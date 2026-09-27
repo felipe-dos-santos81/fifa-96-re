@@ -1,0 +1,8 @@
+# fifa96-reversed ignores
+.DS_Store
+*.lock
+*.lock~
+game/*.iso
+game/hdd/
+build/
+.superpowers/
