@@ -1,0 +1,10 @@
+#pragma once
+typedef enum {
+  FIFA96_OK = 0,
+  FIFA96_ERR_NOT_FOUND = 1,
+  FIFA96_ERR_SHORT_READ = 2,
+  FIFA96_ERR_BAD_MAGIC = 3,
+  FIFA96_ERR_TRUNCATED = 4,
+  FIFA96_ERR_CRC_MISMATCH = 5,
+  FIFA96_ERR_IO = 6
+} fifa96_err_t;
