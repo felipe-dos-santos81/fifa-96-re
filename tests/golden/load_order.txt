@@ -1,2 +1,6 @@
-# load order oracle (DOSBox-X INT21 trace fills sequence)
 tests/golden/fnames.dat
+tests/golden/lengths.dat
+tests/golden/pcindex.pog
+tests/golden/fw1.qfs
+tests/golden/sfx_game.bnk
+tests/golden/vid_game.tgv
