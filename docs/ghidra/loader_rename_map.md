@@ -100,3 +100,20 @@ iteration). Missing for an ADOPT verdict: (a) who re-invokes `5992`/`5dd2` for
 the next object (outer driver loop), (b) the role of `FUN_11bd_5db2` (3 calls
 inside `5dd2`), (c) what the else-branch (`FUN_11bd_5bdb`/`FUN_11bd_5c8b`)
 parses, and (d) any in-tail offset/stride field that locates the next tag.
+
+### Driver loop (verdict: EXHAUSTED)
+
+Ascent path walked with `get_function_callers`: `load_mf_object`
+(`11bd:5dd2`) ← `dispatch_object_load` (`11bd:5992`, sole caller) ←
+`FUN_11bd_2d9c` (sole caller) ← `entry` (`11bd:2382`, zero callers —
+program entry, chain terminates). No back-edge re-invoking `5992`/`5dd2`
+exists anywhere on the path: `FUN_11bd_2d9c` (body `11bd:2d9c..11bd:2ec8`)
+calls `dispatch_object_load` at most twice per run — once unconditionally
+(decompile `puVar10[-1] = 0x4a53; dispatch_object_load();` before the
+`FUN_11bd_6028` check) and once conditionally (`if (sVar5 == 0)` after
+`FUN_11bd_6028()`, markers `0x4a68`/`0x4a6b`) — then falls through to
+`FUN_11bd_627f(); return` or the noreturn `FUN_11bd_22ad()` error path
+(`0x4a79` marker). `FUN_11bd_2d9c` left unrenamed (role beyond the two
+dispatch sites involves unread callees `2f7f`/`614a`/`627f`/`6028`).
+Consequence for the trace: at most TWO `load_mf_object` invocations per run
+bound the capture window; there is no per-object driver loop to break on.
