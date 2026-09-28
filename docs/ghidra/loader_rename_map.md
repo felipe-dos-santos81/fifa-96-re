@@ -55,9 +55,10 @@ Notes:
 - `mem_grow_relocate` is shared infrastructure, not funnel-private: 7 callers
   (`11bd:3844`, `11bd:3986`, `11bd:3ed8`, `11bd:5c8b`, `11bd:5dd2`,
   `11bd:7290`, `11bd:76db`); it takes no byte-decode role.
-- `FUN_11bd_5db2` is called 3× inside `load_mf_object` but was NOT renamed
-  (outside this pass's funnel list; candidate for Task 3 FU-3 input).
-- Caller `FUN_11bd_5992` calls `load_mf_object` at most once per invocation
+- `mem_free_dos` (ex-`FUN_11bd_5db2`, renamed in delimitation pass) is called
+  3× inside `load_mf_object` (cleanup/fail paths; see Load-path delimitation).
+- Caller `dispatch_object_load` (ex-`FUN_11bd_5992`, renamed in delimitation
+  pass) calls `load_mf_object` at most once per invocation
   (single-shot branch, no loop back) — see Block-walk verdict.
 
 ## Load-path delimitation (verified 2026-09-28, program `/fifa96.exe`)
@@ -71,16 +72,20 @@ Notes:
 `load_mf_object` once (`CALL 0x1000:79a2` at `11bd:5aa8`), else-branch calls
 `parse_script_text` then `build_word_table`
 (`CALL 0x1000:77ab` at `11bd:5ab1`, `CALL 0x1000:785b` at `11bd:5ab9`).
-`mem_free_dos` (ex-`FUN_11bd_5db2`, 15 insns) is the AH=49h free-memory
-sibling of `alloc_retry_loop`'s AH=48h probe (same `FUN_11bd_2718` INT 21h
-register-block dispatcher, `INT 0x21` at `11bd:273a`); it is called 3×
+`mem_free_dos` (ex-`FUN_11bd_5db2`, 15 insns) is the putative AH=49h free-memory
+sibling of `alloc_retry_loop`'s AH=48h probe (inferred by structural parallel:
+same `FUN_11bd_2718` INT 21h register-block dispatcher, `INT 0x21` at
+`11bd:273a`). Register-block offset supports the AH reading: the dispatcher
+loads `AX` from block+0 (`MOV AX,word ptr [DI]` at `11bd:2720`), and `5db2`
+passes block base `[BP-0xe]` (`LEA AX,[BP-0xe]` at `11bd:5dc6`) while storing
+`0x49` at `[BP-0xd]` (= block+1 = AH on little-endian x86); it is called 3×
 inside `load_mf_object` (at `11bd:5f5a`, `11bd:5f61`, `11bd:5fa1`, all on
 cleanup/fail paths). No byte-decode transform was observed in any of the
 four members, so no `decode_*` name was assigned.
 
 | Ghidra FUN | Address | Evidence | New name | C counterpart |
 |------------|---------|----------|----------|---------------|
-| FUN_11bd_5db2 | 11bd:5db2 | `MOV byte ptr [BP-0xd],0x49` at 11bd:5db8 + `CALL 0x1000:42e8` (=2718 dispatcher) at 11bd:5dcb; called 3× inside load_mf_object (11bd:5f5a, 5f61, 5fa1) | mem_free_dos | none — behavioral (DOS free-memory wrapper) |
+| FUN_11bd_5db2 | 11bd:5db2 | `MOV byte ptr [BP-0xd],0x49` at 11bd:5db8 (= block+1 = AH: block base [BP-0xe] via `LEA` at 11bd:5dc6, dispatcher loads AX from block+0 at 11bd:2720) + `CALL 0x1000:42e8` (=2718 dispatcher) at 11bd:5dcb; called 3× inside load_mf_object (11bd:5f5a, 5f61, 5fa1); free-memory role inferred by structural parallel with alloc_retry_loop's 0x48 probe | mem_free_dos | none — behavioral (putative DOS free-memory wrapper, inferred) |
 | FUN_11bd_5bdb | 11bd:5bdb | `CALL 0x1000:76a6` (=5ad6 char reader) at 11bd:5be3; `SUB AX,0x3c` (';' comment) at 11bd:5be9; `CALL file_close_dos` at 11bd:5c47 + `CALL file_open_dos` at 11bd:5c5a (include reopen); returns 0/1 | parse_script_text | none — behavioral (char-driven script/config text parser) |
 | FUN_11bd_5c8b | 11bd:5c8b | `SUB AX,0x23` (quote 0x22/0x27) at 11bd:5ca2; C/E/M dispatch (0x43/0x45/0x4d) at 11bd:5cb7/5cbd/5cc0; `MOV SI,0x15e8` at 11bd:5c96 + `CALLF 0x1000:0b12` (mem_grow_relocate) at 11bd:5d55; `MOV word ptr [SI],0xffff` at 11bd:5d18 + [0xf22]/[0xcde] publish at 11bd:5d1e/5d26 | build_word_table | none — behavioral (script word-table builder) |
 | FUN_11bd_5992 | 11bd:5992 | `CMP [BP+0xfefc],0x4d` at 11bd:5a2d + `CMP [BP+0xfefd],0x46` at 11bd:5a34 ('M'/'F'); `CMP [BP+0xfef6],0x4d` at 11bd:5aa1; `CALL load_mf_object` at 11bd:5aa8 else `CALL 5bdb` at 11bd:5ab1 + `CALL 5c8b` at 11bd:5ab9 | dispatch_object_load | none — behavioral (MF-magic + type-word load dispatcher) |
