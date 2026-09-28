@@ -123,6 +123,8 @@ passes ADOPT.
 | `11bd:5aa1` (`CMP word ptr [BP+0xfef6],0x4d` in dispatch_object_load) | MF vs script branch per object | map § Load-path delimitation |
 | `11bd:5aa8` (`CALL load_mf_object`) | MF-branch invocation | map § Load-path delimitation |
 | `11bd:5ab1` + `11bd:5ab9` (`CALL 5bdb`, `CALL 5c8b`) | else-branch (script parse + word table) | map § Load-path delimitation |
-| `FUN_11bd_2d9c` dispatch sites (`0x4a53` unconditional, `0x4a68` conditional after `FUN_11bd_6028`) | the at-most-two dispatch_object_load calls per run | map § Driver loop (EXHAUSTED) |
-| `11bd:5f6b` (`CALLF 0x1000:0b12`) | mem_grow_relocate within a load | FU-3 § Algorithm pseudocode |
+| `11bd:5dd2` entry / `RET` at `11bd:5faa` (`load_mf_object`) | one load invocation, entry to return | map § Codec funnel (`5dd2` row: body + `CALLF` at `5f6b`) + FU-3 § Algorithm pseudocode |
+| `FUN_11bd_2d9c` dispatch sites (`CALL 0x1000:7562` at `11bd:2e80` unconditional; `CALL 0x1000:7562` at `11bd:2e98` conditional on `FUN_11bd_6028` result, `OR AX,AX` at `11bd:2e91` + `JNZ` at `11bd:2e93`) | the at-most-two dispatch_object_load calls per run | map § Driver loop (EXHAUSTED) |
+| `11bd:5f6b` (`CALLF 0x1000:0b12`) | mem_grow_relocate within a load | map § Codec funnel (`5dd2` row cites this call) |
+| `11bd:5f5a` / `11bd:5f61` / `11bd:5fa1` (`mem_free_dos` calls on load_mf_object cleanup/fail paths) | `5db2` role sites (closed in delimitation pass) | map § Load-path delimitation (`5db2` row) |
 | `11bd:5fe2` / `11bd:6003` (`file_read_dos` / `file_read_far_dos`, AH=3F) | every traced read's handle/count/buffer | FU-3 § Verification experiment |

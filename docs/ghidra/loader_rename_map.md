@@ -109,11 +109,14 @@ Ascent path walked with `get_function_callers`: `load_mf_object`
 program entry, chain terminates). No back-edge re-invoking `5992`/`5dd2`
 exists anywhere on the path: `FUN_11bd_2d9c` (body `11bd:2d9c..11bd:2ec8`)
 calls `dispatch_object_load` at most twice per run — once unconditionally
-(decompile `puVar10[-1] = 0x4a53; dispatch_object_load();` before the
-`FUN_11bd_6028` check) and once conditionally (`if (sVar5 == 0)` after
-`FUN_11bd_6028()`, markers `0x4a68`/`0x4a6b`) — then falls through to
-`FUN_11bd_627f(); return` or the noreturn `FUN_11bd_22ad()` error path
-(`0x4a79` marker). `FUN_11bd_2d9c` left unrenamed (role beyond the two
+(`CALL 0x1000:7562` = `11bd:5992` thunk, at `11bd:2e80`) and once
+conditionally (`CALL 0x1000:7562` at `11bd:2e98`, guarded by `OR AX,AX` at
+`11bd:2e91` + `JNZ` at `11bd:2e93` over the `FUN_11bd_6028` result from
+`CALL 0x1000:7bf8` at `11bd:2e8c`) — then falls through to
+`FUN_11bd_627f` (`CALL 0x1000:7e4f` at `11bd:2ec2`) + `RET` at `11bd:2ec8`,
+or the `FUN_11bd_22ad` error path (`CALL 0x1000:3e7d` at `11bd:2ea6`,
+noreturn per the decompiler's "Subroutine does not return" warning with dead
+fall-through bytes after the call). `FUN_11bd_2d9c` left unrenamed (role beyond the two
 dispatch sites involves unread callees `2f7f`/`614a`/`627f`/`6028`).
 Consequence for the trace: at most TWO `load_mf_object` invocations per run
 bound the capture window; there is no per-object driver loop to break on.
