@@ -1,0 +1,2 @@
+# load order oracle (DOSBox-X INT21 trace fills sequence)
+tests/golden/fnames.dat
