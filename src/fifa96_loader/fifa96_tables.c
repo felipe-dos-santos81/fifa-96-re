@@ -1,6 +1,6 @@
 #include "fifa96_loader/fifa96_tables.h"
 #include <string.h>
-#define REC 12u  /* golden fnames.dat: 2604 B = 217 * 12 (8.3 name + 4 pad) — Ruling v2 */
+#define REC 12u  /* golden fnames.dat: 2604 B = 217 * 12 (fixed-width 12-byte name field) — Ruling v2 */
 fifa96_err_t fifa96_tables_entry_count(const uint8_t *fnames, size_t n, size_t *count) {
   if (!fnames || !count || n % REC) return FIFA96_ERR_TRUNCATED;
   *count = n / REC;
@@ -10,6 +10,7 @@ fifa96_err_t fifa96_tables_name_at(const uint8_t *fnames, size_t n, size_t idx, 
   size_t c = 0;
   if (fifa96_tables_entry_count(fnames, n, &c) != 0 || idx >= c) return FIFA96_ERR_TRUNCATED;
   memcpy(out, fnames + idx * REC, REC);
+  memset(out + REC, 0, sizeof(out[0]) * (16 - REC));
   out[15] = 0;
   return FIFA96_OK;
 }

@@ -10,6 +10,9 @@ int main(void) {
   char name[16]; uint32_t v = 0;
   assert(fifa96_tables_name_at(fn, nfn, 0, name) == 0);
   assert(memcmp(name, "FW1.QFS", 7) == 0);        // golden bytes 0000: FW1.QFS (12-byte record, 4 pad zeros)
+  assert(fifa96_tables_name_at(fn, nfn, 12, name) == 0); // 0x90 / 12 = idx 12
+  assert(memcmp(name, "GAMEART0.PVI", 12) == 0); // golden bytes 0090: 12-char name, zero pad
+  assert(name[12] == 0);
   assert(fifa96_tables_length_at(ln, nln, 0, &v) == 0);
   assert(v == 0x26df);                            // golden bytes 0000: df 26 00 00
   printf("test_tables OK\n");
