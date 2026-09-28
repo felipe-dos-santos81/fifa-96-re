@@ -35,6 +35,7 @@ add_test(NAME test_tgv COMMAND test_tgv WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_executable(test_neg tests/test_neg.c)
 target_link_libraries(test_neg PRIVATE fifa96_pog fifa96_qfs fifa96_tgv fifa96_viv fifa96_tables fifa96_file)
 add_test(NAME test_neg COMMAND test_neg WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)

@@ -27,6 +27,8 @@ int main(void) {
   assert(h.word_a == 0xb600);                /* bytes 2-3: 00 b6 */
   assert(h.word_b == 0xe140);                /* bytes 4-5: 40 e1 */
   assert(memcmp(h.tag, "PCNX", 4) == 0);     /* bytes 6-9: 50 43 4e 58 */
+  assert(h.tail_off == 10);                    /* tail starts after the 10-byte header: xxd -s 10 tests/golden/pcindex.pog */
+  assert(h.tail_len == np - 10);
   fifa96_file_free(p);
   /* gameart0.pvi: xxd -s 0 -l 24 tests/golden/gameart0.pvi */
   assert(fifa96_file_read("tests/golden/gameart0.pvi", &g, &ng) == 0);
@@ -36,6 +38,8 @@ int main(void) {
   assert(h.word_a == 0x1704);                /* bytes 2-3: 04 17 */
   assert(h.word_b == 0xe3a2);                /* bytes 4-5: a2 e3 */
   assert(memcmp(h.tag, "BIGF", 4) == 0);     /* bytes 6-9: 42 49 47 46 */
+  assert(h.tail_off == 10);                    /* tail starts after the 10-byte header: xxd -s 10 tests/golden/gameart0.pvi */
+  assert(h.tail_len == ng - 10);
   fifa96_file_free(g);
   /* negative paths (no I/O) */
   uint8_t z[16] = {0};

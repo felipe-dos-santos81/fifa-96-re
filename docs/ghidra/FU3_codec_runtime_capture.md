@@ -3,7 +3,7 @@
 Source: Task 2 funnel pass (program `/fifa96.exe`, project `fifa96`), evidence rows in
 `docs/ghidra/loader_rename_map.md#codec-funnel` and the `### Block-walk` verdict
 (DEFER). No new evidence was gathered for this doc; every address below is copied
-from the Task 2 report (`.superpowers/sdd/2026-09-28-fifa96-container-decode/task-2-report.md`).
+from the committed map (`docs/ghidra/loader_rename_map.md#codec-funnel` + `### Block-walk`).
 
 ## Algorithm pseudocode (from decompilation)
 
