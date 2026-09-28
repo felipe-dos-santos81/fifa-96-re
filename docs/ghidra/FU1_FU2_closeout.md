@@ -58,3 +58,16 @@ Conclusion: the CRC is almost certainly computed over **transformed content** �
 - `include/fifa96_loader/fifa96_tables.h` — same
 
 No code, no API, no error enum, no spec changes.
+
+## FU-3 — codec runtime capture (2026-09-28)
+
+Task 2's funnel pass CONFIRMED six behavioral names (`load_mf_object`,
+`mem_grow_relocate`, `exec_loaded_image`, `alloc_retry_loop`,
+`copy_bytes_far`, `int21_dispatch`) but its Block-walk verdict is DEFER: no
+byte-decode transform and no next-tag/termination rule were observed, so the
+(a)(b)(c) codec criterion fails on all three and no `fifa96_codec_expand` was
+implemented. The runtime experiment that could still prove a codec — DOSBox-X
+INT 21h trace delimiting one `load_mf_object` invocation, with input/output
+buffer captures and byte-exact vectors — is recorded in
+`docs/ghidra/FU3_codec_runtime_capture.md`, with `FUN_11bd_5db2` and the
+`5992` else-branch (`5bdb`/`5c8b`) named as the highest-value trace targets.
