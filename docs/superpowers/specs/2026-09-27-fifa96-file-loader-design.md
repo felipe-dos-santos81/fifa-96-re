@@ -29,7 +29,7 @@ In-scope for this slice:
   - `art/*.qfs` + `*.pvi` stills/fields/stadiums
   - `sound/*.viv` + `*.bnk` + `*.asf` + `*.par` + `*.crd`
   - `video/*.tgv` framing only (no full video decode)
-  - `soccer/fnames.dat, lengths.dat, crcvals.dat` tables
+  - `soccer/fnames.dat, lengths.dat` tables (crcvals.dat CRC check deferred to follow-up FU-2 — needs CRC polynomial identified first)
 - New portable C library + golden tests + Ghidra rename-backflow.
 
 Out-of-scope (later slices): VGA/SVGA blit, match sim/AI/physics, audio synthesis/playback, full video decode, menus/FE, modem/serial, installer.
@@ -117,3 +117,4 @@ No rendering, no gameplay, no sound output, no TGV frame decode beyond header/fr
 ## 11. Next step
 
 Invoke `writing-plans` skill to produce the implementation plan from this spec. No `src/` code until plan approval.
+Follow-ups outstanding after this slice: FU-1 decoder-citation Ghidra pass (spec §8) and FU-2 crcvals reader+CRC (spec §7).

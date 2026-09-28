@@ -5,6 +5,6 @@ typedef enum {
   FIFA96_ERR_SHORT_READ = 2,
   FIFA96_ERR_BAD_MAGIC = 3,
   FIFA96_ERR_TRUNCATED = 4,
-  FIFA96_ERR_CRC_MISMATCH = 5,
+  FIFA96_ERR_CRC_MISMATCH = 5,  /* reserved: crcvals.dat slice deferred (FU-2) — no producer yet */
   FIFA96_ERR_IO = 6
 } fifa96_err_t;
