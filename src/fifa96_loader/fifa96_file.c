@@ -6,6 +6,12 @@ size_t fifa96_file_split_for_segment(uint16_t seg_off, size_t len) {
   return len < to_boundary ? len : to_boundary;
 }
 void fifa96_file_free(uint8_t *p) { free(p); }
+uint16_t fifa96_read_u16le(const uint8_t *p) {
+  return (uint16_t)(((uint16_t)p[1] << 8) | (uint16_t)p[0]);
+}
+uint32_t fifa96_read_u32le(const uint8_t *p) {
+  return ((uint32_t)p[3] << 24) | ((uint32_t)p[2] << 16) | ((uint32_t)p[1] << 8) | (uint32_t)p[0];
+}
 fifa96_err_t fifa96_file_read(const char *path, uint8_t **out, size_t *out_len) {
   FILE *f = fopen(path, "rb");
   if (!f) return FIFA96_ERR_NOT_FOUND;

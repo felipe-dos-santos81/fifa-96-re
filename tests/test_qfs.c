@@ -11,6 +11,8 @@ int main(void) {
   fifa96_qfs_hdr_t h;
   assert(fifa96_qfs_parse_hdr(q, nq, &h) == 0);
   assert(h.magic[0] == 0x10 && h.magic[1] == 0xfb);
+  assert(h.dec_len == 0xe440d400);                   // golden bytes 2-5: 00 d4 40 e4
+  assert(memcmp(h.tag, "SHPI", 4) == 0);             // golden bytes 6-9: 53 48 50 49
   assert(fifa96_file_read("tests/golden/gameart0.pvi", &p, &np) == 0);
   assert(np == 154387);
   assert(memcmp(p + 6, "BIGF", 4) == 0);          // golden bytes 0006: BIGF
