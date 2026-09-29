@@ -854,3 +854,54 @@ maxima/flags to globals) is settled. What the arm receives back on
 return: nothing — `30d8` returns void (`LEAVE`/`RET` at `326a/326b`,
 no AX staging), effects are globals-only, and the arm falls straight
 into the `4581..4586` epilogue.
+
+## 30d8 second caller (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_76db` (body `11bd:76db..79f5` per `get_function_by_address`,
+272 insns; no prior bounds recorded, delta none) is a hardware/memory
+setup routine: EMS/XMS presence probes (`INT 0x21 AX=0x3567` at `76e0`,
+`INT 0x67` `0xde00`/`0xde0a`/`0xde01` sites), a retry loop that must
+fall through with `AH==0` before any setup runs, a mode publish
+(`MOV [0x2e],0xb` at `7771`), the one-shot `30d8` static-file read at
+`7776` (zero stack args — identical intake to the `457e` first call,
+which likewise pushes nothing), then `3844` at `7779`, memory sizing
+via `mem_grow_relocate` (`CALLF 0x1000:0b12` at `7898`), zero-fill and
+error exits via `print_error_message` (codes `0x17`/`0x18`/`0x19` at
+`78a8`/`78bd`/`7930`). The gate guarding `7776` is the EMS
+retry-loop fall-through (`JZ`/`JNZ` loop-backs to `7740` at
+`7754`/`775e`/`7767`), NOT the `[0xe72]` latch — the latch gates
+inside `30d8` itself (`30dc..30e7`). Post-call the caller consumes
+`30d8`'s publishes directly: `[0xa16]` at `779b`, `[0x15]` at `779f`,
+`[0xecc]` at `7840`, `[0xece]` at `785a`, `[0x11d2]` at `78dd`.
+Far-thunk delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx` holds for every
+call/jump target below (re-confirmed per site against the 13-callee
+list; `7776`: `0x4ca8−0x1BD0=0x30d8`). No rename this task (map-only,
+program untouched).
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| probe head | 11bd:76db..773e | `PUSH SI`/`PUSH DI` at 76db/76dc; `INT 0x21 AX=0x3567` at 76e0/76e3; ES vs `[0x58]` at 76e7 + `JZ` at 76eb; EMM magic `CMP ES:[0xb],0x4d4d` at 76ed + `JNZ` at 76f4, `CMP ES:[0xe],0x5858` at 76f6 + `JNZ` at 76fd, `'E'`/`'X'`/`'0'` compares at 76ff/7707/770f + `JNZ` at 7705/770d/7715; `TEST [0x47],0x80` at 7717 + `JNZ` at 771c; `TEST [0x14],0x2` at 771e + `JNZ` at 7723; `INT 0x67 AX=0xde00` at 7725/7728 + `OR AH,AH` at 772a + `JZ` at 772c; `INT 0x67 AH=0x43,BX=1` at 772e..7733 + `OR AH,AH` at 7735 + `JNZ` at 7737 | `CALL 0x1000:855b` at 76dd (=698b); `CALL 0x1000:82a4` at 7740 (=66d4); `CALL 0x1000:46ab` at 7744 (=2adb) |
+| retry-loop gate | 11bd:7751..7767 | `JZ 0x1000:9310` (=7740 loop-back) at 7754 over the `7751` probe result; `CALL 0x1000:927b` (=76ab) at 7759 + `OR AH,AH` at 775c + `JNZ 0x1000:9310` (=7740) at 775e; `MOV AX,0xde0a` + `INT 0x67` at 7760/7763 + `OR AH,AH` at 7765 + `JNZ 0x1000:9310` (=7740) at 7767 — every failure returns to `7740`, fall-through reaches `7769` | `CALL 0x1000:82a4` at 7751 (=66d4); `CALL 0x1000:927b` at 7759 (=76ab) |
+| pre-call publishes | 11bd:7769..7771 | `MOV [0x50],BL` at 7769; `MOV [0x51],CL` at 776d; `MOV [0x2e],0xb` at 7771 — no `PUSH` between `7771` and the call | — |
+| 30d8 call | 11bd:7776 | `CALL 0x1000:4ca8` (=30d8 `read_static_bw_file`); decompile emits `read_static_bw_file();` with no assigned return | `CALL 0x1000:4ca8` at 7776 (=30d8) |
+| post-call sequence | 11bd:7779..77a8 | `CALL 0x1000:5414` (=3844) at 7779; `CMP [0xdec],0x602` at 777c + `JC` at 7782; `[0xdee]=4`/`[0xdf0]=0xfc00`/`[0xdf2]=0x801` at 7784/778a/7790; flag merge `MOV AL,[0x47]` + `AND 0x80` at 7796/7799, `OR AL,[0xa16]` at 779b, `MOV AH,[0x15]` + `AND 0x20` at 779f/77a3, `OR AL,AH` at 77a6, store `CS:[0x76aa]` at 77a8 | `CALL 0x1000:5414` at 7779 (=3844) |
+| downstream uses of 30d8 publishes | 11bd:77dd..785a | `CMP [0xa16],0x0` at 77dd + `JNZ` at 77e3; `OR [0xa16],0x1` at 78d8; `TEST [0x11d2],0x1` at 78dd + `JNZ` at 78e2; `MOV [0xecc],0xef00` at 78e4; `CMP [0xecc],AX` at 7840 + `JC` at 7844; `MOV [0xece],DX` at 785a | `CALLF 0x1000:0b12` at 7898; `CALL 0x1000:8193` at 789d (=65c3); `CALL 0x1000:3e7d` at 78a8/78bd/7930 (=22ad) |
+| epilogue | 11bd:79bb..79cc | `MOV AX,0x1` at 79bb; `MOV [0xaa4],0x3d15` at 79be; `MOV [0xaa6],0x3d68` at 79c4; `POP DI`/`POP SI` at 79ca/79cb; `RET` at 79cc (plus the `79cd..79f5` join tail re-sourcing `[0xeca]`/`[0xece]` and `JMP 0x1000:9583` at 79f4) | `CALL 0x1000:9786` at 7990 (=7bb6) |
+
+Argument compare (`457e` vs `7776`): identical intake — both sites
+push zero stack words (`457e` preceded only by `CMP [BP-0x56],0x0` at
+`4578` + `JNZ` at `457c` per the 3ed8 tail table; `7776` preceded only
+by `MOV [0x2e],0xb` at `7771`). No slot differences exist: `30d8`
+takes no filename/buffer/length parameters (void signature); its
+`0x1190`/`0xb0`/`[BP-0xb2]` intake is internal. Gates differ: `457e`
+on `[BP-0x56]==0`, `7776` on the EMS retry-loop `AH==0`
+fall-through — neither gate is the `[0xe72]` latch.
+
+### Latch [0xe72] in 76db
+
+| Latch op | Address | Evidence |
+|----------|---------|----------|
+| read/write inside 76db | NOT-FOUND | Searched `11bd:76db..79f5` (`disassemble_function`, 272 insns — no `e72` operand) + program-wide operand search `e72` (5 matches, none in `76db..79f5`): only `0e45`/`0e98`/`30dc`/`30df`/`1991:155e` |
+| setter (address-only deferral) | 11bd:0e45 + 11bd:0e98 | `XCHG byte ptr CS:[0xe72],AL` at 0e45; `MOV CS:[0xe72],AL` at 0e98 — unenclosed bytes below `FUN_11bd_0ef4` (`get_function_by_address` finds no FUN at `0e30`/`0e45`/`0e98`; nearest FUN entry `0ef4`, body `0ef4..0ef6`), amid an `INT 0x0` vector-install sequence (`INT 0x0` at `0e71`, SS/SP save/restore at `0e58..0e8e`); not among `76db`'s 13 callees (`0ef4`, `2adb`, `3844`, `65c3`, `66d4`, `698b`, `76ab`, `7b34`, `7b50`, `7bb6`, `0b12`, `22ad`, `30d8` — none contains an `e72` operand per the program-wide search), so no one-layer resolve; deferred with boundary named |
+| xref index check | 11bd:0e72 | `get_xrefs_to` on `11bd:0e72`: 0 refs — the `CS:`-relative stores at `0e45`/`0e98` are not indexed as xrefs to the data address; claim sourced to disassembly lines instead |
+| false positive | 1991:155e | `JZ 0x1000:ae72` — far-jump code target (`segment:offset`), not a data ref to `[0xe72]`; excluded |
