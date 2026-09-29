@@ -4370,3 +4370,286 @@ the orphan row — the JZ does not reach it).
 Program state and the prior commits' cites were NOT re-verified beyond
 the two read-only probes above; nothing in the listing was mutated this
 wave.
+
+## block head 2978..2a59 (verified 2026-09-29, program `/fifa96.exe`)
+
+Zero-Ghidra-write classification pass on the 226-byte block head — the
+stretch `11bd:2978..2a59` left inside the former `2978..2ada` paging
+block after slice-22's carve created `clear_msw_and_callfar`
+(`2a5a..2ad8`) (gap row `1000:4548..1000:4629`). Headline: (1) the head
+is TWO flow-disconnected CODE islands around ONE TABLE run — R1
+`2978..29b7` (64 B): `[0xdfe]` gate → CR0 paging-enable (`6650 0f20c0
+660d00000080 0f22c0`) → TSS-descriptor byte patch (`2999 MOV BX,
+word [0xdfc]` → DS←`0x8` → `29a2 c64705 89 MOV byte [BX+5],0x89` → DS←
+`0x20`) → `LTR` `0f00d8`@`29ae` + `CLTS` `0f06`@`29b1` → `POP EAX` →
+tail `JMP 0x1000:1f07` (`e97fd9`@`29b5`, rel `d97f`=−`0x2681`,
+`29b8−0x2681 = 0337` ✓, render `1f07−1bd0 = 0337` ✓) whose landing is
+live-verified as the orphan-band relay `2eff26fa02` = `JMP word ptr
+CS:[0x2fa]` (`0337..033b`, inside row `1000:1ea4..1000:1f0b`
+`has_undefined_bytes:true`, `get_function_by_address(11bd:0337)` → no-
+function error — exit cite only, one hop, not followed); R2
+`29b8..29bb` (4 B): the `[0x9bc]`/`[0x9be]` pair source words for arg
+`0x29bc` — `5a2a602a` (live `read_memory(29b8,4)` reconciled) =
+`0x2a5a`/`0x2a60`, both INSIDE the owned handler body (slice-22 H13
+boundary `2a5a..2ad8`), so the pair is a TABLE selecting handler
+entries, NOT a pointer into the head; R3 `29bc..2a59` (158 B): PM-
+transition save/restore island (GS/FS→`[0xd66]/[0xd64]` — the pocket
+`2824/2828` twin cells; EAX→`[0xd6c]`, ESI→`[0xd68]`, `[0x8c8..0x8d4]`→
+`[0xd4e..0xd58]` copy legs, SP→`[0xd78]/[0xdb0]`, ESI←`[0xd34]`,
+`[0xd70]`→`[0xd5e]` (same cell pair H13 uses at `2a76/2a79`), FS/GS←0,
+`b80cde MOV AX,0xde0c` + `cd67 INT 0x67`, DS←`0x20`, `2a1f TEST byte
+[0x47],0x20`, `2a24 7513 JNZ`→`2a39` (`2a26+0x13`, `4609−1bd0=2a39` ✓),
+restore legs `2a26..2a37` (`[0xd6c]/[0xd68]` reload, FS/GS←`[0xd60]/
+[0xd62]`, `2a37 ffe3 JMP BX` DYNAMIC exit) and `2a39..2a58` (ESI←
+`[0xde4]`, FS←`0x38`, `LES DI,[0xde8]`, `MOVZX EDI,DI`, CLD, TWO
+`676664a5` = `MOVSD ES:EDI,FS:ESI` implicit string ops, `6697`
+restore, `2a58 ebcc JMP`→`2a26` internal back-edge, `2a5a−0x34=2a26` ✓,
+`45f6−1bd0=2a26` ✓). Dry-run window emitted 73 insns over 226/226 bytes
+with ZERO decode-skips (contrast: pocket `2811..296c` had two skip
+windows). (2) ZERO static entries into `2978..2a59` re-verified in the
+post-carve state — the NEW `0x1000:45` class (4 hits, all
+`FUN_11bd_2864` rel8/loop legs) recomputes to `2945/294a/2953/2957`
+(pocket, below `2978`); `0x1000:46` = the same 8 slice-17 hits, every
+target ≥ `2aeb`; `0x1000:29`/`0x1000:2a` reproduce 12/7 recomputing to
+`0dxx`/`0ef4`; `11bd:29`/`11bd:2a` 0; operand `0x2978`/`0x2a30`/
+`0x2a59` 0 each; `[0x9c2]` writer set still {`41ee`} value `0x296d`
+(out of range); determinability re-scan: of the 28 arm cells
+(`arg−4`/`arg−2` for all 14 args), exactly ONE pair lands in the head —
+`0x29bc`→`29b8/29ba` — and it is a DATA source, its values pointing
+into the handler, not the head; the `0x29bc` numeral is referenced only
+by the two rejected frame-slot stores (`2f18`/`44ab`, slice-17 ruling +
+`[0x9ba]` NONE-FROM-DISCIPLINE stand); no far-ret pair stores an IP in
+range (the `0x2a` family's `2aaa PUSH 0x2ac4` is the handler's own
+return frame — target `2ac4` inside `clear_msw_and_callfar`). (3)
+`[0xdfe]` sweep — READERS among defined insns: ZERO; WRITERS FOUND:
+`2892 c606fe0d00` + `28a0 c606fe0d01` = `MOV byte ptr [0xdfe],0x0/0x1`
+inside `FUN_11bd_2864` (the pocket body created by slice-21 — the
+writer set was never swept after creation; this pass supersedes the
+slice-22 deferral wording "writers open" at the defined-instruction
+layer). The program's only read of `[0xdfe]` is `2978` itself (`803efe0d01`),
+in UNDEFINED bytes — invisible to defined-insn search by construction,
+cited from raw bytes + the dry-run emission. Window arithmetic for the
+`0xdfe..0xdff` reach class: constant-base census at this-slice time
+(BX 46 / SI 62 / DI 35 / BP 1) × form partitions (`[BX + 0` envelope
+320, sign runs 10/15/6, bare 140/40/35/0, pair 348/12, compound 4/3) —
+ZERO constant-base site resolves into the window (per-candidate
+arithmetic below); ES-override sites are NO-OP class (the cell is
+DS-absolute; an ES-based window can't statically address it); dynamic
+DS-relative sites are OPEN-WINDOW holes (never silently rejected).
+Brief-hint reconciliation: the task hint "constant base [2df6,2e41]"
+resolves live to the slice-20 anchor cluster `2df5 8b5e06 MOV BX,
+[BP+0x6]` (RUNTIME base — its `2df8 ff7702 PUSH [BX+0x2]` is an
+OPEN-WINDOW row reaching `0xdfe` iff runtime BX=`0xdfc`, not a constant)
+and `2e41` = rel8 byte inside `2e40 75e7 JNZ`→`2e29` (no window site
+there — dump-cited); the hint "partition `fe0d`@3059" does NOT
+reproduce: raw `fe0d` = 4 hits {`1132`,`2894`,`28a2`,`297a`}, and all
+three `3059` space-readings were probed negative (`1991:3059` = `e98200`
+JMP rel16 head — no `fe0d` bytes; `11bd:3059` = `36` mid-`ff36`-push
+operand; `1000:3059` = `11bd:1489` = `b0 08 MOV AL,0x8`) — reported as a
+live-partition correction, not adopted. Quote protocol: 11/11
+`read_memory` responses reconciled `hex`-vs-`data` before quoting (the
+96+96+34 byte-truth chunks also reconcile insn-byte-for-insn-byte
+against the dry-run emission at every boundary — three-way agreement,
+no render glitch seen); 2 cap-truncated `[BP +` discovery runs are
+class-rejected per the slice-20 method (1-hit BP census; stack-frame
+disp sets observed `−0x62..−0x1`/`0x0..0x26`/`0xff00..0xff7e`; the only
+census-constant reach disp is `[BP + 0xdfd]` and the targeted run
+returns 0). Caveats standing: `search_instructions` is
+defined-instruction-only (`instructions_scanned:14638` uniform on every
+run at this-slice time — grew from slice-21's 14006/14170 as slice-22's
+13 creates + islands landed), intra-gap relative flow is invisible
+until decoded (the pocket skip bytes `28e7..28eb`/`28ed`, 7 B, were
+again NOT disassembled this pass — residual fall-in hole), `get_xrefs_to`
+and `list_data_items_by_xrefs` are dead channels for these forms
+(probes on `2978`/`29b8`/`0dfe` all returned 0/empty — reported, not
+relied), implicit string operands (`MOVS`/`STOS`/the head's own
+`2a4e/2a52 MOVSD`) render no offset expression and escape every
+operand/window sweep, and raw `search_byte_patterns` hits must be
+context-reconciled (`fe0d`@`1132` is the rel16 high bytes of the
+orphan-band `1130 e83bfe0d CALL` — `1134−0x1c5 = 0f6f`, a false
+positive, not a data contact). No `create_function`, no rename, no
+comment, no `set_global`/define, no `save_program`, no real
+`disassemble_bytes`; pre-existing bodies (`restore_fs_gs_and_resume`,
+`clear_msw_and_callfar`, `FUN_11bd_2864`, `FUN_11bd_033c`) re-read only;
+`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+### Confirmation rows (Step 1)
+
+| Probe | Verbatim response | Reconciliation / math |
+|-------|-------------------|------------------------|
+| `get_function_by_address(11bd:2978)` | `{"error":"No function found for 11bd:2978"}` | head start UNOWNED ✓ (2978 = `1000:4548`−`0x1bd0`) |
+| `get_function_by_address(11bd:2977)` | `{"name":"restore_fs_gs_and_resume","address":"11bd:296d","signature":"undefined restore_fs_gs_and_resume(void)","entry_point":"11bd:296d","body_start":"11bd:296d","body_end":"11bd:2977"}` | head = body_end+1 ✓; before-neighbor unchanged since slice-14 |
+| `get_function_by_address(11bd:2a59)` | `{"error":"No function found for 11bd:2a59"}` | head end UNOWNED ✓ (2a59 = `1000:4629`−`0x1bd0`) |
+| `get_function_by_address(11bd:2a5a)` | `{"name":"clear_msw_and_callfar",…,"entry_point":"11bd:2a5a","body_start":"11bd:2a5a","body_end":"11bd:2ad8"}` | head = body_start−1 ✓; after-neighbor is the slice-22 H13 handler (read-only context per scope guard) |
+| `find_code_gaps` head row (total 149, offset 0/limit 100) | `{"start":"1000:4548","end":"1000:4629","size":226,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"clear_msw_and_callfar","after_function_address":"11bd:2a5a"}` | `0x4548−0x1bd0 = 0x2978` ✓, `0x4629−0x1bd0 = 0x2a59` ✓, `0x4629−0x4548+1 = 0xE2 = 226 = 0x2a59−0x2978+1` ✓ — byte-identical to slice-22's post-carve quote ✓ (total 149 = slice-22's post-state count ✓); tail row `{"start":"1000:46a9","end":"1000:46aa","size":2,…}` (= `2ad9..2ada`, `CS:[0x2ad9]` live tail cell) also re-quoted identical |
+| tail-`JMP` re-cite | `read_memory(11bd:2975,3)` → `{"data":[233,61,217],"hex":"e93dd9"}` | data→hex ✓ (233=`0xe9`,61=`0x3d`,217=`0xd9`); byte-level re-cite of the `## 296d hook target` row "exit (tail JMP, cited) … `e93dd9`, 3 bytes → ends `2977`" — unconditional `JMP 0x1000:1e85`, NOT re-walked; the stub body ends AT `2977` (owner row above), so no fallthrough path into `2978` |
+| head bytes | `read_memory(11bd:2978,5)` → `{"data":[128,62,254,13,1],"hex":"803efe0d01"}` | data→hex ✓ (128=`0x80`,62=`0x3e`,254=`0xfe`,13=`0x0d`) — `CMP byte ptr [0xdfe],0x1`, byte-exact vs the slice-14/17 cites, listing still UNDEFINED (`get_function_by_address(2978)` error row above) |
+
+### Byte-run classification (Step 2) — tiles `2978..2a59` contiguously
+
+Walk: dry-run `disassemble_bytes(11bd:2978, length 226, max_instructions
+400)` → `{"dry_run":true,"success":true,"start_address":"11bd:2978",
+"end_address":"11bd:2a59","bytes_disassembled":226,"instructions_total":
+73,"truncated":false}` — emission contiguous `2978→2a59` (no gaps),
+ZERO decode-skips (disclosed-by-absence vs the pocket precedent). Byte
+truth: `read_memory(2978,96)`+`read_memory(29d8,96)`+`read_memory(2a38,34)`
+= 96+96+34 = 226 B, each internally hex↔data reconciled AND matching
+the emitted per-insn bytes at every instruction boundary (chunk-2/3
+start mid-insn by design: `29d8` is the 4th byte of `66a34e0d`@`29d5`,
+`2a38` is byte 2 of `ffe3`@`2a37` — reconciled against the emission).
+
+| run | range | evidence (hex+data reconciled) | class | entry/exit or table-role |
+|-----|-------|--------------------------------|-------|---------------------------|
+| R1 | `2978..29b7` (64 B, 22 insns) | `803efe0d01` CMP→`[0xdfe]`; `0f853400` JNZ→`29b5` (`2981+0x34`, render `4585−1bd0`✓); `6650 0f20c0 660d00000080 0f22c0` CR0 PG set; `a1fc0d 0bc0 0f841b00` (`2994` JZ→`29b3`, `2998+0x1b`, `4583−1bd0`✓); `53 8b1efc0d b80800 8ed8 c6470589` (`29a2` DS-rel window store `[BX+5]←0x89`, BX=`[0xdfc]` loaded under original DS, DS←`0x8` before the store); `8bc3 bb2000 8edb 5b` (DS←`0x20`, POP BX); `0f00d8 LTR`, `0f06 CLTS`, `6658 POP EAX`, `e97fd9` JMP→`0x1000:1f07` (`29b8−0x2681 = 0337`✓) | CODE (island A) | entry: NONE static (reachability table); exit: unconditional tail-JMP `29b5`→`11bd:0337` = orphan-band relay `2eff26fa02` `JMP word ptr CS:[0x2fa]` (5 B, row `1000:1ea4..1f0b`, no-function probe quoted; one hop, not followed) |
+| R2 | `29b8..29bb` (4 B) | `read_memory(11bd:29b8,4)` → `{"data":[90,42,96,42],"hex":"5a2a602a"}` ✓ internally reconciled; LE words `[29b8]=0x2a5a`, `[29ba]=0x2a60` — byte-identical to the determinability appendix `29b8` row (`5a2a602a`, `## 2811..296c pocket` table); linear stream emits `5a POP DX`+`2a602a SUB AH,[BX+SI+0x2a]` — post-unconditional-JMP emission artifact (no flow edge lands here, see Step 3); values are instruction-boundary entries of the OWNED handler (`2a5a PUSH AX` head, `2a60 CLI` post-preamble — slice-22 H13 rows) | TABLE | role: `[0x9bc]`/`[0x9be]` source pair for arg `0x29bc` — `6270 2e8b47fc`/`6277 2e8b47fe` CS-window loads (map rows `## 2811..296c pocket` R2 chain + live `## callee arg question` reads); pair selects HANDLER entries, does NOT point into the head; CODE-vs-TABLE conflict resolved to TABLE with flow evidence |
+| R3 | `29bc..2a59` (158 B, 49 insns) | head `93 XCHG AX,BX`, `58 POP AX`; saves `8c2e660d 8c26640d 66a36c0d 668936680d 8bcc 66a1c808 66a34e0d a0cc08 8a26cf08 a3520d a1d208 a3560d a0d408 a2580d c706fe088000 c6061d0989 8926780d 8926b00d 668b36340d a1700d a35e0d 33c0 8ee0 8ee8 b80cde cd67 8be1 b92000 8ed9 f606470020 7513` (`2a24` JNZ→`2a39`, `2a26+0x13`, `4609−1bd0`✓); leg-1 `66a16c0d 668b36680d 8e26600d 8e2e620d ffe3` (`2a37 JMP BX` — DYNAMIC exit, BX runtime-valued); leg-2 `668b36e40d b83800 8ee0 6697 c43ee80d 660fb7ff fc 676664a5 676664a5 6697 ebcc` (`2a58` JMP→`2a26`, `2a5a−0x34`, `45f6−1bd0`✓ — internal back-edge) | CODE (island B) | entry: `29bc` NONE static (reachability table; note `29bc` = the arg numeral — pure coincidence, the stores of `0x29bc` are frame-slot, rejected slice-17); exits: `2a37 JMP BX` dynamic, `2a16 INT 0x67` IVT-mediated; back-edge `2a58→2a26` internal. Cell contacts (cite-only): `[0xd34]`, `[0xd4e..0xd58]`, `[0xd5e]`, `[0xd60..0xd6c]` (= H13 restore pair `2ac4/2ac9` twins + pocket `2824/2828`), `[0xd70]`, `[0xd78]`, `[0xdb0]`, `[0xde4]`, `[0xde8]`, `[0x8c8..0x8d4]`, `[0x8fe]`, `[0x91d]`, `[0x47]` |
+
+Tiling check (mandated): `64 + 4 + 158 = 226` = `0x2a59 − 0x2978 + 1` ✓;
+every byte classified exactly once. Emission cross-check: 73 insns =
+22 (R1) + 2 (R2 artifact) + 49 (R3) ✓; bytes `64+4+158 = 226` = the
+window's `bytes_disassembled` ✓. PADDING: none — no zero-fill run
+(contrast pocket R1); the only `00` bytes are embedded operands (`8000`
+imm@`29ef`, `0d` disp-hi bytes). UNKNOWN/skip: none — zero decode-skips
+this window. The `29b8..29bb` region was checked against the CODE
+stream claim: the overlap IS the conflict (stream emits those 4 bytes
+as 2 artifacts); resolved in Step 3 by flow evidence, not by fiat —
+see reachability table row "determinability pair source".
+
+### Reachability (Step 3a) — `| entry candidate | evidence | verdict |`
+
+Sweep scope: `search_instructions` over the 14638 defined instructions
+(uniform at this-slice time), every hit recomputed `−0x1bd0` (code
+space renders) / `−0x9910` (overlay bank `1991:` renders); far renders
+`11bd:`-form probed separately (0). Head range in render space:
+`1000:4548..4629`.
+
+| entry candidate | evidence | verdict |
+|-----------------|----------|---------|
+| fall-through from `296d` | `## 296d hook target` row "exit (tail JMP, cited)" (`JMP 0x1000:1e85` @`2975`, ends `2977`, unconditional) + live `read_memory(2975,3)` → `e93dd9` ✓ + owner row `restore_fs_gs_and_resume` body `296d..2977` | REFUTED — no fallthrough path into `2978` |
+| defined-insn `CALL`/`JMP`/`Jcc` target in `2978..2a59`, render family `0x1000:45` | 4 hits (`## paging block` era state was 0 — NEW post-carve class): `291b 742d`→`451a`= `294a`, `2922 7433`→`4527`= `2957`, `2945 e2fe`→`4515`= `2945` (self), `2951 eb00`→`4523`= `2953` — all `FUN_11bd_2864` rel8 legs (pocket) | OUT ×4 — every recomputed target `< 2978`; ZERO in-range |
+| same, family `0x1000:46` | 8 hits (identical to slice-17's row, owners/bits re-verified live): `2ae2`→`46b8`=`2ae8`, `2b02`→`46da`=`2b0a`, `2b3e`→`46f8`=`2b28`, `2b45`→`46f0`=`2b20`, `2b68`→`46bb`=`2aeb`, `2bc9`→`46e1`=`2b11`, `7744`/`792b`→`46ab`=`2adb` | OUT ×8 — all ≥ `2aeb` (after the handler); head sub-window `4600..4629` (`2a30..2a59`): ZERO hits |
+| same, families `0x1000:29` / `0x1000:2a` / `11bd:29` / `11bd:2a` | 12 / 7 / 0 / 0 — REPRODUCED from slice-17 byte-for-byte; the 12 recompute to `11bd:0d56..0dd3`, the 7 all → `2ac4`−`1bd0` = `0ef4` (`FUN_11bd_0ef4`) | OUT ×19; segment-forms negative ×2 |
+| direct candidate-entry operands | `0x2978`: 0 hits (slice-17 row reproduced); `0x2a30` (slice-17 candidate): 0; `0x2a59`: 0 | NEGATIVE ×3 — no defined reference to any head boundary/candidate address |
+| cell `[0x9c2]` (armed vector) | operand `0x9c2` = 2: `02b1 ff26c209` READ + `41ee c706c2096d29` WRITE (value `0x296d`); superset `9c2` = 2 (no extension) — slice-14/17/22 writer set {`41ee`} CONFIRMED unchanged | `0x296d < 0x2978` — OUT; arms the restore stub, NOT the head |
+| cell `[0x9bc]`/`[0x9be]` (per-arg vector) | controls REPRODUCED exactly: `0x9bc` 2 / `9bc` 6 / `0x9be` 2 / `9be` 4 (full false-string set — slice-21's reconciled count; single runs this pass, no batch artifact); per-arg pair words = determinability appendix `## 2811..296c pocket` table (14 rows quoted there, in-map) | the `0x29bc` arm's values `0x2a5a`/`0x2a60` land INSIDE `clear_msw_and_callfar` (owned, boundary `2a5a..2ad8`) — NOT the head; other 13 arms' values all `< 2978` (037d..0905 band) or pocket `2820/2822` |
+| determinability pair-source words resolving INTO `2978..2a59` | re-scan of all 28 arm cells `arg−4`/`arg−2` (arithmetic from the appendix rows): `037d/037f`, `08d6/08d8`, `2820/2822`, `03a3/03a5`, `0716/0718`, `08ae/08b0`, `0745/0747`, `0901/0903`, `29b8/29ba`, `0675/0677`, `08a8/08aa`, `03d2/03d4`, `045e/0460`, `04f3/04f5` — only `0x29bc−4 = 0x29b8` ≥ `2978` (and `29ba/29bc…`: cells `29b8..29bb` ⊆ head ✓) | EXACTLY ONE in-head contact: the R2 TABLE run. It is a DATA source (read by `6270/6277`), not a transfer target — its values leave the head (`2a5a/2a60` in-handler). The `0x29bc` numeral itself: only `2f18`/`44ab` frame-slot stores (`0x29` family re-run, 4 hits identical to slice-17) → rejected as entry writer per slice-17; `[0x9ba]` chain terminal per slice-20 NONE-FROM-DISCIPLINE |
+| far-ret return frames (stored IPs) | handler-pair stores per slice-22 walk tables: `0x443/0x4d3/0x665/0x6ca/0x7b9/0xb6e/0xa35/0xa86/0xb14/0xb3f` + H13 `PUSH 0x2ac4`@`2aaa` (in the `0x2a` family re-run, 18 hits = slice-17's 17 + this new handler row) | none in `2978..2a59` — `2ac4` is inside the handler body; ZERO ret-frame entries into the head |
+| internal head edges (self vs external) | stream edges enumerated: `297d→29b5`, `2994→29b3`, `29b5→0337` (external), `2a24→2a39`, `2a37→BX` (dynamic), `2a58→2a26` (internal back-edge) — every in-head Jcc/JMP accounted | islands reachable only from their own heads (`2978`, `29bc`) or dynamically; `29b8` NOT flow-reachable (unconditional JMP exits at `29b5`) — supports R2 TABLE |
+| residual dynamic holes (legs (i)/(ii)/(iii) inherited) | (i) fall-in from pocket: pocket now defined (slice-21/22) and the `0x1000:45` family proves no pocket edge targets the head — except the 7 never-disassembled skip bytes `28e7..28eb`/`28ed` (defined-instr blindness); (ii) runtime-installed pointers ([0x9c0]-NOT-IN-EXE precedent); (iii) `CS:[0x2ad9]` tail cell: not an entry (data, row `1000:46a9..46aa`) | head entry verdict: ZERO static entries — DYNAMIC-ONLY (or never). The three slice-17 legs persist in dynamic form only |
+
+### `[0xdfe]` sweep (Step 3b) — contact table + window arithmetic + controls
+
+`| pattern run | match_count | hits + classification |` (all `search_instructions`
+runs `truncated:false`, `instructions_scanned:14638` unless stated):
+
+| pattern run | match_count | hits + classification |
+|-------------|-------------|------------------------|
+| operand `0xdfe` | 2 | `2892 c606fe0d00` `MOV byte ptr [0xdfe],0x0` WRITE; `28a0 c606fe0d01` `MOV byte ptr [0xdfe],0x1` WRITE — both in `FUN_11bd_2864` (pocket `[0x2e]`-switch stream). ZERO defined READS. The head reader `2978` (`803efe0d01`) is UNDEFINED-listing → invisible by construction (cite: raw read + dry-run emit rows above); `2978` IS a reader of `[0xdfe]` (class READ — conditional gate, the flag test before CR0 PG-set) |
+| operand `dfe` (superset) | 3 | above 2 + 1 FALSE-STRING: `1991:34e5 7507 JNZ 0x1000:cdfe` — overlay-bank near target, recompute `34e5+2+0x07 = 34ee` ↔ `cdfe−9910 = 34ee` ✓ same-bank CODE target, not the cell |
+| operand `[0xdfe]` (bracket form) | 2 | identical (render-form probe) |
+| operand `DS:[0xdfe]` / `CS:[0xdfe]` / `ES:[0xdfe]` / `SS:[0xdfe]` | 0 / 0 / 0 / 0 | negative ×4 — no override render of the cell exists |
+| byte pattern `803efe0d` | 1 | `11bd:2978` only — the CMP-byte form is program-unique (the head itself; undefined bytes ARE scanned by the raw pattern channel) |
+| byte pattern `3efe0d` | 1 | `11bd:2979` only (offset+1 = the `3e fe 0d` window on the same instruction — consistent single occurrence) |
+| byte pattern `fe0d` (raw, caution) | 4 | `1132` FALSE-POSITIVE (context `1128 e843fe0b e83ffe0c e83bfe0d e837fe0e` — `1132..1133` = rel16 displacement `fe3b` of `1130 CALL`: `1134−0x1c5 = 0f6f`, orphan-band defined bytes not in a body (`get_function_by_address(1132)` → error), branch displacement bytes — not a data contact); `2894` = disp16 field of `2892` WRITE ✓; `28a2` = disp16 field of `28a0` WRITE ✓; `297a` = disp16 field of `2978` READ ✓ — partition reconciles 1:1 against the operand/pattern runs above; hint-partition `fe0d`@`3059` NOT reproduced (all three space-readings probed negative, ¶ above) |
+| family control `[0xd` (absolute `0xd00..0xdf` window) | 95 | `[0xdfe]` contributes exactly 2 (both WRITEs) — READS zero; adjacency live: `[0xdfc]` `28a5 STR word ptr [0xdfc]` (pocket, TR store — feeds the head's `2999` BX load), `[0xdff]` ×9 (`2afd` `FUN_11bd_2aeb` + `setup_memory_hardware` leg + `execute_exit_arm`/`7b50`/`7bb6` CMPs, `77ef SETA SS:`, `7836/7875` writes) — other-cell, cite-only; the `[0xd60..0xd6c]`/`[0xd5e]`/`[0xd70]` cluster rows appear under both pocket/H13/head owners (head-internal contacts listed in R3 row) |
+
+Constant-base census at this-slice time (supersedes slice-20's
+14006-era counts; window arithmetic re-derived against the SAME
+constant sets — slice-20's Base→window ledger structure reused, values
+re-verified live): `MOV BX,0x…` 46 (was 33; +13 = slice-22-created band
+preludes `0347/0410/0493/05b1/0699/0771/07e9/093a/099d/09d9/0a60/0aa1/
+0ae4` all `bb0010 MOV BX,0x1000` + island `033c` — no NEW value in
+window-reach position), `MOV SI,0x…` 62 (was 59; +3: `0340 SI=0x467`,
+`0354 SI=0x3e0`, `096a SI=0x978`), `MOV DI,0x…` 35 (was 34; +1: `033d
+DI=0xf56`), `MOV BP,0x…` 1 (identical: `1000:0000 BP=0x1` stub). No
+constant equals `0xdfe/0xdff`; reach requires `base+disp ≡ 0xdfe..0xdff`:
+
+| base (census value) | required disp for `0xdfe` | site present? | verdict |
+|---------------------|---------------------------|---------------|---------|
+| `0x98e` (`6a97`) | `+0x470` | `[BX + 0` 320-hit list: no `0x470` disp | REJECT (vacuous-owner basis: slice-20 body-scan `6a68..6aab` zero sites) |
+| `0xf7d` (`7684`) | `+0x81` | negative (partition list: `+0x81` absent) | REJECT (owner sites `7687/768e` are `−0x3/−0x2` → `0xf7a/0xf7b` ∉) |
+| `0xd12` (`2804`) | `+0xec` | absent | REJECT |
+| `0x1000` ×14 (band preludes/islands) | `−0x202` | `[BX + -` full 10-hit list: no `−0x202` | REJECT ×14 (band-handler `[BX+disp]` sites: none in the 10; their cell ops are absolute) |
+| `0x2824` (`626d`) | `−0x1a46` | absent | REJECT (sites `6270/6277` → `0x2820/0x2822` ∉ — the known mirror rows) |
+| `0x11e4` (`3465/363b/36a4`) | `−0x3e6` | absent | REJECT (sites `+0x2..+0x26` → `0x11e6..0x120a` ∉) |
+| `0x2d0a` (`7697`) | `−0x1f0c` | absent | REJECT (sites → `0x2d07/0x2d08` ∉) |
+| `0xe000/0xf000/0xfffe/0xffff/0xe822` (`0d7c/3f13/3f18/5ff7/1e6b`) | `+0x2dfe/+0x1dfe/+0xe00/+0xdff/+0x25dc` | all absent in the positive envelope + `[BX + -` list | REJECT ×5 |
+| small constants `{0,1,2,3,4,5,8,0xa,0xb,0x10,0x40,0x200}` (census owners `12a1/14a4/1df7/23cf/3bea/5e9e/62ce/63c4/6995/69ac/6afe/707f/711f/7730/78ec/795c/79ff/7a23/1991:2034/1991:3897`) | `0xdfe−b ∈ {0xdee,0xdf3,0xdf4,0xdf6,0xdf9..0xdfd,0xdbe,0xbfe,…}` | NONE present in any partition list (no `+0xd??`/`+0xdf?`/`+0xbfe` render among the 320/68/70 positives; the `dfe`-substring runs already cover any `0xdfe` render) | REJECT per-value ×20 |
+| SI/DI/BP constants (62/35/1 values, full list quoted in the census runs above) | required disps `{0x997,0xa1e,0x486,0xdde,0xdf9,0x536,0xdf6,0xd86,0xb2e5,0xdfd,0xdfe(ESI 0xf000 half),0x6ffe,0x7fe,0x9fe,0x8bfe,0xdee,0xdf4,0xdfb,0xdf3,0xdfc,0xdf5,0xdf8,0xddc,0xdc7,0xdb6,0xd66,0x4c6,0x4be,0xae8,0xa6bd,0x8dfe,0x382,0xa101,0x65e,0x99b4,0xc62,…}` and DI `{0xe72…0xdce,0x1de,0x215,0x203,0x3d2,0x66,0xd9e,0x53e,…}` and BP `0xdfd` | per-site check against the live partition lists (`[SI + 0` 68 hits — disps `0x0..0x68`; `[DI + 0` 70 — `0x0..0xc,0x1,0x3,0x66a,0x28,0x2a`; `[BP + 0` capped-500 discovery — observed `0x0..0x26`+`0xff00..0xff7e` group, targeted `[BP + 0xdf` = 0 closes the single required value): NONE match | REJECT ×all resolved; negative-side renders `[BX/SI/DI + -` (10/15/6 hits, complete lists quoted above) carry no `−(base−0xdfe)` value → REJECT |
+| head-internal window site `29a2 MOV byte [BX+5],0x89` | BX = `[0xdfc]` runtime (`2999`); site executes under DS←`0x8` (`29a0` immediately before) | linear reach `0x10000+0xdfe` requires `(0x80 + ((BX+5) mod 0x10000))` — max `0x80+0xFFFF = 0x1007F < 0x10Dfe` | REJECT by segment arithmetic, BX-independent (site cited for completeness; head bytes are undefined → invisible to the sweep anyway) |
+
+Reader/writer closure: `[0xdfe]` defined WRITEs `{2892, 28a0}` (sole
+static writer set this pass — the pocket flag-legs: write-0 / write-1
+inside `FUN_11bd_2864`'s `[0x2e]` switch stream, owners cited); defined
+READs `∅`; the sole known READ is the unowned head `2978` (byte-cited).
+Runtime writer status: OPEN-WINDOW holes stand — dynamic DS-relative
+sites (base-not-static): `2df8 PUSH [BX+0x2]` (BX=`[BP+0x6]` caller
+pointer; reaches `0xdfe` iff BX=`0xdfc`), `09ed FNSAVE [BX]` (H9 body,
+BX←`[0xf82]` runtime, 108-byte write footprint), `0227 FNSAVE [BX]`,
+`4629 CMP [BX]` (parse_config — read only), `0978` orphan-junk `[BX+SI]`
+class, `1e73 ADC [BX+SI]`, `0bd4/0bd8` (`[BX+SI]` pair, SI=0x1028 →
+BX=`0xfd6` needed — BX uncensored), struct-cursor owners (`1ab8/1d8c/
+3986/4bdd/52ef/5686/6701/4ca1/4f83/6084` families per slice-20's OPEN
+ledger — form sets re-verified identical or +1 row per the pair-run
+deltas), every `1000:` stub-zone base (frame/stub class), overlay-bank
+dynamic bases (`1991:321b/3253/35d0/362f/3689/3879/38b2/3977/453b/3a75/
+3af1` + `1991:2f65`-class ES sites) — enumerated-as-class, NOT silently
+rejected; `[ES+...]`/`[SS+...]` renders are no-op/frame classes for a
+DS-absolute cell (segment math, cited by the `1dfe`-row precedent
+`## [0x9ba] consumers`); implicit `MOVSD` legs `2a4e/2a52` (inside the
+head) touch FS:ESI/ES:EDI at runtime values `[0xde4]/`[0xde8]` — no
+offset render, out of sweep visibility (flagged, head-internal).
+
+Controls (reported, NOT relied — dead channel per slices 16/18/19/20/21):
+`get_xrefs_to(11bd:0dfe)` → `{"references":[],"count":0,…,"total":0}`
+despite the two defined WRITEs; `list_data_items_by_xrefs(filter=all,
+type_filter=all,min_xrefs=1,limit=30)` → `{"data_items":[],"count":0,
+…,"total":0}`; `get_xrefs_to(11bd:2978)` and `get_xrefs_to(11bd:29b8)` →
+both `{"references":[],"count":0,"total":0}` (head-entry + pair-source
+probes). Raw-pattern caution row quoted above (`fe0d`@`1132` false
+positive) is the demonstration that the raw channel needs context
+reconciliation.
+
+### `0x29b8/0x29ba` role (Step 3c)
+
+| Item | Evidence | Claim |
+|------|----------|-------|
+| pair bytes | `read_memory(11bd:29b8,4)` → `{"data":[90,42,96,42],"hex":"5a2a602a"}` — hex↔data reconciled ✓; matches the determinability appendix `29b8` row (`0x29bc (44ab) | 29b8/29ba 5a2a602a`) and the pocket "0x29bc lead resolution" paragraph byte-for-byte | `w0 = 0x2a5a`, `w1 = 0x2a60` |
+| load chain | `## 2811..296c pocket` R2 row (cited, in-map): `626d bb2428`/`6270 2e8b47fc MOV AX,CS:[BX+-0x4]`→`6274 a3bc09 MOV [0x9bc],AX` + `6277 2e8b47fe`→`627b a3be09` — with BX = the `0x29bc` ARG (non-override path, gates `6259`/`6266` per that section's reader-closure row); `0x29bc` arrives via `44ab` slot store → `452f PUSH [BP+-0x5a]` → `6252 8b5f02` (`## callee arg question` re-derives, cited) | arg `0x29bc` arms the pair from cells `29b8/29ba` |
+| target homes | `0x2a5a` = `clear_msw_and_callfar` entry (`get_function_by_address(2a5a)` owner row, this pass) — `2a5a PUSH AX` `50` boundary; `0x2a60` = the post-preamble `CLI fa` (`w1` preamble-skipping entry via stub `0934`, slice-22 H13 rows) | BOTH values land INSIDE the owned handler `2a5a..2ad8` — NOT in the head |
+| role + conflict disposition | bytes sit in the head's address span (`2978 ≤ 29b8 ≤ 2a59`); the linear stream emits them as 2 artifact insns (`5a`/`2a602a`) with NO flow edge landing on `29b8` (every in-head edge enumerated in the reachability table; `29b5 JMP` unconditional before them); the same words are the data source of a live per-arg vector chain | TABLE (not CODE): the determinability pair for arg `0x29bc`, sibling of `mode_vector_source_pair@2820..2823` (same `arg−4/arg−2` shape; there the pair feeds the pocket-override targets, here the `0x29bc`-arm handler entries). The Step-2 CODE-vs-TABLE overlap is RESOLVED to TABLE with this evidence — the CODE emission past the unconditional tail-JMP is an output artifact, not a flow claim (pocket precedents: slice-22 "beyond-exit emitted, NOT walked" rows) |
+
+### Disposition-so-far (Step 4)
+
+Per-class counts: CODE 2 runs / 222 B (R1 `2978..29b7` 64 B, R3
+`29bc..2a59` 158 B), TABLE 1 run / 4 B (R2 `29b8..29bb`), PADDING 0,
+UNKNOWN 0 — tiling sum 226 ✓. Head-entry verdict: **ZERO static entries
+into `2978..2a59`** re-verified in the post-carve defined set
+(`instructions_scanned:14638`); R1 `2978` and R3 `29bc` are DYNAMIC-ONLY
+entry candidates (or never-entered); no attributed walk was created —
+the two islands' bodies are classified, not adopted (Task 2's capped
+path at the cited boundaries). `[0xdfe]`: reader FOUND (the unowned head
+`2978` — sole READ program-wide); defined WRITERS FOUND `2892`/`28a0`
+(`FUN_11bd_2864`, flag-0/flag-1 stores) — the prior "runtime writers
+zero/unfound" state is superseded at the defined-instruction layer;
+runtime-window writers remain enumerated holes (OPEN-WINDOW rows +
+implicit-MOVSD caveat). Pair-role claim: `0x29b8/0x29ba` = TABLE
+(arg-`0x29bc` `[0x9bc]`/`[0x9be]` source pair selecting handler entries
+`0x2a5a`/`0x2a60`) — CODE conflict resolved with flow evidence, do NOT
+treat the run as code at create time (Task 2's never-create-over-TABLE
+rule engaged). R1 tail `JMP→0337` enters the orphan-band relay `JMP CS:
+[0x2fa]` — cell `[0x2fa]` writer set NOT swept this pass (one hop,
+named-deferred); R3 `2a37 JMP BX` exit dynamic. Tool inventory (this
+pass, all read-only): `search_instructions` ×46 (reachability cell
+families 13 + pocket controls 4 + `[0xdfe]` literals 7 + family
+control 1 + censuses 4 + window partitions 17; two `[BP +` discovery
+runs capped 500 → class-rejected + targeted `[BP + 0xdf` closure,
+slice-20 method), `search_byte_patterns` ×3, `read_memory` ×11 (11/11
+internally reconciled; three-way with emission on the head chunks),
+`disassemble_bytes` ×3 ALL `dry_run=true` (226 B head window, `2de0..
+2e48` context probe, `0337..033b` landing probe), `get_function_by_address`
+×8 (4 edges + `0337` + `2a30` + `1132` + `1991:3059`), `find_code_gaps`
+×1 (total 149), `get_xrefs_to` ×3 (0 each), `list_data_items_by_xrefs`
+×1 (empty). NO create/rename/comment/define/save; no transaction
+opened; `fifa96.rep` churn left unstaged; `/media/felipe/FIFAPCCD/`
+untouched.
