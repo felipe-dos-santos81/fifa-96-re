@@ -1205,3 +1205,84 @@ no plate, no boundary change, no save).
 | exit/tail | 11bd:02b1 | `JMP word ptr [0x9c2]` (`ff26c209`, 4 bytes → ends `02b4` = delimited body end) — indirect near tail; no RET, no in-body POPA; vector target owns unwind; continuation evidence: `0db2` post-call segment repair at `0dca`/`0dcd` | cell `[0x9c2]`: static writer `41ee` (`MOV ,0x296d`, gated `41e7`/`41ec`); `11bd:296d` no FUN — address-only, no dive |
 | publishes | — | zero memory stores in the 12 insns (PUSHA/CALL stack pushes only); publishes = register state: SS←DX, DS/ES←0x20, LDTR←0x68, MSW←MSW∪`[0x40]` | — |
 | 7ced contract | 11bd:7ced → 7cf0 | slice-12 rows (cited, no re-walk): resumes `PUSH 0x38`/`POP ES` at `7cf0`/`7cf2` (repairs ES after the pair's `0x20`), no AX read (verify loop `CMP EAX,ES:[EBX]` at `7d06` consumes the stack struct); twin shape at `0db2` (`0dc4`+ segment repair) | — |
+
+### Verdict: 0290 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on the identity leg (REAL-PAIR disposition above): the
+one-insn body `MOV DX,0x20` at `0290` (bytes `ba2000`,
+`disassemble_bytes` `028e..0296`) is deliberate selector staging, not
+pad or artifact — all eight `CALL 0x1000:1e60` sites enter specifically
+for the fixed `DX=0x20` (entries row; `7ced` `execute_exit_arm` among
+them); the sole in-image consumer of that DX is `MOV SS,DX` at `0298`
+(SS-load row — DS/ES re-stage their own fixed `0x20` at `029a`, so the
+staged value feeds only SS); the direct `0293` entry at `0dc1` proves
+the contract is DX-supply, not fall-through convenience (that caller
+stages its own `DX=[BP+0x8]` at `0db5`); and the `11bd:0251` body above
+terminates with `IRETD` at `028e` — `0290` is not swallowed. Role
+stated with citations, no missing leg material to it: renamed +
+plate-set (`C: none — behavioral (selector-staging prelude …)`).
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_0290 | 11bd:0290 | `MOV DX,0x20` only (bytes `ba2000`); sole DX consumer `MOV SS,DX` at 0298 (DS/ES re-stage at 029a); 8 `CALL 0x1000:1e60` sites enter for the fixed selector; direct-`0293` caller `0db2` stages own DX at `0db5`; `0251` ends `IRETD` at `028e` — deliberate staging, not pad | stage_ss_selector | none — behavioral (selector-staging prelude) |
+
+### Verdict: 0293 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on all three legs (walk rows above, not rewritten): role —
+consumes entry `DX` as the SS selector (`MOV SS,DX` at `0298`, the
+stub's `0x20` or the `0dc1` caller's `[BP+0x8]`), re-stages `DS/ES←0x20`
+at `029a/029d/029f`, loads `LDTR←0x68` at `02a1/02a4`, merges the
+global control mask into the MSW (`SMSW`/`OR [0x40]`/`LMSW` at
+`02a7/02aa/02ae`), saves all GPRs (`PUSHA` at `0293`) and publishes
+register state only (zero memory stores — publishes row); exit
+mechanism — pre-hook `CALL word ptr [0x9c0]` at `0294` + tail transfer
+`JMP word ptr [0x9c2]` at `02b1`, no `RET`, no in-body `POPA` — the
+vector target owns the unwind, with caller-side continuation evidence
+(`0db2` repairs DS/ES at `0dca/0dcd`; `7ced` arm repairs ES at
+`7cf0/7cf2`, no AX read — both slice-12 rows); callees — leaf at FUN
+level (`get_function_callees` count 0), the two cell-mediated transfers
+indirect and deferred with the missing pieces named, no dive. Naming
+judgment recorded: `[0x40]` has exactly one read program-wide (the
+`02aa` `OR`; program-wide operand search) and no direct store found, so
+the MSW bit0 (PE) value — hence the transition direction — is unsettled
+in-binary; the name therefore states the mechanism without asserting
+enter-vs-exit, and neither cell value (`[0x9c0]` hook identity,
+`[0x9c2]` per-path target) is material to that role claim. Renamed +
+plate-set (`C: none — behavioral (mode-switch core …)`).
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_0293 | 11bd:0293 | `PUSHA` at 0293; `CALL [0x9c0]` at 0294; `SS←DX` at 0298 (`0x20` via stub / caller value via `0dc1`); `DS/ES←0x20` at 029a..029f; `LLDT 0x68` at 02a1/02a4; `SMSW`+`OR [0x40]`+`LMSW` at 02a7..02ae; tail `JMP [0x9c2]` at 02b1, no RET/POPA — vector target unwinds; 0 FUN callees | execute_mode_switch | none — behavioral (mode-switch core) |
+
+### Boundary disposition
+
+REAL-PAIR — boundary KEPT as-is, no Ghidra boundary action taken:
+neither `delete_function` nor `create_function` was run, and no
+re-bounding is warranted. Evidence (boundary rows above): `0293` has
+its own direct entry (`CALL 0x1000:1e63` at `0dc1`, sole per
+`get_xrefs_to` + program-wide `:1e63` search) with its own DX contract
+(`0db5`), the `0290` stub is deliberate selector staging consumed at
+`0298`, and `11bd:0251` above terminates at `IRETD` `028e`. Ghidra
+before-state = after-state: `stage_ss_selector` body `11bd:0290..0292`,
+`execute_mode_switch` body `11bd:0293..02b4` (`get_function_by_address`
+re-read post-write — bounds unchanged; xrefs unchanged: 8 entries into
+`0290`, 1 direct into `0293`).
+
+### Resolution: slice-12 `0290` NOT-CONFIRMED leg
+
+The `## 7c62 exit arm` NOT-CONFIRMED row (`FUN_11bd_0290` — "the role
+of `DX=0x20` and the exit mechanism are both missing from disassembly")
+is superseded at the pair level, row left untouched here: NOW CLOSED —
+DX role (`SS` selector staged for `MOV SS,DX` at `0298`; stub value for
+the 8 entering sites, caller value for the direct `0dc1` entry) and
+exit mechanism (hook `CALL [0x9c0]` + tail `JMP [0x9c2]`, vector target
+owns unwind, caller-side repair evidence `0dca/0dcd` and `7cf0/7cf2`).
+STAYS OPEN (named, none material to the two assigned roles): `[0x9c0]`
+hook writer/target identity (0 data xrefs, sole mention the `0294`
+consumer — runtime); `[0x9c2]` per-path cell value and the unwind shape
+at its `0x296d` target (static gated writer `41ee`, no FUN, unresolved
+bytes — `3ed8` mode-dispatch territory, Task 2+ material); `[0x40]` MSW
+mask runtime value (single read `02aa`, no direct store found — mode
+direction unsettled, reflected in the direction-neutral name). Ghidra
+writes this task: two renames + two plates + `save_program` on
+`/fifa96.exe` — success.
