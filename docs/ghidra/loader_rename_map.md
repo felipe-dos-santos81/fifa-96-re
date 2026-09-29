@@ -2005,3 +2005,101 @@ this task: `find_code_gaps`, `get_function_by_address` ×3,
 `read_memory` (2), `get_xrefs_to` (2 controls); no `disassemble_bytes`
 (dry-run or otherwise), no rename, no plate, no save;
 `/media/felipe/FIFAPCCD/` untouched.
+
+### Verdicts
+
+None apply — zero walked functions, so there is no role, no mechanism name,
+no cited exit, and no CONFIRMED/NOT-CONFIRMED row to write. This is the
+plan's pre-declared legal zero-entry branch, not an omission: the walk
+disposition table above is the basis, quoted by row — "Attributed entries |
+**None** (0 of 3 candidate entries `2978`/`2a30`/`2a6c` has a resolved
+static feeder; see attribution table)" and "Walks executed | 0 — per the
+zero-entry rule no `disassemble_bytes` window was run this pass". The
+per-walked-function verdict rule (CONFIRMED → verb-led mechanism name +
+plate `C: none — behavioral (<role>)`; NOT-CONFIRMED-at-name → create-only,
+missing leg named) is recorded here as applying VACUOUSLY: no leg is
+"missing" per function because no function was walked; the missing leg is
+the ENTRY LEG ITSELF, block-wide, and it is dispositioned below and in the
+deferral lines rather than per function.
+
+### Entry attribution (conclusion)
+
+**Zero static entries into `2978..2ada` from defined instructions** — the
+honest negative stands as the section's deliverable. Evidence is the
+enumerated sweep in the attribution table above, cited by row (not
+rewritten): 36 `search_instructions` operand runs over the 14006 defined
+instructions (`0x1000:29` 12 hits, `0x1000:2a` 7, `:296`–`:2ad` 24 patterns
+11 hits, `0x1000:45` 0, `0x1000:46` 8, `0x9c2`/`9c2` 2, `0x2978`/`0x2a6c`
+0, `0x29` 4, `0x2a` 17 — every raw hit recomputed, none in range), 6
+`search_byte_patterns` data probes (far-ptr pairs + raw LE words for
+`2978`/`2a30`/`2a6c`, all no-match across defined AND undefined bytes),
+and 2 `get_xrefs_to` controls (0 refs each — dead channel, reported not
+relied). The `[0x9c2]` writer set is unchanged (`41ee` sole writer,
+immediate `0x296d`, out of range). Caveat carried from the sweep rows:
+`search_instructions` is DEFINED-INSTRUCTION-ONLY, so intra-gap relative
+flow cannot surface — fall-in from the undecoded `2811..296c` pocket
+remains OPEN; the block is therefore fallthrough-only statically, with the
+entry mechanism unresolved among the three legs named in the deferral
+update above.
+
+Strongest dynamic lead, now correctly attributed (post-fix-round ownership
+of the `0x29` immediate-family row): the immediate `0x29bc` — numerically
+inside the block — is stored into BP-relative FRAME SLOTS by TWO different
+functions: `11bd:2f18` (`MOV [BP+-0x18],0x29bc`) inside `FUN_11bd_2ec9`
+(body `2ec9..2f4b`), and `11bd:44ab` (`MOV [BP+-0x5a],0x29bc`) inside
+`FUN_11bd_3ed8` (body `3ed8..4586`, the `[0x9c2]`-vector publisher family —
+`41ee` is the same function). Slot stores are not absolute vector cells →
+REJECTED as static entry writers; recorded as a RUNTIME-SLICE LEAD pointing
+at BOTH functions, lead-not-evidence. Second flagged-not-adopted contact:
+`CS:[0x2ad9]` (bytes `2ad9..2ada`, the block's last two cells) is a LIVE
+DATA TAIL CELL — read at `2adb` (`FUN_11bd_2adb` first insn,
+`MOV DX,CS:[0x2ad9]`) and written at `7739` (`setup_memory_hardware`,
+`MOV CS:[0x2ad9],DX`) — flagged-not-adopted; ownership question deferred.
+
+### Writes (before-state → after-state — ZERO-WRITE branch)
+
+NONE. Zero writes this task: no `disassemble_bytes` (real or dry), no
+`create_function`, no `rename_function`, no `set_comment`, no
+`save_program` — authorized by the zero-entry branch (nothing was walked,
+so nothing has a cited boundary to create at; the inherited cap + ratify
+rule was never engaged and stays intact for a future slice). The block's
+before-state and after-state are UNCHANGED, proven by two live read-backs
+run THIS task (project `fifa96`, program `/fifa96.exe`), each verbatim
+identical to the corresponding Task-1 row above:
+
+| Live re-read (this task) | Verbatim response | Matches Task-1 row |
+|--------------------------|-------------------|--------------------|
+| `get_function_by_address(11bd:2a6c)` | `{"error":"No function found for 11bd:2a6c"}` | no-function at MSW-clear locator ✓ (`2a6c..2a73` still UNDEFINED, still flagged-not-adopted) |
+| `find_code_gaps` (total 131, page offset 0/limit 100), covering row | `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | covering-row quote byte-exact ✓ — boundaries `2978`/`2ada` (−`0x1bd0`), size 355, neighbors unchanged |
+
+Scope guards honored by non-action: `11bd:2811..296c` and the twin orphan
+`02da..02f8` were not entered, not repaired, not mutated; no pre-existing
+function body touched (`FUN_11bd_2adb`, `restore_fs_gs_and_resume` states
+re-read only); `/media/felipe/FIFAPCCD/` untouched.
+
+### Deferrals
+
+- Unwalked attributed entries by name/address: **N/A** — zero attributed
+  entries (nothing to walk, nothing deferred-by-name at this step).
+- Unattributed remainder: **the whole block `2978..2ada` — all 355 bytes —
+  handed back NAMED-OPEN**, every byte still undefined listing
+  (`has_undefined_bytes:true` in the covering row above); the block is
+  larger than this slice may claim per the plan's scope check.
+- Runtime legs unchanged: `[0x40]` contents (slice-15 direction UNDECIDED)
+  and `[0x9c0]` installer identity (NOT-IN-EXE, runtime-written) are
+  UNCHANGED by this slice — no walk occurred that could name their
+  installer, and no direction claim was made anywhere in this section.
+- Out-of-scope skip pocket `2811..296c`: UNTOUCHED; tracked state stands in
+  this section's own gap table (left-pocket row `1000:43e1..1000:453c`
+  size 348 + pocket-edge `get_function_by_address(11bd:296c)` error — both
+  re-confirmed by the `find_code_gaps` page just re-read).
+- Twin orphan `02da..02f8`: UNTOUCHED; tracked state stands in
+  `## 02b7 twin completion` `### Pocket repair` tail row
+  (`get_function_by_address(11bd:02da)` → `{"error":"No function found for
+  11bd:02da"}` — orphan still stands).
+- Next-slice candidates: the FRAME-SLOT QUESTION — the `0x29bc` stores at
+  `FUN_11bd_2ec9`/`2f18` (`[BP+-0x18]`) and `FUN_11bd_3ed8`/`44ab`
+  (`[BP+-0x5a]`), and who consumes those slots (whether the frames reach
+  the block via any runtime path); plus the `CS:[0x2ad9]` tail-cell
+  ownership question (`2ad9..2ada` = the block's last two bytes as live
+  data across `FUN_11bd_2adb`/`setup_memory_hardware`@`7739`).
