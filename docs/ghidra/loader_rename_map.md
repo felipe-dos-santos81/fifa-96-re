@@ -945,3 +945,188 @@ read. No single first-vs-second order holds for all paths.
 Setter status: deferred-with-boundary (unchanged from the latch
 table above: `0e45`/`0e98` unenclosed bytes below `FUN_11bd_0ef4`,
 no FUN, not among `76db`'s callees).
+
+## 7c62 exit arm (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_7c62` (body `11bd:7c62..7d3d` per `get_function_by_address`
+— matches the slice-8 anchor, delta none; signature
+`uint FUN_11bd_7c62(undefined2 param_1)`, 79 insns) takes zero stack
+words (no prologue, no PUSH before either gated call; caller `4575`
+likewise push-free per the 3ed8 tail rows) with `param_1`
+register-passed (fastcall) and forwarded to `199a`. Gate
+`[0xe00]!=0` (`CMP` at `7c62` + `JZ` at `7c67`) admits the pair
+`199a` (site `7c69`) → `016c` (site `7c6c`); `[0xdff]` then splits
+EMS-setup (`!=0`: CX derived from `[0xece]`, tail `JMP 79fc` at
+`7c89` iff `[0x47]` bit `0x80`, else out-of-body `JZ` to the `7c2b`
+EMS block) from the `[0xdfa]`/`[0xadc]`-gated main block (`CALLF
+[0xaec]` loop, `0290(0)` at `7ced`, `092c` verify at `7d15`,
+fail-path `092c` at `7d1e`, zero-fill, `1df7` at `7d39`).
+Publishes: `[0xeca]+=CX` at `7d25` and an `ES:DI` zero-fill
+(`ES=[0xaa]+0x200` segment, `STOSW.REP` at `7d37`). Return: a word
+in AX on every path (`092c`-AX on success, `1df7`-AX on the fail
+path, `79fc`-AX via the tail jump, entry-AX via the `7c61` RET for
+the latch/guard exits) — and the `4575` arm ignores it (next insn
+after the call is `CMP [BP-0x56],0x0` at `4578`, no AX read).
+Overlap: `199a`/`016c` take identical zero-stack-word intake here
+(sites `7c69`/`7c6c`) and in `run_postload_init` (sites `62a0`/
+`62b7`) — shared-helper evidence; gates differ (`[0xe00]` here vs
+`[0x2e]` there). Callees (`get_function_callees`, count 6): exactly
+the known six, no seventh. No rename this task (map-only, program
+untouched).
+
+Far-thunk delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx` holds for all six
+call/jump targets (`356a→199a`, `1d3c→016c`, `1e60→0290`,
+`24fc→092c`, `39c7→1df7`, `95cc→79fc`) and the caller
+(`9832→7c62` at `4575`).
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| arg intake | 11bd:7c62 | no prologue (first insn `CMP byte ptr [0xe00],0x0` at 7c62); no PUSH before 7c69/7c6c; decompile `uint __fastcall FUN_11bd_7c62(undefined2 param_1)` forwards `param_1` to 199a | — |
+| latch gate | 11bd:7c62..7c67 | `CMP byte ptr [0xe00],0x0` at 7c62 + `JZ 0x1000:9831` (=7c61 RET, unenclosed, see out-of-body row) at 7c67 | — |
+| call 199a | 11bd:7c69 | `CALL 0x1000:356a` (=199a); arg `param_1` register-passed (decompile `FUN_11bd_199a(param_1)`; zero PUSH at site) | `CALL 0x1000:356a` at 7c69 (=199a) |
+| call 016c | 11bd:7c6c | `CALL 0x1000:1d3c` (=016c); no args (decompile `FUN_11bd_016c()`; zero PUSH at site) | `CALL 0x1000:1d3c` at 7c6c (=016c) |
+| dff split | 11bd:7c6f..7c8c | `CMP byte ptr [0xdff],0x0` at 7c6f + `JZ 0x1000:985c` (=7c8c main block) at 7c74; `!=0` path: `MOV CX,[0xece]` at 7c76 + `SUB CX,0x1000` at 7c7a + `SHR CX,0xc` at 7c7e + `INC CX` at 7c81; `TEST [0x47],0x80` at 7c82 | — |
+| tail jump 79fc | 11bd:7c87..7c89 | `JZ 0x1000:97fb` (=7c2b EMS block, unenclosed) at 7c87; `JMP 0x1000:95cc` (=79fc, tail transfer — no CALL insn; callee attribution via `get_function_callees` + decompile `FUN_11bd_79fc()` with no args, result returned) at 7c89 | `JMP 0x1000:95cc` at 7c89 (=79fc) |
+| main-block guards | 11bd:7c8c..7c97 | `MOV CX,[0xdfa]` at 7c8c + `JCXZ 0x1000:9831` (=7c61 RET) at 7c90; `CMP [0xadc],0x0` at 7c92 + `JZ 0x1000:9831` at 7c97 | — |
+| CALLF block | 11bd:7c99..7ceb | `PUSH SI`/`PUSH DI` at 7c99/7c9a; EAX=`[0xeca]<<0xa` at 7c9b/7ca1; EDX=`[0x98]<<4` adjust at 7ca5..7cb4; stack struct pushes at 7cb7..7ccd (`PUSH EAX`, `OR AX,0xeee`, `PUSH 0x0/DX/[0xadc]/SS/BX/0x0/0x0/0x4`); `SHR CX,0x2` at 7cd7 + `MOV AH,0xb` at 7cda; `OR AX,AX` at 7ce0 + `JZ 0x1000:98f1` (=7d21 fail path) at 7ce2; `ADD [BX]/[SI+0xc],EDI(=0x1000)` at 7ce4/7ce7 + `LOOP` at 7ceb | `CALLF [0xaec]` at 7cdc (indirect, not FUN-resolved — address-only, no dive) |
+| call 0290 | 11bd:7ced | `CALL 0x1000:1e60` (=0290); arg 0 register-passed (decompile `FUN_11bd_0290(0)`; zero PUSH at site) | `CALL 0x1000:1e60` at 7ced (=0290) |
+| call 092c (verify) | 11bd:7cf0..7d15 | `PUSH 0x38`/`POP ES` at 7cf0/7cf2; EBX=`[BX+0x14]` at 7cf5; EAX=EBX&#124;0xeee at 7cf9/7cfc; `CX=[0xdfa]>>2` at 7cff/7d03; `CMP EAX,ES:[EBX]` at 7d06 + `JNZ 0x1000:98ee` (=7d1e fail path) at 7d0b; `ADD EBX/EAX,EDI` at 7d0d/7d10 + `LOOP` at 7d13 | `CALL 0x1000:24fc` at 7d15 (=092c; success — AX returned at 7d1d) |
+| fail path: 092c + zero-fill + 1df7 | 11bd:7d1e..7d39 | `CALL 0x1000:24fc` at 7d1e (=092c); `MOV CX,[0xdfa]` at 7d21; `ADD [0xeca],CX` at 7d25 (publish); `MOV AX,[0xaa]` at 7d29 + `ADD AH,0x2` at 7d2c + `MOV ES,AX` at 7d2f; `XOR AX,AX`/`XOR DI,DI` at 7d31/7d33 + `SHR CX,0x1` at 7d35 + `STOSW.REP ES:DI` at 7d37 (zero-fill); `CALL 0x1000:39c7` at 7d39 (=1df7); `JMP 0x1000:98e8` (=7d18 epilogue join) at 7d3c | `CALL 0x1000:24fc` at 7d1e (=092c); `CALL 0x1000:39c7` at 7d39 (=1df7; AX returned at 7d1d) |
+| epilogue (in-body return) | 11bd:7d18..7d1d | `ADD SP,0x18` at 7d18; `POP DI`/`POP SI` at 7d1b/7d1c; `RET` at 7d1d — AX holds 092c-AX (via 7d15) or 1df7-AX (via 7d3c join); signature `uint` | — |
+| out-of-body edges (NOT 7c62 publishes) | 11bd:7c2b..7c61 | `JZ/JCXZ` targets `0x1000:9831` = `11bd:7c61` (`RET` — bare, entry-AX); `JZ` at 7c87 targets `11bd:7c2b` (unenclosed bytes, `get_function_by_address` finds no FUN): `MOV CS:[0x79f6],CX` at 7c2b, `INT 0x67 AX=0xde04` at 7c48/7c4b, `JNZ 0x1000:9476` (=11bd:78a6, `76db` 0x17-error neighborhood) at 7c4f, `LOOP 0x1000:9818` (=7c48) at 7c5f — shared EMS block, recorded address-only, no dive | — |
+
+Call sequence (address order): `199a` at `7c69` (`param_1` via
+register) → `016c` at `7c6c` (no args) → `79fc` via tail `JMP` at
+`7c89` (no args, EMS-setup path only) → `0290(0)` at `7ced` →
+`092c` at `7d15` (verify; success returns its AX) → `092c` at
+`7d1e` (fail path) → `1df7` at `7d39` (fail-path AX returned).
+`CALLF [0xaec]` at `7cdc` is indirect (not FUN-resolved).
+
+Overlap (`016c`/`199a` here vs `run_postload_init` at `11bd:627f`,
+disassembly + decompile read this task, no dive into either callee,
+`run_postload_init` row untouched): `199a` — here site `7c69`
+gated on `[0xe00]!=0` (`7c62`/`7c67`), arg `param_1` register-passed
+(zero PUSH); there site `62a0` (`CALL 0x1000:356a`) gated on
+`[0x2e]!=0` (`CMP byte ptr [0x2e],0x0` at `6299` + `JZ` at `629e`),
+arg register-passed (decompile `FUN_11bd_199a(extraout_CX)`, zero
+PUSH). `016c` — here site `7c6c` fall-through after `199a`, no args
+(zero PUSH); there site `62b7` (`CALL 0x1000:1d3c`) inline sequence,
+no args (decompile `FUN_11bd_016c()`, zero PUSH). Verdict:
+same-role (shared-helper) evidence on intake — identical
+zero-stack-word call shape at all four sites; gate contexts differ
+(`[0xe00]` here vs `[0x2e]` there), cited, not elided.
+
+Return contract: `7c62` hands a word in AX back to the `4575` arm
+(`092c`-AX / `1df7`-AX / `79fc`-AX / entry-AX per path above), which
+the arm ignores — `CMP [BP-0x56],0x0` at `4578` reads no AX (3ed8
+tail rows). Ruled out: VOID (signature is `uint`, AX staged on the
+main paths), caller-gated status (no `OR AX,AX`/`JZ`/`MOV` of AX
+between `4575` and `457e`).
+
+### Verdict: 7c62 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on all four legs (evidence rows above, not rewritten):
+intake — zero stack words, `param_1` register-passed (fastcall),
+forwarded to `199a` (arg-intake row + `7c69` site); call order —
+`199a` at `7c69` → `016c` at `7c6c` → `79fc` via tail `JMP` at
+`7c89` (EMS-setup path only) → `0290(0)` at `7ced` → `092c` at
+`7d15` (verify) → `092c` at `7d1e` (fail path) → `1df7` at `7d39`
+(call-sequence statement); publish — `[0xeca]+=CX` at `7d25` plus
+the `ES:DI` zero-fill (`ES=[0xaa]+0x200`, `STOSW.REP` at `7d37`);
+return contract — word in AX on every path (`092c`-AX / `1df7`-AX /
+`79fc`-AX / entry-AX), ignored by the `4575` arm (VOID and
+caller-gated status ruled out). Renamed + plate-set +
+`save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_7c62 | 11bd:7c62 | intake zero stack words + `param_1` forwarded to 199a at 7c69; six-call order 7c69/7c6c/7c89/7ced/7d15/7d1e/7d39; publishes `[0xeca]+=CX` at 7d25 + `ES:DI` zero-fill at 7d37; AX word return per path, arm-ignored at 4578 | execute_exit_arm | none — behavioral (SI==0xb exit arm) |
+
+### Verdict: 092c (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+One-layer role (body `11bd:092c..0930` per `get_function_by_address`,
+2 insns, signature `void`, 0 FUN callees): indirect tail-transfer
+stub through the `[0x9bc]` mode-vector cell — `NOP` at `092c` +
+`JMP word ptr [0x9bc]` at `092d`, no `RET` in-body — the `CALL`s at
+`7d15`/`7d1e` push `7d18`/`7d21` and resume there only via the vector
+target's own `RET` (the target owns the continuation). Called at `7d15`
+(verify; success returns its AX via the `7d1d` epilogue) and `7d1e`
+(fail path). Renamed + plate-set + `save_program` on `/fifa96.exe`
+— success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_092c | 11bd:092c | `NOP` at 092c + `JMP word ptr [0x9bc]` at 092d, no RET; 0 FUN callees; called at 7d15/7d1e | dispatch_mode_vector | none — behavioral (indirect tail transfer through [0x9bc]) |
+
+### Verdict: 1df7 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+One-layer role (body `11bd:1df7..1e1c` per `get_function_by_address`,
+16 insns, signature `void`, 0 FUN callees — the two `CALLF [0xaec]`
+sites are indirect, address-only, no dive): per-slot teardown loop
+over `[BX+0xadc]` words — `MOV BX,0x10` at `1df7`, `DEC BX` x2 per
+pass (`1dfa/1dfb`), `JS` exit at `1dfc`; nonzero slot
+(`MOV DX,[BX+0xadc]` at `1dfe` + `OR DX,DX` at `1e02` + `JZ` skip
+at `1e04`) issues `CALLF [0xaec]` with `AH=0xd` at `1e09` then
+`AH=0xa` at `1e0f`, then zeroes the slot
+(`MOV word ptr [BX+0xadc],0x0` at `1e14`); `RET` at `1e1c`.
+Called at `7d39` (fail path; its AX returned at `7d1d` — per the
+`7c62` path-table fail-path row and the epilogue row's "via `7d3c`
+join").
+Renamed + plate-set + `save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_1df7 | 11bd:1df7 | BX 0x10→0 step -2 over `[BX+0xadc]` (1df7..1dfc); nonzero slot → `CALLF [0xaec]` AH=0xd/0xa at 1e09/1e0f + zero at 1e14; `RET` at 1e1c; 0 FUN callees; called at 7d39 | clear_slot_entries | none — behavioral (per-slot teardown loop) |
+
+NOT-CONFIRMED (no rename, no row): `FUN_11bd_0290`
+(body `11bd:0290..0292`, 1 insn, 0 FUN callees): `MOV DX,0x20`
+at `0290` with no `RET`/`JMP` in the delimited body — the role of
+`DX=0x20` and the exit mechanism are both missing from disassembly
+(the body falls through into the adjacent `FUN_11bd_0293` at
+`0293..02b4`; the `0290(0)` decompile surface reads past the
+delimited body, flagged per Task 1 — disassembly wins, so no
+one-layer role is stated).
+
+### Guard-deferred (7c62 arm): 11bd:199a
+
+Body `11bd:199a..1a85` (82 insns). 1 FUN callee (`FUN_11bd_27a4`,
+`11bd:27a4..27ae`) — a second layer past the `7c62` body. No dive,
+no rename.
+
+### Guard-deferred (7c62 arm): 11bd:016c
+
+Body `11bd:016c..0245`. 1 FUN callee (`FUN_11bd_2081`,
+`11bd:2081..2088`) — a second layer past the `7c62` body. No dive,
+no rename.
+
+### Guard-deferred (7c62 arm): 11bd:79fc
+
+Body `11bd:79fc..7a87`. 3 FUN callees (`FUN_11bd_0290` at
+`11bd:0290..0292`, `dispatch_mode_vector` at `11bd:092c..0930`,
+`FUN_11bd_0ef4` at `11bd:0ef4..0ef6`) — second layers past the
+`7c62` body (the `092c` layer is now a CONFIRMED leaf callee, still
+a second layer, so the layer rule fires regardless — same precedent
+as `22ad→25ee`). No dive, no rename.
+
+### Deferral unlock: 4575
+
+`execute_exit_arm` (`11bd:7c62..7d3d`) is now CONFIRMED+renamed, so
+the `7c62` call in the 3ed8 tail arm (`### Guard-deferred (tail):
+11bd:7c62`, site `4575`, `CALL 0x1000:9832` gated on SI==0xb at
+`4570/4573`) needs no dive — the callee role (gated `199a`/`016c`
+pair, EMS/main split, `CALLF` block + verify, `[0xeca]` publish +
+zero-fill, word return) is settled. What the arm receives back on
+return: a word in AX (`092c`-AX / `1df7`-AX / `79fc`-AX /
+entry-AX per path), which the arm ignores — the next insn
+`CMP [BP-0x56],0x0` at `4578` reads no AX before the `457e` gate.
+
+### Overlap note: 016c/199a
+
+Shared-helper verdict (no change to the `run_postload_init` row):
+`199a`/`016c` take identical zero-stack-word intake here (sites
+`7c69`/`7c6c`, gated on `[0xe00]` at `7c62/7c67`) and in
+`run_postload_init` (sites `62a0`/`62b7`, gated on `[0x2e]` at
+`6299/629e`) — same-role evidence on call shape, gate contexts
+differ as cited. Both callees are guard-deferred above (second
+layers `27a4`/`2081`), so no role claim beyond the shared intake
+shape is made here.
