@@ -606,3 +606,128 @@ read by `lookup_copy_config_string` at `466c/4677`, writer unknown);
 the `2d40` split-label question (`2d40..2d42` zero-return adjacent
 to `raise_boot_error` at `2d43` — one function split or two?);
 the 2 new tail deferred (`7c62` 6 callees, `30d8` 4 callees).
+
+## 22ad error exit (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_22ad` (body `11bd:22ad..2381` per `get_function_by_address` —
+matches the slice-8 anchor, delta none) takes one word error code at
+`[BP+4]`, formats a `"[NN]  "` prefix into the `BP-0x98` stack buffer
+(`'['` at `22db`, decimal `IDIV`-by-10 digits via the `[BX+0xab0]`
+digit table, `']'`/spaces/NUL at `231c..232a`), scans the `0x15e8`
+word table bounded by `[0xf22]` for a code match (calling
+`copy_string_aligned` on match), prints via the `[0xe6c]` vector
+twice (conditional `0x1190`-prefixed line, unconditional second line),
+and returns via plain `RET` at `2381` — no in-body trap: `HLT`,
+self-`JMP` loop, and `INT` are all absent from the 89-insn body, so the
+program-wide noreturn is caller convention (push a code, never resume),
+not a hardware mechanism in `22ad`.
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| arg intake | 11bd:22ad..22d0 | `PUSH BP` at 22ad; `MOV BP,SP` at 22ae; `SUB SP,0x9c` at 22b0; `MOV [BP-0x2],0x0` at 22b6; `CMP [BP+0x4],0x0` at 22bb + `JGE` at 22bf; `[BP-0x2]=1` at 22c1 + `NEG [BP+0x4]` at 22c6 (abs of code); `MOV [BP+0xff66],AX` at 22cc; `LEA SI,[BP+0xff68]` at 22d0 | — |
+| `[NN]` format | 11bd:22d4..232a | `CMP [0xf21],0x1` at 22d4 + `JZ` at 22d9 (skip when set); `MOV [BP+0xff68],0x5b` (`'['`) at 22db; `IDIV CX` (CX=`0xa`) at 22ed/2301/2311; digit `MOV AL,[BX+0xab0]` at 2305; `MOV [SI-0x1],0x5d` (`']'`) at 231c; two `MOV [SI-0x1],0x20` at 2321/2326; `MOV [SI],0x0` at 232a | — |
+| `0x15e8`/`0xf22` scan | 11bd:232d..2357 | `MOV DI,0x15e8` at 232d; `CMP [0xf22],DI` at 2332 + `JBE` exit at 2336; `CMP AX,[BP+0x4]` at 2338 + `JNZ` skip at 233b; skip path `INC DI` + `CMP [DI-0x1],0x0` at 2346/2347 + `JNZ` at 234b; `MOV AX,[DI]` at 234d; `INC DI` x2 at 234f/2350; `MOV [BP+0xff66],AX` at 2351; `OR AX,AX` at 2355 + `JGE` at 2357 | `CALL 0x1000:41be` at 233f (=25ee) |
+| 25ee match call | 11bd:233d..2344 | `PUSH DI` at 233d + `PUSH SI` at 233e (table string + formatted buffer); `POP BX` x2 at 2342/2343 | `CALL 0x1000:41be` at 233f (=25ee; far-thunk delta `0x41be-0x1BD0=0x25ee` holds) |
+| print + epilogue | 11bd:2359..2381 | `CMP [BP-0x2],0x0` at 2359 + `JZ` at 235d (skips first print); `PUSH 0x1190` + `LEA AX,[BP+0xff68]` + `PUSH` at 235f..2367; `SUB AX,AX` + `PUSH` + `LEA AX,[BP+0xff68]` + `PUSH` at 236e..2375; `POP SI` at 237c; `POP DI` at 237d; `MOV SP,BP` at 237e; `POP BP` at 2380; `RET` at 2381 | `CALL [0xe6c]` at 2368; `CALL [0xe6c]` at 2376 |
+
+Callees (`get_function_callees`, count 1): sole FUN callee
+`copy_string_aligned` (`25ee`) — linkage confirmed, nothing else
+pursued. The two `CALL word ptr [0xe6c]` sites (print vector) are not
+FUN-resolved; recorded address-only, no dive.
+
+Noreturn mechanism: plain `RET` at `11bd:2381` (epilogue
+`237c..2381` cited above). Ruled out: `HLT` (absent from body),
+infinite self-`JMP` (no backward jump to self in body), `INT`
+(absent from body). Verdict: `22ad` itself returns; noreturn is a
+caller-level convention, NOT an in-body trap.
+
+### Raisers of 22ad
+
+38 xrefs (`get_function_xrefs` = `get_xrefs_to`, all
+`CALL 0x1000:3e7d` except `6025` which is `JMP 0x1000:3e7d`).
+Known-list confirm: `raise_boot_error` site `2d4d` CONFIRMED;
+arm-1/22 site `43c6` CONFIRMED (also reached via the `43aa` tail join
+by arms 5/14/15); tail-default site `451a` CONFIRMED. Previously
+noted (now confirmed as xrefs): `2d9c` site `2ea6`, `3ed8`
+pre-dispatch site `4240`. All other rows are ADDs vs the known list.
+Each site pushes one word code (immediate, except `14bc` dynamic and
+`6025` tail-jump with no push at site).
+
+| Raiser | Call site | Context |
+|--------|-----------|---------|
+| FUN_11bd_2d9c | 11bd:2ea6 | `CMP [0x2f],0x3` at 2e9b + `JGE` at 2ea0; `MOV AX,0xf` at 2ea2 + `PUSH AX` at 2ea5 — code 0xf |
+| raise_boot_error (2d43) | 11bd:2d4d | `MOV [0x11d4],0x7` at 2d43; `MOV AX,0x15` at 2d49 + `PUSH AX` at 2d4c — code 0x15 |
+| FUN_11bd_3ed8 (pre-dispatch) | 11bd:4240 | `MOV [0x11d4],0x4` at 4232; `OR AX,AX` at 4238 + `JGE` at 423a; `MOV AX,0x11` at 423c + `PUSH AX` at 423f — code 0x11 |
+| FUN_11bd_3ed8 (arm 1/22, via 43aa join also arms 5/14/15) | 11bd:43c6 | `OR AX,AX` at 43be + `JNZ` at 43c0 (fall-through); `MOV AX,0x12` at 43c2 + `PUSH AX` at 43c5 — code 0x12 |
+| FUN_11bd_3ed8 (default) | 11bd:451a | `MOV [0x11d4],0x6` at 4510; `MOV AX,0xffec` at 4516 + `PUSH AX` at 4519 — code 0xffec (-20) |
+| FUN_11bd_304f | 11bd:30ca | `CMP [BP+0x6],0x0` at 30c2 + `JZ` at 30c6; `PUSH -0x2` at 30c8 — code -2 |
+| FUN_11bd_3844 | 11bd:387a | `OR AX,AX` at 3874 + `JNZ` at 3876 (fall-through); `PUSH 0x9` at 3878 — code 9 |
+| FUN_11bd_0c28 | 11bd:0c39 | `JZ` at 0c35; `PUSH 0x1a` at 0c37 — code 0x1a (26) |
+| FUN_11bd_53e0 | 11bd:5539 | `OR AX,AX` at 5533 + `JNZ` at 5535 (fall-through); `PUSH 0x1b` at 5537 — code 0x1b (27) |
+| FUN_11bd_14ac | 11bd:14bc | `PUSH SS:[BX+0x2]` at 14b8 — dynamic code from caller stack (no immediate) |
+| FUN_11bd_7290 | 11bd:728d | `PUSH 0x1f` at 728b — code 0x1f (31) |
+| FUN_11bd_7290 | 11bd:731f | `PUSH 0xd` at 731d — code 0xd (13) |
+| FUN_11bd_3986 | 11bd:39f4 | `OR AX,AX` at 39ee + `JNZ` at 39f0 (fall-through); `PUSH 0xd` at 39f2 — code 0xd (13) |
+| FUN_11bd_4b37 | 11bd:4b5f | `CMP [0xe70],0x0` at 4b56 + `JGE` at 4b5b (fall-through); `PUSH -0x8` at 4b5d — code -8 |
+| FUN_11bd_6e20 | 11bd:6e11 | `PUSH 0x20` at 6e0f — code 0x20 (32) |
+| FUN_11bd_6e20 | 11bd:715d | `PUSH 0x20` at 715b — code 0x20 (32) |
+| FUN_11bd_7522 | 11bd:7581 | `PUSH 0x21` at 757f — code 0x21 (33) |
+| FUN_11bd_76db | 11bd:78a8 | `CMP AX,0xffff` at 78a1 + `JNZ` at 78a4 (fall-through); `PUSH 0x17` at 78a6 — code 0x17 (23) |
+| FUN_11bd_76db | 11bd:78bd | `OR AL,AL` at 78b5 + `JZ` at 78b7 (fall-through on nonzero); `PUSH 0x18` at 78bb — code 0x18 (24) |
+| FUN_11bd_76db | 11bd:7930 | `INT 0x67` at 7925; `OR AH,AH` at 7927 + `JZ` at 7929; `PUSH 0x19` at 792e — code 0x19 (25) |
+| FUN_11bd_381d | 11bd:3834 | `CMP [0xe70],0x0` at 382b + `JGE` at 3830 (fall-through); `PUSH -0x8` at 3832 — code -8 |
+| FUN_11bd_32c6 | 11bd:351a | `OR AX,AX` at 3514 + `JNZ` at 3516 (fall-through); `PUSH 0x3` at 3518 — code 3 |
+| FUN_11bd_32c6 | 11bd:353f | `CMP CX,[0x97c]` at 3537 + `JC` at 353b (taken); `PUSH 0x4` at 353d — code 4 |
+| FUN_11bd_32c6 | 11bd:35c4 | `OR AX,[0x1202]` at 35b9 + `JNZ` at 35bd; `PUSH 0x6` at 35c2 — code 6 |
+| FUN_11bd_32c6 | 11bd:37b0 | `AND AL,0x18` at 37a8 + `CMP AL,0x10` at 37aa + `JZ` at 37ac (taken); `PUSH 0x7` at 37ae — code 7 |
+| FUN_11bd_1b0a | 11bd:1c2b | `OR AX,AX` at 1c25 + `JNZ` at 1c27 (fall-through); `PUSH 0x16` at 1c29 — code 0x16 (22) |
+| FUN_11bd_3a89 | 11bd:3acf | `PUSH -0xe` at 3acd — code -0xe (-14) |
+| FUN_11bd_5686 | 11bd:56b2 | `CMP CX,AX` at 56ac + `JNC` at 56ae (taken); `PUSH 0x28` at 56b0 — code 0x28 (40) |
+| FUN_11bd_5686 | 11bd:5706 | `MOV [0x11d4],0xb` at 56f6; `OR AX,[0x98e]` at 56fe + `JNZ` at 5702 (fall-through); `PUSH 0xa` at 5704 — code 0xa (10) |
+| FUN_11bd_5686 | 11bd:581b | `OR AX,AX` at 5815 + `JNZ` at 5817 (fall-through); `PUSH 0xb` at 5819 — code 0xb (11) |
+| FUN_11bd_5686 | 11bd:58be | `OR AX,AX` at 58b8 + `JNZ` at 58ba (fall-through); `PUSH 0xc` at 58bc — code 0xc (12) |
+| FUN_11bd_601d | 11bd:6025 | `JMP 0x1000:3e7d` (tail transfer, no immediate push at site) |
+| FUN_11bd_479a | 11bd:47ac | `INT 0x21` at 47a6 + `JNC` at 47a8 (fall-through on carry); `PUSH 0x22` at 47aa — code 0x22 (34) |
+| (no enclosing FUN — `get_function_by_address` finds none) | 11bd:486b | `TEST [BP+0xff6c],0x1` at 4862 + `JNZ` at 4867 (fall-through); `PUSH 0x1e` at 4869 — code 0x1e (30) |
+| (no enclosing FUN — `get_function_by_address` finds none) | 11bd:48b9 | `OR AX,AX` at 48b3 + `JNZ` at 48b5 (fall-through); `PUSH 0xa` at 48b7 — code 0xa (10) |
+| (no enclosing FUN — `get_function_by_address` finds none) | 11bd:48ed | `CMP SI,AX` at 48e7 + `JBE` at 48e9 (taken); `PUSH 0xe` at 48eb — code 0xe (14) |
+| (no enclosing FUN — `get_function_by_address` finds none) | 11bd:4990 | `OR AX,AX` at 498a + `JNZ` at 498c (fall-through); `PUSH 0x6` at 498e — code 6 |
+| FUN_11bd_46de | 11bd:473c | `CMP BX,DX` at 4730 + `JL`/`JG` + `CMP CX,AX` at 4736 + `JBE` at 4738 (taken); `PUSH 0x6` at 473a — code 6 |
+
+No rename this task (map-only, program untouched).
+
+### Verdict: 22ad (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on the corrected premise (caller-convention exit, not in-body
+trap): argument contract — one word error code at `[BP+4]`, abs at
+`22bb..22c6`; formatting/scan behavior — `[NN]` prefix `22d4..232a`,
+`0x15e8`/`0xf22` scan `232d..2357`, sole FUN callee `copy_string_aligned`
+(`25ee`) at site `233f`; exit/return mechanism — plain `RET` at `2381`
+(`HLT`/self-`JMP`/`INT` all absent from the 89-insn body, re-verified this
+task), so program-wide noreturn is caller convention. Renamed +
+plate-set + `save_program` on `/fifa96.exe` — success.
+
+| FUN_11bd_22ad | 11bd:22ad | arg `[BP+4]` abs `22bb..22c6`; `[NN]` format `22d4..232a`; `0x15e8`/`0xf22` scan + `25ee` call at `233f`; two `[0xe6c]` prints `2359..2376`; `RET` at `2381` (HLT/self-JMP/INT absent) | print_error_message | none — behavioral (format [NN] error prefix, scan 0x15e8 table, print via [0xe6c] vector; returns via RET at 2381, caller-convention exit) |
+
+### Deferral unlock: 22ad
+
+`print_error_message` (`11bd:22ad..2381`) is now CONFIRMED+renamed, so the
+`22ad` call in each guard site below needs no dive — the callee role
+(formats the `[NN]` code prefix, resolves the message via the `0x15e8`
+table + `25ee`, prints through the `[0xe6c]` vector) is settled:
+
+- arm 1 (`### Guard-deferred: arm 1 (11bd:436e)`, site `43c6`): error path
+  pushes code `0x12` then calls `22ad` — no dive, callee prints the
+  code-tagged message and returns.
+- arm 5 (`### Guard-deferred: arm 5 (11bd:4423)`, site `43c6` via the
+  `43aa` tail join): same `43c6` error exit as arm 1 — no dive.
+- arm 14 (`### Guard-deferred: arm 14 (11bd:44c6)`, site `43c6` via the
+  `43aa` join): same `43c6` error exit — no dive.
+- arm 15 (`### Guard-deferred: arm 15 (11bd:44ce)`, same `43aa`-tail
+  convergence, site `43c6`): same `43c6` error exit — no dive.
+- arm 22 (`### Guard-deferred: arm 22 (11bd:436b)`, site `43c6` via
+  fall-through into the arm-1 body): same `43c6` error exit — no dive.
+- tail default (`### Guard-deferred (tail): 11bd:22ad`, site `451a`):
+  publishes `[0x11d4]=0x6`, pushes code `0xffec` (-20), calls `22ad` —
+  no dive, callee role settled (the `25ee` second layer is now a
+  CONFIRMED leaf callee, not an open question).
