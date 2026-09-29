@@ -905,3 +905,43 @@ fall-through — neither gate is the `[0xe72]` latch.
 | setter (address-only deferral) | 11bd:0e45 + 11bd:0e98 | `XCHG byte ptr CS:[0xe72],AL` at 0e45; `MOV CS:[0xe72],AL` at 0e98 — unenclosed bytes below `FUN_11bd_0ef4` (`get_function_by_address` finds no FUN at `0e30`/`0e45`/`0e98`; nearest FUN entry `0ef4`, body `0ef4..0ef6`), amid an `INT 0x0` vector-install sequence (`INT 0x0` at `0e71`, SS/SP save/restore at `0e58..0e8e`); not among `76db`'s 13 callees (`0ef4`, `2adb`, `3844`, `65c3`, `66d4`, `698b`, `76ab`, `7b34`, `7b50`, `7bb6`, `0b12`, `22ad`, `30d8` — none contains an `e72` operand per the program-wide search), so no one-layer resolve; deferred with boundary named |
 | xref index check | 11bd:0e72 | `get_xrefs_to` on `11bd:0e72`: 0 refs — the `CS:`-relative stores at `0e45`/`0e98` are not indexed as xrefs to the data address; claim sourced to disassembly lines instead |
 | false positive | 1991:155e | `JZ 0x1000:ae72` — far-jump code target (`segment:offset`), not a data ref to `[0xe72]`; excluded |
+
+### Verdict: 76db CONFIRMED
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_76db | 11bd:76db | Role: hardware/memory setup (EMS/XMS probes at 76e0/7725/7760, mode publish `[0x2e]=0xb` at 7771, `30d8` at 7776, `3844` at 7779, sizing via `0b12` at 7898, exits 0x17/0x18/0x19); gate: EMS retry-loop fall-through (`JZ`/`JNZ` to 7740 at 7754/775e/7767); args: zero stack words, identical to `457e`; post-call: consumes `[0xa16]` at 779b, `[0x15]` at 779f, `[0xecc]` at 7840, `[0xece]` at 785a, `[0x11d2]` at 78dd | setup_memory_hardware | none — behavioral (hardware/memory setup) |
+
+Renamed in program `/fifa96.exe` with plate `C: none —
+behavioral (hardware/memory setup)`; `save_program` confirmed.
+All four CONFIRM legs (role sketch, gate, argument compare,
+post-call use) stand on the walk rows above — no leg missing.
+
+### Latch note: [0xe72] shared one-shot
+
+Polarity (cited, `disassemble_function` on `11bd:30d8`):
+`MOV AL,[0xe72]` at `30dc` + `OR AL,AL` at `30e3` (TEST) +
+`JZ 0x1000:4cba` at `30e5` (first arrival, AL==0, falls into the
+body) vs `JMP 0x1000:4e3a` at `30e7` (repeat arrival, latch
+already incremented by `INC byte ptr [0xe72]` at `30df`, skips
+the body). Whoever reaches `30d8` first does the real `0x1190`
+static-file read; the other call is a no-op skip.
+
+Caller order: NOT-DETERMINED as a single static order. Both
+`30d8` call sites hang off one function: `FUN_11bd_3ed8` calls
+`30d8` directly at `457e` (`get_function_xrefs` on `11bd:30d8`:
+`457e` + `7776`) and calls `76db` at three dispatch sites
+`41cf`/`420e`/`421d` (`get_function_xrefs` on `11bd:76db`, all
+from `FUN_11bd_3ed8`; `76db`'s sole caller is `3ed8` per
+`get_function_callers`), each address-upstream of `457e` — but
+the dispatch is conditional (`CMP SI,0xb` + `JZ` at `41c7/41ca`
+with a `JMP`-over at `41cc`; `JNZ`-over at `420c`; `JMP`-past
+at `421a`), so paths exist that reach the `457e` tail arm
+without firing any `76db` arm. On paths where a dispatch arm
+fires, `7776` runs first and does the read while `457e` skips;
+on paths where all three arms are bypassed, `457e` does the
+read. No single first-vs-second order holds for all paths.
+
+Setter status: deferred-with-boundary (unchanged from the latch
+table above: `0e45`/`0e98` unenclosed bytes below `FUN_11bd_0ef4`,
+no FUN, not among `76db`'s callees).
