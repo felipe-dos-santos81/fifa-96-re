@@ -2513,3 +2513,104 @@ MATCH), `search_instructions`
 new cell was under entry-scrutiny this pass, the `[0x9ba]` consumer sweep is
 the deferred leg). `/media/felipe/FIFAPCCD/` untouched; pre-existing function
 state re-read only.
+
+### Disposition (Task 2 — settled 2026-09-29)
+
+**NEITHER-CALLEE-INDIRECTS-ON-ARG** — final disposition for this slice,
+the three-way outcome per callee restated with the citations that
+establish it (enumeration scope = complete-dump instruction totals;
+sweeps and cell-store site as recorded in the Step 2/Step 3 tables
+above):
+
+1. *`FUN_11bd_1e9f` — **NONE-INDIRECT***: complete dump **61
+   instructions** (`count:61`, body `1e9f..1f23`) as enumeration scope
+   — 6/6 transfers classified (4 literal near-direct + `RET` +
+   literal-number `INT 0x21` with runtime-IVT target); indirect
+   `CALL`/`JMP`/`Jcc`/far forms: 0, corroborated by function-scoped
+   sweeps `CALL`+`[` = 0 and `JMP`+`[` = 0 at `instructions_scanned:61`
+   = dump total. The arg arrives at the single slot read `1ea3`
+   `368b7f04 MOV DI,word ptr SS:[BX + 0x4]` and never appears as a
+   transfer operand (terminal forms: string-write destination offset,
+   transformed cell stores `1ecc`/`1efa`, `1f09 RET` exit).
+2. *`publish_mode_vector` — **CELL-STORAGE***: complete dump **14
+   instructions** (`count:14`, body `6250..627e`) as enumeration scope
+   — 3/3 transfers classified (2 literal near-direct Jccs, flags from
+   global `CMP`s + `RET`); indirect forms: 0, sweeps `CALL`+`[` = 0 and
+   `JMP`+`[` = 0 at `instructions_scanned:14` = dump total. The arg
+   lands **VERBATIM into `[0x9ba]`** at `6255 891eba09`
+   `MOV word ptr [0x9ba],BX` — store site + cell + bytes cited; no
+   indirect-branch form on the arg exists in the body. `[0x9ba]` is
+   distinct from slice-8's `[0x9bc]` publish target: the `[0x9bc]`/
+   `[0x9be]` writes at `6274`/`627b` are fed by the LITERAL
+   `626d bb2428 MOV BX,0x2824` (the 0x2824 literal trace), not by the
+   arg. The `[0x9ba]` consumers were NOT dived (named-and-deferred
+   guard).
+3. *Slice-18 carried condition — **DISCHARGED (CLOSED at the
+   callee-body layer)***: the carry sentence — "a callee of the pushed
+   slot value performing an indirect transfer on that argument"
+   (slice-18 `### Deferrals` line 1) — resolves **NOT-MET**: callees do
+   NOT indirect on the arg — entry lead stays as slice-17/18 recorded,
+   mechanism not found in either callee (`CALL`+`[` = 0 and `JMP`+`[` =
+   0 across both complete dumps, scopes 61 insns and 14 insns). The
+   indirect-transfer question of the arg is DONE within static scope at
+   this layer; what remains of the entry question sits only in the
+   runtime legs (`[0x40]`/`[0x9c0]`), the still-named-open block
+   `2978..2ada`, and the relocated cell lead (point 4).
+4. *Question relocation (CELL-STORAGE carry):* at `6250` the arg
+   question relocates ONE layer out to the consumers of the stored cell
+   **`[0x9ba]`** — cell named, store site `6255` (`891eba09`) cited,
+   consumers DEFERRED per the named-and-deferred guard
+   (`### Deferrals` line 1 below). At `1e9f` nothing relocates: no
+   verbatim cell store exists (Arg propagation table — the `1ecc`/`1efa`
+   stores are transformed forms).
+
+No `### Entry function` row is emitted and the capped write path was
+NOT executed — both were authorized only under INDIRECT-ON-ARG, which
+did not occur (points 1–2 above); no conditional one-hop dry-run was
+triggered.
+
+### Writes (Task 2 — NONE-INDIRECT / CELL-STORAGE branch: ZERO writes; live unmoved-proof pair)
+
+NONE. The program was not touched: the only Ghidra calls executed this
+task are the two read-only read-backs below, quoted verbatim (live,
+this task, program `/fifa96.exe`), in slice-18's unmoved-proof form:
+
+| Probe | Verbatim response (live, this task) | Unmoved check |
+|-------|--------------------------------------|---------------|
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | byte-identical to slice-18's Task-2 quote — no function was created at the lead cell by this slice |
+| `find_code_gaps(min_size=1)` | envelope `{"total":131,"offset":0,"limit":100,…}`; covering row verbatim: `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | block `11bd:2978..2ada` (`4548−1bd0=2978`, `46aa−1bd0=2ada` ✓) still **size 355**, `has_undefined_bytes:true`, same neighbors — unchanged vs slice-17/18's rows and Task-1's re-read; no shrink, no reflow |
+
+Write-tool inventory for this task: zero — no `disassemble_bytes`
+(INDIRECT-ON-ARG branch not triggered, dry-run included), no
+`create_function`, no `rename_function`/`rename_symbol`, no
+`set_comment`/`batch_set_comments`, no `set_global`, no `save_program`;
+no Ghidra transaction was opened. `/media/felipe/FIFAPCCD/` untouched;
+pre-existing function state re-read only.
+
+### Deferrals (Task 2)
+
+- **`[0x9ba]` consumers = the next lead:** data cell `[0x9ba]` —
+  address-only; store site `6255` (`891eba09`) cited above; consumers
+  not enumerated this slice (named-and-deferred guard).
+- **`FUN_11bd_1e9f` full verdict stays a non-goal:** current status as
+  recorded — default-named live function, body `1e9f..1f23`,
+  NONE-INDIRECT for this question only; no name/role/semantics
+  asserted.
+- **`publish_mode_vector` full verdict stays a non-goal:** current
+  status as recorded — slice-8 name live, body `6250..627e`,
+  CELL-STORAGE for this question only; its slice-8 `[0x9bc]` publish
+  records stand unchanged.
+- **Block `2978..2ada` stays fully named-open:** the size-355 covering
+  gap row is quoted under `### Writes` above; nothing landed in-range
+  this slice, so the recorded open range is untouched.
+- **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
+  UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE,
+  runtime-written) — a zero-write pass occurred; nothing in this slice
+  could have moved them.
+- **Prior-slice statuses:** slice-18 **SLOT-READERS-DATA-ONLY** stands
+  — this slice closes ONLY its deferral line 1 (the callee-indirect
+  carry condition, answered NOT-MET in Disposition point 3), whose
+  follow-up is superseded by the `[0x9ba]`-consumers line here;
+  slice-18's remaining deferrals stand. Slice-17's open legs (fall-in
+  `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail cell)
+  stand as recorded.
