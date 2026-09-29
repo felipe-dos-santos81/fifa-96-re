@@ -1811,3 +1811,109 @@ two controls), `audit_global` (five cells), `get_function_by_address`,
 flow/listing change, no `save_program`; `FUN_11bd_02b7` still
 body `11bd:02b7..02d3`, pocket still undefined, tail still
 defined-but-outside-body; `/media/felipe/FIFAPCCD/` untouched.
+
+### Pocket repair (executed 2026-09-29, Task 2, program `/fifa96.exe`)
+
+Pre-state re-confirmed live immediately before any write:
+`get_function_by_address(11bd:02b7)` →
+`{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`;
+plate `get_comment(11bd:02b7)` → slice-15 plate read back verbatim
+(quoted in the `### Name disposition` before-row); gap row
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"FUN_11bd_02b7","before_function_address":"11bd:02b7","after_function":"FUN_11bd_0733","after_function_address":"11bd:0733"}`
+(total 131) — all identical to the `## 02b7 twin` `### Writes`
+post-state. Two sanctioned paths only, per brief Step 1; no third path
+invented; `02f9+` and the `2978..2ada` block never touched.
+
+| Step | Command as run | Tool response (verbatim) | Reading |
+|------|----------------|--------------------------|---------|
+| real pocket disassembly | `disassemble_bytes` start `11bd:02d4` length `6` (no dry_run — the sanctioned real write) | `{"success":true,"start_address":"11bd:02d4","end_address":"11bd:02d9","bytes_disassembled":6,"message":"Successfully disassembled 6 byte(s)","instructions":[],"instructions_total":0,"truncated":false}` | The skip is reproduced in WRITE mode: 6 bytes "disassembled", ZERO instructions emitted, exact range echoed `02d4..02d9` (no clamp this time). Post-run `read_memory(11bd:02d4,6)` → `{"address":"11bd:02d4","length":6,"data":[3,54,84,15,131,6],"hex":"0336540f8306"}` — bytes intact, pocket still undefined in effect |
+| bounds re-read #1 | `get_function_by_address(11bd:02b7)` | `{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` | NOT joined (refusal #1: the analyzer did not re-flow the body over the pocket) |
+| sanctioned nudge | `create_function` at `11bd:02b7`, `disassemble_first=false` | `{"error":"Function already exists at 11bd:02b7: FUN_11bd_02b7"}` | Refused against the existing function object; no new object created ⇒ nothing of mine to delete (delete-nothing rule satisfied trivially) |
+| bounds re-read #2 | `get_function_by_address(11bd:02b7)` | `{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` | Refusal #2 ⇒ disposition final |
+| post-state tool re-probe | `disassemble_bytes` `11bd:02d4..02d9` `dry_run=true` | `{"dry_run":true,"success":true,"start_address":"11bd:02d4","end_address":"11bd:02d8","bytes_disassembled":5,"message":"Successfully disassembled 5 byte(s)","instructions":[],"instructions_total":0,"truncated":false}` | Tool state unchanged from before (same skip + `02d8` clamp as the Task-1 quote) |
+| tail state | `get_function_by_address(11bd:02da)` | `{"error":"No function found for 11bd:02da"}` | Tail `02da..02f8` still defined-but-outside any body — the orphan stands |
+
+Disposition: **RATIFIED-TRUNCATION** (not JOINED). Reason the map keeps
+the tail orphaned: both sanctioned paths were exhausted and each was
+answered by the analyzer's own output — the real pocket disassembly
+emitted zero instructions (the skip is a write-mode tool behavior, not a
+dry-run artifact), and the single `create_function` nudge refused against
+the existing object. Per the no-fight rule the byte-evidence `ADD`/`ADD`
+parse (`0336540f`/`8306520f08`) stays recorded-but-unapplied, exactly the
+slice-15 posture; the full confirmed boundary `02b7..02f8` with the
+`PUSHA`↔`POPA`/`RET` contract remains defended in the `## 02b7 twin`
+verdict row, which this section supersedes on disposition only (deferral
+(e) of that section is hereby dispositioned: ratified-truncated, pocket
+left undefined by tool refusal, tail left orphaned by analyzer refusal —
+no hand-forcing). Residue (3) of this section's summary therefore stands
+unchanged: `[0xf52]`'s `+8` writer (and `[0xf54]`'s base-add) stay
+byte-evidence-in-pocket.
+
+### Name disposition (PINNED — executed 2026-09-29, Task 2, program `/fifa96.exe`)
+
+Rename (verb-led snake_case, mechanism-level):
+`FUN_11bd_02b7` → **`write_slot_from_cursor`** — `rename_function` →
+`{"status":"success","message":"Success: Renamed function at FUN_11bd_02b7 from 'FUN_11bd_02b7' to 'write_slot_from_cursor'","warnings":["Function name 'write_slot_from_cursor' — main part 'write_slot_from_cursor' is not PascalCase. Expected: WriteSlotFromCursor","Function name 'write_slot_from_cursor' — main part 'write_slot_from_cursor' contains underscores. Use PascalCase after the module prefix."]}`
+(warnings are the tool's PascalCase style default; the repo convention
+is snake_case — cf. `clear_slot_entries`, `publish_mode_vector`,
+`execute_mode_switch` — so the name stands). Collision check before
+renaming: `search_functions` `slot` → only `clear_slot_entries @
+11bd:1df7`; `cursor` → 0 functions.
+
+| Item | Before (slice-15 state) | After (post-write read-back) |
+|------|--------------------------|------------------------------|
+| name | `FUN_11bd_02b7` (`get_function_by_address` quote in `### Pocket repair` pre-state) | `write_slot_from_cursor` — `{"name":"write_slot_from_cursor","address":"11bd:02b7","signature":"undefined2 write_slot_from_cursor(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` |
+| plate | `C: none — behavioral (mode-switch twin shape: PUSHA + hook CALL [0x9c0] + DS/ES 0x20 staging + [0x40] MSW OR-merge + slot-cursor compute [0xf52]&0x38+[0xf54] with [0xf52]+8 bump + slot stores [SI+2]/[SI+4]/[SI+7] + computed SS switch + LLDT 0x68 + self POPA/RET; unnamed pending [0xf52]/[0xf54] cell roles; body truncated at tool-undecoded 02d4..02d9, tail 02da..02f8 defined but outside body)` | `C: none — behavioral (slot-table cursor consumer: reads [0xf52] cursor, bounds to 8 slots via AND SI,0x38, then [0xf54]-base add and [0xf52]+8 bump byte-evidenced in pocket 02d4..02d9, writes slot fields [SI+2]/[SI+4]/[SI+7], computed SS←SI, LLDT 0x68, self POPA/RET; cells PINNED non-twin-only ([0xf54] base written at 11bd:5812 and scaled x8 at 584b, [0xf52] cursor with -8 consumer at 1991:057a and save/restore at 1991:0cc9/0d23 — the 1991 contacts are offset-nominal to their own segment, same-runtime-cell identity rests on the DS/ES←0x20 staging not a static symbol); name safe under either pocket parse (no advance/base-add asserted as listing fact); body truncated at tool-refused 02d4..02d9, tail 02da..02f8 defined but outside body)` — `set_comment` → `{"status":"success","message":"Set plate comment at 11bd:02b7","warnings":["Plate comment missing Algorithm section","Plate comment missing Parameters section","Plate comment missing Returns section"]}` (boilerplate warnings only, same as prior slices' behavioral plates); `get_comment(11bd:02b7)` read-back verbatim = the text in this cell |
+
+Name rationale (PINNED branch; mechanism from the body + pinned roles,
+no direction words, no caller lore): the body reads the CURSOR
+(`MOV SI,word ptr [0xf52]`@`02cd`, defined) and bounds it to the
+8-slot window the BASE table uses (`AND SI,0x38`@`02d1`, defined); the
+pocket byte-parse adds the base (`ADD SI,[0xf54]`@`02d4`) and advances
+the cursor (`ADD word ptr [0xf52],0x8`@`02d8`); the stores publish slot
+fields (`[SI+2]`/`[SI+4]`/`[SI+7]`, defined in the tail). Because the
+adopted parse never joined the body (RATIFIED above), the `+8` and
+base-add legs remain byte-evidence-in-pocket — so the name asserts only
+what is listing-visible under EITHER pocket parse: consult the cursor,
+write the slot (`write_slot_from_cursor`). "write"/"slot"/"cursor" are
+mechanism vocabulary; no enter/exit/switch-mode word appears (the
+direction question stays UNDECIDED per `## 02b7 twin` `### Direction
+question`); no hook/`[0x9c0]` caller identity enters the name (its writer
+set is still NOT-IN-EXE, deferral (b)).
+
+Carried condition (residue (2) of this section's summary, recorded in the
+plate too): the `[0xf52]` −8/save/restore contacts live in the `1991:`
+segment and are **offset-nominal to their own segment** — same-runtime-cell
+identity with the `11bd:`-rendered cells rests on the observed DS/ES
+staging (`PUSH 0x20`/`POP DS`@`1991:056c/056e`;
+`ES←CS:[0x5680]`@`1991:0ca9`) plus the shared `[0x996]`/`[0x99e]`/`[0xf50]`
+cluster, NOT on a static symbol. If the runtime slice shows selector
+`0x20` does not base to the `11bd` block, the cursor's non-twin-writer
+leg weakens back toward THIN and this name must be re-examined.
+
+Verdict-leg update (by reference, not rewritten): the slice-15
+`### Verdict` row's `NOT-CONFIRMED-at-name` leg — "missing leg: cell
+roles of `[0xf52]`/`[0xf54]`" — **is closed on the Task-1 contact
+enumeration**: `[0xf54]` = slot-table BASE (sole writer `11bd:5812`
+`MOV [0xf54],AX` from the stride-8 walker `11bd:3bcc`, scaled in place
+`SHL [0xf54],0x3`@`584b`), `[0xf52]` = 8-stride CURSOR (non-twin −8
+writer `1991:057a`, save/restore `1991:0cc9`/`0d23`) — neither cell is
+twin-only, so the THIN condition fails and the rename above executes.
+Deferral (d) of `## 02b7 twin` is thereby consumed; deferrals (a)/(b)/(c)
+stand untouched.
+
+### Post-state (Task 2)
+
+`save_program(/fifa96.exe)` →
+`{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+Final quotes: function `{"name":"write_slot_from_cursor","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`
+(bounds unchanged — RATIFIED-TRUNCATION; rename does not re-flow);
+plate = the after-cell quoted above, read back verbatim; pocket still
+undefined (`read_memory` = `0336540f8306`); tail `02da..02f8` still
+orphaned (`get_function_by_address(11bd:02da)` → `{"error":"No function
+found for 11bd:02da"}`); `find_code_gaps` twin row reflowed to name only:
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"write_slot_from_cursor","before_function_address":"11bd:02b7","after_function":"FUN_11bd_0733","after_function_address":"11bd:0733"}`,
+total still 131. Writes this task: the real `disassemble_bytes(11bd:02d4,
+length 6)`, one `create_function` nudge (refused, no effect),
+`rename_function`, `set_comment`, `save_program` — nothing else;
+`/media/felipe/FIFAPCCD/` untouched.
