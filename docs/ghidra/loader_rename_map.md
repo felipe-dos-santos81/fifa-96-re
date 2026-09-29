@@ -1550,3 +1550,146 @@ or `AND AX,[mask]`+`LMSW` — none present). The `[0x40]` writer/runtime
 value remains the missing leg (slice-13 rows 1194/1245-1248 re-cited:
 reads now `{02aa, 02c6}`, direct stores still 0 among defined insns),
 handed to the runtime slice.
+
+### Writes (before-state → post-write state)
+
+Before-state, re-confirmed live immediately before any write (same values
+as the tables above; quoted verbatim):
+`get_function_by_address(11bd:02b7)` →
+`{"error":"No function found for 11bd:02b7"}`;
+`get_xrefs_to(11bd:02b7)` →
+`{"references":[],"count":0,"offset":0,"limit":100,"total":0}`; covering
+gap row (Task 1, pre-write state):
+`{"start":"1000:1e87","end":"1000:2302","size":1148,...,"before_function":"FUN_11bd_02b5","after_function":"FUN_11bd_0733"}`;
+`audit_global(11bd:0f52)` →
+`{"name":"","type":"","xref_count":0,...}` — the cursor cells are undefined
+globals with no symbol and no xrefs (the twin body was still undecoded).
+Write sequence, each with actual result: (1) real `disassemble_bytes`
+`11bd:02b7` (end-exclusive → decoded `02b7..02f7`, 65 bytes):
+`{"success":true,...,"instructions_total":24,"truncated":false}` — the tool
+REPRODUCED the Task-1 skip exactly: it emitted nothing for `02d4..02d9`
+(raw `03 36 54 0f 83 06`) and defined its own alternative `PUSH DX` (`52`)
+@`02da` + `INVD` (`0f08`)@`02db..02dc`, resuming at `MOV AX,0x8`@`02dd`;
+all other 24 emitted insns byte-identical to the dry-run walk. Follow-up
+`disassemble_bytes` `11bd:02f8` →
+`{"instructions":[{"address":"11bd:02f8","mnemonic":"RET","bytes":"c3"}],"instructions_total":1}`
+— the cited-exit `RET` defined. (2) `create_function(11bd:02b7)` →
+`{"success":true,"function_name":"FUN_11bd_02b7","body_size":29,...}`;
+re-read `get_function_by_address(11bd:02b7)` →
+`{"body_start":"11bd:02b7","body_end":"11bd:02d3"}` — the analyzer's
+NEAREST CONSISTENT BODY: flow breaks at the tool-undecoded pocket
+`02d4..02d9` (29 bytes / 10 insns = `PUSHA`..`AND SI,0x38`). NO
+over-extension past `02f8` occurred (the body UNDER-shoots), so the
+`disassemble_first=false` retry is inapplicable — a dry-run of it against
+the live function returns
+`{"dry_run":true,"error":"Function already exists at 11bd:02b7: FUN_11bd_02b7"}`,
+and delete-then-recreate would be fighting the analyzer: NOT done. The
+skip region was NOT hand-forced: the byte-evidence `ADD SI,[0xf54]`
+(`0336540f`)@`02d4` + `ADD word [0xf52],0x8`
+(`8306520f08`)@`02d8` parse remains recorded-but-unapplied; the listing
+carries the tool's `PUSH DX`/`INVD` parse at `02da..02dc`. Residual state
+inside the proposed boundary: pocket `02d4..02d9` UNDEFINED (6 bytes) and
+tail `02da..02f8` DEFINED-BUT-OUTSIDE the function body (13 insns — the
+`PUSH DX`/`INVD`/`MOV AX,0x8`/…/`POPA`/`RET` chain incl. the cited exit);
+`get_function_by_address` at `02da` and `02d4` both →
+`{"error":"No function found..."}`. (3) Rename: NOT performed —
+NOT-CONFIRMED-at-name (verdict below; missing leg = `[0xf52]`/`[0xf54]`
+cell roles). (4) `set_comment` plate at `11bd:02b7` →
+`{"status":"success","message":"Set plate comment at 11bd:02b7"}`
+(boilerplate Algorithm/Parameters/Returns warnings only — same as prior
+slices' behavioral plates). (5) `save_program(/fifa96.exe)` →
+`{"success":true,...}`. Post-write re-confirm (the state the verdict row
+cites; actual responses): `get_function_by_address(11bd:02b7)` →
+`{"name":"FUN_11bd_02b7","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`;
+`get_comment(11bd:02b7)` → plate read back verbatim (text quoted below in
+the verdict row's plate cell); `get_function_xrefs(11bd:02b7)` →
+`{"references":[],"count":0,"total":0}` (still zero static entries —
+creation defined bytes, it did not manufacture feeders); `find_code_gaps`
+row reflowed to
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"FUN_11bd_02b7","after_function":"FUN_11bd_0733"}`
+(`1000:1ea4` = `11bd:02d4` — the pocket start; −29 bytes = the created
+body; `has_orphaned_instructions:true` now covers the `02da..02f8` tail
+inside the same row; total still 131 — one row shrank, none added).
+
+### Verdict: 02b7 twin (CONFIRMED-FUNC / NOT-CONFIRMED-at-name, created 2026-09-29, program `/fifa96.exe`)
+
+FUNC verdict — created (flow-clean within the analyzer's own decode;
+boundary defended by sole gap occupancy from `02b7`, no fall-through from
+`02b6`'s `RET`, and the `PUSHA`↔`POPA`/`RET` structural contract; exit
+CITED with bytes: `POPA` `61`@`02f7` + `RET` `c3`@`02f8`; callees: no FUN
+callees, sole transfer the dynamic `CALL word ptr [0x9c0]`@`02b8` — runtime
+identity deferred, so leaf-or-deferred holds). NAME withheld — the missing
+leg is the cell roles of `[0xf52]`/`[0xf54]`: the twin's distinguishing
+half is the cursor compute `SI = [0xf52]&0x38 + [0xf54]` (+ the `[0xf52]`
+`+8` bump under the byte parse) feeding BOTH the slot stores
+(`[SI+2]`/`[SI+4]`/`[SI+7]`, DS=0x8) AND the computed `SS←SI` selector —
+8-byte stride + masked index + table-base add is compatible with several
+mechanisms (selector/stack table walk, descriptor-table patch, slot
+allocator cursor), and a live `audit_global(11bd:0f52)` shows no name, no
+type, 0 xrefs — nothing in-program pins the cell identity, so any
+mechanism-level name would be lore. Per the create-without-rename middle:
+the FUN record stands, the shape is documented in the plate, and
+`FUN_11bd_02b7` is RETAINED until a slice names the cells (or the runtime
+slice resolves `[0x9c0]`/`[0x40]` context). Plate set
+(`C: none — behavioral (mode-switch twin shape: PUSHA + hook CALL [0x9c0]
++ DS/ES 0x20 staging + [0x40] MSW OR-merge + slot-cursor compute
+[0xf52]&0x38+[0xf54] with [0xf52]+8 bump + slot stores
+[SI+2]/[SI+4]/[SI+7] + computed SS switch + LLDT 0x68 + self POPA/RET;
+unnamed pending [0xf52]/[0xf54] cell roles; body truncated at
+tool-undecoded 02d4..02d9, tail 02da..02f8 defined but outside body)`).
+No direction word is asserted anywhere (UNDECIDED — `### Direction
+question` below); no `decode_*`; no caller lore.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_02b7 | 11bd:02b7 | created: real `disassemble_bytes` 24+1 insns (skip reproduced), `create_function` → body `02b7..02d3` (analyzer nearest-consistent; pocket `02d4..02d9` undefined, tail `02da..02f8` orphaned-in-listing); entry `PUSHA` `60`@`02b7`; hook `CALL [0x9c0]`@`02b8`; `SMSW`/`OR [0x40]`/`LMSW`@`02c3/02c6/02ca`; cursor `MOV SI,[0xf52]`/`AND SI,0x38`@`02cd/02d1`; cited exit `POPA` `61`@`02f7`+`RET` `c3`@`02f8`; 0 xrefs before and after | NOT-CONFIRMED-at-name — `FUN_11bd_02b7` retained; missing leg: cell roles of `[0xf52]`/`[0xf54]` | none — behavioral (plate above) |
+
+### Direction question
+
+Answer to the question slice 13 deferred: **NOT an enter/exit pair as far
+as static code shows — both set-only OR; the question moves to the runtime
+`[0x40]` writer.** Both bodies merge the same cell with the same op —
+sibling `execute_mode_switch`: `SMSW`@`02a7` + `OR AX,word ptr [0x40]`
+(`0b064000`)@`02aa` + `LMSW`@`02ae` (cited rows of
+`## 0290/0293 fall-through`); twin: `SMSW`@`02c3` +
+`OR AX,word ptr [0x40]` (`0b064000`)@`02c6` + `LMSW`@`02ca` (rows above) —
+neither carries any `AND`/`ANDNOT` MSW form, so no PE-clearing leg exists
+in the pair and the decide-rule ("one sets, the other clears") is NOT met.
+`[0x40]`'s runtime value (bit0 = PE target) and its installer identity are
+handed to the RUNTIME slice (reads now `{02aa, 02c6}`, direct stores still
+0 among defined insns — slice-13 rows re-cited by Task 1). What the twin
+DOES show, per its walk rows + this create: selector staging
+`MOV AX,0x20`@`02bc` feeding segment stores `MOV DS`@`02bf`/`MOV ES`@`02c1`
+(and `MOV DS,0x8`@`02dd/02e0`, `DS←ES`@`02f5/02f6`); the selector-mask
+arithmetic `AND SI,0x38`@`02d1` over `[0xf52]`; the cursor `ADD`s at
+`02d4/02d8` (`0336540f` / `8306520f08` — byte-evidence parse; the defined
+listing instead carries the tool's `PUSH DX`@`02da`+`INVD`@`02db`
+alternative, recorded as such); slot stores `[SI+2]/[SI+4]/[SI+7]` with
+the computed `SS←SI`@`02ed` and `LLDT 0x68`@`02ef/02f2`. That evidence
+characterizes the twin as the STATEFUL half of the pair (table/cursor
+mutation + stack switch around the same MSW merge, self-unwinding) — which
+is a role observation, not a direction observation: none of it changes the
+`MSW ← MSW ∪ [0x40]` semantics, so the enter-vs-exit question remains with
+the `[0x40]` writer at runtime.
+
+### Deferrals
+
+Carried/extended from this section's Task-1 rows and the
+`## 296d hook target` deferral list: (a) `[0x40]` MSW mask WRITER and
+installer identity → runtime slice (reads `{02aa, 02c6}`, stores 0 among
+defined insns — the direction question's sole missing leg, as stated
+above); (b) `[0x9c0]` hook target identity → runtime (writer set
+NOT-IN-EXE per slice-14; the twin's `02b8` is read-site #2, contact-point
+evidence only; the twin has NO call targets beyond this dynamic hook — no
+second-layer callee question); (c) `2978..2ada` paging-block ownership →
+out of slice scope (twin exits at `02f8` inside its own gap; never
+entered); (d) NEW: `[0xf52]`/`[0xf54]` cell roles — the naming leg for
+`FUN_11bd_02b7` (needs their writer/value evidence; both currently
+undefined globals, 0 xrefs; the byte-parse cursor bump at `02d8` is itself
+a writer candidate pending the pocket's disposition); (e) NEW: the
+`02d4..02d9` decode pocket + orphaned `02da..02f8` tail — a future
+listing-disposition item (bytes-authority `ADD`/`ADD` re-decode vs keeping
+the tool's `PUSH DX`/`INVD` parse; this slice deliberately did not
+hand-force per the no-fight rule — see `### Writes`). Leaf verdicts
+elsewhere: none new surfaced — the twin's only transfers and cell
+contacts were already tabled by Task 1.
