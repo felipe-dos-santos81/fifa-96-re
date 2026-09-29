@@ -1459,3 +1459,237 @@ direction still unsettled); the `02b5`-region twin (`PUSHA` `60` at
 `02b7` + `CALL word ptr [0x9c0]` at `02b8` — still no function at
 `02b7` post-write, untouched; future slice material together with the
 as-yet-unnamed `FUN_11bd_02b5` landing pad).
+
+## 02b7 twin (verified 2026-09-29, program `/fifa96.exe`)
+
+The second mode-switch clone flagged at `11bd:02b7` in the `## 296d hook
+target` deferral list is proven UNOWNED at current state and walked to a
+cited exit with `disassemble_bytes` in `dry_run=true` only: the proposed
+body `[02b7..02f8]` (66 bytes, 24 insns, whole-region `read_memory` dump
+`60ff16c009b82000…000f00d0061f61c3`) opens exactly like
+`execute_mode_switch` (`PUSHA` `60` at `02b7`; `CALL word ptr [0x9c0]`
+`ff16c009` at `02b8` — return slot `02bc`, hook consumes it) and carries
+the identical PE-merge op (`SMSW AX` `0f01e0` @`02c3`,
+`OR AX,word ptr [0x40]` `0b064000` @`02c6`, `LMSW AX` `0f01f0` @`02ca`
+— cite the sibling map row for `02a7/02aa/02ae`, not re-walked), then
+DEVIATES where the sibling tails out: no `SS←DX` head-load (staging is
+`MOV AX,0x20`/`MOV DS`/`MOV ES` at `02bc/02bf/02c1` — note the task
+context guessed `MOV DX,0x20`@`02ba`; bytes say `02ba..02bb` = `c009`,
+the little-endian cell operand of the `02b8` CALL, and the loader is
+`MOV AX,0x20` `b82000`@`02bc`), a slot-cursor sequence (`MOV SI,[0xf52]`
+@`02cd`, `AND SI,0x38` @`02d1`, then the 6-byte skip pair at
+`02d4..02d9` — see walk row), `MOV DS,0x8` @`02dd/02e0`, three stores
+into the cursor slot (`MOV [SI+0x2],DI` `897c02`,
+`MOV [SI+0x4],DL` `885404`, `MOV [SI+0x7],DH` `887407`), the computed
+stack switch `MOV SS,SI` `8ed6` @`02ed`, `LLDT 0x68` (`MOV AX,0x68` +
+`0f00d0`) @`02ef/02f2`, `DS←ES` via `PUSH ES`/`POP DS` @`02f5/02f6`, and
+a SELF-closing exit `POPA` `61` @`02f7` + `RET` `c3` @`02f8` — the twin
+unwinds its own `PUSHA` frame and returns to its caller's return slot,
+whereas the sibling delegates the unwind to the `[0x9c2]` vector target
+and the landing pad (per its map rows; cite-only). The twin never reads
+`[0x9c2]` — the continuation vector is absent from its body. Entry has
+NO static feeder: `get_xrefs_to(11bd:02b7)` 0 refs, defined-insn operand
+searches `1e87`/`0x1e87`/`0x2b7` 0/0/0 matches (13981 insns scanned), and
+the program-wide raw-byte search `871ebd11` (far-pointer form of
+`0x1e87`:`0x11bd`, covers undefined holes too) 0 hits — entry is
+dynamic/installed or lives inside an undecoded hole; the boundary is
+defended by structure, not caller count. Direction pairing: BOTH bodies
+apply the same set-only `OR [0x40]` mask merge; neither contains an
+`AND`/`ANDNOT` MSW op — no PE-clearing leg exists in this pair, so the
+enter-vs-exit question stays UNDECIDED and the `[0x40]` writer is
+re-cited as the missing leg for the runtime slice (slice-13 rows
+1180-1194 untouched). Zero Ghidra writes this task: `disassemble_bytes`
+exclusively `dry_run=true`, plus `get_function_by_address`,
+`find_code_gaps`, `get_xrefs_to`, `search_instructions`,
+`search_byte_patterns`, `read_memory` (reads only).
+
+| Question | Evidence | Verdict-so-far |
+|----------|----------|----------------|
+| function at 02b7? | `get_function_by_address(11bd:02b7)` → `{"error":"No function found for 11bd:02b7"}` — actual response, current state | NO-FUNCTION (as expected from slice 14's post-write spot-check; no state change to resolve) |
+| covering gap row | `find_code_gaps` (total 131, offset 0/limit 100, twin row on page 0), verbatim: `{"start":"1000:1e87","end":"1000:2302","size":1148,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"FUN_11bd_02b5","before_function_address":"11bd:02b5","after_function":"FUN_11bd_0733","after_function_address":"11bd:0733"}` — `1000:1e87` = `11bd:02b7` (0x11bd0+0x2b7 = 0x11e87), twin start = gap start exactly; end = `11bd:0732`, next owner `FUN_11bd_0733` | GAP-CONFIRMED, gap BEGINS at `02b7` (no discrepancy vs slice-14's row `1000:1e85..1000:2302`/`execute_mode_switch` neighbor — it reflowed to start `1000:1e87` with before_function `FUN_11bd_02b5` when the landing pad was created in slice-14 Task 2) |
+| gap total drift | 131 now vs 130 at slice-14 Task 1: the `296d` row split into `1000:43e1..1000:453c` + `1000:4548..1000:46aa` around the new `restore_fs_gs_and_resume` body (`296d..2977` = `1000:453d..4547`); the `02b7` row same count, shifted start | consistent post-write bookkeeping, no unexplained coverage |
+| FUN_11bd_02b5 bounds | `get_function_by_address(11bd:02b5)` → `{"name":"FUN_11bd_02b5","body_start":"11bd:02b5","body_end":"11bd:02b6"}` | EXACTLY SIZED `02b5..02b6` (POPA/RET landing pad unchanged; the twin starts one byte past its end) |
+| static entries into 02b7 | `get_xrefs_to(11bd:02b7)` → 0 refs; `search_instructions` operand `1e87` → 0 matches, `0x1e87` → 0, `0x2b7` → 0 (13981 defined insns scanned); `search_byte_patterns` `871ebd11` → no matches (raw scan incl. undefined holes) | NO-FEEDER-FOUND — entry dynamic or inside an undecoded hole (weaker than `296d`, which at least had the `41ee` cell-write feeder); does not defeat the boundary (structure-leg rows below) |
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| entry / save frame | 11bd:02b7 | `PUSHA` (byte `60`, dry-run `02b7..02fe` window 1; raw dump byte 1) — same opener as sibling `0293`; fall-through INTO `02b7` impossible: preceding owner byte `02b6` is the landing pad's `RET` (cited slice-14 row), flow never reaches `02b7` linearly | — |
+| pre-hook | 11bd:02b8 | `CALL word ptr [0x9c0]` (`ff16c009`, 4 bytes → return slot next insn at `02bc`) — SECOND read of `[0x9c0]` (first: sibling `0294`); cell operand little-endian `c009` = `0x9c0` sits at `02ba..02bb`, correcting the task-context guess of `MOV DX,0x20`@`02ba` (bytes from `02ba`: `c0 09 b8 20 00` = CALL tail + start of `b82000`) | cell `[0x9c0]`: writer set unchanged (NOT-IN-EXE per slice-14 cell table; searches defined-only — the `02b8` consumer is in undefined bytes, invisible until decoded, exactly the recorded method caveat) |
+| DS/ES staging | 11bd:02bc..02c1 | `MOV AX,0x20` (`b82000`) + `MOV DS,AX` (`8ed8`) + `MOV ES,AX` (`8ec0`) — selector `0x20` fixed via AX; NO `SS←DX` head-load (sibling has `MOV SS,DX`@`0298` — its map row, cite-only) | — |
+| PE merge | 11bd:02c3..02ca | `SMSW AX` (`0f01e0`) + `OR AX,word ptr [0x40]` (`0b064000`) + `LMSW AX` (`0f01f0`) — set-only merge, same op AND same operand-cell as sibling `02a7/02aa/02ae` (cited rows; `0x40]`-operand text search is defined-only so it never saw `02c6` — this walk is its second sighting) | — |
+| cursor compute | 11bd:02cd..02d1 | `MOV SI,word ptr [0xf52]` (`8b36520f`) + `AND SI,0x38` (`83e638`, ends `02d3`) | new cells touched: `[0xf52]` (read here) |
+| 6-byte decode skip | 11bd:02d4..02d9 | tool returned NO instructions for these bytes from every dry-run window attempted (`02b7`-start, `02d1..02da`, `02d2..02e2`, `02d4..02de`, `02d4..02d9` alone → `instructions_total:0`); `read_memory` raw = `0336540f 8306520f` + `08`@`02dc`; aligned manual decode from `02d1`'s end: `02d4 ADD SI,word ptr [0xf54]` (`0336540f`) + `02d8 ADD word ptr [0xf52],0x8` (`8306520f08`) lands EXACTLY on the tool's own resume point `02dd` and consumes every byte (66-byte region dump concatenates cleanly end-to-end); the tool's emitted alternative (`PUSH DX`@`02da` `52`, `INVD`@`02db` `0f08`) leaves `02d4..02d9` undecoded AND breaks the frame — an unmatched `+2` push would make `POPA`/`RET`@`02f7/02f8` pop DX-pushed data as return address | AMBIGUOUS-BY-TOOL, RESOLVED-BY-BYTES (both parses converge at `02dd`; only the `ADD`/`ADD` parse balances PUSHA↔POPA and explains all bytes; recorded as a finding, byte evidence wins per disassembly-rule) |
+| DS re-stage | 11bd:02dd..02e0 | `MOV AX,0x8` (`b80800`) + `MOV DS,AX` (`8ed8`) — second selector immediate (`0x8`) | — |
+| slot stores | 11bd:02e2..02ea | `MOV word ptr [SI+0x2],DI` (`897c02`) + `MOV byte ptr [SI+0x4],DL` (`885404`) + `XOR DH,DH` (`32f6`) + `MOV byte ptr [SI+0x7],DH` (`887407`) — the sibling publishes ZERO memory stores (its map row); these writes (SS-default addressing) + the `+0x8` cursor bump (slot stride 8) are the twin's distinguishing side effect | — |
+| stack switch | 11bd:02ed | `MOV SS,SI` (`8ed6`) — selector COMPUTED from the `[0xf52]/[0xf54]` cursor arithmetic, not an immediate (sibling: `SS←DX` staged selector, cited row) | — |
+| LDT load | 11bd:02ef..02f2 | `MOV AX,0x68` (`b86800`) + `LLDT AX` (`0f00d0`) — same LDTR selector as sibling `02a1/02a4` (cited row) | — |
+| DS←ES copy | 11bd:02f5..02f6 | `PUSH ES` (`06`) + `POP DS` (`1f`) — ESP net 0; no sibling counterpart | — |
+| EXIT (cited) | 11bd:02f7..02f8 | `POPA` (`61`) + `RET` (`c3`) — self-unwind: `PUSHA`@`02b7` ↔ `POPA` (16+16 bytes, CALL/hook RET pair already consumed at `02bc`), `RET` pops the CALLER's return → classic near-call contract; NOT the sibling's tail `JMP [0x9c2]` (cited `02b1` row); first exit in address order, nothing earlier in the walk (no unconditional JMP/RET between `02b7` and `02f7`; the `02b8` CALL is the only transfer before it) | — |
+| bytes after exit | 11bd:02f9.. | `NOP` (`90`), `0000` `ADD byte ptr [BX+SI],AL`, desynced `2e8f06fa02` `POP word ptr CS:[0x2fa]` — pad-like, NOT in proposed boundary | — |
+| proposed boundary | [11bd:02b7..02f8] | 66 bytes / 24 insns, entry gap row starts at `02b7` exactly, prologue↔epilogue balanced, whole-region byte dump = instruction concatenation, `02b6` RET kills fall-through into `02b7`; why a function start despite 0 feeders: structure (full PUSHA…POPA/RET frame contract, zero leftover bytes) + sole-occupancy of `[02b7..02f8]` inside the `1000:1e87..1000:2302` gap; exit lands INSIDE the same gap at `02f8` — no `2978..2ada` contact (out-of-scope block never entered by this flow) | boundary FUNC-proposed (Task 2 verdict material) |
+
+| Contact | Twin `02b7..02f8` (walked) | Sibling `0293..02b4` (CITED from `## 0290/0293 fall-through`, not re-walked) | Implication |
+|---------|---------------------------|------------------------------------------------------------------|-------------|
+| `[0x40]` MSW mask op | `SMSW`@`02c3` + `OR AX,[0x40]`@`02c6` (`0b064000`) + `LMSW`@`02ca` — SET-only | `SMSW`@`02a7` + `OR AX,[0x40]`@`02aa` + `LMSW`@`02ae` — SET-only (map rows 1204/1255) | SAME op, SAME cell: neither body can CLEAR PE (no AND/ANDNOT form in either) — the pairing adds NO exit-to-PM leg ⇒ direction rule ("one sets, one clears") NOT met → UNDECIDED |
+| `[0x9c0]` pre-hook | `CALL [0x9c0]`@`02b8` (`ff16c009`) — read-site #2 | `CALL [0x9c0]`@`0294` — read-site #1 (map row 1200) | slice-13/14 cell story UNCHANGED (writer still none in 13981 defined insns; `02b8` was invisible to defined-only searches per the recorded caveat): read fan-out 1→2, hook is shared by both bodies — contact-point evidence only, NOT-IN-EXE verdict not overturned |
+| `[0x9c2]` tail vector | ABSENT — twin exits `POPA`/`RET`@`02f7/02f8` | sole read `JMP [0x9c2]`@`02b1` (map row 1205) | twin does not participate in the continuation-vector story (`{41ee}` writer set, value `0x296d` — cited slice-14 rows); it RETURNS instead of transferring |
+| segment stores | `MOV DS,AX`@`02bf`(`0x20`), `MOV ES,AX`@`02c1`(`0x20`), `MOV DS,AX`@`02e0`(`0x8`), `MOV SS,SI`@`02ed`(computed), `POP DS`@`02f6` | `MOV SS,DX`@`0298`(caller/stub DX), `MOV DS`/`MOV ES`@`029d/029f`(`0x20`) | twin clobbers/re-purposes segments AND switches SS to a table-computed selector; sibling only stages — different job at the same transition machinery |
+| selector immediates | `0x20`@`02bc`, `0x8`@`02dd`, `0x68`@`02ef`(LLDT@`02f2`) | `0x20`@`029a`(+`0290` stub), `0x68`@`02a1`(LLDT@`02a4`) | shared constants (`0x20` data selector, `0x68` LDT selector); `0x8` and the `[0xf52]/[0xf54]` cursor cells are twin-only |
+| memory stores | `[SI+0x2]`@`02e2`, `[SI+0x4]`@`02e5`, `[SI+0x7]`@`02ea`, `word [0xf52]` bump@`02d8`(byte-evidence parse) | ZERO stores (map row 1206) | twin mutates a slot table + cursor cell — a stateful walk; sibling stateless |
+| unwind shape | self: `POPA`+`RET` inside body | delegated: tail `JMP [0x9c2]` → `296d` epilogue → landing pad `02b5..02b6` (cited slice-14) | the "twin" is not a clone: same OPENER and same mask op, different exit contract |
+| gap-coverage caveat | operand searches see defined insns only; EVERY byte of the twin body was undefined at search time, so `1e87`/`0x2b7` text searches could not have seen twin-internal immediates either — raw-byte search `871ebd11` covers the holes and found nothing; no proposed-region byte is also immediate-encoded in a way that defeats the walk's boundaries (`02dd` resume point identical under both parses; the `02d4` cell operand `540f`/`520f` shapes are cited per parse) | same caveat recorded slice 14 (M1) | searches over/into the gap are NOT a coverage proof — walk evidence is |
+
+Direction verdict (this task, evidence table above): **UNDECIDED** —
+the instructions show both bodies performing the SAME set-only
+`OR AX,word ptr [0x40]` merge (`02c6` cited by bytes `0b064000`; sibling
+`02aa` cited by map row); nothing in the pair clears PE, so no
+enter-vs-exit call is decidable from instruction evidence alone and the
+pairing's only new information is the uniformity itself (a hypothetical
+PE-CLEARING clone would have carried `AND`/`ANDNOT`-`0f20/0f22` CR-style
+or `AND AX,[mask]`+`LMSW` — none present). The `[0x40]` writer/runtime
+value remains the missing leg (slice-13 rows 1194/1245-1248 re-cited:
+reads now `{02aa, 02c6}`, direct stores still 0 among defined insns),
+handed to the runtime slice.
+
+### Writes (before-state → post-write state)
+
+Before-state, re-confirmed live immediately before any write (same values
+as the tables above; quoted verbatim):
+`get_function_by_address(11bd:02b7)` →
+`{"error":"No function found for 11bd:02b7"}`;
+`get_xrefs_to(11bd:02b7)` →
+`{"references":[],"count":0,"offset":0,"limit":100,"total":0}`; covering
+gap row (Task 1, pre-write state):
+`{"start":"1000:1e87","end":"1000:2302","size":1148,...,"before_function":"FUN_11bd_02b5","after_function":"FUN_11bd_0733"}`;
+`audit_global(11bd:0f52)` →
+`{"name":"","type":"","xref_count":0,...}` — the cursor cells are undefined
+globals with no symbol and no xrefs (the twin body was still undecoded).
+Write sequence, each with actual result: (1) real `disassemble_bytes`
+`11bd:02b7` (end-exclusive → decoded `02b7..02f7`, 65 bytes):
+`{"success":true,...,"instructions_total":24,"truncated":false}` — the tool
+REPRODUCED the Task-1 skip exactly: it emitted nothing for `02d4..02d9`
+(raw `03 36 54 0f 83 06`) and defined its own alternative `PUSH DX` (`52`)
+@`02da` + `INVD` (`0f08`)@`02db..02dc`, resuming at `MOV AX,0x8`@`02dd`;
+all other 24 emitted insns byte-identical to the dry-run walk. Follow-up
+`disassemble_bytes` `11bd:02f8` →
+`{"instructions":[{"address":"11bd:02f8","mnemonic":"RET","bytes":"c3"}],"instructions_total":1}`
+— the cited-exit `RET` defined. (2) `create_function(11bd:02b7)` →
+`{"success":true,"function_name":"FUN_11bd_02b7","body_size":29,...}`;
+re-read `get_function_by_address(11bd:02b7)` →
+`{"body_start":"11bd:02b7","body_end":"11bd:02d3"}` — the analyzer's
+NEAREST CONSISTENT BODY: flow breaks at the tool-undecoded pocket
+`02d4..02d9` (29 bytes / 10 insns = `PUSHA`..`AND SI,0x38`). NO
+over-extension past `02f8` occurred (the body UNDER-shoots), so the
+`disassemble_first=false` retry is inapplicable — a dry-run of it against
+the live function returns
+`{"dry_run":true,"error":"Function already exists at 11bd:02b7: FUN_11bd_02b7"}`,
+and delete-then-recreate would be fighting the analyzer: NOT done. The
+skip region was NOT hand-forced: the byte-evidence `ADD SI,[0xf54]`
+(`0336540f`)@`02d4` + `ADD word [0xf52],0x8`
+(`8306520f08`)@`02d8` parse remains recorded-but-unapplied; the listing
+carries the tool's `PUSH DX`/`INVD` parse at `02da..02dc`. Residual state
+inside the proposed boundary: pocket `02d4..02d9` UNDEFINED (6 bytes) and
+tail `02da..02f8` DEFINED-BUT-OUTSIDE the function body (13 insns — the
+`PUSH DX`/`INVD`/`MOV AX,0x8`/…/`POPA`/`RET` chain incl. the cited exit);
+`get_function_by_address` at `02da` and `02d4` both →
+`{"error":"No function found..."}`. (3) Rename: NOT performed —
+NOT-CONFIRMED-at-name (verdict below; missing leg = `[0xf52]`/`[0xf54]`
+cell roles). (4) `set_comment` plate at `11bd:02b7` →
+`{"status":"success","message":"Set plate comment at 11bd:02b7"}`
+(boilerplate Algorithm/Parameters/Returns warnings only — same as prior
+slices' behavioral plates). (5) `save_program(/fifa96.exe)` →
+`{"success":true,...}`. Post-write re-confirm (the state the verdict row
+cites; actual responses): `get_function_by_address(11bd:02b7)` →
+`{"name":"FUN_11bd_02b7","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`;
+`get_comment(11bd:02b7)` → plate read back verbatim (text quoted below in
+the verdict row's plate cell); `get_function_xrefs(11bd:02b7)` →
+`{"references":[],"count":0,"total":0}` (still zero static entries —
+creation defined bytes, it did not manufacture feeders); `find_code_gaps`
+row reflowed to
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"FUN_11bd_02b7","after_function":"FUN_11bd_0733"}`
+(`1000:1ea4` = `11bd:02d4` — the pocket start; −29 bytes = the created
+body; `has_orphaned_instructions:true` now covers the `02da..02f8` tail
+inside the same row; total still 131 — one row shrank, none added).
+
+### Verdict: 02b7 twin (CONFIRMED-FUNC / NOT-CONFIRMED-at-name, created 2026-09-29, program `/fifa96.exe`)
+
+FUNC verdict — created (flow-clean within the analyzer's own decode;
+boundary defended by sole gap occupancy from `02b7`, no fall-through from
+`02b6`'s `RET`, and the `PUSHA`↔`POPA`/`RET` structural contract; exit
+CITED with bytes: `POPA` `61`@`02f7` + `RET` `c3`@`02f8`; callees: no FUN
+callees, sole transfer the dynamic `CALL word ptr [0x9c0]`@`02b8` — runtime
+identity deferred, so leaf-or-deferred holds). NAME withheld — the missing
+leg is the cell roles of `[0xf52]`/`[0xf54]`: the twin's distinguishing
+half is the cursor compute `SI = [0xf52]&0x38 + [0xf54]` (+ the `[0xf52]`
+`+8` bump under the byte parse) feeding BOTH the slot stores
+(`[SI+2]`/`[SI+4]`/`[SI+7]`, DS=0x8) AND the computed `SS←SI` selector —
+8-byte stride + masked index + table-base add is compatible with several
+mechanisms (selector/stack table walk, descriptor-table patch, slot
+allocator cursor), and a live `audit_global(11bd:0f52)` shows no name, no
+type, 0 xrefs — nothing in-program pins the cell identity, so any
+mechanism-level name would be lore. Per the create-without-rename middle:
+the FUN record stands, the shape is documented in the plate, and
+`FUN_11bd_02b7` is RETAINED until a slice names the cells (or the runtime
+slice resolves `[0x9c0]`/`[0x40]` context). Plate set
+(`C: none — behavioral (mode-switch twin shape: PUSHA + hook CALL [0x9c0]
++ DS/ES 0x20 staging + [0x40] MSW OR-merge + slot-cursor compute
+[0xf52]&0x38+[0xf54] with [0xf52]+8 bump + slot stores
+[SI+2]/[SI+4]/[SI+7] + computed SS switch + LLDT 0x68 + self POPA/RET;
+unnamed pending [0xf52]/[0xf54] cell roles; body truncated at
+tool-undecoded 02d4..02d9, tail 02da..02f8 defined but outside body)`).
+No direction word is asserted anywhere (UNDECIDED — `### Direction
+question` below); no `decode_*`; no caller lore.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_02b7 | 11bd:02b7 | created: real `disassemble_bytes` 24+1 insns (skip reproduced), `create_function` → body `02b7..02d3` (analyzer nearest-consistent; pocket `02d4..02d9` undefined, tail `02da..02f8` orphaned-in-listing); entry `PUSHA` `60`@`02b7`; hook `CALL [0x9c0]`@`02b8`; `SMSW`/`OR [0x40]`/`LMSW`@`02c3/02c6/02ca`; cursor `MOV SI,[0xf52]`/`AND SI,0x38`@`02cd/02d1`; cited exit `POPA` `61`@`02f7`+`RET` `c3`@`02f8`; 0 xrefs before and after | NOT-CONFIRMED-at-name — `FUN_11bd_02b7` retained; missing leg: cell roles of `[0xf52]`/`[0xf54]` | none — behavioral (plate above) |
+
+### Direction question
+
+Answer to the question slice 13 deferred: **NOT an enter/exit pair as far
+as static code shows — both set-only OR; the question moves to the runtime
+`[0x40]` writer.** Both bodies merge the same cell with the same op —
+sibling `execute_mode_switch`: `SMSW`@`02a7` + `OR AX,word ptr [0x40]`
+(`0b064000`)@`02aa` + `LMSW`@`02ae` (cited rows of
+`## 0290/0293 fall-through`); twin: `SMSW`@`02c3` +
+`OR AX,word ptr [0x40]` (`0b064000`)@`02c6` + `LMSW`@`02ca` (rows above) —
+neither carries any `AND`/`ANDNOT` MSW form, so no PE-clearing leg exists
+in the pair and the decide-rule ("one sets, the other clears") is NOT met.
+`[0x40]`'s runtime value (bit0 = PE target) and its installer identity are
+handed to the RUNTIME slice (reads now `{02aa, 02c6}`, direct stores still
+0 among defined insns — slice-13 rows re-cited by Task 1). What the twin
+DOES show, per its walk rows + this create: selector staging
+`MOV AX,0x20`@`02bc` feeding segment stores `MOV DS`@`02bf`/`MOV ES`@`02c1`
+(and `MOV DS,0x8`@`02dd/02e0`, `DS←ES`@`02f5/02f6`); the selector-mask
+arithmetic `AND SI,0x38`@`02d1` over `[0xf52]`; the cursor `ADD`s at
+`02d4/02d8` (`0336540f` / `8306520f08` — byte-evidence parse; the defined
+listing instead carries the tool's `PUSH DX`@`02da`+`INVD`@`02db`
+alternative, recorded as such); slot stores `[SI+2]/[SI+4]/[SI+7]` with
+the computed `SS←SI`@`02ed` and `LLDT 0x68`@`02ef/02f2`. That evidence
+characterizes the twin as the STATEFUL half of the pair (table/cursor
+mutation + stack switch around the same MSW merge, self-unwinding) — which
+is a role observation, not a direction observation: none of it changes the
+`MSW ← MSW ∪ [0x40]` semantics, so the enter-vs-exit question remains with
+the `[0x40]` writer at runtime.
+
+### Deferrals
+
+Carried/extended from this section's Task-1 rows and the
+`## 296d hook target` deferral list: (a) `[0x40]` MSW mask WRITER and
+installer identity → runtime slice (reads `{02aa, 02c6}`, stores 0 among
+defined insns — the direction question's sole missing leg, as stated
+above); (b) `[0x9c0]` hook target identity → runtime (writer set
+NOT-IN-EXE per slice-14; the twin's `02b8` is read-site #2, contact-point
+evidence only; the twin has NO call targets beyond this dynamic hook — no
+second-layer callee question); (c) `2978..2ada` paging-block ownership →
+out of slice scope (twin exits at `02f8` inside its own gap; never
+entered); (d) NEW: `[0xf52]`/`[0xf54]` cell roles — the naming leg for
+`FUN_11bd_02b7` (needs their writer/value evidence; both currently
+undefined globals, 0 xrefs; the byte-parse cursor bump at `02d8` is itself
+a writer candidate pending the pocket's disposition); (e) NEW: the
+`02d4..02d9` decode pocket + orphaned `02da..02f8` tail — a future
+listing-disposition item (bytes-authority `ADD`/`ADD` re-decode vs keeping
+the tool's `PUSH DX`/`INVD` parse; this slice deliberately did not
+hand-force per the no-fight rule — see `### Writes`). Leaf verdicts
+elsewhere: none new surfaced — the twin's only transfers and cell
+contacts were already tabled by Task 1.
