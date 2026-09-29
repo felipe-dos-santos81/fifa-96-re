@@ -1693,3 +1693,227 @@ the tool's `PUSH DX`/`INVD` parse; this slice deliberately did not
 hand-force per the no-fight rule — see `### Writes`). Leaf verdicts
 elsewhere: none new surfaced — the twin's only transfers and cell
 contacts were already tabled by Task 1.
+
+## 02b7 twin completion (verified 2026-09-29, program `/fifa96.exe`)
+
+Summary. Cell roles: **PINNED, both cells** — neither `[0xf52]` nor
+`[0xf54]` is twin-only, so the THIN condition in the `## 02b7 twin`
+verdict row ("twin-only contacts") is NOT met and the naming leg's
+missing fact is now supplied: `[0xf54]` is the BASE of an 8-byte-stride
+slot table and `[0xf52]` is a CURSOR into it. The base is written by a
+non-twin site — `MOV word ptr [0xf54],AX` at `11bd:5812` (`FUN_11bd_5686`),
+AX from `CALL 0x1000:579c` (= `11bd:3bcc`, called with count `0x1c` at
+`5807..580e`, whose body walks slots at stride 8 — `MOV BX,0x8`@`3bea`,
+`MOV SI,word ptr ES:[BX]`@`3bef`, `SHR SI,0x3`@`3bf2`, and `SHL BX,0x3`
+at `3c0d`/`3c2c`/`3c57`/`3c6e` as the slot-address step) — and is then
+scaled IN PLACE
+by `SHL word ptr [0xf54],0x3` at `584b`, i.e. stored as a slot COUNT and
+converted to a byte offset by the same ×8 the twin's arithmetic uses; the
+only other `[0xf54]` contacts are reads at `581f`/`583b`. The cursor
+`[0xf52]` has TWO non-twin writers plus a save/restore pair, all with the
+same ±8 stride the twin's `AND SI,0x38` mask bounds: `SUB word ptr
+[0xf52],0x8` at `1991:057a` (bytes `832e520f08`, DS←`0x20` staged at
+`1991:056c/056e`) and `POP word ptr [0xf52]` at `1991:0d23` (store),
+paired with `PUSH word ptr ES:[0xf52]` at `1991:0cc9` (read) inside
+`FUN_1991_0c9e`, a stack-switch handler that saves the cursor across a
+`REP MOVSW` frame copy and restores it before `IRETD` — and that handler
+touches the same family of cells (`ES:[0x996]`/`ES:[0x99e]`, the stack
+slot pointers at `1991:0cb5`/`0cb0`). So the role reading is: allocate a
+block of 8-byte slots (`3bcc`), scale the handle to a byte offset
+(`[0xf54]`), then walk it with a cursor (`[0xf52]`) that one consumer
+advances +8 and another decrements −8, saving/restoring it around a stack
+switch. That is the "base+cursor pair written by X" shape, and it makes a
+mechanism-level name for `FUN_11bd_02b7` decidable from evidence rather
+than lore (the rename itself is NOT performed here — this pass is
+read-only). Two hardening residues are named below; neither re-opens the
+THIN test, because both concern VALUE knowledge and segment-alias
+bookkeeping, not contact sets. Pocket: **tool parse UNCHANGED** — every
+dry-run window re-emitted slice-15's behavior verbatim (nothing for
+`02d4..02d9`, `PUSH DX`@`02da`, `INVD`@`02db`, resume `02dd`), the raw
+bytes still read `0336540f8306` with zero diff against the map quote, and
+the byte-authority `ADD`/`ADD` parse is now INDEPENDENTLY CORROBORATED:
+both pocket encodings recur verbatim against these same two cells
+elsewhere in the image (`832e520f08` at `1991:057a` is the same `83 /ib +
+disp16 [0xf52]` shape with only the `/digit` changed; `0306540f` at
+`11bd:583b` is the same `03 /r + disp16 [0xf54]` shape), so the adopted
+parse is a live instruction form, not a hand-fitted reading.
+Method caveat, stated once and applying to every negative below:
+`search_instructions` scans DEFINED instructions only (14006 per run,
+reported in every response), and the whole twin region `11bd:02d4..02f8`
+is partly undecoded, so operand searches cannot see pocket/`1991:057a`
+bytes — the two raw-byte scans (`520f`, `540f`) are the coverage
+authority here and are the reason each negative row lists the searches
+that ran. Second caveat: `get_xrefs_to` is dead for these near-data
+operands — all five cells return `count:0`, and control probes on
+known-referenced cells confirm the artifact (`get_xrefs_to(11bd:0040)` →
+0 refs despite the `02aa`/`02c6`/`2a6c` readers;
+`get_xrefs_to(11bd:098e)` → 0 refs despite `56ef` writing it), so
+xref counts are reported but are NOT evidence of contact absence;
+instruction enumeration is. `audit_global` on all five cells: identical
+blank state — `name:""`, `type:""`, `length:0`, `plate_comment:""`,
+`xref_count:0`, issues `["generic_name","untyped","missing_plate_comment"]`
+(3 hard).
+
+| cell | search run | hits (addr, mnemonic) | role reading |
+|------|-----------|----------------------|--------------|
+| `[0xf54]` (BASE) | `search_instructions` operand `0xf54` → 4; operand `f54` → 5; `0xf5` → 12 (family superset); `get_xrefs_to(11bd:0f54)` → `{"references":[],"count":0,"total":0}`; `audit_global(11bd:0f54)` → blank; raw `search_byte_patterns 540f` → 5 (`02d6`,`5813`,`5820`,`583d`,`584d`); far forms `540fbd11` → none | `11bd:5812` `MOV [0xf54],AX` (a3540f) — WRITE, sole non-twin writer, AX = `CALL 0x1000:579c`(`11bd:3bcc`, arg `0x1c`@`580d`) result; `11bd:581f` `MOV AX,[0xf54]` (a1540f) — READ; `11bd:583b` `ADD AX,word ptr [0xf54]` (0306540f) — READ; `11bd:584b` `SHL word ptr [0xf54],0x3` (c126540f03) — READ+WRITE (in-place ×8 = slot-count → byte offset, same stride as the twin's `AND 0x38`/`+8`); `11bd:02d4` `ADD SI,word ptr [0xf54]` (`0336540f`, byte-evidence parse) — READ by the twin, inside the undecoded pocket (invisible to the operand search; raw hit `540f`@`02d6`). FALSE HIT rejected: `11bd:47d6` `MOV AX,word ptr [BP + 0xff54]` — frame-relative disp8-negated lookalike, no absolute operand | slot-table BASE, allocated+counted by `FUN_11bd_5686` through the stride-8 walker `11bd:3bcc`, consumed by the twin as the block base |
+| `[0xf52]` (CURSOR) | operand `0xf52` → 3; operand `f52` → 4; operand `0xf52]` → 3; `get_xrefs_to(11bd:0f52)` → `count:0`; `audit_global(11bd:0f52)` → blank; raw `search_byte_patterns 520f` → 5 (`02cf`,`02da`,`1991:057c`,`1991:0ccc`,`1991:0d25`); far form `520fbd11` → none | `11bd:02cd` `MOV SI,word ptr [0xf52]` (8b36520f) — READ, twin (defined); `11bd:02d8` `ADD word ptr [0xf52],0x8` (`8306520f08`) — WRITE (+8 advance), twin, INSIDE the undecoded pocket (raw hit `520f`@`02da`); `1991:057a` `SUB word ptr [0xf52],0x8` (`832e520f08`) — WRITE (−8 retreat), UNOWNED bytes (`get_function_by_address(1991:057a)` → no function), reached with DS←`0x20` (`1991:056c/056e`), so NOT visible to any operand search; `1991:0d23` `POP word ptr [0xf52]` (8f06520f) — WRITE (restore), `FUN_1991_0c9e`; `1991:0cc9` `PUSH word ptr ES:[0xf52]` (26ff36520f) — READ (save), `FUN_1991_0c9e`. FALSE HIT rejected: `11bd:337d` `JMP 0x1000:4f52` (bytes `eb03`) — branch-target text match, not a memory operand | 8-byte-stride CURSOR into the `[0xf54]` block: `+8` consumer (twin, to publish a slot), `−8` consumer (`1991:057a`, to release/roll back), `PUSH`/`POP` save-restore around a stack switch — the `AND SI,0x38` mask bounds it to 8 slots |
+| `[0xf50]` (neighbor, SP save) | operand `0xf50` → 5; `get_xrefs_to(11bd:0f50)` → `count:0`; `audit_global(11bd:0f50)` → blank; raw `500f` → 21 = the 5 defined contacts' disp16 bytes (`6021`,`62e0`,`6e78`,`7297`,`7316`) + 9 contacts in
+undecoded bytes (`001d`,`0bbc`,`0cf2`,`1367`,`1472`,`1491`,`1592`,`16f6`,`1991:09bc`) + 7 straddle artifacts
+(`295e`,`2982`,`2a94`,`2a97`,`2cdf`,`6b8f`,`720b`) | DEFINED (the 5 the operand search found): `11bd:601f` `MOV SP,word ptr [0xf50]` — READ (`FUN_11bd_601d`, 6-insn stack-pop tail); `11bd:62de` `MOV word ptr [0xf50],SP` — WRITE (`run_postload_init`); `11bd:6e77` `MOV AX,[0xf50]` — READ (`FUN_11bd_6e20`); `11bd:7295` `MOV word ptr [0xf50],SP` — WRITE and `11bd:7314` `MOV word ptr [0xf50],BP` — WRITE (`FUN_11bd_7290`, DPMI-ish IRET frame builder at `730a..731c`: `MOV SS,AX`/`LEA SP,[DI+-0x6]`/`MOV [0xf50],BP`/`IRET`). UNDECODABLE-BY-SEARCH contacts (raw `500f` + dry-run, no function per `get_function_by_address`): READ `MOV SP,[0xf50]` at `11bd:001a` (bytes `368b26500f`, SS-override form, in the `11bd:0000` stub), `0bba`, `0cf0`, `1365`, `148f`, `1590`, `16f4` and `1991:09ba`; WRITE `MOV [0xf50],SP` at `11bd:1470`. FALSE/STRADDLE rejected: `295d`/`2982`/`2cdf` (`6650 PUSH EAX` + `0f20` CR-read), `2a94`/`2a97` (`PUSH AX` + `PUSH GS`/`PUSH FS`), `6b8f` (`PUSH ES:AX`), `720b` (inside `ROR byte ptr [BP+DI+0x5026],0x1`); ADDRESS-only: `11bd:033d` `MOV DI,0xf56` / `0369` `MOV SI,0xf56` use `0xf56` as an address immediate | saved-`SP` cell of the stack-switch state block — the cluster `0xf50/0xf52/0xf54` is stack/slot machinery, which is exactly the context the twin's `MOV SS,SI`@`02ed` plugs into; the raw scan also shows this cell has 8 contacts the defined-only search could NOT see, so "5 hits" understates the family and the caveat is demonstrated on a cell whose whole accessor set is visible |
+| `[0xf56]` (neighbor) | operand `0xf56` → 0 matches (14006 defined insns); `get_xrefs_to(11bd:0f56)` → `count:0`; `audit_global(11bd:0f56)` → blank; raw `560f` → 4 (`033e`,`036a`,`28e5`,`2a68`) | NEGATIVE on defined-instruction evidence: the searches that ran are operand `0xf56` (0), operand `0xf5` (12, none at `[0xf56]`), and `get_xrefs_to` (0 refs, xref channel dead per caveat). Raw scan adds what the operand search structurally cannot see: `11bd:28e4` `MOV AX,[0xf56]` (`a1560f`) — READ, in the `2811..2ada` deferred block (unowned: `get_function_by_address(11bd:28e4)` → no function); `11bd:033d`/`0369` treat `0xf56` as an ADDRESS (4-byte save/restore pair with `0x467`); FALSE HIT rejected: `11bd:2a68` — the bytes straddle `6656` `PUSH ESI`@`2a67` + `0f01e1` `SMSW CX`@`2a69` | contact exists, but in unowned/deferred bytes and as an address constant — no role claim; per scope note, cited as context, not widened |
+| `[0xf58]` (neighbor) | operand `0xf58` → 0 matches (14006 defined insns); `get_xrefs_to(11bd:0f58)` → `count:0`; `audit_global(11bd:0f58)` → blank; raw `580f` → 1 (`11bd:28ec`) | NEGATIVE on defined-instruction evidence (searches that ran: operand `0xf58` → 0, operand `0xf5` → 12 with no `[0xf58]` mention, `get_xrefs_to(11bd:0f58)` → 0 refs — xref counts meaningless per the control probes). One raw-scan hit: disp16 bytes `58 0f` at `11bd:28ec`, i.e. `MOV AX,[0xf58]` (`a1580f`) at `28eb..28ed` — READ, in unowned bytes (`get_function_by_address(11bd:28e4)` → no function), immediately preceded in the same dry-run window by the `[0xf56]` read at `28e4` and followed by `MOV ES:[0x469],AX` at `28ee`; the value is copied out to `ES:[0x467]`/`ES:[0x469]` (`28e7`/`28ee`, `26a3 6704`/`26a3 6904`). CAVEAT on this reading: the `28d8..28f2` dry-run emit itself skips `28e7..28eb` and resyncs at `28ec` (a SECOND instance of the `02d4` skip-and-resync pathology), so the `28eb` instruction is my aligned decode of the raw dump (`28eb=a1 28ec=58 28ed=0f`), not a tool emit — out-of-scope deferred-block material, flagged not adopted | `[0xf56]`+`[0xf58]` is the 4-BYTE unit (copied as a pair to `0x467`, read back as two words) — contrast the assignment's `32-bit descriptor-ish pair` question: `[0xf52]`/`[0xf54]` are NEVER accessed as a dword (every enumerated operand is a word op), so the pair structure is base+cursor, not a single 32-bit field |
+| `[0x40]` (mask, re-cite) | operand `0x40]` → 8; `11bd:2a6c` NOT among them (undefined bytes — it surfaced only in the `disassemble_bytes` dry-run window `2a60..2a74`, which I ran to classify the `560f` raw hit at `2a68`) | Reads `11bd:02aa` (`execute_mode_switch`) and `11bd:02c6` (twin) — both `OR AX,word ptr [0x40]` `0b064000`; NEW read sighting `11bd:2a6c` `MOV AX,[0x40]` (`a14000`, `NOT AX`/`AND AX,CX`/`LMSW` at `2a6f/2a71/2a73`, unowned bytes in the deferred `2811..2ada` block — that sequence is an MSW CLEAR path, the form slice 15 said is absent from the twin/sibling pair). FALSE HITS rejected (frame-relative `0xffc0`-style lookalikes): `11bd:3286`/`3292`/`32a2` `LEA AX,[BP+-0x40]`, `3433` `MOV word ptr [BP+-0x40],0x50`, `35e9`/`3600` `MOV ES,word ptr [BP+-0x40]` | re-cited only: reader set grows to {`02aa`,`02c6`,`2a6c`} (the last from a dry-run window, not from the operand search), direct stores still 0 among defined insns — the `[0x40]` writer stays the runtime slice's missing leg (`## 02b7 twin` deferral (a) unchanged); the `2a6c..2a73` AND-NOT-`[0x40]`+`LMSW` shape belongs to the deferred paging block, flagged for that slice, not adopted here |
+
+| Pocket item | Evidence (this pass, verbatim) | Result |
+|-------------|-------------------------------|--------|
+| raw bytes `11bd:02d4..02d9` | `read_memory(11bd:02d4,6)` → `{"address":"11bd:02d4","length":6,"data":[3,54,84,15,131,6],"hex":"0336540f8306"}` | IDENTICAL to the map's quoted `0336540f8306` — zero diff |
+| pocket + seam context | `read_memory(11bd:02d4,12)` → `0336540f8306520f08b80800` (`0x08`@`02dc`, `b8 08 00`@`02dd..02df` = `MOV AX,0x8`) | slice-15's "+`08`@`02dc`" quote re-confirmed; the 6-byte pocket boundary `02d9`/`02da` falls mid-instruction under the adopted parse |
+| tool behavior, pocket alone | `disassemble_bytes` `dry_run=true` `11bd:02d4..02d9` → `{"dry_run":true,"success":true,"start_address":"11bd:02d4","end_address":"11bd:02d8","bytes_disassembled":5,"message":"Successfully disassembled 5 byte(s)","instructions":[],"instructions_total":0,"truncated":false}` | EMITS NOTHING (and clamps the echoed end to `02d8`) — unchanged from slice 15's `instructions_total:0` finding |
+| tool behavior, left seam | `disassemble_bytes` `dry_run=true` `11bd:02cf..02e3` → `AND SI,0x38`@`02d1` (`83e638`), `PUSH DX`@`02da` (`52`), `INVD`@`02db` (`0f08`), `MOV AX,0x8`@`02dd` (`b80800`), `MOV DS,AX`@`02e0` (`8ed8`), `MOV word ptr [SI + 0x2],DI`@`02e2` (`897c02`) — `instructions_total:6` | The pocket is SKIPPED, not mis-parsed in place: the tool jumps `02d3 → 02da`, leaving `02d4..02d9` undefined, then resumes at `02dd`. `disassemble_bytes` `dry_run=true` `11bd:02d2..02d8` → `instructions:[],"instructions_total":0` (second emptiness probe) |
+| adopted parse, field-level | `02d4` `03 /r` `ADD r16,r/m16` + ModRM `36` = mod`00` reg`110`(SI) rm`110` → disp16 `540f` = `[0xf54]` → `ADD SI,[0xf54]` (4 bytes `02d4..02d7`); `02d8` `83 /0 ib` `ADD r/m16,imm8` + ModRM `06` = mod`00` reg`000`(/0 = ADD) rm`110` → disp16 `520f` = `[0xf52]`, imm8 `08` → `ADD word ptr [0xf52],0x8` (5 bytes `02d8..02dc`) | Consumes all 9 bytes `02d4..02dc` and lands on `02dd` = the tool's own resume point (slice-15 convergence re-confirmed) |
+| tool parse, field-level | `02da` `52` = `PUSH DX` (opcode-only, no ModRM, reg field `010` = DX); `02db` `0f 08` = `INVD` (2-byte opcode, no ModRM) | bytes `52 0f 08`@`02da..02dc` are read as two instructions; under the adopted parse the SAME bytes are disp16-lo/`0f`-hi/imm8 of the `ADD [0xf52],0x8` |
+| agree/diverge | Both parses: `02d1` `AND SI,0x38` and everything from `02dd` onward. Divergence is exactly `02d4..02d9` (tool: undefined; adopted: `ADD SI,[0xf54]`) plus the byte-level ownership of `02da..02dc` | Agrees with slice 15's "converge at `02dd`" statement word for word; nothing about the tool's emit changed |
+| NEW corroboration | `832e520f08` (`SUB word ptr [0xf52],0x8`) at `1991:057a` and `0306540f` (`ADD AX,word ptr [0xf54]`) at `11bd:583b` | Both pocket encodings are live, repeated forms aimed at these same two cells — the adopted parse needs no hand-forcing argument beyond that, on top of the frame-balance finding (`PUSH DX` unbalanced against `POPA`/`RET`@`02f7/02f8`) recorded in `## 02b7 twin` |
+
+Hardening residue (named; does not re-open the PINNED test): (1) cell
+VALUES — the static bytes under `11bd:0f4e..0f6d` are a run of
+`CALL 11bd:0f6e` stubs (`e81d0000`,`e8190000`,`e8150000`,…; the target
+`0f6e` is an unowned stack-save stub, `CLI`/`PUSH DS`/`MOV DI,0x1000`/
+`ES:[0x996]` walk at `0f6e..0f89`), so no static initial value is
+readable for `[0xf52]`/`[0xf54]`/`[0xf56]`/`[0xf58]`, and `audit_global`
+finds no data definition at any of them — the runtime slice's value
+snapshot (the `[0x40]`/`[0x9c0]`-style deferral) is what would turn the
+role claim into a value-confirmed one; (2) segment-alias bookkeeping —
+the `1991:` sites are offset-nominal relative to their own block, and
+same-runtime-cell identity with the `11bd:`-rendered cells rests on the
+observed DS/ES staging (`1991:056c/056e` `PUSH 0x20`/`POP DS`;
+`ES←CS:[0x5680]` at `1991:0ca9`, and `CS:[0x5680]` itself written only by
+`MOV word ptr [0x5680],SS` at `11bd:7048`) plus the shared
+`[0x996]`/`[0x99e]`/`[0xf50]` cluster, not on a static symbol; and (3)
+disposition — adopting `ADD`/`ADD` over the listing's `PUSH DX`/`INVD` is
+still the un-run `### Writes` item (deferral (e)), and `[0xf52]`'s `+8`
+writer stays inside that pocket, so the cursor's `+8` leg is byte-evidence
+until the pocket is re-decoded while its `−8` and save/restore legs are
+already defined/listing-visible. Contact-set facts (both cells non-twin,
+writer identities as cited) are independent of all three.
+
+Zero Ghidra writes this task: `disassemble_bytes` exclusively
+`dry_run=true` (23 windows, no write-mode call made at all), plus
+`read_memory`, `inspect_memory_content`,
+`search_instructions` (operand patterns run, with hit counts: `0xf50` 5,
+`0xf52` 3, `0xf54` 4, `0xf56` 0, `0xf58` 0, `f52` 4, `f54` 5, `0xf5` 12,
+`0xf52]` 3, `0xa87` 3, `0x996` 30, `0x99e` 5, `0x5680` 3, `0x40]` 8),
+`search_byte_patterns` (`520f` 5, `540f` 5, `560f` 4, `580f` 1, `500f`
+21, `520fbd11`/`540fbd11`/`bd11520f` none), `get_xrefs_to` (five cells +
+two controls), `audit_global` (five cells), `get_function_by_address`,
+`disassemble_function`. No rename, no plate, no data definition, no
+flow/listing change, no `save_program`; `FUN_11bd_02b7` still
+body `11bd:02b7..02d3`, pocket still undefined, tail still
+defined-but-outside-body; `/media/felipe/FIFAPCCD/` untouched.
+
+### Pocket repair (executed 2026-09-29, Task 2, program `/fifa96.exe`)
+
+Pre-state re-confirmed live immediately before any write:
+`get_function_by_address(11bd:02b7)` →
+`{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`;
+plate `get_comment(11bd:02b7)` → slice-15 plate read back verbatim
+(quoted in the `### Name disposition` before-row); gap row
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"FUN_11bd_02b7","before_function_address":"11bd:02b7","after_function":"FUN_11bd_0733","after_function_address":"11bd:0733"}`
+(total 131) — all identical to the `## 02b7 twin` `### Writes`
+post-state. Two sanctioned paths only, per brief Step 1; no third path
+invented; `02f9+` and the `2978..2ada` block never touched.
+
+| Step | Command as run | Tool response (verbatim) | Reading |
+|------|----------------|--------------------------|---------|
+| real pocket disassembly | `disassemble_bytes` start `11bd:02d4` length `6` (no dry_run — the sanctioned real write) | `{"success":true,"start_address":"11bd:02d4","end_address":"11bd:02d9","bytes_disassembled":6,"message":"Successfully disassembled 6 byte(s)","instructions":[],"instructions_total":0,"truncated":false}` | The skip is reproduced in WRITE mode: 6 bytes "disassembled", ZERO instructions emitted, exact range echoed `02d4..02d9` (no clamp this time). Post-run `read_memory(11bd:02d4,6)` → `{"address":"11bd:02d4","length":6,"data":[3,54,84,15,131,6],"hex":"0336540f8306"}` — bytes intact, pocket still undefined in effect |
+| bounds re-read #1 | `get_function_by_address(11bd:02b7)` | `{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` | NOT joined (refusal #1: the analyzer did not re-flow the body over the pocket) |
+| sanctioned nudge | `create_function` at `11bd:02b7`, `disassemble_first=false` | `{"error":"Function already exists at 11bd:02b7: FUN_11bd_02b7"}` | Refused against the existing function object; no new object created ⇒ nothing of mine to delete (delete-nothing rule satisfied trivially) |
+| bounds re-read #2 | `get_function_by_address(11bd:02b7)` | `{"name":"FUN_11bd_02b7","address":"11bd:02b7","signature":"undefined2 FUN_11bd_02b7(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` | Refusal #2 ⇒ disposition final |
+| post-state tool re-probe | `disassemble_bytes` `11bd:02d4..02d9` `dry_run=true` | `{"dry_run":true,"success":true,"start_address":"11bd:02d4","end_address":"11bd:02d8","bytes_disassembled":5,"message":"Successfully disassembled 5 byte(s)","instructions":[],"instructions_total":0,"truncated":false}` | Tool state unchanged from before (same skip + `02d8` clamp as the Task-1 quote) |
+| tail state | `get_function_by_address(11bd:02da)` | `{"error":"No function found for 11bd:02da"}` | Tail `02da..02f8` still defined-but-outside any body — the orphan stands |
+
+Disposition: **RATIFIED-TRUNCATION** (not JOINED). Reason the map keeps
+the tail orphaned: both sanctioned paths were exhausted and each was
+answered by the analyzer's own output — the real pocket disassembly
+emitted zero instructions (the skip is a write-mode tool behavior, not a
+dry-run artifact), and the single `create_function` nudge refused against
+the existing object. Per the no-fight rule the byte-evidence `ADD`/`ADD`
+parse (`0336540f`/`8306520f08`) stays recorded-but-unapplied, exactly the
+slice-15 posture; the full confirmed boundary `02b7..02f8` with the
+`PUSHA`↔`POPA`/`RET` contract remains defended in the `## 02b7 twin`
+verdict row, which this section supersedes on disposition only (deferral
+(e) of that section is hereby dispositioned: ratified-truncated, pocket
+left undefined by tool refusal, tail left orphaned by analyzer refusal —
+no hand-forcing). Residue (3) of this section's summary therefore stands
+unchanged: `[0xf52]`'s `+8` writer (and `[0xf54]`'s base-add) stay
+byte-evidence-in-pocket.
+
+### Name disposition (PINNED — executed 2026-09-29, Task 2, program `/fifa96.exe`)
+
+Rename (verb-led snake_case, mechanism-level):
+`FUN_11bd_02b7` → **`write_slot_from_cursor`** — `rename_function` →
+`{"status":"success","message":"Success: Renamed function at FUN_11bd_02b7 from 'FUN_11bd_02b7' to 'write_slot_from_cursor'","warnings":["Function name 'write_slot_from_cursor' — main part 'write_slot_from_cursor' is not PascalCase. Expected: WriteSlotFromCursor","Function name 'write_slot_from_cursor' — main part 'write_slot_from_cursor' contains underscores. Use PascalCase after the module prefix."]}`
+(warnings are the tool's PascalCase style default; the repo convention
+is snake_case — cf. `clear_slot_entries`, `publish_mode_vector`,
+`execute_mode_switch` — so the name stands). Collision check before
+renaming: `search_functions` `slot` → only `clear_slot_entries @
+11bd:1df7`; `cursor` → 0 functions.
+
+| Item | Before (slice-15 state) | After (post-write read-back) |
+|------|--------------------------|------------------------------|
+| name | `FUN_11bd_02b7` (`get_function_by_address` quote in `### Pocket repair` pre-state) | `write_slot_from_cursor` — `{"name":"write_slot_from_cursor","address":"11bd:02b7","signature":"undefined2 write_slot_from_cursor(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}` |
+| plate | `C: none — behavioral (mode-switch twin shape: PUSHA + hook CALL [0x9c0] + DS/ES 0x20 staging + [0x40] MSW OR-merge + slot-cursor compute [0xf52]&0x38+[0xf54] with [0xf52]+8 bump + slot stores [SI+2]/[SI+4]/[SI+7] + computed SS switch + LLDT 0x68 + self POPA/RET; unnamed pending [0xf52]/[0xf54] cell roles; body truncated at tool-undecoded 02d4..02d9, tail 02da..02f8 defined but outside body)` | `C: none — behavioral (slot-table cursor consumer: reads [0xf52] cursor, bounds to 8 slots via AND SI,0x38, then [0xf54]-base add and [0xf52]+8 bump byte-evidenced in pocket 02d4..02d9, writes slot fields [SI+2]/[SI+4]/[SI+7], computed SS←SI, LLDT 0x68, self POPA/RET; cells PINNED non-twin-only ([0xf54] base written at 11bd:5812 and scaled x8 at 584b, [0xf52] cursor with -8 consumer at 1991:057a and save/restore at 1991:0cc9/0d23 — the 1991 contacts are offset-nominal to their own segment, same-runtime-cell identity rests on the DS/ES←0x20 staging not a static symbol); name safe under either pocket parse (no advance/base-add asserted as listing fact); body truncated at tool-refused 02d4..02d9, tail 02da..02f8 defined but outside body)` — `set_comment` → `{"status":"success","message":"Set plate comment at 11bd:02b7","warnings":["Plate comment missing Algorithm section","Plate comment missing Parameters section","Plate comment missing Returns section"]}` (boilerplate warnings only, same as prior slices' behavioral plates); `get_comment(11bd:02b7)` read-back verbatim = the text in this cell |
+
+Name rationale (PINNED branch; mechanism from the body + pinned roles,
+no direction words, no caller lore): the body reads the CURSOR
+(`MOV SI,word ptr [0xf52]`@`02cd`, defined) and bounds it to the
+8-slot window the BASE table uses (`AND SI,0x38`@`02d1`, defined); the
+pocket byte-parse adds the base (`ADD SI,[0xf54]`@`02d4`) and advances
+the cursor (`ADD word ptr [0xf52],0x8`@`02d8`); the stores publish slot
+fields (`[SI+2]`/`[SI+4]`/`[SI+7]`, defined in the tail). Because the
+adopted parse never joined the body (RATIFIED above), the `+8` and
+base-add legs remain byte-evidence-in-pocket — so the name asserts only
+what is listing-visible under EITHER pocket parse: consult the cursor,
+write the slot (`write_slot_from_cursor`). "write"/"slot"/"cursor" are
+mechanism vocabulary; no enter/exit/switch-mode word appears (the
+direction question stays UNDECIDED per `## 02b7 twin` `### Direction
+question`); no hook/`[0x9c0]` caller identity enters the name (its writer
+set is still NOT-IN-EXE, deferral (b)).
+
+Carried condition (residue (2) of this section's summary, recorded in the
+plate too): the `[0xf52]` −8/save/restore contacts live in the `1991:`
+segment and are **offset-nominal to their own segment** — same-runtime-cell
+identity with the `11bd:`-rendered cells rests on the observed DS/ES
+staging (`PUSH 0x20`/`POP DS`@`1991:056c/056e`;
+`ES←CS:[0x5680]`@`1991:0ca9`) plus the shared `[0x996]`/`[0x99e]`/`[0xf50]`
+cluster, NOT on a static symbol. If the runtime slice shows selector
+`0x20` does not base to the `11bd` block, the cursor's non-twin-writer
+leg weakens back toward THIN and this name must be re-examined.
+
+Verdict-leg update (by reference, not rewritten): the slice-15
+`### Verdict` row's `NOT-CONFIRMED-at-name` leg — "missing leg: cell
+roles of `[0xf52]`/`[0xf54]`" — **is closed on the Task-1 contact
+enumeration**: `[0xf54]` = slot-table BASE (sole writer `11bd:5812`
+`MOV [0xf54],AX` from the stride-8 walker `11bd:3bcc`, scaled in place
+`SHL [0xf54],0x3`@`584b`), `[0xf52]` = 8-stride CURSOR (non-twin −8
+writer `1991:057a`, save/restore `1991:0cc9`/`0d23`) — neither cell is
+twin-only, so the THIN condition fails and the rename above executes.
+Deferral (d) of `## 02b7 twin` is thereby consumed; deferrals (a)/(b)/(c)
+stand untouched.
+
+### Post-state (Task 2)
+
+`save_program(/fifa96.exe)` →
+`{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+Final quotes: function `{"name":"write_slot_from_cursor","entry_point":"11bd:02b7","body_start":"11bd:02b7","body_end":"11bd:02d3"}`
+(bounds unchanged — RATIFIED-TRUNCATION; rename does not re-flow);
+plate = the after-cell quoted above, read back verbatim; pocket still
+undefined (`read_memory` = `0336540f8306`); tail `02da..02f8` still
+orphaned (`get_function_by_address(11bd:02da)` → `{"error":"No function
+found for 11bd:02da"}`); `find_code_gaps` twin row reflowed to name only:
+`{"start":"1000:1ea4","end":"1000:2302","size":1119,"has_undefined_bytes":true,"has_orphaned_instructions":true,"before_function":"write_slot_from_cursor","before_function_address":"11bd:02b7","after_function":"FUN_11bd_0733","after_function_address":"11bd:0733"}`,
+total still 131. Writes this task: the real `disassemble_bytes(11bd:02d4,
+length 6)`, one `create_function` nudge (refused, no effect),
+`rename_function`, `set_comment`, `save_program` — nothing else;
+`/media/felipe/FIFAPCCD/` untouched.
