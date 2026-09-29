@@ -2359,3 +2359,258 @@ Ghidra transaction was opened.
 - **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
   UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE, runtime-written)
   — a zero-write pass occurred; nothing in this slice could have moved them.
+
+## callee arg question (verified 2026-09-29, program `/fifa96.exe`)
+
+Read-only one-layer-out trace of the slice-18 deferral (Task-2 Deferrals line
+1): do the two callees of the pushed `0x29bc`-bearing slot values —
+`11bd:1e9f` (args pushed at `2f3f`/`2f40` in `FUN_11bd_2ec9`) and `11bd:6250`
+(arg pushed at `452f` in `FUN_11bd_3ed8`) — indirect-branch on the received
+argument? Result: **NEITHER-CALLEE-INDIRECTS-ON-ARG**. `FUN_11bd_1e9f` =
+NONE-INDIRECT (61 instructions, zero register- or memory-operand `CALL`/`JMP`
+forms; the arg arrives into `DI` at `1ea3` and is consumed as string-write
+destination pointer arithmetic plus transformed stores — never as a branch
+operand). `publish_mode_vector` = CELL-STORAGE (the arg is stored VERBATIM one
+instruction after entry: `6255` `891eba09` `MOV word ptr [0x9ba],BX` — store
+site + cell + bytes cited; per the named-and-deferred guard its consumers were
+NOT followed). Slice-18's promotion condition — "a callee of the pushed slot
+value performing an indirect transfer on that argument" — resolves NOT-MET at
+the callee-body layer; any remaining entry leg sits further out (at the
+`[0x9ba]` cell consumers, deferred, and the untouched slice-17 runtime legs).
+No INDIRECT-ON-ARG form surfaced, so the conditional one-hop dry-run walk was
+not triggered and `disassemble_bytes` was not invoked (dry-run or otherwise);
+`disassemble_function` was the sole dump tool. Frame note: NEITHER callee uses
+a BP frame — both index args off `BX` set by the entry `MOV BX,SP` (`8bdc`),
+so the actual arrival displacements are `SS:[BX + 0x4]`/`[BX + 0x2]`, recorded
+at actual addresses below. Quote protocol honored: all twelve `read_memory`
+responses' `hex` fields reconciled against their own `data` arrays before
+quoting (12/12 MATCH).
+
+### Site confirmations (Step 1)
+
+| Probe | Verbatim response | Reconciliation / reading |
+|-------|-------------------|--------------------------|
+| `get_function_by_address(11bd:1e9f)` | `{"name":"FUN_11bd_1e9f","address":"11bd:1e9f","signature":"undefined2 FUN_11bd_1e9f(void)","entry_point":"11bd:1e9f","body_start":"11bd:1e9f","body_end":"11bd:1f23"}` | ACTUAL name recorded — default `FUN_11bd_1e9f` (not renamed, not assumed); live function, body `1e9f..1f23` (61-instruction dump below) |
+| `get_function_by_address(11bd:6250)` | `{"name":"publish_mode_vector","address":"11bd:6250","signature":"undefined publish_mode_vector(void)","entry_point":"11bd:6250","body_start":"11bd:6250","body_end":"11bd:627e"}` | slice-8 name LIVE at 6250 ✓; body `6250..627e` (14-instruction dump below) |
+| caller re-derive `read_memory(11bd:2f3f,12)` | `{"address":"11bd:2f3f","length":12,"data":[80,255,118,4,232,89,239,91,91,139,229,93],"hex":"50ff7604e859ef5b5b8be55d"}` | data→hex reconciled ✓. Decode: `2f3f 50 PUSH AX` (slot `[BP+-0x18]` value, loaded `2f39`) → `2f40 ff7604 PUSH word ptr [BP + 0x4]` → `2f43 e859ef CALL 0x1000:3a6f` (`3a6f−1bd0=1e9f` ✓; rel16 `ef59`=−0x10A7, `2f46−0x10A7=1e9f` ✓) → `2f46 5b`/`2f47 5b POP BX` ×2 = two-word cleanup → `2f48 8be5`/`2f4a 5d` epilogue. Push order fixes arrival: slot value (pushed FIRST) lands furthest → callee `[BX+0x4]`; `2ec9`'s own arg (pushed LAST) → `[BX+0x2]` |
+| caller re-derive `read_memory(11bd:452f,12)` | `{"address":"11bd:452f","length":12,"data":[255,118,166,137,134,20,255,232,23,29,91,128],"hex":"ff76a6898614ffe8171d5b80"}` | data→hex reconciled ✓. Decode: `452f ff76a6 PUSH word ptr [BP + -0x5a]` (slice-18's sole slot reader) → `4532 898614ff MOV word ptr [BP + -0xec],AX` (caller-side, non-transfer) → `4536 e8171d CALL 0x1000:7e20` (`7e20−1bd0=6250` ✓) → `4539 5b POP BX` one-word cleanup → callee single arg at `[BX+0x2]` |
+
+### Indirect-transfer enumeration (Step 2 — complete dumps, slice-18 reviewer's method)
+
+Scope anchors: `disassemble_function(11bd:1e9f)` returned **61 instructions**
+(`count:61`, `1e9f..1f23`); `disassemble_function(11bd:6250)` returned **14
+instructions** (`count:14`, `6250..627e`; first invocation's response was
+truncated mid-listing at `6274` without a `count` field and was re-invoked —
+the complete response is the one quoted). Every `CALL`/`JMP`/`Jcc`/far form
+in each dump gets a row; far deltas recomputed `− 0x1bd0` per hit.
+
+`FUN_11bd_1e9f` — 61 instructions, ALL transfers (6):
+
+| Site | Rendered operand | Class | Recompute / value source |
+|------|------------------|-------|--------------------------|
+| `1eac` | `JNZ 0x1000:3ada` | literal near-direct Jcc | `3ada−1bd0=1ecd` (in body) |
+| `1eae` | `CALL 0x1000:3af4` | literal near-direct CALL | `3af4−1bd0=1f24` (past `body_end 1f23` — cited, not followed) |
+| `1edb` | `CALL 0x1000:3afe` | literal near-direct CALL | `3afe−1bd0=1f2e` |
+| `1f02` | `INT 0x21` | software interrupt — LITERAL number operand; target resolved at runtime via IVT entry `0x21`, not an instruction operand and not arg-fed | — |
+| `1f09` | `RET` | near return — stack return-address | — |
+| `1f22` | `JMP 0x1000:3ab2` | literal near-direct JMP | `3ab2−1bd0=1ee2` (in body) |
+
+Counted split: 6 transfers = 4 literal near (`CALL`×2, `JNZ`, `JMP`) + 1
+`RET` (stack) + 1 `INT 0x21` (runtime IVT, literal number); indirect
+`CALL`/`JMP`/`Jcc`/far: **0**. No far form (`9A`/`EA`/`FF` renderings) exists
+in the dump.
+
+`publish_mode_vector` — 14 instructions, ALL transfers (3):
+
+| Site | Rendered operand | Class | Recompute / value source |
+|------|------------------|-------|--------------------------|
+| `625e` | `JC 0x1000:7e40` | literal near-direct Jcc | `7e40−1bd0=6270` (in body); bytes corroborate: `7210` at `625e` → `6260+0x10=6270` ✓ |
+| `626b` | `JNZ 0x1000:7e40` | literal near-direct Jcc | `→6270` (flags from the `[0x2e]` CMP, not arg-fed) |
+| `627e` | `RET` | near return — stack return-address | — |
+
+Counted split: 3 transfers = 2 literal near Jcc + 1 `RET`; indirect: **0**;
+no `CALL` at all; no far form. Flag sources of both Jccs are global `CMP`s
+(`[0x2f]`, `[0x2e]`), not the arg.
+
+Catch-all corroboration (`search_instructions`, function-scoped, mnemonic +
+`[` operand):
+
+| Run | Response | Reading |
+|-----|----------|---------|
+| `CALL` + `[` in `FUN_11bd_1e9f` | `{"matches":[],"match_count":0,"instructions_scanned":61,"truncated":false,"scope":"function:FUN_11bd_1e9f"}` | 0 indirect CALLs; scanned 61 = dump total ✓ |
+| `JMP` + `[` in `FUN_11bd_1e9f` | `{"matches":[],"match_count":0,"instructions_scanned":61,"truncated":false, …}` | ditto ✓ |
+| `CALL` + `[` in `publish_mode_vector` | `{"matches":[],"match_count":0,"instructions_scanned":14,"truncated":false,"scope":"function:publish_mode_vector"}` | 0; scanned 14 = dump total ✓ |
+| `JMP` + `[` in `publish_mode_vector` | `{"matches":[],"match_count":0,"instructions_scanned":14,"truncated":false, …}` | ditto ✓ |
+
+(`JMP`+`[` in Ghidra renderings covers `Jcc` too only if disassembled as
+`JMP` — irrelevant here: every Jcc in both dumps is listed above and printed
+with a literal `0x1000:` target.)
+
+### Arg propagation (Step 3)
+
+`FUN_11bd_1e9f` — arg = slot `[BP+-0x18]` value pushed `2f3f`:
+
+| Arg arrival form | Frame slot | Every reference (store/load, addr+bytes+operand) | Clobbers | Terminal form |
+|------------------|-----------|--------------------------------------------------|----------|---------------|
+| stack push (PUSH AX @`2f3f`), 2-word frame | `[BX + 0x4]` (`BX=SP` set by `1e9f 8bdc MOV BX,SP`; **no BP frame**; read `1ea3` pre-pushes since `57`/`56` come after) | SLOT READS: `1ea3 368b7f04 MOV DI,word ptr SS:[BX + 0x4]` — the ONLY reference in 61 insns (sibling arg `[BX + 0x2]` = `2ec9`'s own `[BP+0x4]` value: ZERO references in the dump — recorded, no claim). DI HOPS: `1eb4 83c70f ADD DI,0xf` → `1eb7 83e7f0 AND DI,0xfff0` → `1eba 8bc7 MOV AX,DI` → AX offshoot `1ebc c1e8.. SHR AX,0x4` → `1ec9 ADD AX,DX` → `1ecc XCHG word ptr [0xa10],AX` (**transformed** paragraph form stored — not the value verbatim) → `1ed2 MOV DS,AX` (AX clobber). DI continues: `1ed6 f3a5 MOVSW.REP ES:DI,SI` (consumed as write-DESTINATION offset; `ES=DX=CS` per `1ec3 8cca MOV DX,CS` → `1ed4 8ec2 MOV ES,DX`; DI incremented by the string op = value consumed) → `1ee7 8bdf MOV BX,DI` → `1ef1 031eb609 ADD BX,[0x9b6]` → `1ef8 2bd8 SUB BX,AX` → `1efa 891e5a00 MOV word ptr [0x5a],BX` (derived form). Final DI read: `1f1e 2bcf SUB CX,DI` in tail block `1f0a..1f22` | DI never re-loads arg; BX-arg-pointer dead after `1ebf 8b1e100a MOV BX,[0xa10]` (arg window never re-walked) | NO transfer ever reads DI/AX/BX-derived chain as target (enumeration above: zero indirect forms); value life ends in pointer arithmetic + transformed stores + `1f09 RET` function exit |
+
+`publish_mode_vector` — arg = slot `[BP+-0x5a]` value pushed `452f`:
+
+| Arg arrival form | Frame slot | Every reference (store/load, addr+bytes+operand) | Clobbers | Terminal form |
+|------------------|-----------|--------------------------------------------------|----------|---------------|
+| stack push (PUSH `[BP+-0x5a]` @`452f`), 1-word frame | `[BX + 0x2]` (`BX=SP` set by `6250 8bdc MOV BX,SP`; **no BP frame**) | SLOT READS: `6252 8b5f02 MOV BX,word ptr [BX + 0x2]` — the ONLY reference in 14 insns. BX HOPS: `6255 891eba09 MOV word ptr [0x9ba],BX` — VERBATIM cell store, one insn after entry. **CELL-STORAGE — STOP HERE; `[0x9ba]` consumers DEFERRED (named-and-deferred).** BX later REDEFINED `626d bb2428 MOV BX,0x2824` (literal — numeral shared with the `3ed8` dispatch family value `440e`→`0x2824`; recorded as numeral fact, no role claim); the subsequent writes `6274 a3bc09 MOV [0x9bc],AX` / `627b a3be09 MOV [0x9be],AX` take AX from `2e8b47fc MOV AX,word ptr CS:[BX + -0x4]` / `2e8b47fe MOV AX,word ptr CS:[BX + -0x2]` — fed by the LITERAL `0x2824`, NOT by the arg (slice-8's `[0x9bc]` write re-confirmed at cited bytes) | arg value fully consumed by the `6255` store; BX arg-holder clobbered at `626d` | CELL-STORAGE at `6255` → `[0x9ba]` (bytes `891eba09`); no branch form reads the arg (both Jccs flag-fed from globals `[0x2f]`/`[0x2e]`) |
+
+Optional `analyze_dataflow` runs (accelerator only; disassembly stays
+authority; any use reconciled): backward from `1e9f`@`1eb4` on `DI`
+terminated "chain exhausted" at step 7 — `LOAD`/`SEGMENTOP`/`PTRADD SP,const`
+under asm `MOV DI,word ptr SS:[BX + 0x4]`, code `1000:3a73` (`3a73−1bd0=1ea3`
+✓ disassembly cite) — reaches the arg load and stops at stack arithmetic,
+exactly as the table above. Backward from `6250`@`6252` terminated at step 0
+with `INT_ADD SP,const:0x2` under asm `MOV BX,word ptr [BX + 0x2]`, code
+`1000:7e22` (`7e22−1bd0=6252` ✓) — the arg slot address expression; a first
+anchor attempt at `6255` with variable `BX` returned the candidate error
+(`No varnode … Candidates: [in_DS, sVar1, DAT_1000_031f]`) and was superseded
+by the `6252` run; the store leg stands on the cited disassembly bytes
+`891eba09`. No contradiction with the walks above; no new info beyond them.
+
+### Disposition-so-far (Step 4)
+
+| Function | Disposition | Basis (cited) |
+|----------|-------------|---------------|
+| `FUN_11bd_1e9f` | **NONE-INDIRECT** | 61-instruction complete dump, 6/6 transfers classified, 0 indirect (sweeps `instructions_scanned:61` 0/0); arg arrives `1ea3`→`DI`, never re-entered any transfer operand; terminal forms = string-write offset (`f3a5`), transformed stores (`XCHG [0xa10]`, `MOV [0x5a]`), function exit (`1f09 RET`) |
+| `publish_mode_vector` | **CELL-STORAGE** | arg read `6252 8b5f02` → verbatim store `6255 891eba09 MOV word ptr [0x9ba],BX` (site + cell + bytes cited); 14-instruction dump, 3/3 transfers classified, 0 indirect (sweeps `instructions_scanned:14` 0/0); `[0x9ba]` consumers NOT followed per guard |
+
+**Combined answer to the slice-18 condition:** NO — neither callee
+indirect-branches on the received `0x29bc`-bearing argument. The deferral's
+promotion path ("a callee … performing an indirect transfer on that argument")
+is NOT-MET at this layer. The arg question relocates ONE layer further out at
+`6250`: the verbatim cell `[0x9ba]` — its consumers are the next open leg and
+are DEFERRED (named-and-deferred; not exercised this pass). At `1e9f` the arg
+instead feeds runtime write-address arithmetic (`ES=CS` string destination) —
+flagged-not-adopted numeral-adjacency only (aligned `DI` of a `0x29bc`-family
+value can select low-window offsets at runtime); no role claim, consumers
+n/a, entry relevance NONE. Slice-17's other runtime legs (`2811..296c`
+fall-in, runtime-installed pointers, `CS:[0x2ad9]` tail cell) remain
+untouched and stand. Scope guard honored: neither callee's name/role was
+promoted or altered — `FUN_11bd_1e9f` stays default-named,
+`publish_mode_vector` keeps its slice-8 name; the dumps informed the ONE
+carried question only.
+
+### Writes (ZERO-WRITE branch)
+
+NONE. Read-only pass as tasked: no `disassemble_bytes` (INDIRECT-ON-ARG
+branch not triggered, so the one-hop dry-run was neither needed nor
+authorized), no `create_function`, no rename, no comment, no `save_program`;
+no Ghidra transaction was opened. Tool inventory: `get_function_by_address`
+×2, `disassemble_function` ×3 (61-insn dump; `6250` dump ×2 — first response
+truncated, complete one with `count:14`), `read_memory` ×12 (caller re-derives
+`2f3f`12/`452f`12 + propagation bytes `1e9f`8, `1eb4`10, `1ebf`12, `1ed0`6,
+`1ed6`4, `1ee7`4, `1ef1`12, `1f1b`9, `6250`16, `626d`18; hex-vs-data 12/12
+MATCH), `search_instructions`
+×4 (function-scoped `CALL`+`[`/`JMP`+`[` sweeps, all `truncated:false`),
+`analyze_dataflow` ×3 (2 reconciled uses, 1 superseded candidate-error call),
+`get_xrefs_to` ×0 (dead-channel ruling — not needed for this question; no
+new cell was under entry-scrutiny this pass, the `[0x9ba]` consumer sweep is
+the deferred leg). `/media/felipe/FIFAPCCD/` untouched; pre-existing function
+state re-read only.
+
+### Disposition (Task 2 — settled 2026-09-29)
+
+**NEITHER-CALLEE-INDIRECTS-ON-ARG** — final disposition for this slice,
+the three-way outcome per callee restated with the citations that
+establish it (enumeration scope = complete-dump instruction totals;
+sweeps and cell-store site as recorded in the Step 2/Step 3 tables
+above):
+
+1. *`FUN_11bd_1e9f` — **NONE-INDIRECT***: complete dump **61
+   instructions** (`count:61`, body `1e9f..1f23`) as enumeration scope
+   — 6/6 transfers classified (4 literal near-direct + `RET` +
+   literal-number `INT 0x21` with runtime-IVT target); indirect
+   `CALL`/`JMP`/`Jcc`/far forms: 0, corroborated by function-scoped
+   sweeps `CALL`+`[` = 0 and `JMP`+`[` = 0 at `instructions_scanned:61`
+   = dump total. The arg arrives at the single slot read `1ea3`
+   `368b7f04 MOV DI,word ptr SS:[BX + 0x4]` and never appears as a
+   transfer operand (terminal forms: string-write destination offset,
+   transformed cell stores `1ecc`/`1efa`, `1f09 RET` exit).
+2. *`publish_mode_vector` — **CELL-STORAGE***: complete dump **14
+   instructions** (`count:14`, body `6250..627e`) as enumeration scope
+   — 3/3 transfers classified (2 literal near-direct Jccs, flags from
+   global `CMP`s + `RET`); indirect forms: 0, sweeps `CALL`+`[` = 0 and
+   `JMP`+`[` = 0 at `instructions_scanned:14` = dump total. The arg
+   lands **VERBATIM into `[0x9ba]`** at `6255 891eba09`
+   `MOV word ptr [0x9ba],BX` — store site + cell + bytes cited; no
+   indirect-branch form on the arg exists in the body. `[0x9ba]` is
+   distinct from slice-8's `[0x9bc]` publish target: the `[0x9bc]`/
+   `[0x9be]` writes at `6274`/`627b` are fed by the LITERAL
+   `626d bb2428 MOV BX,0x2824` (the 0x2824 literal trace), not by the
+   arg. The `[0x9ba]` consumers were NOT dived (named-and-deferred
+   guard).
+3. *Slice-18 carried condition — **DISCHARGED (CLOSED at the
+   callee-body layer)***: the carry sentence — "a callee of the pushed
+   slot value performing an indirect transfer on that argument"
+   (slice-18 `### Deferrals` line 1) — resolves **NOT-MET**: callees do
+   NOT indirect on the arg — entry lead stays as slice-17/18 recorded,
+   mechanism not found in either callee (`CALL`+`[` = 0 and `JMP`+`[` =
+   0 across both complete dumps, scopes 61 insns and 14 insns). The
+   indirect-transfer question of the arg is DONE within static scope at
+   this layer; what remains of the entry question sits only in the
+   runtime legs (`[0x40]`/`[0x9c0]`), the still-named-open block
+   `2978..2ada`, and the relocated cell lead (point 4).
+4. *Question relocation (CELL-STORAGE carry):* at `6250` the arg
+   question relocates ONE layer out to the consumers of the stored cell
+   **`[0x9ba]`** — cell named, store site `6255` (`891eba09`) cited,
+   consumers DEFERRED per the named-and-deferred guard
+   (`### Deferrals` line 1 below). At `1e9f` nothing relocates: no
+   verbatim cell store exists (Arg propagation table — the `1ecc`/`1efa`
+   stores are transformed forms).
+
+No `### Entry function` row is emitted and the capped write path was
+NOT executed — both were authorized only under INDIRECT-ON-ARG, which
+did not occur (points 1–2 above); no conditional one-hop dry-run was
+triggered.
+
+### Writes (Task 2 — NONE-INDIRECT / CELL-STORAGE branch: ZERO writes; live unmoved-proof pair)
+
+NONE. The program was not touched: the only Ghidra calls executed this
+task are the two read-only read-backs below, quoted verbatim (live,
+this task, program `/fifa96.exe`), in slice-18's unmoved-proof form:
+
+| Probe | Verbatim response (live, this task) | Unmoved check |
+|-------|--------------------------------------|---------------|
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | byte-identical to slice-18's Task-2 quote — no function was created at the lead cell by this slice |
+| `find_code_gaps(min_size=1)` | envelope `{"total":131,"offset":0,"limit":100,…}`; covering row verbatim: `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | block `11bd:2978..2ada` (`4548−1bd0=2978`, `46aa−1bd0=2ada` ✓) still **size 355**, `has_undefined_bytes:true`, same neighbors — unchanged vs slice-17/18's rows and Task-1's re-read; no shrink, no reflow |
+
+Write-tool inventory for this task: zero — no `disassemble_bytes`
+(INDIRECT-ON-ARG branch not triggered, dry-run included), no
+`create_function`, no `rename_function`/`rename_symbol`, no
+`set_comment`/`batch_set_comments`, no `set_global`, no `save_program`;
+no Ghidra transaction was opened. `/media/felipe/FIFAPCCD/` untouched;
+pre-existing function state re-read only.
+
+### Deferrals (Task 2)
+
+- **`[0x9ba]` consumers = the next lead:** data cell `[0x9ba]` —
+  address-only; store site `6255` (`891eba09`) cited above; consumers
+  not enumerated this slice (named-and-deferred guard).
+- **`FUN_11bd_1e9f` full verdict stays a non-goal:** current status as
+  recorded — default-named live function, body `1e9f..1f23`,
+  NONE-INDIRECT for this question only; no name/role/semantics
+  asserted.
+- **`publish_mode_vector` full verdict stays a non-goal:** current
+  status as recorded — slice-8 name live, body `6250..627e`,
+  CELL-STORAGE for this question only; its slice-8 `[0x9bc]` publish
+  records stand unchanged.
+- **Block `2978..2ada` stays fully named-open:** the size-355 covering
+  gap row is quoted under `### Writes` above; nothing landed in-range
+  this slice, so the recorded open range is untouched.
+- **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
+  UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE,
+  runtime-written) — a zero-write pass occurred; nothing in this slice
+  could have moved them.
+- **Prior-slice statuses:** slice-18 **SLOT-READERS-DATA-ONLY** stands
+  — this slice closes ONLY its deferral line 1 (the callee-indirect
+  carry condition, answered NOT-MET in Disposition point 3), whose
+  follow-up is superseded by the `[0x9ba]`-consumers line here;
+  slice-18's remaining deferrals stand. Slice-17's open legs (fall-in
+  `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail cell)
+  stand as recorded.
