@@ -2151,7 +2151,7 @@ tool render glitch — the 384-byte window re-reconciled MATCH at 384/384 bytes)
 | Slot | Function | Store sites (bytes → value) | Reader sites (bytes) | Consumption form |
 |------|----------|------------------------------|----------------------|------------------|
 | `[BP + -0x18]` | `FUN_11bd_2ec9` | `2f05 c746e8402d`→`0x2d40`; `2f18 c746e8bc29`→`0x29bc` (lead); `2f24 c746e87f62`→`0x627f` | `2f30 8b46e8 MOV AX,word ptr [BP + -0x18]`; `2f39 8b46e8 MOV AX,word ptr [BP + -0x18]` | data-only (see AX walk) |
-| context | — | `2ecf 83ec18 SUB SP,0x18` (frame allocation — immediate, not a slot access; same numeral as displacement, classified non-reference) | — | — |
+| context | — | `2ecc 83ec18 SUB SP,0x18` (frame allocation — immediate, not a slot access; same numeral as displacement, classified non-reference) | — | — |
 
 AX forward walk (disassembly order, until clobber): `2f30` load→AX → `2f33`
 `39066e0e CMP word ptr [0xe6e],AX` (flags only) → `2f37` `760f JBE 0x1000:4b18`
