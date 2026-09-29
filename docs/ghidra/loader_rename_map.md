@@ -1286,3 +1286,65 @@ mask runtime value (single read `02aa`, no direct store found — mode
 direction unsettled, reflected in the direction-neutral name). Ghidra
 writes this task: two renames + two plates + `save_program` on
 `/fifa96.exe` — success.
+
+## 296d hook target (verified 2026-09-29, program `/fifa96.exe`)
+
+The `[0x9c2]` value `0x296d` written at `41ee` lands inside a 714-byte
+gap (`find_code_gaps` row `1000:43e1..1000:46aa` = `11bd:2811..2ada`,
+between `FUN_11bd_27e4` body `27e4..2810` and `FUN_11bd_2adb` body
+`2adb..2ae8`); `11bd:296d` is an instruction boundary both ways (dry-run
+walk from the gap start decodes the preceding block to `RET` `c3` at
+`296c`; a bounded decode AT `296d` is clean 386 code). The hidden target
+is a 3-instruction restore-and-resume epilogue: `MOV FS,[0xd60]` at
+`296d` + `MOV GS,[0xd62]` at `2971` (reloading the segments saved at
+`2880/2884` — `MOV [0xd62],GS`/`MOV [0xd60],FS`, `8c2e620d`/`8c26600d`)
++ tail `JMP 0x1000:1e85` (= `11bd:02b5`) at `2975` (`e93dd9`) — an exact
+exit cited to the byte, boundary proposal `[296d..2977]`, classification
+FUNC (no call sites, no memory writes beyond segment state). The landing
+pad closes the slice-13 deferred leg: `02b5` is `POPA` (`61`) and `02b6`
+`RET` (`c3`) (dry-run) — the `PUSHA` frame from `execute_mode_switch`
+`0293` is unwound there and the `RET` returns to the CALL site +3,
+matching the `0dc4`/`7cf0` continuation evidence; the unwind shape is
+POPA+RET on the landing pad, the vector target itself transfer-tails.
+Cell forensics: `[0x9c0]` has NO in-exe writer (searches exhausted —
+`get_xrefs_to` 0 refs, operand `0x9c0` = sole consumer `0294`, operand
+`9c0` adds only the `1991:3093` `JZ 0x1000:c9c0` branch-target false
+hit); `[0x9c2]` writer set confirmed and NOT extended (`02b1` read +
+`41ee` write `c706c2096d29`, same 2 hits for both operand forms), and
+the value `0x296d` appears exactly once program-wide (at `41ee`). The
+block starting at `2978` (paging: `CMP [0xdfe],1`, `OR EAX,0x80000000`
+CR0, LIDT-adjacent hole code) is NOT part of this boundary — the `2975`
+JMP is unconditional, so `2978` is unreachable from the `296d` entry and
+has no static entry found (`0x2978` operand search 0 matches, xrefs 0).
+Zero Ghidra writes this task: `disassemble_bytes` used exclusively with
+`dry_run=true`; no function created/renamed/re-bounded, no save.
+
+| Question | Evidence | Verdict-so-far |
+|----------|----------|----------------|
+| gap covering 11bd:296d? | `find_code_gaps` (total 130, page offset 0/limit 100 — sorted-disjoint, unique coverer found on page 0), verbatim row: `{"start":"1000:43e1","end":"1000:46aa","size":714,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_27e4","before_function_address":"11bd:27e4","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` — `1000:453d` = `11bd:296d` sits +`15c` inside it | GAP-CONFIRMED, not aligned to `296d` (hole = whole unanchored PM-restore subsystem `2811..2ada`) |
+| anything defined at 296d? | `get_function_by_address` 11bd:296d → `{"error":"No function found for 11bd:296d"}` | nothing defined |
+| covered neighbors | prev `FUN_11bd_27e4` body `27e4..2810` = gap start −1 (re-read); next `FUN_11bd_2adb` body `2adb..2ae8` = gap end +1 (re-read) | hole bounded by real function bodies both sides |
+| first bytes at 296d (entry plausibility) | dry-run `disassemble_bytes` `296d..`: `8e26600d` = `MOV FS, word ptr [0xd60]` — a legal 386 segment load (reg field /4), recurs verbatim at `282c` inside the hole's decoded stream; not pad, not mid-instruction | CODE, plausible entry |
+| stream alignment at 296d | dry-run decode from gap start `2811` (369-byte window to `2981`): contiguous through `…2965 MOV CR0,EAX` `0f22c0`, `2968 POP EAX` `6658`, `296a POP BX` `5b`, `296b POP AX` `58`, `296c RET` `c3` → next insn at exactly `296d` (two local decode-skips at `2811..281f`/`28e7..28eb` elsewhere in the window, none near the target) | instruction boundary |
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| entry | 11bd:296d | sole static feeder = cell `[0x9c2]` value `0x296d` (`MOV [0x9c2],0x296d` at `41ee`, `c706c2096d29`, gated `41e7`/`41ec` per slice 13; consumer `JMP [0x9c2]` at `02b1`); `get_xrefs_to(11bd:296d)` = 0 refs; operand search `0x296d` = 1 hit program-wide (`41ee`) — entry reached by the dynamic target alone | — |
+| insn 1 (FS restore) | 11bd:296d | `MOV FS, word ptr [0xd60]` (`8e26600d`) — reload of the copy saved by the hole's forward path: `MOV word ptr [0xd60], FS` at `2884` (`8c26600d`), dry-run-cited | — |
+| insn 2 (GS restore) | 11bd:2971 | `MOV GS, word ptr [0xd62]` (`8e2e620d`) — twin save `MOV word ptr [0xd62], GS` at `2880` (`8c2e620d`) | — |
+| exit (tail JMP, cited) | 11bd:2975 | `JMP 0x1000:1e85` (`e93dd9`, 3 bytes → ends `2977`) — unconditional near tail = exact function exit; target = `11bd:02b5` = exactly one byte past the `JMP [0x9c2]` (`02b1..02b4`), i.e. the resume point of `execute_mode_switch`'s caller stream | — |
+| landing pad (unwind) | 11bd:02b5..02b6 | dry-run `disassemble_bytes` `02b5..02c1`: `POPA` (`61`) + `RET` (`c3`) — balances `PUSHA` at `0293` and returns to CALL site +3 (`0dc4`/`7cf0` per slice-13 continuation rows); at `02b7` a second mode-switch clone starts (`PUSHA` `60`, `CALL word ptr [0x9c0]` `ff16c009` at `02b8`, `MOV AX,0x20`/`MOV DS`/`MOV ES` at `02bc..`) — gap row `1000:1e85..1000:2302` (neighbors `execute_mode_switch`/`FUN_11bd_0733`); no dive | 02b8 cell-mediated (same `[0x9c0]`), address-only |
+| block after exit (NOT in boundary) | 11bd:2978 | `CMP byte ptr [0xdfe],0x1` (`803efe0d01`) + paging-enable block (`PUSH EAX` `6650`, `MOV EAX,CR0` `0f20c0`, `OR EAX,0x80000000` `660d00000080`, `MOV CR0,EAX` `0f22c0` …) — unreachable from the `296d` entry (the `2975` JMP is unconditional); zero static entries found (`get_xrefs_to(2978)` 0, operand `0x2978` 0 matches) — deferred, ownership open | — |
+| boundary + classification | [11bd:296d..2977] | entry = the dynamic cell target `0x296d` alone; aligned both from `2811`-stream (boundary above) and AT the address; exact exit cited (`JMP` `e93dd9` ending `2977`); 3 insns, zero calls, zero memory stores (segment loads only); shape = restore-and-resume epilogue stub, not mid-function flow | FUNC (11-byte epilogue stub) |
+
+| Cell | Searches run (enumerated) | Hits (address + mnemonic + bytes) | Classification | Verdict |
+|------|---------------------------|-----------------------------------|----------------|---------|
+| [0x9c0] (pre-hook) | `get_xrefs_to(11bd:09c0)`; `search_instructions` operand `0x9c0`; operand `9c0` (13976 defined insns scanned each) | xrefs: 0. `0x9c0`: 1 — `0294` `CALL word ptr [0x9c0]` `ff16c009`. `9c0`: 2 — same `0294` + `1991:3093` `JZ 0x1000:c9c0` `741b` (branch-target substring in another program segment, NOT a data operand). No `MOV [0x9c0],…`/`POP`-into/store form at all | 1 read (`0294`), 0 writes | NOT-IN-EXE — writer searches exhausted; hook target is runtime-written (loader/relocation-time), identity unidentified |
+| [0x9c2] (tail vector) | `get_xrefs_to(11bd:09c2)`; operand `0x9c2`; operand `9c2` | xrefs: 0 (despite defined refs — xref capture unreliable for these DS-relative cells; instruction search is the authority). `0x9c2`: 2 — `02b1` `JMP word ptr [0x9c2]` `ff26c209` + `41ee` `MOV word ptr [0x9c2],0x296d` `c706c2096d29`. `9c2`: same 2. Supplementary operand `0x296d`: 1 — `41ee` only | 1 read (`02b1`), 1 write (`41ee`) | writer set CONFIRMED (`{41ee}`), NOT extended; sole value `0x296d` → epilogue above; gate `41e7`/`41ec` (`[0x2f]>=3`) per slice 13 |
+
+Search-method caveat (recorded for reuse): `search_instructions`
+enumerates defined instructions only (13976 scanned), so relative jumps
+inside the two big holes (`02b5..0733`, `2811..2ada`) are invisible to
+operand searches until decoded; the dry-run windows cited above
+(`2811..2981`, `02b5..02c1`) show no jump targeting `296d`/`2978` within
+their coverage, and `296d`'s only static feeder is the `41ee` cell write.
