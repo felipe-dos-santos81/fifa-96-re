@@ -308,3 +308,61 @@ five distinct helper layers (2d40 zero-gate, 195d predicate-gated body
 constants, 61ee-thunk arithmetic, 4587 arg-handoff, 689e/6869/68b9 stack
 re-source) plus body defaults — no single called FUN "computes or
 publishes the mode value". Per the one-layer guard: STOP, no rename.
+
+## 3ed8 mode dispatch (verified 2026-09-29, program `/fifa96.exe`)
+
+Entry `MOV AX,SI` at `11bd:42db` opens a 22-arm decrement chain
+(`DEC AX`/`JNZ`-to-next-link with a `JMP`-to-body per link at
+`11bd:42dd..4348`, then `SUB AX,<const>`/`JNZ` links with constants
+`0x3`/`0x10a`/`0x64`/`0x171a`/`0xdad` at `11bd:433d..4366`; far-target
+delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx` holds for every link target).
+SI values are cumulative subtractions: arms 1–16 take SI `1..0x10`,
+then `0x13` (16+3), `0x14` (+1), `0x11e` (+0x10a), `0x182` (+0x64),
+`0x189c` (+0x171a), `0x2649` (+0xdad). Pre-chain prefix at
+`42d3..42d6` (`CALL 0x1000:857c`, `MOV [0x10ee],0xff`, gated on
+`[0x47]` bit `0x80`) is setup, not an arm. Normal arms rejoin toward
+the `451e` tail via `JMP 0x1000:60ee` (= `11bd:451e`) sites (`43ea`,
+`4408`, `4420`, `4461`, `4493`, `44b0`, `44b7`, `44e5`) or mid-body
+joins (`43aa`, `4403`, `4418`, `442f`, `4469`, `44a3`); the
+fall-through default (`JMP 0x1000:60b7` at `4368` → `11bd:44e7`)
+publishes `[0x11d4]=0x6` and ends in the noreturn `CALL 0x1000:3e7d`
+(`=22ad`) at `451a`, never merging to `451e`. Guard-hit count: 15 of
+22 arms contain ≥1 CALL in-body (incl. via joins) and are deferred to
+Task 2 with no callee opened; 7 arms (6, 8, 11, 12, 13, 16, 21) are
+call-free. No range in `42db..4368` is uncovered (every link is a
+contiguous `DEC`/`SUB`+`JNZ`/`JZ`+`JMP` triple — see NOT-COVERED note).
+
+| # | Condition | Target | Publishes | Calls (address only) |
+|---|-----------|--------|-----------|----------------------|
+| 1 | SI==1: `DEC AX` at 42dd; `JNZ 42e3` at 42de (not taken); `JMP` at 42e0 | 11bd:436e | `MOV [BP-0x5a],0x381` at 436e; `MOV [BP-0x5e],AL` at 4383; `MOV [0x11fe],0x146` at 4386; `MOV [0x1200],0x40` at 438c; `MOV [0xeca],0x500` at 43a4; `OR [0x14],0x4` at 43aa; `MOV [0x11d4],0x5` at 43af; `MOV [0xece],AX` at 43da; `MOV [0xa8],AX` at 43e3; `INC [0x11f0]` at 43e6 | `CALL 0x1000:8844` at 4379; `CALL 0x1000:7fd0` at 4380; `CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6 |
+| 2 | SI==2: `DEC AX` at 42e3; `JNZ 42e9` at 42e4; `JMP` at 42e6 | 11bd:43ed | `MOV [BP-0x5a],0x8da` at 43ed; `MOV [0x120c],AL` at 43f5; `OR [0x120c],0x2` at 43fe; `MOV [0x10ef],0x1` at 4403 | `CALL 0x1000:8242` at 43f2 |
+| 3 | SI==3: `DEC AX` at 42e9; `JNZ 42ef` at 42ea; `JMP` at 42ec | 11bd:440b | `MOV SI,0x3` at 440b; `MOV [BP-0x5a],0x2824` at 440e; `MOV [0x10ee],0x9` at 4413; `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:85b0` at 441d |
+| 4 | SI==4: `DEC AX` at 42ef; `JNZ 42f5` at 42f0; `JMP` at 42f2 | 11bd:4469 | `MOV SI,0x9` at 4469; `MOV [BP-0x5a],0x8b2` at 446c; taken path `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e | `CALL 0x1000:8289` at 447f |
+| 5 | SI==5: `DEC AX` at 42f5; `JNZ 42fb` at 42f6; `JMP` at 42f8 | 11bd:4423 | `MOV [BP-0x5a],0x3a7` at 4423; `MOV [0x36],0x80` at 442f; `MOV [0xf82],AX` at 4453; joins arm-1 tail at 43aa (`[0x14]`/`[0x11d4]`/`[0xece]`/`[0xa8]`/`[0x11f0]` as in row 1) | `CALLF 0x1000:0b12` at 4445; `CALL 0x1000:400e` at 444f; + arm-1 tail calls via 43aa join |
+| 6 | SI==6: `DEC AX` at 42fb; `JNZ 4301` at 42fc; `JMP` at 42fe | 11bd:445c | `MOV [BP-0x5a],0x71a` at 445c (skips `MOV SI,0x6` at 4459; SI already 6) | none |
+| 7 | SI==7: `DEC AX` at 4301; `JNZ 4307` at 4302; `JMP` at 4304 | 11bd:446c | joins arm-4 body at 446c (same publishes as row 4 from 446c) | `CALL 0x1000:8289` at 447f (via join) |
+| 8 | SI==8: `DEC AX` at 4307; `JNZ 430d` at 4308; `JMP` at 430a | 11bd:4486 | `MOV SI,0x8` at 4486; `MOV [0x10ee],0xa` at 4489; `MOV [BP-0x5a],0x749` at 448e | none |
+| 9 | SI==9: `DEC AX` at 430d; `JNZ 4313` at 430e; `JMP` at 4310 | 11bd:446c | same as row 7 (shared target) | `CALL 0x1000:8289` at 447f (via join) |
+| 10 | SI==0xa: `DEC AX` at 4313; `JNZ 4319` at 4314; `JMP` at 4316 | 11bd:44a3 | `MOV [BP-0x5a],0x905` at 44a3; joins arm-3 tail at 4418 (`MOV [0x10ef],0x1`) | `CALL 0x1000:85b0` at 441d (via join) |
+| 11 | SI==0xb: `DEC AX` at 4319; `JNZ 431f` at 431a; `JMP` at 431c | 11bd:44ab | `MOV [BP-0x5a],0x29bc` at 44ab | none |
+| 12 | SI==0xc: `DEC AX` at 431f; `JNZ 4325` at 4320; `JMP` at 4322 | 11bd:44b2 | `MOV [BP-0x5a],0x679` at 44b2 | none |
+| 13 | SI==0xd: `DEC AX` at 4325; `JNZ 432b` at 4326; `JMP` at 4328 | 11bd:44b9 | `MOV [BP-0x5a],0x8ac` at 44b9; `MOV [0x10ee],0x9` at 44be; joins arm-2 tail at 4403 (`MOV [0x10ef],0x1`) | none |
+| 14 | SI==0xe: `DEC AX` at 432b; `JNZ 4331` at 432c; `JMP` at 432e | 11bd:44c6 | `MOV [BP-0x5a],0x3d6` at 44c6; joins arm-1 tail at 43aa | arm-1 tail calls via 43aa join (`CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6) |
+| 15 | SI==0xf: `DEC AX` at 4331; `JNZ 4337` at 4332; `JMP` at 4334 | 11bd:44ce | `MOV [BP-0x5a],0x462` at 44ce; `JGE 44dd` at 44d8 selects join: 43aa (arm-1 tail) or 442f (arm-5 `[0x36]` path) | via joins (see rows 1, 5) |
+| 16 | SI==0x10: `DEC AX` at 4337; `JNZ 433d` at 4338; `JMP` at 433a | 11bd:44e0 | `MOV [BP-0x5a],0x4f7` at 44e0 | none |
+| 17 | SI==0x13: `SUB AX,0x3` at 433d (cumul. 16+3=19); `JNZ 4345` at 4340; `JMP` at 4342 | 11bd:4464 | `MOV [0xed0],0x0` at 4464; falls through into arm-4 body at 4469 | `CALL 0x1000:8289` at 447f (via fall-through) |
+| 18 | SI==0x14: `DEC AX` at 4345 (cumul. 20); `JNZ 434b` at 4346; `JMP` at 4348 | 11bd:449b | `MOV [0xed0],0x0` at 449b; `MOV SI,0xa` at 44a0; falls into arm-10 at 44a3 | `CALL 0x1000:85b0` at 441d (via 44a8→4418 join) |
+| 19 | SI==0x11e: `SUB AX,0x10a` at 434b (cumul. 20+266=286); `JNZ 4353` at 434e; `JMP` at 4350 | 11bd:4469 | same as row 4 (shared target) | `CALL 0x1000:8289` at 447f |
+| 20 | SI==0x182: `SUB AX,0x64` at 4353 (cumul. 286+100=386); `JNZ 435b` at 4356; `JMP` at 4358 | 11bd:440b | same as row 3 (shared target) | `CALL 0x1000:85b0` at 441d |
+| 21 | SI==0x189c: `SUB AX,0x171a` at 435b (cumul. 386+5914=6300); `JNZ 4363` at 435e; `JMP` at 4360 | 11bd:4459 | `MOV SI,0x6` at 4459; `MOV [BP-0x5a],0x71a` at 445c | none |
+| 22 | SI==0x2649: `SUB AX,0xdad` at 4363 (cumul. 6300+3501=9801); `JZ 436b` at 4366 (taken) | 11bd:436b | `MOV SI,0x1` at 436b; falls into arm-1 body at 436e (row 1 publishes) | same as row 1 |
+| default | no arm matched: `JMP 0x1000:60b7` at 4368 | 11bd:44e7 | `MOV DI,0x1190` at 44e7; `MOV [DI],0x0` at 44ea; `MOV [0x11d4],0x6` at 4510 | `CALL 0x1000:41be` at 44fa + `CALL 0x1000:7c24` at 450a (both skipped if `[BP-0x5c]==0` via `JZ 4510` at 44f1); `CALL 0x1000:3e7d` at 451a (noreturn — default never reaches 451e) |
+
+NOT-COVERED: none inside `11bd:42db..4368` — every byte belongs to a
+listed link (`DEC`/`SUB` + `JNZ`/`JZ` + `JMP` triples are contiguous:
+6-byte `DEC` links `42dd..433a`, 8-byte `SUB` links
+`433d/434b/4353/435b`, 6-byte `DEC` link `4345`, 8-byte tail
+`4363..436a`). Shared-target pairs (7+9→446c, 4+19→4469, 3+20→440b,
+1+22→436b/436e) are separate rows above, not gaps. Merge point
+`11bd:451e` (`CMP [0x10ee],0xff`) and the `451e..4586` tail are exit
+facts owned by the `3ed8 verdict` section, not re-verified here.
