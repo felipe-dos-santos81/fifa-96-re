@@ -4702,3 +4702,224 @@ inconsistently).
 `6e4f`'s.
 Program state unchanged beyond the read probes; no listing mutation;
 `fifa96.rep` churn left unstaged.
+
+### Writes (Task 2 — capped creates + TABLE define, executed 2026-09-29, program `/fifa96.exe`)
+
+Before-state (verbatim, captured before the first mutation):
+`get_function_by_address` → `{"error":"No function found for 11bd:2978"}`,
+same form for `11bd:29bc` / `11bd:29b8` / `11bd:0337`;
+`get_function_count` → `{"function_count":315,"program":"fifa96.exe"}`;
+head gap row byte-identical to Task 1's quote (`1000:4548..1000:4629`,
+size 226, `has_undefined_bytes:true`);
+`audit_global(11bd:29b8)` pre → `{"name":"","type":"","length":0,"plate_comment":"","xref_count":0,"issues":["generic_name","untyped","missing_plate_comment"],"severity_summary":{"hard":3,"medium":0,"soft":0},"fully_documented":false}`;
+`ushort[2]` type exists (slice-21, `mode_vector_source_pair` template).
+No STOP-BLOCKED fired: no create landed on a defined byte and the
+CODE-vs-TABLE conflict never engaged — neither create's flow reaches
+`29b8..29bb` (R1 exits at the unconditional tail-JMP `29b5`; R3 starts
+`29bc`), and the apply conflict-check ran against the POST-create
+state (dry-run row below).
+
+Real disassembly (2 calls, cited ranges, emission byte-identical to the
+Task-1 dry-run rows): `disassemble_bytes(11bd:2978, len 64)` →
+`{"success":true,"start_address":"11bd:2978","end_address":"11bd:29b6",
+"bytes_disassembled":63,"instructions_total":22,"truncated":false}` —
+envelope 63/`29b6` quoted-as-returned lag (last insn `29b5` len 3 covers
+`29b7`; slice-21 envelope-lag precedent); `disassemble_bytes(11bd:29bc,
+len 158)` → `{"success":true,…,"end_address":"11bd:2a58",
+"bytes_disassembled":157,"instructions_total":49,…}` — same lag class
+(`2a58` len 2 covers `2a59`).
+
+Creates (order R1 → R3; every response verbatim):
+
+| create cmd | verbatim response |
+|------------|--------------------|
+| `create_function(11bd:2978)` | `{"success":true,"address":"11bd:2978","function_name":"FUN_11bd_2978","entry_point":"11bd:2978","body_size":69,"message":"Function created successfully at 11bd:2978"}` |
+| `create_function(11bd:29bc)` | `{"success":true,"address":"11bd:29bc","function_name":"FUN_11bd_29bc","entry_point":"11bd:29bc","body_size":158,"message":"Function created successfully at 11bd:29bc"}` |
+
+Post-bounds vs proposal (all `get_function_by_address` verbatim
+read-backs): R1 → `{"name":"enable_paging_and_load_tss","entry_point":"11bd:2978","body_start":"11bd:2978","body_end":"11bd:29b7"}` — MATCH
+proposal `[2978..29b7]` (call-time envelope `body_size:69` = 64 B body +
+the 5 B relay block `0337..033b` transiently flow-attached; final bounds
+per read-back — slice-14 `body_size:13` precedent, quoted not fought);
+R3 → `{"entry_point":"11bd:29bc","body_start":"11bd:29bc","body_end":"11bd:2a59"}` — MATCH proposal `[29bc..2a59]`; probes
+`(11bd:2a58)`/`(11bd:2a59)` resolve in-body ✓. Zero nudges: both
+creates succeeded first-call; `disassemble_first=false` never used — cap
+compliance. `get_function_callees`: `enable_paging_and_load_tss` →
+`{"callees":[{"name":"caseD_0","address":"11bd:0337"}],"total":1}` (the
+tail-JMP edge — see side-effects (1)); `FUN_11bd_29bc` →
+`{"callees":[],"total":0}` — `INT 0x67` (IVT) + `JMP BX` (dynamic)
+record nothing static, matching the Task-1 walk.
+
+Name + plate (Step 1 disposition): `rename_function(FUN_11bd_2978 →
+enable_paging_and_load_tss)` → `{"status":"success","message":"Success:
+Renamed function at FUN_11bd_2978 from 'FUN_11bd_2978' to
+'enable_paging_and_load_tss'","warnings":["…not PascalCase…","…contains
+underscores…"]}` (the two style warnings quoted-as-returned; snake_case
+kept per repo convention — slice-21/22 precedent). Naming bar: entry leg
+= DYNAMIC-ONLY (Task-1 reachability zero-static-entries, cited); role leg
+holds on IN-BODY cites: `0f20c0 MOV EAX,CR0` + `660d00000080 OR
+EAX,0x80000000` + `0f22c0 MOV CR0,EAX` (CR0-class cite per the
+preflight's mode-word bar) + `0f00d8 LTR` + `0f06 CLTS` + descriptor
+type-byte store `c64705 89`. `set_comment(11bd:2978, plate)` →
+`{"status":"success","message":"Set plate comment at 11bd:2978","warnings":[…missing Algorithm/Parameters/Returns…]}`;
+plate text `C: none — behavioral (block-head island, dynamic-only entry
+(zero static entries per slice-23 sweep): gate CMP byte [0xdfe],0x1
+(JNZ skips enable); PUSH EAX; MOV EAX,CR0; OR EAX,0x80000000; MOV
+CR0,EAX (set PG); test [0xdfc]; BX←[0xdfc] (value written by pocket
+STR@28a5), DS←0x8, descriptor type byte store MOV byte [BX+5],0x89,
+DS←0x20, POP BX; LTR AX; CLTS; POP EAX; unconditional tail JMP
+0x1000:1f07 (=11bd:0337) into cell [0x2fa] relay (one hop, not
+followed); TSS/LDT descriptor interpretation of the patched byte
+DEFERRED — opcode-level cites only)` (full text read back via
+`get_comment` ✓ verbatim match). R3 (`29bc..2a59`) KEEPS DEFAULT NAME:
+NOT-CONFIRMED-at-name — the role leg needs the `INT 0x67` IVT-handler
+identity, the `JMP BX` target, and the `[0xd34]/[0xd4e..0xd58]/[0xd5e]/
+[0xd60..0xd6c]/[0xd70]/[0xd78]/[0xdb0]/[0xde4]/[0xde8]/[0x8c8..0x8d4]/
+[0x8fe]/[0x91d]/[0x47]` cluster consumers, all one hop out; no rename,
+no plate per the write rule.
+
+TABLE define (controller path per the `mode_vector_source_pair@2820`
+template, post-creates = the conflict-checked state): (1)
+`apply_data_type(11bd:29b8, ushort[2], dry_run=true)` → `{"dry_run":true,
+"status":"success","message":"Successfully applied data type 'ushort[2]'
+at 11bd:29b8 (size: 4 bytes)","size":4}` — clean at both edges;
+(2) real apply → `{"status":"success","message":"Successfully applied
+data type 'ushort[2]' at 11bd:29b8 (size: 4 bytes)"}`; (3)
+`create_label(11bd:29b8, mode_29bc_source_pair)` → `{"status":"success",
+"message":"Created label 'mode_29bc_source_pair' at address 11bd:29b8"}`
+(name = the brief's role wording: near-offset pair for mode-`0x29bc`
+args; g_+Hungarian gate conflicts as on the template row — mandated
+wording kept, precedent recorded); (4)
+`set_comment(11bd:29b8, plate)` → `{"status":"success","message":"Set
+plate comment at 11bd:29b8","warnings":[…missing sections…]}`, text
+`C: none — behavioral (near-offset pair words for mode-0x29bc args:
+[0x9bc]/[0x9be] source pair cells 29b8/29ba read by publish_mode_vector
+CS-window chain 6270 (BX-4)/6277 (BX-2) feeding stores 6274/627b;
+values 0x2a5a/0x2a60 land on clear_msw_and_callfar entry ops; sibling
+of mode_vector_source_pair at 2820, same arg-4/arg-2 shape)`.
+Verification: `audit_global` post → `{"name":"mode_29bc_source_pair",
+"type":"ushort[2]","length":4,"xref_count":0,"issues":["name_missing_g_prefix",
+"plate_line_too_long"],"severity_summary":{"hard":1,"medium":0,"soft":1}}`
+— the blank pre-state's 3 hard issues cleared to the same naming-convention
+pair the template carries; `analyze_global_completeness` → `{"score":77.0,
+"effective_score":80.0,"band":"COMPLETE_80","missing":["name"]}` —
+template band reproduced; bytes read-back `inspect_memory_content(11bd:29b8,8)`
+→ hex_dump `5A 2A 60 2A 93 58 8C 2E` ✓ = the pair words unchanged +
+`FUN_11bd_29bc` head bytes (the tool's `is_likely_string:true` is a
+printable-ratio heuristic artifact, not a claim).
+
+Save (with archive-repair disclosure): the first two `save_program`
+attempts and one `save_all_programs` returned `{"error":"/udf_
+7f0019cf94341022393885 already exists."}` — a stale `ProgramUserData`
+domain entry in the project's USER storage area (`fifa96.rep/user/`
+index + `00/00000000.prp` both mtime Sep 28 21:26, from a prior-session
+interrupted save; the open program's FileData treats the user file as
+new, so every createFile collides). Repair (filesystem only — NO
+Ghidra write): the four stale files backed up to
+`/tmp/opencode/fifa96-rep-backup/`; `user/~index.dat` rewritten to the
+empty form; orphan `user/00/00000000.prp` + stale `user/~journal.bak`
+removed → retry `save_program` → `{"success":true,"program":"fifa96.exe",
+"message":"Program saved successfully"}`. Persistence verified: entry DB
+committed `db.25.gbf` (+32,768 B over `db.24`) at 20:42; user area
+rebuilds consistent (empty — this slice created no bookmarks/user
+metadata). Note: the FAILED first attempt had already committed its
+entry DB (`db.24`) — the analyzer sweep below ran during the save
+sequence and the final save captured the complete state; nothing was
+rolled back.
+
+Side-effect disclosures (analyzer-created, RATIFIED + FLAGGED per the
+slice-17/21/22 precedent — quoted as returned, not fought, not reverted
+(reverting would be further writes beyond the cited boundaries)):
+(1) create-flow: `caseD_0` at `11bd:0337` — relay stub
+(`2eff26fa02` = `JMP word ptr CS:[0x2fa]`, `0337..033b`, listed
+`isThunk:true`, same-name collision with the stub-zone `caseD_0` kept
+as created); became `enable_paging_and_load_tss`'s sole callee (edge
+cite above); the covering gap row shrank `1000:1ea4..1f0b` (104) →
+`1000:1ea4..1f06` (99), arithmetic `99 + 5 = 104` ✓. (2) SAVE-TIME
+AUTO-ANALYSIS SWEEP: function count moved 318 → **329** (+11) across
+the save attempts. Row-proven new functions: `FUN_11bd_0ad5`
+(`0ad5..0ae1`) — **split out of `FUN_11bd_0a9f`**, whose live re-read
+body is now `0a9f..0ad2` (slice-22's H11 record said `0a9f..0ae1`
+"resolved UNDER this body" — the prior slice's boundary claim is
+BREACHED by the sweep; disclosed, next slice must ratify or re-merge;
+the halt-retry fragment `0ad3..0ad4` stays defined-unowned and the row
+`1000:26a3..26a4` after_function moved `0ae2` → `0ad5` — the proof the
+entry is new); `FUN_11bd_0c9f` (entry `0c9f`, body `0c84..0d0b`) —
+carved the former gap `1000:280c..28db` (208 = `0c3c..0d0b`) into rows
+`1000:280c..2853` (72) + a 4 B defined-island row `1000:286b..286e`
+quoted as returned; `FUN_11bd_2d0a` (body `2d0a..2d3f`, 54 B) — carved
+the former gap row `1000:4717..490f` (505) to `1000:4717..48d9` (451),
+arithmetic `451 + 54 = 505` ✓. The remaining +8 count delta sits at
+function-list addresses (`0bd1`, `0d15`, `11ed`, `1222`, `1a86`,
+`1d11`, `1e7c`, `1f24`, `2d8b`, `2d95`, `2d99`, `2fa3..2fa6`, `601d`
+candidates) whose addresses carry NO row delta because they are
+splits/absorptions inside previously-covered regions — per-function
+attribution needs a baseline function-list diff (CONCERN filed; the
+329-entry list is now the saved baseline). Listing-state flips (no
+ownership): `1000:2235..2266` (50 = `0665..0696`, H3's far-ret half) and
+`1000:2605..262d` (41 = `0a35..0a5d`, H9's) went `has_undefined_bytes:
+true→false` — now DEFINED but still UNOWNED, deferrals stand with the
+listing disposition moved; `1000:80cf..8118` same flip;
+`1000:3011..3066` + `1000:8045..8086` orphan flags flipped false→true.
+(3) Neighbors re-read identical to pre-state ✓: `restore_fs_gs_and_resume`
+`296d..2977`, `clear_msw_and_callfar` `2a5a..2ad8`, `FUN_11bd_2adb`
+`2adb..2ae8`, `FUN_11bd_2b11` `2b11..2b46`, `FUN_11bd_2864`
+`2864..295c`, `FUN_11bd_0ae2` `0ae2..0b11`, `FUN_11bd_0bc3`
+`0bc3..0bd0`.
+
+Post-state gap arithmetic (head): the 226 B row is GONE, replaced by —
+`{"start":"1000:4588","end":"1000:458b","size":4,"has_undefined_bytes":
+false,"has_orphaned_instructions":false,"before_function":"enable_paging_and_load_tss",
+"before_function_address":"11bd:2978","after_function":"FUN_11bd_29bc",
+"after_function_address":"11bd:29bc"}` — `0x4588−0x1bd0 = 0x29b8` ✓
+(the TABLE stays ROW-LISTED as defined data exactly like the slice-21
+`1000:43e1..43f3` template row); tiling `64 + 4 + 158 = 226` ✓; total
+gap rows `149 → 151` (Δ+2 = the `280c`/`4717` sweep splits; head row →
+TABLE row is net 0); function count `315 → 318 → 329` = 315 + 2 cited
+creates + 1 create-flow (`caseD_0`) + 11 save-sweep (breakdown and
+provenance in the disclosures above).
+
+### Verdicts (Task 2)
+
+| FUN | address | evidence | new_name | C counterpart |
+|-----|---------|----------|----------|---------------|
+| `enable_paging_and_load_tss` | `11bd:2978..29b7` | R1 CODE run cited by Task 1; entry leg DYNAMIC-ONLY (zero static entries — reachability table); exit leg `JMP 0x1000:1f07`@`29b5` (`e97fd9`, unconditional, cited); role leg holds on in-body CR0-class cites (`0f20c0`/`660d00000080`/`0f22c0`) + `LTR`/`CLTS` (`0f00d8`/`0f06`) + descriptor type-byte store (`c6470589`); sole callee = relay `caseD_0@0337` | `enable_paging_and_load_tss` (plate set) | none — behavioral (conditional paging-enable gate + TSS-descriptor byte patch + LTR/CLTS + tail-relay); TSS/LDT semantics and the `[0x2fa]` relay target DEFERRED |
+| `FUN_11bd_29bc` | `11bd:29bc..2a59` | R3 CODE run cited by Task 1; entry leg DYNAMIC-ONLY (cited); exits: `INT 0x67` (IVT-mediated), `JMP BX` (`2a37`, dynamic), internal back-edge `2a58→2a26`; zero static callees | — (create-only) | role leg open: IVT-`0x67` handler identity, BX target, save-cluster consumers — one hop out |
+| `mode_29bc_source_pair` (DATA) | `11bd:29b8..29bb` | TABLE class won the Step-2 CODE-vs-TABLE conflict on Task-1 flow evidence; `ushort[2]` = `0x2a5a`/`0x2a60`; load chain `6270/6274` + `6277/627b` cited; audit `COMPLETE_80` band | — (label + plate) | sibling of `mode_vector_source_pair@2820` |
+
+### Deferrals (Task 2 additions)
+
+- `[0xdfe]` runtime writers: static set {`2892`, `28a0`} (pocket
+  `FUN_11bd_2864` — Task 1 found); beyond that the enumerated
+  OPEN-WINDOW holes stand (incl. the head-internal `29a2`
+  BX-dependent row, fix-wave 1); NOT claimed closed.
+- Cell consumers one hop out: `[0x2fa]` (relay target — writer set NOT
+  swept this slice), `[0xd34]`/`[0xd4e..0xd58]`/`[0xd5e]`/
+  `[0xd60..0xd6c]`/`[0xd70]`/`[0xd78]`/`[0xdb0]`/`[0xde4]`/`[0xde8]`/
+  `[0x8c8..0x8d4]`/`[0x8fe]`/`[0x91d]`/`[0x47]`/`[0xdfc]` (head-side
+  consumers now in-body-cited, roles unresolved); `[0x9b4]`/`[0x40]`
+  prior dispositions stand.
+- Created-handler callee trees: `caseD_0@0337` body followed ONE edge
+  only (its `CS:[0x2fa]` target not chased); `INT 0x67` IVT leg;
+  `JMP BX` dynamic leg.
+- Six far-return halves: ownership stays deferred; H3 `0665..0696` and
+  H9 `0a35..0a5d` listing moved undefined→defined-unowned by the
+  save-sweep (disclosed; no ownership claim).
+- Save-sweep ownership question: `FUN_11bd_0ad5` split vs slice-22's
+  H11 `0a9f..0ae1` record, the +8 non-row-provable new functions, and
+  the new band FUNs (`0c9f`/`2d0a`) — next-slice review scope; this
+  slice ratified per precedent and changed nothing back.
+- Tail `2ad9..2ada`: `CS:[0x2ad9]` live data cell untouched; row
+  `1000:46a9..46aa` re-quoted unchanged.
+- Islands `08c2`/`033c`/`0bc3` + pocket FUNs `2824`/`284c`/`2864`
+  bodies: unchanged (re-read rows above), except the analyzer-side
+  listing flips disclosed.
+- Pair-bytes conflict: RESOLVED for the TABLE claim (Task 1 Step-3
+  evidence); no CODE create was allowed to touch `29b8..29bb` — both
+  proposals stop at the edges and the post read-backs confirm exact
+  match.
+- Suite: no test/tool/C changes; build + ctest green post-write
+  (docs-only diff); `grep -c "block head 2978"` nonzero; prior rows
+  byte-identical (fix-wave-1 rows untouched by this append);
+  `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left
+  unstaged.
