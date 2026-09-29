@@ -242,3 +242,69 @@ the SI mode word (`DEC AX` / `JNZ` chain plus `SUB AX,0x3/0x10a/0x64/
 (`0xeca`/`0xecc`/`0xece` at `40b0/40d4/40f6`, `0x11d4`, `0x46`/`0x47`,
 `0x10ee`). Mode/config/video/domain unknowns mix across 30 unread callees —
 bounding needs its own slice.
+
+## 3ed8 probe cluster (verified 2026-09-29, program `/fifa96.exe`)
+
+The `3f66..41a1` probe loops inside `FUN_11bd_3ed8` feed caller-string
+arguments to four config probes: `4665` is called at `11bd:3f66`/`3f7a`,
+`4645` at `11bd:3f89` (plus 2× inside `45c3`), `6120` at `11bd:3fea`/`406d`/
+`4099`/`40bd`/`40e6`/`4108`/`414b`/`4160` (plus 1× inside `45c3`), and `45c3`
+at `11bd:40a5`/`40c9`/`40f2`/`4114`/`4172`/`4196` (all callers per
+`get_function_xrefs`). Each probe publishes back to its loop caller: the two
+leaf scanners return pointers (`4645` an advanced string pointer, `6120` a
+match pointer or NULL), `4665` copies a matched value into the caller buffer
+sourced from the `[0x9b8]` table, and `45c3` returns a parsed numeric value
+(`M`-suffixed values scaled ×1024). OPEN: the downstream consumers of the
+published values (which loop iterations feed the `42de..4368` SI-mode
+dispatch arms) and the role of `195d` (called by `45c3`, out of scope).
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_4645 | 11bd:4645 | body `11bd:4645..4664`, 17 insns, leaf (0 callees); `CMP byte ptr [SI],0x20` at 11bd:464e + `CMP byte ptr [SI],0x9` at 11bd:4653 (space/tab skip); `MOV AX,SI` at 11bd:465e (returns advanced pointer); called at 11bd:3f89 + 2× inside 45c3 | skip_blank_chars | none — behavioral (blank skipper) |
+| FUN_11bd_6120 | 11bd:6120 | body `11bd:6120..6149`, 24 insns, leaf (0 callees); `SCASB.REPNE ES:DI` strlen at 11bd:6130 + char scan at 11bd:613a; `CMP byte ptr [DI],AL` at 11bd:613d; miss `XOR DI,DI` at 11bd:6141 (NULL); 8× callers in 3ed8 loops + 1× inside 45c3 | find_char_in_string | none — behavioral (char finder) |
+| FUN_11bd_4665 | 11bd:4665 | body `11bd:4665..46dd`, 47 insns, leaf (0 callees); `CMP word ptr [0x9b8],0x0` at 11bd:466c + `MOV AX,[0x9b8]` at 11bd:4677 (table source); per-char `CMP byte ptr ES:[BX],AL` at 11bd:4695; `MOV word ptr [BP-0x6],0x80` at 11bd:46b1 (copy bound) into `[BP+0x6]` buffer; `MOV byte ptr [SI],0x0` at 11bd:46d3 (NUL); miss returns 0 (`SUB AX,AX` at 11bd:4673); called at 11bd:3f66/3f7a | lookup_copy_config_string | none — behavioral (config string lookup + value copy) |
+| FUN_11bd_45c3 | 11bd:45c3 | body `11bd:45c3..4644`, 71 insns; callees: 4645, 195d, 45ab, 6120, 61ee-thunk; skip-blanks via 4645-thunk `CALL 0x1000:6215` at 11bd:45d8; hex accumulate `SHL DI,CL` (CL=4) at 11bd:4615 + `SUB AX,0xab0` at 11bd:4617 + `ADD DI,AX` at 11bd:461a; `CMP byte ptr [BX],0x4d` ('M') at 11bd:4629; `SHL DI,CL` (CL=10, ×1024) at 11bd:463b else `MOV DI,0xffff` at 11bd:4634; returns AX=DI at 11bd:463d; called 6× in 3ed8 loops (11bd:40a5/40c9/40f2/4114/4172/4196) | parse_config_number | none — behavioral (config number parser, M-suffix kilobytes) |
+
+### SI-producer boundary: 11bd:3f9c (verdict: BOUNDARY — no rename, program untouched)
+
+Question: where does the SI mode word dispatched at `42de..4368`
+(`MOV AX,SI` at `11bd:42db`, `DEC AX`/`JNZ` chain) come from?
+Derivation facts (disassembly of `FUN_11bd_3ed8`, program `/fifa96.exe`;
+far-thunk delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx`, verified uniform on
+12 call sites, e.g. `CALL 0x1000:6235` at `3f66` = `4665`):
+
+- The anchor `MOV SI,word ptr ES:[BX]` at `11bd:3f1b` (ES=0xF000/BX=0xFFFE)
+  + `AND SI,0xff` at `3f1e` is DEAD for the dispatch: `CALL 0x1000:4910`
+  (= `2d40`) at `3f38` + `MOV SI,AX` at `3f3b` overwrites SI. The BIOS word
+  only gates `CMP SI,0xfb` at `3f22` / `CMP SI,0xfd` at `3f28` →
+  `INC byte ptr [0x11f0]` at `3f2e`.
+- `FUN_11bd_2d40` (body `11bd:2d40..2d42`: `SUB AX,AX` + `RET`; sole caller
+  is `3f38` per `get_function_xrefs`) always returns 0, so SI=0 at `3f3b`
+  always and `OR SI,SI` at `3f4b` always takes `JZ` to the `MOV SI,0xa`
+  default at `3f52`. The nonzero path (`JMP` at `3f4f` → `41a4`) is
+  unreachable as disassembled.
+- SI writers inside the `3f66..41a1` probe window: `MOV SI,0x3` at `3fa5`,
+  `MOV SI,0xb` at `3fce`, `MOV SI,0x2` at `402e` (each gated by a nonzero
+  `195d` result via `OR AX,AX` at `3fa1/3fca/402a` + `JZ`), and
+  `MOV SI,AX` at `4063` (61ee-thunk `CALL 0x1000:7c50` at `4037` plus
+  `SUB AX,0x3880` / `SBB DX,0x1` adjust at `4057/405a`).
+- `195d` (leaf, 0 callees; 6 sites in 3ed8 at
+  `3f9c/3fb4/3fc5/3fd9/4017/4025` per xrefs, plus 1 inside
+  `parse_config_number` at `45df`) is a compare predicate returning 1 on
+  first-string exhaustion and 0 on mismatch — it gates the SI constants
+  but the constants live in the 3ed8 body, so it is not the producer.
+- Past the window SI is re-sourced again: `PUSH SI` + `CALL 0x1000:6157`
+  (= `4587`) at `41a4/41a5` takes SI as an argument, `OR SI,SI` is read at
+  `41ba` with a `NEG`-merge at `41c1..41c5`, and conditional on
+  `[BP-0x4]==0` (at `426c`) the `689e/6869/68b9` sequence at `4272..429d`
+  reloads SI via `MOV SI,word ptr [BP+0xff16]` at `42c3` before
+  `MOV AX,SI` at `42db`.
+- Globals published in the window (`[0xeca]` at `40b0`, `[0xece]` at
+  `40d4`, `[0xecc]` at `40f6`, `[0x14]` at `4118`, all from `45c3` outputs)
+  are side channels never loaded into SI.
+
+Why it exceeds one layer: the dispatched SI is a merge across at least
+five distinct helper layers (2d40 zero-gate, 195d predicate-gated body
+constants, 61ee-thunk arithmetic, 4587 arg-handoff, 689e/6869/68b9 stack
+re-source) plus body defaults — no single called FUN "computes or
+publishes the mode value". Per the one-layer guard: STOP, no rename.
