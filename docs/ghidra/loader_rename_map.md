@@ -2614,3 +2614,265 @@ pre-existing function state re-read only.
   slice-18's remaining deferrals stand. Slice-17's open legs (fall-in
   `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail cell)
   stand as recorded.
+
+## [0x9ba] consumers (verified 2026-09-29, program `/fifa96.exe`)
+
+Read-only consumer-attribution pass on the cell slice-19 named-and-deferred:
+`publish_mode_vector` stores its arg VERBATIM at `6255` `891eba09`
+`MOV word ptr [0x9ba],BX` (value = `0x29bc` conditional-armed via the
+`3ed8`→`452f`→`4536`→`6250` chain, slices 17–19). Question: does ANY defined
+instruction read `[0x9ba]` (literal form or `[base+disp]` window form —
+the `626d MOV BX,0x2824`/`6270 2e8b47fc` mirror pattern, reproduced and
+extended), and if so does the loaded value reach a CALL/JMP within one hop?
+Method: literal family sweeps (every pattern run + count), constant base-load
+inventory (`MOV BX/SI/DI/BP,imm`), displacement-window sweeps over every
+16-bit base form (`[BX +`/`[SI +`/`[DI +`/`[BP +`, the four ModRM bases plus
+bare-register and base+index encodings — 16-bit real mode has no other
+addressable forms; no SP-relative addressing exists), per-candidate
+`base + disp → resolved` arithmetic against the `0x9b8..0x9bf` window,
+dynamic-base sites recorded as OPEN-WINDOW rows, and the control probes
+(`get_xrefs_to`/`list_data_items_by_xrefs` — dead channel per slices 16/18/19).
+Result: **NONE-FROM-DISCIPLINE** — zero confirmed readers of `[0x9ba]` in the
+enumerated static surface: the ONLY direct operand contact is the store
+itself; the whole absolute-cell family `[0x9b0..0x9bf]` was swept complete
+(17 hits) and shows the adjacency cells `[0x9bc]`/`[0x9be]` DO carry
+transfer consumers (`092d`/`0934` `JMP word ptr` vectors — `dispatch_mode_vector`
+/ `FUN_11bd_0931`) while `[0x9ba]` carries none; every constant-base
+`[base+disp]` site in the program was resolved arithmetically and NONE
+lands on `0x9b8..0x9bf` (the mirror `6270/6277` pair resolves
+`0x2824−0x4→0x2820` / `0x2824−0x2→0x2822` — window-MISS, cited below).
+This is a negative UNDER THE ENUMERATION, not an absence claim: undefined
+gap code (block `2978..2ada` interior and the `6aae..6c3e`-style orphan
+regions whose DEFINED instructions are outside function bodies), the
+`1991:` overlay bank, implicit string-operand accesses (`MOVS`/`STOS`
+read/write `[SI]`/`[DI]` with no rendered operand), and runtime segment
+reloads (e.g. `66f6` `MOV DS,word ptr SS:[BX + 0x2]` re-DSes the default
+segment that operandless absolute `[0x9ba]` references read through —
+flagged-not-adopted, context only) are outside sweep visibility; the
+OPEN-WINDOW rows below are honest holes, not resolved negatives.
+Armed-conditional: the store fires only when the `3ed8` dispatch arms
+value `0x29bc` into slot `[BP+-0x5a]` and pushes it (`452f`→`4536`);
+even when armed, nothing in the enumerated static surface reads the cell
+back, so the value reaches NO transfer — it dies in data at the cell
+(terminal form = the `6255` store itself). Quote protocol honored: all
+five `read_memory` responses below reconciled `hex` vs the response's own
+`data` array (5/5 MATCH).
+
+### Site confirmations and byte reconciliations (anchors)
+
+| Probe | Verbatim response (data→hex reconciled) | Reading |
+|-------|------------------------------------------|---------|
+| `read_memory(11bd:6255,4)` | `{"address":"11bd:6255","length":4,"data":[137,30,186,9],"hex":"891eba09"}` | `137=0x89, 30=0x1E, 186=0xBA, 9=0x09` → `891eba09` ✓ — the slice-19 store cite is live and byte-exact: `MOV word ptr [0x9ba],BX` |
+| `read_memory(11bd:092d,4)` | `{"address":"11bd:092d","length":4,"data":[255,38,188,9],"hex":"ff26bc09"}` | `FF 26 BC 09` ✓ `JMP word ptr [0x9bc]` — adjacency-cell TRANSFER consumer (control) |
+| `read_memory(11bd:0934,4)` | `{"address":"11bd:0934","length":4,"data":[255,38,190,9],"hex":"ff26be09"}` | `FF 26 BE 09` ✓ `JMP word ptr [0x9be]` — same family shape, other cell |
+| `read_memory(11bd:626d,18)` | `{"address":"11bd:626d","length":18,"data":[187,36,40,46,139,71,252,163,188,9,46,139,71,254,163,190,9,195],"hex":"bb24282e8b47fca3bc092e8b47fea3be09c3"}` | ✓ the full mirror chain: `626d bb2428 MOV BX,0x2824` / `6270 2e8b47fc MOV AX,CS:[BX+-0x4]` / `6274 a3bc09 MOV [0x9bc],AX` / `6277 2e8b47fe MOV AX,CS:[BX+-0x2]` / `627b a3be09 MOV [0x9be],AX` / `627e c3 RET` — the known window-pattern instance reproduced verbatim |
+| `read_memory(11bd:2df5,8)` | `{"address":"11bd:2df5","length":8,"data":[139,94,6,255,119,2,232,31],"hex":"8b5e06ff7702e81f"}` | ✓ `2df5 8b5e06 MOV BX,[BP+0x6]` (caller-pointer base — dynamic) → `2df8 ff7702 PUSH [BX+0x2]` — the `[0x9b8]`-literal-as-ARG owner's nearest window-adjacent site, base provenance byte-exact |
+
+### Sweeps inventory (Step 1 + Step 2 — every run, pattern + `match_count`, scope 14006 defined instructions, all responses `truncated:false` unless stated)
+
+Literal family (11 runs):
+
+| Sweep run (operand_pattern) | Hits | Classification (every hit quoted/instruction render) |
+|-----------------------------|------|------------------------------------------------------|
+| `0x9ba` | 1 | `6255` `MOV word ptr [0x9ba],BX` bytes `891eba09` — WRITE (the store). ZERO reads |
+| `9ba` | 1 | identical (superset check — no extra renderings) |
+| `[0x9ba]` | 1 | identical (bracket form) |
+| `CS:[0x9ba]` | 0 | negative — tool accepts CS-override renders; none exists |
+| override variants (`SS:/ES:/DS:[0x9ba]`) — subsumed, not separate runs | — | every override rendering contains the substring `9ba`; the `9ba` superset returned only `6255`, so all override-form renders are covered by that one-hit negative-remainder |
+| `0x9b8` | 5 | ALL other-cell: `2dac MOV AX,0x9b8` (immediate ARG — see window trace), `39b4 MOV AX,[0x9b8]` READ, `466c CMP word ptr [0x9b8],0x0` READ, `4677 MOV AX,[0x9b8]` READ, `57af PUSH word ptr [0x9b8]` READ — `[0x9b8]` is live READ-ONLY data (config-string cell per owners `FUN_11bd_3986`/`lookup_copy_config_string`/`FUN_11bd_5686`) |
+| `9b8` | 5 | identical (superset check) |
+| `0x9bc` | 2 | `092d JMP word ptr [0x9bc]` **TRANSFER consumer** (`dispatch_mode_vector`) + `6274 MOV [0x9bc],AX` WRITE (`publish_mode_vector`) — adjacency control: this family cell DOES branch-read |
+| `9bc` | 6 | above 2 + 4 FALSE-STRING rejections: `2dd6`/`2de7` `JNZ 0x1000:49bc` (near-target render; `49bc−1bd0=2dec` in-body code, not the data cell), `2f18`/`44ab` `MOV [BP+…],0x29bc` (immediate numeral `9bc` inside `0x29bc` — frame-slot stores, slices 17–18) |
+| `0x9be` | 2 | `0934 JMP word ptr [0x9be]` **TRANSFER consumer** (`FUN_11bd_0931`) + `627b MOV [0x9be],AX` WRITE — same shape as `[0x9bc]` |
+| `9be` | 4 | above 2 + 2 FALSE-STRING: `4dcd JMP 0x1000:69be` (`eb1f` → `4dcd+2+0x1f=4dee`; `69be−1bd0=4dee` — code target), `1991:20a6 JNZ 0x1000:b9be` (other-bank code target) |
+| `[0x9b` (whole absolute-cell family window) | 17 | COMPLETE picture: `6ea2 MOV word ptr SS:[0x9b2],ES` W + `199f MOV AX,[0x9b4]` R + `5f7f PUSH [0x9b4]` R + `1991:0ff3` R + `1991:2a13` PUSH R (`[0x9b4]`), `1a1d MOV AX,[0x9b6]` R + `1ef1 ADD BX,[0x9b6]` R + `1000:0b9d MOV [0x9b6],AX` W (`[0x9b6]`), the 5 `[0x9b8]` rows, `6255` W (`[0x9ba]`), the 2 `[0x9bc]` rows, the 2 `[0x9be]` rows — **zero reads of `[0x9ba]` across the whole 9b0–9bf absolute neighborhood; the only branch-shaped consumers in the family sit on `[0x9bc]`/`[0x9be]`** |
+
+Constant base-load inventory (imm-source constants, 9 runs):
+
+| Sweep run | Hits | Notes |
+|-----------|------|-------|
+| mnemonic `MOV` + `0x2824` | 2 | `440e` slot store (`3ed8` dispatch family) + **`626d MOV BX,0x2824` — the known instance REPRODUCED verbatim** (bytes `bb2428` in both this run and the reconciled `626d` read above) |
+| `MOV` + `0x9b8` / `0x9ba` / `0x9bc` / `0x9be` | 3 / 1 / 1 / 1 | `2dac MOV AX,0x9b8` + the `[0x9b8]` loads; `0x9ba`/`0x9bc`/`0x9be` rows are the CELL OPERANDS themselves (stores/reads), NOT base loads → **no register ever holds a window-cell address as an immediate** |
+| `MOV` + `BX, 0x` | 33 | complete BX immediate-load census; window-relevant values: `6a97 BX=0x98e` (needs `[BX+0x2a..0x31]` sites — FUN_11bd_6a68 body `6a68..6aab` contains ZERO `[BX+…]` sites per the full partition → vacuous), `626d BX=0x2824`, `3465 BX=0x11e4`, `7684 BX=0xf7d`, `7697 BX=0x2d0a`, `0d7c BX=0xe000`, `3f13/3f18 BX=0xf000/0xfffe`, `1e6b BX=0xe822`, `2804 BX=0xd12`, smalls `{0x2,3,4,5,8,0xa,0xb,0x10,0x40,0x200,0xffff,0,0x1000}` — **none in `0x9b8..0x9bf`** |
+| `MOV` + `SI, 0x` | 59 | closest: `57da SI=0x938` (owner FUN_11bd_5686 — its `[SI+` sites: NONE; reaches would need `[SI+0x80..0x87]`), `791f SI=0x940` (owner setup_memory_hardware — bare `[SI]` at `77e8` PRECEDES the load (0x940 dword would cover `0x940..0x943` ∉ window anyway); none in window |
+| `MOV` + `DI, 0x` | 34 | none in window (`0xf8c,0x98,0x8c0,0x15e8,0xc20,0xa2c,0x6341,0x7330…`); reaches checked per-site below |
+| `MOV` + `BP, 0x` | 1 | **only constant BP load in the program: `1000:0000 MOV BP,0x1`** (MS-DOS-stub decode region); frame-chain BP (`55`/`8b e5`/`8b ec`) elsewhere — basis for the stack-relative class rejection |
+
+Displacement-window sweeps (form-complete for 16-bit ModRM; render-form
+discovery: operand text renders with spaces — `[BX+` = 0 vs `[BX +` =
+matches — both runs recorded):
+
+| Sweep run | Hits | Coverage/notes |
+|-----------|------|----------------|
+| `[BX+` (no space) | 0 | render-form probe (negative) |
+| `[BX +` (combined) | 500 **cap-truncated** (`instructions_scanned:7779` of 14006) | discovery run; stub-zone `ADD byte ptr [BX + SI],AL` flood hits the match cap → superseded by the sign+digit partition below (COMPLETE) |
+| `[BX + -` (all negative disps) | 10 | full: `4cc3`/`6198`/`6270`/`6277`/`7687`/`768e`/`769a`/`76a4`/`1991:2f65`/`1991:3872` — arithmetics in window table |
+| `[BX + 0` (all positive disps, single combined run) | executed — response tail lost to display truncation; `match_count` NOT quoted from that run | superseded for citation by the 16-run digit partition below — the citable complete enumeration, each run `truncated:false`, totals summed |
+| `[BX + 0x0` … `[BX + 0xf` (digit partition = complete enumeration of positive disps) | 0+57+92+3+37+32+48+7+10+0+12+0+14+1+7+0 = **320** | every run `truncated:false` over 14006; totals sum and reconcile `[BX + 0` |
+| `[SI +` | 81 | complete — full disp list includes `+0x2..+0x68`, `-0x30..-0x1`, `CS:[SI+-0x2]/-0x6` (1991) |
+| `[DI +` | 76 | complete — includes `ES:[DI+0x6]`, `CS:[DI+0x66a]` (1991 transfer), `[DI+0x2a]` family |
+| `[BP + -` | 500 **cap-truncated** (scanned 5140; frame displacement family, observed range −0x1..−0x98 in prefix) | class-rejected (stack frames; basis = BP census 1-hit above); window question closed instead by the TARGETED runs: `[BP + 0x9b` = **0** (no disp renders `0x9b0..0x9bf` → stub BP=0x1 can never reach the window; wrap-reach would need runtime BP≈0xFFF0±, unattributable), `[BP + 0x9` = 2 (`1991:40f6`/`41a0` `BP+0x9` sites, owners load BP from `SS:[BX+0x4]` frames `410d`/`417d` → dynamic, OPEN) |
+| bare-register: `[BX]` | 137 | complete — no BX constant equals a window cell (nearest 0x98e) → every statically-resolved `[BX]` lands outside `0x9b8..0x9bf`; rest dynamic/frame → OPEN |
+| `[SI]` | 40 | complete — no SI constant in window; `77e8`/`79f0` resolve to `0x940`∉ (ordering: sites precede `791f` load) or ES-override → reject/OPEN |
+| `[DI]` | 34 | complete — `44ea [DI]` resolves `DI=0x1190` (`44e7` precedes) ∉ reject; `639c/63a2 CS:[DI]` resolve `0x6341`∉; `234d [DI]` → `0x15e8`∉; `6345` → `DI=0x0`→`0x0`∉; `1000:001a/008d` stub-OPEN; rest dynamic-frame |
+| `[BP]` | 0 | negative |
+| `[BX + SI]` | 347 | complete (no cap!) — 335 stub-zone junk + `1000:0bd4/0bd8` + `11bd:1e73 ADC [BX+SI],AX` (owner `FUN_11bd_1e68`: BX/SI both runtime pointers, no constant pair) + 6 `1991:` sites incl. `1991:453b JMP word ptr CS:[BX + SI]` (dynamic transfer → OPEN) |
+| `[BX + DI]` | 12 | complete — stubs + `mem_grow_relocate` `0bce/0bd2` + `11bd:1b9b/2295` + 4 `1991:` ES sites; no constant pair reaches window (`mem_grow_relocate`: BX uncensed-dynamic × DI=0xf8c → OPEN) |
+| `[BX + SI +` / `[BX + DI +` | 3 / 3 | complete — `1000:004b`/`11bd:5b03`/`1991:3880`, stubs `0083`/`0eb8`/`0ee2`; all dynamic base+index → OPEN |
+| `[BP + SI +` / `[BP + DI +` / `[BP + SI]` / `[BP + DI]` | 2 / 2 / 0 / 0 | complete — all `1000:` stub-zone junk → OPEN(stub) |
+| `[BX + S +` / `[BX + D +` (mis-guess render probe) | 0 / 0 | negative — superseded by exact forms above; recorded for run-honesty |
+
+Total `search_instructions` runs this pass: **61** (11 literal + 5
+MOV-constants + 4 register-census + 41 form/window — the 41 includes 3
+render-format probes (`[BX+` no-space, `[BX + D +`, `[BX + S +` — all
+negative, exact forms kept) and one `[BP]` re-run whose first response was
+lost to display truncation; both `[BP]` calls returned 0).
+
+### Base→window arithmetic (every constant-base candidate: hit resolves to `[0x9ba]` or explicit rejection)
+
+| Site | Rendered | Base (cited constant load) | base + disp → resolved | Verdict |
+|------|----------|---------------------------|------------------------|---------|
+| `6270` | `MOV AX,word ptr CS:[BX + -0x4]` | `626d bb2428 MOV BX,0x2824` | `0x2824 − 0x4 = 0x2820` ∉ `0x9b8..0x9bf` | REJECT (known mirror instance — pair feeds `[0x9bc]` WRITE from a CS-relative paging read, not the cell) |
+| `6277` | `MOV AX,word ptr CS:[BX + -0x2]` | same | `0x2824 − 0x2 = 0x2822` ∉ | REJECT |
+| `7687` | `MOV byte ptr CS:[BX + -0x3],0xe9` | `7684 bb7d0f MOV BX,0xf7d` | `0xf7a` ∉ | REJECT (hook-patch write) |
+| `768e` | `MOV word ptr CS:[BX + -0x2],DX` | same | `0xf7b` ∉ | REJECT |
+| `769a` | `MOV byte ptr CS:[BX + -0x3],0xe9` | `7697 bb0a2d MOV BX,0x2d0a` | `0x2d07` ∉ | REJECT |
+| `76a4` | `MOV word ptr CS:[BX + -0x2],DX` | same | `0x2d08` ∉ | REJECT |
+| `12a9` | `CMP byte ptr [BX + 0x10be],0x0` | `12a1 bb0800 MOV BX,0x8` | `0x10c6` ∉ | REJECT |
+| `1dfe`/`1e14` | `[BX + 0xadc]` R/W | `1df7 bb1000 MOV BX,0x10` | `0xaec` ∉ | REJECT |
+| `23de` | `OR byte ptr [BX + 0xcfa],0x40` | `23cf bb0400 MOV BX,0x4` | `0xcfe` ∉ | REJECT |
+| `32c6`-family 11 sites (`36ca`…`37f1`, `[BX+0x2..0x26]`) | R/W | `3465 bbe411 MOV BX,0x11e4` | `0x11e6..0x120a` ∉ | REJECT ×11 |
+| `3ed8`: `4004` `[BX+0x1]`, `4002`/`400f`/`4396` `[BX]` | R/W | `3f13 BX=0xf000` / `3f18 BX=0xfffe` | `0xffff`/`0xf001`/`0xf000`/`0xfffe` ∉ | REJECT ×4 |
+| `3bcc`: `3c16`…`3c77` `[BX+0x5/0x8]`, `3bef` `[BX]` | R | `3bea BX=0x8` | `0xd`/`0x10`/`0x8` ∉ | REJECT ×6 |
+| `62ee` `ES:[BX+0x2]`; `62d1`/`62d7` | R/W | `62ce BX=0xa` (`62d7` site PRECEDES load→dynamic) | `0xc`/`0xa` ∉ | REJECT (1 OPEN: `62d7` pre-load) |
+| `5ef6`/`6009` `ES:[BX+0x2/0x6]` | R | `5e9e BX=0x3` | `0x5`/`0x9` ∉ | REJECT |
+| `20d0` `1991: CS:[BX+0x1ea6]`; 9 sites `1991:39xx` | R/W | `1991:2034 BX=0x4` / `1991:3897 BX=0x8` | `0x1eaa` / `0xd..0x1e` ∉ | REJECT ×10 |
+| `7063/7066` `[SI+0x2/0x6]` | W | `7060 SI=0x7a0` | `0x7a2`/`0x7a6` ∉ | REJECT |
+| `76b6/76cc/76d1` `[SI+0x2]`, `76b3`/`76c8` `[SI]` | R/W | `76b0 SI=0x19c` | `0x19e`/`0x19c` ∉ | REJECT ×5 |
+| `2347` `[DI+-0x1]`, `234d` `[DI]` | R/W | `232d DI=0x15e8` | `0x15e7`/`0x15e8` ∉ | REJECT |
+| `63de/63e1/6345` | R | `6396 DI=0x6341` / `63ac DI=0x4a` / `6335 DI=0` | `0x633f`/`0x633d`→`0x48`/`0x46`→`0x2` ∉ | REJECT ×3 (both orderings miss) |
+| `6eca/6edf` `ES:[DI+0x6]` | W | `6e3b DI=0xc20` | `0xc26` ∉ | REJECT |
+| `2c9e/2cc1` `[DI+0x6]`, `414d` `ES:[DI+0x5]` | W/R | `1991:2c94/2cb7 DI=0x60` / `1991:4135 DI=0x8c0` | `0x66`/`0x8c5` ∉ | REJECT ×3 |
+| `44ea` `[DI]`, `639c/63a2` `CS:[DI]` | W/CMP | `44e7 DI=0x1190` / `6396 DI=0x6341` | `0x1190`/`0x6341` ∉ | REJECT ×3 |
+| `1868` `LEA CX,[SI+-0x1]` | (LEA — no memory access) | `1863 SI=0x5` | — | NON-LOAD |
+| `6a97 BX=0x98e` | **nearest-miss constant** | owner `FUN_11bd_6a68` (`6a68..6aab`) | window reach needs a `[BX+0x2a..0x31]` site: the full `[BX +` partition lists ZERO sites in that body | NO-REACH (vacuous) |
+| `2df8` `PUSH word ptr [BX + 0x2]` | owner `FUN_11bd_2d9c` (127-insn dump) | `2df5 8b5e06 MOV BX,[BP+0x6]` — caller pointer; and the `2dac MOV AX,0x9b8` constant flows ONLY `2daf PUSH AX` → arg stack into `2db8 CALL` (never into any base register; `2d9c` BX-set = `2dbe/2df5/2e87/2eb8 [BP+0x6]`, `2e16 0x80`, `LES`-loads) | base runtime | **OPEN-WINDOW** (dump-cited; `analyze_dataflow` backward at `2df8` resolved the PTRADD base to `SP` and terminated "chain exhausted" at step 0/phi `1000:49bc` (= `2dec` ✓ delta) — reconciled, disassembly stands) |
+| `4cc3` | `MOV AX,word ptr ES:[BX + -0x2]` | owner `FUN_11bd_4ca1` — BX census lists NO constant load in that body (caller struct cursor; `4cb7/4cf5/4d10..` chain from `[0xc20]`) | base runtime | **OPEN-WINDOW** (window-reach would need BX∈`0x9ba..0x9c1`; no static base) |
+| `6198` | `LEA AX,[BX + -0x1]` | `find_substring` | — | **NON-LOAD** (LEA computes an address, never reads memory) |
+| `1991:3872` | `LEA AX,[BX + -0x1]` | overlay | — | **NON-LOAD** |
+| `1991:2f65` | `AND byte ptr ES:[BX + -0x1],0xfd` | overlay owner `FUN_1991_2d3e` — no BX constant in body | base runtime | **OPEN-WINDOW** |
+
+OPEN-WINDOW rows (dynamic/stack/wrap-unattributable base sites cited, NOT
+counted as negatives. Exhaustiveness: every `[base+disp]`/`[base+index]`
+site whose base admits a CONSTANT census value is individually resolved or
+rejected in the table above — the census×site cross-check leaves NO
+constant-base site unresolved; every remaining site is class-OPEN below):
+all `[BX+SI]`/`[BX+DI]` (+disp) pair-form sites
+outside the resolved table (`11bd:1b9b`, `1e73`, `2295`, `5b03`, `1000:`
+stub flood 335+6+6, `1991:321b/3253/35d0/362f/3689/3879/38b2/3977/453b/3a75/3af1`);
+transfer-form OPENs — `1991:0cf7 JMP CS:[DI+0x66a]`,
+`1991:1f7d JMP CS:[BX+0x1ece]`, `1991:20d0`+`1991:33a5`+`1991:33e1`
+CS-table sites, `1991:4f91 JMPF CS:[BX+0x4d78]` (all overlay-bank dynamic
+tables, no `[0x9ba]` feeder exists to arm them); ES:[BX+…] struct-cursor
+owners with no constant BX in their body per the 33-site census (`1ab8`,
+`1d8c`, `3986`, `4bdd`, `52ef`, `5686`, `6701`, `4ca1`/`4f83`/`6084`/
+`exec_loaded_image`/`probe_bios_model` families — sites `1ae7..1de4`,
+`39c5/39cb`, `4a5d..4dc7`, `5327..53d5`, `5698/569c`, `6716..6726`,
+`6941..694e`, `62d7`-class cursors) — base = caller pointer → OPEN;
+orphan-region sites
+(functionless defined code, `get_function_by_address(11bd:6ae2)` → error —
+no owner dump exists to cite): `6ab2`, `6ac6`, `6acb`, `6ae2`, `6ae5`,
+`6af2..6b3f` (`[SI+0x2/0x18/0x28/0x2a/0x2c/0x34/0x36/0x38]` family — the
+CS:6b51-return IRET-frame builder cluster, SI = runtime stack pointer,
+stack-class), `6bfd`, `6c14`, `6c23`, `6c3e`, `0e22`, `0e28`, `0ef8`,
+`0efe`, `1877`, `2282`, `4901`, `49b0`, `4a5d..4ae5`, `4bfc..4dc7`
+struct-cursor families (`ES:[BX+…]`, BX = caller pointer), and every
+`SS:[BX+…]` arg-frame site (`11dd`, `1266`, `14ac`, `1e9f`, `66e1`,
+`71d1`, `1991:3f74..416e` stub family) — SS-override stack addressing,
+class-rejected with the frame-chain reason; plus implicit
+`MOVS`/`STOS` `[SI]`/`[DI]` forms (no rendered operand — out of sweep
+visibility, e.g. the `1ed6 f3a5 MOVSW.REP` seen slice-19 in `1e9f`).
+
+### Reader table (confirmed reads of `[0x9ba]` / window-resolved hits)
+
+| Reader site | Bytes | Render | Cell resolved | Value flow |
+|-------------|-------|--------|---------------|------------|
+| — none — | — | — | — | zero confirmed reads: the `0x9ba` literal runs return only the `6255` WRITE; the `[0x9b` absolute-family run returns 17 hits, of which `[0x9ba]` contributes exactly 1 (the store); the full `[base+disp]` partition resolves NO site into `0x9b8..0x9bf` |
+
+Classification rows (all candidates, by disposition): `6255` = WRITE(the
+store); `[0x9b8]`/`[0x9b4]`/`[0x9b6]`/`[0x9b2]` accesses = other-cell
+(adjacency control); `092d`/`0934` = other-cell TRANSFERS (control — they
+read `[0x9bc]`/`[0x9be]`, NOT `[0x9ba]`); `9bc`/`9be` superset extras
+(`2dd6/2de7/2f18/44ab/4dcd/1991:20a6`) = false-string (near-target and
+immediate-numeral renders, arithmetic shown above); constant-base window
+candidates = REJECTED-with-arithmetic (table); dynamic sites = OPEN-WINDOW
+(rows above).
+
+### One-hop transfer question (Step 3)
+
+Enumeration scope: owner dump `FUN_11bd_2d9c` = **127 instructions**
+(`count:127`, body `2d9c..2ec8`) — the only body pulled because it owns
+both the `0x9b8` immediate (`2dac`) and the nearest-miss window candidate
+(`2df8`). No confirmed reader exists, so the per-reader chain walk is
+VACUOUS at hop zero: there is no loaded value, therefore no
+`CALL reg`/`JMP reg`/`[mem]`-target form can be fed from `[0x9ba]` within
+one hop (nor any hop) in the static surface. What the surface does show,
+cited as controls: (a) the family transfer pattern EXISTS on adjacent
+cells — `092d ff26bc09 JMP word ptr [0x9bc]` (`dispatch_mode_vector`) and
+`0934 ff26be09 JMP word ptr [0x9be]` (`FUN_11bd_0931`) — so a future
+writer+reader pair on `[0x9ba]` would be recognizable by exactly these
+renderings, and today `[0x9ba]` has none; (b) the store site itself is
+transfer-free (`publish_mode_vector` 14 insns, 3/3 transfers literal,
+slice-19); (c) dynamic-base transfers (`1991:0cf7/1f7d/33a5/33e1/453b/4f91`
+CS-relative jumps) are OPEN-WINDOW holes with no `[0x9ba]` feeder.
+`get_xrefs_to(0x9ba)` verbatim `{"references":[],"count":0,…,"total":0}`;
+same for `11bd:09ba` form; `list_data_items_by_xrefs(filter=all,
+type_filter=all,min_xrefs=1,limit=30)` verbatim
+`{"data_items":[],"count":0,"offset":0,"limit":30,"total":0}` — control
+only, dead channel for absolute-operand forms per slices 16/18/19, reported
+not relied upon.
+
+### Disposition-so-far (Step 4)
+
+**NONE-FROM-DISCIPLINE** — of the four allowed verdicts: READERS-FOUND-*
+cannot apply (the reader table is empty: no literal read survived any of
+the 5 direct-pattern runs, no window hit survived per-candidate
+arithmetic); PARTIAL cannot apply (no reader class resolved even
+provisionally); READERS-FOUND-REACH-TRANSFER is refuted at its first
+condition. Armed-conditional phrasing (exact, once): the store at `6255`
+fires only when the `3ed8` dispatch cascade arms `0x29bc` through the
+`452f`/`4536`→`6250` path; even in that armed state, within the enumerated
+static surface (61 pattern runs × 14006 defined instructions, 4 constant
+base-load censuses, complete `[base+disp]` form partition, 127-instruction
+owner dump, controls quoted) the cell value is NEVER read and therefore
+reaches NO transfer — it dies in data at the cell. The negative binds the
+enumeration, not existence: OPEN-WINDOW rows, gap/orphan-region code, the
+`1991:` overlay, implicit string forms, and the runtime DS-reload chain
+(`[0xcec]` → `66f6`) remain visible holes. Slice-19's named-and-deferred
+leg is now discharged at this layer: the deferred consumer question has an
+answer WITHIN static scope, and the `0x29bc` entry-lead chain (slices
+17→19) acquires no new transfer path through `[0x9ba]` — what survives of
+the entry question stays exactly in the slice-17 runtime legs plus the
+holes above.
+
+### Writes (ZERO-WRITE branch)
+
+NONE. Read-only pass: no `disassemble_bytes` (dry-run or real — no reader
+materialized, so the one-hop walk had nothing to dry-run INTO), no
+`create_function`, no rename, no comment, no `save_program`; no Ghidra
+transaction opened. Tool inventory: `search_instructions` ×61 runs
+(all `truncated:false` responses quoted with counts; two cap-truncated
+discovery runs superseded by the complete partition — recorded as such),
+`get_function_by_address` ×3 (`2d9c` body `2d9c..2ec8`; `6a68` body
+`6a68..6aab`; `6ae2` → `{"error":"No function found for 11bd:6ae2"}` —
+the orphan-region no-owner proof behind the OPEN rows),
+`disassemble_function` ×1 (`FUN_11bd_2d9c`, 127 instructions),
+`read_memory` ×5 (`6255`4, `092d`4, `0934`4, `626d`18, `2df5`8 —
+hex-vs-data 5/5 MATCH, quoted verbatim in the anchors table),
+`get_xrefs_to` ×2 (controls, both ×0), `list_data_items_by_xrefs` ×1
+(control, empty envelope quoted), `analyze_dataflow` ×2 (1 candidate-varnode
+error `No varnode at 11bd:2df8 matches 'BX'. Candidates: [in_DS, in_SS,
+puVar10]` superseded by the `puVar10` retry — resolved anchor `SP`,
+terminated "chain exhausted", reconciled to the dump, disassembly remains
+authority). `/media/felipe/FIFAPCCD/` untouched; pre-existing function
+state re-read only; `fifa96.rep` churn left unstaged.
