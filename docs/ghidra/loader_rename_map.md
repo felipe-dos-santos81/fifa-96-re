@@ -1348,3 +1348,114 @@ inside the two big holes (`02b5..0733`, `2811..2ada`) are invisible to
 operand searches until decoded; the dry-run windows cited above
 (`2811..2981`, `02b5..02c1`) show no jump targeting `296d`/`2978` within
 their coverage, and `296d`'s only static feeder is the `41ee` cell write.
+
+### Verdict: 296d (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on all legs (walk/cell rows above, not rewritten): role — the
+11-byte body reloads FS/GS from the selector cells `[0xd60]`/`[0xd62]`
+(`MOV FS,[0xd60]` `8e26600d` at `296d`, `MOV GS,[0xd62]` `8e2e620d` at
+`2971` — exact counterparts of the hole's save pair `MOV [0xd60],FS`
+`2884`/`MOV [0xd62],GS` `2880`) and tail-transfers to the landing pad
+(one restore-and-resume epilogue; "mode" enters only through the landing
+pad's frame unwind, so the name states mechanism, not caller lore); exit
+mechanism cited — `JMP 0x1000:1e85` (`e93dd9`) at `2975`, ends `2977`,
+unconditional near tail, first plausible exit in address order (no
+earlier RET/JMPF/IRET); callee — single transfer target is the landing
+pad `02b5..02b6` (`POPA` `61` + `RET` `c3`), body-level cited by Task-1's
+dry-run `02b5..02c1` window and NOT walked further (out-of-slice,
+cite-only); boundary defended by the gap rows above (`296d` inside
+`1000:43e1..1000:46aa`, `get_function_by_address` error pre-write,
+`can_rename_at_address` type `undefined` = no symbol, xrefs 0) + entry
+evidence (sole static feeder the `41ee` cell write; `get_xrefs_to` 0;
+operand `0x296d` 1 hit program-wide). No leg missing → renamed +
+plate-set.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_296d → restore_fs_gs_and_resume | 11bd:296d | `MOV FS,[0xd60]` at 296d + `MOV GS,[0xd62]` at 2971 (reloads of the `2884`/`2880` save pair) + tail `JMP 0x1000:1e85` `e93dd9` at 2975 ending 2977; sole feeder = `41ee` cell value (`get_xrefs_to` 0, operand `0x296d` 1 hit); post-write: body exactly `296d..2977`, callees = {`FUN_11bd_02b5` (landing-pad tail)}, xrefs-to still 0 — entry stays purely dynamic | restore_fs_gs_and_resume | none — behavioral (FS/GS selector-cell restore + tail-resume epilogue) |
+
+No leaf verdict row: the only callee (`FUN_11bd_02b5`) is the landing pad,
+cited at body level only, renamed nothing, per the one-layer guard.
+
+### Writes (before-state → post-write state)
+
+Before-state: gap `11bd:2811..2ada` (hole row above), nothing defined at
+`11bd:296d` — `get_function_by_address` → `"No function found"`,
+`can_rename_at_address` → type `undefined`, `get_xrefs_to` → 0 refs;
+bytes UNDEFINED in the listing (Task 1 was `dry_run=true` throughout).
+Write sequence, each with result: (1) real `disassemble_bytes`
+`11bd:296d..2977` → 3 insns defined (`8e26600d`/`8e2e620d`/`e93dd9`),
+identical to the Task-1 dry-run head. (2) `create_function(11bd:296d)` →
+`FUN_11bd_296d`, reported `body_size:13`; re-read shows the requested
+boundary KEPT exact — body `296d..2977` — and the +2 flow effect landed
+in a SEPARATE auto-created landing-pad function `FUN_11bd_02b5`
+(`02b5..02b6` = the dry-run `POPA`+`RET`), not a merged body; the
+`disassemble_first=false` retry was therefore NOT needed and was not
+attempted. `11bd:02b7` re-checked after save: still no function — the
+second mode-switch clone (`PUSHA`/`CALL [0x9c0]` at `02b7..02b8`) is
+untouched; `FUN_11bd_02b5` itself was left exactly as created (no rename,
+no plate, no re-bound). (3) `rename_function` → `restore_fs_gs_and_resume`
+(verb-led snake_case from the walk's mechanism: FS/GS restore, tail
+resume; no `decode_*`, no caller lore). (4) `set_comment` plate →
+`C: none — behavioral (FS/GS selector-cell restore + tail-resume
+epilogue)`. (5) `save_program(/fifa96.exe)` → success; post-write
+re-confirm (the state the row above cites): name + body `296d..2977` +
+plate via `get_function_by_address`/`get_comment`, `get_function_callees`
+= {`FUN_11bd_02b5`}, `get_function_xrefs` = 0.
+
+### Hook cells
+
+The two cells are one pair around the transition core
+(`execute_mode_switch` `0293..02b4`, per the `## 0290/0293 fall-through`
+section — cited, not rewritten). `[0x9c0]` = PRE-SWAP HOOK: called at
+`0294` (`CALL word ptr [0x9c0]` `ff16c009`, pushes return `0298`, so DX
+must survive it) and again by the `02b7` twin at `02b8`; writer set:
+NOT-IN-EXE — searches exhausted per the cell table above
+(`get_xrefs_to(11bd:09c0)` 0 refs; operand `0x9c0` → sole mention the
+`0294` consumer; operand `9c0` → same plus the `1991:3093`
+branch-target false hit; no store form among the 13976 scanned defined
+insns), so the hook target is runtime-installed (loader/self-relocation)
+with identity unidentified — a negative over the in-exe search space, not
+a claim that no writer exists at runtime. `[0x9c2]` = CONTINUATION
+VECTOR: sole read `02b1` (`JMP word ptr [0x9c2]` `ff26c209` — the core's
+tail exit), sole writer `41ee` (`MOV word ptr [0x9c2],0x296d`
+`c706c2096d29`, set `{41ee}` confirmed and NOT extended per the cell
+table); the vector is ARMED exactly when `CMP byte ptr [0x2f],0x3` at
+`41e7` passes the `JL 0x1000:5e27` (= `4257`) skip at `41ec`, i.e. mode
+word `[0x2f] >= 3`. The armed-path target is now the named
+`restore_fs_gs_and_resume` (`11bd:296d..2977`). Pair summary: pre-swap
+notification (cell-mediated, runtime target, unresolved identity) +
+post-transition continuation (statically armed at `41ee` when
+`[0x2f]>=3`, restores FS/GS from the `2880/2884` selector cells, tails
+into `POPA`+`RET` at `02b5..02b6` and returns to the CALL site +3 — the
+`0dc4`/`7cf0` contract of the `## 0290/0293 fall-through` section).
+Xref caveat applies to both cells (0 data xrefs despite defined
+referencing insns; instruction enumeration is the authority — row above).
+
+### Deferral resolution
+
+Closes, from the `## 0290/0293 fall-through` section's NOT-CONFIRMED
+residue list (`0293` verdict + `### Resolution: slice-12` STAYS-OPEN
+paragraph — rows untouched, resolved here by reference): (a) `[0x9c2]`
+per-path cell value — on the armed path (`[0x2f]>=3`) the vector points
+at `0x296d` and `restore_fs_gs_and_resume` IS what the armed path does:
+reloads FS/GS from `[0xd60]`/`[0xd62]` (the `2880/2884` saves) and
+transfer-tails to the landing pad — value `0x296d` appears exactly once
+program-wide (`41ee`), so there is no second static target; (b) the
+unwind shape at that target — `POPA` (`61`) + `RET` (`c3`) at
+`02b5..02b6` (dry-run-cited, and now flow-anchored as
+`FUN_11bd_02b5`): the `PUSHA` frame from `0293` unwinds there and the
+`RET` returns to CALL site +3, honoring the `0dc4`/`7cf0` continuation
+evidence — the vector target itself never returns, it transfer-tails;
+(c) `[0x9c0]` writer question — resolved NEGATIVE: not-in-EXE (search
+enumeration in the cell table above), the hook target is runtime-written.
+Stays open (named, none material to the epilogue's verdict): `[0x9c0]`
+installer identity (whoever writes it at runtime is unidentified);
+`0x2978` paging-block ownership (unreachable from the `296d` entry, zero
+static entries found — the `296d`-callee second-layer question in
+miniature, deferred per the one-layer guard); `[0x40]` MSW mask writer
+(single read `02aa`, no direct store found — slice-13 list, mode
+direction still unsettled); the `02b5`-region twin (`PUSHA` `60` at
+`02b7` + `CALL word ptr [0x9c0]` at `02b8` — still no function at
+`02b7` post-write, untouched; future slice material together with the
+as-yet-unnamed `FUN_11bd_02b5` landing pad).
