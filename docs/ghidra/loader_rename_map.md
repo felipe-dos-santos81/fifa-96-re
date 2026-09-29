@@ -1917,3 +1917,195 @@ total still 131. Writes this task: the real `disassemble_bytes(11bd:02d4,
 length 6)`, one `create_function` nudge (refused, no effect),
 `rename_function`, `set_comment`, `save_program` — nothing else;
 `/media/felipe/FIFAPCCD/` untouched.
+
+## paging block 2978..2ada (verified 2026-09-29, program `/fifa96.exe`)
+
+Read-only attribution pass over the paging block — the right half of the
+original hole `11bd:2811..2ada`, split by slice-14's
+`restore_fs_gs_and_resume` create (`296d..2977`) into the skip-pocket
+`2811..296c` (out of scope) and this block `2978..2ada` (355 bytes).
+Result: **ZERO attributed entries.** Every `CALL`/`JMP` operand pattern
+run against the 14006 defined instructions resolves either to the wrong
+region (code-space `29xx`/`2axx` renderings = `11bd:0dxx`/`0ef4`, since
+far/near targets print in the `0x1000:` code space and the block renders
+as `0x1000:4548..46aa`) or to addresses ≥ `11bd:2adb` in/after the next
+function; the in-range code-space windows (`0x1000:45`, `0x1000:46`)
+produce 0/8 hits with every hit recomputed out-of-range. The `[0x9c2]`
+writer set is unchanged (`41ee` sole writer, immediate `0x296d` — the
+epilogue, NOT in this block); no absolute-cell store with an immediate in
+`2978..2ada` exists among defined instructions; raw far-pointer pairs
+for the three candidate entries (`2978`, `2a30`, `2a6c`) are 0-hit
+program-wide, including inside undefined holes. The block head byte at
+`2978` (`803efe0d01` = `CMP byte ptr [0xdfe],0x1`, slice-14 citation) and
+the MSW-clear locator at `2a6c` (`a14000 f7d0 23c1` = `MOV AX,[0x40]` /
+`NOT AX` / `AND AX,CX`, `0f` opening `LMSW` at `2a73`, slice-16 flag)
+were re-confirmed by raw `read_memory` and remain UNDEFINED. With zero
+attributed entries there are no walks: `disassemble_bytes` was not
+invoked at all this pass. Caveats standing: `search_instructions` is
+defined-instruction-only (14006 scanned) so intra-gap relative flow
+cannot surface, and `get_xrefs_to` is dead for these operand forms
+(control probes on `2978`/`2a6c` return 0 like every other cell) —
+instruction enumeration + raw-byte scans are the authority, and the
+entry mechanism therefore remains dynamic or gap-internal (e.g. fall-in
+from the `2811..296c` pocket's undecoded flow), unresolved. Quote protocol:
+read_memory `hex` fields must be reconciled against the response's `data`
+array or disassembly before being quoted verbatim; an 8-byte render glitch
+(this section, found at review) produced `23c8` where bytes are `23c1`.
+
+| Gap-state item | Evidence (verbatim) | Boundary reading |
+|----------------|---------------------|------------------|
+| covering row | `find_code_gaps` (total 131, page offset 0/limit 100): `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | `1000:4548 − 0x1bd0 = 11bd:2978` ✓ start, `1000:46aa − 0x1bd0 = 11bd:2ada` ✓ end, size 355 — matches the slice-14 post-split expectation (`1000:4548..1000:46aa`) |
+| left pocket row | `{"start":"1000:43e1","end":"1000:453c","size":348,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_27e4","before_function_address":"11bd:27e4","after_function":"restore_fs_gs_and_resume","after_function_address":"11bd:296d"}` | `1000:453c − 0x1bd0 = 11bd:296c` — pocket ends exactly one byte before the block; split confirmed |
+| left neighbor | `get_function_by_address(11bd:2977)` → `{"name":"restore_fs_gs_and_resume","entry_point":"11bd:296d","body_start":"11bd:296d","body_end":"11bd:2977"}` | block starts at end+1 ✓ |
+| pocket edge byte | `get_function_by_address(11bd:296c)` → `{"error":"No function found for 11bd:296c"}` | pocket `2811..296c` still unowned ✓ |
+| right neighbor | `get_function_by_address(11bd:2adb)` → `{"name":"FUN_11bd_2adb","body_start":"11bd:2adb","body_end":"11bd:2ae8"}` | block ends at start−1 ✓; `0x1000:46ab − 0x1bd0 = 2adb` corroborated live by the `7744`/`792b` CALLs below |
+| head byte | `read_memory(11bd:2978,5)` → `803efe0d01` | `CMP byte ptr [0xdfe],0x1` — slice-14 quote byte-exact, still undefined listing |
+| MSW-clear locator | `read_memory(11bd:2a6c,8)` → `a14000f7d023c10f` | `MOV AX,[0x40]`@`2a6c` + `NOT AX`@`2a6f` + `AND AX,CX`@`2a71` + `0f`(@`2a73`, `LMSW` opener) — slice-16 flag byte-exact, still undefined, still not adopted |
+
+| Search run | Hits (addr, mnemonic → target) | Verdict |
+|------------|--------------------------------|---------|
+| `search_instructions` operand `0x1000:29` | 12: `0d38` JNZ→`292c`, `0d60` JMP→`2926`, `0d7a` JZ→`294f`, `0d8d`/`0d95`/`0d9b` CALL→`2932` ×3, `0d90`/`0d9e` JNZ→`297c` ×2, `0dba` JNZ→`29a3`, `0e3c` CALL→`2950`, `0eaf` CALL→`2982`, `11c2` CALL→`2950` | all targets −`0x1bd0` = `11bd:0d5c/0d56/0d7f/0d62/0dac/0dd3/0d80/0db2` — every one lands in `11bd:0dxx`, OUT of `2978..2ada` (enumerated pattern hits the wrong region: code-space `29xx` ≠ `11bd:29xx`) |
+| `search_instructions` operand `0x1000:2a` | 7: `699c`/`72c7`/`77bc`/`798a`/`7a02`/`7a26` CALL + `69b2` JMP, all →`0x1000:2ac4` | `2ac4 − 1bd0 = 11bd:0ef4` (`FUN_11bd_0ef4`) — OUT of range ×7 |
+| `search_instructions` operand `11bd:29` | 0 | negative (no `11bd:29xx` segment-form renderings) |
+| `search_instructions` operand `11bd:2a` | 0 | negative |
+| `search_instructions` operand `:296` | 0 | negative |
+| `:297` | 2: `0d90`/`0d9e` JNZ→`0x1000:297c` | `→11bd:0dac` OUT (same insns as `0x1000:29` run) |
+| `:298` | 1: `0eaf` CALL→`0x1000:2982` | `→11bd:0db2` OUT |
+| `:299` `:29b` `:29c` `:29d` `:29e` `:29f` `:2a0` `:2a1` `:2a2` `:2a3` `:2a4` `:2a5` `:2a6` `:2a7` `:2a8` `:2a9` `:2aa` `:2ab` `:2ad` | 0 each (19 patterns) | negative ×19 |
+| `:29a` | 1: `0dba` JNZ→`0x1000:29a3` | `→11bd:0dd3` OUT |
+| `:2ac` | 7: the `0x1000:2ac4` set | `→11bd:0ef4` OUT ×7 (same insns) |
+| `search_instructions` operand `0x1000:45` (added: code-space window `4500..45ff` = `11bd:2930..2a2f`) | 0 | negative — NO defined `CALL`/`JMP` targets anywhere in the block's first half |
+| `search_instructions` operand `0x1000:46` (added: `4600..46ff` = `11bd:2a30..2b2f`) | 8: `2ae2` JZ→`46b8`→`2ae8`; `2b02` JZ→`46da`→`2b0a`; `2b3e` JNS→`46f8`→`2b28`; `2b45` JMP→`46f0`→`2b20`; `2b68` CALL→`46bb`→`2aeb`; `2bc9` CALL→`46e1`→`2b11`; `7744`/`792b` CALL→`46ab`→`2adb` ×2 | every recomputed target ≥ `2aeb`/`2adb` — at/after `FUN_11bd_2adb`, OUT of `2978..2ada`; `46ab−1bd0=2adb` = block end `46aa`+1, boundary arithmetic confirmed |
+| `search_instructions` operand `0x9c2` | 2: `02b1` JMP `[0x9c2]` (read), `41ee` MOV `[0x9c2],0x296d` (write) | writer set UNCHANGED (`{41ee}`); sole immediate `0x296d` is the epilogue, NOT in-range (`< 2978`) — no new into-range vector store |
+| `search_instructions` operand `9c2` | 2 (same) | superset check — identical, negative for extensions |
+| `search_instructions` operand `0x2978` | 0 | candidate entry head: no defined-instruction reference |
+| `search_instructions` operand `0x2a6c` | 0 | candidate MSW-clear entry: no defined-instruction reference |
+| `search_instructions` operand `0x29` (immediate family, subsumes every `0x297x..0x29fx` text) | 4: `1000:006e` SUB `[BP+DI+0x29]` (disp8); `2f18` MOV `[BP+-0x18],0x29bc`; `41ee` MOV `[0x9c2],0x296d`; `44ab` MOV `[BP+-0x5a],0x29bc` | `0x29bc` IS numerically in `2978..2ada`, but both stores target BP-RELATIVE frame slots, not absolute vector cells — and the owners differ: `2f18` lives in `FUN_11bd_2ec9` (body `2ec9..2f4b`), `44ab` in `FUN_11bd_3ed8` (body `3ed8..4586`), the `[0x9c2]` publisher itself (same function as the `41ee` vector write) → REJECTED as code-entry writers; the runtime-slice value-coincidence lead points at BOTH functions (`2ec9` and `3ed8`); `41ee` out-of-range as above; `006e` disp-only noise |
+| `search_instructions` operand `0x2a` (immediate family) | 17: `2adb` MOV `DX,CS:[0x2ad9]` + `7739` MOV `CS:[0x2ad9],DX`; 7× `[BP+-0x2a]` disp8 (`3730`,`374e`,`3751`,`375f`,`376f`,`3776`,`37d8`); 4× imm `0x2a` (`3850`,`3894`,`5b6c`,`6e7a`); `[SI+0x2a]`@`6b3f`; `1991:3807`/`3829`/`5457` (other segment) | ZERO transfers/stores with an in-range value; NEW DATA CONTACT noted: the word at `CS:[0x2ad9]` (bytes `2ad9..2ada`, the block's LAST two bytes) is read by `FUN_11bd_2adb`'s first insn and written by `setup_memory_hardware`@`7739` — in-block bytes serving as a live data cell, cited not adopted (ownership question for a later slice) |
+| `search_byte_patterns` `7829bd11` (far-ptr LE of `0x2978:0x11bd`) | no matches (covers undefined holes) | no raw far-pointer data entry for block head |
+| `search_byte_patterns` `6c2abd11` (`0x2a6c:0x11bd`) | no matches | none for MSW-clear candidate |
+| `search_byte_patterns` `302abd11` (`0x2a30:0x11bd`) | no matches | none for mid-block candidate |
+| `search_byte_patterns` `7829` / `6c2a` / `302a` (raw LE word immediates) | no matches / no matches / no matches | no `MOV [cell],imm`-style entry value even in undecoded bytes |
+| `get_xrefs_to(11bd:2978)` / `get_xrefs_to(11bd:2a6c)` | 0 refs each | dead channel per slice-16 controls — reported, NOT evidence |
+
+| Walk disposition | Result |
+|------------------|--------|
+| Attributed entries | **None** (0 of 3 candidate entries `2978`/`2a30`/`2a6c` has a resolved static feeder; see attribution table) |
+| Walks executed | 0 — per the zero-entry rule no `disassemble_bytes` window was run this pass; `No attributed entries` is the deliverable: the block's entry mechanism stays dynamic/gap-internal (defined-only search caveat + dead-xref caveat recorded above) |
+
+Deferral update for `## 02b7 twin` deferral (c) (`2978..2ada` ownership):
+the entry question is now swept with the enumerated negative above —
+`[0x9c2]` extension ruled out, far-pointer pairs ruled out, in-range
+immediate stores ruled out among defined insns — leaving only (i)
+fall-in/relative flow from the undecoded `2811..296c` pocket, (ii)
+runtime-installed pointers, and (iii) the `CS:[0x2ad9]` tail data cell
+as open legs. `2a6c..2a73` stays flagged-not-adopted. Zero Ghidra writes
+this task: `find_code_gaps`, `get_function_by_address` ×3,
+`search_instructions` (36 operand runs: `0x1000:29` 12, `0x1000:2a` 7,
+`11bd:29` 0, `11bd:2a` 0, `:296`–`:2ad` 24 patterns 11 total hits all OUT,
+`0x1000:45` 0, `0x1000:46` 8, `0x9c2` 2, `9c2` 2, `0x2978` 0, `0x2a6c` 0,
+`0x29` 4, `0x2a` 17), `search_byte_patterns` (6 runs, all none),
+`read_memory` (2), `get_xrefs_to` (2 controls); no `disassemble_bytes`
+(dry-run or otherwise), no rename, no plate, no save;
+`/media/felipe/FIFAPCCD/` untouched.
+
+### Verdicts
+
+None apply — zero walked functions, so there is no role, no mechanism name,
+no cited exit, and no CONFIRMED/NOT-CONFIRMED row to write. This is the
+plan's pre-declared legal zero-entry branch, not an omission: the walk
+disposition table above is the basis, quoted by row — "Attributed entries |
+**None** (0 of 3 candidate entries `2978`/`2a30`/`2a6c` has a resolved
+static feeder; see attribution table)" and "Walks executed | 0 — per the
+zero-entry rule no `disassemble_bytes` window was run this pass". The
+per-walked-function verdict rule (CONFIRMED → verb-led mechanism name +
+plate `C: none — behavioral (<role>)`; NOT-CONFIRMED-at-name → create-only,
+missing leg named) is recorded here as applying VACUOUSLY: no leg is
+"missing" per function because no function was walked; the missing leg is
+the ENTRY LEG ITSELF, block-wide, and it is dispositioned below and in the
+deferral lines rather than per function.
+
+### Entry attribution (conclusion)
+
+**Zero static entries into `2978..2ada` from defined instructions** — the
+honest negative stands as the section's deliverable. Evidence is the
+enumerated sweep in the attribution table above, cited by row (not
+rewritten): 36 `search_instructions` operand runs over the 14006 defined
+instructions (`0x1000:29` 12 hits, `0x1000:2a` 7, `:296`–`:2ad` 24 patterns
+11 hits, `0x1000:45` 0, `0x1000:46` 8, `0x9c2`/`9c2` 2, `0x2978`/`0x2a6c`
+0, `0x29` 4, `0x2a` 17 — every raw hit recomputed, none in range), 6
+`search_byte_patterns` data probes (far-ptr pairs + raw LE words for
+`2978`/`2a30`/`2a6c`, all no-match across defined AND undefined bytes),
+and 2 `get_xrefs_to` controls (0 refs each — dead channel, reported not
+relied). The `[0x9c2]` writer set is unchanged (`41ee` sole writer,
+immediate `0x296d`, out of range). Caveat carried from the sweep rows:
+`search_instructions` is DEFINED-INSTRUCTION-ONLY, so intra-gap relative
+flow cannot surface — fall-in from the undecoded `2811..296c` pocket
+remains OPEN; the block is therefore fallthrough-only statically, with the
+entry mechanism unresolved among the three legs named in the deferral
+update above.
+
+Strongest dynamic lead, now correctly attributed (post-fix-round ownership
+of the `0x29` immediate-family row): the immediate `0x29bc` — numerically
+inside the block — is stored into BP-relative FRAME SLOTS by TWO different
+functions: `11bd:2f18` (`MOV [BP+-0x18],0x29bc`) inside `FUN_11bd_2ec9`
+(body `2ec9..2f4b`), and `11bd:44ab` (`MOV [BP+-0x5a],0x29bc`) inside
+`FUN_11bd_3ed8` (body `3ed8..4586`, the `[0x9c2]`-vector publisher family —
+`41ee` is the same function). Slot stores are not absolute vector cells →
+REJECTED as static entry writers; recorded as a RUNTIME-SLICE LEAD pointing
+at BOTH functions, lead-not-evidence. Second flagged-not-adopted contact:
+`CS:[0x2ad9]` (bytes `2ad9..2ada`, the block's last two cells) is a LIVE
+DATA TAIL CELL — read at `2adb` (`FUN_11bd_2adb` first insn,
+`MOV DX,CS:[0x2ad9]`) and written at `7739` (`setup_memory_hardware`,
+`MOV CS:[0x2ad9],DX`) — flagged-not-adopted; ownership question deferred.
+Task-2 report Concern 3 (copied): if a future ownership decision classes
+`2ad9..2ada` as data, the block's code range shrinks to `2978..2ad8` —
+noted so a later create doesn't blindly claim the tail.
+
+### Writes (before-state → after-state — ZERO-WRITE branch)
+
+NONE. Zero writes this task: no `disassemble_bytes` (real or dry), no
+`create_function`, no `rename_function`, no `set_comment`, no
+`save_program` — authorized by the zero-entry branch (nothing was walked,
+so nothing has a cited boundary to create at; the inherited cap + ratify
+rule was never engaged and stays intact for a future slice). The block's
+before-state and after-state are UNCHANGED, proven by two live read-backs
+run THIS task (project `fifa96`, program `/fifa96.exe`), each verbatim
+identical to the corresponding Task-1 row above:
+
+| Live re-read (this task) | Verbatim response | Matches Task-1 row |
+|--------------------------|-------------------|--------------------|
+| `get_function_by_address(11bd:2a6c)` | `{"error":"No function found for 11bd:2a6c"}` | no-function at MSW-clear locator ✓ (`2a6c..2a73` still UNDEFINED, still flagged-not-adopted) |
+| `find_code_gaps` (total 131, page offset 0/limit 100), covering row | `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | covering-row quote byte-exact ✓ — boundaries `2978`/`2ada` (−`0x1bd0`), size 355, neighbors unchanged |
+
+Scope guards honored by non-action: `11bd:2811..296c` and the twin orphan
+`02da..02f8` were not entered, not repaired, not mutated; no pre-existing
+function body touched (`FUN_11bd_2adb`, `restore_fs_gs_and_resume` states
+re-read only); `/media/felipe/FIFAPCCD/` untouched.
+
+### Deferrals
+
+- Unwalked attributed entries by name/address: **N/A** — zero attributed
+  entries (nothing to walk, nothing deferred-by-name at this step).
+- Unattributed remainder: **the whole block `2978..2ada` — all 355 bytes —
+  handed back NAMED-OPEN**, every byte still undefined listing
+  (`has_undefined_bytes:true` in the covering row above); the block is
+  larger than this slice may claim per the plan's scope check.
+- Runtime legs unchanged: `[0x40]` contents (slice-15 direction UNDECIDED)
+  and `[0x9c0]` installer identity (NOT-IN-EXE, runtime-written) are
+  UNCHANGED by this slice — no walk occurred that could name their
+  installer, and no direction claim was made anywhere in this section.
+- Out-of-scope skip pocket `2811..296c`: UNTOUCHED; tracked state stands in
+  this section's own gap table (left-pocket row `1000:43e1..1000:453c`
+  size 348 + pocket-edge `get_function_by_address(11bd:296c)` error — both
+  re-confirmed by the `find_code_gaps` page just re-read).
+- Twin orphan `02da..02f8`: UNTOUCHED; tracked state stands in
+  `## 02b7 twin completion` `### Pocket repair` tail row
+  (`get_function_by_address(11bd:02da)` → `{"error":"No function found for
+  11bd:02da"}` — orphan still stands).
+- Next-slice candidates: the FRAME-SLOT QUESTION — the `0x29bc` stores at
+  `FUN_11bd_2ec9`/`2f18` (`[BP+-0x18]`) and `FUN_11bd_3ed8`/`44ab`
+  (`[BP+-0x5a]`), and who consumes those slots (whether the frames reach
+  the block via any runtime path); plus the `CS:[0x2ad9]` tail-cell
+  ownership question (`2ad9..2ada` = the block's last two bytes as live
+  data across `FUN_11bd_2adb`/`setup_memory_hardware`@`7739`).
