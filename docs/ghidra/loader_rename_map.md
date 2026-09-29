@@ -1022,3 +1022,108 @@ the arm ignores — `CMP [BP-0x56],0x0` at `4578` reads no AX (3ed8
 tail rows). Ruled out: VOID (signature is `uint`, AX staged on the
 main paths), caller-gated status (no `OR AX,AX`/`JZ`/`MOV` of AX
 between `4575` and `457e`).
+
+### Verdict: 7c62 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on all four legs (evidence rows above, not rewritten):
+intake — zero stack words, `param_1` register-passed (fastcall),
+forwarded to `199a` (arg-intake row + `7c69` site); call order —
+`199a` at `7c69` → `016c` at `7c6c` → `79fc` via tail `JMP` at
+`7c89` (EMS-setup path only) → `0290(0)` at `7ced` → `092c` at
+`7d15` (verify) → `092c` at `7d1e` (fail path) → `1df7` at `7d39`
+(call-sequence statement); publish — `[0xeca]+=CX` at `7d25` plus
+the `ES:DI` zero-fill (`ES=[0xaa]+0x200`, `STOSW.REP` at `7d37`);
+return contract — word in AX on every path (`092c`-AX / `1df7`-AX /
+`79fc`-AX / entry-AX), ignored by the `4575` arm (VOID and
+caller-gated status ruled out). Renamed + plate-set +
+`save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_7c62 | 11bd:7c62 | intake zero stack words + `param_1` forwarded to 199a at 7c69; six-call order 7c69/7c6c/7c89/7ced/7d15/7d1e/7d39; publishes `[0xeca]+=CX` at 7d25 + `ES:DI` zero-fill at 7d37; AX word return per path, arm-ignored at 4578 | execute_exit_arm | none — behavioral (SI==0xb exit arm) |
+
+### Verdict: 092c (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+One-layer role (body `11bd:092c..0930` per `get_function_by_address`,
+2 insns, signature `void`, 0 FUN callees): indirect tail-transfer
+stub through the `[0x9bc]` mode-vector cell — `NOP` at `092c` +
+`JMP word ptr [0x9bc]` at `092d`, no `RET` (control never returns;
+the vector target owns the continuation). Called at `7d15`
+(verify; success returns its AX via the `7d1d` epilogue) and `7d1e`
+(fail path). Renamed + plate-set + `save_program` on `/fifa96.exe`
+— success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_092c | 11bd:092c | `NOP` at 092c + `JMP word ptr [0x9bc]` at 092d, no RET; 0 FUN callees; called at 7d15/7d1e | dispatch_mode_vector | none — behavioral (indirect tail transfer through [0x9bc]) |
+
+### Verdict: 1df7 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+One-layer role (body `11bd:1df7..1e1c` per `get_function_by_address`,
+16 insns, signature `void`, 0 FUN callees — the two `CALLF [0xaec]`
+sites are indirect, address-only, no dive): per-slot teardown loop
+over `[BX+0xadc]` words — `MOV BX,0x10` at `1df7`, `DEC BX` x2 per
+pass (`1dfa/1dfb`), `JS` exit at `1dfc`; nonzero slot
+(`MOV DX,[BX+0xadc]` at `1dfe` + `OR DX,DX` at `1e02` + `JZ` skip
+at `1e04`) issues `CALLF [0xaec]` with `AH=0xd` at `1e09` then
+`AH=0xa` at `1e0f`, then zeroes the slot
+(`MOV word ptr [BX+0xadc],0x0` at `1e14`); `RET` at `1e1c`.
+Called at `7d39` (fail path; its AX returned at `7d1d`).
+Renamed + plate-set + `save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_1df7 | 11bd:1df7 | BX 0x10→0 step -2 over `[BX+0xadc]` (1df7..1dfc); nonzero slot → `CALLF [0xaec]` AH=0xd/0xa at 1e09/1e0f + zero at 1e14; `RET` at 1e1c; 0 FUN callees; called at 7d39 | clear_slot_entries | none — behavioral (per-slot teardown loop) |
+
+NOT-CONFIRMED (no rename, no row): `FUN_11bd_0290`
+(body `11bd:0290..0292`, 1 insn, 0 FUN callees): `MOV DX,0x20`
+at `0290` with no `RET`/`JMP` in the delimited body — the role of
+`DX=0x20` and the exit mechanism are both missing from disassembly
+(the body falls through into the adjacent `FUN_11bd_0293` at
+`0293..02b4`; the `0290(0)` decompile surface reads past the
+delimited body, flagged per Task 1 — disassembly wins, so no
+one-layer role is stated).
+
+### Guard-deferred (7c62 arm): 11bd:199a
+
+Body `11bd:199a..1a85` (82 insns). 1 FUN callee (`FUN_11bd_27a4`,
+`11bd:27a4..27ae`) — a second layer past the `7c62` body. No dive,
+no rename.
+
+### Guard-deferred (7c62 arm): 11bd:016c
+
+Body `11bd:016c..0245`. 1 FUN callee (`FUN_11bd_2081`,
+`11bd:2081..2088`) — a second layer past the `7c62` body. No dive,
+no rename.
+
+### Guard-deferred (7c62 arm): 11bd:79fc
+
+Body `11bd:79fc..7a87`. 3 FUN callees (`FUN_11bd_0290` at
+`11bd:0290..0292`, `dispatch_mode_vector` at `11bd:092c..0930`,
+`FUN_11bd_0ef4` at `11bd:0ef4..0ef6`) — second layers past the
+`7c62` body (the `092c` layer is now a CONFIRMED leaf callee, still
+a second layer, so the layer rule fires regardless — same precedent
+as `22ad→25ee`). No dive, no rename.
+
+### Deferral unlock: 4575
+
+`execute_exit_arm` (`11bd:7c62..7d3d`) is now CONFIRMED+renamed, so
+the `7c62` call in the 3ed8 tail arm (`### Guard-deferred (tail):
+11bd:7c62`, site `4575`, `CALL 0x1000:9832` gated on SI==0xb at
+`4570/4573`) needs no dive — the callee role (gated `199a`/`016c`
+pair, EMS/main split, `CALLF` block + verify, `[0xeca]` publish +
+zero-fill, word return) is settled. What the arm receives back on
+return: a word in AX (`092c`-AX / `1df7`-AX / `79fc`-AX /
+entry-AX per path), which the arm ignores — the next insn
+`CMP [BP-0x56],0x0` at `4578` reads no AX before the `457e` gate.
+
+### Overlap note: 016c/199a
+
+Shared-helper verdict (no change to the `run_postload_init` row):
+`199a`/`016c` take identical zero-stack-word intake here (sites
+`7c69`/`7c6c`, gated on `[0xe00]` at `7c62/7c67`) and in
+`run_postload_init` (sites `62a0`/`62b7`, gated on `[0x2e]` at
+`6299/629e`) — same-role evidence on call shape, gate contexts
+differ as cited. Both callees are guard-deferred above (second
+layers `27a4`/`2081`), so no role claim beyond the shared intake
+shape is made here.
