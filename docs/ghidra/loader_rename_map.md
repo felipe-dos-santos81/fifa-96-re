@@ -786,3 +786,71 @@ Ruled out: pointer return (no pointer staged into AX before `RET`),
 count/status return (AX after `3246` is compare scratch for the
 `[0xecc]` guards, never staged; signature is `void`). Effects are
 globals-only (publish row above).
+
+### Verdict: 30d8 (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on all four legs (evidence rows above, not rewritten):
+intake source — static filename word `0x1190` pushed at `30f1`,
+prologue-gated on `[0xe70]<0` (`30ea..30ef`), opened once via
+`file_open_dos` at `30f4`, one-shot latch `[0xe72]` at `30dc..30e7`;
+trio order — open (`30f4`) → seek (`3199`, offsets
+`[BP-0x94]`/`[BP-0x96]`) → read (`31a6`, `0xb0` into `[BP-0xb2]`,
+loop-back at `31b0` while AX==`0xb0`); publish target — post-loop
+maxima/flags `[0x14]`, `[0x120e]`, `[0xa16]`, `[0x1206]`, `[0xecc]`,
+`[0x11d2]`, `[0xece]`, `[0x15]` (`31b3..3265`); return contract —
+VOID (`LEAVE`/`RET` at `326a/326b`, no AX staging, `void` signature;
+pointer/count/status ruled out). Renamed + plate-set +
+`save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_30d8 | 11bd:30d8 | intake `0x1190` push at 30f1 + `[0xe70]<0` gate at 30ea + latch `[0xe72]` at 30dc; trio open 30f4 → seek 3199 → read 31a6 (`0xb0` into `[BP-0xb2]`); publishes `[0x14]/[0x120e]/[0xa16]/[0x1206]/[0xecc]/[0x11d2]/[0xece]/[0x15]` at 31b3..3265; `LEAVE`/`RET` at 326a/326b, void signature | read_static_bw_file | none — behavioral (one-shot static-file reader) |
+
+### Verdict: 304f (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+One-layer role (body `11bd:304f..30d7` per `get_function_by_address`,
+53 insns, signature `undefined2`; disassembly + decompile read this
+task, no deeper dive): header vetting probe over the `30d8` stack
+buffer. Call-site args at `311c` are (`[BP-0xb2]` buffer at `[BP+4]`,
+`0` at `[BP+6]`, `0xb0` length at `[BP+8]`). Each pass seeks to
+`[0x11da]`/`[0x11dc]` via `file_seek_dos` (`CALL 0x1000:7b9a` at
+`3060`) and reads `[BP+8]` bytes via `file_read_dos`
+(`CALL 0x1000:7bb2` at `306b`), exiting on short read (`CMP AX,[BP+8]`
+at `3070` + `JNZ` at `3073`); `'MF'` (`CMP 0x4d/0x46` at `3078/307d`)
+accumulates words at `BX+2`/`BX+4` into `[0x11da]`/`[0x11dc]`
+(`ADD`/`ADC` at `3089/308d`); `'BW'` (`CMP 0x42/0x57` at `30a5/30aa`)
+returns 1 (`MOV AX,0x1` at `30b0`); any other magic issues disk-reset
+(`MOV AH,0xd` + `INT 0x21` at `30b5/30b7`) with a retry countdown
+(`[BP-2]` from 2 at `3053`, `DEC` at `30b9`, `JGE` loop at `30c0`);
+exhaustion with `[BP+6]!=0` raises via `print_error_message`
+(`PUSH -0x2` at `30c8`, `CALL 0x1000:3e7d` at `30ca`), then zeroes
+`[0x11da]`/`[0x11dc]` (`30d0/30d3`) and returns 0. Renamed +
+plate-set + `save_program` on `/fifa96.exe` — success.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_304f | 11bd:304f | seek 3060 + read 306b over `[BP+4]` buffer / `[BP+8]` length; MF accumulate at 3089/308d; BW→1 at 30b0; disk-reset retry 30b5..30c0; fail raise at 30ca then zero `[0x11da]/[0x11dc]`, return 0 | vet_file_header | none — behavioral (header vetting probe) |
+
+### Guard-deferred: 304f second layer (11bd:300b)
+
+`FUN_11bd_300b` (body `11bd:300b..304e` per `get_function_by_address`,
+called at `309f` on the `'MZ'` path, `CALL 0x1000:4bdb`) is a second
+layer past the `vet_file_header` body — recorded address-only, no
+dive, no rename. The other second-layer call (`print_error_message`
+at `30ca`) needs no dive: CONFIRMED+renamed (22ad verdict section).
+
+File-trio confirm (no re-rename, call context matches slice-1 roles):
+`file_open_dos` (`5fb8`, at `30f4`), `file_seek_dos` (`5fca`, at
+`3199` + `3060`), `file_read_dos` (`5fe2`, at `31a6` + `306b`).
+
+### Deferral unlock: 457e
+
+`read_static_bw_file` (`11bd:30d8..326b`) is now CONFIRMED+renamed, so
+the `30d8` call in the 3ed8 tail arm (`### Guard-deferred (tail):
+11bd:30d8`, site `457e`, gated on `[BP-0x56]==0` at `4578/457c`) needs
+no dive — the callee role (one-shot `0x1190` static-file read: open
+once, vet through `vet_file_header`, seek/read `'BW'` loop, publish
+maxima/flags to globals) is settled. What the arm receives back on
+return: nothing — `30d8` returns void (`LEAVE`/`RET` at `326a/326b`,
+no AX staging), effects are globals-only, and the arm falls straight
+into the `4581..4586` epilogue.
