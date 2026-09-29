@@ -2708,7 +2708,7 @@ matches — both runs recorded):
 | Sweep run | Hits | Coverage/notes |
 |-----------|------|----------------|
 | `[BX+` (no space) | 0 | render-form probe (negative) |
-| `[BX +` (combined) | 500 **cap-truncated** (`instructions_scanned:7779` of 14006) | discovery run; the `offset=500` retry returned the identical first-500 window (pagination is a no-op for this tool) — stub-zone `ADD byte ptr [BX + SI],AL` flood hits the match cap → superseded by the sign+digit partition below (COMPLETE) |
+| `[BX +` (combined) | 500 **cap-truncated** (`instructions_scanned:7779` of 14006) | discovery run; the `offset=500` retry (an accepted tool parameter — `search_instructions` takes `offset`) returned the identical first-500 window: pagination is a NO-OP, demonstrated live this fix round with `search_instructions(operand_pattern="[BX +", offset=500, limit=1)` → first match verbatim `{"address":{"address":"1000:0009"},"function":"FUN_1991_0c9e","mnemonic":"ADD","operands":"byte ptr [BX + SI], AL","bytes":"0000"}` (`"match_count":1,"truncated":true`) — match index 500 == index 0; the stub-zone `ADD byte ptr [BX + SI],AL` flood hits the match cap → superseded by the sign+digit partition below (COMPLETE) |
 | `[BX + -` (all negative disps) | 10 | full: `4cc3`/`6198`/`6270`/`6277`/`7687`/`768e`/`769a`/`76a4`/`1991:2f65`/`1991:3872` — arithmetics in window table |
 | `[BX + 0` (all positive disps, single combined run) | **320** (`truncated:false`, `instructions_scanned:14006` — envelope re-quoted live this fix round; Task-1's first response tail was lost to display truncation) | reconciles exactly with the 16-run digit partition below (0+57+92+3+37+32+48+7+10+0+12+0+14+1+7+0 = 320) |
 | `[BX + 0x0` … `[BX + 0xf` (digit partition = complete enumeration of positive disps) | 0+57+92+3+37+32+48+7+10+0+12+0+14+1+7+0 = **320** | every run `truncated:false` over 14006; totals sum and reconcile `[BX + 0` |
@@ -2731,8 +2731,11 @@ one `[BP]` re-run; both recorded on their rows). The 59 distinct = 11
 literal + 5 MOV-constant + 4 register-census + 39 form/window patterns
 (the 3 render-format probes `[BX+`-no-space, `[BX + D +`, `[BX + S +` are
 among the 39, all negative, exact forms kept). Fix-round verification runs
-(`[BX + 0` envelope re-quote etc.) are recorded in the fix subsection, not
-in the 61.
+(`[BX + 0` envelope re-quote, the `offset=500` pagination probe,
+`0x1ea6` probes) are recorded in the fix subsection, not in the 61 — and
+the `[BX +` offset-retry counted among the 61 is EVIDENCED by that probe
+(match index 500 == index 0), so the 61 = 59 distinct + 2 duplicates
+reconciliation stands with proof, not recollection.
 
 ### Base→window arithmetic (every constant-base candidate: hit resolves to `[0x9ba]` or explicit rejection)
 
@@ -2825,7 +2828,15 @@ walked → precedence-cautious OPEN), `65cb` (`65c3`: none), `665e` (`6655`:
 none), `6685/669d` (`probe_bios_model`: none), `686b/686e` (`6869`: none),
 `7162` (`7160`: none), `73bb` (functionless: none), `7cf5`
 (`execute_exit_arm`: `7bf4 MOV EBX,0x1000` — 32-bit load, carry would give
-`0x1014` ∉, clobber-unwalked → OPEN); plus implicit
+`0x1014` ∉, clobber-unwalked → OPEN); overlay-bank `[BX+disp]` forms
+named per review (class-OPEN — dynamic bases, no owner constant in the
+33-site BX census): `1991:4523` `SI←CS:[BX+0x44b8]` (owner
+`FUN_1991_44d6` — the same body owning the `452c`/`453e` CS-table
+load/JMPF forms), `1991:4f05` `word ptr [BX + 0x4d7c],0x0` store (owner
+`FUN_1991_4efe`, pairing with the `1991:4f91 JMPF CS:[BX+0x4d78]`
+transfer above), `1991:0ce0`/`1991:0ce3` frame-store `[BX+0x22],SS` /
+`[BX+0x26],BP` (owner `FUN_1991_0c9e` — IRET-frame builder shape, the
+overlay analogue of the `11bd:0e22/0e28` orphan sites); plus implicit
 `MOVS`/`STOS` `[SI]`/`[DI]` forms (no rendered operand — out of sweep
 visibility, e.g. the `1ed6 f3a5 MOVSW.REP` seen slice-19 in `1e9f`).
 
@@ -2878,7 +2889,8 @@ provisionally); READERS-FOUND-REACH-TRANSFER is refuted at its first
 condition. Armed-conditional phrasing (exact, once): the store at `6255`
 fires only when the `3ed8` dispatch cascade arms `0x29bc` through the
 `452f`/`4536`→`6250` path; even in that armed state, within the enumerated
-static surface (61 pattern runs × 14006 defined instructions, 4 constant
+static surface (61 recorded `search_instructions` calls — 59 distinct
+patterns — × 14,006 defined instructions, 4 constant
 base-load censuses, complete `[base+disp]` form partition, 127-instruction
 owner dump, controls quoted) the cell value is NEVER read and therefore
 reaches NO transfer — it dies in data at the cell. The negative binds the
@@ -2952,3 +2964,22 @@ dump scope. The NONE-FROM-DISCIPLINE verdict is unchanged: every re-marked
 row is a NO site for `[0x9ba]` consumption (none is a `[0x9ba]` read; the
 candidate constants miss the window even if carried); the re-marks widen
 the honest-hole list, not the reader set.
+
+**Round 2 (scoped re-review, 2026-09-29):** the pagination claim challenged
+as unevidenced is LIVE-EVIDENCED — `search_instructions(program=
+/fifa96.exe, operand_pattern="[BX +", offset=500, limit=1)` returned the
+index-500 slot as match index 0: first match verbatim
+`{"address":{"address":"1000:0009"},"function":"FUN_1991_0c9e",
+"mnemonic":"ADD","operands":"byte ptr [BX + SI], AL","bytes":"0000"}`,
+`"match_count":1,"instructions_scanned":5,"truncated":true` — the tool
+accepts `offset` but ignores it; the `[BX +` row now carries this
+reproduction, so the 61 calls = 59 distinct patterns + 2 duplicates
+(`[BX +` offset-retry, `[BP]` re-run) reconciliation stands (the fix-round
+probe itself is excluded from the 61). Headline unit aligned at every
+mention (sweeps total row, disposition paragraph — "61 recorded
+`search_instructions` calls — 59 distinct patterns — × 14,006 defined
+instructions", Writes row `×61 calls (59 distinct)`). Overlay disp-forms
+`1991:4523` (`FUN_1991_44d6`), `1991:4f05` (`FUN_1991_4efe`) and
+`1991:0ce0`/`0ce3` (`FUN_1991_0c9e`) given an explicit named row in the
+OPEN enumeration. Verdict and all window dispositions unchanged; zero
+Ghidra writes (one read-only search call this round).
