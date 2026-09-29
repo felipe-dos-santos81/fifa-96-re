@@ -3113,4 +3113,92 @@ unstaged.
   slice-18's remaining deferrals stand (its line 1 was already discharged
   in slice-19), and slice-17's open legs (fall-in `2811..296c`,
   runtime-installed pointers, `CS:[0x2ad9]` tail cell) stand as
-  recorded; slice-8 `publish_mode_vector` records unchanged.
+   recorded; slice-8 `publish_mode_vector` records unchanged.
+
+### Fix wave (final whole-branch review 2026-09-29 — DI-negative ledger completion + two word-level corrections; every claim verified live this wave; zero Ghidra writes)
+
+Read-only calls this wave: `search_instructions` ×4 (`[DI + -` full run —
+verbatim `match_count:6`, `instructions_scanned:14006`, `truncated:false`;
+`[0x9b` re-run for the Minor-2 count — verbatim `match_count:17`,
+`truncated:false`; two function-scoped `MOV`+`DI, 0x` censuses — owner
+`FUN_11bd_79fc` `match_count:1`, sole hit `{"address":"11bd:7a0e",
+"operands":"DI, 0x4","bytes":"bf0400"}` (`instructions_scanned:49`), owner
+`FUN_11bd_7290` `match_count:0` (`instructions_scanned:59`)),
+`get_function_by_address` ×5 (`11bd:7c37` → verbatim
+`{"error":"No function found for 11bd:7c37"}`; `11bd:7c2b` → same-shape
+error; `11bd:7a11` → `FUN_11bd_79fc`, body `79fc..7a87`; `11bd:7311` →
+`FUN_11bd_7290`, body `728b..7321`; `1991:20ae` →
+`{"error":"No function found for 1991:20ae"}`), `disassemble_function` ×1
+(`FUN_11bd_79fc`, `count:49` — the `7a11` precedence proof), `read_memory`
+×4 (hex-vs-data 4/4 MATCH: `11bd:7311`3 `[141,101,250]`→`8d65fa` ✓;
+`11bd:7a11`5 = `11bd:7c37`5 `[38,102,139,69,252]`→`26668b45fc` ✓ — a
+byte-identical load-twin pair; `1991:20a6`16
+`[117,6,199,70,0,56,0,64,57,78,2,117,6,199,70,2]`→
+`7506c74600380040394e027506c74602` ✓), `get_xrefs_to(11bd:7a11)` ×1
+(dead-channel control, ×0 — cited-precedence from the body dump remains
+authority), `find_code_gaps(min_size=1)` ×1, `get_address_spaces` ×1
+(single default `ram` space — the `1000:`/`11bd:`/`1991:` renders are the
+same linear bytes under different paragraph notations; the gap envelope
+itself crosses notations (`end":"1991:597f"`), evidencing the
+`+0x1bd0`/`−0x9910` deltas used below). Wave runs recorded HERE, per the
+standing convention (fix verification runs are excluded from the 61-call /
+59-pattern reconciliation, cf. the Fix round section).
+
+**(a) `[DI + -` full ledger — all six sites of the run, complete
+dispositions.** Important 1: three negative-DI sites (`7311`, `7a11`,
+`7c37`) appeared in NO ledger row, while the `[DI +` census row promised
+"reaches checked per-site below" and the exhaustiveness paragraph promised
+class-OPEN sites are "enumerated below". The run's other three sites
+(`2347`, `63de`, `63e1`) were already resolved in the Base→window table.
+Restating all six closes both promises; 3 committed + 3 appended = 6 = the
+run's `match_count:6` — no unaccounted sixth site; the reviewer's 3-vs-6
+arithmetic reconciles exactly.
+
+| Site | Render (verbatim, bytes) | Owner | Disposition | Per-site arithmetic / precedent |
+|------|--------------------------|-------|-------------|--------------------------------|
+| `11bd:2347` | `CMP byte ptr [DI + -0x1],0x0` (`807dff00`) | `print_error_message` | REJECT (committed row — restated for ledger completeness) | `232d DI=0x15e8` → `0x15e7` ∉ `0x9b8..0x9bf` |
+| `11bd:63de` | `SUB AX,word ptr [DI + -0x2]` (`2b45fe`) | `FUN_11bd_6395` | REJECT (committed row) | `6396 DI=0x6341` → `0x633f` ∉ |
+| `11bd:63e1` | `SUB DI,word ptr [DI + -0x4]` (`2b7dfc`) | `FUN_11bd_6395` | REJECT (committed row) | `63ac DI=0x4a` → `0x46` ∉ (alt ordering `6396` → `0x633d` ∉) |
+| `11bd:7311` | `LEA SP,[DI + -0x6]` (`8d65fa`) | `FUN_11bd_7290` (body `728b..7321`) | **NON-LOAD — appended row** | LEA computes an address, never reads memory — the doc's own `6198`/`1991:3872` (and `1868`) LEA treatment; owner additionally has NO constant DI load (function-scoped census `match_count:0`) — moot either way |
+| `11bd:7a11` | `MOV EAX,dword ptr ES:[DI + -0x4]` (`26668b45fc`) | `FUN_11bd_79fc` (body `79fc..7a87`; 49-insn dump this wave) | **REJECT-with-arithmetic — appended row** (live evidence CORRECTS the review's "no constant DI base" parenthetical: the owner DOES have a constant base and it ADJACENTLY precedes) | `7a0e bf0400 MOV DI,0x4` is the immediately-preceding instruction — zero insns between it and `7a11`, no body branch renders a target at `0x1000:95e1`(`=7a11`); exactly the `626d`→`6270` cited-precedence form. Carried: `0x4 − 0x4 = 0x0` ∉ `0x9b8..0x9bf` (dword reach `0x0..0x3` ∉; additionally an ES-override read — the DS-default cell is not even in the addressed segment). Unprovable-base treatment would file it class-OPEN; under EITHER label it is NOT a read of `[0x9ba]` — verdict-neutral, negative survives |
+| `11bd:7c37` | `MOV EAX,dword ptr ES:[DI + -0x4]` (`26668b45fc` — byte-identical twin of `7a11`) | **none** — `{"error":"No function found for 11bd:7c37"}` | **class-OPEN, functionless-in-orphan-gap — appended row**, exactly as reviewed; same no-owner-dump class as the `73bb` row | sits inside the NAMED orphan gap — `find_code_gaps` row verbatim `{"start":"1000:97fb","end":"1000:9831","size":55,"has_undefined_bytes":false,"has_orphaned_instructions":true,"before_function":"FUN_11bd_7be9","after_function":"execute_exit_arm","after_function_address":"11bd:7c62"}`; deltas `0x97fb−0x1bd0=7c2b` ✓, `0x9831−0x1bd0=7c61` ✓, site `0x7c37+0x1bd0=0x9807` ∈ gap ✓; the earlier `7c62` section already records this `11bd:7c2b..7c61` EMS block unenclosed (`get_function_by_address(11bd:7c2b)` same error live); no owner dump exists to cite → never silently rejected |
+
+Six-site outcome: ZERO new readers of `[0x9ba]` (two appended
+resolutions, one appended class-OPEN hole, one NON-LOAD); the
+NONE-FROM-DISCIPLINE verdict and every committed disposition stand
+unchanged; the OPEN enumeration gains `7c37` as a named hole.
+
+**(b) Two Minor corrections of committed wording (the committed rows are
+NOT rewritten here; these are the authoritative readings):**
+
+- **Minor 2 — the `[0x9b` sweeps row:** as-written "the 5 `[0x9b8]` rows"
+  is a miscount. The live re-run (17 hits, `truncated:false`, scanned
+  14006) contains exactly **4** bracketed `[0x9b8]` sites — `39b4`,
+  `466c`, `4677`, `57af`. `2dac MOV AX,0x9b8` is an UNBRACKETED immediate
+  — correctly absent from the `[0x9b` run (it lives on the `0x9b8`
+  literal row, where it belongs). Read the row as "the 4 `[0x9b8]` rows":
+  the enumeration then sums `6ea2`1 + `[0x9b4]`4 (`199f`/`5f7f`/
+  `1991:0ff3`/`1991:2a13`) + `[0x9b6]`3 (`1a1d`/`1ef1`/`1000:0b9d`) +
+  `[0x9b8]`4 + `6255`1 + `[0x9bc]`2 + `[0x9be]`2 = **17**, matching the
+  stated (correct) total; as-written it summed 18.
+- **Minor 3 — the `9be` sweeps row, `1991:20a6` parenthetical:** the
+  cited-only rejection "other-bank code target" lacked the bank-render
+  delta arithmetic its siblings (`4dcd`: `eb1f` → `4dcd+2+0x1f=4dee`;
+  `69be−1bd0=4dee`; `2dd6/2de7`: `49bc−1bd0=2dec`) carry. Quoted form
+  now: live `read_memory(1991:20a6,16)` hex
+  `7506c74600380040394e027506c74602` — `7506` = `JNZ rel8` →
+  `20a6+2+6 = 20ae`, same bank; the rendered `0x1000:b9be` is that
+  landing's other paragraph notation:
+  `0x19910+0x20ae = 0x1b9be = 0x10000+0xb9be`, i.e. `b9be − 0x9910 = 20ae`
+  (the 1991↔1000 paragraph delta). The landing holds DEFINED CODE
+  (`39 4e 02` = `CMP word ptr [SI+0x2],CX`, read bytes; `1991:20ae` is
+  functionless orphan code inside the `has_orphaned_instructions:true`
+  gap `1000:b860..bab2`) — a branch-flow target, NOT a data-cell operand:
+  the FALSE-STRING rejection stands, now with its arithmetic cited.
+
+Write-tool inventory for this wave: **zero** — no `disassemble_bytes`, no
+`create_function`, no rename, no comment, no `set_global`, no
+`save_program`; no Ghidra transaction opened; the listing was not modified
+(`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged).
+The negative survives: all three findings were enumeration hygiene; the
+completed six-site ledger adds no reader of `[0x9ba]`.
