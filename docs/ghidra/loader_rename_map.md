@@ -4551,7 +4551,7 @@ runs `truncated:false`, `instructions_scanned:14638` unless stated):
 | byte pattern `803efe0d` | 1 | `11bd:2978` only — the CMP-byte form is program-unique (the head itself; undefined bytes ARE scanned by the raw pattern channel) |
 | byte pattern `3efe0d` | 1 | `11bd:2979` only (offset+1 = the `3e fe 0d` window on the same instruction — consistent single occurrence) |
 | byte pattern `fe0d` (raw, caution) | 4 | `1132` FALSE-POSITIVE (context `1128 e843fe0b e83ffe0c e83bfe0d e837fe0e` — `1132..1133` = rel16 displacement `fe3b` of `1130 CALL`: `1134−0x1c5 = 0f6f`, orphan-band defined bytes not in a body (`get_function_by_address(1132)` → error), branch displacement bytes — not a data contact); `2894` = disp16 field of `2892` WRITE ✓; `28a2` = disp16 field of `28a0` WRITE ✓; `297a` = disp16 field of `2978` READ ✓ — partition reconciles 1:1 against the operand/pattern runs above; hint-partition `fe0d`@`3059` NOT reproduced (all three space-readings probed negative, ¶ above) |
-| family control `[0xd` (absolute `0xd00..0xdf` window) | 95 | `[0xdfe]` contributes exactly 2 (both WRITEs) — READS zero; adjacency live: `[0xdfc]` `28a5 STR word ptr [0xdfc]` (pocket, TR store — feeds the head's `2999` BX load), `[0xdff]` ×9 (`2afd` `FUN_11bd_2aeb` + `setup_memory_hardware` leg + `execute_exit_arm`/`7b50`/`7bb6` CMPs, `77ef SETA SS:`, `7836/7875` writes) — other-cell, cite-only; the `[0xd60..0xd6c]`/`[0xd5e]`/`[0xd70]` cluster rows appear under both pocket/H13/head owners (head-internal contacts listed in R3 row) |
+| family control `[0xd` (absolute `0xd00..0xdf` window) | 95 | `[0xdfe]` contributes exactly 2 (both WRITEs) — READS zero; adjacency live: `[0xdfc]` `28a5 STR word ptr [0xdfc]` (pocket, TR store — feeds the head's `2999` BX load), `[0xdff]` ×12 (fix-wave 1 — count corrected from the original ×9, live-bracket run `[0xdff]` → `match_count:12`, `truncated:false`: CMPs `2afd`/`786b`/`78d1`/`794f`/`796f`/`7b7d`/`7bcf`/`7c6f`/`1991:593d`, `77ef SETA SS:`, writes `7836`/`7875`) — other-cell, cite-only; the `[0xd60..0xd6c]`/`[0xd5e]`/`[0xd70]` cluster rows appear under both pocket/H13/head owners (head-internal contacts listed in R3 row) |
 
 Constant-base census at this-slice time (supersedes slice-20's
 14006-era counts; window arithmetic re-derived against the SAME
@@ -4567,16 +4567,16 @@ constant equals `0xdfe/0xdff`; reach requires `base+disp ≡ 0xdfe..0xdff`:
 | base (census value) | required disp for `0xdfe` | site present? | verdict |
 |---------------------|---------------------------|---------------|---------|
 | `0x98e` (`6a97`) | `+0x470` | `[BX + 0` 320-hit list: no `0x470` disp | REJECT (vacuous-owner basis: slice-20 body-scan `6a68..6aab` zero sites) |
-| `0xf7d` (`7684`) | `+0x81` | negative (partition list: `+0x81` absent) | REJECT (owner sites `7687/768e` are `−0x3/−0x2` → `0xf7a/0xf7b` ∉) |
+| `0xf7d` (`7684`) | `−0x17f` (`3965−383 = 3582` ✓; as disp16 renders `+0xfe81`) | targeted probes `[BX + -0x17f` → 0 AND `[BX + 0xfe81` → 0; the complete `[BX + -` 10-hit list carries only `−0x1..−0x4` | REJECT (owner sites `7687/768e` are `−0x3/−0x2` → `0xf7a/0xf7b` ∉) — fix-wave 1: printed value was `+0x81`, a slip; corrected, verdict stands |
 | `0xd12` (`2804`) | `+0xec` | absent | REJECT |
 | `0x1000` ×14 (band preludes/islands) | `−0x202` | `[BX + -` full 10-hit list: no `−0x202` | REJECT ×14 (band-handler `[BX+disp]` sites: none in the 10; their cell ops are absolute) |
-| `0x2824` (`626d`) | `−0x1a46` | absent | REJECT (sites `6270/6277` → `0x2820/0x2822` ∉ — the known mirror rows) |
+| `0x2824` (`626d`) | `−0x1a26` (`10276−6694 = 3582` ✓; as disp16 renders `+0xe5da`) | targeted probes `[BX + -0x1a26` → 0 AND `[BX + 0xe5da` → 0; absent from the complete negative lists | REJECT (sites `6270/6277` → `0x2820/0x2822` ∉ — the known mirror rows) — fix-wave 1: printed value was `−0x1a46`, digit transposition; corrected, verdict stands |
 | `0x11e4` (`3465/363b/36a4`) | `−0x3e6` | absent | REJECT (sites `+0x2..+0x26` → `0x11e6..0x120a` ∉) |
 | `0x2d0a` (`7697`) | `−0x1f0c` | absent | REJECT (sites → `0x2d07/0x2d08` ∉) |
-| `0xe000/0xf000/0xfffe/0xffff/0xe822` (`0d7c/3f13/3f18/5ff7/1e6b`) | `+0x2dfe/+0x1dfe/+0xe00/+0xdff/+0x25dc` | all absent in the positive envelope + `[BX + -` list | REJECT ×5 |
-| small constants `{0,1,2,3,4,5,8,0xa,0xb,0x10,0x40,0x200}` (census owners `12a1/14a4/1df7/23cf/3bea/5e9e/62ce/63c4/6995/69ac/6afe/707f/711f/7730/78ec/795c/79ff/7a23/1991:2034/1991:3897`) | `0xdfe−b ∈ {0xdee,0xdf3,0xdf4,0xdf6,0xdf9..0xdfd,0xdbe,0xbfe,…}` | NONE present in any partition list (no `+0xd??`/`+0xdf?`/`+0xbfe` render among the 320/68/70 positives; the `dfe`-substring runs already cover any `0xdfe` render) | REJECT per-value ×20 |
+| `0xe000/0xf000/0xfffe/0xffff/0xe822` (`0d7c/3f13/3f18/5ff7/1e6b`) | `+0x2dfe/+0x1dfe/+0xe00/+0xdff/+0x25dc` | all absent in the positive envelope + `[BX + -` list; fix-wave targeted probes on the `0xe822` value: `[BX + 0x25dc` → 0 AND `[BX + -0xda24` → 0 — recompute CONFIRMS `+0x25dc` (`0xe822 + 0x25dc = 0x10Dfe ≡ 0xdfe (mod 0x10000)` ✓; the review-suggested `+0xf5dc`/`−0xa24` gives `0xDE22` — refuted, original value stands) | REJECT ×5 |
+| small constants `{0,1,2,3,4,5,8,0xa,0xb,0x10,0x40,0x200}` (census owners `12a1/14a4/1df7/23cf/3bea/5e9e/62ce/63c4/6995/69ac/6afe/6e4f/707f/711f/7730/78ec/795c/79ff/7a23/1991:2034/1991:3897` — fix-wave 1: `6e4f MOV BX,0x200` (`FUN_11bd_6e20`) added, omitted from the original owner list; its required disp is the already-printed `+0xbfe`, not `+0xdbe` which belongs to the `0x40` owners `711f/795c`) | `0xdfe−b ∈ {0xdee,0xdf3,0xdf4,0xdf6,0xdf9..0xdfd,0xdbe,0xbfe,…}` | NONE present in any partition list (no `+0xd??`/`+0xdf?`/`+0xbfe` render among the 320/68/70 positives; the `dfe`-substring runs already cover any `0xdfe` render; fix-wave targeted probe `[BX + 0xbfe` → 0) | REJECT per-value ×21 |
 | SI/DI/BP constants (62/35/1 values, full list quoted in the census runs above) | required disps `{0x997,0xa1e,0x486,0xdde,0xdf9,0x536,0xdf6,0xd86,0xb2e5,0xdfd,0xdfe(ESI 0xf000 half),0x6ffe,0x7fe,0x9fe,0x8bfe,0xdee,0xdf4,0xdfb,0xdf3,0xdfc,0xdf5,0xdf8,0xddc,0xdc7,0xdb6,0xd66,0x4c6,0x4be,0xae8,0xa6bd,0x8dfe,0x382,0xa101,0x65e,0x99b4,0xc62,…}` and DI `{0xe72…0xdce,0x1de,0x215,0x203,0x3d2,0x66,0xd9e,0x53e,…}` and BP `0xdfd` | per-site check against the live partition lists (`[SI + 0` 68 hits — disps `0x0..0x68`; `[DI + 0` 70 — `0x0..0xc,0x1,0x3,0x66a,0x28,0x2a`; `[BP + 0` capped-500 discovery — observed `0x0..0x26`+`0xff00..0xff7e` group, targeted `[BP + 0xdf` = 0 closes the single required value): NONE match | REJECT ×all resolved; negative-side renders `[BX/SI/DI + -` (10/15/6 hits, complete lists quoted above) carry no `−(base−0xdfe)` value → REJECT |
-| head-internal window site `29a2 MOV byte [BX+5],0x89` | BX = `[0xdfc]` runtime (`2999`); site executes under DS←`0x8` (`29a0` immediately before) | linear reach `0x10000+0xdfe` requires `(0x80 + ((BX+5) mod 0x10000))` — max `0x80+0xFFFF = 0x1007F < 0x10Dfe` | REJECT by segment arithmetic, BX-independent (site cited for completeness; head bytes are undefined → invisible to the sweep anyway) |
+| head-internal window site `29a2 c6470589 MOV byte [BX+5],0x89` (live re-cite `read_memory(11bd:299d,10)` → `{"data":[184,8,0,142,216,198,71,5,137,139],"hex":"b808008ed8c64705898b"}` ✓ — DS←`0x8` at `29a0` immediately before the store) | BX = `[0xdfc]` loaded `2999` under the entry DS; the value's only known writer is the pocket `28a5 STR word ptr [0xdfc]` (`0f000efc0d`, task-register selector — cited this pass in the `[0xd` family row); site linear = `0x80 + ((BX+5) mod 0x10000)` ∈ `0x80..0x1007F` | CELL SEGMENT MODEL DECIDES: DS=`0x1000` model → cell linear `0x10Dfe` > `0x1007F` — out of reach (the original rejection holds under THIS model only); DS=`0x20` model — live in-map (R3 `2a1d/2a1f` DS←`0x20` then byte-test of `[0x47]`, H13 `ES←0x20` restore of the `[0xd64]/[0xd66]` pair) → cell linear `0x2Dfe`, which IS inside `0x80..0x1007F`: hit ⟺ `BX+5 ≡ 0x2DFE−0x80 = 0x2D7E`, i.e. `BX = 0x2D79` (reviewer arithmetic ✓ reproduced); offset-wrap hit under the `0x1000` model would need `BX ≡ 0xD79` | **RECLASSIFIED (fix-wave 1) → BX-dependent OPEN-WINDOW, NOT REJECT.** Of the two reviewer-sanctioned remedies the reclassification is chosen because it is the honest enumeration posture (never silently reject): the selector-alignment argument (`0x2D79` = descriptor index `0x5AF`, RPL `1` — an LDT spanning `0x2D78` bytes — not a plausible STR result) establishes implausibility only, not static impossibility — the runtime value is unbounded. Downstream conclusions unchanged either way: the site is head-internal, byte-wide, UNDEFINED listing — invisible to the defined-insn sweep, no sweep negative binds it. The original "REJECT by segment arithmetic, BX-independent" wording is WITHDRAWN as over-generalizing one model (same failure class as slice-22's H8 arrow — false arithmetic justification inside otherwise-correct text) |
 
 Reader/writer closure: `[0xdfe]` defined WRITEs `{2892, 28a0}` (sole
 static writer set this pass — the pocket flag-legs: write-0 / write-1
@@ -4584,7 +4584,10 @@ inside `FUN_11bd_2864`'s `[0x2e]` switch stream, owners cited); defined
 READs `∅`; the sole known READ is the unowned head `2978` (byte-cited).
 Runtime writer status: OPEN-WINDOW holes stand — dynamic DS-relative
 sites (base-not-static): `2df8 PUSH [BX+0x2]` (BX=`[BP+0x6]` caller
-pointer; reaches `0xdfe` iff BX=`0xdfc`), `09ed FNSAVE [BX]` (H9 body,
+pointer; reaches `0xdfe` iff BX=`0xdfc`), `29a2 MOV byte [BX+5],0x89`
+(head-internal, DS←`0x8`, BX=`[0xdfc]` STR value — reaches the cell
+linear `0x2Dfe` under the DS=`0x20` model iff BX=`0x2D79`, reclassified
+from REJECT in fix-wave 1 — arithmetic row above), `09ed FNSAVE [BX]` (H9 body,
 BX←`[0xf82]` runtime, 108-byte write footprint), `0227 FNSAVE [BX]`,
 `4629 CMP [BX]` (parse_config — read only), `0978` orphan-junk `[BX+SI]`
 class, `1e73 ADC [BX+SI]`, `0bd4/0bd8` (`[BX+SI]` pair, SI=0x1028 →
@@ -4653,3 +4656,49 @@ internally reconciled; three-way with emission on the head chunks),
 ×1 (empty). NO create/rename/comment/define/save; no transaction
 opened; `fifa96.rep` churn left unstaged; `/media/felipe/FIFAPCCD/`
 untouched.
+
+### Fix wave 1 (review 2026-09-29 — text-only, zero Ghidra writes beyond reads)
+
+Live verification this wave (all new read calls, before any edit):
+targeted `search_instructions` disp probes ×7 — `[BX + -0x17f` → 0,
+`[BX + 0xfe81` → 0, `[BX + -0x1a26` → 0, `[BX + 0xe5da` → 0,
+`[BX + -0xda24` → 0, `[BX + 0x25dc` → 0, `[BX + 0xbfe` → 0 (every
+`match_count:0`, `truncated:false`, `instructions_scanned:14638`);
+bracket re-run `[0xdff]` → `match_count:12` (`2afd`/`77ef`/`7836`/`786b`/
+`7875`/`78d1`/`794f`/`796f`/`7b7d`/`7bcf`/`7c6f`/`1991:593d`, full
+membership quoted in the family-control row);
+`read_memory(11bd:299d,10)` → `{"data":[184,8,0,142,216,198,71,5,137,
+139],"hex":"b808008ed8c64705898b"}` ✓ internally reconciled (confirms
+DS←`0x8` at `29a0` immediately precedes the `29a2` window store).
+Corrections applied (this section only; prior sections untouched):
+(1) IMPORTANT — the `29a2` arithmetic row: original "max `0x80+0xFFFF =
+0x1007F < 0x10Dfe`, BX-independent" rejection holds ONLY under the
+DS=`0x1000` cell model; under the map-live DS=`0x20` model (`2a1d/2a1f`,
+H13 `ES←0x20` restore pair) the cell linear `0x2Dfe` IS inside the site
+reach and the hit condition is `BX = 0x2DFE−0x80−5 = 0x2D79` (reviewer
+math reproduced). Row RECLASSIFIED to BX-dependent OPEN-WINDOW and added
+to the reader/writer-closure hole list; the selector-alignment argument
+(`0x2D79` → descriptor index `0x5AF`/RPL `1`) is kept as plausibility
+framing only — reclassification (not alignment-rejection) chosen because
+the runtime selector value is statically unbounded ("never silently
+reject" discipline). Downstream conclusions unchanged: head-internal,
+byte-wide, invisible to the defined-insn layer; no sweep negative
+depended on it. Failure class recorded: false arithmetic justification
+inside otherwise-correct text (same class as slice-22's H8 arrow).
+(2) Census cells — `0xf7d` required disp corrected `+0x81` → `−0x17f`
+(alt render `+0xfe81`; both targeted-probed 0, verdict REJECT stands);
+`0x2824` corrected `−0x1a46` → `−0x1a26` (alt `+0xe5da`; probed 0,
+verdict stands); `0xe822` — recomputed: the printed `+0x25dc` was
+ALREADY CORRECT (`0xe822+0x25dc = 0x10Dfe ≡ 0xdfe (mod 0x10000)`), the
+review-suggested `+0xf5dc`/`−0xa24` is refuted (`0xe822+0xf5dc − 0x10000
+= 0xDE22 ≠ 0xdfe`) — row keeps its value, targeted-probe cites added.
+(3) `[0xdff]` adjacency count ×9 → ×12 with full membership quoted
+(the original parenthetical both undercounted the value and enumerated
+inconsistently).
+(4) Small-constant owner list gained the omitted `6e4f MOV BX,0x200`
+(`FUN_11bd_6e20`); its required disp is the row's already-printed
+`+0xbfe` (targeted probe 0; per-value count 20 → 21) — the review's
+`+0xdbe` attribution is the `0x40` owners' (`711f/795c`) value, not
+`6e4f`'s.
+Program state unchanged beyond the read probes; no listing mutation;
+`fifa96.rep` churn left unstaged.
