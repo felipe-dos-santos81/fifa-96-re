@@ -2109,3 +2109,253 @@ re-read only); `/media/felipe/FIFAPCCD/` untouched.
   the block via any runtime path); plus the `CS:[0x2ad9]` tail-cell
   ownership question (`2ad9..2ada` = the block's last two bytes as live
   data across `FUN_11bd_2adb`/`setup_memory_hardware`@`7739`).
+
+## 0x29bc slot consumers (verified 2026-09-29, program `/fifa96.exe`)
+
+Read-only trace pass on the slice-17 runtime-slice lead: the immediate
+`0x29bc` (numerically INSIDE block `11bd:2978..2ada`) is stored into BP-relative
+frame slots at `2f18` in `FUN_11bd_2ec9` and `44ab` in `FUN_11bd_3ed8`. Question:
+do those slots have readers whose values feed an indirect transfer into the
+block (a mechanism), or are the slots data-only? Result:
+**SLOT-READERS-DATA-ONLY** — readers exist in BOTH functions, every consumption
+form is non-branch (CMP/flag-Jcc/global-store/argument-PUSH into DIRECT calls),
+and zero indirect `CALL`/`JMP` forms exist in either function; `11bd:29bc`
+remains UNDEFINED with no static entry chain surfaced. The `0x29bc` stores now
+carry full consumer evidence and are demoted from "untested lead" to
+"settled-data-only" for the entry question. Disassembly rendering note: both
+displacements render as `word ptr [BP + -0x18]` / `word ptr [BP + -0x5a]`
+(Ghidra `disp8 − 0x100` form; store encoding `c7 46 <disp8> imm16`, load
+`8b 46 <disp8>`, push `ff 76 <disp8>`). Quote protocol honored: every
+`read_memory` `hex` field below was reconciled against the response's own
+`data` array before quoting (all 11 reads matched byte-for-byte; the one
+initial mismatch was a transcription error in the reconciliation script, not a
+tool render glitch — the 384-byte window re-reconciled MATCH at 384/384 bytes).
+
+### Site confirmations (Step 1)
+
+| Probe | Verbatim response | Reconciliation / reading |
+|-------|-------------------|--------------------------|
+| `get_function_by_address(11bd:2ec9)` | `{"name":"FUN_11bd_2ec9","address":"11bd:2ec9","signature":"undefined FUN_11bd_2ec9(void)","entry_point":"11bd:2ec9","body_start":"11bd:2ec9","body_end":"11bd:2f4b"}` | function, body `2ec9..2f4b` ✓ matches slice-17 |
+| `get_function_by_address(11bd:3ed8)` | `{"name":"FUN_11bd_3ed8","address":"11bd:3ed8","signature":"undefined FUN_11bd_3ed8(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:3ed8","body_start":"11bd:3ed8","body_end":"11bd:4586"}` | function, body `3ed8..4586` ✓ matches slice-17 |
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | no-function ✓ — block interior still fully undefined |
+| `read_memory(11bd:2f18,8)` | `{"address":"11bd:2f18","length":8,"data":[199,70,232,188,41,246,6,20],"hex":"c746e8bc29f60614"}` | data→hex: `c7 46 e8 bc 29 f6 06 14` == hex field ✓; store = `MOV word ptr [BP + -0x18],0x29bc` (`e8`→−0x18, `bc29`→0x29bc); slice-17 byte quote `c746e8bc29` VERBATIM-CONFIRMED |
+| `read_memory(11bd:44ab,8)` | `{"address":"11bd:44ab","length":8,"data":[199,70,166,188,41,235,108,199],"hex":"c746a6bc29eb6cc7"}` | data→hex: `c7 46 a6 bc 29 eb 6c c7` == hex field ✓; ACTUAL operand derived live: `c7 46 a6` = `MOV word ptr [BP + -0x5a],0x29bc` (disp8 `a6`→−0x5a) — displacement CONFIRMED `[BP+-0x5a]` (matches slice-17 rendering; was "NOT yet derived" per plan); following `eb6c` = `JMP rel8` → `451e` (`60ee−1bd0` ✓) |
+
+### Slot trace (Step 2)
+
+`FUN_11bd_2ec9` / slot `[BP + -0x18]` (body bytes cited from reconciled reads
+`11bd:2ec9,12` `558bec83ec18c646f31ac746`, `11bd:2f00,52`
+`7403e8e129c746e8402d803e2e000b740cf6064700807505c746e8bc29f6061400087405c746e87f62833e6e0e0074098b46e839`,
+`11bd:2f36,12` `0e760f8b46e8a36e0e50ff76`):
+
+| Slot | Function | Store sites (bytes → value) | Reader sites (bytes) | Consumption form |
+|------|----------|------------------------------|----------------------|------------------|
+| `[BP + -0x18]` | `FUN_11bd_2ec9` | `2f05 c746e8402d`→`0x2d40`; `2f18 c746e8bc29`→`0x29bc` (lead); `2f24 c746e87f62`→`0x627f` | `2f30 8b46e8 MOV AX,word ptr [BP + -0x18]`; `2f39 8b46e8 MOV AX,word ptr [BP + -0x18]` | data-only (see AX walk) |
+| context | — | `2ecc 83ec18 SUB SP,0x18` (frame allocation — immediate, not a slot access; same numeral as displacement, classified non-reference) | — | — |
+
+AX forward walk (disassembly order, until clobber): `2f30` load→AX → `2f33`
+`39066e0e CMP word ptr [0xe6e],AX` (flags only) → `2f37` `760f JBE 0x1000:4b18`
+(direct flag-conditional, `4b18−1bd0=2f48`) → CLOBBER `2f39` re-load → `2f3c`
+`a36e0e MOV [0xe6e],AX` (global store — high-water clamp) → `2f3f` `50 PUSH AX`
+(argument) → `2f43` `e859ef CALL 0x1000:3a6f` (DIRECT near call, `3a6f−1bd0=1e9f`)
+→ `2f46` `5b POP BX`; AX live-ends at the call return. NO register-as-target
+transfer anywhere on the walk; the value exits only into flags, the global cell
+`[0xe6e]`, and a stack argument.
+
+`FUN_11bd_3ed8` / slot `[BP + -0x5a]` (body bytes cited from reconciled reads
+`11bd:436e,384` (hex beginning `c746a68103…`, ending `…f704eb37bf9011c6050083`)
+and `11bd:452f,6` `ff76a6898614`):
+
+| Slot | Function | Store sites (bytes → value) | Reader sites (bytes) | Consumption form |
+|------|----------|------------------------------|----------------------|------------------|
+| `[BP + -0x5a]` | `FUN_11bd_3ed8` | `436e c746a68103`→`0x381`; `43ed c746a6da08`→`0x8da`; `440e c746a62428`→`0x2824`; `4423 c746a6a703`→`0x3a7`; `445c c746a61a07`→`0x71a`; `446c c746a6b208`→`0x8b2`; `448e c746a64907`→`0x749`; `44a3 c746a60509`→`0x905`; `44ab c746a6bc29`→`0x29bc` (lead); `44b2 c746a67906`→`0x679`; `44b9 c746a6ac08`→`0x8ac`; `44c6 c746a6d603`→`0x3d6`; `44ce c746a66204`→`0x462`; `44e0 c746a6f704`→`0x4f7` — ALL FOURTEEN are `MOV word ptr [BP + -0x5a],imm16` immediate stores from a dispatch cascade | `452f ff76a6 PUSH word ptr [BP + -0x5a]` (the ONLY reader in 667 instructions) | data-only: stack argument → `4536 e8171d CALL 0x1000:7e20` (DIRECT near call, `7e20−1bd0=6250`; callee cited-address-only, not dived) |
+
+`3ed8` has NO `MOV reg,[BP + -0x5a]` reader → no register propagation walk
+required. Every store block terminates in a direct `JMP` and the reader sits in
+the convergence region `44e7..4536` (cited example: `44b0 eb6c`→`451e`
+(`60ee−1bd0`)); exhaustive per-path CFG analysis of `3ed8` is out of scope (its
+full verdict is a non-goal) — what is settled is that the ONE reader site of
+the slot, wherever reached, consumes only via the `452f`→`4536` argument push. Value-family semantics
+(cited, not asserted): the stored set `0x381..0x905`/`0x2824`/`0x29bc` behaves
+like selector/ID codes; the `2ec9` slot behaves like a size/request value
+compared and clamped against running maximum `[0xe6e]`. The `2ec9` global sink
+`[0xe6e]`: per the complete program-wide `[`-operand sweeps below, `0xe6e` is
+NOT an operand cell of any defined indirect transfer — the side effect cannot
+become a jump table without a defined reader.
+
+Optional `analyze_dataflow` runs (reconciled, disassembly stays authority):
+backward from `2f30` terminated "chain exhausted" at step 2 (SP/`PUSH BP`
+frame arithmetic; `PTRADD SP,const:0xffe6` at asm line `MOV AX,word ptr [BP +
+-0x18]`, code `1000:4b00` = `2f30` ✓ delta); backward from `452f` likewise
+(PTRADD asm `PUSH word ptr [BP + -0x5a]`, `1000:60ff` = `452f` ✓). Neither
+reached store cells (store→load memory aliasing is not followed by the PCode
+walk) — no contradiction, no new info; the disassembly-order walk above stands.
+
+### Indirect-transfer enumeration + catch-all sweep (Step 3)
+
+Indirect transfers IN the two functions (from the complete disassembly dumps —
+`2ec9` 45 instructions, `3ed8` 667 instructions — cross-checked by scoped
+`search_instructions`):
+
+| Function | `CALL reg` | `CALL [mem]` | `JMP reg` | `JMP [mem]` | far indirect | far direct | direct CALL/JMP | `RET` |
+|----------|-----------|--------------|-----------|-------------|--------------|-----------|-----------------|-------|
+| `FUN_11bd_2ec9` | 0 | 0 | 0 | 0 | 0 | 0 | all (`e82ef8`→`2718`, `e8e129`→`58e6`, `e859ef`→`1e9f`; `JMP`/`Jcc` all rel8/rel16 literal) | `2f4b c3` (stack return-address — unrelated to slot) |
+| `FUN_11bd_3ed8` | 0 | 0 | 0 | 0 | 0 | 1: `4445 9a120b0010 CALLF 0x1000:0b12` — far POINTER IMMEDIATE (`9A`), operand value source = the instruction's own immediate, cited; NOT slot-fed | all `e8`/literal targets | `4586 c3` (stack return-address) |
+
+Zero indirect forms fed from either slot; enumeration operand-value-source
+column is therefore vacuous by evidence (no indirect transfer exists to trace).
+
+Catch-all sweep (40 `search_instructions` runs, program scope over the 14006
+defined instructions unless noted; all responses `truncated:false`):
+
+| Run (mnemonic + operand pattern) | Hits | Disposition |
+|----------------------------------|------|-------------|
+| `CALL` + `29bc` | 0 | no transfer references the lead value |
+| `CALL` + `0x29bc` | 0 | ditto (both accepted render forms) |
+| `JMP` + `29bc` | 0 | ditto |
+| `JMP` + `0x29bc` | 0 | ditto |
+| `CALLF` + `29bc` | 0 | ditto (far forms) |
+| `JMPF` + `29bc` | 0 | ditto (far forms) |
+| (no mnemonic) + `29bc` | 2 | EXACTLY the two known slot stores `2f18`/`44ab` (`MOV`, bytes `c746e8bc29`/`c746a6bc29`) — program-wide confirmation of slice-17's `0x29` row; no new consumer, none is a transfer |
+| (no mnemonic) + `0x1000:458c` (block cell `29bc` in near-target rendering, `29bc+1bd0=458c`) | 0 | no defined direct transfer targets the block cell (extends slice-17's `0x1000:45`=0 half-block negative to this exact cell) |
+| `CALL` + `-0x18` | 0 | slot displacement absent from every `CALL` operand program-wide |
+| `CALL` + `-0x5a` | 0 | ditto for `3ed8` slot |
+| `JMP` + `-0x18` | 0 | ditto |
+| `JMP` + `-0x5a` | 0 | ditto |
+| `CALL` + `+ 0x18` / `CALL` + `+ 0x5a` | 0 / 0 | positive-displacement side of the family — negative |
+| `JMP` + `+ 0x18` / `JMP` + `+ 0x5a` | 0 / 0 | ditto — negative |
+| `CALL` + `[` (program) | 9 | all OUTSIDE both functions: `0249 [0x97a]`, `0294/02b8 [0x9c0]`×2, `183e [0xac2]`, `2368/2376 [0xe6c]`×2, `4fd3 [BP+0x4]` (`FUN_11bd_4f83` — displacement ≠ our slots), `1991:3bbf [0xaa4]`, `1991:3bf5 [0xaa6]`; no `0xe6e`, no `-0x18`/`-0x5a`, no `29bc` |
+| `JMP` + `[` (program) | 9 | all OUTSIDE: `02b1 [0x9c2]` (known slice-17 vector reader), `092d [0x9bc]`, `0934 [0x9be]`, `25ea [0xd10]`, `1991:` ×5 CS-relative table forms; ditto — no contact |
+| `CALLF` + `[` (program) | 20 | all OUTSIDE (`[0x1e]`, `[0xaec]`×7, `[BP-0x10]`, `[0xd5a]`×2, `[BP-0x4]`, `[BP-0xe]`, `[BP+0x0]`×4, `[0x12c4]`, `[0x22]`×2 …); none in our bodies, none reads our displacements |
+| `JMPF` + `[` (program) | 5 | all OUTSIDE (`DS:[0xaf2]`, `CS:[0x17be]`×2, `CS:[SI-0x6]`, `CS:[BX+0x4d78]`) |
+| `CALL` + `AX/BX/CX/DX/SI/DI/SP/BP` (8 runs) | 1/0/0/0/0/0/0/1 | `56e7 ffd0 CALL AX` (`FUN_11bd_5686`) and `4fd3 ff5604 CALL [BP+0x4]` (dup of `[` run) — both OUTSIDE our functions; the two dumps show no register-operand transfers |
+| `JMP` + `AX/BX/CX/DX/SI/DI/SP/BP` (8 runs) | 2/5/4/0/1/2/0/0 | `1991:3fb1/412e JMP AX`, `11bd:675a ffe3 JMP BX`, `5fb1/5fb6/6d3b ffe1 JMP CX` (+`1991:4168`), `1991:` `[BX…/DI…]` forms, `1991:4227 ffe7 JMP DI` — ALL OUTSIDE both functions; no slot contact |
+| scoped `CALL`+`[` / `JMP`+`[` in `FUN_11bd_2ec9` | 0 / 0 (45 insns scanned) | function-scoped cross-check agrees with the dump |
+| scoped `CALL`+`[` / `JMP`+`[` in `FUN_11bd_3ed8` | 0 / 0 (667 insns scanned) | ditto |
+| `get_xrefs_to(11bd:29bc)` | 0 refs | CONTROL ONLY — dead channel for absolute-operand forms (slice-16/17 rulings); reported, NOT relied upon |
+
+### Verdict-so-far (Step 4)
+
+**SLOT-READERS-DATA-ONLY** — the three MECHANISM-FOUND conditions, individually:
+
+1. *Both `0x29bc` store sites live and byte-exact*: **YES** — `2ec9`/`3ed8`
+   functions confirmed live (`2ec9..2f4b`, `3ed8..4586`); stores `2f18`
+   `c746e8bc29` (`[BP+-0x18]`) and `44ab` `c746a6bc29` (`[BP+-0x5a]`,
+   displacement derived live this pass) reconciled hex-vs-data verbatim.
+2. *Slot readers exist*: **YES** — `2ec9`: `2f30`/`2f39` `MOV AX,[BP+-0x18]`;
+   `3ed8`: `452f` `PUSH [BP+-0x5a]` (sole reader of 667 instructions).
+3. *A reader's value feeds an indirect transfer (the mechanism leg)*: **NO** —
+   full consumption inventory: `2ec9` AX walk ends in flags, the `[0xe6e]`
+   high-water store, and a PUSH argument into the DIRECT call at `2f43`
+   (`11bd:1e9f`); `3ed8`'s sole reader is a PUSH argument into the DIRECT call
+   at `4536` (`11bd:6250`); both functions contain ZERO register- or
+   memory-operand `CALL`/`JMP` forms (the only far form, `4445` `CALLF`, is a
+   `9A` pointer-immediate); program-wide sweep puts no transfer on either slot
+   displacement, no transfer carrying `0x29bc`, and no `CALL/JMP` whose
+   operand cell is `[0xe6e]`; `0x1000:458c` (= `11bd:29bc` as near target) = 0
+   defined hits.
+
+Conditions 1+2 hold but 3 fails on complete enumeration → SLOT-READERS-DATA-ONLY
+(not NOT-FOUND: readers exist and are cited; not FOUND: no branch consumption).
+SLOT-READER-NOT-FOUND branch not applicable. **No entry walk executed** — the
+conditional dry-run walk to a cited exit applies only under MECHANISM-FOUND;
+`11bd:29bc` therefore stays UNDEFINED, and the slice-17 "runtime path from the
+frame slots to the block" lead is CLOSED for the static slot-consumer angle:
+the frames' `0x29bc` values are message/size-like data consumed as arguments.
+The block-entry question stays with the remaining open legs named in slice-17
+(fall-in from `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail
+cell) — none of them involves these slots.
+
+### Writes (before-state → after-state — ZERO-WRITE branch)
+
+NONE. Read-only pass as tasked: no `disassemble_bytes` (dry-run or real —
+verdict branch does not authorize the walk), no `create_function`, no rename,
+no comment, no `save_program`. Tool inventory: `get_function_by_address` ×3,
+`read_memory` ×11 (all reconciled: `2f18`8, `44ab`8, `2f00`52, `436e`384,
+`452f`6, `2f36`12, `2ec9`12, `2ee7`4, `2f43`9, `4581`6, `4536`3),
+`disassemble_function` ×2 (45 + 667 instructions), `search_instructions` ×40
+runs, `get_xrefs_to` ×1 (control), `analyze_dataflow` ×2 (optional, reconciled,
+no contradiction). Scope guards honored: `3ed8` walked for the slot question
+only (its own verdict is a non-goal); callees `11bd:1e9f`/`11bd:6250` cited
+address-only, not dived; `2811..296c` pocket not entered; no pre-existing
+function state mutated; `/media/felipe/FIFAPCCD/` untouched.
+
+### Disposition (Task 2 — settled 2026-09-29)
+
+**SLOT-READERS-DATA-ONLY** — final disposition for this slice, restated with
+the three MECHANISM-FOUND condition answers and the function-scope wording:
+
+1. *Both `0x29bc` store sites live and byte-exact*: **YES** — `2f18`
+   `c746e8bc29` → `MOV word ptr [BP + -0x18],0x29bc` (`FUN_11bd_2ec9`) and
+   `44ab` `c746a6bc29` → `MOV word ptr [BP + -0x5a],0x29bc`
+   (`FUN_11bd_3ed8`), displacement derived live; hex-vs-data reconciled
+   before quoting (Site confirmations table).
+2. *Slot readers exist*: **YES** — `2ec9`: `2f30`/`2f39` `8b46e8`
+   `MOV AX,word ptr [BP + -0x18]` (consumption per the AX walk); `3ed8`:
+   `452f ff76a6 PUSH word ptr [BP + -0x5a]`, sole reader in 667
+   instructions, feeding the DIRECT `4536 e8171d CALL 0x1000:7e20` =
+   `CALL 11bd:6250`.
+3. *A reader's value feeds an indirect transfer*: **NO** — zero register- or
+   memory-operand `CALL`/`JMP` in either function (complete dumps + 4
+   scoped searches); program-wide sweeps put no transfer on either slot
+   displacement, none carrying `0x29bc`, `[0xe6e]` is no indirect-transfer
+   operand cell, and the near rendering `0x1000:458c` has 0 defined hits.
+
+The verdict is **function-scoped**: it settles the consumption of
+`[BP+-0x18]`/`[BP+-0x5a]` inside the two consumer bodies (`2ec9..2f4b`,
+`3ed8..4586`) only. The callees `11bd:1e9f` (arg = slot value + `[BP+0x4]`)
+and `11bd:6250` (arg = slot value) are cited address-only and could
+themselves indirect-branch on the pushed value — that open condition belongs
+one layer OUTSIDE these functions and is carried here as a deferral (line 1
+below), not as part of the verdict.
+
+No `### Entry function` row is emitted (the FOUND branch was not triggered);
+`11bd:29bc` remains UNDEFINED block interior. The two `0x29bc` stores are
+settled data-only for the entry question: the values behave as
+message/size-family data consumed as DIRECT-call arguments (value-family
+note in Slot trace above).
+
+### Writes (Task 2 — DATA-ONLY branch: ZERO writes; live unmoved-proof pair)
+
+NONE. Per the brief's Step 2 for this branch the program was not touched;
+the only two calls executed this task are read-only, quoted verbatim:
+
+| Probe | Verbatim response (live, this task) | Unmoved check |
+|-------|--------------------------------------|---------------|
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | byte-identical to the Task-1 Step-1 quote (Site confirmations row 3) — no function was created at the lead cell |
+| `find_code_gaps(min_size=1)` | envelope `{"total":131,"offset":0,"limit":100,…}`; covering row verbatim: `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | block `11bd:2978..2ada` (`4548−1bd0=2978`, `46aa−1bd0=2ada` ✓) still **size 355**, `has_undefined_bytes:true`, same neighbors — unchanged vs slice-17's row and Task-1's re-read; no shrink, no reflow |
+
+Write-tool inventory for this task: zero — no `disassemble_bytes` (dry-run or
+real), no `create_function`, no `rename_function`/`rename_symbol`, no
+`set_comment`/`batch_set_comments`, no `set_global`, no `save_program`; no
+Ghidra transaction was opened.
+
+### Deferrals (Task 2)
+
+- **What would promote `0x29bc` from data to entry:** a callee of the pushed
+  slot value performing an indirect transfer on that argument. Named
+  follow-up candidates at one-layer distance: `11bd:1e9f` (called from
+  `2ec9`/`2f43`, arg = `[BP+-0x18]` value pushed at `2f3f`) and `11bd:6250`
+  (called from `3ed8`/`4536`, arg = `[BP+-0x5a]` value pushed at `452f`) —
+  requires walking those bodies for `CALL`/`JMP` reading the incoming stack
+  argument or a register loaded from it; out of slice-18 scope.
+- **`29bc` data-meaning question** (what the bytes at `11bd:29bc` themselves
+  are): not exercised this slice — the block stays **fully named-open
+  `2978..2ada`** (covering gap row quoted above); under DATA-ONLY no shrink
+  arithmetic applies (the FOUND-branch split to `2978..29bb` + `X+1..2ada`
+  was never triggered).
+- **`3ed8`/`2ec9` full verdicts remain non-goals:** `3ed8` was walked for the
+  slot question only (its ~66 direct calls and jump-table regions untouched
+  beyond classification); `2ec9`'s whole-function semantics likewise.
+- **Other-slot leads surfaced, cited not dived:** `3ed8` sibling slot
+  `[BP+-0x58]` (feeds `[BX]` memory reads at `3ffc`/`4002` — NON-transfer,
+  Slot trace note), and program-wide `4fd3 CALL [BP+0x4]` in
+  `FUN_11bd_4f83` (different frame, no contact with our slots); these join
+  the data-surface list alongside `[0xe6e]`.
+- **Slice-17 leads untouched unless closed here:** fall-in pocket
+  `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail cell, twin
+  orphan `02da..02f8` — all stand as previously recorded; only the static
+  slot-consumer angle is closed by this section.
+- **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
+  UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE, runtime-written)
+  — a zero-write pass occurred; nothing in this slice could have moved them.
