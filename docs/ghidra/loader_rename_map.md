@@ -3795,8 +3795,9 @@ window as misaligned fragments `91 04 96 04` ↔ LE words ✓ reconciled),
 `XCHG AX,DI`/`PUSH ES`/`PUSHF`/`PUSH ES` in the `0665` window ✓),
 `06fc..0732` (H4's callee region), `073c..076e` (H5's `230c`-callee +
 arg `0x749` pair `0745/0747`), `0852..08c1` (H6 beyond-exit region + args
-`0x8ac`/`0x8b2` pairs `08a8..08ab`/`08ae..08b1`), `09cf..09d6` (H8
-beyond-exit block — reached statically only from H9's gate),
+`0x8ac`/`0x8b2` pairs `08a8..08ab`/`08ae..08b1`), `09cf..09d3` (H8
+JZ-leg block — taken leg of `JZ`@`09c2`) and `09d4..09d6` (gate stub —
+reached statically only from H9's gate),
 `0b94..0bc2` (unowned non-vector block ending in `CALL print_error_message`
 + fallthrough to island `0bc3` — left unclaimed).
 
@@ -3823,7 +3824,7 @@ landing offset. `far/near render − 0x1bd0` applied to every branch cite.
 | boundary | `[040e..045d]` (80 B) | why-function-start: dynamic vector landing `w0` from dedupe row (entry cite); `w1` `0413` second entry; range inside row `1000:1f30..2302`, no defined bytes interior; ends one byte before arg-`0x462` source cell `045e` | — |
 
 **H2 `0x0491`/`0x0496` (arg `0x462`)** — windows `dry_run` `11bd:0491`
-(45 B — tool STOPPED at the `04be` defined unit, envelope `0491..04bd`),
+(45 B — emission ENDED at `04bd` because the linear decoder does not carry across the `04be` defined unit (skip-and-report, same disclosed behavior as the `04c0`-probe row below); envelope `0491..04bd` reflects the window length),
 `11bd:04c0` (32 B, off-alignment disclosed below), `11bd:04d3` (48 B).
 
 | element | address | evidence (bytes) | calls (address only) |
@@ -3858,7 +3859,7 @@ landing offset. `far/near render − 0x1bd0` applied to every branch cite.
 |---------|---------|------------------|----------------------|
 | prelude | `0697`–`069c` | `50 53 bb0010 fa` (`069c CLI` = `w1`) | — |
 | body | `069d`–`06bf` | `60 PUSHA`; `[0xf7c]/[0xf7a]` saves; `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c7066704ca06 MOV ES:[0x467],0x6ca` — return pair `0x6ca:[0x9b6]`; `26c60612040a MOV byte ES:[0x412],0xa`; `b4c0 MOV AH,0xc0` | — |
-| retry loop | `06c1`–`06c8` | `e83800 CALL 0x1000:22cc` (→`11bd:06fc`); `33c9 XOR CX,CX`; `e2fe LOOP 0x1000:2296` (→`06c6` self); `ebf5 JMP 0x1000:228f` (→`06bf` = back to `MOV AH,0xc0`) — **cited exit: tail-JMP retry loop** | → `06fc` |
+| retry loop | `06c1`–`06c9` | `e83800 CALL 0x1000:22cc` (→`11bd:06fc`); `33c9 XOR CX,CX`; `e2fe LOOP 0x1000:2296` (→`06c6` self); `ebf5 JMP 0x1000:228f` @`06c8..06c9` (→`06bf` = back to `MOV AH,0xc0`) — **cited exit: tail-JMP retry loop** | → `06fc` |
 | reload | `06ca`–`06e1` | entry cite = stored IP `0x6ca`; `2e8b1e0000 MOV BX,CS:[0x0]`; `8edb MOV DS,BX`; `8e167c0f/8b267a0f SS/SP←[0xf7c]/[0xf7a]`; `33c0/8ec0 ES←0`; `26a21204 MOV ES:[0x412],AL`; `8ec3 ES←BX` | — |
 | second call + PIC | `06e3`–`06f6` | `e81600 CALL 0x1000:22cc` (→`06fc`); `e469 IN AL,0x69`; `eb00` (→`06ea`); `0c04 OR AL,4`; `e669 OUT 0x69,AL`; `eb00` (→`06f0`); `e4a0 IN AL,0xa0`; `eb00`; `0c80`; `e6a0 OUT 0xa0,AL` | → `06fc` |
 | exit | `06f8`–`06fb` | `61 POPA`; `5b POP BX`; `58 POP AX`; `c3 RET` @`06fb` — **static exit cite** | — |
@@ -3915,13 +3916,13 @@ rel-byte; aligned coverage ends at the cited exit `0851` anyway).
 | element | address | evidence (bytes) | calls (address only) |
 |---------|---------|------------------|----------------------|
 | prelude | `099b`–`09a0` | `50 53 bb0010 fa` (`09a0 CLI` = `w1`) | — |
-| body | `09a1`–`09c1` | `60 PUSHA`; `891e7c0f/89267a0f` saves (the `09a2/09a6` cluster cite of slice-21 ✓); `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c70667046e0b MOV ES:[0x467],0xb6e` — return pair `0xb6e:[0x9b6]`; `f6060c1202 TEST byte [0x120c],2`; `740b JZ 0x1000:259f` →`09cd` | — |
+| body | `09a1`–`09c1` | `60 PUSHA`; `891e7c0f/89267a0f` saves (the `09a2/09a6` cluster cite of slice-21 ✓); `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c70667046e0b MOV ES:[0x467],0xb6e` — return pair `0xb6e:[0x9b6]`; `f6060c1202 TEST byte [0x120c],2`; `740b JZ 0x1000:259f` →`09cf` (rel8 `+0x0b`: `09c2+2+0x0b = 09cf`; `0x259f−0x1bd0 = 09cf` ✓ — fix-wave correction: earlier render said `09cd`, an arithmetic error; live `read_memory(11bd:09c2,6)` = `740be4920c03` ↔ data `[116,11,…]` re-confirmed) | — |
 | A20 leg + exit | `09c4`–`09cc` | `e492 IN AL,0x92`; `0c03 OR AL,3`; `eb00` (→`09ca`); `e692 OUT 0x92,AL`; `f4 HLT` @`09cc` — **cited exit** | — |
-| halt-retry | `09cd`–`09ce` | `ebfd JMP 0x1000:259c` (→ `0x259c−0x1bd0` = `09cc` — jump BACK to the HLT: halt-retry idiom, also the JZ@`09c2` target) | — |
-| beyond-exit block | `09cf`–`09d6` | `b0fe MOV AL,0xfe`; `e664 OUT 0x64,AL`; `f4 HLT` @`09d3`; `e9751e JMP 0x1000:441c` →`284c` — statically unreached from H8's own flow; reached from H9's gate (`09e2 JNC` →`09d4`) — recorded, edge cited | → `284c` |
+| halt-retry | `09cd`–`09ce` | `ebfd JMP 0x1000:259c` (→ `0x259c−0x1bd0` = `09cc` — jump BACK to the HLT: halt-retry idiom) — NO static predecessor: the `JZ`@`09c2` targets `09cf` (fixed arrow above) and the `HLT`@`09cc` terminates fall-in, which is why the block orphaned at create (Task-2 row `1000:259d..259e`) | — |
+| JZ-leg block | `09cf`–`09d3` | `b0fe MOV AL,0xfe`; `e664 OUT 0x64,AL`; `f4 HLT` @`09d3` — REACHED from H8's own flow as the `JZ`@`09c2` taken leg (create absorbed `09cf..09d3` into `FUN_11bd_099b` — Task-2 H8 row); `09d4`–`09d6` (`e9751e JMP 0x1000:441c` →`284c`) is NOT reached by H8's flow — its only static feeder is H9's gate `09e2 JNC`→`09d4` — recorded, edge cited | → `284c` |
 | return block | `0b6e`–`0b93` | entry cite = stored IP `0xb6e`; `b80010/8ed8 DS←0x1000`; `8e167c0f/8b267a0f SS/SP←[0xf7c]/[0xf7a]`; `b00d/ e670 OUT 0x70,AL`; `61 POPA`; `e471 IN AL,0x71`; `803e350000 CMP byte [0x35],0`; `e492 IN AL,0x92`; `7502 JNZ` →`0b8d`; `24fd AND AL,0xfd`; `24fe AND AL,0xfe`; `e692 OUT 0x92,AL`; `5b/58/c3 RET` @`0b93` — **static exit cite** | — |
 | contacts | — | `[0x120c]`, `[0x9b6]`, `[0xf7c]/[0xf7a]`, `ES:[0x467]/[0x469]`, `[0x35]`; ports `0x92/0x70/0x71/0x64` | — |
-| boundary | `[099b..09cc]` primary + `[0b6e..0b93]` return; beyond-exit `[09cf..09d6]` recorded | both ranges inside row `1000:2508..2792`; return block is non-contiguous (separated by H9..H12 lands) — per-block proposal | — |
+| boundary | `[099b..09cc]` primary + `[0b6e..0b93]` return; JZ-leg block `[09cf..09d3]` + gate stub `[09d4..09d6]` recorded | both ranges inside row `1000:2508..2792`; return block is non-contiguous (separated by H9..H12 lands) — per-block proposal | — |
 
 **H9 `0x09d7`/`0x09dc` (arg `0x3a7`)** — windows `dry_run` `11bd:09d7`
 (100 B), `11bd:0a35` (41 B, exact).
@@ -3929,7 +3930,7 @@ rel-byte; aligned coverage ends at the cited exit `0851` anyway).
 | element | address | evidence (bytes) | calls (address only) |
 |---------|---------|------------------|----------------------|
 | prelude | `09d7`–`09dc` | `50 53 bb0010 fa` (`09dc CLI` = `w1`) | — |
-| gate | `09dd`–`09e3` | `803e2f0003 CMP byte [0x2f],0x3`; `73f0 JNC 0x1000:25a4` → `0x25a4−0x1bd0` = `09d4` = H8's beyond-exit `JMP 284c` byte (cross-handler edge, cite-only) | → `09d4`→`284c` |
+| gate | `09dd`–`09e3` | `803e2f0003 CMP byte [0x2f],0x3`; `73f0 JNC 0x1000:25a4` → `0x25a4−0x1bd0` = `09d4` = the `JMP 284c` gate stub (`09d4..09d6`, H8-side, NOT the JZ-leg block — cross-handler edge, cite-only) | → `09d4`→`284c` |
 | FPU leg | `09e4`–`09f0` | `53 PUSH BX`; `8b1e820f MOV BX,[0xf82]`; `0bdb OR BX,BX`; `7403 JZ 0x1000:25c0` →`09f0`; `dd37 FNSAVE [BX]`; `9b WAIT`; `5b POP BX` | — |
 | body | `09f1`–`0a26` | `60 PUSHA`; `b80010/50/50`; `b83800/8ec0 ES←0x38`; `26c706fc03350a MOV ES:[0x3fc],0xa35`; `a1b609`; `26a3fe03 MOV ES:[0x3fe],AX` — return pair `0xa35:[0x9b6]`; `e402 IN AL,0x2`; `8ac8 CL←AL`; `e412 IN AL,0x12`; `8ae8 CH←AL`; `b0fb/e612`; `b0ff/e602` (counter restore legs); `b001`; `bab031 MOV DX,0x31b0`; `ee OUT DX,AL`; `e460 IN AL,0x60`; `c0e802 SHR AL,2`; `2407 AND AL,7` | — |
 | PIC mask + exit | `0a27`–`0a34` | `60 PUSHA`; `891e7c0f/89267a0f` saves; `b009/e620 OUT 0x20,AL(9)`; `f4 HLT` @`0a34` — **cited exit** | — |
@@ -3958,7 +3959,7 @@ continuation `0b06..` verified consistent), `11bd:0b60` (return tail).
 |---------|---------|------------------|----------------------|
 | prelude | `0a9f`–`0aa4` | `50 53 bb0010 fa` (`0aa4 CLI` = `w1`) | — |
 | frame | `0aa5`–`0ac6` | `e421 IN AL,0x21`; `60 PUSHA`; `9c PUSHF`; `ff36b609 PUSH [0x9b6]`; `683f0b PUSH 0xb3f` — far frame `:0xb3f` (H11's own return IP); `2b26c409 SUB SP,[0x9c4]` (frame carve); `b0ff/e621 OUT 0x21,AL` (mask ALL); `b83800/8ec0 ES←0x38`; `26891e6904 MOV ES:[0x469],BX`; `2689266704 MOV ES:[0x467],SP` (pair = BX:SP under seg 0x38) | — |
-| gate + exit | `0ac7`–`0ad3` | `803ed00e00 CMP byte [0xed0],0`; `7507 JNZ 0x1000:26a5` →`0ad5` (shared tail — **NOT** island `08d5`: `0x26a5−0x1bd0=0xad5` re-derived); `b0fe/e664 OUT 0x64,AL`; `f4 HLT` @`0ad2` — **cited exit**; `ebfd JMP 0x1000:26a2` (→`0ad2`) halt-retry | → `0ad5` |
+| gate + exit | `0ac7`–`0ad4` | `803ed00e00 CMP byte [0xed0],0`; `7507 JNZ 0x1000:26a5` →`0ad5` (shared tail — **NOT** island `08d5`: `0x26a5−0x1bd0=0xad5` re-derived); `b0fe/e664 OUT 0x64,AL`; `f4 HLT` @`0ad2` — **cited exit**; `ebfd JMP 0x1000:26a2` @`0ad3..0ad4` (→`0ad2`) halt-retry | → `0ad5` |
 | shared shutdown tail | `0ad5`–`0ae1` | `c706d0080000 MOV word [0x8d0],0`; `0f011ed008 LIDT word [0x8d0]`; `cdff INT 0xff` — fed by three static edges (`084f` H6, `0acc` H11, `0b0b` H12); contains the only LIDT-class cite of the band handlers; **cited exit of the tail: INT 0xff** (`cdff` ends `0ae1`); `0ae2` = H12 landing — falls through to the next handler's prelude (adjacency cite) | — |
 | return block | `0b3f`–`0b5f` | entry cite = own pushed IP `0xb3f`; `fa CLI`; `e81df8 CALL 0x1000:1f30` (→`0360`); `61 POPA`; `e621 OUT 0x21,AL`; `c706d008ff07 MOV [0x8d0],0x7ff`; `803e350000 CMP byte [0x35],0`; `750d JNZ` →`0b60`; `803e3f0000 CMP byte [0x3f],0`; `7403 JZ` →`0b5d`; `e88600 CALL 0x1000:27b3` (→`0be3`, inside `FUN_11bd_0be9` body `0be3..0bef` — edge to DEFINED byte, one hop); `5b/58/c3 RET` @`0b5f` — **static exit cite** | → `0360`, `0be3` |
 | delay-call tail | `0b60`–`0b6d` | entered by `0b51 JNZ 0x1000:2730` (→`0b60`): `51 PUSH CX`; `8b0e1000 MOV CX,[0x10]`; `90 NOP`; `e2fe LOOP 0x1000:2736` (→`0b66` self); `e87e00 CALL 0x1000:27b9` (→`0be9` = `FUN_11bd_0be9` ENTRY — defined-body edge); `59 POP CX`; `ebef JMP 0x1000:272d` (→`0b5d` — re-joins return block at `POP BX`) | → `0be9` |
@@ -3986,8 +3987,8 @@ continuation `0b06..` verified consistent), `11bd:0b60` (return tail).
 | prelude | `2a5a`–`2a60` | `50 PUSH AX`; `53 PUSH BX`; `8b1eb409 MOV BX,[0x9b4]` (6-byte preamble — the cited `0x2a5a` form `50538b1eb409fa` ✓); `fa CLI` @`2a60` (= `w1`; explains the `+6` spacing) | — |
 | 32-bit save | `2a61`–`2a67` | `6650 PUSH EAX`; `6652 PUSH EDX`; `6651 PUSH ECX`; `6656 PUSH ESI` | — |
 | **MSW-clear shape** | `2a69`–`2a73` | `0f01e1 SMSW CX`; **`a14000 MOV AX,[0x40]` @`2a6c`**; `f7d0 NOT AX`; `23c1 AND AX,CX`; `0f01f0 LMSW AX` — the slice-16 flagged shape, REACHED by the walk (fallthrough from `2a60`, `+0xc`; from `2a5a`, `+0x12`) | — |
-| body | `2a76`–`2a9f` | `a1700d MOV AX,[0xd70]`; `a35e0d MOV [0xd5e],AX`; `660fb70eb409 MOVZX ECX,[0x9b4]` (second cell read); `668bd4 MOV EDX,ESP`; `8c2e620d MOV [0xd62],GS`; `8c26600d MOV [0xd60],FS` (THE pocket `2880/2884` save cells); `6633c0 XOR EAX,EAX`; `8ee0 MOV FS,AX`; `8ee8 MOV GS,AX`; push storm `50/0fa8/50/0fa0/6651/6651/50/53/6652/6650/50/ff36b609` (`PUSH [0x9b6]`), `50`, `68c42a PUSH 0x2ac4` — far frame `:0x2ac4` (own return) | — |
-| segment load + CALLF | `2aa0`–`2ac3` | `6650 PUSH EAX`; `50 PUSH AX`; `ff36b609 PUSH [0x9b6]`; `50`; `68c42a PUSH 0x2ac4`; `b82000/8ec0 ES←0x20`; `b83800/8ed8 DS←0x38`; `b80cde MOV AX,0xde0c`; `660fb7e4 MOVZX ESP,SP`; `6626ff1e5a0d CALLF word ptr ES:[0xd5a]` (far call through cell `ES(0x20):[0xd5a]` — dynamic target, cite-only) | → `ES:[0xd5a]` dynamic |
+| body | `2a76`–`2a9f` | `a1700d MOV AX,[0xd70]`; `a35e0d MOV [0xd5e],AX`; `660fb70eb409 MOVZX ECX,[0x9b4]` (second cell read); `668bd4 MOV EDX,ESP`; `8c2e620d MOV [0xd62],GS`; `8c26600d MOV [0xd60],FS` (THE pocket `2880/2884` save cells); `6633c0 XOR EAX,EAX`; `8ee0 MOV FS,AX`; `8ee8 MOV GS,AX`; push storm BEGINS @`2a94`: `50`,`0fa8 PUSH GS`,`50`,`0fa0 PUSH FS`,`6651 PUSH ECX` ×2 (@`2a9a`/`2a9c`), `50`, `53 PUSH BX` @`2a9f` — storm completes `2aa0..2aaa`, next row | — |
+| segment load + CALLF | `2aa0`–`2ac3` | storm completes (`2aa0..2aaa`, continuation of row above): `6652 PUSH EDX`@`2aa0`, `6650 PUSH EAX`@`2aa2`, `50`@`2aa4`, `ff36b609 PUSH [0x9b6]`@`2aa5`, `50`@`2aa9`, `68c42a PUSH 0x2ac4`@`2aaa` — far frame `:0x2ac4` (own return); `b82000/8ec0 ES←0x20`; `b83800/8ed8 DS←0x38`; `b80cde MOV AX,0xde0c`; `660fb7e4 MOVZX ESP,SP`; `6626ff1e5a0d CALLF word ptr ES:[0xd5a]` (far call through cell `ES(0x20):[0xd5a]` — dynamic target, cite-only) | → `ES:[0xd5a]` dynamic |
 | return block | `2ac4`–`2ad8` | entry cite = own pushed IP `0x2ac4`; `268e2e660d MOV GS,ES:[0xd66]`; `268e26640d MOV FS,ES:[0xd64]` (the pocket `2824/2828` save cells, restored via seg-0x20); `665e POP ESI`; `6659 POP ECX`; `665a POP EDX`; `6658 POP EAX`; `5b POP BX`; `58 POP AX`; `c3 RET` @`2ad8` — **cited exit** | — |
 | excluded tail | `2ad9`–`2ada` | `0000` = the live `CS:[0x2ad9]` data tail cell (`2adb` reader + `7739` writer per `## paging block 2978..2ada`) — NOT walked, NOT included (first cited external byte after the exit = `2ad9`) | — |
 | contacts | — | `[0x9b4]` ×2 (16-bit + MOVZX), `[0x40]`, `[0x9b6]`, `[0xd5e]`, `[0xd60]/[0xd62]` saves, `ES:[0xd64]/[0xd66]` restores, `ES:[0xd5a]` CALLF cell, `CS:[0x2ad9]` adjacency (excluded); segment stores `ES←0x20`, `DS←0x38`, `FS/GS←0`, FS/GS reload | — |
@@ -4086,7 +4087,8 @@ churn left unstaged.
   family — the `0bba` `MOV SP,[0xf50]` sighting in the unclaimed
   `0b94..0bc2` block re-cites that section's raw-scan list, no new claim).
 - Unowned/recorded regions: `0852..08a3+` H6 installed-vector candidate,
-  `09cf..09d6` (H8 beyond-exit / H9 gate target), `0ad5..0ae1` shared
+  `09cf..09d3` (H8 JZ-leg block) / `09d4..09d6` (H9 gate-stub target),
+  `0ad5..0ae1` shared
   shutdown tail (proposed under H11), `0b94..0bc2` non-vector stub,
   inter-handler fill (`045e..0490`, `04f3..05ae`, `0675..0696`,
   `06fc..0732`, `073c..076e`, `08d6..0937` incl. stub cluster,
@@ -4133,8 +4135,10 @@ JMP); `11bd:076f` len 74 → `076f..07b8` (30, ends on the `ebfe` self-spin);
 `f3 f0` at `0974..0975` = an undecodable REP+LOCK prefix pair — the pocket
 `28e7..28eb` skip-window class, the disassembler jumps `0973 → 0976`);
 `11bd:099b` len 50 → `099b..09cc` (19); `11bd:09cd` len 2 → `09cd..09ce`
-(the `ebfd` halt-retry, pre-defined so H8's JZ leg resolves without
-over-reaching — cited H8 row); `11bd:09d7` len 94 → `09d7..0a34` (42);
+(the `ebfd` halt-retry bytes cited in the Task-1 H8 row — pre-defined for
+neighborhood completeness; it has NO static predecessor — H8's `JZ`@`09c2`
+targets `09cf`, fix-wave corrected — so it resolved to the orphan row
+`1000:259d..259e` at create, see H8 post-bounds row); `11bd:09d7` len 94 → `09d7..0a34` (42);
 `11bd:0a5e` len 40 → `0a5e..0a85` (15, ends on the `ebfe` self-spin);
 `11bd:0a9f` len 67 → `0a9f..0ae1` (25, incl. the shared shutdown tail
 `0ad5..0ae1`); `11bd:0ae2` len 48 → `0ae2..0b11` (18); `11bd:2a5a` len 127
@@ -4155,8 +4159,8 @@ Every response verbatim:
 | `create_function(11bd:05af)` | `{"success":true,…,"FUN_11bd_05af",…,"body_size":182,…}` |
 | `create_function(11bd:0697)` | `{"success":true,…,"FUN_11bd_0697",…,"body_size":51,…}` |
 | `create_function(11bd:076f)` | `{"success":true,…,"FUN_11bd_076f",…,"body_size":74,…}` |
-| `create_function(11bd:0938)` | `{"success":true,…,"FUN_11bd_0938",…,"body_size":60,…}` |
-| `create_function(11bd:099b)` | `{"success":true,…,"FUN_11bd_099b",…,"body_size":55,…}` |
+| `create_function(11bd:0938)` | `{"success":true,…,"FUN_11bd_0938",…,"body_size":60,…}` (call-time envelope; final bounds below) |
+| `create_function(11bd:099b)` | `{"success":true,…,"FUN_11bd_099b",…,"body_size":55,…}` (call-time envelope; final bounds below) |
 | `create_function(11bd:0a5e)` | `{"success":true,…,"FUN_11bd_0a5e",…,"body_size":40,…}` |
 | `create_function(11bd:09d7)` | `{"success":true,…,"FUN_11bd_09d7",…,"body_size":97,…}` |
 | `create_function(11bd:2a5a)` | `{"success":true,…,"FUN_11bd_2a5a",…,"body_size":127,…}` |
@@ -4172,19 +4176,28 @@ not fought, slice-17/21 precedent):
 
 | H | FUN | proposal (Task 1) | post bounds | disposition |
 |---|-----|-------------------|-------------|-------------|
-| H1 | `FUN_11bd_040e` | `[040e..0442]` primary | `{"body_start":"11bd:040e","body_end":"11bd:0442"}` | MATCH (primary; return block `0443..045d` left undefined — far-ret entry cite `ES:[0x160]←0x443`, deferred) |
+| H1 | `FUN_11bd_040e` | `[040e..045d]` (80 B — Task-1 boundary row: primary + return) | `{"body_start":"11bd:040e","body_end":"11bd:0442"}` | DEVIATION → RATIFIED: a landing create yields the primary only — the first cited exit `0442 HLT` terminates flow and the far-ret half `0443..045d` is statically unreachable (entry cite `ES:[0x160]←0x443`); flow-following acceptance — see the `**` note below and the Deferrals far-ret bullet |
 | H2 | `FUN_11bd_0491` | `[0491..04bd]` (split at `DAT_11bd_04be`) | `{"body_start":"11bd:0491","body_end":"11bd:04bd"}` | MATCH the split; fragments `04c0..04d2`/`04d3..04f2` left undefined, stop-short `04bd|04be` cited |
-| H3 | `FUN_11bd_05af` | `[05af..0664]` | `{"body_start":"11bd:05af","body_end":"11bd:0664"}` | MATCH (return `[0665..0674]` undefined, entry cite `PUSH 0x665`) |
-| H4 | `FUN_11bd_0697` | `[0697..06c8]` primary | `{"body_start":"11bd:0697","body_end":"11bd:06c9"}` | MATCH (`06c8..06c9` = the `ebf5` retry JMP, owned; return `[06ca..06fb]` undefined) |
-| H5 | `FUN_11bd_076f` | `[076f..07b7]` | `{"body_start":"11bd:076f","body_end":"11bd:07b8"}` | MATCH (`ebfe` spin `07b7..07b8` owned; return `[07b9..07e6]` undefined) |
+| H3 | `FUN_11bd_05af` | `[05af..0674]` (198 B contiguous — Task-1 boundary row) | `{"body_start":"11bd:05af","body_end":"11bd:0664"}` | DEVIATION → RATIFIED: first cited exit `0664 HLT` terminates the flow; far-ret half `[0665..0674]` (entry cite `PUSH 0x665`@`05c6`) stays undefined — `**` note/Deferrals |
+| H4 | `FUN_11bd_0697` | `[0697..06fb]` (165 B — Task-1 boundary row) | `{"body_start":"11bd:0697","body_end":"11bd:06c9"}` | DEVIATION → RATIFIED: flow closes at the owned retry tail-JMP `06c8..06c9` (`ebf5→06bf`); the RET-bearing half `[06ca..06fb]` is far-ret-only (`ES:[0x467]←0x6ca`) — `**` note/Deferrals |
+| H5 | `FUN_11bd_076f` | `[076f..07e6]` (120 B — Task-1 boundary row) | `{"body_start":"11bd:076f","body_end":"11bd:07b8"}` | DEVIATION → RATIFIED: self-spin `07b7..07b8` (`ebfe→07b7`) terminates flow; far-ret half `[07b9..07e6]` (`ES:[0x467]←0x7b9`) stays undefined — `**` note/Deferrals |
 | H6 | `FUN_11bd_07e7` | `[07e7..0851]` | `{"body_start":"11bd:07e7","body_end":"11bd:0851"}` | MATCH — tail-JMP into `0ad5` (now owned by H11) resolves as an inter-function edge |
 | H7 | `FUN_11bd_0938` | `[0938..099a]` | `{"body_start":"11bd:0938","body_end":"11bd:0973"}` | DEVIATION → RATIFIED: the undecodable `f3 f0` pair at `0974..0975` breaks linear flow; remainder `[0976..099a]` defined-but-unowned (post-probe `get_function_by_address(11bd:099a)` → `{"error":"No function found for 11bd:099a"}`) — listing-disposition item, no second create across an undecodable gap (the entry cite governs the landing `0938`, not `0976`) |
-| H8 | `FUN_11bd_099b` | `[099b..09ce]` | `{"body_start":"11bd:099b","body_end":"11bd:09d3"}` | DEVIATION → RATIFIED: analyzer additionally flowed the beyond-exit block `09cf..09d3` (probe `09d1` → `FUN_11bd_099b`); the halt-retry block `09cd..09ce` reappears as an UNCOVERED row (`1000:259d..259e`, `has_orphaned_instructions:true`) despite the envelope — quoted as returned; return `[0b6e..0b93]` left undefined |
-| H9 | `FUN_11bd_09d7` | `[09d7..0a34]` | `{"body_start":"11bd:09d4","body_end":"11bd:0a34"}` | DEVIATION → RATIFIED: the `JNC→09d4` leg auto-disassembled + absorbed the 3-byte block `09d4..09d6` (`e9751e JMP 284c`) PRE-entry (probe `11bd:09d4` → `{"name":"FUN_11bd_09d7","entry_point":"11bd:09d7","body_start":"11bd:09d4","body_end":"11bd:0a34"}`); entry stays `09d7` ✓ |
-| H10 | `FUN_11bd_0a5e` | `[0a5e..0a84]` | `{"body_start":"11bd:0a5e","body_end":"11bd:0a85"}` | MATCH (`ebfe` spin owned; return `[0a86..0a9e]` undefined) |
+| H8 | `FUN_11bd_099b` | `[099b..09cc]` primary + `[0b6e..0b93]` return (Task-1 boundary row) | `{"body_start":"11bd:099b","body_end":"11bd:09d3"}` | DEVIATION → RATIFIED: analyzer flowed `09cf..09d3` INTO the body as the `JZ`@`09c2` TAKEN leg (fix-wave arrow correction: `0x259f−0x1bd0 = 09cf`, not `09cd`; probe `09d1` → `FUN_11bd_099b`); the halt-retry block `09cd..09ce` has NO static predecessor and reappears as an UNCOVERED row (`1000:259d..259e`, `has_orphaned_instructions:true`) despite the envelope — quoted as returned; return `[0b6e..0b93]` left undefined (far-ret half — `**` note/Deferrals) |
+| H9 | `FUN_11bd_09d7` | `[09d7..0a5d]` (135 B contiguous — Task-1 boundary row) | `{"body_start":"11bd:09d4","body_end":"11bd:0a34"}` | DEVIATION → RATIFIED: (a) the `JNC→09d4` leg auto-disassembled + absorbed the 3-byte block `09d4..09d6` (`e9751e JMP 284c`) PRE-entry (probe `11bd:09d4` → `{"name":"FUN_11bd_09d7","entry_point":"11bd:09d7","body_start":"11bd:09d4","body_end":"11bd:0a34"}`); entry stays `09d7` ✓; (b) landing create yields primary only — cited exit `0a34 HLT`; far-ret half `[0a35..0a5d]` (`ES:[0x3fc]←0xa35`) — `**` note/Deferrals |
+| H10 | `FUN_11bd_0a5e` | `[0a5e..0a9e]` (65 B, "contiguous incl. return" — Task-1 boundary row) | `{"body_start":"11bd:0a5e","body_end":"11bd:0a85"}` | DEVIATION → RATIFIED: self-spin `0a84..0a85` (`ebfe→0a84`) terminates; far-ret half `[0a86..0a9e]` (`ES:[0x4a2]←0xa86`) stays undefined — `**` note/Deferrals |
 | H11 | `FUN_11bd_0a9f` | `[0a9f..0ae1]` (shared-tail proposal) | `{"body_start":"11bd:0a9f","body_end":"11bd:0ae1"}` | MATCH — tail outcome reversed from the interim read (H12 initially showed envelope `0ad5..0b11`; after `create_function(0a9f)` the block `0ad5..0ae1` resolves to H11: probe `11bd:0ad5` → `{"name":"FUN_11bd_0a9f",…}`; H12 final `{"body_start":"11bd:0ae2","body_end":"11bd:0b11"}`) — Task-1 proposal achieved; halt-retry fragment `0ad3..0ad4` left defined-unowned (probe `{"error":"No function found for 11bd:0ad3"}`) |
 | H12 | `FUN_11bd_0ae2` | `[0ae2..0b11]` | `{"body_start":"11bd:0ae2","body_end":"11bd:0b11"}` | MATCH; the `0b3c JMP→0x28fb` edge now points into pocket-defined orphan bytes — no absorption (target owned by no function; slice-21 R7 orphan state unchanged); return `[0b14..0b3e]` left undefined |
 | H13 | `clear_msw_and_callfar` (was `FUN_11bd_2a5a`) | `[2a5a..2ad8]` | `{"entry_point":"11bd:2a5a","body_start":"11bd:2a5a","body_end":"11bd:2ad8"}` | MATCH — the `CALLF ES:[0xd5a]` fall-through absorbed the `2ac4..2ad8` return block INTO the body (statically contiguous per listing — no separate create made, none needed); `2ad9..2ada` tail cell EXCLUDED ✓ |
+
+** `**`: the six primary-only relabels (H1/H3/H4/H5/H9/H10 — and H8's return
+half) are ONE deferred layer, not six defects: every far-return block is
+entered only through the runtime far-ret pair its handler stores
+(`[0x467]/[0x469]`, `[0x3fc]/[0x3fe]`, `[0x160]/[0x162]`, `[0x4a2]/[0x4a4]`
+← stored IP + CS from `[0x9b6]`), so the landing create CANNOT statically
+absorb them — the one-hop-out consumer of that pair is the deferred layer
+(Deferrals: "Far-return blocks LEFT UNDEFINED"). Task-1 report concern 3
+anticipated exactly this outcome.
 
 Side-effect discloses (analyzer-created, RATIFIED+FLAGGED per slice-17/21
 precedent — both are H4/H5 callee islands resolved from the `CALL` edges
@@ -4253,7 +4266,7 @@ unchanged.
 | `FUN_11bd_076f` | `11bd:076f` | landing `0x749:w0`; exit `07b7 ebfe` self-spin; callee `073c`, calls into `FUN_11bd_0733` ×2 | — (create-only) | RTC-port arm role open |
 | `FUN_11bd_07e7` | `11bd:07e7` | landing `0x8ac:w0`; PIT read/reprogram + `[0x20]/[0x22]` vector-save; tail-JMP `084f→0ad5` | — (create-only) | installed-vector region `0852..` unowned (no attributed entry) |
 | `FUN_11bd_0938` | `11bd:0938` | landing `0x381:w0` (THE `0x0938` cite row); body split by undecodable `f3 f0` (`0974..0975`); `RET 099a` sits in the unowned remainder | — (create-only) | flow-split: whole-body role needs the `0976..099a` disposition first |
-| `FUN_11bd_099b` | `11bd:099b` | landing `0x8da:w0`; A20 port `0x92` ops; exit `09cc HLT`; analyzer absorbed `09cf..09d3`; `09cd..09ce` re-listed orphan | — (create-only) | `[0x120c]`-test branch semantics deferred |
+| `FUN_11bd_099b` | `11bd:099b` | landing `0x8da:w0`; A20 port `0x92` ops; exit `09cc HLT`; analyzer absorbed `09cf..09d3` as the `JZ`@`09c2` taken leg; `09cd..09ce` re-listed orphan | — (create-only) | `[0x120c]`-test branch semantics deferred |
 | `FUN_11bd_09d7` | `11bd:09d7` | landing `0x3a7:w0`; FNSAVE `[BX]` via `[0xf82]`; pre-entry block `09d4..09d6` absorbed; exit `0a34 HLT` | — (create-only) | FPU-state consumer (`[0xf82]` role) deferred |
 | `FUN_11bd_0a5e` | `11bd:0a5e` | landing `0x71a:w0`; ports `0x3f00/0x3f20`; exit `0a84 ebfe` spin | — (create-only) | `[0x4a2]/[0x4a4]` pair consumer deferred |
 | `FUN_11bd_0a9f` | `11bd:0a9f` | landing `0x8b2:w0`; mask-all `OUT 0x21,0xff` + `SUB SP,[0x9c4]`; shared shutdown tail `0ad5..0ae1` (`LIDT [0x8d0]`→`INT 0xff`) resolved UNDER this body | — (create-only) | LIDT-class cite in-body → wording leg AVAILABLE, withheld: tail shared by H6@`084f`/H12@`0b0b` edges + `INT 0xff` consumer tree = deferred layer |
@@ -4316,3 +4329,44 @@ unchanged.
 - Suite: no test/tool/C changes; `cmake --build build && ctest` green
   post-write (docs-only diff). `/media/felipe/FIFAPCCD/` untouched;
   `fifa96.rep` churn left unstaged.
+
+### Fix wave (final-review corrections, 2026-09-29 — docs-only, zero Ghidra writes)
+
+Live verification (reads only, this wave): `read_memory(11bd:09c2,6)` →
+`{"data":[116,11,228,146,12,3],"hex":"740be4920c03"}` — `JZ` rel8 `+0x0b`:
+target `09c2+2+0x0b = 09cf` ✓ (and `0x259f−0x1bd0 = 0x09cf`);
+`disassemble_bytes(11bd:09c2, length 16, dry_run=true)` re-emitted the same
+render `JZ 0x1000:259f` with `b0fe MOV AL,0xfe` living at `09cf` ✓ — the
+reviewer's finding stands: the Task-1 H8 body-row arrow `→09cd` was an
+arithmetic error on the rendered operand. Spot-checked two re-quoted
+proposals against the Task-1 boundary rows (H1 `[040e..045d]` 80 B; H10
+`[0a5e..0a9e]` 65 B "contiguous incl. return") ✓ as printed in the
+reviewer's finding. Changes made (this section only; prior sections
+untouched):
+(1) H8 walk table — `JZ` arrow corrected `09cd`→`09cf` (with the byte cite
+above); halt-retry row's "also the JZ@`09c2` target" claim deleted,
+replaced with the no-predecessor/orphan explanation; former "beyond-exit
+block `09cf..09d6`" row split into "JZ-leg block `09cf..09d3`" (REACHED —
+explains the create absorption) and the `09d4..09d6` gate stub (NOT
+reached by H8 flow; H9-gate-only), boundary row and both deferrals-region
+references updated to match;
+(2) post-bounds table — H1/H3/H4/H5/H9/H10 relabeled MATCH →
+DEVIATION → RATIFIED against their RE-QUOTED Task-1 boundary rows
+(previously the proposal cells had been silently re-based to primary
+only); H8/H9 proposal cells likewise re-quoted from Task-1; shared
+`**` note added pointing the six far-ret halves at the one Deferrals
+bullet (flow-following acceptance, anticipated by Task-1 report concern
+3);
+(3) Minors folded — H4 retry-loop range completed to `06c1..06c9`; H11
+gate+exit range completed to `0ac7..0ad4`; H13 push-storm partition
+cleaned (body row `2a76..2a9f` lists the storm head, segment row
+`2aa0..2ac3` lists the tail with per-op addresses — no double-listing,
+no address mislabels); `(call-time envelope; final bounds below)` added
+to the `0938`/`099b` create rows; H2 window wording aligned with the
+disclosed decoder-skip behavior ("emission ENDED at `04bd` because the
+linear decoder does not carry across the `04be` defined unit"); Task-2
+leg rationale for the `09cd` 2-byte pre-define reworded (it resolves to
+the orphan row — the JZ does not reach it).
+Program state and the prior commits' cites were NOT re-verified beyond
+the two read-only probes above; nothing in the listing was mutated this
+wave.
