@@ -368,3 +368,118 @@ listed link (`DEC`/`SUB` + `JNZ`/`JZ` + `JMP` triples are contiguous:
 1+22→436b/436e) are separate rows above, not gaps. Merge point
 `11bd:451e` (`CMP [0x10ee],0xff`) and the `451e..4586` tail are exit
 facts owned by the `3ed8 verdict` section, not re-verified here.
+
+### Callee verdicts (one-layer, verified 2026-09-29, program `/fifa96.exe`)
+
+Scope: the 15 proxy-hit arms resolve to 8 unique callees (far-thunk
+delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx`, re-confirmed per callee by
+`get_function_by_address` at the computed entry; unresolvable: none).
+Default-row calls (`44fa`/`450a`/`451a`, body `11bd:44e7` past `4368`)
+are downstream consumers — NOT in scope, untouched.
+`mem_grow_relocate` (`1000:0b12..1000:0c0c`, 0 FUN callees) is already
+CONFIRMED+renamed (Codec funnel section) — no new row, no re-rename.
+Leaf = the callee itself is the one allowed FUN layer (0 callees);
+any callee with ≥1 callee is a second layer past the arm body and
+defers its arm (record, do not pursue).
+
+| arm # | call site | callee FUN + bounds | verdict + evidence | new_name or — |
+|-------|-----------|---------------------|--------------------|---------------|
+| 1, 5, 14, 15, 22 | `CALL 0x1000:8844` at 4379 / 43bb | `probe_xms_installed`, `11bd:6c74..6c83`, leaf (0 callees) | CONFIRMED — `MOV AX,0x4300` at 6c74 (INT 2Fh XMS installation check) + `INT 0x2f` at 6c77 + `CMP AL,0x80` at 6c79 + `OR byte ptr [0x36],AL` at 6c7f (sets the `0x80` bit in `[0x36]` iff XMS present; same cell arm 5 publishes at 442f) | probe_xms_installed |
+| 2 | `CALL 0x1000:8242` at 43f2 | `probe_bios_model`, `11bd:6672..66a1`, leaf (0 callees) | CONFIRMED — `CMP byte ptr [0x34],0x15` gate at 6672 + `MOV AH,0xc0` at 667c + `INT 0x15` at 667e (BIOS Get System Configuration) + model-byte validation `CMP CL,0xe0/0xf8/0xfc` + `CMP CH,0x4` at 6689..669b + `MOV AL,ES:[BX+0x5]` feature-byte return at 669d (0 on gate/model/carry fail) | probe_bios_model |
+
+NOT-CONFIRMED (no rename, no row): `FUN_11bd_6400`
+(`11bd:6400..641c`, leaf, called at 4380 by arms 1+22): `XOR AX,AX` at
+6400 + `XOR BX,BX` at 6402 + `MOV CL,0x82` at 6404 + `INT 0xdc` at 6406
++ `SHL BX,0x6` / `MOV word ptr [0xeca],BX` at 640e/6411 + `SHL DX,0x6`
+/ `MOV word ptr [0xece],DX` at 6415/6418. Missing: the `INT 0xDCh`
+`CL=0x82` input/output contract (extender-private API) — the queried
+source is unidentified, so no role name.
+
+In-scope arms with nothing to verdict: 6, 8, 11, 12, 13, 16, 21
+(call-free per the arm table; arm 13's 4403 join never reaches a call).
+
+### Guard-deferred: arm 1 (11bd:436e)
+
+Call sites: 4379 (`6c74` CONFIRMED leaf), 4380 (`6400` NOT-CONFIRMED
+leaf), 43bb (`6c74`), 43c6 (deep, see below). Known: error path exits
+via the noreturn call. Excess: `FUN_11bd_22ad` (`11bd:22ad..2381`,
+called at 43c6) has 1 FUN callee (`FUN_11bd_25ee`) — a second layer
+past the arm body (decompile surface: error-message formatting +
+`0x15e8`/`0xf22` word-table scan). No rename.
+
+### Guard-deferred: arm 3 (11bd:440b)
+
+Call site: 441d (deep). Excess: `FUN_11bd_69e0` (`11bd:69e0..6a2c`)
+has 1 FUN callee (`FUN_11bd_69c7`, `11bd:69c7..69df`) — a second layer
+past the arm body (decompile surface: port-`0x92` writes + 9-byte copy
+loops). No rename.
+
+### Guard-deferred: arm 4 (11bd:4469)
+
+Call sites: 447f (deep), 441d via the 4418 gate-fail join (deep).
+Excess: `FUN_11bd_66b9` (`11bd:66b9..66d3`, at 447f) has 2 FUN callees
+(`FUN_11bd_0733`, `FUN_11bd_0c0d`) plus `FUN_11bd_69e0` (at 441d, as in
+arm 3) — both second layers past the arm body. No rename.
+
+### Guard-deferred: arm 5 (11bd:4423)
+
+Call sites: 4445 (`mem_grow_relocate`, already-named leaf), 444f
+(deep), 43bb/43c6 via the 43aa tail join (`6c74` leaf + deep).
+Excess: `FUN_11bd_243e` (`11bd:243e..245b`, at 444f) has 1 FUN callee
+(`FUN_11bd_65c3`) plus `FUN_11bd_22ad` (at 43c6, as in arm 1) — both
+second layers past the arm body. No rename.
+
+### Guard-deferred: arm 7 (11bd:446c)
+
+Shared body with arm 9: 447f (`66b9`) + 441d via the 4418 gate-fail
+join (`69e0`) — both deep as in arm 4. No rename.
+
+### Guard-deferred: arm 9 (11bd:446c)
+
+Same as arm 7 (shared target): 447f + 441d, both deep. No rename.
+
+### Guard-deferred: arm 10 (11bd:44a3)
+
+Call site: 441d via the 44a8→4418 join (deep: `69e0` as in arm 3).
+No rename.
+
+### Guard-deferred: arm 14 (11bd:44c6)
+
+Call sites: 43bb (`6c74` leaf) + 43c6 (deep) via the 43aa join.
+Excess: `FUN_11bd_22ad` (as in arm 1). No rename.
+
+### Guard-deferred: arm 15 (11bd:44ce)
+
+Same 43aa-tail convergence as arm 14: 43bb (`6c74` leaf) + 43c6
+(`22ad` deep). No rename.
+
+### Guard-deferred: arm 17 (11bd:4464)
+
+Falls through into the arm-4 body: 447f (`66b9` deep) + 441d via the
+4418 join (`69e0` deep). No rename.
+
+### Guard-deferred: arm 18 (11bd:449b)
+
+Call site: 441d via the 44a8→4418 join (deep: `69e0` as in arm 3).
+No rename.
+
+### Guard-deferred: arm 19 (11bd:4469)
+
+Shared target with arm 4: 447f (`66b9`) + 441d (`69e0`), both deep.
+No rename.
+
+### Guard-deferred: arm 20 (11bd:440b)
+
+Shared target with arm 3: 441d (`69e0` deep). No rename.
+
+### Guard-deferred: arm 22 (11bd:436b)
+
+Falls through into the arm-1 body: 4379/43bb (`6c74` leaf), 4380
+(`6400` NOT-CONFIRMED leaf), 43c6 (`22ad` deep). No rename.
+
+Closeout: guard-deferred arms are 14 of 22
+(1, 3, 4, 5, 7, 9, 10, 14, 15, 17, 18, 19, 20, 22) = 63.6% > 1/3 —
+STOP diving, skeleton-plus closeout (arm table complete, deep dives
+`69e0→69c7`, `66b9→0733/0c0d`, `243e→65c3`, `22ad→25ee` deferred to a
+follow-up slice). Fully in-scope arm: 2 (row above). Call-free arms:
+6, 8, 11, 12, 13, 16, 21.
