@@ -1937,7 +1937,7 @@ epilogue, NOT in this block); no absolute-cell store with an immediate in
 for the three candidate entries (`2978`, `2a30`, `2a6c`) are 0-hit
 program-wide, including inside undefined holes. The block head byte at
 `2978` (`803efe0d01` = `CMP byte ptr [0xdfe],0x1`, slice-14 citation) and
-the MSW-clear locator at `2a6c` (`a14000 f7d0 23c8` = `MOV AX,[0x40]` /
+the MSW-clear locator at `2a6c` (`a14000 f7d0 23c1` = `MOV AX,[0x40]` /
 `NOT AX` / `AND AX,CX`, `0f` opening `LMSW` at `2a73`, slice-16 flag)
 were re-confirmed by raw `read_memory` and remain UNDEFINED. With zero
 attributed entries there are no walks: `disassemble_bytes` was not
@@ -1947,7 +1947,10 @@ cannot surface, and `get_xrefs_to` is dead for these operand forms
 (control probes on `2978`/`2a6c` return 0 like every other cell) —
 instruction enumeration + raw-byte scans are the authority, and the
 entry mechanism therefore remains dynamic or gap-internal (e.g. fall-in
-from the `2811..296c` pocket's undecoded flow), unresolved.
+from the `2811..296c` pocket's undecoded flow), unresolved. Quote protocol:
+read_memory `hex` fields must be reconciled against the response's `data`
+array or disassembly before being quoted verbatim; an 8-byte render glitch
+(this section, found at review) produced `23c8` where bytes are `23c1`.
 
 | Gap-state item | Evidence (verbatim) | Boundary reading |
 |----------------|---------------------|------------------|
@@ -1957,7 +1960,7 @@ from the `2811..296c` pocket's undecoded flow), unresolved.
 | pocket edge byte | `get_function_by_address(11bd:296c)` → `{"error":"No function found for 11bd:296c"}` | pocket `2811..296c` still unowned ✓ |
 | right neighbor | `get_function_by_address(11bd:2adb)` → `{"name":"FUN_11bd_2adb","body_start":"11bd:2adb","body_end":"11bd:2ae8"}` | block ends at start−1 ✓; `0x1000:46ab − 0x1bd0 = 2adb` corroborated live by the `7744`/`792b` CALLs below |
 | head byte | `read_memory(11bd:2978,5)` → `803efe0d01` | `CMP byte ptr [0xdfe],0x1` — slice-14 quote byte-exact, still undefined listing |
-| MSW-clear locator | `read_memory(11bd:2a6c,8)` → `a14000f7d023c80f` | `MOV AX,[0x40]`@`2a6c` + `NOT AX`@`2a6f` + `AND AX,CX`@`2a71` + `0f`(@`2a73`, `LMSW` opener) — slice-16 flag byte-exact, still undefined, still not adopted |
+| MSW-clear locator | `read_memory(11bd:2a6c,8)` → `a14000f7d023c10f` | `MOV AX,[0x40]`@`2a6c` + `NOT AX`@`2a6f` + `AND AX,CX`@`2a71` + `0f`(@`2a73`, `LMSW` opener) — slice-16 flag byte-exact, still undefined, still not adopted |
 
 | Search run | Hits (addr, mnemonic → target) | Verdict |
 |------------|--------------------------------|---------|
@@ -1968,7 +1971,7 @@ from the `2811..296c` pocket's undecoded flow), unresolved.
 | `search_instructions` operand `:296` | 0 | negative |
 | `:297` | 2: `0d90`/`0d9e` JNZ→`0x1000:297c` | `→11bd:0dac` OUT (same insns as `0x1000:29` run) |
 | `:298` | 1: `0eaf` CALL→`0x1000:2982` | `→11bd:0db2` OUT |
-| `:299` `:29b` `:29c` `:29d` `:29e` `:29f` `:2a0` `:2a1` `:2a2` `:2a3` `:2a4` `:2a5` `:2a6` `:2a7` `:2a8` `:2a9` `:2aa` `:2ab` `:2ad` | 0 each (18 patterns) | negative ×18 |
+| `:299` `:29b` `:29c` `:29d` `:29e` `:29f` `:2a0` `:2a1` `:2a2` `:2a3` `:2a4` `:2a5` `:2a6` `:2a7` `:2a8` `:2a9` `:2aa` `:2ab` `:2ad` | 0 each (19 patterns) | negative ×19 |
 | `:29a` | 1: `0dba` JNZ→`0x1000:29a3` | `→11bd:0dd3` OUT |
 | `:2ac` | 7: the `0x1000:2ac4` set | `→11bd:0ef4` OUT ×7 (same insns) |
 | `search_instructions` operand `0x1000:45` (added: code-space window `4500..45ff` = `11bd:2930..2a2f`) | 0 | negative — NO defined `CALL`/`JMP` targets anywhere in the block's first half |
@@ -2055,6 +2058,9 @@ at BOTH functions, lead-not-evidence. Second flagged-not-adopted contact:
 DATA TAIL CELL — read at `2adb` (`FUN_11bd_2adb` first insn,
 `MOV DX,CS:[0x2ad9]`) and written at `7739` (`setup_memory_hardware`,
 `MOV CS:[0x2ad9],DX`) — flagged-not-adopted; ownership question deferred.
+Task-2 report Concern 3 (copied): if a future ownership decision classes
+`2ad9..2ada` as data, the block's code range shrinks to `2978..2ad8` —
+noted so a later create doesn't blindly claim the tail.
 
 ### Writes (before-state → after-state — ZERO-WRITE branch)
 
