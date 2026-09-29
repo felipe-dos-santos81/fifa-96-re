@@ -2983,3 +2983,134 @@ instructions", Writes row `×61 calls (59 distinct)`). Overlay disp-forms
 `1991:0ce0`/`0ce3` (`FUN_1991_0c9e`) given an explicit named row in the
 OPEN enumeration. Verdict and all window dispositions unchanged; zero
 Ghidra writes (one read-only search call this round).
+
+### Disposition (Task 2 — settled 2026-09-29)
+
+**NONE-FROM-DISCIPLINE** — final disposition for this slice, restating the
+Task-1 verdict with the sweeps' totals as enumeration scope and the
+three-way consumer outcome cited (every Task-1 table above is consumed by
+reference, not rewritten):
+
+1. *Enumeration scope*: **61 recorded `search_instructions` calls — 59
+   distinct pattern runs + 2 duplicate executions — × 14,006 defined
+   instructions**: 11 literal-family runs (the `0x9ba`/`9ba`/`[0x9ba]`
+   patterns return only the `6255` WRITE), the 9-run constant base-load
+   inventory (censuses **BX 33 / SI 59 / DI 34 / BP 1**), the
+   form-complete `[base+disp]` partition over the four ModRM bases plus
+   bare-register and base+index encodings (the `[BX + 0` envelope 320
+   reconciled with its 16-run digit partition; the two cap-truncated
+   discovery runs superseded by complete partitions or targeted negatives,
+   pagination no-op evidenced live), and the absolute-cell family sweep
+   `[0x9b` = **17 hits, of which `[0x9ba]` contributes exactly 1 — the
+   store; reads: ZERO**. Every constant-base candidate with proven carry
+   resolves arithmetically OUT of `0x9b8..0x9bf` (Base→window arithmetic
+   table); the reader table is empty-with-reason; controls quoted
+   (`get_xrefs_to(0x9ba)` ×0, `list_data_items_by_xrefs` empty envelope —
+   dead channel, reported not relied upon).
+2. *Three-way consumer outcome*: **NONE-FROM-DISCIPLINE**. READERS-FOUND-*
+   and PARTIAL are refuted jointly by the reader table and the per-candidate
+   arithmetic — no confirmed read of `[0x9ba]` survives any enumerated run;
+   the one-hop transfer question is **vacuous at hop zero** (no reader ⇒ no
+   loaded value ⇒ no `CALL reg`/`JMP reg`/`[mem]`-target form fed from
+   `[0x9ba]` at any hop in the static surface). Sensitivity proven by
+   adjacency, not assumed: the same sweeps DO find `JMP word ptr`
+   transfer-consumers on the neighbor cells `[0x9bc]` (`092d`) and `[0x9be]`
+   (`0934`) — the discipline detects this shape when present; `[0x9ba]`
+   carries none.
+3. *Armed-conditional (stated once, here, not per row)*: the store at `6255`
+   fires only when the `3ed8` dispatch arms value `0x29bc` into slot
+   `[BP+-0x5a]` and pushes it (`452f`→`4536`→`6250`) — readers could exist
+   only under armed-state reasoning; even in that armed state **the `0x29bc`
+   value reaches NO indirect transfer — NO-CONSUMERS-STATICALLY** (not
+   NO-DATA-ONLY: that answer presupposes readers consuming the value as
+   data, and there are none), and the value dies in data at the cell — to
+   the extent static sweeps can say so; terminal form = the `6255` store
+   itself.
+4. *Entry-lead chain (slices 17→18→19→20)*: **CLOSED-with-answer-as-far-as
+   static-sweeps-go.** The chain: slice-17 named the `0x29bc` slot stores;
+   slice-18 settled the slot readers as DATA-ONLY into DIRECT calls;
+   slice-19 settled callee `6250` as verbatim CELL-STORAGE at `[0x9ba]`
+   with zero indirect in body; this slice settles the cell's consumers as
+   NONE-FROM-DISCIPLINE. At no layer does the lead reach a transfer.
+   **Nothing re-extends**: with zero readers there is no reader's-own
+   consumers to name-and-defer (the one-layer guard has nothing to guard —
+   the chain terminates AT the cell within static scope). What remains
+   dynamic is NOT a dived lead: it lives in the OPEN-WINDOW rows (the
+   enumeration's honest holes — dynamic bases `2df8`/`4cc3`,
+   functionless-band OPEN-WINDOW-with-candidate-constant sites
+   `1991:20d0`/`1991:3920..3964`,
+   ordering-precedence sites `62d7`/`63ef`/`0d65-0d6b`, transfer-form
+   OPENs `1991:0cf7/1f7d/33a5/33e1/453b/4f91`) and in the runtime legs
+   (`[0x40]`/`[0x9c0]`, the `66f6` DS-reload chain, gap/orphan-region code,
+   the `1991:` overlay bank, implicit `MOVS`/`STOS` forms).
+
+The negative binds the enumeration, not existence (honesty rule): this
+disposition records "no consumers attributable from the enumerated static
+sweeps", never "no consumers exist".
+
+No `### Entry function` row is emitted and the capped write path was NOT
+executed — both were authorized only under materialization (READERS-FOUND
+**and** a statically-resolved indirect-transfer target **and** a citable
+dry-run boundary), whose first condition is already false.
+
+### Writes (Task 2 — NONE-FROM-DISCIPLINE branch: ZERO writes; live unmoved-proof pair)
+
+NONE. The program was not touched: the only Ghidra calls executed this
+task are the two read-only read-backs below, quoted verbatim (live,
+this task, program `/fifa96.exe`), in slice-18's unmoved-proof form:
+
+| Probe | Verbatim response (live, this task) | Unmoved check |
+|-------|--------------------------------------|---------------|
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | byte-identical to slice-18's and slice-19's Task-2 quotes — no function was created at the lead cell by this slice |
+| `find_code_gaps(min_size=1)` | envelope `{"total":131,"offset":0,"limit":100,…}`; covering row verbatim: `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | block `11bd:2978..2ada` (`4548−1bd0=2978`, `46aa−1bd0=2ada` ✓) still **size 355**, `has_undefined_bytes:true`, same neighbors — unchanged vs slice-17/18/19's rows and Task-1's re-read; no shrink, no reflow |
+
+Write-tool inventory for this task: zero — no `disassemble_bytes`
+(materialization branch not triggered; not even dry-run — there was no
+cited reader or target to walk), no `create_function`, no
+`rename_function`/`rename_symbol`, no `set_comment`/`batch_set_comments`,
+no `set_global`, no `save_program`; no Ghidra transaction was opened; the
+listing was not modified in any way. `/media/felipe/FIFAPCCD/` untouched;
+pre-existing function state re-read only; `fifa96.rep` churn left
+unstaged.
+
+### Deferrals (Task 2)
+
+- **OPEN-WINDOW holes stay:** classes with example rows cited by address —
+  dynamic-base sites (`2df8`, `4cc3`), functionless-band
+  candidate-constant sites (`1991:20d0`, `1991:3920..3964`),
+  ordering-precedence sites (`62d7`, `63ef`, `0d65/0d68/0d6b`),
+  transfer-form OPENs (`1991:0cf7/1f7d/33a5/33e1/453b/4f91`), stub/orphan/
+  overlay-bank and implicit `MOVS`/`STOS` forms — enumerated above; they
+  are holes in the enumeration, not leads dived; closing them needs
+  runtime-side evidence, out of slice scope.
+- **Reader consumers: N/A** — zero readers were confirmed, so there is no
+  reader-of-a-reader to name-and-defer; the one-layer guard terminated at
+  the cell itself.
+- **Block `2978..2ada` stays fully named-open:** the size-355 covering gap
+  row is quoted under `### Writes` above; zero writes occurred, so no
+  shrink arithmetic applies (the materialization split was never
+  triggered).
+- **`[0x9b8]`/`[0x9bc]`/`[0x9be]` family roles untouched (cite-only):**
+  `[0x9b8]` READ-only config-string cell, `[0x9bc]`/`[0x9be]` carry the
+  ONLY transfer-consumers seen in the family (`092d`/`0934` `JMP word
+  ptr`) — those two cells' consumers belong to their own story (slice-8
+  publish writes, `dispatch_mode_vector`/`FUN_11bd_0931` reads) and were
+  not re-opened here.
+- **`1e9f`/`6250` full verdicts stay non-goals:** current status as
+  recorded — `FUN_11bd_1e9f` default-named, NONE-INDIRECT per slice-19;
+  `publish_mode_vector` slice-8 name live, CELL-STORAGE per slice-19;
+  this slice cites both only as chain facts (the `6255` store inside the
+  latter's body; the `4536` direct-call arrival into it).
+- **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
+  UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE,
+  runtime-written) — a zero-write pass occurred; nothing in this slice
+  could have moved them.
+- **Prior-slice statuses, exact:** this section **closes slice-19's
+  deferral line 1 ("`[0x9ba]` consumers = the next lead") — now
+  dispositioned**: the consumers were enumerated and answered
+  NONE-FROM-DISCIPLINE, terminating the `0x29bc` entry-lead chain at the
+  cell within static scope; slice-19's remaining deferrals stand,
+  slice-18's remaining deferrals stand (its line 1 was already discharged
+  in slice-19), and slice-17's open legs (fall-in `2811..296c`,
+  runtime-installed pointers, `CS:[0x2ad9]` tail cell) stand as
+  recorded; slice-8 `publish_mode_vector` records unchanged.
