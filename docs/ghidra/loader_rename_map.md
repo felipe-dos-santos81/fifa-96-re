@@ -3113,7 +3113,7 @@ unstaged.
   slice-18's remaining deferrals stand (its line 1 was already discharged
   in slice-19), and slice-17's open legs (fall-in `2811..296c`,
   runtime-installed pointers, `CS:[0x2ad9]` tail cell) stand as
-   recorded; slice-8 `publish_mode_vector` records unchanged.
+  recorded; slice-8 `publish_mode_vector` records unchanged.
 
 ### Fix wave (final whole-branch review 2026-09-29 — DI-negative ledger completion + two word-level corrections; every claim verified live this wave; zero Ghidra writes)
 
