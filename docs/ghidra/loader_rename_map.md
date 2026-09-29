@@ -4103,3 +4103,216 @@ churn left unstaged.
   return-block evidence above is the naming-leg raw material for Task 2's
   verdict rows (SMSW/LMSW-class cite exists ONLY in H13; band handlers'
   mechanism wording bounded by their port/PIC/CMOS operand cites).
+
+### Writes (Task 2 — capped creates + verdicts, program `/fifa96.exe`)
+
+Before-state (verbatim, all captured before the first mutation): all 13
+landing offsets return the Task-1 dedupe-table owner errors live —
+`get_function_by_address(11bd:040e)` → `{"error":"No function found for 11bd:040e"}`,
+same form for `0491`/`05af`/`0697`/`076f`/`07e7`/`0938`/`099b`/`09d7`/`0a5e`/
+`0a9f`/`0ae2`/`2a5a`; `get_function_count` → `{"function_count":300,"program":"fifa96.exe"}`;
+covering gap rows byte-identical to Task 1's quotes (block
+`{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,…}`,
+bands `1000:1f30..2302` 979 / `1000:230c..2491` 390 / `1000:2508..2792` 651,
+total 136). No STOP-BLOCKED condition fired: no create landed on a defined
+byte, no thunk collision at any landing.
+
+REAL disassembly at the cited ranges (13 calls + 1 leg, all `success:true`,
+emission byte-identical to the Task-1 dry-run cites above): `11bd:040e` len
+53 → `040e..0442` (20 insns, ends on `f4 HLT`); `11bd:0491` len 45 →
+`0491..04bd` (16 insns — window boundary = the `DAT_11bd_04be` stop-short,
+H2 primary created to here only; the post-carve fragment `04c0..04d2` was
+NOT disassembled — forcing a boundary through the defined unit is the
+discouraged path; it stays undefined); `11bd:05af` len 182 → `05af..0664`
+(98 insns); `11bd:0697` len 51 → `0697..06c9` (18, ends on the `ebf5` retry
+JMP); `11bd:076f` len 74 → `076f..07b8` (30, ends on the `ebfe` self-spin);
+`11bd:07e7` len 107 → `07e7..0851` (46, ends on the `e98302` tail-JMP);
+`11bd:0938` len 99 → `0938..099a` (44 — note the 2-byte NON-EMIT gap at
+`0974..0975`, raw `read_memory(11bd:0970,16)` →
+`data[252,186,240,0,243,240,46,110,…]` ↔ hex `fcbaf000f3f02e6e…` ✓: bytes
+`f3 f0` at `0974..0975` = an undecodable REP+LOCK prefix pair — the pocket
+`28e7..28eb` skip-window class, the disassembler jumps `0973 → 0976`);
+`11bd:099b` len 50 → `099b..09cc` (19); `11bd:09cd` len 2 → `09cd..09ce`
+(the `ebfd` halt-retry, pre-defined so H8's JZ leg resolves without
+over-reaching — cited H8 row); `11bd:09d7` len 94 → `09d7..0a34` (42);
+`11bd:0a5e` len 40 → `0a5e..0a85` (15, ends on the `ebfe` self-spin);
+`11bd:0a9f` len 67 → `0a9f..0ae1` (25, incl. the shared shutdown tail
+`0ad5..0ae1`); `11bd:0ae2` len 48 → `0ae2..0b11` (18); `11bd:2a5a` len 127
+→ `2a5a..2ad8` (52, incl. the `2a6c` MSW-clear shape and the `2ac4..2ad8`
+return block).
+
+Creates (order: `0ae2` → `0a9f` → `07e7` so the shared tail `0ad5..0ae1`
+resolves under one owner before the three inbound edges; then batched).
+Every response verbatim:
+
+| create cmd | verbatim response |
+|------------|--------------------|
+| `create_function(11bd:0ae2)` | `{"success":true,"address":"11bd:0ae2","function_name":"FUN_11bd_0ae2","entry_point":"11bd:0ae2","body_size":61,"message":"Function created successfully at 11bd:0ae2"}` |
+| `create_function(11bd:0a9f)` | `{"success":true,…,"function_name":"FUN_11bd_0a9f","entry_point":"11bd:0a9f","body_size":65,…}` |
+| `create_function(11bd:07e7)` | `{"success":true,…,"function_name":"FUN_11bd_07e7","entry_point":"11bd:07e7","body_size":107,…}` |
+| `create_function(11bd:040e)` | `{"success":true,…,"FUN_11bd_040e",…,"body_size":53,…}` |
+| `create_function(11bd:0491)` | `{"success":true,…,"FUN_11bd_0491",…,"body_size":45,…}` |
+| `create_function(11bd:05af)` | `{"success":true,…,"FUN_11bd_05af",…,"body_size":182,…}` |
+| `create_function(11bd:0697)` | `{"success":true,…,"FUN_11bd_0697",…,"body_size":51,…}` |
+| `create_function(11bd:076f)` | `{"success":true,…,"FUN_11bd_076f",…,"body_size":74,…}` |
+| `create_function(11bd:0938)` | `{"success":true,…,"FUN_11bd_0938",…,"body_size":60,…}` |
+| `create_function(11bd:099b)` | `{"success":true,…,"FUN_11bd_099b",…,"body_size":55,…}` |
+| `create_function(11bd:0a5e)` | `{"success":true,…,"FUN_11bd_0a5e",…,"body_size":40,…}` |
+| `create_function(11bd:09d7)` | `{"success":true,…,"FUN_11bd_09d7",…,"body_size":97,…}` |
+| `create_function(11bd:2a5a)` | `{"success":true,…,"FUN_11bd_2a5a",…,"body_size":127,…}` |
+
+Zero nudges: every create succeeded first-call; the cap's
+`disassemble_first=false` retry was never engaged (the two boundary
+deviations below are flow decisions on ALREADY-defined bytes — a nudge
+cannot change them; ratify per rule).
+
+Post-bounds vs proposal (all `get_function_by_address` verbatim read-backs;
+envelope = body_start..body_end as returned, block-ownership quirks quoted
+not fought, slice-17/21 precedent):
+
+| H | FUN | proposal (Task 1) | post bounds | disposition |
+|---|-----|-------------------|-------------|-------------|
+| H1 | `FUN_11bd_040e` | `[040e..0442]` primary | `{"body_start":"11bd:040e","body_end":"11bd:0442"}` | MATCH (primary; return block `0443..045d` left undefined — far-ret entry cite `ES:[0x160]←0x443`, deferred) |
+| H2 | `FUN_11bd_0491` | `[0491..04bd]` (split at `DAT_11bd_04be`) | `{"body_start":"11bd:0491","body_end":"11bd:04bd"}` | MATCH the split; fragments `04c0..04d2`/`04d3..04f2` left undefined, stop-short `04bd|04be` cited |
+| H3 | `FUN_11bd_05af` | `[05af..0664]` | `{"body_start":"11bd:05af","body_end":"11bd:0664"}` | MATCH (return `[0665..0674]` undefined, entry cite `PUSH 0x665`) |
+| H4 | `FUN_11bd_0697` | `[0697..06c8]` primary | `{"body_start":"11bd:0697","body_end":"11bd:06c9"}` | MATCH (`06c8..06c9` = the `ebf5` retry JMP, owned; return `[06ca..06fb]` undefined) |
+| H5 | `FUN_11bd_076f` | `[076f..07b7]` | `{"body_start":"11bd:076f","body_end":"11bd:07b8"}` | MATCH (`ebfe` spin `07b7..07b8` owned; return `[07b9..07e6]` undefined) |
+| H6 | `FUN_11bd_07e7` | `[07e7..0851]` | `{"body_start":"11bd:07e7","body_end":"11bd:0851"}` | MATCH — tail-JMP into `0ad5` (now owned by H11) resolves as an inter-function edge |
+| H7 | `FUN_11bd_0938` | `[0938..099a]` | `{"body_start":"11bd:0938","body_end":"11bd:0973"}` | DEVIATION → RATIFIED: the undecodable `f3 f0` pair at `0974..0975` breaks linear flow; remainder `[0976..099a]` defined-but-unowned (post-probe `get_function_by_address(11bd:099a)` → `{"error":"No function found for 11bd:099a"}`) — listing-disposition item, no second create across an undecodable gap (the entry cite governs the landing `0938`, not `0976`) |
+| H8 | `FUN_11bd_099b` | `[099b..09ce]` | `{"body_start":"11bd:099b","body_end":"11bd:09d3"}` | DEVIATION → RATIFIED: analyzer additionally flowed the beyond-exit block `09cf..09d3` (probe `09d1` → `FUN_11bd_099b`); the halt-retry block `09cd..09ce` reappears as an UNCOVERED row (`1000:259d..259e`, `has_orphaned_instructions:true`) despite the envelope — quoted as returned; return `[0b6e..0b93]` left undefined |
+| H9 | `FUN_11bd_09d7` | `[09d7..0a34]` | `{"body_start":"11bd:09d4","body_end":"11bd:0a34"}` | DEVIATION → RATIFIED: the `JNC→09d4` leg auto-disassembled + absorbed the 3-byte block `09d4..09d6` (`e9751e JMP 284c`) PRE-entry (probe `11bd:09d4` → `{"name":"FUN_11bd_09d7","entry_point":"11bd:09d7","body_start":"11bd:09d4","body_end":"11bd:0a34"}`); entry stays `09d7` ✓ |
+| H10 | `FUN_11bd_0a5e` | `[0a5e..0a84]` | `{"body_start":"11bd:0a5e","body_end":"11bd:0a85"}` | MATCH (`ebfe` spin owned; return `[0a86..0a9e]` undefined) |
+| H11 | `FUN_11bd_0a9f` | `[0a9f..0ae1]` (shared-tail proposal) | `{"body_start":"11bd:0a9f","body_end":"11bd:0ae1"}` | MATCH — tail outcome reversed from the interim read (H12 initially showed envelope `0ad5..0b11`; after `create_function(0a9f)` the block `0ad5..0ae1` resolves to H11: probe `11bd:0ad5` → `{"name":"FUN_11bd_0a9f",…}`; H12 final `{"body_start":"11bd:0ae2","body_end":"11bd:0b11"}`) — Task-1 proposal achieved; halt-retry fragment `0ad3..0ad4` left defined-unowned (probe `{"error":"No function found for 11bd:0ad3"}`) |
+| H12 | `FUN_11bd_0ae2` | `[0ae2..0b11]` | `{"body_start":"11bd:0ae2","body_end":"11bd:0b11"}` | MATCH; the `0b3c JMP→0x28fb` edge now points into pocket-defined orphan bytes — no absorption (target owned by no function; slice-21 R7 orphan state unchanged); return `[0b14..0b3e]` left undefined |
+| H13 | `clear_msw_and_callfar` (was `FUN_11bd_2a5a`) | `[2a5a..2ad8]` | `{"entry_point":"11bd:2a5a","body_start":"11bd:2a5a","body_end":"11bd:2ad8"}` | MATCH — the `CALLF ES:[0xd5a]` fall-through absorbed the `2ac4..2ad8` return block INTO the body (statically contiguous per listing — no separate create made, none needed); `2ad9..2ada` tail cell EXCLUDED ✓ |
+
+Side-effect discloses (analyzer-created, RATIFIED+FLAGGED per slice-17/21
+precedent — both are H4/H5 callee islands resolved from the `CALL` edges
+during create; each stopped one byte BEFORE the next arg-pair source cell,
+so the vector source DATA stays intact):
+`get_function_by_address(11bd:06fc)` → `{"name":"FUN_11bd_06fc","signature":"byte FUN_11bd_06fc(void)","entry_point":"11bd:06fc","body_start":"11bd:06fc","body_end":"11bd:0715"}` (H4's `0x1000:22cc` callee; `0716/0718` = arg `0x71a` source cells, undefined ✓);
+`get_function_by_address(11bd:073c)` → `{"name":"FUN_11bd_073c","entry_point":"11bd:073c","body_start":"11bd:073c","body_end":"11bd:0744"}` (H5's `0x1000:230c` callee; `0745/0747` = arg `0x749` source cells, undefined ✓).
+`get_function_count` → 300 → **315** (+15 = 13 cited creates + 2 flow-effect
+islands, exact arithmetic). No pocket/`092c`/`0931`/island body moved
+(`FUN_11bd_2824`/`284c`/`2864`, `restore_fs_gs_and_resume`,
+`dispatch_mode_vector`, `FUN_11bd_0931`, `08c2`/`033c`/`0bc3` unchanged —
+post gap rows for their neighborhoods re-quoted identical).
+
+Name + plate (Step 2): `rename_function(FUN_11bd_2a5a → clear_msw_and_callfar)`
+→ `{"status":"success","message":"Success: Renamed function at FUN_11bd_2a5a
+from 'FUN_11bd_2a5a' to 'clear_msw_and_callfar'",…}` (two PascalCase style
+warnings quoted-as-returned; snake_case kept per repo convention — the
+slice-21 `mode_vector_source_pair` naming-gate precedent). Naming bar:
+the pre-flight ruling accepts msw-clear-class wording ONLY with cited
+MSW-ops — satisfied IN-BODY: `0f01e1 SMSW CX`@`2a69`, `a14000 MOV AX,[0x40]`
+@`2a6c`, `f7d0 NOT AX`, `23c1 AND AX,CX`, `0f01f0 LMSW AX`@`2a73` (the AND
+of SMSW with the NOT of `[0x40]` clears the mask bits the cell names;
+LMSW is the CR0-MSW write). Plate `set_comment(11bd:2a5a, plate)` →
+`{"status":"success","message":"Set plate comment at 11bd:2a5a","warnings":[…"missing Algorithm/Parameters/Returns"…]}`
+(full text in the first Deferrals bullet; `C: none — behavioral (…)` form
+per slice-21). All twelve band handlers KEEP DEFAULT NAMES: the entry leg
+holds (vector landing) but each ROLE leg needs the one-hop-out layer
+(callee trees `06fc`/`073c`/`0360`/`0be3`/`0be9`, port-leg consumers, the
+far-ret pair CONSUMER that re-enters the return blocks) — NOT-CONFIRMED-at-
+role → no rename/plate. H11 additionally withholds despite the now in-body
+LIDT (`0f011ed008` in the absorbed tail block): the tail is three-edge-
+shared with H6/H12 and the `INT 0xff` consumer/IDT state is the deferred
+layer — the missing leg is tail-specificity, recorded below.
+`save_program` → `{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+
+Post-state gap carve (total 136 → **149**; the required block shrink):
+`{"start":"1000:4548","end":"1000:4629","size":226,…,"before_function":"restore_fs_gs_and_resume","after_function":"clear_msw_and_callfar","after_function_address":"11bd:2a5a"}`
+(= `2978..2a59` ✓ head still UNOWNED — slice-17 legs (i)/(ii)/(iii) stand,
+and leg (i) "fall-in from the pocket" now has a named inside-block landing
+at `+0xe2`) and
+`{"start":"1000:46a9","end":"1000:46aa","size":2,…,"before_function":"clear_msw_and_callfar","after_function":"FUN_11bd_2adb"}`
+(= `2ad9..2ada` ✓ — the `CS:[0x2ad9]` live tail-cell row, unchanged
+undefined). Tiling: `226 + 127 + 2 = 355` ✓ = original row size. Band rows
+split at every create: `1f30..1fdd` (174 = `0360..040d`), `2013..2060` (78
+= `0443..0490`), `208e..217e` (241 = `04be..05ad`, `has_undefined_bytes:
+false` = the DAT unit + the two untouched H2 fragments span, quoted as
+returned), `2235..2266` (50 = `0665..0696`), `229a..22cb` (50 =
+`06ca..06fb`), `22e6..2302` (29 = `0716..0732`), `2315..233e` (42 =
+`0745..076e`), `2389..23b6` (46 = `07b9..07e6`), `2422..2491` (112 =
+`0852..08c1`), `2544..256a` (39 = `0974..099a`, `has_orphaned_instructions:
+true` — the H7 undecodable-gap + orphan-remainder row), `259d..259e` (2 =
+`09cd..09ce` orphan row), `2605..262d` (41 = `0a35..0a5d`), `2656..266e`
+(25 = `0a86..0a9e`), `26a3..26a4` (2 = `0ad3..0ad4` orphan row),
+`26e2..2792` (177 = `0b12..0bc2` — all deferred return blocks + the
+non-vector `0b94..0bc2` stub, untouched). `1ea4..1f0b`/`24a6..24f8` rows
+unchanged.
+
+### Verdicts (Task 2)
+
+| FUN | address | evidence | new_name | C counterpart |
+|-----|---------|----------|----------|---------------|
+| `FUN_11bd_040e` | `11bd:040e` | vector landing `0x3d6:w0` (dedupe row); exit `0442 HLT f4`; return block `[0443..045d]` entry-cited by own `ES:[0x160]←0x443` store, left undefined | — (create-only) | role leg open: gate legs + stored-pair consumer unattributed |
+| `FUN_11bd_0491` | `11bd:0491` | landing `0x462:w0`; split stop-short at `DAT_11bd_04be` (`04bd|04be` cited); return cite `ES:[0x3fc]←0x4d3` | — (create-only) | HLT@`04d2` beyond the carve stays unowned — role statement blocked by the split |
+| `FUN_11bd_05af` | `11bd:05af` | landing `0x4f7:w0`; CMOS `0x368/0x36a` nibble-stream ops; exit `0664 HLT` | — (create-only) | operand-level only; `0x665`/`[0x9b6]` roles one hop out |
+| `FUN_11bd_0697` | `11bd:0697` | landing `0x679:w0`; retry-loop exit `06c8 ebf5→06bf`; callee `06fc` auto-island ratified | — (create-only) | `AH=0xc0` callee semantics (`06fc` body) deferred |
+| `FUN_11bd_076f` | `11bd:076f` | landing `0x749:w0`; exit `07b7 ebfe` self-spin; callee `073c`, calls into `FUN_11bd_0733` ×2 | — (create-only) | RTC-port arm role open |
+| `FUN_11bd_07e7` | `11bd:07e7` | landing `0x8ac:w0`; PIT read/reprogram + `[0x20]/[0x22]` vector-save; tail-JMP `084f→0ad5` | — (create-only) | installed-vector region `0852..` unowned (no attributed entry) |
+| `FUN_11bd_0938` | `11bd:0938` | landing `0x381:w0` (THE `0x0938` cite row); body split by undecodable `f3 f0` (`0974..0975`); `RET 099a` sits in the unowned remainder | — (create-only) | flow-split: whole-body role needs the `0976..099a` disposition first |
+| `FUN_11bd_099b` | `11bd:099b` | landing `0x8da:w0`; A20 port `0x92` ops; exit `09cc HLT`; analyzer absorbed `09cf..09d3`; `09cd..09ce` re-listed orphan | — (create-only) | `[0x120c]`-test branch semantics deferred |
+| `FUN_11bd_09d7` | `11bd:09d7` | landing `0x3a7:w0`; FNSAVE `[BX]` via `[0xf82]`; pre-entry block `09d4..09d6` absorbed; exit `0a34 HLT` | — (create-only) | FPU-state consumer (`[0xf82]` role) deferred |
+| `FUN_11bd_0a5e` | `11bd:0a5e` | landing `0x71a:w0`; ports `0x3f00/0x3f20`; exit `0a84 ebfe` spin | — (create-only) | `[0x4a2]/[0x4a4]` pair consumer deferred |
+| `FUN_11bd_0a9f` | `11bd:0a9f` | landing `0x8b2:w0`; mask-all `OUT 0x21,0xff` + `SUB SP,[0x9c4]`; shared shutdown tail `0ad5..0ae1` (`LIDT [0x8d0]`→`INT 0xff`) resolved UNDER this body | — (create-only) | LIDT-class cite in-body → wording leg AVAILABLE, withheld: tail shared by H6@`084f`/H12@`0b0b` edges + `INT 0xff` consumer tree = deferred layer |
+| `FUN_11bd_0ae2` | `11bd:0ae2` | landing `0x905:w0`; `ES:[0x467]←0xb14`; exit `0b11 HLT`; `0b3c JMP→28fb` edge into pocket orphan | — (create-only) | `[0xed0]`-gate semantics deferred |
+| `clear_msw_and_callfar` | `11bd:2a5a` | landing `0x29bc:w0` — FIRST ATTRIBUTED BLOCK ENTRY; inline `2a6c..2a73` SMSW/AND-NOT-`[0x40]`/LMSW (slice-16 shape cited-then-adopted in-body); `CALLF ES:[0xd5a]`; RET `2ad8`; tail `2ad9..2ada` excluded | `clear_msw_and_callfar` (plate set) | verb-led mechanism from cited SMSW/LMSW ops; no direction/mode words — pre-flight bar cleared |
+
+### Deferrals (Task 2 additions)
+
+- Plate text (H13): `C: none — behavioral (vector dispatch landing handler,
+  arg 0x29bc pair w0/w1: PUSH AX;PUSH BX;MOV BX,[0x9b4];CLI preamble;
+  32-bit PUSH EAX/EDX/ECX/ESI; SMSW CX @2a69; AX←[0x40], NOT, AND AX,CX,
+  LMSW AX @2a73 (clear MSW bits per cell [0x40] mask); GS/FS saved to
+  [0xd62]/[0xd60] then zeroed; far frame push (:0x2ac4) + ES←0x20/DS←0x38;
+  CALLF ES:[0xd5a]; return reloads GS/FS from ES:[0xd66]/[0xd64], pops
+  ESI/ECX/EDX/EAX/BX/AX, RET @2ad8; tail cells 2ad9..2ada excluded)`.
+- Listing-disposition items (defined, unowned, left so): H7 remainder
+  `[0976..099a]` + the undecodable pair `f3 f0`@`0974..0975` (row
+  `1000:2544..256a`); H8 halt-retry `[09cd..09ce]` (row `1000:259d..259e`);
+  H11 retry `[0ad3..0ad4]` (row `1000:26a3..26a4`). No create forced across
+  any of them; no delete made.
+- Far-return blocks LEFT UNDEFINED (never disassembled this pass; entry
+  cites in the Task-1 walk tables): H1 `[0443..045d]`, H2 `[04c0..04f2]`
+  (post-carve, incl. the HLT@`04d2` and RET@`04f2`), H3 `[0665..0674]`,
+  H4 `[06ca..06fb]`, H5 `[07b9..07e6]`, H8 `[0b6e..0b93]`, H9
+  `[0a35..0a5d]`, H10 `[0a86..0a9e]`, H11 `[0b3f..0b6d]`, H12
+  `[0b14..0b3e]` — each reachable only via the runtime far-ret pair
+  (`[0x467]/[0x469]`, `[0x3fc]/[0x3fe]`, `[0x160]/[0x162]`,
+  `[0x4a2]/[0x4a4]` ← stored IP + CS from `[0x9b6]`); creating them now
+  would assert an entry the listing cannot show (one-hop rule).
+- `DAT_11bd_04be` untouched (2 B defined data inside H2's true stream;
+  its 6 xref sites `6bb6/6e99/7371/73a0/73e1/7501` remain cite-only);
+  H2 true-alignment reconstruction at `04be..04c0` stays flagged-not-
+  adopted.
+- Callee trees one hop out: `06fc`/`073c` (auto-islands — bodies not
+  examined), `0733`/`073c`/`0360`/`0be3`/`0be9`/`284c`/`28fb`/`22ad`,
+  `CALLF ES:[0xd5a]` dynamic target. Cell consumers: `[0x9b4]` (slice-20
+  disposition stands), `[0x9b6]`, `[0x40]` (slices 15/17 stand — H13 now
+  adds a cited READER at `2a6c` INSIDE an owned function, noted, no
+  direction claim), `[0xdfe]` (head `2978` byte — block still unowned,
+  untouched), `[0xd5a]/[0xd5e]/[0xd60..0xd66]`, `[0xf82]`, `[0x9c4]`,
+  `[0x9c6]/[0x9c8]/[0x9cc]`, `[0xed0]`, `[0x120c]`, `[0x8d0]`,
+  `[0x20]/[0x22]`, `[0x10]`, `[0x2f]`, `[0x35]`, `[0x3f]` — logged per
+  Task-1 tables, not resolved.
+- Islands `08c2`/`033c`/`0bc3` and pocket FUNs `2824`/`284c`/`2864`:
+  bodies untouched; only EDGES arrive (`JMP→284c` ×4 now inter-function;
+  `JMP→28fb` inter-function; no island entered, none grown).
+- Block interior: `2978..2a59` (226 B) stays NAMED-OPEN with the slice-17
+  legs; `0b94..0bc2` non-vector stub untouched; `CS:[0x2ad9]` tail
+  ownership unchanged (row `1000:46a9..46aa` re-quoted); `2a30` remains
+  unreferenced by any walked flow.
+- Vector selection logic between `092c`/`0931` (readers side) and the
+  `3ed8` 14-arg arm cascade: untouched, prior dispositions stand.
+- MSW-clear shape status: ADOPTED-IN-BODY per this slice's walk + create
+  (was flagged-not-adopted): `2a6c..2a73` now sits inside
+  `clear_msw_and_callfar`; the "candidate entry at `2a6c`" question is
+  CLOSED (entered THROUGH the vector landing, no separate feeder needed);
+  the `0ad5..0ae1` shutdown tail is owned by `FUN_11bd_0a9f` — Task-1's
+  non-adoption flag discharged with the verbatim interim/ final envelope
+  reads above.
+- Suite: no test/tool/C changes; `cmake --build build && ctest` green
+  post-write (docs-only diff). `/media/felipe/FIFAPCCD/` untouched;
+  `fifa96.rep` churn left unstaged.
