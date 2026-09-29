@@ -162,3 +162,83 @@ No `decode_*` (no byte transform observed in any member). OPEN items got no
 renames (keyword tail spellings, static `0x1190`/`0xfxx` targets).
 
 Gate for fifa96_script lib: PASS with confirmed list (table append 5d44, limit 5d4d, grow 5d55, terminator 5d18, publish 5d1e/5d26; ';'-skip, quote collector, C/E/M branches, E/R-as-chars, include close/reopen, 5bdb 0/1 return rule, helpers script_read_char/script_read_number/match_script_keyword).
+
+## Boot preamble (verified 2026-09-28, program `/fifa96.exe`)
+
+`entry` (`11bd:2382..11bd:23fc`, 51 insns, zero callers — program entry)
+establishes before `CALL 0x1000:496c` (= `FUN_11bd_2d9c`, verified by thunk
+lookup) at `11bd:23f9`: stack/segments (`MOV SS,DI` with DI=0x1000 at
+`11bd:2385`, `ADD SP,0x120e` at `11bd:2387`, `PUSH SS`/`POP ES` at
+`11bd:23b7/23b8`, `PUSH SS`/`POP DS` at `11bd:23c6/23c7`, `CLD` at `11bd:23b9`);
+paragraph-delta + SP snapshot (`SUB SI,DI` at `11bd:238e`, `SHL AX,CL` at
+`11bd:2394`, `MOV SS:[0xce6],AX` at `11bd:2397`, `MOV SS:[0xcdc],SP` at
+`11bd:239b`); DOS shrink (`MOV AH,0x4a` + `INT 0x21` at `11bd:23ae/23b0`);
+DS snapshot (`MOV SS:[0xcec],DS` at `11bd:23b2`); BSS zero (`MOV DI,0x1186` +
+`STOSB.REP` at `11bd:23ba/23c4`); DOS version (`MOV AH,0x30` + `INT 0x21` at
+`11bd:23c8/23ca`, stored to `[0xcee]` at `11bd:23cc`); console device-flag
+loop (`MOV AX,0x4400` + `INT 0x21` at `11bd:23d2/23d5`, `TEST DL,0x80` at
+`11bd:23d9`, `OR byte ptr [BX+0xcfa],0x40` at `11bd:23de`, `DEC BX`/`JNS` at
+`11bd:23e3/23e4` over BX=4..0); `CALL 0x1000:4030` at `11bd:23e6`; then
+`XOR BP,BP` at `11bd:23e9` and three argument-word pushes (`PUSH [0xcf6]` /
+`[0xcf4]` / `[0xcf2]` at `11bd:23ed/23f1/23f5`) before the call, `RET` at
+`11bd:23fc`. No argv/env string decoding beyond the three pushed words —
+full CRT argument parsing left OPEN.
+
+| Ghidra FUN | Address | Evidence | New name | C counterpart |
+|------------|---------|----------|----------|---------------|
+| FUN_11bd_2f7f | 11bd:2f7f | `CMP [BP+0x4],0x20` at 11bd:2f82 + `CMP ...,0x9` at 2f88 + `CMP ...,0xa` at 2f8e + `CMP ...,0xd` at 2f94; `MOV AX,0x1` at 2f9a else `SUB AX,AX` at 2f9f; called 2× in 2d9c char loops (11bd:2e3a, 11bd:2e55 via thunk 0x1000:4b4f) | test_space_char | none — behavioral (whitespace classifier: space/tab/LF/CR test) |
+| FUN_11bd_614a | 11bd:614a | `SCASB.REPNE` strlen prologues at 11bd:615c/6171; `JCXZ` empty-needle out at 6161; `JBE` length guard at 617b; `LODSB`+`SCASB.REPNE` scan at 6182/6187; `CMPSB.REPE` verify at 6194; miss `XOR AX,AX` at 61a2, hit `LEA AX,[BX-1]` at 6198; returns char *; called 2× in 2d9c prologue with NULL checks (11bd:2dcf, 11bd:2de0 via thunk 0x1000:7d1a) | find_substring | none — behavioral (substring search, strstr-like) |
+| FUN_11bd_6028 | 11bd:6028 | `SCASB.REPNE` strlen at 11bd:603e; `CMPSB.REPE` compare at 6044; `SBB AX,AX` + `SBB AX,-1` sign pattern at 6048/604a (returns -1/0/1 short); called at 11bd:2e8c (thunk 0x1000:7bf8), result zero-gated in 2d9c (`if (sVar5 == 0)` → 2d43 + second dispatch) | compare_strings | none — behavioral (string compare, strcmp-like sign result) |
+| FUN_11bd_627f | 11bd:627f | `MOV SP,[0xcdc]` at 11bd:627f; `SMSW [0xf88]` at 6283; 11 init callees (3844, 0c0d, 2fa3, 199a, 64b7, 641d, 016c, 65a6, 1280, 0251, 7290); `[0x2e]`-gated blocks at 6299/62a3/62ad/62e2; called once at 2d9c tail (11bd:2ec2 via thunk 0x1000:7e4f) before RET | run_postload_init | none — behavioral (post-load tail init sequence) |
+| FUN_11bd_2d43 | 11bd:2d43 | `MOV [0x11d4],0x7` at 11bd:2d43; `MOV AX,0x15` + `PUSH AX` at 2d49/2d4c; `CALL 0x1000:3e7d` (=22ad, noreturn) at 2d4d; called at 11bd:2e95 (thunk 0x1000:4913) on the 6028==0 branch | raise_boot_error | none — behavioral (boot error raise: code store + noreturn call) |
+| FUN_11bd_6a2d | 11bd:6a2d | `MOV DI,0xa2c` dest at 11bd:6a3c/6a48; `CMP AL,0x5c` at 6a53 + `MOV BX,DI` last-backslash track at 6a57; `MOV DI,BX` truncate at 6a5b; `MOV SI,0xa7c` + `LODSB`/`STOSB` append loop at 6a5d/6a60-6a64; called at 11bd:2ebd (thunk 0x1000:85fd) on the doubly-nested `[0x2f]`>2 path | splice_path_tail | none — behavioral (path splice: truncate at last backslash + append tail) |
+
+Notes:
+- All six renames verb-led; no `decode_*` (no byte-decode transform observed
+  in any member — 614a/6028 are compare/search, 6a2d copies bytes verbatim via
+  `LODSB`/`STOSB`).
+- `FUN_11bd_2d9c` (body `11bd:2d9c..11bd:2ec8`) left unrenamed: orchestrator
+  role spans unread callees beyond these six (65e1, 66e1, 191d, 18ba, 2fa5,
+  3ed8, 2d99); revisit when those resolve.
+
+### 3ed8 verdict: NEEDS-OWN-SLICE (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_3ed8` (body `11bd:3ed8..11bd:4586`, 667 insns, `RET` at `11bd:4586`;
+adjacent `FUN_11bd_4587` is a callee, confirming the boundary) left unrenamed:
+its role does not fit one paragraph, so no bound row and no rename.
+
+Entry conditions: two word args (decompile
+`void __fastcall FUN_11bd_3ed8(undefined2 param_1, undefined2 param_2)`,
+called after the second-dispatch check in `2d9c`); frame `PUSH BP` /
+`MOV BP,SP` / `SUB SP,0xec` at `11bd:3ed8..3edb`; first call
+`CALL 0x1000:7ec8` (= `62f8`) at `11bd:3ef2` forwarding the args; BIOS
+equipment-word probe (`MOV SI,word ptr ES:[BX]` at `11bd:3f1b` with
+ES=0xF000/BX=0xFFFE, `CMP SI,0xfb` at `3f22` / `CMP SI,0xfd` at `3f28`,
+`INC [0x11f0]` at `3f2e`); status cells `MOV [0x11d4],0x2` at `3f0d`,
+`CALL 68c2` at `3f32`, `CALL 2d40` at `3f38`, `MOV [0x11d4],0x3` at `3f3d`
+(`2d40` NOT conflated with Task-1 `raise_boot_error` at `2d43`).
+
+Exit shape: tail publishes a mode byte (`CMP [0x10ee],0xff` at `11bd:451e`,
+`MOV [0x10ee],AL` / `MOV [0x2e],AL` at `4527/452c`), `CALL 6250` at `4536`,
+`CALL 4587` at `455e`, SI==0xb arm `CALL 7c62` at `4575`,
+`[BP-0x56]`==0 arm `CALL 30d8` at `457e`, then `POP SI` / `POP DI` /
+`MOV SP,BP` / `POP BP` / `RET` at `4581..4586` — normal void return
+(noreturn paths exit via `CALL 22ad` at `4240/43c6/451a` instead).
+
+Callee summary: 38 callees (`get_function_callees`, limit 100). Known-role
+loader/script helpers: `find_substring` (`614a`, via thunk `0x1000:7d1a`),
+`mem_grow_relocate` (`CALLF 0x1000:0b12` at `11bd:4445`), `30d8`, `22ad`
+(noreturn, via thunk `0x1000:3e7d`). Resolved names with roles still open:
+`62f8`, `6054`, `6250`. Unknown domain (~30 unread): `18f1`, `195d`, `243e`, `25ee`, `2620`, `2d40`,
+`4587`, `45c3`, `4645`, `4665`, `6120`, `6395`, `6400`, `6618`, `6667`,
+`6672`, `66a2`, `66b9`, `6869`, `689e`, `68b9`, `68c2`, `698b`, `69ac`,
+`69e0`, `6c74`, `6d9c`, `76db`, `7c62` (+ 2 thunks of `61ee`).
+
+Why it exceeds a bound: a config-probe fan-out (`4665`/`4645`/`6120`/
+`45c3`/`195d` loops at `3f66..41a1`) feeds a central multi-arm dispatch on
+the SI mode word (`DEC AX` / `JNZ` chain plus `SUB AX,0x3/0x10a/0x64/
+0x171a/0xdad` at `11bd:42de..4368`, ~20 arms) publishing distinct
+`[BP-0x5a]`/`[0x10ee]`/`[0x2e]` constants, with further globals published
+(`0xeca`/`0xecc`/`0xece` at `40b0/40d4/40f6`, `0x11d4`, `0x46`/`0x47`,
+`0x10ee`). Mode/config/video/domain unknowns mix across 30 unread callees —
+bounding needs its own slice.
