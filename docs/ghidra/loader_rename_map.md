@@ -3697,3 +3697,409 @@ restores at `28c2/28c6` and the `296d/2971` epilogue reload — now inside
 - Post-`CLI` leg bodies behind every vector target (the landing layer):
   named-and-deferred per Task-1's one-hop ruling; the `79fc/7a88/
   execute_exit_arm/0d80` stub-caller bodies likewise.
+
+## vector dispatch handlers (verified 2026-09-29, program `/fifa96.exe`)
+
+Zero-Ghidra-write pass over the landing layer of the `[0x9bc]`/`[0x9be]`
+dispatch: the 26 band+block targets of the `## 2811..296c pocket + 9bc
+vector` determinability table (the two pocket targets `0x2864`/`0x284c` are
+out of scope — they already own created FUNs) are deduped, every unique
+offset owner-probed live, and each handler dry-run-walked from its cited
+landing to a CITED exit (`RET`/`HLT`/tail-`JMP`/boundary stop-short at a
+defined byte). Headline results: (1) the 26 edges land on 26 pairwise-distinct
+offsets, collapsing to **13 handler bodies** — each arg's `w0` lands on the
+body's head (prelude entry via the bare `092d` stub) and its `w1` lands on
+the post-prelude `CLI` byte (preamble-skipping entry via `FUN_11bd_0931`'s
+`0934`, which pre-pushes AX/BX at `0932/0933`); (2) twelve of thirteen
+preludes are byte-identical `50 53 bb0010 fa` (`PUSH AX;PUSH BX;MOV
+BX,0x1000;CLI` = the `0x0938` cited form) and the block handler `0x2a5a`
+is the `50 53 8b1e b409 fa` form (`MOV BX,[0x9b4]` base, +6 spacing = the
+`0x2a5a` cited form); (3) every handler ends at a cited terminator — a
+`RET` or an `HLT` followed by a `JMP`-back halt-retry (`ebfd` idiom) or a
+self-spin (`ebfe` idiom), and ten of thirteen also carry a **far-return
+block** whose entry address the handler itself stores as an IP:CS pair
+into the `[0x467]/[0x469]` (or `[0x3fc]/[0x3fe]`, `[0x160]/[0x162]`,
+`[0x4a2]/[0x4a4]`) cluster with the CS half taken from cell `[0x9b6]`;
+(4) the walk of the block handler `0x2a5a` REACHES `0x2a6c` — the
+slice-16-flagged MSW-clear shape is inline static code in the handler body
+(SMSW `0f01e1`@`2a69`, `MOV AX,[0x40]`@`2a6c`, NOT `f7d0`@`2a6f`,
+AND `23c1`@`2a71`, LMSW `0f01f0`@`2a73`), and the same walk yields the
+FIRST attributed entry into block `2978..2ada`: body `[2a5a..2ad8]`,
+tail-cited `RET (c3)` @`2ad8`, the `CS:[0x2ad9]` tail cell excluded;
+(5) one listing collision: `04be..04bf` is a defined data unit
+`DAT_11bd_04be` (`undefined2`) carved into the middle of handler `0x0491`'s
+stream — stop-short cited on both sides below. No walk touches the flow
+islands `08c2`/`033c`/`0bc3` (the three `0x1000:26a5`-rendered branch
+targets recompute to `11bd:0ad5`, NOT `08d5` — delta arithmetic cited per
+edge). `disassemble_bytes` ran exclusively `dry_run=true`; names, creates,
+plates: NONE (Task 2 territory). Reader context per slice-21: `092d` @
+`dispatch_mode_vector` (`092c..0930`) arms the `w0` path, `0934` @
+`FUN_11bd_0931` (`0931..0937`) arms the `w1` path; far/near target render
+delta `0x1bd0` applied to every branch cite.
+
+### Dedupe of the 26 (Step 1)
+
+Edges: 13 band+block args × 2 vector words = 26. Unique offsets: **26 —
+every target appears exactly once (multiplicity 1; zero address collisions)**.
+Structural collapse: 13 handler bodies — for twelve args `word1−word0=+5`
+(3-byte `bb0010` preamble tail), for `0x29bc` `+6` (4-byte `8b1eb409`); the
+`w1` offset is an instruction boundary of the `w0`-aligned decode in all 13
+walks (the emitted `CLI (fa)` row). Owner state live at every unique offset
+(`get_function_by_address`, 26/26 no-function errors — the same-form
+response as slice-21's two probes):
+
+| unique offset | arrived from (arg: source-cell words, cited) | owner state at offset |
+|---------------|---------------------------------------------|------------------------|
+| `11bd:040e` | `0x3d6` (`44c6`): `03d2/03d4` = `0e04/1304` | `{"error":"No function found for 11bd:040e"}` |
+| `11bd:0413` | `0x3d6` (same pair, `w1`) | `{"error":"No function found for 11bd:0413"}` |
+| `11bd:0491` | `0x462` (`44ce`): `045e/0460` = `9104/9604` | `{"error":"No function found for 11bd:0491"}` |
+| `11bd:0496` | `0x462` (same pair, `w1`) | `{"error":"No function found for 11bd:0496"}` |
+| `11bd:05af` | `0x4f7` (`44e0`): `04f3/04f5` = `af05/b405` | `{"error":"No function found for 11bd:05af"}` |
+| `11bd:05b4` | `0x4f7` (same pair, `w1`) | `{"error":"No function found for 11bd:05b4"}` |
+| `11bd:0697` | `0x679` (`44b2`): `0675/0677` = `9706/9c06` | `{"error":"No function found for 11bd:0697"}` |
+| `11bd:069c` | `0x679` (same pair, `w1`) | `{"error":"No function found for 11bd:069c"}` |
+| `11bd:076f` | `0x749` (`448e`): `0745/0747` = `6f07/7407` | `{"error":"No function found for 11bd:076f"}` |
+| `11bd:0774` | `0x749` (same pair, `w1`) | `{"error":"No function found for 11bd:0774"}` |
+| `11bd:07e7` | `0x8ac` (`44b9`): `08a8/08aa` = `e707/ec07` | `{"error":"No function found for 11bd:07e7"}` |
+| `11bd:07ec` | `0x8ac` (same pair, `w1`) | `{"error":"No function found for 11bd:07ec"}` |
+| `11bd:0938` | `0x381` (`436e`): `037d/037f` = `3809/3d09` | `{"error":"No function found for 11bd:0938"}` |
+| `11bd:093d` | `0x381` (same pair, `w1`) | `{"error":"No function found for 11bd:093d"}` |
+| `11bd:099b` | `0x8da` (`43ed`): `08d6/08d8` = `9b09/a009` | `{"error":"No function found for 11bd:099b"}` |
+| `11bd:09a0` | `0x8da` (same pair, `w1`) | `{"error":"No function found for 11bd:09a0"}` |
+| `11bd:09d7` | `0x3a7` (`4423`): `03a3/03a5` = `d709/dc09` | `{"error":"No function found for 11bd:09d7"}` |
+| `11bd:09dc` | `0x3a7` (same pair, `w1`) | `{"error":"No function found for 11bd:09dc"}` |
+| `11bd:0a5e` | `0x71a` (`445c`): `0716/0718` = `5e0a/630a` | `{"error":"No function found for 11bd:0a5e"}` |
+| `11bd:0a63` | `0x71a` (same pair, `w1`) | `{"error":"No function found for 11bd:0a63"}` |
+| `11bd:0a9f` | `0x8b2` (`446c`): `08ae/08b0` = `9f0a/a40a` | `{"error":"No function found for 11bd:0a9f"}` |
+| `11bd:0aa4` | `0x8b2` (same pair, `w1`) | `{"error":"No function found for 11bd:0aa4"}` |
+| `11bd:0ae2` | `0x905` (`44a3`): `0901/0903` = `e20a/e70a` | `{"error":"No function found for 11bd:0ae2"}` |
+| `11bd:0ae7` | `0x905` (same pair, `w1`) | `{"error":"No function found for 11bd:0ae7"}` |
+| `11bd:2a5a` | `0x29bc` (`44ab`): `29b8/29ba` = `5a2a/602a` (BLOCK) | `{"error":"No function found for 11bd:2a5a"}` |
+| `11bd:2a60` | `0x29bc` (same pair, `w1`) | `{"error":"No function found for 11bd:2a60"}` |
+
+Live gap-row context for the boundary claims (`find_code_gaps` this pass,
+total 136 — slice-21's post-state count): band `0360..0732` row
+`{"start":"1000:1f30","end":"1000:2302",…,"before_function":"FUN_11bd_033c","after_function":"FUN_11bd_0733"}`;
+band `073c..08c1` row `{"start":"1000:230c","end":"1000:2491",…,"after_function":"FUN_11bd_08c2"}`;
+band `0938..0bc2` row `{"start":"1000:2508","end":"1000:2792",…,"before_function":"FUN_11bd_0931","after_function":"FUN_11bd_0bc3"}`;
+block row `{"start":"1000:4548","end":"1000:46aa",…,"before_function":"restore_fs_gs_and_resume","after_function":"FUN_11bd_2adb"}`
+(`1000:1f30/2302/230c/2491/2508/2792/4548/46aa` − `0x1bd0` =
+`0360/0732/073c/08c1/0938/0bc2/2978/2ada` ✓). All 13 proposed ranges above
+sit inside these rows — no proposed interior crosses a function body.
+Inter-handler unclaimed regions (source cells live in them; not walked):
+`045e..0490` (holds arg `0x462` pair `045e/0460` — emitted in the `040e`
+window as misaligned fragments `91 04 96 04` ↔ LE words ✓ reconciled),
+`04f3..05ae` (arg `0x4f7` pair `04f3/04f5` = bytes `af 05 b4 05` emitted
+`SCASW`@`04f3`+`ADD AX,0x5b4`@`04f4` in the `04d3` window ✓),
+`0675..0696` (arg `0x679` pair `0675/0677` = bytes `97 06 9c 06` emitted
+`XCHG AX,DI`/`PUSH ES`/`PUSHF`/`PUSH ES` in the `0665` window ✓),
+`06fc..0732` (H4's callee region), `073c..076e` (H5's `230c`-callee +
+arg `0x749` pair `0745/0747`), `0852..08c1` (H6 beyond-exit region + args
+`0x8ac`/`0x8b2` pairs `08a8..08ab`/`08ae..08b1`), `09cf..09d6` (H8
+beyond-exit block — reached statically only from H9's gate),
+`0b94..0bc2` (unowned non-vector block ending in `CALL print_error_message`
++ fallthrough to island `0bc3` — left unclaimed).
+
+### Per-handler walks (Step 2)
+
+All windows `disassemble_bytes` `dry_run=true` (23 calls incl. one refused
+probe + three disclosed off-alignment probes). Calls are address-only (no
+dives; scope guard honored — callee bodies, `[0x9b4]`/`[0x9b6]` consumer
+roles, port-leg semantics named-and-deferred). `H` numbers ordered by
+landing offset. `far/near render − 0x1bd0` applied to every branch cite.
+
+**H1 `0x040e`/`0x0413` (arg `0x3d6`)** — window `dry_run` `11bd:040e`
+(100 B emitted `040e..0471`; walk trimmed at cited exit `045d`).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `040e`–`0413` | `50 PUSH AX`; `53 PUSH BX`; `bb0010 MOV BX,0x1000`; `fa CLI` @`0413` (= `w1`) | — |
+| gate | `0414`–`041d` | `803e2f0003 CMP byte [0x2f],0x3`; `7203 JC 0x1000:1fee` (→`041e`); `e92e24 JMP 0x1000:441c` (→ `11bd:284c` = pocket FUN entry — flow edge to DEFINED byte, boundary keeps own last byte `041d`) | → `284c` |
+| body | `041e`–`042b` | `60 PUSHA`; `891e7c0f MOV [0xf7c],BX`; `89267a0f MOV [0xf7a],SP`; `b83800 MOV AX,0x38`; `8ec0 MOV ES,AX` | — |
+| far-ret store | `042c`–`0439` | `26c70660014304 MOV word ES:[0x160],0x443`; `a1b609 MOV AX,[0x9b6]`; `26a36201 MOV ES:[0x162],AX` — return pair `0x443:[0x9b6]` | — |
+| ports+halts | `043a`–`0442` | `e4f0 IN AL,0xf0`; `0c01 OR AL,1`; `eb00 JMP+0` (→`0440`); `e6f0 OUT 0xf0,AL`; `f4 HLT` @`0442` — **primary cited exit** | — |
+| return block | `0443`–`045d` | entry cite = stored IP `0x443`; `e4f2 IN AL,0xf2`; `0c01`; `eb00` (→`0449`); `e6f2 OUT 0xf2,AL`; `bb0010 MOV BX,0x1000`; `8edb MOV DS,BX`; `8e167c0f MOV SS,[0xf7c]`; `8b267a0f MOV SP,[0xf7a]`; `8ec3 MOV ES,BX`; `61 POPA`; `5b POP BX`; `58 POP AX`; `c3 RET` @`045d` — **static exit cite** | — |
+| contacts | — | cells `[0x2f]`, `[0x9b6]`, `[0xf7c]`, `[0xf7a]`, `ES:[0x160]`, `ES:[0x162]`; segment stores `ES←0x38`, `DS/ES←0x1000`; ports `0xf0/0xf2` | — |
+| boundary | `[040e..045d]` (80 B) | why-function-start: dynamic vector landing `w0` from dedupe row (entry cite); `w1` `0413` second entry; range inside row `1000:1f30..2302`, no defined bytes interior; ends one byte before arg-`0x462` source cell `045e` | — |
+
+**H2 `0x0491`/`0x0496` (arg `0x462`)** — windows `dry_run` `11bd:0491`
+(45 B — tool STOPPED at the `04be` defined unit, envelope `0491..04bd`),
+`11bd:04c0` (32 B, off-alignment disclosed below), `11bd:04d3` (48 B).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0491`–`0496` | `50 53 bb0010 fa` (`0496 CLI` = `w1`) | — |
+| gate | `0497`–`04a0` | `803e2f0003 CMP byte [0x2f],0x3`; `7203 JC` →`04a1`; `e9ab23 JMP 0x1000:441c` → `284c` (edge to defined; own bytes `049e..04a0` owned) | → `284c` |
+| body | `04a1`–`04bd` | `60 PUSHA`; `[0xf7c]/[0xf7a]` saves (`891e7c0f`,`89267a0f`); `fa CLI` @`04aa` (second CLI); `b83800`/`8ec0 ES←0x38`; `26c706fc03d304 MOV ES:[0x3fc],0x4d3`; `a1b609 MOV AX,[0x9b6]`; `26a3fe03 MOV ES:[0x3fe],AX` — last owned byte `04bd` | — |
+| **collision** | `04be`–`04bf` | first FOREIGN bytes: `DAT_11bd_04be` defined `undefined2` (`analyze_data_region`; `current_name/current_type` cited); raw `read_memory(11bd:04be,16)` `data[186,132,4,237,235,0,37,254,254,239,235,0,186,4,4,176]` ↔ `hex ba8404edeb0025fefeefeb00ba0404b0` ✓ MATCH (also ↔ `inspect_memory_content` 32 B `BA 84 04 ED…` ✓) — unit carves `ba8404 = MOV DX,0x484` (2 of 3 bytes); post-unit stream re-aligns at `04c1`/`04c2` | — |
+| continued primary | `04c0`–`04d2` | `04d3`-probe and `04c0`-probe emissions agree from `04c2`: `eb00` (→`04c4`), `25fefe AND AX,0xfefe`, `ef OUT DX,AX`, `eb00`, `ba0404 MOV DX,0x404`, `b004 MOV AL,4`, `eb00`, `ee OUT DX,AL`, `f4 HLT` @`04d2` — **primary cited exit** (true-alignment head of this run = the carved `MOV DX,0x484` @`04be..04c0`, reconstructed from the reconciled raw bytes — flagged not adopted) | — |
+| return block | `04d3`–`04f2` | entry cite = stored IP `0x4d3` (`ES:[0x3fc]` @`04b0`); `ba0404 MOV DX,0x404`; `ec IN AL,DX`; `24f9 AND AL,0xf9`; `0c01 OR AL,1`; `eb00`; `ee OUT DX,AL`; `eb00`; `bb0010/b8?? MOV BX,0x1000; 8edb DS; 8e167c0f SS←[0xf7c]; 8b267a0f SP←[0xf7a]; 8ec3 ES←BX; 61 POPA; 5b; 58; c3 RET` @`04f2` — **static exit cite** | — |
+| contacts | — | `[0x2f]`, `[0x9b6]`, `[0xf7c]`, `[0xf7a]`, `ES:[0x3fc]/[0x3fe]`; ports `0x484/0x404`; second CLI `04aa` | — |
+| boundary | `[0491..04d2]` primary + `[04d3..04f2]` return | collision-conditioned: a create over the contiguous `[0491..04f2]` would have to resolve `DAT_11bd_04be` first — Task-2 decision; Task-1 proposal records stop-short `04bd|04be` cite on both sides | — |
+
+**H3 `0x05af`/`0x05b4` (arg `0x4f7`)** — windows `dry_run` `11bd:05af`
+(100 B `05af..0612`… emitted `05af..0603` coverage), `11bd:0604` (100 B),
+`11bd:0665` (48 B).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `05af`–`05b4` | `50 53 bb0010 fa` (`05b4 CLI` = `w1`) | — |
+| body head | `05b5`–`05c6` | `60 PUSHA`; `52 PUSH DX`; `[0xf7c]/[0xf7a]` saves; `a1b609 MOV AX,[0x9b6]`; `50`; `b86506 MOV AX,0x665`; `50` — stack far frame with return IP `0x665` | — |
+| CMOS nibble legs | `05c7`–`065f` | `8bcb MOV CX,BX`; `ba6803 MOV DX,0x368`; alternating `b018/b26a 240f ee` / `b268 b017 ee` / `SHR AL,0x4` nibble OUTs to `DX=0x36a/0x368` with commands `0x18,0x17,0x16,0x15,0x14,0x13,0x12,0x11,0x10` + `05fb/0638/0641` `eb00` stubs; `8bcc MOV CX,SP` @`0610`; `b008`+`b26a ee` + `b05f e6a1` @`065b..0662` | — |
+| exit | `0663`–`0664` | `b05f MOV AL,0x5f`; `e6a1 OUT 0xa1,AL`; `f4 HLT` @`0664` — **cited exit** | — |
+| return block | `0665`–`0674` | entry cite = pushed IP `0x665` @`05c6`; `b0f0 MOV AL,0xf0`; `e6a0 OUT 0xa0,AL`; `bb0010/b8?? MOV BX,0x1000`; `8edb DS`; `8ec3 ES`; `5a POP DX`; `61 POPA`; `5b`; `58`; `c3 RET` @`0674` — **static exit cite**; `0675` = arg-`0x679` source byte (adjacency ✓) | — |
+| contacts | — | `[0x9b6]`, `[0xf7c]`, `[0xf7a]`; ports `0x368/0x36a` (OUTs), `0xa1`, `0xa0`; NO ES/segment-0x38 stores | — |
+| boundary | `[05af..0664]` primary + `[0665..0674]` return (contiguous `[05af..0674]`, 198 B) | inside row `1000:1f30..2302`; no defined-byte interior | — |
+
+**H4 `0x0697`/`0x069c` (arg `0x679`)** — windows `dry_run` `11bd:0697`
+(100 B), re-run (102 B, exact exit).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0697`–`069c` | `50 53 bb0010 fa` (`069c CLI` = `w1`) | — |
+| body | `069d`–`06bf` | `60 PUSHA`; `[0xf7c]/[0xf7a]` saves; `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c7066704ca06 MOV ES:[0x467],0x6ca` — return pair `0x6ca:[0x9b6]`; `26c60612040a MOV byte ES:[0x412],0xa`; `b4c0 MOV AH,0xc0` | — |
+| retry loop | `06c1`–`06c8` | `e83800 CALL 0x1000:22cc` (→`11bd:06fc`); `33c9 XOR CX,CX`; `e2fe LOOP 0x1000:2296` (→`06c6` self); `ebf5 JMP 0x1000:228f` (→`06bf` = back to `MOV AH,0xc0`) — **cited exit: tail-JMP retry loop** | → `06fc` |
+| reload | `06ca`–`06e1` | entry cite = stored IP `0x6ca`; `2e8b1e0000 MOV BX,CS:[0x0]`; `8edb MOV DS,BX`; `8e167c0f/8b267a0f SS/SP←[0xf7c]/[0xf7a]`; `33c0/8ec0 ES←0`; `26a21204 MOV ES:[0x412],AL`; `8ec3 ES←BX` | — |
+| second call + PIC | `06e3`–`06f6` | `e81600 CALL 0x1000:22cc` (→`06fc`); `e469 IN AL,0x69`; `eb00` (→`06ea`); `0c04 OR AL,4`; `e669 OUT 0x69,AL`; `eb00` (→`06f0`); `e4a0 IN AL,0xa0`; `eb00`; `0c80`; `e6a0 OUT 0xa0,AL` | → `06fc` |
+| exit | `06f8`–`06fb` | `61 POPA`; `5b POP BX`; `58 POP AX`; `c3 RET` @`06fb` — **static exit cite** | — |
+| contacts | — | `[0x9b6]`, `[0xf7c]`, `[0xf7a]`, `CS:[0x0]`, `ES:[0x467]/[0x469]`, `ES:[0x412]`; ports `0x69`, `0xa0`; `06fc` = first byte after own RET (callee region, unclaimed, address-only) | — |
+| boundary | `[0697..06fb]` (165 B) | inside row `1000:1f30..2302` ✓ | — |
+
+**H5 `0x076f`/`0x0774` (arg `0x749`)** — windows `dry_run` `11bd:076f`
+(100 B), `11bd:07d2` (48 B — **off-alignment disclosed**: starts 2 bytes
+early, its `07d2 POP DI`/`07d3 JMP [SI]` read the `e8 5f ff` rel-bytes of
+the aligned `07d1 CALL`; aligned ops below from `07d4` = `24 3f`, corroborated by both windows' bytes).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `076f`–`0774` | `50 53 bb0010 fa` (`0774 CLI` = `w1`) | — |
+| body head | `0775`–`0795` | `e466 IN AL,0x66` (CMOS before PUSHA); `60 PUSHA`; `a8a0 TEST AL,0xa0`; `7504 JNZ` →`0780`; `0ca0/ e666 OUT 0x66,AL`; `[0xf7c]/[0xf7a]` saves; `6a38 PUSH 0x38/07 POP ES`; `26c7066704b907 MOV ES:[0x467],0x7b9`; `a1b609`; `26a36904 MOV ES:[0x469],AX` — return pair `0x7b9:[0x9b6]` | — |
+| RTC legs | `0799`–`07b4` | `b84401 MOV AX,0x144`; `e89dff CALL 0x1000:230c` (→`073c`); three `eb00` stubs (`2371/2373/2375` → `07a1/07a3/07a5`); `b84400 MOV AX,0x44`; CALL `073c`; `b045 MOV AL,0x45`; `e883ff CALL 0x1000:2303` (→`11bd:0733` = FUN_11bd_0733 — call edge into DEFINED function, one hop); `0c80`; `86c4 XCHG AH,AL`; CALL `073c` | → `073c` ×4, `0733` |
+| exit | `07b7` | `ebfe JMP 0x1000:2387` (→ `07b7` itself) — **cited exit: self-spin tail-JMP** | — |
+| return block | `07b9`–`07e6` | entry cite = stored IP `0x7b9`; `b80010/8ed8 DS←0x1000`; `8ec0 ES`; `8e167c0f/8b267a0f SS/SP`; `61 POPA`; `a8a0 TEST AL,0xa0`; `7502 JNZ` →`07cf`; `e666 OUT 0x66,AL`; `b045`; `e85fff CALL 0x1000:2303` (→`0733`); [aligned 07d4+] `243f AND AL,0x3f`; `803e350000 CMP byte [0x35],0`; `7502 JNZ` →`07df`; `0c40 OR AL,0x40`; `86c4 XCHG AH,AL`; `e858ff CALL 0x1000:230c` (→`073c`); `5b`; `58`; `c3 RET` @`07e6` — **static exit cite** | → `0733`, `073c` |
+| contacts | — | `[0x9b6]`, `[0xf7c]`, `[0xf7a]`, `ES:[0x467]/[0x469]`, `[0x35]`; port `0x66`; ES←0x38 | — |
+| boundary | `[076f..07e6]` (120 B) | ends exactly one byte before next landing `07e7` (tiling, pocket-style); inside row `1000:230c..2491` ✓ | — |
+
+**H6 `0x07e7`/`0x07ec` (arg `0x8ac`)** — windows `dry_run` `11bd:07e7`
+(100 B), `11bd:084d` (48 B), `11bd:087c` (40 B — **off-alignment
+disclosed**: starts 1 byte early; `087c OR BH,DH` reads the `74 08` JZ
+rel-byte; aligned coverage ends at the cited exit `0851` anyway).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `07e7`–`07ec` | `50 53 bb0010 fa` (`07ec CLI` = `w1`) | — |
+| timer legs | `07ed`–`0814` | `e421 IN AL,0x21`; `60 PUSHA`; `33c0/ e643 OUT 0x43,AL(0)`; `8b16b609 MOV DX,[0x9b6]`; `33c9 XOR CX,CX`; `b00b/ e620 OUT 0x20,AL(0xb)`; `6a38 PUSH 0x38`; `e440 IN AL,0x40`; `2ac8 SUB CL,AL`; `1f POP DS`; `e440`; `1ae8 SBB CH,AL`; `9c PUSHF`; `e420 IN AL,0x20`; `a801 TEST AL,1`; `7404 JZ` →`0810`; `b020/ e620 OUT 0x20,AL(0x20 EOI)`; `9d POPF` | — |
+| vector-save + reprogram | `0815`–`084c` | `ff362200 PUSH [0x22]`; `ff362000 PUSH [0x20]`; `b0fe/ e621 OUT 0x21,AL`; `b010/ e643 OUT 0x43,AL(0x10)`; `89162200 MOV [0x22],DX`; `c70620005208 MOV [0x20],0x852`; `e640 OUT 0x40,AL`; `891e6904 MOV [0x469],BX`; `89266704 MOV [0x467],SP` (PLAIN stores — register save, NOT a far-ret pair); `6a20 PUSH 0x20/1f POP DS`; `b034/ e643 OUT 0x43,AL(0x34)`; `33c0/ e640`; `290ec609 SUB [0x9c6],CX`; `831ec80900 SBB [0x9c8],0` | — |
+| exit | `084d`–`0851` | `e640 OUT 0x40,AL`; `e98302 JMP 0x1000:26a5` — target = `0x26a5−0x1bd0` = **`11bd:0ad5`** (NOT `08d5` — no island touch) = the shared shutdown tail below; **cited exit: tail-JMP**, own last byte `0851` | → `0ad5` |
+| beyond-exit region | `0852`–`087b` | emitted, NOT walked (after unconditional tail-JMP): `fa CLI`; `83c406 ADD SP,6`; `8ed8 DS←0`; `8f062000 POP [0x20]`; `8f062200 POP [0x22]`; `e8fbfa CALL 0x1000:1f30` (→`0360`); `8606cc09 XCHG [0x9cc],AL`; `3c08/7424/0ac0/741c/3906c809/7d14/3c21/7408` gate chain to `0ad5`/`088d`/`0885`; `ff06c809 INC [0x9c8]`; `cd08 INT 0x8`; `eb04` →`0891`; `b020/ e620`; `61 POPA`… — installed-vector body candidate (the `[0x20]/[0x22]` cells H6 saved are its far vector) — recorded, unclaimed | → `0360` |
+| contacts | — | `[0x9b6]`, `[0x20]`, `[0x22]`, `[0x467]/[0x469]`, `[0x9c6]/[0x9c8]`, `[0x9cc]`; ports `0x20/0x21/0x40/0x43`; DS←0x38/0x20 staging | — |
+| boundary | `[07e7..0851]` (107 B) | inside row `1000:230c..2491` ✓; tail-JMP target owned elsewhere (shared tail) | — |
+
+**H7 `0x0938`/`0x093d` (arg `0x381`)** — window `dry_run` `11bd:0938`
+(100 B emitted through next landing `099b` — adjacency cite).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0938`–`093d` | `50 53 bb0010 fa` (`093d CLI` = `w1`) — THE cited `0x0938` form | — |
+| gate | `093e`–`0947` | `803e2f0003 CMP byte [0x2f],0x3`; `7203 JC` →`0948`; `e9041f JMP 0x1000:441c` →`284c` (edge to defined) | → `284c` |
+| body | `0948`–`0977` | `b00e/ e637 OUT 0x37,AL`; `b80010/50/50` (0x1000 frame); `60 PUSHA`; `ff36b609 PUSH [0x9b6]`; `687b09 PUSH 0x97b` — far frame `0x97b` (inside own inline-stream region); `b00a/ e637`; `b83800/8ed8 DS←0x38`; `891e0604 MOV [0x406],BX`; `89260404 MOV [0x404],SP` (DS-based save pair at seg 0x38); `be7809 MOV SI,0x978`; `b90300 MOV CX,3`; `fc CLD`; `baf000 MOV DX,0xf0`; `2e6e OUTSB DX,CS:SI` | — |
+| inline stream | `0978`–`0980` | `0000`,`00b00fe6`,`37`,`eb00` emitted as code fragments — the OUTSB operand bytes SI walks (recorded; decoded-by-linear-tool artifact, not claimed as flow) | — |
+| A20/ports | `0981`–`0994` | `e652 OUT 0x52,AL`; `813e35000080 CMP word [0x35],0x8000`; `7406 JZ` →`0991`; `b000/ e6f2 OUT 0xf2,AL`; `eb04` →`0995`; `b003/ e6f6 OUT 0xf6,AL` | — |
+| exit | `0995`–`099a` | `61 POPA`; `07 POP ES`; `1f POP DS`; `5b`; `58`; `c3 RET` @`099a` — **cited exit**; `099b` = H8 landing (adjacency cite) | — |
+| contacts | — | `[0x2f]`, `[0x9b6]`, `[0x404]/[0x406]`, `[0x35]`; DS←0x38; ports `0x37/0x52/0xf2/0xf6` | — |
+| boundary | `[0938..099a]` (99 B) | inside row `1000:2508..2792`; starts 1 after stub-cluster end `0937` (`FUN_11bd_0931` body edge adjacency ✓) | — |
+
+**H8 `0x099b`/`0x09a0` (arg `0x8da`)** — windows `dry_run` `11bd:099b`
+(100 B `099b..09fe`), `11bd:0b60` (99 B, return block + tail region).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `099b`–`09a0` | `50 53 bb0010 fa` (`09a0 CLI` = `w1`) | — |
+| body | `09a1`–`09c1` | `60 PUSHA`; `891e7c0f/89267a0f` saves (the `09a2/09a6` cluster cite of slice-21 ✓); `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c70667046e0b MOV ES:[0x467],0xb6e` — return pair `0xb6e:[0x9b6]`; `f6060c1202 TEST byte [0x120c],2`; `740b JZ 0x1000:259f` →`09cd` | — |
+| A20 leg + exit | `09c4`–`09cc` | `e492 IN AL,0x92`; `0c03 OR AL,3`; `eb00` (→`09ca`); `e692 OUT 0x92,AL`; `f4 HLT` @`09cc` — **cited exit** | — |
+| halt-retry | `09cd`–`09ce` | `ebfd JMP 0x1000:259c` (→ `0x259c−0x1bd0` = `09cc` — jump BACK to the HLT: halt-retry idiom, also the JZ@`09c2` target) | — |
+| beyond-exit block | `09cf`–`09d6` | `b0fe MOV AL,0xfe`; `e664 OUT 0x64,AL`; `f4 HLT` @`09d3`; `e9751e JMP 0x1000:441c` →`284c` — statically unreached from H8's own flow; reached from H9's gate (`09e2 JNC` →`09d4`) — recorded, edge cited | → `284c` |
+| return block | `0b6e`–`0b93` | entry cite = stored IP `0xb6e`; `b80010/8ed8 DS←0x1000`; `8e167c0f/8b267a0f SS/SP←[0xf7c]/[0xf7a]`; `b00d/ e670 OUT 0x70,AL`; `61 POPA`; `e471 IN AL,0x71`; `803e350000 CMP byte [0x35],0`; `e492 IN AL,0x92`; `7502 JNZ` →`0b8d`; `24fd AND AL,0xfd`; `24fe AND AL,0xfe`; `e692 OUT 0x92,AL`; `5b/58/c3 RET` @`0b93` — **static exit cite** | — |
+| contacts | — | `[0x120c]`, `[0x9b6]`, `[0xf7c]/[0xf7a]`, `ES:[0x467]/[0x469]`, `[0x35]`; ports `0x92/0x70/0x71/0x64` | — |
+| boundary | `[099b..09cc]` primary + `[0b6e..0b93]` return; beyond-exit `[09cf..09d6]` recorded | both ranges inside row `1000:2508..2792`; return block is non-contiguous (separated by H9..H12 lands) — per-block proposal | — |
+
+**H9 `0x09d7`/`0x09dc` (arg `0x3a7`)** — windows `dry_run` `11bd:09d7`
+(100 B), `11bd:0a35` (41 B, exact).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `09d7`–`09dc` | `50 53 bb0010 fa` (`09dc CLI` = `w1`) | — |
+| gate | `09dd`–`09e3` | `803e2f0003 CMP byte [0x2f],0x3`; `73f0 JNC 0x1000:25a4` → `0x25a4−0x1bd0` = `09d4` = H8's beyond-exit `JMP 284c` byte (cross-handler edge, cite-only) | → `09d4`→`284c` |
+| FPU leg | `09e4`–`09f0` | `53 PUSH BX`; `8b1e820f MOV BX,[0xf82]`; `0bdb OR BX,BX`; `7403 JZ 0x1000:25c0` →`09f0`; `dd37 FNSAVE [BX]`; `9b WAIT`; `5b POP BX` | — |
+| body | `09f1`–`0a26` | `60 PUSHA`; `b80010/50/50`; `b83800/8ec0 ES←0x38`; `26c706fc03350a MOV ES:[0x3fc],0xa35`; `a1b609`; `26a3fe03 MOV ES:[0x3fe],AX` — return pair `0xa35:[0x9b6]`; `e402 IN AL,0x2`; `8ac8 CL←AL`; `e412 IN AL,0x12`; `8ae8 CH←AL`; `b0fb/e612`; `b0ff/e602` (counter restore legs); `b001`; `bab031 MOV DX,0x31b0`; `ee OUT DX,AL`; `e460 IN AL,0x60`; `c0e802 SHR AL,2`; `2407 AND AL,7` | — |
+| PIC mask + exit | `0a27`–`0a34` | `60 PUSHA`; `891e7c0f/89267a0f` saves; `b009/e620 OUT 0x20,AL(9)`; `f4 HLT` @`0a34` — **cited exit** | — |
+| return block | `0a35`–`0a5d` | entry cite = stored IP `0xa35`; `b080/e620 OUT 0x20,AL(0x80)`; `bb0010/8edb DS`; `8e167c0f/8b267a0f SS/SP`; `61 POPA`; `e660 OUT 0x60,AL`; `fa CLI`; `8ac5 AL←CH`; `e612`; `8ac1 AL←CL`; `e602`; `32c0 XOR AL,AL`; `bab031/ee`; `07 POP ES`; `1f POP DS`; `61 POPA`; `5b/58`; `c3 RET` @`0a5d` — **static exit cite**; ends one byte before landing `0a5e` (tiling ✓) | — |
+| contacts | — | `[0x2f]`, `[0xf82]`, `[0x9b6]`, `[0xf7c]/[0xf7a]`, `ES:[0x3fc]/[0x3fe]`; ports `0x2/0x12/0x20/0x60/0x31b0` | — |
+| boundary | `[09d7..0a5d]` (135 B, contiguous) | inside row `1000:2508..2792` ✓ | — |
+
+**H10 `0x0a5e`/`0x0a63` (arg `0x71a`)** — window `dry_run` `11bd:0a5e`
+(100 B `0a5e..0ac1`).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0a5e`–`0a63` | `50 53 bb0010 fa` (`0a63 CLI` = `w1`) | — |
+| body | `0a64`–`0a83` | `60 PUSHA`; `b83800/8ec0 ES←0x38`; `26c706a204860a MOV ES:[0x4a2],0xa86`; `a1b609`; `26a3a404 MOV ES:[0x4a4],AX` — return pair `0xa86:[0x9b6]` (DIFFERENT cluster: `[0x4a2]/[0x4a4]`); `891e7c0f/89267a0f` saves; `ba003f MOV DX,0x3f00`; `ed IN AX,DX` | — |
+| exit | `0a84` | `ebfe JMP 0x1000:2654` (→ `0x2654−0x1bd0` = `0a84` self) — **cited exit: self-spin tail-JMP** | — |
+| return block | `0a86`–`0a9e` | entry cite = stored IP `0xa86`; `b80010/8ed8/8ec0 DS/ES←0x1000`; `8e167c0f/8b267a0f SS/SP`; `ba203f MOV DX,0x3f20`; `b000`; `ee OUT DX,AL`; `61 POPA`; `5b/58`; `c3 RET` @`0a9e` — **static exit cite** | — |
+| contacts | — | `[0x9b6]`, `[0xf7c]/[0xf7a]`, `ES:[0x4a2]/[0x4a4]`; ports `0x3f00/0x3f20` | — |
+| boundary | `[0a5e..0a9e]` (65 B, contiguous incl. return) | inside row `1000:2508..2792`; `0a9f` = next landing (tiling ✓) | — |
+
+**H11 `0x0a9f`/`0x0aa4` (arg `0x8b2`)** — windows `dry_run` `11bd:0a9f`
+(100 B emitted into H12 through `0aff`), `11bd:0b00` (96 B —
+**off-alignment disclosed**: starts mid `0aff`'s 7-byte store; aligned
+continuation `0b06..` verified consistent), `11bd:0b60` (return tail).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0a9f`–`0aa4` | `50 53 bb0010 fa` (`0aa4 CLI` = `w1`) | — |
+| frame | `0aa5`–`0ac6` | `e421 IN AL,0x21`; `60 PUSHA`; `9c PUSHF`; `ff36b609 PUSH [0x9b6]`; `683f0b PUSH 0xb3f` — far frame `:0xb3f` (H11's own return IP); `2b26c409 SUB SP,[0x9c4]` (frame carve); `b0ff/e621 OUT 0x21,AL` (mask ALL); `b83800/8ec0 ES←0x38`; `26891e6904 MOV ES:[0x469],BX`; `2689266704 MOV ES:[0x467],SP` (pair = BX:SP under seg 0x38) | — |
+| gate + exit | `0ac7`–`0ad3` | `803ed00e00 CMP byte [0xed0],0`; `7507 JNZ 0x1000:26a5` →`0ad5` (shared tail — **NOT** island `08d5`: `0x26a5−0x1bd0=0xad5` re-derived); `b0fe/e664 OUT 0x64,AL`; `f4 HLT` @`0ad2` — **cited exit**; `ebfd JMP 0x1000:26a2` (→`0ad2`) halt-retry | → `0ad5` |
+| shared shutdown tail | `0ad5`–`0ae1` | `c706d0080000 MOV word [0x8d0],0`; `0f011ed008 LIDT word [0x8d0]`; `cdff INT 0xff` — fed by three static edges (`084f` H6, `0acc` H11, `0b0b` H12); contains the only LIDT-class cite of the band handlers; **cited exit of the tail: INT 0xff** (`cdff` ends `0ae1`); `0ae2` = H12 landing — falls through to the next handler's prelude (adjacency cite) | — |
+| return block | `0b3f`–`0b5f` | entry cite = own pushed IP `0xb3f`; `fa CLI`; `e81df8 CALL 0x1000:1f30` (→`0360`); `61 POPA`; `e621 OUT 0x21,AL`; `c706d008ff07 MOV [0x8d0],0x7ff`; `803e350000 CMP byte [0x35],0`; `750d JNZ` →`0b60`; `803e3f0000 CMP byte [0x3f],0`; `7403 JZ` →`0b5d`; `e88600 CALL 0x1000:27b3` (→`0be3`, inside `FUN_11bd_0be9` body `0be3..0bef` — edge to DEFINED byte, one hop); `5b/58/c3 RET` @`0b5f` — **static exit cite** | → `0360`, `0be3` |
+| delay-call tail | `0b60`–`0b6d` | entered by `0b51 JNZ 0x1000:2730` (→`0b60`): `51 PUSH CX`; `8b0e1000 MOV CX,[0x10]`; `90 NOP`; `e2fe LOOP 0x1000:2736` (→`0b66` self); `e87e00 CALL 0x1000:27b9` (→`0be9` = `FUN_11bd_0be9` ENTRY — defined-body edge); `59 POP CX`; `ebef JMP 0x1000:272d` (→`0b5d` — re-joins return block at `POP BX`) | → `0be9` |
+| contacts | — | `[0x9b6]`, `[0x9c4]`, `[0xed0]`, `[0x8d0]`, `[0x35]`, `[0x3f]`, `[0x10]`, `ES:[0x467]/[0x469]`; ports `0x21/0x64` | — |
+| boundary | `[0a9f..0ae1]` primary (incl. shared tail) + `[0b3f..0b6d]` return (contiguous, 47 B) | inside row `1000:2508..2792`; tail `0ae0..0ae1` ends one byte before landing `0ae2` ✓ | — |
+
+**H12 `0x0ae2`/`0x0ae7` (arg `0x905`)** — windows `dry_run` `11bd:0a9f`
+(100 B, emitted H12 `0ae2..0aff`), `11bd:0b00` (aligned `0b06..0b5f`).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `0ae2`–`0ae7` | `50 53 bb0010 fa` (`0ae7 CLI` = `w1`) | — |
+| body | `0ae8`–`0b05` | `e421 IN AL,0x21`; `60 PUSHA`; `891e7c0f/89267a0f` saves; `b83800/8ec0 ES←0x38`; `a1b609 MOV AX,[0x9b6]`; `26a36904 MOV ES:[0x469],AX`; `26c7066704140b MOV ES:[0x467],0xb14` — return pair `0xb14:[0x9b6]` (7-byte store ends `0b05`) | — |
+| gate + exit | `0b06`–`0b12` | `803ed00e00 CMP byte [0xed0],0`; `75c8 JNZ 0x1000:26a5` →`0ad5` (shared tail, `0x26a5−0x1bd0` ✓); `b0fe/e664`; `f4 HLT` @`0b11` — **cited exit**; `ebfd JMP 0x1000:26e1` (→`0x26e1−0x1bd0` = `0b11`) halt-retry | → `0ad5` |
+| return block | `0b14`–`0b3b` | entry cite = stored IP `0xb14`; `b80010/8ed8 DS`; `8e167c0f/8b267a0f SS/SP`; `e83cf8 CALL 0x1000:1f30` (→`0360`); `b00d/e670 OUT 0x70,AL`; `61 POPA`; `e621 OUT 0x21,AL`; `c706d008ff07 MOV [0x8d0],0x7ff`; `813e35000080 CMP word [0x35],0x8000`; `7403 JZ` →`0b3c`; `5b/58`; `c3 RET` @`0b3b` — **static exit cite** | → `0360` |
+| conditional tail | `0b3c`–`0b3e` | `e9bc1d JMP 0x1000:44cb` — `0x0b3f+0x1dbc` = `0x28fb` = pocket DEFINED orphan block `28ee..28fd` (within `FUN_11bd_2864` envelope, uncovered) — flow edge into defined bytes: collision recorded, boundary keeps own bytes | → `28fb` |
+| contacts | — | `[0x9b6]`, `[0xf7c]/[0xf7a]`, `ES:[0x467]/[0x469]`, `[0xed0]`, `[0x8d0]`, `[0x35]`; ports `0x21/0x64/0x70` | — |
+| boundary | `[0ae2..0b11]` primary + `[0b14..0b3e]` return+tail | inside row `1000:2508..2792`; `0b3f` = H11's return block (cross-handler adjacency: H12 range ends `0b3e`, H11 return starts `0b3f` — tiles with no gap) | — |
+
+**H13 `0x2a5a`/`0x2a60` (arg `0x29bc` — the BLOCK handler)** — window
+`dry_run` `11bd:2a5a` (128 B emitted `2a5a..2ad9`).
+
+| element | address | evidence (bytes) | calls (address only) |
+|---------|---------|------------------|----------------------|
+| prelude | `2a5a`–`2a60` | `50 PUSH AX`; `53 PUSH BX`; `8b1eb409 MOV BX,[0x9b4]` (6-byte preamble — the cited `0x2a5a` form `50538b1eb409fa` ✓); `fa CLI` @`2a60` (= `w1`; explains the `+6` spacing) | — |
+| 32-bit save | `2a61`–`2a67` | `6650 PUSH EAX`; `6652 PUSH EDX`; `6651 PUSH ECX`; `6656 PUSH ESI` | — |
+| **MSW-clear shape** | `2a69`–`2a73` | `0f01e1 SMSW CX`; **`a14000 MOV AX,[0x40]` @`2a6c`**; `f7d0 NOT AX`; `23c1 AND AX,CX`; `0f01f0 LMSW AX` — the slice-16 flagged shape, REACHED by the walk (fallthrough from `2a60`, `+0xc`; from `2a5a`, `+0x12`) | — |
+| body | `2a76`–`2a9f` | `a1700d MOV AX,[0xd70]`; `a35e0d MOV [0xd5e],AX`; `660fb70eb409 MOVZX ECX,[0x9b4]` (second cell read); `668bd4 MOV EDX,ESP`; `8c2e620d MOV [0xd62],GS`; `8c26600d MOV [0xd60],FS` (THE pocket `2880/2884` save cells); `6633c0 XOR EAX,EAX`; `8ee0 MOV FS,AX`; `8ee8 MOV GS,AX`; push storm `50/0fa8/50/0fa0/6651/6651/50/53/6652/6650/50/ff36b609` (`PUSH [0x9b6]`), `50`, `68c42a PUSH 0x2ac4` — far frame `:0x2ac4` (own return) | — |
+| segment load + CALLF | `2aa0`–`2ac3` | `6650 PUSH EAX`; `50 PUSH AX`; `ff36b609 PUSH [0x9b6]`; `50`; `68c42a PUSH 0x2ac4`; `b82000/8ec0 ES←0x20`; `b83800/8ed8 DS←0x38`; `b80cde MOV AX,0xde0c`; `660fb7e4 MOVZX ESP,SP`; `6626ff1e5a0d CALLF word ptr ES:[0xd5a]` (far call through cell `ES(0x20):[0xd5a]` — dynamic target, cite-only) | → `ES:[0xd5a]` dynamic |
+| return block | `2ac4`–`2ad8` | entry cite = own pushed IP `0x2ac4`; `268e2e660d MOV GS,ES:[0xd66]`; `268e26640d MOV FS,ES:[0xd64]` (the pocket `2824/2828` save cells, restored via seg-0x20); `665e POP ESI`; `6659 POP ECX`; `665a POP EDX`; `6658 POP EAX`; `5b POP BX`; `58 POP AX`; `c3 RET` @`2ad8` — **cited exit** | — |
+| excluded tail | `2ad9`–`2ada` | `0000` = the live `CS:[0x2ad9]` data tail cell (`2adb` reader + `7739` writer per `## paging block 2978..2ada`) — NOT walked, NOT included (first cited external byte after the exit = `2ad9`) | — |
+| contacts | — | `[0x9b4]` ×2 (16-bit + MOVZX), `[0x40]`, `[0x9b6]`, `[0xd5e]`, `[0xd60]/[0xd62]` saves, `ES:[0xd64]/[0xd66]` restores, `ES:[0xd5a]` CALLF cell, `CS:[0x2ad9]` adjacency (excluded); segment stores `ES←0x20`, `DS←0x38`, `FS/GS←0`, FS/GS reload | — |
+| boundary | `[2a5a..2ad8]` (127 B) | first attributed entry in block `2978..2ada`: dynamic vector landing `w0`/`w1` from dedupe row = entry cites; range interior fully inside block row `1000:4548..46aa` (all undefined per slice-17/21 + this pass's no-function probes); tail `2ad9..2ada` excluded | — |
+
+### Prelude signature comparison (Step 3)
+
+| handler | prelude bytes cited | vs `0x0938` form `50 53 bb0010 fa` | diff |
+|---------|---------------------|------------------------------------|------|
+| H1..H12 (band, 12) | `50`,`53`,`bb0010`,`fa` identical at `040e/0491/05af/0697/076f/07e7/0938/099b/09d7/0a5e/0a9f/0ae2` (per-window emission rows above) | MATCH — zero diffs | — |
+| H13 (block) | `50`,`53`,`8b1eb409 (MOV BX,[0x9b4])`,`fa` @`2a5a` | matches the `0x2a5a` cited form `50538b1eb409fa` | base from cell `[0x9b4]` (4-byte operand) not immediate `0x1000`; prelude 6 B → `+6` word spacing (slice-21's lone `+6` arg, now explained at the opcode level) |
+
+`w1` check: the `fa` CLI byte is an instruction boundary of each `w0` decode
+in all 13 (emitted `CLI` rows above) — the `FUN_11bd_0931` preamble-skip
+entry (stub pre-pushes `50/53` at `0932/0933`) lands exactly on the post-
+prelude `CLI` in every handler. Gate polarity: four band handlers
+(H1/H2/H7 + H9 via the `09d4` hop) carry the `CMP byte [0x2f],0x3` +
+`J(C/C)C` pair with the taken/skipped leg ending in `JMP 0x1000:441c` →
+`11bd:284c` (pocket SS-rebase preamble FUN) when `[0x2f]>=3` — byte-cited
+four distinct `e9..` edges (`041b`,`049e`,`0945`,`09d4`) to the same pocket
+entry; the other nine go gate-free straight into the body.
+
+### Block adjacency: `2a6c` verdict (Step 3)
+
+- **H13's walk REACHES `2a6c`.** Fallthrough path `2a5a→2a60(CLI)→2a61..2a67
+  (PUSH EAX/EDX/ECX/ESI)→2a69 SMSW CX→2a6c MOV AX,[0x40]→2a6f NOT AX→
+  2a71 AND AX,CX→2a73 LMSW AX→2a76 …` — every byte emitted by the single
+  `dry_run` window `11bd:2a5a` (128 B), zero branches between the landing
+  and the shape. Distance: `+0x12` from `w0`, `+0xc` from `w1`.
+- The slice-16 `2a6c..2a73` "MSW-clear locator" (`a14000 f7d0 23c1 0f…`,
+  flagged-not-adopted as a *candidate entry*) is therefore **reached and
+  statically attributed as inline mid-body code of dispatch handler
+  `0x2a5a`** — the flag's own bytes are byte-exact this pass (`a14000`@`2a6c`,
+  `f7d0`@`2a6f`, `23c1`@`2a71`, `0f01f0 LMSW`@`2a73`). Per Step 3's
+  condition the shape "stays flagged-not-adopted until this slice's walk
+  shows otherwise": the walk shows the shape is entered THROUGH `2a5a`/
+  `2a60`, not as a separate entry candidate — `2a6c` needs no own feeder
+  search beyond the vector landing. Adoption (create) is Task 2's decision;
+  Task 1 records the reachability and the attribution basis.
+- The SMSW→AND-NOT-`[0x40]`→LMSW op sequence, plus `[0xd60..0xd66]` FS/GS
+  save/restore (the same cells the pocket stream `2880/2884` saves under,
+  restored at `2ac4/2ac9` through segment-0x20) and the `CALLF ES:[0xd5a]`
+  with self return frame `0x2ac4`, make H13 the block-side twin of the
+  pocket's mode-transition machinery — mechanism-level naming leg exists
+  (CR-access-class SMSW/LMSW ops cited inline), but naming is Task 2 per
+  slice rules.
+- Block attribution delta: `## paging block 2978..2ada`'s "ZERO attributed
+  entries" deliverable is amended by this pass — `2a5a` (+ companion `2a60`)
+  are now attributed vector entries with cited boundary `[2a5a..2ad8]`;
+  `2978..2a59` and `2adb`-side legs stay as that section states (fall-in
+  leg (i) now has a landing INSIDE the block; tail cell `2ad9..2ada`
+  unchanged-flagged).
+- H6/H11/H12 edges to `0ad5` and the `0x1000:26a5` renders: all three
+  recompute `−0x1bd0 = 0xad5` — **none targets the `08c2..08d5` island**;
+  the self-spin/halt-retry idioms never leave their handler's band row;
+  NO walk touches `08c2`/`033c`/`0bc3`. The only defined-byte flow edges
+  found: `JMP→284c` ×4 (entries at byte `041d/04a0/0947/09d6`-side,
+  targets = created pocket FUN), `JMP→28fb` ×1 (H12 `0b3c`, defined orphan),
+  calls into defined bodies (`0733` @H5 `07ad/07d1`, `0be3/0be9` @H11
+  `0b5a/0b68`, pocket `284c`-edge above), and the unowned `0b94..0bc2`
+  stub's `CALL 0x1000:3e7d`(→`11bd:22ad` `print_error_message`) +
+  fallthrough to island `0bc3` at `0bc2` — recorded; that block is NOT a
+  vector handler (no landing, no far-ret cite from the 26 edges) and stays
+  unclaimed/deferred.
+
+### Reads executed (ZERO-WRITE branch)
+
+`disassemble_bytes` ×23 EXCLUSIVELY `dry_run=true` (13 primary windows,
+6 extension/exit-exact windows incl. the `0697` 102-byte re-run, the
+refused `04be` probe, and three disclosed off-alignment probes `07d2`/
+`084d→087c`/`0b00` — the `084d` probe was aligned, the misalign list is
+`07d2` (−2), `087c` (−1), `0b00` (−6)); `get_function_by_address` ×27
+(26 unique offsets + `04be` collision probe, all verbatim above);
+`find_code_gaps` ×1 (total 136); `analyze_data_region` ×1 (`04be` —
+`current_name DAT_11bd_04be`, `current_type undefined2`, listing-state
+fields only, xref_map sites `6bb6/6e99/7371/73a0/73e1/7501` cited as
+listing fact not contact count); `inspect_memory_content` ×1 +
+`read_memory` ×1 (`04be` 32 B/16 B — hex↔data reconciled ✓, the 16-B read
+is a strict prefix of the inspect dump ✓ two-way agreement); NO
+create/rename/comment/set_global/save; no transaction opened; pre-existing
+bodies re-read only. `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep`
+churn left unstaged.
+
+### Deferrals
+
+- Callee bodies (`06fc`, `073c`, `0733`, `0360`, `0be3/0be9`, pocket
+  `284c`, orphan `28fb`) and the `CALLF ES:[0xd5a]` dynamic target:
+  one-hop cite-only.
+- Cell ROLES (`[0x9b4]`, `[0x9b6]`, `[0x40]`, `[0x2f]`, `[0x35]`, `[0xf7c]/
+  [0xf7a]`, `[0x467]/[0x469]`, `[0x4a2]/[0x4a4]`, `[0x3fc]/[0x3fe]`,
+  `[0x160]/[0x162]`, `[0x404]/[0x406]`, `[0x9c4]/[0x9c6]/[0x9c8]/[0x9cc]`,
+  `[0xd5e]/[0xd5a]/[0xd60..0xd66]`, `[0xf82]`, `[0x120c]`, `[0xed0]`,
+  `[0x10]`, `[0x20]/[0x22]`, `[0x8d0]`): contacts LOGGED per handler above,
+  not resolved (prior-slice dispositions stand — `[0x9b4]` slice-20,
+  `[0xf7a]/[0xf7c]` slice-21 deferral, `[0xf50]`/`[0x996]` `## 02b7 twin`
+  family — the `0bba` `MOV SP,[0xf50]` sighting in the unclaimed
+  `0b94..0bc2` block re-cites that section's raw-scan list, no new claim).
+- Unowned/recorded regions: `0852..08a3+` H6 installed-vector candidate,
+  `09cf..09d6` (H8 beyond-exit / H9 gate target), `0ad5..0ae1` shared
+  shutdown tail (proposed under H11), `0b94..0bc2` non-vector stub,
+  inter-handler fill (`045e..0490`, `04f3..05ae`, `0675..0696`,
+  `06fc..0732`, `073c..076e`, `08d6..0937` incl. stub cluster,
+  `0b60..` split per H11 above) — ownership is Task-2 create scope at the
+  cited boundaries.
+- `DAT_11bd_04be` (defined `undefined2` inside H2): clearing/reclassifying
+  it is a listing mutation — Task 2 decides (stop-short boundary stands if
+  not resolved).
+- H2 true-alignment reconstruction at `04be..04c0` (`ba8404 = MOV DX,
+  0x484`): flagged not adopted (data-unit carve makes it a hand decode from
+  reconciled raw bytes); post-`04c1` alignment is tool-emit corroborated
+  (both windows identical from `04c2`).
+- Naming: NOTHING renamed this pass (Task 1 rule) — signature/gate/exit/
+  return-block evidence above is the naming-leg raw material for Task 2's
+  verdict rows (SMSW/LMSW-class cite exists ONLY in H13; band handlers'
+  mechanism wording bounded by their port/PIC/CMOS operand cites).
