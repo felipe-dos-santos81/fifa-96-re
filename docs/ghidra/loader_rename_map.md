@@ -536,3 +536,73 @@ NOT-COVERED: none in `11bd:4368..4586` — rows above tile the window
 contiguously (join-reached calls at `441d`/`43bb`/`43c6`/`442f`/`43aa`
 are counted once in their home rows, noted but not double-counted in
 join rows).
+
+### Tail callee verdicts (one-layer, verified 2026-09-29, program `/fifa96.exe`)
+
+Scope: the 7 tail calls in the walk table resolve via
+`get_function_by_address` to 7 bodies (unresolvable: none). Leaf = the
+callee itself is the one allowed FUN layer (0 callees); ≥1 callee
+defers the site (record, do not pursue); `22ad` guard-deferred without
+diving per the whitelist rule. Already-named `mem_grow_relocate`
+(called at `4445` in the arm-5 body): grow-role fits the tail context
+(`MOV AX,0x5e` size pushes at `4441/444b`) — confirmed, no re-rename,
+no new row. Task-1 flag confirmed: `JNZ 0x1000:60fa` at `4523`
+targets `11bd:452a` (far-thunk delta holds), so the taken path skips
+`MOV AX,SI` at `4525` + `MOV [0x10ee],AL` at `4527` only and keeps
+`MOV AX,SI` at `452a` + `MOV [0x2e],AL` at `452c` — the asymmetric
+store stands as written.
+
+| call site | callee FUN + bounds | verdict + evidence | new_name or — |
+|-----------|---------------------|--------------------|---------------|
+| `CALL 0x1000:41be` at 44fa | `copy_string_aligned`, `11bd:25ee..261f`, leaf (0 callees) | CONFIRMED — `SCASB.REPNE ES:DI` strlen at 2603 + `NOT CX` at 2605; odd-head `TEST AL,0x1` at 260c + `MOVSB` at 2610; `SHR CX,0x1` at 2612 + `MOVSW.REP` at 2614 + `ADC CX,CX` at 2616 + `MOVSB.REP` at 2618 (word-aligned copy); called with `0xec2` + `DI` (`=0x1190` buffer) pushes at 44f3..44f9 | copy_string_aligned |
+| `CALL 0x1000:7c24` at 450a | `copy_string_bounded`, `11bd:6054..607b`, leaf (0 callees) | CONFIRMED — `LODSB` at 6068 + `OR AL,AL` at 6069 + `JZ` (NUL stop) + `STOSB` at 606d + `LOOP` at 606e (CX bound); `XOR AL,AL` at 6070 + `STOSB.REP` at 6072 (NUL fill); returns dest `MOV AX,BX` at 6074; called with `0x14` + `[BP-0x5c]` + `0x1197` at 44ff..4509 | copy_string_bounded |
+| `CALL 0x1000:7e20` at 4536 | `publish_mode_vector`, `11bd:6250..627e`, leaf (0 callees) | CONFIRMED — `MOV [0x9ba],BX` at 6255 (arg publish); gate `CMP [0x2f],0x3` at 6259 + `CMP [0x2e],0x2` at 6266 selects `BX=0x2824` override at 626d; pair loads `CS:[BX-4]`/`CS:[BX-2]` at 6270/6277 into `[0x9bc]`/`[0x9be]` at 6274/627b | publish_mode_vector |
+| `CALL 0x1000:6157` at 455e | `test_mode_member`, `11bd:4587..45aa`, leaf (0 callees) | CONFIRMED — `CMP [BP+0x4]` against `0x1` at 458a / `0x5` at 4590 / `0xe` at 4596 / `0xf` at 459c; match `MOV AX,0x1` at 45a2 else `SUB AX,AX` at 45a7; returns 1 iff arg in `{1,5,0xe,0xf}` | test_mode_member |
+
+All four renames verb-led; no `decode_*` (no byte transform observed
+in any member — two are verbatim copiers, one publishes words, one
+tests membership). Plates `C: none — behavioral (<role>)` set on all
+four; `save_program` on `/fifa96.exe` — success.
+
+### Guard-deferred (tail): 11bd:22ad
+
+Called at `451a` (default noreturn). 1 FUN callee
+(`copy_string_aligned`, freshly CONFIRMED above — still a second
+layer past the `3ed8` body, so the layer rule fires regardless).
+Whitelist: guard-deferred without diving, no rename.
+
+### Guard-deferred (tail): 11bd:7c62
+
+Called at `4575` (SI==0xb arm). 6 FUN callees (`016c`, `0290`,
+`092c`, `199a`, `1df7`, `79fc`) — a second layer past the tail body.
+No rename, no dive.
+
+### Guard-deferred (tail): 11bd:30d8
+
+Called at `457e` (`[BP-0x56]`==0 arm). 4 FUN callees (`304f`,
+`file_open_dos`, `file_read_dos`, `file_seek_dos`) — a second layer
+past the tail body (loader file-trio infra). No rename, no dive.
+
+### 3ed8 closeout
+
+Delimited: entry conditions (two word args, `62f8` forward, BIOS
+equipment-word probe, `[0x11d4]=2`/`68c2`/`2d40`/`[0x11d4]=3`
+sequence); body bounds `11bd:3ed8..4586` (667 insns, `RET` boundary
+with adjacent `4587` callee); config-probe fan-out `3f66..41a1`
+(4 probes CONFIRMED+renamed: `skip_blank_chars`, `find_char_in_string`,
+`lookup_copy_config_string`, `parse_config_number`); SI-producer
+boundary at `3f9c` (`2d40` zero-gate, `195d`-gated body constants,
+`61ee`-thunk arithmetic, `4587` arg-handoff, `689e`/`6869`/`68b9`
+stack re-source); 22-arm mode dispatch `42db..4368` (full arm table,
+2 probes CONFIRMED+renamed, `6400` NOT-CONFIRMED, 14 arms
+guard-deferred); tail walk `4368..4586` (23 rows, void return into
+`2d9c`, asymmetric `452a` store confirmed); tail callee verdicts
+(4 CONFIRMED+renamed above, 3 guard-deferred, `mem_grow_relocate`
+confirmed without re-rename). Open: the 4 slice-7 deep dives
+(`69e0→69c7`, `66b9→0733/0c0d`, `243e→65c3`, `22ad→25ee`); the
+`6400` INT `DC`h contract (`CL=0x82` extender-private API,
+queried source unidentified); the `[0x9b8]` table writer (source
+read by `lookup_copy_config_string` at `466c/4677`, writer unknown);
+the `2d40` split-label question (`2d40..2d42` zero-return adjacent
+to `raise_boot_error` at `2d43` — one function split or two?);
+the 2 new tail deferred (`7c62` 6 callees, `30d8` 4 callees).
