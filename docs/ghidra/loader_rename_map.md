@@ -1130,3 +1130,78 @@ Shared-helper verdict (no change to the `run_postload_init` row):
 differ as cited. Both callees are guard-deferred above (second
 layers `27a4`/`2081`), so no role claim beyond the shared intake
 shape is made here.
+
+## 0290/0293 fall-through (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_0290` (body `11bd:0290..0292` per `get_function_by_address`)
+is one instruction — `MOV DX,0x20` at `0290` (bytes `ba2000`,
+`disassemble_bytes` on `028e..0296`) — a selector-staging prelude that
+falls through into `FUN_11bd_0293` (body `11bd:0293..02b4`, 12 insns,
+last insn `JMP word ptr [0x9c2]` at `02b1` ending at `02b4` — matches
+the delimited end; delta none). The split is a genuine pair, not an
+artifact: `0293` has its own direct caller — `CALL 0x1000:1e63`
+(near `e8`, delta `0x1e63−0x1bd0=0293`) at `11bd:0dc1`
+(`FUN_11bd_0db2`, sole direct entry per `get_xrefs_to` and the
+program-wide `:1e63` instruction search, one match) — and that caller
+stages DX itself (`MOV DX,word ptr [BP+0x8]` at `0db5`), which is
+exactly the register `0293` consumes at `0298` (`MOV SS,DX`); the
+other eight sites enter through the stub to get the fixed selector
+`DX=0x20`. Role of `0293`: a protected-mode transition — `PUSHA` at
+`0293`, pre-hook `CALL word ptr [0x9c0]` at `0294`, `SS←DX` at `0298`
+then `DS/ES←0x20` via `MOV DX,0x20`/`MOV DS,DX`/`MOV ES,DX` at
+`029a/029d/029f`, `LLDT 0x68` at `02a1/02a4`, `SMSW`+`OR AX,[0x40]`+
+`LMSW` at `02a7/02aa/02ae` (MSW←MSW∪control-mask global, PE on bit 0),
+exit via `JMP word ptr [0x9c2]` at `02b1` — no `RET` anywhere and no
+in-body `POPA` to pair the `PUSHA`: the vector target owns the unwind.
+Both slice-12 missing legs close at the body level: DX=0x20 identity =
+the SS selector staged for `MOV SS,DX` at `0298` (stub value for
+0290-entry callers, caller value for the `0dc1` entry — asymmetric
+with DS/ES, which re-stage the fixed `0x20` at `029a`); exit mechanism
+= hook call through cell `[0x9c0]` + tail transfer through cell
+`[0x9c2]`, with caller-side continuation evidence — `0db2` resumes at
+`0dc4` after the call and repairs DS/ES at `0dca`/`0dcd`
+(`MOV DS,[BP+0xa]`/`MOV ES,[BP+0xc]`), and the `7ced` arm resumes at
+`7cf0` with `PUSH 0x38`/`POP ES` (slice-12 rows) — so the contract is
+return-to-site+3, GPRs restored through the PUSHA frame, segments
+clobbered, NO value consumed: neither post-site reads AX (the
+decompile `0290(0)` arg lands in the saved frame, `*(puVar2+-4)=
+param_1`, and comes back on the unwind — not a return slot). NOT-
+CONFIRMED residue (missing fact named, boundary unaffected):
+`[0x9c0]` hook has no found writer — `get_xrefs_to` on `11bd:09c0`
+returns 0 refs and the program-wide operand search `0x9c0]` shows the
+`0294` site as sole mention, so the hook target is runtime-written and
+unidentified; `[0x9c2]` has one static writer — `MOV word ptr
+[0x9c2],0x296d` at `41ee` (`FUN_11bd_3ed8`, gated: `CMP byte ptr
+[0x2f],0x3` at `41e7` + `JL 0x1000:5e27` (=4257) at `41ec` skips it
+while the mode word is below 3) — but `get_function_by_address` finds
+no FUN at `11bd:296d` and the 16-byte dump there is unresolved
+code-ish (`8E` MOV-Sreg forms recur), so the per-path target value and
+the unwind shape there (POPA+RET vs terminal transfer) stay deferred.
+Decompiler divergences cited above: `0290`'s decompile inlines the
+whole `0293` body past its one-insn delimitation (slice-12 flag
+re-confirmed — the `*(puVar2+-6)=0x20` frame store is the stub's
+`MOV DX,0x20`), and `0293`'s decompile drops the `SMSW`/`LMSW` pair;
+disassembly wins both times. Zero Ghidra writes this task (no rename,
+no plate, no boundary change, no save).
+
+| Question | Evidence | Verdict-so-far |
+|----------|----------|----------------|
+| entries into 0290? | 8 × `CALL 0x1000:1e60` (`e8` rel16 near; delta `0x1e60−0x1bd0=0290`), `get_xrefs_to` count 8 + program-wide `:1e60` search 8/8 exact: `0269` `FUN_11bd_0251`, `11f2` `FUN_11bd_11ed`, `1227` `FUN_11bd_1222`, `2081` `FUN_11bd_2081` (body-entry site), `670a` `FUN_11bd_6701`, `7a50` `FUN_11bd_79fc`, `7a8d` `FUN_11bd_7a88`, `7ced` `execute_exit_arm` | enumerated (all via stub) |
+| entries into 0293 direct? | exactly one: `CALL 0x1000:1e63` at `11bd:0dc1` (`FUN_11bd_0db2`) — `get_xrefs_to` count 1, `:1e63` search 1 match; reachable by straight-line from the `0db2` entry (`JNZ 0x1000:29a3`(=0dd3) at `0dba` never taken — `XOR AX,AX` at `0db8` sets ZF) | REAL-PAIR |
+| stub identity at 0290 | `MOV DX,0x20` only (bytes `ba2000`, `disassemble_bytes` `028e..0296`) — not NOP, not JMP, not RET: deliberate selector staging consumed at `0298` `MOV SS,DX`; direct-entry caller supplies its own DX instead (`0db5`), so the stub is a distinct entry contract, not padding | REAL-PAIR (deliberate prelude) |
+| artifact from above? | `FUN_11bd_0251` body ends `11bd:028f` (`get_function_by_address`) with `IRETD` at `028e` (bytes `66cf`) — handler terminates; `0290` is not swallowed fall-through | no |
+| boundary verdict | `0293` direct entry exists with its own DX contract + stub is deliberate staging + clean end-of-function above | REAL-PAIR |
+| [0x9c0]/[0x9c2] cell values | `[0x9c0]`: 0 data xrefs, sole mention = consumer `0294` — no writer found (missing fact: hook writer). `[0x9c2]`: writer `MOV ,0x296d` at `41ee` gated `41e7`/`41ec` (`[0x2f]>=3`); `11bd:296d` no FUN, unresolved bytes — target semantics deferred (missing fact: per-path cell value + target unwind) | OPEN (residue, boundary not at stake) |
+
+| Element | Address | Evidence | Calls (address only) |
+|---------|---------|----------|----------------------|
+| entry state | 11bd:0293 | via stub: DX=`0x20` (`MOV DX,0x20` at `0290`); via `0dc1`: DX=`[BP+0x8]` (`0db5`); other GPRs = caller's; CALL return word on stack (`7cf0` from `7ced`, `0dc4` from `0dc1`); flags = caller's, never read in-body (no conditional insn in the 12-insn `disassemble_function` list) | — |
+| save frame | 11bd:0293 | `PUSHA` (byte `60` — 16-bit push, no `0x66` prefix; decompile mirrors it as the 8 frame stores `puVar2+-2..-0x10`, incl. DX save) | — |
+| pre-hook | 11bd:0294 | `CALL word ptr [0x9c0]` (`ff16c009`), pushes return `0298` (decompile `*(puVar2+-0x12)=0x1e68`); DX must survive the hook — `0298` consumes it | cell `[0x9c0]`: no writer found (0 xrefs on `11bd:09c0`, `0x9c0]` search = sole consumer at `0294`) — runtime, no dive |
+| SS load (DX=0x20 role) | 11bd:0298 | `MOV SS,DX` — consumes the entry DX: `0x20` from the `0290` stub, caller value from `0dc1` | — |
+| DS/ES load | 11bd:029a..029f | `MOV DX,0x20` at `029a` + `MOV DS,DX` at `029d` + `MOV ES,DX` at `029f` — re-staged fixed, unlike SS; last two DX consumers in-body | — |
+| LDT load | 11bd:02a1..02a4 | `MOV AX,0x68` + `LLDT AX` (decompile `LocalDescriptorTableRegister(0x68)`) | — |
+| PE merge | 11bd:02a7..02ae | `SMSW AX` + `OR AX,word ptr [0x40]` + `LMSW AX` — MSW ∪ global mask (PE=bit0); decompiler drops the SMSW/LMSW pair — disassembly wins | — |
+| exit/tail | 11bd:02b1 | `JMP word ptr [0x9c2]` (`ff26c209`, 4 bytes → ends `02b4` = delimited body end) — indirect near tail; no RET, no in-body POPA; vector target owns unwind; continuation evidence: `0db2` post-call segment repair at `0dca`/`0dcd` | cell `[0x9c2]`: static writer `41ee` (`MOV ,0x296d`, gated `41e7`/`41ec`); `11bd:296d` no FUN — address-only, no dive |
+| publishes | — | zero memory stores in the 12 insns (PUSHA/CALL stack pushes only); publishes = register state: SS←DX, DS/ES←0x20, LDTR←0x68, MSW←MSW∪`[0x40]` | — |
+| 7ced contract | 11bd:7ced → 7cf0 | slice-12 rows (cited, no re-walk): resumes `PUSH 0x38`/`POP ES` at `7cf0`/`7cf2` (repairs ES after the pair's `0x20`), no AX read (verify loop `CMP EAX,ES:[EBX]` at `7d06` consumes the stack struct); twin shape at `0db2` (`0dc4`+ segment repair) | — |
