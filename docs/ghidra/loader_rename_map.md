@@ -1047,8 +1047,9 @@ caller-gated status ruled out). Renamed + plate-set +
 One-layer role (body `11bd:092c..0930` per `get_function_by_address`,
 2 insns, signature `void`, 0 FUN callees): indirect tail-transfer
 stub through the `[0x9bc]` mode-vector cell — `NOP` at `092c` +
-`JMP word ptr [0x9bc]` at `092d`, no `RET` (control never returns;
-the vector target owns the continuation). Called at `7d15`
+`JMP word ptr [0x9bc]` at `092d`, no `RET` in-body — the `CALL`s at
+`7d15`/`7d1e` push `7d18`/`7d21` and resume there only via the vector
+target's own `RET` (the target owns the continuation). Called at `7d15`
 (verify; success returns its AX via the `7d1d` epilogue) and `7d1e`
 (fail path). Renamed + plate-set + `save_program` on `/fifa96.exe`
 — success.
@@ -1068,7 +1069,9 @@ pass (`1dfa/1dfb`), `JS` exit at `1dfc`; nonzero slot
 at `1e04`) issues `CALLF [0xaec]` with `AH=0xd` at `1e09` then
 `AH=0xa` at `1e0f`, then zeroes the slot
 (`MOV word ptr [BX+0xadc],0x0` at `1e14`); `RET` at `1e1c`.
-Called at `7d39` (fail path; its AX returned at `7d1d`).
+Called at `7d39` (fail path; its AX returned at `7d1d` — per the
+`7c62` path-table fail-path row and the epilogue row's "via `7d3c`
+join").
 Renamed + plate-set + `save_program` on `/fifa96.exe` — success.
 
 | Ghidra FUN | Address | Evidence | New name | C counterpart |
