@@ -695,3 +695,39 @@ Each site pushes one word code (immediate, except `14bc` dynamic and
 | FUN_11bd_46de | 11bd:473c | `CMP BX,DX` at 4730 + `JL`/`JG` + `CMP CX,AX` at 4736 + `JBE` at 4738 (taken); `PUSH 0x6` at 473a — code 6 |
 
 No rename this task (map-only, program untouched).
+
+### Verdict: 22ad (CONFIRMED 2026-09-29, program `/fifa96.exe`)
+
+CONFIRMED on the corrected premise (caller-convention exit, not in-body
+trap): argument contract — one word error code at `[BP+4]`, abs at
+`22bb..22c6`; formatting/scan behavior — `[NN]` prefix `22d4..232a`,
+`0x15e8`/`0xf22` scan `232d..2357`, sole FUN callee `copy_string_aligned`
+(`25ee`) at site `233f`; exit/return mechanism — plain `RET` at `2381`
+(`HLT`/self-`JMP`/`INT` all absent from the 89-insn body, re-verified this
+task), so program-wide noreturn is caller convention. Renamed +
+plate-set + `save_program` on `/fifa96.exe` — success.
+
+| FUN_11bd_22ad | 11bd:22ad | arg `[BP+4]` abs `22bb..22c6`; `[NN]` format `22d4..232a`; `0x15e8`/`0xf22` scan + `25ee` call at `233f`; two `[0xe6c]` prints `2359..2376`; `RET` at `2381` (HLT/self-JMP/INT absent) | print_error_message | none — behavioral (format [NN] error prefix, scan 0x15e8 table, print via [0xe6c] vector; returns via RET at 2381, caller-convention exit) |
+
+### Deferral unlock: 22ad
+
+`print_error_message` (`11bd:22ad..2381`) is now CONFIRMED+renamed, so the
+`22ad` call in each guard site below needs no dive — the callee role
+(formats the `[NN]` code prefix, resolves the message via the `0x15e8`
+table + `25ee`, prints through the `[0xe6c]` vector) is settled:
+
+- arm 1 (`### Guard-deferred: arm 1 (11bd:436e)`, site `43c6`): error path
+  pushes code `0x12` then calls `22ad` — no dive, callee prints the
+  code-tagged message and returns.
+- arm 5 (`### Guard-deferred: arm 5 (11bd:4423)`, site `43c6` via the
+  `43aa` tail join): same `43c6` error exit as arm 1 — no dive.
+- arm 14 (`### Guard-deferred: arm 14 (11bd:44c6)`, site `43c6` via the
+  `43aa` join): same `43c6` error exit — no dive.
+- arm 15 (`### Guard-deferred: arm 15 (11bd:44ce)`, same `43aa`-tail
+  convergence, site `43c6`): same `43c6` error exit — no dive.
+- arm 22 (`### Guard-deferred: arm 22 (11bd:436b)`, site `43c6` via
+  fall-through into the arm-1 body): same `43c6` error exit — no dive.
+- tail default (`### Guard-deferred (tail): 11bd:22ad`, site `451a`):
+  publishes `[0x11d4]=0x6`, pushes code `0xffec` (-20), calls `22ad` —
+  no dive, callee role settled (the `25ee` second layer is now a
+  CONFIRMED leaf callee, not an open question).
