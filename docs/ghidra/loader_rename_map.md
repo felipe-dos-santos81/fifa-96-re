@@ -200,3 +200,45 @@ Notes:
 - `FUN_11bd_2d9c` (body `11bd:2d9c..11bd:2ec8`) left unrenamed: orchestrator
   role spans unread callees beyond these six (65e1, 66e1, 191d, 18ba, 2fa5,
   3ed8, 2d99); revisit when those resolve.
+
+### 3ed8 verdict: NEEDS-OWN-SLICE (verified 2026-09-29, program `/fifa96.exe`)
+
+`FUN_11bd_3ed8` (body `11bd:3ed8..11bd:4586`, 667 insns, `RET` at `11bd:4586`;
+adjacent `FUN_11bd_4587` is a callee, confirming the boundary) left unrenamed:
+its role does not fit one paragraph, so no bound row and no rename.
+
+Entry conditions: two word args (decompile
+`void __fastcall FUN_11bd_3ed8(undefined2 param_1, undefined2 param_2)`,
+called after the second-dispatch check in `2d9c`); frame `PUSH BP` /
+`MOV BP,SP` / `SUB SP,0xec` at `11bd:3ed8..3edb`; first call
+`CALL 0x1000:7ec8` (= `62f8`) at `11bd:3ef2` forwarding the args; BIOS
+equipment-word probe (`MOV SI,word ptr ES:[BX]` at `11bd:3f1b` with
+ES=0xF000/BX=0xFFFE, `CMP SI,0xfb` at `3f22` / `CMP SI,0xfd` at `3f28`,
+`INC [0x11f0]` at `3f2e`); status cells `MOV [0x11d4],0x2` at `3f0d`,
+`CALL 68c2` at `3f32`, `CALL 2d40` at `3f38`, `MOV [0x11d4],0x3` at `3f3d`
+(`2d40` NOT conflated with Task-1 `raise_boot_error` at `2d43`).
+
+Exit shape: tail publishes a mode byte (`CMP [0x10ee],0xff` at `11bd:451e`,
+`MOV [0x10ee],AL` / `MOV [0x2e],AL` at `4527/452c`), `CALL 6250` at `4536`,
+`CALL 4587` at `455e`, SI==0xb arm `CALL 7c62` at `4575`,
+`[BP-0x56]`==0 arm `CALL 30d8` at `457e`, then `POP SI` / `POP DI` /
+`MOV SP,BP` / `POP BP` / `RET` at `4581..4586` — normal void return
+(noreturn paths exit via `CALL 22ad` at `4240/43c6/451a` instead).
+
+Callee summary: 38 callees (`get_function_callees`, limit 100). Known-role
+loader/script helpers: `find_substring` (`614a`, via thunk `0x1000:7d1a`),
+`mem_grow_relocate` (`CALLF 0x1000:0b12` at `11bd:4445`), `30d8`, `22ad`
+(noreturn, via thunk `0x1000:3e7d`). Resolved names with roles still open:
+`62f8`, `6054`, `6250`. Unknown domain (~30 unread): `18f1`, `195d`, `243e`, `25ee`, `2620`, `2d40`,
+`4587`, `45c3`, `4645`, `4665`, `6120`, `6395`, `6400`, `6618`, `6667`,
+`6672`, `66a2`, `66b9`, `6869`, `689e`, `68b9`, `68c2`, `698b`, `69ac`,
+`69e0`, `6c74`, `6d9c`, `76db`, `7c62` (+ 2 thunks of `61ee`).
+
+Why it exceeds a bound: a config-probe fan-out (`4665`/`4645`/`6120`/
+`45c3`/`195d` loops at `3f66..41a1`) feeds a central multi-arm dispatch on
+the SI mode word (`DEC AX` / `JNZ` chain plus `SUB AX,0x3/0x10a/0x64/
+0x171a/0xdad` at `11bd:42de..4368`, ~20 arms) publishing distinct
+`[BP-0x5a]`/`[0x10ee]`/`[0x2e]` constants, with further globals published
+(`0xeca`/`0xecc`/`0xece` at `40b0/40d4/40f6`, `0x11d4`, `0x46`/`0x47`,
+`0x10ee`). Mode/config/video/domain unknowns mix across 30 unread callees —
+bounding needs its own slice.
