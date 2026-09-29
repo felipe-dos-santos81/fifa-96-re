@@ -3232,7 +3232,9 @@ disassembler `ba4001`) resolved by a fresh narrow read + the dry-run bytes
 (three-way agreement → byte `0x40`, `MOV DX,0x140`), the same render-path
 class as slice-17's `23c1/23c8` note; all pocket quotes below are the
 reconciled values. `search_instructions` is the consumer authority (defined
-instructions only — `instructions_scanned:14006` on every run here); xrefs
+instructions only — `instructions_scanned:14006` on every run AT TASK-1 TIME;
+post-Task-2 sweeps report 14170 as this slice's own defines grew the defined
+count — historical value correct for the zero-write pass); xrefs
 and data-items channels reported-not-relied (both cell probes returned 0
 despite the defined `092d/6274/0934/627b` references — dead channel per
 slices 16/18/19/20).
@@ -3263,7 +3265,7 @@ data↔hex before use.
 | R2 | `2820..2823` (4 B) | W1 `64284c28` (data `[100,40,76,40]` ✓) → LE words `[0x2820]=0x2864`, `[0x2822]=0x284c` | TABLE | role: `[0x9bc]`/`[0x9be]` vector pair for base `0x2824` — read at `6270 2e8b47fc MOV AX,CS:[BX+-0x4]`→`6274 a3bc09` and `6277 2e8b47fe MOV AX,CS:[BX+-0x2]`→`627b a3be09` (BX=`0x2824` via `626d bb2428` override; fresh 18-B read `bb24282e8b47fca3bc092e8b47fea3be09c3` data↔hex ✓ = slice-20 mirror chain verbatim); both values land on emitted boundaries (`2864 PUSH AX 50`, `284c PUSH BX 53`); tool's form-collision at `2820` (`SUB byte ptr FS:[SI + 0x28], CL`) quoted as emission artifact |
 | R3 | `2824..28e6` (195 B) | clean contiguous emission `2824 MOV [0xd66],GS` (`8c2e660d`) … `28e4 MOV AX,[0xf56]` (`a1560f`) | CODE | entry-side segment saves + CR0/CMOS/port block; last-insn end cited: `28e6` |
 | R4 | `28e7..28eb` (5 B) | W3 raw `26a36704a1`; emission jumps `28e4..28e6` → `28ec` | UNKNOWN-flagged (tool non-emit; slice-14's named skip) | hand shape: `28e7 26a36704` = `MOV word ptr ES:[0x467],AX` (form twin of the emitted `28ee 26a36904 MOV ES:[0x469],AX` — skip is emission-local, not capability) + `28eb a1` = head of `MOV AX,[0xf58]` (`a1580f`); resync emitted insn: `28ec POP AX` (`58`) |
-| R5 | `28ec` (1 B) | emitted `58 POP AX` | CODE (stray resync alignment — byte is mid-`a1580f`; classification carries the flag) | — |
+| R5 | `28ec` (1 B) | emitted `58 POP AX` | CODE (stray resync alignment — byte is mid-`a1580f`; classification carries the flag) | forward-pointer: no define adopted — final state left undefined in the `28e7..28ed` interior (no-function probe `11bd:28ec` + row re-page quoted in `### Writes`) |
 | R6 | `28ed` (1 B) | W3 byte `0f`; non-emit | UNKNOWN-flagged | stream re-joins at `28ee` |
 | R7 | `28ee..296c` (127 B) | clean contiguous emission `28ee MOV ES:[0x469],AX` (`26a36904`) … `296c RET` (`c3`) | CODE | exit: `296c RET` = stream tail, pocket edge −0 ✓; contains the `296d` mirror region (see recursion below), the `ea` far-flush at `28b6`, PIT/CMOS port legs, `CMP [0x2e],…` switch `28f4..2926` |
 
@@ -3301,7 +3303,7 @@ ways.
 
 ### Vector consumer sweep (Step 3a)
 
-Sweep runs (all `search_instructions`, program scope, every response
+Sweep runs (all `search_instructions`, program scope, at Task-1 time every
 `instructions_scanned:14006`, `truncated:false`):
 
 | pattern run | match_count | hits + classification |
@@ -3394,14 +3396,17 @@ read above). Source-side divergence from the brief's expectation
 body — the interior class is empty; all twelve non-pocket/block sources sit
 in the three gap bands (defined-orphan/undefined bytes — per-row
 `get_function_by_address` responses quoted in the appendix below; rows
-`0x381`/`0x2824`/`0x29bc` already inline them in the table).
+`0x381`/`0x29bc` carry inline error-cites in the table, `0x2824` does not —
+the appendix's keyed set governs).
 
 ### Source-home citations — `get_function_by_address` per claimed source address (appendix)
 
 All fourteen pair-source cells probed; responses verbatim, keyed by address
-(the eleven under-cited rows of the table above are cited here live; rows
-`0x381`, `0x2824`, `0x29bc` carry the same responses inline and are repeated
-for completeness — the appendix is the authoritative per-row home cite set):
+(the eleven under-cited rows of the table above are cited here live; of the
+three previously-claimed inline rows, `0x381` carries the error text verbatim
+and `0x29bc` points at "no-function error @`29b8` cited", while `0x2824`'s
+table row carries NO inline response — the appendix is the authoritative
+keyed cite set for all fourteen):
 
 | source addr (arg) | verbatim response |
 |-------------------|-------------------|
@@ -3646,7 +3651,10 @@ under the `626d` override; per-arg targets land 2 in pocket (now `FUN_11bd_284c`
 entry `284c` and `FUN_11bd_2864` entry `2864` — targets named with their
 homes, the YES-branch discharge), 2 in block `2978..2ada` (`0x2a5a`/`0x2a60`,
 still undefined listing), and 24 in the functionless gap bands (`02d4..0732`,
-`073c..0928`, `0938..0bd0`) — ZERO targets in defined function bodies; the
+`073c..0928`, `0938..0bd0` — each band functionless except the three
+flow-island FUNs `08c2`/`033c`/`0bc3` above) — ZERO of the 24 band + 2 block
+targets fall in pre-existing defined bodies (the 2 pocket targets' landing
+insns are entries of bodies THIS slice created); the
 selector between the two cells is WHICH STUB the caller enters (`092c` vs
 `0931`, Task-1 owner table) and the cell content is fully static per arg.
 Slice-prior status: slice-17's OPEN note (`## 296d hook target`, "hole =
