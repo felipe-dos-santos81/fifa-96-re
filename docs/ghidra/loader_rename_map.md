@@ -3265,7 +3265,13 @@ data↔hex before use.
 | R4 | `28e7..28eb` (5 B) | W3 raw `26a36704a1`; emission jumps `28e4..28e6` → `28ec` | UNKNOWN-flagged (tool non-emit; slice-14's named skip) | hand shape: `28e7 26a36704` = `MOV word ptr ES:[0x467],AX` (form twin of the emitted `28ee 26a36904 MOV ES:[0x469],AX` — skip is emission-local, not capability) + `28eb a1` = head of `MOV AX,[0xf58]` (`a1580f`); resync emitted insn: `28ec POP AX` (`58`) |
 | R5 | `28ec` (1 B) | emitted `58 POP AX` | CODE (stray resync alignment — byte is mid-`a1580f`; classification carries the flag) | — |
 | R6 | `28ed` (1 B) | W3 byte `0f`; non-emit | UNKNOWN-flagged | stream re-joins at `28ee` |
-| R7 | `28ee..296c` (79 B) | clean contiguous emission `28ee MOV ES:[0x469],AX` (`26a36904`) … `296c RET` (`c3`) | CODE | exit: `296c RET` = stream tail, pocket edge −0 ✓; contains the `296d` mirror region (see recursion below), the `ea` far-flush at `28b6`, PIT/CMOS port legs, `CMP [0x2e],…` switch `28f4..2926` |
+| R7 | `28ee..296c` (127 B) | clean contiguous emission `28ee MOV ES:[0x469],AX` (`26a36904`) … `296c RET` (`c3`) | CODE | exit: `296c RET` = stream tail, pocket edge −0 ✓; contains the `296d` mirror region (see recursion below), the `ea` far-flush at `28b6`, PIT/CMOS port legs, `CMP [0x2e],…` switch `28f4..2926` |
+
+Tiling check (mandated — printed sizes sum): `15 + 4 + 195 + 5 + 1 + 1 +
+127 = 348` = `0x296c − 0x2811 + 1` ✓; maximal runs tile the pocket, every
+byte classified exactly once. Emitted-coverage cross-check:
+`4 (R2 collision) + 195 (R3) + 1 (R5) + 127 (R7) = 327` = the walk's
+`348 − (15+5+1)` skipped bytes ✓.
 
 Stream landmarks (cited from the same emission): `2880 MOV [0xd62],GS`
 (`8c2e620d`) + `2884 MOV [0xd60],FS` (`8c26600d`) — the save pair the
@@ -3386,8 +3392,42 @@ scatter resolved: pocket 2, block 2, functionless gap bands 24 — bands
 read above). Source-side divergence from the brief's expectation
 "interiors of defined functions": NONE of the 14 sources sits in a defined
 body — the interior class is empty; all twelve non-pocket/block sources sit
-in the three gap bands (defined-orphan/undefined bytes, `get_function_by_address`
-errors ×12 quoted in the table).
+in the three gap bands (defined-orphan/undefined bytes — per-row
+`get_function_by_address` responses quoted in the appendix below; rows
+`0x381`/`0x2824`/`0x29bc` already inline them in the table).
+
+### Source-home citations — `get_function_by_address` per claimed source address (appendix)
+
+All fourteen pair-source cells probed; responses verbatim, keyed by address
+(the eleven under-cited rows of the table above are cited here live; rows
+`0x381`, `0x2824`, `0x29bc` carry the same responses inline and are repeated
+for completeness — the appendix is the authoritative per-row home cite set):
+
+| source addr (arg) | verbatim response |
+|-------------------|-------------------|
+| `11bd:037d` (`0x381`) | `{"error":"No function found for 11bd:37d"}` |
+| `11bd:08d6` (`0x8da`) | `{"error":"No function found for 11bd:8d6"}` |
+| `11bd:2820` (`0x2824`) | `{"error":"No function found for 11bd:2820"}` |
+| `11bd:03a3` (`0x3a7`) | `{"error":"No function found for 11bd:3a3"}` |
+| `11bd:0716` (`0x71a`) | `{"error":"No function found for 11bd:716"}` |
+| `11bd:08ae` (`0x8b2`) | `{"error":"No function found for 11bd:8ae"}` |
+| `11bd:0745` (`0x749`) | `{"error":"No function found for 11bd:745"}` |
+| `11bd:0901` (`0x905`) | `{"error":"No function found for 11bd:901"}` |
+| `11bd:29b8` (`0x29bc`) | `{"error":"No function found for 11bd:29b8"}` |
+| `11bd:0675` (`0x679`) | `{"error":"No function found for 11bd:675"}` |
+| `11bd:08a8` (`0x8ac`) | `{"error":"No function found for 11bd:8a8"}` |
+| `11bd:03d2` (`0x3d6`) | `{"error":"No function found for 11bd:3d2"}` |
+| `11bd:045e` (`0x462`) | `{"error":"No function found for 11bd:45e"}` |
+| `11bd:04f3` (`0x4f7`) | `{"error":"No function found for 11bd:4f3"}` |
+
+Every response is a no-function error — consistent, row-by-row, with the
+gap-row band memberships claimed in the table (a source inside a defined
+body would return that body). Band-level target-home claims additionally
+carry the two live target-side probes quoted in the run: `get_function_by_address(11bd:0938)` →
+`{"error":"No function found for 11bd:0938"}` (band `0938..0bd0` entry) and
+`get_function_by_address(11bd:2a5a)` → `{"error":"No function found for 11bd:2a5a"}`
+(block `2978..2ada` interior); the remaining gap-band/block targets are the
+same-functionless-class claim anchored by the three gap rows + these probes.
 
 Scope guard honored: consumers of the jump targets = ONE hop — the preamble
 instructions at the resolved targets are cited; the bodies behind them
@@ -3418,6 +3458,12 @@ count:2/count:4), `get_function_callers` ×2 (3 + 1, quoted),
 untouched; `fifa96.rep` churn left unstaged. Unmoved proof: the two edge
 no-function errors above are byte-identical in form to slice-17's quotes
 and the pocket gap row is byte-identical to slice-17/20's — nothing moved.
+Fix round 1 (review): +14 `get_function_by_address` executions — the full
+source-appendix set, every response quoted in the appendix above, keyed by
+address — plus the R7 size-label correction (`79` → `127` B, the earlier
+value an unconverted `0x7F` misread) and the mandated tiling-sum line; zero
+writes; excluded from the Task-1 counts above per the standing
+fix-round-recording convention.
 
 ### Deferrals
 
