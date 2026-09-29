@@ -2279,3 +2279,83 @@ no contradiction). Scope guards honored: `3ed8` walked for the slot question
 only (its own verdict is a non-goal); callees `11bd:1e9f`/`11bd:6250` cited
 address-only, not dived; `2811..296c` pocket not entered; no pre-existing
 function state mutated; `/media/felipe/FIFAPCCD/` untouched.
+
+### Disposition (Task 2 — settled 2026-09-29)
+
+**SLOT-READERS-DATA-ONLY** — final disposition for this slice, restated with
+the three MECHANISM-FOUND condition answers and the function-scope wording:
+
+1. *Both `0x29bc` store sites live and byte-exact*: **YES** — `2f18`
+   `c746e8bc29` → `MOV word ptr [BP + -0x18],0x29bc` (`FUN_11bd_2ec9`) and
+   `44ab` `c746a6bc29` → `MOV word ptr [BP + -0x5a],0x29bc`
+   (`FUN_11bd_3ed8`), displacement derived live; hex-vs-data reconciled
+   before quoting (Site confirmations table).
+2. *Slot readers exist*: **YES** — `2ec9`: `2f30`/`2f39` `8b46e8`
+   `MOV AX,word ptr [BP + -0x18]` (consumption per the AX walk); `3ed8`:
+   `452f ff76a6 PUSH word ptr [BP + -0x5a]`, sole reader in 667
+   instructions, feeding the DIRECT `4536 e8171d CALL 0x1000:7e20` =
+   `CALL 11bd:6250`.
+3. *A reader's value feeds an indirect transfer*: **NO** — zero register- or
+   memory-operand `CALL`/`JMP` in either function (complete dumps + 4
+   scoped searches); program-wide sweeps put no transfer on either slot
+   displacement, none carrying `0x29bc`, `[0xe6e]` is no indirect-transfer
+   operand cell, and the near rendering `0x1000:458c` has 0 defined hits.
+
+The verdict is **function-scoped**: it settles the consumption of
+`[BP+-0x18]`/`[BP+-0x5a]` inside the two consumer bodies (`2ec9..2f4b`,
+`3ed8..4586`) only. The callees `11bd:1e9f` (arg = slot value + `[BP+0x4]`)
+and `11bd:6250` (arg = slot value) are cited address-only and could
+themselves indirect-branch on the pushed value — that open condition belongs
+one layer OUTSIDE these functions and is carried here as a deferral (line 1
+below), not as part of the verdict.
+
+No `### Entry function` row is emitted (the FOUND branch was not triggered);
+`11bd:29bc` remains UNDEFINED block interior. The two `0x29bc` stores are
+settled data-only for the entry question: the values behave as
+message/size-family data consumed as DIRECT-call arguments (value-family
+note in Slot trace above).
+
+### Writes (Task 2 — DATA-ONLY branch: ZERO writes; live unmoved-proof pair)
+
+NONE. Per the brief's Step 2 for this branch the program was not touched;
+the only two calls executed this task are read-only, quoted verbatim:
+
+| Probe | Verbatim response (live, this task) | Unmoved check |
+|-------|--------------------------------------|---------------|
+| `get_function_by_address(11bd:29bc)` | `{"error":"No function found for 11bd:29bc"}` | byte-identical to the Task-1 Step-1 quote (Site confirmations row 3) — no function was created at the lead cell |
+| `find_code_gaps(min_size=1)` | envelope `{"total":131,"offset":0,"limit":100,…}`; covering row verbatim: `{"start":"1000:4548","end":"1000:46aa","size":355,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_fs_gs_and_resume","before_function_address":"11bd:296d","after_function":"FUN_11bd_2adb","after_function_address":"11bd:2adb"}` | block `11bd:2978..2ada` (`4548−1bd0=2978`, `46aa−1bd0=2ada` ✓) still **size 355**, `has_undefined_bytes:true`, same neighbors — unchanged vs slice-17's row and Task-1's re-read; no shrink, no reflow |
+
+Write-tool inventory for this task: zero — no `disassemble_bytes` (dry-run or
+real), no `create_function`, no `rename_function`/`rename_symbol`, no
+`set_comment`/`batch_set_comments`, no `set_global`, no `save_program`; no
+Ghidra transaction was opened.
+
+### Deferrals (Task 2)
+
+- **What would promote `0x29bc` from data to entry:** a callee of the pushed
+  slot value performing an indirect transfer on that argument. Named
+  follow-up candidates at one-layer distance: `11bd:1e9f` (called from
+  `2ec9`/`2f43`, arg = `[BP+-0x18]` value pushed at `2f3f`) and `11bd:6250`
+  (called from `3ed8`/`4536`, arg = `[BP+-0x5a]` value pushed at `452f`) —
+  requires walking those bodies for `CALL`/`JMP` reading the incoming stack
+  argument or a register loaded from it; out of slice-18 scope.
+- **`29bc` data-meaning question** (what the bytes at `11bd:29bc` themselves
+  are): not exercised this slice — the block stays **fully named-open
+  `2978..2ada`** (covering gap row quoted above); under DATA-ONLY no shrink
+  arithmetic applies (the FOUND-branch split to `2978..29bb` + `X+1..2ada`
+  was never triggered).
+- **`3ed8`/`2ec9` full verdicts remain non-goals:** `3ed8` was walked for the
+  slot question only (its ~66 direct calls and jump-table regions untouched
+  beyond classification); `2ec9`'s whole-function semantics likewise.
+- **Other-slot leads surfaced, cited not dived:** `3ed8` sibling slot
+  `[BP+-0x58]` (feeds `[BX]` memory reads at `3ffc`/`4002` — NON-transfer,
+  Slot trace note), and program-wide `4fd3 CALL [BP+0x4]` in
+  `FUN_11bd_4f83` (different frame, no contact with our slots); these join
+  the data-surface list alongside `[0xe6e]`.
+- **Slice-17 leads untouched unless closed here:** fall-in pocket
+  `2811..296c`, runtime-installed pointers, `CS:[0x2ad9]` tail cell, twin
+  orphan `02da..02f8` — all stand as previously recorded; only the static
+  slot-consumer angle is closed by this section.
+- **Runtime legs unchanged:** `[0x40]` contents (slice-15 direction
+  UNDECIDED) and `[0x9c0]` installer identity (NOT-IN-EXE, runtime-written)
+  — a zero-write pass occurred; nothing in this slice could have moved them.
