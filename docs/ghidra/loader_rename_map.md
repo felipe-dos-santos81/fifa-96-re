@@ -308,3 +308,178 @@ five distinct helper layers (2d40 zero-gate, 195d predicate-gated body
 constants, 61ee-thunk arithmetic, 4587 arg-handoff, 689e/6869/68b9 stack
 re-source) plus body defaults — no single called FUN "computes or
 publishes the mode value". Per the one-layer guard: STOP, no rename.
+
+## 3ed8 mode dispatch (verified 2026-09-29, program `/fifa96.exe`)
+
+Entry `MOV AX,SI` at `11bd:42db` opens a 22-arm decrement chain
+(`DEC AX`/`JNZ`-to-next-link with a `JMP`-to-body per link at
+`11bd:42dd..4348`, then `SUB AX,<const>`/`JNZ` links with constants
+`0x3`/`0x10a`/`0x64`/`0x171a`/`0xdad` at `11bd:433d..4366`; far-target
+delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx` holds for every link target).
+SI values are cumulative subtractions: arms 1–16 take SI `1..0x10`,
+then `0x13` (16+3), `0x14` (+1), `0x11e` (+0x10a), `0x182` (+0x64),
+`0x189c` (+0x171a), `0x2649` (+0xdad). Pre-chain prefix at
+`42d3..42d6` (`CALL 0x1000:857c`, `MOV [0x10ee],0xff`, gated on
+`[0x47]` bit `0x80`) is setup, not an arm. Normal arms rejoin toward
+the `451e` tail via `JMP 0x1000:60ee` (= `11bd:451e`) sites (`43ea`,
+`4408`, `4420`, `4461`, `4493`, `44b0`, `44b7`, `44e5`) or mid-body
+joins (`43aa`, `4403`, `4418`, `442f`, `4469`, `44a3`); the
+fall-through default (`JMP 0x1000:60b7` at `4368` → `11bd:44e7`)
+publishes `[0x11d4]=0x6` and ends in the noreturn `CALL 0x1000:3e7d`
+(`=22ad`) at `451a`, never merging to `451e`. Guard-hit proxy count (NOT the
+briefed depth verdict): 15 of 22 arms contain ≥1 CALL in-body (incl. via
+joins) and are deferred to Task 2 with no callee opened; 7 arms (6, 8,
+11, 12, 13, 16, 21) are call-free. The briefed metric (call list deeper
+than one layer) requires opening callees, so Task 1 records this ≥1-CALL
+proxy only — Task 2 confirms actual depth. No range in `42db..4368` is uncovered (every link is a
+contiguous `DEC`/`SUB`+`JNZ`/`JZ`+`JMP` triple — see NOT-COVERED note).
+
+| # | Condition | Target | Publishes | Calls (address only) |
+|---|-----------|--------|-----------|----------------------|
+| 1 | SI==1: `DEC AX` at 42dd; `JNZ 42e3` at 42de (not taken); `JMP` at 42e0 | 11bd:436e | `MOV [BP-0x5a],0x381` at 436e; `MOV [BP-0x5e],AL` at 4383; `MOV [0x11fe],0x146` at 4386; `MOV [0x1200],0x40` at 438c; `MOV [0xeca],0x500` at 43a4; `OR [0x14],0x4` at 43aa; `MOV [0x11d4],0x5` at 43af; `MOV [0xece],AX` at 43da; `MOV [0xa8],AX` at 43e3; `INC [0x11f0]` at 43e6 | `CALL 0x1000:8844` at 4379; `CALL 0x1000:7fd0` at 4380; `CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6 |
+| 2 | SI==2: `DEC AX` at 42e3; `JNZ 42e9` at 42e4; `JMP` at 42e6 | 11bd:43ed | `MOV [BP-0x5a],0x8da` at 43ed; `MOV [0x120c],AL` at 43f5; `OR [0x120c],0x2` at 43fe; `MOV [0x10ef],0x1` at 4403 | `CALL 0x1000:8242` at 43f2 |
+| 3 | SI==3: `DEC AX` at 42e9; `JNZ 42ef` at 42ea; `JMP` at 42ec | 11bd:440b | `MOV SI,0x3` at 440b; `MOV [BP-0x5a],0x2824` at 440e; `MOV [0x10ee],0x9` at 4413; `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:85b0` at 441d |
+| 4 | SI==4: `DEC AX` at 42ef; `JNZ 42f5` at 42f0; `JMP` at 42f2 | 11bd:4469 | always `MOV SI,0x9` at 4469 + `MOV [BP-0x5a],0x8b2` at 446c; gated `[0x11f0]!=0` at 4471 AND `[0x2f]==2` at 4478 path: `CALL 8289` at 447f, then nonzero-return `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e (overwrite; zero-return exits via 4496 `MOV AX,0x13` with no publish); gate-fail path: 4418-tail join `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:8289` at 447f; `CALL 0x1000:85b0` at 441d (via 4418 gate-fail join) |
+| 5 | SI==5: `DEC AX` at 42f5; `JNZ 42fb` at 42f6; `JMP` at 42f8 | 11bd:4423 | `MOV [BP-0x5a],0x3a7` at 4423; `[0x2f]>=3` path `MOV [0x36],0x80` at 442f; `[0x3e]!=0` path `MOV [0xf82],AX` at 4453; arm-1 tail from 43aa: `OR [0x14],0x4` at 43aa + `MOV [0x11d4],0x5` at 43af + `MOV [0xece],AX` at 43da + `MOV [0xa8],AX` at 43e3 + `INC [0x11f0]` at 43e6 | `CALLF 0x1000:0b12` at 4445; `CALL 0x1000:400e` at 444f; `CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6 (via 43aa tail join) |
+| 6 | SI==6: `DEC AX` at 42fb; `JNZ 4301` at 42fc; `JMP` at 42fe | 11bd:445c | `MOV [BP-0x5a],0x71a` at 445c (skips `MOV SI,0x6` at 4459; SI already 6) | none |
+| 7 | SI==7: `DEC AX` at 4301; `JNZ 4307` at 4302; `JMP` at 4304 | 11bd:446c | `MOV [BP-0x5a],0x8b2` at 446c; gated path as row 4: nonzero-return `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e; gate-fail path: 4418-tail join `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:8289` at 447f; `CALL 0x1000:85b0` at 441d (via 4418 gate-fail join) |
+| 8 | SI==8: `DEC AX` at 4307; `JNZ 430d` at 4308; `JMP` at 430a | 11bd:4486 | `MOV SI,0x8` at 4486; `MOV [0x10ee],0xa` at 4489; `MOV [BP-0x5a],0x749` at 448e | none |
+| 9 | SI==9: `DEC AX` at 430d; `JNZ 4313` at 430e; `JMP` at 4310 | 11bd:446c | `MOV [BP-0x5a],0x8b2` at 446c; gated path as row 4: nonzero-return `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e; gate-fail path: 4418-tail join `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:8289` at 447f; `CALL 0x1000:85b0` at 441d (via 4418 gate-fail join) |
+| 10 | SI==0xa: `DEC AX` at 4313; `JNZ 4319` at 4314; `JMP` at 4316 | 11bd:44a3 | `MOV [BP-0x5a],0x905` at 44a3; joins arm-3 tail at 4418 (`MOV [0x10ef],0x1`) | `CALL 0x1000:85b0` at 441d (via join) |
+| 11 | SI==0xb: `DEC AX` at 4319; `JNZ 431f` at 431a; `JMP` at 431c | 11bd:44ab | `MOV [BP-0x5a],0x29bc` at 44ab | none |
+| 12 | SI==0xc: `DEC AX` at 431f; `JNZ 4325` at 4320; `JMP` at 4322 | 11bd:44b2 | `MOV [BP-0x5a],0x679` at 44b2 | none |
+| 13 | SI==0xd: `DEC AX` at 4325; `JNZ 432b` at 4326; `JMP` at 4328 | 11bd:44b9 | `MOV [BP-0x5a],0x8ac` at 44b9; `MOV [0x10ee],0x9` at 44be; joins arm-2 tail at 4403 (`MOV [0x10ef],0x1`) | none |
+| 14 | SI==0xe: `DEC AX` at 432b; `JNZ 4331` at 432c; `JMP` at 432e | 11bd:44c6 | `MOV [BP-0x5a],0x3d6` at 44c6; arm-1 tail from 43aa: `OR [0x14],0x4` at 43aa + `MOV [0x11d4],0x5` at 43af + `MOV [0xece],AX` at 43da + `MOV [0xa8],AX` at 43e3 + `INC [0x11f0]` at 43e6 | arm-1 tail calls via 43aa join (`CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6) |
+| 15 | SI==0xf: `DEC AX` at 4331; `JNZ 4337` at 4332; `JMP` at 4334 | 11bd:44ce | `MOV [BP-0x5a],0x462` at 44ce; `JGE 44dd` at 44d8 selects join: `[0x2f]<3` direct to 43aa tail at 44da, `[0x2f]>=3` via 442f `MOV [0x36],0x80` path then 43aa tail (`OR [0x14],0x4` at 43aa + `MOV [0x11d4],0x5` at 43af + `MOV [0xece],AX` at 43da + `MOV [0xa8],AX` at 43e3 + `INC [0x11f0]` at 43e6) | `CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6 (both branches converge via 43aa tail) |
+| 16 | SI==0x10: `DEC AX` at 4337; `JNZ 433d` at 4338; `JMP` at 433a | 11bd:44e0 | `MOV [BP-0x5a],0x4f7` at 44e0 | none |
+| 17 | SI==0x13: `SUB AX,0x3` at 433d (cumul. 16+3=19); `JNZ 4345` at 4340; `JMP` at 4342 | 11bd:4464 | `MOV [0xed0],0x0` at 4464; falls into arm-4 body at 4469 (`MOV SI,0x9` at 4469 + `MOV [BP-0x5a],0x8b2` at 446c; gated nonzero-return `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e; gate-fail 4418-tail `MOV [0x10ef],0x1` at 4418) | `CALL 0x1000:8289` at 447f (via fall-through); `CALL 0x1000:85b0` at 441d (via 4418 gate-fail join) |
+| 18 | SI==0x14: `DEC AX` at 4345 (cumul. 20); `JNZ 434b` at 4346; `JMP` at 4348 | 11bd:449b | `MOV [0xed0],0x0` at 449b; `MOV SI,0xa` at 44a0; falls into arm-10 at 44a3 (`MOV [BP-0x5a],0x905` at 44a3 + 4418-tail `MOV [0x10ef],0x1` at 4418 via 44a8 join) | `CALL 0x1000:85b0` at 441d (via 44a8→4418 join) |
+| 19 | SI==0x11e: `SUB AX,0x10a` at 434b (cumul. 20+266=286); `JNZ 4353` at 434e; `JMP` at 4350 | 11bd:4469 | `MOV SI,0x9` at 4469 + `MOV [BP-0x5a],0x8b2` at 446c (shared target with row 4); gated nonzero-return `MOV [0x10ee],0xa` at 4489 + `MOV [BP-0x5a],0x749` at 448e; gate-fail 4418-tail `MOV [0x10ef],0x1` at 4418 | `CALL 0x1000:8289` at 447f; `CALL 0x1000:85b0` at 441d (via 4418 gate-fail join) |
+| 20 | SI==0x182: `SUB AX,0x64` at 4353 (cumul. 286+100=386); `JNZ 435b` at 4356; `JMP` at 4358 | 11bd:440b | `MOV SI,0x3` at 440b; `MOV [BP-0x5a],0x2824` at 440e; `MOV [0x10ee],0x9` at 4413; `MOV [0x10ef],0x1` at 4418 (shared target with row 3) | `CALL 0x1000:85b0` at 441d |
+| 21 | SI==0x189c: `SUB AX,0x171a` at 435b (cumul. 386+5914=6300); `JNZ 4363` at 435e; `JMP` at 4360 | 11bd:4459 | `MOV SI,0x6` at 4459; `MOV [BP-0x5a],0x71a` at 445c | none |
+| 22 | SI==0x2649: `SUB AX,0xdad` at 4363 (cumul. 6300+3501=9801); `JZ 436b` at 4366 (taken) | 11bd:436b | `MOV SI,0x1` at 436b; falls into arm-1 body at 436e (row-1 publishes: `[BP-0x5a]`=0x381, `[BP-0x5e]`=AL, `[0x11fe]`=0x146, `[0x1200]`=0x40, `[0xeca]`=0x500, `OR [0x14]`=0x4, `[0x11d4]`=0x5, `[0xece]`=AX, `[0xa8]`=AX, `INC [0x11f0]`) | `CALL 0x1000:8844` at 4379; `CALL 0x1000:7fd0` at 4380; `CALL 0x1000:8844` at 43bb; `CALL 0x1000:3e7d` at 43c6 |
+| default | no arm matched: `JMP 0x1000:60b7` at 4368 | 11bd:44e7 | `MOV DI,0x1190` at 44e7; `MOV [DI],0x0` at 44ea; `MOV [0x11d4],0x6` at 4510 | `CALL 0x1000:41be` at 44fa + `CALL 0x1000:7c24` at 450a (both skipped if `[BP-0x5c]==0` via `JZ 4510` at 44f1); `CALL 0x1000:3e7d` at 451a (noreturn — default never reaches 451e) |
+
+NOT-COVERED: none inside `11bd:42db..4368` — every byte belongs to a
+listed link (`DEC`/`SUB` + `JNZ`/`JZ` + `JMP` triples are contiguous:
+6-byte `DEC` links `42dd..433a`, 8-byte `SUB` links
+`433d/434b/4353/435b`, 6-byte `DEC` link `4345`, 8-byte tail
+`4363..436a`). Shared-target pairs (7+9→446c, 4+19→4469, 3+20→440b,
+1+22→436b/436e) are separate rows above, not gaps. Merge point
+`11bd:451e` (`CMP [0x10ee],0xff`) and the `451e..4586` tail are exit
+facts owned by the `3ed8 verdict` section, not re-verified here.
+
+### Callee verdicts (one-layer, verified 2026-09-29, program `/fifa96.exe`)
+
+Scope: the 15 proxy-hit arms resolve to 8 unique callees (far-thunk
+delta `0x1000:xxxx − 0x1BD0 = 11bd:xxxx`, re-confirmed per callee by
+`get_function_by_address` at the computed entry; unresolvable: none).
+Default-row calls (`44fa`/`450a`/`451a`, body `11bd:44e7` past `4368`)
+are downstream consumers — NOT in scope, untouched.
+`mem_grow_relocate` (`1000:0b12..1000:0c0c`, 0 FUN callees) is already
+CONFIRMED+renamed (Codec funnel section) — no new row, no re-rename.
+Leaf = the callee itself is the one allowed FUN layer (0 callees);
+any callee with ≥1 callee is a second layer past the arm body and
+defers its arm (record, do not pursue).
+
+| arm # | call site | callee FUN + bounds | verdict + evidence | new_name or — |
+|-------|-----------|---------------------|--------------------|---------------|
+| 1, 5, 14, 15, 22 | `CALL 0x1000:8844` at 4379 / 43bb | `probe_xms_installed`, `11bd:6c74..6c83`, leaf (0 callees) | CONFIRMED — `MOV AX,0x4300` at 6c74 (INT 2Fh XMS installation check) + `INT 0x2f` at 6c77 + `CMP AL,0x80` at 6c79 + `OR byte ptr [0x36],AL` at 6c7f (sets the `0x80` bit in `[0x36]` iff XMS present; same cell arm 5 publishes at 442f) | probe_xms_installed |
+| 2 | `CALL 0x1000:8242` at 43f2 | `probe_bios_model`, `11bd:6672..66a1`, leaf (0 callees) | CONFIRMED — `CMP byte ptr [0x34],0x15` gate at 6672 + `MOV AH,0xc0` at 667c + `INT 0x15` at 667e (BIOS Get System Configuration) + model-byte validation `CMP CL,0xe0/0xf8/0xfc` + `CMP CH,0x4` at 6689..669b + `MOV AL,ES:[BX+0x5]` feature-byte return at 669d (0 on gate/model/carry fail) | probe_bios_model |
+
+NOT-CONFIRMED (no rename, no row): `FUN_11bd_6400`
+(`11bd:6400..641c`, leaf, called at 4380 by arms 1+22): `XOR AX,AX` at
+6400 + `XOR BX,BX` at 6402 + `MOV CL,0x82` at 6404 + `INT 0xdc` at 6406
++ `SHL BX,0x6` / `MOV word ptr [0xeca],BX` at 640e/6411 + `SHL DX,0x6`
+/ `MOV word ptr [0xece],DX` at 6415/6418. Missing: the `INT 0xDCh`
+`CL=0x82` input/output contract (extender-private API) — the queried
+source is unidentified, so no role name.
+
+In-scope arms with nothing to verdict: 6, 8, 11, 12, 13, 16, 21
+(call-free per the arm table; arm 13's 4403 join never reaches a call).
+
+### Guard-deferred: arm 1 (11bd:436e)
+
+Call sites: 4379 (`6c74` CONFIRMED leaf), 4380 (`6400` NOT-CONFIRMED
+leaf), 43bb (`6c74`), 43c6 (deep, see below). Known: error path exits
+via the noreturn call. Excess: `FUN_11bd_22ad` (`11bd:22ad..2381`,
+called at 43c6) has 1 FUN callee (`FUN_11bd_25ee`) — a second layer
+past the arm body (decompile surface: error-message formatting +
+`0x15e8`/`0xf22` word-table scan). No rename.
+
+### Guard-deferred: arm 3 (11bd:440b)
+
+Call site: 441d (deep). Excess: `FUN_11bd_69e0` (`11bd:69e0..6a2c`)
+has 1 FUN callee (`FUN_11bd_69c7`, `11bd:69c7..69df`) — a second layer
+past the arm body (decompile surface: port-`0x92` writes + 9-byte copy
+loops). No rename.
+
+### Guard-deferred: arm 4 (11bd:4469)
+
+Call sites: 447f (deep), 441d via the 4418 gate-fail join (deep).
+Excess: `FUN_11bd_66b9` (`11bd:66b9..66d3`, at 447f) has 2 FUN callees
+(`FUN_11bd_0733`, `FUN_11bd_0c0d`) plus `FUN_11bd_69e0` (at 441d, as in
+arm 3) — both second layers past the arm body. No rename.
+
+### Guard-deferred: arm 5 (11bd:4423)
+
+Call sites: 4445 (`mem_grow_relocate`, already-named leaf), 444f
+(deep), 43bb/43c6 via the 43aa tail join (`6c74` leaf + deep).
+Excess: `FUN_11bd_243e` (`11bd:243e..245b`, at 444f) has 1 FUN callee
+(`FUN_11bd_65c3`) plus `FUN_11bd_22ad` (at 43c6, as in arm 1) — both
+second layers past the arm body. No rename.
+
+### Guard-deferred: arm 7 (11bd:446c)
+
+Shared body with arm 9: 447f (`66b9`) + 441d via the 4418 gate-fail
+join (`69e0`) — both deep as in arm 4. No rename.
+
+### Guard-deferred: arm 9 (11bd:446c)
+
+Same as arm 7 (shared target): 447f + 441d, both deep. No rename.
+
+### Guard-deferred: arm 10 (11bd:44a3)
+
+Call site: 441d via the 44a8→4418 join (deep: `69e0` as in arm 3).
+No rename.
+
+### Guard-deferred: arm 14 (11bd:44c6)
+
+Call sites: 43bb (`6c74` leaf) + 43c6 (deep) via the 43aa join.
+Excess: `FUN_11bd_22ad` (as in arm 1). No rename.
+
+### Guard-deferred: arm 15 (11bd:44ce)
+
+Same 43aa-tail convergence as arm 14: 43bb (`6c74` leaf) + 43c6
+(`22ad` deep). No rename.
+
+### Guard-deferred: arm 17 (11bd:4464)
+
+Falls through into the arm-4 body: 447f (`66b9` deep) + 441d via the
+4418 join (`69e0` deep). No rename.
+
+### Guard-deferred: arm 18 (11bd:449b)
+
+Call site: 441d via the 44a8→4418 join (deep: `69e0` as in arm 3).
+No rename.
+
+### Guard-deferred: arm 19 (11bd:4469)
+
+Shared target with arm 4: 447f (`66b9`) + 441d (`69e0`), both deep.
+No rename.
+
+### Guard-deferred: arm 20 (11bd:440b)
+
+Shared target with arm 3: 441d (`69e0` deep). No rename.
+
+### Guard-deferred: arm 22 (11bd:436b)
+
+Falls through into the arm-1 body: 4379/43bb (`6c74` leaf), 4380
+(`6400` NOT-CONFIRMED leaf), 43c6 (`22ad` deep). No rename.
+
+Closeout: guard-deferred arms are 14 of 22
+(1, 3, 4, 5, 7, 9, 10, 14, 15, 17, 18, 19, 20, 22) = 63.6% > 1/3 —
+STOP diving, skeleton-plus closeout (arm table complete, deep dives
+`69e0→69c7`, `66b9→0733/0c0d`, `243e→65c3`, `22ad→25ee` deferred to a
+follow-up slice). Fully in-scope arm: 2 (row above). Call-free arms:
+6, 8, 11, 12, 13, 16, 21.
