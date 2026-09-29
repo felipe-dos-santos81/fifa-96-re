@@ -3483,3 +3483,209 @@ fix-round-recording convention.
 - `[0x9ba]` disposition unchanged (slice-20 NONE-FROM-DISCIPLINE stands —
   this slice adds no reader; the arg-path vector writes never touch
   `[0x9ba]`).
+
+### Writes (Task 2 — capped writes at Task-1-cited boundaries, program `/fifa96.exe`)
+
+Before-state (verbatim, all captured before the first mutation): pocket gap
+row `{"start":"1000:43e1","end":"1000:453c","size":348,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_27e4","before_function_address":"11bd:27e4","after_function":"restore_fs_gs_and_resume","after_function_address":"11bd:296d"}` (total 131) — byte-identical to
+Task-1's quote: no listing movement between the passes; no-function errors
+at every cited create/define address —
+`get_function_by_address(11bd:2820)` → `{"error":"No function found for 11bd:2820"}`,
+`(11bd:2823)` → `{"error":"No function found for 11bd:2823"}` (both TABLE
+edges undefined — apply-cleared check), `(11bd:2824)` / `(11bd:284c)` /
+`(11bd:2864)` → same-shape errors (no thunk/defined-byte collisions at the
+entries; STOP-BLOCKED condition never fired);
+`audit_global(11bd:2820)` pre → `{"address":"11bd:2820","name":"","type":"","length":0,"plate_comment":"","xref_count":0,"issues":["generic_name","untyped","missing_plate_comment"],"severity_summary":{"hard":3,"medium":0,"soft":0},"fully_documented":false}`;
+`inspect_memory_content(11bd:2820,8)` → `hex_dump "64 28 4C 28 8C 2E 66 0D"`
+(TABLE words + `2824` head byte, reconciled vs Task-1 W1).
+
+TABLE class (R2 `2820..2823`) — controller path `create_array_type` +
+apply + label + plate, verified `audit_global`:
+(1) `create_array_type(base_type=uint16, length=2)` →
+`{"status":"success","message":"Successfully created array type: ushort[2] (uint16[2])","name":"ushort[2]","base_type":"uint16","length":2}`.
+(2) `apply_data_type(11bd:2820, ushort[2], dry_run=true)` →
+`{"dry_run":true,"status":"success","message":"Successfully applied data type 'ushort[2]' at 11bd:2820 (size: 4 bytes)","size":4}` — conflict check
+clean at both edges (no prior-slice code claim over `2820..2823`).
+(3) real apply → `{"status":"success","message":"Successfully applied data
+type 'ushort[2]' at 11bd:2820 (size: 4 bytes)"}`. (4) `create_label(11bd:2820,
+mode_vector_source_pair)` → `{"status":"success","message":"Created label 'mode_vector_source_pair' at address 11bd:2820"}`. (5) `set_comment`
+plate → `{"status":"success","message":"Set plate comment at 11bd:2820","warnings":["Plate comment missing Algorithm section","Plate comment
+missing Parameters section","Plate comment missing Returns section"]}` —
+plate text `C: none — behavioral (mode vector near-offset table — [0x9bc]/[0x9be] source pair words for base 0x2824; cited chain 6270/6274 + 6277/627b)`
+(brief's `mode vector near-offset table` wording kept; role from the cited
+chain only, no direction claims). Verification: `audit_global` post →
+`{"name":"mode_vector_source_pair","type":"ushort[2]","length":4,"plate_comment":"C: none — behavioral (…)","xref_count":0,"issues":["name_missing_g_prefix","plate_line_too_long"],"severity_summary":{"hard":1,"medium":0,"soft":1}}`
+— blank pre-state's three hard issues cleared to the naming-convention pair
+below; `analyze_global_completeness` → `{"score":77.0,"effective_score":80.0,"band":"COMPLETE_80","missing":["name"],"deductions":[{"axis":"name","code":"name_missing_g_prefix","points":20.0,"severity":"hard"},{"axis":"comment","code":"plate_line_too_long","points":3.0,"severity":"soft","forgiven":true}]}`.
+Naming-gate disclosure: the tool chain then requested a `g_` prefix
+(`audit_global` hard issue) — the rename attempt
+`rename_symbol(11bd:2820 → g_mode_vector_source_pair)` was rejected by the
+Hungarian gate verbatim: `{"status":"rejected","issue":"name_quality","issue_msg":"Global 'g_mode_vector_source_pair' has no recognized Hungarian prefix after 'g_' (got 'mode_vector_source_pair')"}`; the two machine gates
+(`g_`+Hungarian) conflict with the controller-mandated wording (snake_case,
+behavioral role, no direction claims — and repo precedent: zero
+named/defined globals exist, `list_globals(filter=named,type_filter=defined)`
+→ `{"count":0,"total":0}`, so there is no established prefix to match).
+Decision: keep `mode_vector_source_pair` exactly as mandated, gates recorded
+above. `xref_count:0` is the dead-xref channel (slices 16/18/19/20 controls)
+— the two `6270/6277` window reads address `0x2820/0x2822` dynamically via
+`BX` and are invisible to static xrefs by construction.
+
+CODE class — path per controller: real `disassemble_bytes` at each run,
+then `create_function` at the cited entries (`2824` fall-through-side,
+`284c`/`2864` vector targets), post-check bounds, cap {one nudge → ratify}.
+Real disassembly: (a) run R3 `disassemble_bytes(11bd:2824..28e6)` →
+`{"success":true,"start_address":"11bd:2824","end_address":"11bd:28e5","bytes_disassembled":194,…,"instructions_total":69,"truncated":false}` —
+69 insns, first `2824 MOV word ptr [0xd66], GS 8c2e660d`, `282c MOV FS,
+[0xd60]`/`2830 MOV GS,[0xd62]` (the recursion pair, matching Task-1's
+dry-run listing byte-for-byte), `283c CALL 0x1000:27b9`, `2848 JMP
+0x1000:2492`, `284b RET`, `284c PUSH BX 53`, SS-rebase preamble verbatim
+(`8cd3 MOV BX,SS` / `80e3f8 AND BL,0xf8` / `6a08 PUSH 0x8` / `07 POP ES` /
+`fa CLI` / `268707 XCHG ES:[BX],AX` ×2 / `8ed3 MOV SS,BX`), `2862 JMP
+0x1000:443b`, `2864 PUSH AX 50`, `2866 MOV BX,[0x9b4]`, `288f MOV EAX,CR0`,
+`2897 BTR EAX,0x1f`, `28b3 MOV CR0,EAX`, `28b6 JMPF 0x1000:448b`, `28ca
+LIDT word ptr [0xddc]`, last `28e4 MOV AX,[0xf56] a1560f` (len 3; the
+envelope end/count reported `28e5`/194 — envelope arithmetic lag, quoted as
+returned). (b) run R7 `disassemble_bytes(11bd:28ee..296c)` →
+`{"success":true,…,"end_address":"11bd:296b","bytes_disassembled":126,…,"instructions_total":61,"truncated":false}` — 61 insns through
+`296b POP AX`; the cited tail `296c RET` was NOT emitted by the window
+request, defined by a follow-up 1-byte real disassembly `disassemble_bytes(11bd:296c, length 1)` →
+`{"success":true,…,"instructions":[{"address":"11bd:296c","mnemonic":"RET","length":1,"bytes":"c3"}],"instructions_total":1}` —
+`296c` is a Task-1-cited CODE byte (R7 exit), NOT a skip byte; the skip
+bytes `28e7..28eb`/`28ed` and `??? 28ec` were never disassembled and never
+used as entries.
+Creates: `create_function(11bd:2824)` → `{"success":true,"function_name":"FUN_11bd_2824","body_size":60}`; bounds read-back
+`get_function_by_address(11bd:2824)` → body `2824..284b` (RET-terminated;
+analyzer split R3 at the `284b RET` — actual resulting body recorded).
+`create_function(11bd:284c)` → `{"success":true,"function_name":"FUN_11bd_284c","body_size":236}`; first read-back envelope `284c..295c`.
+`create_function(11bd:2864)` → `{"success":true,"function_name":"FUN_11bd_2864","body_size":219}`; post-split read-backs: `FUN_11bd_2864`
+body `2864..295c`, `FUN_11bd_284c` re-split to body `284c..2863` (exact
+preamble block; the stream blocks moved to the last-created entry — Ghidra
+block-ownership, recorded not fought). Zero nudges: no create was retried,
+`disassemble_first=false` never used — cap compliance: all three entries
+succeeded first-call. Ownership probes verbatim: `(11bd:28e7)`/`(11bd:28ec)`/
+`(11bd:28ee)`/`(11bd:295d)`/`(11bd:296c)` → all `{"error":"No function
+found for 11bd:…"}` (skip/??? bytes untouched; orphan blocks outside every
+body); `(11bd:286b)`/`(11bd:28fe)` → resolve to `FUN_11bd_2864` (jump-fed
+blocks).
+Flow side effects (analyzer-decided, ratified per the slice-17
+`FUN_11bd_02b5` precedent — left as created: no rename, no plate):
+`create_function(2824)`'s `2848 JMP` target became `FUN_11bd_08c2`
+(`get_function_by_address` → body `08c2..08d5`; dump `{"instructions":[{"08c2 MOV AX,0x9db"},{"08c5 MOV CX,DS"},{"08c7 CALL 0x1000:1f0c"},…,"count":9]}`),
+whose `08c7 CALL 0x1000:1f0c` (= `033c`, delta ✓) in turn produced
+`FUN_11bd_033c` (`body_start":"11bd:033c","body_end":"11bd:035f`);
+`FUN_11bd_0bc3` (`0bc3..0bd0`, 7-insn dump; its only pocket-side call edge
+is the `2903 CALL 0x1000:2793` (`e8bde2`, `0x2793−0x1bd0=0x0bc3` ✓) inside
+the now-orphan block `2901..2907` — exact creation trigger not reconstructed,
+recorded as flow effect). `283c CALL 0x1000:27b9` (= `0beb`) resolved into
+the PRE-EXISTING `FUN_11bd_0be9` (`body_start 0be3` — unchanged
+`0be3..0bef`); callee read-backs: `FUN_11bd_2824` → `{"callees":[{"name":"FUN_11bd_08c2"},{"name":"FUN_11bd_0be9"}],"total":2}`,
+`FUN_11bd_284c`/`FUN_11bd_2864` → `{"callees":[],"total":0}`.
+Neighbors re-read: `FUN_11bd_27e4` `27e4..2810` and `restore_fs_gs_and_resume`
+`296d..2977` unchanged ✓; `get_function_count` 294 → 300 (+6 = 3 cited
+creates + 3 flow-effect auto-creates, exact).
+`save_program` → `{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+
+PADDING/SKIP/UNKNOWN — no-action citations: R1 `2811..281f` PADDING:
+untouched (zero bytes, no define, no disassembly); R4 `28e7..28eb` SKIP:
+untouched — post probes `{"error":"No function found for 11bd:28e7"}` and
+`has_undefined_bytes:true` still covers them; R6 `28ed` (1 B): untouched;
+R5 `28ec` (`???`): untouched — the analyzer's own first-pass stray `POP AX`
+emit was never adopted, no define at `28ec`. Slice-14's contiguous-stream
+cite (`## 296d hook target` row "stream alignment at 296d") is now embodied
+as program state: the decode chain `2824→…→296c RET` is defined, the pocket
+tail `296c RET` sits exactly one byte before the `296d` function start.
+
+Post-state gap re-page (`find_code_gaps` total 131 → 136, offset 0, limit
+100): the pocket row is GONE, replaced by four rows —
+`{"start":"1000:43e1","end":"1000:43f3","size":19,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_27e4","after_function":"FUN_11bd_2824"}`
+(= `2811..2823`: PADDING 15 B + TABLE 4 B — defined data stays row-listed),
+`{"start":"1000:44b7","end":"1000:44cd","size":23,"has_undefined_bytes":true,"has_orphaned_instructions":true,…,"before_function":"FUN_11bd_2864","after_function":"restore_fs_gs_and_resume"}`
+(= `28e7..28fd`: skip 7 B + orphan block `28ee..28fd` 16 B),
+`{"start":"1000:44d1","end":"1000:44d7","size":7,…,"has_orphaned_instructions":true}` (= `2901..2907`),
+`{"start":"1000:452d","end":"1000:453c","size":16,…,"has_orphaned_instructions":true}` (= `295d..296c`, contains `2965 MOV CR0,EAX`
+and the `296c RET`). Math: `19+23+7+16 = 65` uncovered vs old 348 → `283 B`
+now function-covered inside the pocket = `FUN_11bd_2824` 40 (`2824..284b`)
++ `FUN_11bd_284c` 24 (`284c..2863`) + `FUN_11bd_2864` 219 (envelope
+`2864..295c` = 249 B minus its uncovered interior `28e7..28ed` 7 +
+`28ee..28fd` 16 + `2901..2907` 7 = 30); the TABLE's 4 B sit inside row 1 as
+defined data (row-listed, `has_undefined_bytes:false`), not counted as
+function coverage: `40+24+219 = 283` ✓. Band rows also
+split at the flow-effect functions: `1000:1ea4..2302` (1119) → `1000:1ea4..1f0b`
+(104) + `1000:1f30..2302` (979) around `FUN_11bd_033c`; `1000:230c..24f8`
+(493) → `1000:230c..2491` (390) + `1000:24a6..24f8` (83) around
+`FUN_11bd_08c2`; `1000:2508..27a0` (665) → `1000:2508..2792` (651) +
+`FUN_11bd_0bc3` tail. Page-0 observed row delta = +6; the program-wide
+total moved +5, so one row outside the fetched page-0 window (never quoted
+in either pass) merged — recorded as observation, not attributed.
+
+### Disposition (Task 2)
+
+Pocket verdict: the left pocket `2811..296c` is the unanchored PM-restore
+subsystem's mode-vector landing layer and its entry stream — the `0x2824`
+override's `[0x9bc]`/`[0x9be]` pair now lives as typed data
+(`g`-gate-pending `mode_vector_source_pair`, `ushort[2]` = `0x2864`/`0x284c`),
+and the two vector words land on real function entries (`FUN_11bd_2864`
+`PUSH AX`-headed, `FUN_11bd_284c` SS-rebase-preamble-headed) with the
+stream head `FUN_11bd_2824` — mechanism ops cited from the created bodies:
+`288f MOV EAX,CR0`/`2897 BTR EAX,0x1f`/`28b3 MOV CR0,EAX` + `28b6 JMPF`
+flush + `28ca LIDT word ptr [0xddc]` + `28a5 STR word ptr [0xdfc]` +
+segment saves/restores (`2880/2884` ↔ `28c2/28c6`, the `282c/2830` twin of
+the `296d/2971` restores) + `[0x2e]` mode-byte switch with CMOS `0x70/0x71`,
+PIC `0x20`, `0xF2/0xF6` and `DX=0x140`/`0x404` port arms (the Task-1
+one-hop PIT-`0x43`-shape mention lives band-side, not in these bodies). Names: all three created FUNs stay default-named — role naming at
+mechanism level is defensible ONLY partially (the bodies' ops support a
+teardown/restore vocabulary but the stream's entry attribution and the
+port-leg consumer trees are the deferred layers), and NOT-CONFIRMED-at-role
+gets no rename per the write rule; the missing leg for each name is the
+entry question (who reaches `2811..2823`/`2824` — slice-17's
+"unanchored…-subsystem" leg, open) plus the `[0x2e]`-arm semantics (one-hop
+rule). Determinability verdict: the `[0x9bc]`/`[0x9be]` dispatch IS
+statically determinable PER ARG (14/14, Task-1 table): the armed pair is
+`arg−4`/`arg−2` under the gate-free path and the pocket pair `0x2864`/`0x284c`
+under the `626d` override; per-arg targets land 2 in pocket (now `FUN_11bd_284c`
+entry `284c` and `FUN_11bd_2864` entry `2864` — targets named with their
+homes, the YES-branch discharge), 2 in block `2978..2ada` (`0x2a5a`/`0x2a60`,
+still undefined listing), and 24 in the functionless gap bands (`02d4..0732`,
+`073c..0928`, `0938..0bd0`) — ZERO targets in defined function bodies; the
+selector between the two cells is WHICH STUB the caller enters (`092c` vs
+`0931`, Task-1 owner table) and the cell content is fully static per arg.
+Slice-prior status: slice-17's OPEN note (`## 296d hook target`, "hole =
+whole unanchored PM-restore subsystem `2811..2ada`") is PARTLY CLOSED by
+this disposition — the left pocket `2811..296c` is now classified, typed
+(TABLE), and function-owned (3 FUNs) with the vector pair wired; the note's
+right half (block `2978..2ada` ownership) and the "unanchored" entry leg for
+`2824` itself STAND (extended by reference, not rewritten); slice-16's
+concern items: `28e7..28eb` skip — CLOSED as classified UNKNOWN-flagged and
+LEFT UNTOUCHED (probes quoted above: still no-function, `has_undefined_bytes:true`
+row member — disposition: emission-local artifact, hand shapes cited in
+Task-1 R4, no define forced); save-pair `2880/2884` — CLOSED byte-exact
+(Task-1 re-derivation: `2880` saves GS→`[0xd62]`, `2884` saves FS→`[0xd60]`,
+restores at `28c2/28c6` and the `296d/2971` epilogue reload — now inside
+`FUN_11bd_2864`'s body).
+
+### Deferrals (Task 2 additions)
+
+- Orphan R7 blocks: `28ee..28fd`, `2901..2907`, `295d..296c` (the `2965
+  MOV CR0,EAX` reload block and the `28fb/2903` call edges) — defined
+  instructions, NO cited entry, no function created over them; ownership
+  open.
+- Flow-effect band FUNs (analyzer-created, ratified as-is, boot-table
+  territory NOT followed per the scope guard): `FUN_11bd_08c2` (`08c2..08d5`,
+  CMOS `0x70/0x71` legs + `08c7 CALL 033c`), `FUN_11bd_033c` (`033c..035f`,
+  new owner-island in band `02d4..0732`, role unattributed), `FUN_11bd_0bc3`
+  (`0bc3..0bd0`, `IN/OUT 0x92` NMI-shaped arm); their consumer trees are
+  target-side one hop, closed by citation.
+- `[0x9c0]` installer identity and `[0x40]` MSW runtime legs: cite-only
+  prior status (slices 15/17), untouched this write batch.
+- `[0x9b8]/[0x9ba]` roles: slice-19/20 dispositions stand, no new reader
+  from the created bodies.
+- Twin orphan `02da..02f8`: untouched; the twin-band gap row merely split at
+  `FUN_11bd_033c` (row math above).
+- Block `2978..2ada` and `CS:[0x2ad9]`: unchanged (`1000:4548..46aa` row
+  re-quoted identical, `has_undefined_bytes:true`).
+- Remaining gap pages: total 131 → 136 (page-0 delta +6, one unquoted
+  page->100 row merged, disclosed); the 24 gap-band dispatch targets stay
+  functionless except the three flow-effect islands above.
+- Post-`CLI` leg bodies behind every vector target (the landing layer):
+  named-and-deferred per Task-1's one-hop ruling; the `79fc/7a88/
+  execute_exit_arm/0d80` stub-caller bodies likewise.
