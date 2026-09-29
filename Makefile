@@ -6,8 +6,9 @@ SERVICE = fifa96_loader
 BUILD = build
 CMAKE = cmake
 CTEST = ctest
+FILE ?= tests/golden/fw1.qfs
 
-.PHONY: help configure build test check clean rebuild
+.PHONY: help configure build test check run clean rebuild
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -28,6 +29,11 @@ test: build ## Build and run the full golden suite via CTest
 	$(CTEST) --test-dir $(BUILD) --output-on-failure
 
 check: test ## Exactly the gate set: configure + strict build + full suite
+
+# ── Run ────────────────────────────────────────────────────────────────────────
+
+run: build ## Build and run the port's container dumper (make run FILE=path, default fw1.qfs)
+	./$(BUILD)/fifa96_dump $(FILE)
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 

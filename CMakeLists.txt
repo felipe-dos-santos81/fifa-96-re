@@ -45,3 +45,6 @@ add_library(fifa96_script src/fifa96_loader/fifa96_script.c)
 add_executable(test_script tests/test_script.c)
 target_link_libraries(test_script PRIVATE fifa96_script fifa96_file)
 add_test(NAME test_script COMMAND test_script WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(fifa96_dump tools/fifa96_dump.c)
+target_link_libraries(fifa96_dump PRIVATE fifa96_envelope fifa96_qfs fifa96_pog fifa96_tgv fifa96_viv fifa96_file)
