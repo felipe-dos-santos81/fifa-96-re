@@ -5417,9 +5417,12 @@ quoted)), **0 `JMP`-form sites**, and **1 site resolving to `11bd:0931`**
 (`0da6` in `FUN_11bd_0d80`, body `0d80..0db1` — the slice-22 leg, bytes
 `e888fb` verified live: `0da9 − 0x478 = 0931` ✓); no far-form caller exists
 (`9a`/`ea` byte-patterns 0/0 for `0931`, 1 hit for `ea2c09` at `1991:0477`
-RECONCILED-OUT — segment field `0x0018`/listing render `0x0000` gives
-physical `0xAA4`/`0xAAC`, neither = the dispatcher's `0x124FC`; a raw-vs-
-listing view divergence recorded there); no `ff16/ff26` cell statically
+RECONCILED-OUT — raw bytes `ea 2c 09 18 00` = `JMPF 0x0018:0x092C` =
+physical `0x0180+0x092C = 0x0AAC`; the listing render `JMPF 0x0000:0aac` =
+physical `0x0AAC` — BOTH views converge on the same physical target (the
+divergence is render-only: seg/offset decomposition of one physical,
+re-checked this fix wave); `0x0AAC` ≠ the dispatcher's `0x124FC` either way
+— not a caller); no `ff16/ff26` cell statically
 holds a `092c`-class value (indirect-transfer enumeration complete — table
 below; every abs-cell content reconciled, pair tables and stub addresses
 cited). (2) The `0931` **walk exposes ZERO new contiguous CODE runs** — body
@@ -5435,10 +5438,21 @@ window = EMPTY (enumerated legal outcome). (3) Cell census
 bracket forms same-set / `CS:` forms 0 / `0x296d` 1 (`41ee` sole value site),
 every false-string recomputed identical at scope `instructions_scanned:
 15589` uniform on every program-scope run AT THIS-SLICE TIME; the
-`[BX + -` window run **grew 10→24** — all +14 land in the sweep-created
-overlay `FUN_1991_0400` (constant base cited, resolves OUT of every cell —
-per-hit table) or are the pre-existing OPEN-WINDOW class — NO new constant-
-base window hit reaches `0x9bc/0x9be/0x9c2`. (4) NEW records: the stub
+`[BX + -` window run **grew 10→24** — the +14 split honestly by set:
+**12-family** = the sweep-created overlay `FUN_1991_0400`'s window sites in
+this run (11 store sites `0412…045e` + the `0461 LEA` base-setter); +
+`1991:111e` (LEA — NON-LOAD) + `1991:49aa` (TEST — OPEN-WINDOW, no base
+enumerated) = 14 new run hits total. The 11 stores are **REJECTED via the
+DS-CLAMP**, not a constant store base: `0406 8edb MOV DS,BX` with BX = the
+`0402 bb2000` constant `0x20` pins DS, unrestored through the `0477 ea` tail
+(42-insn listing: no `POP DS`/DS-write between) → every physical target of
+the body's window sites ∈ `[0x20<<4, 0x20<<4+0xFFFF] = [0x200, 0x101FF]`,
+and the `1000:`-paragraph cell views sit at physical `0x109BC/0x109BE/
+0x109C2` > `0x101FF` — excluded regardless of the BX value; BX itself is
+RUNTIME after `040e 8b1e9609 MOV BX,[0x996]` (following `0408 812e9609 8001
+SUB [0x996],0x180`) — the register's own value stays OPEN-WINDOW-class, the
+DS pin is what rejects the sites. NO window hit with a reachable base
+reaches `0x9bc/0x9be/0x9c2`. (4) NEW records: the stub
 address operands `[0x92c]`/`[0x931]` are STORE TARGETS, not calls — `0229`
 `MOV byte ptr CS:[0x92c],0x9b` + `022f` `MOV byte ptr CS:[0x931],0x9b`
 (both in `FUN_11bd_016c`, a recorded `7c62` callee — the x87 WAIT opcode
@@ -5469,7 +5483,8 @@ distinct consumers — the near pair serves the stub dispatch, `[0x9c2]` serves
 stay OPEN by standing scope guard; `2cc5`/`0e3c` owner neighborhoods listed
 as defined-unowned, not chased. Quote protocol: 14/14 `read_memory`
 responses internally reconciled hex-vs-data ✓ (the `1991:0473`/`0477`
-listing-vs-raw DIVERGENCE flagged in-line); `disassemble_bytes` ran
+raw-vs-listing seg/offset DIVERGENCE RENDER-ONLY per fix wave 1 — physicals
+converge); `disassemble_bytes` ran
 EXCLUSIVELY `dry_run=true` (2 calls); no create/rename/comment/define/`save_program`;
 `find_code_gaps` not needed (no exposure claim rests on a gap row —
 ownership cites govern); controls (`get_function_callers`/`get_function_xrefs`/
@@ -5513,12 +5528,14 @@ Direct-far (`9a`/`ea`) + indirect-through-cell probes: byte patterns
 `read_memory(1991:0473,10)` → `{"data":[71,28,52,15,234,44,9,24,0,142],
 "hex":"471c340fea2c0918008e"}` ✓ internally reconciled = bytes `ea 2c 09 18
 00` (JMPF seg-field `0x0018`); the `disassemble_function(1991:0400)` listing
-emits at `0477` `JMPF 0x0000:0aac` — VIEW DIVERGENCE DISCLOSED (raw-bytes
-channel vs listing channel; last insn of the body `0400..047b`). Either
-reading lands at physical `0x18:0x92C = 0xAA4` or `0x0:0xAAC = 0xAAC` —
-NEITHER equals `0x11BD0+0x92C = 0x124FC` (the dispatcher) — RECONCILED-OUT,
-not a caller; overlay-bank body, roles NOT-CONFIRMED (slice-24 ratification
-stands). Cell-value census for `ff16/ff26` forms (complete indirect
+emits at `0477` `JMPF 0x0000:0aac`. PHYSICAL ARITHMETIC (fix wave 1): raw
+`0x0018:0x092C = 0x0018<<4 + 0x092C = 0x180 + 0x92C = 0x0AAC`; listing
+`0x0000:0x0AAC = 0x0AAC` — the two views DECOMPOSE DIFFERENTLY BUT RESOLVE
+TO THE SAME PHYSICAL TARGET; the divergence is RENDER-ONLY (seg/offset split
+of one physical address), not a content contradiction. `0x0AAC ≠
+0x11BD0+0x092C = 0x124FC` (the dispatcher) under both readings —
+RECONCILED-OUT, not a caller; overlay-bank body, roles NOT-CONFIRMED
+(slice-24 ratification stands). Cell-value census for `ff16/ff26` forms (complete indirect
 enumeration, both runs `scope:program`, 15589, `truncated:false`):
 
 | indirect site | cell | static content (source) | = 092c/0931-class? |
@@ -5628,8 +5645,9 @@ all enumerated below, NONE reaches a cell**:
 | `4cc3 268b47fe ES:[BX−2]`; `1991:2f65`; `1991:3872 LEA` | dynamic / non-load | — | OPEN-WINDOW ×2 + NON-LOAD (slice-20 ledger rows stand) |
 | `7687/768e/769a/76a4` (hook-patch cluster, BX=`0xf7d`/`0x2d0a`) | `7684`/`7697` constant loads | `0xf7a`/`0x2d07` etc | REJECT (slice-20 arithmetic reproduced; owners render `FUN_11bd_7670` this pass) |
 | `6198 8d47ff LEA` | — | — | NON-LOAD (`find_substring`, as slice-20) |
-| **NEW ×13** `1991:0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/045e` stores + `0461 LEA` (+`0439 [BX+0x2a]`-family is in the positive-disp class) | `1991:0402 bb2000 MOV BX,0x20` (constant, precedes every store site per the function dump this pass — `FUN_1991_0400` 42-insn listing; post-`0461` `LEA BX,[BX−0x32]` sites resolved from that: `0x20−0x32 = 0xFFEE`) | disp −0x30..−0x12 on base `0x20` → `0xFFD0..0xFEEE` (wrap); post-LEA `[BX]`/`[BX+0x1c]` → `0xFFEE`/`0x000A` | **REJECT ×14** — no value reaches `0x9bc/0x9be/0x9c2` (wrap-checked); sites belong to the sweep-created overlay body (slice-24 ratification; window class NEW BY CREATION, not new flow) |
-| **NEW** `1991:111e 8d47e0 LEA`, `1991:49aa f647ff02 TEST` | none enumerated (functionless/dynamic) | — | NON-LOAD (LEA) / **OPEN-WINDOW** (no constant base — class-OPEN, never silently rejected) |
+| **NEW family ×12** (`FUN_1991_0400` sites in this run — 11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/045e` + `0461 LEA`; body dump `0400..0477`, 42 insns this pass) | STORE BASE IS RUNTIME: `0402 bb2000 MOV BX,0x20` → `0405 1e PUSH DS` → `0406 8edb MOV DS,BX` (DS pinned `0x20`) → `0408 812e96098001 SUB [0x996],0x180` → `040e 8b1e9609 MOV BX,[0x996]` — every store site (all ≥ `0412`) executes with BX = the RUNTIME cell value `[0x996]−0x180`; the `0461 8d5fce LEA BX,[BX−0x32]` rebases again (runtime) for the post-`0461` sites (`046a [BX]`/`0472 [BX+0x1c]` — positive-disp class, outside this run, same clamp) | bytes all reconciled live this wave: `read_memory(1991:0400,16)` → `fa53bb20001e8edb812e9609 80018b1e` ✓ + `read_memory(1991:040e,4)` → `8b1e9609` ✓ | **REJECT ×11 stores — DS-CLAMP basis (fix wave 1; supersedes the earlier "constant base resolves `0xFFD0..0xFEEE`" wording, which was false on its own premise AND wrong-based)**: DS pinned `0x20` at `0406` and NEVER restored before the `0477 ea` tail (no DS write/`POP DS` in the listing between) → physical ∈ `[0x20<<4, 0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for any effective address; the cells in the `1000:`-paragraph view sit at physical `0x109BC/0x109BE/0x109C2` > `0x101FF` — unreachable regardless of BX; `0461 LEA` = NON-LOAD; REMAINS OPEN: the `[0x996]` value itself and the sites' effective addresses (runtime register — the clamp closes the PHYSICAL question for these cells only; the window is rejected against the `0x9bc/0x9be/0x9c2` view, and under DS=`0x20` no rendering of these disps is that cell set at any BX) |
+| **NEW** `1991:111e 8d47e0 LEA` | none (defined-unowned site, function field absent) | — | NON-LOAD (LEA computes an address, never touches memory) |
+| **NEW** `1991:49aa f647ff02 TEST byte [BX−0x1],0x2` | none enumerated (site ownerless in the run response) | — | **OPEN-WINDOW** (no base or segment pin citable for this site — class-OPEN, never silently rejected) |
 
 Constant-BX census (`MOV BX,imm` family) needs no re-run for the cell
 window: slice-20's 33-hit BX census and nearest-miss arithmetic (`6a97
@@ -5657,7 +5675,11 @@ Static image view of the cluster (recorded NEW; raw channel):
 0000b2089f0aa40afc02b502220000000100000000000000"}` ✓ reconciled →
 `[0x9b0]=0x0080, [0x9b2]=0x0028, [0x9b4]=0x1000, [0x9b6]=0x11BD, [0x9ba]
 =0x08B2, [0x9bc]=0x0A9F, [0x9be]=0x0AA4, [0x9c0]=0x02FC, [0x9c2]=0x02B5,
-[0x9c4]=0x0022, [0x9c6..0x9ce]={0,0,0,0x0001,0}`. The DS=`0x1000` paragraph
+[0x9c4]=0x0022, [0x9c6]=0, [0x9c8]=0x0001, [0x9ca]=0, [0x9cc]=0, [0x9ce]=0`
+(fix wave 1 — the earlier tuple `{0,0,0,0x0001,0}` mis-placed the `0x0001`
+at `0x9cc`; the data-array index 24 = `1` = byte at offset `0x9b0+24 =
+0x9c8`, word `[0x9c8]=0x0001` — mapping re-derived word-by-offset from the
+re-read `1000:09b0`/32 this wave, hex↔data ✓). The DS=`0x1000` paragraph
 image pre-arms the cluster with the arg-`0x8b2` dispatch state (`0x9ba` =
 that arg; `0x9bc/0x9be` = its pair words `0x0a9f/0x0aa4` = H11 w0/w1 per the
 determinability table — byte-for-byte ✓), the CS paragraph in `[0x9b6]`,
@@ -5776,3 +5798,51 @@ churn left unstaged. Suite: build + `ctest` → 10/10 (docs-only diff).
 - `0931` naming: the walk adds mechanism evidence (w1 pre-push-transfer —
   the body's own 4 insns) but the rename is Task-2 verdict territory per the
   plan's bar; nothing renamed this pass.
+
+### Fix wave 1 (review 2026-09-30 — storm-ledger correction; own-section edits only, zero Ghidra writes beyond reads)
+
+Reviewer finding IMPORTANT + minors 2–4 folded; every correction verified
+live this wave before printing (reads only: `read_memory` ×4 new —
+`1991:0400/16` → `{"data":[250,83,187,32,0,30,142,219,129,46,150,9,128,1,139,30],
+"hex":"fa53bb20001e8edb812e960980018b1e"}` ✓ internally reconciled,
+`1991:040e/4` → `{"data":[139,30,150,9],"hex":"8b1e9609"}` ✓,
+`1991:0461/3` → `{"data":[141,95,206],"hex":"8d5fce"}` ✓ (the `LEA`
+rebaser bytes), re-read `1000:09b0/32` — byte-identical to the Task-1 quote
+✓; the `FUN_1991_0400`
+42-insn listing is the Task-1 pass's own `disassemble_function` dump, re-used
+for the no-DS-restore scan). Corrections:
+(1) IMPORTANT — storm row rejection basis: the Task-1 row resolved the 11
+negative-disp stores from a "constant base `0402` BX=`0x20`" — FALSE:
+`0406 8edb` consumes that BX for `MOV DS,BX` and `040e 8b1e9609` RELOADS
+BX from `[0x996]` (after `0408 812e9609 8001 SUB [0x996],0x180`) — store
+base is RUNTIME. The quoted range was also wrong on its own premise
+(`0x20−0x30 = 0xFFF0`, `0x20−0x12 = 0x000E`, not `0xFFD0..0xFEEE`). The
+rejection now rests on the DS-CLAMP: DS pinned `0x20` at `0406`, never
+restored before the `0477 ea` tail (listing has no DS write/`POP DS`
+between; `046e MOV SS,DX` re-pins SS, not DS — per the 42-insn dump) → physical ∈ `[0x20<<4,
+0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for every effective address, and the
+`0x9bc/0x9be/0x9c2` cells in the DS=`0x1000` image view sit at physical
+`0x109BC/0x109BE/0x109C2` > `0x101FF` — excluded at any BX value. What
+REMAINS OPEN is stated in the row: the `[0x996]` value / BX register itself
+(runtime) — the clamp closes the cells' physical reachability, not the
+register. The `0461/0402`-derived `0xFFEE`/`0x000A` LEA resolutions were
+reworded out. Slice-26 inherits this ledger with the corrected basis.
+(2) Minor 2 — recount by set: the run's new hits are 14 = `FUN_1991_0400`
+FAMILY 12 (11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/
+045e` + `0461 LEA`) + `1991:111e` LEA (NON-LOAD) + `1991:49aa` TEST
+(OPEN-WINDOW, ownerless); the Task-1 labels "NEW ×13" and "REJECT ×14"
+undercounted/misbundled — replaced with family-scope/run-scope rows above
+and headline (3) reworded; the earlier "(`0439 [BX+0x2a]`-family is in the
+positive-disp class)" parenthetical double-counted a site outside this run
+and is gone.
+(3) Minor 3 — `1991:0477` physical arithmetic corrected: `JMPF
+0x0018:0x092C` = `0x0180 + 0x092C = 0x0AAC` (NOT `0xAA4`); with the fix the
+raw bytes and the listing render `0x0000:0aac` converge on the SAME physical
+target — the divergence is render-only (seg/offset decomposition), headline
+(1), the Step-1 paragraph and the quote-protocol parenthetical reworded; the
+RECONCILED-OUT conclusion is unaffected (`0x0AAC ≠ 0x124FC`).
+(4) Minor 4 — image-cluster tuple: `0x0001` is at `[0x9c8]` (data index 24),
+not `0x9cc`; the tuple is printed word-by-offset corrected, mapping
+re-derived from the live re-read.
+State: prior sections untouched (diff hunks all `≥5417`, inside this
+section); no program write; `fifa96.rep` churn left unstaged.
