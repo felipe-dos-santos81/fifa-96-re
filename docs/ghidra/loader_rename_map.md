@@ -6721,3 +6721,95 @@ decompiler-cache touch; listing unmoved (slice-26 byte runs re-read
 byte-identical: strip `8bec…8b7e04` ✓, `7748..7753` overlap ✓, `76c0`
 window ✓). Negatives scoped defined-insn-only at-this-slice-time;
 `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+### Writes (Task 2 — ZERO-WRITES branch executed, 2026-09-30, program `/fifa96.exe`)
+
+Pre-check (Step 1 — the ONE load-bearing claim per disposition, re-run
+live at Task-2 time; no contradiction ⇒ the RATIFY-with-disclosure
+downgrade path did NOT fire):
+
+| claim | verbatim live response (this task) | parity vs Task 1 |
+|-------|------------------------------------|------------------|
+| strip entry-run parity | `search_instructions` operand `6329` → `{"matches":[],"match_count":0,"instructions_scanned":15589,"truncated":false,"scope":"program",…}`; operand `7ef8` → `match_count:0` (same flags) | IDENTICAL — zero static entries holds |
+| strip adjacency/wall cite | `read_memory(11bd:6327,2)` → `{"address":"11bd:6327","length":2,"data":[195,85],"hex":"c355"}` (hex↔data ✓) | `c3 RET`@`6327` wall (flow-terminates) + `55`@`6328` head re-cited byte-exact vs the anchor window |
+| `7750` reference parity (incl. the store + no-function) | operand `7750` → `match_count:2`: `11bd:76c8 c7045077 MOV word ptr [SI], 0x7750` (`temporarily_patch_int67_vector` — the sole designed reference, WRITE of the numeral-as-IVT-IP-VALUE; Task-1 address correction holds: store `76c8`, `76cc` = `8c4c02` CS half) + `11bd:5b79 7505 JNZ 0x1000:7750` (`script_read_number` — FALSE-NUMERAL: `5b7b+0x05 = 5b80` ≠ `11bd:7750`); `search_byte_patterns` `c7 04 50 77` → `[{"address":"11bd:76c8"}]`; `get_function_by_address(11bd:7750)` → `{"error":"No function found for 11bd:7750"}` | IDENTICAL hit-for-hit to Task 1 |
+| `7750` own gap row | `find_code_gaps` offset 100 → `{"start":"1000:9320","end":"1000:9320","size":1,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"setup_memory_hardware","before_function_address":"11bd:76db","after_function":"FUN_11bd_79fc","after_function_address":"11bd:79fc"}` within `total:151` | byte-identical row re-quoted; strip row `1000:7ef8..7f64` in same unchanged census (Task-1 verbatim) |
+
+Both Task-1 proposals are **leave-as-bytes**, therefore NO create/define/
+rename/plate is admissible — Step 2 executes NOTHING: the strip create path
+skipped (plan entry rule: create requires cited CALL/JMP/fallthrough — the
+parity re-runs reproduce ZERO; `6327 c3` wall REFUTES fallthrough);
+`7750` 1-byte-create skipped (legality = cited entry; reference parity
+shows only the value-WRITE at `76c8` + the `5b80` false-numeral; relocated
+`9320` = 0); rename branch cannot fire (no body created) — the recorded
+bar final: staging-shape/mechanism leg WOULD pass naming (`1e`/`bf0000`/
+`8edf` DS←0 segment-ops + POP/RET restore shape cited) but is MOOT —
+nothing to name; IVT-flavored words stay blocked (body re-checked against
+the slice-26 pairing rule: 20 rendered insns contain no `INT`/`cd*`, no
+`IRET`/`cf`, no `0x19c/0x19e` store — `632d`/`6330` are cell READS). Zero-
+writes per slice-25 precedent: "the conditional create path is skipped and
+the binding ruling for this task is ZERO PROGRAM WRITES".
+
+Byte-level proof + inventory (this task): NO `create_function`, NO
+`apply_data_type`/`set_global`/define, NO `rename_function`, NO
+`set_comment`/plate, NO `save_program`, NO real (non-dry-run)
+`disassemble_bytes`, no transaction opened; reads only —
+`search_instructions` ×3 (`6329` 0, `7ef8` 0, `7750` 2 — every response
+pattern+match_count+`instructions_scanned:15589`+`truncated:false`; scope
+UNCHANGED since Task 1 — no save occurred so no sweep and no drift: the
+slice-24/25 `Drift`/`15589` precedent holds exactly),
+`search_byte_patterns` ×1 (`c7 04 50 77` = 1), `read_memory` ×1 (1/1
+hex↔data reconciled), `get_function_by_address` ×1, `get_function_count`
+→ `{"function_count":329,"program":"fifa96.exe"}` (Δ0 vs slice-26
+post-state AND Task 1), `find_code_gaps` ×1 full-pagination re-run
+(100+51 = `total:151`, Δ0; side-effect ledger: NO new/changed rows —
+`1000:927a` already renders `after_function:"temporarily_patch_int67_vector"`
+from the slice-26 ratified rename, quoted not fought; overlay membership
+spot-checks `c87e`/`de60`/`e270`/`e424`/`e685`/`e7a0`/`e8a7`/`f193`/`f266`
+`/00000000` identical to the slice-26 ledger ✓). mtime-invariance:
+`fifa96.rep/idata/00/00000000.prp` → `2026-09-29 17:56:21 -0300` and
+`~00000000.db/db.28.gbf` → `2026-09-30 02:49:57 -0300` captured BEFORE the
+live runs, re-stat AFTER the final census — invariant (no save ⇒ program
+storage untouched by this task); `/media/felipe/FIFAPCCD/` untouched;
+`fifa96.rep` churn left unstaged. Slip fold-in check (reviewer carry): the
+two Task-1 REPORT-only wording slips — `7744 50 PUSH AX` (true layout:
+`50`@`7743`, `7744` = `e8 94 b3` = the pre-existing `## 30d8 second caller`
+probe row's `CALL 0x1000:46ab`→`2adb` ✓ consistent with live bytes) and
+"21-insn body" (true: 20 insns) — grep of THIS section for `7744`/
+`21-insn`: the map never carried either → REPORT-SIDE ONLY, NO MAP EDIT.
+
+### Verdicts (Task 2)
+
+| verdict | address | evidence | disposition | C counterpart |
+|---------|---------|----------|-------------|---------------|
+| strip — **DISPOSED: LEAVE-AS-BYTES** (supersedes nothing — extends honestly) | body `6328..634e` + orphan-table `634f..6394` (deferral span `6329..633c`) | class DEFINED-UNOWNED CODE, orphan-instruction gap flag, 3-window render-IDENTICAL span internals (`632d`/`6330` present in the `[0x56]`/`[0x58]` authority runs WITHOUT function fields — the `173b`/`4c94` render-dependent class REJECTED); entry ZERO (Task-1 eight numeral runs 0/0×8 + Task-2 parity re-runs; fallthrough REFUTED — `6327 c3 RET` byte-cited `c355` read + owner authority render `count:28`; controls `get_xrefs_to` 0/0 ×2 tasks); enumeration+store-sweep CLOSED (20 insns, zero memory stores) | slice-26 deferral "`6329..633c` unowned zero-DS staging strip — full enumeration + store sweep next slice" carried → **DISPOSED here** (this section: walk/renders/entry/proposals rows + this verdict row): leave-as-bytes — create inadmissible (no cited entry), data-define MISLABELS executed frame-CODE (`633a [BP+0x4]`/`6340 [BP+0x2]` args + `634b..634d` POP-restore + `634e RET`); naming final: mechanism leg passes but MOOT (no body created); IVT-flavored words stay bar-BLOCKED. Supersession record: the slice-26 rows claimed ONLY what they printed (`read_memory(6329,20)` + emission ending `633a 8b7e04`, explicitly "full-body enumeration … next slice" — no end-at-`633c` claim); the walk widened the head by 1 B (`55`@`6328`, anchor-window cite) and the body to `634e` — byte-window-anchored deferral text, widened, honest record; slice-26 rows stand byte-untouched (append-only ✓) | none — behavioral (zero-DS placeholder-pair scan over a `[DI]`-addressed table, downward 4-B stride, result in `AX=DI`; entry runtime-only) |
+| `7750` — **DISPOSED: LEAVE-AS-BYTES** | `11bd:7750` | undefined 1-B flow-DEAD hole inside the `setup_memory_hardware` `76db..79f5` envelope (Task-1 probes ×4 owner + `7750` error re-quoted Task-2), own gap row `1000:9320` (`has_undefined_bytes:true` — not even disassembled) re-quoted byte-identical; references: operand `7750` = 2 (`76c8` designed WRITE-of-value + `5b79` FALSE-NUMERAL `5b7b+0x05=5b80`), `0x7750` = 1, relocated `9320` = 0, `50 77` = 1 (`76ca` imm), xref control 0 | slice-26 deferral "the `7750` sink byte (undefined/flow-dead, single `cf`) stays a define-candidate for a capped write path" carried → **DISPOSED here**: capped path EXECUTED = NOT-ADMISSIBLE — the 1-byte-create legality test (cited entry) FAILS at both tasks; reachability is runtime-IVT-indirect ONLY (cited chain `76c8/76cc`→`76cf INT 0x67`→`cf`→IRET→`76d1/76d4` restore); leave-as-bytes with the role ALREADY documented at the `temporarily_patch_int67_vector` plate — no write needed, none made | none — behavioral (inert IRET sink byte; semantics live at the 76ab plate row) |
+| bonus — cell-writer pair located | `631e`/`6321` (`FUN_11bd_62f8`) | `[0x56]` run 3 hits / `[0x58]` run 4 hits — each with EXACTLY ONE WRITE, both in the immediately-preceding owner (`a35600 MOV [0x56],AX` / `89165800 MOV word ptr [0x58],DX`, authority render count 28) | recorded; the FULL `[0x56]/[0x58]` armed-value story STAYS deferred (one line here) | — |
+| bonus — store-sweep closure | body `6328..634e` | the deferral's "store sweep" leg: fully enumerated body has ZERO memory stores (stack + segment-register ops only) — window stores under the staged DS are READs (`6340`/`6345`) | CLOSED statically at this slice; the persistent non-IRET-install OPEN-WINDOW posture unchanged (this body adds no writer) | — |
+
+### Deferrals (Task 2)
+
+- `[0x56]/[0x58]` full stories: static writer pair NOW located (`631e/
+  6321` in `FUN_11bd_62f8`); armed-value semantics, WHY the sink is needed,
+  placeholder-pair runtime-writer layer (`62f8` call graph + out-of-image
+  writers) stay second-layer (slice-26 wording carries).
+- Runtime legs unchanged: persistent IVT-`0x19C/0x19E` set, `[0xaa2]`,
+  `[0x996]`-class; `[0x2fa]`/`[0x9ba]` — FU-blocked (prior); `674c/675a`
+  POP-BX dive; callee trees (`2adb`/`2d0a`/`setup_memory_hardware`
+  internals/`0d62`); `7c4b` defined-unowned strip.
+- NEW — orphan-relay family question: does the `6328..634e` defined-unowned
+  orphan PAIR with the recorded orphan relays — `02da..02f8` ("tail
+  `02da..02f8` DEFINED-BUT-OUTSIDE the function body (13 insns)", `## 02b7
+  twin` ledger) and `0976..099a` ("remainder `[0976..099a]` defined-but-
+  unowned", H7 ratified row in `## vector dispatch handlers`)? One-line status:
+  all three are defined-in-listing / unowned / non-entry-referenced
+  (per their recorded rows) — mechanism-family investigation DEFERRED.
+- Strip table `634f..6394`: role OPEN (content identity + consumers not
+  swept; the `6341` DI-base numeral already closed by the pocket REJECT
+  rows, quoted Task-1).
+- Name-class route (`caseD_0`), Δ1 (`list_functions_enhanced` 328 vs 329),
+  masked-run unreliability backlog — all carry (slice-26 ledger).
+- Suite green (10/10, docs-only diff); THIS TASK'S PROGRAM WRITES = ZERO
+  (create/define/rename/plate/save each not-admissible-or-skipped with the
+  cites above); function count Δ0 (`329`), gap total Δ0 (`151`), mtimes
+  invariant, rep churn unstaged, `/media/felipe/FIFAPCCD/` untouched.
