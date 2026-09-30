@@ -7376,7 +7376,7 @@ it FOUND an inbound edge for `64ff..6548`.
 | byte read | `read_memory(11bd:64fb,52)` → `ff641800b0fee664f4ebfdfab800108ed88ed08b267a0f…` ✓: `64ff b0`/`6500 fe`=`MOV AL,0xfe`, `6501 e664`/`6503 f4`/`6504 ebfd`/`6506 fa` |
 | primary tail | `disassemble_bytes(11bd:64f6,11bd:64ff,dry_run)` → `64f7 0f01f0 LMSW AX`/`64fa eaff641800 JMPF 0x0000:667f` — `FUN_11bd_64b7` LAST insn unconditional JMPF ⇒ **flow TERMINATES, no fall-in to `64ff`** |
 | maximal render-stable CODE span | `6501..6548` (head `64ff..6500` `MOV AL,0xfe` UN-emitted, H9-Alignment-class skip); far-ret half = `6506..6548` (arm lands at `6506` CLI); `64ff..6505` halt-retry stub |
-| inbound census | operand `0x64ff`/`6500`/`6501`/`6502`=0/0/0/0; far `0x1000:80cf`/`80d0`/`80d1`/`80d2`=0/0/0/0; raw `ff 64`=2 (`64fa` JMPF + `1991:1e49`, NOT an arm). **Region-wide landing FOUND:** `search_instructions("0x467")`=9 incl. `64d7 FUN_11bd_64b7: MOV word [0x467], 0x6506` (`c70667040665`) → target `0x6506` ∈ region at aligned `CLI`@`6506`; companion `64d3 MOV word [0x469], CS` (`8c0e6904`). The far-ret pair `CS:0x6506` is armed by the immediately-preceding primary ⇒ region 4 is a **far-ret half of `FUN_11bd_64b7`**, NOT foreign/entryless (absence was assumed; the census found the edge) |
+| inbound census | operand `0x64ff`/`6500`/`6501`/`6502`=0/0/0/0; far `0x1000:80cf`/`80d0`/`80d1`/`80d2`=0/0/0/0; raw `ff 64`=2 (`64fa` JMPF + `1991:1e49`, NOT an arm — containing-insn convention applies to the `ff 64` control hits: the `64fb` match lies INSIDE the `64fa` `eaff641800 JMPF` insn and `search_byte_patterns` reports the containing byte-run address, so neither hit is a standalone reference). **Region-wide landing FOUND:** `search_instructions("0x467")`=9 incl. `64d7 FUN_11bd_64b7: MOV word [0x467], 0x6506` (`c70667040665`) → target `0x6506` ∈ region at aligned `CLI`@`6506`; companion `64d3 MOV word [0x469], CS` (`8c0e6904`). The far-ret pair `CS:0x6506` is armed by the immediately-preceding primary ⇒ region 4 is a **far-ret half of `FUN_11bd_64b7`**, NOT foreign/entryless (absence was assumed; the census found the edge) |
 | terminator/head ops | head `b0 fe`@`64ff` unemitted (arm lands past it); exit `{fb,5d,c3}` |
 
 ### R5 `11bd:0a35..0a5d` — H9 half (`DAT_11bd_0a35` Alignment-head)
@@ -7590,12 +7590,39 @@ segment-physicality caveat; 0x467/0x469 consumer deferred; head 64ff..6505
 unowned)`.
 
 **R5 H9 `11bd:0a35..0a5d` — the ONE sanctioned `clear_flow_and_repair` (then
-LEAVE).** Task-1 pre-call expected-effect paragraph quoted VERBATIM FIRST (the
-`> A single clear_flow_and_repair seeded at 11bd:0a36 …` block reproduced above
-in this section's H9 listing-analysis sub-heading — seed `0a36`, `clear_data=
-false` leaves `DAT_11bd:0a35`, expected no head realignment, flow-free band a
-legitimate outcome, create precondition `aligned b080@0a35 renders` likely NOT
-met). FULL pre-capture (post-R4): `get_function_count`→**335** (334 + R4);
+LEAVE).** Task-1 pre-call expected-effect paragraph embedded VERBATIM FIRST
+(character-identical to the Task-1 text at lines 7488–7514; reproduced here so
+the record carries the paragraph adjacent to the call):
+
+> A single `clear_flow_and_repair` seeded at `11bd:0a36` (the only
+> instruction-bearing candidate flow start in `0a35..0a5d`; `0a35` is a defined
+> 1-byte `Alignment` data unit `DAT_11bd:0a35`, not a legal insn seed) will, per
+> the tool contract, clear instruction flow reachable from the seed, then repair
+> function bodies and re-disassemble retained flow, following control flow
+> **beyond** the seed. Because the command runs `clear_data=false`, it does NOT
+> delete `DAT_11bd:0a35`; Ghidra cannot decode an insn overlapping defined data,
+> so the first free aligned decode address after repair remains `0a36` and the
+> misaligned artifact `80 e6 20 AND DH,0x20`@`0a36` reproduces rather than the
+> true head `b0 80 MOV AL,0x80`@`0a35`+`e6 20 OUT 0x20,AL`@`0a37`. Forward flow
+> is cut by `0a5d c3 RET` (no fallthrough into owned `FUN_11bd_0a5e` `0a5e..0a85`)
+> and backward by `0a34 f4 HLT` (owned `FUN_11bd_09d7` `09d4..0a34` last insn),
+> so both healthy owners are OFF any fallthrough path from the seed. **Risk
+> surfaces:** (i) non-idempotent, reaches BEYOND the seed — a reseeded switch/jump
+> pass could touch the neighbouring `1000:26a3..26a4` orphan row or the
+> `FUN_11bd_0a5e`/`FUN_11bd_09d7` bodies' flow even though not fallthrough-
+> reachable, and can clear otherwise-healthy flow; (ii) may silently re-list the
+> `1000:2605..262d` flip row (now `has_undefined_bytes:false`); (iii) a second
+> call is NOT sanctioned. **Expected outcome:** no change to the misaligned head
+> — the blocker is a DATA definition, not stale flow, so the create precondition
+> (aligned `b080`@`0a35` renders as true code) is NOT met by flow-repair alone.
+> Only undefining `DAT_11bd:0a35` (a data mutation OUTSIDE the sanctioned
+> `clear_flow_and_repair` write, NOT proposed) would re-align `0a35`. Task 2's
+> single capped attempt is therefore expected to RATIFY as unchanged ⇒ H9 stays
+> **LEAVE-as-bytes**; only IF post-repair yields the aligned `b080`@`0a35` head
+> AND both walls intact does the capped create at `0a35..0a5d` apply (R5
+> mechanism cite `09fc`→`0xa35`).
+
+FULL pre-capture (post-R4): `get_function_count`→**335** (334 + R4);
 dry-run `disassemble_bytes(0a30,0a5d)`→ `0a30 b009`/`0a32 e620`/`0a34 f4 HLT`/
 **`0a36 80e620 AND DH,0x20`**/`0a39 bb0010`…`0a5c 58` (artifact head, 23 insns);
 `audit_global(0a35)`→`{"type":"Alignment","length":1,"xref_count":0,…}`;
@@ -7631,7 +7658,16 @@ external edge; direction UNDECIDED; no create. R3 `6328..634e` **LEAVE-as-bytes*
 — zero static entries WITHOUT mechanism (slice-27 disposition re-confirmed
 byte-identical; `6327 c3` wall; body renders but has no cited entry); no create,
 no data-define (would mislabel frame-CODE). R6 `0675..0696` **LEAVE-as-bytes +
-CODE reclassification** — the `0675..0696` bytes decode as a coherent far-ret
+CODE reclassification** — SUPERSESSION quote (source: `## far-return halves`,
+`### Deferrals (Task 2 additions)`, lines 7297–7299, verbatim, that section NOT
+edited):
+
+> - H3-surplus `0675..0696` `false→true` orphan-un-definition: RATIFIED
+>   status quo (no ownership); if a future pass re-defines those arg-cell
+>   bytes, this slice's row stands as the baseline.
+
+This slice's CODE classification overrides that row's DATA-heritage clause
+("those arg-cell bytes"): the `0675..0696` bytes decode as a coherent far-ret
 ARM-WRITER CODE block (`0684 ES:[0x467]←0xb94` + `068b ES:[0x469]←CS` +
 `0690 ES:[0x412]←0xa` + `RET`@`0696`), NOT data arg-cells; `0x675` has no arm-
 store citing it and `0674` is a `FUN_11bd_0667` `c3 RET` wall ⇒ entry static-zero,
