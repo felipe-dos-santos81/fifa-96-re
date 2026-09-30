@@ -6396,3 +6396,130 @@ ALL `dry_run=true`, `search_instructions` ×2 (authority re-run +
 function-scope MOV/ES), `search_functions` ×1, `disassemble_function` ×1
 (error row), `analyze_dataflow` ×1 (round-1 clause verification); no
 transaction opened; no listing mutation; suite gate re-run post-edit.
+
+### Writes (Task 2 — ONE rename executed, capped; executed 2026-09-30, program `/fifa96.exe`)
+
+Both bar tests printed BEFORE any write (Step 1):
+
+**R3 bar test — FAIL ⇒ default stands.** Gate (IVT-flavored words require
+in-body staging writes OR in-body INT/IRET pairing; `INT` alone is a CALL,
+not an install claim): ops cited from the Task-1 49-insn walk (flow table
+above) + the body dump — (i) in-body stores: `29be/29c2/29c6/29ca/29d5/
+29e0/29e6/29ec/29ef/29f5/29fa/29fe/2a0a` — every store that renders a
+destination (13 sites) is an ABSOLUTE
+DS-cell store (`[0xd4e..0xd6c]`, `[0x8fe]`, `[0x91d]`, `[0xd78]`,
+`[0xdb0]`, `[0xd5e]`); the two implicit `2a4e/2a52 MOVSD ES:EDI,FS:ESI`
+legs render NO destination (runtime ES:DI via `LES DI,[0xde8]` / FS:SI via
+`[0xde4]` — window class, invisible to operand sweeps per the slice-23
+caveat, no citable base reaching the IVT page), ZERO store
+renders `0x19c`/`0x19e` or a `[reg]`
+window under the entry segment state (the post-`2a1d` DS←0x20 views do not
+touch the IVT page — physical `[0x200,0x101FF]`-style clamp argument per
+the storm-ledger template); program-wide operand `0x19c` = 1 hit total,
+`76b0`, OUTSIDE R3 (T1 Step-3 table). (ii) INT/IRET pairing: `2a16 cd67
+INT 0x67` in-body ✓ but ZERO `IRET`/`cf` render among the 49 emitted
+insns ⇒ pairing fails. Candidate (`hook`/`install`-class) gate: FAILED.
+General-mechanism rename not taken: the withheld-name note's three legs
+were "INT 0x67/JMP BX/cluster consumers one hop out" — the walk closed the
+INT-consumer and cluster-enumeration legs at the static layer but the
+`2a37 JMP BX` TARGET leg remains DYNAMIC-OPEN (BX = caller entry AX via
+`29bc XCHG`; no static entries — `get_function_xrefs(29bc)` 0/0), so no
+mechanism-level role is decidable from R3's own ops. ⇒ `FUN_11bd_29bc`
+KEEPS DEFAULT NAME, NO plate (before-and-after probe:
+`get_comment(11bd:29bc)` → `{"plate":null,…,"has_comment":false}` — still
+null after this task; NOT-CONFIRMED-at-name row below).
+
+**`FUN_11bd_76ab` bar test — PASS ⇒ the ONE capped rename.** Body
+re-derived live at Task-2 time (`disassemble_function(11bd:76ab)` → `count:23`
+✓ identical to Task 1). Gate (i) — cited staging writes INSIDE the named
+body: `76ab 6a00 PUSH 0x0` + `76ad 1f POP DS` (zero-segment staging),
+`76b0 be9c01 MOV SI,0x19c` (constant base = IVT entry `0x67` = `0x67×4`),
+`76c8 c7045077 MOV word ptr [SI],0x7750` (WRITE physical `0:0x19C`) +
+`76cc 8c4c02 MOV word ptr [SI + 0x2],CS` (WRITE physical `0:0x19E`) —
+bytes from the Task-1 window read `be9c01…c70450778c4c02cd` ✓; gate (ii)
+INT/IRET pairing alone would FAIL (`cf`@`7750` is one hop out, not
+in-body) but the gate is an OR and (i) is satisfied — this is the
+staging-writer role the bar names, and it lives HERE, not in R3. Candidate
+name (verb-led, mechanism-only from cited ops — the ops literally save →
+patch → INT → POP-restore the vector): `temporarily_patch_int67_vector`
+(IVT-flavored word admitted per gate (i)).
+
+Verbatim write sequence (all responses as-returned):
+
+| step | verbatim response |
+|------|--------------------|
+| before: `get_function_by_address(11bd:76ab)` | `{"name":"FUN_11bd_76ab","address":"11bd:76ab","signature":"undefined FUN_11bd_76ab(void)","entry_point":"11bd:76ab","body_start":"11bd:76ab","body_end":"11bd:76da"}` |
+| before: `get_comment(11bd:76ab)` | `{"address":"11bd:76ab","plate":null,"pre":null,"eol":null,"post":null,"repeatable":null,"comment":null,"has_comment":false}` |
+| `rename_function(FUN_11bd_76ab → temporarily_patch_int67_vector)` | `{"status":"success","message":"Success: Renamed function at FUN_11bd_76ab from 'FUN_11bd_76ab' to 'temporarily_patch_int67_vector'","warnings":["…not PascalCase. Expected: TemporarilyPatchInt67Vector","…contains underscores…"]}` — style warnings quoted-as-returned; snake_case kept per precedent (`clear_msw_and_callfar`, `enable_paging_and_load_tss`) |
+| plate: `set_comment(11bd:76ab, plate)` | `{"status":"success","message":"Set plate comment at 11bd:76ab","warnings":[…missing Algorithm/Parameters/Returns…]}`; text `C: none — behavioral (transient IVT-entry-0x67 invoke wrapper — ops: DS←0 staging 76ab PUSH 0x0/76ad POP DS; constant base 76b0 MOV SI,0x19c (=0x67×4); SAVE current vector 76b3/76b6 reads [SI]/[SI+2] + 76b5/76b9 PUSH; gate 76ba/76c1 CMP vs SS:[0x56]/SS:[0x58] placeholder pair, mismatch JNZ 76bf/76c6 → INT anyway (armed-vector call); PATCH 76c8 MOV word [SI],0x7750 + 76cc MOV word [SI+2],CS; CALL 76cf INT 0x67 (installed target CS:0x7750 = single cf IRET byte, one hop out — inert sink); RESTORE 76d1/76d4 POP word [SI+2]/[SI] (stack-restores saved vector); 76d6/76d7 POP DI/SI; DS un-pin 76d8/76d9 PUSH SS/POP DS; RET. Caller-staged AX selector (this body writes NO AX — service 0xdeXX convention per ## R3 IVT cluster Step 2). WHY-needs-a-sink / placeholder-pair semantics / persistent-install identity DEFERRED — opcode-level cites only)` |
+| after: `get_function_by_address(11bd:76ab)` | `{"name":"temporarily_patch_int67_vector","address":"11bd:76ab","signature":"undefined temporarily_patch_int67_vector(void)","entry_point":"11bd:76ab","body_start":"11bd:76ab","body_end":"11bd:76da"}` — bounds unchanged |
+| after: `get_comment(11bd:76ab)` | plate read back ✓ verbatim match, `has_comment:true` |
+| R3 untouched read-back: `get_function_by_address(11bd:29bc)` | `{"name":"FUN_11bd_29bc",…,"body_end":"11bd:2a59"}` — default name + bounds unmoved ✓ |
+| `save_program()` | `{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}` |
+
+Census protocol (post-write, per slice-24): function count **before
+329 → after 329, Δ0** (`get_function_count` verbatim both sides).
+`find_code_gaps` FULL pagination: offset 0/limit 100 → 100 rows, offset
+100 → 51 rows, **total 151 = the slice-24/25 post-state count ✓**,
+151/151 consumed. Side-effect ledger: ZERO structural changes — no
+creates/deletes/orphan flips; ONE display propagation: page-2 row
+`{"start":"1000:927a","end":"1000:927a","size":1,…,"before_function":"FUN_11bd_7670","after_function":"temporarily_patch_int67_vector","after_function_address":"11bd:76ab"}`
+now renders the NEW name in its `after_function` field (same row, same
+owner address `11bd:76ab`, name-string propagation only — quoted, not
+fought). Overlay `1991:` pagination check: rows `1000:990e/9d8c` straddle
+`FUN_1991_0400`, `c87e` straddles `FUN_1991_2d3e`, `de60/e270/e424`
+straddle `FUN_1991_4930/4b0a`, `e685/e7a0` straddle `FUN_1991_4e38`,
+`e8a7` follows `FUN_1991_4efe`, tail rows `f193/f266/00000000` —
+membership identical to the slice-23/24 ledger ✓.
+
+**Exposed bodies (Step 2): NONE — zero creates.** Owned walls cited live:
+head wall `read_memory(11bd:29b8,6)` → `{"data":[90,42,96,42,147,88],
+"hex":"5a2a602a9358"}` ✓ = TABLE `29b8..29bb` (`mode_29bc_source_pair`
+data — `get_function_by_address(11bd:29b8)` → `{"error":"No function
+found for 11bd:29b8"}` verbatim) + R3 head `93 58`; tail wall
+`read_memory(11bd:2a56,8)` → `6697ebcc50538b1e` ✓ = `2a58 ebcc` ending
+`2a59` = body_end + `2a5a 50` (PUSH AX) — owner probe
+`get_function_by_address(11bd:2a5a)` → `{"name":"clear_msw_and_callfar","body_start":"11bd:2a5a","body_end":"11bd:2ad8"}`
+✓. No unowned contiguous CODE anywhere in or abutting `29bc..2a59`; the
+real-disassembly → nudge → create path was NOT needed and NOT executed.
+
+### Verdicts (Task 2)
+
+| verdict | address | evidence | disposition | C counterpart |
+|---------|---------|----------|-------------|---------------|
+| `FUN_11bd_29bc` — **NOT-CONFIRMED-at-name, default stands** | `11bd:29bc..2a59` | R3 bar test printed above (gate i 0/13 store sites IVT-render, gate ii no IRET); role leg from the walk: INT-`0x67` CALLER + segment/SP save-restore island + MOVSD copy-out leg + `XCHG`-fed DYNAMIC tail — consumer legs closed statically, the BX-target leg stays DYNAMIC-OPEN (caller entry AX; zero static entries `0/0` xrefs control); `get_comment` before/after null | no rename, no plate per the write rule; carried candidate + bar state in Deferrals | none — behavioral (PM-state save/restore island around an `INT 0x67` service call, tail-continuation dynamic) |
+| `temporarily_patch_int67_vector` (was `FUN_11bd_76ab`) — **RENAMED + PLATED** | `11bd:76ab..76da` | bar gate (i) PASS on in-body cited staging writes (`6a00 1f`/`be9c01`/`c7045077`/`8c4c02` → physical `0:0x19C/0:0x19E`); the staging-writer role the plan sought for R3 is HERE (one-hop-out discovery re-located this slice); verbatim before/after in `### Writes` | rename executed (the ONE under the ≤1 cap) + plate `C: none — behavioral (...)` | none — behavioral (transient IVT-`0x67` vector save→patch→INT→restore wrapper) |
+| **staging disposition** — transient ATTRIBUTED / persistent OPEN-WINDOW | `0x19C/0x19E` | transient writer pair `{76c8, 76cc}` attributed to `temporarily_patch_int67_vector` (this slice's rename owner); persistent non-IRET install NOT attributable from the enumerated sweeps (defined-insn + raw, at this-slice time) — OPEN-WINDOW legs named in Step 3 + Fix wave 2 (positive-disp envelopes; DS=0-body window stores incl. the unowned `6329..633c` candidate; ES-write `1991:2f65` runtime-`[0xaa2]`; out-of-image installers; DOS SET-vector `b86725` = 0) | recorded; not claimed closed | — |
+| freebie `FUN_11bd_0929` — **RATIFIED (default stands)** | `11bd:0929..092b` | T1 rows + fix wave: `6a 20 1f` DS←0x20 prologue, fall-through into `092c`; 4 defined CALL sites (`24f9` family); `092c` head `90` at this-slice time | NOT renamed — the ≤1 cap was consumed by `76ab` (which passed decisively in-body; `0929`'s 2-insn fall-through stub is a thinner role); candidate `ds_staged_dispatch_fallthrough` carried in Deferrals | none — behavioral (staged-DS pre-entry into the dispatcher stub) |
+| freebie `016c` gate tail — **RATIFIED (record)** | `11bd:023a/0242` | `023a/023e JZ 0x1000:1e12` = `0242` (`1e12−1bd0`✓) lands on the 1-byte `9b WAIT` = the value `0229/022f` patch; `0243 FSETPM` = `db e4` (fix-wave-2 byte adjustment); `[0x2e]∈{0,0xb}` CLTS-gate structure cited | no change | none — behavioral (x87-sync gate tail) |
+
+### Deferrals (Task 2)
+
+- `FUN_11bd_29bc` name: NOT-CONFIRMED-at-name state carried — general
+  mechanism candidate for a future bar pass (`save_segments_call_int67`-
+  class) awaits the caller-side leg (entry AX / DYNAMIC-ONLY entry);
+  IVT-flavored words stay blocked absent in-body staging or in-body
+  INT/IRET pairing.
+- `temporarily_patch_int67_vector` semantics beyond the ops: WHY a sink
+  is needed for the placeholder-armed state, the `SS:[0x56]/SS:[0x58]`
+  placeholder-pair writer set, and the armed-vector identity — second
+  layer; the `7750` sink byte (undefined/flow-dead, single `cf`) stays a
+  define-candidate for a capped write path, NOT touched here.
+- R3 callee trees / one-hop consumers: the 8 non-R3 INT sites' bodies
+  (`2adb` done; `2d0a` one-hop; `7c4b` defined-unowned strip;
+  `setup_memory_hardware` internals beyond cite-rows), `0d62` dive,
+  handler callee trees — unchanged prior dispositions.
+- `675a`/`FUN_11bd_674c` consumer dive — one-liner deferred (POP-BX stack
+  leg open).
+- `[0x2fa]`/`[0x9ba]` runtime legs — FU-blocked (prior).
+- Runtime writers: persistent IVT-`0x19C/0x19E` set, `[0x56]/[0x58]`,
+  `[0xaa2]`, `[0x996]`-class — OPEN-WINDOW (armed-value layer).
+- `6329..633c` unowned zero-DS staging strip — full enumeration + store
+  sweep next slice (Fix wave 2 row).
+- Name-class route (`caseD_0` identically-named instances — no tool route
+  renames exactly one), Δ1 (`list_functions_enhanced` 328 vs count 329
+  erratum), the masked-run unreliability backlog (Fix wave 2) — all carry.
+- Suite green (10/10, docs-only diff); program writes this task = ONE
+  rename + ONE plate (+ `save_program` per protocol), count Δ0, gap total
+  Δ0, side-effect ledger as printed; `fifa96.rep` churn left unstaged;
+  `/media/felipe/FIFAPCCD/` untouched.
