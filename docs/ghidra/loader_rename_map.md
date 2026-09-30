@@ -8349,3 +8349,374 @@ ellipses left (cosmetic, noted). Wave reads ONLY: `disassemble_function`×1 +
 no transaction; `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn
 unstaged. Prior sections byte-identical; the slice-22 row at map line 3963
 LEFT UNTOUCHED — reconciliation is append-only.
+
+## fill region ownership (verified 2026-09-30, program `/fifa96.exe`)
+
+Slice-31 Task-1: read-only four-region evidence packages over the regions slice 30
+named as the only known route to future creates on the int-FF pair — fill A
+`11bd:0360..040d` (twin-A staging `03a7/03a9` + arms `03ab` `26c706fc03940b` /
+`03b2` `268c0efe03`), fill B `045e..0490` (`0462/0464` staging + twin-B
+`0466/046d`), third-writer region C `0745..076e` (`075e 8ec0` + `0760` ES-form arm
+candidate, basis OPEN per the slice-30 fix wave), and landing region D = the band
+row around `0b94` (`1000:26e2..2792`-class, derived live below). ZERO Ghidra writes;
+every `disassemble_bytes` ran `dry_run=true`. **Disposition-so-far: A = mixed
+CODE-blocks + 3 far-pointer-cell tenants, entry ground FOUND at `0360` (byte-level
+static edge, arith shown) — create CANDIDATE at the `0360..037c` island only, the
+twin-A block `03a7..03d1` stays gate-FAIL/LEAVE (entry zero ⇒ writer-open persists);
+B = tenant `045e..0461` + CODE `0462..0490`, GATE NONE (writer-open persists);
+C = tenant `0745..0748` + CODE `0749..076e` whose `0760` arm is now render-stable
+ES-form with in-row `33c0/8ec0` staging, GATE NONE for entry (basis still OPEN,
+owner-absent); D = all-CODE band (6 CODE blocks per the D class row — intro's earlier "7"
+reconciled to the live enumeration at the final-review wave; dry re-render 177 B stable,
+render-stable), GATE FAIL on the
+mechanism leg — the int-FF IVT-fetch is the ONLY cited route to `0b94` and it is
+CITED-SEMANTICALLY mode-dependent ⇒ landing-open persists.** Region ownership and
+chain closure remain separate facts, as designed.
+
+**Live state (at-slice-time):** `get_function_count` → `{"function_count":335}` ✓
+(slice-30 state, no drift); `find_code_gaps` FULL pagination offset 0 → 100 rows
+`total:149`, offset 100 → 49 rows, 149/149 consumed ✓; `search_instructions`
+`instructions_scanned:15694` UNIFORM across all 20 valid runs, `truncated:false`,
+scope `program` ✓ (6 first-attempt runs errored on the param name
+`operand`→`operand_pattern` — reads-only retries, no effect); delta `−0x1bd0`
+re-derived live from the fetched rows (`1f30−1bd0=0360`, `202e−1bd0=045e`,
+`2315−1bd0=0745`, `26e2−1bd0=0b12`, `2792−1bd0=0bc2` + the wall adjacencies below);
+`get_address_spaces` → `ram` default `0000:0000..ffff:ffff` + `HEADER` overlay ✓.
+Overlay ledger spot rows re-present: `1000:c87e`/`de60`/`e270`/`e424`/`e685`/`e7a0`/
+`e8a7`/`f193`/`f266` + `00000000` ✓ identical set to the slice-30 ledger; no `1991:`
+address appears in ANY of this pass's runs.
+
+**Gap rows (verbatim, FULL pagination):** A: `{"start":"1000:1f30","end":"1000:1fdd",
+"size":174,"has_undefined_bytes":true,"has_orphaned_instructions":false,
+"before_function":"FUN_11bd_033c","before_function_address":"11bd:033c",
+"after_function":"FUN_11bd_040e","after_function_address":"11bd:040e"}` — exactly
+`0360..040d` ✓; B: `{"start":"1000:202e","end":"1000:2060","size":51,
+"has_undefined_bytes":true,"has_orphaned_instructions":false,
+"before_function":"restore_ss_sp_and_return","before_function_address":"11bd:0443",
+"after_function":"FUN_11bd_0491","after_function_address":"11bd:0491"}` — exactly
+`045e..0490` ✓ (H1 half `0443..045d` created + renamed as expected); C:
+`{"start":"1000:2315","end":"1000:233e","size":42,"has_undefined_bytes":true,
+"has_orphaned_instructions":false,"before_function":"FUN_11bd_073c",
+"before_function_address":"11bd:073c","after_function":"FUN_11bd_076f",
+"after_function_address":"11bd:076f"}` — exactly `0745..076e` ✓ (island `073c..0744`
+now OWNED by `FUN_11bd_073c` — re-probed live); D: `{"start":"1000:26e2","end":
+"1000:2792","size":177,"has_undefined_bytes":true,"has_orphaned_instructions":false,
+"before_function":"FUN_11bd_0ae2","before_function_address":"11bd:0ae2",
+"after_function":"FUN_11bd_0bc3","after_function_address":"11bd:0bc3"}` — band
+`0b12..0bc2` UNCHANGED vs slice-30 ✓.
+
+**Walls (all eight, live `get_function_by_address` verbatim):** A west `035f`→
+`{"name":"FUN_11bd_033c",…,"body_start":"11bd:033c","body_end":"11bd:035f"}` (island;
+its LAST insn `035f RET` — disasm `{"address":"11bd:035f","instruction":"RET"}` +
+bytes `read(11bd:035f,2)`→`c333` = `c3`@`035f`); A west-west relay thunk `0337..033b`→
+`{"name":"caseD_0",…,"body_start":"11bd:0337","body_end":"11bd:033b"}` with body
+disasm `11bd:0337 "JMP word ptr CS:[0x2fa]"` count:1 and bytes `read(11bd:0337,5)`→
+`2eff26fa02` ✓; A east `040e`→`{"name":"FUN_11bd_040e",…,"body_end":"11bd:0442"}`
+(H1 primary, default name stands — the brief's `040e..0442` re-derived ✓); B west
+`045d`→`{"name":"restore_ss_sp_and_return",…,"body_start":"11bd:0443","body_end":
+"11bd:045d"}` last insn `045d RET` (disasm `{"address":"11bd:045d","instruction":
+"RET"}`; bytes `read(11bd:045c,3)`→`58c391` = `58`@`045c`,`c3`@`045d`); B east `0491`→
+`{"name":"FUN_11bd_0491",…,"body_end":"11bd:04bd"}`; C west `0744`→`{"name":
+"FUN_11bd_073c",…,"body_end":"11bd:0744"}` last insns `0742 OUT 0x23,AL`/`0744 RET`
+(bytes `read(11bd:0743,3)`→`23c36f` = `23`@`0743` lo-byte of the `0x23` port disp,
+`c3`@`0744`); C west-west `0733`→`{"name":"FUN_11bd_0733",…,"body_end":"11bd:073b"}`;
+C east `076f`→`{"name":"FUN_11bd_076f",…,"body_end":"11bd:07b8"}` (H5 PRIMARY bound
+live-derived: `076f..07b8`, the `076f..07e6`-and-beyond question answered — return
+half `07b9..07e6` = `restore_ss_sp_and_write_port66` per the slice-28 created name,
+its absence from the gap list between `233f..2421` confirms the covers); D west `0b11`→
+`{"name":"FUN_11bd_0ae2",…,"body_end":"11bd:0b11"}` last insn `0b11 HLT` (bytes
+`read(11bd:0b10,4)`→`64f4ebfd` = `e664`@`0b0f..0b10`,`f4`@`0b11`,`ebfd`@`0b12..0b13`);
+D east `0bc3`→`{"name":"FUN_11bd_0bc3",…,"body_end":"11bd:0bd0"}`. Start±1 probes:
+`0360`/`0361`/`040d`, `045e`/`045f`/`0490`, `0745`/`0746`/`076e`, `0b12`/`0b13`/
+`0b93`/`0b94`/`0b95`/`0bc2` ALL `{"error":"No function found for 11bd:…}` ✓ (verbatim
+style; 13 probes).
+
+### Package A `11bd:0360..040d` (fill-A: twin-A arms + restore/mode-switch blocks)
+
+| item | output verbatim |
+|---|---|
+| listing state | 13 ownership probes + gap row above; bytes authority `read_memory(11bd:0360,174)` → `33db8ec3bb00108edbbe560fbf6704fca5a5bfe003b91000f3a58ec3c338093d09b00ee63733c0e6f28b0e100090e2fe8ec0268c1e060426c7060404ef09b00ae637c3d709dc0933c08ec026c706fc03940b268c0efe038b1e820f0bdb74049bdd279b0f01e00b0640000f01f0b0a0e620c30e04130433c08ec026c7066001940b268c0e62010f01e00b0640000f01f0e4f224feeb00e6f2803e2f0003720e9cfa52ba4001b001eefec8ee5a9dc3` (174 B, last `c3`@`040d`); slice-30 window parity: `03a4..03bd` of this string = `09dc0933c08ec026c706fc03940b268c0efe038b1e820f0bdb74` BYTE-IDENTICAL to slice-30's `read(11bd:03a4,26)` cite ✓ |
+| render W-A (region start `0360`) | `disassemble_bytes(11bd:0360,11bd:040d,dry_run)` → 76 insns emitted over `0360..040c`; block heads `0360 33db XOR BX,BX` … `037a 8ec3 MOV ES,BX`/`037c c3 RET`; forced-sync fragments from `037d` then `0382 0e`/`0383 e637` … `03a2 c3 RET`; `03a3 d7 XLAT`,`03a4 09dc`,`03a6 0933`,`03a8 ROR byte ptr [BP+0x26c0],0xc7`(5B),`03ad 06 PUSH ES`,`03ae fc CLD`,`03af ADD DX,[SI+0x260b]`,`03b3 8c0efe03 MOV word ptr [0x3fe],CS`(4B); `03b7..03d1` aligned (`8b1e820f`/`0bdb`/`7404`/`9b`/`dd27`/`9b`/`0f01e0`/`0b064000`/`0f01f0`/`b0a0`/`e620`/`c3`); `03d2..03e1` fragments (`0e PUSH CS`/`0413`/`0433`/`ROR`/`06 PUSH ES`/`60 PUSHA`/`01940b26`/then `03e2 8c0e6201 MOV word ptr [0x162],CS` re-sync); `03e2..040c` aligned tail ending `040c 9d POPF` (`040d c3` covered by the W-E window + byte read) |
+| render W-B (anchor `035f`, the west wall's LAST insn — tests region-head sync from the owner side) | `disassemble_bytes(11bd:035f,…,dry_run)` → `035f c3 RET` then `0360..037c` BYTE-IDENTICAL to W-A ✓✓ (the maximal 2-window agreement for block-1) then identical fragment pattern `037d 3809 CMP byte ptr [BX+DI],CL`/`037f CMP AX,0xb009`/`0382 PUSH CS`/`0383..03a2` identical ✓ |
+| render W-C (anchor `03a7` — the slice-30 `03a7 33c0`/`03a9 8ec0` staging cite + this pass's byte read) | `disassemble_bytes(11bd:03a7,…,dry_run)` → 43 insns: TRUE-aligned twin-A: `03a7 33c0 XOR AX,AX`/`03a9 8ec0 MOV ES,AX`/`03ab 26c706fc03940b MOV word ptr ES:[0x3fc],0xb94`(7B)/`03b2 268c0efe03 MOV word ptr ES:[0x3fe],CS`(5B)/`03b7 8b1e820f MOV BX,[0xf82]`/`03bb 0bdb OR BX,BX`/`03bd 7404 JZ 0x1000:1f93`(=`03c3` ✓ internal)/`03bf 9b WAIT`/`03c0 dd27 FRSTOR [BX]`/`03c2 9b WAIT`/`03c3 0f01e0 SMSW AX`/`03c6 0b064000 OR AX,[0x40]`/`03ca 0f01f0 LMSW AX`/`03cd b0a0 MOV AL,0xa0`/`03cf e620 OUT 0x20,AL`/`03d1 c3 RET`; then the SAME `03d2..03e1` fragments as W-A (agreement `03d2..040c` ✓ — the two windows' fragment lines are identical to each other); overlap `03b7..040c` byte-identical W-A↔W-C ✓ |
+| render W-D (anchor `0381` — tests the block-2 head hypothesis) | `disassemble_bytes(11bd:0381,…,dry_run)` → `0381 b00e MOV AL,0xe`/`0383 e637 OUT 0x37,AL`/`0385 33c0`/`0387 e6f2 OUT 0xf2,AL`/`0389 8b0e1000 MOV CX,[0x10]`/`038d 90 NOP`/`038e e2fe LOOP 0x1000:1f5e`(self ✓)/`0390 8ec0 MOV ES,AX`/`0392 268c1e0604 MOV ES:[0x406],DS`/`0397 26c7060404ef09 MOV ES:[0x404],0x9ef`/`039e b00a`/`03a0 e637`/`03a2 c3 RET` then `03a3 d7 XLAT`/`03a4 09dc`/`03a6 0933` fragments; overlap `0383..03a2` byte-identical to W-A/W-B ✓ (head `0381` renders ONLY from its own anchor — alignment-dependent, see class row) |
+| render W-E (anchor `03d6` — tests the block-5 head hypothesis) | `disassemble_bytes(11bd:03d6,11bd:040e,dry_run)` → 24 insns TRUE-aligned: `03d6 33c0 XOR AX,AX`/`03d8 8ec0 MOV ES,AX`/`03da 26c7066001940b MOV word ptr ES:[0x160],0xb94`(7B)/`03e1 268c0e6201 MOV word ptr ES:[0x162],CS`(5B)/`03e6 0f01e0 SMSW AX`/`03e9 0b064000`/`03ed 0f01f0 LMSW AX`/`03f0 e4f2 IN AL,0xf2`/`03f2 24fe AND AL,0xfe`/`03f4 eb00 JMP 0x1000:1fc6`(stub→`03f6` ✓)/`03f6 e6f2 OUT 0xf2,AL`/`03f8 803e2f0003 CMP byte ptr [0x2f],0x3`/`03fd 720e JC 0x1000:1fdd`(=`040d` ✓ internal)/`03ff 9c PUSHF`/`0400 fa CLI`/`0401 52 PUSH DX`/`0402 ba4001 MOV DX,0x140`/`0405 b001`/`0407 ee OUT DX,AL`/`0408 fec8 DEC AL`/`040a ee OUT DX,AL`/`040b 5a POP DX`/`040c 9d POPF`/`040d c3 RET` — region's last insn is a terminator ✓ |
+| maximal render-stable span(s) | 2-window agreements: `0360..037c` (W-A↔W-B, 14 insns/29 B) ✓; `0383..03a2` (W-A↔W-D, 12 insns) ✓; `03b7..040d` (W-A↔W-C on `03b7..040c` + W-E `03e2..040d` — combined the aligned tail block `03e6..040d` from W-E and the gate/FPU/mode tail `03b7..03d1` from W-C) ✓. Alignment-dependent heads (single-anchor renders): `0381` (block-2 head), `03a7` (block-3 twin head), `03d6` (block-5 head) — heads render clean only from their own anchors; sequential windows force `037d..0380`/`03a3..03a6`/`03d2..03d5` into insns (see class row). Render-disposition: a create at `0360` grows the body along W-A's alignment (stops at `037c RET` like `FUN_11bd_033c` precedent) — the 3 embedded island heads would each need their own entry ground, NONE found (census below) |
+| class sub-spans | CODE `0360..037c` — mirror RESTORE of the `033c..035f` save island: `0360 XOR BX,BX`/`0362 MOV ES,BX`⇒ES←0, `0364 MOV BX,0x1000`/`0367 MOV DS,BX`⇒DS←0x1000, `0369 SI←0xf56`, `036c DI←0x467`, `036f CLD`, `0370/0371 MOVSW` (copies `1000:f56/f58` → `0:467/469` = cluster-A arm cells — register-indirect, invisible to any substring-operand run), `0372 DI←0x3e0`, `0375 CX←0x10`, `0378 REP MOVSW` (copies `1000:f5a..f79` → `0:3e0..3ff` = IVT vectors `0xF8..0xFF` incl. the `0x3FC/3FE` INT-FF slot), `037a MOV ES,BX`, `037c RET` — exact mirror of `FUN_11bd_033c` (whose body this pass disasmed: `033d MOV DI,0xf56`/`0340 MOV SI,0x467`/`034c/034d MOVSW`/`0354 SI←0x3e0`/`0357 CX←0x10`/`035a REP MOVSW`) ✓. DATA-tenant `037d..0380` = `3809 3d09` = words `0x0938`/`0x093d` — dedup pair arg `0x381` (`436e` store; w0 `0x0938` PUSH-AX-band/w1 `0x093d` CLI — `## 0x29bc slot consumers` row verbatim "`0x381` (`436e`) | `037d/037f` `38093d09`"). CODE `0381..03a2` — CMOS `AL=0xE` OUT `0x37`, `33c0`+`OUT 0xf2,AL`, delay `CX←[0x10]/NOP/LOOP$`, `ES←AX`, `ES:[0x406]←DS`, `ES:[0x404]←0x9ef`, `AL=0xA` OUT `0x37`, RET (cell writes under in-body ES). DATA-tenant `03a3..03a6` = `d709 dc09` = `0x09d7`/`0x09dc` — dedup pair arg `0x3a7` (`4423` store) = H9 primary w0/w1 (`FUN_11bd_09d7` entry `09d7` live-probed via the slice-28 row; `09dc` CLI per dedup row `0x3a7`(`4423`)). CODE `03a7..03d1` — TWIN-A ARMS block (`03a7/03a9` ES←0 staging, `03ab` IP `26c706fc03940b`, `03b2` CS `268c0efe03` → physical `0:3FC/3FE` INT-FF) + `[0xf82]`-gated FPU-wait (`03b7 MOV BX,[0xf82]`/`03bb OR BX,BX`/`03bd JZ→03c3`/`03bf+03c2 WAIT`/`03c0 FRSTOR [BX]` — the `[0xf82]` FNSAVE-cell role is cite-only per slice-22's H9 row) + mode-switch tail (`SMSW/OR[0x40]/LMSW`) + `MOV AL,0xa0`/`OUT 0x20`/RET. DATA-tenant `03d2..03d5` = `0e04 1304` = `0x040e`/`0x0413` — dedup pair arg `0x3d6` (`44c6`) = H1 w0/w1 (`FUN_11bd_040e` entry + CLI — live body_start `040e` ✓). CODE `03d6..040d` — SECOND far-pointer arm pair: `ES:[0x160],0xb94` + `ES:[0x162],CS` under `33c0/8ec0` ES←0 staging (physical `0:160/162` = the cell whose defined-layer census is `042c MOV ES:[0x160],0x443` — `[0x160]` run `match_count:1` ✓ class-W only) + `SMSW/OR[0x40]/LMSW` + port-0xf2 RMW + `[0x2f]` gate (`803e2f0003`) + `JC→040d` + PUSHF/CLI/PUSH DX/`DX=0x140` OUT AL=1→0/POP DX/POPF + RET@`040d` |
+| inbound — defined layer | operand runs: `0x1000:1f30`→`match_count:0`; `0x360`→`0`; region-wide `0x1000:1f`→`match_count:3` (`0419 JC 0x1000:1fee`→`041e` internal FUN_11bd_040e ✓; `08c7 CALL 0x1000:1f0c`→`033c` island entry ✓; `29b5 JMP 0x1000:1f07`→`0337` thunk entry ✓) — ZERO land inside `1f30..1fdd` ⇒ NEGATIVE, defined-insn-only, at this-slice-time. Exact-form byte runs ALL `No matches found`: `b86003`,`686003`,`ea6003`,`c706????6003` (+ the arity-artifact row `c7????6003` — see matrix note); heads `0381`: `b88103`,`688103`,`ea8103` = 0; `03a7`: `b8a703`,`68a703`,`eaa703` = 0; `03d6`: `b8d603`,`68d603`,`ead603` = 0. (The `0x3a7`/`0x3d6`/`0x462`/`0x749` numbers ALSO exist as dispatch ARG constants at `4423/44c6/44ce/448e` — `MOV [BP+-0x5a],imm16` stores feeding the `092d/0934` vector machinery — cell selectors, NOT landing targets; cite-only per the `[BP + -0x5a]` census row verbatim.) |
+| inbound — byte-level edges FOUND into `0360` | three unconditional `e8` CALL rel16 whose operands land INSIDE the span (arith shown, each read+render grounded this pass): (1) `0b21 e83cf8 CALL 0x1000:1f30`: nextIP `0b24`(view `26f4`) + `0xf83c`(−`0x7c4`) = `0x1f30` ⇒ `11bd:0360` ✓ — source bytes in gap row D (`1000:26e2..2792`), H12-return block, UNOWNED (dry render W-B `0b21` + `read(11bd:0b12,177)` bytes); (2) `0b40 e81df8 CALL 0x1000:1f30`: nextIP `0b43`(view `2713`) − `0x7e3` = `0x1f30` ⇒ `0360` ✓ — H11-return block, UNOWNED (render + read bytes); (3) `0862 e8fbfa CALL 0x1000:1f30`: nextIP `0865`(view `2435`) − `0x505` = `0x1f30` ⇒ `0360` ✓ — H6 beyond-exit region (`0852..`), UNOWNED (dry render `0852`: `0852 fa/0853 83c406/0856 33c0/0858 8ed8/085a 8f062000 POP [0x20]/085e 8f062200 POP [0x22]/0862 e8fbfa CALL 0x1000:1f30` + `read(11bd:0852,22)`→`fa83c40633c08ed88f0620008f062200e8fbfa8606cc` ✓; the `## vector dispatch handlers` H6 row cites the same edge "installed-vector body candidate… → `0360`"). Disclosed: the three source sites are unowned bytes (regions D/H6) — the edges are static in form, the sources' own reachability is dynamic/installed |
+| west-wall fallthrough test | owner `FUN_11bd_033c` LAST insn = `035f RET`, bytes `c3` (`read(11bd:035f,2)`→`c333`; W-B render) — TERMINATES ⇒ fallthrough into `0360` REFUTED; west-west `caseD_0` relay `2eff26fa02` (`JMP word ptr CS:[0x2fa]` — unconditional far-indirect, refuting tail) ✓ slice-30 control cite re-confirmed live |
+| GATE row A | static-edge: FOUND at byte level (three `e8` landings into `0360`, arith shown, read+render grounded) — defined-layer NEGATIVE disclosed; fallthrough: REFUTED (`c3`@`035f`); mechanism: NOT NEEDED for `0360` (and the int-FF leg is CITED-SEMANTICALLY mode-dependent — slice-30 verbatim — so it could not carry any create here anyway); per-island: heads `0381`/`03a7`/`03d6` = NONE (all census classes zero — writer-open PERSISTS for twin-A at `03a7..03d1`). ⇒ `0360..037c` island = create-ADMISIBLE (with disclosure rows); `03a7..03d1`/`0381..03a2`/`03d6..040d` = LEAVE-as-bytes rows citing the gate text ("Half-chains/semantic-only ⇒ leave-as-bytes"; alignment-dependent heads got their render-disposition rows first ✓) |
+
+### Package B `11bd:045e..0490` (fill-B: twin-B arms + H2-cell tenant)
+
+| item | output verbatim |
+|---|---|
+| listing state | probes `045e`/`045f`/`0490`→No function; walls `restore_ss_sp_and_return` `0443..045d` / `FUN_11bd_0491` `0491..04bd`; gap row above (51 B, `has_undefined_bytes:true`); bytes `read(11bd:045e,51)` → `9104960433c08ec026c706fc03940b268c0efe030f01e00b0640000f01f052ba0404ec24fb0c02eb00ee5a8b0e100090e2fec3` — slice-30 `read(11bd:045e,18)` window `9104960433c08ec026c706fc03940b268c0e` is the prefix, BYTE-IDENTICAL ✓ |
+| render W-A (region start `045e`) | `disassemble_bytes(11bd:045e,11bd:0491,dry_run)` → **23 insns (end-inclusive — `0490 c3 RET` IS emitted; re-rendered live at fix wave)** `045e 91 XCHG AX,CX`/`045f 0496 ADD AL,0x96`/`0461 0433 ADD AL,0x33`/`0463 ROR byte ptr [BP+0x26c0],0xc7`(5B)/`0468 06 PUSH ES`/`0469 fc CLD`/`046a 03940b26 ADD DX,[SI+0x260b]`/`046e 8c0efe03 MOV word ptr [0x3fe],CS`(4B)/then TRUE-ALIGNED `0472 0f01e0 SMSW AX` … `0490 c3 RET` — the forced-sync window re-converges exactly at the mode-switch block head; the slice-28 H1-row fragment cites (`045e 91`,`045f 0496`,`0461 0433`) reproduce byte-identically ✓ |
+| render W-B (anchor `0462` — the slice-30 `0462 33c0`/`0464 8ec0` staging cite + byte read `n4=33`) | `disassemble_bytes(11bd:0462,11bd:0490,dry_run)` → 19 insns TRUE-aligned: `0462 33c0 XOR AX,AX`/`0464 8ec0 MOV ES,AX`/`0466 26c706fc03940b MOV word ptr ES:[0x3fc],0xb94`/`046d 268c0efe03 MOV word ptr ES:[0x3fe],CS`/`0472..0490` = W-A's aligned tail identical ✓✓; overlap agreement `0472..0490` (15 insns) byte-identical ✓ |
+| maximal render-stable span | `0472..0490` (31 B, 15 insns, 2-window ✓); alignment-dependent head `0462` (twin-B block `0462..0471` renders only from its own anchor); tenant `045e..0461` renders as fragments from the row head — cell pattern per class row |
+| class sub-spans | DATA-tenant `045e..0461` = `9104 9604` = `0x0491`/`0x0496` — dedup pair arg `0x462` (`44ce`) = H2 w0/w1, both land INSIDE the owned `FUN_11bd_0491` `0491..04bd` (w0 = body_start ✓ live probe; w1 = CLI+5 prelude shape per the dedup row "`0x462` (`44ce`) | `045e/0460` `91049604` | band `02d4..0732` | `0x0491` | `PUSH AX` `50` | `0x0496` | `CLI` `fa`"). CODE `0462..0490` — TWIN-B ARMS (`0466`/`046d` — the IDENTICAL encoding pair `26c706fc03940b`/`268c0efe03` to twin-A, physical `0:3FC/3FE`, ES←0 self-staged at `0462/0464`) + `SMSW/OR[0x40]/LMSW` + `PUSH DX/DX=0x404/IN AL,DX/AND 0xfb/OR 0x2/JMP+0/OUT DX,AL/POP DX` (aux-port RMW) + delay `CX←[0x10]/NOP/LOOP$` + `0490 RET` (region ends on a terminator ✓) |
+| inbound — defined layer | `0x1000:202e`→0; `0x1000:2032`→0; region-wide `0x1000:20`→`match_count:3` (`043e JMP 0x1000:2010`→`0440` internal H1-primary ✓; `0447 JMP 0x1000:2019`→`0449` internal half ✓; `049c JC 0x1000:2071`→`04a1` internal FUN_11bd_0491 ✓) — ZERO land inside `202e..2060` ⇒ NEGATIVE, defined-insn-only, at-this-slice-time; operand `0x45e`→0, operand `0x462`→`match_count:1` = `44ce MOV word ptr [BP + -0x5a], 0x462` bytes `c746a66204` — ARG-CONSTANT (dispatch), NOT a flow edge and NOT a landing in the span ✓ per-hit arith. Byte runs `b86204`/`686204`/`ea6204`/`c706????6204`/`b85e04`/`685e04`/`ea5e04` ALL `No matches found`; `c7????6204`→`11bd:44ce` (same ARG-CONSTANT — the modrm `46 a6` variant, not the cell-store `c706` class) |
+| west-wall fallthrough test | `restore_ss_sp_and_return` LAST insn = `045d RET` bytes `c3` (disasm + `read(11bd:045c,3)`→`58c391`) — REFUTED (slice-28 outer-wall terminator re-confirmed live) |
+| GATE row B | static-edge: NONE (defined NEGATIVE + byte NEGATIVE, both views, arith shown); fallthrough: REFUTED; mechanism: the int-FF consumer leg is CITED-SEMANTICALLY mode-dependent (slice-30 verbatim) and reaches the LANDING `0b94`, never the writer — region B's entry leg is the WRITER-OPEN leg, zero evidence found ⇒ **NONE ⇒ LEAVE**; twin-B arms stay writer-open (region unowned, row unchanged) |
+
+### Package C `11bd:0745..076e` (third-writer candidate + H5-cell tenant)
+
+| item | output verbatim |
+|---|---|
+| listing state | probes `0745`/`0746`/`076e`→No function; walls `FUN_11bd_073c` `073c..0744` / `FUN_11bd_076f` `076f..07b8`; gap row above (42 B `has_undefined_bytes:true`); bytes `read(11bd:0745,42)` → `6f0774078b0e100090e2feb045e8deff243f86c4e8e0ff33c08ec026c7066704940b268c0e6904e9af01` — slice-30 `read(11bd:075d,10)` window `c08ec026c7066704940b` is contained byte-identical ✓ |
+| render W-A (region start `0745`) | `disassemble_bytes(11bd:0745,11bd:076e,dry_run)` → 16 insns: `0745 6f OUTSW`/`0746 07 POP ES`/`0747 7407 JZ 0x1000:2320`(=`0750`?? — arith: nextIP `0749`+`0x07`=`0750` — forced-sync fragment over the tenant trio; the 3 fragment lines consume EXACTLY the 4 tenant bytes and the stream self-heals at) `0749 8b0e1000 MOV CX,[0x10]`/`074d 90 NOP`/`074e e2fe LOOP 0x1000:231e`(=self `074e` ✓)/`0750 b045 MOV AL,0x45`/`0752 e8deff CALL 0x1000:2303`(=`0733` ✓ arith `2303−1bd0=0733`, owned callee)/`0755 243f AND AL,0x3f`/`0757 86c4 XCHG AH,AL`/`0759 e8e0ff CALL 0x1000:230c`(=`073c` ✓ owned)/`075c 33c0 XOR AX,AX`/`075e 8ec0 MOV ES,AX`/`0760 26c7066704940b MOV word ptr ES:[0x467],0xb94`(7B)/`0767 268c0e6904 MOV word ptr ES:[0x469],CS`(5B)/`076c e9af01 JMP 0x1000:24ee`(=`091e` ✓ arith `24ee−1bd0=091e`, region ENDS on unconditional JMP — no fallthrough into the H5 wall ✓)|
+| render W-B (anchor `075c` — one insn boundary before the `075e 8ec0`/`0760` ES-form cite; slice-30 read-window at `075d` shows `075c`=`33` via this pass's region read) | `disassemble_bytes(11bd:075c,11bd:076e,dry_run)` → 5 insns, `075c..076e` BYTE-IDENTICAL to W-A ✓✓ (the third-writer arm pair is render-stable) |
+| render W-C (anchor `0749`, head hypothesis test) | `disassemble_bytes(11bd:0749,11bd:076e,dry_run)` → 13 insns = W-A's `0749..` window BYTE-IDENTICAL ✓✓ ⇒ code span `0749..076e` is 3-window render-stable; the tenant `0745..0748` is the ONLY mis-synced stretch (its trio-fragments happen to consume exactly 4 bytes) |
+| maximal render-stable span | `0749..076e` (38 B, 13 insns — W-A↔W-C agree on the FULL span; W-A↔W-B agree `075c..076e`) ✓ |
+| class sub-spans | DATA-tenant `0745..0748` = `6f07 7407` = `0x076f`/`0x0774` — dedup pair arg `0x749` (`448e`): "`0x749` (`448e`) | `0745/0747` `6f077407` | band `073c..0928` | `0x076f` | `PUSH AX` `50` | `0x0774` | `CLI` `fa`" — w0 = `FUN_11bd_076f` body_start ✓ live, w1 = H5 prelude CLI (slice-22 row `50 53 bb0010 fa` @`076f..0774` ✓). CODE `0749..076e` — delay + `AL=0x45` + PIT-leg CALLs into the OWNED islands `0733`/`073c` (RTC-encode idiom, same legs as H5's body) + **THE THIRD-WRITER PAIR: `075c/075e` ES←0 self-staging + `0760 26c7066704940b` = `ES:[0x467],0xb94` + `0767 268c0e6904` = `ES:[0x469],CS`** — under the in-row ES←0 staging the physical target is `0:467/469` = cluster A (the SAME cell as R6's `0684` pair — serialized tenants), value `0xb94` = the int-FF landing value; + `076c JMP 091e` tail (lands in band row `1000:24a6..24f8` = `08d6..0928`, H6-tail region — cite-only adjacency; the band block there holds `0916 b8940b MOV AX,0xb94` + `091b e81efa CALL 0x1000:1f0c`(=`033c`) read-grounded `read(11bd:0910,22)`→`0e100090e2feb8940b8cc9e81efab00fe670eb00b00a` — STATUS cite, NOT a chain claim) |
+| basis question (slice-30 OPEN item) | the `0760` store's basis: owner-absent ⇒ physical-cell basis stays OPEN as recorded; THIS pass adds the in-row staging evidence (`075c 33c0`/`075e 8ec0` immediately before, render-stable ×3, read-grounded) — the ES-form `26c7066704940b` now has a byte-cited staged ES←0 like R6's `0680/0682` — softened descriptor holds; no relabel |
+| inbound — defined layer | `0x1000:2315`→0; `0x1000:2319`→0; operand `0x745`→0; operand `0x749`→`match_count:1` = `448e MOV word ptr [BP + -0x5a], 0x749` bytes `c746a64907` — ARG-CONSTANT ✓; region-wide `0x1000:23`→`match_count:17` with EVERY target arith-checked and enumerated to the full count (1+1+1+4+3+3+1+1+1+1 = 17): `2309`×1→`0739`,`2312`×1→`0742`,`2350`×1→`0780`,`230c`×4→`073c`(island; sources `079c/07a8/07b4` `FUN_11bd_076f` + `07e1` `restore_ss_sp_and_write_port66`),`2371/2373/2375`×3→`07a1/07a3/07a5` self-stubs,`2303`×**3**→`0733` (sources `07ad` `e883ff` `FUN_11bd_076f`, `07d1` `e85fff` `restore_ss_sp_and_write_port66`, and the far-side `66be CALL 0x1000:2303` bytes `e872a0` `FUN_11bd_66b9` — arith WITH segment wrap: nextIP `66c1` + `0xa072` = `0x10733` ≡ `0733` ✓; grounding read `read(11bd:66bc,4)`→`b045e872` shows `e8 72`@`66be..66bf`),`2387`×1→`07b7`,`239f`×1→`07cf`,`23af`×1→`07df`,`23e4`×1→`0814` — ZERO land inside `2315..233e` (`0733` is the OWNED delay island, outside span) ⇒ NEGATIVE, defined-insn-only, at-this-slice-time. Byte runs `b84907`/`684907`/`ea4907`/`c706????4907`/`b84507`/`684507`/`ea4507` ALL `No matches found`; `c7????4907`→`11bd:448e` (same ARG-CONSTANT class) |
+| west-wall fallthrough test | `FUN_11bd_073c` LAST insn = `0744 RET` bytes `c3` (`read(11bd:0743,3)`→`23c36f` + disasm body) — REFUTED; also the region's OWN tail is `e9af01`@`076c` (unconditional JMP, refuting tail) — no adjacency flow either way with the H5 wall ✓ |
+| GATE row C | static-edge: NONE (both space-views + all exact forms zero; `448e` = ARG-CONSTANT non-flow, arith shown); fallthrough: REFUTED (`c3`@`0744`); mechanism: NONE found for ENTRY into `0749` (the writer-open leg persists); the region's significance is the THIRD-WRITER arm — a landing value `0xb94` store with basis OPEN cannot itself ground a create ⇒ **NONE ⇒ LEAVE**; basis stays OPEN (status, cites added) |
+
+### Package D landing band `11bd:0b12..0bc2` (row `1000:26e2..2792`; landing head `0b94`)
+
+| item | output verbatim |
+|---|---|
+| listing state | probes `0b12`/`0b13`/`0b93`/`0b94`/`0b95`/`0bc2`→No function; walls `FUN_11bd_0ae2` `0ae2..0b11` / `FUN_11bd_0bc3` `0bc3..0bd0`; gap row above verbatim — band `0b12..0bc2` UNCHANGED vs slice-30 ("band sits in gap row `1000:26e2..2792`" ✓); bytes `read(11bd:0b12,177)` → `ebfdb800108ed88e167c0f8b267a0fe83cf8b00de67061e621c706d008ff07813e3500008074035b58c3e9bc1dfae81df861e621c706d008ff07803e350000750d803e3f00007403e886005b58c3518b0e100090e2fee87e0059ebefb800108ed88e167c0f8b267a0fb00de67061e471803e350000e492750224fd24fee6925b58c3b800108ed88ed08b26960981ec80018bec8bfcb92a00fc33c0f3aa892696098becc74618feff8b36500f6a00e8ea16` |
+| render W-A (landing anchor `0b94` — the int-FF twins' IP value, slice-30 chains rows) | `disassemble_bytes(11bd:0b94,11bd:0bc2,dry_run)` → 17 insns: `0b94 b80010 MOV AX,0x1000`/`0b97 8ed8 DS`/`0b99 8ed0 SS`/`0b9b 8b269609 SP←[0x996]`/`0b9f 81ec8001 SUB SP,0x180`/`0ba3 8bec BP←SP`/`0ba5 8bfc DI←SP`/`0ba7 b92a00 CX←0x2a`/`0baa fc CLD`/`0bab 33c0 XOR AX,AX`/`0bad f3aa REP STOSB`/`0baf 89269609 [0x996]←SP`/`0bb3 8bec`/`0bb5 c74618feff [BP+0x18],0xfffe`/`0bba 8b26500f SP←[0xf50]`/`0bbe 6a00 PUSH 0x0`/`0bc0 e8ea16 CALL 0x1000:3e7d`(= `3e7d−1bd0 = 0x22ad` = **print_error_message** ✓ — block ENDS on the CALL at `0bc2`, no RET) — the slice-30 landing-quote "`b80010/8ed8/8ed0/8b26 9609/SUB SP,0x180/MOV DI,SP/MOV CX,0x2a/REP STOSB` = stack-setup stub `0b94..0bad+`" reproduces BYTE-IDENTICAL ✓ (stack-0x2a-byte-zero setup + far-args error-call = runtime landing body) |
+| render W-B (row head `0b12`) | `disassemble_bytes(11bd:0b12,11bd:0bc2,dry_run)` → 71 insns over the full row: `0b12 ebfd JMP 0x1000:26e1`(=`0b11` HLT retry — edge INTO the west wall) / H12-return `0b14 b80010…0b21 e83cf8 CALL 0x1000:1f30`(=`0360` — Region-A inbound edge #1, arith `26f4−7c4=1f30` ✓)/`0b24 b00d e670`/`61`/`e621`/`c706d008ff07 [0x8d0],0x7ff`/`813e35000080 CMP word[0x35],0x8000`/`7403`→`0b3c`/`5b58 c3`@`0b3b`/`0b3c e9bc1d JMP 0x1000:44cb`(=`28fb` pocket-adjacent row — out-edge)/ H11-return `0b3f fa CLI`/`0b40 e81df8 CALL 0x1000:1f30`(=`0360` — inbound edge #2, arith `2713−7e3=1f30` ✓)/`61 e621 c706d008ff07/803e350000/750d`→`0b60`/`803e3f0000/7403`→`0b5d`/`0b5a e88600 CALL 0x1000:27b3`(=`0be3` owned body)/`5b58 c3`@`0b5f`/ error-delay block `0b60 51 PUSH CX`/`8b0e1000`/`90`/`e2fe LOOP`→self/`0b68 e87e00 CALL 0x1000:27b9`(=`0be9` owned entry)/`59`/`0b6c ebef JMP 0x1000:272d`(=`0b5d` — INTERNAL edge into the H11-return tail)/ H8-return `0b6e b80010…0b7f 61`/`0b80 e471`/`803e350000`/`0b87 e492`/`7502`→`0b8d`/`24fd`/`24fe`/`e692`/`5b58 c3`@`0b93`/ landing stub `0b94..0bc2` = W-A BYTE-IDENTICAL over the overlap ✓✓ |
+| maximal render-stable span | `0b94..0bc2` (47 B, 17 insns, 2-window agreement ✓); row body `0b12..0b93` single-window (W-B) — every island head `0b14`/`0b3f`/`0b60`/`0b6e` renders TRUE-aligned from the row-head window (the retry pair `ebfd` consumes `0b12..0b13` exactly) — no tenant pattern anywhere in the row (all operands are disps/imms of cells/ports, no far-pointer cell pairs — checked against the 14-arg dedup pair list: no pair source lies inside `0b12..0bc2`) |
+| class sub-spans | CODE `0b12..0b13` halt-retry tail (H12 adjacency — its `JMP→0b11` lands on the OWNED `f4` HLT); CODE `0b14..0b3e` H12-return half (slice-22 proposed `[0b14..0b3e]` — SS/SP restore + `CALL→0360` + CMOS `0xd` + PIC `0x7ff` + `[0x35]`-0x8000 gate + `5b/58/RET` + `JMP→28fb`); CODE `0b3f..0b5f` H11-return half (slice-22 `[0b3f..0b6d]` re-derived: RET@`0b5f`, `CALL→0360`, `CALL→0be3`); CODE `0b60..0b6d` error-delay block (`CALL 0be9` + `JMP→0b5d` merge-back); CODE `0b6e..0b93` H8-return half (CMOS/NMI `e670 AL=0xd`, A20-ish port-0x92 RMW, RET@`0b93`); CODE `0b94..0bc2` LANDING STUB (int-FF `0xb94` value's target — stack-frameset + `PUSH 0x0`/`CALL print_error_message`@`22ad`) |
+| inbound — defined layer | `0x1000:26e2`→0; `0x1000:2764`→0; `0x1000:26e`→0; operand `0xb94`→`match_count:0` (⇒ EVERY `0xb94`-carrying insn — the twins `03ab/0466`, R6 `0684`, region-C `0760`, block-5 `03da`, callee `0726`, band `0916` — is OUTSIDE the defined layer: writer-open confirmed cross-method ✓ the run catches the class: compare `[0x160]`→`match_count:1` `042c`); operand `0xb12`→0 (note: `mem_grow_relocate` at `1000:0b12` is a DIFFERENT-space symbol — no `11bd:0b12` edge); region-wide `0x1000:27`→`match_count:20`, per-hit arith: `279e`→`0bce`,`27f8`×4→`0c28`,`27a1`→`0bd1`,`27b3`→`0be3`,`27c5`→`0bf5`,`27dd`×4→`0c0d`,`27b9`×4→`0be9`,`27cb`×2→`0bfb`,`27fb`→`0c2b`,`2793`→`0bc3` (= wall+1, the `2903 CALL` lands INSIDE `FUN_11bd_0bc3`, NOT in the row) — ZERO land inside `26e2..2792` ⇒ NEGATIVE, defined-insn-only, at-this-slice-time. Byte runs: `68940b`/`ea940b`/`b8120b`/`68120b`/`ea120b`/`c706????120b`/`c706????6003` ALL `No matches found`; `b8940b`→`11bd:0916` READ-GROUNDED `MOV AX,0xb94` (value materialization in band `08d6..0928` — AX-dest, not a flow edge; cite-only status); `c706????940b`→`[03ac,03db,0467,0685,0727,0761]` — SIX cell-store sites, ALL read-grounded this pass (`03ac` region-A read; `03db` read `03d2,20`→`…26c7066001940b…`; `0467` region-B read; `0685` read `11bd:0685,6`→`c7066704940b` — the `940b` imm value bytes (the `26` ES-prefix byte sits at `0684`); `0727` read `0722,16`→`33c08ec026c706a204940b268c0ea404` + dry render `0716`: `0726 26c706a204940b MOV ES:[0x4a2],0xb94`/`072d 268c0ea404 ES:[0x4a4],CS`/`0732 RET`; `0761` region-C read) |
+| west-wall fallthrough test | `FUN_11bd_0ae2` LAST insn = `0b11 HLT` bytes `f4` (`read(11bd:0b10,4)`→`64f4ebfd` + disasm body `{"address":"11bd:0b11","instruction":"HLT"}`) — TERMINATES ⇒ no fallthrough into `0b12`; and the row's FIRST insn `ebfd`@`0b12..0b13` jumps BACK into the wall (`→0b11`) — the retry pair is the H12 halt-loop, cited not claimed |
+| GATE row D | static-edge: NONE (every class zero arith-checked — nothing lands inside `26e2..2792`, `2793`/`0bc3` miss by 1 byte); fallthrough: REFUTED (`f4`@`0b11`); mechanism: the ONLY cited reachability route to the `0b94` stub is the int-FF IVT fetch (`0:3FC/3FE` → `CS:0xb94`), which is **CITED-SEMANTICALLY mode-dependent (slice-30 relabel verbatim: "NOT CLOSED"; RM-#UD/PM-null-IDT unresolved) — a region reachable ONLY through that leg FAILS the create gate** ⇒ **FAIL ⇒ LEAVE** for `0b94..0bc2`; same class for the return halves (`0xb14` armed by OWNED `0aff`, `0xb6e` by OWNED `09b6`, `0b3f` by the H11 frame — cell/stack arms whose readers are the far-ret runtime, DYNAMIC — slice-28 precedent vocabulary), and `0b12..0b13` is H12-adjacent tail — LEAVE ×5 (the 5 spans the disposition rows enumerate: stub `0b94..0bc2`, H12-ret `0b14..0b3e`, H11-ret `0b3f..0b5f`+err-delay `0b60..0b6d`, H8-ret `0b6e..0b93`, retry tail `0b12..0b13` — relabeled from "×4" at the final-review wave; the enumeration always listed 5). The `0916`/`0726`/`03da` value-materializations are STATUS facts (below), not grounds |
+
+### Chains-map status updates (status ONLY — no relabel beyond what bytes give)
+
+| chains row | slice-30 status | status + cites at this slice-time |
+|---|---|---|
+| IVT-twin-A `03ab`+`03b2` (fill `0360..040d`) | HALF (writer-open + landing-open; consumer leg mode-dependent) | **PERSISTS — arms NOT inside any gate-passing span candidate**: block `03a7..03d1` entry census NONE (Package A rows), writer-open unchanged; NEW byte facts (status only): the block's aligned render is `03a7 33c0`/`03a9 8ec0` staging (slice-30 cite reproduces exactly) and the fill's `0360..037c` island = static MIRROR RESTORE of `0:467/469` + IVT `0:3e0..3ff` (register-indirect MOVSW/`f3a5` — invisible to the substring-operand runs that produced T1's `match_count:8` writers/0 readers; the 8/0 census numbers stand, the scope sentence "consumed only by runtime/reset-path code" gains byte-cited reset-PATH code evidence: save `033c..035f` (OWNED) ↔ restore `0360..037c` (unowned island) |
+| IVT-twin-B `0466`+`046d` (fill `045e..0490`) | HALF | **PERSISTS** — block `0462..0490` gate NONE; aligned render reproduces the twin encoding byte-identically (`26c706fc03940b`/`268c0efe03`) |
+| third-writer `0761`/`0760` (fill `0745..076e`) | basis OPEN, ES-form candidate softened | **OPEN persists** — ES-form now render-stable ×3 windows + in-row `075c/075e` ES←0 staging byte-cited + read-grounded `c706????940b` hit at `0761`; physical-basis adjudication still needs the entry leg (NONE found) — unchanged status, strengthened cites |
+| landing `0b94` (band row `1000:26e2..2792`) | landing-open | **PERSISTS — gate FAIL** (Package D: only route = mode-dependent IVT leg); stub render-stable `0b94..0bc2` 17 insns (2-window ✓, slice-30 quote parity ✓), ends `CALL print_error_message` (`0bc0 e8ea16` → `22ad` arith ✓); row byte-identical to slice-30 |
+| consumer leg (`0ae0 INT 0xff` in `FUN_11bd_0ad5`) | CITED-SEMANTICALLY (mode-dependent) — NOT CLOSED | UNTOUCHED — re-cited verbatim in gates A/D; no new evidence either way this pass |
+| (new census fact, no chain row) `0xb94` writer-family | T1 table listed twins/`0684`/`0760`-candidate | exact-form run `c706????940b` (read-grounded ×6) shows value `0xb94` arms FOUR nominal cell pairs with the 6-site → 4-pair mapping {`0x3fc/0x3fe`: twins `03ab`+`03b2` (c7-fields `03ac`/—) and `0466`+`046d` (c7 `0467`); `0x467/0x469`: `0684`-R6 (c7 `0685`) and `0760`-C (c7 `0761`); `0x160/0x162`: `03da`-A-block-5 (c7 `03db`); `0x4a2/0x4a4`: `0726`-callee-region (c7 `0727`) NEW — cluster-D, NOT `0x467/0x469` (erratum at final review: this row earlier mis-grouped `0726` under the `467` slot; the section's own cites refute it — `read(11bd:0722,16)`→`33c08ec026c706a204940b268c0ea404` re-confirmed live at the fix wave, hex↔data reconciled: `33 c0 8e c0 26 c7 06 a2 04 94 0b 26 8c 0e a4 04` = `0722 XOR AX,AX`/`0724 MOV ES,AX`/`0726 26c706a204940b MOV ES:[0x4a2],0xb94`/`072d 268c0ea404 ES:[0x4a4],CS` ✓ same in-body-staged shape, cluster-D target)}, plus value-materialization `0916 MOV AX,0xb94` + `091b CALL 0x1000:1f0c`(=`033c`) in band `08d6..0928` — STATUS fact; `[0x160]` defined-layer run = 1 (`042c` writer, class-W, ZERO readers — control that the search sees this disp class); `0:4a2/4a4` = cluster-D nominal — H10's cell class; NO chain relabel from this census (reader legs unchanged per the 36-matrix) |
+
+### Disposition proposals + bar pre-tests (Task-1; Task-2 executes nothing beyond gate-passing rows)
+
+| region | proposal | bar pre-test |
+|---|---|---|
+| A `0360..037c` | **CREATE candidate** (S..E = `0360..037c`, 29 B, 14 insns — Task-2 note: first printed "19 B, 15 insns" corrected live at Writes execution: span bytes `0x37c−0x360+1 = 0x1D = 29`, emitted instruction list 14) — entry ground: byte-level static edge (`0b21`/`0b40`/`0862` `e8`→`0x1000:1f30`, arith shown, read+render grounded) + head renders clean/aligned from BOTH `0360` and `035f` windows; class CODE; disclosure rows bind (defined-layer NEGATIVE, sources unowned bytes, island-internal heads unclaimed) | printed ops of THAT span only (`33db/8ec3/bb0010/8edb/be560f/bf6704/fc/a5/a5/bfe003/b91000/f3a5/8ec3/c3`): candidate `copy_words_to_cells_and_return` — copy/return class, PASS at ops level; IVT/mode-flavored words (`vector/ivt/install/reset`): excluded — the body has no INT/IRET pairing and the RM-#UD/PM-IDT question is unresolved ⇒ default `FUN_11bd_0360` stands (NOT-CONFIRMED rule); direction words ("restore") banned by the twin-shape rule + not printed by ops (MOVSW copy only) |
+| A `03a7..03d1` | **LEAVE-as-bytes** — gate text cite: entry census NONE (both space-views + exact forms + west fallthrough refuted `c3`@`035f`… wall is NOT adjacent to this block — no adjacency either); twin-shaped body ⇒ direction words banned; writer-open status row above | n/a — no create candidate |
+| A `0381..03a2`, `03d6..040d` | **LEAVE-as-bytes** — entry NONE × heads (arith table above); alignment-dependent heads got render-disposition rows first (W-D/W-E) ✓ | n/a |
+| A tenants `037d..0380`, `03a3..03a6`, `03d2..03d5` | **DATA-define PROPOSAL (future listing decision)** — far-pointer cell pairs, dedup-cited (`0x381`/`0x3a7`/`0x3d6` rows), value words land on handler entries/CLI sites in OWNED bodies; not create material | n/a |
+| B `045e..0490` | **LEAVE** (CODE block `0462..0490`, gate NONE) + tenant `045e..0461` DATA-define proposal (arg `0x462`, lands inside OWNED `FUN_11bd_0491`) | n/a — no create candidate; nothing to name |
+| C `0745..076e` | **LEAVE** (CODE `0749..076e`, gate NONE; third-writer basis stays OPEN) + tenant `0745..0748` DATA-define proposal (arg `0x749`, lands inside OWNED `FUN_11bd_076f`); disclosure: out-edges `0752→0733`, `0759→073c` (OWNED callees — a create here WOULD own edges into defined bodies), `076c→091e` (unowned band, cite-only) | n/a — no create candidate |
+| D `0b12..0bc2` | **LEAVE ×5** (stub `0b94..0bc2` gate FAIL — mode-dependent-only leg, stated explicitly per the binding rule; return halves `0b14..0b3e`/`0b3f..0b5f`(+/`0b60..0b6d`)/`0b6e..0b93` = DYNAMIC cell/push arms — slice-28 vocabulary; retry tail `0b12..0b13` = H12 adjacency) | n/a |
+
+### Reads executed (ZERO-WRITE proof) + controls
+
+`list_instances`×1; `connect_instance`×1; `get_current_program_info`×1 (`function_count:335` ✓); `get_function_count`×1 (335 ✓); `get_address_spaces`×1; `find_code_gaps`×2 (FULL 100+49 = 149/149 ✓, overlay ledger spot rows present ✓); `get_function_by_address`×30 (14 A/B walls+probes, 14 C/D walls+probes, 2 re-probes `0733`/`0bc3`); `disassemble_function`×5 (`033c`,`0337`,`073c`,`0ae2`,`0443` — owner bodies for terminators); `disassemble_bytes`×15 EXCLUSIVELY `dry_run=true` (A `0360`/`03a7`/`035f`/`0381`/`03d6`, B `045e`/`0462` + fix-wave re-render `045e..0490` end-inclusive, C `0745`/`075c`/`0749`, D `0b94`/`0b12`, context `0716`/`0852`); `read_memory`×16 (four region windows + wall terminator bytes + grounding for every byte-pattern POSITIVE: `03d2`,`0722`,`0683`,`0910`,`0337`,`0852`, fix wave: `66bc`,`0685,6`); `search_instructions`×21 valid runs incl. the fix-wave re-run of `0x1000:23` (all `instructions_scanned:15694`, `truncated:false`, scope program — 6 aborted first-attempts used the wrong param name, read-only no-ops); `search_byte_patterns`×41 (exact forms + masked cell-store runs; the arity-artifact pair `c7????940b`→0 vs corrected `c706????940b`→6 disclosed: the FIRST masked run missed the ModRM byte position and is RETRACTED as a negative — superseded by the arity-correct run, positives read-grounded per the flakiness rule). NO create/rename/comment/prototype/define/flow-repair/`save_program`; no transaction; `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn unstaged. Negatives scoped defined-insn-only at-this-slice-time + zero-hit exact-form runs as existence-negatives (4+ byte stable forms). Controls quoted not relied: `[0x2fa]` run = 1 (`0337` — relay reader exists and is found ✓), `[0x160]` run = 1 (`042c` — class-W store found, reader zero ✓), `44ce`/`448e` ARG-CONSTANT singles (imm-store class is visible to both engines ✓), `29b5 JMP 0x1000:1f07` + `08c7 CALL 0x1000:1f0c` (branch-target rendering is visible to the defined run ✓ — so the zero LANDINGS in the region-wide runs are real, not blind spots). Prior sections byte-identical (append-only).
+
+### Fix wave 1 (review round 1 of `28bc7b4`; enumeration completeness + render count + read-cite, ZERO writes)
+
+(1) **IMPORTANT fixed — Package C `0x1000:23` row under-enumerated a claimed-complete
+per-hit table**: the row printed `2303`×2 but the live run's 17 hits contain `2303`×**3**
+— the missing hit is `11bd:66be CALL word… 0x1000:2303` bytes `e872a0` (`FUN_11bd_66b9`),
+an out-of-band near CALL into the OWNED island `0733`; enumerated items now sum 1+1+1+4+3+3+1+1+1+1 = 17
+✓ against `match_count:17` (row rewritten in place WITH the wrap arith: nextIP `66c1` +
+`0xa072` ≡ `0733` mod `0x10000`). LIVE re-verified this wave: `search_instructions(operand_pattern=
+"0x1000:23")` → re-run reproduced `match_count:17`, `instructions_scanned:15694`,
+`truncated:false` — the three `2303` sources' addresses read off the run output (`07ad`,`07d1`,
+`66be`) ✓; `read(11bd:66bc,4)` → `b045e872` grounds `66be`'s `e8 72` opcode bytes ✓ (flakiness
+rule satisfied — the run itself is defined-layer output with `bytes` per hit, read re-confirmed).
+Conclusion unchanged as the reviewer stated: `0733` lies outside `2315..233e` ⇒ the NEGATIVE
+stands; the fix repairs the completeness CLAIM, not any verdict. (2) **Minor — Package B W-A
+count**: end-exclusive window `045e..0490` emitted 22 insns while the row's prose included
+`0490 c3 RET`; row now cites the END-INCLUSIVE live re-render
+`disassemble_bytes(11bd:045e,11bd:0491,dry_run)` → `instructions_total:23` (`0490 "bytes":"c3"`
+emitted ✓; every other line byte-identical to the first render — no decode drift). (3) **Minor —
+`0685` grounding**: `read(0683,6)` showed `c026c7066704` without the value bytes; replaced by
+`read(11bd:0685,6)` → `c7066704940b` — the six `c706????940b` positives NOW all show imm
+`940b` bytes in their cited windows (`03ac`+`03db` via `03d2,20`; `0467` via the region-B
+window; `0685` via `0685,6`; `0727` via `0722,16`; `0761` via the region-C window).
+Ledger rows updated (dry-renders 14→15, reads 14→16, valid defined-runs 20→21). All wave calls
+read-only; no create/rename/comment/define/flow-repair/`save_program`; no transaction;
+`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged. Prior sections AND this
+section's untouched rows byte-identical.
+
+### Writes (Task 2 — capped create, executed 2026-09-30, program `/fifa96.exe`)
+
+**Step 1 pre-write parity per region (live re-read vs the Task-1 quotes) — ZERO DRIFT on all
+four.**
+- **A:** `(0360)`/`(0361)`→`{"error":"No function found …"}`; walls `(035f)`→`FUN_11bd_033c
+  033c..035f` + tail bytes `read(11bd:035f,2)`→`c333` ✓, `(040e)`→`FUN_11bd_040e 040e..0442` ✓;
+  span PREFIX bytes `read(11bd:0360,19)`→`33db8ec3bb00108edbbe560fbf6704fca5a5bf` = the Task-1 W-A
+  window prefix, byte-identical ✓ (this 19-B window ends mid-disp at `0372`; FULL-span parity is
+  the real-disasm row's 29 B/14-insn byte-identity vs the dry W-A render — cross-cited there); the three byte-level `e8` sources re-grounded byte-exact:
+  `read(0b21,3)`→`e83cf8`, `read(0b40,3)`→`e81df8`, `read(0862,3)`→`e8fbfa` ✓ (arith → `0x1f30`
+  unchanged per the Task-1 table).
+- **B:** `(045e)`/`(0490)`→no function; `read(045e,51)` BYTE-IDENTICAL to the Task-1 window;
+  walls `restore_ss_sp_and_return`/`FUN_11bd_0491` re-probed ✓.
+- **C:** `(0745)`/`(076e)`→no function; `read(0745,42)` BYTE-IDENTICAL ✓; walls
+  `FUN_11bd_073c 073c..0744` / `FUN_11bd_076f 076f..07b8` ✓.
+- **D:** `(0b94)`/`(0bc2)`→no function; `read(0b94,47)` BYTE-IDENTICAL to the Task-1 stub window
+  ✓; walls `FUN_11bd_0ae2 0ae2..0b11` / `FUN_11bd_0bc3 0bc3..0bd0` ✓.
+Parity surfaced no new complete chain ⇒ exactly the ONE gate-passing candidate executes (cap 1).
+
+**Executed create — `0360..037c` (capped path, ZERO nudges needed).**
+
+| item | output verbatim |
+|---|---|
+| before-state | `{"error":"No function found for 11bd:0360"}` + covering gap row verbatim (pre-census): `{"start":"1000:1f30","end":"1000:1fdd","size":174,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"FUN_11bd_033c","before_function_address":"11bd:033c","after_function":"FUN_11bd_040e","after_function_address":"11bd:040e"}` |
+| real disassembly | `disassemble_bytes(11bd:0360,11bd:037d)` NON-dry (first write of the task) → `{"bytes_disassembled":29,"instructions_total":14,"truncated":false}` — 14 insns `0360 33db XOR BX,BX` … `037c c3 RET`, BYTE-IDENTICAL to Task-1 dry render W-A ✓ (the create head was 2-window-stable pre-write — never a create baked from a false head; the alignment-dependent island heads `0381/03a7/03d6` were NOT disassembled or created) |
+| create_function | `create_function(11bd:0360, disassemble_first=true)` → `{"success":true,"function_name":"FUN_11bd_0360","entry_point":"11bd:0360","body_size":29,"message":"Function created successfully at 11bd:0360"}` — body = proposal `0360..037c` EXACT (29 B, 14 insns); NO nudge used (0 of 1 allowed); no analyzer surplus: nothing beyond `037c` entered the body (see stop-short row) |
+| post-read-back | `(0360)`→`{"name":"FUN_11bd_0360",…,"body_start":"11bd:0360","body_end":"11bd:037c"}` ✓ bounds vs proposal: zero delta; `(037c)`→same function (last byte owned); STOP-SHORT RE-CITES: `(037d)`→`{"error":"No function found for 11bd:037d"}` — the first foreign byte after `body_end` is the tenant-pair head `037d` (`3809 3d09` = arg `0x381` per the dedup row; bytes NOT defined, NOT absorbed); west neighbor `FUN_11bd_033c` `033c..035f` re-probed unchanged; east region wall `FUN_11bd_040e` `040e..0442` unchanged; `disassemble_function(11bd:0360)` post → 14 insns verbatim (= real render) |
+| rename (bar) | `rename_function('FUN_11bd_0360'→'copy_words_to_cells_and_return')` → `{"status":"success",…,"warnings":["Function name 'copy_words_to_cells_and_return' — main part … not PascalCase. Expected: CopyWordsToCellsAndReturn","…contains underscores. Use PascalCase after the module prefix."]}` — style warnings only; name = the Task-1 bar pre-test candidate VERBATIM ("candidate `copy_words_to_cells_and_return` — copy/return class, PASS at ops level"); ops-decisive: `a5/a5/f3a5` printed = copy, `c3` = return; `cells` = the map's own disp-slot vocabulary (cluster-A `[0x467]/[0x469]` + block `[0x3e0..0x3ff]`, in-body `bf6704/bfe003` immediates); IVT/mode words (vector/ivt/install/reset) EXCLUDED — fail the slice-30 mode-survival bar (no INT/IRET pairing in-body, RM-#UD/PM-IDT unresolved); direction words ("restore") banned by the twin-shape rule and not printed by ops; snake_case = the program's established vocabulary (`copy_string_bounded`, `restore_ss_sp_and_return`, `write_slot_from_cursor`) |
+| plate | `set_comment(11bd:0360, plate)` → `{"status":"success","message":"Set plate comment at 11bd:0360","warnings":["Plate comment missing Algorithm section","Plate comment missing Parameters section","Plate comment missing Returns section"]}` — boilerplate-only (same class as prior slices' behavioral plates); `get_comment(11bd:0360)` read-back `plate` = the text quoted in the read-back note (C: none — behavioral (word-copy island: … exact mirror of the OWNED save island FUN_11bd_033c 033c..035f … Twin-A arms 03a7..03b6 are NOT in this body (writer-open persists) …) |
+
+**NOT-created rows (gate-failure citations, binding texts).**
+- A `03a7..03d1` (TWIN-A arms): **LEAVE** — Task-1 gate text verbatim: "heads `0381`/`03a7`/`03d6` =
+  NONE (all census classes zero — writer-open PERSISTS for twin-A at `03a7..03d1`)"; both
+  space-views + exact forms 0 at pre-check parity re-runs; NOT in the created body (body_end
+  `037c` cited above) ⇒ arms stay writer-open.
+- A `0381..03a2`, `03d6..040d` (islands): **LEAVE** — "entry NONE × heads";
+  tenants `037d..0380`/`03a3..03a6`/`03d2..03d5`: **leave as bytes** (DATA-define remains a
+  future listing decision — data mutations outside sanctioned write classes).
+- B `045e..0490`: **LEAVE** — gate verbatim: "static-edge: NONE … fallthrough: REFUTED …
+  **NONE ⇒ LEAVE**; twin-B arms stay writer-open".
+- C `0745..076e`: **LEAVE** — gate verbatim: "**NONE ⇒ LEAVE**; basis stays OPEN"; `0760`
+  ES-form remains basis-OPEN (owner-absent), cites unchanged.
+- D `0b94..0bc2` + return halves: **LEAVE ×5** — gate verbatim: "the ONLY cited reachability
+  route to the `0b94` stub is the int-FF IVT fetch … **CITED-SEMANTICALLY mode-dependent …
+  a region reachable ONLY through that leg FAILS the create gate ⇒ FAIL ⇒ LEAVE**".
+
+**Save + FULL census protocol (written — program mutated).**
+`save_program(/fifa96.exe)` → `{"success":true,"message":"Program saved successfully"}`.
+`get_function_count` 335 (pre) → **336** (post) = Δ1 = EXACTLY the write-set (one function;
+no analyzer-side island born — the post fetch shows no new owner anywhere in `037d..040d`:
+`(037d)` no-function re-probed ✓). `find_code_gaps`: FULL pagination BOTH sides — pre 100+49 =
+`total:149`, post re-pull `total:149`, Δ0. **FLIP — named, exactly one:** row A
+`{"start":"1000:1f30","end":"1000:1fdd","size":174,…,"before_function":"FUN_11bd_033c",…}` →
+`{"start":"1000:1f4d","end":"1000:1fdd","size":145,"has_undefined_bytes":true,
+"has_orphaned_instructions":false,"before_function":"copy_words_to_cells_and_return",
+"before_function_address":"11bd:0360","after_function":"FUN_11bd_040e",…}` — new start
+`1f4d` = `037d+1bd0` ✓ arith (remainder begins AT the tenant-pair head); no other row appeared,
+disappeared or changed state. All four neighborhoods re-derived post, verbatim UNCHANGED: B
+`1000:202e..2060` (51 B), C `1000:2315..233e` (42 B), D `1000:26e2..2792` (177 B) ✓ + the A
+remainder row above; A-neighbor companion rows re-observed identical (`1ea4..1f06` before,
+`202e..` after ✓); every touched wall re-probed: `033c..035f`/`037d`/`040d`/`040e`-class ✓ plus
+B/C/D walls in the parity block. Overlay spots: `1000:c87e`/`cc19`/`cefa` (offset-130 fetch ✓),
+`de60`/`e270`/`e424`/`e685`/`e7a0`/`e8a7`/`f193`/`f266` + `00000000` row present ✓ (post tail
+fetch). Scope line: `search_instructions` post runs `instructions_scanned:15708` = 15694 + 14 =
+EXACTLY the 14 new defined insns, `truncated:false`, scope program; the `0x1000:1f30` operand
+run is STILL `match_count:0` (the three `e8` sources remain unowned bytes — as disclosed at
+Task-1: ownership of the TARGET does not define the CALLERS); `0x1000:1f` prefix run post →
+same 3 hits (`1fee`/`1f0c`/`1f07`), zero into the remainder.
+**Mtime:** captured BEFORE the writes — `fifa96.rep/idata/00/00000000.prp` →
+`2026-09-29 17:56:21.166450572 -0300`, `…/db.30.gbf` → `2026-09-30 11:32:00.103296466 -0300`,
+`change.data.gbf` → `2026-09-30 11:32:00.077457456`, `change.map.gbf` → `11:32:00.102572337`;
+AFTER the save: `db.31.gbf` NEW `2026-09-30 18:20:58.288436462 -0300` (version rotation = the
+save) and the pre-fetch `db.30.gbf` is GONE from disk — ABSORBED by save-time revision
+consolidation (the post-stat lists `db.31.gbf` in its place; the tracked `db.14.gbf` deletion
+in the pre-existing churn is the same rotation class), `change.data.gbf`/`change.map.gbf` →
+`18:20:58.284139295`/`18:20:58.287591374`, `.prp`
+unchanged — save effect is EXACTLY the new-revision + change-log rotation. `/media/felipe/
+FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+**Chains-map final update rows (Task 2 — STATUS FACTS ONLY; no relabel beyond what bytes give).**
+
+| chains leg | Task-1 status | final status at Task 2 (cites) |
+|---|---|---|
+| IVT-twin-A writer-open (`03ab/03b2`) | HALF — writer-open | **PERSISTS** — arms live in block `03a7..03d1`, OUTSIDE the created body (post `(037c)` = body_end cite, `(03a7)` region still gap `1000:1f4d..1fdd`); the create owns the RESTORE island only. NEW status fact (bytes, no chain claim): the cluster-A `0:467/469` + IVT `0:3e0..3ff` save/restore pair is now FULLY OWNED — `FUN_11bd_033c 033c..035f` (save) ↔ `copy_words_to_cells_and_return 0360..037c` (restore), both register-indirect (substring-runs blind — the T1 census scope note), mirror-cited in the plate |
+| IVT-twin-B writer-open (`0466/046d`) | HALF — writer-open | **PERSISTS** — region B UNOWNED post: gap row `1000:202e..2060` verbatim unchanged |
+| third-writer (`0760` ES-form, basis OPEN) | HALF/OPEN basis | **PERSISTS** — region C UNOWNED post: gap row `1000:2315..233e` verbatim unchanged; basis stays OPEN (owner-absent) |
+| landing-open (`0b94..0bc2`) | HALF — landing-open | **PERSISTS** — gate FAIL (mode-dependent-only route, cited verbatim above); row `1000:26e2..2792` verbatim unchanged; the created A body does NOT change the landing facts |
+| consumer leg (`0ae0 INT 0xff`) | CITED-SEMANTICALLY (mode-dependent) — NOT CLOSED | **UNTOUCHED** — no new evidence this task; chains COMPLETE count: **0 of 15 stands** |
+
+**Verdict rows ×4.**
+
+| region | final disposition | entry class | name status |
+|---|---|---|---|
+| A `0360..037c` | **CREATED** (rename + plate above); remainder of fill A: LEAVE ×3 islands + ×3 tenants | **static (byte-level)** — operand landing INSIDE span arith-shown+read-grounded (`0b21`/`0b40`/`0862` `e8`→`0x1000:1f30`); defined-layer 0 disclosed; west fallthrough REFUTED (`c3`@`035f`) as bound; sources unowned (D-band/H6 rows) | `copy_words_to_cells_and_return` — bar PASS verbatim from the Task-1 pre-test row; mode-words excluded w/ reason; style warnings disclosed (snake_case = program convention) |
+| B `045e..0490` | **LEAVE** (CODE + tenant bytes untouched) | **none** — entry static-zero both views + forms; `44ce` = ARG-CONSTANT non-flow; fallthrough refuted | n/a — not created, no rename |
+| C `0745..076e` | **LEAVE** (third-writer arm region; basis OPEN persists) | **none** (static-zero; `448e` ARG-CONSTANT; fallthrough refuted) — region's arm `0760` is writer-side, never an inbound ground | n/a |
+| D `0b12..0bc2` | **LEAVE ×5** (stub + H12/H11/H8 return halves + retry tail) | **none — mechanism FAIL stated**: only cited route = int-FF IVT fetch, CITED-SEMANTICALLY mode-dependent ⇒ cannot meet the create gate (binding text quoted); D-band edges `0b21/0b40→0360` now feed an OWNED body (target-side fact; sources still gap) | n/a |
+
+**Explicit no-write inventory + read/write ledger.** EXECUTED: `disassemble_bytes`×1 NON-dry
+(29 B at `0360..037c` ONLY — capped), `create_function`×1, `rename_function`×1,
+`set_comment`×1 (plate), `save_program`×1. NOT executed (with reasons): `create_function`×0
+beyond the one gate-pass (A islands/B/C/D — gate texts cited; 0 of the 3 remaining A heads,
+B, C, D passed), `rename_function`×0 others, `set_function_prototype`×0 (signature left
+`undefined FUN(void)`-class — no in-body arg-pinning evidence), `apply_data_type`/`set_global`×0
+(tenant data-define = future listing decision, DATA class unsanctioned),
+`clear_flow_and_repair`×0 (nothing mis-flowed; no nudge needed), disassemble NON-dry ×0
+elsewhere. READS this task: `list_open_programs`×1, `get_function_count`×2,
+`find_code_gaps`×6 (pre 100+49 FULL; post tail-fetch `offset 0/10/130/140` windows re-observing
+every neighborhood + overlay ledger rows incl. `00000000`), `get_function_by_address`×13 (parity
+walls + post read-backs `(0360)/(037c)/(037d)` + `035f/040e` re-probes), `read_memory`×9 (A/B/C/D
+parity windows + `035f`, `0360,19`, `0b21,3`, `0b40,3`, `0862,3`, `0b94,47`),
+`disassemble_function`×1 post, `get_comment`×1, `search_instructions`×2 post (scope line —
+15708 uniform), ×4 pre-parity operand runs. Negatives = defined-insn-only at-this-slice-time +
+zero-hit exact-form runs; controls quoted not relied.
+
+### Deferrals (Task 2 — updated)
+
+- **int-FF CHAIN: mode question OPEN unchanged** — consumer leg stays CITED-SEMANTICALLY
+  (mode-dependent); writer legs persist per the final table (A arms, B twin, C third-writer
+  all outside the one created span); landing `0b94` persists gate-FAIL. This slice OWNED the
+  A restore island exactly as designed — ownership ≠ closure.
+- **A-island entry legs** (`0381`, `03a7` twin-A, `03d6` `[0x160]`-pair block): runtime OPEN —
+  which dispatch reaches the island heads is the remaining writer-side evidence; byte forms
+  all zero at this slice-time.
+- **Source-side ownership of the A edges**: `0b21`/`0b40` (D-band return halves) + `0862`
+  (H6 beyond-exit) still gap bytes — the D-band return blocks + the H6 installed-vector body
+  are future-own material IF a gate ever passes for them (currently DYNAMIC/mode-only ⇒
+  LEAVE rows); the band's `0bc0 CALL print_error_message` tail + `0b5d`/`0b60` merge edges are
+  the walking skeleton for that decision.
+- **Writer-family census carry (NEW material this slice):** `0726/072d` (`[0x4a2]/[0x4a4]` ←
+  `CS:0xb94` in the H4-callee region `0716..0732`, `0732 RET`) + band block `0910..0928`
+  (`0916 MOV AX,0xb94`, `091b CALL 0x1000:1f0c`=`033c`) — cite-only until an entry ground
+  exists (scope-guard: dispatcher runtime story not admitted).
+- Tenant-cell data-defines `037d..0380`/`03a3..03a6`/`03d2..03d5` (+ `045e..0461`, `0745..0748`):
+  future listing decision (DATA mutation class).
+- Prior deferrals unchanged: R6 entry static-zero, stub + H9 `Alignment` units + listing gate,
+  R1/R2 direction, `[0x2fa]` consumer story, `[0x9ba]`/`[0x9bc-9c2]` runtime, `2cc5/0e3c`,
+  `674c/675a`, `0:412/0x792` flag, H7/R2 remainder, name-class route, Δ1, overlay tooling
+  stability — cite-only carry.
+- Suite: no C/test/CMake/tool change (`cmake --build build && ctest --test-dir build` green
+  10/10 — docs-only diff); THIS TASK'S PROGRAM WRITES = 1 function created
+  (`copy_words_to_cells_and_return` `0360..037c`, renamed + plated) + 1 save; count Δ1, gap
+  total Δ0 with the single named flip, scope Δ+14, mtime rotation captured; `fifa96.rep` churn
+  left unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+### Fix wave (final review of `28bc7b4`/`4a34301`/`32209ed` — errata, zero writes)
+
+(1) **IMPORTANT fixed — `0726` writer mis-attribution**: the `0xb94` writer-family status row
+grouped the sixth site under the `467/469` slot; the section's OWN cites (Package D `0727` read
++ the `0716` dry render) and a live re-read this wave — `read(11bd:0722,16)` →
+`33c08ec026c706a204940b268c0ea404` (hex↔data reconciled elementwise: [51,192,142,192,38,199,6,
+162,4,148,11,38,140,14,164,4]) — confirm `0726 26c706a204940b` = `ES:[0x4a2],0xb94` + `072d`
+`ES:[0x4a4],CS` = **cluster-D** arm pair (H10's cell class), NOT `0x467/0x469`. Row rewritten
+with the complete 6-site → 4-pair mapping {3fc: `03ab/03b2`-twins A+B | 467: `0684`-R6, `0760`-C
+| 160: `03da` | 4a2: `0726`} — "FOUR nominal cell pairs" now enumerates four pair-slots each
+WITH its writer (the reviewer's consequence: previously three slots + a trailing writer-less
+clause). The D-package row and the Deferrals bullet carried it correctly all along — one-row
+contradiction of its own bytes, erratum applied in place. (2) **Minor — intro block count**:
+"D = all-CODE band (7 blocks…)" reconciled to **6** = the D class row's own CODE sub-spans
+(`0b12..0b13`, `0b14..0b3e`, `0b3f..0b5f`, `0b60..0b6d`, `0b6e..0b93`, `0b94..0bc2`); dry
+re-render `disassemble_bytes(11bd:0b12,11bd:0bc3)` → `bytes_disassembled:177` ✓ stable.
+(3) **Minor — LEAVE ×4 relabeled ×5** at all four label sites (GATE row D, Task-1 proposal row,
+Task-2 NOT-created row, verdict row): the enumerations always listed 5 spans {stub, H12-ret,
+H11-ret+err-delay, H8-ret, retry-tail} — label fixed to match the disposition rows.
+(4) **Minor — verbatim-glyph restored**: the NOT-created quote of the A gate text printed
+`⇒ writer-open PERSISTS` where the gate row says `— writer-open PERSISTS` — exact glyph restored
+(reviewer's "mark the substitution" alternative not needed; source text unchanged).
+(5) **Minor — parity label**: "span bytes `read(11bd:0360,19)`" relabeled "span PREFIX bytes"
+(the 19-B window ends mid-disp at `0372`; FULL-span parity lives on the real-disasm row's
+29 B/14-insn byte-identity — cross-cite added). (6) **Minor — mtime claim completed**:
+added that the pre-fetch `db.30.gbf` was ABSORBED by save-time revision consolidation (post-stat
+shows `db.31.gbf` only; the pre-existing tracked `db.14.gbf` deletion is the same rotation
+class) — the row is now fully verbatim. ALL SIX applied INSIDE `## fill region ownership`; this
+wave ran READS ONLY (1 `read_memory`, 1 dry-run `disassemble_bytes`) — no create/rename/comment/
+define/flow-repair/`save_program`, no transaction; `/media/felipe/FIFAPCCD/` untouched;
+`fifa96.rep` churn + `Testing/` left unstaged; prior sections byte-identical; the three earlier
+commits' rows otherwise untouched.
