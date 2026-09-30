@@ -7540,3 +7540,193 @@ read-only; `get_address_spaces`×1. NO create/rename/comment/define/
 untouched; `fifa96.rep` churn unstaged. Negatives scoped defined-insn-only at-
 this-slice-time (the `0684` arm invisibility = the documented defined-only-scan
 caveat); controls quoted NOT relied.
+
+### Writes (Task 2 — capped creates + ONE flow-repair + bar rename, executed 2026-09-30, program `/fifa96.exe`)
+
+**Step 1 pre-write parity re-check ×6 (zero drift ⇒ no downgrades).** Live vs
+Task-1 quotes: `get_function_count`→`{"function_count":334,…}`; R1 `(02d9)`/
+`(02da)`→no-function; R2 `(0976)`/`(099a)`→no-function; R3 `(6328)`/`(634f)`→
+no-function; R4 `(6506)`/`(64ff)`→no-function, `(6549)`→`FUN_11bd_6549
+6549..6557`; R5 `(0a35)`→no-function, `(0a34)`→`FUN_11bd_09d7 09d4..0a34`,
+`(0a5e)`→`FUN_11bd_0a5e 0a5e..0a85`, `analyze_data_region(11bd:0a35)`→
+`{"current_type":"Alignment","xref_count":0}` (unit intact); R6 `(0675)`→
+no-function, `(0697)`→`FUN_11bd_0697 0697..06c9`. All byte-identical to
+Task-1 ⇒ every region enters at its proposed state.
+
+**R4 `11bd:64ff..6548` — CREATE-with-mechanism at `6506..6548`.** Real
+`disassemble_bytes(11bd:6506,6548)` (write) → 28 insns `6506..6547`, BYTE-
+IDENTICAL to the Task-1 dry-run cite (render-stability re-read = this identity);
+body-end `6548 c3 RET`. Create:
+`create_function(11bd:6506)` → `{"success":true,"address":"11bd:6506","function_name":"FUN_11bd_6506","entry_point":"11bd:6506","body_size":67,"message":"Function created successfully at 11bd:6506"}`
+(first-call, ZERO nudges). Post-read-back `(6506)`→`{"body_start":"11bd:6506","body_end":"11bd:6548"}`
+= cited span EXACTLY (no auto-extension past `6548`, no absorption);
+stop-short walls — inner `(6505)`→`{"error":"No function found for 11bd:6505"}`
+⇒ the halt-retry stub `64ff..6505` (`MOV AL,0xfe`/`OUT 0x64`/`HLT`/`ebfd`
+retry-JMP; H9-like unemitted head) stays **UNOWNED, as proposed**; outer
+`(6549)`→`FUN_11bd_6549 6549..6557` owned/untouched. MECHANISM cite (honest
+CLASS = data-staged arm, flow-consumer deferred): `64d3 FUN_11bd_64b7 MOV word
+[0x469], CS` (`8c0e6904`) + `64d7 MOV word [0x467], 0x6506` (`c70667040665`) —
+far-ptr pair into the `[0x467]/[0x469]` cell cluster, target `0x6506` lands
+ALIGNED inside the region. **Segment-physicality caveat:** the R4 arms are
+`seg←CS` (`8c0e6904`)/DS-default `[0x467]` (`c70667040665`, no `ES:` override)
+whereas H4/H5/H8/H12 arm the SAME cell numerals via `ES:[…]` stores under
+`ES←0` (or `ES←0x38`) staging — physically DIFFERENT segment bases; the pair
+CONSUMER (`RETF`/`JMPF` reader of `CS:0x6506`) is the named one-hop layer,
+deferred honestly, NOT asserted by this create. Rename (bar: printed ops decisive
+— SS/SP restore `8ed0`/`8b267a0f`@`650c`/`650e` + PIC read-modify-write
+`e4a1`/`f6d0`/`e6a1`/`e421`/`e621` + near-`c3`@`6548`):
+`rename_function(FUN_11bd_6506 → restore_ss_sp_and_modify_pic_masks)` →
+`{"status":"success","message":"Success: Renamed function at FUN_11bd_6506 …","warnings":[…not PascalCase…,…contains underscores…]}`
+(snake_case kept per repo convention; same warning class as the slice-28
+`…_pic_and_return` precedent — that exact name is collision-occupied by H4 so a
+distinct printed-ops name was chosen; `pic`-class word admissible, H4 precedent).
+Plate `set_comment(…,plate)` →
+`{"status":"success","message":"Set plate comment at 11bd:6506","warnings":["Plate comment missing Algorithm section",…]}`
+— `C: none — behavioral (…far-return restoration half entered at the pair-armed
+landing CS:0x6506; CLI + DS/SS←0x1000 + SP←[0xf7a] + read-modify-write BOTH 8259
+PIC masks + stores [0x2e]/[0x10ee]←9 + PUSH 0x8b2/CALL 6250 + CMP [0x35]/CALL
+06fb + STI/POP BP/RET@6548; arm stores 64d3/64d7 cited; ES←0x38 vs seg←CS
+segment-physicality caveat; 0x467/0x469 consumer deferred; head 64ff..6505
+unowned)`.
+
+**R5 H9 `11bd:0a35..0a5d` — the ONE sanctioned `clear_flow_and_repair` (then
+LEAVE).** Task-1 pre-call expected-effect paragraph quoted VERBATIM FIRST (the
+`> A single clear_flow_and_repair seeded at 11bd:0a36 …` block reproduced above
+in this section's H9 listing-analysis sub-heading — seed `0a36`, `clear_data=
+false` leaves `DAT_11bd:0a35`, expected no head realignment, flow-free band a
+legitimate outcome, create precondition `aligned b080@0a35 renders` likely NOT
+met). FULL pre-capture (post-R4): `get_function_count`→**335** (334 + R4);
+dry-run `disassemble_bytes(0a30,0a5d)`→ `0a30 b009`/`0a32 e620`/`0a34 f4 HLT`/
+**`0a36 80e620 AND DH,0x20`**/`0a39 bb0010`…`0a5c 58` (artifact head, 23 insns);
+`audit_global(0a35)`→`{"type":"Alignment","length":1,"xref_count":0,…}`;
+walls `(0a34)`=`FUN_11bd_09d7 09d4..0a34`, `(0a5e)`=`FUN_11bd_0a5e 0a5e..0a85`;
+covering row `1000:2605..262d` `has_undefined_bytes:false`. The single call:
+`clear_flow_and_repair(start_address="11bd:0a36", program="/fifa96.exe")` →
+`{"success":true,"seed_range":{"start_address":"11bd:0a36","end_address_exclusive":"11bd:0a37"},"repair":true,"clear_data":false,"clear_labels":false,"observations":{"instructions_in_seed_before":0,"instructions_in_seed_after":0,"instruction_count_delta_in_seed":0,"functions_intersecting_seed_before":[],"functions_intersecting_seed_after":[],"noreturn_call_boundaries_in_seed":[]}}`
+RATIFY-as-returned (no second call under any circumstance). POST-capture:
+dry-run `disassemble_bytes(0a30,0a5d)` BYTE-IDENTICAL to pre (`0a36 AND
+DH,0x20` artifact head reproduces); `audit_global(0a35)`→`{"type":"Alignment",
+"length":1,"xref_count":0}` (data unit INTACT — `clear_data=false` honoured);
+`(0a35)`→no-function; walls `(0a34)`/`(0a5e)` INTACT unchanged; count **335**
+(Δ0 — flow-repair created/deleted no function). **Decision gate:** create
+requires the aligned `b080`@`0a35` head to render AS CODE AND walls intact; the
+head did NOT re-align (still the `0a36` artifact; `0a35` still covered by the
+`Alignment` unit, so a body could not start there per the gate clause) ⇒
+**LEAVE-as-bytes**, capped create NOT executed. The `instructions_in_seed_after:0`
+/ no-functions-intersecting-seed return is the tool contract's **flow-free-band /
+not-reseeded branch — a legitimate outcome, NOT a failed prediction**: the
+misalignment blocker was a DATA definition, never stale flow, so clearing flow
+left it untouched exactly as the paragraph predicted. **Side-effect ledger:**
+ZERO deltas beyond the R4 create — no healthy flow cleared (both owners
+`09d4..0a34`/`0a5e..0a85` intact), the `1000:26a3..26a4` neighbour orphan row
+UNCHANGED (risk surface (i) did NOT fire), the `1000:2605..262d` flip row
+UNCHANGED `has_undefined_bytes:false` (risk surface (ii) did NOT fire).
+
+**Mechanism-NONE explicit not-created rows** (R1/R2/R3/R6): R1 `02da..02f8`
+**LEAVE** — tail of `write_slot_from_cursor` (`02d3` body_end) past the
+tool-refused pocket `02d4..02d9`; inbound internal fallthrough only; direction
+UNDECIDED (a signature does not resolve it); no create/plate. R2 `0976..099a`
+**LEAVE** — H7 remainder behind the undecodable `f3 f0`@`0974..0975` seam; no
+external edge; direction UNDECIDED; no create. R3 `6328..634e` **LEAVE-as-bytes**
+— zero static entries WITHOUT mechanism (slice-27 disposition re-confirmed
+byte-identical; `6327 c3` wall; body renders but has no cited entry); no create,
+no data-define (would mislabel frame-CODE). R6 `0675..0696` **LEAVE-as-bytes +
+CODE reclassification** — the `0675..0696` bytes decode as a coherent far-ret
+ARM-WRITER CODE block (`0684 ES:[0x467]←0xb94` + `068b ES:[0x469]←CS` +
+`0690 ES:[0x412]←0xa` + `RET`@`0696`), NOT data arg-cells; `0x675` has no arm-
+store citing it and `0674` is a `FUN_11bd_0667` `c3 RET` wall ⇒ entry static-zero,
+mechanism NONE ⇒ create inadmissible; **NO data-repair** (that would freeze the
+mislabel being refuted). `save_program` →
+`{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+
+**Post-state gap-carve ledger (side-effect proof).** R4 flip row `1000:80cf..
+8118` (74) → SHRANK to `{"start":"1000:80cf","end":"1000:80d5","size":7,…,
+"before_function":"FUN_11bd_64b7","after_function":"restore_ss_sp_and_modify_pic_masks","after_function_address":"11bd:6506"}`
+(= unowned stub `64ff..6505`, `7 B`; `80cf−1bd0=64ff`,`80d5−1bd0=6505` ✓) —
+created body `6506..6548` = 67 B absorbed ⇒ `7+67=74` ✓ (one row shrank, none
+added/deleted ⇒ total gaps 149→**149** Δ0, FULL pagination 100+49 re-consumed).
+H9 row `1000:2605..262d` (41) UNCHANGED post-flow-repair (leave disposition
+stands). R1 `1000:1ea4..1f06` (99), R2 `1000:2544..256a` (39), R3
+`1000:7ef8..7f64` (109), R6 `1000:2245..2266` (34) + companion `2235..2236` (2)
+ALL re-derived byte-identical. Neighbour rows `259d..259e`, `26a3..26a4`,
+`8045..8086` (R4-adjacent) UNCHANGED. Overlay `1991:` membership spot-check:
+`c87e`/`de60`/`e270`/`e424`/`e685`/`e7a0`/`e8a7`/`f193`/`f266`/`00000000` all
+present on page-2 fetch ⇒ no overlay-side effect from the `11bd:` create.
+`get_function_count` 334→**335** Δ+1 = exactly the R4 create (H9 flow-repair ±0).
+Scan-scope line (slice-24 errata format): `instructions_scanned` 15665→**15694**
+(Δ+29 = the 29 body insns `6506..6548` newly entering the defined-function scan
+at create — 28 real-disasm insns `6506..6547` + `6548 RET`; the `64ff..6505`
+unowned stub and the still-unowned H9 orphans contribute nothing before/after),
+post-save re-runs `search_instructions("0x6506")`=1 (`64d7` arm-store, now its
+target RENTS an owned body) and `("0xa35")`=1 (`09fc` arm-store, unchanged —
+H9 uncreated), both `instructions_scanned:15694` `truncated:false`.
+
+**Read/write inventory + count reconciliation (review minor).** Task-2 own
+runs — WRITES: `create_function`×1, `rename_function`×1, `set_comment`×1,
+`clear_flow_and_repair`×1 (H9, single), `save_program`×1. READS:
+`get_function_count`×4; `get_function_by_address`×21 (parity 14 + R4 verify 4 +
+H9 post 3); `disassemble_bytes`×4 (1 REAL R4 create + 3 `dry_run` H9 pre/post/
+wall); `analyze_data_region`×1; `audit_global`×2 (H9 pre/post);
+`find_code_gaps`×2 (FULL 100+49=149); `search_instructions`×2 (scope re-read
+`0x6506`/`0xa35`). TASK-1 reconciliation: the Task-1 report `### Reads executed`
+line claimed `search_instructions`×50 but enumerated `48 first-4-byte runs +
+0x467/0x469/0x679/0x67d/0xb94 (5) sweeps` = **53**; the `×50` UNDER-counted by 3
+(48+5=53, not 50) — a Task-1 REPORT-SIDE bookkeeping slip only; the map's Task-1
+`Reads executed` cell carries the SAME "×50" wording (grep of this section:
+line ~7535) — corrected here by stating the true 53 in this Task-2 reconciliation
+WITHOUT editing the prior Task-1 line (append-only); Task-1's own evidence
+(48 numeral runs + the region-wide `0x467`/`0x469` landing sweeps that FOUND the
+R4 edge) stands substantively.
+
+### Verdicts (Task 2 — six rows)
+
+| region | final disposition | entry class | family-class answer (what the matrix says it IS, cited) |
+|--------|-------------------|-------------|---------------------------------------------------------|
+| R1 `02da..02f8` | **LEAVE** (not created) | NONE for entry (internal fallthrough from `write_slot_from_cursor` `02d3` only; no external CALL/JMP; `0x2da..2dd`+far `1eaa..1ead` all 0) | **sweep-truncation artifact** — tail of an existing body past the tool-refused `02d4..02d9` pocket; ends `POPA/RET` self-unwind; **NOT** a far-ret half; direction UNDECIDED |
+| R2 `0976..099a` | **LEAVE** (not created) | NONE for entry (seam `f3f0`@`0974..0975` breaks fall-in from `0973`; `0x976..979` hits are DATA-cell stores/imm not flow) | **sweep-truncation artifact** — H7 primary remainder across an undecodable REP+LOCK prefix pair; `POPA→RET`@`099a`; direction UNDECIDED |
+| R3 `6328..634e` | **LEAVE-as-bytes** (not created, not data-defined) | NONE — zero static entries WITHOUT mechanism (8 numeral runs 0; `6327 c3` wall; `6343/6347→633d` internal only) | **entryless orphan CODE** — a clean `PUSH BP` frame stub with ZERO stores; unique head-render of the six (aligned, un-affected by any carve) |
+| R4 `64ff..6548` | **CREATED `restore_ss_sp_and_modify_pic_masks` @ `6506..6548`** + plate (head-block `64ff..6505` left unowned) | **DYNAMIC-ONLY w/ cited mechanism** — far-ptr pair arm `64d3 MOV [0x469],CS`+`64d7 MOV [0x467],0x6506` lands ALIGNED inside (`CLI`@`6506`); consumer deferred one-hop (data-staged arm, segment-physicality caveat) | **far-ret-half family (TRUE member)** — same shape as H1/H4/H5/H8/H10/H12 (SS/SP restore + PIC/IO legs + `RET c3`@`6548`); head `b0fe`@`64ff` unemitted = slice-23 flip-carve LISTING artifact, NOT absence of mechanism |
+| R5 `0a35..0a5d` | **LEAVE-as-bytes** after the single sanctioned flow-repair (aligned head did NOT render; capped create NOT executed) | **DYNAMIC-ONLY w/ cited mechanism, head-blocked** — arm `09fc ES:[0x3fc]←0xa35` (+CS store); only body with segment-pops `07`/`1f` before `c3` | **far-ret-half family (TRUE member)** — but its arm lands ON the `DAT_11bd:0a35` `Alignment` byte (misaligned, unlike R4 whose `0x6506` is clean): the family's asymmetry is LISTING not mechanism; flow-repair (`clear_data=false`) cannot clear the data unit ⇒ re-alignment needs a data-mutation outside this slice |
+| R6 `0675..0696` | **LEAVE-as-bytes + DATA→CODE reclassification** (not created, NO data-repair) | NONE for entry (`0x675`=0; `0x676`=1 substring false-numeral `0x6761`; `0674 RET` wall) | **far-ret ARM-WRITER CODE (primary-exit side)** — arms the shared `CS:0xb94` pair (`0684`/`068b`)+`ES:[0x412]←0xa`+`RET`@`0696`; refutes slice-22's arg-cell DATA reading (no static reader, no 8-stride structure; the twin's stride-8 vocabulary was mis-borrowed) |
+
+**Family-class final answer (one paragraph, MIXED with per-class cites).** The
+six are NOT one mechanism: the signature matrix (head byte / head-rendered /
+loop-back / exit-multiset / static-data-readers) splits them three ways —
+(1) **true far-ret halves** R4 (`6506..6548`, arm `64d3`/`64d7`→`CS:0x6506`,
+created) and R5/H9 (`0a35..0a5d`, arm `09fc`→`0xa35`, head-blocked by the
+`Alignment` carve) share the H1/H4/H5/H8/H10/H12 shape and the shared
+`[0x467]/[0x469]` cell; R6 is the arm-WRITER code of that same cell (`CS:0xb94`);
+(2) **sweep-truncation artifacts** R1 (tail past the `02d4..02d9` pocket) and R2
+(remainder past the `f3f0` seam) have only internal fall-through and no pair-arm —
+direction UNDECIDED stands; (3) **entryless CODE** R3. The one *shared shape*
+across the flip-carved regions (unemitted head byte-pair) is a **listing artifact
+of the slice-23 sweep, not a common mechanism** — proven by R4, which despite the
+identical-looking foreign-flip heritage turned out to carry a REAL cited arm-store
+only once the region-wide landing arithmetic (the R1→`0337` lesson) was run.
+
+### Deferrals (Task 2 — carry list updated)
+
+- **CLOSED this slice:** R4-create (`6506..6548` = `restore_ss_sp_and_modify_pic_masks`
+  created + plate + mechanism cite) — the "foreign flip `1000:80cf..8118`"
+  disposition is discharged.
+- R4 head-block `64ff..6505` (`MOV AL,0xfe`/`OUT 0x64`/`HLT`/`ebfd` retry,
+  `64ff b0fe` unemitted): left UNOWNED — same class as R5's `Alignment`-blocked
+  head; owns to `FUN_11bd_64b7`-family only via a future listing decision.
+- `[0x467]/[0x469]` far-ret PAIR CONSUMER (RETF/JMPF reader of `CS:0x6506`,
+  `CS:0xb94` etc.) + segment-physicality of the `seg←CS` vs `ES←0/0x38` arms:
+  one-hop runtime layer, NOT searched; the R4/R6 arm-stores are the writers only.
+- **R6 CODE-band ownership story** (`0675..0696` arm-writer + the `0xb94` half it
+  arms): needs its OWN arms analysis (which primary's fall-through/dispatch
+  reaches `0675`, and where `0xb94` lives) — **named next-slice candidate**; this
+  slice only reclassified DATA→CODE and left it as bytes.
+- H9 `DAT_11bd:0a35` re-alignment: a DATA-unit undefine (`clear_flow_and_repair`
+  with `clear_data=false` cannot touch it) — outside this slice's sanctioned
+  writes; H9 stays leave-as-bytes, mechanism row carried.
+- R1 `02d4..02d9` pocket decision + `write_slot_from_cursor` body-extension to
+  `02f8`; R2 `f3f0`@`0974..0975` seam — listing-disposition items carried, no
+  direction asserted.
+- Prior deferrals unchanged: `2cc5`/`0e3c`, `674c`/`675a`, `[0x56]/[0x58]` armed
+  values, `[0x2fa]`/`[0x9ba]` runtime, name-class route, Δ1 — cite-only carry.
+- Suite: no C/test/CMake/tool change (`cmake --build build && ctest` green —
+  docs + listing-writes only); `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep`
+  churn left unstaged.
