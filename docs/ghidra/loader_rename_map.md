@@ -7766,3 +7766,586 @@ only once the region-wide landing arithmetic (the R1→`0337` lesson) was run.
 - Suite: no C/test/CMake/tool change (`cmake --build build && ctest` green —
   docs + listing-writes only); `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep`
   churn left unstaged.
+
+## arm pairs and R6 band (verified 2026-09-30, program `/fifa96.exe`)
+
+Slice-30 Task-1: read-only census of the far-pointer arm cell pairs, the
+arm→cell→consumer→landing chains map, and the R6 band `11bd:0675..0696` + R4
+head-stub `11bd:64ff..6505` packages (ZERO Ghidra writes; every
+`disassemble_bytes` ran `dry_run=true`). Re-reads live: `get_function_count` →
+**335** ✓ (slice-29 post-R4-create state); `find_code_gaps` FULL pagination
+100+49 = `total:149` ✓ (149/149 consumed); `search_instructions`
+`instructions_scanned` **15694** ✓ uniform across all 18 runs; delta `−0x1bd0`
+re-derived live (rows `1000:2245−1bd0=0675`, `1000:80cf−1bd0=64ff`,
+`1000:2605−1bd0=0a35`). Flip rows current live state (verbatim): R4 stub
+`{"start":"1000:80cf","end":"1000:80d5","size":7,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_64b7","after_function":"restore_ss_sp_and_modify_pic_masks","after_function_address":"11bd:6506"}`;
+R6 `{"start":"1000:2245","end":"1000:2266","size":34,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"FUN_11bd_0667","after_function":"FUN_11bd_0697","after_function_address":"11bd:0697"}`;
+companion `{"start":"1000:2235","end":"1000:2236","size":2,…}` = `0665..0666`;
+H9 `1000:2605..262d` UNCHANGED `false/false` (slice-29 flow-repair ratification
+stands — NOT re-touched this slice).
+
+**Tool-reliability finding (THIS pass, census-material):**
+`search_byte_patterns` is NON-DETERMINISTIC for 2-byte patterns and its
+POSITIVE-hit ADDRESSES are unreliable on this program. Proof pairs: pattern
+`940b` returned 10 addresses on one run and 1 (`1991:1e5c`) on an identical
+re-run; `b8940b@11bd:046b/05ab/0765/7a04` claims contradicted by
+`read_memory` at those addresses (046b=`94` byte of the `c706fc03940b@0467`
+imm; 7a04=`94` of a `e8 ef 94 0b` CALL-rel16 — i.e. the scanner sometimes
+reports the IMM position, not the pattern start); 1991-overlay reads are
+address-ambiguous (`read(1e65)[0]=8d` vs `read(1e5c)[13]=c7` at the same
+address — overlay space mixing). The reliable core used throughout: (i)
+`search_instructions` defined-layer scans (stable, quoted verbatim), (ii)
+dry-run renders, (iii) `read_memory` windows, and for byte-patterns (iv)
+ZERO-hit exact-form runs as EXISTENCE negatives (absence of the encoding
+anywhere) with every positive re-verified by read before citing.
+
+### Basis derivation (segment staging at each arm site, LIVE owner bodies)
+
+`FUN_11bd_64b7` body tail (dry render): `64cb XOR AX,AX`/`64cd MOV DS,AX` ⇒
+**DS←0 at `64d3`/`64d7`** — the brief's "DS-default" is live-verified as
+DS=0, so R4's pair arms **physical `0:0x467`/`0:0x469`** (bytes:
+`read(11bd:64d1,17)` → `e6708c0e6904c70667040665b00ae67136`; `64d3 8c0e6904` =
+modrm `0e` = mod00/reg001(CS)/rm110(disp16) → `MOV word ptr [0x469],CS` no
+segment prefix; `64d7 c70667040665` = `MOV word ptr [0x467],0x6506`, imm
+`0665` seen live at `64db` via the `0665` raw run). **R6 stages ES ITSELF**:
+`0680 33c0 XOR AX,AX`/`0682 8ec0 MOV ES,AX` ⇒ **ES←0 at `0684`/`068b`** —
+R6's arm is the SAME physical pair as R4 (`0:0x467`); the brief's
+"`0684` ES←0x38" is corrected live: ES←0x38 is the basis of the H4/H5/H8/H12
+sites (nominal `[0x467]` under ES←0x38 ⇒ physical `0x380+0x467=0x7E7`) and of
+H9's `[0x3fc]` sites (⇒ physical `0x77C`). H3-surplus ES-inheritance question
+closed: **no caller-ES dependency** (band sets ES←0 at 0680/0682 two insns
+before the store). Staging cites (all from owner-body dry renders): `0491`:
+`04ab b83800`/`04ae MOV ES,AX`; `09d7`: `09f7 b83800`/`09fa MOV ES,AX`
+(bytes `read(11bd:09f7,16)` → `b838008ec026c706fc03350aa1b60926`); `0697`:
+`06a6 b83800`/`06a9 MOV ES,AX`; `076f`: `0788 6838`/`078a POP ES`; `099b`:
+`09aa b83800`/`09ad MOV ES,AX`; `0a5e`: `0a65 b83800`/`0a68 MOV ES,AX`;
+`0ae2`: `0af3 b83800`/`0af6 MOV ES,AX`; `0a9f`: `0ab8 b83800`/`0abb MOV ES,AX`;
+save-side `07e7`: `07fe PUSH 0x38`/`0804 POP DS` ⇒ DS←0x38 at `0831`/`0835`;
+`641d`: `6422 33c0`/`6424 8ed8` ⇒ DS←0 at `643d`/`6441`; hidden fill sites
+`03a9`: `03a7 33c0`/`03a9 8ec0` ⇒ ES←0 (read window `03a4,26` →
+`09dc0933c08ec026c706fc03940b268c0efe038b1e820f0bdb74`); `0466`: `0462 33c0`/
+`0464 8ec0` ⇒ ES←0 (read `045e,18` → `9104960433c08ec026c706fc03940b268c0e`).
+
+**Physical-cell map:** cluster A `0:0x467/0x469` (seg←0 arms + `641d` SS/SP
+save); cluster B `0:0x7E7/0x7E9` (ES/DS←0x38 nominal 467/469: H4/H5/H8/H12
+arms + `07e7`/`0a9f` BX-0x1000/SP saves); cluster C `0:0x77C/0x77E` (ES←0x38
+nominal 3fc/3fe: H2/H9 arms); cluster D `0:0x822/0x824` (ES←0x38 nominal
+4a2/4a4: H10); cluster IVT `0:0x3FC/0x3FE` = **INT 0xFF vector** (arith
+`0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`/CS-half `0x3FE`; ES←0 nominal
+3fc/3fe: `03ab/03b2` + `0466/046d`); aux `0:0x412` / `0x792` (byte-flag,
+`0690` ES←0 vs `06b9` ES←0x38). **None of these linear ranges is mapped in the
+program**: `read_memory(0000:0467)` → `"Failed to read memory: Unable to read
+bytes at ram:0000:0467"` (the `0:` block is `00000000..000001ff` only — last
+gap row) ⇒ armed cell CONTENTS are runtime-only; cell-physical reads live
+outside the captured listing.
+
+### Pair census T1 `{[0x467],[0x469]}` (nominal disps)
+
+Writers (`search_instructions` operand `[0x467]` → `match_count:8`,
+`instructions_scanned:15694, truncated:false`; `[0x469]` → `match_count:9`;
+ALL class-W, ZERO class-R; plus render/read-cited invisible-site `0684/068b`):
+
+| site (owner?) | bytes | basis→physical | class | value |
+|---|---|---|---|---|
+| `64d3` (`FUN_11bd_64b7`) | `8c0e6904` | DS←0 → `0x469` | W | CS |
+| `64d7` (`FUN_11bd_64b7`) | `c70667040665` | DS←0 → `0x467` | W | `0x6506` |
+| `0684` (R6 band, UNOWNED) | `26c7066704940b` | ES←0 → `0x467` | W (scan-invisible, render+read verified) | `0xb94` |
+| `068b` (R6 band, UNOWNED) | `268c0e6904` | ES←0 → `0x469` | W | CS |
+| `06ae` (`FUN_11bd_0697` H4) | `26a36904` | ES←0x38 → `0x7E9` | W | AX=`[0x9b6]` |
+| `06b2` (`FUN_11bd_0697` H4) | `26c7066704ca06` | ES←0x38 → `0x7E7` | W | **`0x6ca`** (live — not `0xb94`) |
+| `0795` (`FUN_11bd_076f` H5) | `26a36904` | ES←0x38 → `0x7E9` | W | `[0x9b6]` |
+| `078b` (`FUN_11bd_076f` H5) | `26c7066704b907` | ES←0x38 → `0x7E7` | W | `0x7b9` |
+| `0831` (`FUN_11bd_07e7`) | `891e6904` | DS←0x38 → `0x7E9` | W | BX=`0x1000` |
+| `0835` (`FUN_11bd_07e7`) | `89266704` | DS←0x38 → `0x7E7` | W | SP |
+| `09b2` (`FUN_11bd_099b` H8) | `26a36904` | ES←0x38 → `0x7E9` | W | `[0x9b6]` |
+| `09b6` (`FUN_11bd_099b` H8) | `26c70667046e0b` | ES←0x38 → `0x7E7` | W | `0xb6e` |
+| `0abd` (`FUN_11bd_0a9f`) | `26891e6904` | ES←0x38 → `0x7E9` | W | BX=`0x1000` |
+| `0ac2` (`FUN_11bd_0a9f`) | `2689266704` | ES←0x38 → `0x7E7` | W | SP |
+| `0afb` (`FUN_11bd_0ae2` H12) | `26a36904` | ES←0x38 → `0x7E9` | W | `[0x9b6]` |
+| `0aff` (`FUN_11bd_0ae2` H12) | `26c7066704140b` | ES←0x38 → `0x7E7` | W | `0xb14` |
+| `28ee` (ORPHAN-defined, no fn) | `26a36904` | ES = basis-OPEN | W | AX |
+| `643d` (`FUN_11bd_641d`) | `8c166904` | DS←0 → `0x469` | W | SS |
+| `6441` (`FUN_11bd_641d`) | `89266704` | DS←0 → `0x467` | W | SP |
+| `0761` (UNOWNED fill `0745..076e`) | `c7066704940b` (`c7`-field; live `read(11bd:075d,10)` → `c08ec026c7066704940b`: `26`@`0760` immediately after `8ec0` = MOV ES,AX @`075e` ⇒ store plausibly the ES-form `26c7066704940b`@`0760`, same staging shape as `0684` — "DS-default" descriptor softened at final review) | owner-absent → basis OPEN (ES-form candidate) | W | `0xb94` |
+| `~1991:3687` overlay (existence per raw run; addr flaky) | `c70667041e0b` | DS = overlay runtime | W (existence) | `0x0b1e` |
+
+Readers: **NONE** — defined operand runs (every form renders the cell as an
+operand substring) returned zero non-MOV hits; see the 36-run consumer matrix
+below.
+
+### Pair census T2 `{[0x3fc],[0x3fe]}` (the H9 pair + IVT twins)
+
+`[0x3fc]` operand run → `match_count:2` (`04b0` ES←0x38→`0x77C` ←`0x4d3`;
+`09fc` ES←0x38→`0x77C` ←`0xa35`, bytes `26c706fc03350a` live); `[0x3fe]` run →
+`match_count:2` (`04ba`, `0a06` both `26a3fe03` ES:[0x3fe],AX with AX←`[0x9b6]`).
+**PAIR-MATE ANSWER: YES — `[0x3fe]` IS WRITTEN** (`0a06`, five bytes after the
+IP store, same owner `FUN_11bd_09d7`) ⇒ the H9 arm is a COMPLETE far-pointer
+pair `CS←[0x9b6] : IP=0xa35` at physical `0x77C/0x77E`. ES←0 twins `03ab`
+(`26c706fc03940b`) + `03b2` (`268c0efe03`) and `0466`+`046d` arm physical
+IVT-slot `0x3FC/0x3FE` (INT 0xFF) with `CS:0xb94`. Consumers: `[0x3fc]`/
+`[0x3fe]` nominal + `7c03`/`7e03` physical — ZERO static READS (matrix below),
+EXCEPT the IVT-basis instance has a cited-read CANDIDATE at `INT 0xff` —
+relabelled **CITED-SEMANTICALLY (mode-dependent), NOT CLOSED** (final review;
+aligned to the stub-inbound row's bar below: "CITED-SEMANTICALLY … NOT
+arithmetically-closable"): the RM reading "vector fetch IS the read of
+`0:3FC/0x3FE`" (arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`, CS-half `0x3FE`)
+holds ONLY for a real-mode IVT fetch, and the body's immediately-preceding
+`LIDT` is mode-exclusive — in RM `LIDT word [0x8d0]` is #UD (the fault
+dispatch reads vector 6 ⇒ `0:0018`; `0ae0` never fetches `0:3FC`); in PM
+`INT 0xff` fetches the zero-limit IDT just loaded from `[0x8d0]`=0, NOT the
+IVT — i.e. an engineered shutdown/triple-fault, matching the prior row's
+"shutdown tail" label and this section's own family-answer ("consumed only by
+runtime/reset-path code"). Site facts unchanged: `0ae0 INT 0xff` — DEFINED,
+inside `FUN_11bd_0ad5` (`0ad5..0ae1`, live re-render this wave — exactly 3
+insns: `MOV word [0x8d0],0`@`0ad5`/`LIDT word [0x8d0]`@`0adb`/`INT 0xff`@
+`0ae0`), + `cdff` overlay existence hit (`1991:~3692`, address flaky). The H9 (0x38-basis) instance has
+NO consumer: landing `0xa35` is reachable from the IVT-chain only if
+`CS*16` semantics place `0xa35` there — the IVT instances arm `0xb94`, not
+`0xa35`, and NO staging site for the `0x77C` cell's IP value `0xa35` was FOUND
+IN THIS RUN (`350a` raw run → 1 hit = the `09fc` imm itself at `0a01`; no
+table copy — bounded wording per the tool-reliability finding: 1-hit
+flaky-set runs can under-report; the conclusion survives via the independent
+runs: defined operand runs + the 36-encoding matrix + `retf`/`iret`
+corroborations, all zero).
+**H9 chain does NOT close with a cited reader landing `0a35`.**
+
+**Reconciliation with the prior section (final-review fix wave — append-only;
+the slice-22 row itself LEFT UNTOUCHED):** the pre-existing
+`## vector dispatch handlers` listing covers this same body at map line 3963,
+verbatim: "shared shutdown tail | `0ad5`–`0ae1` | `c706d0080000 MOV word
+[0x8d0],0`; `0f011ed008 LIDT word [0x8d0]`; `cdff INT 0xff` — fed by three
+static edges (`084f` H6, `0acc` H11, `0b0b` H12) … **cited exit of the tail:
+INT 0xff**". That row's SHUTDOWN framing and the mode-exclusive
+`LIDT`-before-`INT` shape are the same fact from two sides: the tail's
+`INT 0xff` is its CITED EXIT — an engineered triple-fault/reset leg — NOT an
+arithmetically-closed value-read of `0:3FC/0x3FE`; hence the consumer-leg
+relabel above and no COMPLETE-chain claim anywhere in this section.
+
+### Pair census T3 CS-source cell `[0x9b6]` + control `[0x2fa]`
+
+`[0x9b6]` run → `match_count:21`: exactly ONE writer (`1000:0b9d`
+`mem_grow_relocate` `a3b609` `MOV [0x9b6],AX`) and 20 READERS across the
+cluster (`0433,04b7,05bf,06ab,0792,07f4,0952,09af,0a03,0a71,0aa9,0af8,1a1d,1ef1,2aa5`
++ overlay `1991:1151,4ee2,4eef,5006,5026`) — incl. the stack-staged PUSH form
+`ff36b609` at `0952`/`0aa9`/`2aa5`. **The CS source cell IS consumed
+statically — in pointed contrast to every arm pair cluster, which has zero
+static readers.** Control/relay template `[0x2fa]` run → `match_count:1` =
+`0337 JMP word ptr CS:[0x2fa]` (`2eff26fa02`) — proves the reader-search
+mechanics catch cell READERS of exactly the sought class; our pairs' zero is
+therefore a real zero, not a search blind spot. H7 push-staging verified by
+read (`0950,8` → `5060ff36b609687b`): `0952 PUSH [0x9b6]` + `0956 PUSH 0x097b`
+(stack far-pair → IRET class, landing `097b` = inside the UNOWNED R2 band —
+the H3-style mechanism exists at H7 too; R2 direction beyond this slice).
+
+### Consumer-encoding matrix (36 exact runs; raw bytes: defined + undefined + `1991:`)
+
+Encodings `ff2e`(JMPF)/`ff1e`(CALLF)/`ff26`(JMP)/`ff16`(CALL)/`ff36`(PUSH) ×
+IP-half disps `6704,fc03,e703,7c03,a204,2208` + `ff36` × CS-half disps
+`6904,fe03,e903,7e03,a404,2408` (any segment prefix is a superset match since
+the 4-byte tail is prefix-independent): **ALL 36 = `No matches found`** (e.g.
+`ff2e6704`,`ff1e6704`,`ff266704`,`ff166704`,`ff366704`,`ff2efc03`,`ff1efc03`,
+`ff26fc03`,`ff16fc03`,`ff36fc03`,`ff36fe03`,`ff2ee703`,`ff1ee703`,`ff36e703`,
+`ff36e903`,`ff2e7c03`,`ff1e7c03`,`ff367c03`,`ff367e03`,`ff2ea204`,`ff1ea204`,
+`ff36a204`,`ff362208`,`ff362408`,`ff26e703`,`ff16e703`,`ff267c03`,`ff167c03`,
+`ff26a204`,`ff16a204`,`ff262208`,`ff162208`,`ff2e2208`,`ff1e2208`,
+`ff366904`,`ff2e6904`… each `"No matches found"`). Generic corroborations:
+raw `ff2e` → 11 hits, every 11bd disp spot-verified ≠ cell-class (disps seen:
+`c412`@12d7 `JMPF [0x12c4]` bytes-context, `d414`@14e8, `6010`@17cb, `f20a`
+=1e98 defined `DS:[0xaf2]`, `be17`×2 = 6b5a/6bc8 defined `CS:[0x17be]`,
+`6689`@6e31 (contained), `c412`@727e (contained), 3×`1991:` flaky-addr);
+raw `ff1e` → 35 hits (all defined ones are `[0x1e],[0xaec],[0xd5a],[0x12c4],
+[BP±]`); raw `ea` far-literals via defined run: `1991:` three + `11bd:2084,
+28b6,6470,64fa` — none with offset∈cell-values except `64fa` (stub, below).
+`retf` → 24 defined sites, `iret` → 3 (`0ef3,11c0,731c`) — the stack-consumer
+class EXISTS but no static PUSH-pair reads our cells (only `[0x9b6]` is
+PUSH-read). Data-driven far-call table cells that DO close: `[0xd5a]`
+(`7933` writer ←; `2abe`/`2b20`/`1991:575b` CALLF readers), `[0x12c4]`
+(`6578 CALLF CS:[0x12c4]`), `[0xaec]`, `[0x2fa]`, `[0x1e]` — **none of these
+cells is armed with an R4/R6/H9 landing value** (writers `7933`←runtime BX;
+`[0x1e]/[0xaec]` = DOS vectors).
+
+### Arm→cell→consumer→landing chains map (spine)
+
+| chain | arm-writer (site+bytes+basis) | cell (physical) | reader (arith-cited or NEGATIVE w/ scope) | landing | status |
+|---|---|---|---|---|---|
+| R4 (`6506` half) | `64d3`+`64d7` (`8c0e6904`+`c70667040665`; DS←0) `FUN_11bd_64b7` | `0:467/469` (cluster A) | **NEGATIVE** (36-enc matrix 0; defined operand runs 0; cell unmapped at rest — `0000:0467` read fail) | `CS:0x6506` = `restore_ss_sp_and_modify_pic_masks` (OWNED) | **consumer-open** |
+| R6-arm | `0684`+`068b` (`26c7066704940b`+`268c0e6904`; ES←0 self-staged) UNOWNED band | `0:467/469` (cluster A — SAME cell as R4, serialized tenants) | NEGATIVE (same scope) + SS/SP-save co-tenants `643d/6441` also unread | `CS:0xb94` = UNOWNED (read-render: `b80010/8ed8/8ed0/8b26 9609/SUB SP,0x180/MOV DI,SP/MOV CX,0x2a/REP STOSB` = stack-setup stub `0b94..0bad+`) | **consumer-open + landing-unowned** |
+| IVT-twin-A (int-FF) | `03ab`+`03b2` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `03a7/03a9`; fill `0360..040d` UNOWNED) | `0:3FC/3FE` = INT 0xFF vector (IVT; arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`/CS-half `0x3FE`) | **CITED-SEMANTICALLY (mode-dependent)** — read-site CANDIDATE `0ae0 INT 0xff` (`FUN_11bd_0ad5` `0ad5..0ae1`, DEFINED+OWNED) as IVT fetch; RM-#UD/PM-null-IDT alternatives unresolved (T2 prose + reconciliation) — **NOT CLOSED**; + overlay `cdff` existence | `CS:0xb94` (same UNOWNED stub as above) | **HALF (writer-open + landing-open; consumer leg CITED-SEMANTICALLY (mode-dependent) — not CLOSED)** |
+| IVT-twin-B (int-FF) | `0466`+`046d` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `0462/0464`; fill `045e..0490` UNOWNED) | same `0:3FC/3FE` INT-FF vector cell (arith `0xFF × 4 = 0x3FC`; the two arm-pairs serialize on ONE vector slot — same-instance rule as the R4/R6 cluster-A sharing) | same consumer leg (same mode-dependent tag): `0ae0 INT 0xff` vector-read candidate — a single RM-branch fetch would serve both arms — CITED-SEMANTICALLY (mode-dependent), NOT CLOSED; + overlay `cdff` existence | `CS:0xb94` | **HALF (writer-open + landing-open; consumer leg CITED-SEMANTICALLY (mode-dependent) — not CLOSED)** |
+| H4 | `06ae`+`06b2` (ES←0x38) | `0:7E7/7E9` (B) | NEGATIVE (36 matrix) | `0x6ca` = `restore_ss_sp_pic_and_return` (OWNED) | consumer-open |
+| H5 | `0795`+`078b` (ES←0x38) | B | NEGATIVE | `0x7b9` = `restore_ss_sp_and_write_port66` (OWNED) | consumer-open |
+| H8 | `09b2`+`09b6` (ES←0x38) | B | NEGATIVE | `0xb6e` UNOWNED (`(0b6e)`→no function) | consumer-open + landing-open |
+| H12 | `0afb`+`0aff` (ES←0x38) | B | NEGATIVE | `0xb14` UNOWNED | consumer-open + landing-open |
+| H9 | `09fc`+`0a06` (`26c706fc03350a`+`26a3fe03`; ES←0x38) | `0:77C/77E` (C) | NEGATIVE; no `0xa35` staging site found in this run (`350a`=1 self-hit; 1-hit flaky-set runs can under-report — conclusion rests on the independent defined-operand + 36-matrix runs) | `0xa35` unowned + `DAT_11bd:0a35` `Alignment` intact (audit: `{"type":"Alignment","length":1,"xref_count":0}`) | **consumer-open + listing-blocked (slice-29 flow-repair ruling stands)** |
+| H2 | `04b0`+`04ba` (ES←0x38) | C (`0:77C/77E`) | NEGATIVE | `0x4d3` UNOWNED (`(04d3)`→no function) | consumer-open + landing-open |
+| H10 | `0a6a`+`0a74` (`26c706a204860a`+`26a3a404`; ES←0x38) | `0:822/824` (D) | NEGATIVE | `0xa86` = `restore_ss_sp_and_out_3f20` (OWNED) | consumer-open |
+| H3 (stack form) | `05bf-05c6` (`ff36b609`? no — `a1b609 50 b86506 50`: PUSH [0x9b6]-value; `MOV AX,0x665`; PUSH AX) + PIT reprogram + `0664 HLT` | stack far-pair (no cell) | consumer CLASS = `IRET` (3 defined sites; `0ef3` precedes `FUN_11bd_0ef4`; exact instance-attribution runtime-int-dependent) | `0x665` — 2-B `Alignment`-eaten true head (`b0 f0`=MOV AL,0xF0 + `e6 a0` OUT 0xa0 EOI at 0665..0666; `(0665)`→no function) | half (consumer-class-identified, listing-blocked) |
+| H7 (stack form) | `0952 PUSH [0x9b6]`+`0956 PUSH 0x097b` (read-verified) | stack far-pair | IRET class (as H3) | `0x097b` inside UNOWNED R2 band | half (out of slice scope) |
+| save-tenants | `643d/6441`(→A), `0831/0835`,`0abd/0ac2`(→B), `28ee`(Basis-open) | A/B | NEGATIVE (no restore read exists statically) | (SS/SP restore halves use `[0xf7c]/[0xf7a]` instead) | **consumer-open** (serialized tenants) |
+| `[0x412]` byte-flag | `0690` (ES←0→`0x412`), `06b9` (ES←0x38→`0x792`) ←`0xa`; writeback `06dd` (`26a21204`, H4 half, ES-basis at `06dd` = inherited-open) | A-adjacent/792 | NEGATIVE (operand run `[0x412]`=2, both stores) | n/a | consumer-open |
+
+**Family mechanism answer:** the two arming STYLES are (1) cell-store pairs
+(`[IP]/[CS]` or `[IP]/[SS]` co-tenants at seg·16+disp) — ZERO static consumers
+anywhere, physical cells outside the mapped image ⇒ consumed only by
+runtime/reset-path code (e.g. after the `0x64,0xFE` keyboard-controller reset
++ the `0:0000` `JMPF CS:6485` stub patch seen at `6449 MOV byte [0x0],0xea`/
+`644e MOV [0x1],0x6485`/`6454 MOV [0x3],CS` under DS←0 — the self-installed
+restart vector; `1991:~1e4f..1e55` holds the overlay-side sibling far-literal
+per raw scan, address flaky); (2) stack-staged `PUSH CS:PUSH IP + IRET` (H3/H7)
+— consumer class closed by construction. **No COMPLETE chain** (every
+non-int-FF cell-store row is missing the reader link; the two int-FF rows have
+their reader but unowned arm-writers + unowned landing).
+
+**Chains-map final row (Task 2 disposition — appended here, NOT a 16th table
+row; the map stays 15 chains):** as of this slice: **0 COMPLETE**; the **int-FF
+consumer leg is the project's first CLOSED consumer-leg SEARCH result — a
+named read-site candidate only, CITED-SEMANTICALLY (mode-dependent), NOT a
+CLOSED leg** (RM-#UD/PM-null-IDT — see T2 prose + reconciliation row) — the remaining legs
+named: IVT-twin-A/B = **writer-open** (arms `03ab/03b2` in fill `0360..040d` +
+`0466/046d` in fill `045e..0490` — all `(03ab)`/`(0466)`→`No function found`
+re-probed live at Task 2) + **landing-open** (`(0b94)`→`No function found` live;
+band sits in gap row `1000:26e2..2792`); the 11 cell-store rows = **reader-leg
+open** (36-run matrix; zero-hit exact-forms re-run live at Task 2); H3/H7 =
+consumer-CLASS closed (`IRET`), instance-attribution open. **save-tenants stay
+`consumer-open (serialized tenants)`**: cluster A/B cells carry arm-stores and
+SS/SP saves as serialized co-tenants with NO static reader of either leg — the
+note is the disposition, not a status change.
+
+### R6 band package `11bd:0675..0696`
+
+| item | output (verbatim) |
+|---|---|
+| ownership probes | `(0675)`/`(0696)`→`{"error":"No function found …"}`; walls `(0674)`→`FUN_11bd_0667 …body_end 11bd:0674` (H3-IRET-ret side), `(0697)`→`{"name":"FUN_11bd_0697",…,"body_end":"11bd:06c9"}` ✓ byte-parity with slice-29 |
+| render W-A | `disassemble_bytes(11bd:0675,11bd:0696,dry_run)` → 13 insns, head `0675 97 XCHG AX,DI` ALIGNED+emitted, `0676 06 PUSH ES`/`0677 9c PUSHF`/`0678 06 PUSH ES`/`0679 52 PUSH DX`/`067a b480 MOV AH,0x80`/`067c e87d00 CALL 0x1000:22cc`/`067f 5a POP DX`/`0680 33c0`/`0682 8ec0`/`0684 26c7066704940b`/`068b 268c0e6904`/`0690 26c60612040a` |
+| render W-B | `disassemble_bytes(11bd:0670,11bd:0697,dry_run)` → `0670 POP DX`…`0674 c3 RET` then `0675 97 XCHG`…+`0696 c3 RET` ✓ two-render STABLE at aligned head `0675` (`97` renders `XCHG AX,DI` in 16-bit — the slice-28 `9706`=`0x0697` DATA-word reading is dead: live decode is CODE both anchors; brief's LEA/`0x0697` question answered: `97 06` = XCHG + `06` PUSH ES) |
+| byte read | `read_memory(11bd:0670,40)` → `5a615b58c397069c0652b480e87d005a33c08ec026c7066704940b268c0e690426c60612040ac350` ✓ byte-identical to slice-29 (`c3`@`0674`, `c3`@`0696`, arm trio `26c7066704940b`/`268c0e6904`/`26c60612040a`) |
+| inbound `7506` run | raw `7506` → `match_count:30` (22 `11bd:` + 8 `1991:`); **fix-wave-1 LIVE RE-RUN: same `22+8` counts, different address set** (the documented 2-byte-pattern instability) — per-hit classification of MY re-run set: all 22 `11bd` hits map to defined-function/defined-orphAN regions (none in true undefined gaps — checked against a fresh FULL 149-row `find_code_gaps` list) = code bytes (`75 06` = `JNE rel8 +6` opcode or displacement fragment); read-grounded samples (each `read_memory` window opens `7506` AT the quoted address, owner cited from `get_function_by_address`): `11bd:1832` `7506c706d411ffff` (`FUN_11bd_17f3`), `11bd:2e93` `7506e8abfee8f72a` (`FUN_11bd_2d9c`), `11bd:3516` `75066a03e890ed5b` (`FUN_11bd_32c6`), `11bd:58ba` `75066a0ce8ecc95b` (`FUN_11bd_5686`), `11bd:78e2` `7506c706cc0e00ef` (`setup_memory_hardware`), plus defined-orphan-region pair `11bd:4867` `75066a1ee83fda5b` / `11bd:4a2d` `75068b46f8a3400c` — my set has 4 `11bd` hits inside `6382..6706` (`4867/48b5/498c/4a2d`); `1991` hits (`20a6,20b1,225a,23ed,2b75,32f8,3859,3e34`) = overlay code bytes, count-quoted only — NOT read-grounded (overlay addresses ambiguous per tool-stability paragraph). **RETRACTION (fix wave 1): the previously printed "verified samples" `11bd:12d7`-class and `11bd:03ae` are NOT `7506` hit sites** — neither is in the re-run set, `03ae` holds the `03ab` ARM DISP bytes `fc03 940b` with no `75 06` within ±4, and `12d7` is a `ff2e`-run context address mis-pasted into this row; reprinted samples are from THIS wave's re-run, read-grounded by me, classification corroborated by the reviewer's independent re-run (22 hits byte-grounded, none in true undefined gaps, 5 in `6382..6706` — set churn between runs is the documented flakiness itself). **Zero data-word `0x0675` table candidates.** Stable exact inbound-arm forms ALL `No matches found`: `c70667047506`, `c706fc037506`, `c706e7037506`, `c7067c037506`, `b87506` (`MOV AX,0x675`), `687506` (`PUSH 0x675`), `ea7506` (far-literal offset `0x675`); defined operands `0x675`=0 (`match_count:0` re-run live), `0x676`=1 false-numeral `0x6761` (slice-29 parity), `0x679`=1 = `44b2 MOV word ptr [BP + -0x5a], 0x679` (the dispatcher ARG-CONSTANT — appendix re-scan below). **TASK-2 FOLD (deferred cosmetic — the 5-vs-4 orphan-window prose):** per-run counts inside `6382..6706` are SET-dependent — that IS the documented flakiness. Task-2's parity re-run again returned `22+8=30` with the overlay set identical to fix-wave-1 and **4** `11bd` hits in the orphan window (`4867/48b5/498c/4a2d` — `4867` re-grounded live `read(11bd:4867,8)`→`75066a1ee83fda5b`; plus this-run NEW-set samples read-grounded here: `11bd:1c27` `75066a16e87f065b` and `11bd:39f0` `75066a0de8b6e85b` — `JNE`+`PUSH`+`CALL` code fragments, OUTSIDE every gap row at their 1000-view `37f7`/`55c0` = defined body interiors); the reviewer's `5` came from a different churned set. All 22 `11bd` hits re-checked against THIS task's fresh FULL 149-row gap list (both pages re-pulled): 18 in defined bodies, 4 in the `1000:6382..6706` orphan-instruction row (`has_undefined_bytes:false` — defined-but-orphaned, not a true undefined gap), ZERO in true undefined gaps — the classification conclusion stands unchanged |
+| appendix re-scan | map lines `2363`-section & `3701`-section 14-arg rows: arg `0x679` story = `44ab/44b2` dispatch immediates (`c746a67906`/`c746a6bc29`); slice-22 dedupe row `0x679↔0675/0677 (9706/9c06)` = the byte-ADJACENCY of the H4 landing words `0x0697/0x069c` — refuted by this pass's CODE render (no data reader; value is a slot index, not a pointer); **no arm value `0x675` exists anywhere**: `7506` has no cell-store/MOV/PUSH/ea form (all 0) |
+| landing check | region-wide targets into `0675..0696` (1000-view `2245..2266`): defined runs operand `0x675`=0; rel16/`e8`/`e9` enumeration: nearest edges are `067c CALL 0x1000:22cc` (OUTBOUND, callee `06fc`), internal `0b0b→0ad5`-style legs never point into the band; `0674 c3 RET` wall (owner `FUN_11bd_0667` = H3 IRET-ret half); **zero inbound edges** |
+| exits | `{c3}`@`0696` (W-B render ✓); arm-stores as above |
+| ES-inheritance question | CLOSED: R6 stages ES←0 itself at `0680/0682` before the `0684/068b/0690` stores — no CALLER ES dependency; the only OPEN leg named: **the band's own ENTRY (writer-open: which dispatch/fallthrough reaches `0675`) — zero static evidence** |
+| mechanism row | **NONE for entry** (no `[..]←0x675` in ANY cell/stack/literal form; `0674` RET wall; entry static-zero) — R6 IS the arm-writer side (cluster A + value-sharing with the int-FF twins) |
+
+### R4 head-stub package `11bd:64ff..6505`
+
+| item | output (verbatim) |
+|---|---|
+| data-state | `analyze_data_region(11bd:64ff)` read-only → `{"start_address":"11bd:64ff","end_address":"11bd:6505","byte_span":7,"xref_count":0,"current_name":"DAT_11bd:64ff","current_type":"Alignment",…}` — **the entire stub head `64ff..6505` is ONE 7-byte defined `Alignment` unit** (formed under/around the slice-29 create — explains this pass's gap row `has_undefined_bytes:false` while the bytes are NOT function-owned); H9-`0a35` CLASS — blocks insn decode over it |
+| renders | `disassemble_bytes(11bd:64f8,11bd:6505,dry_run)` → `64fa eaff641800 JMPF 0x0000:667f` then **SKIPS `64ff..6500`**, `6501 e664 OUT 0x64,AL`/`6503 f4 HLT`/`6504 ebfd JMP 0x1000:80d3`(=6503 retry) — head unemitted (the Alignment unit covers it); `read(11bd:64fa,13)` → `eaff641800b0fee664f4ebfdfa` ⇒ bytes-authority: `64ff b0fe`=`MOV AL,0xfe`, `6501 e664`, `6503 f4`, `6504 ebfd`→`6503` HLT-spin, `6505 fd` last, `6506 fa` = created entry. **Stability: renders from the `64f6`/`64fa` anchor are byte-consistent; the unemit is a LISTING effect of the `Alignment` unit, not a decode instability** |
+| inbound (entry) | `64fa` = `FUN_11bd_64b7` LAST insn (owner body render: `…64f7 0f01f0 LMSW AX`/`64fa eaff641800`); raw `eaff64` → `match_count:1` (`11bd:64fa` ONLY — unique far-literal with offset field `0x64ff` = THE STUB HEAD); raw `ff64` → 2 hits (`11bd:64fb` = inside the `64fa` insn — containing-insn convention per slice-29; `1991:1e49` = overlay code byte per flaky-address caveat); operand/value-word class: `b8ff64`/`68ff64`/`c7066704ff64`/`c706fc03ff64` → ALL `No matches found` (no MOV/PUSH/cell-store stages `0x64ff`). **Selector caveat:** under `64f7 LMSW` PE=1 the `ea` operand is GDT-selector `0x0018`:`0x64ff`; Ghidra's real-mode arithmetic renders `0x0000:667f` (`0x18*16+0x64ff`) which does NOT arithmetically hit the stub — the idiom sibling `6470 JMPF 0x0000:65f5` (`ea75641800` = selector 0x18, offset `0x6475` = the fallthrough-adjacent address inside `FUN_11bd_641d`) proves these literals mean `selector:offset`, base-unresolved statically (GDT from `SS:[0x8c8]` runtime). Entry = **CITED-SEMANTICALLY (`64fa` names `0x64ff`), NOT arithmetically-closable** |
+| inbound (cell class) | cluster A `0:467` is armed `CS:0x6506` by the same primary — the stub is NOT downstream of the pair (stub `6504` spins at `6503`; NEVER falls through to `6506`) — the pair and the stub are the primary's TWO distinct exits (restore-half via cell, reset via stub) |
+| semantics | `MOV AL,0xfe`/`OUT 0x64,AL` = i8042 CPU-reset command + `HLT` retry spin — SAME tail as H8 (`FUN_11bd_099b` `09cf b0fe`/`09d1 e664`/`09d3 f4` render ✓) and H12 (`0ae2` `0b0d/0b0f/0b11`) and `07e7` (`081d` region) — the family's hard-reset exit leg inlined in primaries, factored behind a `JMPF` in R4's primary |
+| mechanism row | PRESENT (entry `64fa` far-literal, offset-field `0x64ff`, selector-semantics caveat) but **listing-blocked** (7-B `Alignment` unit on the head, xref 0) + landing-semantic = terminal reset (no onward flow) — NOT create-admissible this slice (create requires the aligned head to render — the same gate clause slice-29 applied to H9; flow-repair is OUT OF SANCTION here: the blocker is DATA, and the sanctioned one-repair-per-region was already spent on H9 last slice and returned the ratified no-op) |
+
+### Proposals + bar pre-tests (≤2 creates allowed; ZERO proposed)
+
+| region | proposal | basis | bar pre-test |
+|---|---|---|---|
+| R6 `0675..0696` | **LEAVE-as-bytes (CODE classification re-confirmed)** — no create | mechanism NONE for entry (every `0x675` inbound encoding + landing class = 0 hits; `0674` RET wall) — the create-gate "COMPLETE chain + aligned head" FAILS on the chain leg despite the aligned head (`97 XCHG` renders clean from both anchors) | n/a — NO create candidate; nothing to name |
+| R4 stub `64ff..6505` | **LEAVE** (stays `DAT_11bd:64ff` `Alignment` until a data mutation + listing decision) | entry CITED (unique `eaff641800`@`64fa`, offset `0x64ff`) but (i) landing = terminal 0x64-reset spin, (ii) head covered by the Alignment unit (decode-blocked), (iii) selector-base static-unresolved | create INADMISSIBLE — aligned render fails (NOT-CONFIRMED default per bar rule; printed-ops would be `reset_cpu_and_halt`-class IF ever freed) |
+| H9 `0a35..0a5d` | **NO CHANGE** — slice-29 leave-as-bytes + flow-repair ratification stands, section NOT re-touched | chain: pair ARM complete (`09fc`+`0a06`), pair-mate `[0x3fe]` ANSWERED (written), CONSUMER **not found** (`0x77C` cell: zero reads; `0xa35` staged nowhere else) ⇒ **consumer-open — the H9 leave gets its mechanism answer: the `0x3fc` chain does NOT close with a cited reader landing `0a35`** | listing-gate restated: even chain completion ≠ auto-write — `DAT_11bd:0a35` `Alignment` still blocks create |
+| int-FF family (`03ab`/`0466` arms, `0ae0` consumer-candidate, `0b94` landing) | **CENSUS ONLY** — the first cited-read consumer-leg candidate found for any arm pair — CITED-SEMANTICALLY (mode-dependent), NOT CLOSED — but arm-sites (undefined fill `0360..040d`/`045e..0490`) and landing `0b94` are UNOWNED ⇒ named NEXT-SLICE candidate for the ownership story | all four links cited above | n/a — no create (writer-open + landing-open ⇒ HALF) |
+
+**Chains complete count: 0 of 15** (11 consumer-open cell-store rows — named:
+R4, R6-arm, H4, H5, H8, H12, H9, H2, H10, save-tenants, `[0x412]` flag — 4 of
+the 11 with OWNED landings (`0x6506`/`0x6ca`/`0x7b9`/`0xa86`, rest unowned or
+listing-blocked); 2 int-FF rows, ONE PER twin arm-site (`03ab/03b2`,
+`0466/046d`), each **HALF** with the defined consumer; 2 stack-staged halves —
+H3/H7). **R6 answer: LEAVE (entry static-zero re-verified live; CODE
+classification holds). Stub answer: LEAVE (listing-blocked, entry
+cited-semantically only). H9 answer: consumer-OPEN — chain does NOT close at
+`0a35`; pair-mate `[0x3fe]` is WRITTEN (`0a06`).**
+
+**Count reconciliation (fix wave 1):** pre-fix the table rendered **14** rows
+while the headline/summary claimed "0 of 15 / 12 consumer-open" against an
+**11**-member named list and **10** actual consumer-open rows. Causes: the two
+int-FF arm-sites were fused into ONE row (they are DISTINCT sites in distinct
+UNOWNED fills `0360..040d`/`045e..0490` — now split into `IVT-twin-A`/
+`IVT-twin-B` ⇒ 15 rows, making the existing "of 15" claim true), and
+save-tenants carried the off-enum status `writer-only` (by this table's own
+definition — writer present, reader absent — it is `consumer-open`,
+"(serialized tenants)" kept). Reconciled, all three surfaces agree: **15 rows =
+11 consumer-open (4 owned landings) + 2 int-FF HALF + 2 stack HALF; complete =
+0.** The slip is recorded here as made; Task 2 plans against these numbers.
+
+### Reads executed (ZERO-WRITE proof)
+
+`list_open_programs`×1; `get_function_count`×1 (335 ✓); `find_code_gaps`×2
+(FULL 100+49=149 ✓); `get_function_by_address`×18 (walls/parity/landings:
+`06ca,07b9,0b6e,0b14,0a86,0b94,0665,64ff,6485,0b3f,0675,0697,0ae0,03ab,04d3,
+20a6,0337,1991:2166`); `disassemble_function`×14 (owner bodies `64b7,09d7,
+0697,05af,0667,099b,076f,0a5e,0ae2,0491,641d,0a9f,07e7,0ad5`);
+`disassemble_bytes`×6 EXCLUSIVELY `dry_run=true` (R6 W-A/W-B, stub @64f8,
+fill @03a4/@03a9, landing @0b90); `read_memory`×28 (+1 refused
+`0000:0467` = the cell-unmapped proof); `search_instructions`×18 (T1/T2/T3 +
+`jmpf,callf,retf,iret` + `[0xd5a],[0x4a2],[0x4a4],[0x412]` + `0x675,0x679,
+0x469`-plain; all `instructions_scanned:15694` `truncated:false` scope program);
+`search_byte_patterns`×63 (36-encoding consumer matrix, inbound-arm forms,
+value-word runs `7506/0665/350a/940b/eaff64/ff64/cdff/c706-…`, incl. 5
+deliberate stability re-runs whose variance is documented above);
+`analyze_data_region`×2 read-only (`64ff` stub unit; `0665` — wide xref map
+returned, unit type cited from its `current_*` fields); `audit_global`×1
+(`0a35` Alignment intact); `get_address_spaces`×1. NO create/rename/comment/
+define/flow-repair/`save_program`; no transaction; `/media/felipe/FIFAPCCD/`
+untouched; `fifa96.rep` churn unstaged. Negatives = defined-insn-only + the
+36-run raw matrix (covers undefined space + `1991:` overlay) + cell-unmapped
+read-fail + data-word `350a`/`940b`-class runs before any consumer-OPEN call.
+Controls quoted not relied (`[0x2fa]`=1-reader proof-of-search; `[0xd5a]`
+closed cell shows the class Ghidra CAN find).
+
+### Fix wave 1 (review round 1 of `a2b2332`; bookkeeping + re-grounding only, ZERO writes)
+
+(1) **Chains map rebuilt from the section's own census tables** — IVT row split
+into `IVT-twin-A`/`IVT-twin-B` (15 rows now, headline "of 15" true);
+save-tenants `writer-only` → `consumer-open (serialized tenants)`; counts
+recomputed so table, named list and summary agree (see count-reconciliation
+note above). (2) **INT-FF equivalence arith** `0xFF × 4 = 0x3FC` now spelled at
+every link asserting the equivalence (physical-cell map cluster IVT, T2
+consumer sentence, both twin rows). (3) **`7506` row re-sampled live**: stale
+`12d7`/`03ae` "verified" cites retracted (not hit sites — see row), replaced by
+THIS wave's re-run with every printed sample read-grounded
+(`search_byte_patterns`×1 → `22+8`, `find_code_gaps`×2 → 100+49=149 ✓,
+`read_memory`×7, `get_function_by_address`×5). (4) **T1 `6441` cell** backtick
+malformation fixed (row renders). All fix-wave calls were read-only; no
+create/rename/comment/define/flow-repair/`save_program`; no transaction;
+`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged. Prior
+sections and this section's untouched rows byte-identical.
+
+### Writes (Task 2 — mechanism-gated dispositions, executed 2026-09-30, program `/fifa96.exe`) — ZERO-WRITES BRANCH
+
+**Step 1 pre-write parity per region (live re-check vs the Task-1 quotes) —
+ZERO DRIFT on all three.**
+
+- **R6 `0675..0696`:** ownership probes `(0675)`/`(0696)`→
+  `{"error":"No function found for 11bd:0675"}`/`…11bd:0696…` (unowned ✓);
+  walls `(0674)`→`FUN_11bd_0667 …"body_end":"11bd:0674"`, `(0697)`→
+  `FUN_11bd_0697 …"body_end":"11bd:06c9"` — identical to the Task-1 package
+  row. DAT units: `analyze_data_region(11bd:0675)`→`{"start_address":
+  "11bd:0675","end_address":"11bd:0696","byte_span":34,"xref_count":0,
+  "current_name":"DAT_11bd:0675","current_type":"undefined"}` — NO defined
+  data unit over the band, xref 0. Gap rows verbatim: `{"start":"1000:2245",
+  "end":"1000:2266","size":34,"has_undefined_bytes":true,
+  "has_orphaned_instructions":false,"before_function":"FUN_11bd_0667",
+  "after_function":"FUN_11bd_0697","after_function_address":"11bd:0697"}` +
+  companion `{"start":"1000:2235","end":"1000:2236","size":2,
+  "has_undefined_bytes":false,…}` = `0665..0666`. Inbound-run parity: value-
+  word `7506`→22+8=30 with per-hit classification holding (see the fold in
+  the Task-1 row above); exact forms `c70667047506`/`c706fc037506`/
+  `c706e7037506`/`c7067c037506`/`b87506`/`687506`/`ea7506` ALL `No matches
+  found`; defined operands `0x675`→`match_count:0`, `0x679`→1 = the same
+  `44b2 MOV word ptr [BP + -0x5a], 0x679` ARG-CONSTANT (`match_count:1`,
+  `instructions_scanned:15694`). Bytes: `read(11bd:0670,40)`→`5a615b58c39706
+  9c0652b480e87d005a33c08ec026c7066704940b268c0e690426c60612040ac350`
+  BYTE-IDENTICAL to the Task-1 cite (`c3`@`0674` wall, arm trio, `c3`@`0696`).
+- **Stub `64ff..6505`:** `(64ff)`→no function; `(64fa)`→`FUN_11bd_64b7
+  64b7..64fe` (the inbound insn's owner ✓); `(6506)`→
+  `restore_ss_sp_and_modify_pic_masks 6506..6548` ✓. DAT unit:
+  `analyze_data_region(11bd:64ff)`→`{"byte_span":7,"xref_count":0,
+  "current_name":"DAT_11bd:64ff","current_type":"Alignment"}` — the 7-B
+  `Alignment` unit INTACT, verbatim vs Task-1. Gap row verbatim: `{"start":
+  "1000:80cf","end":"1000:80d5","size":7,"has_undefined_bytes":false,
+  "has_orphaned_instructions":false,"before_function":"FUN_11bd_64b7",
+  "after_function":"restore_ss_sp_and_modify_pic_masks",
+  "after_function_address":"11bd:6506"}`. Inbound-run parity: raw `eaff64`→
+  exactly one hit `[{"address":"11bd:64fa"}]` (match_count 1, same site),
+  POSITIVE READ-GROUNDED: `read(11bd:64fa,13)`→
+  `eaff641800b0fee664f4ebfdfa` byte-identical to Task-1; value-word forms
+  `b8ff64`/`68ff64`/`c7066704ff64`/`c706fc03ff64` ALL `No matches found`.
+- **int-FF twins' arms + landing:** `(03ab)`/`(0466)`→both `{"error":"No
+  function found …"}` (arms still UNOWNED — writer leg still open);
+  `(0b94)`→`{"error":"No function found for 11bd:0b94"}` (landing leg still
+  open); consumer `(0ae0)`→`FUN_11bd_0ad5 0ad5..0ae1` DEFINED+OWNED ✓ (the
+  consumer-leg read-site CANDIDATE still stands — CITED-SEMANTICALLY
+  (mode-dependent), NOT CLOSED, per the final-review relabel); writer pattern `c706fc03940b`→
+  `[{"address":"11bd:03ac"},{"address":"11bd:0467"}]` = the two twins'
+  `c7`-fields (sites `03ab`/`0466` incl the `26` ES-prefix), both READ-
+  GROUNDED: `read(11bd:03a4,26)`→`09dc0933c08ec026c706fc03940b268c0efe038b1e
+  820f0bdb74` and `read(11bd:045e,18)`→`9104960433c08ec026c706fc03940b268c0e`
+  — byte-identical to the Task-1 windows; fills still undefined gap rows
+  `1000:1f30..1fdd` (174 B) / `1000:202e..2060` (51 B).
+
+**Create-branch evaluation (honest, per the pre-check mandate):** the parity
+re-checks surfaced NO new complete chain — the twins remain HALF (writer-open +
+landing-open re-probed above), every cell-store row remains reader-open ⇒ **0 of
+15 COMPLETE stands; the create branch does NOT open. Zero-writes branch
+executes: 0 creates (≤2 allowed), 0 renames, 0 saves.**
+
+**Zero-writes disclosure — byte-level proofs per region (the two create-gate
+failures, cited verbatim).**
+
+- **R6 `0675..0696` — LEAVE.** Gate failure 1, inbound static-zero ACROSS
+  CLASSES, re-verified live this task (7 exact forms + `7506` classification +
+  operand runs above); Task-1 proposal row verbatim: "mechanism NONE for entry
+  (every `0x675` inbound encoding + landing class = 0 hits; `0674` RET wall)"
+  and mechanism row verbatim: "**NONE for entry** (no `[..]←0x675` in ANY
+  cell/stack/literal form; `0674` RET wall; entry static-zero) — R6 IS the
+  arm-writer side (cluster A + value-sharing with the int-FF twins)". Gate
+  failure 2, the `ES:[0x467],0xb94`-class writer is its OWN arm: the only
+  store-encoding carrying an R6-class value into a cell is `0684`
+  `26c7066704940b` (`ES:[0x467],0xb94`, T1 row "`0684` (R6 band, UNOWNED)")
+  — i.e. the band arms the pair, and the chains map says the chain does not
+  come BACK: R6-arm row verbatim — reader "NEGATIVE (same scope) + SS/SP-save
+  co-tenants `643d/6441` also unread", status
+  "**consumer-open + landing-unowned**"; family-mechanism answer verbatim:
+  "**No COMPLETE chain** (every non-int-FF cell-store row is missing the
+  reader link; the two int-FF rows have their reader but unowned arm-writers
+  + unowned landing)" — and the binding rule, a half-chain is not a mechanism
+  (slice-29 ruling; plan Global). ⇒ **LEAVE**; CODE classification holds; the
+  aligned head (`97 XCHG AX,DI`@`0675`) is NOT sufficient — Task-1 proposal
+  row verbatim: "the create-gate 'COMPLETE chain + aligned head' FAILS on the
+  chain leg despite the aligned head".
+- **Stub `64ff..6505` — LEAVE.** Failure 1, the Alignment unit: the whole head
+  is ONE defined 7-B `Alignment` data unit `DAT_11bd:64ff` (xref 0; re-audited
+  live — the aligned-head render gate CANNOT pass over a defined data unit);
+  Task-1 mechanism row verbatim: "PRESENT (entry `64fa` far-literal,
+  offset-field `0x64ff`, selector-semantics caveat) but **listing-blocked**
+  (7-B `Alignment` unit on the head, xref 0) + landing-semantic = terminal
+  reset (no onward flow) — NOT create-admissible this slice"; proposal row
+  verbatim: "create INADMISSIBLE — aligned render fails (NOT-CONFIRMED
+  default per bar rule; printed-ops would be `reset_cpu_and_halt`-class IF
+  ever freed)". Failure 2, selector-only inbound: the unique inbound is the
+  GDT-SELECTOR literal `64fa JMPF 0x18:0x64ff` (raw `eaff64` = 1 hit,
+  re-run live above) — Task-1 inbound row verbatim: "Entry =
+  **CITED-SEMANTICALLY (`64fa` names `0x64ff`), NOT arithmetically-closable**"
+  (Ghidra's real-mode render `0x0000:667f` misses the stub); value-word class
+  0/4 forms re-confirmed live. No data-undefine is attempted: the `Alignment`
+  units are DATA mutations OUTSIDE the sanctioned write classes (slice-29
+  rule, H9 precedent).
+- **Bar renames: 0** — no creates ⇒ nothing to name (both proposal rows
+  verbatim: "n/a — NO create candidate; nothing to name" / the
+  `reset_cpu_and_halt`-class name stays NOT-CONFIRMED-if-ever-freed).
+- **H9:** not a Task-2 subject; section NOT re-touched — gap row
+  `1000:2605..262d` re-observed UNCHANGED `false/false`, `DAT_11bd:0a35`
+  `Alignment` intact per storage invariance (below).
+
+**Census protocol (zero-writes path, in full).**
+`get_function_count` 335 (pre) → **335** (post) = Δ0 = EXACTLY the write-set
+(empty). `find_code_gaps`: FULL pagination consumed BOTH sides — pre 100+49 =
+`total:149`, post re-pulled ×2 pages = `total:149`, Δ0; touched neighborhoods
+ALL re-observed byte-identical: R6 `1000:2245..2266` + companion
+`1000:2235..2236`, stub `1000:80cf..80d5`, H9 `1000:2605..262d`, int-FF fills
+`1000:1f30..1fdd`/`1000:202e..2060`, landing band `1000:26e2..2792`, orphan
+window `1000:6382..6706` (the `7506` classification anchor). **Flip changes:
+NONE — no row appeared, disappeared or changed state** (every row above
+quoted at pre AND re-observed identical at post). Overlay spot: page-2 fetch
+`1000:c87e`/`de60`/`e270`/`e424`/`e685`/`e7a0`/`e8a7`/`f193`/`f266` +
+`00000000` ALL present = identical to the slice-29/Task-1 ledger. Scope line:
+`search_instructions` both runs `instructions_scanned:15694`,
+`truncated:false`, scope program — Δ0 vs Task-1 (no body entered or left the
+defined-function layer, as required by a zero write-set).
+
+**Mtime-invariance:** captured BEFORE the live runs —
+`fifa96.rep/idata/00/00000000.prp` → `2026-09-29 17:56:21.166450572 -0300`,
+`fifa96.rep/idata/00/~00000000.db/db.30.gbf` → `2026-09-30 11:32:00.103296466
+-0300` — and re-stat AFTER the final census: IDENTICAL to the nanosecond ⇒ no
+save ⇒ program storage untouched by this task. `/media/felipe/FIFAPCCD/`
+untouched; `fifa96.rep` churn left unstaged.
+
+**Explicit no-write inventory + read/write ledger.** NOT executed (each, with
+its reason): `create_function`×0 (gate failures cited above — 0 of 15 chains
+complete), `rename_function`×0, `set_comment`×0, `set_function_prototype`×0,
+`apply_data_type`/`set_global`×0 (DATA-mutation class, unsanctioned),
+`clear_flow_and_repair`×0 (blockers are DATA; H9's one sanctioned repair per
+region spent last slice and ratified), REAL `disassemble_bytes`×0 (byte-
+authority came from `read_memory` identity; no write-mode disasm needed),
+`save_program`×0 (nothing to save; mtime proves it). No transaction. READS
+this task: `list_open_programs`×1, `get_function_count`×2, `find_code_gaps`×4
+(FULL pagination pre 100+49 and post 100+49, 149/149 both sides),
+`get_function_by_address`×11 (R6 ×4, stub ×3, int-FF ×4),
+`analyze_data_region`×2 (read-only), `search_byte_patterns`×14 (`7506`,
+`eaff64`, `c706fc03940b` parity + 11 exact-form negatives),
+`search_instructions`×2 (`0x675`, `0x679` — defined-layer authority, scope
+15694), `read_memory`×7 (every quoted POSITIVE read-grounded per the
+flakiness rule: `64fa`, `03a4`, `045e`, `0670`, `4867`, `1c27`, `39f0`).
+Negatives = zero-hit exact-form runs (existence class) + defined-operand runs;
+controls quoted not relied.
+
+### Verdicts (Task 2 — two rows)
+
+| region | final disposition | entry class | chain cite |
+|---|---|---|---|
+| R6 `0675..0696` | **LEAVE** (zero-writes branch; CODE classification holds; bytes untouched) | **n/a — no create** (entry-class vocabulary applies to created bodies only; the ENTRY itself is static-zero across classes — 7 exact forms `No matches found` + operand `0x675`=0 + `0x679`=1 ARG-CONSTANT + `0674`/`0697` walls, ALL re-verified live at Task 2) | chains map `R6-arm` row: arm `0684`+`068b` (`26c7066704940b`+`268c0e6904`; ES←0 self-staged) → cell `0:467/469` cluster A → reader "NEGATIVE (same scope) + SS/SP-save co-tenants `643d/6441` also unread" → landing `CS:0xb94` UNOWNED ⇒ status **consumer-open + landing-unowned**; the `ES:[0x467],0xb94`-class writer IS the band's own arm ⇒ half-chain ≠ mechanism ("**No COMPLETE chain**" — family-mechanism answer verbatim) |
+| R4 head-stub `64ff..6505` | **LEAVE** (stays ONE 7-B `Alignment` unit `DAT_11bd:64ff`, xref 0 — no create, no data-mutation) | **n/a — no create** (sole inbound is SELECTOR-SEMANTIC ONLY: unique `eaff641800`@`64fa` = `JMPF 0x18:0x64ff`, "Entry = CITED-SEMANTICALLY (64fa names 0x64ff), NOT arithmetically-closable"; value-word forms `b8ff64`/`68ff64`/`c7066704ff64`/`c706fc03ff64` all `No matches found` live) | stub-package mechanism row verbatim: "PRESENT … but **listing-blocked** (7-B `Alignment` unit on the head, xref 0) + landing-semantic = terminal reset (no onward flow) — NOT create-admissible this slice"; proposal row: "create INADMISSIBLE — aligned render fails"; chains map `R4` row `consumer-open` (same cluster-A cell armed `CS:0x6506` by the primary — the stub is the primary's distinct reset exit, never its downstream) |
+
+### Deferrals (Task 2 — updated)
+
+- **INT-FF TWINS = the top next-slice candidate (the natural next slice):**
+  first cited-read consumer-leg candidate on record — CITED-SEMANTICALLY
+  (mode-dependent), NOT CLOSED (the `LIDT`@`0adb` immediately before
+  `INT 0xff`@`0ae0` is mode-exclusive: RM ⇒ #UD dispatching vector 6 at
+  `0:0018`; PM ⇒ zero-limit IDT fetch — the slice-22 "shared shutdown tail"
+  row labels the same body's `INT` as the tail's cited EXIT, not a proven
+  IVT value-read) (arms `03ab/03b2`+`0466/046d` → IVT
+  `0:3FC/3FE` → `0ae0 INT 0xff` inside `FUN_11bd_0ad5` `0ad5..0ae1`) still
+  carries its two OPEN legs — WRITER-OPEN (both arm-sites in UNOWNED fills
+  `0360..040d`/`045e..0490` — `No function found` + gap rows
+  `1000:1f30..1fdd`/`1000:202e..2060` re-observed at Task 2) and
+  LANDING-OPEN (`0b94` stack-setup stub band `No function found`, inside gap
+  row `1000:26e2..2792`). FILL-REGION OWNERSHIP (`0360..040d`, `045e..0490`,
+  the `0745..076e` third int-FF writer `0761 MOV [0x467],0xb94` — store
+  plausibly ES-form `26c7066704940b`@`0760` (live `read(11bd:075d,10)` →
+  `c08ec026c7066704940b`; owner-absent ⇒ basis stays OPEN — "DS-form"
+  softened at final review), +
+  landing `0b94..0bc2`-class) is the pre-step that turns this HALF into a
+  COMPLETE chain — the ONLY route to a future create on this pair KNOWN TO
+  THIS SECTION, and even that route additionally requires resolving the
+  consumer leg's mode-dependence (a CITED-SEMANTICALLY leg does not meet the
+  create gate's arithmetically-closed chain without mode context).
+- `[0x2fa]` consumer story: UNCHANGED, FU-blocked (sole reader `0337 JMP word
+  ptr CS:[0x2fa]` `2eff26fa02` — this slice used it only as the search
+  control, per scope-guard cite-only).
+- R6's own ENTRY writer-open leg (which dispatch/fallthrough reaches `0675`):
+  static-zero persists; runtime OPEN-WINDOW row.
+- Stub + H9 heads: the `Alignment` units (`DAT_11bd:64ff` 7-B,
+  `DAT_11bd:0a35` 1-B) are DATA mutations outside sanctioned write classes;
+  re-alignment/undefine stays a future listing decision. **H9 chain NOT newly
+  COMPLETE** (consumer-open at this slice: `[0x3fe]` written at `0a06`, no
+  reader lands `0xa35`) — and the listing-gate clause carries regardless of
+  chain state: **chain completion does NOT auto-create over the `Alignment`
+  unit — the gate stays** (slice-29 flow-repair ratification stands; section
+  NOT re-touched, row `1000:2605..262d` unchanged).
+- Remaining list (Task-1 carry): H7 `PUSH 0x097b` → R2-band direction;
+  `0:412`/`0x792` flag-cell consumer (`0690`/`06b9` stores, writeback
+  `06dd`); overlay `~1991:3687 [0x467]←0x0b1e` + overlay `cdff` existence
+  site (needs STABLE overlay tooling first — the tool-reliability finding).
+- Prior deferrals unchanged: `2cc5`/`0e3c`, `674c`/`675a`, `[0x56]`/`[0x58]`
+  armed values, `[0x9ba]` runtime, R1/R2 direction, R3 stub, name-class
+  route, Δ1 — cite-only carry.
+- Suite: no C/test/CMake/tool change (`cmake --build build && ctest` green —
+  docs-only diff); THIS TASK'S PROGRAM WRITES = ZERO (count Δ0 `335`, gap
+  total Δ0 `149`, no flip changes, mtimes invariant); `fifa96.rep` churn left
+  unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+### Fix wave (final review of `a2b2332`/`ffb7f01`/`6aa355a` — int-FF consumer-leg relabel + minor softening; ZERO Ghidra writes beyond reads)
+
+(1) **Important fixed — IVT twins' "consumer leg CLOSED" relabelled
+CITED-SEMANTICALLY (mode-dependent)** on every surface that asserted closure:
+T2 prose, both twin rows' reader+status cells, the chains-map final row, the
+int-FF proposal row, the Task-2 parity bullet, and the Deferrals (incl. the
+hedge on "the ONLY route to a future create on this pair"). Live re-observed
+this wave: `disassemble_function(11bd:0ad5)` → EXACTLY 3 insns — `MOV word
+ptr [0x8d0],0x0`@`0ad5`, `LIDT word ptr [0x8d0]`@`0adb`, `INT 0xff`@`0ae0`;
+the `LIDT` immediately before the `INT` is mode-exclusive: RM ⇒ #UD (fault
+dispatch reads vector 6 at `0:0018`, the `0ae0` INT never fetches `0:3FC`);
+PM ⇒ `INT 0xff` fetches the just-loaded zero-limit IDT (from `[0x8d0]`=0),
+NOT the IVT — engineered shutdown/triple-fault class. Bar precedent aligned
+(verbatim, this section's stub inbound row): "Entry = **CITED-SEMANTICALLY
+(`64fa` names `0x64ff`), NOT arithmetically-closable**". Reconciliation line
+added citing the untouched slice-22 row verbatim (`## vector dispatch
+handlers`, map line 3963: "shared shutdown tail … `0f011ed008 LIDT word
+[0x8d0]`; `cdff INT 0xff` … **cited exit of the tail: INT 0xff**"). No other
+row's status changes; the LEAVE×2 / 0-create dispositions are UNCHANGED;
+bytes already disclosed. (2) Minor — `0761`/`0760` "DS-form" descriptor
+softened to ES-form candidate at the T1 row + the Deferrals mention (live
+`read_memory(11bd:075d,10)` → `c08ec026c7066704940b`: `26`@`0760` immediately
+after `8ec0` = MOV ES,AX@`075e`, same staging shape as `0684`; owner-absent ⇒
+basis stays OPEN). (3) Minor — `350a`=1-hit grounding softened: "NEVER staged
+anywhere else" → "no staging site found in this run" (T2 prose + H9 row);
+1-hit flaky-set runs can under-report per this section's tool-reliability
+finding; conclusion survives via the independent runs (defined operand runs +
+36-encoding matrix + `retf`/`iret` corroborations, all zero). (4) Ledger
+ellipses left (cosmetic, noted). Wave reads ONLY: `disassemble_function`×1 +
+`read_memory`×1; no create/rename/comment/define/flow-repair/`save_program`;
+no transaction; `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn
+unstaged. Prior sections byte-identical; the slice-22 row at map line 3963
+LEFT UNTOUCHED — reconciliation is append-only.
