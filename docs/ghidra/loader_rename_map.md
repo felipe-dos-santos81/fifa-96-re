@@ -6782,7 +6782,7 @@ probe row's `CALL 0x1000:46ab`→`2adb` ✓ consistent with live bytes) and
 
 | verdict | address | evidence | disposition | C counterpart |
 |---------|---------|----------|-------------|---------------|
-| strip — **DISPOSED: LEAVE-AS-BYTES** (supersedes nothing — extends honestly) | body `6328..634e` + orphan-table `634f..6394` (deferral span `6329..633c`) | class DEFINED-UNOWNED CODE, orphan-instruction gap flag, 3-window render-IDENTICAL span internals (`632d`/`6330` present in the `[0x56]`/`[0x58]` authority runs WITHOUT function fields — the `173b`/`4c94` render-dependent class REJECTED); entry ZERO (Task-1 eight numeral runs 0/0×8 + Task-2 parity re-runs; fallthrough REFUTED — `6327 c3 RET` byte-cited `c355` read + owner authority render `count:28`; controls `get_xrefs_to` 0/0 ×2 tasks); enumeration+store-sweep CLOSED (20 insns, zero memory stores) | slice-26 deferral "`6329..633c` unowned zero-DS staging strip — full enumeration + store sweep next slice" carried → **DISPOSED here** (this section: walk/renders/entry/proposals rows + this verdict row): leave-as-bytes — create inadmissible (no cited entry), data-define MISLABELS executed frame-CODE (`633a [BP+0x4]`/`6340 [BP+0x2]` args + `634b..634d` POP-restore + `634e RET`); naming final: mechanism leg passes but MOOT (no body created); IVT-flavored words stay bar-BLOCKED. Supersession record: the slice-26 rows claimed ONLY what they printed (`read_memory(6329,20)` + emission ending `633a 8b7e04`, explicitly "full-body enumeration … next slice" — no end-at-`633c` claim); the walk widened the head by 1 B (`55`@`6328`, anchor-window cite) and the body to `634e` — byte-window-anchored deferral text, widened, honest record; slice-26 rows stand byte-untouched (append-only ✓) | none — behavioral (zero-DS placeholder-pair scan over a `[DI]`-addressed table, downward 4-B stride, result in `AX=DI`; entry runtime-only) |
+| strip — **DISPOSED: LEAVE-AS-BYTES** (supersedes nothing — extends honestly) | body `6328..634e` + orphan-table `634f..6394` (deferral span `6329..633c`) | class DEFINED-UNOWNED CODE, orphan-instruction gap flag, 3-window render-IDENTICAL span internals (`632d`/`6330` present in the `[0x56]`/`[0x58]` authority runs WITHOUT function fields — the `173b`/`4c94` render-dependent class REJECTED); entry ZERO (Task-1 eight numeral runs 0/0×8 + Task-2 parity re-runs; fallthrough REFUTED — `6327 c3 RET` byte-cited `c355` read + owner authority render `count:28`; controls `get_xrefs_to` 0/0 ×2 tasks); enumeration+store-sweep CLOSED (20 insns, zero memory stores) | slice-26 deferral "`6329..633c` unowned zero-DS staging strip — full enumeration + store sweep next slice" carried → **DISPOSED here** (this section: walk/renders/entry/proposals rows + this verdict row): leave-as-bytes — create inadmissible (no cited entry), data-define MISLABELS executed frame-CODE (`633a [BP+0x4]`/`6340 [DI+0x2]` args + `634b..634d` POP-restore + `634e RET`); naming final: mechanism leg passes but MOOT (no body created); IVT-flavored words stay bar-BLOCKED. Supersession record: the slice-26 rows claimed ONLY what they printed (`read_memory(6329,20)` + emission ending `633a 8b7e04`, explicitly "full-body enumeration … next slice" — no end-at-`633c` claim); the walk widened the head by 1 B (`55`@`6328`, anchor-window cite) and the body to `634e` — byte-window-anchored deferral text, widened, honest record; slice-26 rows stand byte-untouched (append-only ✓) | none — behavioral (zero-DS placeholder-pair scan over a `[DI]`-addressed table, downward 4-B stride, result in `AX=DI`; entry runtime-only) |
 | `7750` — **DISPOSED: LEAVE-AS-BYTES** | `11bd:7750` | undefined 1-B flow-DEAD hole inside the `setup_memory_hardware` `76db..79f5` envelope (Task-1 probes ×4 owner + `7750` error re-quoted Task-2), own gap row `1000:9320` (`has_undefined_bytes:true` — not even disassembled) re-quoted byte-identical; references: operand `7750` = 2 (`76c8` designed WRITE-of-value + `5b79` FALSE-NUMERAL `5b7b+0x05=5b80`), `0x7750` = 1, relocated `9320` = 0, `50 77` = 1 (`76ca` imm), xref control 0 | slice-26 deferral "the `7750` sink byte (undefined/flow-dead, single `cf`) stays a define-candidate for a capped write path" carried → **DISPOSED here**: capped path EXECUTED = NOT-ADMISSIBLE — the 1-byte-create legality test (cited entry) FAILS at both tasks; reachability is runtime-IVT-indirect ONLY (cited chain `76c8/76cc`→`76cf INT 0x67`→`cf`→IRET→`76d1/76d4` restore); leave-as-bytes with the role ALREADY documented at the `temporarily_patch_int67_vector` plate — no write needed, none made | none — behavioral (inert IRET sink byte; semantics live at the 76ab plate row) |
 | bonus — cell-writer pair located | `631e`/`6321` (`FUN_11bd_62f8`) | `[0x56]` run 3 hits / `[0x58]` run 4 hits — each with EXACTLY ONE WRITE, both in the immediately-preceding owner (`a35600 MOV [0x56],AX` / `89165800 MOV word ptr [0x58],DX`, authority render count 28) | recorded; the FULL `[0x56]/[0x58]` armed-value story STAYS deferred (one line here) | — |
 | bonus — store-sweep closure | body `6328..634e` | the deferral's "store sweep" leg: fully enumerated body has ZERO memory stores (stack + segment-register ops only) — window stores under the staged DS are READs (`6340`/`6345`) | CLOSED statically at this slice; the persistent non-IRET-install OPEN-WINDOW posture unchanged (this body adds no writer) | — |
@@ -6813,3 +6813,37 @@ probe row's `CALL 0x1000:46ab`→`2adb` ✓ consistent with live bytes) and
   (create/define/rename/plate/save each not-admissible-or-skipped with the
   cites above); function count Δ0 (`329`), gap total Δ0 (`151`), mtimes
   invariant, rep churn unstaged, `/media/felipe/FIFAPCCD/` untouched.
+
+### Fix wave 1 (review 2026-09-30 round — verdict-row operand cite; own-section edit only, zero Ghidra writes beyond reads)
+
+Reviewer IMPORTANT, verbatim: "Strip verdict row cites `6340 [BP+0x2]` …
+Live bytes render `6340 395502` = `CMP word ptr [DI + 0x2], DX` — and the
+section's own Task-1 walk row records it correctly as `[DI + 0x2]`; the
+bonus store-sweep row in this very append also treats `6340` as a
+`[DI]`-based READ. … One-word fix: `[BP+0x2]` → `[DI+0x2]`." Verified LIVE
+BEFORE editing: `read_memory(11bd:6340,3)` →
+`{"address":"11bd:6340","length":3,"data":[57,85,2],"hex":"395502"}`
+(hex↔data ✓) — authority render in this section's Step-1 walk table:
+"`| 6340 | 395502 | — | CMP word ptr [DI + 0x2], DX | CODE scan-compare |`"
+(window-B and window-C emissions identical) — verdict row was the outlier.
+Co-cited `633a` RE-CHECKED per review instruction: `read_memory(11bd:633a,3)`
+→ `{"address":"11bd:633a","length":3,"data":[139,126,4],"hex":"8b7e04"}` ✓
+and the emitted operand from BOTH covering dry-run windows (quoted verbatim
+in the walk table) is `MOV DI, word ptr [BP + 0x4]` — the review's rhetorical
+`8b7e04 MOV BX,[SI+4]` is the PLAN's rejected decode hypothesis (already
+recorded as REJECTED in the walk row: ModRM `7e` = mod `01`, reg `111` = DI,
+rm `110` = `[BP+disp8]` — `[SI+disp8]` would need rm `100`, `BX` would need
+reg `011`) — ⇒ verdict row's `633a [BP+0x4]` CONSISTENT with live, NO fix.
+Correction applied (own-section only; every prior row byte-untouched): the
+strip verdict row clause `6340 [BP+0x2]` → `6340 [DI+0x2]` — the ONE edit
+(one-word, per reviewer). Post-fix consistency notes: (a) `6340 [DI+0x2]`
+is the loop-cursor cell READ (compares against the DX VALUE loaded from
+`[0x58]`), NOT a frame argument — the frame-arg leg of the data-define
+mislabel rests on `633a [BP+0x4]` alone (the sentence's "args" collective
+phrasing stands; disposition is unaffected either way, as the reviewer
+states); (b) the bonus store-sweep row and the verdict row's C-counterpart
+row already said `[DI]`-addressed — now consistent section-wide. Tool
+inventory this wave (reads only): `read_memory` ×2 (2/2 hex↔data
+reconciled); no transaction opened; no listing mutation; NO create/define/
+rename/comment/save. Suite gate re-run post-edit (10/10, docs-only diff);
+`fifa96.rep` churn left unstaged; `/media/felipe/FIFAPCCD/` untouched.
