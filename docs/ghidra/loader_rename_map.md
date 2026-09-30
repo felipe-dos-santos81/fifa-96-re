@@ -8366,7 +8366,9 @@ twin-A block `03a7..03d1` stays gate-FAIL/LEAVE (entry zero ⇒ writer-open pers
 B = tenant `045e..0461` + CODE `0462..0490`, GATE NONE (writer-open persists);
 C = tenant `0745..0748` + CODE `0749..076e` whose `0760` arm is now render-stable
 ES-form with in-row `33c0/8ec0` staging, GATE NONE for entry (basis still OPEN,
-owner-absent); D = all-CODE band (7 blocks, render-stable), GATE FAIL on the
+owner-absent); D = all-CODE band (6 CODE blocks per the D class row — intro's earlier "7"
+reconciled to the live enumeration at the final-review wave; dry re-render 177 B stable,
+render-stable), GATE FAIL on the
 mechanism leg — the int-FF IVT-fetch is the ONLY cited route to `0b94` and it is
 CITED-SEMANTICALLY mode-dependent ⇒ landing-open persists.** Region ownership and
 chain closure remain separate facts, as designed.
@@ -8485,7 +8487,7 @@ style; 13 probes).
 | class sub-spans | CODE `0b12..0b13` halt-retry tail (H12 adjacency — its `JMP→0b11` lands on the OWNED `f4` HLT); CODE `0b14..0b3e` H12-return half (slice-22 proposed `[0b14..0b3e]` — SS/SP restore + `CALL→0360` + CMOS `0xd` + PIC `0x7ff` + `[0x35]`-0x8000 gate + `5b/58/RET` + `JMP→28fb`); CODE `0b3f..0b5f` H11-return half (slice-22 `[0b3f..0b6d]` re-derived: RET@`0b5f`, `CALL→0360`, `CALL→0be3`); CODE `0b60..0b6d` error-delay block (`CALL 0be9` + `JMP→0b5d` merge-back); CODE `0b6e..0b93` H8-return half (CMOS/NMI `e670 AL=0xd`, A20-ish port-0x92 RMW, RET@`0b93`); CODE `0b94..0bc2` LANDING STUB (int-FF `0xb94` value's target — stack-frameset + `PUSH 0x0`/`CALL print_error_message`@`22ad`) |
 | inbound — defined layer | `0x1000:26e2`→0; `0x1000:2764`→0; `0x1000:26e`→0; operand `0xb94`→`match_count:0` (⇒ EVERY `0xb94`-carrying insn — the twins `03ab/0466`, R6 `0684`, region-C `0760`, block-5 `03da`, callee `0726`, band `0916` — is OUTSIDE the defined layer: writer-open confirmed cross-method ✓ the run catches the class: compare `[0x160]`→`match_count:1` `042c`); operand `0xb12`→0 (note: `mem_grow_relocate` at `1000:0b12` is a DIFFERENT-space symbol — no `11bd:0b12` edge); region-wide `0x1000:27`→`match_count:20`, per-hit arith: `279e`→`0bce`,`27f8`×4→`0c28`,`27a1`→`0bd1`,`27b3`→`0be3`,`27c5`→`0bf5`,`27dd`×4→`0c0d`,`27b9`×4→`0be9`,`27cb`×2→`0bfb`,`27fb`→`0c2b`,`2793`→`0bc3` (= wall+1, the `2903 CALL` lands INSIDE `FUN_11bd_0bc3`, NOT in the row) — ZERO land inside `26e2..2792` ⇒ NEGATIVE, defined-insn-only, at-this-slice-time. Byte runs: `68940b`/`ea940b`/`b8120b`/`68120b`/`ea120b`/`c706????120b`/`c706????6003` ALL `No matches found`; `b8940b`→`11bd:0916` READ-GROUNDED `MOV AX,0xb94` (value materialization in band `08d6..0928` — AX-dest, not a flow edge; cite-only status); `c706????940b`→`[03ac,03db,0467,0685,0727,0761]` — SIX cell-store sites, ALL read-grounded this pass (`03ac` region-A read; `03db` read `03d2,20`→`…26c7066001940b…`; `0467` region-B read; `0685` read `11bd:0685,6`→`c7066704940b` — the `940b` imm value bytes (the `26` ES-prefix byte sits at `0684`); `0727` read `0722,16`→`33c08ec026c706a204940b268c0ea404` + dry render `0716`: `0726 26c706a204940b MOV ES:[0x4a2],0xb94`/`072d 268c0ea404 ES:[0x4a4],CS`/`0732 RET`; `0761` region-C read) |
 | west-wall fallthrough test | `FUN_11bd_0ae2` LAST insn = `0b11 HLT` bytes `f4` (`read(11bd:0b10,4)`→`64f4ebfd` + disasm body `{"address":"11bd:0b11","instruction":"HLT"}`) — TERMINATES ⇒ no fallthrough into `0b12`; and the row's FIRST insn `ebfd`@`0b12..0b13` jumps BACK into the wall (`→0b11`) — the retry pair is the H12 halt-loop, cited not claimed |
-| GATE row D | static-edge: NONE (every class zero arith-checked — nothing lands inside `26e2..2792`, `2793`/`0bc3` miss by 1 byte); fallthrough: REFUTED (`f4`@`0b11`); mechanism: the ONLY cited reachability route to the `0b94` stub is the int-FF IVT fetch (`0:3FC/3FE` → `CS:0xb94`), which is **CITED-SEMANTICALLY mode-dependent (slice-30 relabel verbatim: "NOT CLOSED"; RM-#UD/PM-null-IDT unresolved) — a region reachable ONLY through that leg FAILS the create gate** ⇒ **FAIL ⇒ LEAVE** for `0b94..0bc2`; same class for the return halves (`0xb14` armed by OWNED `0aff`, `0xb6e` by OWNED `09b6`, `0b3f` by the H11 frame — cell/stack arms whose readers are the far-ret runtime, DYNAMIC — slice-28 precedent vocabulary), and `0b12..0b13` is H12-adjacent tail — LEAVE ×4. The `0916`/`0726`/`03da` value-materializations are STATUS facts (below), not grounds |
+| GATE row D | static-edge: NONE (every class zero arith-checked — nothing lands inside `26e2..2792`, `2793`/`0bc3` miss by 1 byte); fallthrough: REFUTED (`f4`@`0b11`); mechanism: the ONLY cited reachability route to the `0b94` stub is the int-FF IVT fetch (`0:3FC/3FE` → `CS:0xb94`), which is **CITED-SEMANTICALLY mode-dependent (slice-30 relabel verbatim: "NOT CLOSED"; RM-#UD/PM-null-IDT unresolved) — a region reachable ONLY through that leg FAILS the create gate** ⇒ **FAIL ⇒ LEAVE** for `0b94..0bc2`; same class for the return halves (`0xb14` armed by OWNED `0aff`, `0xb6e` by OWNED `09b6`, `0b3f` by the H11 frame — cell/stack arms whose readers are the far-ret runtime, DYNAMIC — slice-28 precedent vocabulary), and `0b12..0b13` is H12-adjacent tail — LEAVE ×5 (the 5 spans the disposition rows enumerate: stub `0b94..0bc2`, H12-ret `0b14..0b3e`, H11-ret `0b3f..0b5f`+err-delay `0b60..0b6d`, H8-ret `0b6e..0b93`, retry tail `0b12..0b13` — relabeled from "×4" at the final-review wave; the enumeration always listed 5). The `0916`/`0726`/`03da` value-materializations are STATUS facts (below), not grounds |
 
 ### Chains-map status updates (status ONLY — no relabel beyond what bytes give)
 
@@ -8496,7 +8498,7 @@ style; 13 probes).
 | third-writer `0761`/`0760` (fill `0745..076e`) | basis OPEN, ES-form candidate softened | **OPEN persists** — ES-form now render-stable ×3 windows + in-row `075c/075e` ES←0 staging byte-cited + read-grounded `c706????940b` hit at `0761`; physical-basis adjudication still needs the entry leg (NONE found) — unchanged status, strengthened cites |
 | landing `0b94` (band row `1000:26e2..2792`) | landing-open | **PERSISTS — gate FAIL** (Package D: only route = mode-dependent IVT leg); stub render-stable `0b94..0bc2` 17 insns (2-window ✓, slice-30 quote parity ✓), ends `CALL print_error_message` (`0bc0 e8ea16` → `22ad` arith ✓); row byte-identical to slice-30 |
 | consumer leg (`0ae0 INT 0xff` in `FUN_11bd_0ad5`) | CITED-SEMANTICALLY (mode-dependent) — NOT CLOSED | UNTOUCHED — re-cited verbatim in gates A/D; no new evidence either way this pass |
-| (new census fact, no chain row) `0xb94` writer-family | T1 table listed twins/`0684`/`0760`-candidate | exact-form run `c706????940b` (read-grounded ×6) shows value `0xb94` arms FOUR nominal cell pairs — `0x3fc/0x3fe` (twins), `0x467/0x469` (`0684`-R6, `0760`-C, and `0726`-callee-region NEW), `0x160/0x162` (`03da`-A-block-5 NEW), plus value-materialization `0916 MOV AX,0xb94` + `091b CALL 0x1000:1f0c`(=`033c`) in band `08d6..0928` — STATUS fact; `[0x160]` defined-layer run = 1 (`042c` writer, class-W, ZERO readers — control that the search sees this disp class); `0:4a2/4a4` = cluster-D nominal — H10's cell class; NO chain relabel from this census (reader legs unchanged per the 36-matrix) |
+| (new census fact, no chain row) `0xb94` writer-family | T1 table listed twins/`0684`/`0760`-candidate | exact-form run `c706????940b` (read-grounded ×6) shows value `0xb94` arms FOUR nominal cell pairs with the 6-site → 4-pair mapping {`0x3fc/0x3fe`: twins `03ab`+`03b2` (c7-fields `03ac`/—) and `0466`+`046d` (c7 `0467`); `0x467/0x469`: `0684`-R6 (c7 `0685`) and `0760`-C (c7 `0761`); `0x160/0x162`: `03da`-A-block-5 (c7 `03db`); `0x4a2/0x4a4`: `0726`-callee-region (c7 `0727`) NEW — cluster-D, NOT `0x467/0x469` (erratum at final review: this row earlier mis-grouped `0726` under the `467` slot; the section's own cites refute it — `read(11bd:0722,16)`→`33c08ec026c706a204940b268c0ea404` re-confirmed live at the fix wave, hex↔data reconciled: `33 c0 8e c0 26 c7 06 a2 04 94 0b 26 8c 0e a4 04` = `0722 XOR AX,AX`/`0724 MOV ES,AX`/`0726 26c706a204940b MOV ES:[0x4a2],0xb94`/`072d 268c0ea404 ES:[0x4a4],CS` ✓ same in-body-staged shape, cluster-D target)}, plus value-materialization `0916 MOV AX,0xb94` + `091b CALL 0x1000:1f0c`(=`033c`) in band `08d6..0928` — STATUS fact; `[0x160]` defined-layer run = 1 (`042c` writer, class-W, ZERO readers — control that the search sees this disp class); `0:4a2/4a4` = cluster-D nominal — H10's cell class; NO chain relabel from this census (reader legs unchanged per the 36-matrix) |
 
 ### Disposition proposals + bar pre-tests (Task-1; Task-2 executes nothing beyond gate-passing rows)
 
@@ -8508,7 +8510,7 @@ style; 13 probes).
 | A tenants `037d..0380`, `03a3..03a6`, `03d2..03d5` | **DATA-define PROPOSAL (future listing decision)** — far-pointer cell pairs, dedup-cited (`0x381`/`0x3a7`/`0x3d6` rows), value words land on handler entries/CLI sites in OWNED bodies; not create material | n/a |
 | B `045e..0490` | **LEAVE** (CODE block `0462..0490`, gate NONE) + tenant `045e..0461` DATA-define proposal (arg `0x462`, lands inside OWNED `FUN_11bd_0491`) | n/a — no create candidate; nothing to name |
 | C `0745..076e` | **LEAVE** (CODE `0749..076e`, gate NONE; third-writer basis stays OPEN) + tenant `0745..0748` DATA-define proposal (arg `0x749`, lands inside OWNED `FUN_11bd_076f`); disclosure: out-edges `0752→0733`, `0759→073c` (OWNED callees — a create here WOULD own edges into defined bodies), `076c→091e` (unowned band, cite-only) | n/a — no create candidate |
-| D `0b12..0bc2` | **LEAVE ×4** (stub `0b94..0bc2` gate FAIL — mode-dependent-only leg, stated explicitly per the binding rule; return halves `0b14..0b3e`/`0b3f..0b5f`(+/`0b60..0b6d`)/`0b6e..0b93` = DYNAMIC cell/push arms — slice-28 vocabulary; retry tail `0b12..0b13` = H12 adjacency) | n/a |
+| D `0b12..0bc2` | **LEAVE ×5** (stub `0b94..0bc2` gate FAIL — mode-dependent-only leg, stated explicitly per the binding rule; return halves `0b14..0b3e`/`0b3f..0b5f`(+/`0b60..0b6d`)/`0b6e..0b93` = DYNAMIC cell/push arms — slice-28 vocabulary; retry tail `0b12..0b13` = H12 adjacency) | n/a |
 
 ### Reads executed (ZERO-WRITE proof) + controls
 
@@ -8547,8 +8549,9 @@ section's untouched rows byte-identical.
 four.**
 - **A:** `(0360)`/`(0361)`→`{"error":"No function found …"}`; walls `(035f)`→`FUN_11bd_033c
   033c..035f` + tail bytes `read(11bd:035f,2)`→`c333` ✓, `(040e)`→`FUN_11bd_040e 040e..0442` ✓;
-  span bytes `read(11bd:0360,19)`→`33db8ec3bb00108edbbe560fbf6704fca5a5bf` = the Task-1 W-A
-  window prefix, byte-identical ✓; the three byte-level `e8` sources re-grounded byte-exact:
+  span PREFIX bytes `read(11bd:0360,19)`→`33db8ec3bb00108edbbe560fbf6704fca5a5bf` = the Task-1 W-A
+  window prefix, byte-identical ✓ (this 19-B window ends mid-disp at `0372`; FULL-span parity is
+  the real-disasm row's 29 B/14-insn byte-identity vs the dry W-A render — cross-cited there); the three byte-level `e8` sources re-grounded byte-exact:
   `read(0b21,3)`→`e83cf8`, `read(0b40,3)`→`e81df8`, `read(0862,3)`→`e8fbfa` ✓ (arith → `0x1f30`
   unchanged per the Task-1 table).
 - **B:** `(045e)`/`(0490)`→no function; `read(045e,51)` BYTE-IDENTICAL to the Task-1 window;
@@ -8572,7 +8575,7 @@ Parity surfaced no new complete chain ⇒ exactly the ONE gate-passing candidate
 
 **NOT-created rows (gate-failure citations, binding texts).**
 - A `03a7..03d1` (TWIN-A arms): **LEAVE** — Task-1 gate text verbatim: "heads `0381`/`03a7`/`03d6` =
-  NONE (all census classes zero ⇒ writer-open PERSISTS for twin-A at `03a7..03d1`)"; both
+  NONE (all census classes zero — writer-open PERSISTS for twin-A at `03a7..03d1`)"; both
   space-views + exact forms 0 at pre-check parity re-runs; NOT in the created body (body_end
   `037c` cited above) ⇒ arms stay writer-open.
 - A `0381..03a2`, `03d6..040d` (islands): **LEAVE** — "entry NONE × heads";
@@ -8582,7 +8585,7 @@ Parity surfaced no new complete chain ⇒ exactly the ONE gate-passing candidate
   **NONE ⇒ LEAVE**; twin-B arms stay writer-open".
 - C `0745..076e`: **LEAVE** — gate verbatim: "**NONE ⇒ LEAVE**; basis stays OPEN"; `0760`
   ES-form remains basis-OPEN (owner-absent), cites unchanged.
-- D `0b94..0bc2` + return halves: **LEAVE ×4** — gate verbatim: "the ONLY cited reachability
+- D `0b94..0bc2` + return halves: **LEAVE ×5** — gate verbatim: "the ONLY cited reachability
   route to the `0b94` stub is the int-FF IVT fetch … **CITED-SEMANTICALLY mode-dependent …
   a region reachable ONLY through that leg FAILS the create gate ⇒ FAIL ⇒ LEAVE**".
 
@@ -8612,7 +8615,10 @@ same 3 hits (`1fee`/`1f0c`/`1f07`), zero into the remainder.
 `2026-09-29 17:56:21.166450572 -0300`, `…/db.30.gbf` → `2026-09-30 11:32:00.103296466 -0300`,
 `change.data.gbf` → `2026-09-30 11:32:00.077457456`, `change.map.gbf` → `11:32:00.102572337`;
 AFTER the save: `db.31.gbf` NEW `2026-09-30 18:20:58.288436462 -0300` (version rotation = the
-save), `change.data.gbf`/`change.map.gbf` → `18:20:58.284139295`/`18:20:58.287591374`, `.prp`
+save) and the pre-fetch `db.30.gbf` is GONE from disk — ABSORBED by save-time revision
+consolidation (the post-stat lists `db.31.gbf` in its place; the tracked `db.14.gbf` deletion
+in the pre-existing churn is the same rotation class), `change.data.gbf`/`change.map.gbf` →
+`18:20:58.284139295`/`18:20:58.287591374`, `.prp`
 unchanged — save effect is EXACTLY the new-revision + change-log rotation. `/media/felipe/
 FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
 
@@ -8633,7 +8639,7 @@ FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
 | A `0360..037c` | **CREATED** (rename + plate above); remainder of fill A: LEAVE ×3 islands + ×3 tenants | **static (byte-level)** — operand landing INSIDE span arith-shown+read-grounded (`0b21`/`0b40`/`0862` `e8`→`0x1000:1f30`); defined-layer 0 disclosed; west fallthrough REFUTED (`c3`@`035f`) as bound; sources unowned (D-band/H6 rows) | `copy_words_to_cells_and_return` — bar PASS verbatim from the Task-1 pre-test row; mode-words excluded w/ reason; style warnings disclosed (snake_case = program convention) |
 | B `045e..0490` | **LEAVE** (CODE + tenant bytes untouched) | **none** — entry static-zero both views + forms; `44ce` = ARG-CONSTANT non-flow; fallthrough refuted | n/a — not created, no rename |
 | C `0745..076e` | **LEAVE** (third-writer arm region; basis OPEN persists) | **none** (static-zero; `448e` ARG-CONSTANT; fallthrough refuted) — region's arm `0760` is writer-side, never an inbound ground | n/a |
-| D `0b12..0bc2` | **LEAVE ×4** (stub + H12/H11/H8 return halves + retry tail) | **none — mechanism FAIL stated**: only cited route = int-FF IVT fetch, CITED-SEMANTICALLY mode-dependent ⇒ cannot meet the create gate (binding text quoted); D-band edges `0b21/0b40→0360` now feed an OWNED body (target-side fact; sources still gap) | n/a |
+| D `0b12..0bc2` | **LEAVE ×5** (stub + H12/H11/H8 return halves + retry tail) | **none — mechanism FAIL stated**: only cited route = int-FF IVT fetch, CITED-SEMANTICALLY mode-dependent ⇒ cannot meet the create gate (binding text quoted); D-band edges `0b21/0b40→0360` now feed an OWNED body (target-side fact; sources still gap) | n/a |
 
 **Explicit no-write inventory + read/write ledger.** EXECUTED: `disassemble_bytes`×1 NON-dry
 (29 B at `0360..037c` ONLY — capped), `create_function`×1, `rename_function`×1,
@@ -8681,3 +8687,36 @@ zero-hit exact-form runs; controls quoted not relied.
   (`copy_words_to_cells_and_return` `0360..037c`, renamed + plated) + 1 save; count Δ1, gap
   total Δ0 with the single named flip, scope Δ+14, mtime rotation captured; `fifa96.rep` churn
   left unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+### Fix wave (final review of `28bc7b4`/`4a34301`/`32209ed` — errata, zero writes)
+
+(1) **IMPORTANT fixed — `0726` writer mis-attribution**: the `0xb94` writer-family status row
+grouped the sixth site under the `467/469` slot; the section's OWN cites (Package D `0727` read
++ the `0716` dry render) and a live re-read this wave — `read(11bd:0722,16)` →
+`33c08ec026c706a204940b268c0ea404` (hex↔data reconciled elementwise: [51,192,142,192,38,199,6,
+162,4,148,11,38,140,14,164,4]) — confirm `0726 26c706a204940b` = `ES:[0x4a2],0xb94` + `072d`
+`ES:[0x4a4],CS` = **cluster-D** arm pair (H10's cell class), NOT `0x467/0x469`. Row rewritten
+with the complete 6-site → 4-pair mapping {3fc: `03ab/03b2`-twins A+B | 467: `0684`-R6, `0760`-C
+| 160: `03da` | 4a2: `0726`} — "FOUR nominal cell pairs" now enumerates four pair-slots each
+WITH its writer (the reviewer's consequence: previously three slots + a trailing writer-less
+clause). The D-package row and the Deferrals bullet carried it correctly all along — one-row
+contradiction of its own bytes, erratum applied in place. (2) **Minor — intro block count**:
+"D = all-CODE band (7 blocks…)" reconciled to **6** = the D class row's own CODE sub-spans
+(`0b12..0b13`, `0b14..0b3e`, `0b3f..0b5f`, `0b60..0b6d`, `0b6e..0b93`, `0b94..0bc2`); dry
+re-render `disassemble_bytes(11bd:0b12,11bd:0bc3)` → `bytes_disassembled:177` ✓ stable.
+(3) **Minor — LEAVE ×4 relabeled ×5** at all four label sites (GATE row D, Task-1 proposal row,
+Task-2 NOT-created row, verdict row): the enumerations always listed 5 spans {stub, H12-ret,
+H11-ret+err-delay, H8-ret, retry-tail} — label fixed to match the disposition rows.
+(4) **Minor — verbatim-glyph restored**: the NOT-created quote of the A gate text printed
+`⇒ writer-open PERSISTS` where the gate row says `— writer-open PERSISTS` — exact glyph restored
+(reviewer's "mark the substitution" alternative not needed; source text unchanged).
+(5) **Minor — parity label**: "span bytes `read(11bd:0360,19)`" relabeled "span PREFIX bytes"
+(the 19-B window ends mid-disp at `0372`; FULL-span parity lives on the real-disasm row's
+29 B/14-insn byte-identity — cross-cite added). (6) **Minor — mtime claim completed**:
+added that the pre-fetch `db.30.gbf` was ABSORBED by save-time revision consolidation (post-stat
+shows `db.31.gbf` only; the pre-existing tracked `db.14.gbf` deletion is the same rotation
+class) — the row is now fully verbatim. ALL SIX applied INSIDE `## fill region ownership`; this
+wave ran READS ONLY (1 `read_memory`, 1 dry-run `disassemble_bytes`) — no create/rename/comment/
+define/flow-repair/`save_program`, no transaction; `/media/felipe/FIFAPCCD/` untouched;
+`fifa96.rep` churn + `Testing/` left unstaged; prior sections byte-identical; the three earlier
+commits' rows otherwise untouched.
