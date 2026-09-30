@@ -5645,7 +5645,7 @@ all enumerated below, NONE reaches a cell**:
 | `4cc3 268b47fe ES:[BX−2]`; `1991:2f65`; `1991:3872 LEA` | dynamic / non-load | — | OPEN-WINDOW ×2 + NON-LOAD (slice-20 ledger rows stand) |
 | `7687/768e/769a/76a4` (hook-patch cluster, BX=`0xf7d`/`0x2d0a`) | `7684`/`7697` constant loads | `0xf7a`/`0x2d07` etc | REJECT (slice-20 arithmetic reproduced; owners render `FUN_11bd_7670` this pass) |
 | `6198 8d47ff LEA` | — | — | NON-LOAD (`find_substring`, as slice-20) |
-| **NEW family ×12** (`FUN_1991_0400` sites in this run — 11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/045e` + `0461 LEA`; body dump `0400..0477`, 42 insns this pass) | STORE BASE IS RUNTIME: `0402 bb2000 MOV BX,0x20` → `0405 1e PUSH DS` → `0406 8edb MOV DS,BX` (DS pinned `0x20`) → `0408 812e96098001 SUB [0x996],0x180` → `040e 8b1e9609 MOV BX,[0x996]` — every store site (all ≥ `0412`) executes with BX = the RUNTIME cell value `[0x996]−0x180`; the `0461 8d5fce LEA BX,[BX−0x32]` rebases again (runtime) for the post-`0461` sites (`046a [BX]`/`0472 [BX+0x1c]` — positive-disp class, outside this run, same clamp) | bytes all reconciled live this wave: `read_memory(1991:0400,16)` → `fa53bb20001e8edb812e9609 80018b1e` ✓ + `read_memory(1991:040e,4)` → `8b1e9609` ✓ | **REJECT ×11 stores — DS-CLAMP basis (fix wave 1; supersedes the earlier "constant base resolves `0xFFD0..0xFEEE`" wording, which was false on its own premise AND wrong-based)**: DS pinned `0x20` at `0406` and NEVER restored before the `0477 ea` tail (no DS write/`POP DS` in the listing between) → physical ∈ `[0x20<<4, 0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for any effective address; the cells in the `1000:`-paragraph view sit at physical `0x109BC/0x109BE/0x109C2` > `0x101FF` — unreachable regardless of BX; `0461 LEA` = NON-LOAD; REMAINS OPEN: the `[0x996]` value itself and the sites' effective addresses (runtime register — the clamp closes the PHYSICAL question for these cells only; the window is rejected against the `0x9bc/0x9be/0x9c2` view, and under DS=`0x20` no rendering of these disps is that cell set at any BX) |
+| **NEW family ×12** (`FUN_1991_0400` sites in this run — 11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/045e` + `0461 LEA`; body dump `0400..0477`, 42 insns this pass) | STORE BASE IS RUNTIME: `0402 bb2000 MOV BX,0x20` → `0405 1e PUSH DS` → `0406 8edb MOV DS,BX` (DS pinned `0x20`) → `0408 812e96098001 SUB [0x996],0x180` → `040e 8b1e9609 MOV BX,[0x996]` — every store site (all ≥ `0412`) executes with BX = the RUNTIME cell value `[0x996]−0x180`; the `0461 8d5fce LEA BX,[BX−0x32]` rebases again (runtime) for the post-`0461` sites (`046a` = bare-`[BX]` no-disp form, `0472 [BX+0x1c]` = positive-disp form — neither in this run's negative-disp set, same clamp) — class label folded per Task-2 fold-in | bytes all reconciled live this wave: `read_memory(1991:0400,16)` → `fa53bb20001e8edb812e9609 80018b1e` ✓ + `read_memory(1991:040e,4)` → `8b1e9609` ✓ | **REJECT ×11 stores — DS-CLAMP basis (fix wave 1; supersedes the earlier "constant base resolves `0xFFD0..0xFEEE`" wording, which was false on its own premise AND wrong-based)**: DS pinned `0x20` at `0406` and NEVER restored before the `0477 ea` tail (no DS write/`POP DS` in the listing between) → physical ∈ `[0x20<<4, 0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for any effective address; the cells in the `1000:`-paragraph view sit at physical `0x109BC/0x109BE/0x109C2` > `0x101FF` — unreachable regardless of BX; `0461 LEA` = NON-LOAD; REMAINS OPEN: the `[0x996]` value itself and the sites' effective addresses (runtime register — the clamp closes the PHYSICAL question for these cells only; the window is rejected against the `0x9bc/0x9be/0x9c2` view, and under DS=`0x20` no rendering of these disps is that cell set at any BX) |
 | **NEW** `1991:111e 8d47e0 LEA` | none (defined-unowned site, function field absent) | — | NON-LOAD (LEA computes an address, never touches memory) |
 | **NEW** `1991:49aa f647ff02 TEST byte [BX−0x1],0x2` | none enumerated (site ownerless in the run response) | — | **OPEN-WINDOW** (no base or segment pin citable for this site — class-OPEN, never silently rejected) |
 
@@ -5844,5 +5844,84 @@ RECONCILED-OUT conclusion is unaffected (`0x0AAC ≠ 0x124FC`).
 (4) Minor 4 — image-cluster tuple: `0x0001` is at `[0x9c8]` (data index 24),
 not `0x9cc`; the tuple is printed word-by-offset corrected, mapping
 re-derived from the live re-read.
-State: prior sections untouched (diff hunks all `≥5417`, inside this
-section); no program write; `fifa96.rep` churn left unstaged.
+State: prior sections untouched (all edits confined to this section —
+diff-mechanics wording folded per Task-2, hunk evidence lives in the task
+report); no program write; `fifa96.rep` churn left unstaged.
+
+### Writes (Task 2 — zero-writes branch, executed 2026-09-30, program `/fifa96.exe`)
+
+The Task-1 walk table's exposed-bodies list is **NONE**, so the conditional
+create path is skipped and the binding ruling for this task is ZERO
+PROGRAM WRITES: no `create_function`, no `rename_function` (execute), no
+plate, no `set_global`, no `save_program`, no transaction opened. The
+rename-branch bar test for `0931` is executed honestly in the verdict row
+below — its premise FAILS and the tool-side probe ran `dry_run=true` only
+(read-only, no mutation recorded). This section is the disclosure's
+byte-level proof, re-run live THIS task (all responses verbatim, Task-2
+time):
+
+| proof leg | verbatim live response (this task) | reconciliation |
+|-----------|-----------------------------------|----------------|
+| before-neighbor | `get_function_by_address(11bd:092c)` → `{"name":"dispatch_mode_vector","address":"11bd:092c","signature":"undefined dispatch_mode_vector(void)","entry_point":"11bd:092c","body_start":"11bd:092c","body_end":"11bd:0930"}` | body ends `0930` — the byte immediately before the stub |
+| the stub | `get_function_by_address(11bd:0931)` → `{"name":"FUN_11bd_0931","address":"11bd:0931","signature":"undefined FUN_11bd_0931(void)","entry_point":"11bd:0931","body_start":"11bd:0931","body_end":"11bd:0937"}` | bounds BYTE-IDENTICAL to the Task-1 quote — unmoved |
+| after-neighbor | `get_function_by_address(11bd:0938)` → `{"name":"FUN_11bd_0938","address":"11bd:0938","signature":"undefined FUN_11bd_0938(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:0938","body_start":"11bd:0938","body_end":"11bd:0973"}` | starts `0938` = `0937+1` ✓ — the walk's first-foreign byte is OWNED |
+| boundary gaps | between `0930|0931` and between `0937|0938` there is NO unowned byte — the three returned `body_end`/`body_start` pairs are exact adjacencies (arith above); full-pagination `find_code_gaps` (below) carries NO row covering `1000:24f9..2543` (`0929..0973` minus the four bodies: zero) | boxed walk proven: no gap row inside the cluster span |
+| caller census re-verify | `search_instructions` CALL + `0x1000:24fc` → `match_count:6`, sites `0cf4/2cc5/7a76/7b24/7d15/7d1e`, bytes `e835fc/e864dc/e8b38e/e8058e/e8148c/e80b8c` — **byte-identical to Task 1**; CALL + `0x1000:2501` → `match_count:1`, `0da6 e888fb` in `FUN_11bd_0d80` ✓ | authority stable Task-1→Task-2; `instructions_scanned:15589` uniform (scope UNCHANGED — no save occurred, so no sweep and no drift: the slice-24 `Drift`/`15589` precedent holds exactly) |
+| gap census (FULL pagination, mandated since a state read backs the zero-writes claim) | `find_code_gaps offset 0 limit 100` → 100 rows, `total:151`; `offset 100 limit 100` → 51 rows, `total:151` — 151/151 consumed; neighborhood rows verbatim: `{"start":"1000:24a6","end":"1000:24f8","size":83,…,"before_function":"FUN_11bd_08c2",…,"after_function":"FUN_11bd_0929",…}` and `{"start":"1000:2544","end":"1000:256a","size":39,…,"before_function":"FUN_11bd_0938",…,"after_function":"FUN_11bd_099b",…}` | `24f8−0x1bd0 = 0928`, `2544−0x1bd0 = 0974` ✓; total 151 = slice-24 post-state ✓ (no drift); between the rows the whole `0929..0973` span is owned by the four bodies — no new contiguous CODE run exists anywhere the walk could have exposed |
+| function count | `get_function_count` → `{"function_count":329,"program":"fifa96.exe"}` | 329 = slice-24 → 329, Δ0 ✓ (and Δ0 Task 1 → Task 2 — this task wrote nothing) |
+
+NEW SURFACED ADJACENCY (disclosed, NOT created here): the gap row above
+names `after_function FUN_11bd_0929` — probe: `get_function_by_address(11bd:0929)`
+→ `{"name":"FUN_11bd_0929","address":"11bd:0929","signature":"undefined FUN_11bd_0929(void)","entry_point":"11bd:0929","body_start":"11bd:0929","body_end":"11bd:092b"}` —
+a 3-byte body PRECEDING `dispatch_mode_vector`. Provenance: the count is
+stable at 329 across slice-24/Task-1/Task-2 quotes ⇒ it PRE-DATES this
+slice (never claimed by it); Task 1 simply never quoted that row's
+`after_function` field. The walk proof is unaffected (the adjacency sits
+one body BEFORE the `092c` end-boundary, and the boxed-walk claim concerns
+`0930|0931` and `0937|0938` — both still exact).
+
+Fold-ins executed (docs-only, own-section rows — Task-1 wording nits):
+(1) the storm-row post-`0461` class label corrected — `046a` is a
+BARE-`[BX]` no-disp form (the dump's `MOV word ptr [BX],0xef8`), `0472`
+carries `[BX+0x1c]` positive-disp; neither belongs to this run's
+negative-disp set (row now says so); (2) the `### Fix wave 1` trailer's
+"diff hunks all `≥5417`" wording replaced by
+"all edits confined to this section" (the hunk count is a report-side
+artifact, not a map claim). No other prior row of this or any section was
+touched; `git diff` shows the fold-ins plus this append.
+
+### Verdicts (Task 2)
+
+| verdict | address | evidence | disposition | C counterpart |
+|---------|---------|----------|-------------|---------------|
+| `dispatch_mode_vector` — **RATIFIED** (as recorded) | `11bd:092c` | slice-12 rename+plate row (`NOP`@`092c` + `JMP word ptr [0x9bc]`@`092d`, no RET — cited there; bounds re-read byte-identical THIS task); caller census count live re-verified: **6 sites / 5 owners** (`0cf4`,`2cc5`,`7a76`,`7b24`,`7d15`,`7d1e` — bytes identical to Task 1), controls 4-keyed/6-xrefs quoted; NEW patch-leg adjacency disclosed and deferred (`016c@0229/022f` WAIT stores, heads `90` un-applied) | no change — record stands + the new caller rows are this slice's census (Tables above) | none — behavioral (indirect tail transfer through `[0x9bc]`) — as set slice-12 |
+| `FUN_11bd_0931` — **NOT-CONFIRMED-at-name** | `11bd:0931` | bar test shown: the rename branch requires the body's ops to BE the near-offset pair dispatch with pair-LOAD + far-consume — its own cited ops are `0931 NOP (90)`/`0932 PUSH AX (50)`/`0933 PUSH BX (53)`/`0934 JMP word ptr [0x9be] (ff26be09)`: there is NO load op (the pair-load is `publish_mode_vector`'s `6270/6277`, one hop out) and the consume is the NEAR `ff26` form, NOT `JMPF`/`ea` — premise fails; the mechanism the ops DO show (pre-push AX/BX replay + near tail transfer through the w1 cell) named cleanly at the gate on a read-only probe: `rename_function(old_name="FUN_11bd_0931", new_name="prepush_dispatch_mode_vector", dry_run=true)` → `{"dry_run":true,"status":"success","message":"Success: Renamed function at FUN_11bd_0931 from 'FUN_11bd_0931' to 'prepush_dispatch_mode_vector'","warnings":["…not PascalCase. Expected: PrepushDispatchModeVector","…contains underscores…"]}` — style warnings only, quoted-as-returned, snake_case precedent (`clear_msw_and_callfar`, `enable_paging_and_load_tss`); NOT EXECUTED per this task's zero-writes ruling | create-already-existing → disposition = keep `FUN_11bd_0931` default name, NO plate; role recorded at the mechanism the body itself shows; the dry-run-passed candidate carried in Deferrals should the controller lift the zero-writes ruling | none — behavioral (register-preamble replay + near tail transfer through `[0x9be]`), recorded wording only |
+| **selection answer** — **CLOSED at the static layer** (runtime legs named) | chain | stub choice = CALL-SITE binding (092c: 6 sites incl. `execute_exit_arm@7d15/7d1e`; 0931: 1 site `0da6` in `FUN_11bd_0d80` `0d80..0db1`, DS←0x20 staged `0da3/0da5` immediately prior — cited in the walk context); pair content = `[BP+-0x5a]` arg (cascade stores `440e/44ab` bytes live-verified) + `publish_mode_vector` gates `6259/625e` carry ∧ `6266/626b`, override `626d` → `CS:[BX−4]/[BX−2]` → `6274/627b`; far cell `[0x9c2]` = consumer `02b1` (`execute_mode_switch` tail) + conditional writer `41ee` iff `[0x2f]>=3` (`41e7/41ec` byte-re-derived) + image default `0x02B5`; patch leg `016c@0229/022f` gated `[0x3e]≠0`, UN-APPLIED in the listing at this-slice time | answers the spine question at the static layer; NO runtime claim made | — |
+
+### Deferrals (Task 2)
+
+- R3 IVT cluster (`INT 0x67` handler identity at `2a16`, `2a37 JMP BX`
+  dynamic leg) — slice-26 queued (standing scope guard).
+- Handler callee trees (`0d62`, `06fc`/`073c`/`0733`-family, `284c`/`28fb`,
+  the far-ret pair consumers, `CALLF ES:[0xd5a]`) — one-hop rule.
+- `[0x9ba]` armed-value runtime — FU-blocked (prior disposition).
+- `[0x2fa]` consumers + the `016c` patch-leg gate inputs (`[0x3e]`,
+  `[0xf82]` runtime) — recorded, not traced.
+- Runtime writers of `{[0x9bc], [0x9be], [0x9c2], [0x996]}` beyond the
+  cited static writers — OPEN-WINDOW (armed-value layer, trace-blocked).
+- `0931` NAME EXECUTION: the gate-passed candidate
+  `prepush_dispatch_mode_vector` (dry-run verbatim in the verdict row) is
+  carried forward — executing it is a controller decision, this slice's
+  ruling is zero-writes; the `caseD_0` name-class route (slice-24 finding:
+  no tool route renames exactly one of two identically-named instances)
+  remains deferred.
+- Δ1 (`list_functions_enhanced` 328 vs count 329) — unresolved, no claim
+  (slice-24 erratum (c) stands).
+- Storm ledger carry-forward to slice-26: rejection basis = **DS-clamp**
+  (`0406 8edb` pin, never restored before the `0477 ea` tail; physical
+  `[0x200,0x101FF]` excludes the `1000:`-view cells) — the fixed basis is
+  what slice-26 inherits, per the fix-round ruling.
+- Suite green (10/10, docs-only diff); no program write occurred this task
+  — `save_program` NOT called (nothing to persist); on-disk program stays
+  at slice-23's committed state (the net-zero precedent — slice-24 `### Writes`);
+  `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
