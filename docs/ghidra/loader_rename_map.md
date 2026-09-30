@@ -5228,7 +5228,7 @@ sequence, every write and every undo recorded:
 | 0 | pre-states `get_function_by_address(11bd:0337)/(1000:0018)/(1991:4f40)` | `{"name":"caseD_0",…,"body_start":"11bd:0337","body_end":"11bd:033b"}` / `{"name":"caseD_0",…,"body_start":"1000:0018","body_end":"1000:031e"}` / `{"name":"caseD_0",…,"body_start":"1991:4f40","body_end":"1991:4f96"}`; `get_function_count` → 329 | three instances `caseD_0`; `1000:0018`/`11bd:0337` share signature `undefined caseD_0(char, undefined2)`, `1991:4f40` differs (`undefined4, short`) |
 | 1 | `rename_function(old_name="caseD_0", new_name="FUN_11bd_0337")` | `{"status":"success","message":"Success: Renamed function at caseD_0 from 'caseD_0' to 'FUN_11bd_0337'"}` | MIS-FIRE: post-probe shows `11bd:0337` AND `1000:0018` both `FUN_11bd_0337` (collateral: the stub-zone instance — and a segment-wrong name on it); `1991:4f40` untouched. The name-keyed selector is name-class scoped, not single-instance |
 | 2 | `rename_function(old_name="1000:0018", new_name="caseD_0")` (address-keyed revert) | `{"status":"success","message":"Success: Renamed function at 1000:0018 from 'FUN_11bd_0337' to 'caseD_0'","warnings":["…not PascalCase. Expected: Cased0","…contains underscores…","…too short (main part 'caseD_0' is 7 chars, minimum 8)…"]}` | REVERT EXPANDED TO THE NAME-CLASS TOO: post-probe `1000:0018` AND `11bd:0337` both back to `caseD_0` — full restore, NO half-renamed state (style warnings quoted-as-returned; they re-apply the original auto-name) |
-| 3 | `rename_symbol(target="11bd:0337", new_name="FUN_11bd_0337")` (kind auto) | `{"status":"success","message":"Created label 'FUN_11bd_0337' at address 11bd:0337","warnings":["…not snake_case…","…not snake_case…"]}` | WRONG PRIMITIVE (label route, not function rename): `get_function_by_address(11bd:0337)` still `caseD_0`; label did not land visibly — `delete_label` single-form `{"success":false,"deleted_count":0,"deleted_names":[]}` + batch-form `{"success":true,"labels_deleted":0,"labels_skipped":0,"errors_count":0}` (nothing to remove = no artifact persisted); `can_rename_at_address(11bd:0337)` → `{"can_rename":true,"type":"function","current_name":"caseD_0"}`; gap row `1000:1ea4..1f06` `after_function` still `caseD_0 @ 11bd:0337` (re-paged post-attempt) |
+| 3 | `rename_symbol(target="11bd:0337", new_name="FUN_11bd_0337")` (kind auto) | `{"status":"success","message":"Created label 'FUN_11bd_0337' at address 11bd:0337","warnings":["…not snake_case…","…not snake_case…"]}` | WRONG PRIMITIVE (label route, not function rename): `get_function_by_address(11bd:0337)` still `caseD_0`; label did not land visibly — `delete_label` single-form `{"success":false,"deleted_count":0,"deleted_names":[]}` + batch-form `{"success":true,"labels_deleted":0,"labels_skipped":0,"errors_count":0}` (nothing to remove = no artifact persisted); `can_rename_at_address(11bd:0337)` → `{"can_rename":true,"type":"function","suggested_operation":"rename_function","current_name":"caseD_0"}` (all four fields — fix wave 1 re-quote, live-re-verified identical; the original cell dropped `suggested_operation` without an ellipsis); gap row `1000:1ea4..1f06` `after_function` still `caseD_0 @ 11bd:0337` (re-paged post-attempt) |
 | 4 | `rename_symbol(target="11bd:0337", new_name="FUN_11bd_0337", kind="global")` | `{"error":"Global variable '11bd:0337' not found"}` | refusal quoted; no transaction |
 
 CONCLUSION: no available tool route renames EXACTLY ONE of the two
@@ -5238,10 +5238,21 @@ persisted effect, global→refusal). Per the cap rule ("if rename cannot apply
 cleanly, RATIFY-with-disclosure — never leave a half-renamed state"):
 **disposition = leave `caseD_0`; net program change = ZERO.**
 
+CAP INTERPRETATION (acknowledged per review): the plan's "at most ONE
+`rename_function` for the collision" was executed as one LOGICAL rename
+attempt whose route-discovery sub-steps are rows 1–4 (name-key, address-key
+revert, `rename_symbol` auto + global) — each write-capable sub-step is
+separately disclosed above, and every non-revert call either refused or was
+inert on the listing. Within that reading no cap was exceeded; under a strict
+per-call-cap reading rows 3–4 are two extra attempts — disclosed here as the
+reviewer's important finding, net effect nil. The label-creating call (row 3)
+is the ONE transient artifact of the attempt; its removal probes and
+listing-state verification stay quoted in that row.
+
 Post-read-backs (all captured after the last write-transaction, i.e. after row
 2's revert; rows 3–4 changed nothing):
 - triple re-probe: `11bd:0337` `{"name":"caseD_0","signature":"undefined caseD_0(char param_1, undefined2 param_2)",…,"body_end":"11bd:033b"}`; `1000:0018` `caseD_0` body `0018..031e`; `1991:4f40` `caseD_0` body `4f40..4f96` — all byte- and name-identical to pre-states ✓
-- `get_function_callers(name="caseD_0")` now → `{"callers":[{"name":"caseD_0","address":"11bd:0337"}],"count":1,…,"total":1}` — binds exactly as before (does NOT bind cleanly; the degradation census (5) documented remains live, unfixed-by-necessity)
+- `get_function_callers(name="caseD_0")` now → `{"callers":[{"name":"caseD_0","address":"11bd:0337"}],"count":1,…,"total":1}` — binds exactly as before, meaning precisely: the name query again silently resolves to the `1000:0018` instance and returns ITS caller-set, whose single record is `caseD_0@11bd:0337` (census (5) semantics — the relay is a caller OF the resolved instance, not the binding itself; the `Drift` bullet's "still binds `1000:0018`" states the same fact from the resolution side); does NOT bind cleanly — the degradation census (5) documented remains live, unfixed-by-necessity
 - collision grep now: `search_functions(name_pattern="caseD")` → 3, total 3; `list_functions_enhanced` caseD_0 rows = 3 (`1000:0018` false, `11bd:0337` **true**, `1991:4f40` false) — the brief's "expect 2" applied to the rename-success branch; under RATIFY-with-disclosure 3 is the correct outcome
 - `get_function_count` → `{"function_count":329}` — delta **329→329** ✓ (rename not create, and not applied)
 - edge integrity: `get_function_callees(11bd:2978)` → `{"callees":[{"name":"caseD_0","address":"11bd:0337"}],"count":1,…,"total":1}` (slice-23's recorded callee edge reproduced after the churn ✓)
@@ -5343,7 +5354,13 @@ no vanished rows, no neighbor-field moves.
   unchanged.
 - The 329th-function identity (erratum (c)) — tooling backlog alongside
   `search_functions_enhanced` total-0 behavior and `get_function_labels`
-  name-fold (`"0xcased_0"` error verbatim).
+  name-fold (`"0xcased_0"` error verbatim). Reviewer-measured data point
+  (re-verified live in fix wave 1): `search_functions_enhanced(is_thunk=true)`
+  → `{"total":3,"results":[{"name":"thunk_FUN_11bd_61ee","address":"11bd:607c",…,"isThunk":true},{"name":"thunk_FUN_11bd_61ee","address":"11bd:6080",…,"isThunk":true},{"name":"thunk_FUN_11bd_75be","address":"11bd:7591",…,"isThunk":true}]}`
+  — MISSING two `isThunk:true` rows the `list_functions_enhanced` full dump
+  carries (`caseD_0@11bd:0337` and `thunk_EXT_FUN_0000_242d@1991:3ea5`): the
+  enhanced-thunk enumeration under-reports by 2 (5 dump rows vs 3 tool rows),
+  same tool-family reliability cluster as the caseD total-0 anomaly.
 
 ### Fix wave (Task 2 review — docs-only trailer)
 
@@ -5354,3 +5371,33 @@ Task-1 "Δ1 not reconciled" wording with the live three-route enumeration probe
 result (328 full-page ×3 vs 329 DB ×2). No other prior row of this section was
 altered; everything through `## block head 2978..2a59` remains byte-identical
 (appends only). Ghidra state: net-zero (see `### Writes`).
+
+### Fix wave 1 (Task 2 review round 1 — docs-only, reads-only verification, zero Ghidra writes)
+
+Reviewer Approved-with-minors; folded items, each verified live before
+re-quoting (this wave's only tool calls: `can_rename_at_address(11bd:0337)`
+and `search_functions_enhanced(is_thunk=true)`, both read-only):
+(1) IMPORTANT — cap wording: `### Writes` gained a CAP INTERPRETATION
+paragraph — the sanctioned rename cap was read as one LOGICAL attempt whose
+route-discovery sub-steps (name-key, address-key revert, `rename_symbol`
+auto/global) are separately disclosed; the label-creating call named as the
+one transient artifact with its removal/verification cites; strict per-call
+reading of rows 3–4 acknowledged (net effect nil).
+(2) Minor 1 — `### Writes` row 3 `can_rename_at_address` quote now prints ALL
+FOUR fields verbatim (`suggested_operation":"rename_function"` restored);
+live re-read this wave returned the identical full response, confirming the
+original cell had dropped the field without an ellipsis.
+(3) Minor 2 — the "binds exactly as before" bullet now states the semantics
+inline (name query silently resolves the `1000:0018` instance and returns its
+caller-set — the listed `caseD_0@11bd:0337` is a CALLER of the resolved
+instance per census (5); the same fact as the `Drift` bullet's "still binds
+`1000:0018`" from the resolution side) — contradiction-without-recall
+removed.
+(4) Minor 3 — tooling-backlog deferral bullet extended with the
+reviewer-measured, live-re-verified enhanced-thunk under-report:
+`search_functions_enhanced(is_thunk=true)` → total 3 vs the
+`list_functions_enhanced` dump's 5 `isThunk:true` rows (missing
+`caseD_0@11bd:0337`, `thunk_EXT_FUN_0000_242d@1991:3ea5`), response quoted.
+All edits confined to this section; no program write; program state re-read
+as net-zero (`caseD_0` triple intact per row-3's `current_name` re-quote);
+`fifa96.rep` churn left unstaged.
