@@ -5401,3 +5401,527 @@ reviewer-measured, live-re-verified enhanced-thunk under-report:
 All edits confined to this section; no program write; program state re-read
 as net-zero (`caseD_0` triple intact per row-3's `current_name` re-quote);
 `fifa96.rep` churn left unstaged.
+
+## vector selection logic (verified 2026-09-30, program `/fifa96.exe`)
+
+Zero-Ghidra-write census closing the slice-22 spine deferral — who calls
+`dispatch_mode_vector@092c` vs `FUN_11bd_0931`, what the `0931` body walk
+exposes, and what statically decides which vector cell the arm consumes
+(near-offset pair `[0x9bc]/[0x9be]` vs far cell `[0x9c2]`). Headline:
+(1) authority `search_instructions` operand runs find **6 near-`CALL` sites
+resolving to `11bd:092c`** (nextIP+rel arithmetic below: `0cf4`/`2cc5`/
+`7a76`/`7b24`/`7d15`/`7d1e` — two owners beyond slice-21's 3-callee control:
+`FUN_11bd_0c9f` (sweep-created body `0c84..0d0b`, slice-24 census (6)) and a
+**defined-unowned** site `2cc5` (`get_function_by_address` no-function error
+quoted)), **0 `JMP`-form sites**, and **1 site resolving to `11bd:0931`**
+(`0da6` in `FUN_11bd_0d80`, body `0d80..0db1` — the slice-22 leg, bytes
+`e888fb` verified live: `0da9 − 0x478 = 0931` ✓); no far-form caller exists
+(`9a`/`ea` byte-patterns 0/0 for `0931`, 1 hit for `ea2c09` at `1991:0477`
+RECONCILED-OUT — raw bytes `ea 2c 09 18 00` = `JMPF 0x0018:0x092C` =
+physical `0x0180+0x092C = 0x0AAC`; the listing render `JMPF 0x0000:0aac` =
+physical `0x0AAC` — BOTH views converge on the same physical target (the
+divergence is render-only: seg/offset decomposition of one physical,
+re-checked this fix wave); `0x0AAC` ≠ the dispatcher's `0x124FC` either way
+— not a caller); no `ff16/ff26` cell statically
+holds a `092c`-class value (indirect-transfer enumeration complete — table
+below; every abs-cell content reconciled, pair tables and stub addresses
+cited). (2) The `0931` **walk exposes ZERO new contiguous CODE runs** — body
+`0931..0937` is `NOP; PUSH AX; PUSH BX; JMP word ptr [0x9be]`, the `ff26`
+transfer has no fall-through, and both neighbours are owned (last-owned
+`0930` = `dispatch_mode_vector` body end; first-foreign `0938` = the live
+entry of `FUN_11bd_0938`, body `0938..0973` — the slice-22 `0938` envelope
+row re-derived live; the plan's `0938`/`stage_ss_selector` parenthetical is
+superseded by these bounds + map rows per the ledger ruling). Task-2 write
+window = EMPTY (enumerated legal outcome). (3) Cell census
+`{0x9bc, 0x9be, 0x9c2}`: **zero delta** vs the slice-14/20/21/23/24 records
+— `0x9bc` 2 / `9bc` 6 / `0x9be` 2 / `9be` 4 / `0x9c2` 2 / `9c2` 2 / `[0x…]`
+bracket forms same-set / `CS:` forms 0 / `0x296d` 1 (`41ee` sole value site),
+every false-string recomputed identical at scope `instructions_scanned:
+15589` uniform on every program-scope run AT THIS-SLICE TIME; the
+`[BX + -` window run **grew 10→24** — the +14 split honestly by set:
+**12-family** = the sweep-created overlay `FUN_1991_0400`'s window sites in
+this run (11 store sites `0412…045e` + the `0461 LEA` base-setter); +
+`1991:111e` (LEA — NON-LOAD) + `1991:49aa` (TEST — OPEN-WINDOW, no base
+enumerated) = 14 new run hits total. The 11 stores are **REJECTED via the
+DS-CLAMP**, not a constant store base: `0406 8edb MOV DS,BX` with BX = the
+`0402 bb2000` constant `0x20` pins DS, unrestored through the `0477 ea` tail
+(42-insn listing: no `POP DS`/DS-write between) → every physical target of
+the body's window sites ∈ `[0x20<<4, 0x20<<4+0xFFFF] = [0x200, 0x101FF]`,
+and the `1000:`-paragraph cell views sit at physical `0x109BC/0x109BE/
+0x109C2` > `0x101FF` — excluded regardless of the BX value; BX itself is
+RUNTIME after `040e 8b1e9609 MOV BX,[0x996]` (following `0408 812e9609 8001
+SUB [0x996],0x180`) — the register's own value stays OPEN-WINDOW-class, the
+DS pin is what rejects the sites. NO window hit with a reachable base
+reaches `0x9bc/0x9be/0x9c2`. (4) NEW records: the stub
+address operands `[0x92c]`/`[0x931]` are STORE TARGETS, not calls — `0229`
+`MOV byte ptr CS:[0x92c],0x9b` + `022f` `MOV byte ptr CS:[0x931],0x9b`
+(both in `FUN_11bd_016c`, a recorded `7c62` callee — the x87 WAIT opcode
+`0x9b` patched over BOTH stub head NOPs, gated `[0x3e]≠0` at `0216`/`021b`),
+plus `575f` `MOV byte ptr [0x92c],CL` (`FUN_11bd_5686`, DS-relative);
+head bytes still `90 90` in the listing at this-slice time (runtime patch,
+trace-blocked like the other armed-value layers). (5) The **static image**
+content of the cell cluster (DS=`0x1000` paragraph view, raw read at
+`1000:09b0`) pre-arms `[0x9b4]=0x1000`, `[0x9b6]=0x11BD`, `[0x9ba]=0x08B2`,
+`[0x9bc]=0x0A9F`, `[0x9be]=0x0AA4` — exactly the arg-`0x8b2` state (its pair
+words = `0x0a9f`/`0x0aa4` per the determinability table), `[0x9c0]=0x02FC`,
+`[0x9c2]=0x02B5` (the landing pad — default non-armed continuation),
+`[0x9c4]=0x0022`; recorded as image bytes, not a runtime claim. (6) The
+selection question is ANSWERED at the static layer: which dispatcher is
+bound AT THE CALL SITE (no selector instruction anywhere inspects the cells
+— the only readers of `[0x9bc]`/`[0x9be]` are the two stub transfers);
+`092c` = bare w0 transfer (target carries its own `PUSH AX;PUSH BX`
+preamble), `0931` = pre-pushing w1 transfer (lands on the post-preamble
+`CLI` — why two dispatchers exist); which pair the arm consumes = the
+`[BP+-0x5a]` arg (`440e`/`44ab` cascade stores → `452f` sole push → `4536`
+publish) + `publish_mode_vector`'s gates (`6259`/`625e` carry and `6266`/
+`626b`, override `626d` iff `[0x2f]>=3 AND [0x2e]==2` → pocket pair
+`2820/2822`, else `CS:[arg−4]/[arg−2]`); pair-vs-far = two statically
+distinct consumers — the near pair serves the stub dispatch, `[0x9c2]` serves
+`execute_mode_switch`'s tail `02b1`, armed at `41ee` iff `[0x2f]>=3`
+(`41e7`/`41ec` JL-skip re-derived byte-exact). Runtime-armed values, the
+`[0x9ba]` chain, `[0x9c0]` installer identity and the `CS:[0x2fa]` relay
+stay OPEN by standing scope guard; `2cc5`/`0e3c` owner neighborhoods listed
+as defined-unowned, not chased. Quote protocol: 14/14 `read_memory`
+responses internally reconciled hex-vs-data ✓ (the `1991:0473`/`0477`
+raw-vs-listing seg/offset DIVERGENCE RENDER-ONLY per fix wave 1 — physicals
+converge); `disassemble_bytes` ran
+EXCLUSIVELY `dry_run=true` (2 calls); no create/rename/comment/define/`save_program`;
+`find_code_gaps` not needed (no exposure claim rests on a gap row —
+ownership cites govern); controls (`get_function_callers`/`get_function_xrefs`/
+`get_function_callees`) quoted not relied; `get_function_xrefs(092c)` alive
+this pass (6/6 = the authority set) vs the historical dead-channel 0 — drift
+disclosed, not used for the census.
+
+### Dispatcher bounds + caller census (Step 1)
+
+Bounds verbatim (`get_function_by_address`, this pass):
+
+| Probe | Verbatim response |
+|-------|--------------------|
+| `11bd:092c` | `{"name":"dispatch_mode_vector","address":"11bd:092c","signature":"undefined dispatch_mode_vector(void)","entry_point":"11bd:092c","body_start":"11bd:092c","body_end":"11bd:0930"}` |
+| `11bd:0931` | `{"name":"FUN_11bd_0931","address":"11bd:0931","signature":"undefined FUN_11bd_0931(void)","entry_point":"11bd:0931","body_start":"11bd:0931","body_end":"11bd:0937"}` |
+| `11bd:0934` (interior resolve) | `{"name":"FUN_11bd_0931","address":"11bd:0931",…,"body_start":"11bd:0931","body_end":"11bd:0937"}` — the `0934` load leg resolves THROUGH the stub FUN (slice-21 row reproduced) |
+| `11bd:0938` (after-neighbor) | `{"name":"FUN_11bd_0938","address":"11bd:0938","signature":"undefined FUN_11bd_0938(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:0938","body_start":"11bd:0938","body_end":"11bd:0973"}` — FINAL bounds; the slice-22 create row's call-time envelope was `body_size:60` (H7 row, `(call-time envelope; final bounds below)` annotation) |
+| `11bd:0d80` | `{"name":"FUN_11bd_0d80","address":"11bd:0d80","signature":"undefined2 FUN_11bd_0d80(void)","entry_point":"11bd:0d80","body_start":"11bd:0d80","body_end":"11bd:0db1"}` |
+
+Authority runs (all `search_instructions`, `scope:program`,
+`truncated:false`, `instructions_scanned:15589`, defined-instructions-only,
+at this-slice time): CALL+`0x1000:24fc` = 6; JMP+`0x1000:24fc` = 0; all-
+mnemonic `0x1000:24fc` = 6 (set identical — no other transfer form renders
+that target); CALL+`0x1000:2501` = 1; JMP+`0x1000:2501` = 0; all-mnemonic
+`0x1000:2501` = 1; operand `11bd:092c` = 0; operand `11bd:0931` = 0
+(segment-form probes, negative ×2). Render delta `0x1000:xxxx − 0x1BD0 =
+11bd:xxxx` applies to every target column.
+
+| caller insn | bytes | nextIP + rel (arith shown) | resolves to | owner (function field as returned) |
+|-------------|-------|---------------------------|-------------|-------------------------------------|
+| `11bd:0cf4 CALL 0x1000:24fc` | `e835fc` | `0cf7 + 0xFC35(−0x3CB) = 092C` | `11bd:092c` | `FUN_11bd_0c9f` (`0c84..0d0b` — sweep-created, slice-24 census (6) neighbor; NEW owner vs slice-21 control) |
+| `11bd:2cc5 CALL 0x1000:24fc` | `e864dc` | `2cc8 + 0xDC64(−0x239C) = 092C` | `11bd:092c` | NONE — `get_function_by_address(11bd:2cc5)` → `{"error":"No function found for 11bd:2cc5"}` (defined-unowned site; invisible to any function-keyed control) |
+| `11bd:7a76 CALL 0x1000:24fc` | `e8b38e` | `7a79 + 0x8EB3(−0x714D) = 092C` | `11bd:092c` | `FUN_11bd_79fc` (control-listed caller reproduced) |
+| `11bd:7b24 CALL 0x1000:24fc` | `e8058e` | `7b27 + 0x8E05(−0x71FB) = 092C` | `11bd:092c` | `FUN_11bd_7a88` (body `7a88..7b33` live-probed — control-listed caller reproduced) |
+| `11bd:7d15 CALL 0x1000:24fc` | `e8148c` | `7d18 + 0x8C14(−0x73EC) = 092C` | `11bd:092c` | `execute_exit_arm` — the slice-12 verify leg, bytes re-derived (`e8148c` ↔ `−0x73EC` ✓) |
+| `11bd:7d1e CALL 0x1000:24fc` | `e80b8c` | `7d21 + 0x8C0B(−0x73F5) = 092C` | `11bd:092c` | `execute_exit_arm` — the fail-path leg, bytes re-derived ✓ |
+| `11bd:0da6 CALL 0x1000:2501` | `e888fb` | `0da9 + 0xFB88(−0x478) = 0931` | `11bd:0931` | `FUN_11bd_0d80` — the slice-22 known leg, bytes + owner verified live ✓ |
+
+Direct-far (`9a`/`ea`) + indirect-through-cell probes: byte patterns
+`9a2c09` 0, `9a3109` 0, `ea3109` 0, `ea2c09` **1** = `1991:0477` — raw read
+`read_memory(1991:0473,10)` → `{"data":[71,28,52,15,234,44,9,24,0,142],
+"hex":"471c340fea2c0918008e"}` ✓ internally reconciled = bytes `ea 2c 09 18
+00` (JMPF seg-field `0x0018`); the `disassemble_function(1991:0400)` listing
+emits at `0477` `JMPF 0x0000:0aac`. PHYSICAL ARITHMETIC (fix wave 1): raw
+`0x0018:0x092C = 0x0018<<4 + 0x092C = 0x180 + 0x92C = 0x0AAC`; listing
+`0x0000:0x0AAC = 0x0AAC` — the two views DECOMPOSE DIFFERENTLY BUT RESOLVE
+TO THE SAME PHYSICAL TARGET; the divergence is RENDER-ONLY (seg/offset split
+of one physical address), not a content contradiction. `0x0AAC ≠
+0x11BD0+0x092C = 0x124FC` (the dispatcher) under both readings —
+RECONCILED-OUT, not a caller; overlay-bank body, roles NOT-CONFIRMED
+(slice-24 ratification stands). Cell-value census for `ff16/ff26` forms (complete indirect
+enumeration, both runs `scope:program`, 15589, `truncated:false`):
+
+| indirect site | cell | static content (source) | = 092c/0931-class? |
+|---------------|------|-------------------------|--------------------|
+| `11bd:092d JMP [0x9bc]` `ff26bc09` | `[0x9bc]` | runtime: sole writer `6274` value = `CS:[BX−4]` pair word; image initial `0x0A9F` (`1000:09bc` read) | NO (handler offsets only per determinability) |
+| `11bd:0934 JMP [0x9be]` `ff26be09` | `[0x9be]` | runtime: sole writer `627b` value = `CS:[BX−2]`; image initial `0x0AA4` | NO |
+| `11bd:02b1 JMP [0x9c2]` `ff26c209` | `[0x9c2]` | `41ee` value `0x296d`; image initial `0x02B5` | NO |
+| `11bd:0249 CALL [0x97a]` `ff167a09` (`FUN_11bd_0246`) | `[0x97a]` | image `0x2F4C` (`1000:0970` read ✓ reconciled) | NO |
+| `11bd:0294/02b8 CALL [0x9c0]` `ff16c009` | `[0x9c0]` | image `0x02FC`; NO-IN-EXE writer (slice-14 exhausted) | NO |
+| `11bd:183e CALL [0xac2]` `ff16c20a` (`FUN_11bd_17f3`) | `[0xac2]` | image `0x2422` (`1000:0ac0` read ✓; region is text `0x6520 0x7272` = " err" tail bytes) | NO |
+| `11bd:2368/2376 CALL [0xe6c]` `ff166c0e` (`print_error_message`) | `[0xe6c]` | image `0x17F3` (`1000:0e68` read ✓) | NO |
+| `11bd:25ea JMP [0xd10]` `ff26100d` (`FUN_11bd_2460`) | `[0xd10]` | image `0x0000` (`1000:0d0c` read ✓) | NO |
+| `11bd:4fd3 CALL [BP+0x4]` `ff5604` (`FUN_11bd_4f83`) | stack slot | runtime (frame value) | OPEN-WINDOW (runtime arg frame; per rule counted only with cited writers — none enumerated) |
+| `11bd:0337 JMP CS:[0x2fa]` `2eff26fa02` | `CS:[0x2fa]` | slice-23/24 deferral stands (writer set unswept; listing-resolved callee `caseD_0@1000:0018` cited there) | OPEN-WINDOW (unchanged) |
+| `1991:0cf7/1f7d/33a5/33e1/453b` `CS:[…]` window forms; `1991:3bbf/3bf5` `CALL [0xaa4]/[0xaa6]` | dynamic/overlay | overlay cells image `0x17C0`/`0x4E89` (`1991:0aa4` read ✓) | NO / OPEN-WINDOW (dynamic bases) |
+| pair tables `mode_vector_source_pair@2820` = `64284c28` (`0x2864`/`0x284c`), `mode_29bc_source_pair@29b8` = `5a2a602a` (`0x2a5a`/`0x2a60`) | CS-space | words cited (determinability table; slice-21/23 applies) | NO — the tables feed `[0x9bc]/[0x9be]` via `6270/6277`, they are not caller cells |
+
+No `ff162c09`-style cell-mediated CALL of the stub addresses exists
+(pattern `ff262c09` 0, `ff263109` 0; operand renders below complete).
+
+Controls (quoted, NOT authority): `get_function_callers(092c)` → `FUN_11bd_0c9f`,
+`FUN_11bd_7a88`, `FUN_11bd_79fc`, `execute_exit_arm` (count 4 — slice-21's
+3 + the sweep-created `0c9f`; misses the defined-unowned `2cc5` site:
+6 authority sites vs 4 keyed entries); `get_function_callers(0931)` →
+`FUN_11bd_0d80` count 1 ✓; `get_function_xrefs(092c)` → 6 refs, exactly the
+authority set (`0cf4`/`2cc5` [no `from_function` — unowned] `/7a76`/`7b24`/
+`7d15`/`7d1e`, all `UNCONDITIONAL_CALL`) — channel ALIVE this pass, drift vs
+slices 16–20's 0-ref quotes, disclosed; `get_function_xrefs(0931)` → 1 ref
+(`0da6`) ✓; `get_function_callees(092c)`/`(0931)` → `{"callees":[]}` both
+(the transfers are dynamic — records nothing static, consistent with the
+stub shape); `get_function_callees(execute_exit_arm)` → 6 = {`FUN_11bd_016c`,
+`FUN_11bd_199a`, `FUN_11bd_79fc`, `clear_slot_entries@1df7`,
+`dispatch_mode_vector@092c`, `stage_ss_selector@0290`} — slice-12's "exactly
+the known six, no seventh" reproduced.
+
+0d80 caller context (one hop out): its own callers are `11bd:0e3c CALL
+0x1000:2950` (`e841ff`: `0e3f + 0xFF41(−0xBF) = 0D80` ✓ — site DEFINED-
+UNOWNED, probe error quoted) and `11bd:11c2` (`e8bbfb`: `11c5 +
+0xFBBB(−0x445) = 0D80` ✓) in `FUN_11bd_11c1` (body `11c1..11c6` verbatim) —
+reproduces the paging-block `0x1000:29` family row (`## paging block` sweep,
+12-hit era list including `0e3c`/`11c2`).
+
+### Walk of FUN_11bd_0931 (Step 2)
+
+`disassemble_function(11bd:0931)` verbatim: 4 insns — `0931 NOP`; `0932
+PUSH AX`; `0933 PUSH BX`; `0934 JMP word ptr [0x9be]` — matches the stub-
+cluster read re-quoted live this pass: `read_memory(11bd:092c,12)` →
+`{"data":[144,255,38,188,9,144,80,83,255,38,190,9],"hex":"90ff26bc09905053ff26be09"}`
+✓ (NOP;JMP`[0x9bc]`;NOP;PUSH AX;PUSH BX;JMP`[0x9be]` — head bytes `90` at
+`0931` at this-slice time, i.e. the `022f` WAIT-patch below has NOT applied
+to the listing).
+
+Dry-run windows (`disassemble_bytes`, `dry_run=true` only — 2 calls this
+pass): start `11bd:092c` len 16 → emitted `092c..093a` (9 insns): `092c NOP
+90`; `092d JMP [0x9bc] ff26bc09`; `0931 NOP 90`; `0932 PUSH AX 50`; `0933
+PUSH BX 53`; `0934 JMP [0x9be] ff26be09`; `0938 PUSH AX 50`; `0939 PUSH BX
+53`; `093a MOV BX,0x1000 bb0010` (H7 prelude head, in the owned
+`FUN_11bd_0938`). Start `11bd:0931` len 12 → identical from `0931` (7
+insns). Every emitted instruction classified:
+
+| insn | address | class | owner/flow note |
+|------|---------|-------|-----------------|
+| `NOP` | `0931` | CODE (body entry) | `FUN_11bd_0931` entry byte |
+| `PUSH AX` | `0932` | CODE | preamble pre-push (w1 path byte 1) |
+| `PUSH BX` | `0933` | CODE | preamble pre-push (w1 path byte 2) |
+| `JMP word ptr [0x9be]` | `0934..0937` | CODE — **transfer exit** | dynamic near transfer (`ff26`); no fall-through defined past `0937` by this flow |
+| `PUSH AX` / `PUSH BX` / `MOV BX,0x1000` | `0938`–`093c` | CODE (beyond, LINEAR emission only) | already DEFINED+OWNED (`FUN_11bd_0938` body `0938..0973`); static landing set of the `0934` transfer = the 13 w1 values `0413…0ae7`+`2a60` (slice-22 dedupe/determinability rows; each `CLI` byte, all inside slice-22/23-created handler bodies) |
+
+Cited exit: the body's own terminator is the `ff26` dynamic transfer (exit
+class of `092c`'s `ff26` twin; no `c3`/`cb`/`ea`/tail-`e9` byte exists
+inside `0931..0937` — emission complete to the boundary). **Exposed NEW
+contiguous CODE runs: NONE.** Boundaries with stop-short cites: before —
+last-owned `0930` (`dispatch_mode_vector` body_end, bounds row) | entry
+`0931`; after — last-owned `0937` | first-foreign `0938` = `FUN_11bd_0938`
+entry (bounds row above; no undefined byte between — the 12-byte cluster
+read is fully emitted/owned). Task-2 consequence: the write window is EMPTY;
+zero creates are admissible from this walk.
+
+### Cell census {0x9bc, 0x9be, 0x9c2} (Step 3)
+
+Literal family (every run `scope:program`, `truncated:false`,
+`instructions_scanned:15589` uniform — all "at this-slice time"):
+
+| pattern run | match_count | hits + classification | prior record |
+|-------------|-------------|------------------------|--------------|
+| operand `0x9bc` | 2 | `092d ff26bc09 JMP [0x9bc]` TRANSFER-READER (`dispatch_mode_vector`) + `6274 a3bc09 MOV [0x9bc],AX` WRITE (`publish_mode_vector`) | slice-20/21/23 `2` — REPRODUCED exactly |
+| operand `9bc` | 6 | above 2 + FALSE-STRINGS `2dd6`/`2de7 75xx JNZ 0x1000:49bc` (→`2dec`, `FUN_11bd_2d9c`) + `2f18 c746e8bc29` + `44ab c746a6bc29` (imm `0x29bc` renders; `44ab` bytes re-read below) | slice-20/21/23 `6` — REPRODUCED (same 4 false strings, same owners) |
+| operand `0x9be` | 2 | `0934 ff26be09 JMP [0x9be]` TRANSFER-READER (`FUN_11bd_0931`) + `627b a3be09 MOV [0x9be],AX` WRITE | slice-20/21/23 `2` — REPRODUCED |
+| operand `9be` | 4 | above 2 + `4dcd eb1f JMP 0x1000:69be` (→`4dee`, `FUN_11bd_4ca1`) + `1991:20a6 7506 JNZ 0x1000:b9be` (same-bank target) | slice-20/21 `4` reconciled set — REPRODUCED (single run, no batch artifact this pass) |
+| operand `0x9c2` | 2 | `02b1 ff26c209 JMP [0x9c2]` READ (`execute_mode_switch` tail) + `41ee c706c2096d29 MOV [0x9c2],0x296d` WRITE (`FUN_11bd_3ed8`) | slice-14/17/22 `{41ee}`+read `02b1` — **CONFIRMED, NOT EXTENDED** (brief's `02b1?` hedge resolved: `02b1` is a READ, `41ee` the sole static writer, value `0x296d` — matching the prior records exactly, no re-proving needed) |
+| operand `9c2` | 2 | identical (superset check) | slice-14 `2/2` ✓ |
+| operand `[0x9bc]` / `[0x9be]` / `[0x9c2]` | 2 / 2 / 2 | same pairs (bracket-render probe) | slice-21 rows ✓ |
+| operand `CS:[0x9bc]` / `CS:[0x9be]` / `CS:[0x9c2]` | 0 / 0 / 0 | negative ×3 — no CS-override render exists for any of the three | slice-21 negatives for `9bc/9be` extended to `9c2` this pass (new probe, same class) |
+| operand `0x296d` | 1 | `41ee` only | slice-14 `1` — value program-unique REPRODUCED |
+| operand `0x92c` (stub-address probe) | 2 | `0229 2ec6062c099b` `MOV byte CS:[0x92c],0x9b` WRITE + `575f 880e2c09` `MOV byte [0x92c],CL` WRITE — **NEW: store-targets, zero transfer-forms** (see patch row below) | never swept before (prior sweeps covered the `0x9b8..0x9bf` family and the stub as CODE only) |
+| operand `0x931` | 1 | `022f 2ec60631099b` `MOV byte CS:[0x931],0x9b` WRITE — same patch family | NEW |
+| operand `92c` (superset) | 3 | above 2 + FALSE-STRING `0d38 7522 JNZ 0x1000:292c` (→`0d5c`, `FUN_11bd_0d26` — the same hit as the paging-block `0x1000:29` row ✓ reproduced) | — |
+| operand `931` (superset) | 5 | above 1 + FALSE-STRINGS `774a e301 JCXZ→0x1000:931d`, `7754 74ea`, `775e 75e0`, `7767 75d7` (all →`0x1000:9310` = `11bd:7740`-class, `setup_memory_hardware` branch-target renders — substrings, not cell refs) | — |
+
+Window forms (`[base+disp]` discipline per slice-20/22): `[BX + -` run =
+**24** hits (`truncated:false`, 15589) — **DELTA vs slice-20/21's 10: +14,
+all enumerated below, NONE reaches a cell**:
+
+| new/known hit | base cited | resolved | verdict |
+|---------------|-----------|----------|---------|
+| `6270 2e8b47fc` / `6277 2e8b47fe` (CS:[BX−4]/[BX−2]) | `626d bb2428 MOV BX,0x2824` (override path) | `0x2820/0x2822` | PAIR-SOURCE reads of the pocket TABLE (the `mode_vector_source_pair@2820` words) — known chain, live-verified in this run |
+| `4cc3 268b47fe ES:[BX−2]`; `1991:2f65`; `1991:3872 LEA` | dynamic / non-load | — | OPEN-WINDOW ×2 + NON-LOAD (slice-20 ledger rows stand) |
+| `7687/768e/769a/76a4` (hook-patch cluster, BX=`0xf7d`/`0x2d0a`) | `7684`/`7697` constant loads | `0xf7a`/`0x2d07` etc | REJECT (slice-20 arithmetic reproduced; owners render `FUN_11bd_7670` this pass) |
+| `6198 8d47ff LEA` | — | — | NON-LOAD (`find_substring`, as slice-20) |
+| **NEW family ×12** (`FUN_1991_0400` sites in this run — 11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/045e` + `0461 LEA`; body dump `0400..0477`, 42 insns this pass) | STORE BASE IS RUNTIME: `0402 bb2000 MOV BX,0x20` → `0405 1e PUSH DS` → `0406 8edb MOV DS,BX` (DS pinned `0x20`) → `0408 812e96098001 SUB [0x996],0x180` → `040e 8b1e9609 MOV BX,[0x996]` — every store site (all ≥ `0412`) executes with BX = the RUNTIME cell value `[0x996]−0x180`; the `0461 8d5fce LEA BX,[BX−0x32]` rebases again (runtime) for the post-`0461` sites (`046a` = bare-`[BX]` no-disp form, `0472 [BX+0x1c]` = positive-disp form — neither in this run's negative-disp set, same clamp) — class label folded per Task-2 fold-in | bytes all reconciled live this wave: `read_memory(1991:0400,16)` → `fa53bb20001e8edb812e9609 80018b1e` ✓ + `read_memory(1991:040e,4)` → `8b1e9609` ✓ | **REJECT ×11 stores — DS-CLAMP basis (fix wave 1; supersedes the earlier "constant base resolves `0xFFD0..0xFEEE`" wording, which was false on its own premise AND wrong-based)**: DS pinned `0x20` at `0406` and NEVER restored before the `0477 ea` tail (no DS write/`POP DS` in the listing between) → physical ∈ `[0x20<<4, 0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for any effective address; the cells in the `1000:`-paragraph view sit at physical `0x109BC/0x109BE/0x109C2` > `0x101FF` — unreachable regardless of BX; `0461 LEA` = NON-LOAD; REMAINS OPEN: the `[0x996]` value itself and the sites' effective addresses (runtime register — the clamp closes the PHYSICAL question for these cells only; the window is rejected against the `0x9bc/0x9be/0x9c2` view, and under DS=`0x20` no rendering of these disps is that cell set at any BX) |
+| **NEW** `1991:111e 8d47e0 LEA` | none (defined-unowned site, function field absent) | — | NON-LOAD (LEA computes an address, never touches memory) |
+| **NEW** `1991:49aa f647ff02 TEST byte [BX−0x1],0x2` | none enumerated (site ownerless in the run response) | — | **OPEN-WINDOW** (no base or segment pin citable for this site — class-OPEN, never silently rejected) |
+
+Constant-BX census (`MOV BX,imm` family) needs no re-run for the cell
+window: slice-20's 33-hit BX census and nearest-miss arithmetic (`6a97
+BX=0x98e`) stands; the only BX-constant sites reaching the `0x9b8..0x9bf`
+window in any run this pass are the cited pair-source reads via the
+`0x2824` override (window −4/−2 = the TABLE, not the cells). Positive-disp
+envelope (`[BX + 0`, 320 hits at 14006 in slice-20/21) NOT re-enumerated
+per-site this pass (no new claim rests on it; the window question for the
+three cells is closed by the ledger + this pass's negative-disp run — the
+envelope's scope number would now drift at 15589; recorded, not re-derived
+— fix-forwardable if a later slice needs the per-hit set).
+
+READER/WRITER CLOSURE (unchanged vs slice-21): `[0x9bc]` = 1 write
+(`6274`) + 1 defined transfer-reader (`092d`); `[0x9be]` = 1 write (`627b`)
++ 1 transfer-reader (`0934`); `[0x9c2]` = 1 write (`41ee`) + 1 transfer-
+reader (`02b1`); zero conditional/test readers of the three cells among
+defined instructions ("not attributable from the enumerated sweeps,
+defined-insn-only, at this-slice time"). Cell-adjacency NEW data contacts
+at the STUB addresses (`0229`/`022f`/`575f`) are stores into offset
+`0x92c/0x931` — not the three cells; they belong to the patch row below.
+
+Static image view of the cluster (recorded NEW; raw channel):
+`read_memory(1000:09b0,32)` → `{"data":[128,0,40,0,0,16,189,17,0,0,178,8,
+159,10,164,10,252,2,181,2,34,0,0,0,1,0,0,0,0,0,0,0],"hex":"800028000010bd11
+0000b2089f0aa40afc02b502220000000100000000000000"}` ✓ reconciled →
+`[0x9b0]=0x0080, [0x9b2]=0x0028, [0x9b4]=0x1000, [0x9b6]=0x11BD, [0x9ba]
+=0x08B2, [0x9bc]=0x0A9F, [0x9be]=0x0AA4, [0x9c0]=0x02FC, [0x9c2]=0x02B5,
+[0x9c4]=0x0022, [0x9c6]=0, [0x9c8]=0x0001, [0x9ca]=0, [0x9cc]=0, [0x9ce]=0`
+(fix wave 1 — the earlier tuple `{0,0,0,0x0001,0}` mis-placed the `0x0001`
+at `0x9cc`; the data-array index 24 = `1` = byte at offset `0x9b0+24 =
+0x9c8`, word `[0x9c8]=0x0001` — mapping re-derived word-by-offset from the
+re-read `1000:09b0`/32 this wave, hex↔data ✓). The DS=`0x1000` paragraph
+image pre-arms the cluster with the arg-`0x8b2` dispatch state (`0x9ba` =
+that arg; `0x9bc/0x9be` = its pair words `0x0a9f/0x0aa4` = H11 w0/w1 per the
+determinability table — byte-for-byte ✓), the CS paragraph in `[0x9b6]`,
+the band base in `[0x9b4]`, the landing-pad default continuation `0x02b5` in
+`[0x9c2]`, and a static initial `0x02FC` in the hook cell `[0x9c0]` (new
+observation vs the "runtime-written, identity unidentified" framing — an
+IMAGE initial exists in this paragraph view; the runtime-writer identity
+question stays open unchanged). Caveat recorded: these are image bytes at
+the `1000:`-paragraph view; runtime DS staging varies per path (see the
+`0da3/0da5 PUSH 0x20/POP DS` row) — not a runtime-value claim.
+
+### Selection trace — one hop from `execute_exit_arm@7c62` (Step 3)
+
+| leg | cite | what it decides |
+|-----|------|-----------------|
+| arm → stub dispatch | `CALL 0x1000:24fc` at `7d15` (`e8148c` — verify path) and `7d1e` (`e80b8c` — fail path), both in `execute_exit_arm`; 092c-leg of the six-callee list (control reproduced) | which DISPATCHER the arm uses — statically bound at the call site: the arm consumes the **near pair** via `092c` (bare w0 transfer). No selector insn tests the cells anywhere (census above) |
+| arm → mode-switch core → far cell | `CALL 0x1000:1e60` at `7ced` (= `1e60−0x1bd0 = 0290` ✓) → `stage_ss_selector` `0290..0292` fall-through `execute_mode_switch` `0293..02b4` (slice-12 fall-through row) → `JMP word ptr [0x9c2]` at `02b1` (`ff26c209` — live in the `0x9c2` run) | pair-vs-far consumption: the FAR cell serves the mode-switch tail exit, the NEAR pair serves the stub dispatch — two statically distinct consumers, both one hop from `7c62`'s recorded callees |
+| selector helper → stub patch | `FUN_11bd_016c` (recorded callee, site `7c6c`): `0216 803e3e0000`-family gate `CMP byte [0x3e],0x0` + `021b JZ→0245` (skip on 0); inside the FPU block `021d FNINIT`/`021f MOV BX,[0xf82]`/`0227 FNSAVE [BX]`: `0229 2ec6062c099b MOV byte CS:[0x92c],0x9b` + `022f 2ec60631099b MOV byte CS:[0x931],0x9b` (`0x9b` = the WAIT opcode emitted at `0242` in the same body — 60-insn dump this pass) | NEW leg: when `[0x3e]≠0` the helper patches `0x9b` (WAIT) over BOTH stub head NOPs — an x87-busy sync prepended to each dispatcher entry, not a selection decision; listing heads still `90` (runtime patch, trace-blocked); the other DS-view store `575f 880e2c09 MOV byte [0x92c],CL` (`FUN_11bd_5686`, config-string family per slice-20 owner row) recorded as a data contact under runtime DS — semantics deferred |
+| cascade → publish | `440e c746a62428` `MOV word [BP+−0x5a],0x2824` (bytes re-read: `read_memory(11bd:440e,6)` → `c746a62428c6` ✓) and `44ab c746a6bc29` `…,0x29bc` (within `read_memory(11bd:44a3,14)` → `c746a60509e96dffc746a6bc29eb` ✓ — the `44a3`(0x905) store, `44a8 e96dff` and the `44b0 eb` leg exactly as the slot-consumers rows); sole slot read `452f ff76a6 PUSH word [BP+−0x5a]` (`read_memory(11bd:452f,12)` → `ff76a6898614ffe8171d5b80` ✓ reconciled); direct call `4536 e8171d` → `0x7e20−0x1bd0 = 6250` ✓ `publish_mode_vector` | which PAIR the cells receive: the 14-arg cascade value (`0x2824` = pocket override pair; `0x29bc` = block pair; 12 band args) — reproduced live byte-exact |
+| publish gate (pair content) | `read_memory(11bd:6250,46)` → `8bdc8b5f02891eba09803e2f000372102ec6061f0366803e2e00027503bb24282e8b47fca3bc092e8b47fea3be09` ✓ reconciled; decode `6250 8bdc MOV BX,SP` / `6252 8b5f02 MOV BX,[BX+0x2]` (arg) / `6255 891eba09 MOV [0x9ba],BX` / `6259 803e2f0003 CMP byte [0x2f],0x3` / `625e 7210 JC→6270` / `6260 2ec6061f0366 MOV byte CS:[0x31f],0x66` (side store in the `[0x2f]≥3` branch — recorded, role not claimed) / `6266 803e2e0002 CMP byte [0x2e],0x2` / `626b 7503 JNZ→6270` / `626d bb2428 MOV BX,0x2824` / `6270 2e8b47fc` / `6274 a3bc09` / `6277 2e8b47fe` / `627b a3be09` | the OVERRIDE decision: `[0x2f]>=3 AND [0x2e]==2` ⇒ BX=0x2824 ⇒ pocket-table pair (`2820/2822` = `64284c28` → cells `0x2864`/`0x284c`); ELSE BX=arg ⇒ `CS:[arg−4]/[arg−2]`; the 6270/6277 CS-window pair-source reads and the 6274/627b stores live-verified in the byte read AND the `[BX + -` run ✓ |
+| far-cell arming | `read_memory(11bd:41e0,20)` → `fe027503e88024803e2f00037c69c706c2096d29` ✓; decode `41e2 7503 JNZ→41e7` / `41e4 e88024 CALL` / `41e7 803e2f0003 CMP byte [0x2f],0x3` / `41ec 7c69 JL→4257` (skip) / `41ee c706c2096d29 MOV word [0x9c2],0x296d` | the FAR decision, statically: armed iff `[0x2f]>=3` with value `0x296d` = `restore_fs_gs_and_resume` (`296d..2977`, slice-14 verdict — sole value, `0x296d` run 1 hit ✓); default image value `0x02b5` = the POPA+RET landing pad (non-armed continuation) — the near/far split is gate-bound at `[0x2f]`, both legs in `FUN_11bd_3ed8` |
+| `0931` caller context (`0d80`) | `FUN_11bd_0d80` dump (26 insns, body `0d80..0db1`): `0d85 MOV AX,0x8`/`0d88 MOV DS,AX` → 3× `CALL 0x1000:2932` (`e89dff`-family at `0d8d/0d95/0d9b` — target `2932−0x1bd0 = 0d62` = `FUN_11bd_0d62` `0d62..0d7f` (probe cited, one hop, no dive); `0da0 XCHG word [BP+0x4],AX` (arg swap with `0d62`-AX); `0da3 6a20 PUSH 0x20`/`0da5 1f POP DS` (**DS←0x20 staged immediately before the dispatcher call**); `0da6 e888fb CALL 0x1000:2501` (=0931 ✓); exits `0dab/0db1 RETF` | what distinguishes the `0931` path caller-side: a far-returning selector helper that arms DS=0x20 for the stub (the `[0x9be]` read happens under that DS view — runtime-segment note, trace-blocked); no cell-inspection either — the stub choice is again compile-time call-site binding |
+| `2864` pocket role | `search_instructions(function="FUN_11bd_2864")`: operand `0xdfe` → 2 hits = `2892 c606fe0d00` WRITE + `28a0 c606fe0d01` WRITE (`instructions_scanned:90` — its own ops ✓); operand `0x282` → 0 hits; `BX + -` → 0 hits (both 90 scanned) | VERDICT: `FUN_11bd_2864` WRITES `[0xdfe]` (2/2 live) and is **NOT a `2820`-pair consumer** (0/90 pair reads, 0/90 window reads) — it is the pair's VALUE (w0 landing `0x2864 PUSH AX` per the determinability row), answering the brief's compound question in the negative for the consumer leg; the program-wide `[0xdfe]` reader stays `2978` (`enable_paging_and_load_tss`, READ — the slice-24 3-hit re-render reproduced exactly: 2 WRITE + 1 READ) |
+
+### Disposition-so-far
+
+Caller counts: `dispatch_mode_vector@092c` — **6 authority sites / 5 owners**
+(`FUN_11bd_0c9f` `0cf4`; defined-unowned `2cc5`; `FUN_11bd_79fc` `7a76`;
+`FUN_11bd_7a88` `7b24`; `execute_exit_arm` `7d15`+`7d1e`); `FUN_11bd_0931` —
+**1 site / 1 owner** (`FUN_11bd_0d80` `0da6`). No JMP/far/indirect caller of
+either stub exists at the defined-instruction layer ("not attributable from
+the enumerated sweeps, defined-insn-only, at this-slice time"); the `9a`/`ea`
+probes and the complete indirect-transfer/cell-content enumeration are
+negative with per-hit cites above. Walk outcome: **ZERO new contiguous CODE
+runs exposed** — the body is a 7-byte pre-push-transfer stub boxed between
+two owned neighbours; the Task-2 write window is empty. Cell census:
+**zero delta** vs slice-14/20/21/23/24 (all counts reproduced at scope 15589;
+writer `{41ee}`→`0x296d` + reader `02b1` for `[0x9c2]` re-confirmed, `02b1`
+READ — the brief's hedge resolved); disclosed deltas: `[BX + -` 10→24 (all
++14 constant-base-rejected or class-OPEN, none reaches a cell), `get_function_xrefs`
+aliveness, and the two NEW stub-head store families (`0229`/`022f` CS-patch,
+`575f` DS byte) plus the image-state cluster record (`0x02fc` initial of
+`[0x9c0]` noted as observation; the NOT-IN-EXE writer finding itself
+unchanged). SELECTION ANSWER — CLOSED at the static layer: (i) WHICH
+dispatcher = the call site (arm `7d15/7d1e` → `092c` = bare w0 transfer to
+the handler head; `0d80@0da6` → `0931` = AX/BX pre-push w1 transfer to the
+post-prelude `CLI` — the two dispatchers exist because each vector pair
+stores a preamble-entrance `w0` and a preamble-skipped `w1`, slice-22
+prelude rows; no runtime selector inspects the cells); (ii) WHICH pair the
+cells hold = the `[BP+-0x5a]` arg (14-store cascade, byte-verified legs
+`440e`/`44ab`) + `publish_mode_vector`'s override gate (`[0x2f]>=3 AND
+[0x2e]==2` → pocket pair `0x2864/0x284c`, else `CS:[arg−4]/[arg−2]`);
+(iii) pair-vs-far consumption = statically distinct consumers (stubs
+`092d`/`0934` read the near pair; `02b1` reads `[0x9c2]`), with the far cell
+armed to the restore-epilogue `0x296d` iff `[0x2f]>=3` (`41ee`, gate bytes
+re-derived) and pre-armed `0x02b5` (landing pad) in the image. What STAYS
+OPEN (exact legs named): the runtime armed VALUES of `[0x9ba]`/`[0x9bc]`/
+`[0x9be]` per dispatch (runtime DS/arg values — trace-blocked per standing
+scope guard); the `[0x9c0]` runtime-writer identity; the `CS:[0x2fa]` relay
+content; which of the six `092c` call paths executes at runtime (path
+selection is `[0xdff]`/`[0xe00]`/`[0x47]`-style runtime state, slice-12 rows
+stand); the runtime effect of the `016c` WAIT patch (heads unpatched in the
+listing at this-slice time).
+
+### Reads executed (ZERO-WRITE branch)
+
+Tool inventory, this pass (all reads; no transaction opened):
+`get_function_by_address` ×15 (`092c`/`0931`/`0934`/`0938`/`0d80`/`2cc5`/
+`0e3c`/`0d62`/`11c1`/`7a88` + the bounds table rows; all quoted above);
+`search_instructions` ×33 runs (6 caller-form operand runs, 2 segment-form
+probes, 1 `0x1000:2950`, 16 cell-literal family runs incl. bracket/CS forms
+and the `0x92c/0x931` probes, `CALL [`/`JMP [` enumeration ×2, `[BX + -` ×1,
+`[0xdfe]` program ×1 + function-scoped ×3, `0x296d`/`0x282`/`BX + -` scoped
+— every response carries pattern + `match_count` + scope +
+`truncated:false`; program-scope `instructions_scanned:15589` UNIFORM on
+every program-scope run at this-slice time — re-read, matches slice-24's
+number; `find_code_gaps` NOT used); `search_byte_patterns` ×6
+(`9a2c09`/`9a3109`/`ea2c09`/`ea3109`/`ff262c09`/`ff263109` — 1 hit
+(`ea2c09`), reconciled in-line); `disassemble_function` ×4 (`0931` walk ×1,
+`0d80` context ×1, `016c` patch context ×1, `1991:0400` reconciliation ×1 —
+read-only listing walks); `disassemble_bytes` ×2 **EXCLUSIVELY
+`dry_run=true`** (the two walk windows); `read_memory` ×14 (`11bd:092c/12`
+stub cluster, `11bd:09b0/32` (band-bytes view), `1000:09b0/32` (cell image
+view), `1000:0970/16`, `1000:0ac0/8`, `1000:0e68/8`, `1000:0d0c/8`,
+`1991:0aa4/4`, `1991:0473/10`, `11bd:440e/6`, `11bd:44a3/14`, `11bd:452f/12`,
+`11bd:6250/46`, `11bd:41e0/20`) — 14/14 internally hex↔data reconciled;
+`get_function_callers` ×2, `get_function_xrefs` ×2, `get_function_callees`
+×3 (controls, quoted-not-relied). Program state: NO create/rename/comment/
+set_global/define/delete/`save_program`; pre-existing bodies (`092c`/`0931`/
+`0938`/`0d80`/`7a88`/`79fc`/`016c`/`FUN_1991_0400`) re-read only; unmoved
+proof: the stub-cluster read byte-identical to the slice-21 quote
+(`90ff26bc09905053ff26be09` ✓) and the `0938`/`0d80` bounds match the
+slice-22/23 records. `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep`
+churn left unstaged. Suite: build + `ctest` → 10/10 (docs-only diff).
+
+### Deferrals
+
+- Runtime armed values of `[0x9ba]/[0x9bc]/[0x9be]/[0x9c2]` per dispatch and
+  the per-path DS/CS staging (`0x1000` image view vs the `DS←0x20` stage at
+  `0d80`, `DS←0x38/0/0x8` stagings in handler bodies) — trace-blocked
+  runtime layer, prior disposition stands.
+- `FUN_11bd_016c`'s WAIT-patch semantics beyond the op-cites (why `0x9b`,
+  which dispatch sees a patched head) — second layer; `FUN_11bd_2081` callee
+  (site `01e4`) untouched.
+- Handler callee trees (`0d62`, `06fc`-family, `284c` pocket body, `28fb`
+  orphan, the far-ret pair consumers) — one-hop rule; `575f`'s owner-role
+  (`FUN_11bd_5686`) per slice-20 config-string disposition, not reopened.
+- Defined-unowned neighbourhoods of `2cc5`/`0e3c` (nearest owners quoted
+  only); `1991:0477` raw-vs-listing view divergence (tooling backlog class
+  alongside slice-24's `caseD`/enhanced-search items).
+- `[0x9c0]` runtime-writer identity (image initial `0x02FC` recorded this
+  pass as static fact — installer still unidentified); `CS:[0x2fa]` writer
+  set; `6260` side-store `CS:[0x31f]←0x66` role.
+- R3 `INT 0x67` cluster (slice 26 queued); `[0x29bc]`-coincidence rows —
+  unchanged.
+- `0931` naming: the walk adds mechanism evidence (w1 pre-push-transfer —
+  the body's own 4 insns) but the rename is Task-2 verdict territory per the
+  plan's bar; nothing renamed this pass.
+
+### Fix wave 1 (review 2026-09-30 — storm-ledger correction; own-section edits only, zero Ghidra writes beyond reads)
+
+Reviewer finding IMPORTANT + minors 2–4 folded; every correction verified
+live this wave before printing (reads only: `read_memory` ×4 new —
+`1991:0400/16` → `{"data":[250,83,187,32,0,30,142,219,129,46,150,9,128,1,139,30],
+"hex":"fa53bb20001e8edb812e960980018b1e"}` ✓ internally reconciled,
+`1991:040e/4` → `{"data":[139,30,150,9],"hex":"8b1e9609"}` ✓,
+`1991:0461/3` → `{"data":[141,95,206],"hex":"8d5fce"}` ✓ (the `LEA`
+rebaser bytes), re-read `1000:09b0/32` — byte-identical to the Task-1 quote
+✓; the `FUN_1991_0400`
+42-insn listing is the Task-1 pass's own `disassemble_function` dump, re-used
+for the no-DS-restore scan). Corrections:
+(1) IMPORTANT — storm row rejection basis: the Task-1 row resolved the 11
+negative-disp stores from a "constant base `0402` BX=`0x20`" — FALSE:
+`0406 8edb` consumes that BX for `MOV DS,BX` and `040e 8b1e9609` RELOADS
+BX from `[0x996]` (after `0408 812e9609 8001 SUB [0x996],0x180`) — store
+base is RUNTIME. The quoted range was also wrong on its own premise
+(`0x20−0x30 = 0xFFF0`, `0x20−0x12 = 0x000E`, not `0xFFD0..0xFEEE`). The
+rejection now rests on the DS-CLAMP: DS pinned `0x20` at `0406`, never
+restored before the `0477 ea` tail (listing has no DS write/`POP DS`
+between; `046e MOV SS,DX` re-pins SS, not DS — per the 42-insn dump) → physical ∈ `[0x20<<4,
+0x20<<4 + 0xFFFF] = [0x200, 0x101FF]` for every effective address, and the
+`0x9bc/0x9be/0x9c2` cells in the DS=`0x1000` image view sit at physical
+`0x109BC/0x109BE/0x109C2` > `0x101FF` — excluded at any BX value. What
+REMAINS OPEN is stated in the row: the `[0x996]` value / BX register itself
+(runtime) — the clamp closes the cells' physical reachability, not the
+register. The `0461/0402`-derived `0xFFEE`/`0x000A` LEA resolutions were
+reworded out. Slice-26 inherits this ledger with the corrected basis.
+(2) Minor 2 — recount by set: the run's new hits are 14 = `FUN_1991_0400`
+FAMILY 12 (11 stores `0412/0415/0418/041b/041e/0426/0429/042f/0435/0455/
+045e` + `0461 LEA`) + `1991:111e` LEA (NON-LOAD) + `1991:49aa` TEST
+(OPEN-WINDOW, ownerless); the Task-1 labels "NEW ×13" and "REJECT ×14"
+undercounted/misbundled — replaced with family-scope/run-scope rows above
+and headline (3) reworded; the earlier "(`0439 [BX+0x2a]`-family is in the
+positive-disp class)" parenthetical double-counted a site outside this run
+and is gone.
+(3) Minor 3 — `1991:0477` physical arithmetic corrected: `JMPF
+0x0018:0x092C` = `0x0180 + 0x092C = 0x0AAC` (NOT `0xAA4`); with the fix the
+raw bytes and the listing render `0x0000:0aac` converge on the SAME physical
+target — the divergence is render-only (seg/offset decomposition), headline
+(1), the Step-1 paragraph and the quote-protocol parenthetical reworded; the
+RECONCILED-OUT conclusion is unaffected (`0x0AAC ≠ 0x124FC`).
+(4) Minor 4 — image-cluster tuple: `0x0001` is at `[0x9c8]` (data index 24),
+not `0x9cc`; the tuple is printed word-by-offset corrected, mapping
+re-derived from the live re-read.
+State: prior sections untouched (all edits confined to this section —
+diff-mechanics wording folded per Task-2, hunk evidence lives in the task
+report); no program write; `fifa96.rep` churn left unstaged.
+
+### Writes (Task 2 — zero-writes branch, executed 2026-09-30, program `/fifa96.exe`)
+
+The Task-1 walk table's exposed-bodies list is **NONE**, so the conditional
+create path is skipped and the binding ruling for this task is ZERO
+PROGRAM WRITES: no `create_function`, no `rename_function` (execute), no
+plate, no `set_global`, no `save_program`, no transaction opened. The
+rename-branch bar test for `0931` is executed honestly in the verdict row
+below — its premise FAILS and the tool-side probe ran `dry_run=true` only
+(read-only, no mutation recorded). This section is the disclosure's
+byte-level proof, re-run live THIS task (all responses verbatim, Task-2
+time):
+
+| proof leg | verbatim live response (this task) | reconciliation |
+|-----------|-----------------------------------|----------------|
+| before-neighbor | `get_function_by_address(11bd:092c)` → `{"name":"dispatch_mode_vector","address":"11bd:092c","signature":"undefined dispatch_mode_vector(void)","entry_point":"11bd:092c","body_start":"11bd:092c","body_end":"11bd:0930"}` | body ends `0930` — the byte immediately before the stub |
+| the stub | `get_function_by_address(11bd:0931)` → `{"name":"FUN_11bd_0931","address":"11bd:0931","signature":"undefined FUN_11bd_0931(void)","entry_point":"11bd:0931","body_start":"11bd:0931","body_end":"11bd:0937"}` | bounds BYTE-IDENTICAL to the Task-1 quote — unmoved |
+| after-neighbor | `get_function_by_address(11bd:0938)` → `{"name":"FUN_11bd_0938","address":"11bd:0938","signature":"undefined FUN_11bd_0938(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:0938","body_start":"11bd:0938","body_end":"11bd:0973"}` | starts `0938` = `0937+1` ✓ — the walk's first-foreign byte is OWNED |
+| boundary gaps | between `0930|0931` and between `0937|0938` there is NO unowned byte — the three returned `body_end`/`body_start` pairs are exact adjacencies (arith above); full-pagination `find_code_gaps` (below) carries NO row covering `1000:24f9..2543` (`0929..0973` minus the four bodies: zero) | boxed walk proven: no gap row inside the cluster span |
+| caller census re-verify | `search_instructions` CALL + `0x1000:24fc` → `match_count:6`, sites `0cf4/2cc5/7a76/7b24/7d15/7d1e`, bytes `e835fc/e864dc/e8b38e/e8058e/e8148c/e80b8c` — **byte-identical to Task 1**; CALL + `0x1000:2501` → `match_count:1`, `0da6 e888fb` in `FUN_11bd_0d80` ✓ | authority stable Task-1→Task-2; `instructions_scanned:15589` uniform (scope UNCHANGED — no save occurred, so no sweep and no drift: the slice-24 `Drift`/`15589` precedent holds exactly) |
+| gap census (FULL pagination, mandated since a state read backs the zero-writes claim) | `find_code_gaps offset 0 limit 100` → 100 rows, `total:151`; `offset 100 limit 100` → 51 rows, `total:151` — 151/151 consumed; neighborhood rows verbatim: `{"start":"1000:24a6","end":"1000:24f8","size":83,…,"before_function":"FUN_11bd_08c2",…,"after_function":"FUN_11bd_0929",…}` and `{"start":"1000:2544","end":"1000:256a","size":39,…,"before_function":"FUN_11bd_0938",…,"after_function":"FUN_11bd_099b",…}` | `24f8−0x1bd0 = 0928`, `2544−0x1bd0 = 0974` ✓; total 151 = slice-24 post-state ✓ (no drift); between the rows the whole `0929..0973` span is owned by the four bodies — no new contiguous CODE run exists anywhere the walk could have exposed |
+| function count | `get_function_count` → `{"function_count":329,"program":"fifa96.exe"}` | 329 = slice-24 → 329, Δ0 ✓ (and Δ0 Task 1 → Task 2 — this task wrote nothing) |
+
+NEW SURFACED ADJACENCY (disclosed, NOT created here): the gap row above
+names `after_function FUN_11bd_0929` — probe: `get_function_by_address(11bd:0929)`
+→ `{"name":"FUN_11bd_0929","address":"11bd:0929","signature":"undefined FUN_11bd_0929(void)","entry_point":"11bd:0929","body_start":"11bd:0929","body_end":"11bd:092b"}` —
+a 3-byte body PRECEDING `dispatch_mode_vector`. Provenance: the count is
+stable at 329 across slice-24/Task-1/Task-2 quotes ⇒ it PRE-DATES this
+slice (never claimed by it); Task 1 simply never quoted that row's
+`after_function` field. The walk proof is unaffected (the adjacency sits
+one body BEFORE the `092c` end-boundary, and the boxed-walk claim concerns
+`0930|0931` and `0937|0938` — both still exact).
+
+Fold-ins executed (docs-only, own-section rows — Task-1 wording nits):
+(1) the storm-row post-`0461` class label corrected — `046a` is a
+BARE-`[BX]` no-disp form (the dump's `MOV word ptr [BX],0xef8`), `0472`
+carries `[BX+0x1c]` positive-disp; neither belongs to this run's
+negative-disp set (row now says so); (2) the `### Fix wave 1` trailer's
+"diff hunks all `≥5417`" wording replaced by
+"all edits confined to this section" (the hunk count is a report-side
+artifact, not a map claim). No other prior row of this or any section was
+touched; `git diff` shows the fold-ins plus this append.
+
+### Verdicts (Task 2)
+
+| verdict | address | evidence | disposition | C counterpart |
+|---------|---------|----------|-------------|---------------|
+| `dispatch_mode_vector` — **RATIFIED** (as recorded) | `11bd:092c` | slice-12 rename+plate row (`NOP`@`092c` + `JMP word ptr [0x9bc]`@`092d`, no RET — cited there; bounds re-read byte-identical THIS task); caller census count live re-verified: **6 sites / 5 owners** (`0cf4`,`2cc5`,`7a76`,`7b24`,`7d15`,`7d1e` — bytes identical to Task 1), controls 4-keyed/6-xrefs quoted; NEW patch-leg adjacency disclosed and deferred (`016c@0229/022f` WAIT stores, heads `90` un-applied) | no change — record stands + the new caller rows are this slice's census (Tables above) | none — behavioral (indirect tail transfer through `[0x9bc]`) — as set slice-12 |
+| `FUN_11bd_0931` — **NOT-CONFIRMED-at-name** | `11bd:0931` | bar test shown: the rename branch requires the body's ops to BE the near-offset pair dispatch with pair-LOAD + far-consume — its own cited ops are `0931 NOP (90)`/`0932 PUSH AX (50)`/`0933 PUSH BX (53)`/`0934 JMP word ptr [0x9be] (ff26be09)`: there is NO load op (the pair-load is `publish_mode_vector`'s `6270/6277`, one hop out) and the consume is the NEAR `ff26` form, NOT `JMPF`/`ea` — premise fails; the mechanism the ops DO show (pre-push AX/BX replay + near tail transfer through the w1 cell) named cleanly at the gate on a read-only probe: `rename_function(old_name="FUN_11bd_0931", new_name="prepush_dispatch_mode_vector", dry_run=true)` → `{"dry_run":true,"status":"success","message":"Success: Renamed function at FUN_11bd_0931 from 'FUN_11bd_0931' to 'prepush_dispatch_mode_vector'","warnings":["…not PascalCase. Expected: PrepushDispatchModeVector","…contains underscores…"]}` — style warnings only, quoted-as-returned, snake_case precedent (`clear_msw_and_callfar`, `enable_paging_and_load_tss`); NOT EXECUTED per this task's zero-writes ruling | create-already-existing → disposition = keep `FUN_11bd_0931` default name, NO plate; role recorded at the mechanism the body itself shows; the dry-run-passed candidate carried in Deferrals should the controller lift the zero-writes ruling | none — behavioral (register-preamble replay + near tail transfer through `[0x9be]`), recorded wording only |
+| **selection answer** — **CLOSED at the static layer** (runtime legs named) | chain | stub choice = CALL-SITE binding (092c: 6 sites incl. `execute_exit_arm@7d15/7d1e`; 0931: 1 site `0da6` in `FUN_11bd_0d80` `0d80..0db1`, DS←0x20 staged `0da3/0da5` immediately prior — cited in the walk context); pair content = `[BP+-0x5a]` arg (cascade stores `440e/44ab` bytes live-verified) + `publish_mode_vector` gates `6259/625e` carry ∧ `6266/626b`, override `626d` → `CS:[BX−4]/[BX−2]` → `6274/627b`; far cell `[0x9c2]` = consumer `02b1` (`execute_mode_switch` tail) + conditional writer `41ee` iff `[0x2f]>=3` (`41e7/41ec` byte-re-derived) + image default `0x02B5`; patch leg `016c@0229/022f` gated `[0x3e]≠0`, UN-APPLIED in the listing at this-slice time | answers the spine question at the static layer; NO runtime claim made | — |
+
+### Deferrals (Task 2)
+
+- R3 IVT cluster (`INT 0x67` handler identity at `2a16`, `2a37 JMP BX`
+  dynamic leg) — slice-26 queued (standing scope guard).
+- Handler callee trees (`0d62`, `06fc`/`073c`/`0733`-family, `284c`/`28fb`,
+  the far-ret pair consumers, `CALLF ES:[0xd5a]`) — one-hop rule.
+- `[0x9ba]` armed-value runtime — FU-blocked (prior disposition).
+- `[0x2fa]` consumers + the `016c` patch-leg gate inputs (`[0x3e]`,
+  `[0xf82]` runtime) — recorded, not traced.
+- Runtime writers of `{[0x9bc], [0x9be], [0x9c2], [0x996]}` beyond the
+  cited static writers — OPEN-WINDOW (armed-value layer, trace-blocked).
+- `0931` NAME EXECUTION: the gate-passed candidate
+  `prepush_dispatch_mode_vector` (dry-run verbatim in the verdict row) is
+  carried forward — executing it is a controller decision, this slice's
+  ruling is zero-writes; the `caseD_0` name-class route (slice-24 finding:
+  no tool route renames exactly one of two identically-named instances)
+  remains deferred.
+- Δ1 (`list_functions_enhanced` 328 vs count 329) — unresolved, no claim
+  (slice-24 erratum (c) stands).
+- Storm ledger carry-forward to slice-26: rejection basis = **DS-clamp**
+  (`0406 8edb` pin, never restored before the `0477 ea` tail; physical
+  `[0x200,0x101FF]` excludes the `1000:`-view cells) — the fixed basis is
+  what slice-26 inherits, per the fix-round ruling.
+- Suite green (10/10, docs-only diff); no program write occurred this task
+  — `save_program` NOT called (nothing to persist); on-disk program stays
+  at slice-23's committed state (the net-zero precedent — slice-24 `### Writes`);
+  `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
