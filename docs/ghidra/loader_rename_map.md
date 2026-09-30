@@ -7970,6 +7970,19 @@ per raw scan, address flaky); (2) stack-staged `PUSH CS:PUSH IP + IRET` (H3/H7)
 non-int-FF cell-store row is missing the reader link; the two int-FF rows have
 their reader but unowned arm-writers + unowned landing).
 
+**Chains-map final row (Task 2 disposition — appended here, NOT a 16th table
+row; the map stays 15 chains):** as of this slice: **0 COMPLETE**; the **int-FF
+consumer leg is the project's first CLOSED consumer leg** — the remaining legs
+named: IVT-twin-A/B = **writer-open** (arms `03ab/03b2` in fill `0360..040d` +
+`0466/046d` in fill `045e..0490` — all `(03ab)`/`(0466)`→`No function found`
+re-probed live at Task 2) + **landing-open** (`(0b94)`→`No function found` live;
+band sits in gap row `1000:26e2..2792`); the 11 cell-store rows = **reader-leg
+open** (36-run matrix; zero-hit exact-forms re-run live at Task 2); H3/H7 =
+consumer-CLASS closed (`IRET`), instance-attribution open. **save-tenants stay
+`consumer-open (serialized tenants)`**: cluster A/B cells carry arm-stores and
+SS/SP saves as serialized co-tenants with NO static reader of either leg — the
+note is the disposition, not a status change.
+
 ### R6 band package `11bd:0675..0696`
 
 | item | output (verbatim) |
@@ -7978,7 +7991,7 @@ their reader but unowned arm-writers + unowned landing).
 | render W-A | `disassemble_bytes(11bd:0675,11bd:0696,dry_run)` → 13 insns, head `0675 97 XCHG AX,DI` ALIGNED+emitted, `0676 06 PUSH ES`/`0677 9c PUSHF`/`0678 06 PUSH ES`/`0679 52 PUSH DX`/`067a b480 MOV AH,0x80`/`067c e87d00 CALL 0x1000:22cc`/`067f 5a POP DX`/`0680 33c0`/`0682 8ec0`/`0684 26c7066704940b`/`068b 268c0e6904`/`0690 26c60612040a` |
 | render W-B | `disassemble_bytes(11bd:0670,11bd:0697,dry_run)` → `0670 POP DX`…`0674 c3 RET` then `0675 97 XCHG`…+`0696 c3 RET` ✓ two-render STABLE at aligned head `0675` (`97` renders `XCHG AX,DI` in 16-bit — the slice-28 `9706`=`0x0697` DATA-word reading is dead: live decode is CODE both anchors; brief's LEA/`0x0697` question answered: `97 06` = XCHG + `06` PUSH ES) |
 | byte read | `read_memory(11bd:0670,40)` → `5a615b58c397069c0652b480e87d005a33c08ec026c7066704940b268c0e690426c60612040ac350` ✓ byte-identical to slice-29 (`c3`@`0674`, `c3`@`0696`, arm trio `26c7066704940b`/`268c0e6904`/`26c60612040a`) |
-| inbound `7506` run | raw `7506` → `match_count:30` (22 `11bd:` + 8 `1991:`); **fix-wave-1 LIVE RE-RUN: same `22+8` counts, different address set** (the documented 2-byte-pattern instability) — per-hit classification of MY re-run set: all 22 `11bd` hits map to defined-function/defined-orphAN regions (none in true undefined gaps — checked against a fresh FULL 149-row `find_code_gaps` list) = code bytes (`75 06` = `JNE rel8 +6` opcode or displacement fragment); read-grounded samples (each `read_memory` window opens `7506` AT the quoted address, owner cited from `get_function_by_address`): `11bd:1832` `7506c706d411ffff` (`FUN_11bd_17f3`), `11bd:2e93` `7506e8abfee8f72a` (`FUN_11bd_2d9c`), `11bd:3516` `75066a03e890ed5b` (`FUN_11bd_32c6`), `11bd:58ba` `75066a0ce8ecc95b` (`FUN_11bd_5686`), `11bd:78e2` `7506c706cc0e00ef` (`setup_memory_hardware`), plus defined-orphan-region pair `11bd:4867` `75066a1ee83fda5b` / `11bd:4a2d` `75068b46f8a3400c` — my set has 4 `11bd` hits inside `6382..6706` (`4867/48b5/498c/4a2d`); `1991` hits (`20a6,20b1,225a,23ed,2b75,32f8,3859,3e34`) = overlay code bytes, count-quoted only — NOT read-grounded (overlay addresses ambiguous per tool-stability paragraph). **RETRACTION (fix wave 1): the previously printed "verified samples" `11bd:12d7`-class and `11bd:03ae` are NOT `7506` hit sites** — neither is in the re-run set, `03ae` holds the `03ab` ARM DISP bytes `fc03 940b` with no `75 06` within ±4, and `12d7` is a `ff2e`-run context address mis-pasted into this row; reprinted samples are from THIS wave's re-run, read-grounded by me, classification corroborated by the reviewer's independent re-run (22 hits byte-grounded, none in true undefined gaps, 5 in `6382..6706` — set churn between runs is the documented flakiness itself). **Zero data-word `0x0675` table candidates.** Stable exact inbound-arm forms ALL `No matches found`: `c70667047506`, `c706fc037506`, `c706e7037506`, `c7067c037506`, `b87506` (`MOV AX,0x675`), `687506` (`PUSH 0x675`), `ea7506` (far-literal offset `0x675`); defined operands `0x675`=0 (`match_count:0` re-run live), `0x676`=1 false-numeral `0x6761` (slice-29 parity), `0x679`=1 = `44b2 MOV word ptr [BP + -0x5a], 0x679` (the dispatcher ARG-CONSTANT — appendix re-scan below) |
+| inbound `7506` run | raw `7506` → `match_count:30` (22 `11bd:` + 8 `1991:`); **fix-wave-1 LIVE RE-RUN: same `22+8` counts, different address set** (the documented 2-byte-pattern instability) — per-hit classification of MY re-run set: all 22 `11bd` hits map to defined-function/defined-orphAN regions (none in true undefined gaps — checked against a fresh FULL 149-row `find_code_gaps` list) = code bytes (`75 06` = `JNE rel8 +6` opcode or displacement fragment); read-grounded samples (each `read_memory` window opens `7506` AT the quoted address, owner cited from `get_function_by_address`): `11bd:1832` `7506c706d411ffff` (`FUN_11bd_17f3`), `11bd:2e93` `7506e8abfee8f72a` (`FUN_11bd_2d9c`), `11bd:3516` `75066a03e890ed5b` (`FUN_11bd_32c6`), `11bd:58ba` `75066a0ce8ecc95b` (`FUN_11bd_5686`), `11bd:78e2` `7506c706cc0e00ef` (`setup_memory_hardware`), plus defined-orphan-region pair `11bd:4867` `75066a1ee83fda5b` / `11bd:4a2d` `75068b46f8a3400c` — my set has 4 `11bd` hits inside `6382..6706` (`4867/48b5/498c/4a2d`); `1991` hits (`20a6,20b1,225a,23ed,2b75,32f8,3859,3e34`) = overlay code bytes, count-quoted only — NOT read-grounded (overlay addresses ambiguous per tool-stability paragraph). **RETRACTION (fix wave 1): the previously printed "verified samples" `11bd:12d7`-class and `11bd:03ae` are NOT `7506` hit sites** — neither is in the re-run set, `03ae` holds the `03ab` ARM DISP bytes `fc03 940b` with no `75 06` within ±4, and `12d7` is a `ff2e`-run context address mis-pasted into this row; reprinted samples are from THIS wave's re-run, read-grounded by me, classification corroborated by the reviewer's independent re-run (22 hits byte-grounded, none in true undefined gaps, 5 in `6382..6706` — set churn between runs is the documented flakiness itself). **Zero data-word `0x0675` table candidates.** Stable exact inbound-arm forms ALL `No matches found`: `c70667047506`, `c706fc037506`, `c706e7037506`, `c7067c037506`, `b87506` (`MOV AX,0x675`), `687506` (`PUSH 0x675`), `ea7506` (far-literal offset `0x675`); defined operands `0x675`=0 (`match_count:0` re-run live), `0x676`=1 false-numeral `0x6761` (slice-29 parity), `0x679`=1 = `44b2 MOV word ptr [BP + -0x5a], 0x679` (the dispatcher ARG-CONSTANT — appendix re-scan below). **TASK-2 FOLD (deferred cosmetic — the 5-vs-4 orphan-window prose):** per-run counts inside `6382..6706` are SET-dependent — that IS the documented flakiness. Task-2's parity re-run again returned `22+8=30` with the overlay set identical to fix-wave-1 and **4** `11bd` hits in the orphan window (`4867/48b5/498c/4a2d` — `4867` re-grounded live `read(11bd:4867,8)`→`75066a1ee83fda5b`; plus this-run NEW-set samples read-grounded here: `11bd:1c27` `75066a16e87f065b` and `11bd:39f0` `75066a0de8b6e85b` — `JNE`+`PUSH`+`CALL` code fragments, OUTSIDE every gap row at their 1000-view `37f7`/`55c0` = defined body interiors); the reviewer's `5` came from a different churned set. All 22 `11bd` hits re-checked against THIS task's fresh FULL 149-row gap list (both pages re-pulled): 18 in defined bodies, 4 in the `1000:6382..6706` orphan-instruction row (`has_undefined_bytes:false` — defined-but-orphaned, not a true undefined gap), ZERO in true undefined gaps — the classification conclusion stands unchanged |
 | appendix re-scan | map lines `2363`-section & `3701`-section 14-arg rows: arg `0x679` story = `44ab/44b2` dispatch immediates (`c746a67906`/`c746a6bc29`); slice-22 dedupe row `0x679↔0675/0677 (9706/9c06)` = the byte-ADJACENCY of the H4 landing words `0x0697/0x069c` — refuted by this pass's CODE render (no data reader; value is a slot index, not a pointer); **no arm value `0x675` exists anywhere**: `7506` has no cell-store/MOV/PUSH/ea form (all 0) |
 | landing check | region-wide targets into `0675..0696` (1000-view `2245..2266`): defined runs operand `0x675`=0; rel16/`e8`/`e9` enumeration: nearest edges are `067c CALL 0x1000:22cc` (OUTBOUND, callee `06fc`), internal `0b0b→0ad5`-style legs never point into the band; `0674 c3 RET` wall (owner `FUN_11bd_0667` = H3 IRET-ret half); **zero inbound edges** |
 | exits | `{c3}`@`0696` (W-B render ✓); arm-stores as above |
@@ -8069,3 +8082,196 @@ malformation fixed (row renders). All fix-wave calls were read-only; no
 create/rename/comment/define/flow-repair/`save_program`; no transaction;
 `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged. Prior
 sections and this section's untouched rows byte-identical.
+
+### Writes (Task 2 — mechanism-gated dispositions, executed 2026-09-30, program `/fifa96.exe`) — ZERO-WRITES BRANCH
+
+**Step 1 pre-write parity per region (live re-check vs the Task-1 quotes) —
+ZERO DRIFT on all three.**
+
+- **R6 `0675..0696`:** ownership probes `(0675)`/`(0696)`→
+  `{"error":"No function found for 11bd:0675"}`/`…11bd:0696…` (unowned ✓);
+  walls `(0674)`→`FUN_11bd_0667 …"body_end":"11bd:0674"`, `(0697)`→
+  `FUN_11bd_0697 …"body_end":"11bd:06c9"` — identical to the Task-1 package
+  row. DAT units: `analyze_data_region(11bd:0675)`→`{"start_address":
+  "11bd:0675","end_address":"11bd:0696","byte_span":34,"xref_count":0,
+  "current_name":"DAT_11bd:0675","current_type":"undefined"}` — NO defined
+  data unit over the band, xref 0. Gap rows verbatim: `{"start":"1000:2245",
+  "end":"1000:2266","size":34,"has_undefined_bytes":true,
+  "has_orphaned_instructions":false,"before_function":"FUN_11bd_0667",
+  "after_function":"FUN_11bd_0697","after_function_address":"11bd:0697"}` +
+  companion `{"start":"1000:2235","end":"1000:2236","size":2,
+  "has_undefined_bytes":false,…}` = `0665..0666`. Inbound-run parity: value-
+  word `7506`→22+8=30 with per-hit classification holding (see the fold in
+  the Task-1 row above); exact forms `c70667047506`/`c706fc037506`/
+  `c706e7037506`/`c7067c037506`/`b87506`/`687506`/`ea7506` ALL `No matches
+  found`; defined operands `0x675`→`match_count:0`, `0x679`→1 = the same
+  `44b2 MOV word ptr [BP + -0x5a], 0x679` ARG-CONSTANT (`match_count:1`,
+  `instructions_scanned:15694`). Bytes: `read(11bd:0670,40)`→`5a615b58c39706
+  9c0652b480e87d005a33c08ec026c7066704940b268c0e690426c60612040ac350`
+  BYTE-IDENTICAL to the Task-1 cite (`c3`@`0674` wall, arm trio, `c3`@`0696`).
+- **Stub `64ff..6505`:** `(64ff)`→no function; `(64fa)`→`FUN_11bd_64b7
+  64b7..64fe` (the inbound insn's owner ✓); `(6506)`→
+  `restore_ss_sp_and_modify_pic_masks 6506..6548` ✓. DAT unit:
+  `analyze_data_region(11bd:64ff)`→`{"byte_span":7,"xref_count":0,
+  "current_name":"DAT_11bd:64ff","current_type":"Alignment"}` — the 7-B
+  `Alignment` unit INTACT, verbatim vs Task-1. Gap row verbatim: `{"start":
+  "1000:80cf","end":"1000:80d5","size":7,"has_undefined_bytes":false,
+  "has_orphaned_instructions":false,"before_function":"FUN_11bd_64b7",
+  "after_function":"restore_ss_sp_and_modify_pic_masks",
+  "after_function_address":"11bd:6506"}`. Inbound-run parity: raw `eaff64`→
+  exactly one hit `[{"address":"11bd:64fa"}]` (match_count 1, same site),
+  POSITIVE READ-GROUNDED: `read(11bd:64fa,13)`→
+  `eaff641800b0fee664f4ebfdfa` byte-identical to Task-1; value-word forms
+  `b8ff64`/`68ff64`/`c7066704ff64`/`c706fc03ff64` ALL `No matches found`.
+- **int-FF twins' arms + landing:** `(03ab)`/`(0466)`→both `{"error":"No
+  function found …"}` (arms still UNOWNED — writer leg still open);
+  `(0b94)`→`{"error":"No function found for 11bd:0b94"}` (landing leg still
+  open); consumer `(0ae0)`→`FUN_11bd_0ad5 0ad5..0ae1` DEFINED+OWNED ✓ (the
+  CLOSED consumer leg still stands); writer pattern `c706fc03940b`→
+  `[{"address":"11bd:03ac"},{"address":"11bd:0467"}]` = the two twins'
+  `c7`-fields (sites `03ab`/`0466` incl the `26` ES-prefix), both READ-
+  GROUNDED: `read(11bd:03a4,26)`→`09dc0933c08ec026c706fc03940b268c0efe038b1e
+  820f0bdb74` and `read(11bd:045e,18)`→`9104960433c08ec026c706fc03940b268c0e`
+  — byte-identical to the Task-1 windows; fills still undefined gap rows
+  `1000:1f30..1fdd` (174 B) / `1000:202e..2060` (51 B).
+
+**Create-branch evaluation (honest, per the pre-check mandate):** the parity
+re-checks surfaced NO new complete chain — the twins remain HALF (writer-open +
+landing-open re-probed above), every cell-store row remains reader-open ⇒ **0 of
+15 COMPLETE stands; the create branch does NOT open. Zero-writes branch
+executes: 0 creates (≤2 allowed), 0 renames, 0 saves.**
+
+**Zero-writes disclosure — byte-level proofs per region (the two create-gate
+failures, cited verbatim).**
+
+- **R6 `0675..0696` — LEAVE.** Gate failure 1, inbound static-zero ACROSS
+  CLASSES, re-verified live this task (7 exact forms + `7506` classification +
+  operand runs above); Task-1 proposal row verbatim: "mechanism NONE for entry
+  (every `0x675` inbound encoding + landing class = 0 hits; `0674` RET wall)"
+  and mechanism row verbatim: "**NONE for entry** (no `[..]←0x675` in ANY
+  cell/stack/literal form; `0674` RET wall; entry static-zero) — R6 IS the
+  arm-writer side (cluster A + value-sharing with the int-FF twins)". Gate
+  failure 2, the `ES:[0x467],0xb94`-class writer is its OWN arm: the only
+  store-encoding carrying an R6-class value into a cell is `0684`
+  `26c7066704940b` (`ES:[0x467],0xb94`, T1 row "`0684` (R6 band, UNOWNED)")
+  — i.e. the band arms the pair, and the chains map says the chain does not
+  come BACK: R6-arm row verbatim — reader "NEGATIVE (same scope) + SS/SP-save
+  co-tenants `643d/6441` also unread", status
+  "**consumer-open + landing-unowned**"; family-mechanism answer verbatim:
+  "**No COMPLETE chain** (every non-int-FF cell-store row is missing the
+  reader link; the two int-FF rows have their reader but unowned arm-writers
+  + unowned landing)" — and the binding rule, a half-chain is not a mechanism
+  (slice-29 ruling; plan Global). ⇒ **LEAVE**; CODE classification holds; the
+  aligned head (`97 XCHG AX,DI`@`0675`) is NOT sufficient — Task-1 proposal
+  row verbatim: "the create-gate 'COMPLETE chain + aligned head' FAILS on the
+  chain leg despite the aligned head".
+- **Stub `64ff..6505` — LEAVE.** Failure 1, the Alignment unit: the whole head
+  is ONE defined 7-B `Alignment` data unit `DAT_11bd:64ff` (xref 0; re-audited
+  live — the aligned-head render gate CANNOT pass over a defined data unit);
+  Task-1 mechanism row verbatim: "PRESENT (entry `64fa` far-literal,
+  offset-field `0x64ff`, selector-semantics caveat) but **listing-blocked**
+  (7-B `Alignment` unit on the head, xref 0) + landing-semantic = terminal
+  reset (no onward flow) — NOT create-admissible this slice"; proposal row
+  verbatim: "create INADMISSIBLE — aligned render fails (NOT-CONFIRMED
+  default per bar rule; printed-ops would be `reset_cpu_and_halt`-class IF
+  ever freed)". Failure 2, selector-only inbound: the unique inbound is the
+  GDT-SELECTOR literal `64fa JMPF 0x18:0x64ff` (raw `eaff64` = 1 hit,
+  re-run live above) — Task-1 inbound row verbatim: "Entry =
+  **CITED-SEMANTICALLY (`64fa` names `0x64ff`), NOT arithmetically-closable**"
+  (Ghidra's real-mode render `0x0000:667f` misses the stub); value-word class
+  0/4 forms re-confirmed live. No data-undefine is attempted: the `Alignment`
+  units are DATA mutations OUTSIDE the sanctioned write classes (slice-29
+  rule, H9 precedent).
+- **Bar renames: 0** — no creates ⇒ nothing to name (both proposal rows
+  verbatim: "n/a — NO create candidate; nothing to name" / the
+  `reset_cpu_and_halt`-class name stays NOT-CONFIRMED-if-ever-freed).
+- **H9:** not a Task-2 subject; section NOT re-touched — gap row
+  `1000:2605..262d` re-observed UNCHANGED `false/false`, `DAT_11bd:0a35`
+  `Alignment` intact per storage invariance (below).
+
+**Census protocol (zero-writes path, in full).**
+`get_function_count` 335 (pre) → **335** (post) = Δ0 = EXACTLY the write-set
+(empty). `find_code_gaps`: FULL pagination consumed BOTH sides — pre 100+49 =
+`total:149`, post re-pulled ×2 pages = `total:149`, Δ0; touched neighborhoods
+ALL re-observed byte-identical: R6 `1000:2245..2266` + companion
+`1000:2235..2236`, stub `1000:80cf..80d5`, H9 `1000:2605..262d`, int-FF fills
+`1000:1f30..1fdd`/`1000:202e..2060`, landing band `1000:26e2..2792`, orphan
+window `1000:6382..6706` (the `7506` classification anchor). **Flip changes:
+NONE — no row appeared, disappeared or changed state** (every row above
+quoted at pre AND re-observed identical at post). Overlay spot: page-2 fetch
+`1000:c87e`/`de60`/`e270`/`e424`/`e685`/`e7a0`/`e8a7`/`f193`/`f266` +
+`00000000` ALL present = identical to the slice-29/Task-1 ledger. Scope line:
+`search_instructions` both runs `instructions_scanned:15694`,
+`truncated:false`, scope program — Δ0 vs Task-1 (no body entered or left the
+defined-function layer, as required by a zero write-set).
+
+**Mtime-invariance:** captured BEFORE the live runs —
+`fifa96.rep/idata/00/00000000.prp` → `2026-09-29 17:56:21.166450572 -0300`,
+`fifa96.rep/idata/00/~00000000.db/db.30.gbf` → `2026-09-30 11:32:00.103296466
+-0300` — and re-stat AFTER the final census: IDENTICAL to the nanosecond ⇒ no
+save ⇒ program storage untouched by this task. `/media/felipe/FIFAPCCD/`
+untouched; `fifa96.rep` churn left unstaged.
+
+**Explicit no-write inventory + read/write ledger.** NOT executed (each, with
+its reason): `create_function`×0 (gate failures cited above — 0 of 15 chains
+complete), `rename_function`×0, `set_comment`×0, `set_function_prototype`×0,
+`apply_data_type`/`set_global`×0 (DATA-mutation class, unsanctioned),
+`clear_flow_and_repair`×0 (blockers are DATA; H9's one sanctioned repair per
+region spent last slice and ratified), REAL `disassemble_bytes`×0 (byte-
+authority came from `read_memory` identity; no write-mode disasm needed),
+`save_program`×0 (nothing to save; mtime proves it). No transaction. READS
+this task: `list_open_programs`×1, `get_function_count`×2, `find_code_gaps`×4
+(FULL pagination pre 100+49 and post 100+49, 149/149 both sides),
+`get_function_by_address`×11 (R6 ×4, stub ×3, int-FF ×4),
+`analyze_data_region`×2 (read-only), `search_byte_patterns`×14 (`7506`,
+`eaff64`, `c706fc03940b` parity + 11 exact-form negatives),
+`search_instructions`×2 (`0x675`, `0x679` — defined-layer authority, scope
+15694), `read_memory`×7 (every quoted POSITIVE read-grounded per the
+flakiness rule: `64fa`, `03a4`, `045e`, `0670`, `4867`, `1c27`, `39f0`).
+Negatives = zero-hit exact-form runs (existence class) + defined-operand runs;
+controls quoted not relied.
+
+### Verdicts (Task 2 — two rows)
+
+| region | final disposition | entry class | chain cite |
+|---|---|---|---|
+| R6 `0675..0696` | **LEAVE** (zero-writes branch; CODE classification holds; bytes untouched) | **n/a — no create** (entry-class vocabulary applies to created bodies only; the ENTRY itself is static-zero across classes — 7 exact forms `No matches found` + operand `0x675`=0 + `0x679`=1 ARG-CONSTANT + `0674`/`0697` walls, ALL re-verified live at Task 2) | chains map `R6-arm` row: arm `0684`+`068b` (`26c7066704940b`+`268c0e6904`; ES←0 self-staged) → cell `0:467/469` cluster A → reader "NEGATIVE (same scope) + SS/SP-save co-tenants `643d/6441` also unread" → landing `CS:0xb94` UNOWNED ⇒ status **consumer-open + landing-unowned**; the `ES:[0x467],0xb94`-class writer IS the band's own arm ⇒ half-chain ≠ mechanism ("**No COMPLETE chain**" — family-mechanism answer verbatim) |
+| R4 head-stub `64ff..6505` | **LEAVE** (stays ONE 7-B `Alignment` unit `DAT_11bd:64ff`, xref 0 — no create, no data-mutation) | **n/a — no create** (sole inbound is SELECTOR-SEMANTIC ONLY: unique `eaff641800`@`64fa` = `JMPF 0x18:0x64ff`, "Entry = CITED-SEMANTICALLY (64fa names 0x64ff), NOT arithmetically-closable"; value-word forms `b8ff64`/`68ff64`/`c7066704ff64`/`c706fc03ff64` all `No matches found` live) | stub-package mechanism row verbatim: "PRESENT … but **listing-blocked** (7-B `Alignment` unit on the head, xref 0) + landing-semantic = terminal reset (no onward flow) — NOT create-admissible this slice"; proposal row: "create INADMISSIBLE — aligned render fails"; chains map `R4` row `consumer-open` (same cluster-A cell armed `CS:0x6506` by the primary — the stub is the primary's distinct reset exit, never its downstream) |
+
+### Deferrals (Task 2 — updated)
+
+- **INT-FF TWINS = the top next-slice candidate (the natural next slice):**
+  first CLOSED consumer-leg on record (arms `03ab/03b2`+`0466/046d` → IVT
+  `0:3FC/3FE` → `0ae0 INT 0xff` inside `FUN_11bd_0ad5` `0ad5..0ae1`) still
+  carries its two OPEN legs — WRITER-OPEN (both arm-sites in UNOWNED fills
+  `0360..040d`/`045e..0490` — `No function found` + gap rows
+  `1000:1f30..1fdd`/`1000:202e..2060` re-observed at Task 2) and
+  LANDING-OPEN (`0b94` stack-setup stub band `No function found`, inside gap
+  row `1000:26e2..2792`). FILL-REGION OWNERSHIP (`0360..040d`, `045e..0490`,
+  the `0745..076e` third int-FF writer `0761 MOV [0x467],0xb94` DS-form, +
+  landing `0b94..0bc2`-class) is the pre-step that turns this HALF into a
+  COMPLETE chain — the ONLY route to a future create on this pair.
+- `[0x2fa]` consumer story: UNCHANGED, FU-blocked (sole reader `0337 JMP word
+  ptr CS:[0x2fa]` `2eff26fa02` — this slice used it only as the search
+  control, per scope-guard cite-only).
+- R6's own ENTRY writer-open leg (which dispatch/fallthrough reaches `0675`):
+  static-zero persists; runtime OPEN-WINDOW row.
+- Stub + H9 heads: the `Alignment` units (`DAT_11bd:64ff` 7-B,
+  `DAT_11bd:0a35` 1-B) are DATA mutations outside sanctioned write classes;
+  re-alignment/undefine stays a future listing decision. **H9 chain NOT newly
+  COMPLETE** (consumer-open at this slice: `[0x3fe]` written at `0a06`, no
+  reader lands `0xa35`) — and the listing-gate clause carries regardless of
+  chain state: **chain completion does NOT auto-create over the `Alignment`
+  unit — the gate stays** (slice-29 flow-repair ratification stands; section
+  NOT re-touched, row `1000:2605..262d` unchanged).
+- Remaining list (Task-1 carry): H7 `PUSH 0x097b` → R2-band direction;
+  `0:412`/`0x792` flag-cell consumer (`0690`/`06b9` stores, writeback
+  `06dd`); overlay `~1991:3687 [0x467]←0x0b1e` + overlay `cdff` existence
+  site (needs STABLE overlay tooling first — the tool-reliability finding).
+- Prior deferrals unchanged: `2cc5`/`0e3c`, `674c`/`675a`, `[0x56]`/`[0x58]`
+  armed values, `[0x9ba]` runtime, R1/R2 direction, R3 stub, name-class
+  route, Δ1 — cite-only carry.
+- Suite: no C/test/CMake/tool change (`cmake --build build && ctest` green —
+  docs-only diff); THIS TASK'S PROGRAM WRITES = ZERO (count Δ0 `335`, gap
+  total Δ0 `149`, no flip changes, mtimes invariant); `fifa96.rep` churn left
+  unstaged; `/media/felipe/FIFAPCCD/` untouched.
