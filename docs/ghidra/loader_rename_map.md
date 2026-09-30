@@ -6523,3 +6523,201 @@ real-disassembly → nudge → create path was NOT needed and NOT executed.
   rename + ONE plate (+ `save_program` per protocol), count Δ0, gap total
   Δ0, side-effect ledger as printed; `fifa96.rep` churn left unstaged;
   `/media/felipe/FIFAPCCD/` untouched.
+
+## IVT loose ends (verified 2026-09-30, program `/fifa96.exe`)
+
+Read-only walk disposing the two candidates carried in slice-26 `### Deferrals
+(Task 2)`, verbatim: "`temporarily_patch_int67_vector` semantics beyond the
+ops: … the `7750` sink byte (undefined/flow-dead, single `cf`) stays a
+define-candidate for a capped write path, NOT touched here." + "`6329..633c`
+unowned zero-DS staging strip — full enumeration + store sweep next slice
+(Fix wave 2 row)." Scope re-read at-this-slice-time:
+`get_function_count` → `{"function_count":329,"program":"fifa96.exe"}` =
+slice-26 count ✓; every `search_instructions` response carries
+`instructions_scanned:15589` + `truncated:false` ✓ uniform (slice-25/26
+number, no drift); `find_code_gaps` FULL pagination offset 0 → 100 rows,
+offset 100 → 51 rows, `total:151` ✓; delta `11bd:xxxx = 1000:(xxxx+1bd0)`.
+HEADLINES: (1) the strip is DEFINED-UNOWNED CODE (render-independent inside
+its span — NOT the `173b`/`4c94` class) whose live extent is WIDER than the
+deferral: prologue head `55 PUSH BP` at **`6328`** (one byte before the
+recorded span) + body continuing `633d..634e` (loop + POP-restore + `RET`)
+inside one gap row `1000:7ef8..7f64` = `6328..6394`; ENTRY CENSUS ZERO →
+create NOT admissible → proposal **leave-as-bytes**; the deferral's "full
+enumeration + store sweep" is CLOSED here (body writes NO memory). (2) The
+strip's cells `{[0x56],[0x58]}` have a NEWLY LOCATED single static writer
+pair — `631e`/`6321` INSIDE the immediately-preceding owner
+`FUN_11bd_62f8` (slice 26 had them unswept). (3) `7750`: flow-DEAD
+undefined 1-byte hole (`cf`) with its own gap row `1000:9320`;
+reference runs yield ZERO static entries (the only true `7750`-view
+references are the `76c8` STORE writing the numeral as a VALUE —
+address-correction disclosed: the IP-word store is `76c8 c7045077`, NOT
+`76cc` — `76cc` is the `8c4c02` CS-store) + a FALSE-NUMERAL `JNZ` recomputed
+to `11bd:5b80`; runtime-IVT-indirect only ⇒ 1-byte create FAILS its entry-
+legality test → proposal **leave-as-bytes**. Quote protocol:
+`read_memory` 5/5 hex↔data reconciled; `disassemble_bytes` ×4 EXCLUSIVELY
+`dry_run=true`; controls quoted not relied; no `decompile_function`/
+`analyze_dataflow` this slice (zero cache touch); listing unmoved (slice-26
+byte runs re-read identical: strip bytes ✓, `7748` region ✓, `76c0` window ✓
+✓ `count:28` 62f8 emission includes `631e`/`6321` writer rows).
+
+### Strip context + renders (Step 1)
+
+Ownership probes `get_function_by_address` (verbatim): `11bd:6329`/`6328`/
+`633d`/`633e`/`633f`/`6340`/`634e`/`634f`/`6360` → `{"error":"No function
+found for 11bd:…"}` each; `11bd:6327` AND `11bd:6321` →
+`{"name":"FUN_11bd_62f8","address":"11bd:62f8","signature":"undefined2 FUN_11bd_62f8(undefined2 param_1, undefined2 param_2)","entry_point":"11bd:62f8","body_start":"11bd:62f8","body_end":"11bd:6327"}`
+(−1-byte wall ✓). Gap rows verbatim (151 total, full pagination):
+`{"start":"1000:7ef8","end":"1000:7f64","size":109,"has_undefined_bytes":false,"has_orphaned_instructions":true,"before_function":"FUN_11bd_62f8","before_function_address":"11bd:62f8","after_function":"FUN_11bd_6395","after_function_address":"11bd:6395"}`
+(`7ef8−1bd0=6328` ✓ `7f64−1bd0=6394` ✓ size `7f64−7ef8+1=109` ✓ —
+`has_undefined_bytes:false` + orphaned flag = the DEFINED-UNOWNED/
+orphan-instruction class, cf. `7c4b`; NOT the `173b` class — that region was
+undefined-bytes-rendering-by-window only) — live code extent `6328..634e`
+(body) + `634f..6394` TABLE bytes (misdecode artifact row below).
+Bytes live: `read_memory(11bd:6320,32)` →
+`008916580061fcc3558bec5257a156008b1658001ebf00008edf8b7e0483ef04` — the
+deferral run `8bec5257a156008b1658001ebf00008edf8b7e04` REPRODUCED verbatim
+at `6329..633c` ✓ + `read_memory(11bd:62f8,56)` →
+`601eb800008ed8bef602fd8bdead8bd0ad81fbfa0273f4434339079c43439d75f0391775ec1fa356008916580061fcc3558bec5257a15600`
+✓ + `read_memory(11bd:633d,48)` →
+`83ef0439550275f8390575f48bc71f5f5ac30f0010041404020008100000020005000000100002004048400002000e00`
+✓ (all reconciled; anchor chosen LIVE: previous owned body's end `6327`).
+THREE dry-run windows: A `disassemble_bytes(11bd:6329,20)` = slice-26 window
+replay; B `disassemble_bytes(11bd:6327,41)` (anchor = previous owned
+body_end); C `disassemble_bytes(11bd:633d,20)` (continuation cross-check).
+Every overlapped insn renders IDENTICALLY across covering windows (A∩B:
+`6329..633c` ✓; B∩C: `633d..634f` ✓) — span internals are NOT render-
+dependent; what differs is COVERAGE: window A never sees the `6328` head or
+the `633d..` tail (the deferral's truncated view), window B/C expose them.
+
+| insn | bytes | render-from-6329 | render-from-anchor-6327 | class |
+|------|-------|------------------|--------------------------|-------|
+| `6327` | `c3` | — | `RET` | CODE — `FUN_11bd_62f8` LAST insn (body_end `6327` ✓, authority render): flow-TERMINATES ⇒ NO fallthrough into `6328` |
+| `6328` | `55` | — (outside window) | `PUSH BP` | CODE-ORPHAN — PROLOGUE HEAD, 1 byte BEFORE the deferred span (live finding) |
+| `6329` | `8bec` | `MOV BP,SP` | `MOV BP,SP` | CODE |
+| `632b` | `52` | `PUSH DX` | `PUSH DX` | CODE stack |
+| `632c` | `57` | `PUSH DI` | `PUSH DI` | CODE stack |
+| `632d` | `a15600` | `MOV AX, [0x56]` | same | CODE read — member of the `[0x56]` authority run with NO function field ⇒ DEFINED-UNOWNED |
+| `6330` | `8b165800` | `MOV DX, word ptr [0x58]` | same | CODE read |
+| `6334` | `1e` | `PUSH DS` | same | CODE stack |
+| `6335` | `bf0000` | `MOV DI, 0x0` | same | CODE (pocket ledger already carried `6335 DI=0` — see Step-2 REJECT row cite) |
+| `6338` | `8edf` | `MOV DS,DI` | same | CODE SEGMENT-OP — DS←0 staging (the `1e/bf0000/8edf` shape slice 26 flagged as census-missed) |
+| `633a` | `8b7e04` | `MOV DI, word ptr [BP + 0x4]` | same | CODE frame-arg — plan hypothesis `MOV BX,[SI+4]` REJECTED by live render (same for `MOV SP,BP`/`PUSH SI`: authority = `MOV BP,SP`/`PUSH DX`/`PUSH DI`) |
+| `633d` | `83ef04` | — (window A ended `633c`) | `SUB DI,0x4` | CODE — window C re-emits identically |
+| `6340` | `395502` | — | `CMP word ptr [DI + 0x2], DX` | CODE scan-compare |
+| `6343` | `75f8` | — | `JNZ 0x1000:7f0d` | CODE loop — `6345−0x08 = 633d` ✓ internal |
+| `6345` | `3905` | — | `CMP word ptr [DI], AX` | CODE scan-compare UNDER DS←0 (staged view) |
+| `6347` | `75f4` | — | `JNZ 0x1000:7f0d` | CODE loop — `6349−0x0c = 633d` ✓ |
+| `6349` | `8bc7` | — | `MOV AX,DI` | CODE result-out |
+| `634b` | `1f` | — | `POP DS` | CODE un-pin |
+| `634c` | `5f` | — | `POP DI` | CODE |
+| `634d` | `5a` | — | `POP DX` | CODE |
+| `634e` | `c3` | — | `RET` | CODE BODY-END — body `6328..634e` = 20 insns, ZERO memory stores (stack+segment-register ops only) — the deferral's store-sweep CLOSED at the static layer |
+| `634f` | `0f0010` | — | `LLDT word ptr [BX + SI]` | DATA mis-DECODE (linear-sweep artifact — table head `0f00 1004 1404 …` follows; both covering windows emit the same artifact) |
+
+### Entry census + strip context (Step 2)
+
+| run | pattern | match_count | scope/flags | classification |
+|-----|---------|-------------|-------------|----------------|
+| operand | `6329` / `0x6329` | 0 / 0 | program, 15589, `truncated:false` | none — no defined-insn references the span-start numerals |
+| operand | `6328` / `0x6328` | 0 / 0 | same | none |
+| operand | `7ef8` / `0x7ef8` / `7ef9` / `0x7ef9` | 0 / 0 / 0 / 0 | same | none — the `1000:`-VIEW forms (rel-CALL/JMP render targets, e.g. `CALL 0x1000:82a4`) — bare `e8`/`e9` candidates = 0 ⇒ no nextIP+rel rows to recompute |
+| operand | `[0x56]` | 3 | same | WRITER `631e a35600 MOV [0x56],AX` (`FUN_11bd_62f8` — the ONLY static writer, cited in the 28-insn authority render); READS: `632d` (strip, function-less), `76ba CMP DI,word ptr SS:[0x56]` (`temporarily_patch_int67_vector`) |
+| operand | `[0x58]` | 4 | same | WRITER `6321 89165800 MOV word ptr [0x58],DX` (`FUN_11bd_62f8`, same render); READS: `6330` (strip), `76c1 CMP CX,SS:[0x58]` (`76ab`), `76e7 CMP CX,word ptr [0x58]` (`setup_memory_hardware`, DS-view — READ classified, cite-only) |
+| operand | `[SI + 0x4]` | 6 | same | NONE family-context: `11bd:02e5` (unowned byte-write)/`5ae8 LEA`/`5e2a MOV AX` (`load_mf_object`)/`1991:38c8 ES`-write/`1991:48cc`/`1991:4f67 caseD_0`-write — the strip renders `[BP + 0x4]`; the family SI-base forms are `76b0 be9c01` + `[SI]`/`[SI + 0x2]` (`76ab`, slice-26 cited) |
+| operand | `633d` / `633f` | 0 / 0 | same | none |
+| operand | `6341` | 1 | same | `6396 bf4163 MOV DI,0x6341` (`FUN_11bd_6395`) — READ-side numeral touching the strip region; pocket-committed REJECT rows cited below, NOT re-walked |
+| raw | `28 63` | 1 | program raw | `1000:1aaf` FALSE-STRING — `read_memory(1000:1aa4,24)` → `686f7374206572726f72202863616e6e6f74206c6f636b20` = `host error(cannot lock ` (`28 63` = the `(c` bytes) |
+| raw | `29 63` | 0 | program raw | none |
+| control | `get_xrefs_to(6329)` / `(6328)` | 0 / 0 refs | — | `{"references":[],"count":0,"offset":0,"limit":100,"total":0}` each — quoted, not relied |
+
+FALLTHROUGH: owner wall `6327 RET` (`c3`, 1 B, authoritative render)
+terminates flow — no fall-in from `FUN_11bd_62f8`; adjacency ✓ (body_end
+`6327`, gap starts `7ef8` = `6328`). ENTRY VERDICT: ZERO static entries at
+`6328`/`6329` — defined-insn-only, at-this-slice-time; runtime-indirect
+entry NOT excluded (window class — `JMP BX`/`JMPF`/cell-borne; missing legs
+named). Precedent contrast (read-only): the `0929` stub (`## R3 IVT cluster`
+Freebies) is the entry-CITED form — 4 `CALL …24f9`-family sites with
+per-site recompute; the strip has NO such family. Pocket ledger rows
+carried (committed, REJECT — the `6341` base's cell arithmetic):
+`| 63de/63e1/6345 | R | 6396 DI=0x6341 / 63ac DI=0x4a / 6335 DI=0 | 0x633f/0x633d→0x48/0x46→0x2 ∉ | REJECT ×3 (both orderings miss) |` +
+`| 11bd:63e1 | SUB DI,word ptr [DI + -0x4] (2b7dfc) | FUN_11bd_6395 | REJECT (committed row) | 63ac DI=0x4a → 0x46 ∉ (alt ordering 6396 → 0x633d ∉) |`
+— note the trace already included the strip's `6335 DI=0` producer.
+SI-context row: strip renders NO SI-operand; neighbor `FUN_11bd_62f8` sets
+`62ff be f602 MOV SI,0x2f6` (authority render) — dies at `6325 POPA` before
+`RET`; the pair-family SI base is `76ab`'s `MOV SI,0x19c` (slice-26 cited).
+`76ab` staging bytes consumed as-is: `be9c01…c70450778c4c02cd` (slice-26
+`### INT + BX sites`/`IVT-0x19C staging sweep` rows) ✓ re-cited live in the
+`76c0` window below.
+
+### 7750 neighborhood + references (Step 3)
+
+`read_memory(11bd:7740,32)` →
+`e891ef50e894b333c059e301485f5ec3cfe880ef74eab800dee84fff0ae475e0` (hex↔data
+reconciled ✓; slice-26's 12-byte `7748` overlap reproduced byte-identical ✓)
+— layout `774f c3 RET` / **`7750 cf IRET`** / `7751 e880ef CALL` /
+`7754 74ea JZ 7740`-class / `7756 b800de MOV AX,0xde00` / `7759 e84fff CALL`
+(the `76ab` wrapper site — slice-26 caller row) / `775c 0ae4 OR AH,AH` /
+`775e 75e0 JNZ`. Own gap row verbatim:
+`{"start":"1000:9320","end":"1000:9320","size":1,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"setup_memory_hardware","before_function_address":"11bd:76db","after_function":"FUN_11bd_79fc","after_function_address":"11bd:79fc"}`
+(`9320−1bd0=7750` ✓ — `has_undefined_bytes:true`: NOT even disassembled,
+unlike the strip's orphan-defined bytes).
+
+| probe | output |
+|-------|--------|
+| `get_function_by_address(11bd:774f)` / `(7751)` / `(7739)` / `(7741)` | all `{"name":"setup_memory_hardware","address":"11bd:76db","signature":"undefined4 setup_memory_hardware(void)","entry_point":"11bd:76db","body_start":"11bd:76db","body_end":"11bd:79f5"}` — `7750` is the single unowned HOLE inside that envelope |
+| `get_function_by_address(11bd:7750)` | `{"error":"No function found for 11bd:7750"}` (slice-26 `cf` no-function state HOLDS) |
+| operand `7750` | 2 (program 15589, `truncated:false`): `11bd:76c8 c7045077 MOV word ptr [SI],0x7750` (`temporarily_patch_int67_vector` — WRITE of the IVT-IP word, the deferral store RE-CITED, address at `76c8` — task-prompt `76cc` corrected: `76cc 8c4c02 MOV word ptr [SI + 0x2],CS` is the CS half) + `11bd:5b79 7505 JNZ 0x1000:7750` (`script_read_number`) — **FALSE-NUMERAL**: `5b79+2=5b7b`, `+0x05 → 5b80`; `1000:7750 − 1bd0 = 11bd:5b80` ≠ `11bd:7750`; intra-function forward skip, not a reference to the sink |
+| operand `0x7750` | 1 — the store only (the `5b79` JNZ renders `0x1000:7750`, substring without `0x7750`) |
+| operand `9320` (relocated view of `11bd:7750`) | 0 — no defined-insn transfer can enter at `7750` statically |
+| raw `50 77` | **1** hit: `11bd:76ca` = the store's imm word at `76c8..76cb` (WRITE-side; zero other in-image occurrences, no false-strings) |
+| raw `c7 04 50 77` | 1: `11bd:76c8` ✓ |
+| dry-run `disassemble_bytes(11bd:76c0,16)` | `76c1 363b0e5800 CMP CX,word ptr SS:[0x58]`/`76c6 7507 JNZ 0x1000:929f`(=`76cf` ✓)/`76c8 c7045077 MOV word ptr [SI],0x7750`/`76cc 8c4c02 MOV word ptr [SI + 0x2],CS`/`76cf cd67 INT 0x67` — the transient-install chain re-cited live, byte-identical to slice 26 |
+| control `get_xrefs_to(11bd:7750)` | `{"references":[],"count":0,"offset":0,"limit":100,"total":0}` — quoted, not relied |
+
+REACHABILITY: `7750` is ONLY IVT-indirect (runtime): `76c8/76cc` install
+`CS:7750` at `0:19C/19E` → `76cf INT 0x67` → `cf` executes as IRET →
+`76d1/76d4 POP` restore (chain cited; `7751` — NOT `7750` — is the
+`771c/7723/772c Jcc→0x1000:9321` entry per slice 26). `7739`-region owner:
+`setup_memory_hardware` (probe above); the recorded tail-cell row, verbatim
+from `## paging block 2978..2ada` — "`CS:[0x2ad9]` (bytes `2ad9..2ada`, the
+block's last two cells) is a LIVE DATA TAIL CELL — read at `2adb`
+(`FUN_11bd_2adb` first insn, `MOV DX,CS:[0x2ad9]`) and written at `7739`
+(`setup_memory_hardware`, `MOV CS:[0x2ad9],DX`) — flagged-not-adopted;
+ownership question deferred" — NOT re-walked per scope.
+
+### Proposals + bar pre-test (Step 4)
+
+| candidate | walk outcome | PROPOSED disposition | bar pre-test |
+|-----------|--------------|----------------------|--------------|
+| strip — deferral span `6329..633c`; live extent BODY `6328..634e` + orphan-table `634f..6394` (one gap row `6328..6394`) | DEFINED-UNOWNED CODE, render-identical across 3 windows (authority-run member at `632d`/`6330` with no function field — the `173b` NOT-ATTRIBUTABLE class REJECTED for the span internals); entry ZERO (8 numeral runs = 0, fallthrough refuted by `6327 c3 RET`, controls 0/0); enumeration + store-sweep CLOSED (20-insn body, zero memory stores); `[0x56]/[0x58]` sole static writers LOCITED at `631e/6321` in the preceding owner | **leave-as-bytes** — create NOT admissible (no cited CALL/JMP/fallthrough entry — plan entry rule); data-define MISLABELS executed frame-code (`[BP+4]/[BP+2]` args + POP-restore + `RET`) | pre-tested though create-inadmissible: STAGING-SHAPE/mechanism naming PASSES the mechanism leg if a future gate cites entry (segment-ops cited: `6334 1e`/`6335 bf0000`/`6338 8edf` DS←0 + `634b..634e` POP/RET restore shape); IVT-FLAVORED words FAIL the slice-26 pairing rule — CHECKED: no `INT` (`cd*`), no `IRET` (`cf`), no `0x19c/0x19e` store in the body's 20 rendered insns; its `[0x56]/[0x58]` are cell READS under caller DS. Task-2 create bounds IF ever admitted: `6328..634e`, stop-short walls `6327` (owned) and `634f` (table). |
+| `11bd:7750 cf` | undefined 1-byte flow-DEAD hole in `setup_memory_hardware` envelope, own gap row `1000:9320`; static references = 0 (operand `0x7750` → only the WRITE-of-value at `76c8`; `9320` → 0; `50 77` → the imm; xref control 0); reach = runtime-IVT-indirect only (cited chain) | **leave-as-bytes** — the 1-byte-create legality test = cited entry evidence ⇒ ABSENT ⇒ create path CLOSED; data-define rejected (misrepresents a runtime-executed IRET sink; the role is already documented at the `76ab` plate + this slice's rows) | n/a (no create proposed) |
+
+DISPOSITION-SO-FAR: both carried candidates walked to CLOSED proposals
+(leave-as-bytes ×2 — the plan's enumerated legal zero-writes outcome for
+Task 2's pre-check); carried legs unchanged: strip runtime-entry class +
+table `634f..6394` role + `[0x56]/[0x58]` runtime-writer layer +
+`[0x2ad9]`-ownership deferral. New facts for Task 2 pre-check parity: entry
+runs re-runnable at numerals `{6328,6329,7ef8,7ef9}` (all 0 this slice);
+`7750` reference parity runs `{7750:2, 0x7750:1, 9320:0, 50 77:1@76ca,
+c7045077:1@76c8}`.
+
+### Reads executed (ZERO-WRITE proof)
+
+`list_open_programs` ×1, `get_current_program_info` ×1, `get_function_count`
+×2 (`329`), `get_function_by_address` ×16 (9 strip/no-function probes + 2
+`FUN_11bd_62f8` owner probes + 4 `setup_memory_hardware` owner probes +
+`7750` error probe + `6360` probe), `read_memory` ×5 — 5/5 hex↔data
+reconciled (`6320`/`62f8`/`633d`/`7740`/`1000:1aa4`), `disassemble_bytes` ×4
+ALL `dry_run=true` (`6329`/20, `6327`/41, `633d`/20, `76c0`/16) + 1
+client-side arg-validation error before any Ghidra action (disclosed —
+`address` vs `start_address`), `disassemble_function` ×1 (`62f8` count 28),
+`search_instructions` ×17 (every response: pattern + match_count +
+`instructions_scanned:15589` + `truncated:false` + scope),
+`search_byte_patterns` ×4 (`50 77` 1, `c7 04 50 77` 1, `28 63` 1,
+`29 63` 0), `find_code_gaps` ×2 (FULL pagination, `total:151` = 100+51),
+`get_xrefs_to` ×3 (controls). NO create/rename/comment/set_global/define/
+delete/`save_program`; NO `decompile_function`/`analyze_dataflow` — zero
+decompiler-cache touch; listing unmoved (slice-26 byte runs re-read
+byte-identical: strip `8bec…8b7e04` ✓, `7748..7753` overlap ✓, `76c0`
+window ✓). Negatives scoped defined-insn-only at-this-slice-time;
+`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
