@@ -5925,3 +5925,315 @@ touched; `git diff` shows the fold-ins plus this append.
   — `save_program` NOT called (nothing to persist); on-disk program stays
   at slice-23's committed state (the net-zero precedent — slice-24 `### Writes`);
   `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+## R3 IVT cluster (verified 2026-09-30, program `/fifa96.exe`)
+
+Read-only walk closing slice-23's withheld-name note on `FUN_11bd_29bc`
+(`29bc..2a59`): every exit path to a cited terminator + the tail question,
+`INT 0x67` site table, `JMP BX` backward chains, IVT-`0x19C` (`0x67×4`)
+staging sweep under the DS-clamp discipline, and the two final-review
+freebies (`FUN_11bd_0929`, the `016c` gate tail). Headline: (1) **tail
+RESOLVED — NO tiling DELTA**: the last insn is `2a58 ebcc JMP`→`2a26`
+(rel8, 2 bytes, ends `2a59` = body_end; live `read_memory(2a56,8)` →
+`6697ebcc50538b1e` ✓ — `2a5a` holds `50` = `clear_msw_and_callfar` entry,
+NOT eaten; the `e9??`-span hypothesis REFUTED by bytes; `2a5a` appears in
+the back-edge ONLY as the displacement nextIP, `2a5a−0x34 = 2a26` ✓).
+(2) **INT 0x67: 9 defined sites** (raw `cd67` 10, the 10th `1991:4c94` =
+insn-unaligned FALSE-POSITIVE — `4c93 b1cd MOV CL,0xcd` imm byte); 1 in R3
+(`2a16`, after `2a13 b80cde MOV AX,0xde0c`) + 8 cluster consumers one hop
+out (`2ae6` in `FUN_11bd_2adb` AH=0x45-gated by `CS:[0x2ad9]`; `2d36` in
+`FUN_11bd_2d0a` AX=0xde01; `76cf` in `FUN_11bd_76ab` — immediately after
+the vector store itself; `7728/7733/7763/7925` in `setup_memory_hardware`
+AX=0xde00/0xde0a/0xde01 + AH=0x43; `7c4b` DEFINED-UNOWNED, AX=0xde04).
+`AX=0xdeXX`/`AH=0x4X` selector convention censused: operand `0xde0` = 11
+hits (incl. `2ab7` in H13 — same `0xde0c` numeral, NO INT follows: `b80cde
+660fb7` MOVZX cited — cite-only). (3) **BX: both bare `ffe3` sites
+DYNAMIC-OPEN** — `2a37` chain (verbatim steps below) lands on `29bc XCHG
+AX,BX` = caller entry AX (no `[BP+-0x5a]`-form anywhere in the body, that
+alternative REFUTED by the 49-insn emission; INT-`0x67` clobber leg
+named); `675a` lands on `POP BX`@`674f` (stack value). The 4 overlay
+`CS:[BX+disp]` forms are window-family rows, not `ffe3`-class. (4)
+**Staging sweep ANSWERED at the static layer**: the image's only IVT-
+`0x19C/0x19E` WRITE pair = `76c8 c7045077 MOV word [SI],0x7750` + `76cc
+8c4c02 MOV word [SI+2],CS` inside `FUN_11bd_76ab` — a TRANSIENT
+save→patch→INT→restore probe (DS←0 staging `76ab 6a00/76ad 1f`, constant
+base `76b0 be9c01 MOV SI,0x19c` — the sole `0x19c` render program-wide;
+saves `76b3/76b6`+PUSH; restore-writes `76d1 8f4402/76d4 8f04 POP
+[SI+2]/[SI]`; DS un-pinned `76d8/76d9 PUSH SS;POP DS`); the installed
+"handler" `CS:0x7750` is a flow-DEAD single **`cf` IRET sink** byte
+(`get_function_by_address(7750)` error cited; `read_memory(7748,12)` =
+`…c3 cf e8 80 ef` — `7751` block entered by `771c/7723/772c` Jcc only,
+absent from the 272-insn flow dump) — INT/IRET pairing CITED (`cd67`@`76cf`
+↔ `cf`@`7750`, across the `76ab` wrapper + `setup_memory_hardware` sink).
+GET-vector via DOS (`76e0 b86735`/`76e3 INT 0x21`) + server-signature ES-CMPs
+(`0x4d4d/0x5858/0x45/0x58/0x30`) cited; SET-vector `b86725` = 0. Absolute
+stores `c7069c01`/`c7069e01`/masked `8c??9c01` all **0**; operand `0x19e`
+**0**; PERSISTENT non-IRET install NOT attributable from the enumerated
+sweeps (defined-insn + raw, at this-slice time) — OPEN-WINDOW with legs
+named (positive-disp envelopes not re-enumerated; `1991:2f65`-class
+ES-write with no pin; out-of-image installers). Zero-DS staging census
+(`6a001f` 2 / `b800008ed8` 1 / `33c08ed8` 4) fully reconciled against the
+`0x19c`-render run (only `76ab` pairs staging with a store). (5) Freebies:
+`FUN_11bd_0929` = `6a 20 1f` (`PUSH 0x20; POP DS`) — NOT NOP-like, a live
+**DS-staged pre-entry stub falling through into `dispatch_mode_vector`**
+(`092c` head `90` at this-slice time per the `0928` read; `get_function_by_address
+1000:24f9`-family = **4 CALL sites** `1218`/`125c`/`1493`(unowned)/`6743`,
+arith `−0x8f2/−0x936/−0xb6d/−0x5e1d` all = `0929` ✓ — fits the `0229`
+WAIT-patch story: same patchable head; replicates `0d80`'s inline
+`0da3/0da5` staging); `016c` tail re-derived: `023a/023e JZ 0x1000:1e12` =
+`1e12−1bd0 = 0242` = `WAIT` (`9b`) — `[0x2e]∈{0,0xb}` skips `0240 CLTS`,
+60-insn dump reproduced. Quote protocol: 12/12 `read_memory` responses
+internally hex↔data reconciled; `disassemble_bytes` EXCLUSIVELY
+`dry_run=true` (2 executed; a 3rd call died in client-side arg validation
+BEFORE any Ghidra action — disclosed); `analyze_dataflow`/`decompile_function`
+read-tool outputs quoted verbatim (incl. the 2 named-varnode errors); NO
+create/rename/comment/define/`save_program`; program-scope
+`instructions_scanned:15589` UNIFORM at this-slice time (re-read, matches
+slice-25 — no drift since no save occurred); controls
+(`get_function_callees(29bc)` 0/0, `get_function_xrefs(29bc)` 0 refs,
+`get_function_xrefs(76ab)` 3 callers) quoted not relied; `find_code_gaps`
+not needed (no claim rests on a gap row); R3 bounds/49-insn-count/byte
+chunks byte-identical vs slice-23's records (unmoved proof);
+`/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+### Flow + tail resolution (Step 1)
+
+Bounds verbatim: `get_function_by_address(11bd:29bc)` →
+`{"name":"FUN_11bd_29bc","signature":"undefined FUN_11bd_29bc(void)","entry_point":"11bd:29bc","body_start":"11bd:29bc","body_end":"11bd:2a59"}`
+(= slice-23 read-back ✓); `disassemble_function(11bd:29bc)` → `count:49` ✓.
+Body bytes re-derived live: `read_memory(29bc,96)` =
+`93588c2e660d…8be1b920` ✓ + `read_memory(2a1c,62)` =
+`008ed9…6697ebcc` ✓ (96+62 = 158 = span; chunks meet mid-`b92000`;
+insn-byte-for-insn-byte reconciled against the emission; identical to
+slice-23's R3 byte run). Size-sum: 49 insn lengths sum to **158** ✓ tiles
+`29bc..2a59` exactly. TAIL: `2a58 ebcc` (2 B → ends `2a59`);
+`read_memory(2a56,8)` → `6697ebcc50538b1e` ✓ — `2a5a = 50` = `clear_msw_and_callfar`
+entry byte (`get_function_by_address(2a5a)` → body `2a5a..2ad8` ✓). No
+`e9` at the tail, no `2a59`-boundary breach, no DELTA row needed.
+
+| insn | bytes | class | target/exit cite |
+|------|-------|-------|------------------|
+| `29bc XCHG AX,BX` | `93` | CODE — sole body BX-writer | BX ← caller entry AX (feeds `2a37`; decompiler `(*(code *)in_EAX)()` tail) |
+| `29bd POP AX` | `58` | CODE | pops caller word; zero `[BP` refs in body |
+| `29be MOV [0xd66],GS` | `8c2e660d` | CODE save | pocket-twin cell (slice-23) |
+| `29c2 MOV [0xd64],FS` | `8c26640d` | CODE save | |
+| `29c6 MOV [0xd6c],EAX` | `66a36c0d` | CODE save | restored `2a26` |
+| `29ca MOV [0xd68],ESI` | `668936680d` | CODE save | restored `2a2a` |
+| `29cf MOV CX,SP` | `8bcc` | CODE save | SP→CX; restore `2a18` |
+| `29d1 MOV EAX,[0x8c8]` | `66a1c808` | CODE copy-leg | `[0x8c8..0x8d4]`→`[0xd4e..0xd58]` |
+| `29d5 MOV [0xd4e],EAX` | `66a34e0d` | CODE | |
+| `29d9 MOV AL,[0x8cc]` | `a0cc08` | CODE | |
+| `29dc MOV AH,[0x8cf]` | `8a26cf08` | CODE | |
+| `29e0 MOV [0xd52],AX` | `a3520d` | CODE | |
+| `29e3 MOV AX,[0x8d2]` | `a1d208` | CODE | |
+| `29e6 MOV [0xd56],AX` | `a3560d` | CODE | |
+| `29e9 MOV AL,[0x8d4]` | `a0d408` | CODE | |
+| `29ec MOV [0xd58],AL` | `a2580d` | CODE | |
+| `29ef MOV word [0x8fe],0x80` | `c706fe088000` | CODE store | |
+| `29f5 MOV byte [0x91d],0x89` | `c6061d0989` | CODE store | |
+| `29fa MOV [0xd78],SP` | `8926780d` | CODE save | |
+| `29fe MOV [0xdb0],SP` | `8926b00d` | CODE save | |
+| `2a02 MOV ESI,[0xd34]` | `668b36340d` | CODE load | |
+| `2a07 MOV AX,[0xd70]` | `a1700d` | CODE copy-leg | H13 twin pair (slice-23) |
+| `2a0a MOV [0xd5e],AX` | `a35e0d` | CODE | |
+| `2a0d XOR AX,AX` | `33c0` | CODE | |
+| `2a0f MOV FS,AX` | `8ee0` | CODE | FS←0 |
+| `2a11 MOV GS,AX` | `8ee8` | CODE | GS←0 (`2a12` = ModRM `e8` — read-start reconciliation) |
+| `2a13 MOV AX,0xde0c` | `b80cde` | CODE — INT selector staging | `read_memory(2a12,8)` → `e8b80cdecd678be1` ✓ |
+| `2a16 INT 0x67` | `cd67` | **EXIT 1: IVT-MEDIATED** | slot `0x19C/0x19E` (runtime); handler identity OPEN — sweep below; flow continues `2a18` (IRET-return class path, static-only claim) |
+| `2a18 MOV SP,CX` | `8be1` | CODE restore | |
+| `2a1a MOV CX,0x20` | `b92000` | CODE | chunk seam ✓ |
+| `2a1d MOV DS,CX` | `8ed9` | CODE | DS←0x20 (post-INT cell views — `1000:`-view caveat) |
+| `2a1f TEST byte [0x47],0x20` | `f606470020` | CODE gate | |
+| `2a24 JNZ 0x1000:4609` | `7513` | CODE branch | → `2a39` (`2a26+0x13`; `4609−1bd0`✓); fallthrough `2a26` |
+| `2a26 MOV EAX,[0xd6c]` | `66a16c0d` | CODE restore-leg head | landing pad `2a24`/`2a58` |
+| `2a2a MOV ESI,[0xd68]` | `668b36680d` | CODE restore | |
+| `2a2f MOV FS,[0xd60]` | `8e26600d` | CODE restore | |
+| `2a33 MOV GS,[0xd62]` | `8e2e620d` | CODE restore | |
+| `2a37 JMP BX` | `ffe3` | **EXIT 2: DYNAMIC transfer** | Step-2 BX chain; no fall-through |
+| `2a39 MOV ESI,[0xde4]` | `668b36e40d` | CODE leg-2 head | |
+| `2a3e MOV AX,0x38` | `b83800` | CODE | |
+| `2a41 MOV FS,AX` | `8ee0` | CODE | FS←0x38 |
+| `2a43 XCHG EAX,EDI` | `6697` | CODE | |
+| `2a45 LES DI,[0xde8]` | `c43ee80d` | CODE | ES:DI ← cell pair |
+| `2a49 MOVZX EDI,DI` | `660fb7ff` | CODE | |
+| `2a4d CLD` | `fc` | CODE | |
+| `2a4e MOVSD ES:EDI,FS:ESI` | `676664a5` | CODE copy | implicit — escapes operand sweeps (slice-23 caveat) |
+| `2a52 MOVSD ES:EDI,FS:ESI` | `676664a5` | CODE copy | |
+| `2a56 XCHG EAX,EDI` | `6697` | CODE | |
+| `2a58 JMP 0x1000:45f6` | `ebcc` | CODE **internal back-edge, TAIL** | → `2a26` (`2a5a−0x34` ✓; `45f6−1bd0`✓); ENDS `2a59` = body_end — NO `e9`, NO delta |
+
+Zero `c3`/`cb`/`ea` terminators in the body; both exits are transfers.
+Controls: `get_function_callees(FUN_11bd_29bc)` → `{"callees":[],"total":0}`
+✓ (INT/`JMP BX` record nothing static — slice-23 row reproduced);
+`get_function_xrefs(11bd:29bc)` → `{"references":[],"count":0,"total":0}` ✓
+DYNAMIC-ONLY entry unchanged at this-slice time.
+
+### INT + BX sites (Step 2)
+
+Raw `search_byte_patterns "cd 67"` = 10 hits (`2a16/2ae6/2d36/76cf/7728/
+7733/7763/7925/7c4b/1991:4c94`); authority `INT`+operand `0x67` = **9**,
+all bytes `cd67`, `truncated:false`, 15589. `1991:4c94` FALSE-POSITIVE:
+dry-run `disassemble_bytes(1991:4c8c,12)` emits `4c8c ff83c30c INC
+[BP+DI+0xcc3]`/`4c90 83c70c ADD DI,0xc`/`4c93 b1cd MOV CL,0xcd`/`4c95
+678a6d14 MOV CH,[EBP+0x14]` — the raw `cd` = `4c93`'s imm byte (owner
+probe: no-function error).
+
+| INT site | bytes | preceding context (one cited insn) | enclosing block |
+|----------|-------|------------------------------------|-----------------|
+| `2a16` | `cd67` | `2a13 b80cde MOV AX,0xde0c` | `FUN_11bd_29bc` |
+| `2ae6` | `cd67` | `2ae4 MOV AH,0x45` (`2adb MOV DX,CS:[0x2ad9]`/`2ae0 OR DX,DX`/`2ae2 JNZ→2ae8 RET` gate) | `FUN_11bd_2adb` `2adb..2ae8` |
+| `2d36` | `cd67` | `2d33 b801de MOV AX,0xde01` (`2d2c/2d2d PUSH SS;POP DS`, `2d2e SUB SP,0x18`, `2d31 MOV SI,SP` param-block) | `FUN_11bd_2d0a` `2d0a..2d3f` |
+| `76cf` | `cd67` | `76cc 8c4c02 MOV word ptr [SI+0x2],CS` — the vector-CS store itself | `FUN_11bd_76ab` |
+| `7728` | `cd67` | `7725 b800de MOV AX,0xde00` (post `INT 0x21` GET-vector + signature CMPs; `0x2ad9`-storing leg follows at `7739`) | `setup_memory_hardware` `76db..79f5` |
+| `7733` | `cd67` | `7730 MOV BX,0x1` (`772e MOV AH,0x43`) | `setup_memory_hardware` |
+| `7763` | `cd67` | `7760 b80ade MOV AX,0xde0a` (block via `771c/7723/772c Jcc→0x1000:9321 = 7751`) | `setup_memory_hardware` |
+| `7925` | `cd67` | `7922 b801de MOV AX,0xde01` (`791f MOV SI,0x940`, ES←`[0xaa]+100h` legs) | `setup_memory_hardware` |
+| `7c4b` | `cd67` | `7c48 b804de MOV AX,0xde04` (dry-run window `7c40`: `7c41 CMP byte [0xe00],0x0`/`7c46 JZ→7c61`/`7c4d OR AH,AH`) | **DEFINED-UNOWNED** (`get_function_by_address(7c4b)` → error verbatim); after-neighbor `execute_exit_arm` `7c62..7d3d` (probe quoted) |
+
+Selector census operand `0xde0` = 11: `{2a13,2ab7}``0xde0c` (H13 `2ab7` —
+NO INT: `read_memory(2ab7,6)` → `b80cde660fb7` ✓, cite-only), `2b1d` 0xde05,
+`2d33` 0xde01, `7725/7756` 0xde00, `7760` 0xde0a, `7922` 0xde01, `7b43`
+0xde03 (`FUN_11bd_7b34` — between two `76ab`-wrapper calls at `7b3a/7b46`),
+`7c48` 0xde04 (unowned), `1991:5758` 0xde04 (`FUN_1991_5750`; bytes
+`b804de` ✓). `AH=0x43/0x45` register-variants cited in rows above;
+result-check legs `OR AH,AH`+Jcc at `772a/7735/7765/7927/7c4d`.
+
+Raw `ff e3` = 2 (`2a37`, `675a`); authority `JMP`+`BX` = 6 (+4 `1991`
+`CS:[BX+disp]` window-forms `2effa7ce1e/2effa7aa33/2effa7e633/2eff20` —
+family rows, slice-25 ledger). Named-varnode probes failed, quoted:
+`analyze_dataflow(2a37,"BX")` → `{"error":"No varnode at 11bd:2a37 matches
+'BX'. Candidates: [DAT_0000_0247, DAT_0000_0fe4, DAT_0000_0fe8]"}`; same
+class at `675a` (candidates `[pcVar1]`). Default-anchor walks verbatim:
+
+| JMP BX site | backward chain (varnode steps) | outcome CLASS |
+|-------------|------------------------------|---------------|
+| `2a37` | anchor `"unique:7df00","resolved_from":"output of SEGMENTOP"`; `step0 1000:4607 SEGMENTOP [const:0xbaaedc8afe30, const:0x1000, AX] "JMP BX"`; `step1 1000:458c SUBPIECE AX ← [EAX,0] "XCHG AX,BX"`; `terminated:"chain exhausted"` (`4607−1bd0 = 2a37`✓, `458c−1bd0 = 29bc`✓) | **DYNAMIC-OPEN** — BX = caller entry AX via the `29bc` XCHG (sole BX-writer; `[BP+-0x5a]`-alternative REFUTED: no `[BP` operand in 49 insns). Missing legs named: caller-side entry AX (zero static xrefs — control quoted); the intervening `swi(0x67)` passed WITHOUT a modeled clobber (Ghidra call artifact — runtime handler clobber of AX/BX possible, NOT asserted) |
+| `675a` | `step0 1000:832a SEGMENTOP … pcVar1 "JMP BX"`; `step1 CAST ← unique:10000019 "POP BX"`; `step2 LOAD [const:0x1f1, …]` (SS:SP); `step3/4/5 SEGMENTOP SS,SP / SUBPIECE SP / PTRSUB ESP`; `chain exhausted` (`832a−1bd0 = 675a`✓, `831f−1bd0 = 674f`✓) | **DYNAMIC-OPEN** — BX ← `POP BX`@`674f` (stack content at entry; one-hop deferral) |
+| `1991:1f7d/33a5/33e1/453b` | window `2effa7/2eff20` forms — target = `CS:[…]` cell CONTENT | OPEN-WINDOW family rows (carry-forward, slice-25 census) |
+
+CONSTANT / CELL-writer classes not reached at either bare site.
+
+### IVT-0x19C staging sweep (Step 3)
+
+| pattern/base-window run | match_count | scope | hits classified |
+|--------------------------|-------------|-------|-----------------|
+| `c7 06 9c 01` (abs word store — incl. far-pointer `c7 /0 m16:16` form) | 0 | program raw | none |
+| `c7 06 9e 01` | 0 | program raw | none |
+| masked `8c 00 9c 01`/`ff c7 ff ff` (any seg→`[0x19c]` abs store) | 0 | program raw | none |
+| `b8 67 25` (DOS SET-vector 0x67) | 0 | program raw | none — no DOS-mediated install |
+| `b8 67 35` (DOS GET-vector) | 1 | program raw | `76e0` READ staging (`76e3 INT 0x21` → `ES:BX` = current vector; `76e5/76e7` CS-check + `ES:[0xa/0xb/0xd/0xe/0x11]` signature CMPs `0x45/0x4d4d/0x58/0x5858/0x30`) |
+| operand `0x19c` | 1 | program 15589 | `76b0 be9c01 MOV SI,0x19c` — CONSTANT-BASE setter |
+| operand `0x19e` | 0 | program 15589 | none (`[SI+0x2]` renders no absolute) |
+| operand `19c` / `19e` supersets | 1 / 0 | program 15589 | same / none; zero false-strings this family |
+| `6a 00 1f` (`PUSH 0x0; POP DS`) | 2 | program raw | `648f` (DEFINED-UNOWNED, probe error) + `76ab` = THE staging fn |
+| `b8 00 00 8e d8` | 1 | program raw | `62fa` (`FUN_11bd_62f8` `62f8..6327`) — no `0x19c`-render store |
+| `33 c0 8e d8` | 4 | program raw | `0856` (unowned)/`1285` (`FUN_11bd_1280`)/`6422` (`FUN_11bd_641d`)/`64cb` (`FUN_11bd_64b7`) — same negative |
+| `[BX + -` ledger | 24 | program 15589 | **membership IDENTICAL to slice-25's corrected 24 (Δ0)** — DS-CLAMP carry-forward: `1991:0412`-family rejected (DS pinned `0x20`, physical `[0x200,0x101FF]` — no rendering addresses `0x19C`); constant-base arithmetic (slice-20/25 sets) none hit `0x19c`; OPEN-WINDOW: `1991:2f65 AND ES:[BX+-0x1]` (WRITE-class, no base/ES pin — missing leg named), `1991:49aa TEST` (read, ownerless), `4cc3` READ |
+
+**WRITERS FOUND (static layer): `{76c8, 76cc}`** — `FUN_11bd_76ab`
+(`23` insns, `76ab..76da`), byte-verified window:
+`read_memory(76b0,32)` → `be9c018b3c578b4c0251363b3e5600750e363b0e58007507
+c70450778c4c02cd` ✓ + `read_memory(76d1,10)` → `8f44028f045f5e161fc3` ✓.
+Sequence: `76ab/76ad PUSH 0x0; POP DS` (DS=0 ⇒ IVT page addressed
+physically) → `76b0 MOV SI,0x19c` → READs `76b3 [SI]`/`76b6 [SI+0x2]` +
+`76b5/76b9 PUSH DI/CX` (save) → `76ba/76c1 CMP DI,CX,SS:[0x56]/[0x58]` +
+`76bf/76c6 JNZ→76cf` (mismatch = skip patch, call anyway) → **PATCH
+`76c8 c7045077 MOV word [SI],0x7750` (→`0:0x19C`) + `76cc 8c4c02 MOV word
+[SI+2],CS` (→`0:0x19E`)** → `76cf cd67 INT 0x67` → **RESTORE `76d1 8f4402
+POP word [SI+2]` + `76d4 8f04 POP word [SI]`** → `76d6/76d7 POP DI/SI` →
+`76d8/76d9 PUSH SS; POP DS` → `76da RET`. Function-scoped `[SI` run: 6
+hits = exactly READ×2 + WRITE×2 + POP-write×2 (23 scanned). Handler =
+`CS:0x7750`: `get_function_by_address(11bd:7750)` → no-function error;
+`read_memory(7748,12)` → `c059e301485f5ec3cfe880ef` ✓ → `774f c3 RET` /
+**`7750 cf IRET`** / `7751 e880ef CALL 0x1000:82a4` (= `66D4`, rel
+`ef80` = −0x1080 ✓) — `7750` is FLOW-DEAD (never emitted in the 272-insn
+`setup_memory_hardware` walk; `7751` entered only via `771c/7723/772c`
+Jcc→`0x1000:9321`): the installed vector is an INERT IRET SINK —
+INT→IRET→`76d1` restore. **INT/IRET pairing CITED**; `76ab` writes NO AX
+(caller selector preserved — `0xdeXX` convention). Wrapper callers (control
+quoted): `get_function_xrefs(76ab)` → 3 `UNCONDITIONAL_CALL` `7759`
+(`setup_memory_hardware`, render `927b−1bd0 = 76ab` ✓), `7b3a`/`7b46`
+(`FUN_11bd_7b34` sandwiching `7b43 MOV AX,0xde03`).
+
+Dispositions: transient probe-style staging = ATTRIBUTED (writer pair
+above); persistent non-IRET handler install = **not attributable from the
+enumerated sweeps, defined-insn-only + raw-pattern, at this-slice time —
+OPEN-WINDOW**, missing legs named: positive-disp envelopes per-site lists
+(not re-enumerated; no claim rests on them — slice-25 posture), DS=0-body
+window stores with runtime bases, `1991:2f65`-class ES-relative WRITEs,
+out-of-image installers (runtime-loaded banks), and any DOS SET-vector
+path beyond the image (`b86725` = 0 here). Controls: `find_code_gaps` not
+used (no gap-dependent claim).
+
+### Freebies (Step 4)
+
+`FUN_11bd_0929`: `get_function_by_address` → body `0929..092b`, entry =
+body_start ✓ (slice-25 Task-2 disclosure probe reproduced live);
+`disassemble_function` → `count:2`: `0929 PUSH 0x20 (6a20)`/`092b POP DS
+(1f)`; `read_memory(0928,6)` → `c36a201f90ff` ✓ (`0928 c3` = preceding
+run tail; **`092c` head = `90` at this-slice time**). DISPOSITION: NOT
+NOP-like — DS←0x20 staging prologue FALLING THROUGH into
+`dispatch_mode_vector@092c` (`NOP;JMP [0x9bc]`); no RET in the body
+(fall-through exit). Entries: operand `0x929` = 0; **render family
+`24f9` = 4 defined CALL sites**: `1218 e80ef7` `FUN_11bd_11ed`
+(`121b−0x8f2 = 0929`✓), `125c e8caf6` `FUN_11bd_1222` (`125f−0x936`✓),
+`1493 e893f4` **DEFINED-UNOWNED** (`1496−0xb6d`✓, no function field),
+`6743 e8e3a1` `FUN_11bd_6701` (`6746−0x5e1d`✓). Story fit: the `0229`
+`CS:[0x92c]←0x9b` patch (gated `[0x3e]≠0`) sits on the SAME head this
+stub falls into — `0929`-entered dispatch gets the WAIT prefix when armed;
+`6a20/1f` = `0d80`'s inline `0da3/0da5 PUSH 0x20; POP DS` staging hoisted
+into a pre-entry (slice-25 row re-cited).
+
+`016c` gate tail (live 60-insn dump re-derived): `0235 MOV AL,[0x2e]` →
+`0238 OR AL,AL` → **`023a JZ 0x1000:1e12`** → `023c CMP AL,0xb` → `023e JZ
+0x1000:1e12` → `0240 CLTS` → **`0242 WAIT`** → `0243 FSETPM` → `0245 RET`
+— `1e12−1bd0 = 0242` ✓ both skips land ON the WAIT; `[0x2e] ∈ {0,0xb}`
+skips CLTS only. The patched value `0x9b` IS this opcode (slice-25 cite
+reproduced at this-slice time; `0216/021b` `[0x3e]`-gate → `0245` skip
+re-cited).
+
+### Disposition-so-far
+
+Exit classes: IVT-MEDIATED (`2a16`) + DYNAMIC transfer (`2a37`); internal
+edges `2a24→2a39`, `2a58→2a26` reproduced; zero `c3`/`cb`/`ea`; tail =
+`ebcc` ends `2a59` — **tiling `29bc..2a59` RATIFIED, NO DELTA**. INT
+count: **9 defined sites** (1 in R3; 8 one-hop-out consumers; raw 10th =
+false positive). BX outcome: **2 bare sites, both DYNAMIC-OPEN** (legs
+named; CONSTANT/CELL not reached); 4 window-forms as family rows. Staging
+answer: **WRITERS FOUND** — transient pair `{76c8,76cc}` in
+`FUN_11bd_76ab` (DS←0 staging + constant base `be9c01`), inert-IRET
+handler `CS:7750` cited with INT/IRET pairing; persistent install
+OPEN-WINDOW (legs named, not "doesn't exist"). Freebies ratified: `0929`
+= live 4-entry DS-staged pre-entry stub; `023a→0242` WAIT-gate structure
+cited. FOR TASK 2 (bar input, disclosed early): R3's own body contains
+NEITHER IVT-window stores NOR an INT/IRET pair (the pair is `76ab`+`7750`
+one hop out; R3's INT is a consume) — the staging-writer role the bar
+names belongs to `FUN_11bd_76ab`, not `FUN_11bd_29bc`.
+
+### Reads executed (ZERO-WRITE proof)
+
+`get_function_by_address` ×15 (10 owner rows + 5 quoted error probes: `7750`,
+`7c4b`, `1991:4c94`, `0856`, `648f`); `disassemble_function` ×7
+(`29bc` 49, `2adb` 6, `2d0a` 23, `76ab` 23, `7728`→`setup_memory_hardware`
+272, `0929` 2, `016c` 60); `decompile_function` ×1 (`29bc` — read,
+WARNING lines quoted); `analyze_dataflow` ×4 (2 named-varnode errors + 2
+verbatim chains); `search_instructions` ×11 (INT+op 9, JMP+op 6, `0x19c`
+1, `0x19e` 0, `19c` 1, `19e` 0, `0xde0` 11, `0x929` 0, `24f9` 4, `[SI`@76ab
+6/23-scanned, `[BX + -` 24 — every response pattern+match_count+scope+
+`truncated:false`; program-scope `instructions_scanned:15589` UNIFORM at
+this-slice time = slice-25's number, no save occurred so no drift
+possible); `search_byte_patterns` ×10 (`cd67` 10, `ffe3` 2, `c7069c01` 0,
+`c7069e01` 0, `b86725` 0, `b86735` 1, masked `8c` 0, `6a001f` 2,
+`b800008ed8` 1, `33c08ed8` 4); `disassemble_bytes` ×2 **EXCLUSIVELY
+`dry_run=true`** (`7c40` window, `1991:4c8c` window) + 1 client-side
+arg-validation error (no Ghidra action); `read_memory` ×12 — 12/12
+hex↔data internally reconciled (`2a56`/`2a12`/`7748`/`1991:4c90`×2/`0928`/
+`29bc`96/`2a1c`62/`76b0`32/`76d1`10/`1991:5758`/`2ab7`); controls
+`get_function_callees` ×1, `get_function_xrefs` ×2. NO create/rename/
+comment/set_global/define/delete/`save_program`; no real disassembly;
+pre-existing bodies re-read only — unmoved proof: R3 bounds/count/byte-
+runs byte-identical to slice-23 records, `092c` head `90` unchanged,
+`[BX + -` ledger Δ0 vs slice-25. `/media/felipe/FIFAPCCD/` untouched;
+`fifa96.rep` churn left unstaged.
+
