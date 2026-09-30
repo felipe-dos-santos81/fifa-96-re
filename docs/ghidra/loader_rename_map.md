@@ -4837,30 +4837,58 @@ as created); became `enable_paging_and_load_tss`'s sole callee (edge
 cite above); the covering gap row shrank `1000:1ea4..1f0b` (104) →
 `1000:1ea4..1f06` (99), arithmetic `99 + 5 = 104` ✓. (2) SAVE-TIME
 AUTO-ANALYSIS SWEEP: function count moved 318 → **329** (+11) across
-the save attempts. Row-proven new functions: `FUN_11bd_0ad5`
-(`0ad5..0ae1`) — **split out of `FUN_11bd_0a9f`**, whose live re-read
-body is now `0a9f..0ad2` (slice-22's H11 record said `0a9f..0ae1`
-"resolved UNDER this body" — the prior slice's boundary claim is
-BREACHED by the sweep; disclosed, next slice must ratify or re-merge;
-the halt-retry fragment `0ad3..0ad4` stays defined-unowned and the row
-`1000:26a3..26a4` after_function moved `0ae2` → `0ad5` — the proof the
-entry is new); `FUN_11bd_0c9f` (entry `0c9f`, body `0c84..0d0b`) —
-carved the former gap `1000:280c..28db` (208 = `0c3c..0d0b`) into rows
-`1000:280c..2853` (72) + a 4 B defined-island row `1000:286b..286e`
-quoted as returned; `FUN_11bd_2d0a` (body `2d0a..2d3f`, 54 B) — carved
-the former gap row `1000:4717..490f` (505) to `1000:4717..48d9` (451),
-arithmetic `451 + 54 = 505` ✓. The remaining +8 count delta sits at
-function-list addresses (`0bd1`, `0d15`, `11ed`, `1222`, `1a86`,
-`1d11`, `1e7c`, `1f24`, `2d8b`, `2d95`, `2d99`, `2fa3..2fa6`, `601d`
-candidates) whose addresses carry NO row delta because they are
-splits/absorptions inside previously-covered regions — per-function
-attribution needs a baseline function-list diff (CONCERN filed; the
-329-entry list is now the saved baseline). Listing-state flips (no
-ownership): `1000:2235..2266` (50 = `0665..0696`, H3's far-ret half) and
-`1000:2605..262d` (41 = `0a35..0a5d`, H9's) went `has_undefined_bytes:
-true→false` — now DEFINED but still UNOWNED, deferrals stand with the
-listing disposition moved; `1000:80cf..8118` same flip;
-`1000:3011..3066` + `1000:8045..8086` orphan flags flipped false→true.
+the save attempts — **3 new `11bd:` functions + 8 new `1991:`
+(overlay-bank) functions, every one attributable**; my first ledger said
+"3 + 8 unattributable candidates" because the sweep's overlay half sits
+beyond the page-0 `find_code_gaps` fetch (total 149/151, limit 100)
+both Task passes used — misattribution corrected by the fix-wave 1
+replay (fix-wave 1). The `11bd` half: `FUN_11bd_0ad5` (`0ad5..0ae1`) —
+**split out of `FUN_11bd_0a9f`**, whose live re-read body is now
+`0a9f..0ad2` (slice-22's H11 record said `0a9f..0ae1` "resolved UNDER
+this body" — the prior slice's boundary claim is BREACHED by the sweep;
+disclosed, next slice must ratify or re-merge; the halt-retry fragment
+`0ad3..0ad4` stays defined-unowned and the row `1000:26a3..26a4`
+after_function moved `0ae2` → `0ad5` — the proof the entry is new);
+`FUN_11bd_0c9f` (entry `0c9f`, body `0c84..0d0b`) — carved the former
+gap `1000:280c..28db` (208 = `0c3c..0d0b`) into rows
+`1000:280c..2853` (72) + `1000:286b..286e` (size 4,
+**`has_undefined_bytes:true`** — an UNDEFINED 4-byte hole INSIDE the
+new body, not a defined island [fix-wave 1]); anomaly (fix-wave 1):
+body_start `0c84` sits `0xc9f−0xc84 = 0x1B = 27 B` BEFORE
+entry_point `0c9f` (= the 23 B covered lead `1000:2854..286a` + the
+4 B hole), the H9 pre-entry-absorption shape (slice-22 `09d4..09d6`
+precedent) — disclosed so a next-slice reviewer doesn't hit it cold;
+`FUN_11bd_2d0a` (body `2d0a..2d3f`, 54 B) — carved the former gap row
+`1000:4717..490f` (505) to `1000:4717..48d9` (451), arithmetic
+`451 + 54 = 505` ✓. The overlay half (`1991:` entries; row addresses
+in `1000:` space, physical = `1991:`+`9910`): row `1000:990e..a155`
+SPLIT by `FUN_1991_0400` (entry `1991:0400` = `1000:9d10`, body
+`0400..047b` = `1000:9d10..9d8b`, bounds live-verified) into
+`{"1000:990e..9d0f",size:1026}` + `{"1000:9d8c..a155",size:970}`
+(reassemble `1026+124+970 = 2120 = 0xa155−0x990e+1` ✓); row
+`1000:de60..e657` SPLIT into three by `FUN_1991_4930` (body
+`4930..495f` = `1000:e240..e26f`) + `FUN_1991_4b0a` (body
+`4b0a..4b13` = `1000:e41a..e423`) into `{"1000:de60..e23f",size:992}`
++ `{"1000:e270..e419",size:426}` + `{"1000:e424..e657",size:564}`
+(reassemble `992+48+426+10+564 = 2040 = 0xe657−0xde60+1` ✓), with
+`FUN_1991_4542` (body `4542..454f` = `1000:de52..de5f`, live) at the
+seam just below — cited as `before_function` of the first row; its own
+split is not row-visible, its sweep-newness rests on count-closure +
+the reviewer's live replay; row `1000:e685..e80d` SPLIT by
+`FUN_1991_4e38` (body `4e38..4e8f` = `1000:e748..e79f`) into
+`{"1000:e685..e747",size:195}` + `{"1000:e7a0..e80d",size:110}`; and
+THREE rows VANISHED with functions created at the exact former
+row-starts — `FUN_1991_21e2` (body `21e2..2281` = former row-start
+`1000:baf2`), `FUN_1991_2999` (body `2999..2a0c` = `1000:c2a9`),
+`FUN_1991_2b3f` (body `2b3f..2d11` = `1000:c44f`) — the current
+page-1 has no rows at those spans (page steps `b860..bab2`/`babd` →
+`c87e..`). Attribution closes exactly: 3 + 8 = +11. Listing-state
+flips (no ownership): `1000:2235..2266` (50 = `0665..0696`, H3's
+far-ret half) and `1000:2605..262d` (41 = `0a35..0a5d`, H9's) went
+`has_undefined_bytes: true→false` — now DEFINED but still UNOWNED,
+deferrals stand with the listing disposition moved; `1000:80cf..8118`
+same flip; `1000:3011..3066` + `1000:8045..8086` orphan flags flipped
+false→true.
 (3) Neighbors re-read identical to pre-state ✓: `restore_fs_gs_and_resume`
 `296d..2977`, `clear_msw_and_callfar` `2a5a..2ad8`, `FUN_11bd_2adb`
 `2adb..2ae8`, `FUN_11bd_2b11` `2b11..2b46`, `FUN_11bd_2864`
@@ -4874,10 +4902,14 @@ false,"has_orphaned_instructions":false,"before_function":"enable_paging_and_loa
 "after_function_address":"11bd:29bc"}` — `0x4588−0x1bd0 = 0x29b8` ✓
 (the TABLE stays ROW-LISTED as defined data exactly like the slice-21
 `1000:43e1..43f3` template row); tiling `64 + 4 + 158 = 226` ✓; total
-gap rows `149 → 151` (Δ+2 = the `280c`/`4717` sweep splits; head row →
-TABLE row is net 0); function count `315 → 318 → 329` = 315 + 2 cited
-creates + 1 create-flow (`caseD_0`) + 11 save-sweep (breakdown and
-provenance in the disclosures above).
+gap rows `149 → 151` (Δ+2 decomposition per fix-wave 1 replay: +1
+(`990e` split) +2 (`de60` split) +1 (`e685` split) +1 (`280c` split)
+−3 (`baf2`/`c2a9`/`c44f` vanished) +0 (`4717` persists, shrank — my
+original "`280c`/`4717` sweep splits" attribution was wrong: `4717`
+contributes 0) +0 (`1ea4` shrink) +0 (head row → TABLE row) = **+2**
+✓); function count `315 → 318 → 329` = 315 + 2 cited creates + 1
+create-flow (`caseD_0`) + 11 save-sweep (3 `11bd` + 8 `1991`,
+breakdown and provenance in the disclosures above).
 
 ### Verdicts (Task 2)
 
@@ -4905,10 +4937,16 @@ provenance in the disclosures above).
 - Six far-return halves: ownership stays deferred; H3 `0665..0696` and
   H9 `0a35..0a5d` listing moved undefined→defined-unowned by the
   save-sweep (disclosed; no ownership claim).
-- Save-sweep ownership question: `FUN_11bd_0ad5` split vs slice-22's
-  H11 `0a9f..0ae1` record, the +8 non-row-provable new functions, and
-  the new band FUNs (`0c9f`/`2d0a`) — next-slice review scope; this
-  slice ratified per precedent and changed nothing back.
+- Save-sweep ownership question (corrected ledger, fix-wave 1):
+  `FUN_11bd_0ad5` split vs slice-22's H11 `0a9f..0ae1` record, the new
+  band FUNs (`0c9f`/`2d0a`), and the OVERLAY half — `FUN_1991_0400`,
+  `4542`, `4930`, `4b0a`, `4e38`, `21e2`, `2999`, `2b3f` (bounds +
+  row-delta cites in the side-effect disclosure; prior-slice records
+  covering the overlay rows `1000:990e..a155`, `de60..e657`,
+  `e685..e80d`, `baf2..bb91`, `c2a9..c31c`, `c44f..c621` are the ones
+  silently re-cut and need next-slice ratification) — next-slice
+  review scope; this slice ratified per precedent and changed nothing
+  back.
 - Tail `2ad9..2ada`: `CS:[0x2ad9]` live data cell untouched; row
   `1000:46a9..46aa` re-quoted unchanged.
 - Islands `08c2`/`033c`/`0bc3` + pocket FUNs `2824`/`284c`/`2864`
@@ -4923,3 +4961,48 @@ provenance in the disclosures above).
   byte-identical (fix-wave-1 rows untouched by this append);
   `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left
   unstaged.
+
+### Fix wave 1 (Task 2 review 2026-09-29 — docs-only, zero Ghidra writes beyond reads)
+
+Live verification this wave (reads only, before any edit):
+`get_function_by_address` ×8 on the overlay functions —
+`1991:0400` → `{"body_start":"1991:0400","body_end":"1991:047b"}`,
+`1991:4542` → `4542..454f`, `1991:4930` → `4930..495f`, `1991:4b0a` →
+`4b0a..4b13`, `1991:4e38` → `4e38..4e8f`, `1991:21e2` → `21e2..2281`,
+`1991:2999` → `2999..2a0c`, `1991:2b3f` → `2b3f..2d11` (all verbatim,
+reviewer bounds reproduced exactly); `find_code_gaps` offset 100
+limit 100 (total 151) — the page-0 blind spot that caused the original
+misattribution: current rows `1000:990e..9d0f`/`9d8c..a155` straddle
+the `0400` body, `1000:de60..e23f`/`e270..e419`/`e424..e657` straddle
+`4930`/`4b0a` (with `FUN_1991_4542` as `1000:de60` row's
+`before_function`), `1000:e685..e747`/`e7a0..e80d` straddle `4e38`,
+and NO rows exist at the `21e2`/`2999`/`2b3f` entry spans
+(`baf2`/`c2a9`/`c44f` vanished; page steps `b860..bab2`/`babd` →
+`c87e..`); reassembly math `1026+124+970=2120=0xa155−0x990e+1` ✓,
+`992+48+426+10+564=2040=0xe657−0xde60+1` ✓; row `1000:286b..286e`
+re-checked in the saved page-0: `"has_undefined_bytes":true` ✓.
+Corrections applied (this section only; prior sections untouched):
+(1) CRITICAL — the side-effect ledger: "+3 proven + 8 unattributable
+11bd candidates (`0bd1`/`0d15`/…)" replaced by **3 `11bd` (0ad5/0c9f/
+2d0a, row-proven) + 8 `1991` overlay (0400/4542/4930/4b0a/4e38/21e2/
+2999/2b3f, row-split + vanish + count-closure provenance as printed)**
+= +11 exact; the Δ+2 row-count sentence re-derived truthfully (+1
+`990e` +2 `de60` +1 `e685` +1 `280c` −3 vanished +0 `4717` +0 `1ea4`
++0 head→TABLE = +2; the original "`280c`/`4717`" attribution was
+wrong — `4717` persists shrunk, contributes 0); the reviewer's replay
+of the PRE-state overlay rows (`990e..a155`, `de60..e657`,
+`e685..e80d`, `baf2..bb91`, `c2a9..c31c`, `c44f..c621`) is the prior
+snapshot behind the splits/vanishes (my pages were page-0-only and
+never contained them — disclosed, not silently adopted); the
+deferrals bullet names the overlay half as the silently-re-cut
+prior-slice records needing next-slice ratification.
+(2) `1000:286b..286e` mislabel: "a 4 B defined-island row" → a 4 B
+`has_undefined_bytes:true` UNDEFINED hole INSIDE `FUN_11bd_0c9f`'s
+body (flag quoted).
+(3) New anomaly note: `FUN_11bd_0c9f` entry-before-body —
+`body_start 0c84` is `0xc9f−0xc84 = 27 B` before the entry (the
+reviewer's "60 B" did not reproduce; live math printed instead:
+23 B covered lead `2854..286a` + 4 B hole = 27), the slice-22 H9
+pre-entry-absorption shape, disclosed for the next reviewer.
+Ghidra state untouched by this wave (reads only); rep churn left
+unstaged.
