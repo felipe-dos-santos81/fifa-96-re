@@ -7866,7 +7866,7 @@ ALL class-W, ZERO class-R; plus render/read-cited invisible-site `0684/068b`):
 | `28ee` (ORPHAN-defined, no fn) | `26a36904` | ES = basis-OPEN | W | AX |
 | `643d` (`FUN_11bd_641d`) | `8c166904` | DS←0 → `0x469` | W | SS |
 | `6441` (`FUN_11bd_641d`) | `89266704` | DS←0 → `0x467` | W | SP |
-| `0761` (UNOWNED fill `0745..076e`) | `c7066704940b` | DS-default (owner-absent) → basis OPEN | W | `0xb94` |
+| `0761` (UNOWNED fill `0745..076e`) | `c7066704940b` (`c7`-field; live `read(11bd:075d,10)` → `c08ec026c7066704940b`: `26`@`0760` immediately after `8ec0` = MOV ES,AX @`075e` ⇒ store plausibly the ES-form `26c7066704940b`@`0760`, same staging shape as `0684` — "DS-default" descriptor softened at final review) | owner-absent → basis OPEN (ES-form candidate) | W | `0xb94` |
 | `~1991:3687` overlay (existence per raw run; addr flaky) | `c70667041e0b` | DS = overlay runtime | W (existence) | `0x0b1e` |
 
 Readers: **NONE** — defined operand runs (every form renders the cell as an
@@ -7884,16 +7884,42 @@ pair `CS←[0x9b6] : IP=0xa35` at physical `0x77C/0x77E`. ES←0 twins `03ab`
 (`26c706fc03940b`) + `03b2` (`268c0efe03`) and `0466`+`046d` arm physical
 IVT-slot `0x3FC/0x3FE` (INT 0xFF) with `CS:0xb94`. Consumers: `[0x3fc]`/
 `[0x3fe]` nominal + `7c03`/`7e03` physical — ZERO static READS (matrix below),
-EXCEPT the IVT-basis instance is consumed by `INT 0xff` (vector fetch IS the
-read of `0:3FC/0x3FE` — arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`, CS-half
-`0x3FE`): `0ae0 INT 0xff` — DEFINED, inside `FUN_11bd_0ad5`
-(`0ad5..0ae1`: `MOV [0x8d0],0x0`/`LIDT [0x8d0]`/`INT 0xff`), + `cdff` overlay
-existence hit (`1991:~3692`, address flaky). The H9 (0x38-basis) instance has
+EXCEPT the IVT-basis instance has a cited-read CANDIDATE at `INT 0xff` —
+relabelled **CITED-SEMANTICALLY (mode-dependent), NOT CLOSED** (final review;
+aligned to the stub-inbound row's bar below: "CITED-SEMANTICALLY … NOT
+arithmetically-closable"): the RM reading "vector fetch IS the read of
+`0:3FC/0x3FE`" (arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`, CS-half `0x3FE`)
+holds ONLY for a real-mode IVT fetch, and the body's immediately-preceding
+`LIDT` is mode-exclusive — in RM `LIDT word [0x8d0]` is #UD (the fault
+dispatch reads vector 6 ⇒ `0:0018`; `0ae0` never fetches `0:3FC`); in PM
+`INT 0xff` fetches the zero-limit IDT just loaded from `[0x8d0]`=0, NOT the
+IVT — i.e. an engineered shutdown/triple-fault, matching the prior row's
+"shutdown tail" label and this section's own family-answer ("consumed only by
+runtime/reset-path code"). Site facts unchanged: `0ae0 INT 0xff` — DEFINED,
+inside `FUN_11bd_0ad5` (`0ad5..0ae1`, live re-render this wave — exactly 3
+insns: `MOV word [0x8d0],0`@`0ad5`/`LIDT word [0x8d0]`@`0adb`/`INT 0xff`@
+`0ae0`), + `cdff` overlay existence hit (`1991:~3692`, address flaky). The H9 (0x38-basis) instance has
 NO consumer: landing `0xa35` is reachable from the IVT-chain only if
 `CS*16` semantics place `0xa35` there — the IVT instances arm `0xb94`, not
-`0xa35`, and the `0x77C` cell's IP value `0xa35` is NEVER staged anywhere
-else (`350a` raw run → 1 hit = the `09fc` imm itself at `0a01`; no table copy).
+`0xa35`, and NO staging site for the `0x77C` cell's IP value `0xa35` was FOUND
+IN THIS RUN (`350a` raw run → 1 hit = the `09fc` imm itself at `0a01`; no
+table copy — bounded wording per the tool-reliability finding: 1-hit
+flaky-set runs can under-report; the conclusion survives via the independent
+runs: defined operand runs + the 36-encoding matrix + `retf`/`iret`
+corroborations, all zero).
 **H9 chain does NOT close with a cited reader landing `0a35`.**
+
+**Reconciliation with the prior section (final-review fix wave — append-only;
+the slice-22 row itself LEFT UNTOUCHED):** the pre-existing
+`## vector dispatch handlers` listing covers this same body at map line 3963,
+verbatim: "shared shutdown tail | `0ad5`–`0ae1` | `c706d0080000 MOV word
+[0x8d0],0`; `0f011ed008 LIDT word [0x8d0]`; `cdff INT 0xff` — fed by three
+static edges (`084f` H6, `0acc` H11, `0b0b` H12) … **cited exit of the tail:
+INT 0xff**". That row's SHUTDOWN framing and the mode-exclusive
+`LIDT`-before-`INT` shape are the same fact from two sides: the tail's
+`INT 0xff` is its CITED EXIT — an engineered triple-fault/reset leg — NOT an
+arithmetically-closed value-read of `0:3FC/0x3FE`; hence the consumer-leg
+relabel above and no COMPLETE-chain claim anywhere in this section.
 
 ### Pair census T3 CS-source cell `[0x9b6]` + control `[0x2fa]`
 
@@ -7944,13 +7970,13 @@ cells is armed with an R4/R6/H9 landing value** (writers `7933`←runtime BX;
 |---|---|---|---|---|---|
 | R4 (`6506` half) | `64d3`+`64d7` (`8c0e6904`+`c70667040665`; DS←0) `FUN_11bd_64b7` | `0:467/469` (cluster A) | **NEGATIVE** (36-enc matrix 0; defined operand runs 0; cell unmapped at rest — `0000:0467` read fail) | `CS:0x6506` = `restore_ss_sp_and_modify_pic_masks` (OWNED) | **consumer-open** |
 | R6-arm | `0684`+`068b` (`26c7066704940b`+`268c0e6904`; ES←0 self-staged) UNOWNED band | `0:467/469` (cluster A — SAME cell as R4, serialized tenants) | NEGATIVE (same scope) + SS/SP-save co-tenants `643d/6441` also unread | `CS:0xb94` = UNOWNED (read-render: `b80010/8ed8/8ed0/8b26 9609/SUB SP,0x180/MOV DI,SP/MOV CX,0x2a/REP STOSB` = stack-setup stub `0b94..0bad+`) | **consumer-open + landing-unowned** |
-| IVT-twin-A (int-FF) | `03ab`+`03b2` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `03a7/03a9`; fill `0360..040d` UNOWNED) | `0:3FC/3FE` = INT 0xFF vector (IVT; arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`/CS-half `0x3FE`) | **FOUND**: `0ae0 INT 0xff` (`FUN_11bd_0ad5` `0ad5..0ae1`, DEFINED+OWNED) + overlay `cdff` existence | `CS:0xb94` (same UNOWNED stub as above) | **HALF (writer-open + landing-open; consumer leg CLOSED)** |
-| IVT-twin-B (int-FF) | `0466`+`046d` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `0462/0464`; fill `045e..0490` UNOWNED) | same `0:3FC/3FE` INT-FF vector cell (arith `0xFF × 4 = 0x3FC`; the two arm-pairs serialize on ONE vector slot — same-instance rule as the R4/R6 cluster-A sharing) | same consumer leg: `0ae0 INT 0xff` (single vector read serves both arms) + overlay `cdff` existence | `CS:0xb94` | **HALF (writer-open + landing-open; consumer leg CLOSED)** |
+| IVT-twin-A (int-FF) | `03ab`+`03b2` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `03a7/03a9`; fill `0360..040d` UNOWNED) | `0:3FC/3FE` = INT 0xFF vector (IVT; arith `0xFF × 4 = 0x3FC` ⇒ IP-half `0x3FC`/CS-half `0x3FE`) | **CITED-SEMANTICALLY (mode-dependent)** — read-site CANDIDATE `0ae0 INT 0xff` (`FUN_11bd_0ad5` `0ad5..0ae1`, DEFINED+OWNED) as IVT fetch; RM-#UD/PM-null-IDT alternatives unresolved (T2 prose + reconciliation) — **NOT CLOSED**; + overlay `cdff` existence | `CS:0xb94` (same UNOWNED stub as above) | **HALF (writer-open + landing-open; consumer leg CITED-SEMANTICALLY (mode-dependent) — not CLOSED)** |
+| IVT-twin-B (int-FF) | `0466`+`046d` (`26c706fc03940b`+`268c0efe03`; ES←0 staged at `0462/0464`; fill `045e..0490` UNOWNED) | same `0:3FC/3FE` INT-FF vector cell (arith `0xFF × 4 = 0x3FC`; the two arm-pairs serialize on ONE vector slot — same-instance rule as the R4/R6 cluster-A sharing) | same consumer leg (same mode-dependent tag): `0ae0 INT 0xff` vector-read candidate — a single RM-branch fetch would serve both arms — CITED-SEMANTICALLY (mode-dependent), NOT CLOSED; + overlay `cdff` existence | `CS:0xb94` | **HALF (writer-open + landing-open; consumer leg CITED-SEMANTICALLY (mode-dependent) — not CLOSED)** |
 | H4 | `06ae`+`06b2` (ES←0x38) | `0:7E7/7E9` (B) | NEGATIVE (36 matrix) | `0x6ca` = `restore_ss_sp_pic_and_return` (OWNED) | consumer-open |
 | H5 | `0795`+`078b` (ES←0x38) | B | NEGATIVE | `0x7b9` = `restore_ss_sp_and_write_port66` (OWNED) | consumer-open |
 | H8 | `09b2`+`09b6` (ES←0x38) | B | NEGATIVE | `0xb6e` UNOWNED (`(0b6e)`→no function) | consumer-open + landing-open |
 | H12 | `0afb`+`0aff` (ES←0x38) | B | NEGATIVE | `0xb14` UNOWNED | consumer-open + landing-open |
-| H9 | `09fc`+`0a06` (`26c706fc03350a`+`26a3fe03`; ES←0x38) | `0:77C/77E` (C) | NEGATIVE; `0xa35` never staged anywhere else (`350a`=1 self-hit) | `0xa35` unowned + `DAT_11bd:0a35` `Alignment` intact (audit: `{"type":"Alignment","length":1,"xref_count":0}`) | **consumer-open + listing-blocked (slice-29 flow-repair ruling stands)** |
+| H9 | `09fc`+`0a06` (`26c706fc03350a`+`26a3fe03`; ES←0x38) | `0:77C/77E` (C) | NEGATIVE; no `0xa35` staging site found in this run (`350a`=1 self-hit; 1-hit flaky-set runs can under-report — conclusion rests on the independent defined-operand + 36-matrix runs) | `0xa35` unowned + `DAT_11bd:0a35` `Alignment` intact (audit: `{"type":"Alignment","length":1,"xref_count":0}`) | **consumer-open + listing-blocked (slice-29 flow-repair ruling stands)** |
 | H2 | `04b0`+`04ba` (ES←0x38) | C (`0:77C/77E`) | NEGATIVE | `0x4d3` UNOWNED (`(04d3)`→no function) | consumer-open + landing-open |
 | H10 | `0a6a`+`0a74` (`26c706a204860a`+`26a3a404`; ES←0x38) | `0:822/824` (D) | NEGATIVE | `0xa86` = `restore_ss_sp_and_out_3f20` (OWNED) | consumer-open |
 | H3 (stack form) | `05bf-05c6` (`ff36b609`? no — `a1b609 50 b86506 50`: PUSH [0x9b6]-value; `MOV AX,0x665`; PUSH AX) + PIT reprogram + `0664 HLT` | stack far-pair (no cell) | consumer CLASS = `IRET` (3 defined sites; `0ef3` precedes `FUN_11bd_0ef4`; exact instance-attribution runtime-int-dependent) | `0x665` — 2-B `Alignment`-eaten true head (`b0 f0`=MOV AL,0xF0 + `e6 a0` OUT 0xa0 EOI at 0665..0666; `(0665)`→no function) | half (consumer-class-identified, listing-blocked) |
@@ -7972,7 +7998,9 @@ their reader but unowned arm-writers + unowned landing).
 
 **Chains-map final row (Task 2 disposition — appended here, NOT a 16th table
 row; the map stays 15 chains):** as of this slice: **0 COMPLETE**; the **int-FF
-consumer leg is the project's first CLOSED consumer leg** — the remaining legs
+consumer leg is the project's first CLOSED consumer-leg SEARCH result — a
+named read-site candidate only, CITED-SEMANTICALLY (mode-dependent), NOT a
+CLOSED leg** (RM-#UD/PM-null-IDT — see T2 prose + reconciliation row) — the remaining legs
 named: IVT-twin-A/B = **writer-open** (arms `03ab/03b2` in fill `0360..040d` +
 `0466/046d` in fill `045e..0490` — all `(03ab)`/`(0466)`→`No function found`
 re-probed live at Task 2) + **landing-open** (`(0b94)`→`No function found` live;
@@ -8016,7 +8044,7 @@ note is the disposition, not a status change.
 | R6 `0675..0696` | **LEAVE-as-bytes (CODE classification re-confirmed)** — no create | mechanism NONE for entry (every `0x675` inbound encoding + landing class = 0 hits; `0674` RET wall) — the create-gate "COMPLETE chain + aligned head" FAILS on the chain leg despite the aligned head (`97 XCHG` renders clean from both anchors) | n/a — NO create candidate; nothing to name |
 | R4 stub `64ff..6505` | **LEAVE** (stays `DAT_11bd:64ff` `Alignment` until a data mutation + listing decision) | entry CITED (unique `eaff641800`@`64fa`, offset `0x64ff`) but (i) landing = terminal 0x64-reset spin, (ii) head covered by the Alignment unit (decode-blocked), (iii) selector-base static-unresolved | create INADMISSIBLE — aligned render fails (NOT-CONFIRMED default per bar rule; printed-ops would be `reset_cpu_and_halt`-class IF ever freed) |
 | H9 `0a35..0a5d` | **NO CHANGE** — slice-29 leave-as-bytes + flow-repair ratification stands, section NOT re-touched | chain: pair ARM complete (`09fc`+`0a06`), pair-mate `[0x3fe]` ANSWERED (written), CONSUMER **not found** (`0x77C` cell: zero reads; `0xa35` staged nowhere else) ⇒ **consumer-open — the H9 leave gets its mechanism answer: the `0x3fc` chain does NOT close with a cited reader landing `0a35`** | listing-gate restated: even chain completion ≠ auto-write — `DAT_11bd:0a35` `Alignment` still blocks create |
-| int-FF family (`03ab`/`0466` arms, `0ae0` consumer, `0b94` landing) | **CENSUS ONLY** — the first CLOSED consumer-leg found for any arm pair, but arm-sites (undefined fill `0360..040d`/`045e..0490`) and landing `0b94` are UNOWNED ⇒ named NEXT-SLICE candidate for the ownership story | all four links cited above | n/a — no create (writer-open + landing-open ⇒ HALF) |
+| int-FF family (`03ab`/`0466` arms, `0ae0` consumer-candidate, `0b94` landing) | **CENSUS ONLY** — the first cited-read consumer-leg candidate found for any arm pair — CITED-SEMANTICALLY (mode-dependent), NOT CLOSED — but arm-sites (undefined fill `0360..040d`/`045e..0490`) and landing `0b94` are UNOWNED ⇒ named NEXT-SLICE candidate for the ownership story | all four links cited above | n/a — no create (writer-open + landing-open ⇒ HALF) |
 
 **Chains complete count: 0 of 15** (11 consumer-open cell-store rows — named:
 R4, R6-arm, H4, H5, H8, H12, H9, H2, H10, save-tenants, `[0x412]` flag — 4 of
@@ -8127,7 +8155,8 @@ ZERO DRIFT on all three.**
   function found …"}` (arms still UNOWNED — writer leg still open);
   `(0b94)`→`{"error":"No function found for 11bd:0b94"}` (landing leg still
   open); consumer `(0ae0)`→`FUN_11bd_0ad5 0ad5..0ae1` DEFINED+OWNED ✓ (the
-  CLOSED consumer leg still stands); writer pattern `c706fc03940b`→
+  consumer-leg read-site CANDIDATE still stands — CITED-SEMANTICALLY
+  (mode-dependent), NOT CLOSED, per the final-review relabel); writer pattern `c706fc03940b`→
   `[{"address":"11bd:03ac"},{"address":"11bd:0467"}]` = the two twins'
   `c7`-fields (sites `03ab`/`0466` incl the `26` ES-prefix), both READ-
   GROUNDED: `read(11bd:03a4,26)`→`09dc0933c08ec026c706fc03940b268c0efe038b1e
@@ -8241,16 +8270,27 @@ controls quoted not relied.
 ### Deferrals (Task 2 — updated)
 
 - **INT-FF TWINS = the top next-slice candidate (the natural next slice):**
-  first CLOSED consumer-leg on record (arms `03ab/03b2`+`0466/046d` → IVT
+  first cited-read consumer-leg candidate on record — CITED-SEMANTICALLY
+  (mode-dependent), NOT CLOSED (the `LIDT`@`0adb` immediately before
+  `INT 0xff`@`0ae0` is mode-exclusive: RM ⇒ #UD dispatching vector 6 at
+  `0:0018`; PM ⇒ zero-limit IDT fetch — the slice-22 "shared shutdown tail"
+  row labels the same body's `INT` as the tail's cited EXIT, not a proven
+  IVT value-read) (arms `03ab/03b2`+`0466/046d` → IVT
   `0:3FC/3FE` → `0ae0 INT 0xff` inside `FUN_11bd_0ad5` `0ad5..0ae1`) still
   carries its two OPEN legs — WRITER-OPEN (both arm-sites in UNOWNED fills
   `0360..040d`/`045e..0490` — `No function found` + gap rows
   `1000:1f30..1fdd`/`1000:202e..2060` re-observed at Task 2) and
   LANDING-OPEN (`0b94` stack-setup stub band `No function found`, inside gap
   row `1000:26e2..2792`). FILL-REGION OWNERSHIP (`0360..040d`, `045e..0490`,
-  the `0745..076e` third int-FF writer `0761 MOV [0x467],0xb94` DS-form, +
+  the `0745..076e` third int-FF writer `0761 MOV [0x467],0xb94` — store
+  plausibly ES-form `26c7066704940b`@`0760` (live `read(11bd:075d,10)` →
+  `c08ec026c7066704940b`; owner-absent ⇒ basis stays OPEN — "DS-form"
+  softened at final review), +
   landing `0b94..0bc2`-class) is the pre-step that turns this HALF into a
-  COMPLETE chain — the ONLY route to a future create on this pair.
+  COMPLETE chain — the ONLY route to a future create on this pair KNOWN TO
+  THIS SECTION, and even that route additionally requires resolving the
+  consumer leg's mode-dependence (a CITED-SEMANTICALLY leg does not meet the
+  create gate's arithmetically-closed chain without mode context).
 - `[0x2fa]` consumer story: UNCHANGED, FU-blocked (sole reader `0337 JMP word
   ptr CS:[0x2fa]` `2eff26fa02` — this slice used it only as the search
   control, per scope-guard cite-only).
@@ -8275,3 +8315,37 @@ controls quoted not relied.
   docs-only diff); THIS TASK'S PROGRAM WRITES = ZERO (count Δ0 `335`, gap
   total Δ0 `149`, no flip changes, mtimes invariant); `fifa96.rep` churn left
   unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+### Fix wave (final review of `a2b2332`/`ffb7f01`/`6aa355a` — int-FF consumer-leg relabel + minor softening; ZERO Ghidra writes beyond reads)
+
+(1) **Important fixed — IVT twins' "consumer leg CLOSED" relabelled
+CITED-SEMANTICALLY (mode-dependent)** on every surface that asserted closure:
+T2 prose, both twin rows' reader+status cells, the chains-map final row, the
+int-FF proposal row, the Task-2 parity bullet, and the Deferrals (incl. the
+hedge on "the ONLY route to a future create on this pair"). Live re-observed
+this wave: `disassemble_function(11bd:0ad5)` → EXACTLY 3 insns — `MOV word
+ptr [0x8d0],0x0`@`0ad5`, `LIDT word ptr [0x8d0]`@`0adb`, `INT 0xff`@`0ae0`;
+the `LIDT` immediately before the `INT` is mode-exclusive: RM ⇒ #UD (fault
+dispatch reads vector 6 at `0:0018`, the `0ae0` INT never fetches `0:3FC`);
+PM ⇒ `INT 0xff` fetches the just-loaded zero-limit IDT (from `[0x8d0]`=0),
+NOT the IVT — engineered shutdown/triple-fault class. Bar precedent aligned
+(verbatim, this section's stub inbound row): "Entry = **CITED-SEMANTICALLY
+(`64fa` names `0x64ff`), NOT arithmetically-closable**". Reconciliation line
+added citing the untouched slice-22 row verbatim (`## vector dispatch
+handlers`, map line 3963: "shared shutdown tail … `0f011ed008 LIDT word
+[0x8d0]`; `cdff INT 0xff` … **cited exit of the tail: INT 0xff**"). No other
+row's status changes; the LEAVE×2 / 0-create dispositions are UNCHANGED;
+bytes already disclosed. (2) Minor — `0761`/`0760` "DS-form" descriptor
+softened to ES-form candidate at the T1 row + the Deferrals mention (live
+`read_memory(11bd:075d,10)` → `c08ec026c7066704940b`: `26`@`0760` immediately
+after `8ec0` = MOV ES,AX@`075e`, same staging shape as `0684`; owner-absent ⇒
+basis stays OPEN). (3) Minor — `350a`=1-hit grounding softened: "NEVER staged
+anywhere else" → "no staging site found in this run" (T2 prose + H9 row);
+1-hit flaky-set runs can under-report per this section's tool-reliability
+finding; conclusion survives via the independent runs (defined operand runs +
+36-encoding matrix + `retf`/`iret` corroborations, all zero). (4) Ledger
+ellipses left (cosmetic, noted). Wave reads ONLY: `disassemble_function`×1 +
+`read_memory`×1; no create/rename/comment/define/flow-repair/`save_program`;
+no transaction; `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn
+unstaged. Prior sections byte-identical; the slice-22 row at map line 3963
+LEFT UNTOUCHED — reconciliation is append-only.
