@@ -6847,3 +6847,267 @@ inventory this wave (reads only): `read_memory` ×2 (2/2 hex↔data
 reconciled); no transaction opened; no listing mutation; NO create/define/
 rename/comment/save. Suite gate re-run post-edit (10/10, docs-only diff);
 `fifa96.rep` churn left unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+## far-return halves (verified 2026-09-30, program `/fifa96.exe`)
+
+Zero-Ghidra-write evidence pass over the six far-return half-blocks slice 22
+left as the six DEVIATION→RATIFIED relabel rows of
+`## vector dispatch handlers`: H1 `[0443..045d]`, H3 `[0665..0674]`,
+H4 `[06ca..06fb]`, H5 `[07b9..07e6]`, H9 `[0a35..0a5d]`, H10 `[0a86..0a9e]`
+(ranges re-quoted from those rows; primaries re-derived live — table
+below). Per-half mandatory uniform set: ownership probes start±1 + both
+walls; two dry-run render windows + the maximal render-stable CODE span;
+entry census operand runs in BOTH space-views per proposed start with
+per-hit arith; fallthrough verdict from the primary's LAST-insn BYTES; the
+half's outer-wall terminator cite; pairing hypothesis row CLASS-tagged; bar
+pre-test; disposition proposal. `disassemble_bytes` ran exclusively
+`dry_run=true`; names, creates, plates: NONE (Task 2 territory).
+
+Context re-read (live, this pass): `get_function_count` →
+`{"function_count":329,"program":"fifa96.exe"}`; `find_code_gaps` FULL
+pagination — offset 0 → 100 rows `total:151`, offset 100 → 51 rows
+`total:151`, 151/151 consumed; scan scope `instructions_scanned:15589`
+UNIFORM across all twelve entry-census runs; far/near render delta
+`−0x1bd0` re-verified live from row-neighbor adjacency (row `1000:2235`
+sits immediately after `FUN_11bd_05af` `body_end 11bd:0664` = `0x2234`;
+row end `1000:2266` + 1 = `0x2267 − 0x1bd0 = 0697` = `after_function
+FUN_11bd_0697`; row `1000:80cf..8118` sits between `FUN_11bd_64b7`/
+`FUN_11bd_6549` → `64ff/6549` ✓). The six primaries' live bounds from this
+pass's probes: `FUN_11bd_040e` `040e..0442`, `FUN_11bd_05af` `05af..0664`,
+`FUN_11bd_0697` `0697..06c9`, `FUN_11bd_076f` `076f..07b8`,
+`FUN_11bd_09d7` `body_start 11bd:09d4 … body_end 11bd:0a34` (pre-entry
+`09d4..09d6` absorption stands), `FUN_11bd_0a5e` `0a5e..0a85` — each
+primary's LAST byte = its half's start − 1 ✓ (inner-wall fallthrough test
+addresses below).
+
+** `**` shared far-ret note re-quoted (slice 22, verbatim): "`the six
+primary-only relabels (H1/H3/H4/H5/H9/H10 — and H8's return half) are ONE
+deferred layer, not six defects: every far-return block is entered only
+through the runtime far-ret pair its handler stores … Task-1 report concern
+3 anticipated exactly this outcome." This section is that deferred layer's
+evidence pass; the one-hop deferral pointer is discharged at Task 2's
+creates. H8's return half `[0b6e..0b93]`, H11 `[0b3f..0b6d]`, H12
+`[0b14..0b3e]`, H2 `[04c0..04f2]` and the H7 remainder stay cite-only this
+slice (Deferrals block below).
+
+### Slice-24 flip-row mapping (ledger ruling — scope-check findings)
+
+Slice-24 census (4) header verbatim: "`(4) The three defined-unowned halves
+(row verbatims live; `has_undefined_bytes` + neighbors quoted; slice-22
+deferral-recorded ranges with delta arithmetic)`" and the Ratifications row
+verbatim: "`| 3 defined-unowned halves `1000:2235..2266`/`2605..262d`/
+`80cf..8118` = `11bd:0665..0696`/`0a35..0a5d`/`64ff..6548` | RATIFIED
+status quo — `has_undefined_bytes:false` + no-function at starts
+(`0665`/`0a35`/`64ff` errors quoted); attribution stays deferred (one-hop
+far-ret rule) | census (4) |`". RULING APPLIED: each flip row's live
+11bd extent re-derived from THIS pass's gap fetch; where extent ≠ a half
+or the row belongs to no half, it is a scope-check FINDING row and the
+foreign region is NOT admitted into any create.
+
+| flip row (slice-24, verbatim) | live row this pass (verbatim) | live `11bd:` derivation (delta −`0x1bd0`) | mapping | finding |
+|-------------------------------|------------------------------|-------------------------------------------|---------|---------|
+| `1000:2235..2266` | `{"start":"1000:2235","end":"1000:2266","size":50,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_05af",…,"after_function":"FUN_11bd_0697",…}` | `0665..0696` (50 ✓) | extent DIFFERS from H3 half `[0665..0674]`: surplus `0675..0696` = arg-`0x679` source cells (live render at `0675`: `97`/`06`/`9c` = LE words `9706`/`9c06` = `0x0697`/`0x069c` per slice-22 dedupe row — DATA) | **SCOPE-CHECK FINDING**: half portion walked under H3; `0675..0696` NOT admitted into creates |
+| `1000:2605..262d` | `{"start":"1000:2605","end":"1000:262d","size":41,"has_undefined_bytes":false,…,"before_function":"FUN_11bd_09d7",…,"after_function":"FUN_11bd_0a5e",…}` | `0a35..0a5d` (41 ✓) | maps 1:1 onto H9 half `[0a35..0a5d]` | CLEAN MAP — no finding; H9 half is the flip-row's only content (walked below, WITH the `0a35` Alignment-unit collision discovery) |
+| `1000:80cf..8118` | `{"start":"1000:80cf","end":"1000:8118","size":74,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_64b7",…,"after_function":"FUN_11bd_6549",…}` | `64ff..6548` (74 ✓) | belongs to NO half of the six — outside the band region entirely (between `FUN_11bd_64b7` and `FUN_11bd_6549`) | **SCOPE-CHECK FINDING**: foreign far-ret-half-FAMILY block; prior record = slice-23 ledger "`1000:80cf..8118` same flip" + slice-24 census (4) "far-ret-half family (no slice-22 own record)"; CITE-ONLY, NOT admitted into this slice's creates — needs its own slice |
+
+No flip row points at the `2cc5`/`0e3c` unowned fragments or at the H7
+`0976..099a` remainder — per plan those stay no-work cite-only deferrals.
+
+### H1 half `0443..045d` (primary `FUN_11bd_040e`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `get_function_by_address(11bd:0442)` → `{"name":"FUN_11bd_040e",…,"body_start":"11bd:040e","body_end":"11bd:0442"}` (inner wall = primary's own end ✓); `(11bd:0443)` → `{"error":"No function found for 11bd:0443"}`; `(11bd:0444)` → `{"error":"No function found for 11bd:0444"}`; `(11bd:045d)` → `{"error":"No function found for 11bd:045d"}`; `(11bd:045e)` → `{"error":"No function found for 11bd:045e"}` (outer wall = unowned fill; next owner `FUN_11bd_0491` @`0491`) |
+| covering gap row | `{"start":"1000:2013","end":"1000:2060","size":78,"has_undefined_bytes":true,…,"before_function":"FUN_11bd_040e",…,"after_function":"FUN_11bd_0491",…}` → `0443..0490` ⊃ half; NOT a flip row (still undefined) ✓ |
+| render W-A | `disassemble_bytes(11bd:0443, 40, dry_run)` → 20 insns; own run `0443 e4f2 IN AL,0xf2` / `0445 0c01 OR AL,0x1` / `0447 eb00 JMP 0x1000:2019` / `0449 e6f2 OUT 0xf2,AL` / `044b bb0010 MOV BX,0x1000` / `044e 8edb MOV DS,BX` / `0450 8e167c0f MOV SS,[0xf7c]` / `0454 8b267a0f MOV SP,[0xf7a]` / `0458 8ec3 MOV ES,BX` / `045a 61 POPA` / `045b 5b POP BX` / `045c 58 POP AX` / `045d c3 RET` (13 insns, 27 B); beyond `045d`: misaligned fragments of the arg-`0x462` cells (`045e 91 XCHG AX,CX`, `045f 0496`, `0461 0433` = LE `9104`/`9604` — same reconciliation as slice-22's dedupe row; NOT admitted) |
+| render W-B | `disassemble_bytes(11bd:043a, 44, dry_run)` → 22 insns from `043a`; primary tail `0442 f4 HLT` then `0443..045d` BYTE-IDENTICAL to W-A ✓ |
+| maximal render-stable CODE span | `0443..045d` (27 B, 13 insns) = slice-22 proposal ✓ zero delta |
+| entry census | `search_instructions(operand="0x443")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:042c","function":"FUN_11bd_040e","mnemonic":"MOV","operands":"word ptr ES:[0x160], 0x443","bytes":"26c70660014304"}` — imm store (LE `43 04` = `0x0443` ✓), NOT a flow edge (no nextIP+rel applies); `search_instructions(operand="0x1000:2013")` → `match_count:0` (far-view zero — statics-zero, defined-insn-only, at this-slice time); intra-half stub arith: `eb00`@`0447` → `0x1000:2019 − 0x1bd0 = 0449` = nextIP+0 ✓ (self-stub, no external landing) |
+| fallthrough verdict | primary's LAST insn BYTES `f4` @`0442` (`HLT`, W-B emitted `{"bytes":"f4"}`) — TERMINATES flow: no fallthrough edge into `0443` (live proof: `body_end 0442` + no-function at `0443`) — NOT an analyzer-absorption question |
+| outer-wall terminator | `045d c3 RET` (bytes `"c3"` cited in BOTH windows) |
+| pairing | see pairing table — `26c70660014304`@`042c` + `a1b609`@`0433` + `26a36201`@`0436` vs half `8e167c0f`/`8b267a0f`/`61`/`c3` — CLASS cited-pair |
+| bar pre-test | candidate `restore_ss_sp_and_return` — rests on `8e167c0f`@`0450`, `8b267a0f`@`0454`, `61 POPA`@`045a`, `c3 RET`@`045d` — return-class cite: `c3` (near-RET; see bar caveat row in Deferrals); PASS at pre-test (final gate + collision check: Task 2) |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hits = stores not flow, fallthrough refuted at `f4`@`0442`; xref control 0 quoted-not-relied) + runtime arm leg = primary's stored IP:CS pair `ES:[0x160]←0x443` + `ES:[0x162]←[0x9b6]` (slice-22 H1 far-ret-store row; live bytes cited this pass) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:0443)` → `{"references":[],"count":0,…,"total":0}` |
+
+### H3 half `0665..0674` (primary `FUN_11bd_05af`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `(11bd:0664)` → `{"name":"FUN_11bd_05af",…,"body_start":"11bd:05af","body_end":"11bd:0664"}` ✓ inner wall; `(11bd:0665)` → `{"error":"No function found for 11bd:0665"}`; `(11bd:0666)` → error; `(11bd:0674)` → error; `(11bd:0675)` → error (outer wall = arg-cell fill; next owner `FUN_11bd_0697` @`0697`) |
+| covering gap row | FLIP ROW (census table above): `1000:2235..2266` `has_undefined_bytes:false` → live `0665..0696` ⊋ half — surplus `0675..0696` NOT admitted (scope-check finding) |
+| byte reads | `read_memory(11bd:0660,24)` → `{"data":[176,95,230,161,244,176,240,230,160,187,0,16,142,219,142,195,90,97,91,88,195,151,6,156],"hex":"b05fe6a1f4b0f0e6a0bb00108edb8ec35a615b58c397069c"}` — hex↔data reconciled ✓: `f4`@`0664`, `b0 f0`@`0665..0666`, `e6 a0`@`0667`, `c3`@`0674`, `97 06`@`0675` (= w0 LE of `0x0697`), `9c`@`0677` |
+| render W-A | `disassemble_bytes(11bd:0665, 28, dry_run)` → 18 insns but the emission's FIRST insn is `0667 e6a0 OUT 0xa0,AL` — `0665..0666` SKIPPED (no emission at either byte); own-code run `0667 e6a0` / `0669 bb0010 MOV BX,0x1000` / `066c 8edb MOV DS,BX` / `066e 8ec3 MOV ES,BX` / `0670 5a POP DX` / `0671 61 POPA` / `0672 5b POP BX` / `0673 58 POP AX` / `0674 c3 RET` (9 insns); beyond `0675`: `97069c` fragments (arg cells, listed) |
+| render W-B | `disassemble_bytes(11bd:0664, 24, dry_run)` → `0664 f4 HLT` then skips `0665..0666`, `0667..0674` BYTE-IDENTICAL to W-A ✓ (two-window agreement on the skip — stable listing effect, not window noise) |
+| collision at head | `audit_global(11bd:0665)` → `{"type":"Alignment","length":1,…}` — 1-byte Alignment data unit `DAT_11bd:0665` (byte `b0`); `audit_global(11bd:0666)` → untyped/no unit; `analyze_data_region(11bd:0665)` → `{"current_name":"DAT_11bd:0665","current_type":"Alignment",…0665..0696 classification scan}` — the sweep's defined-unowned flip state carved the half's true-aligned head `b0f0` (`MOV AL,0xf0`, slice-22 walk cite) out of the CODE stream |
+| maximal render-stable CODE span | `0667..0674` (14 B, 9 insns) — DELTA vs proposal `0665..0674`: head `0665..0666` un-emittable over the Alignment unit (H2 `DAT_11bd_04be` collision-class precedent) |
+| entry census | `search_instructions(operand="0x665")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:05c3","function":"FUN_11bd_05af","mnemonic":"MOV","operands":"AX, 0x665","bytes":"b86506"}` — imm load (LE `65 06`) + `05c6 50 PUSH AX` frame push (W-window cite; slice-22 entry cite "pushed IP `0x665` @`05c6`" ✓) — NOT a flow edge; `search_instructions(operand="0x1000:2235")` → `match_count:0` (statics-zero, defined-insn-only, at this-slice time) |
+| fallthrough verdict | primary's LAST insn BYTES `f4` @`0664` (`HLT` — W-B emitted + byte read `…a1 f4 b0…`) — TERMINATES: no fallthrough into `0665`; NOT an analyzer-absorption question |
+| outer-wall terminator | `0674 c3 RET` (bytes `"c3"` in BOTH windows) |
+| pairing | see pairing table — `a1b609`@`05bf` + `50`@`05c2` + `b86506`@`05c3` + `50`@`05c6 vs half `e6a0`/`8edb`/`8ec3`/`5a`/`61`/`c3` — CLASS cited-pair (WITH head-cite disclosure: stored IP `0x665` lands on the Alignment-unit byte, 2 B BEFORE the emitted body head) |
+| bar pre-test | **NOT-CONFIRMED-at-name** — the live span's first op `OUT 0xa0,AL`@`0667` takes its AL from the EXCLUDED head byte (`MOV AL,0xf0`@`0665` blocked by the collision): mechanism-weak at name level |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hit = `MOV imm`+`PUSH` pairing frame not flow, fallthrough refuted at `f4`@`0664`; xref control 0) + runtime arm leg = pushed far frame `0x665:[0x9b6]` (live bytes cited; slice-22 H3 body-head row) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:0665)` → `{"references":[],"count":0,…,"total":0}` |
+
+### H4 half `06ca..06fb` (primary `FUN_11bd_0697`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `(11bd:06c9)` → `{"name":"FUN_11bd_0697",…,"body_start":"11bd:0697","body_end":"11bd:06c9"}` ✓; `(11bd:06ca)` → error; `(11bd:06cb)` → error; `(11bd:06fb)` → error; `(11bd:06fc)` → `{"name":"FUN_11bd_06fc","signature":"byte FUN_11bd_06fc(void)","entry_point":"11bd:06fc","body_start":"11bd:06fc","body_end":"11bd:0715"}` (outer wall = OWNED auto-island — slice-22 side-effect disclose; H4-adjacency stays one-hop cite-only, stop-short mandatory) |
+| covering gap row | `{"start":"1000:229a","end":"1000:22cb","size":50,"has_undefined_bytes":true,…,"before_function":"FUN_11bd_0697",…,"after_function":"FUN_11bd_06fc",…}` → `06ca..06fb` == half ✓ exact tiling, NOT a flip row |
+| render W-A | `disassemble_bytes(11bd:06ca, 56, dry_run)` → 25 insns; own run 22: `06ca 2e8b1e0000 MOV BX,CS:[0x0]` / `06cf 8edb DS,BX` / `06d1 8e167c0f MOV SS,[0xf7c]` / `06d5 8b267a0f MOV SP,[0xf7a]` / `06d9 33c0 XOR AX,AX` / `06db 8ec0 ES,AX` / `06dd 26a21204 MOV ES:[0x412],AL` / `06e1 8ec3 ES,BX` / `06e3 e81600 CALL 0x1000:22cc` / `06e6 e469 IN AL,0x69` / `06e8 eb00` / `06ea 0c04 OR AL,0x4` / `06ec e669 OUT 0x69,AL` / `06ee eb00` / `06f0 e4a0 IN AL,0xa0` / `06f2 eb00` / `06f4 0c80 OR AL,0x80` / `06f6 e6a0 OUT 0xa0,AL` / `06f8 61 POPA` / `06f9 5b POP BX` / `06fa 58 POP AX` / `06fb c3 RET`; beyond: owned `06fc ba87fc MOV DX,0xfc87`/`06ff ec IN AL,DX`/`0700 eb00` (defined insns emitted, not claimed) |
+| render W-B | `disassemble_bytes(11bd:06c1, 56, dry_run)` → primary tail `06c1 e83800 CALL 0x1000:22cc` (→`06fc` ✓), `06c4 33c9 XOR CX,CX`, `06c6 e2fe LOOP 0x1000:2296` (nextIP `06c8`−2 = `06c6` self ✓), `06c8 ebf5 JMP 0x1000:228f` (nextIP `06ca`−0x0b = `06bf` ✓ back-into-body); overlap `06ca..` BYTE-IDENTICAL to W-A ✓ |
+| maximal render-stable CODE span | `06ca..06fb` (50 B, 22 insns) = proposal ✓ zero delta |
+| entry census | `search_instructions(operand="0x6ca")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:06b2","function":"FUN_11bd_0697","mnemonic":"MOV","operands":"word ptr ES:[0x467], 0x6ca","bytes":"26c7066704ca06"}` — imm store (LE `ca 06` ✓), not flow; `search_instructions(operand="0x1000:229a")` → `match_count:0` (statics-zero, defined-insn-only, at this-slice time) |
+| fallthrough verdict | primary's LAST insns BYTES `eb f5` @`06c8..06c9` (`JMP 0x1000:228f` → `06bf`, arith cited W-B) — UNCONDITIONAL JMP TERMINATES: no fallthrough into `06ca`; NOT an analyzer-absorption question |
+| outer-wall terminator | `06fb c3 RET` (bytes `"c3"` both windows) |
+| pairing | see pairing table — `26c7066704ca06`@`06b2` (+ CS store `26a36904` `ES:[0x469]` — slice-22 H4 body row cite @`06ae..06b1`; this pass's `06b0` probe starts mid-insn, disclosed) vs half `2e8b1e0000`/`8e167c0f`/`8b267a0f`/`33c0 8ec0`/`26a21204`/`8ec3`/`61`/`c3` — CLASS cited-pair |
+| bar pre-test | candidate `restore_ss_sp_pic_and_return` — rests on `8e167c0f`@`06d1`, `8b267a0f`@`06d5`, `0c80`@`06f4`, `e6a0 OUT 0xa0,AL`@`06f6`, `c3`@`06fb` — PASS at pre-test (Task 2 gate) |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hit = store not flow, fallthrough refuted at `ebf5`@`06c8`) + runtime arm leg = `ES:[0x467]←0x6ca` + `ES:[0x469]←[0x9b6]` (bytes cited) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:06ca)` → `{"references":[],"count":0,…,"total":0}` |
+
+### H5 half `07b9..07e6` (primary `FUN_11bd_076f`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `(11bd:07b8)` → `{"name":"FUN_11bd_076f",…,"body_start":"11bd:076f","body_end":"11bd:07b8"}` ✓; `(11bd:07b9)` → error; `(11bd:07ba)` → error; `(11bd:07e6)` → error; `(11bd:07e7)` → `{"name":"FUN_11bd_07e7",…,"body_end":"11bd:0851"}` (outer wall owned) |
+| covering gap row | `{"start":"1000:2389","end":"1000:23b6","size":46,"has_undefined_bytes":true,…,"before_function":"FUN_11bd_076f",…,"after_function":"FUN_11bd_07e7",…}` → `07b9..07e6` == half ✓, NOT a flip row |
+| render W-A | `disassemble_bytes(11bd:07b9, 56, dry_run)` → 27 insns; own run 20: `07b9 b80010 MOV AX,0x1000` / `07bc 8ed8 DS,AX` / `07be 8ec0 ES,AX` / `07c0 8e167c0f MOV SS,[0xf7c]` / `07c4 8b267a0f MOV SP,[0xf7a]` / `07c8 61 POPA` / `07c9 a8a0 TEST AL,0xa0` / `07cb 7502 JNZ 0x1000:239f` / `07cd e666 OUT 0x66,AL` / `07cf b045 MOV AL,0x45` / `07d1 e85fff CALL 0x1000:2303` / `07d4 243f AND AL,0x3f` / `07d6 803e350000 CMP byte [0x35],0x0` / `07db 7502 JNZ 0x1000:23af` / `07dd 0c40 OR AL,0x40` / `07df 86c4 XCHG AH,AL` / `07e1 e858ff CALL 0x1000:230c` / `07e4 5b POP BX` / `07e5 58 POP AX` / `07e6 c3 RET`; beyond: H6 prelude `07e7 50`/`07e8 53`/`07e9 bb0010`/`07ec fa CLI` (defined, not claimed); arith: `07d1` call → nextIP `07d4` + rel16 `0xff5f`(−0xa1) = `0733` ✓ (`0x2303−0x1bd0`), `07e1` call → `07e4 − 0xa8 = 073c` ✓ (`0x230c−0x1bd0`) |
+| render W-B | `disassemble_bytes(11bd:07b7, 56, dry_run)` → `07b7 ebfe JMP 0x1000:2387` (nextIP `07b9`−2 = `07b7` SELF-SPIN ✓) then `07b9..07e6` BYTE-IDENTICAL ✓ |
+| maximal render-stable CODE span | `07b9..07e6` (46 B, 20 insns) = proposal ✓ zero delta |
+| entry census | `search_instructions(operand="0x7b9")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:078b","function":"FUN_11bd_076f","mnemonic":"MOV","operands":"word ptr ES:[0x467], 0x7b9","bytes":"26c7066704b907"}` — imm store (LE `b9 07` ✓), not flow; `search_instructions(operand="0x1000:2389")` → `match_count:0` (statics-zero, defined-insn-only, at this-slice time) |
+| fallthrough verdict | primary's LAST insns BYTES `eb fe` @`07b7..07b8` (`JMP` self-spin, arith W-B) — TERMINATES: no fallthrough into `07b9`; NOT an analyzer-absorption question |
+| outer-wall terminator | `07e6 c3 RET` (bytes `"c3"` both windows) |
+| pairing | see pairing table — `26c7066704b907`@`078b` + `a1b609`@`0792` + `26a36904`@`0795` vs half `8e167c0f`@`07c0`, `8b267a0f`@`07c4`, `61`@`07c8`, `c3`@`07e6` — CLASS cited-pair |
+| bar pre-test | candidate `restore_ss_sp_and_write_port66` — rests on `8e167c0f`@`07c0`, `8b267a0f`@`07c4`, `e666 OUT 0x66,AL`@`07cd`, `c3`@`07e6` — PASS at pre-test (port-number level only; the CMOS-leg semantics stay one-hop, slice-22 deferral) |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hit = store, fallthrough refuted at `ebfe`@`07b7`) + runtime arm leg = `ES:[0x467]←0x7b9` + `ES:[0x469]←[0x9b6]` (bytes cited) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:07b9)` → `{"references":[],"count":0,…,"total":0}` |
+
+### H9 half `0a35..0a5d` (primary `FUN_11bd_09d7`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `(11bd:0a34)` → `{"name":"FUN_11bd_09d7",…,"entry_point":"11bd:09d7","body_start":"11bd:09d4","body_end":"11bd:0a34"}` ✓ (pre-entry absorption stands); `(11bd:0a35)` → `{"error":"No function found for 11bd:0a35"}`; `(11bd:0a36)` → error; `(11bd:0a5d)` → error; `(11bd:0a5e)` → `{"name":"FUN_11bd_0a5e",…,"body_end":"11bd:0a85"}` (outer wall owned) |
+| covering gap row | FLIP ROW, CLEAN MAP (census table above): `{"start":"1000:2605","end":"1000:262d","size":41,"has_undefined_bytes":false,…,"before_function":"FUN_11bd_09d7",…,"after_function":"FUN_11bd_0a5e",…}` → `0a35..0a5d` == half ✓ |
+| byte reads | `read_memory(11bd:0a32,8)` → `{"data":[230,32,244,176,128,230,32,187],"hex":"e620f4b080e620bb"}` ✓ — `e620`@`0a32`, `f4`@`0a34`, `b0 80`@`0a35..0a36`, `e6 20`@`0a37..0a38`, `bb`@`0a39` |
+| render W-A | `disassemble_bytes(11bd:0a35, 48, dry_run)` → 26 insns, head SKIPS `0a35`; first emission `0a36 80e620 AND DH,0x20`; run `0a39 bb0010 MOV BX,0x1000` / `0a3c 8edb DS,BX` / `0a3e 8e167c0f MOV SS,[0xf7c]` / `0a42 8b267a0f MOV SP,[0xf7a]` / `0a46 61 POPA` / `0a47 e660 OUT 0x60,AL` / `0a49 fa CLI` / `0a4a 8ac5 MOV AL,CH` / `0a4c e612 OUT 0x12,AL` / `0a4e 8ac1 MOV AL,CL` / `0a50 e602 OUT 0x2,AL` / `0a52 32c0 XOR AL,AL` / `0a54 bab031 MOV DX,0x31b0` / `0a57 ee OUT DX,AL` / `0a58 07 POP ES` / `0a59 1f POP DS` / `0a5a 61 POPA` / `0a5b 5b` / `0a5c 58` / `0a5d c3 RET`; beyond: H10 prelude `0a5e 50`/`0a5f 53`/`0a60 bb0010`/`0a63 fa CLI`/`0a64 60` (defined, not claimed) |
+| render W-B | `disassemble_bytes(11bd:0a30, 56, dry_run)` → `0a30 b009` / `0a32 e620` / `0a34 f4 HLT` / `0a36 80e620` … `0a5d c3 RET` then `0a5e..` H10 prelude; overlap `0a36..0a5d` BYTE-IDENTICAL to W-A ✓ (two-window agreement) |
+| collision at head + MISALIGNMENT | `audit_global(11bd:0a35)` → `{"type":"Alignment","length":1,…}` (unit `DAT_11bd:0a35`, byte `b0`); `audit_global(11bd:0a36)` → untyped; `analyze_data_region(11bd:0a35)` → `{"current_name":"DAT_11bd:0a35","current_type":"Alignment"}`. The Alignment carve consumed the FIRST byte of the true-aligned pair, so the sweep's defined stream realigned one byte late: emitted `AND DH,0x20`@`0a36` vs byte-level TRUE alignment `b080 MOV AL,0x80`@`0a35` + `e620 OUT 0x20,AL`@`0a37` (slice-22 H9 return-block row `b080/e620 OUT 0x20,AL(0x80)` + this pass's byte read ✓; re-converges at `0a39` — `bb0010` aligned in BOTH decodes). True-alignment reconstruction FLAGGED-NOT-ADOPTED (H2 `04be`-carve precedent) |
+| maximal render-stable CODE span | `0a36..0a5d` (40 B, 20 insns) — DELTA vs proposal `0a35..0a5d`: one byte short AND internally MISALIGNED at the head (the stable span's first insn is the artifact `AND DH,0x20`) |
+| entry census | `search_instructions(operand="0xa35")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:09fc","function":"FUN_11bd_09d7","mnemonic":"MOV","operands":"word ptr ES:[0x3fc], 0xa35","bytes":"26c706fc03350a"}` — imm store (LE `35 0a` ✓), not flow; `search_instructions(operand="0x1000:2605")` → `match_count:0` (statics-zero, defined-insn-only, at this-slice time) |
+| fallthrough verdict | primary's LAST insn BYTES `f4` @`0a34` (`HLT` — W-B emitted + byte read `…e620 f4 b0…`) — TERMINATES: no fallthrough into `0a35`; NOT an analyzer-absorption question |
+| outer-wall terminator | `0a5d c3 RET` (bytes `"c3"` both windows) |
+| pairing | see pairing table — `26c706fc03350a`@`09fc` (+ CS store `26a3fe03` `ES:[0x3fe]` — slice-22 H9 body row cite) vs half segment-pops `07 POP ES`@`0a58` + `1f POP DS`@`0a59` + `8e167c0f`/`8b267a0f`/`61`/`c3` — CLASS cited-pair (WITH misalignment disclosure: stored IP `0xa35` lands on the Alignment-unit byte INSIDE the carved head) |
+| bar pre-test | **NOT-CONFIRMED-at-name** — the emitted head is the artifact `AND DH,0x20`; no own-op mechanism wording admissible over a misaligned first insn (true-aligned EOI/counter-restore ops are byte-level cites, flagged-not-adopted — naming on them would assert the un-adopted reconstruction) |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hit = store, fallthrough refuted at `f4`@`0a34`) + runtime arm leg = `ES:[0x3fc]←0xa35` + `ES:[0x3fe]←[0x9b6]` (bytes cited) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:0a35)` → `{"references":[],"count":0,…,"total":0}` |
+
+### H10 half `0a86..0a9e` (primary `FUN_11bd_0a5e`)
+
+| item | output (verbatim) |
+|------|-------------------|
+| ownership probes | `(11bd:0a85)` → `{"name":"FUN_11bd_0a5e",…,"body_start":"11bd:0a5e","body_end":"11bd:0a85"}` ✓; `(11bd:0a86)` → error; `(11bd:0a87)` → error; `(11bd:0a9e)` → error; `(11bd:0a9f)` → `{"name":"FUN_11bd_0a9f",…,"body_end":"11bd:0ad2"}` (outer wall owned; H11's final `0ad2` bound = slice-24 ACCEPTED-SPLIT, cited not re-litigated) |
+| covering gap row | `{"start":"1000:2656","end":"1000:266e","size":25,"has_undefined_bytes":true,…,"before_function":"FUN_11bd_0a5e",…,"after_function":"FUN_11bd_0a9f",…}` → `0a86..0a9e` == half ✓, NOT a flip row |
+| render W-A | `disassemble_bytes(11bd:0a86, 32, dry_run)` → 17 insns; own run 12: `0a86 b80010 MOV AX,0x1000` / `0a89 8ed8 DS,AX` / `0a8b 8ec0 ES,AX` / `0a8d 8e167c0f MOV SS,[0xf7c]` / `0a91 8b267a0f MOV SP,[0xf7a]` / `0a95 ba203f MOV DX,0x3f20` / `0a98 b000 MOV AL,0x0` / `0a9a ee OUT DX,AL` / `0a9b 61 POPA` / `0a9c 5b` / `0a9d 58` / `0a9e c3 RET`; beyond: H11 prelude `0a9f 50`/`0aa0 53`/`0aa1 bb0010`/`0aa4 fa CLI` (defined, not claimed) |
+| render W-B | `disassemble_bytes(11bd:0a84, 32, dry_run)` → `0a84 ebfe JMP 0x1000:2654` (nextIP `0a86`−2 = `0a84` SELF-SPIN ✓ — `0x2654−0x1bd0 = 0a84` re-derived) then `0a86..0a9e` BYTE-IDENTICAL ✓ |
+| maximal render-stable CODE span | `0a86..0a9e` (25 B, 12 insns) = proposal ✓ zero delta |
+| entry census | `search_instructions(operand="0xa86")` → `match_count:1`, `instructions_scanned:15589`, hit `{"address":"11bd:0a6a","function":"FUN_11bd_0a5e","mnemonic":"MOV","operands":"word ptr ES:[0x4a2], 0xa86","bytes":"26c706a204860a"}` — imm store (LE `86 0a` ✓), not flow; `search_instructions(operand="0x1000:2656")` → `match_count:0` (statics-zero, defined-insn-only, at this-slice time) |
+| fallthrough verdict | primary's LAST insns BYTES `eb fe` @`0a84..0a85` (`JMP` self-spin, W-B + arith cited) — TERMINATES: no fallthrough into `0a86`; NOT an analyzer-absorption question |
+| outer-wall terminator | `0a9e c3 RET` (bytes `"c3"` both windows) |
+| pairing | see pairing table — `26c706a204860a`@`0a6a` + `a1b609`@`0a71` + `26a3a404`@`0a74` (`ES:[0x4a4]`, the DIFFERENT cluster per slice-22 H10 row) vs half `8e167c0f`/`8b267a0f`/`ba203f b000 ee`/`61`/`c3` — CLASS cited-pair |
+| bar pre-test | candidate `restore_ss_sp_and_out_3f20` — rests on `8e167c0f`@`0a8d`, `8b267a0f`@`0a91`, `ba203f`@`0a95` + `ee`@`0a9a`, `c3`@`0a9e` — PASS at pre-test (port-number level; cell `[0x4a2]/[0x4a4]` consumer role stays one-hop) |
+| entry class | **DYNAMIC-ONLY** — statics-zero (far-view 0, numeric hit = store, fallthrough refuted at `ebfe`@`0a84`) + runtime arm leg = `ES:[0x4a2]←0xa86` + `ES:[0x4a4]←[0x9b6]` (bytes cited) |
+| xref control (quoted, NOT relied) | `get_xrefs_to(11bd:0a86)` → `{"references":[],"count":0,…,"total":0}` |
+
+### Pairing hypothesis table (CLASS-tagged)
+
+Mechanism column = the PRIMARY's pairing-region BYTES (the exit-path store/
+push that names the half) + the HALF's cited frame ops (SS/SP restore of the
+cells the primary saved + segment reload + pops + terminator). CLASS
+cited-pair = both sides byte-cited this pass; hypothesis = either side rests
+on a quote this pass did not re-derive.
+
+| half | returns-to primary | mechanism cited (primary-exit BYTES + half frame ops) | CLASS |
+|------|------------------|--------------------------------------------------------|-------|
+| `0443..045d` | `FUN_11bd_040e` | `26c70660014304 MOV word ES:[0x160],0x443`@`042c` + `a1b609`@`0433` + `26a36201 MOV ES:[0x162],AX`@`0436` ↔ `8e167c0f MOV SS,[0xf7c]`@`0450` + `8b267a0f MOV SP,[0xf7a]`@`0454` + `8ec3`@`0458` + `61 POPA`@`045a` + `c3`@`045d` | **cited-pair** |
+| `0665..0674` | `FUN_11bd_05af` | `a1b609 MOV AX,[0x9b6]`@`05bf` + `50 PUSH AX`@`05c2` + `b86506 MOV AX,0x665`@`05c3` + `50 PUSH AX`@`05c6` ↔ `e6a0`@`0667` + `8edb`@`066c` + `8ec3`@`066e` + `5a POP DX`@`0670` + `61 POPA`@`0671` + `c3`@`0674` | **cited-pair** (head-cite disclosure: landing `0x665` = Alignment byte, body head `0667`) |
+| `06ca..06fb` | `FUN_11bd_0697` | `26c7066704ca06 MOV word ES:[0x467],0x6ca`@`06b2` + CS store `26a36904 ES:[0x469]` (slice-22 row cite @`06ae..06b1`; this pass's `06b0` probe mid-insn, disclosed) ↔ `2e8b1e0000 MOV BX,CS:[0x0]`@`06ca` + `8e167c0f`@`06d1` + `8b267a0f`@`06d5` + `33c0`/`8ec0`@`06d9`/`06db` + `26a21204 ES:[0x412],AL`@`06dd` + `61`@`06f8` + `c3`@`06fb` | **cited-pair** |
+| `07b9..07e6` | `FUN_11bd_076f` | `26c7066704b907 MOV word ES:[0x467],0x7b9`@`078b` + `a1b609`@`0792` + `26a36904 MOV ES:[0x469],AX`@`0795` ↔ `8e167c0f`@`07c0` + `8b267a0f`@`07c4` + `61 POPA`@`07c8` + `5b`/`58`/`c3`@`07e4..07e6` | **cited-pair** |
+| `0a35..0a5d` | `FUN_11bd_09d7` | `26c706fc03350a MOV word ES:[0x3fc],0xa35`@`09fc` + CS store `26a3fe03 ES:[0x3fe]` (slice-22 row cite) ↔ `8e167c0f`@`0a3e` + `8b267a0f`@`0a42` + `61`@`0a46` + `07 POP ES`@`0a58` + `1f POP DS`@`0a59` + `61`@`0a5a` + `c3`@`0a5d` | **cited-pair** (misalignment disclosure: landing `0xa35` = Alignment byte; segment-pops cited INSIDE the stable span — the only half with POP-ES/POP-DS before RET) |
+| `0a86..0a9e` | `FUN_11bd_0a5e` | `26c706a204860a MOV word ES:[0x4a2],0xa86`@`0a6a` + `a1b609`@`0a71` + `26a3a404 MOV ES:[0x4a4],AX`@`0a74` ↔ `8e167c0f`@`0a8d` + `8b267a0f`@`0a91` + `ba203f`@`0a95` + `ee`@`0a9a` + `61`@`0a9b` + `c3`@`0a9e` | **cited-pair** |
+
+### Disposition proposals (six rows — Task 2 consumes these by heading)
+
+| half | proposal | naming | evidence named |
+|------|----------|--------|----------------|
+| H1 `0443..045d` | **create at cited span `0443..045d`** (stop-short `045d\|045e`) | bar-passed candidate `restore_ss_sp_and_return` else default | H1 rows: ownership probes / W-A+W-B stable / span==proposal / fallthrough `f4`@`0442` / `c3`@`045d` / pairing cited-pair / bar PASS / entry DYNAMIC-ONLY |
+| H3 `0665..0674` | **create at live stable span `0667..0674`** with BOTH disclosures printed pre-write: (i) landing cite `0x665` sits on the 1-byte `DAT_11bd:0665` Alignment unit OUTSIDE the body head — body entry ≠ stored IP; (ii) row extent `0665..0696` ≠ half — `0675..0696` arg cells NOT admitted (scope-check finding); if the landing-mismatch is judged entry-asserting (one-hop rule reading), DOWNGRADE to leave-as-bytes with the collision cites | default-named (bar NOT-CONFIRMED-at-name) | H3 rows: collision audit/region / W-A+W-B skip-agreement / span delta / byte read `b0f0` / pairing cited-pair + head-cite disclosure / flip-mapping finding row |
+| H4 `06ca..06fb` | **create at cited span `06ca..06fb`** (stop-short `06fb\|06fc` — next byte OWNED by `FUN_11bd_06fc`) | bar-passed candidate `restore_ss_sp_pic_and_return` else default | H4 rows: ownership probes / stable / span==proposal / fallthrough `ebf5`@`06c8` arith / `c3`@`06fb` / pairing cited-pair / bar PASS |
+| H5 `07b9..07e6` | **create at cited span `07b9..07e6`** (stop-short `07e6\|07e7` — next byte OWNED by `FUN_11bd_07e7`) | bar-passed candidate `restore_ss_sp_and_write_port66` else default | H5 rows: ownership probes / stable / span==proposal / fallthrough `ebfe`@`07b7` / `c3`@`07e6` / pairing cited-pair / bar PASS |
+| H9 `0a35..0a5d` | **render-dependent → LEAVE-AS-BYTES** (create NOT proposed this slice): the only render-stable span `0a36..0a5d` is internally MISALIGNED at the head (`AND DH,0x20` artifact swallowing the true `e620 OUT 0x20,AL` bytes), and creating over it would bake in a false first insn while creating at the byte-true `0a35..0a5d` fights the defined `DAT_11bd:0a35` Alignment unit — both out of the capped path's honest reach; re-admission condition named: a listing decision on the 1-B unit (H2 `DAT_11bd:04be` precedent class) | n/a (NOT-CONFIRMED-at-name moot while unowned) | H9 rows: flip clean-map row / audit+region Alignment cites / byte read `b080 e620` vs emitted `80e620` / W-A+W-B misaligned-head agreement / span delta / pairing cited-pair + misalignment disclosure |
+| H10 `0a86..0a9e` | **create at cited span `0a86..0a9e`** (stop-short `0a9e\|0a9f` — next byte OWNED by `FUN_11bd_0a9f`) | bar-passed candidate `restore_ss_sp_and_out_3f20` else default | H10 rows: ownership probes / stable / span==proposal / fallthrough `ebfe`@`0a84` / `c3`@`0a9e` / pairing cited-pair / bar PASS |
+
+Four creates admissible at byte-exact proposals (H1/H4/H5/H10), one create
+admissible at a 2-B-short live span with disclosures (H3), one
+render-dependent leave-as-bytes (H9). No analyzer-absorption question rows:
+every primary's body-end insn BYTE-terminates flow (`f4` HLT ×3, `eb..`
+unconditional JMP ×3 — all cited above), so no inner wall presents a
+non-terminating end.
+
+### Bar-text note (uniform caveat on the four `…_return`-class candidates)
+
+Plan bar verbatim: "`"return"-class words admissible ONLY with a cited
+`cb`/`ca` (RET/near-far) terminator in that body`". All six bodies terminate
+in near-`RET (c3)` (byte-cited in every W-A/W-B pair above); NO body contains
+`cb`/`ca` (RETF). The candidates rest on the parenthetical "(RET/near-far)"
+reading — `c3` RET cited; if the gate enforces the `cb`/`ca` literal,
+fallback = default names (candidates recorded as pre-tests only, Task 2 +
+operator decide; no `far`-class word proposed anywhere — segment-pop
+evidence exists only in H9's body, which stays leave-as-bytes).
+
+### Reads executed (ZERO-WRITE branch)
+
+`get_function_by_address` ×30 (start±1 + end + end+1 per half, verbatim in
+tables); `disassemble_bytes` ×18 EXCLUSIVELY `dry_run=true` (12 window
+renders + 6 primary pairing-store-region probes `042c`/`05bc`/`06b0`/`0787`/
+`09f3`/`0a67`); `search_instructions` ×12 (6 numeral-view + 6 far-view entry
+runs, ALL `instructions_scanned:15589`, uniform scope); `read_memory` ×2
+(`0660` 24 B, `0a32` 8 B — both hex↔data reconciled ✓); `get_xrefs_to` ×6
+(0/6 — dead-channel controls, quoted NOT relied); `analyze_data_region` ×2 +
+`audit_global` ×4 (collision mapping: `DAT_11bd:0665` and `DAT_11bd:0a35`,
+both `Alignment`); `get_function_count` ×1 (329); `find_code_gaps` ×2 (FULL
+pagination 100+51 = total 151). NO create/rename/comment/define/save; no
+transaction opened; prior-slice bodies re-read only; `/media/felipe/
+FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
+
+### Deferrals (cite-only, this slice)
+
+- Flip-row mapping findings (scope-check table): `1000:2235..2266` surplus
+  `0675..0696` (arg-`0x679` cells — DATA) and `1000:80cf..8118` =
+  `64ff..6548` (foreign far-ret-half-family block) — NOT admitted into any
+  create this slice; the `64ff` block needs its own evidence pass.
+- H7 remainder `[0976..099a]` + undecodable `f3 f0`@`0974..0975` seam —
+  live row `{"start":"1000:2544","end":"1000:256a","size":39,
+  "has_undefined_bytes":true,"has_orphaned_instructions":true,…,
+  "before_function":"FUN_11bd_0938",…,"after_function":"FUN_11bd_099b",…}`
+  — family-adjacent, NOT admitted (plan scope guard verbatim).
+- Remaining return blocks from slice-22's "Far-return blocks LEFT UNDEFINED"
+  bullet — H2 `[04c0..04f2]`, H8 `[0b6e..0b93]`, H11 `[0b3f..0b6d]`,
+  H12 `[0b14..0b3e]` — under live row `{"start":"1000:26e2","end":"1000:
+  2792","size":177,"has_undefined_bytes":true,…}` (`0b12..0bc2`) — carried,
+  not this slice's six.
+- `674c`/`675a` dive: live gap row `{"start":"1000:832c","end":"1000:8438",
+  …,"before_function":"FUN_11bd_674c",…}` confirms `FUN_11bd_674c` now
+  exists; `675a` per `## R3 IVT cluster`/`## IVT loose ends` dispositions —
+  carried, NOT admitted.
+- Callee bodies one hop out: `06fc` (H4 outer wall), `0733`/`073c` (H5 call
+  legs), `0360`, `0be3/0be9`, pocket FUNs — untouched, prior dispositions
+  stand; cell ROLES (`[0xf7c]/[0xf7a]`, `[0x9b6]`, `[0x160]/[0x162]`,
+  `[0x467]/[0x469]`, `[0x3fc]/[0x3fe]`, `[0x4a2]/[0x4a4]`, `CS:[0x0]`,
+  `ES:[0x412]`, `[0x35]`, `[0x2f]`) logged per table, not resolved.
+- Runtime writers of the far-ret pair cells + the `RETF`-class consumer of
+  the pairs (the one-hop-out layer the `**` note names): NOT searched this
+  slice beyond the six stores/pushes cited in the pairing table.
+- H9's `0a35` re-admission leg: clearing/re-decoding `DAT_11bd:0a35` is a
+  listing mutation — named-and-deferred; H3's `0665` head byte stays inside
+  the created body only if a future listing decision re-aligns it.
