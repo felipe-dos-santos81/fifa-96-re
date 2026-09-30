@@ -7111,3 +7111,192 @@ FIFAPCCD/` untouched; `fifa96.rep` churn left unstaged.
 - H9's `0a35` re-admission leg: clearing/re-decoding `DAT_11bd:0a35` is a
   listing mutation — named-and-deferred; H3's `0665` head byte stays inside
   the created body only if a future listing decision re-aligns it.
+
+### Writes (Task 2 — capped creates + bar renames, executed 2026-09-30, program `/fifa96.exe`)
+
+Before-state (verbatim, captured before the first mutation, Step 1
+pre-write re-check): zero drift since Task 1 — `get_function_by_address`
+no-function errors live at `11bd:0443`/`0667`/`06ca`/`07b9`/`0a35`/`0a86`
+(same-form as Task-1 probes); wall owners re-read identical
+(`0442`→`FUN_11bd_040e …body_end 0442`, `0664`→`FUN_11bd_05af …0664`,
+`06c9`→`FUN_11bd_0697 …06c9`, `07b8`→`FUN_11bd_076f …07b8`,
+`0a34`→`FUN_11bd_09d7 body_start 09d4 …body_end 0a34`,
+`0a85`→`FUN_11bd_0a5e …0a85`); the two defined-data probes returned
+`{"address":"11bd:0665","type":"Alignment","length":1,…}` and
+`{"address":"11bd:0a35","type":"Alignment","length":1,…}` — both units
+intact, NEVER touched by this slice's writes; `get_function_count` →
+`{"function_count":329,…}`; six covering gap rows byte-identical to
+Task-1's quotes (totals `total:151`, full pagination). No STOP-BLOCKED
+condition: no create landed on owned bytes; H3's create starts AFTER the
+`Alignment` unit by design (narrowed span per Task-1 disposition).
+
+REAL disassembly at the five admitted spans (5 calls, all `success:true`,
+emission BYTE-IDENTICAL to the Task-1 dry-run cites — the Step-1
+render-stability re-read is this identity): `11bd:0443` len 27 →
+`0443..045d` (13 insns, ends `c3 RET`); `11bd:0667` len 14 → `0667..0674`
+(9, ends `c3 RET`); `11bd:06ca` len 50 → `06ca..06fb` (22, ends `c3`);
+`11bd:07b9` len 46 → `07b9..07e6` (20, ends `c3`); `11bd:0a86` len 25 →
+`0a86..0a9e` (12, ends `c3`).
+
+Creates (all first-call, ZERO nudges — the cap's `disassemble_first=false`
+retry never engaged). Every response verbatim:
+
+| create cmd | verbatim response |
+|------------|--------------------|
+| `create_function(11bd:0443)` | `{"success":true,"address":"11bd:0443","function_name":"FUN_11bd_0443","entry_point":"11bd:0443","body_size":27,"message":"Function created successfully at 11bd:0443"}` |
+| `create_function(11bd:0667)` | `{"success":true,…,"function_name":"FUN_11bd_0667","entry_point":"11bd:0667","body_size":14,…}` |
+| `create_function(11bd:06ca)` | `{"success":true,…,"function_name":"FUN_11bd_06ca","entry_point":"11bd:06ca","body_size":50,…}` |
+| `create_function(11bd:07b9)` | `{"success":true,…,"function_name":"FUN_11bd_07b9","entry_point":"11bd:07b9","body_size":46,…}` |
+| `create_function(11bd:0a86)` | `{"success":true,…,"function_name":"FUN_11bd_0a86","entry_point":"11bd:0a86","body_size":25,…}` |
+
+Post-read-back vs proposal (verbatim; bounds = cited spans EXACTLY —
+no auto-extension, no split, no absorption anywhere):
+
+| body | proposal (Task 1 live span) | post bounds | walls (last-owned / first-foreign, stop-short cites) |
+|------|------------------------------|-------------|------------------------------------------------------|
+| `FUN_11bd_0443` → renamed | `[0443..045d]` | `{"entry_point":"11bd:0443","body_start":"11bd:0443","body_end":"11bd:045d"}` | inner `0442` = `FUN_11bd_040e` `body_end` (owned, untouched); outer `045e` → `{"error":"No function found for 11bd:045e"}` (fill `045e..0490`, unclaimed) |
+| `FUN_11bd_0667` | `[0667..0674]` (narrowed) | `{"body_start":"11bd:0667","body_end":"11bd:0674"}` ✓ `body_start 0667` REQUIRED — MET; `0665/0666` NOT absorbed: post-probe `(11bd:0665)` → `{"error":"No function found for 11bd:0665"}` + audit `{"type":"Alignment","length":1}` unit INTACT (pre AND post-save); outer `0675` → no-function (fill, unclaimed) | inner `0664` = `FUN_11bd_05af` `body_end`; head-cite `0x665` (stored IP) = Alignment byte OUTSIDE body head — carried disclosure (Task-1 H3 row) |
+| `FUN_11bd_06ca` → renamed | `[06ca..06fb]` | `{"body_start":"11bd:06ca","body_end":"11bd:06fb"}` | inner `06c9` = `FUN_11bd_0697` `body_end`; outer `06fc` = `FUN_11bd_06fc` ENTRY (`body 06fc..0715`, owned, untouched) |
+| `FUN_11bd_07b9` → renamed | `[07b9..07e6]` | `{"body_start":"11bd:07b9","body_end":"11bd:07e6"}` | inner `07b8` = `FUN_11bd_076f` `body_end`; outer `07e7` = `FUN_11bd_07e7` ENTRY, untouched |
+| `FUN_11bd_0a86` → renamed | `[0a86..0a9e]` | `{"body_start":"11bd:0a86","body_end":"11bd:0a9e"}` | inner `0a85` = `FUN_11bd_0a5e` `body_end`; outer `0a9f` = `FUN_11bd_0a9f` ENTRY (`body_end 11bd:0ad2` — slice-24 ACCEPTED-SPLIT bound, quoted not re-litigated) |
+
+NOT-CREATED row — H9 `[0a35..0a5d]`: disposition-only per Task 1
+(render-dependent → leave-as-bytes); no disassembly, no create, no rename,
+no plate — citing: the `{"address":"11bd:0a35","type":"Alignment","length":1}`
++ `{"address":"11bd:0a36"}`→no-function post-probes, row
+`{"start":"1000:2605","end":"1000:262d","size":41,"has_undefined_bytes":false,…}`
+(verbatim above, unchanged pre AND post-save), and the byte-vs-render
+delta (`e620f4b080e620bb` read vs `80e620 AND DH,0x20`@`0a36` stable
+artifact render — Task-1 H9 rows).
+
+Rename (bar passes only — the four Task-1 PASS-at-pre-test candidates;
+H3 executed NOTHING per its NOT-CONFIRMED-at-name pre-test → keeps
+default name, no plate):
+
+| rename cmd | verbatim response |
+|------------|--------------------|
+| `rename_function(FUN_11bd_0443 → restore_ss_sp_and_return)` | `{"status":"success","message":"Success: Renamed function at FUN_11bd_0443 from 'FUN_11bd_0443' to 'restore_ss_sp_and_return'",…}` |
+| `rename_function(FUN_11bd_06ca → restore_ss_sp_pic_and_return)` | `{"status":"success","message":"Success: Renamed function at FUN_11bd_06ca from 'FUN_11bd_06ca' to 'restore_ss_sp_pic_and_return'",…}` |
+| `rename_function(FUN_11bd_07b9 → restore_ss_sp_and_write_port66)` | `{"status":"success","message":"Success: Renamed function at FUN_11bd_07b9 from 'FUN_11bd_07b9' to 'restore_ss_sp_and_write_port66'",…}` |
+| `rename_function(FUN_11bd_0a86 → restore_ss_sp_and_out_3f20)` | `{"status":"success","message":"Success: Renamed function at FUN_11bd_0a86 from 'FUN_11bd_0a86' to 'restore_ss_sp_and_out_3f20'",…}` |
+
+(two PascalCase style warnings per rename quoted-as-returned — same class
+as the slice-22 `clear_msw_and_callfar` and slice-21 `mode_vector_source_pair`
+precedents; snake_case kept per repo convention). Bar execution note:
+`return`-class words rest on the body-end `c3 RET` cites + the bodies'
+SS/SP frame ops (`8e167c0f`/`8b267a0f`) per the Task-1 pre-test op cites
+and the plan's "(RET/near-far)" gloss; the literal `cb`/`ca` reading is
+recorded in the Task-1 bar-text note row — no `far`-class word used
+(anywhere the pop-before-RET evidence lives is H9, uncreated).
+
+Plates (`set_comment(…, plate)` ×4, all `status:success` + the three
+standard "missing Algorithm/Parameters/Returns" warnings quoted-as-returned;
+`C: none — behavioral (…)` form per slice-21/22): H1 — far-return
+restoration half of `FUN_11bd_040e` (arg `0x3d6`): port `0xf2` IN/OR/OUT
+leg; `BX←0x1000`, `DS/ES←BX`, `SS←[0xf7c]`, `SP←[0xf7a]`, `POPA/POP BX/POP
+AX`, `RET @045d`; DYNAMIC-ONLY entry via the `ES:[0x160]/[0x162]` pair
+stored `042c..0439`; primary exit `f4 HLT @0442`. H4 — half of
+`FUN_11bd_0697` (arg `0x679`): `BX←CS:[0x0]`, `DS←BX`, SS/SP restore,
+`ES←0` + `ES:[0x412]←AL`, `ES←BX`, `CALL 06fc`, read-modify-write legs
+ports `0x69`(OR `0x4`)/`0xa0`(OR `0x80`), `RET @06fb`; pair stored `06b2`;
+primary exit `ebf5` retry-JMP. H5 — half of `FUN_11bd_076f` (arg `0x749`):
+`DS/ES←0x1000`, SS/SP restore, `POPA`, `TEST AL,0xa0`+JNZ+`OUT 0x66`,
+`MOV AL,0x45`+`CALL 0733`, `AND AL,0x3f`+`CMP [0x35]`+`OR AL,0x40`+
+`XCHG AH,AL`+`CALL 073c`, `RET @07e6`; pair stored `078b..0798`; primary
+exit `ebfe` self-spin. H10 — half of `FUN_11bd_0a5e` (arg `0x71a`):
+`DS/ES←0x1000`, SS/SP restore, `DX←0x3f20`/`AL←0`/`OUT DX,AL`, `POPA`,
+`RET @0a9e`; pair stored `0a6a..0a77` (`[0x4a2]/[0x4a4]` — DIFFERENT
+cluster); primary exit `ebfe` self-spin. Full plate texts set verbatim in
+the listing (each names its cite addresses; the summaries above omit no
+cite class).
+`save_program` → `{"success":true,"program":"fifa96.exe","message":"Program saved successfully"}`.
+
+Post-state gap carve (total 151 → **149**, FULL pagination re-consumed
+100+49): `1000:2013..2060` (78) →
+`{"start":"1000:202e","end":"1000:2060","size":51,"has_undefined_bytes":true,"has_orphaned_instructions":false,"before_function":"restore_ss_sp_and_return","before_function_address":"11bd:0443","after_function":"FUN_11bd_0491",…}`
+(= `045e..0490` ✓ tiling `27+51=78`);
+H3 row `1000:2235..2266` (50) → SPLIT pair
+`{"start":"1000:2235","end":"1000:2236","size":2,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_05af",…,"after_function":"FUN_11bd_0667",…}`
+(= the `0665..0666` Alignment head still listing-distinguished ✓, `2+14+34=50` ✓)
+and `{"start":"1000:2245","end":"1000:2266","size":34,"has_undefined_bytes":true,…,"before_function":"FUN_11bd_0667",…,"after_function":"FUN_11bd_0697",…}`
+(= `0675..0696` surplus — flag moved `false→true`, side-effect ledger (a));
+H4 `1000:229a..22cb`, H5 `1000:2389..23b6`, H10 `1000:2656..266e` rows
+VANISH (bodies 50/46/25 = exact former row sizes ✓ exact absorption);
+H9 row `{"start":"1000:2605","end":"1000:262d","size":41,"has_undefined_bytes":false,"has_orphaned_instructions":false,"before_function":"FUN_11bd_09d7",…,"after_function":"FUN_11bd_0a5e",…}`
+UNCHANGED post-save ✓ (leave-as-bytes disposition stands); foreign flip row
+`{"start":"1000:80cf","end":"1000:8118","size":74,…,"before_function":"FUN_11bd_64b7",…,"after_function":"FUN_11bd_6549",…}`
+UNCHANGED ✓ (NOT admitted, as ruled). Row-count arithmetic: −3 vanished
++1 H3-split = Δ−2 ✓ = 151→149. Band rows `1f30..1fdd`, `2422..2491`,
+`24a6..24f8`, `2544..256a`, `259d..259e`, `26a3..26a4`, `26e2..2792` and
+ALL `1991:` overlay rows re-quoted identical (page-2 fetch ✓ — no
+overlay-side effect).
+
+`get_function_count` → `329` → **`334`** (Δ+5 = exactly the five cited
+creates; H9 uncreated as proposed; cap +≤6 honored). No unexpected
+function appears in any row-neighbor field program-wide across both
+pages. Side-effect ledger: (a) ONE listing-state change outside the
+created bodies — the H3-surplus orphan-instructions `0675..0696`
+re-classified to undefined bytes by the save sweep (flip-row region flag
+`false→true`, row verbatim above; no ownership created/deleted — probe
+`0675` no-function, RATIFY status quo; disclosure per cap rule);
+(b) created bodies took auto-signature shape `undefined2 FUN_11bd_XXXX(void)`
+in the read-backs (quoted, same class as slice-22's `FUN_11bd_06fc`
+`byte …(void)` read-back; not fought); (c) scan-scope line (slice-24
+errata format): `instructions_scanned` `15589` → **`15665`** (post-save
+`search_instructions("0x443")` re-run: `match_count:1` SAME single hit
+`042c` store, byte-identical); Δ+76 = +67 newly-scanned body insns
+(H1 13 + H4 22 + H5 20 + H10 12, previously undefined bytes) + 9 H3 body
+insns that entered the count at create — consistent with the
+defined-function-body scan semantics the same re-run exhibits; H9's
+still-unowned misaligned orphans contribute nothing either before or
+after, at this-slice time.
+
+### Verdicts (Task 2)
+
+| body | address | entry class | pairing CLASS | naming disposition |
+|------|---------|-------------|---------------|--------------------|
+| `restore_ss_sp_and_return` | `11bd:0443` | DYNAMIC-ONLY carried (statics-zero runs Task-1; post-create the stored IP `0x443` now RENTS an owned body — the runtime pair-consumer remains the named-one-hop layer) | cited-pair carried (primary `26c70660014304`@`042c` ↔ body `8e167c0f`/`8b267a0f`/`61`/`c3`@`045d`) | BAR-PASSED rename + plate (cited SS/SP frame ops + `c3`@`045d`) |
+| `FUN_11bd_0667` | `11bd:0667` | DYNAMIC-ONLY carried | cited-pair carried WITH head-cite disclosure (`0x665` landing = `Alignment` byte outside body; body head `0667`) | NOT-CONFIRMED-at-name — default kept, NO plate (Task-1 pre-test: value producer `MOV AL,0xf0` excluded by collision) |
+| `restore_ss_sp_pic_and_return` | `11bd:06ca` | DYNAMIC-ONLY carried | cited-pair carried (`26c7066704ca06`@`06b2` ↔ `CS:[0x0]`/SS-SP/`ES:[0x412]`/`c3`@`06fb`) | BAR-PASSED rename + plate |
+| `restore_ss_sp_and_write_port66` | `11bd:07b9` | DYNAMIC-ONLY carried | cited-pair carried (`26c7066704b907`@`078b`+`26a36904`@`0795` ↔ SS/SP/`c3`@`07e6`) | BAR-PASSED rename + plate |
+| (H9 — UNCREATED) | `11bd:0a35..0a5d` | DYNAMIC-ONLY carried (unchanged — leave-as-bytes) | cited-pair carried (misalignment disclosure stands: stored IP `0xa35` = Alignment byte; only body of the six with segment-pops `07`/`1f` before `c3`@`0a5d`) | n/a (no body); listing decision deferred — see Deferrals |
+| `restore_ss_sp_and_out_3f20` | `11bd:0a86` | DYNAMIC-ONLY carried | cited-pair carried (`26c706a204860a`@`0a6a`+`26a3a404`@`0a74` ↔ SS/SP/`ba203f`+`ee`/`c3`@`0a9e`) | BAR-PASSED rename + plate |
+
+Slice-22's LAST structural deferral (the `**` one-hop layer) is hereby
+DISCHARGED for four byte-exact halves + one narrowed-span half; the sixth
+(H9) converts from "far-ret deferral" to a listed "listing-repair
+deferral".
+
+### Deferrals (Task 2 additions)
+
+- Family question — UPGRADED candidate (one line): `02da..02f8` /
+  `0976..099a` / `6328..634e` orphan-FAMILY shape now joins the foreign
+  flip region `11bd:64ff..6548` (H9-like misaligned far-ret halves class)
+  — next slice to scope all four together.
+- H9 listing decision `DAT_11bd_0a35`: WHO disposes = a future slice's
+  manual listing-fix pass — clearing/re-defining the 1-B Alignment unit and
+  re-decoding `0a35..0a38` true-aligned is NOT in this slice's sanctioned
+  write set (no `resize_struct`/manual-fix executed here; sanctioned writes
+  were the 5 disassembles + 5 creates + 4 renames + 4 plates + save ONLY).
+- H7 remainder `[0976..099a]` + `f3 f0`@`0974..0975` seam (row
+  `1000:2544..256a`, live re-quoted unchanged); `674c`/`675a` (row
+  `1000:832c..8438`, `FUN_11bd_674c` neighbor re-confirmed unchanged);
+  `2cc5`/`0e3c` unowned fragments (no flip row points there — no work);
+  H2 `[04c0..04f2]`, H8 `[0b6e..0b93]`, H11 `[0b3f..0b6d]`, H12
+  `[0b14..0b3e]` return blocks (row `1000:26e2..2792` unchanged) — carried.
+- Cell stories (`[0xf7c]/[0xf7a]`, `[0x9b6]`, `[0x160]/[0x162]`,
+  `[0x467]/[0x469]`, `[0x3fc]/[0x3fe]`, `[0x4a2]/[0x4a4]`, `CS:[0x0]`,
+  `ES:[0x412]`, `[0x35]`, `[0x2f]`, `[0x40]`-family): contacts cited in
+  the four plates, roles NOT resolved (prior dispositions stand);
+  name-class route and Δ1 unchanged from prior slices.
+- Runtime writers/far-ret PAIR CONSUMER (`RETF`-class reader of the
+  `[cell]` pairs) + callee trees one hop out (`06fc` body, `0733`,
+  `073c`, `0360`, `0be3/0be9`, pocket FUNs): untouched; the created bodies
+  reference them by cited CALL edges only (H4 `06e3→06fc`, H5
+  `07d1→0733`/`07e1→073c` — inter-function edges, no growth).
+- H3-surplus `0675..0696` `false→true` orphan-un-definition: RATIFIED
+  status quo (no ownership); if a future pass re-defines those arg-cell
+  bytes, this slice's row stands as the baseline.
+- Suite: no test/tool/C changes; `cmake --build build && ctest` green
+  post-write (docs-only diff). `/media/felipe/FIFAPCCD/` untouched;
+  `fifa96.rep` churn left unstaged.
