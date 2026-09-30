@@ -5938,8 +5938,11 @@ RESOLVED — NO tiling DELTA**: the last insn is `2a58 ebcc JMP`→`2a26`
 `6697ebcc50538b1e` ✓ — `2a5a` holds `50` = `clear_msw_and_callfar` entry,
 NOT eaten; the `e9??`-span hypothesis REFUTED by bytes; `2a5a` appears in
 the back-edge ONLY as the displacement nextIP, `2a5a−0x34 = 2a26` ✓).
-(2) **INT 0x67: 9 defined sites** (raw `cd67` 10, the 10th `1991:4c94` =
-insn-unaligned FALSE-POSITIVE — `4c93 b1cd MOV CL,0xcd` imm byte); 1 in R3
+(2) **INT 0x67: 9 defined sites** (raw `cd67` 10; the 10th `1991:4c94` =
+UNDEFINED byte whose `cd67` render is linear-START-OFFSET-DEPENDENT —
+from `4c8c` the walk swallows the `cd` as `4c93 b1cd MOV CL,0xcd`'s imm,
+from `4c94` itself it emits `INT 0x67`; absent from the defined-insn
+authority, re-run this wave 9/9 — fix wave 2 reword); 1 in R3
 (`2a16`, after `2a13 b80cde MOV AX,0xde0c`) + 8 cluster consumers one hop
 out (`2ae6` in `FUN_11bd_2adb` AH=0x45-gated by `CS:[0x2ad9]`; `2d36` in
 `FUN_11bd_2d0a` AX=0xde01; `76cf` in `FUN_11bd_76ab` — immediately after
@@ -5952,7 +5955,10 @@ DYNAMIC-OPEN** — `2a37` chain (verbatim steps below) lands on `29bc XCHG
 AX,BX` = caller entry AX (no `[BP+-0x5a]`-form anywhere in the body, that
 alternative REFUTED by the 49-insn emission; INT-`0x67` clobber leg
 named); `675a` lands on `POP BX`@`674f` (stack value). The 4 overlay
-`CS:[BX+disp]` forms are window-family rows, not `ffe3`-class. (4)
+`CS:[BX+disp]` forms are window-family rows, not `ffe3`-class — raw
+`ff e3` = **3** (fix wave 1: the 3rd hit `11bd:173b` is unowned/undefined,
+linear-window-aligned render only, NOT-ATTRIBUTABLE as a third defined
+site — disposition row in Step 2). (4)
 **Staging sweep ANSWERED at the static layer**: the image's only IVT-
 `0x19C/0x19E` WRITE pair = `76c8 c7045077 MOV word [SI],0x7750` + `76cc
 8c4c02 MOV word [SI+2],CS` inside `FUN_11bd_76ab` — a TRANSIENT
@@ -5986,7 +5992,10 @@ WAIT-patch story: same patchable head; replicates `0d80`'s inline
 internally hex↔data reconciled; `disassemble_bytes` EXCLUSIVELY
 `dry_run=true` (2 executed; a 3rd call died in client-side arg validation
 BEFORE any Ghidra action — disclosed); `analyze_dataflow`/`decompile_function`
-read-tool outputs quoted verbatim (incl. the 2 named-varnode errors); NO
+read-tool outputs quoted verbatim (incl. the 2 named-varnode errors);
+`decompile_function`/`analyze_dataflow` mutate the DECOMPILER CACHE only
+— listing bytes untouched (fix-wave-2 re-reads byte-identical to the
+Task-1 quotes); no `force_decompile` was needed (reviewer item applied); NO
 create/rename/comment/define/`save_program`; program-scope
 `instructions_scanned:15589` UNIFORM at this-slice time (re-read, matches
 slice-25 — no drift since no save occurred); controls
@@ -6073,11 +6082,21 @@ DYNAMIC-ONLY entry unchanged at this-slice time.
 
 Raw `search_byte_patterns "cd 67"` = 10 hits (`2a16/2ae6/2d36/76cf/7728/
 7733/7763/7925/7c4b/1991:4c94`); authority `INT`+operand `0x67` = **9**,
-all bytes `cd67`, `truncated:false`, 15589. `1991:4c94` FALSE-POSITIVE:
+all bytes `cd67`, `truncated:false`, 15589 (re-run THIS wave — identical
+9, `1991:4c94` ABSENT ⇒ not a defined instruction). `1991:4c94`
+START-OFFSET-DEPENDENT UNDEFINED BYTE — not attributable as a 10th site:
 dry-run `disassemble_bytes(1991:4c8c,12)` emits `4c8c ff83c30c INC
 [BP+DI+0xcc3]`/`4c90 83c70c ADD DI,0xc`/`4c93 b1cd MOV CL,0xcd`/`4c95
-678a6d14 MOV CH,[EBP+0x14]` — the raw `cd` = `4c93`'s imm byte (owner
-probe: no-function error).
+678a6d14 MOV CH,[EBP+0x14]` (the raw `cd` = `4c93`'s imm byte) while
+dry-run `disassemble_bytes(1991:4c94,4)` emits `4c94 cd67 INT 0x67`/`4c96
+8a6d14 MOV CH,[DI+0x14]` — BOTH windows live this wave; bytes
+`read_memory(1991:4c8c,16)` → `ff83c30c83c70cb1cd678a6d14678e5d` ✓.
+Ownership: `get_function_by_address(1991:4c94)` AND `(1991:4c82)` → both
+`{"error":"No function found for 1991:…"}` verbatim;
+`disassemble_function(1991:4c82)` → `{"error":"No function found at or
+containing address 1991:4c82"}` — the reviewer-replay bounds row
+`FUN_1991_4c82` `4c82..4c94` does NOT reproduce live (disclosed, fix wave
+2); site table stands at **9 defined**.
 
 | INT site | bytes | preceding context (one cited insn) | enclosing block |
 |----------|-------|------------------------------------|-----------------|
@@ -6089,7 +6108,7 @@ probe: no-function error).
 | `7733` | `cd67` | `7730 MOV BX,0x1` (`772e MOV AH,0x43`) | `setup_memory_hardware` |
 | `7763` | `cd67` | `7760 b80ade MOV AX,0xde0a` (block via `771c/7723/772c Jcc→0x1000:9321 = 7751`) | `setup_memory_hardware` |
 | `7925` | `cd67` | `7922 b801de MOV AX,0xde01` (`791f MOV SI,0x940`, ES←`[0xaa]+100h` legs) | `setup_memory_hardware` |
-| `7c4b` | `cd67` | `7c48 b804de MOV AX,0xde04` (dry-run window `7c40`: `7c41 CMP byte [0xe00],0x0`/`7c46 JZ→7c61`/`7c4d OR AH,AH`) | **DEFINED-UNOWNED** (`get_function_by_address(7c4b)` → error verbatim); after-neighbor `execute_exit_arm` `7c62..7d3d` (probe quoted) |
+| `7c4b` | `cd67` | `7c48 b804de MOV AX,0xde04` (dry-run window `7c40`, bytes re-verified fix wave 1 — emission `7c41 803e000e00 CMP byte [0xe00],0x0`/`7c46 7419 JZ 0x1000:9831`→`7c61`/`7c48 b804de`/`7c4b cd67`/`7c4d 0ae4 OR AH,AH`, identical to Task 1) | **DEFINED-UNOWNED** (`get_function_by_address(7c4b)` → error verbatim); after-neighbor `execute_exit_arm` `7c62..7d3d` (probe quoted) |
 
 Selector census operand `0xde0` = 11: `{2a13,2ab7}``0xde0c` (H13 `2ab7` —
 NO INT: `read_memory(2ab7,6)` → `b80cde660fb7` ✓, cite-only), `2b1d` 0xde05,
@@ -6099,18 +6118,24 @@ NO INT: `read_memory(2ab7,6)` → `b80cde660fb7` ✓, cite-only), `2b1d` 0xde05,
 `b804de` ✓). `AH=0x43/0x45` register-variants cited in rows above;
 result-check legs `OR AH,AH`+Jcc at `772a/7735/7765/7927/7c4d`.
 
-Raw `ff e3` = 2 (`2a37`, `675a`); authority `JMP`+`BX` = 6 (+4 `1991`
+Raw `ff e3` = **3** (`173b`, `2a37`, `675a`) — fix wave 1 correction: the
+Task-1 pass recorded 2 and dropped `173b`; live re-run ×2 (incl. a masked
+re-run) = 3/3. Authority `JMP`+`BX` = 6 (+4 `1991`
 `CS:[BX+disp]` window-forms `2effa7ce1e/2effa7aa33/2effa7e633/2eff20` —
-family rows, slice-25 ledger). Named-varnode probes failed, quoted:
+family rows, slice-25 ledger). The 2 BARE DEFINED sites re-owned live this
+wave: `get_function_by_address(11bd:2a37)` → `{"name":"FUN_11bd_29bc",…,"body_end":"11bd:2a59"}`
+(body-interior ✓), `(11bd:675a)` → `{"name":"FUN_11bd_674c","body_start":"11bd:674c","body_end":"11bd:675b"}`
+(interior ✓ — `ffe3`@`675a..675b` = body tail). Named-varnode probes failed, quoted:
 `analyze_dataflow(2a37,"BX")` → `{"error":"No varnode at 11bd:2a37 matches
 'BX'. Candidates: [DAT_0000_0247, DAT_0000_0fe4, DAT_0000_0fe8]"}`; same
 class at `675a` (candidates `[pcVar1]`). Default-anchor walks verbatim:
 
 | JMP BX site | backward chain (varnode steps) | outcome CLASS |
 |-------------|------------------------------|---------------|
-| `2a37` | anchor `"unique:7df00","resolved_from":"output of SEGMENTOP"`; `step0 1000:4607 SEGMENTOP [const:0xbaaedc8afe30, const:0x1000, AX] "JMP BX"`; `step1 1000:458c SUBPIECE AX ← [EAX,0] "XCHG AX,BX"`; `terminated:"chain exhausted"` (`4607−1bd0 = 2a37`✓, `458c−1bd0 = 29bc`✓) | **DYNAMIC-OPEN** — BX = caller entry AX via the `29bc` XCHG (sole BX-writer; `[BP+-0x5a]`-alternative REFUTED: no `[BP` operand in 49 insns). Missing legs named: caller-side entry AX (zero static xrefs — control quoted); the intervening `swi(0x67)` passed WITHOUT a modeled clobber (Ghidra call artifact — runtime handler clobber of AX/BX possible, NOT asserted) |
+| `2a37` | anchor `"unique:7df00","resolved_from":"output of SEGMENTOP"`; `step0 1000:4607 SEGMENTOP [const:0xbaaedc8afe30, const:0x1000, AX] "JMP BX"`; `step1 1000:458c SUBPIECE AX ← [EAX,0] "XCHG AX,BX"`; `terminated:"chain exhausted"` (`4607−1bd0 = 2a37`✓, `458c−1bd0 = 29bc`✓; step-0 packed SEGMENTOP const is SESSION-UNSTABLE — Task-1 record + fix-wave re-run `0xbaaedc8afe30`, reviewer replay `0xc80208f98e30`; address/op/asm/inputs-SHAPE stable across all — the const value carries no claim) | **DYNAMIC-OPEN** — BX = caller entry AX via the `29bc` XCHG (sole BX-writer; `[BP+-0x5a]`-alternative REFUTED: no `[BP` operand in 49 insns). Missing legs named: caller-side entry AX (zero static xrefs — control quoted); the intervening `swi(0x67)` passed WITHOUT a modeled clobber (Ghidra call artifact — runtime handler clobber of AX/BX possible, NOT asserted) |
 | `675a` | `step0 1000:832a SEGMENTOP … pcVar1 "JMP BX"`; `step1 CAST ← unique:10000019 "POP BX"`; `step2 LOAD [const:0x1f1, …]` (SS:SP); `step3/4/5 SEGMENTOP SS,SP / SUBPIECE SP / PTRSUB ESP`; `chain exhausted` (`832a−1bd0 = 675a`✓, `831f−1bd0 = 674f`✓) | **DYNAMIC-OPEN** — BX ← `POP BX`@`674f` (stack content at entry; one-hop deferral) |
 | `1991:1f7d/33a5/33e1/453b` | window `2effa7/2eff20` forms — target = `CS:[…]` cell CONTENT | OPEN-WINDOW family rows (carry-forward, slice-25 census) |
+| `11bd:173b` (RAW-only — fix wave 1 disposition row) | NO chain run — NOT a defined insn: absent from the `JMP`+`BX` authority run (defined-insn-only); `get_function_by_address(11bd:173b)` → `{"error":"No function found for 11bd:173b"}`; dry-run `disassemble_bytes(11bd:1730,16)` emits `1730 2000 AND byte ptr [BX+SI],AL`/`1732 8ed8 MOV DS,AX`/`1734 6689267c15 MOV dword [0x157c],ESP`/`1739 8be6 MOV SP,SI`/**`173b ffe3 JMP BX`**/`173d f70682150100 TEST word [0x1582],0x1` — `ffe3` ALIGNED BY THIS START-OFFSET | **NOT-ATTRIBUTABLE** as a third defined `JMP BX` site — unowned/undefined region, the alignment is linear-window-dependent (same disposition class as `cd67`@`1991:4c94` and the `29b8` post-JMP artifact rows); defined-bare census = 2 (`2a37`+`675a`, live-owned) |
 
 CONSTANT / CELL-writer classes not reached at either bare site.
 
@@ -6120,7 +6145,8 @@ CONSTANT / CELL-writer classes not reached at either bare site.
 |--------------------------|-------------|-------|-----------------|
 | `c7 06 9c 01` (abs word store — incl. far-pointer `c7 /0 m16:16` form) | 0 | program raw | none |
 | `c7 06 9e 01` | 0 | program raw | none |
-| masked `8c 00 9c 01`/`ff c7 ff ff` (any seg→`[0x19c]` abs store) | 0 | program raw | none |
+| masked `8c 00 9c 01`/`ff c7 ff ff` (any seg→`[0x19c]` abs store) | 0 | program raw | none — SUPERSEDED by fix wave 2's 12 concrete encodings below (mask runs DEMOTED to discovery-aids: a masked `b0 00 00 8e` run returned 0 yet the DIRECT read proves `6335 bf0000`+`6338 8edf` — see the `6329` strip row; mask-convention unreliable this build, tooling-backlog disclosure) |
+| concrete seg→[0x19c]/[0x19e] stores: `8c06/0e/16/1e/26/2e` × `9c01`/`9e01` (fix wave 2) | **0 ×12** | program raw | negatives CONFIRMED without masks (ES/CS/SS/DS/FS/GS → absolute `0x19c`/`0x19e`: all twelve encodings zero) |
 | `b8 67 25` (DOS SET-vector 0x67) | 0 | program raw | none — no DOS-mediated install |
 | `b8 67 35` (DOS GET-vector) | 1 | program raw | `76e0` READ staging (`76e3 INT 0x21` → `ES:BX` = current vector; `76e5/76e7` CS-check + `ES:[0xa/0xb/0xd/0xe/0x11]` signature CMPs `0x45/0x4d4d/0x58/0x5858/0x30`) |
 | operand `0x19c` | 1 | program 15589 | `76b0 be9c01 MOV SI,0x19c` — CONSTANT-BASE setter |
@@ -6129,7 +6155,8 @@ CONSTANT / CELL-writer classes not reached at either bare site.
 | `6a 00 1f` (`PUSH 0x0; POP DS`) | 2 | program raw | `648f` (DEFINED-UNOWNED, probe error) + `76ab` = THE staging fn |
 | `b8 00 00 8e d8` | 1 | program raw | `62fa` (`FUN_11bd_62f8` `62f8..6327`) — no `0x19c`-render store |
 | `33 c0 8e d8` | 4 | program raw | `0856` (unowned)/`1285` (`FUN_11bd_1280`)/`6422` (`FUN_11bd_641d`)/`64cb` (`FUN_11bd_64b7`) — same negative |
-| `[BX + -` ledger | 24 | program 15589 | **membership IDENTICAL to slice-25's corrected 24 (Δ0)** — DS-CLAMP carry-forward: `1991:0412`-family rejected (DS pinned `0x20`, physical `[0x200,0x101FF]` — no rendering addresses `0x19C`); constant-base arithmetic (slice-20/25 sets) none hit `0x19c`; OPEN-WINDOW: `1991:2f65 AND ES:[BX+-0x1]` (WRITE-class, no base/ES pin — missing leg named), `1991:49aa TEST` (read, ownerless), `4cc3` READ |
+| zero-staging SUPERSET (fix wave 2): `33 c0 8e` / `b8 00 00 8e` / `6a 00 07` | **18 / 1 / 1** | program raw | superset of the 3-pattern census above: new members `03a7/03d6/0462/04fc/0680/06d9/0722/075c/0dac/129d/28e0/2a0d/2a8e/6917` (`2a0d` = R3's own `33c0`/`8ee0` FS←0 — in-body cite-only; `28e0/2a8e` pocket/H13 strips — one-hop, store follow-ups not swept) + the prior 4 owners; `6a00 07` (PUSH 0/POP ES) = `167e`; every post-staging store under these bodies = OPEN-WINDOW class, legs named in the strip row below |
+| `[BX + -` ledger | 24 | program 15589 | **membership IDENTICAL to slice-25's corrected 24 (Δ0)** — DS-CLAMP carry-forward: `1991:0412`-family rejected (DS pinned `0x20`, physical `[0x200,0x101FF]` — no rendering addresses `0x19C`); constant-base arithmetic (slice-20/25 sets) none hit `0x19c`; ES-WRITE DISPOSITION (fix wave 2 — the old "no base or ES pin citable" wording was FALSE, a pin chain is citable): `1991:2f65 268067fffd AND byte ptr ES:[BX+-0x1],0xfd` (bytes live this wave ✓), owner `FUN_1991_2d3e` `2d3e..2f6d` (probe ✓); in-force ES at the site = `2f61 8e06a20a MOV ES,[0xaa2]` — RUNTIME cell (function-scoped `MOV`+`ES` run: 11 hits / 213 insns — `2d4d/2d58/2dae/2db7/2df4/2e2f/2e9c/2eab/2f3f/2f43/2f61`); the constant pin `2d29 b90800 MOV CX,0x8`/`2d2c 8ec1 MOV ES,CX` lives in the NEIGHBOUR body `FUN_1991_2d12` `2d12..2d3d` (probes this wave) — NOT the ES in force at `2f65`; clamp arithmetic applied both ways: ES=`0x8` ⇒ reach `[0x80,0x807F]` which INCLUDES physical `0x19C` (BX≡`0x11D`) ⇒ NO reject possible; ES=`[0xaa2]` ⇒ unbounded ⇒ **OPEN-WINDOW RETAINED** (never-silently-reject rule) with legs named: runtime `[0xaa2]` writer set + BX cursor. Reviewer-quoted pin bytes `2d1f 8b08`/`2d22 8b1eaa09`/`2d26 050001`/`2d28 8ec1` do NOT reproduce at those addresses (live window `1991:2d1d..2d28` this wave: `2d1f 39067c09 CMP word [0x97c],AX`/`2d23 7610 JBE 0x1000:c645`/`2d25 24f8 AND AL,0xf8`/`2d27 8bd8 MOV BX,AX`/`2d29 b90800` — disassembly wins); `1991:49aa TEST` unchanged (read, ownerless), `4cc3` READ |
 
 **WRITERS FOUND (static layer): `{76c8, 76cc}`** — `FUN_11bd_76ab`
 (`23` insns, `76ab..76da`), byte-verified window:
@@ -6161,10 +6188,24 @@ above); persistent non-IRET handler install = **not attributable from the
 enumerated sweeps, defined-insn-only + raw-pattern, at this-slice time —
 OPEN-WINDOW**, missing legs named: positive-disp envelopes per-site lists
 (not re-enumerated; no claim rests on them — slice-25 posture), DS=0-body
-window stores with runtime bases, `1991:2f65`-class ES-relative WRITEs,
-out-of-image installers (runtime-loaded banks), and any DOS SET-vector
-path beyond the image (`b86725` = 0 here). Controls: `find_code_gaps` not
-used (no gap-dependent claim).
+window stores with runtime bases, `1991:2f65`-class ES-relative WRITEs
+(fix wave 2: pin chain now citable — in-force ES = runtime `[0xaa2]` via
+`2f61 8e06a20a`; still OPEN-WINDOW, no reject possible), out-of-image
+installers (runtime-loaded banks), and any DOS SET-vector path beyond the
+image (`b86725` = 0 here). NEW OPEN-WINDOW candidate (fix wave 2) —
+**UNOWNED zero-DS STAGING STRIP at `11bd:6329..633c`**: ownership probes
+`(6329)`/`(632d)`/`(633a)` ALL → `{"error":"No function found for
+11bd:…"}` verbatim; `read_memory(6329,20)` →
+`8bec5257a156008b1658001ebf00008edf8b7e04` ✓; dry-run window emits
+`6329 8bec MOV BP,SP`/`632b 52 PUSH DX`/`632c 57 PUSH DI`/`632d a15600
+MOV AX,[0x56]`/`6330 8b165800 MOV DX,[0x58]`/`6334 1e PUSH DS`/`6335
+bf0000 MOV DI,0`/`6338 8edf MOV DS,DI`/`633a 8b7e04 MOV DI,[BP+0x4]` —
+DS←0 staging via a shape the Task-1 3-pattern census missed
+(`PUSH DS`/reg←0/`MOV DS,reg`), reading the SAME vector-placeholder cells
+`[0x56]/[0x58]` the `76ab` wrapper compares; post-`6338` stores not swept
+(missing leg: full-body enumeration of the unowned strip + per-store
+`[DI]/[base+disp]` classification under the staged DS — next slice); body
+NOT touched. Controls: `find_code_gaps` not used (no gap-dependent claim).
 
 ### Freebies (Step 4)
 
@@ -6187,7 +6228,12 @@ into a pre-entry (slice-25 row re-cited).
 
 `016c` gate tail (live 60-insn dump re-derived): `0235 MOV AL,[0x2e]` →
 `0238 OR AL,AL` → **`023a JZ 0x1000:1e12`** → `023c CMP AL,0xb` → `023e JZ
-0x1000:1e12` → `0240 CLTS` → **`0242 WAIT`** → `0243 FSETPM` → `0245 RET`
+0x1000:1e12` → `0240 CLTS` (`0f06`) → **`0242 WAIT`** (`9b` — the patched
+value itself) → `0243 FSETPM` (`db e4`) → `0245 RET` (`c3`) — bytes live:
+`read_memory(0240,6)` → `0f069bdbe4c3` ✓ + `read_memory(023a,4)` →
+`74063c0b` ✓ (`023a 7406` nextIP `023c+6 = 0242` ✓); the reviewer's
+literal `9b 0b` parenthetical is byte-adjusted (`9b` = 1-byte WAIT at
+`0242`; FSETPM encodes `db e4` at `0243..0244` — fix wave 2)
 — `1e12−1bd0 = 0242` ✓ both skips land ON the WAIT; `[0x2e] ∈ {0,0xb}`
 skips CLTS only. The patched value `0x9b` IS this opcode (slice-25 cite
 reproduced at this-slice time; `0216/021b` `[0x3e]`-gate → `0245` skip
@@ -6199,7 +6245,9 @@ Exit classes: IVT-MEDIATED (`2a16`) + DYNAMIC transfer (`2a37`); internal
 edges `2a24→2a39`, `2a58→2a26` reproduced; zero `c3`/`cb`/`ea`; tail =
 `ebcc` ends `2a59` — **tiling `29bc..2a59` RATIFIED, NO DELTA**. INT
 count: **9 defined sites** (1 in R3; 8 one-hop-out consumers; raw 10th =
-false positive). BX outcome: **2 bare sites, both DYNAMIC-OPEN** (legs
+start-offset-dependent UNDEFINED-byte render, not attributable — fix wave
+2). BX outcome: **2 bare DEFINED sites, both DYNAMIC-OPEN**
+(raw `ff e3` = 3 — 3rd hit `173b` NOT-ATTRIBUTABLE, fix wave 1; legs
 named; CONSTANT/CELL not reached); 4 window-forms as family rows. Staging
 answer: **WRITERS FOUND** — transient pair `{76c8,76cc}` in
 `FUN_11bd_76ab` (DS←0 staging + constant base `be9c01`), inert-IRET
@@ -6216,14 +6264,15 @@ names belongs to `FUN_11bd_76ab`, not `FUN_11bd_29bc`.
 `get_function_by_address` ×15 (10 owner rows + 5 quoted error probes: `7750`,
 `7c4b`, `1991:4c94`, `0856`, `648f`); `disassemble_function` ×7
 (`29bc` 49, `2adb` 6, `2d0a` 23, `76ab` 23, `7728`→`setup_memory_hardware`
-272, `0929` 2, `016c` 60); `decompile_function` ×1 (`29bc` — read,
-WARNING lines quoted); `analyze_dataflow` ×4 (2 named-varnode errors + 2
+272, `0929` 2, `016c` 60); `decompile_function` ×1 (`29bc` — decompiler-CACHE
+touch only, listing bytes untouched; WARNING lines quoted); `analyze_dataflow` ×4 (2 named-varnode errors + 2
 verbatim chains); `search_instructions` ×11 (INT+op 9, JMP+op 6, `0x19c`
 1, `0x19e` 0, `19c` 1, `19e` 0, `0xde0` 11, `0x929` 0, `24f9` 4, `[SI`@76ab
 6/23-scanned, `[BX + -` 24 — every response pattern+match_count+scope+
 `truncated:false`; program-scope `instructions_scanned:15589` UNIFORM at
 this-slice time = slice-25's number, no save occurred so no drift
-possible); `search_byte_patterns` ×10 (`cd67` 10, `ffe3` 2, `c7069c01` 0,
+possible); `search_byte_patterns` ×10 (`cd67` 10, `ffe3` **3** — Task-1
+printed 2, corrected at fix wave 1; `c7069c01` 0,
 `c7069e01` 0, `b86725` 0, `b86735` 1, masked `8c` 0, `6a001f` 2,
 `b800008ed8` 1, `33c08ed8` 4); `disassemble_bytes` ×2 **EXCLUSIVELY
 `dry_run=true`** (`7c40` window, `1991:4c8c` window) + 1 client-side
@@ -6237,3 +6286,113 @@ runs byte-identical to slice-23 records, `092c` head `90` unchanged,
 `[BX + -` ledger Δ0 vs slice-25. `/media/felipe/FIFAPCCD/` untouched;
 `fifa96.rep` churn left unstaged.
 
+### Fix wave 1 (review 2026-09-30 — raw `ffe3` census correction + 2 minors; own-section edits only, zero Ghidra writes beyond reads)
+
+Reviewer found ONE IMPORTANT + 2 MINORS. Everything verified LIVE this
+wave BEFORE printing: `search_byte_patterns "ff e3"` → 3 hits verbatim
+`[{"address":"11bd:173b"},{"address":"11bd:2a37"},{"address":"11bd:675a"}]`
+(repeated: identical; masked variant `ff e3`/mask `ff ff` → same 3);
+`get_function_by_address(11bd:173b)` → `{"error":"No function found for
+11bd:173b"}`; dry-run `disassemble_bytes(11bd:1730,16,dry_run=true)` →
+6-insn emission quoted verbatim in the Step-2 disposition row (`1730
+2000 AND byte ptr [BX+SI],AL` head — data-shape class, `173b ffe3 JMP
+BX` ALIGNED BY THAT START-OFFSET); re-ownership of the two bare defined
+sites (verbatim rows in Step-2 census paragraph); `analyze_dataflow(2a37)`
+re-run — step-0/step-1 IDENTICAL except the packed const (`0xbaaedc8afe30`
+this wave, matching the Task-1 record; reviewer replay `0xc80208f98e30`)
+→ session-instability clause added to the quote row; dry-run `7c40`
+window re-emitted byte-identical to Task 1 (bytes into the `7c4b` map
+row). Corrections applied (THIS section only; all prior sections and
+rows byte-untouched): (1) IMPORTANT — the raw `ff e3` census row is now
+stated honestly as **3** (headline (3), Step-2 census paragraph,
+Reads-executed `ffe3` entry, Disposition-so-far); a **NOT-ATTRIBUTABLE
+disposition row** for `11bd:173b` added to the BX table: unowned/
+undefined region — the site is absent from the defined-insn authority run
+(2 bare + 4 window), so its `ffe3` alignment is linear-window-dependent
+(same treatment the cd67 sweep got for `1991:4c94`; authority-vs-render
+distinction stated); the defined-bare census **2 sites holds** (both
+live-owned this wave) and every downstream conclusion — the two
+DYNAMIC-OPEN outcomes, the staging answer, the zero-writes state — is
+UNTOUCHED. Recorded failure class: mis-recorded a raw-run output on an
+appended map line (quote-protocol breach; live-replayable by future
+agents, hence the correction). (2) Minor 1 — packed SEGMENTOP const
+clause in the `2a37` chain row. (3) Minor 2 — `7c4b` row now carries the
+full `7c40` window emission with bytes. This wave's tool inventory
+(reads only): `search_byte_patterns` ×2, `disassemble_bytes` ×2
+(EXCLUSIVELY `dry_run=true`), `get_function_by_address` ×3,
+`analyze_dataflow` ×1; no transaction opened; no listing mutation;
+Suite: build + `ctest` → 10/10 (docs-only diff); `fifa96.rep` churn left
+unstaged; `/media/felipe/FIFAPCCD/` untouched.
+
+
+### Fix wave 2 (reviews 2026-09-30 rounds 2–3 carried — reconciliations + fold-in execution; own-section edits only, zero Ghidra writes beyond reads)
+
+Live verification this wave BEFORE any edit (every output quoted in the
+rows above): INT-`0x67` authority re-run 9/9 (`1991:4c94` absent ⇒ not a
+defined insn); `get_function_by_address(1991:4c94)`/`(1991:4c82)` → error
+rows, `disassemble_function(1991:4c82)` → `{"error":"No function found at
+or containing address 1991:4c82"}`; dry-run windows
+`(1991:4c8c,12)` swallow-emit vs `(1991:4c94,4)` `INT 0x67`-emit (the
+START-OFFSET-DEPENDENT pair, both live); `read_memory(1991:4c8c,16)` →
+`ff83c30c83c70cb1cd678a6d14678e5d` ✓; 12 concrete `8c` segment-store
+encodings (all 0); zero-staging supersets `33c08e` 18 / `b800008e` 1 /
+`6a0007` 1; masked `b0 00 00 8e` run 0 but DISPROVED by direct
+`6335 bf0000`+`6338 8edf` bytes ⇒ masked runs demoted (tooling-backlog
+line alongside slice-24's `caseD`/enhanced-search items); the `6329` strip
+(ownership probes ×3 all → no-function errors; `read_memory(6329,20)` →
+`8bec5257a156008b1658001ebf00008edf8b7e04` ✓; dry-run emission quoted);
+`FUN_1991_2d3e`/`FUN_1991_2d12` ownership rows + `read_memory(1991:2d29,8)`
+→ `b908008ec126807f` ✓ + function-scoped `MOV`+`ES` run 11/213 +
+`read_memory(1991:2f65,5)` → `268067fffd` ✓; gate-tail bytes
+`read_memory(0240,6)` → `0f069bdbe4c3` ✓ / `(023a,4)` → `74063c0b` ✓ /
+`(0928,6)` → `c36a201f90ff` ✓; `search_functions load_h14` → 0.
+
+Corrections applied (THIS section only; every prior line byte-untouched —
+the whole map remains append-only vs c47c37d^): (1) `1991:4c94` reworded —
+Task-1's "insn-unaligned FALSE-POSITIVE" label was WRONG; live truth =
+UNDEFINED byte, alignment linear-START-OFFSET-dependent (both-window pair
+quoted in Step 2); the counts stand (raw 10 / defined 9). The reviewer
+replay's `FUN_1991_4c82` bounds row does NOT reproduce live (verbatim
+error rows) — disclosed, not adopted; disassembly wins. (2) `2f65`
+ES-WRITE disposition executed — "no base or ES pin citable" replaced by
+the citable chain (in-force ES = runtime `[0xaa2]` via `2f61 8e06a20a`; the
+`2d29/2d2c` constant ES←0x8 pin belongs to the NEIGHBOUR body
+`FUN_1991_2d12` `2d12..2d3d`, not the site's ES); the DS-clamp-analogue
+arithmetic is APPLIED and yields NO reject under either ES model
+(`[0x80,0x807F]` includes `0x19C` at BX≡`0x11D`) ⇒ the row stays
+OPEN-WINDOW with the legs named (a "REJECT" wording would not survive the
+live bytes — stated; the reviewer's `2d1f 8b08`/`2d22 8b1eaa09`/`2d26
+050001`/`2d28 8ec1` chain is NOT reproducible at those addresses — live
+window printed). `49aa`/`4cc3` rows unchanged. (3) Fold-in #2
+reconciliation: the quoted row ("only program-wide reader `632c` …
+`6330`/`6334` … `load_h14_pocket_vectors`") exists NOWHERE in the map
+(live grep `e8df`/`632c`/`6330`/`6334`/`633a`/`load_h14` = zero hits), the
+quoted byte-run is NOT reproducible at `11bd:6329` (live read printed) nor
+anywhere in the image (`a0dfe8`/`c706 40e8` raw = 0/0), the function does
+not exist (`search_functions` 0), and the "DS restore at `633c`" quote is
+also non-reproducible (`633c` = operand byte of `633a 8b7e04`) — NO row
+was fabricated to "correct"; instead the live `6329` strip is disclosed as
+a NEW OPEN-WINDOW candidate (zero-DS staging via a shape the Task-1
+3-pattern census missed + `[0x56]/[0x58]` vector-placeholder reads), which
+is the real sweep gap the item pointed at; body not touched, leg named.
+(4) Fold-in #1 executed — gate-tail row now carries the bytes parenthetical,
+with the reviewer's literal `9b 0b` BYTE-ADJUSTED against the live
+`0f069bdbe4c3` (`9b` = the 1-byte WAIT at `0242` = the patched value;
+FSETPM = `db e4` at `0243..0244`); this completes the round-1 pending
+"fold-in #1 not in the committed hunk" disclosure. (5) Masked-run
+unreliability + 12 concrete `8c` negatives + the 18/1/1 zero-staging
+superset rows added to the Step-3 table; OPEN-WINDOW posture UNCHANGED,
+legs extended. (6) Cache-vs-listing disclosure added to the headline quote
+protocol and the `Reads executed` line; the Fix wave 1 trailer's "no
+listing mutation" wording REFINED (listing bytes untouched; decompiler
+CACHE refreshed by `decompile_function`/`analyze_dataflow` on `29bc`/
+`2a37`/`675a`; no `force_decompile` call, none needed). Unmoved proofs
+this wave: INT-`0x67` authority identical 9/9; `0928` read identical;
+`7c40` window emission identical; `[BX + -]` membership identical (the
+`2f65`/`49aa` rows are rewordings, not list changes). Tool inventory this
+wave (reads only): `search_byte_patterns` ×18, `read_memory` ×8 — 8/8
+hex↔data reconciled, `get_function_by_address` ×9, `disassemble_bytes` ×4
+ALL `dry_run=true`, `search_instructions` ×2 (authority re-run +
+function-scope MOV/ES), `search_functions` ×1, `disassemble_function` ×1
+(error row), `analyze_dataflow` ×1 (round-1 clause verification); no
+transaction opened; no listing mutation; suite gate re-run post-edit.
