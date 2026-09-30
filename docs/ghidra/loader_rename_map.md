@@ -5038,7 +5038,9 @@ are verbatim tool responses captured THIS pass (2026-09-29, zero writes —
 
 | item | ratified record (quoted, slice-22/23) | live state (verbatim) | class |
 |------|----------------------------------------|------------------------|-------|
-| `FUN_11bd_0a9f` bounds | post-bounds table H11 row: "`{"body_start":"11bd:0a9f","body_end":"11bd:0ae1"}` | MATCH — tail `0ad5..0ae1` resolves UNDER this body"; Verdicts row: "shared shutdown tail `0ad5..0ae1` (`LIDT [0x8d0]`→`INT 0xff`) resolved UNDER this body" | `{"name":"FUN_11bd_0a9f",…,"entry_point":"11bd:0a9f","body_start":"11bd:0a9f","body_end":"11bd:0ad2"}` — envelope BREACHED: `0ad5..0ae1` no longer inside | SPLIT (supersedes the envelope claim; slice-23 disclosed, now re-proved) |
+| `FUN_11bd_0a9f` bounds — slice-22 post-bounds row, EXACT QUOTE (bounds cell) | ``{"body_start":"11bd:0a9f","body_end":"11bd:0ae1"}`` | `{"name":"FUN_11bd_0a9f",…,"entry_point":"11bd:0a9f","body_start":"11bd:0a9f","body_end":"11bd:0ad2"}` — envelope BREACHED: `0ad5..0ae1` no longer inside | SPLIT (supersedes the envelope claim; slice-23 disclosed, now re-proved) |
+| same item — slice-22 post-bounds row, disposition cell key clause | "after `create_function(0a9f)` the block `0ad5..0ae1` resolves to H11" | `get_function_by_address(11bd:0ad5)` now returns an OWN body (next row) — resolution moved from H11 to the new FUN | bounds attribution changed; the disposition's FLOW facts (tail resolves as one block, entry `0ad5`) still true |
+| same item — slice-22 Verdicts row, evidence cell EXACT QUOTE | "shared shutdown tail `0ad5..0ae1` (`LIDT [0x8d0]`→`INT 0xff`) resolved UNDER this body" | same live pair as rows above | verdict text REMAINS VALID (landings, tail content, LIDT-withheld rationale) — only the body-ownership clause is superseded |
 | second half | (none — slice-22 had no `FUN_11bd_0ad5`) | `{"name":"FUN_11bd_0ad5","address":"11bd:0ad5","signature":"undefined FUN_11bd_0ad5(void)","entry_point":"11bd:0ad5","body_start":"11bd:0ad5","body_end":"11bd:0ae1"}` | NEW function = split partner |
 | plate/comments | Verdicts H11: "`— (create-only)`" (band handlers KEEP default names + no plate per Writes(Name+plate)) | `get_comment(11bd:0a9f)` → `{"plate":null,…,"has_comment":false}`; `get_comment(11bd:0ad5)` → same no-comment form | NOT drift — no plate was ever set; consistent |
 | `0ad3` retry bytes | H11 walk gate+exit row: "`ebfd JMP 0x1000:26a2` @`0ad3..0ad4` (→`0ad2`) halt-retry"; post-bounds H11: "halt-retry fragment `0ad3..0ad4` left defined-unowned (probe `{"error":"No function found for 11bd:0ad3"}`)" | `get_function_by_address(11bd:0ad3)` → `{"error":"No function found for 11bd:0ad3"}` | UNCHANGED (defined-unowned island) |
@@ -5205,3 +5207,150 @@ beyond-exit chain in `1000:2422..2491`, still `has_undefined_bytes:true`) is
 invisible until decoded; `get_xrefs_to` quoted-as-control (alive for
 function-entry targets this time, NOT relied on for the ruling — the operand
 runs are the authority).
+
+### Writes (Task 2 — executed 2026-09-29, program `/fifa96.exe`)
+
+Step 1 contradiction check (the ONE ruling-critical read, single repeat):
+`search_instructions(operand="26a5")` → `match_count:3`,
+`instructions_scanned:15589`, `truncated:false`, sites `11bd:084f`
+(`e98302` JMP, `FUN_11bd_07e7`), `11bd:0acc` (`7507` JNZ, `FUN_11bd_0a9f`),
+`11bd:0b0b` (`75c8` JNZ, `FUN_11bd_0ae2`) — **3/3 same sites as Task 1,
+NO contradiction** → rulings stand: H11 = ACCEPTED-SPLIT (zero writes — the
+delete/create branch is NOT executed; the `0acc` edge is noted as INTERNAL to
+H11's own body, the `084f`/`0b0b` edges are fully external).
+
+RENAME branch — attempted, **not applicable cleanly**, executed to the brief's
+enumerated fallback (RATIFY-with-disclosure, leave `caseD_0`). Verbatim
+sequence, every write and every undo recorded:
+
+| # | command | verbatim response | verification |
+|---|---------|--------------------|--------------|
+| 0 | pre-states `get_function_by_address(11bd:0337)/(1000:0018)/(1991:4f40)` | `{"name":"caseD_0",…,"body_start":"11bd:0337","body_end":"11bd:033b"}` / `{"name":"caseD_0",…,"body_start":"1000:0018","body_end":"1000:031e"}` / `{"name":"caseD_0",…,"body_start":"1991:4f40","body_end":"1991:4f96"}`; `get_function_count` → 329 | three instances `caseD_0`; `1000:0018`/`11bd:0337` share signature `undefined caseD_0(char, undefined2)`, `1991:4f40` differs (`undefined4, short`) |
+| 1 | `rename_function(old_name="caseD_0", new_name="FUN_11bd_0337")` | `{"status":"success","message":"Success: Renamed function at caseD_0 from 'caseD_0' to 'FUN_11bd_0337'"}` | MIS-FIRE: post-probe shows `11bd:0337` AND `1000:0018` both `FUN_11bd_0337` (collateral: the stub-zone instance — and a segment-wrong name on it); `1991:4f40` untouched. The name-keyed selector is name-class scoped, not single-instance |
+| 2 | `rename_function(old_name="1000:0018", new_name="caseD_0")` (address-keyed revert) | `{"status":"success","message":"Success: Renamed function at 1000:0018 from 'FUN_11bd_0337' to 'caseD_0'","warnings":["…not PascalCase. Expected: Cased0","…contains underscores…","…too short (main part 'caseD_0' is 7 chars, minimum 8)…"]}` | REVERT EXPANDED TO THE NAME-CLASS TOO: post-probe `1000:0018` AND `11bd:0337` both back to `caseD_0` — full restore, NO half-renamed state (style warnings quoted-as-returned; they re-apply the original auto-name) |
+| 3 | `rename_symbol(target="11bd:0337", new_name="FUN_11bd_0337")` (kind auto) | `{"status":"success","message":"Created label 'FUN_11bd_0337' at address 11bd:0337","warnings":["…not snake_case…","…not snake_case…"]}` | WRONG PRIMITIVE (label route, not function rename): `get_function_by_address(11bd:0337)` still `caseD_0`; label did not land visibly — `delete_label` single-form `{"success":false,"deleted_count":0,"deleted_names":[]}` + batch-form `{"success":true,"labels_deleted":0,"labels_skipped":0,"errors_count":0}` (nothing to remove = no artifact persisted); `can_rename_at_address(11bd:0337)` → `{"can_rename":true,"type":"function","current_name":"caseD_0"}`; gap row `1000:1ea4..1f06` `after_function` still `caseD_0 @ 11bd:0337` (re-paged post-attempt) |
+| 4 | `rename_symbol(target="11bd:0337", new_name="FUN_11bd_0337", kind="global")` | `{"error":"Global variable '11bd:0337' not found"}` | refusal quoted; no transaction |
+
+CONCLUSION: no available tool route renames EXACTLY ONE of the two
+identically-named identically-signed `caseD_0` instances (name-class scope on
+`rename_function` in both key modes; `rename_symbol` auto→label route with no
+persisted effect, global→refusal). Per the cap rule ("if rename cannot apply
+cleanly, RATIFY-with-disclosure — never leave a half-renamed state"):
+**disposition = leave `caseD_0`; net program change = ZERO.**
+
+Post-read-backs (all captured after the last write-transaction, i.e. after row
+2's revert; rows 3–4 changed nothing):
+- triple re-probe: `11bd:0337` `{"name":"caseD_0","signature":"undefined caseD_0(char param_1, undefined2 param_2)",…,"body_end":"11bd:033b"}`; `1000:0018` `caseD_0` body `0018..031e`; `1991:4f40` `caseD_0` body `4f40..4f96` — all byte- and name-identical to pre-states ✓
+- `get_function_callers(name="caseD_0")` now → `{"callers":[{"name":"caseD_0","address":"11bd:0337"}],"count":1,…,"total":1}` — binds exactly as before (does NOT bind cleanly; the degradation census (5) documented remains live, unfixed-by-necessity)
+- collision grep now: `search_functions(name_pattern="caseD")` → 3, total 3; `list_functions_enhanced` caseD_0 rows = 3 (`1000:0018` false, `11bd:0337` **true**, `1991:4f40` false) — the brief's "expect 2" applied to the rename-success branch; under RATIFY-with-disclosure 3 is the correct outcome
+- `get_function_count` → `{"function_count":329}` — delta **329→329** ✓ (rename not create, and not applied)
+- edge integrity: `get_function_callees(11bd:2978)` → `{"callees":[{"name":"caseD_0","address":"11bd:0337"}],"count":1,…,"total":1}` (slice-23's recorded callee edge reproduced after the churn ✓)
+- gap re-page: `find_code_gaps` total **151** (both pages re-fetched: offset 0 ×100 + offset 100, full consumption re-verified); `1000:26a3..26a4` row UNCHANGED (`after_function FUN_11bd_0ad5`); `1000:4588..458b` TABLE row UNCHANGED ✓ — no new save-time-sweep movement, no new rows
+
+`save_program`: **NOT called** — there is nothing net-new to persist (every
+write was reverted in-session; the on-disk program stays at slice-23's
+committed state). The archive-repair recurrence check is therefore moot (no
+save attempted ⇒ no `already exists` failure observed; disclosed rather than
+exercised). `/media/felipe/FIFAPCCD/` untouched; `fifa96.rep` churn left
+unstaged.
+
+### Ratifications (Task 2)
+
+| item | verdict | evidence |
+|------|---------|----------|
+| H11 `FUN_11bd_0a9f` + `FUN_11bd_0ad5` | **ACCEPTED-SPLIT** — final bounds `0a9f..0ad2` + `0ad5..0ae1`; superseded slice-22 record: the post-bounds H11 row (`"body_end":"11bd:0ae1"`, quoted split into exact-cell quotes in census (1) this wave) — the Verdicts-row verdict text stays valid (landings/tail content/LIDT-withheld rationale), only the "resolved UNDER this body" ownership clause is superseded; plate disposition: NONE (both halves `plate:null` live — slice-22 create-only stands) | census (1)+(2) + `### Writes` Step 1 re-run (3/3 sites: `e98302`@`084f` ext, `7507`@`0acc` internal, `75c8`@`0b0b` ext) |
+| `0ad3..0ad4` halt-retry island | RATIFIED status quo (defined-unowned orphan row `1000:26a3..26a4`, `has_orphaned_instructions:true`, neighbors `0a9f`/`0ad5`) | census (1) rows 6–7 |
+| 8 overlays `FUN_1991_0400/21e2/2999/2b3f/4542/4930/4b0a/4e38` | **RATIFIED** — re-cut list: splits `990e..a155`→2 (by `0400`), `de60..e657`→3 (by `4930`+`4b0a`, seam `4542`), `e685..e80d`→2 (by `4e38`); vanishes `baf2..bb91`(`21e2`)/`c2a9..c31c`(`2999`)/`c44f..c621`(`2b3f`); reassembly sums 2120/2040/393 ✓; roles NOT-CONFIRMED-at-name, naming out of scope | census (3) |
+| 3 defined-unowned halves `1000:2235..2266`/`2605..262d`/`80cf..8118` = `11bd:0665..0696`/`0a35..0a5d`/`64ff..6548` | RATIFIED status quo — `has_undefined_bytes:false` + no-function at starts (`0665`/`0a35`/`64ff` errors quoted); attribution stays deferred (one-hop far-ret rule) | census (4) |
+| `FUN_11bd_0c9f` entry-before-body + `1000:286b..286e` hole | RATIFIED status quo — live `{entry 0c9f, body 0c84..0d0b}` (27 B lead = 23 B covered + 4 B hole); hole row `has_undefined_bytes:true`; both not fought, not recreated | census (6) |
+| `caseD_0` triple (`1000:0018`/`11bd:0337`/`1991:4f40`) | RATIFIED-with-disclosure — rename PROPOSED (Task 1) but NOT APPLICABLE to a single instance with the current tool set (`### Writes` rows 1–4 verbatim); all three keep `caseD_0`; degradation is real and unfixed — carried as Deferrals | census (5) + `### Writes` |
+
+### Errata (append-only — prior sections quoted, never edited)
+
+(a) The `0xDE22` slip — slice-23 fix-wave-1 text verbatim: "`0xe822` —
+recomputed: the printed `+0x25dc` was ALREADY CORRECT
+(`0xe822+0x25dc = 0x10Dfe ≡ 0xdfe (mod 0x10000)`), the review-suggested
+`+0xf5dc`/`−0xa24` is refuted (`0xe822+0xf5dc − 0x10000 = 0xDE22 ≠ 0xdfe`) —
+row keeps its value, targeted-probe cites added." — CORRECTION (this slice,
+re-computed): `0xE822 + 0xF5DC = 0x1DDFE`, so `− 0x10000 = 0xDDFE`;
+equivalently `0xE822 − 0xA24 = 0xDDFE`. The printed intermediate `0xDE22` is
+a slip; the REFUTATION STANDS unchanged (`0xDDFE ≠ 0x0DFE`); the kept value
+re-verified: `0xE822 + 0x25DC = 0x10DFE ≡ 0x0DFE (mod 0x10000)` ✓ (original
+conclusion — REJECT for that base, value `+0x25dc` — unchanged).
+
+(b) Scan-size drift — slice-23 verbatim: "Caveats standing:
+`search_instructions` is defined-instruction-only
+(`instructions_scanned:14638` uniform on every run at this-slice time — grew
+from slice-21's 14006/14170 as slice-22's 13 creates + islands landed)" —
+DRIFT: live scope this slice is `instructions_scanned:15589`, uniform across
+every run (Task-1 ×5 + Task-2 contradiction re-run; Δ+951, at this-slice time
+2026-09-29; the 14638 numbers remain true as-of-then). Consequential
+re-render: operand `0xdfe` now **3 hits** (slice-23 quoted 2): `11bd:2892`
+WRITE + `11bd:28a0` WRITE (`FUN_11bd_2864`) + `11bd:2978 CMP byte ptr
+[0xdfe], 0x1` bytes `803efe0d01` — class READ, now DEFINED inside
+`enable_paging_and_load_tss` (`2978..29b7`) — slice-23's "READERS among
+defined insns: ZERO / the reader `2978` … invisible by construction" state is
+superseded at the defined-instruction layer by this slice's own create
+(its raw-byte + dry-run citation of `2978` as the program's sole read is
+confirmed by the new hit).
+
+(c) Task-1 reviewer minors folded (this wave, own-section edits only):
+(1) census (1) fused quote cell re-printed as SEPARATE exact quotes — the
+slice-22 post-bounds row (bounds cell + disposition key clause, one row each)
+and the Verdicts-row evidence cell (own row); the earlier single cell inlined
+the source row's table delimiter. (2) the `328 vs 329` list/count gap —
+live full-page walk THIS wave: `list_functions_enhanced` exhausted at 328
+entries (`offset 328` fetch → `{"functions":[],"count":0}`, limit 10000 page
+returned all), `list_methods` → `total:328`, `list_functions` → `count:328`
+(three enumeration routes, same 328-row set, pagination ruled out) vs
+`get_function_count` → `329` and `get_metadata` → `function_count:329` (DB
+counter corroborated). Δ1 is an enumeration-vs-DB gap, NOT a page-0 blind
+spot; the 329th object's identity is NOT chased (out of scope) — disclosed
+unresolved with both numbers; candidate class (external-backed functions, cf.
+`thunk_EXT_FUN_0000_242d`) noted as UNVERIFIED hypothesis only.
+
+### Drift (post-Task-2 live state)
+
+Function count `329 → 329` (rename not applied; zero net writes);
+`find_code_gaps` total `151 → 151` (re-paged full, both fetches);
+`search_instructions` scope `15589` unchanged since Task 1 (no save occurred
+⇒ no sweep ⇒ no new restructure — the slice-22/23 save-sweep failure mode
+was NOT re-armed this slice precisely because the net-zero outcome skipped
+`save_program`); `caseD_0` triple state: unchanged names/bodies/flags
+(`isThunk` `false/true/false`), name-keyed lookup still binds `1000:0018`;
+H11 pair bounds unchanged (`0a9f..0ad2` / `0ad5..0ae1`); no new functions,
+no vanished rows, no neighbor-field moves.
+
+### Deferrals (Task 2)
+
+- Auto-analyze-on-save setting: NOT changed (a program-option write is outside
+  this slice's capped envelope) — RECOMMENDATION carried: disabling it (or
+  snapshot-before-save) removes the slice-22/23 silent-restructure class at
+  its root.
+- `caseD_0` disambiguation: rename retry deferred until a tool route exists
+  that targets ONE of two identically-named identically-signed functions
+  (name-class scope proven live in `### Writes` rows 1–2); relay `11bd:0337`
+  and stub `1000:0018` stay coupled.
+- Far-ret-half attribution (`0665..0696`/`0a35..0a5d`/`64ff..6548` + the six
+  slice-22 deferral-recorded halves): one-hop rule unchanged; status-only.
+- Overlay roles/naming (`FUN_1991_*` ×8 + `2d12`-class neighbors):
+  NOT-CONFIRMED-at-name; no consumer sweep this slice.
+- Cell consumers: `[0x2fa]` (relay target of `0337`; listing-resolved callee
+  `caseD_0@1000:0018` cited; writer set still unswept); `[0x9b4]`/`[0x40]`
+  prior dispositions stand; `[0xdfe]` runtime writers (OPEN-WINDOW rows incl.
+  head-internal `29a2`) not claimed closed.
+- R3 IVT cluster (`INT 0x67` handler identity, `2a37 JMP BX` dynamic leg):
+  unchanged.
+- The 329th-function identity (erratum (c)) — tooling backlog alongside
+  `search_functions_enhanced` total-0 behavior and `get_function_labels`
+  name-fold (`"0xcased_0"` error verbatim).
+
+### Fix wave (Task 2 review — docs-only trailer)
+
+This section's census (1) fused quote cell was split into three rows of exact
+separate quotes (post-bounds bounds cell / post-bounds disposition key clause /
+Verdicts evidence cell) per the reviewer minor; erratum (c)(2) replaced the
+Task-1 "Δ1 not reconciled" wording with the live three-route enumeration probe
+result (328 full-page ×3 vs 329 DB ×2). No other prior row of this section was
+altered; everything through `## block head 2978..2a59` remains byte-identical
+(appends only). Ghidra state: net-zero (see `### Writes`).
