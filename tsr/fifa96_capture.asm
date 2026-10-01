@@ -217,18 +217,10 @@ rec_zero_extra:
         mov  word [cs:rec_buf+16], 0
         ret
 
-; fnv_hash — FNV-1a 32 over post_n bytes at pre_ds:pre_dx; result u32 LE to
-; rec_buf+12. Preserves all registers (reads the caller's buffer via DS).
-fnv_hash:
-        push ax
-        push bx
-        push cx
-        push si
-        push ds
-        mov  ax, [cs:pre_ds]
-        mov  ds, ax
-        mov  si, [cs:pre_dx]
-        mov  cx, [cs:post_n]
+; fnv1a — FNV-1a 32 over CX bytes at DS:SI; result hash returned in EAX.
+; Clobbers EAX, EBX, CX, SI; leaves DS unchanged. Shared by the FILE read-head
+; hash and the INT-60 per-site dump hash.
+fnv1a:
         mov  eax, 2166136261           ; FNV-1a basis
         test cx, cx
         jz   .done
@@ -240,12 +232,27 @@ fnv_hash:
         dec  cx
         jnz  .loop
 .done:
+        ret
+
+; fnv_hash — FILE read head: FNV-1a 32 over post_n bytes at pre_ds:pre_dx;
+; result u32 LE to rec_buf+12. Preserves all registers (reads via DS).
+fnv_hash:
+        push eax
+        push bx
+        push cx
+        push si
+        push ds
+        mov  ax, [cs:pre_ds]
+        mov  ds, ax
+        mov  si, [cs:pre_dx]
+        mov  cx, [cs:post_n]
+        call fnv1a
         mov  [cs:rec_buf+12], eax
         pop  ds
         pop  si
         pop  cx
         pop  bx
-        pop  ax
+        pop  eax
         ret
 
 ; copy_input — copy post_dlen bytes at pre_ds:pre_dx to cs:rec_buf+18.
@@ -589,11 +596,181 @@ int21:
         popa
         iret
 
-; ─────────────── INT-60 / INT-1 passthrough (Task 4 fills in) ───────────────
+; ─────────── INT-60 codec record + INT-1 re-arm (Task 4b) ───────────
+; A patched site holds `CD 60`. On entry the INT frame is
+;   [sp+0]=IP (site_off+2), [sp+2]=CS, [sp+4]=FLAGS.
+; We match linear=(CS<<4)+(IP-2) against tgt_lin[0..4]; a miss chains to the
+; original INT-60. On a hit we emit a CODEC record, restore the 2 saved live
+; bytes, remember the site in `pending`, and single-step the restored original
+; instruction by re-pointing the IRET IP to the site offset with TF set.
+; The CPU then raises INT-1 (TF saved, IRET would restore it) after exactly
+; that one instruction; int1 rewrites `CD 60` and clears TF in its frame.
+;
+; Frame base: `push bp / mov bp,sp`, so the INT frame is IP@[bp+2], CS@[bp+4],
+; FLAGS@[bp+6]. pusha/push ds/push es then hold the live registers at
+; DI@[bp-16] SI@[bp-14] BP@[bp-12] SP@[bp-10] BX@[bp-8] DX@[bp-6] CX@[bp-4]
+; AX@[bp-2] DS@[bp-18] ES@[bp-20]; the caller's true BP is [bp]. Because the
+; handler returns via iret (not a far jmp) the interrupted site instruction
+; sees every register and sp_site = (entry sp)+6 = bp+8.
 int60:
+        push bp
+        mov  bp, sp
+        pusha
+        push ds
+        push es
+        ; identify the site: EAX = (frame CS<<4) + (frame IP - 2)
+        movzx eax, word [bp+4]
+        shl  eax, 4
+        movzx ecx, word [bp+2]
+        sub  ecx, 2
+        add  eax, ecx
+        xor  di, di
+.site:
+        mov  bx, di
+        shl  bx, 2
+        cmp  eax, [cs:tgt_lin+bx]
+        je   .found
+        inc  di
+        cmp  di, NSITES
+        jb   .site
+        jmp  .passthru
+
+.found:
+        ; ---- CODEC payload: site_id | 13 regs | flags | hash |
+        ;                    dseg/doff/dlen | data   (len = 39 + dlen)
+        mov  ax, di
+        mov  [cs:rec_buf], al
+        mov  ax, [bp-2]
+        mov  [cs:rec_buf+1], ax        ; ax
+        mov  ax, [bp-8]
+        mov  [cs:rec_buf+3], ax        ; bx
+        mov  ax, [bp-4]
+        mov  [cs:rec_buf+5], ax        ; cx
+        mov  ax, [bp-6]
+        mov  [cs:rec_buf+7], ax        ; dx
+        mov  ax, [bp-14]
+        mov  [cs:rec_buf+9], ax        ; si
+        mov  ax, [bp-16]
+        mov  [cs:rec_buf+11], ax       ; di
+        mov  ax, [bp]
+        mov  [cs:rec_buf+13], ax       ; bp (caller)
+        lea  ax, [bp+8]
+        mov  [cs:rec_buf+15], ax       ; sp_site
+        mov  ax, [bp-18]
+        mov  [cs:rec_buf+17], ax       ; ds
+        mov  ax, [bp-20]
+        mov  [cs:rec_buf+19], ax       ; es
+        mov  ax, ss
+        mov  [cs:rec_buf+21], ax       ; ss
+        mov  ax, [bp+2]
+        sub  ax, 2
+        mov  [cs:rec_buf+23], ax       ; ip_site
+        mov  ax, [bp+4]
+        mov  [cs:rec_buf+25], ax       ; cs_site
+        mov  ax, [bp+6]
+        mov  [cs:rec_buf+27], ax       ; flags_site
+        ; ---- per-site dump: SS:[BP+disp], dlen from the table (BP/SS caller's)
+        imul si, di, 12
+        add  si, site_tab
+        mov  bx, [cs:si+9]             ; dump_disp
+        mov  ax, [bp]                  ; caller BP
+        add  ax, bx
+        mov  [cs:rec_buf+35], ax       ; doff = BP + disp
+        mov  cl, [cs:si+11]            ; dump_len
+        xor  ch, ch
+        mov  [cs:rec_buf+37], cx       ; dlen
+        mov  ax, ss
+        mov  [cs:rec_buf+33], ax       ; dseg = SS
+        mov  ds, ax
+        mov  dx, [bp]
+        add  dx, bx                    ; DX = window offset (survives fnv1a)
+        mov  si, dx
+        call fnv1a                     ; EAX = hash (clobbers EBX,CX,SI)
+        mov  [cs:rec_buf+29], eax
+        push cs
+        pop  es
+        cld
+        mov  si, dx
+        mov  di, rec_buf+39
+        mov  cx, [cs:rec_buf+37]
+        rep  movsb                     ; DS:SI (SS:BP+disp) -> ES:DI (rec_buf)
+        ; ---- emit CODEC (type 0x03) with DS=CS
+        push cs
+        pop  ds
+        mov  al, T_CODEC
+        mov  si, rec_buf
+        mov  cx, [cs:rec_buf+37]
+        add  cx, 39
+        call send_frame
+        ; ---- un-patch: put the 2 saved live bytes back at the site
+        movzx di, byte [cs:rec_buf]
+        mov  bx, di
+        shl  bx, 2
+        mov  eax, [cs:tgt_lin+bx]      ; EAX = target linear
+        mov  edx, eax
+        and  edx, 0x0F                 ; EDX = target & 0xF (linear->offset)
+        shr  eax, 4
+        mov  ds, ax                    ; DS = target >> 4
+        mov  si, [bp+2]
+        sub  si, 2                     ; SI = site's original offset (frame IP-2)
+        mov  bx, dx
+        mov  dl, [cs:save0+di]
+        mov  dh, [cs:save1+di]
+        mov  [bx], dx                  ; original 2 bytes restored
+        ; ---- remember the site, then re-point the IRET frame.
+        ; NB: the site's original offset is frame_IP-2 (e.g. map 11bd:5aa1 ->
+        ; frame IP-2 = 0x5aa1), NOT tgt_lin & 0xF: the code segment at the site
+        ; is the relocated map segment, not the linear's canonical paragraph,
+        ; so CS is left as-is and IP must be the instruction's real offset.
+        mov  ax, di
+        mov  [cs:pending], al
+        mov  [bp+2], si                ; IP = site offset
+        or   word [bp+6], 0x0100       ; FLAGS |= TF
+        pop  es
+        pop  ds
+        popa
+        pop  bp
+        iret
+
+.passthru:
+        pop  es
+        pop  ds
+        popa
+        pop  bp
         jmp  far [cs:old_int60]
+
+; INT-1 re-arm: if a site hit is pending, rewrite `CD 60` there, clear the
+; pending flag, clear TF in the INT-1 frame (the CPU saves TF as it was set,
+; so a plain iret would resume single-stepping) and iret. Otherwise chain.
 int1:
+        push bp
+        mov  bp, sp
+        cmp  byte [cs:pending], 0FFh
+        jne  .consume
+        pop  bp
         jmp  far [cs:old_int1]
+.consume:
+        push ax
+        push bx
+        push dx
+        push ds
+        movzx bx, byte [cs:pending]
+        shl  bx, 2
+        mov  eax, [cs:tgt_lin+bx]      ; EAX = target linear
+        mov  edx, eax
+        shr  eax, 4
+        mov  ds, ax                    ; DS = target segment
+        and  dx, 0x0F
+        mov  bx, dx
+        mov  word [bx], 0x60CD         ; re-arm the site
+        mov  byte [cs:pending], 0FFh
+        pop  ds
+        pop  dx
+        pop  bx
+        pop  ax
+        and  word [bp+6], 0xFEFF       ; clear TF in the INT-1 frame
+        pop  bp
+        iret
 tsr_end:
 
 ; ─────────────────────────── transient install ───────────────────────────
