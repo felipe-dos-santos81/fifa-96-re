@@ -61,3 +61,30 @@ Import `fifa96_le.bin` into Ghidra as `x86:LE:32:default` (base 0) and search
 the code object for the format decoders. Absolute data references in the flat
 image carry the runtime delta (`0x2D1000`) pending fixup application; relative
 calls and control flow are already correct.
+
+## Decoder anchors found in the image
+
+Ghidra program `/fifa96_le.bin` (2,066 functions) now carries these names:
+
+| address | name | evidence |
+| --- | --- | --- |
+| `0x67BA8` | `vgt_stream_poll` | polls a stream buffer; accepts tag dwords `eVGT`..`kVGT`; on `kVGT` copies `0x300` bytes (palette) to `0x560C0` |
+| `0xAE4BC` | `vgt_dispatch` | `fVGT` -> `vgt_decode_f`, `kVGT` -> `vgt_decode_k`, else error `FUN_000cbbe8`; decoded size lands at context+`0x28` |
+| `0xADEFC` | `vgt_decode_f` | `fVGT` variant decoder |
+| `0xAE218` | `vgt_decode_k` | `kVGT` variant decoder |
+| `0xBABE0` | `file_open_ro` | two `MOV AH,3Dh; INT 21h` sites (`0xBAC10`, `0xBAD14`); caller `FUN_000AEE41` |
+
+Dispatch is by **tag letters**, not extension: the immediate `CMP EAX,'kVGT'`
+(`0x5447566B`) appears at `0x67C43` and `0xAE4E5`, and the poller accepts the
+`eVGT`/`fVGT` range around it.
+
+`PCNX` (POG) and `SHPI` (QFS/PVI) occur **only as data** in object 4
+(`0x100020`, `0x142F8C`); no 32-bit tag immediate or word-pair compare exists
+in the code object. Those formats are therefore selected by the CD index
+(`PCCD.DB`, `PCINDEX.NDX`, first bytes of object 4) rather than by a
+self-describing magic check. This supersedes the FU-1 note that the tags are
+"absent from the image": they are present in the LE image, but POG/QFS decode
+paths remain index-typed.
+
+All addresses are link-time flat addresses; the running game adds the
+`0x2D1000` relocation delta (see above).
