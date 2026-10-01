@@ -46,7 +46,7 @@ rebuild: clean build ## Clean rebuild from scratch
 
 TRACE ?= captures/session-latest/trace.bin
 
-tsr: ## Assemble the capture TSR (requires nasm)
+tsr: build ## Assemble the capture TSR (requires nasm)
 	@command -v nasm >/dev/null || { echo "nasm not installed (apt install nasm)" >&2; exit 1; }
 	nasm -f bin tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
 	@printf 'FIFACAP.COM: '; wc -c < $(BUILD)/FIFACAP.COM
