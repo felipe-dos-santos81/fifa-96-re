@@ -58,6 +58,12 @@ class TestCave(unittest.TestCase):
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xC9D10), 6)
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xCAD30), 6)
 
+    def test_overwrite_len_counts_wrapped_instruction(self):
+        # ndisasm prints the first 8 bytes on the instruction line and wraps
+        # the rest onto a continuation line; the 10-byte mov must count whole
+        image = b"\xc7\x05\x00\x10\x00\x00\x78\x56\x34\x12" + b"\x90" * 22
+        self.assertEqual(patch.overwrite_len(image, 0), 10)
+
     def test_cave_ebp_reports_resume_address(self):
         # the patched `call cave` pushes target+5, so the cave must add
         # overwrite-5 to reach the resume address in the EBP slot

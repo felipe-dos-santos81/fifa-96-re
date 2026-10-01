@@ -147,12 +147,34 @@ def overwrite_len(image, target):
     if proc.returncode != 0:
         raise RuntimeError(
             "ndisasm failed: " + proc.stderr.decode("utf-8", "replace"))
-    total = 0
+    instructions = []
+    current = None
     for line in proc.stdout.decode("ascii", "replace").splitlines():
-        m = re.match(r"^[0-9A-F]+ +([0-9A-F]+)", line)
-        if not m:
+        if not line.strip():
             continue
-        opcode = m.group(1)
+        m = re.match(r"^[0-9A-F]+  ([0-9A-F]+)(?:\s|$)", line)
+        if m:                                   # instruction starts here
+            if current is not None:
+                instructions.append(current)
+            current = m.group(1)
+            continue
+        m = re.match(r"^\s+-([0-9A-F]+)(?:\s|$)", line)
+        if m and current is not None:           # wrapped byte continuation
+            current += m.group(1)
+            continue
+        raise ValueError(
+            f"unparseable ndisasm output for {target:#x}: {line!r}")
+    if current is not None:
+        instructions.append(current)
+    if not instructions:
+        raise ValueError(f"could not disassemble an overwrite prefix at "
+                         f"{target:#x}")
+
+    total = 0
+    for opcode in instructions:
+        if len(opcode) % 2:
+            raise ValueError(f"truncated instruction bytes {opcode!r} in "
+                             f"the overwrite prefix at {target:#x}")
         first = int(opcode[:2], 16)
         if first in (0xE8, 0xE9, 0xEB) or 0x70 <= first <= 0x7F or \
                 (first == 0x0F and len(opcode) >= 4 and
