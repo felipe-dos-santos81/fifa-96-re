@@ -48,3 +48,12 @@ add_test(NAME test_script COMMAND test_script WORKING_DIRECTORY ${CMAKE_SOURCE_D
 
 add_executable(fifa96_dump tools/fifa96_dump.c)
 target_link_libraries(fifa96_dump PRIVATE fifa96_envelope fifa96_qfs fifa96_pog fifa96_tgv fifa96_viv fifa96_file)
+
+add_library(fifa96_trace src/fifa96_loader/fifa96_trace.c)
+add_executable(test_trace tests/test_trace.c)
+target_link_libraries(test_trace PRIVATE fifa96_trace fifa96_file)
+add_test(NAME test_trace COMMAND test_trace WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(fifa96_trace_cli tools/fifa96_trace.c)
+set_target_properties(fifa96_trace_cli PROPERTIES OUTPUT_NAME fifa96_trace)
+target_link_libraries(fifa96_trace_cli PRIVATE fifa96_trace fifa96_file)
