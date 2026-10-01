@@ -1,3 +1,5 @@
+import contextlib
+import io
 import struct
 import sys
 import unittest
@@ -75,6 +77,12 @@ class TestCave(unittest.TestCase):
             self.assertEqual(cave[i + 2], ow - 5,
                              f"EBP adjust wrong for overwrite={ow}")
 
+    def test_cave_resets_edi_after_zero_fill(self):
+        # rep stosd leaves EDI past the 48-byte frame; INT 31h needs ES:EDI
+        # at the structure base, so the cave must reload edi from esp
+        cave = patch.build_cave(TARGET, 7, 1, CAVE)
+        self.assertIn(b"\xf3\xab\x89\xe7", cave)
+
     def test_cave_contains_displaced_bytes_and_jump(self):
         ow = patch.overwrite_len(self.info["image"], TARGET)
         cave = patch.build_cave(TARGET, ow, 1, CAVE)
@@ -85,6 +93,16 @@ class TestCave(unittest.TestCase):
         rel = struct.unpack_from("<i", cave, jmp_off + 1)[0]
         self.assertEqual(CAVE + jmp_off + 5 + rel, tgt)
         self.assertIn(displaced, cave)
+
+
+class TestCli(unittest.TestCase):
+    def test_print_overwrite(self):
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = patch.main(["--iso", str(ISO), "--target", "0x9E718",
+                             "--print-overwrite"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(buf.getvalue().strip(), "7")
 
 
 if __name__ == "__main__":

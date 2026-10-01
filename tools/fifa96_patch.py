@@ -41,6 +41,7 @@ cave:
         mov  ecx, 12
         cld
         rep  stosd
+        mov  edi, esp               ; ES:EDI -> structure base for INT 31h
         mov  [esp+0x04], esi        ; ESI slot
         mov  [esp+0x08], ebp        ; EBP slot
         mov  [esp+0x10], ebx        ; EBX slot
@@ -251,29 +252,40 @@ def patch_iso(data, target, cave, site_id):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--iso", required=True, help="input ISO (read-only)")
-    ap.add_argument("--out", required=True,
-                    help="patched ISO copy (must differ from --iso)")
+    ap.add_argument("--out", help="patched ISO copy (must differ from --iso)")
     ap.add_argument("--target", required=True, type=lambda s: int(s, 0),
                     help="target entry link address")
-    ap.add_argument("--cave", required=True, type=lambda s: int(s, 0),
+    ap.add_argument("--cave", type=lambda s: int(s, 0),
                     help="cave link address")
-    ap.add_argument("--site-id", required=True, type=lambda s: int(s, 0))
+    ap.add_argument("--site-id", type=lambda s: int(s, 0))
+    ap.add_argument("--print-overwrite", action="store_true",
+                    help="print the decimal overwrite length and exit; "
+                         "writes no file")
     args = ap.parse_args(argv)
 
-    src, dst = Path(args.iso), Path(args.out)
-    if src.resolve() == dst.resolve():
-        print("error: --out must not overwrite --iso", file=sys.stderr)
-        return 1
+    if not args.print_overwrite and (
+            not args.out or args.cave is None or args.site_id is None):
+        ap.error("--out, --cave and --site-id are required unless "
+                 "--print-overwrite is given")
+
+    src = Path(args.iso)
     try:
         data = src.read_bytes()
-        out = patch_iso(data, args.target, args.cave, args.site_id)
         lba, size = find_iso_file(data, "FIFA96.EXE")
         info = le.parse(data[lba * SECTOR:lba * SECTOR + size])
         ow = overwrite_len(info["image"], args.target)
+        if args.print_overwrite:
+            print(ow)
+            return 0
+        out = patch_iso(data, args.target, args.cave, args.site_id)
         cave_len = len(build_cave(args.target, ow, args.site_id, args.cave,
                                   image=info["image"]))
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
+        return 1
+    dst = Path(args.out)
+    if src.resolve() == dst.resolve():
+        print("error: --out must not overwrite --iso", file=sys.stderr)
         return 1
     dst.write_bytes(out)
     print(f"target {args.target:#x} overwrite: {ow} bytes")
