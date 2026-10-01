@@ -26,6 +26,6 @@ FIFACAP.COM
 STUB.COM
 exit
 EOF
-timeout 60 dosbox-x -conf "$WORK/dosbox.conf" -fastlaunch -nopromptfolder -silent >/dev/null 2>&1 || true
+timeout -s TERM -k 5 60 dosbox-x -conf "$WORK/dosbox.conf" -fastlaunch -nopromptfolder -silent >/dev/null 2>&1 || true
 echo "--- frames ---"
 python3 "$DIR/tools/fifa96_probe.py" "$WORK/trace.bin" --expect-site 0xBEEF

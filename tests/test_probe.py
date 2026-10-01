@@ -1,5 +1,8 @@
+import contextlib
+import io
 import struct
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -42,6 +45,19 @@ class TestFrames(unittest.TestCase):
         self.assertEqual(n["delta"], 0x312000)
         self.assertEqual(n["caller_link"], 0x6BE32)
         self.assertEqual(n["target_ret_link"], 0x9E71F)
+
+
+class TestCli(unittest.TestCase):
+    def test_truncated_trace_reports_error_without_traceback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.bin"
+            trace.write_bytes(frame(0x08, b"B" * 16)[:-3])
+            err = io.StringIO()
+            with contextlib.redirect_stderr(err):
+                rc = probe.main([str(trace)])
+        self.assertEqual(rc, 1)
+        self.assertIn("error:", err.getvalue())
+        self.assertNotIn("Traceback", err.getvalue())
 
 
 if __name__ == "__main__":

@@ -59,9 +59,13 @@ def main(argv=None):
     ap.add_argument("--overwrite", type=int, default=None)
     ap.add_argument("--expect-site", type=lambda s: int(s, 0), default=None)
     args = ap.parse_args(argv)
-    with open(args.trace, "rb") as fh:
-        data = fh.read()
-    frames = probe_frames(data)
+    try:
+        with open(args.trace, "rb") as fh:
+            data = fh.read()
+        frames = probe_frames(data)
+    except ValueError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
     for f in frames:
         if args.target_link is not None and args.overwrite is not None:
             n = normalize(f, args.target_link, args.overwrite)

@@ -29,6 +29,11 @@ class TestIso(unittest.TestCase):
         info = le.parse(exe)
         self.assertEqual(info["header_offset"], 0x290A4)
 
+    def test_patch_iso_rejects_nonzero_cave(self):
+        # a cave placed on live code would silently overwrite it
+        with self.assertRaises(ValueError):
+            patch.patch_iso(self.iso, TARGET, TARGET, 1)
+
     def test_patch_changes_only_target_and_cave(self):
         out = patch.patch_iso(self.iso, TARGET, CAVE, 1)
         self.assertEqual(len(out), len(self.iso))
@@ -47,6 +52,17 @@ class TestIso(unittest.TestCase):
                             f"unexpected diff at file offset 0x{rel:x}")
 
 
+class TestMalformedIso(unittest.TestCase):
+    def test_root_extent_past_eof_raises_value_error(self):
+        data = bytearray(17 * 2048)
+        pvd = 16 * 2048
+        data[pvd + 1:pvd + 6] = b"CD001"
+        struct.pack_into("<I", data, pvd + 156 + 2, 0xFFFF)
+        struct.pack_into("<I", data, pvd + 156 + 10, 2048)
+        with self.assertRaises(ValueError):
+            patch.find_iso_file(bytes(data), "FIFA96.EXE")
+
+
 class TestCave(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -59,6 +75,27 @@ class TestCave(unittest.TestCase):
         self.assertEqual(patch.overwrite_len(self.info["image"], 0x9E860), 6)
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xC9D10), 6)
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xCAD30), 6)
+
+    def test_overwrite_len_rejects_loop_opcodes(self):
+        for first in (0xE0, 0xE1, 0xE2, 0xE3):
+            image = bytes([first, 0x00]) + b"\x90" * 30
+            with self.subTest(opcode=f"{first:#04x}"):
+                with self.assertRaises(ValueError):
+                    patch.overwrite_len(image, 0)
+
+    def test_overwrite_len_rejects_ret_opcodes(self):
+        for vector in (b"\xc2\x00\x00", b"\xc3", b"\xca\x00\x00", b"\xcb"):
+            with self.subTest(opcode=f"{vector[0]:#04x}"):
+                with self.assertRaises(ValueError):
+                    patch.overwrite_len(vector + b"\x90" * 31, 0)
+
+    def test_overwrite_len_rejects_far_branch_opcodes(self):
+        far = b"\x00\x00\x00\x00\x00\x00"
+        for first in (0x9A, 0xEA):
+            with self.subTest(opcode=f"{first:#04x}"):
+                with self.assertRaises(ValueError):
+                    patch.overwrite_len(
+                        bytes([first]) + far + b"\x90" * 25, 0)
 
     def test_overwrite_len_counts_wrapped_instruction(self):
         # ndisasm prints the first 8 bytes on the instruction line and wraps

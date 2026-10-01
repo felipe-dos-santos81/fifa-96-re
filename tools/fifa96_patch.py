@@ -81,12 +81,17 @@ def find_iso_file(data, name):
     pvd = 16 * SECTOR
     if data[pvd + 1:pvd + 6] != b"CD001":
         raise ValueError("no ISO9660 PVD at sector 16")
+    if len(data) < pvd + 190:
+        raise ValueError("truncated ISO9660 PVD")
     root = data[pvd + 156:pvd + 156 + 34]
     extent = struct.unpack_from("<I", root, 2)[0]
     size = struct.unpack_from("<I", root, 10)[0]
     query = name.split(";")[0].lower()
     off = extent * SECTOR
     end = off + size
+    if end > len(data):
+        raise ValueError(
+            f"root directory out of range: extent {extent}, size {size}")
     while off < end:
         rec_len = data[off]
         if rec_len == 0:                        # last record of the sector
@@ -178,7 +183,9 @@ def overwrite_len(image, target):
             raise ValueError(f"truncated instruction bytes {opcode!r} in "
                              f"the overwrite prefix at {target:#x}")
         first = int(opcode[:2], 16)
-        if first in (0xE8, 0xE9, 0xEB) or 0x70 <= first <= 0x7F or \
+        if first in (0x9A, 0xC2, 0xC3, 0xCA, 0xCB,
+                     0xE8, 0xE9, 0xEA, 0xEB) or \
+                0x70 <= first <= 0x7F or 0xE0 <= first <= 0xE3 or \
                 (first == 0x0F and len(opcode) >= 4 and
                  0x80 <= int(opcode[2:4], 16) <= 0x8F):
             raise ValueError(
@@ -243,6 +250,9 @@ def patch_iso(data, target, cave, site_id):
     link_to_file_offset(info, target + 4)
     cave_off = link_to_file_offset(info, cave)
     link_to_file_offset(info, cave + len(cave_bytes) - 1)
+    if any(info["image"][cave:cave + len(cave_bytes)]):
+        raise ValueError(f"cave {cave:#x} is not zero-filled; refusing to "
+                         f"overwrite live bytes")
     out = bytearray(data)
     out[base + cave_off:base + cave_off + len(cave_bytes)] = cave_bytes
     out[base + target_off:base + target_off + 5] = \
