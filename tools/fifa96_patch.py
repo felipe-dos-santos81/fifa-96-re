@@ -54,6 +54,7 @@ cave:
         pop  es
         popfd
         popad
+        add  esp, 4                 ; discard the call's return address
 {displaced}
         jmp  {resume:#x}
 """

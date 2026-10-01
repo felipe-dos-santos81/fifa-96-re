@@ -83,6 +83,12 @@ class TestCave(unittest.TestCase):
         cave = patch.build_cave(TARGET, 7, 1, CAVE)
         self.assertIn(b"\xf3\xab\x89\xe7", cave)
 
+    def test_cave_drops_return_address_before_displaced_prologue(self):
+        # the call's return address must not remain on the stack when the
+        # displaced prologue re-runs, or its [esp+...] loads shift by 4
+        cave = patch.build_cave(TARGET, 7, 1, CAVE)
+        self.assertIn(b"\x61\x83\xc4\x04", cave)
+
     def test_cave_contains_displaced_bytes_and_jump(self):
         ow = patch.overwrite_len(self.info["image"], TARGET)
         cave = patch.build_cave(TARGET, ow, 1, CAVE)
