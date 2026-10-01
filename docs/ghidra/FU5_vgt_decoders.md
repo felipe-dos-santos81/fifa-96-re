@@ -1,7 +1,7 @@
 # FU-5: the game's VGT decoder (protected-mode image)
 
 Static analysis of `/fifa96_le.bin` (see `FU4_le_image.md`). All addresses are
-link-time flat addresses; the running game adds the `0x2D1000` relocation
+link-time flat addresses; the running game adds the `0x1FC010` relocation
 delta. Ghidra names set in the saved program:
 
 | address | name |

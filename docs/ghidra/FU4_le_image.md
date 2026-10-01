@@ -38,11 +38,15 @@ better than any other candidate; and the resulting entry at `0x9FD10` is
 
 ## Runtime cross-check
 
-A guest-RAM dump taken while the game runs shows an applied internal fixup:
-the file stores target offset `0x158DA`, memory holds `0x2E68DA`, i.e. the
-loader relocated object 1 from the link base `0x10000` to `0x2E1000`
-(delta `0x2D1000`). The link-time image produced by the tool is therefore
-also the layout the game runs with, modulo that constant delta.
+A guest-RAM dump taken while the game runs contains the loaded image at
+runtime = link + **0x1FC010**: the entry-page banner (`WATCOM C/C++32
+Run-Time system`, link `0x9FD12`) sits at physical `0x29BD22` with the entry
+`EB 76` at `0x29BD20`, and the banner tail bytes match the file exactly.
+Object 1 therefore loads at runtime base `0x20C010`; the delta is only
+paragraph-aligned (the client base is not page-aligned). Object 2/3 pages were
+not resident in that dump (demand paging), so only the entry-page anchor is
+usable there. `tools/fifa96_runtime.py` recovers the delta from a dump and
+prints runtime addresses.
 
 ## Tool
 
@@ -59,8 +63,8 @@ python3 tools/fifa96_le.py --info
 
 Import `fifa96_le.bin` into Ghidra as `x86:LE:32:default` (base 0) and search
 the code object for the format decoders. Absolute data references in the flat
-image carry the runtime delta (`0x2D1000`) pending fixup application; relative
-calls and control flow are already correct.
+image carry link-time addresses (add the dump-derived delta, normally
+`0x1FC010`, for runtime tracing); relative calls and control flow are already correct.
 
 ## Decoder anchors found in the image
 
@@ -87,4 +91,4 @@ self-describing magic check. This supersedes the FU-1 note that the tags are
 paths remain index-typed.
 
 All addresses are link-time flat addresses; the running game adds the
-`0x2D1000` relocation delta (see above).
+`0x1FC010` relocation delta (see above).
