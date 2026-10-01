@@ -186,6 +186,30 @@ static void test_file_name_resolves(void) {
   free(s);
 }
 
+static void test_failed_ops_uncounted(void) {
+  uint8_t buf[256]; size_t n = 0; char *s = 0;
+  uint8_t hdr[6] = {'F','C','A','P',1,5};
+  uint8_t f[64]; uint16_t fl;
+  const uint8_t nm[7] = {'F','W','1','.','Q','F','S'};
+  put(buf,&n,0x01,0,hdr,6);
+  /* success: open binds handle 3 -> name, counted as one open */
+  fl = (uint16_t)mk_file(f,0x3D,0,0,0,0,3,0x02,0,nm,7);
+  put(buf,&n,0x02,0,f,fl);
+  /* failure: open CF=1 (flags=0, AX=0x0002) -> emitted but not counted */
+  fl = (uint16_t)mk_file(f,0x3D,0,0,0,0,2,0,0,0,0);
+  put(buf,&n,0x02,1,f,fl);
+  /* failure: read CF=1 (flags=0, AX=0x0005) -> emitted but not counted */
+  fl = (uint16_t)mk_file(f,0x3F,3,1024,0,0,5,0,0,0,0);
+  put(buf,&n,0x02,2,f,fl);
+  put(buf,&n,0x06,0,0,0);
+  assert(fifa96_trace_format(buf,n,&s) == FIFA96_OK);
+  expect_has(s,"FILE ah=3D h=0x0000 x=0 got=2");
+  expect_has(s,"FILE ah=3F h=0x0003 x=1024 got=5 name=FW1.QFS");
+  expect_has(s,"FW1.QFS opens=1 reads=0 bytes=0");
+  expect_has(s,"SUMMARY opens=1 reads=0");
+  free(s);
+}
+
 int main(void) {
   test_header_and_end();
   test_bad_header();
@@ -198,6 +222,7 @@ int main(void) {
   test_heartbeat();
   test_raw_mode();
   test_file_name_resolves();
+  test_failed_ops_uncounted();
   printf("test_trace OK\n");
   return 0;
 }

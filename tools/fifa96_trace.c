@@ -1,4 +1,5 @@
 // tools/fifa96_trace.c — CLI: parse a capture-rig trace.bin to text.
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -11,8 +12,9 @@ int main(int argc, char **argv) {
   if (argc > 1 && strcmp(argv[1], "--raw") == 0) { raw = 1; argi = 2; }
   if (argi >= argc) { fprintf(stderr, "usage: %s [--raw] FILE\n", argv[0]); return 2; }
   uint8_t *data = 0; size_t len = 0;
-  if (fifa96_file_read(argv[argi], &data, &len) != FIFA96_OK) {
-    fprintf(stderr, "read failed: %s\n", argv[argi]); return 1;
+  fifa96_err_t re = fifa96_file_read(argv[argi], &data, &len);
+  if (re != FIFA96_OK) {
+    fprintf(stderr, "read failed (%d)\n", re); return 1;
   }
   char *text = 0;
   int rc = raw ? fifa96_trace_raw(data, len, &text)

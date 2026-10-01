@@ -271,6 +271,7 @@ copy_input:
         pop  es
         mov  di, rec_buf+18
         mov  cx, [cs:post_dlen]
+        cld
         rep  movsb
         pop  es
         pop  ds
@@ -523,8 +524,10 @@ int21:
         cmp  al, 3Fh
         je   .post_read
         jmp  .post_done
-.post_open:                            ; AH=3Dh — name only
+.post_open:                            ; AH=3Dh — name only on success
         call put_common
+        test byte [cs:g_flags], 1      ; CF=1 -> failed open
+        jnz  .post_open_err
         mov  byte [cs:rec_buf+11], 0x02
         call rec_zero_extra
         mov  al, [cs:pre_name_len]
@@ -545,6 +548,12 @@ int21:
         mov  cl, [cs:pre_name_len]
         xor  ch, ch
         add  cx, 18
+        call emit_file
+        jmp  .post_done
+.post_open_err:                        ; AH=3Dh, CF=1 — no name, no hash
+        mov  byte [cs:rec_buf+11], 0
+        call rec_zero_extra
+        mov  cx, 18
         call emit_file
         jmp  .post_done
 .post_simple:                          ; AH=3Eh / 40h — no data

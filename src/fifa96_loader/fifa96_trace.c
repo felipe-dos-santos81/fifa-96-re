@@ -206,12 +206,12 @@ static void render_file(sbuf *b, walker *w, const uint8_t *p, uint16_t plen) {
     name = w->handle_name[bx & 0xffu];
     have_name = 1;
   }
-  if (ah == 0x3Fu && have_name) {
+  if (ah == 0x3Fu && have_name && (flags & 0x01u)) {
     fby_entry *e = fby_find(w, name);
     if (e) { e->reads++; e->bytes += ax_after; }
   }
-  if (ah == 0x3Du) w->opens++;
-  else if (ah == 0x3Fu) w->reads++;
+  if (ah == 0x3Du && (flags & 0x02u)) w->opens++;
+  else if (ah == 0x3Fu && (flags & 0x01u)) w->reads++;
   else if (ah == 0x40u) w->writes++;
   else w->other++;
   sb_printf(b, "FILE ah=%02X h=0x%04x x=%u got=%u name=%s hash=",
