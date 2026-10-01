@@ -619,9 +619,16 @@ int21:
         call emit_file
         jmp  .post_done
 .post_done:
-        ; forward the handler's result FLAGS to the caller frame's FLAGS slot
-        mov  ax, [cs:g_flags]          ; clobbers live AX; popa restores AX below
-        mov  [bp+24], ax
+        ; Forward only CF from the handler's result flags. Copying the whole
+        ; word breaks the game: DOSBox's callback leaves its own bits in the
+        ; live flags (observed g_flags 0x7046 = NT|IOPL set, IF=0 in
+        ; 1149/1150 calls), and an IRET with NT set faults, hanging the game
+        ; in a poll loop (timer dies, video mode never advances). Preserve
+        ; the caller's IF/DF/NT/IOPL/TF; only CF carries the DOS result.
+        mov  ax, [cs:g_flags]
+        and  ax, 1
+        and  word [bp+24], 0xFFFE
+        or   word [bp+24], ax
         pop  es
         pop  ds
         popa
