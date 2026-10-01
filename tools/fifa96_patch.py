@@ -29,7 +29,8 @@ cave:
         mov  ax, ss
         mov  es, ax
         mov  ebx, [esp+44]          ; caller return address (relocated)
-        mov  ebp, [esp+40]          ; return into target (relocated)
+        mov  ebp, [esp+40]          ; call's return (target+5, relocated)
+        add  ebp, {adjust}          ; resume is target+overwrite
         mov  edx, ebx
         shr  edx, 16
         and  ebx, 0xFFFF
@@ -180,6 +181,7 @@ def build_cave(target, overwrite, site_id, cave_link, image=None):
         f"0x{b:02x}" for b in image[target:target + overwrite])
     source = CAVE_TEMPLATE.format(cave=cave_link, site=site_id,
                                   displaced=displaced,
+                                  adjust=overwrite - 5,
                                   resume=target + overwrite)
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "cave.asm"

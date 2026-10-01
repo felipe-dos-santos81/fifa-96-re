@@ -58,6 +58,17 @@ class TestCave(unittest.TestCase):
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xC9D10), 6)
         self.assertEqual(patch.overwrite_len(self.info["image"], 0xCAD30), 6)
 
+    def test_cave_ebp_reports_resume_address(self):
+        # the patched `call cave` pushes target+5, so the cave must add
+        # overwrite-5 to reach the resume address in the EBP slot
+        for ow in (7, 5):
+            cave = patch.build_cave(TARGET, ow, 1, CAVE)
+            i = cave.find(b"\x83\xc5")          # add ebp, imm8
+            self.assertGreaterEqual(
+                i, 0, f"no `add ebp, imm8` in the overwrite={ow} cave")
+            self.assertEqual(cave[i + 2], ow - 5,
+                             f"EBP adjust wrong for overwrite={ow}")
+
     def test_cave_contains_displaced_bytes_and_jump(self):
         ow = patch.overwrite_len(self.info["image"], TARGET)
         cave = patch.build_cave(TARGET, ow, 1, CAVE)
