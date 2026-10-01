@@ -140,3 +140,285 @@ not reached before the capture was stopped.
 * The call structure's `SS` field sits at offset 0x30, outside the 48-byte
   zeroed frame; DOS/4GW tolerated it (identical behavior with `SS=0` in a
   control run), but zeroing it would be spec hygiene if the cave is reused.
+
+---
+
+## Task 5 batch — decompressor wrapper and loader entries (sites 2–4)
+
+Three further `tools/trace_probe.sh` sessions, run sequentially (one DOSBox-X
+at a time); each runner self-terminated, and no external kill was used. The
+probe reports **return addresses**; the FU-8/FU-9 census integers are
+**call-opcode** addresses, so a frame matches a census site `S` when
+`caller_link == S + 5`. Every census site for these three targets was
+re-verified in the retail image first: each address holds `E8 rel32` whose
+destination is the target (bytes quoted below).
+
+| target | site | session | frames | delta | final trace |
+| --- | --- | --- | --- | --- | --- |
+| `FUN_0009e860` | 2 | `probe-9e860` | 140 | `0x1FC000` | 316997 B |
+| `FUN_000c9d10` | 3 | `probe-c9d10` | 0 in both runs | n/a | 450724 B (re-run) |
+| `FUN_000cad30` | 4 | `probe-cad30` | 0 in both runs | n/a | 450376 B (re-run) |
+
+### Site 2 — `FUN_0009e860` (VGT decompressor, `src, dst`)
+
+**Run:** `sh tools/trace_probe.sh 0x9E860 2 probe-9e860`
+
+Patch summary (verbatim):
+
+```
+target 0x9e860 overwrite: 6 bytes
+cave 0x6728d: 101 bytes
+file-size delta: 0
+```
+
+* **Overwrite length:** 6 bytes (resume link `0x9E866`).
+* **Measured delta:** `0x1FC000`, identical in all 140 frames (same value as
+  the Task 4 site-1 run, i.e. stable placement for this rig).
+* **Frames:** 140 `T_PROBE`. Trace mix: HEADER ×1, POK ×5, FILE ×3714,
+  HB ×3, no `T_END` (guest ran until the capture was stopped).
+
+Decoder stdout (verbatim):
+
+```
+T_PROBE site=2 caller=0x00214ced delta=0x1fc000 caller_link=0x18ced target_link=0x9e866
+T_PROBE site=2 caller=0x00214ced delta=0x1fc000 caller_link=0x18ced target_link=0x9e866
+T_PROBE site=2 caller=0x0024637b delta=0x1fc000 caller_link=0x4a37b target_link=0x9e866
+T_PROBE site=2 caller=0x0024637b delta=0x1fc000 caller_link=0x4a37b target_link=0x9e866
+T_PROBE site=2 caller=0x00214ced delta=0x1fc000 caller_link=0x18ced target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+T_PROBE site=2 caller=0x002aa479 delta=0x1fc000 caller_link=0xae479 target_link=0x9e866
+probe_frames=140
+expect_site=0x2 hit=True
+```
+
+Cross-check against the FU-9 census (site + 5):
+
+| census site | `E8` bytes (retail image) | expected `S+5` | measured `caller_link` | frames | verdict |
+| --- | --- | --- | --- | --- | --- |
+| `0x18CE8` | `e8 73 5b 08 00` | `0x18CED` | **`0x18CED`** | 3 | matched |
+| `0x4A376` | `e8 e5 44 05 00` | `0x4A37B` | **`0x4A37B`** | 2 | matched |
+| *not in census* | `0xAE474`: `e8 e7 03 ff ff` | `0xAE479` | **`0xAE479`** | 135 | **UNMATCHED** |
+
+* **UNMATCHED `0xAE479`** (135/140 frames): its return address minus 5 is
+  `0xAE474`, which in the retail image holds `e8 e7 03 ff ff` (`call
+  0x9E860`). It is therefore a real direct caller that the 12-entry FU-9
+  census omitted, not a runtime-built dispatch. A full-image `E8` scan finds
+  three direct call sites outside the census: `0x78EAB`, `0x78EB7`,
+  `0xAE474`; only `0xAE474` fired in this window.
+* Census sites not exercised (10 of 12): `0x14C65`, `0x14D76`, `0x23C0C`,
+  `0x24DE6`, `0x26E47`, `0x4A32A`, `0x4A42B`, `0x4A5DC`, `0x4B000`,
+  `0x78E5E`.
+
+Provenance: `captures/session-probe-9e860/trace.bin`, **316997 bytes**
+(HEADER ×1 + POK ×5 + FILE ×3714 + HB ×3 + T_PROBE ×140 complete frames).
+Patched copy `build/fifa96-trace-2.iso`; retail ISO untouched.
+
+### Site 3 — `FUN_000c9d10` (resource loader entry, `name, type, flags`) — zero frames
+
+**Run (default window):** `sh tools/trace_probe.sh 0xC9D10 3 probe-c9d10`
+**Re-run (the one permitted retry):**
+`TIMEOUT=180 sh tools/trace_probe.sh 0xC9D10 3 probe-c9d10`
+
+Patch summary (verbatim):
+
+```
+target 0xc9d10 overwrite: 6 bytes
+cave 0x6728d: 101 bytes
+file-size delta: 0
+```
+
+* **Overwrite length:** 6 bytes. **Measured delta:** not measurable — zero
+  probe frames in both runs.
+* **Frames:** 0 in each run. Decoder stdout (verbatim):
+
+```
+probe_frames=0
+expect_site=0x3 hit=False
+```
+
+* Both runs kept a live guest: the re-run trace holds HEADER ×1, POK ×5,
+  FILE ×5286, HB ×5 and no `T_END`.
+* Both census sites are genuine direct calls in the retail image (`0xC571A`:
+  `e8 f1 45 00 00`, `0xC5742`: `e8 c9 45 00 00`, both `call 0xC9D10`), and a
+  full-image `E8` scan finds no other direct caller. The zero-frame result is
+  therefore "loader entry not reached in the headless window", not a
+  patch/probe failure.
+* Census sites not exercised (2 of 2): `0xC571A`, `0xC5742`.
+
+Provenance (final re-run): `captures/session-probe-c9d10/trace.bin`,
+**450724 bytes** (HEADER ×1 + POK ×5 + FILE ×5286 + HB ×5). The first 120 s
+run produced 314231 bytes, also zero probe frames; its trace was deleted by
+the runner's stale-trace cleanup before the re-run.
+
+### Site 4 — `FUN_000cad30` (load + decode worker, `buf, type, flags`) — zero frames
+
+**Run (default window):** `sh tools/trace_probe.sh 0xCAD30 4 probe-cad30`
+**Re-run (the one permitted retry):**
+`TIMEOUT=180 sh tools/trace_probe.sh 0xCAD30 4 probe-cad30`
+
+Patch summary (verbatim):
+
+```
+target 0xcad30 overwrite: 6 bytes
+cave 0x6728d: 101 bytes
+file-size delta: 0
+```
+
+* **Overwrite length:** 6 bytes. **Measured delta:** not measurable — zero
+  probe frames in both runs.
+* **Frames:** 0 in each run. Decoder stdout (verbatim):
+
+```
+probe_frames=0
+expect_site=0x4 hit=False
+```
+
+* The re-run kept a live guest: HEADER ×1, POK ×5, FILE ×5282, HB ×5, no
+  `T_END`.
+* All seven census sites are genuine direct calls in the retail image
+  (`0xC9D75`: `e8 b6 0f 00 00`, `0xC9DC2`: `e8 69 0f 00 00`,
+  `0xCACB4`: `e8 77 00 00 00`, `0xCACD0`: `e8 5b 00 00 00`,
+  `0xCACEF`: `e8 3c 00 00 00`, `0xCAD0C`: `e8 1f 00 00 00`,
+  `0xCAD24`: `e8 07 00 00 00`, all `call 0xCAD30`), and the full-image `E8`
+  scan finds exactly these seven, no others. The zero-frame result is
+  "decode worker not reached in the headless window".
+* Census sites not exercised (7 of 7): `0xC9D75`, `0xC9DC2`, `0xCACB4`,
+  `0xCACD0`, `0xCACEF`, `0xCAD0C`, `0xCAD24`.
+
+Provenance (final re-run): `captures/session-probe-cad30/trace.bin`,
+**450376 bytes** (HEADER ×1 + POK ×5 + FILE ×5282 + HB ×5). The first 120 s
+run produced 314927 bytes, also zero probe frames; its trace was deleted by
+the runner's stale-trace cleanup before the re-run.
