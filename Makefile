@@ -8,7 +8,7 @@ CMAKE = cmake
 CTEST = ctest
 FILE ?= tests/golden/fw1.qfs
 
-.PHONY: help configure build test check run clean rebuild
+.PHONY: help configure build test check run clean rebuild tsr capture trace
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -41,3 +41,19 @@ clean: ## Remove the CMake build tree
 	rm -rf $(BUILD)
 
 rebuild: clean build ## Clean rebuild from scratch
+
+# ── Capture rig ────────────────────────────────────────────────────────────────
+
+TRACE ?= captures/session-latest/trace.bin
+
+tsr: ## Assemble the capture TSR (requires nasm)
+	@command -v nasm >/dev/null || { echo "nasm not installed (apt install nasm)" >&2; exit 1; }
+	nasm -f bin tsr/fifa96_capture.asm -o $(BUILD)/FIFACAP.COM
+	@printf 'FIFACAP.COM: '; wc -c < $(BUILD)/FIFACAP.COM
+	@sha256sum $(BUILD)/FIFACAP.COM
+
+capture: tsr ## Launch the game under the capture rig (needs game/FIFAPCCD96.iso)
+	./run-fifa96-capture.sh
+
+trace: build ## Parse a captured trace (make trace TRACE=captures/…/trace.bin)
+	./$(BUILD)/fifa96_trace $(TRACE)

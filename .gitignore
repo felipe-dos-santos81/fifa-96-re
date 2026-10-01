@@ -6,3 +6,4 @@ game/*.iso
 game/hdd/
 build/
 .superpowers/
+captures/
