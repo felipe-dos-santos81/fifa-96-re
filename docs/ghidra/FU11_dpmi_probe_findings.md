@@ -93,7 +93,7 @@ expect_site=0x1 hit=True
 ```
 
 All 22 frames are byte-identical: one site, one caller, one delta. The trace
-holds 946 complete frames total (HEADER ×1, PATCH_OK ×5, FILE ×918,
+holds 946 complete frames total (HEADER ×1, POK ×5, FILE ×918,
 T_PROBE ×22) and no `T_END`.
 
 ## Measured delta (not assumed)
@@ -145,13 +145,14 @@ not reached before the capture was stopped.
 
 ## Task 5 batch — decompressor wrapper and loader entries (sites 2–4)
 
-Three further `tools/trace_probe.sh` sessions, run sequentially (one DOSBox-X
-at a time); each runner self-terminated, and no external kill was used. The
-probe reports **return addresses**; the FU-8/FU-9 census integers are
+Five further `tools/trace_probe.sh` runner invocations across three sessions
+(sites 2–4; the two zero-frame targets were each re-run once), run sequentially
+(one DOSBox-X at a time); each runner self-terminated, and no external kill was
+used. The probe reports **return addresses**; the FU-8/FU-9 census integers are
 **call-opcode** addresses, so a frame matches a census site `S` when
 `caller_link == S + 5`. Every census site for these three targets was
 re-verified in the retail image first: each address holds `E8 rel32` whose
-destination is the target (bytes quoted below).
+destination is the target (bytes shown only for the exercised rows below).
 
 | target | site | session | frames | delta | final trace |
 | --- | --- | --- | --- | --- | --- |

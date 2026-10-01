@@ -24,6 +24,7 @@ guest, reusing the proven serial capture rig.
    references in the cave must use link + linear delta `0x2D1000` (the value
    verified from the relocated operand at `0x9FD8E`); the dump-space delta
    `0x1FC010` is physical placement only and must not be used here.
+   *Superseded by FU-11: the probe measures the delta per run (measured `0x1FC000` on this rig), so `0x2D1000` is superseded.*
 3. **TSR v2** adds an `INT 60h` handler that writes the passed words plus its
    own CS:IP to COM1 in the existing frame format; the `AH=3D`/`AH=3F`
    capture stays as-is.
