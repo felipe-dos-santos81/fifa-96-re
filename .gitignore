@@ -7,3 +7,5 @@ game/hdd/
 build/
 .superpowers/
 captures/
+
+__pycache__/
