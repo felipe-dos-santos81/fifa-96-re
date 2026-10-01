@@ -31,3 +31,18 @@ tables. The runtime confirms them and supplies the missing entry addresses.
 POG/VIV/QFS containers are parsed after the generic load/decompress; their
 consumers are the functions above (and their callers), reached via runtime
 dispatch rather than static tables.
+
+## Screen/data-layer consumers (second pass)
+
+* `FUN_00018c90` — generic load: `FUN_00068FD0` source, probe, allocate,
+  `FUN_0009e860` decompress, free source; with `param_2 != 0` it copies the
+  decoded buffer and frees the original (compacting).
+* `FUN_00024b00` — screen setup (mode 1/2/3): configures the layout globals
+  (`0x5470`/`0x5474`/`0x5478`/`0x547c`), calls `FUN_000ce70c` with
+  `PTR_DAT_00047C30 + (*(int*)PTR_DAT_00047C30 >> 8) + 0x10` (these entries
+  carry a big-endian length in the top byte), and decodes
+  `PTR_DAT_00047C30 + 0x10` into a surface with `FUN_0009e860`.
+* The same table `PTR_DAT_00047C30` drives `FUN_00023b38`, so it is the
+  **shared screen/frame asset table**: `entry[0]` is a header whose >>8 gives
+  the offset to the first frame, each entry has BE16 dimensions at `+2`/`+4`
+  and the compressed payload at `+0x10`.
