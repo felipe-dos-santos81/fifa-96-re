@@ -778,7 +778,7 @@ machine=svga_s3
 memsize=16
 
 [serial]
-serial1=file file:$CAP_FILE
+serial1=file file:$CAP_FILE multiplier:100
 
 [sdl]
 fullscreen=false

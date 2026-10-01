@@ -109,12 +109,19 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
 ### Host
 
 - `run-fifa96-capture.sh`: copy of `run-fifa96.sh` + `serial1=file
-  file:$CAP_FILE` (default `captures/session-<UTC>/trace.bin`,
+  file:$CAP_FILE multiplier:100` (default `captures/session-<UTC>/trace.bin`,
   `mkdir -p`), autoexec: mount C, imgmount D, `C:\FIFACAP.COM` (copied into
   `game/hdd/`), then `FIFA96.EXE`. Exit of DOSBox finalizes the file.
   Note: the serial file sink form is `serial1=file file:<path>` (verified
   against `dosbox-x.reference.conf`); no `mode:file`/`filename=` and no
   `timeout:` — DOSBox-X closes/flushes the file on exit, which the rig relies on.
+  Throughput: the emulated UART idles at 9600 baud, so without intervention
+  trace emission throttles the whole game to ~960 B/s and the intro appears
+  hung. `multiplier:` alone does not fix it: `CSerial::Init_Registers` computes
+  `bytetime` before `CSerialPORTS` assigns `baud_multiplier`, and
+  `changeLineProperties` (which applies it) only runs on a guest UART
+  reconfiguration — so the TSR programs COM1 LCR/DLL/DLM to divisor 1
+  (115200 raw) at install, before emitting anything.
 - `tools/fifa96_trace.c`: parser — CLI `fifa96_trace [--raw] FILE`: validates
   header, walks frames, resyncs with flagged `LOST-SYNC`/`SEQ-GAP` lines,
   prints one text line per record (`FILE ah=3F h=0x03 x=1024 got=1024

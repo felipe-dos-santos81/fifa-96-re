@@ -8,8 +8,9 @@
         org 0x100
         bits 16
 
-COM1_TX   equ 0x3F8
-COM1_LSR  equ 0x3FD
+COM1_TX    equ 0x3F8
+COM1_LCR   equ 0x3FB
+COM1_LSR   equ 0x3FD
 
 T_HEADER  equ 0x01
 T_FILE    equ 0x02
@@ -822,6 +823,25 @@ install:
         int  0x21
 
 .serial_ok:
+        ; Program COM1 to the fastest divisor (1 = 115200 raw). Required even
+        ; with DOSBox-X's serial1 `multiplier:` option: CSerial::Init_Registers
+        ; computes bytetime at 9600 baud before CSerialPORTS assigns
+        ; baud_multiplier, and changeLineProperties (which applies it) only
+        ; runs when the guest reconfigures the UART. Without this the trace
+        ; emission throttles the whole game to ~960 B/s and it looks hung.
+        mov  dx, COM1_LCR              ; LCR (0x3FB)
+        mov  al, 0x83                  ; DLAB=1, 8N1
+        out  dx, al
+        mov  dx, COM1_TX               ; DLL (0x3F8)
+        mov  al, 1
+        out  dx, al
+        mov  dx, COM1_TX+1             ; DLM (0x3F9)
+        xor  al, al
+        out  dx, al
+        mov  dx, COM1_LCR
+        mov  al, 0x03                  ; DLAB=0, 8N1
+        out  dx, al
+
         ; save original vectors
         mov  ax, 0x3521
         int  0x21
