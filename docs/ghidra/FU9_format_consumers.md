@@ -46,3 +46,20 @@ dispatch rather than static tables.
   **shared screen/frame asset table**: `entry[0]` is a header whose >>8 gives
   the offset to the first frame, each entry has BE16 dimensions at `+2`/`+4`
   and the compressed payload at `+0x10`.
+
+## Extension probing (FUN_000cab30)
+
+`FUN_000cab30(name, out, list)` copies a 16-bit string two bytes at a time,
+locates the last `.` and `\`, then walks a caller-supplied list in 4-byte
+strides: it copies each candidate (`FUN_000a1764`) after the dot and accepts
+the first that exists (`FUN_000aea90`). It is an **extension prober**, used by
+`FUN_000c9d10` before the loader runs.
+
+The list pointer passed there (`0x4CB8`) is zero in the file and has no true
+static references — the apparent `mov reg,0x4CB8` hits are `mov eax,0x4C`
+false positives. Like the dispatch tables, the extension list is populated at
+runtime, so name→type mapping is not statically enumerable from the image.
+
+This closes the static path for the data layer: loader (FU-8), decompressor
+(FU-5), consumers (FU-9) and the screen table are all mapped; the remaining
+runtime tables (dispatch and extensions) are built during startup.
