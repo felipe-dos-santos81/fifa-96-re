@@ -373,12 +373,12 @@ do_patch_pass:
         mov  edx, eax
         and  edx, 0x0F
         mov  bx, dx                    ; BX = target & 0xF
+        cmp  word [bx], 0x60CD         ; already patched? (checked before sig,
+        je   .skip_dup                 ; so re-runs report reason 1, not 0)
         mov  ecx, [bx]                 ; 4 live bytes at target
         mov  edx, [cs:si+5]            ; sig[4]
         cmp  ecx, edx
         jne  .skip_sig
-        cmp  cx, 0x60CD                ; already patched?
-        je   .skip_dup
 
         ; --- signature matched: patch ---
         mov  [cs:save0+di], cl
