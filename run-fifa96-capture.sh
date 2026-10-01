@@ -45,7 +45,7 @@ else
   EXTRA=""
 fi
 if [ "$TIMEOUT" -gt 0 ]; then
-  timeout -s TERM "$TIMEOUT" dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder $EXTRA || true
+  timeout -s TERM -k 5 "$TIMEOUT" dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder $EXTRA || true
 else
   dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder $EXTRA
 fi

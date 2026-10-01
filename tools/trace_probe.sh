@@ -12,7 +12,8 @@ OW=$(python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/game/FIFAPCCD96.iso" \
     --target "$TARGET" --print-overwrite)
 python3 "$DIR/tools/fifa96_patch.py" --iso "$DIR/game/FIFAPCCD96.iso" \
     --out "$ISO" --target "$TARGET" --cave 0x6728D --site-id "$SITE"
-ISO="$ISO" SESSION="$SESSION" HEADLESS=1 TIMEOUT=120 \
+rm -f "$DIR/captures/session-$SESSION/trace.bin"
+ISO="$ISO" SESSION="$SESSION" HEADLESS=1 TIMEOUT="${TIMEOUT:-120}" \
     "$DIR/run-fifa96-capture.sh"
 python3 "$DIR/tools/fifa96_probe.py" \
     "$DIR/captures/session-$SESSION/trace.bin" \

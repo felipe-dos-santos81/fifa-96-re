@@ -45,6 +45,12 @@ call FUN_0009e718  ---->  pushad/pushfd/push es
   by a per-run delta measured from the frame itself:
   `delta = target_ret - (target_link + overwrite)`,
   `caller_link = caller_ret - delta`.
+* **Capture termination**: `run-fifa96-capture.sh` runs DOSBox-X under
+  `timeout -s TERM -k 5 "$TIMEOUT" ...` — SIGTERM first, then SIGKILL after a
+  5 s grace period — so a live-guest capture always terminates (DOSBox-X
+  ignores SIGTERM on this host) and the decoder always sees a closed trace.
+  `tools/trace_probe.sh` passes `TIMEOUT` through (`${TIMEOUT:-120}`) and
+  deletes any stale `captures/session-$SESSION/trace.bin` before capturing.
 
 ## The run
 
