@@ -57,3 +57,8 @@ add_test(NAME test_trace COMMAND test_trace WORKING_DIRECTORY ${CMAKE_SOURCE_DIR
 add_executable(fifa96_trace_cli tools/fifa96_trace.c)
 set_target_properties(fifa96_trace_cli PROPERTIES OUTPUT_NAME fifa96_trace)
 target_link_libraries(fifa96_trace_cli PRIVATE fifa96_trace fifa96_file)
+
+find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND)
+  add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)
+endif()
