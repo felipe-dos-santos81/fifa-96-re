@@ -45,36 +45,40 @@ post_dlen  dw 0                    ; AH=3Fh: min(post_n,64) bytes dumped
 g_flags    dw 0                    ; handler result flags, captured at .after
 
 ; ── Task 4a: deferred patch table + per-pass state ──
-; Each site record is exactly 12 bytes:
-;   dd img_off (4) | db orig_len (1) | db sig[4] (4) | dw dump_disp (2) | db dump_len (1)
-; sig[4] is the first 4 live bytes at the site (for 3-byte near CALLs the 4th
-; byte is the next instruction opcode; site 2 stops at 4 to exclude the
-; relocated segment high byte).
+; Each site record is exactly 13 bytes:
+;   dd img_off (4) | db orig_len (1) | db siglen (1) | db sig[4] (4) |
+;   dw dump_disp (2) | db dump_len (1)
+; sig[0..siglen-1] is the relocation-independent prefix of the live bytes.
+; Near-CALL sites use siglen 4 (their 4th byte is the next instruction
+; opcode). Site 2 is a far CALL whose operand segment word is relocated by
+; the DOS loader at load time (Ghidra image: 9a 12 0b 00 10 = CALLF
+; 1000:0b12; live byte 3 differs from 0x00), so only its first 3 bytes are
+; compared.
 NSITES     equ 5
 site_tab:
         dd 0x00007671
-        db 5, 0x83,0xbe,0xf6,0xfe
+        db 5, 4, 0x83,0xbe,0xf6,0xfe
         dw 0xfef6
         db 2
         dd 0x00007678
-        db 3, 0xe8,0x27,0x03,0xeb
+        db 3, 4, 0xe8,0x27,0x03,0xeb
         dw 0xfef6
         db 2
         dd 0x00007b3e
-        db 5, 0x9a,0x12,0x0b,0x00
+        db 5, 3, 0x9a,0x12,0x0b,0x00
         dw 0xffe6
         db 2
         dd 0x00007b59
-        db 3, 0xe8,0x76,0x01,0x83
+        db 3, 4, 0xe8,0x76,0x01,0x83
         dw 0xfff8
         db 8
         dd 0x00007b1b
-        db 3, 0xe8,0xb9,0x09,0x83
+        db 3, 4, 0xe8,0xb9,0x09,0x83
         dw 0xfffe
         db 2
 site_tab_end:
-%if (site_tab_end - site_tab) != NSITES*12
-%error "site_tab record stride must be 12 bytes"
+%if (site_tab_end - site_tab) != NSITES*13
+%error "site_tab record stride must be 13 bytes"
 %endif
 tgt_lin    times NSITES dd 0        ; linear target of each patched site
 save0      times NSITES db 0        ; saved live byte 0 of each patched site
@@ -355,7 +359,7 @@ do_patch_pass:
         ; --- walk the site table ---
         xor  di, di
 .sitel:
-        imul si, di, 12
+        imul si, di, 13
         add  si, site_tab
         cmp  byte [cs:patched+di], 0
         jne  .next
@@ -376,11 +380,28 @@ do_patch_pass:
         mov  bx, dx                    ; BX = target & 0xF
         cmp  word [bx], 0x60CD         ; already patched? (checked before sig,
         je   .skip_dup                 ; so re-runs report reason 1, not 0)
-        mov  ecx, [bx]                 ; 4 live bytes at target
-        mov  edx, [cs:si+5]            ; sig[4]
-        cmp  ecx, edx
+        mov  ecx, [bx]                 ; live bytes; CL/CH = bytes 0/1
+        mov  dl, [cs:si+5]             ; siglen (1..4)
+        mov  dh, [cs:si+6]             ; sig[0]
+        cmp  cl, dh
+        jne  .skip_sig
+        cmp  dl, 1
+        je   .sig_ok
+        mov  dh, [cs:si+7]             ; sig[1]
+        cmp  ch, dh
+        jne  .skip_sig
+        cmp  dl, 2
+        je   .sig_ok
+        mov  dh, [cs:si+8]             ; sig[2]
+        cmp  byte [bx+2], dh
+        jne  .skip_sig
+        cmp  dl, 3
+        je   .sig_ok
+        mov  dh, [cs:si+9]             ; sig[3]
+        cmp  byte [bx+3], dh
         jne  .skip_sig
 
+.sig_ok:
         ; --- signature matched: patch ---
         mov  [cs:save0+di], cl
         mov  [cs:save1+di], ch
@@ -390,7 +411,7 @@ do_patch_pass:
         mov  [cs:tgt_lin+bx], eax
         mov  [cs:rec_buf], di
         mov  [cs:rec_buf+1], eax
-        mov  byte [cs:rec_buf+5], 4
+        mov  [cs:rec_buf+5], dl        ; siglen actually matched
         push cs
         pop  ds
         mov  al, T_POK
@@ -679,13 +700,13 @@ int60:
         mov  ax, [bp+6]
         mov  [cs:rec_buf+27], ax       ; flags_site
         ; ---- per-site dump: SS:[BP+disp], dlen from the table (BP/SS caller's)
-        imul si, di, 12
+        imul si, di, 13
         add  si, site_tab
-        mov  bx, [cs:si+9]             ; dump_disp
+        mov  bx, [cs:si+10]            ; dump_disp
         mov  ax, [bp]                  ; caller BP
         add  ax, bx
         mov  [cs:rec_buf+35], ax       ; doff = BP + disp
-        mov  cl, [cs:si+11]            ; dump_len
+        mov  cl, [cs:si+12]            ; dump_len
         xor  ch, ch
         mov  [cs:rec_buf+37], cx       ; dlen
         mov  ax, ss
@@ -838,10 +859,15 @@ install:
         mov  cx, 6
         call send_frame
 
-        ; stay resident: DX = paragraphs from PSP through tsr_end
-        xor  ax, ax
+        ; stay resident: DX = paragraphs from PSP through tsr_end.
+        ; AH=31h, not INT 27h: DOSBox-X's DOS_27Handler computes its
+        ; paragraph count as reg_dx/16 (it treats DX as bytes), so an INT 27h
+        ; TSR keeps 1/16 of the memory it asked for and the next program's PSP
+        ; overwrites the resident data (observed: saved old_int21 clobbered,
+        ; first chained INT-21 call hangs). AH=31h resizes by DX paragraphs.
+        mov  ax, 0x3100
         mov  dx, (tsr_end - start + 0x100 + 15) >> 4
-        int  0x27
+        int  0x21
 
 ; print — DX = '$'-terminated string via INT 21h AH=09h. Preserves AX.
 print:
