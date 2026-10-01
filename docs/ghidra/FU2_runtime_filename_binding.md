@@ -101,10 +101,10 @@ above; the session's FILE lines are reproducible from the trace.
 - The in-repo golden `FW1.QFS` fixture corresponds to `/ART/FW1.QFS`; that file
   was not read in this session.
 
-## FU-3 status (preliminary)
+## FU-3 status (resolved: runtime-unexercised)
 
 No captured session emits a CODEC record — boot, menu, and full-match sessions
-all show `patch: ok=5` and zero CODEC lines. The five cited instructions never
+all show `patch: ok=5` and zero CODEC lines; the five cited instructions never
 executed. A probe build (release TSR plus two extra trap records at the
 function entries) produced:
 
@@ -114,12 +114,30 @@ PATCH_OK site=?0x06 target=0x000108b2 siglen=4    (load_mf_object 11bd:5dd2)
 CODEC site=?0x05 ... ip=5992 cs=0aae ...
 ```
 
-`dispatch_object_load` is entered once during boot and returns early through its
-`[0xf21] > 0` / `[0xcee] < 3` guards before the cited CMP; `load_mf_object` is
-never entered. FU-3 (codec binding via trace) cannot be produced from the
-current trap set. The next FU-3 slice must either retarget traps to the driver
-calls (`11bd:2e80` / `11bd:2e98`, per the FU-3 refined-targets table) or close
-the funnel as runtime-unexercised.
+Static context (Ghidra, `/fifa96.exe`; separate evidence class from the
+runtime lines above):
+
+- Sole caller chain: `entry` (`11bd:2382`, the MZ `e_cs:e_ip`) →
+  `FUN_11bd_2d9c` (`11bd:2d9c`, startup argv/path setup) →
+  `dispatch_object_load`, called unconditionally once at `11bd:2e80` and
+  conditionally once at `11bd:2e98` (string compare). `load_mf_object`'s sole
+  caller is `dispatch_object_load`. No main-loop caller exists.
+- Guards in `dispatch_object_load`: `CMP byte ptr [0xf21],0x0` at `11bd:59a0`
+  returns when set; `CMP byte ptr [0xcee],0x3` at `11bd:59a7` returns when
+  below 3. `[0xcee]` is the DOS major version (`INT 21h/AH=30h` result stored
+  at `11bd:23cc`, re-read at `11bd:2468`), so that guard passes under
+  DOSBox-X. `[0xf21]` is a one-shot latch set at `11bd:5abc`, only at the end
+  of a successful dispatch.
+- The CMP at `11bd:5aa1` is gated by `if (-1 < [0xe70])` (the file handle
+  cell): a start-up invocation that ends with no valid handle never reaches
+  it, and the latch is never set. That is what the probe shows for the one
+  start-up call.
+
+Conclusion: the five sites are start-up loader internals, not a gameplay codec
+funnel. FU-3 (codec binding via trace) cannot be produced from this trap set;
+retargeting to the driver calls (`11bd:2e80`/`11bd:2e98`) would still only see
+the start-up invocation. Locating the real asset decoders remains open — FU-1
+already reported the format tags absent from the analyzed scope.
 
 ## Reproduce
 
