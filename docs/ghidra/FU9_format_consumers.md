@@ -63,3 +63,23 @@ runtime, so name→type mapping is not statically enumerable from the image.
 This closes the static path for the data layer: loader (FU-8), decompressor
 (FU-5), consumers (FU-9) and the screen table are all mapped; the remaining
 runtime tables (dispatch and extensions) are built during startup.
+
+## The extension list is empty (dormant prober)
+
+`push 0x4CB8` occurs exactly once in the image (`0xC9D1E`, inside
+`FUN_000c9d10`); no instruction anywhere writes the table (`C7 05`/`A3`/`89`/`lea`
+searches all negative). At runtime the list is a single empty string, so
+`FUN_000cab30`'s probe loop never iterates: it reduces to a 16-bit string copy
+plus null terminator. The game therefore keys resources by explicit filenames
+that already carry their extensions, and the raw-vs-compressed decision is made
+by content (`FUN_0009e890`), not by name. Extension-based name resolution is
+present in the code but unused by the shipped game build.
+
+## obj2 / obj3 identity
+
+* obj2 (`0xE0000`, 0x34 bytes, readable+executable) is an interrupt stub:
+  `mov al,0x20; out 0x20,al; mov dx,0x22E; in al,dx; iret` (PIC EOI + ack read),
+  duplicated four times.
+* obj3 (`0xF0000`, 0x18 bytes, data) holds small translation tables
+  (`87 83 81 82`, repeated `0A`/`0B`/`0C` groups, then `00 02 04 06` /
+  `01 03 05 07` interleaved) — input/keyboard scan-code maps.
