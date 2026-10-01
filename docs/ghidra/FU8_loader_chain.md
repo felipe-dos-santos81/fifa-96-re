@@ -57,3 +57,21 @@ headless come from a path not covered (extender page-ins), and the asset reads
 of a match need interactive input the headless run cannot provide. The
 trampoline must not be placed past an object's virtual size (execution there
 faults); the only in-range zero cave in object 1 is at link `0x6728D`.
+
+## Recorder follow-up (headless asset reads)
+
+A headless session capture (`captures/session-patchtest`, TSR rig) shows real
+asset reads in 8 KiB/16 KiB chunks: `FEDATA/PCCD.POG`, `FEGFX/LEGAL.POG`,
+`SOUND/CRD_CRD0.CRD`, `SOUND/PHR_FULL.VIV`, `SOUND/SFX_GAME.BNK`,
+`VIDEO/VID_INTR.TGV`, plus `FIFA96.EXE` header seeks. The 16 KiB granularity
+matches the 0x4000 loop in `FUN_000cd6f0`, yet entry trampolines placed on all
+three client `INT 21h AH=3F` functions (`FUN_000bafb1`, `FUN_000cd5d6`,
+`FUN_000cd6f0`) never executed in the patched runs — the reads are serviced
+below the client's C-library entry points (the extender path). Capturing the
+client-side caller chain therefore needs a hook at the extender's DOS API, not
+at the client read functions.
+
+Trampoline constraints learned: the drive is patched in place (sha256 restored
+afterwards); trampolines must live inside object virtual size (a cave past
+`obj1`'s vsize faults); the only in-range zero cave in object 1 is link
+`0x6728D`.
