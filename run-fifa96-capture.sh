@@ -1,7 +1,9 @@
 #!/bin/sh
 set -eu
 DIR=$(cd "$(dirname "$0")" && pwd)
-ISO="$DIR/game/FIFAPCCD96.iso"
+ISO=${ISO:-"$DIR/game/FIFAPCCD96.iso"}
+HEADLESS=${HEADLESS:-0}
+TIMEOUT=${TIMEOUT:-0}
 HDD="$DIR/game/hdd"
 COM="$DIR/build/FIFACAP.COM"
 SESSION=${SESSION:-$(date -u +%Y%m%dT%H%M%SZ)}
@@ -37,5 +39,14 @@ D:
 FIFA96.EXE
 EOF
 
-dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder
+if [ "$HEADLESS" = "1" ]; then
+  EXTRA="-silent"
+else
+  EXTRA=""
+fi
+if [ "$TIMEOUT" -gt 0 ]; then
+  timeout -s TERM "$TIMEOUT" dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder $EXTRA || true
+else
+  dosbox-x -conf "$CONF" -fastlaunch -nopromptfolder $EXTRA
+fi
 printf 'capture: %s\n' "$CAP_FILE"
