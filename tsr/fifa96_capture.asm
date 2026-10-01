@@ -44,6 +44,44 @@ post_n     dw 0                    ; AH=3Fh: min(pre_cx,ax_after) valid bytes
 post_dlen  dw 0                    ; AH=3Fh: min(post_n,64) bytes dumped
 g_flags    dw 0                    ; handler result flags, captured at .after
 
+; ── Task 4a: deferred patch table + per-pass state ──
+; Each site record is exactly 12 bytes:
+;   dd img_off (4) | db orig_len (1) | db sig[4] (4) | dw dump_disp (2) | db dump_len (1)
+; sig[4] is the first 4 live bytes at the site (for 3-byte near CALLs the 4th
+; byte is the next instruction opcode; site 2 stops at 4 to exclude the
+; relocated segment high byte).
+NSITES     equ 5
+site_tab:
+        dd 0x00007671
+        db 5, 0x83,0xbe,0xf6,0xfe
+        dw 0xfef6
+        db 2
+        dd 0x00007678
+        db 3, 0xe8,0x27,0x03,0xeb
+        dw 0xfef6
+        db 2
+        dd 0x00007b3e
+        db 5, 0x9a,0x12,0x0b,0x00
+        dw 0xffe6
+        db 2
+        dd 0x00007b59
+        db 3, 0xe8,0x76,0x01,0x83
+        dw 0xfff8
+        db 8
+        dd 0x00007b1b
+        db 3, 0xe8,0xb9,0x09,0x83
+        dw 0xfffe
+        db 2
+site_tab_end:
+%if (site_tab_end - site_tab) != NSITES*12
+%error "site_tab record stride must be 12 bytes"
+%endif
+tgt_lin    times NSITES dd 0        ; linear target of each patched site
+save0      times NSITES db 0        ; saved live byte 0 of each patched site
+save1      times NSITES db 0        ; saved live byte 1 of each patched site
+patched    times NSITES db 0        ; processed-this-pass guard
+patch_base dd 0                    ; child load base, (PSP+16)<<4
+
 ; ───────────────────────────── resident code ─────────────────────────────
 ; putc — transmit AL to COM1 (0x3F8) after a bounded THRE spin on LSR bit5.
 ; Drops the byte silently on timeout (surfaces downstream as a seq gap).
@@ -265,6 +303,121 @@ emit_file:
         pop  ax
         ret
 
+; ───────────────────── deferred patch pass (Task 4a) ─────────────────────
+; do_patch_pass — invoked once on the first INT-21 entry after an AH=4Bh
+; launch (guarded by patchpend). Obtains the current (child) PSP from the
+; ORIGINAL vector via AH=51h (no IVT recursion), computes the load base
+; (PSP+16)<<4, then for each site: range-check target+4 <= 0x100000,
+; 4-byte signature match, already-CD60 check; on match saves the 2 live
+; bytes, records the linear target, writes CD 60, emits PATCH_OK(0x07);
+; every other outcome emits PATCH_SKIP(0x05) with a reason. The only
+; writes to game memory are word [target]=CD60 for a signature-matched
+; site. Preserves all registers, DS and ES; no INT-21 recursion.
+do_patch_pass:
+        pushad
+        push ds
+        push es
+
+        ; --- current PSP via the original vector: AH=51h ---
+        pushf
+        push cs
+        push word .psp_ret
+        mov  ah, 0x51
+        jmp  far [cs:old_int21]
+.psp_ret:
+        mov  ax, bx                    ; AX = PSP paragraph
+        add  ax, 16
+        movzx eax, ax
+        shl  eax, 4                    ; EAX = (PSP+16)<<4
+        mov  [cs:patch_base], eax
+
+        ; --- clear per-site pass state ---
+        xor  di, di
+        mov  cx, NSITES
+.clr:
+        mov  byte [cs:save0+di], 0
+        mov  byte [cs:save1+di], 0
+        mov  byte [cs:patched+di], 0
+        mov  bx, di
+        shl  bx, 2
+        mov  dword [cs:tgt_lin+bx], 0
+        inc  di
+        loop .clr
+
+        ; --- walk the site table ---
+        xor  di, di
+.sitel:
+        imul si, di, 12
+        add  si, site_tab
+        cmp  byte [cs:patched+di], 0
+        jne  .next
+        mov  byte [cs:patched+di], 1
+
+        mov  eax, [cs:patch_base]
+        add  eax, [cs:si]              ; EAX = target linear
+        mov  ebx, eax
+        add  ebx, 4
+        cmp  ebx, 0x100000
+        ja   .skip_range
+
+        mov  ebx, eax
+        shr  ebx, 4
+        mov  ds, bx                    ; DS = target >> 4
+        mov  edx, eax
+        and  edx, 0x0F
+        mov  bx, dx                    ; BX = target & 0xF
+        mov  ecx, [bx]                 ; 4 live bytes at target
+        mov  edx, [cs:si+5]            ; sig[4]
+        cmp  ecx, edx
+        jne  .skip_sig
+        cmp  cx, 0x60CD                ; already patched?
+        je   .skip_dup
+
+        ; --- signature matched: patch ---
+        mov  [cs:save0+di], cl
+        mov  [cs:save1+di], ch
+        mov  word [bx], 0x60CD         ; the one write to game memory
+        mov  bx, di
+        shl  bx, 2
+        mov  [cs:tgt_lin+bx], eax
+        mov  [cs:rec_buf], di
+        mov  [cs:rec_buf+1], eax
+        mov  byte [cs:rec_buf+5], 4
+        push cs
+        pop  ds
+        mov  al, T_POK
+        mov  si, rec_buf
+        mov  cx, 6
+        call send_frame
+        jmp  .next
+
+.skip_range:
+        mov  al, 2
+        jmp  .emit_skip
+.skip_sig:
+        mov  al, 0
+        jmp  .emit_skip
+.skip_dup:
+        mov  al, 1
+.emit_skip:
+        mov  [cs:rec_buf], di
+        mov  [cs:rec_buf+1], al
+        push cs
+        pop  ds
+        mov  al, T_SKIP
+        mov  si, rec_buf
+        mov  cx, 2
+        call send_frame
+.next:
+        inc  di
+        cmp  di, NSITES
+        jb   .sitel
+
+        pop  es
+        pop  ds
+        popad
+        ret
+
 ; ─────────────────────────── INT-21 hook ───────────────────────────
 ; Pre/post chaining with a synthesized return frame. The original handler
 ; ends in IRET, so we hand it a frame (FLAGS, our CS, .after) to return
@@ -280,6 +433,12 @@ int21:
         mov  [cs:pre_cx], cx
         mov  [cs:pre_ds], ds
         mov  [cs:pre_dx], dx
+        ; deferred patch pass: first INT-21 entry after an AH=4Bh launch
+        cmp  byte [cs:patchpend], 1
+        jne  .no_patch
+        call do_patch_pass
+        mov  byte [cs:patchpend], 0
+.no_patch:
         cmp  ah, 3Dh
         je   .fname
         cmp  ah, 3Eh
@@ -290,6 +449,11 @@ int21:
         je   .chain
         cmp  ah, 4Ch
         je   .quit
+        cmp  ah, 4Bh
+        je   .patchset
+        jmp  .chain
+.patchset:                             ; AH=4Bh — arm the deferred patch pass
+        mov  byte [cs:patchpend], 1
         jmp  .chain
 .fname:                               ; AH=3Dh — copy <=13 B from DS:DX
         mov  si, dx
