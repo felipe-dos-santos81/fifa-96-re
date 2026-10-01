@@ -19,6 +19,7 @@ T_HB      equ 0x04
 T_SKIP    equ 0x05
 T_END     equ 0x06
 T_POK     equ 0x07
+T_PROBE   equ 0x08
 
 start:  jmp install
 
@@ -26,6 +27,8 @@ start:  jmp install
 old_int21  dd 0
 old_int60  dd 0
 old_int1   dd 0
+old_int61  dd 0
+probe_buf  times 16 db 0           ; ESI,EBX,EDX,EBP dwords from DPMI
 patchpend  db 0
 pending    db 0FFh
 filecount  dd 0
@@ -809,6 +812,35 @@ int1:
         and  word [bp+6], 0xFEFF       ; clear TF in the INT-1 frame
         pop  bp
         iret
+
+; ─────────── INT-61 DPMI probe dump (T_PROBE) ───────────
+; Entered via DPMI INT 31h AX=0300h (simulated real-mode interrupt) from the
+; PM cave. The DPMI host loads ESI/EBX/EDX/EBP from the caller's register
+; structure, so the 16-bit handler reads the full 32-bit values with 32-bit
+; operand sizes (values are constructed 16-bit-safe: site <= 0xFFFF, the
+; caller address is split lo/hi, and target_ret fits under 0x100000000).
+; INT 61h is dedicated to this probe; the saved vector is not chained.
+int61:
+        pushad
+        mov  bp, sp
+        push ds
+        push cs
+        pop  ds
+        mov  eax, [bp+4]                ; ESI = site id
+        mov  [probe_buf], eax
+        mov  eax, [bp+16]               ; EBX = caller return address, low 16
+        mov  [probe_buf+4], eax
+        mov  eax, [bp+20]               ; EDX = caller return address, high 16
+        mov  [probe_buf+8], eax
+        mov  eax, [bp+8]                ; EBP = target+overwrite (runtime)
+        mov  [probe_buf+12], eax
+        mov  al, T_PROBE
+        mov  si, probe_buf
+        mov  cx, 16
+        call send_frame
+        pop  ds
+        popad
+        iret
 tsr_end:
 
 ; ─────────────────────────── transient install ───────────────────────────
@@ -865,6 +897,11 @@ install:
         mov  [cs:old_int1], bx
         mov  [cs:old_int1+2], es
 
+        mov  ax, 0x3561
+        int  0x21
+        mov  [cs:old_int61], bx
+        mov  [cs:old_int61+2], es
+
         ; install our vectors
         mov  ax, 0x2521
         mov  dx, int21
@@ -876,6 +913,10 @@ install:
 
         mov  ax, 0x2501
         mov  dx, int1
+        int  0x21
+
+        mov  ax, 0x2561
+        mov  dx, int61
         int  0x21
 
         ; HEADER frame
