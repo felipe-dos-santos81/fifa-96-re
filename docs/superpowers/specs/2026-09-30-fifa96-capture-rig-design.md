@@ -108,10 +108,13 @@ time, `make tsr` fails with a clear message; no hand-emitted blob fallback.
 
 ### Host
 
-- `run-fifa96-capture.sh`: copy of `run-fifa96.sh` + `serial1=mode:file,
-  filename=$CAP_FILE` (default `captures/session-<UTC>/trace.bin`,
+- `run-fifa96-capture.sh`: copy of `run-fifa96.sh` + `serial1=file
+  file:$CAP_FILE` (default `captures/session-<UTC>/trace.bin`,
   `mkdir -p`), autoexec: mount C, imgmount D, `C:\FIFACAP.COM` (copied into
   `game/hdd/`), then `FIFA96.EXE`. Exit of DOSBox finalizes the file.
+  Note: the serial file sink form is `serial1=file file:<path>` (verified
+  against `dosbox-x.reference.conf`); no `mode:file`/`filename=` and no
+  `timeout:` — DOSBox-X closes/flushes the file on exit, which the rig relies on.
 - `tools/fifa96_trace.c`: parser — CLI `fifa96_trace [--raw] FILE`: validates
   header, walks frames, resyncs with flagged `LOST-SYNC`/`SEQ-GAP` lines,
   prints one text line per record (`FILE ah=3F h=0x03 x=1024 got=1024

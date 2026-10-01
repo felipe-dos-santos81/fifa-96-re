@@ -23,7 +23,7 @@ machine=svga_s3
 memsize=16
 
 [serial]
-serial1=mode:file, filename=$CAP_FILE
+serial1=file file:$CAP_FILE
 
 [sdl]
 fullscreen=false
