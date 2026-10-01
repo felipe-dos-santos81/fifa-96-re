@@ -57,3 +57,19 @@ Environment notes from this host:
 * A suspended debugger leaves guest RAM intact, so the host-side dump
   (`process_vm_readv`, as in the FU-4 cross-check) is an alternative to
   `MEMDUMPBIN` when the in-debugger command syntax is inconvenient.
+
+## Automation attempt and blocker (recorded)
+
+Synthetic key injection into the DOSBox-X window was tried from this host with
+xdotool (XTEST and XSendEvent, `-break-start` and the `Alt+Pause` hotkey,
+`MEMDUMPBIN 0 0 100` as the probe): no keystroke reached the SDL debugger.
+The X session runs mutter, and the DOSBox client window is either unmapped or
+its frame holds the input focus (`xdotool windowfocus` returns failure and
+`getwindowfocus` stays on the frame), so both the hotkey and the command line
+are unreachable. The command form itself is fine.
+
+The delta is deterministic across runs (`0x1FC010`, checked in two independent
+guest-RAM dumps), so the breakpoint addresses in Step 1 are stable. Step 2
+needs a real input path (run the three commands at the console) or the
+patched-EXE variant (record `[ESP]` at the read wrapper into obj4 BSS and
+recover the caller chain from a host-side RAM dump).
