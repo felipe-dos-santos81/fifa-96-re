@@ -32,11 +32,16 @@ seq_file   dw 0
 seq_codec  dw 0
 seq_hb     dw 0
 rec_buf    times 160 db 0          ; payload scratch (max 160 B)
-pre_ah     db 0                    ; pre-state snapshot (Task 3b fills)
+pre_ah     db 0                    ; pre-state snapshot
 pre_bx     dw 0
 pre_cx     dw 0
 pre_ds     dw 0
 pre_dx     dw 0
+pre_name   times 13 db 0           ; AH=3Dh filename copy (<=13 B, NUL-stopped)
+pre_name_len db 0
+post_ax    dw 0                    ; AX after the original handler ran
+post_n     dw 0                    ; AH=3Fh: min(pre_cx,ax_after) valid bytes
+post_dlen  dw 0                    ; AH=3Fh: min(post_n,64) bytes dumped
 g_flags    dw 0                    ; handler result flags, captured at .after
 
 ; ───────────────────────────── resident code ─────────────────────────────
@@ -144,6 +149,122 @@ send_frame:
         pop  ax
         ret
 
+; ───────────────────── FILE record build helpers ─────────────────────
+; Frozen FILE payload (len = 18+dlen):
+;   ah:u8 bx:u16 cx:u16 ds:u16 dx:u16 ax_after:u16 flags:u8 hash:u32
+;   dlen:u16 data[dlen]
+; flags bit0 hash_valid, bit1 data_is_name, bit2 data_is_bytes.
+
+; put_common — copy the 11-byte prefix (ah,bx,cx,ds,dx,ax_after) into rec_buf.
+; Clobbers AX only.
+put_common:
+        mov  al, [cs:pre_ah]
+        mov  [cs:rec_buf], al
+        mov  ax, [cs:pre_bx]
+        mov  [cs:rec_buf+1], ax
+        mov  ax, [cs:pre_cx]
+        mov  [cs:rec_buf+3], ax
+        mov  ax, [cs:pre_ds]
+        mov  [cs:rec_buf+5], ax
+        mov  ax, [cs:pre_dx]
+        mov  [cs:rec_buf+7], ax
+        mov  ax, [cs:post_ax]
+        mov  [cs:rec_buf+9], ax
+        ret
+
+; rec_zero_extra — clear hash (rec_buf+12..15) and dlen (rec_buf+16..17).
+rec_zero_extra:
+        mov  word [cs:rec_buf+12], 0
+        mov  word [cs:rec_buf+14], 0
+        mov  word [cs:rec_buf+16], 0
+        ret
+
+; fnv_hash — FNV-1a 32 over post_n bytes at pre_ds:pre_dx; result u32 LE to
+; rec_buf+12. Preserves all registers (reads the caller's buffer via DS).
+fnv_hash:
+        push ax
+        push bx
+        push cx
+        push si
+        push ds
+        mov  ax, [cs:pre_ds]
+        mov  ds, ax
+        mov  si, [cs:pre_dx]
+        mov  cx, [cs:post_n]
+        mov  eax, 2166136261           ; FNV-1a basis
+        test cx, cx
+        jz   .done
+.loop:
+        movzx ebx, byte [si]
+        xor  eax, ebx
+        imul eax, eax, 0x01000193      ; * FNV prime 16777619
+        inc  si
+        dec  cx
+        jnz  .loop
+.done:
+        mov  [cs:rec_buf+12], eax
+        pop  ds
+        pop  si
+        pop  cx
+        pop  bx
+        pop  ax
+        ret
+
+; copy_input — copy post_dlen bytes at pre_ds:pre_dx to cs:rec_buf+18.
+; Preserves all registers.
+copy_input:
+        push ax
+        push cx
+        push si
+        push di
+        push ds
+        push es
+        mov  ax, [cs:pre_ds]
+        mov  ds, ax
+        mov  si, [cs:pre_dx]
+        push cs
+        pop  es
+        mov  di, rec_buf+18
+        mov  cx, [cs:post_dlen]
+        rep  movsb
+        pop  es
+        pop  ds
+        pop  di
+        pop  si
+        pop  cx
+        pop  ax
+        ret
+
+; emit_file — CX = payload length; rec_buf filled. Sends T_FILE, bumps the
+; 32-bit filecount, and emits a HEARTBEAT (payload = filecount u32) on every
+; 1024th FILE record. Preserves AX,BX,CX,DX,SI,DI,BP,DS,ES.
+emit_file:
+        push ax
+        push cx
+        push si
+        push ds
+        push cs
+        pop  ds
+        mov  al, T_FILE
+        mov  si, rec_buf
+        call send_frame
+        inc  word [cs:filecount]
+        jnz  .hb
+        inc  word [cs:filecount+2]
+.hb:
+        test word [cs:filecount], 1023
+        jnz  .done
+        mov  al, T_HB
+        mov  si, filecount
+        mov  cx, 4
+        call send_frame
+.done:
+        pop  ds
+        pop  si
+        pop  cx
+        pop  ax
+        ret
+
 ; ─────────────────────────── INT-21 hook ───────────────────────────
 ; Pre/post chaining with a synthesized return frame. The original handler
 ; ends in IRET, so we hand it a frame (FLAGS, our CS, .after) to return
@@ -153,7 +274,49 @@ int21:
         pusha
         push ds
         push es
-        ; ---- pre (Task 3b/4): snapshot AH-regs, emit FILE/END ----
+        ; ---- pre: snapshot caller state; END on terminate ----
+        mov  [cs:pre_ah], ah
+        mov  [cs:pre_bx], bx
+        mov  [cs:pre_cx], cx
+        mov  [cs:pre_ds], ds
+        mov  [cs:pre_dx], dx
+        cmp  ah, 3Dh
+        je   .fname
+        cmp  ah, 3Eh
+        je   .chain
+        cmp  ah, 3Fh
+        je   .chain
+        cmp  ah, 40h
+        je   .chain
+        cmp  ah, 4Ch
+        je   .quit
+        jmp  .chain
+.fname:                               ; AH=3Dh — copy <=13 B from DS:DX
+        mov  si, dx
+        mov  di, pre_name
+        xor  cx, cx
+.fn_loop:
+        mov  al, [ds:si]
+        mov  [cs:di], al
+        test al, al
+        jz   .fn_done
+        inc  si
+        inc  di
+        inc  cx
+        cmp  cx, 13
+        jb   .fn_loop
+.fn_done:
+        mov  [cs:pre_name_len], cl
+        jmp  .chain
+.quit:                                ; AH=4Ch — emit END, then chain
+        push ds
+        push cs
+        pop  ds
+        mov  al, T_END
+        mov  si, rec_buf
+        xor  cx, cx
+        call send_frame
+        pop  ds
         jmp  .chain
 .chain:
         pop  es
@@ -174,8 +337,89 @@ int21:
         push es
         pushf
         pop  word [cs:g_flags]         ; save handler-result FLAGS (caller frame
-                                       ; FLAGS sits at [sp+24] once 3 pushes added)
-        ; ---- post (Task 3b/4): FILE record, patch pass ----
+                                       ; FLAGS sits at [bp+24] once 3 pushes added)
+        ; ---- post: read result, dispatch, forward flags ----
+        mov  bp, sp                    ; frame base; survives every call below
+        mov  di, [bp+18]               ; AX after the original handler
+        mov  [cs:post_ax], di
+        mov  al, [cs:pre_ah]
+        cmp  al, 3Dh
+        je   .post_open
+        cmp  al, 3Eh
+        je   .post_simple
+        cmp  al, 40h
+        je   .post_simple
+        cmp  al, 3Fh
+        je   .post_read
+        jmp  .post_done
+.post_open:                            ; AH=3Dh — name only
+        call put_common
+        mov  byte [cs:rec_buf+11], 0x02
+        call rec_zero_extra
+        mov  al, [cs:pre_name_len]
+        mov  [cs:rec_buf+16], al
+        mov  byte [cs:rec_buf+17], 0
+        mov  si, pre_name
+        mov  di, rec_buf+18
+        mov  cl, [cs:pre_name_len]
+        xor  ch, ch
+        jcxz .open_copied
+.open_loop:
+        mov  al, [cs:si]
+        mov  [cs:di], al
+        inc  si
+        inc  di
+        loop .open_loop
+.open_copied:
+        mov  cl, [cs:pre_name_len]
+        xor  ch, ch
+        add  cx, 18
+        call emit_file
+        jmp  .post_done
+.post_simple:                          ; AH=3Eh / 40h — no data
+        call put_common
+        mov  byte [cs:rec_buf+11], 0
+        call rec_zero_extra
+        mov  cx, 18
+        call emit_file
+        jmp  .post_done
+.post_read:                            ; AH=3Fh
+        test byte [cs:g_flags], 1      ; CF=1 -> failed read
+        jnz  .post_read_err
+        mov  ax, [cs:pre_cx]
+        mov  bx, [cs:post_ax]
+        cmp  ax, bx
+        jbe  .read_n
+        mov  ax, bx
+.read_n:
+        mov  [cs:post_n], ax
+        call fnv_hash
+        mov  ax, [cs:post_n]
+        cmp  ax, 64
+        jbe  .read_dlen
+        mov  ax, 64
+.read_dlen:
+        mov  [cs:post_dlen], ax
+        call copy_input
+        call put_common
+        mov  byte [cs:rec_buf+11], 0x05
+        mov  ax, [cs:post_dlen]
+        mov  [cs:rec_buf+16], ax
+        add  ax, 18
+        mov  cx, ax
+        call emit_file
+        jmp  .post_done
+.post_read_err:                        ; AH=3Fh, CF=1
+        call put_common
+        mov  byte [cs:rec_buf+11], 0
+        call rec_zero_extra
+        mov  cx, 18
+        call emit_file
+        jmp  .post_done
+.post_done:
+        ; forward the handler's result FLAGS to the caller frame's FLAGS slot
+        mov  ax, [cs:g_flags]          ; clobbers live AX; popa restores AX below
+        mov  [bp+24], ax
         pop  es
         pop  ds
         popa
