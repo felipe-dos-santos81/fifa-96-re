@@ -44,9 +44,10 @@ implementation (`Typer` in `src/gui/sdl_mapper.cpp`) serializes them:
   reach the game.
 * With many lines the autoexec itself is delayed by the serialized typists.
   A 9–10-line keys file stalled the launch beyond the 120 s window: those
-  traces contain only the per-AUTOTYPE-program patch passes and an `END`, with
-  **zero FILE frames** (the game never started). A 4-line file could still
-  launch, but only its final key reached the game.
+  traces contain only the per-AUTOTYPE-program patch passes and six/seven
+  `T_END` frames (attempts 2/3), with **zero FILE frames** (the game never
+  started). A 4-line file could still launch, but only its final key reached
+  the game.
 * Inside the last line, keys are typed at `-p` pace (default 0.1 s) and held
   ~50 ms; a `,` token pauses 2×pace (0.2 s). The shell's command tokenizer
   keeps commas as separate tokens, so runs of commas encode the schedule.
@@ -61,7 +62,7 @@ comma-paced sequence; do not spread a schedule across multiple lines.
 `tools/keys/skip-intro.keys` (committed) is one step. Its generated command:
 
 ```
-AUTOTYPE -w 10 -p 0.1 enter ,,,... space ,,,... space ,,,... space ,,,... enter ,,,... space ,,,... enter
+AUTOTYPE -w 10 -p 0.1 enter , , , ... space , , , ... space , , , ... space , , , ... enter , , , ... space , , , ... enter
 ```
 
 (`,`×20 = 4 s at the default pace.) Timeline: `enter` at ~10 s stops the
@@ -123,8 +124,10 @@ static callers remain untested at runtime.
   it keeps drawing frames.
 * Site 8 is confirmed as part of the `MOD5` front-end draw path through three
   call sites. Site 7's still-loader callers sit in state handlers (`EBX`∈{10,
-  11}; `ESI==0x0A`) that were not reached; reaching them likely needs a
-  different front-end screen or deeper navigation than intro-skip + arrows.
+  11} tested at `0x25D4F–0x25D57`, gating the `0x25D64` call; `ESI==0x0A` at
+  `0x27B1A`, gating `0x27B42` in the LE image) that were not reached; reaching
+  them likely needs a different front-end screen or deeper navigation than
+  intro-skip + arrows.
 * The multi-line AUTOTYPE serialization is the notable hidden complexity; it
   invalidated the original cumulative-wait schedule and is documented here so
   later probe campaigns use the single-line comma-paced form.

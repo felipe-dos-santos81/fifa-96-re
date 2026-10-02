@@ -57,6 +57,12 @@ Mapping: each step becomes exactly
 `AUTOTYPE -w <cumulative WAIT> -p <PACE> <KEYS...>`.
 `PACE` defaults to `0.1` seconds and is overridable with `--pace`.
 
+> **Supersession note (2026-10-01, FU-13 runtime):** DOSBox-X serializes
+> AUTOTYPE typists, so a multi-step schedule stalls the launch instead of
+> preserving step order. Single-step (comma-paced) keys files are the
+> supported form, and `fifa96_keys.py --check` rejects multi-step files.
+> Cumulative emission remains only for compatibility.
+
 ## Components
 
 **`tools/fifa96_keys.py`** (new) — pure string transform; no DOSBox
