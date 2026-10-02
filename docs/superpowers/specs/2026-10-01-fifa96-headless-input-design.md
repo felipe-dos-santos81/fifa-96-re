@@ -41,8 +41,11 @@ Plain text, one step per line:
 WAIT KEYS...
 ```
 
-* `WAIT` — decimal seconds, integer or float (e.g. `5`, `2.5`); the wait
-  before this step's keys are typed, mapped to `AUTOTYPE -w WAIT`.
+* `WAIT` — decimal seconds, integer or float (e.g. `5`, `2.5`); the delay
+  after the previous step. The helper emits CUMULATIVE absolute waits
+  (`AUTOTYPE -w <sum of waits so far>`), because every `AUTOTYPE` command is
+  scheduled at autoexec time and its `-w` is relative to its own invocation —
+  cumulative waits preserve step order under that scheduling.
 * `KEYS...` — one or more AUTOTYPE key names separated by whitespace and/or
   commas (AUTOTYPE's own argument syntax).
 * Blank lines and lines whose first non-space character is `#` are ignored.
@@ -50,7 +53,8 @@ WAIT KEYS...
   nonzero with `error: line N: <reason>`. An invalid `--pace` value is the
   same class of error (`error: --pace: <reason>`).
 
-Mapping: each step becomes exactly `AUTOTYPE -w <WAIT> -p <PACE> <KEYS...>`.
+Mapping: each step becomes exactly
+`AUTOTYPE -w <cumulative WAIT> -p <PACE> <KEYS...>`.
 `PACE` defaults to `0.1` seconds and is overridable with `--pace`.
 
 ## Components
@@ -61,9 +65,10 @@ dependency. CLI: `fifa96_keys.py FILE [--pace P] [--check]`. Without
 prints nothing and exits 0/1 after validating.
 
 **`tests/test_keys.py`** (new, CTest `test_keys`) — unit tests: comment/blank
-skipping, integer and float waits, multi-key lines, comma separators, default
-and overridden pace, exact `AUTOTYPE` output, and `--check` acceptance and
-rejection. Suite becomes 18 tests.
+skipping, integer and float waits, cumulative absolute waits across steps,
+multi-key lines, comma separators, default and overridden pace, exact
+`AUTOTYPE` output, and `--check` acceptance and rejection. Suite becomes 18
+tests.
 
 **`run-fifa96-capture.sh`** (modified) — gains `KEYS_FILE` (unset or empty:
 today's behavior, byte-identical). When set: the file must exist and validate
