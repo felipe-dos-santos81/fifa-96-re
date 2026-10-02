@@ -1,0 +1,10 @@
+# menu-nav.keys — FU-14 best navigation sequence (single step; see
+# docs/ghidra/FU14_navigation_campaign.md).
+# Down-path route: enter skips the looping intro (~10 s), down at ~14 s
+# takes the non-default title-screen branch, and the spaced enters walk the
+# front end into the deeper MOD1/MOD4 screen (new assets vs the FU-13
+# skip-intro.keys MOD5 route). It did NOT reach site 7 or new site-8
+# callers; the tail beyond ~30 s is inert (the game sits in that screen).
+# Use skip-intro.keys for the MOD5 front-end route (site 8); use this file
+# when a deeper setup screen is wanted.
+10 enter , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter
