@@ -194,3 +194,24 @@ trace.
 * The run-3 crash is undocumented in the game’s terms (exception 04h in the
   Watcom extender at `180:00001CA`); whether it is a game bug or a reaction
   to the scripted FRIENDLY cycling is unknown.
+
+## Capture-eax runtime positive control (post-campaign)
+
+The campaign left one ambiguity: capture-eax had no runtime positive control,
+so zero frames at `0x26B45` could have meant either "classifier not entered"
+or "cave variant broken". A control run on a target known to fire resolves it:
+
+```
+$ CAPTURE_EAX=1 sh tools/trace_probe.sh 0x9E718 1 probe-eax-control
+T_PROBE site=1 mode=26104 caller=0x0029a871 delta=0x1fc000 caller_link=0x9e871 target_link=0x9e71f
+T_PROBE site=1 mode=23884 caller=0x0029a871 delta=0x1fc000 caller_link=0x9e871 target_link=0x9e71f
+...
+probe_frames=145
+expect_site=0x1 hit=True
+```
+
+145 frames, mode values decoded from entry EAX, delta and `caller_link`
+unchanged, and `--expect-site` matching the unpacked id. Capture-eax works
+end to end, so the FU-16 negative is a genuine reachability result: the
+classifier at `0x26B45` is not entered by any navigated flow.
+Provenance: `captures/session-probe-eax-control/trace.bin`.
