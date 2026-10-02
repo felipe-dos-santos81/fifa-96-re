@@ -81,6 +81,35 @@ class TestCli(unittest.TestCase):
         self.assertIn("site=2 mode=10", buf.getvalue())
         self.assertIn("delta=0x312000", buf.getvalue())
 
+    def test_capture_eax_expect_site_matches_unpacked_id(self):
+        payload = struct.pack("<IIII", 0x000A0002, 0xDE32, 0x0037, 0x3B071F)
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.bin"
+            trace.write_bytes(frame(0x08, payload))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = probe.main([str(trace), "--capture-eax",
+                                 "--expect-site", "2"])
+            self.assertEqual(rc, 0)
+            self.assertIn("hit=True", buf.getvalue())
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = probe.main([str(trace), "--capture-eax",
+                                 "--expect-site", "0x000A0002"])
+            self.assertEqual(rc, 1)
+            self.assertIn("hit=False", buf.getvalue())
+
+    def test_default_expect_site_matches_raw_word(self):
+        payload = struct.pack("<IIII", 0x000A0002, 0xDE32, 0x0037, 0x3B071F)
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.bin"
+            trace.write_bytes(frame(0x08, payload))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = probe.main([str(trace), "--expect-site", "0x000A0002"])
+            self.assertEqual(rc, 0)
+            self.assertIn("hit=True", buf.getvalue())
+
     def test_default_print_keeps_raw_site_word(self):
         payload = struct.pack("<IIII", 0x000A0002, 0xDE32, 0x0037, 0x3B071F)
         with tempfile.TemporaryDirectory() as tmp:

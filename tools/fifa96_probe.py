@@ -90,7 +90,11 @@ def main(argv=None):
                   f'target_ret=0x{f["target_ret"]:08x}')
     print(f"probe_frames={len(frames)}")
     if args.expect_site is not None:
-        hit = any(f["site"] == args.expect_site for f in frames)
+        if args.capture_eax:
+            hit = any(split_site_mode(f["site"])[0] == args.expect_site
+                      for f in frames)
+        else:
+            hit = any(f["site"] == args.expect_site for f in frames)
         print(f"expect_site=0x{args.expect_site:x} hit={hit}")
         return 0 if hit else 1
     return 0
