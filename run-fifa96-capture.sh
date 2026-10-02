@@ -43,8 +43,7 @@ fullscreen=false
 MOUNT C "$HDD"
 IMGMOUNT D "$ISO" -t iso
 C:\FIFACAP.COM
-D:
-$KEYS_LINES
+D:$( [ -n "$KEYS_LINES" ] && printf '\n%s' "$KEYS_LINES" )
 FIFA96.EXE
 EOF
 

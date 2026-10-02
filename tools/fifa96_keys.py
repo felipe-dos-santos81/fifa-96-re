@@ -5,9 +5,9 @@ File format (one step per line):
     WAIT KEYS...
 WAIT is decimal seconds since the previous step; KEYS are AUTOTYPE tokens
 (e.g. `enter`, `esc`, `up`, `kp_8`, commas allowed). Waits are emitted
-cumulatively: every AUTOTYPE command is scheduled at autoexec time and its
-`-w` is relative to its own invocation, so cumulative absolutes preserve
-step order.
+cumulatively for compatibility; see docs/ghidra/FU13_headless_input.md:
+DOSBox-X serializes AUTOTYPE typists, so only a single-step (comma-paced)
+keys file is supported and `--check` rejects multi-step files.
 """
 import argparse
 import sys
@@ -65,7 +65,21 @@ def main(argv=None):
         print(f"error: {exc}", file=sys.stderr)
         return 1
     if args.check:
+        if len(steps) > 1:
+            print(
+                "error: multi-step keys files are not supported (DOSBox-X "
+                "serializes AUTOTYPE typists; see "
+                "docs/ghidra/FU13_headless_input.md)",
+                file=sys.stderr,
+            )
+            return 1
         return 0
+    if len(steps) > 1:
+        print(
+            f"warning: {len(steps)} steps; only a single step is "
+            "supported (see FU13)",
+            file=sys.stderr,
+        )
     for line in autotype_lines(steps, pace=pace):
         print(line)
     return 0

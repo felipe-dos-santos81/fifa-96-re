@@ -72,6 +72,27 @@ class TestCli(unittest.TestCase):
         rc, out, _ = self._run(["--check", self._write("5 enter\n")])
         self.assertEqual((rc, out), (0, ""))
 
+    def test_check_rejects_multi_step(self):
+        rc, out, err = self._run(["--check", self._write("5 enter\n2 esc\n")])
+        self.assertEqual((rc, out), (1, ""))
+        self.assertIn("multi-step keys files are not supported", err)
+        self.assertIn("FU13_headless_input.md", err)
+
+    def test_multi_step_emit_warns_and_prints_all(self):
+        rc, out, err = self._run([self._write("8 enter\n4 esc\n")])
+        self.assertEqual(rc, 0)
+        self.assertEqual(
+            out,
+            "AUTOTYPE -w 8 -p 0.1 enter\nAUTOTYPE -w 12 -p 0.1 esc\n")
+        self.assertIn(
+            "warning: 2 steps; only a single step is supported (see FU13)",
+            err)
+
+    def test_single_step_has_no_warning(self):
+        rc, out, err = self._run([self._write("5 enter\n")])
+        self.assertEqual((rc, out, err),
+                         (0, "AUTOTYPE -w 5 -p 0.1 enter\n", ""))
+
     def test_check_bad_reports_line(self):
         rc, out, err = self._run(["--check", self._write("nope\n")])
         self.assertEqual(rc, 1)
