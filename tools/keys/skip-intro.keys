@@ -1,6 +1,8 @@
-# skip-intro.keys — candidate intro progression, refined empirically.
-# WAIT is seconds since the previous step (emitted cumulatively).
-8 enter
-4 enter
-4 space
-4 esc
+# skip-intro.keys — headless front-end progression, refined empirically.
+# One step: WAIT, then the KEYS tail of a single AUTOTYPE command. Commas
+# are AUTOTYPE pause tokens (2*pace = 0.2 s each at the default 0.1 s
+# pace) and pace key events: AUTOTYPE commands are serialized by a host
+# thread, so only the LAST line types while the game is live.
+# Sequence: enter skips the looping intro (~10 s), then spaced space/enter
+# presses walk the title screen into the MOD5 front-end module.
+10 enter , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , enter
