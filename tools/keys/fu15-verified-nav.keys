@@ -1,0 +1,21 @@
+# fu15-verified-nav.keys — visually verified front-end navigation (FU-15).
+# Single step (see docs/ghidra/FU13_headless_input.md): the KEYS tail is one
+# comma-paced AUTOTYPE command; `,` is a 2*pace (0.2 s) pause.
+#
+# Timeline (validated frame-by-frame against captures/session-probe-14c18-v3,
+# -v5 and -v6 videos):
+#   10 s  enter  — skip the looping intro; the title screen is live by ~10.3 s
+#   18 s  down   — GAME SELECT is interactive by ~15 s; move highlight
+#                  Friendly -> Leagues (the old menu-nav.keys pressed this at
+#                  14 s and raced the title->menu transition; 18 s is safe)
+#   22 s  enter  — open the LEAGUE SELECT screen (International flag grid)
+#   34 s  esc    — back to GAME SELECT (focus returns to the right column,
+#                  highlight reset to Friendly)
+#   42 s  left   — switch focus to the left column, highlight Load Game
+#   46 s  down   — highlight Options
+#   52 s  enter  — open the OPTIONS screen (Music/SFX/Language/Super VGA)
+#
+# This sequence reaches LEAGUE and OPTIONS deterministically. It does NOT
+# reach probe site 7 (FUN_00014c18); see docs/ghidra/FU15_visual_capture.md
+# for the six-attempt campaign, the screen inventory and the navigation model.
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , esc , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter
