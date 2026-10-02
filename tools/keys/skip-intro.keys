@@ -1,0 +1,6 @@
+# skip-intro.keys — candidate intro progression, refined empirically.
+# WAIT is seconds since the previous step (emitted cumulatively).
+8 enter
+4 enter
+4 space
+4 esc
