@@ -1,0 +1,28 @@
+# fu17-deep-flows.keys — FU-17 verified deep-flow navigation (tournament).
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Timeline and the screens each key reaches (frame-verified in
+# captures/session-probe-flow-1):
+#   10 s  enter       skip the looping intro
+#   18 s  down        GAME SELECT: Friendly -> Leagues
+#   21 s  down        Leagues -> Tournaments
+#   25 s  enter       open TOURNAMENT (purple flag grid; slow purple fade-in)
+#   34 s  enter       International -> TOURNAMENT TEAM SELECT
+#   44 s  enter       check the highlighted country (Algeria in the run-1 draw)
+#   50 s  down, 60/64 s enter, 70 s down
+#                     walk the team-select dialog (same rhythm as the FU-16
+#                     league route; unlocks the bottom Play button)
+#   78/82/86 s right  focus the bottom Play button
+#   90 s  enter       open the TOURNAMENT SCHEDULE (Game 1..Game 5 buttons,
+#                     group fixtures, "Next Game", Simulate, bottom bar
+#                     Load / Standings / Play)
+#   102 s enter       open TOURNAMENT STANDINGS (Group A-D, P/W/D/L/C/A/Pts)
+#   112 s enter       back to the schedule
+#
+# New screens reached: TOURNAMENT TEAM SELECT, TOURNAMENT SCHEDULE,
+# TOURNAMENT STANDINGS. This sequence does NOT enter the mode classifier
+# (0x26B45) and does NOT reach probe site 7 (FUN_00014c18); the per-fixture
+# Play cells and Simulate button were not keyboard-reachable in our runs.
+# See docs/ghidra/FU17_deep_flows.md for the six-run campaign, the mode
+# inventory and the honest gaps.
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter
