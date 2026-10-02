@@ -26,15 +26,14 @@ cave:
         pushad
         pushfd
         push es
-        mov  ax, ss
-        mov  es, ax
+{es_setup}
         mov  ebx, [esp+44]          ; caller return address (relocated)
         mov  ebp, [esp+40]          ; call's return (target+5, relocated)
         add  ebp, {adjust}          ; resume is target+overwrite
         mov  edx, ebx
         shr  edx, 16
         and  ebx, 0xFFFF
-        mov  esi, {site:#x}
+{set_site}
         sub  esp, 48
         mov  edi, esp
         xor  eax, eax
@@ -201,8 +200,13 @@ def overwrite_len(image, target):
                      f"{target:#x}")
 
 
-def build_cave(target, overwrite, site_id, cave_link, image=None):
-    """Assemble the trampoline cave, displacing overwrite bytes of target."""
+def build_cave(target, overwrite, site_id, cave_link, image=None,
+               capture_eax=False):
+    """Assemble the trampoline cave, displacing overwrite bytes of target.
+
+    With capture_eax the entry EAX (a mode/state id) is packed into the high
+    16 bits of the site word; the low 16 bits stay site_id.
+    """
     if image is None:
         image = _default_image()
     if overwrite < 5:
@@ -210,10 +214,20 @@ def build_cave(target, overwrite, site_id, cave_link, image=None):
                          f"{overwrite}")
     displaced = "        db " + ",".join(
         f"0x{b:02x}" for b in image[target:target + overwrite])
-    source = CAVE_TEMPLATE.format(cave=cave_link, site=site_id,
-                                  displaced=displaced,
+    if capture_eax:
+        es_setup = ("        push ss\n"
+                    "        pop  es\n"
+                    "        shl  eax, 0x10\n"
+                    f"        or   eax, strict dword {site_id:#x}\n"
+                    "        mov  esi, eax")
+        set_site = ""
+    else:
+        es_setup = "        mov  ax, ss\n        mov  es, ax"
+        set_site = f"        mov  esi, {site_id:#x}"
+    source = CAVE_TEMPLATE.format(cave=cave_link, displaced=displaced,
                                   adjust=overwrite - 5,
-                                  resume=target + overwrite)
+                                  resume=target + overwrite,
+                                  es_setup=es_setup, set_site=set_site)
     with tempfile.TemporaryDirectory() as tmp:
         src = Path(tmp) / "cave.asm"
         out = Path(tmp) / "cave.bin"
@@ -235,7 +249,7 @@ def rel32(to, next_ip):
     return struct.pack("<i", to - next_ip)
 
 
-def patch_iso(data, target, cave, site_id):
+def patch_iso(data, target, cave, site_id, capture_eax=False):
     """Return a copy of the ISO with the trampoline applied to FIFA96.EXE.
 
     The output has the ISO's original size; the input bytes are untouched.
@@ -245,7 +259,8 @@ def patch_iso(data, target, cave, site_id):
     exe = data[base:base + size]
     info = le.parse(exe)
     ow = overwrite_len(info["image"], target)
-    cave_bytes = build_cave(target, ow, site_id, cave, image=info["image"])
+    cave_bytes = build_cave(target, ow, site_id, cave, image=info["image"],
+                            capture_eax=capture_eax)
     target_off = link_to_file_offset(info, target)
     link_to_file_offset(info, target + 4)
     cave_off = link_to_file_offset(info, cave)
@@ -269,6 +284,8 @@ def main(argv=None):
     ap.add_argument("--cave", type=lambda s: int(s, 0),
                     help="cave link address")
     ap.add_argument("--site-id", type=lambda s: int(s, 0))
+    ap.add_argument("--capture-eax", action="store_true",
+                    help="pack the entry EAX (mode) into the site word")
     ap.add_argument("--print-overwrite", action="store_true",
                     help="print the decimal overwrite length and exit; "
                          "writes no file")
@@ -288,9 +305,11 @@ def main(argv=None):
         if args.print_overwrite:
             print(ow)
             return 0
-        out = patch_iso(data, args.target, args.cave, args.site_id)
+        out = patch_iso(data, args.target, args.cave, args.site_id,
+                        capture_eax=args.capture_eax)
         cave_len = len(build_cave(args.target, ow, args.site_id, args.cave,
-                                  image=info["image"]))
+                                  image=info["image"],
+                                  capture_eax=args.capture_eax))
     except (ValueError, RuntimeError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

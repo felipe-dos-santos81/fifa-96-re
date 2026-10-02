@@ -47,6 +47,14 @@ class TestFrames(unittest.TestCase):
         self.assertEqual(n["target_ret_link"], 0x9E71F)
 
 
+class TestSplitSiteMode(unittest.TestCase):
+    def test_packed_site_word(self):
+        self.assertEqual(probe.split_site_mode(0x000A0002), (2, 10))
+
+    def test_unpacked_site_word_has_mode_zero(self):
+        self.assertEqual(probe.split_site_mode(9), (9, 0))
+
+
 class TestCli(unittest.TestCase):
     def test_truncated_trace_reports_error_without_traceback(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -58,6 +66,32 @@ class TestCli(unittest.TestCase):
         self.assertEqual(rc, 1)
         self.assertIn("error:", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
+
+    def test_capture_eax_decodes_site_and_mode(self):
+        payload = struct.pack("<IIII", 0x000A0002, 0xDE32, 0x0037, 0x3B071F)
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.bin"
+            trace.write_bytes(frame(0x08, payload))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = probe.main([str(trace), "--capture-eax",
+                                 "--target-link", "0x9E718",
+                                 "--overwrite", "7"])
+        self.assertEqual(rc, 0)
+        self.assertIn("site=2 mode=10", buf.getvalue())
+        self.assertIn("delta=0x312000", buf.getvalue())
+
+    def test_default_print_keeps_raw_site_word(self):
+        payload = struct.pack("<IIII", 0x000A0002, 0xDE32, 0x0037, 0x3B071F)
+        with tempfile.TemporaryDirectory() as tmp:
+            trace = Path(tmp) / "trace.bin"
+            trace.write_bytes(frame(0x08, payload))
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                rc = probe.main([str(trace)])
+        self.assertEqual(rc, 0)
+        self.assertIn("site=655362", buf.getvalue())
+        self.assertNotIn("mode=", buf.getvalue())
 
 
 if __name__ == "__main__":

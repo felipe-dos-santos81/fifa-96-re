@@ -43,6 +43,11 @@ def probe_frames(data):
     return out
 
 
+def split_site_mode(site):
+    """Split a site word into (site_id, mode); mode is zero when not packed."""
+    return site & 0xFFFF, site >> 16
+
+
 def normalize(frame, target_link, overwrite):
     n = dict(frame)
     n["caller_ret"] = frame["caller_lo"] | (frame["caller_hi"] << 16)
@@ -58,6 +63,8 @@ def main(argv=None):
     ap.add_argument("--target-link", type=lambda s: int(s, 0), default=None)
     ap.add_argument("--overwrite", type=int, default=None)
     ap.add_argument("--expect-site", type=lambda s: int(s, 0), default=None)
+    ap.add_argument("--capture-eax", action="store_true",
+                    help="decode the site word as low16 site id, high16 mode")
     args = ap.parse_args(argv)
     try:
         with open(args.trace, "rb") as fh:
@@ -67,13 +74,18 @@ def main(argv=None):
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for f in frames:
+        if args.capture_eax:
+            site_id, mode = split_site_mode(f["site"])
+            site_txt = f"site={site_id} mode={mode}"
+        else:
+            site_txt = f"site={f['site']}"
         if args.target_link is not None and args.overwrite is not None:
             n = normalize(f, args.target_link, args.overwrite)
-            print(f'T_PROBE site={f["site"]} caller=0x{n["caller_ret"]:08x} '
+            print(f'T_PROBE {site_txt} caller=0x{n["caller_ret"]:08x} '
                   f'delta=0x{n["delta"]:x} caller_link=0x{n["caller_link"]:x} '
                   f'target_link=0x{n["target_ret_link"]:x}')
         else:
-            print(f'T_PROBE site={f["site"]} caller_lo=0x{f["caller_lo"]:04x} '
+            print(f'T_PROBE {site_txt} caller_lo=0x{f["caller_lo"]:04x} '
                   f'caller_hi=0x{f["caller_hi"]:04x} '
                   f'target_ret=0x{f["target_ret"]:08x}')
     print(f"probe_frames={len(frames)}")

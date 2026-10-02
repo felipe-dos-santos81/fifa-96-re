@@ -14,6 +14,15 @@ ISO = ROOT / "game" / "FIFAPCCD96.iso"
 TARGET = 0x9E718
 CAVE = 0x6728D
 
+# pre-change byte image of build_cave(TARGET, 7, 1, CAVE), pinned so the
+# capture-eax parameter cannot alter the default cave
+PRE_CHANGE_CAVE_HEX = (
+    "609c06668cd08ec08b5c242c8b6c242883c50289dac1ea1081e3ffff0000be01"
+    "00000083ec3089e731c0b90c000000fcf3ab89e789742404896c2408895c2410"
+    "8954241466b8000366bb61006631c9cd3183c430079d6183c4045657558b4424"
+    "10e92c740300"
+)
+
 
 class TestIso(unittest.TestCase):
     @classmethod
@@ -34,8 +43,7 @@ class TestIso(unittest.TestCase):
         with self.assertRaises(ValueError):
             patch.patch_iso(self.iso, TARGET, TARGET, 1)
 
-    def test_patch_changes_only_target_and_cave(self):
-        out = patch.patch_iso(self.iso, TARGET, CAVE, 1)
+    def _assert_changes_only_patched_regions(self, out):
         self.assertEqual(len(out), len(self.iso))
         diffs = [i for i in range(len(out)) if out[i] != self.iso[i]]
         self.assertGreater(len(diffs), 5)
@@ -50,6 +58,14 @@ class TestIso(unittest.TestCase):
             self.assertTrue(off_t <= rel < off_t + 8 or
                             off_c <= rel < off_c + 0x103,
                             f"unexpected diff at file offset 0x{rel:x}")
+
+    def test_patch_changes_only_target_and_cave(self):
+        self._assert_changes_only_patched_regions(
+            patch.patch_iso(self.iso, TARGET, CAVE, 1))
+
+    def test_patch_capture_eax_changes_only_target_and_cave(self):
+        self._assert_changes_only_patched_regions(
+            patch.patch_iso(self.iso, TARGET, CAVE, 1, capture_eax=True))
 
 
 class TestMalformedIso(unittest.TestCase):
@@ -106,13 +122,16 @@ class TestCave(unittest.TestCase):
     def test_cave_ebp_reports_resume_address(self):
         # the patched `call cave` pushes target+5, so the cave must add
         # overwrite-5 to reach the resume address in the EBP slot
-        for ow in (7, 5):
-            cave = patch.build_cave(TARGET, ow, 1, CAVE)
-            i = cave.find(b"\x83\xc5")          # add ebp, imm8
-            self.assertGreaterEqual(
-                i, 0, f"no `add ebp, imm8` in the overwrite={ow} cave")
-            self.assertEqual(cave[i + 2], ow - 5,
-                             f"EBP adjust wrong for overwrite={ow}")
+        for capture_eax in (False, True):
+            for ow in (7, 5):
+                with self.subTest(capture_eax=capture_eax, ow=ow):
+                    cave = patch.build_cave(TARGET, ow, 1, CAVE,
+                                            capture_eax=capture_eax)
+                    i = cave.find(b"\x83\xc5")  # add ebp, imm8
+                    self.assertGreaterEqual(
+                        i, 0, f"no `add ebp, imm8` in the overwrite={ow} cave")
+                    self.assertEqual(cave[i + 2], ow - 5,
+                                     f"EBP adjust wrong for overwrite={ow}")
 
     def test_cave_resets_edi_after_zero_fill(self):
         # rep stosd leaves EDI past the 48-byte frame; INT 31h needs ES:EDI
@@ -130,6 +149,34 @@ class TestCave(unittest.TestCase):
         ow = patch.overwrite_len(self.info["image"], TARGET)
         cave = patch.build_cave(TARGET, ow, 1, CAVE)
         self.assertLess(len(cave), 0x103)
+        displaced = self.info["image"][TARGET:TARGET + ow]
+        tgt = TARGET + ow
+        jmp_off = cave.rindex(b"\xe9")
+        rel = struct.unpack_from("<i", cave, jmp_off + 1)[0]
+        self.assertEqual(CAVE + jmp_off + 5 + rel, tgt)
+        self.assertIn(displaced, cave)
+
+    def test_cave_default_bytes_unchanged(self):
+        cave = patch.build_cave(TARGET, 7, 1, CAVE)
+        self.assertEqual(cave.hex(), PRE_CHANGE_CAVE_HEX)
+        self.assertIn(b"\x8c\xd0", cave)           # mov ax, ss
+        self.assertNotIn(b"\x16\x07\xc1\xe0\x10", cave)
+
+    def test_cave_capture_eax_packs_site_in_esi(self):
+        cave = patch.build_cave(TARGET, 7, 2, CAVE, capture_eax=True)
+        self.assertIn(b"\x16\x07\xc1\xe0\x10", cave)
+        self.assertIn(b"\x0d\x02\x00\x00\x00\x89\xc6", cave)  # or/mov esi
+        self.assertNotIn(b"\x8c\xd0", cave)        # no mov ax, ss
+        self.assertNotIn(b"\xbe", cave)            # ESI is never reloaded
+
+    def test_cave_capture_eax_slots_and_jump(self):
+        ow = patch.overwrite_len(self.info["image"], TARGET)
+        cave = patch.build_cave(TARGET, ow, 2, CAVE, capture_eax=True)
+        self.assertLess(len(cave), 0x103)
+        self.assertIn(b"\x89\x74\x24\x04", cave)   # [esp+0x04], esi
+        self.assertIn(b"\x89\x6c\x24\x08", cave)   # [esp+0x08], ebp
+        self.assertIn(b"\x89\x5c\x24\x10", cave)   # [esp+0x10], ebx
+        self.assertIn(b"\x89\x54\x24\x14", cave)   # [esp+0x14], edx
         displaced = self.info["image"][TARGET:TARGET + ow]
         tgt = TARGET + ow
         jmp_off = cave.rindex(b"\xe9")
