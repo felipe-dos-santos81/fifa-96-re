@@ -48,6 +48,18 @@ def split_site_mode(site):
     return site & 0xFFFF, site >> 16
 
 
+def site_frames(frames, site_id):
+    """Frames whose site word matches site_id exactly."""
+    return [f for f in frames if f["site"] == site_id]
+
+
+def load_delta(frames, target_link, overwrite):
+    """Per-run relocation delta from a T_PROBE frame (None when no frames)."""
+    for f in frames:
+        return f["target_ret"] - (target_link + overwrite)
+    return None
+
+
 def normalize(frame, target_link, overwrite):
     n = dict(frame)
     n["caller_ret"] = frame["caller_lo"] | (frame["caller_hi"] << 16)
