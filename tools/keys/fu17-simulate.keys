@@ -1,0 +1,29 @@
+# fu17-simulate.keys — league CALENDAR "Simulate" press (FU-17 retry, 2026-10-02).
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Prefix is the FU-16 run-B / FU-17 flow-6 league route, re-verified in
+# captures/session-probe-sim-1 and session-probe-sim-2:
+#   10 s  enter        skip the looping intro
+#   18 s  down         GAME SELECT: Friendly -> Leagues
+#   22 s  enter        open LEAGUE SELECT
+#   30 s  enter        International -> LEAGUE TEAM SELECT
+#   40 s  enter        open the "Are you Sure?" dialog on a country
+#   46 s  enter        confirm the country (checkbox sticks)
+#   56 s  down, 60/66 s enter
+#                      walk the team-select dialog (unlocks bottom Play)
+#   70 s  down
+#   74/78/82 s right   focus the bottom Play button
+#   86 s  enter        open the LEAGUE CALENDAR (August fixture list)
+#  104 s  down         calendar focus -> Today button (frame 004-0105)
+#  116 s  down         Today -> Simulate (frame 004-0122)
+#  132 s  enter        run the season simulation -> "League Champions" dialog
+#  160 s  enter        dismiss the dialog -> "Season Over" calendar with scores
+#
+# Frame-verified outcome (both retry runs): Enter on Simulate completes the
+# season instantly (random champion: Spain in run 1, Brazil in run 2), and the
+# second Enter returns to the calendar with all fixtures scored, "Season Over"
+# and Simulate greyed. It does NOT start a competition match: T_PROBE site=9
+# mode= frames were zero in both runs (0x26B45 never entered). See
+# docs/ghidra/FU17_deep_flows.md, "Calendar Simulate retry (2026-10-02)".
+# generated timeline: start 10.0s enter@10 down@18 enter@22 enter@30 enter@40 enter@46 down@56 enter@60 enter@66 down@70 right@74 right@78 right@82 enter@86 down@104 down@116 enter@132 enter@160
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter
