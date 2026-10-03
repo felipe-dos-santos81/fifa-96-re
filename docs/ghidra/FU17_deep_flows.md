@@ -236,3 +236,111 @@ Static checks used the Ghidra MCP session on `fifa96_le.bin`: disassembly of
    verified tournament deep route (schedule + Standings). It does not reach
    site 7 or the classifier; it is a navigation asset for the next campaign.
 2. This document.
+
+## Calendar Simulate retry (2026-10-02)
+
+Follow-up to flow-6, which left the league CALENDAR focus on **Simulate**
+(frame 004-0101) but exited at ≈110 s before `enter@116`. This retry presses
+it: two classifier runs at `0x26B45`/site 9 with the flow-6 prefix, the risky
+`right` presses dropped and the down/enter presses moved later. Result in one
+line: **Simulate completes the season instantly (random champions, "Season
+Over" calendar with every displayed fixture scored) and does NOT start a
+competition match — zero `T_PROBE site=9` frames in both runs, so the site-7
+gate stayed closed**.
+
+### Keys
+
+`tools/keys/fu17-simulate.keys` (new, committed; generated with
+`/tmp/opencode/fu17/gen.py`, validated with
+`python3 tools/fifa96_keys.py --check`):
+
+```
+enter@10 down@18 enter@22 enter@30 enter@40 enter@46 down@56 enter@60
+enter@66 down@70 right@74 right@78 right@82 enter@86 down@104 down@116
+enter@132 enter@160
+```
+
+Timeline: league route (the flow-6 prefix) → calendar at 86 s (drawn by
+004-0079, ≈88 s wall); `down@104` → Today (004-0105), `down@116` → Simulate
+(004-0122); `enter@132` → champions dialog (from 004-0125); `enter@160` →
+dismisses it (from 004-0152/0153). Both runs used `TIMEOUT=240`, so the rig,
+not the game, ended the captures.
+
+### Runs
+
+| # | session | trace bytes | AVIs / frames | probe | modes | frames-verified states |
+|---|---------|------------:|--------------:|------:|-------|------------------------|
+| 1 | `probe-sim-1` | 79,882 | 5 / 241 | 0 | none | 004-0079 calendar (Sweden–Switzerland, Brazil–Colombia, Germany–Norway, Wed 17 Aug); 004-0105 `down`#1 → **Today** focus; 004-0122 `down`#2 → **Simulate** focus; 004-0135 dialog **"Spain League Champions"** with ✓; 004-0153 dialog dismissed; 004-0230 season over (Sweden 2-2 Switzerland, Brazil 4-2 Colombia, Germany 3-1 Norway; "Today's Game: Season Over"; Simulate greyed; focus on Standings) |
+| 2 | `probe-sim-2` | 80,665 | 5 / 240 | 0 | none | 004-0079 calendar (Denmark–Germany, Netherlands–Italy, Portugal–Mexico, Tue 16 Aug); 004-0122 **Simulate** focus; 004-0135 dialog **"Brazil League Champions"**; 004-0152 dismissed; 004-0230 season over (3-3, 2-2, 2-2; Simulate greyed; focus Standings) |
+
+Decoder output identical in both runs:
+
+```
+probe_frames=0
+expect_site=0x9 hit=False
+```
+
+Both traces end with the normal TSR summary (`SUMMARY patch: ok=5 skip=5`,
+`SUMMARY end=END lost=0 seqgaps=0`), and `D:\FEGFX\MOD6` is opened in both
+(the league module). Frame means (`tools/fifa96_frames.py`) show the same
+transitions in both runs: calendar at 004-0079, a small focus change at
+004-0096, dialog 004-0125–0151 (mean ≈11.6 k), season-over state from
+004-0152/0153 (mean ≈13.44 k) to the rig kill. The run-6 exit at ≈110 s did
+**not** reproduce: both retry runs survived to the 240 s rig kill with no
+crash text, so that exit is better explained as a one-off crash than as a
+deterministic reaction to the keys.
+
+### What Enter actually did (frame evidence)
+
+* `enter` on Simulate does not open a match. It resolves the whole season in
+  one step: a modal **"<country> League Champions"** box (Spain in run 1,
+  Brazil in run 2 — the fixture draw and champion are random per run),
+  confirmed by the second `enter`, then the calendar returns with every
+  displayed fixture scored and "Today's Game" reading **Season Over**;
+  Simulate is greyed and the bottom-bar focus ends on Standings.
+* The champion dialog is keyboard-dismissable by a plain `enter`; no second
+  option or menu is offered.
+* The per-fixture `Play` cells were never focused (the `Play` column is empty
+  in the calendar frames), so a competition match start remains unverified.
+
+### Site-7 verdict — gate never opened, allotted run not used
+
+Both runs produced zero `T_PROBE site=9` frames, so no `mode=` value existed
+to place in 8–11; per the brief the site-7 confirmation run was deliberately
+not executed and no `caller_link` is claimed. This is a genuine result, not a
+probe failure: the same classifier patch and capture-eax path that produced
+FU-16's 145-frame positive control was active, and the trace summaries are
+normal. Combined with FU-16/FU-17 (twelve decodable classifier traces now),
+the evidence says the league calendar's Simulate path does not call the
+competition renderer at `0x26B45`; it bulk-simulates the season without
+entering the state 8–11 match flow.
+
+### Honest verdict
+
+The flow-6 gap is closed: Enter on the calendar Simulate was pressed and
+frame-verified in two independent runs, and it does **not** start a
+competition match. The match engine where states 8–11 live remains unreached;
+the keyboard path to a competition match is still unknown (the fixture `Play`
+cells stay greyed/empty in our runs, and "No Flagged Games" / "Season Over"
+implies a mouse-driven game-flagging step). Site 7 therefore remains at its
+historical status.
+
+### Provenance
+
+```
+CAPTURE_EAX=1 CAPTURE_VIDEO=1 TIMEOUT=240 \
+    KEYS_FILE=/tmp/opencode/fu17/simulate1.keys \
+    sh tools/trace_probe.sh 0x26B45 9 probe-sim-1
+CAPTURE_EAX=1 CAPTURE_VIDEO=1 TIMEOUT=240 \
+    KEYS_FILE=/tmp/opencode/fu17/simulate1.keys \
+    sh tools/trace_probe.sh 0x26B45 9 probe-sim-2
+python3 tools/fifa96_frames.py captures/session-probe-sim-<N> --fps 1
+python3 tools/fifa96_probe.py captures/session-probe-sim-<N>/trace.bin \
+    --target-link 0x26B45 --overwrite 5 --expect-site 9 --capture-eax
+./build/fifa96_trace captures/session-probe-sim-<N>/trace.bin
+```
+
+`/tmp/opencode/fu17/simulate1.keys` was committed verbatim as
+`tools/keys/fu17-simulate.keys` (commit `feat(keys): calendar Simulate
+sequence`). `game/FIFAPCCD96.iso` was never written (patched copies only).
+`make test`: 19/19 before and after (no code changed).
