@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fifa96_vgt_capture.py — FU-20 VGT golden-record capture and extraction.
+"""fifa96_vgt_capture.py — FU-21 VGT per-method golden capture/extraction.
 
 Two subcommands:
 
@@ -11,9 +11,11 @@ Two subcommands:
 
 ``extract``
     Parse ``guest.bin`` + ``trace.bin``, require live entry-hook T_PROBE
-    frames (descriptor liveness before trusting a dump), resolve the golden
-    block pointer from the scratch cell (link 0x6728D), verify the success
-    bar and write ``tests/golden/vgt/record-<method>.{in,out}.bin``.
+    frames (descriptor liveness before trusting a dump), walk the golden
+    slot chain from the scratch cell (link 0x6728D) — one block per distinct
+    record method byte, copy-once — verify every success bar and write
+    ``tests/golden/vgt/record-<method>.{in,out}.bin`` (``--method`` selects).
+    FU-20 single-block dumps (record-10) remain extractable.
 
 The guest-RAM dump is only readable while DOSBox-X runs; the earlier FU-4/FU-7
 experiments used a dumpable DOSBox-X build (``/tmp/opencode/dosbox-x-nocap``)
@@ -50,6 +52,7 @@ MIN_OUT = 0x20
 VGT_MAGIC = 0x54475646
 KNOWN_METHODS = {0x10, 0x16, 0x32, 0x34, 0x46, 0x60, 0x62, 0x66,
                  0x6A, 0x6E, 0x70, 0x72, 0x7A}
+MAX_SLOTS = 64
 NEEDLE = rt.BANNER
 
 
@@ -107,15 +110,73 @@ def success_bar(record):
     }
 
 
-def extract(data, trace, scratch_link=SCRATCH_LINK,
-            entry_target=ENTRY_TARGET, entry_overwrite=ENTRY_OVERWRITE,
-            site_id=ENTRY_SITE, in_cap=IN_CAP, out_cap=OUT_CAP,
-            magic=VGT_MAGIC):
-    """Parse a guest RAM dump + trace into a golden record dict.
+def observed_methods(trace, site_id=ENTRY_SITE):
+    """Sorted method bytes observed in live descriptor frames.
 
-    Raises ValueError with a specific reason when the dump cannot be trusted
-    (no live descriptor frames, zero scratch, bad magic, out-of-bounds
-    pointer) or when the success bar fails.
+    FU-21 entry frames carry the raw record header byte (stream[0]) in the
+    caller_lo field, so the trace is a per-method observation record even for
+    records the size filter excluded. Only valid for FU-21-patched runs; a
+    FU-20 trace has caller-address halves there.
+    """
+    frames = probe.probe_frames(trace)
+    return sorted({f["caller_lo"] & 0xFF for f in probe.site_frames(frames,
+                                                                   site_id)})
+
+
+def _block_view(data, ptr, delta_dump, delta_load, in_cap, out_cap, magic):
+    """Parse one self-describing golden block; returns its record view.
+
+    Understands both FU-20 (magic at +0, no linked list) and FU-21 (next at
+    +0, magic at +0xC) headers. Raises ValueError when the block does not map
+    inside the dump or fails the magic/length checks.
+    """
+    block_off = ptr + delta_dump - delta_load
+    if block_off < 0 or block_off + 0x10 + in_cap + out_cap > len(data):
+        raise ValueError(
+            f"golden block 0x{ptr:x} maps outside the dump "
+            f"(offset 0x{block_off:x})")
+    header = data[block_off:block_off + 0x10]
+    next_ptr = 0
+    legacy = False
+    if struct.unpack_from("<I", header, 0)[0] == magic:
+        legacy = True
+    else:
+        got_magic = struct.unpack_from("<I", header, 0xC)[0]
+        if got_magic != magic:
+            raise ValueError(
+                f"golden magic 0x{got_magic:08x} != 0x{magic:08x} at dump "
+                f"offset 0x{block_off:x}; block was clobbered or the pointer "
+                f"is stale")
+        next_ptr = struct.unpack_from("<I", header, 0)[0]
+    method = header[4]
+    out_len = struct.unpack_from("<I", header, 8)[0]
+    if out_len > out_cap:
+        raise ValueError(f"golden out_len 0x{out_len:x} over cap 0x{out_cap:x}")
+    inp = data[block_off + 0x10:block_off + 0x10 + in_cap]
+    out = data[block_off + 0x10 + in_cap:
+               block_off + 0x10 + in_cap + out_len]
+    header24 = (inp[2] << 16) | (inp[3] << 8) | inp[4]
+    return {
+        "method": method, "out_len": out_len, "header24": header24,
+        "input": inp, "output": out, "ptr": ptr, "block_off": block_off,
+        "next": next_ptr, "legacy": legacy,
+    }
+
+
+def extract_records(data, trace, scratch_link=SCRATCH_LINK,
+                    entry_target=ENTRY_TARGET,
+                    entry_overwrite=ENTRY_OVERWRITE, site_id=ENTRY_SITE,
+                    in_cap=IN_CAP, out_cap=OUT_CAP, magic=VGT_MAGIC,
+                    method=None, max_slots=MAX_SLOTS):
+    """Parse a guest RAM dump + trace into the list of golden records.
+
+    Walks the FU-21 slot chain (or the FU-20 single block) from the scratch
+    cell and returns records in capture order (oldest first). Raises
+    ValueError with a specific reason when the dump cannot be trusted (no
+    live descriptor frames, zero scratch, bad magic, out-of-bounds pointer,
+    chain cycle, duplicate method slot) or when any success bar fails.
+    `method` optionally selects a set of method bytes; requesting a method
+    that has no slot is an error.
     """
     frames = probe.probe_frames(trace)
     live = probe.site_frames(frames, site_id)
@@ -123,7 +184,7 @@ def extract(data, trace, scratch_link=SCRATCH_LINK,
         raise ValueError(
             f"no T_PROBE descriptor frames for site {site_id}: the entry "
             f"hook is not live, refusing to trust the dump")
-    delta_load = probe.load_delta(frames, entry_target, entry_overwrite)
+    delta_load = probe.load_delta(live, entry_target, entry_overwrite)
     delta_dump, anchors = rt.find_delta(data)
     if delta_dump is None:
         raise ValueError("WATCOM banner not found in the dump; cannot map "
@@ -135,40 +196,67 @@ def extract(data, trace, scratch_link=SCRATCH_LINK,
     if ptr == 0:
         raise ValueError("scratch pointer is zero: no record was captured "
                          "(hook never matched a small record)")
-    block_off = ptr + delta_dump - delta_load
-    if block_off < 0 or block_off + 0x10 + in_cap + out_cap > len(data):
+    blocks = []
+    seen = set()
+    while ptr:
+        if ptr in seen:
+            raise ValueError(f"golden slot chain cycle at 0x{ptr:x}")
+        seen.add(ptr)
+        if len(blocks) >= max_slots:
+            raise ValueError(f"golden slot chain longer than {max_slots} "
+                             f"blocks; refusing to walk further")
+        block = _block_view(data, ptr, delta_dump, delta_load, in_cap,
+                            out_cap, magic)
+        blocks.append(block)
+        if block["legacy"]:
+            if len(seen) != 1:
+                raise ValueError(
+                    f"legacy FU-20 block found mid-chain at 0x{ptr:x}")
+            break
+        ptr = block["next"]
+    records = list(reversed(blocks))
+    methods = [r["method"] for r in records]
+    dupes = sorted({m for m in methods if methods.count(m) > 1})
+    if dupes:
         raise ValueError(
-            f"golden block 0x{ptr:x} maps outside the dump "
-            f"(offset 0x{block_off:x})")
-    header = data[block_off:block_off + 0x10]
-    got_magic = struct.unpack_from("<I", header, 0)[0]
-    if got_magic != magic:
+            "duplicate method slot(s) "
+            + ", ".join(f"0x{m:02x}" for m in dupes)
+            + ": copy-once per slot is violated")
+    for record in records:
+        record["delta_load"] = delta_load
+        record["delta_dump"] = delta_dump
+        record["anchors"] = anchors
+        record["checks"] = success_bar(record)
+        if not all(record["checks"].values()):
+            failed = [k for k, v in record["checks"].items() if not v]
+            raise ValueError(
+                f"success bar failed: {', '.join(failed)} "
+                f"(method 0x{record['method']:02x}, "
+                f"out_len 0x{record['out_len']:x}, "
+                f"header24 0x{record['header24']:x})")
+    if method is not None:
+        wanted = set(method)
+        missing = sorted(wanted - set(methods))
+        if missing:
+            raise ValueError(
+                "requested method(s) not captured: "
+                + ", ".join(f"0x{m:02x}" for m in missing))
+        records = [r for r in records if r["method"] in wanted]
+    return records
+
+
+def extract(data, trace, method=None, **kwargs):
+    """FU-20-compatible single-record wrapper around `extract_records`.
+
+    Without `method` the dump must hold exactly one record; with `method`
+    the selected record is returned.
+    """
+    records = extract_records(data, trace, method=method, **kwargs)
+    if method is None and len(records) != 1:
         raise ValueError(
-            f"golden magic 0x{got_magic:08x} != 0x{magic:08x} at dump "
-            f"offset 0x{block_off:x}; block was clobbered or the pointer "
-            f"is stale")
-    method = header[4]
-    out_len = struct.unpack_from("<I", header, 8)[0]
-    if out_len > out_cap:
-        raise ValueError(f"golden out_len 0x{out_len:x} over cap 0x{out_cap:x}")
-    inp = data[block_off + 0x10:block_off + 0x10 + in_cap]
-    out = data[block_off + 0x10 + in_cap:
-               block_off + 0x10 + in_cap + out_len]
-    header24 = (inp[2] << 16) | (inp[3] << 8) | inp[4]
-    record = {
-        "method": method, "out_len": out_len, "header24": header24,
-        "input": inp, "output": out,
-        "ptr": ptr, "block_off": block_off,
-        "delta_load": delta_load, "delta_dump": delta_dump,
-        "anchors": anchors,
-    }
-    record["checks"] = success_bar(record)
-    if not all(record["checks"].values()):
-        failed = [k for k, v in record["checks"].items() if not v]
-        raise ValueError(f"success bar failed: {', '.join(failed)} "
-                         f"(method 0x{method:02x}, out_len 0x{out_len:x}, "
-                         f"header24 0x{header24:x})")
-    return record
+            f"dump holds {len(records)} golden slots; pass method=... to "
+            f"select one")
+    return records[0]
 
 
 def write_golden(record, out_dir, provenance=None):
@@ -308,20 +396,25 @@ def cmd_run(args):
 def cmd_extract(args):
     dump = Path(args.dump).read_bytes()
     trace = Path(args.trace).read_bytes()
+    methods = set(args.method) if args.method else None
     try:
-        record = extract(dump, trace, scratch_link=args.scratch_link,
-                         entry_target=args.entry_target)
+        records = extract_records(dump, trace, scratch_link=args.scratch_link,
+                                  entry_target=args.entry_target,
+                                  method=methods)
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    stem = write_golden(record, args.out_dir, provenance={
-        "dump": str(args.dump), "trace": str(args.trace),
-        "session": args.session or "",
-    })
-    print(f"method=0x{record['method']:02x} out_len={record['out_len']} "
-          f"header24=0x{record['header24']:x} ptr=0x{record['ptr']:x}")
-    print(f"checks={record['checks']}")
-    print(f"golden: {stem}.in.bin {stem}.out.bin {stem}.json")
+    for record in records:
+        stem = write_golden(record, args.out_dir, provenance={
+            "dump": str(args.dump), "trace": str(args.trace),
+            "session": args.session or "",
+        })
+        print(f"method=0x{record['method']:02x} out_len={record['out_len']} "
+              f"header24=0x{record['header24']:x} ptr=0x{record['ptr']:x}")
+        print(f"checks={record['checks']}")
+        print(f"golden: {stem}.in.bin {stem}.out.bin {stem}.json")
+    seen = observed_methods(trace)
+    print("observed_methods=[" + ", ".join(f"0x{m:02x}" for m in seen) + "]")
     return 0
 
 
@@ -348,6 +441,9 @@ def main(argv=None):
                    default=SCRATCH_LINK)
     e.add_argument("--entry-target", type=lambda s: int(s, 0),
                    default=ENTRY_TARGET)
+    e.add_argument("--method", action="append", type=lambda s: int(s, 0),
+                   help="only extract this method byte (repeatable; any "
+                        "requested method with no slot is an error)")
     e.set_defaults(func=cmd_extract)
     args = ap.parse_args(argv)
     return args.func(args)

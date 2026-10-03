@@ -42,8 +42,9 @@ def synthetic_dump(scratch=0x400000, delta_load=0x1FC000,
     for i in range(5, len(inp)):
         inp[i] = (i * 7) & 0xFF
     out = bytes((i * 13 + 1) & 0xFF for i in range(out_len))
-    hdr = struct.pack("<I", magic) + bytes([method, 0xFB, 0, 0]) + \
-        struct.pack("<I", out_len)
+    # FU-21 slot block: +0 next, +4 method, +8 out_len, +0xC magic
+    hdr = struct.pack("<I", 0) + struct.pack("<I", method) + \
+        struct.pack("<I", out_len) + struct.pack("<I", magic)
     data[block_off:block_off + 0x10] = hdr
     data[block_off + 0x10:block_off + 0x10 + len(inp)] = inp
     data[block_off + 0x10 + vgt.IN_CAP:
@@ -51,7 +52,7 @@ def synthetic_dump(scratch=0x400000, delta_load=0x1FC000,
     if corrupt == "zero_scratch":
         struct.pack_into("<I", data, vgt.SCRATCH_LINK + delta_dump, 0)
     elif corrupt == "magic":
-        struct.pack_into("<I", data, block_off, 0xDEADBEEF)
+        struct.pack_into("<I", data, block_off + 0xC, 0xDEADBEEF)
     elif corrupt == "length":
         data[block_off + 0x10 + 4] ^= 0xFF
     return bytes(data)
@@ -70,6 +71,16 @@ class TestTemplate(unittest.TestCase):
         self.assertEqual(patch.zero_run_length(img, CAVE + 0x102), 1)
         self.assertEqual(patch.zero_run_length(img, CAVE + 0x103), 0)
         self.assertEqual(patch.zero_run_length(img, 0x10000), 0)
+
+    def test_entry_cave_reads_stream_argument(self):
+        # the patched call adds a return address, so stream is [esp+0x30]
+        # after the three prologue pushes; [esp+0x2c] is the caller return
+        # address (live session vgt21-1 read a code byte 0x83 from it)
+        built = patch.build_vgt_capture(ENTRY, RETURN, 1, CAVE,
+                                        image=self.info["image"])
+        entry = built["blob"][4:4 + built["entry_len"]]
+        self.assertIn(b"\x8b\x5c\x24\x30", entry)     # mov ebx,[esp+0x30]
+        self.assertNotIn(b"\x8b\x5c\x24\x2c", entry)  # mov ebx,[esp+0x2c]
 
     def test_capture_fits_the_cave(self):
         built = patch.build_vgt_capture(ENTRY, RETURN, 1, CAVE,
@@ -95,6 +106,15 @@ class TestTemplate(unittest.TestCase):
                                            image=self.info["image"])
         self.assertIn(b"\x81\xee" + struct.pack("<I", RETURN + 5), cave)
         self.assertNotIn(b"\x81\xee" + struct.pack("<I", RETURN), cave)
+
+    def test_return_cave_keeps_out_len_across_allocator(self):
+        # live session vgt21-1: FUN_00098bf8 preserves only ESI/EDI (it
+        # clobbers EAX/EBX/ECX/EDX), so the decoded length must be stored
+        # from the stack-saved ECX, never from EBX
+        cave = patch.build_vgt_return_cave(RETURN, 5, 0x100000, CAVE,
+                                           image=self.info["image"])
+        self.assertIn(b"\x89\x48\x08", cave)     # mov [eax+8], ecx
+        self.assertNotIn(b"\x89\x58\x08", cave)  # mov [eax+8], ebx
 
     def test_return_cave_reads_saved_esi_not_flags(self):
         # the decoded length is the pushad-saved ESI at [esp+0x0c]; [esp+4]
@@ -201,6 +221,19 @@ class TestExtract(unittest.TestCase):
 
 
 class TestGoldenVectors(unittest.TestCase):
+    def test_record10_vectors_byte_identical(self):
+        import hashlib
+        for name, digest in (
+                ("record-10.in.bin",
+                 "86665a0df5b6f3790e4dabdecc1b4ec6424886cc6ef2797f"
+                 "8485543ddfbe6e9c"),
+                ("record-10.out.bin",
+                 "d1241738a3dcca0c4b205b6764d1494ac3719df720f10739b"
+                 "1b2caa4bba9fac5")):
+            data = (GOLDEN / name).read_bytes()
+            self.assertEqual(hashlib.sha256(data).hexdigest(), digest,
+                             f"{name} changed; FU-20 vectors are pinned")
+
     def test_committed_vectors_pass_success_bar(self):
         vectors = sorted(GOLDEN.glob("record-*.in.bin"))
         if not vectors:

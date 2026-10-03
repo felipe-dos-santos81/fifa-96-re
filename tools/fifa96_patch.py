@@ -58,22 +58,90 @@ cave:
         jmp  {resume:#x}
 """
 
-# --- VGT golden-record capture (FU-20) -------------------------------------
+# --- VGT golden-record capture (FU-20/FU-21) -------------------------------
 # Two trampolines share the single obj1 zero run (link 0x6728D, 0x103 bytes):
 #   [scratch:u32=0][entry probe][return capture]
-# The return trampoline is entered via a `call` patched over the epilogue at
-# 0x9E859. stream and dst are read from the caller's argument slots in the
-# stack frame (entry ESP is [esp+0x28+0] at the hook); the decoded length is
-# the ESI saved by the target's own PUSH ESI. A 0xFB signature check plus a
-# nontrivial/<=out_cap length filter selects the first small record; the
-# scratch cell records the golden block so later records are skipped. The
-# golden block is allocated from the game's own heap via FUN_00098bf8
-# (cdecl: debug-tag string, size, flags) and is read back out of a host RAM
-# dump. The tag argument is the zeroed scratch cell: the allocator only scans
-# and copies it into the block header, so an empty string is safe and avoids
-# the separate low-address relocation base (0x2D1000 in the FU-20 runs) that
+#
+# FU-21: the return hook keeps one golden slot per observed method byte
+# instead of a single first-record slot. The scratch cell is the head of a
+# singly linked list of heap blocks (0 = nothing captured yet); each block is
+# self-describing, so extraction walks the chain and copy-once falls out of
+# checking the method field during the walk. The chain costs ~15 bytes over
+# the single-slot FU-20 template, paid for by the entry probe dropping its
+# caller split (it now carries the observed method byte in the caller_lo
+# field). The allocator FUN_00098bf8 preserves only ESI/EDI (it clobbers
+# EAX/EBX/ECX/EDX; live session vgt21-1 caught EBX returning as 0), so the
+# decoded length is kept on the stack across the call and the method byte in
+# EDI.
+#
+# Block layout (heap, 0x10 + in_cap + out_cap bytes):
+#   +0x00 next pointer (guest runtime address; 0 = tail)
+#   +0x04 method id (raw stream[0], zero-extended dword)
+#   +0x08 decoded length (out_len)
+#   +0x0C magic 'FVGT' (0x54475646)
+#   +0x10 bounded input slice (in_cap)
+#   +0x10+in_cap exact decoded output (out_len)
+#
+# FU-20's single block (magic at +0, no next) is still understood by the
+# extraction tool so the committed record-10 dump remains re-extractable.
+#
+# Entry probe: the proven FU-11 DPMI descriptor, but the caller-address split
+# is dropped (extraction only needs site + the raw call return for the load
+# delta) and the observed method byte (stream[0]) is reported in the
+# caller_lo field, making the trace a per-method liveness record. EBX/EDX
+# slots stay zero from the structure zero-fill (no caller attribution).
+#
+# Return capture: stream and dst are read from the caller's argument slots;
+# the decoded length is the ESI saved by the target's own PUSH ESI. A 0xFB
+# signature plus a nontrivial/<=out_cap length filter selects qualifying
+# records; a list walk skips methods that already own a slot. The golden
+# block is allocated from the game's own heap via FUN_00098bf8 (cdecl:
+# debug-tag string, size, flags) and read back out of a host RAM dump. The
+# tag argument is the scratch cell: on the first capture it is zero (empty
+# string); later it holds a small heap pointer whose top byte is zero, so the
+# allocator's basename helper stops inside the pointer bytes. This avoids the
+# separate low-address relocation base (0x2D1000 in the FU-20 runs) that
 # &DAT_000033cc / &DAT_0000420c carry; that base is not the client image
 # delta (0x1FC000) and is not otherwise derivable from the code delta.
+VGT_ENTRY_TEMPLATE = r"""
+bits 32
+org {cave:#x}
+vgt_entry_probe:
+        pushad
+        pushfd
+        push es
+        mov  ax, ss
+        mov  es, ax
+        mov  ebp, [esp+40]              ; call's return (target+5, runtime)
+        add  ebp, {adjust}              ; resume is target+overwrite
+        mov  ebx, [esp+48]              ; stream (caller arg slot; the
+                                        ; patched call adds a return address,
+                                        ; so [esp+44] is the caller's return)
+        movzx ebx, byte [ebx]           ; observed method byte
+        mov  esi, {site:#x}
+        sub  esp, 48
+        mov  edi, esp
+        xor  eax, eax
+        mov  ecx, 12
+        cld
+        rep  stosd
+        mov  edi, esp                   ; ES:EDI -> real-mode register struct
+        mov  [esp+0x04], esi            ; ESI slot = site id
+        mov  [esp+0x08], ebp            ; EBP slot = target resume (runtime)
+        mov  [esp+0x10], ebx            ; EBX slot = observed method byte
+        mov  ax, 0x0300
+        mov  bx, 0x0061
+        xor  cx, cx
+        int  0x31
+        add  esp, 48
+        pop  es
+        popfd
+        popad
+        add  esp, 4                     ; discard the call's return address
+{displaced}
+        jmp  {resume:#x}
+"""
+
 VGT_RETURN_TEMPLATE = r"""
 bits 32
 org {cave:#x}
@@ -89,36 +157,46 @@ vgt_capture_return:
         cmp  byte [ebp+1], 0xfb         ; compression signature byte
         jne  .done
         mov  ecx, [esp+0x0c]            ; pushad-saved ESI = decoded length
-        cmp  ecx, {min_out:#x}
-        jb   .done
-        cmp  ecx, {out_cap:#x}
-        ja   .done
-        cmp  dword [esi+{scratch:#x}], 0
-        jne  .done                      ; first qualifying record only
+        lea  edx, [ecx-{min_out:#x}]
+        cmp  edx, {range_cap:#x}
+        ja   .done                      ; keep min_out <= len <= out_cap
+        movzx edi, byte [ebp]           ; observed method (callee-saved)
+        mov  edx, [esi+{scratch:#x}]    ; head of the captured-slot list
+.scan:
+        test edx, edx
+        jz   .capture
+        cmp  dword [edx+4], edi         ; method already has a slot?
+        je   .done
+        mov  edx, [edx]
+        jmp  .scan
+.capture:
+        push ecx                        ; out_len survives the allocator
         push 0
         push {alloc_size:#x}
-        lea  eax, [esi+{scratch:#x}]    ; zeroed cell = empty debug tag string
+        lea  eax, [esi+{scratch:#x}]    ; cell = debug tag string
         push eax
         call {alloc:#x}                 ; FUN_00098bf8(tag, size, 0)
         add  esp, 0xc
+        pop  ecx                        ; out_len
         test eax, eax
         jz   .done
-        mov  [esi+{scratch:#x}], eax
+        mov  edx, [esi+{scratch:#x}]    ; old head
+        mov  dword [eax], edx           ; block->next
+        mov  dword [esi+{scratch:#x}], eax
+        mov  [eax+8], ecx               ; out_len
+        mov  [eax+4], edi               ; method id
+        mov  dword [eax+0xc], {magic:#x}
         mov  ebx, eax
-        mov  ecx, [esp+0x0c]
         mov  eax, [esp+0x40]            ; dst (caller arg slot)
-        mov  dword [ebx], {magic:#x}    ; golden header
-        mov  [ebx+8], ecx               ; out_len
-        mov  cl, [ebp]
-        mov  [ebx+4], cl                ; method byte
         push ds
         pop  es
         mov  esi, ebp
         lea  edi, [ebx+0x10]            ; input slice at golden+0x10
+        push ecx                        ; out_len across the input copy
         mov  ecx, {in_cap:#x}
         cld
         rep  movsb
-        mov  ecx, [esp+0x0c]
+        pop  ecx
         mov  esi, eax
         rep  movsb                      ; output follows the input slice
 .done:
@@ -337,18 +415,46 @@ def build_cave(target, overwrite, site_id, cave_link, image=None,
     return cave
 
 
+def build_vgt_entry_cave(target, overwrite, site_id, cave_link, image=None,
+                         capacity=CAVE_CAPACITY):
+    """Assemble the FU-21 VGT entry descriptor trampoline (T_PROBE site 1).
+
+    Same proven DPMI structure as the FU-11 template, but the caller-address
+    split is replaced by the observed method byte (stream[0]) in the
+    caller_lo slot and EBX/EDX stay zero from the structure zero-fill.
+    `target` is decode_record_dispatch (0x9E718).
+    """
+    if image is None:
+        image = _default_image()
+    if overwrite < 5:
+        raise ValueError(f"overwrite must cover the 5-byte call, got "
+                         f"{overwrite}")
+    displaced = "        db " + ",".join(
+        f"0x{b:02x}" for b in image[target:target + overwrite])
+    source = VGT_ENTRY_TEMPLATE.format(
+        cave=cave_link, displaced=displaced, adjust=overwrite - 5,
+        resume=target + overwrite, site=site_id)
+    cave = _assemble(source, optimize=True)
+    if len(cave) > capacity:
+        raise ValueError(f"VGT entry cave is {len(cave)} bytes, over the "
+                         f"{capacity:#x} capacity")
+    return cave
+
+
 def build_vgt_return_cave(target_ret, overwrite, cave_link, scratch_link,
                           image=None, alloc_link=0x98BF8,
                           in_cap=0x4400, out_cap=0x4000, min_out=0x20,
                           capacity=CAVE_CAPACITY, magic=VGT_MAGIC):
-    """Assemble the FU-20 return-side golden-record capture trampoline.
+    """Assemble the FU-21 return-side per-method golden-record trampoline.
 
     Entered from a `call` patched over the dispatcher epilogue at
     `target_ret` (0x9E859). Reads stream/dst from the caller's argument slots
-    and ESI (returned decoded size) from the target's saved ESI, and on the
-    first record passing the <= out_cap filter allocates an in_cap+out_cap+16
-    block from the game heap and copies a bounded input slice plus the exact
-    output. `scratch_link` holds the golden pointer (0 = not yet captured).
+    and ESI (returned decoded size) from the target's saved ESI. For each
+    record passing the min_out/out_cap filter whose raw method byte has no
+    slot yet, allocates an in_cap+out_cap+16 block from the game heap, links
+    it at the head of `scratch_link`'s chain and copies a bounded input slice
+    plus the exact output. A slot is never overwritten: the walk skips blocks
+    whose method field matches.
     """
     if image is None:
         image = _default_image()
@@ -361,6 +467,7 @@ def build_vgt_return_cave(target_ret, overwrite, cave_link, scratch_link,
         cave=cave_link, displaced=displaced, call_ret=target_ret + 5,
         resume=target_ret + overwrite, scratch=scratch_link,
         alloc=alloc_link, in_cap=in_cap, out_cap=out_cap, min_out=min_out,
+        range_cap=out_cap - min_out,
         alloc_size=0x10 + in_cap + out_cap, magic=magic)
     cave = _assemble(source, optimize=True)
     if len(cave) > capacity:
@@ -371,12 +478,12 @@ def build_vgt_return_cave(target_ret, overwrite, cave_link, scratch_link,
 
 def build_vgt_capture(entry_target, return_target, site_id, cave_link,
                       image=None, capacity=CAVE_CAPACITY, **return_kw):
-    """Build the FU-20 two-trampoline blob for the shared zero run.
+    """Build the FU-21 two-trampoline per-method capture blob.
 
     Layout: [scratch:u32][entry probe][return capture]. The entry probe is
-    the proven FU-11 T_PROBE template (site_id), so record entry liveness is
-    visible on the wire; the return capture performs the golden copy.
-    Returns a dict with the blob and its placement.
+    the FU-11-derived T_PROBE descriptor (site_id) carrying the observed
+    method byte; the return capture fills one linked golden slot per distinct
+    method. Returns a dict with the blob and its placement.
     """
     if image is None:
         image = _default_image()
@@ -386,8 +493,9 @@ def build_vgt_capture(entry_target, return_target, site_id, cave_link,
     scratch_link = cave_link
     entry_link = cave_link + 4
     entry_ow = overwrite_len(image, entry_target)
-    entry = build_cave(entry_target, entry_ow, site_id, entry_link,
-                       image=image, capacity=capacity)
+    entry = build_vgt_entry_cave(entry_target, entry_ow, site_id, entry_link,
+                                 image=image,
+                                 capacity=capacity - 4)
     return_link = entry_link + len(entry)
     ret_ow = overwrite_len(image, return_target)
     ret = build_vgt_return_cave(return_target, ret_ow, return_link,
