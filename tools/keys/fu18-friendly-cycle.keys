@@ -1,0 +1,20 @@
+# fu18-friendly-cycle.keys — FU-18 site-8 remap: FRIENDLY value cycling.
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Timeline (frame-verified in captures/session-probe-s8-3):
+#   10 s  enter       skip the looping intro
+#   18 s  enter       GAME SELECT -> FRIENDLY team select
+#   24..54 s space x6 cycle the focused Home value (country/club pair;
+#                     frames 004-0024 France/Auxerre, 004-0066 Brazil/A Mineiro)
+#   60 s right, 66..78 s space x3, 84 s left, 90 s space
+#   96 s up, 102/108 s space, 114 s down, 120/126 s space
+#                     keep cycling the Home rows (USA/Atlanta at 004-0096,
+#                     Sweden/Trelleborg at 004-0130); the Visitor column
+#                     stayed International/Italy in every run
+#
+# Result (session-probe-s8-3): 78 T_PROBE site=8 frames. Each Home value
+# change emits the 0x24227+0x24282 row-frame pair plus 0x246DA (cycle to
+# the previous value) or 0x24789 (cycle to the next value).
+# See docs/ghidra/FU18_site8_callers.md for the campaign.
+# generated timeline: start 10.0s enter@10 enter@18 space@24 space@30 space@36 space@42 space@48 space@54 right@60 space@66 space@72 space@78 left@84 space@90 up@96 space@102 space@108 down@114 space@120 space@126
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space

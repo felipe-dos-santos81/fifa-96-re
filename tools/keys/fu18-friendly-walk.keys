@@ -1,0 +1,22 @@
+# fu18-friendly-walk.keys — FU-18 site-8 caller remap: FRIENDLY screen walk.
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Timeline and the screens each key reaches (frame-verified in
+# captures/session-probe-s8-2):
+#   10 s  enter       skip the looping intro
+#   18 s  enter       GAME SELECT -> FRIENDLY team select (MOD5 loads)
+#   24/29/34/39 s down, 44/49/54 up, 59/64 right, 69/74 left
+#                     walk the team-select rows/columns (no site-8 calls)
+#   79/84 s down      highlight the bottom buttons; 89 s enter opens the
+#                     team editor (BRAZIL roster, frame 004-0089)
+#   94 s enter, 99/104 s space, 109 s right, 114 s enter
+#                     team-editor navigation
+#   119/124 s esc     back to GAME SELECT (frame 004-0125)
+#
+# Result (session-probe-s8-2): 30 T_PROBE site=8 frames, six distinct
+# callers {0x24227, 0x24282, 0x242BF, 0x2431C, 0x24373, 0x25DDA}. The
+# 0x242xx/0x243xx callers fire in the FRIENDLY-entry draw burst and again
+# at the team-editor entry; 0x25DDA is the transition cache reset.
+# See docs/ghidra/FU18_site8_callers.md for the campaign.
+# generated timeline: start 10.0s enter@10 enter@18 down@24 down@29 down@34 down@39 up@44 up@49 up@54 right@59 right@64 left@69 left@74 down@79 down@84 enter@89 enter@94 space@99 space@104 right@109 enter@114 esc@119 esc@124
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , esc , , , , , , , , , , , , , , , , , , , , , , , , , esc
