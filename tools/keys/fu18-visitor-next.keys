@@ -1,0 +1,16 @@
+# fu18-visitor-next.keys — FU-18 site-8 remap: Visitor increment cycles (0x24938).
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Run 2 of the visitor-side retry (docs/ghidra/FU18_site8_callers.md,
+# "Visitor-side retry (2026-10-02)"), session-probe-s8v-2. Same proven walk
+# as fu18-visitor.keys (down x4, up x2 -> Visitor focused), then alternate
+# `space` value cycles with `right`/`left` column-focus moves. Repeated
+# `space` after a `right` cycled the Visitor country with the increment block
+# (0x24938 x2, frame 004-0066 International/Algeria); `left@90` moved focus
+# to Home and the following spaces fired the Home increment block
+# (0x24789 x4: Home Malaysia/Brunei at frame 004-0096); spaces on the Visitor
+# side also hit the decrement block (0x2488F x4). Result: 81 T_PROBE
+# site=8 frames, nine distinct callers (see the doc). This is the sequence
+# that maps the fourth and last visitor-side caller.
+# generated timeline: start 10.0s enter@10 enter@18 down@24 down@29 down@34 down@39 up@44 up@49 space@55 right@60 space@65 right@70 space@75 left@80 space@85 left@90 space@95 enter@100 space@105 tab@110 space@115 down@120 right@125 space@130 up@135 space@140 enter@145 esc@150 esc@155
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , tab , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , esc , , , , , , , , , , , , , , , , , , , , , , , , , esc

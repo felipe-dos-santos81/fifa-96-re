@@ -1,0 +1,34 @@
+# fu18-visitor.keys — FU-18 site-8 caller remap: focus the VISITOR column.
+#
+# One AUTOTYPE step (comma = 0.2 s; see docs/ghidra/FU13_headless_input.md).
+# Hypothesis from re-reading captures/session-probe-s8-2 frames 004-0043/0045/
+# 0049/0050/0060 (extracted again at 4 fps): the Visitor column becomes the
+# active column between wall 49.3 s and 50.0 s, i.e. at the second `up` press
+# of fu18-friendly-walk's walk (up@49), NOT at right@59. FU-18 run 3's
+# right@60 never moved focus because its walk never ran.
+#
+# Timeline (absolute seconds from launch):
+#   10 enter       skip the looping intro
+#   18 enter       GAME SELECT -> FRIENDLY team select (MOD5 loads)
+#   24/29/34/39 down, 44/49 up
+#                  mirror fu18-friendly-walk's walk; focus flips to Visitor
+#                  at the up@49 press
+#   54/59/64 space cycle the focused (Visitor) value -> expect 0x2488F/0x24938
+#   69/74/79/84 left,right,left,right
+#                  try the other cycle/focus-mover keys on the Visitor side
+#   89 space       more visitor cycling
+#   94 enter       selection event attempt on the focused Visitor row
+#   99 down, 104 space, 109 up, 114 space
+#                  walk the Visitor rows and keep cycling
+#   119 tab, 124 space
+#                  try tab as an alternative focus mover, then cycle
+#   129 enter      second selection-event attempt
+#   134 space      cycle again
+#   139/144 esc    back out
+#   149 enter, 154 esc
+#                  one more entry attempt in case esc landed somewhere useful
+#
+# Result: see docs/ghidra/FU18_site8_callers.md, "Visitor-side retry
+# (2026-10-02)".
+# generated timeline: start 10.0s enter@10 enter@18 down@24 down@29 down@34 down@39 up@44 up@49 space@54 space@59 space@64 left@69 right@74 left@79 right@84 space@89 enter@94 down@99 space@104 up@109 space@114 tab@119 space@124 enter@129 space@134 esc@139 esc@144 enter@149 esc@154
+10 enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , left , , , , , , , , , , , , , , , , , , , , , , , , , right , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , down , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , up , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , tab , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , space , , , , , , , , , , , , , , , , , , , , , , , , , esc , , , , , , , , , , , , , , , , , , , , , , , , , esc , , , , , , , , , , , , , , , , , , , , , , , , , enter , , , , , , , , , , , , , , , , , , , , , , , , , esc
