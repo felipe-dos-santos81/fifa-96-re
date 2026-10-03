@@ -193,3 +193,113 @@ and `python3 tools/fifa96_callers.py 0x23B38` (census unchanged: 12 callers).
   remain unknown; run 2's `004-0050`/`004-0060` frames show a
   Visitor-highlighted state but no probe frame was emitted there, so the
   path is not yet proven.
+
+## Visitor-side retry (2026-10-02)
+
+Follow-up to the four unmapped callers: focus the Visitor column and drive
+its value cycles. Two runs, both productive; the two Visitor cycle callers
+are now mapped, leaving only the two selection wrappers, which the static
+evidence places behind the modem/direct-link message queue.
+
+### Method delta (what the FU-18 campaign missed)
+
+Frame forensics (re-extracting `captures/session-probe-s8-2/video/fifa96_004.avi`
+at 4 fps and sampling the Visitor-row highlight region at x=392,y=344) show
+the Visitor column became active between wall 49.3 s and 50.0 s — at the
+second `up` of run 2's walk (`up@49`), **not** at `right@59`. Run 3's
+`right@60` never moved focus because its walk (spaces only) never left the
+Home column. The retry therefore reuses the run-2 walk
+(`down`×4 then `up`×2) as the Visitor-focus recipe, then cycles there.
+
+Fresh frame checks confirm `left` moves focus to the Home column (run-1
+`004-0065`; run-2 4 fps sampling: Visitor focused t≈80–90 s, Home focused
+t≈95–120 s after `left@90`). The way back to the Visitor column was not
+cleanly isolated: run-1's `right@74`/`right@84` did not visibly refocus
+Visitor in the 1 fps frames (`004-0066`, `004-0076` still Home), yet the
+Visitor was focused again by `004-0085`. `space` cycles the focused
+column's country.
+
+### Runs
+
+All runs target `0x23B38`/site 8. Trace bytes from
+`captures/session-probe-s8v-<N>/trace.bin`; "probe" = decoded `T_PROBE
+site=8` frames; modules every run `MOD2 MOD5` (no tournament route).
+
+| # | keys | session | trace bytes | AVIs / frames | probe | distinct callers | screens observed (frame evidence) |
+|---|------|---------|------------:|--------------:|------:|------------------|----------------------------------|
+| 1 | `tools/keys/fu18-visitor.keys` | `probe-s8v-1` | 91,082 | 5 / 171 | 83 | `0x24227` `0x24282` `0x242BF` `0x2431C` `0x24373` `0x25DDA` **`0x2488F`** | FRIENDLY, Visitor column focused: International/Italy (`004-0045`) → Germany/1860 München (`004-0050`) → England/Arsenal (`004-0060`) → Brazil/A Mineiro (`004-0085`); `left@69` refocused Home (`004-0065`), Visitor again by `004-0085` |
+| 2 | `tools/keys/fu18-visitor-next.keys` | `probe-s8v-2` | 82,350 | 5 / 173 | 81 | `0x24227` `0x24282` `0x242BF` `0x2431C` `0x24373` `0x25DDA` `0x24789` `0x2488F` **`0x24938`** | Visitor Germany/1860 `004-0056` → International/Algeria `004-0066` (increment block); `left@90` refocused Home, spaces then cycled Home to Malaysia/Brunei (`004-0096`) |
+
+Counts per run (decoded frames):
+
+* s8v-1: `0x2488F`×9, `0x24373`×29, `0x242BF`×26, `0x24227`×7,
+  `0x24282`×7, `0x2431C`×3, `0x25DDA`×2 (`SUMMARY end=END lost=38
+  seqgaps=37`).
+* s8v-2: `0x24373`×22, `0x242BF`×20, `0x24227`×13, `0x24282`×13,
+  `0x2488F`×4, `0x24789`×4, `0x24938`×2, `0x2431C`×2, `0x25DDA`×1
+  (`SUMMARY end=END lost=38 seqgaps=35`).
+
+Burst attribution (no timestamps in `T_PROBE`, so callers are grouped by the
+draw calls around them): Visitor cycles are preceded by `0x242BF`/`0x24373`
+redraw pairs (slot-1 draw path via `FUN_00023EB8`); Home cycles by
+`0x24227`/`0x24282` pairs (slot-0 path via `FUN_00023D14`). In s8v-2 the two
+`0x24938` bursts sit inside `242BF/24373` groups (decoded-stream positions 22
+and 27) and the four `0x24789` bursts inside `24227/24282` pair groups
+(positions 41, 46, 51, 56), cross-checked against the frame-verified screens
+above.
+
+### Verdict on the four unmapped callers
+
+| caller_link | status after this campaign |
+|-------------|----------------------------|
+| `0x2488F` | **Mapped (run 1)**: Visitor slot-1 country *decrement* range (static block `0x24840`, `[0x5478]--`); fires while the Visitor column is focused and cycled, 9× in `probe-s8v-1`. |
+| `0x24938` | **Mapped (run 2)**: Visitor slot-1 country *increment* range (static block `0x24900`, `([0x5478]+1) % count`); fires after `right`-directed cycles on the Visitor column, 2× in `probe-s8v-2`. |
+| `0x24062` | **Not keyboard-reachable (static verdict).** Its wrapper `FUN_00024044` has exactly two callers, both inside `FUN_00024a9c` (`0x24A29`, `0x24A86`; events 3/4). `FUN_00024a9c` reads the link/message queue (`FUN_0001d51c` → `FUN_0006ccca`) and is gated on `DAT_0005753c`; the binary carries `modem/direct.cfg`, `modem/modems.cfg` and `_CONNECT…` strings, placing that queue in the modem/direct-link subsystem (GAME SELECT's Modem Setup). Fires only when a remote/link peer changes the Home selection. |
+| `0x240C1` | Same as `0x24062` for the Visitor side (`FUN_000240a0`, `0x24A0F`/`0x24A64`); needs the same link message path. |
+
+The `0x24062`/`0x240C1` verdict is static and was not runtime-proven (no
+modem session was started). Both wrappers also consult `FUN_0006d1e5`
+(returns `DAT_0000dfb0`) to pick the side, consistent with a remote-player
+selection event, and the handler copies 0x2f-byte (team record) / 9-byte
+payloads out of the message.
+
+### Honest notes
+
+* Run-2's cycle direction was not fully reduced to a key rule: `right`
+  presses preceded the two Visitor increments and `left` the Visitor
+  decrements, but after `left@90` refocused Home the following `space`
+  presses all used the Home *increment* block. Recorded as observed; the
+  direction-state update rule is an open question.
+* Decode loss again makes all distinct-caller counts lower bounds
+  (`lost=38`, `seqgaps=37/35`).
+* Both runs ended normally (`SUMMARY end=END`); no crash, no early exit.
+* `0x24789` (already mapped in FU-18) fired in run 2; no other previously
+  unmapped caller appeared.
+
+### Provenance
+
+```
+CAPTURE_VIDEO=1 KEYS_FILE=tools/keys/fu18-visitor.keys TIMEOUT=170 \
+    sh tools/trace_probe.sh 0x23B38 8 probe-s8v-1
+CAPTURE_VIDEO=1 KEYS_FILE=tools/keys/fu18-visitor-next.keys TIMEOUT=172 \
+    sh tools/trace_probe.sh 0x23B38 8 probe-s8v-2
+python3 tools/fifa96_frames.py captures/session-probe-s8v-<N> --fps 1
+python3 tools/fifa96_probe.py captures/session-probe-s8v-<N>/trace.bin \
+    --target-link 0x23B38 --overwrite 5 --expect-site 8
+./build/fifa96_trace captures/session-probe-s8v-<N>/trace.bin
+```
+
+Static checks used the open Ghidra MCP session on `fifa96_le.bin`:
+`get_function_xrefs 0x24044`/`0x240a0` (only callers inside `FUN_00024a9c`),
+`FUN_00024a9c` (`0x249DE–0x24AFC`), `FUN_0001d51c`, `FUN_0006ccca`,
+`FUN_0006c74c`, `0x5753c` xrefs, and strings matching
+`modem|serial|_CONNECT`. `game/FIFAPCCD96.iso` was never written (patched
+copies only); `captures/` and `build/` are git-ignored; `make test`: 19/19
+before and after (no code changed).
+
+### Deliverable status (retry)
+
+1. Keys committed: `tools/keys/fu18-visitor.keys` (run 1: Visitor focus +
+   decrement cycles, fires `0x2488F`) and `tools/keys/fu18-visitor-next.keys`
+   (run 2: Visitor increment cycles, fires `0x24938`).
+2. This section.
