@@ -62,3 +62,29 @@ which is what `vgt_decode_k` actually consumes.
 * Assets: `/VIDEO/VID_BULL.TGV` extracted from the read-only ISO via
   `tools/fifa96_bind.iso_files` (probe only, not committed).
 * `make test`: 26/26.
+
+## Errata (2026-10-04, same-day fix)
+
+* **§1 fields are LE16, not BE16.** `MOV EAX,[p+6]; SHR EAX,16` takes the
+  high half of a little-endian dword, which is its second u16 read
+  **little-endian**: `width=LE16(+8)`, `height=LE16(+10)`,
+  `count=LE16(+12)`, `palette_count=LE16(+14)`. The §1 table's "BE16"
+  column is superseded. `src/fifa96_loader/fifa96_kvgt.c` was fixed the
+  same day (`fix(kvgt): little-endian header fields`); the synthetic test
+  frames now build LE16 fields.
+* **§3's "raw VIDEO does not match" is withdrawn.** The raw file *is* the
+  in-memory format. `VID_BULL.TGV` walks as length-prefixed chunks
+  `[u32 tag][u32 len]` (`FUN_00095cb3` advances by the len at chunk+4):
+  `0 @0x0 kVGT len 0x169C`, `1 @0x169C tag 0x684E5331 len 0x1088`,
+  `2 @0x2724 kVGT len 0x169C`, ... The first kVGT chunk parses as
+  96x100, count 0, palette_count 256 (palette at +0x14), refpack record
+  at `+0x14+256*3 = 0x314` (`10 fb 00 25 80`, declared 0x2580 = 9600 =
+  96x100). It is committed as
+  `tests/golden/vgt/kvgt-frame-01.bin` (5788 B, sha256
+  `92a18ccc068e091b31bde300cb27ace496fce960049abba4bb684dfeb71dd14a27`)
+  and decoded in `tests/test_kvgt.c`.
+* The companion chunks (tag bytes `31 53 4e 68` / `31 53 4e 64`, lengths
+  0x1068-0x1088) remain unidentified — audio or inter-frame delta
+  candidates. `vgt_stream_poll` skips non-VGT tags via
+  `FUN_00095dd2` (release), so they do not affect frame decoding.
+* Suite stays 26/26 after the fix (ASan/UBSan clean).
