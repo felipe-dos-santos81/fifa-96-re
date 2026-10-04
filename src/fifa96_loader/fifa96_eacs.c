@@ -80,13 +80,24 @@ int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_inf
     out.format = FIFA96_EACS_FMT_UNKNOWN;
   }
   if (out.format == FIFA96_EACS_FMT_DELTA_STEREO) {
-    /* FU-39 §2.1: the signed/video producer 0xB84FE parses the 20-byte block
-     * header at data_off; its count is one decoder unit (one packed byte)
-     * per stereo frame. */
-    if (out.data_len < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
-    uint32_t count = eacs_u32le(src + data_off);
-    if (count > out.data_len - 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
-    out.delta_units = count;
+    if (voice == -1) {
+      /* FU-43 §2: the bank form's voice -1 removes the arm's 0x10 flag, so the
+       * 20-byte block header is never read. +0x0C declares one decoder unit
+       * (one packed byte, high nibble L) per stereo frame at data_off — the
+       * unsigned producer 0xB8610 leaves the byte cursor unshifted for f9==2
+       * (FU-39 §2.3). */
+      if ((uint64_t)out.count > (uint64_t)out.data_len)
+        return -(int)FIFA96_ERR_TRUNCATED;
+      out.delta_units = out.count;
+    } else {
+      /* FU-39 §2.1: the signed/video producer 0xB84FE parses the 20-byte block
+       * header at data_off; its count is one decoder unit (one packed byte)
+       * per stereo frame. */
+      if (out.data_len < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+      uint32_t count = eacs_u32le(src + data_off);
+      if (count > out.data_len - 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+      out.delta_units = count;
+    }
   } else if (out.format == FIFA96_EACS_FMT_DELTA_MONO) {
     /* FU-39 §2.2: the unsigned/bank producer 0xB8610 skips the block header
      * and takes the declared +0x0C count (nibbles, two per byte at data_off;

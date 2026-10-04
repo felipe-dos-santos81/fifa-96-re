@@ -205,6 +205,28 @@ int main(void) {
   assert(fifa96_eacs_parse(b, 0x20 + 0x14 + 3, &info) == 0);
   assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 3);
 
+  /* ---- bank stereo form (FU-43 §2, closing FU-43 §6 leg 2) ----
+   * voice -1 removes the 20-byte block header (the arm's flags have no
+   * 0x10); the declared +0x0C count is one decoder unit per packed byte. */
+  uint8_t bank3[0x20 + 3];
+  hdr(bank3, 16384, 2, 2, 2, -1, 3, 0, 0, 0x20, 1);
+  bank3[0x20] = 0x12; bank3[0x21] = 0x34; bank3[0x22] = 0x56;
+  assert(fifa96_eacs_parse(bank3, sizeof bank3, &info) == 0);
+  assert(info.voice == -1 && info.f8 == 2 && info.f9 == 2 && info.f10 == 2);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO);
+  assert(info.delta_units == 3);                 /* declared frames */
+  assert(info.data_off == 0x20 && info.data_len == 3);
+  assert(info.block_size == 4);                  /* FU-35 nominal model */
+  put32le(bank3 + 0x0C, 4);                      /* 4 frames need 4 bytes */
+  assert(fifa96_eacs_parse(bank3, sizeof bank3, &info) == -(int)FIFA96_ERR_TRUNCATED);
+  put32le(bank3 + 0x0C, 2);                      /* trailing slack is fine */
+  assert(fifa96_eacs_parse(bank3, sizeof bank3, &info) == 0);
+  assert(info.delta_units == 2);
+  bank3[0x0B] = 0;                               /* voice >= 0 keeps video form */
+  put32le(bank3 + 0x0C, 0);
+  assert(fifa96_eacs_parse(bank3, sizeof bank3, &info) == -(int)FIFA96_ERR_TRUNCATED);
+  bank3[0x0B] = (uint8_t)-1;
+
   /* block count floors, like the original's DIV. */
   hdr(b, 16000, 2, 2, 0, 0, 0, 0, 0, 0, 0x7F);
   assert(fifa96_eacs_parse(b, 0x20 + 6, &info) == 0);

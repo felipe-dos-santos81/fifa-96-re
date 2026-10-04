@@ -113,6 +113,11 @@ add_executable(test_bigf tests/test_bigf.c)
 target_link_libraries(test_bigf PRIVATE fifa96_bigf fifa96_eacs fifa96_file)
 add_test(NAME test_bigf COMMAND test_bigf WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_bnk src/fifa96_loader/fifa96_bnk.c)
+add_executable(test_bnk tests/test_bnk.c)
+target_link_libraries(test_bnk PRIVATE fifa96_bnk fifa96_eacs fifa96_file)
+add_test(NAME test_bnk COMMAND test_bnk WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)

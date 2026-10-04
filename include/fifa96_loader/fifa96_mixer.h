@@ -40,7 +40,7 @@ struct fifa96_mixer_voice {
    * state is re-initialized per block (header pointer kept for loop wraps). */
   int delta;                    /* 1 for a DELTA_* voice */
   uint8_t f9;                   /* delta layout: 2 stereo, 1 mono */
-  const uint8_t *delta_hdr;     /* 20-byte block header, or NULL (bank mono) */
+  const uint8_t *delta_hdr;     /* 20-byte block header, or NULL (bank forms) */
   uint32_t delta_units;         /* units in this block (header/declared count) */
   uint32_t delta_pos;           /* units decoded so far (state chain length) */
   struct fifa96_eacs_delta delta_state; /* running row/acc state */
@@ -59,13 +59,15 @@ void fifa96_mixer_init(struct fifa96_mixer *m);
 // PCM formats the data region is payload + info->data_off and holds
 // info->blocks cursor units: one 4-byte frame for PCM16_STEREO, one 2-byte
 // frame for PCM8_STEREO and one 2-byte sample for PCM16_MONO. For f10==2 the
-// voice decodes the FU-39 adaptive-delta path: DELTA_STEREO parses the 20-byte
-// block header at data_off (signed/video producer 0xB84FE) and holds
-// info->delta_units frames; DELTA_MONO follows the unsigned bank arm (no block
-// header, zero state, declared info->delta_units nibbles at data_off, FU-39
-// §2.2). `volume` is the EACS 0..0x7F scale (0x7F in the corpus); the packed
-// L/R record conversion FUN_000a662c is not ported. `step` is the 32.32
-// resample step (see fifa96_mixer_step_from_rate).
+// voice decodes the FU-39 adaptive-delta path: DELTA_STEREO with voice >= 0
+// parses the 20-byte block header at data_off (signed/video producer 0xB84FE)
+// and holds info->delta_units frames; DELTA_STEREO with voice -1 is the
+// FU-43 §2 bank form (no block header, zero state, info->delta_units packed
+// bytes at data_off, unsigned producer 0xB8610); DELTA_MONO follows the
+// unsigned bank arm (no block header, zero state, declared info->delta_units
+// nibbles at data_off, FU-39 §2.2). `volume` is the EACS 0..0x7F scale (0x7F
+// in the corpus); the packed L/R record conversion FUN_000a662c is not ported.
+// `step` is the 32.32 resample step (see fifa96_mixer_step_from_rate).
 // Returns FIFA96_OK or the negated fifa96_err_t:
 //   TRUNCATED   NULL args, voice out of range, volume > 0x7F, a PCM data
 //               region inconsistent with payload_len, or an f10==2 block

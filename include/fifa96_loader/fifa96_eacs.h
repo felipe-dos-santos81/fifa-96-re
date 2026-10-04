@@ -67,18 +67,22 @@ struct fifa96_eacs_info {
   uint32_t blocks;                  /* data_len / block_size (FU-35 nominal) */
   uint64_t samples;                 /* blocks * (f10 == 2 ? 4 : 1), nominal */
   uint32_t delta_units;             /* f10=2: authoritative per-chunk unit count
-                                       (stereo: block-header count at data_off,
-                                       FU-39 §2.1; mono bank: declared +0x0C,
-                                       FU-39 §2.2); else 0 */
+                                       (stereo video: block-header count at
+                                       data_off, FU-39 §2.1; mono bank and
+                                       stereo bank: declared +0x0C with no
+                                       block header, FU-39 §2.2/FU-43 §2);
+                                       else 0 */
   fifa96_eacs_format_t format;      /* proven layouts, else UNKNOWN */
 };
 
 // Returns 0 (FIFA96_OK) on success or the negated fifa96_err_t code:
 // FIFA96_ERR_TRUNCATED for NULL args, src_len < 0x20, or a malformed header
 // (voice outside -1..15, block_size 0, data offset inside the header or past
-// src_len, an f10=2 stereo data region too short for its 20-byte block header
-// or declaring more units than the packed bytes can hold, or an f10=2 mono
-// declared count exceeding two nibbles per data byte); FIFA96_ERR_BAD_MAGIC
+// src_len, an f10=2 signed stereo data region too short for its 20-byte block
+// header or declaring more units than the packed bytes can hold, an f10=2 bank
+// stereo declared count exceeding the payload bytes (one byte per frame), or
+// an f10=2 mono declared count exceeding two nibbles per data byte);
+// FIFA96_ERR_BAD_MAGIC
 // for a payload that does not start with "EACS"; FIFA96_ERR_UNSUPPORTED for
 // src_len > 2^32-1 (outside the original's 32-bit chunk model). *info is
 // written only on success.

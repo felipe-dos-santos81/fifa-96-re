@@ -186,6 +186,47 @@ static void test_delta_mono_mix(void) {
   for (int i = 0; i < 6; i++) assert(out[i] == want[i]);
 }
 
+static void test_delta_stereo_bank_mix(void) {
+  /* FU-43 §2 bank stereo: voice -1 removes the 20-byte block header, so the
+   * declared +0x0C count is one packed (L,R) frame per byte at data_off,
+   * decoded from zero state (unsigned producer 0xB8610). Data 12 34 56:
+   *   unit 0: L nibble 1 -> +1 = 1; R nibble 2 -> +3 = 3
+   *   unit 1: L nibble 3 -> +4 = 5; R nibble 4 -> +7 = 10 (R row -> 128)
+   *   unit 2: L nibble 5 -> +8 = 13; R nibble 6 at row 128/4+6 -> +14 = 24
+   * At volume 64 the PCM16 reader's SAR 7 gives (0,1),(2,5),(6,12). */
+  uint8_t buf[0x20 + 3];
+  hdr(buf, 2, 2, 2, -1, 0, 0);
+  put32le(buf + 0x0C, 3);
+  buf[0x20] = 0x12; buf[0x21] = 0x34; buf[0x22] = 0x56;
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(buf, sizeof buf, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.voice == -1);
+  assert(info.delta_units == 3);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 64, (uint64_t)1 << 32) == 0);
+  assert(m.voices[3].delta_hdr == NULL && m.voices[3].f9 == 2);
+  assert(m.voices[3].delta_units == 3 && m.voices[3].units == 3);
+  int16_t out[6] = {0};
+  fifa96_mixer_render(&m, out, 3);
+  const int16_t want[6] = {0, 1, 2, 5, 6, 12};
+  for (int i = 0; i < 6; i++) assert(out[i] == want[i]);
+  assert(m.voices[3].delta_pos == 3);
+  assert(m.voices[3].delta_state.l_row == 256 && m.voices[3].delta_state.r_row == 512);
+  assert(m.voices[3].delta_state.l_acc == 13 && m.voices[3].delta_state.r_acc == 24);
+  int16_t stop[2] = {1, 1};
+  fifa96_mixer_render(&m, stop, 1);
+  assert(stop[0] == 0 && stop[1] == 0);
+  assert(fifa96_mixer_voice_active(&m, 3) == 0);
+
+  /* declared frames past the payload bytes are rejected. */
+  struct fifa96_eacs_info bad = info;
+  bad.delta_units = 4;
+  assert(fifa96_mixer_start(&m, 3, &bad, buf, sizeof buf, 64, (uint64_t)1 << 32) ==
+         -(int)FIFA96_ERR_TRUNCATED);
+}
+
 static void test_clamp_sum(void) {
   /* Two full-scale voices on top of each other: 32-bit accumulate, then the
    * 0xB9E53 converter clamps to +/-32767 (not -32768). */
@@ -541,6 +582,7 @@ int main(void) {
   test_pcm16_mono();
   test_delta_stereo_mix();
   test_delta_mono_mix();
+  test_delta_stereo_bank_mix();
   test_clamp_sum();
   test_end_of_data_silence();
   test_loop_wrap();

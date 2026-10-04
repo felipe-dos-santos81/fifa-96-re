@@ -46,18 +46,28 @@ int fifa96_mixer_start(struct fifa96_mixer *m, int voice,
   uint8_t f9 = 0;
   if (is_delta) {
     if (info->format == FIFA96_EACS_FMT_DELTA_STEREO) {
-      /* FU-39 §2.1 signed/video producer 0xB84FE: the 20-byte block header at
-       * data_off carries count + row/acc state, data follows at +0x14. The
-       * arm's u32[data]-1 truncation (FU-39 §4.3) is a runtime streaming
-       * detail and is not modelled by this single-payload port. */
-      if (payload_len - info->data_off < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
-      int rc = fifa96_eacs_delta_header(payload + info->data_off, 0x14u, &dst, &dcount);
-      if (rc != FIFA96_OK) return rc;
-      if ((size_t)dcount > payload_len - info->data_off - 0x14u)
-        return -(int)FIFA96_ERR_TRUNCATED;
-      data = payload + info->data_off + 0x14u;
-      units = dcount;
-      dhdr = payload + info->data_off;
+      if (info->voice == -1) {
+        /* FU-43 §2 bank stereo: voice -1 removes the arm's 0x10 flag, so there
+         * is no 20-byte block header; +0x0C declares one packed (L,R) byte per
+         * frame at data_off from zero state (unsigned producer 0xB8610). */
+        if ((uint64_t)info->delta_units > (uint64_t)(payload_len - info->data_off))
+          return -(int)FIFA96_ERR_TRUNCATED;
+        units = info->delta_units;
+        dcount = units;
+      } else {
+        /* FU-39 §2.1 signed/video producer 0xB84FE: the 20-byte block header at
+         * data_off carries count + row/acc state, data follows at +0x14. The
+         * arm's u32[data]-1 truncation (FU-39 §4.3) is a runtime streaming
+         * detail and is not modelled by this single-payload port. */
+        if (payload_len - info->data_off < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+        int rc = fifa96_eacs_delta_header(payload + info->data_off, 0x14u, &dst, &dcount);
+        if (rc != FIFA96_OK) return rc;
+        if ((size_t)dcount > payload_len - info->data_off - 0x14u)
+          return -(int)FIFA96_ERR_TRUNCATED;
+        data = payload + info->data_off + 0x14u;
+        units = dcount;
+        dhdr = payload + info->data_off;
+      }
     } else if (info->format == FIFA96_EACS_FMT_DELTA_MONO) {
       /* FU-39 §2.2 unsigned/bank producer 0xB8610: no block header; the
        * declared nibble count starts at data_off with zero state. The bank
