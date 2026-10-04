@@ -41,6 +41,16 @@ add_executable(test_refpack tests/test_refpack.c)
 target_link_libraries(test_refpack PRIVATE fifa96_refpack fifa96_file)
 add_test(NAME test_refpack COMMAND test_refpack WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_huff src/fifa96_loader/fifa96_huff.c)
+add_executable(test_huff tests/test_huff.c)
+target_link_libraries(test_huff PRIVATE fifa96_huff fifa96_file)
+add_test(NAME test_huff COMMAND test_huff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_library(fifa96_tree src/fifa96_loader/fifa96_tree.c)
+add_executable(test_tree tests/test_tree.c)
+target_link_libraries(test_tree PRIVATE fifa96_tree fifa96_file)
+add_test(NAME test_tree COMMAND test_tree WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)
