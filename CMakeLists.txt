@@ -95,6 +95,11 @@ add_executable(fifa96_trace_cli tools/fifa96_trace.c)
 set_target_properties(fifa96_trace_cli PROPERTIES OUTPUT_NAME fifa96_trace)
 target_link_libraries(fifa96_trace_cli PRIVATE fifa96_trace fifa96_file)
 
+add_library(fifa96_eacs src/fifa96_loader/fifa96_eacs.c)
+add_executable(test_eacs tests/test_eacs.c)
+target_link_libraries(test_eacs PRIVATE fifa96_eacs fifa96_file)
+add_test(NAME test_eacs COMMAND test_eacs WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)
