@@ -107,7 +107,11 @@ int main(void) {
   b[11] = 16;                                  /* voice > 15 */
   assert(fifa96_eacs_parse(b, sizeof b, &info) == -(int)FIFA96_ERR_TRUNCATED);
   memcpy(b, h, sizeof b);
-  b[11] = 0xFF;                                /* voice -1 (bank form; separate loader) */
+  b[11] = 0xFF;                                /* voice -1: bank form (FU-41 §2) */
+  assert(fifa96_eacs_parse(b, sizeof b, &info) == 0);
+  assert(info.voice == -1);
+  memcpy(b, h, sizeof b);
+  b[11] = 0xFE;                                /* other negatives stay rejected */
   assert(fifa96_eacs_parse(b, sizeof b, &info) == -(int)FIFA96_ERR_TRUNCATED);
 
   /* ---- data pointer / length bounds ---- */
@@ -131,6 +135,26 @@ int main(void) {
   assert(info.block_size == 2 && info.blocks == 4 && info.samples == 16);
   assert(info.format == FIFA96_EACS_FMT_DELTA_MONO);  /* FU-39: f10=2 nibble path */
   assert(info.delta_units == 0);                      /* block header count is 0 */
+
+  /* ---- bank entry form (FU-41 §2): stored voice -1, +0x18 == 0x20 ----
+   * The game relocates +0x18 to header+0x20 just before arming; on disk the
+   * literal 0x20 is the data offset, the declared +0x0C count is in nibbles
+   * (2 per payload byte) and the payload carries no 20-byte block header. */
+  uint8_t bank2[0x20 + 4];
+  hdr(bank2, 16000, 2, 1, 2, -1, 7, -1, 0, 0x20, 1);
+  bank2[0x20] = 0x70; bank2[0x21] = 0x07;
+  bank2[0x22] = 0x00; bank2[0x23] = 0x00;
+  assert(fifa96_eacs_parse(bank2, sizeof bank2, &info) == 0);
+  assert(info.voice == -1 && info.rate == 16000);
+  assert(info.data_ptr == 0x20 && info.data_off == 0x20 && info.data_len == 4);
+  assert(info.block_size == 2 && info.blocks == 2);
+  assert(info.loop_start == -1 && info.loop_len == 0);
+  assert(info.volume == 1);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_MONO);
+  assert(info.delta_units == 7);                      /* declared nibbles */
+  assert((info.delta_units + 1) / 2 == 4);            /* ceil(7/2) bytes */
+  bank2[0x0B] = 0xFE;                                 /* only -1 is the marker */
+  assert(fifa96_eacs_parse(bank2, sizeof bank2, &info) == -(int)FIFA96_ERR_TRUNCATED);
 
   /* declared count is not trusted: the original overwrites it with the block
    * count (FU-35 §2), so a maximal declared count still parses. */

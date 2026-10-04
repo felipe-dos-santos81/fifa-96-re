@@ -14,7 +14,10 @@
 //   +0x08 u8 f8, +0x09 u8 f9: block size = f8*f9 bytes
 //   +0x0A u8 f10: 2 => 4 samples per block (open leg, FU-35 §3.1/§6.1),
 //         otherwise 1
-//   +0x0B s8 voice index; the video parser requires 0..15
+//   +0x0B s8 voice index; the video parser requires 0..15. Bank entries
+//         store -1 (unsigned: the sign selects the arm's flag set, FU-41
+//         §2/§3.3); the runtime voice is supplied separately. -1 is accepted
+//         as the bank-form marker, other out-of-range values are rejected.
 //   +0x0C u32 declared stream length in samples; the original overwrites it
 //         with this chunk's block count before use, so the on-disk value is
 //         exposed here but never trusted for sizing (FU-35 §2). For f10==2
@@ -24,9 +27,10 @@
 //   +0x10 s32 loop start in blocks, +0x14 u32 loop length in blocks; the
 //         original force-writes -1 / 0 in memory before use
 //   +0x18 u32 data pointer/offset; video chunks store 0 (the parser writes
-//         payload+0x20) while bank .spc headers store 0x20 (FU-35 §2/§6.5).
-//         The port treats 0 as the implicit header-end offset 0x20 and
-//         honors a nonzero offset after bounds-checking it.
+//         payload+0x20) while bank .spc headers store 0x20, the offset the
+//         game relocates to header+0x20 before arming (FU-41 §2). The port
+//         treats 0 as the implicit header-end offset 0x20 and honors a
+//         nonzero offset after bounds-checking it.
 //   +0x1D u8 per-voice volume (0x7F in the corpus); +0x1E/+0x1F are unread.
 //
 // Derived exactly as the parser: block_size = f8*f9; data_off as above;
@@ -51,7 +55,7 @@ typedef enum {
 struct fifa96_eacs_info {
   uint32_t rate;                    /* +0x04 */
   uint8_t f8, f9, f10;              /* +0x08, +0x09, +0x0A */
-  int8_t voice;                     /* +0x0B, 0..15 */
+  int8_t voice;                     /* +0x0B: 0..15 video, -1 bank (FU-41) */
   uint32_t count;                   /* +0x0C declared sample count, as stored */
   int32_t loop_start;               /* +0x10, as stored */
   uint32_t loop_len;                /* +0x14, as stored */
@@ -71,7 +75,7 @@ struct fifa96_eacs_info {
 
 // Returns 0 (FIFA96_OK) on success or the negated fifa96_err_t code:
 // FIFA96_ERR_TRUNCATED for NULL args, src_len < 0x20, or a malformed header
-// (voice outside 0..15, block_size 0, data offset inside the header or past
+// (voice outside -1..15, block_size 0, data offset inside the header or past
 // src_len, an f10=2 stereo data region too short for its 20-byte block header
 // or declaring more units than the packed bytes can hold, or an f10=2 mono
 // declared count exceeding two nibbles per data byte); FIFA96_ERR_BAD_MAGIC

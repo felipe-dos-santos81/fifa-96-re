@@ -27,13 +27,18 @@ int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_inf
   if (!(src[0] == 'E' && src[1] == 'A' && src[2] == 'C' && src[3] == 'S'))
     return -(int)FIFA96_ERR_BAD_MAGIC;
   int8_t voice = (int8_t)src[0x0B];
-  // FU-35 §2: the 1SNh path rejects voice < 0 or > 15 (bank headers store -1
-  // and take the voice as an argument in the separate bank loader, §6.5).
-  if (voice < 0 || voice > 15) return -(int)FIFA96_ERR_TRUNCATED;
+  // FU-35 §2: the 1SNh video path requires 0..15. FU-41 §2: bank entries
+  // store -1, the game's bank path never validates the byte and uses its sign
+  // as the signed/unsigned flag selector; the runtime voice is supplied
+  // separately at arm time (header +0x1C). So -1 is accepted as the bank-form
+  // marker, any other out-of-range value is still rejected.
+  if (voice < -1 || voice > 15) return -(int)FIFA96_ERR_TRUNCATED;
   uint32_t block_size = (uint32_t)src[0x08] * (uint32_t)src[0x09];
   if (block_size == 0) return -(int)FIFA96_ERR_TRUNCATED;  // original would DIV by zero
   // Video chunks store 0 and the parser force-writes payload+0x20; bank .spc
-  // headers store the explicit offset (FU-35 §2).
+  // headers store the literal 0x20 that the game relocates to header+0x20
+  // just before arming (FU-41 §2). Both resolve to data_off 0x20 here; a
+  // nonzero offset is honored after bounds-checking.
   uint32_t data_ptr = eacs_u32le(src + 0x18);
   uint32_t data_off = data_ptr ? data_ptr : 0x20u;
   if (data_off < 0x20u || (size_t)data_off > src_len) return -(int)FIFA96_ERR_TRUNCATED;
