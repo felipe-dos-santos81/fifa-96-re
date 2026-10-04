@@ -19,45 +19,44 @@ static uint32_t eacs_clamp_row(int32_t v) {
   return (uint32_t)v;
 }
 
-int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_info *info) {
-  if (!src || !info) return -(int)FIFA96_ERR_TRUNCATED;
-  if (src_len < 0x20) return -(int)FIFA96_ERR_TRUNCATED;
-  // The original's chunk length is a u32; larger buffers are outside its model.
-  if (src_len > (size_t)UINT32_MAX) return -(int)FIFA96_ERR_UNSUPPORTED;
-  if (!(src[0] == 'E' && src[1] == 'A' && src[2] == 'C' && src[3] == 'S'))
+/* Shared header/format checks. `hdr` is the 32-byte EACS header, `data` the
+ * first payload byte and `data_off`/`data_len` the data extent as they must
+ * appear in *info (the public parse uses an offset from src; the bank parse
+ * an absolute offset from the whole file). */
+static int eacs_parse_core(const uint8_t *hdr, const uint8_t *data,
+                           uint32_t data_off, uint32_t data_len,
+                           struct fifa96_eacs_info *info) {
+  if (!(hdr[0] == 'E' && hdr[1] == 'A' && hdr[2] == 'C' && hdr[3] == 'S'))
     return -(int)FIFA96_ERR_BAD_MAGIC;
-  int8_t voice = (int8_t)src[0x0B];
+  int8_t voice = (int8_t)hdr[0x0B];
   // FU-35 §2: the 1SNh video path requires 0..15. FU-41 §2: bank entries
   // store -1, the game's bank path never validates the byte and uses its sign
   // as the signed/unsigned flag selector; the runtime voice is supplied
   // separately at arm time (header +0x1C). So -1 is accepted as the bank-form
   // marker, any other out-of-range value is still rejected.
   if (voice < -1 || voice > 15) return -(int)FIFA96_ERR_TRUNCATED;
-  uint32_t block_size = (uint32_t)src[0x08] * (uint32_t)src[0x09];
+  uint32_t block_size = (uint32_t)hdr[0x08] * (uint32_t)hdr[0x09];
   if (block_size == 0) return -(int)FIFA96_ERR_TRUNCATED;  // original would DIV by zero
   // Video chunks store 0 and the parser force-writes payload+0x20; bank .spc
   // headers store the literal 0x20 that the game relocates to header+0x20
   // just before arming (FU-41 §2). Both resolve to data_off 0x20 here; a
-  // nonzero offset is honored after bounds-checking.
-  uint32_t data_ptr = eacs_u32le(src + 0x18);
-  uint32_t data_off = data_ptr ? data_ptr : 0x20u;
-  if (data_off < 0x20u || (size_t)data_off > src_len) return -(int)FIFA96_ERR_TRUNCATED;
+  // nonzero offset is honored after bounds-checking by the wrappers.
 
   struct fifa96_eacs_info out;
-  out.rate = eacs_u32le(src + 0x04);
-  out.f8 = src[0x08];
-  out.f9 = src[0x09];
-  out.f10 = src[0x0A];
+  out.rate = eacs_u32le(hdr + 0x04);
+  out.f8 = hdr[0x08];
+  out.f9 = hdr[0x09];
+  out.f10 = hdr[0x0A];
   out.voice = voice;
-  out.count = eacs_u32le(src + 0x0C);
-  out.loop_start = (int32_t)eacs_u32le(src + 0x10);
-  out.loop_len = eacs_u32le(src + 0x14);
-  out.data_ptr = data_ptr;
-  out.volume = src[0x1D];
+  out.count = eacs_u32le(hdr + 0x0C);
+  out.loop_start = (int32_t)eacs_u32le(hdr + 0x10);
+  out.loop_len = eacs_u32le(hdr + 0x14);
+  out.data_ptr = eacs_u32le(hdr + 0x18);  /* raw +0x18 field */
+  out.volume = hdr[0x1D];
   out.data_off = data_off;
-  out.data_len = (uint32_t)(src_len - data_off);
+  out.data_len = data_len;
   out.block_size = block_size;
-  out.blocks = out.data_len / block_size;
+  out.blocks = data_len / block_size;
   out.samples = (uint64_t)out.blocks * (out.f10 == 2u ? 4u : 1u);
   out.delta_units = 0;
   if (out.f10 == 2u) {
@@ -86,16 +85,16 @@ int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_inf
        * (one packed byte, high nibble L) per stereo frame at data_off — the
        * unsigned producer 0xB8610 leaves the byte cursor unshifted for f9==2
        * (FU-39 §2.3). */
-      if ((uint64_t)out.count > (uint64_t)out.data_len)
+      if ((uint64_t)out.count > (uint64_t)data_len)
         return -(int)FIFA96_ERR_TRUNCATED;
       out.delta_units = out.count;
     } else {
       /* FU-39 §2.1: the signed/video producer 0xB84FE parses the 20-byte block
        * header at data_off; its count is one decoder unit (one packed byte)
        * per stereo frame. */
-      if (out.data_len < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
-      uint32_t count = eacs_u32le(src + data_off);
-      if (count > out.data_len - 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+      if (data_len < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+      uint32_t count = eacs_u32le(data);
+      if (count > data_len - 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
       out.delta_units = count;
     }
   } else if (out.format == FIFA96_EACS_FMT_DELTA_MONO) {
@@ -104,12 +103,45 @@ int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_inf
      * FU-35 §6.1 measured 2 per byte, with trailing slack of 2-6 nibbles,
      * FU-39 §6). The bank loader's in-memory data mapping stays FU-39 §7
      * leg 3 and is not invented here. */
-    if ((uint64_t)out.count > (uint64_t)out.data_len * 2u)
+    if ((uint64_t)out.count > (uint64_t)data_len * 2u)
       return -(int)FIFA96_ERR_TRUNCATED;
     out.delta_units = out.count;
   }
   *info = out;
   return FIFA96_OK;
+}
+
+int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_info *info) {
+  if (!src || !info) return -(int)FIFA96_ERR_TRUNCATED;
+  if (src_len < 0x20) return -(int)FIFA96_ERR_TRUNCATED;
+  // The original's chunk length is a u32; larger buffers are outside its model.
+  if (src_len > (size_t)UINT32_MAX) return -(int)FIFA96_ERR_UNSUPPORTED;
+  // Magic first: a raw payload with garbage at +0x18 is BAD_MAGIC, not a
+  // data-offset error (the original checks the tag at 0xA79DC's first step).
+  if (!(src[0] == 'E' && src[1] == 'A' && src[2] == 'C' && src[3] == 'S'))
+    return -(int)FIFA96_ERR_BAD_MAGIC;
+  uint32_t data_ptr = eacs_u32le(src + 0x18);
+  uint32_t data_off = data_ptr ? data_ptr : 0x20u;
+  if (data_off < 0x20u || (size_t)data_off > src_len) return -(int)FIFA96_ERR_TRUNCATED;
+  return eacs_parse_core(src, src + data_off, data_off,
+                         (uint32_t)(src_len - data_off), info);
+}
+
+int fifa96_eacs_parse_bank(const uint8_t *file, size_t file_len,
+                           uint32_t eacs_off, uint32_t payload_len,
+                           struct fifa96_eacs_info *info) {
+  if (!file || !info) return -(int)FIFA96_ERR_TRUNCATED;
+  if (file_len > (size_t)UINT32_MAX) return -(int)FIFA96_ERR_UNSUPPORTED;
+  if ((uint64_t)eacs_off + 0x20u > (uint64_t)file_len)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  const uint8_t *hdr = file + eacs_off;
+  if (!(hdr[0] == 'E' && hdr[1] == 'A' && hdr[2] == 'C' && hdr[3] == 'S'))
+    return -(int)FIFA96_ERR_BAD_MAGIC;
+  uint32_t data_off = eacs_u32le(hdr + 0x18);
+  if (data_off < 0x20u ||
+      (uint64_t)data_off + (uint64_t)payload_len > (uint64_t)file_len)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  return eacs_parse_core(hdr, file + data_off, data_off, payload_len, info);
 }
 
 int fifa96_eacs_delta_header(const uint8_t *src, size_t src_len,

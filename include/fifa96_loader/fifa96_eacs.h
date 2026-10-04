@@ -88,6 +88,23 @@ struct fifa96_eacs_info {
 // written only on success.
 int fifa96_eacs_parse(const uint8_t *src, size_t src_len, struct fifa96_eacs_info *info);
 
+// FU-43 §1/§1.2/§4.1: parse the embedded EACS of a .BNK entry. `file` is the
+// whole bank image handed to fifa96_bnk_parse, `eacs_off` the offset of the
+// 32-byte header and `payload_len` the entry's payload extent (the length to
+// the next payload or the file end, FU-43 §1). The bank stores +0x18 as the
+// absolute file offset of the payload — the registrar relocates it to a
+// pointer once at registration (0xA7628..0xA763D) — so the parser reports
+// info->data_off as an offset from `file` and every other field exactly as
+// fifa96_eacs_parse would. A caller can therefore mix directly from the bank:
+//   fifa96_mixer_start(m, v, &info, file, file_len, ...).
+// Returns 0 or the negated fifa96_err_t exactly like fifa96_eacs_parse:
+// FIFA96_ERR_TRUNCATED for NULL args, a header crossing file_len, +0x18 below
+// 0x20 or a payload extent past file_len; FIFA96_ERR_BAD_MAGIC/UNSUPPORTED
+// from the shared header checks. *info is written only on success.
+int fifa96_eacs_parse_bank(const uint8_t *file, size_t file_len,
+                           uint32_t eacs_off, uint32_t payload_len,
+                           struct fifa96_eacs_info *info);
+
 // FU-39 §3 adaptive-delta tables, extracted from the FIFA96.EXE flat LE link
 // image (FU-4) at image 0x141668 (DELTA) and 0x142ca8 (ADAPT); provenance and
 // checksums in fifa96_eacs_tables.c. DELTA is 89 rows x 16 int32 = 0x1640
