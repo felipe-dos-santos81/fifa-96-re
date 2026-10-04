@@ -15,10 +15,10 @@ static uint8_t *build_frame(uint16_t w, uint16_t h, uint16_t count,
   assert(f);
   memset(f, 0xEE, 0x14);
   f[0] = 'k'; f[1] = 'V'; f[2] = 'G'; f[3] = 'T';
-  f[8] = (uint8_t)(w >> 8); f[9] = (uint8_t)w;
-  f[10] = (uint8_t)(h >> 8); f[11] = (uint8_t)h;
-  f[12] = (uint8_t)(count >> 8); f[13] = (uint8_t)count;
-  f[14] = (uint8_t)(pal_n >> 8); f[15] = (uint8_t)pal_n;
+  f[8] = (uint8_t)w; f[9] = (uint8_t)(w >> 8);
+  f[10] = (uint8_t)h; f[11] = (uint8_t)(h >> 8);
+  f[12] = (uint8_t)count; f[13] = (uint8_t)(count >> 8);
+  f[14] = (uint8_t)pal_n; f[15] = (uint8_t)(pal_n >> 8);
   if (pal_n) memcpy(f + 0x14, pal, pal_n * 3);
   memcpy(f + 0x14 + pal_n * 3, rec, rec_n);
   return f;
@@ -65,6 +65,23 @@ int main(void) {
   assert(memcmp(dst46, out46, out46_n) == 0);
   for (size_t i = out46_n; i < out46_n + 16; i++) assert(dst46[i] == 0xA5);
 
+  /* real VIDEO TGV frame chunk (VID_BULL.TGV first chunk, committed). */
+  uint8_t *real = 0;
+  size_t real_n = 0;
+  assert(fifa96_file_read("tests/golden/vgt/kvgt-frame-01.bin", &real, &real_n) == 0);
+  assert(real_n == 5788);
+  uint8_t *dstreal = malloc(9600 + 16);
+  assert(dstreal);
+  memset(dstreal, 0xA5, 9600 + 16);
+  struct fifa96_kvgt_info rinfo;
+  assert(fifa96_kvgt_decode(real, real_n, dstreal, 9600 + 16, &got, &rinfo) == 0);
+  assert(got == 9600);  /* refpack record declared size = 96x100 */
+  assert(rinfo.width == 96 && rinfo.height == 100);
+  assert(rinfo.count == 0 && rinfo.palette_count == 256);
+  assert(real[0x314] == 0x10 && real[0x315] == 0xFB);
+  assert(memcmp(rinfo.palette, real + 0x14, 256 * 3) == 0);
+  for (size_t i = 9600; i < 9600 + 16; i++) assert(dstreal[i] == 0xA5);
+
   /* non-kVGT tag. */
   uint8_t *bad = build_frame(96, 100, 0, NULL, 0, in30, in30_n);
   bad[0] = 'X';
@@ -92,6 +109,7 @@ int main(void) {
   assert(fifa96_kvgt_decode(f30, f30_n, dst, cap, NULL, NULL) < 0);
 
   free(f30); free(f46); free(bad); free(bigpal); free(dst); free(dst46);
+  free(real); free(dstreal);
   free(in30); free(out30); free(in46); free(out46);
   printf("test_kvgt OK\n");
   return 0;

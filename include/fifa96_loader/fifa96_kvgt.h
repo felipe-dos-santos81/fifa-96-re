@@ -4,21 +4,23 @@
 #include "fifa96_loader/fifa96_err.h"
 // Ghidra: vgt_decode_k @ 0xAE218 (kVGT arm of vgt_dispatch 0xAE4BC, tag
 // 0x5447566B = 'kVGT'). Spec: the disassembled field reads at 0xAE22B..0xAE2A4
-// (BE16 at frame+8/10/12/14) and the record call at 0xAE45A..0xAE474.
+// (each `MOV EAX,[p+6]; SHR EAX,16` = LE16 at frame+8/10/12/14) and the
+// record call at 0xAE45A..0xAE474.
 //
-// In-memory frame layout (as passed to vgt_decode_k, tag included):
-//   +0  'kVGT' tag dword (0x5447566B)
-//   +8  BE16 width
-//   +10 BE16 height
-//   +12 BE16 count      (row/block count; ctx[2])
-//   +14 BE16 palette_count (RGB triples at +0x14, ctx[3])
+// Frame chunk layout (as stored in VIDEO/*.TGV and passed to vgt_decode_k):
+//   +0  'kVGT' tag dword (LE 0x5447566B)
+//   +4  u32 chunk length (total bytes; the stream walker's stride)
+//   +8  LE16 width
+//   +10 LE16 height
+//   +12 LE16 count      (row/block count; ctx[2])
+//   +14 LE16 palette_count (RGB triples at +0x14, ctx[3])
 //   +0x14 palette_count RGB triples
 //   ... record = frame + 0x14 + palette_count*3, decoded by
 //   fifa96_record_decode.
 //
-// The raw VIDEO/*.TGV file frames do NOT match this layout byte-for-byte:
-// vgt_stream_poll (0x67BA8) feeds them through the video stream layer before
-// dispatch (FU-29 open leg). The port implements the cited in-memory layout.
+// vgt_stream_poll (0x67BA8) only walks these length-prefixed chunks (via
+// FUN_00095cb3) and dispatches each; the file bytes are the in-memory bytes.
+// FU-29 errata corrected the earlier BE16 reading (see FU29 doc).
 //
 // Returns 0 (FIFA96_OK) on success, or the negated fifa96_err_t code on error
 // (FIFA96_ERR_BAD_MAGIC for a non-kVGT tag, FIFA96_ERR_TRUNCATED for short
