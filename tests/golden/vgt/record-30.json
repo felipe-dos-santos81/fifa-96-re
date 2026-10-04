@@ -1,0 +1,22 @@
+{
+  "checks": {
+    "method_known": true,
+    "output_nontrivial": true,
+    "signature": true
+  },
+  "delta_dump": 18755600,
+  "delta_load": 2080768,
+  "header24": 4696,
+  "input_last_nonzero": 17407,
+  "input_slice_len": 17408,
+  "length_contract": false,
+  "method": 48,
+  "method_raw": 49,
+  "out_len": 2271,
+  "provenance": {
+    "dump": "captures/session-vgt21-3/guest.bin",
+    "session": "vgt21-3",
+    "trace": "captures/session-vgt21-3/trace.bin"
+  },
+  "ptr": 5557784
+}
