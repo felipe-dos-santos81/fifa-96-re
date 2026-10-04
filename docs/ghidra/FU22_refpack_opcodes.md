@@ -285,3 +285,13 @@ Self-review: every formula in §5 was re-read against the disassembly
 listing; the whole 10068-byte output prefix matching byte-for-byte is the
 end-to-end check that no field extraction was misassigned. The one
 uncovered class is named in §10 rather than asserted.
+
+## Errata (2026-10-03, quoted from FU-23)
+
+* §8 "Maximum fields" prints class C length `773`; the formula
+  `(((c&0x0C)<<6) | b3) + 5` reaches `0x3FF + 5 = 1028`. `773` is
+  `0x300 + 5` and omits the `b3` term. Verified against the class C arm
+  `0xB19FC..0xB1A63`: `0xB1A1F ROL EDX,8` / `0xB1A22 SHR DH,2` /
+  `0xB1A25 AND EDX,0x3FF` (max 0x3FF) / `0xB1A30 LEA ECX,[EDX+5]`. The
+  C port (`b5fa81d`, `src/fifa96_loader/fifa96_refpack.c`) implements the
+  full range; the §5 table's `5..773` is superseded by `5..1028`.
