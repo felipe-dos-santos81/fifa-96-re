@@ -177,6 +177,124 @@ class TestWriteGolden(unittest.TestCase):
             self.assertEqual(stem.name, "fvgt-01")
 
 
+def synthetic_pair_dump(index_count=80, raw_count=0, palette_count=352,
+                        row_bits=9, out_len=320 * 240, in_len=None,
+                        delta_load=DELTA_LOAD, delta_dump=DELTA_DUMP,
+                        heap=HEAP, magic=fx.MAGIC, method=fx.METHOD,
+                        tag=b"fVGT", pre=None, output=None, next_ptr=0xDEAD,
+                        in_cap=fx.IN_CAP, marker=0x123456):
+    data = bytearray(0x600000)
+    banner_at = rt.BANNER_LINK + delta_dump
+    data[banner_at:banner_at + len(rt.BANNER)] = rt.BANNER
+    guest = heap - delta_load
+    block_off = guest + delta_dump
+    struct.pack_into("<I", data, fx.SCRATCH_LINK + delta_dump, heap)
+    struct.pack_into("<I", data, fx.MARKER_LINK + delta_dump, marker)
+    struct.pack_into("<I", data, block_off, next_ptr)
+    struct.pack_into("<I", data, block_off + 4, method)
+    struct.pack_into("<I", data, block_off + 8, out_len)
+    struct.pack_into("<I", data, block_off + 0xC, magic)
+    inp = chunk_bytes(index_count=index_count, raw_count=raw_count,
+                      palette_count=palette_count, row_bits=row_bits,
+                      out_len=out_len, in_len=in_len, tag=tag)
+    if output is None:
+        output = canvas_bytes(out_len)
+    if pre is None:
+        pre = bytes((i * 29 + 7) & 0xFF for i in range(out_len))
+    data[block_off + 0x10:block_off + 0x10 + in_cap] = inp
+    base = block_off + 0x10 + in_cap
+    data[base:base + len(output)] = output
+    data[base + len(output):base + len(output) + len(pre)] = pre
+    return bytes(data)
+
+
+class TestExtractPair(unittest.TestCase):
+    def test_parses_post_and_pre(self):
+        dump = synthetic_pair_dump()
+        record = fx.extract_pair(dump)
+        self.assertEqual(record["out_len"], 320 * 240)
+        self.assertEqual(len(record["output"]), 320 * 240)
+        self.assertEqual(len(record["pre"]), 320 * 240)
+        self.assertEqual(record["output"], canvas_bytes(320 * 240))
+        self.assertEqual(record["pre"],
+                         bytes((i * 29 + 7) & 0xFF
+                               for i in range(320 * 240)))
+        self.assertEqual(record["checks"],
+                         {"tag_ok": True, "dims_ok": True,
+                          "out_nontrivial": True, "pre_nontrivial": True,
+                          "pair_differs": True})
+        self.assertEqual(record["marker"], 0x123456)
+
+    def test_tolerates_garbage_next_pointer(self):
+        self.assertEqual(fx.extract_pair(
+            synthetic_pair_dump(next_ptr=0xCAFEBABE))["pre"][0:4],
+            bytes((i * 29 + 7) & 0xFF for i in range(4)))
+
+    def test_rejects_identical_pre_and_post(self):
+        post = canvas_bytes(320 * 240)
+        with self.assertRaisesRegex(ValueError, "pair_differs"):
+            fx.extract_pair(synthetic_pair_dump(output=post, pre=post))
+
+    def test_rejects_trivial_pre(self):
+        with self.assertRaisesRegex(ValueError, "pre_nontrivial"):
+            fx.extract_pair(synthetic_pair_dump(
+                pre=bytes(320 * 240)))
+
+    def test_rejects_truncated_pair_block(self):
+        dump = synthetic_pair_dump()
+        scratch = fx.SCRATCH_LINK + DELTA_DUMP
+        ptr = struct.unpack_from("<I", dump, scratch)[0]
+        block_off = ptr + DELTA_DUMP - DELTA_LOAD
+        # keep the input and post but cut the pre tail short
+        cut = block_off + 0x10 + fx.IN_CAP + 320 * 240 + 100
+        with self.assertRaisesRegex(ValueError, "truncat"):
+            fx.extract_pair(dump[:cut])
+
+    def test_rejects_bad_magic(self):
+        with self.assertRaisesRegex(ValueError, "magic"):
+            fx.extract_pair(synthetic_pair_dump(magic=0xDEADBEEF))
+
+    def test_rejects_wrong_method(self):
+        with self.assertRaisesRegex(ValueError, "method"):
+            fx.extract_pair(synthetic_pair_dump(method=0x70))
+
+    def test_requires_banner(self):
+        dump = bytearray(synthetic_pair_dump())
+        at = rt.BANNER_LINK + DELTA_DUMP
+        dump[at:at + len(rt.BANNER)] = b"\x00" * len(rt.BANNER)
+        with self.assertRaisesRegex(ValueError, "banner"):
+            fx.extract_pair(bytes(dump))
+
+
+class TestWriteGoldenPair(unittest.TestCase):
+    def test_writes_pre_fixture_and_metadata(self):
+        record = fx.extract_pair(synthetic_pair_dump())
+        with tempfile.TemporaryDirectory() as tmp:
+            stem = fx.write_golden_pair(
+                record, tmp, stem="fvgt-01",
+                provenance={"session": "unit"})
+            inp = (Path(tmp) / "fvgt-01.in.bin").read_bytes()
+            out = (Path(tmp) / "fvgt-01.out.bin").read_bytes()
+            pre = (Path(tmp) / "fvgt-01.pre.bin").read_bytes()
+            self.assertEqual(inp, record["input"])
+            self.assertEqual(out, record["output"])
+            self.assertEqual(pre, record["pre"])
+            meta = json.loads((Path(tmp) / "fvgt-01.json").read_text())
+            self.assertEqual(meta["layout"], "pair")
+            self.assertEqual(meta["out_len"], 320 * 240)
+            self.assertEqual(meta["pre"]["out_len"], 320 * 240)
+            self.assertEqual(meta["pre"]["method"], fx.PRE_METHOD)
+            self.assertEqual(meta["sha256"]["pre"],
+                             hashlib.sha256(pre).hexdigest())
+            self.assertEqual(meta["pre"]["sha256"],
+                             hashlib.sha256(pre).hexdigest())
+            self.assertTrue(all(meta["checks"].values()))
+            self.assertEqual(meta["provenance"]["session"], "unit")
+            self.assertIn("pre", meta["provenance"])
+            self.assertIn("post", meta["provenance"])
+            self.assertEqual(stem.name, "fvgt-01")
+
+
 class TestGoldenVector(unittest.TestCase):
     def test_committed_fvgt_vector_consistent(self):
         stem = GOLDEN / "fvgt-01"
@@ -199,6 +317,16 @@ class TestGoldenVector(unittest.TestCase):
             meta["in_len"],
             fx.chunk_size(*fields, meta["out_len"]))
         self.assertTrue(all(meta["checks"].values()))
+        if meta.get("layout") == "pair":
+            pre = stem.with_suffix(".pre.bin").read_bytes()
+            self.assertEqual(len(pre), meta["out_len"])
+            self.assertNotEqual(pre, out)
+            self.assertEqual(meta["sha256"]["pre"],
+                             hashlib.sha256(pre).hexdigest())
+            self.assertEqual(meta["pre"]["sha256"],
+                             hashlib.sha256(pre).hexdigest())
+            self.assertTrue(meta["checks"]["pre_nontrivial"])
+            self.assertTrue(meta["checks"]["pair_differs"])
 
 
 if __name__ == "__main__":

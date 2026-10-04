@@ -3,6 +3,8 @@
   "checks": {
     "dims_ok": true,
     "out_nontrivial": true,
+    "pair_differs": true,
+    "pre_nontrivial": true,
     "tag_ok": true
   },
   "delta_dump": 18755600,
@@ -10,19 +12,38 @@
   "height": 5,
   "in_cap": 16384,
   "in_len": 9972,
+  "layout": "pair",
   "magic": "0x54475646",
+  "marker": 5103720,
   "method": 102,
   "out_len": 76800,
+  "pre": {
+    "equals_out": false,
+    "method": 112,
+    "nontrivial": true,
+    "out_len": 76800,
+    "sha256": "8fdcba20ca2f086e8fe63efb26afc7c58d096884582ddd7a409f393b81db4347"
+  },
   "provenance": {
-    "dump": "captures/session-fvgt-5/guest.bin",
-    "session": "fvgt-5",
-    "trace": "captures/session-fvgt-5/trace.bin"
+    "dump": "captures/session-fvgt-2b/guest.bin",
+    "post": {
+      "captured_at": "vgt_decode_f return 0xAE20B",
+      "source": "ctx[10]+0x10 at vgt_decode_f return"
+    },
+    "pre": {
+      "captured_at": "vgt_decode_f return 0xAE20B",
+      "marker_link": "0x18a01",
+      "source": "entry ctx[10] marker"
+    },
+    "session": "fvgt-2b",
+    "trace": "captures/session-fvgt-2b/trace.bin"
   },
   "ptr": 5202696,
   "rowcount": 10,
   "sha256": {
-    "in": "d3910da507058384537604306469cb992dcc6dccb52e8853b3e3081cc859f0c1",
-    "out": "4b5c900d6df16f8a5a7534e0c19725a92d816d0b757ba08c7f84120645a87ccd"
+    "in": "45844f059594a28279f1e07463e8dbbdcc3d89b016365bcb6581d2cfb2a2046d",
+    "out": "4b5c900d6df16f8a5a7534e0c19725a92d816d0b757ba08c7f84120645a87ccd",
+    "pre": "8fdcba20ca2f086e8fe63efb26afc7c58d096884582ddd7a409f393b81db4347"
   },
   "tag": "fVGT",
   "width": 239

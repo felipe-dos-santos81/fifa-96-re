@@ -43,10 +43,12 @@ import fifa96_runtime as rt  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRATCH_LINK = 0x6728D
+MARKER_LINK = 0x18A01                    # FU-32 pre-pointer handoff cell
 IN_CAP = 0x4000                          # max measured fVGT chunk 0x3AB8
 OUT_CAP = 0x40000
 MAGIC = 0x54475646                       # 'FVGT' golden block magic
 METHOD = 0x66                            # fixed fVGT method id
+PRE_METHOD = 0x70                        # logical pre record id ('p')
 TAG = b"fVGT"                            # chunk tag at chunk+0
 DEFAULT_DELTA_LOAD = 0x1FC000            # observed in every FU session
 
@@ -182,6 +184,180 @@ def extract_frame(data, delta_load=DEFAULT_DELTA_LOAD,
     return record
 
 
+def pair_block_view(data, ptr, delta_dump, delta_load, in_cap=IN_CAP,
+                    out_cap=OUT_CAP, magic=MAGIC, method=METHOD):
+    """Parse the FU-32 paired block that `ptr` (runtime) maps to.
+
+    Layout: ``+0 next`` (unused, capture-latest single block), ``+4 method``
+    byte 0x66, ``+8 out_len``, ``+0xC 'FVGT'``, then the in_cap chunk slice,
+    the post surface and the pre surface, each out_len bytes. Raises
+    ValueError when the pointer does not map inside the dump, the header is
+    not the expected pair block, or the block is truncated.
+    """
+    block_off = ptr + delta_dump - delta_load
+    if block_off < 0 or block_off + 0x10 > len(data):
+        raise ValueError(
+            f"golden block 0x{ptr:x} maps outside the dump "
+            f"(offset 0x{block_off:x})")
+    out_len = _u32(data, block_off + 8)
+    got_magic = _u32(data, block_off + 0xC)
+    got_method = data[block_off + 4]
+    if got_magic != magic:
+        raise ValueError(
+            f"golden magic 0x{got_magic:08x} != 0x{magic:08x} at dump "
+            f"offset 0x{block_off:x}; block was clobbered, the delta_load "
+            f"is wrong, or the pointer is stale")
+    if got_method != method:
+        raise ValueError(
+            f"golden method 0x{got_method:02x} != 0x{method:02x} at dump "
+            f"offset 0x{block_off:x}; the block is not a FU-32 pair block")
+    if out_len > out_cap:
+        raise ValueError(f"golden out_len 0x{out_len:x} over cap 0x{out_cap:x}")
+    end = block_off + 0x10 + in_cap + 2 * out_len
+    if end > len(data):
+        raise ValueError(
+            f"golden block 0x{ptr:x} (in_cap 0x{in_cap:x} + 2 x out_len "
+            f"0x{out_len:x}) is truncated by the dump")
+    inp = data[block_off + 0x10:block_off + 0x10 + in_cap]
+    post = data[block_off + 0x10 + in_cap:
+                block_off + 0x10 + in_cap + out_len]
+    pre = data[block_off + 0x10 + in_cap + out_len:
+               block_off + 0x10 + in_cap + 2 * out_len]
+    return {"ptr": ptr, "block_off": block_off, "next": _u32(data, block_off),
+            "method": got_method, "out_len": out_len, "input": inp,
+            "output": post, "pre": pre}
+
+
+def extract_pair(data, delta_load=DEFAULT_DELTA_LOAD,
+                 scratch_link=SCRATCH_LINK, marker_link=MARKER_LINK,
+                 in_cap=IN_CAP, out_cap=OUT_CAP, magic=MAGIC,
+                 method=METHOD):
+    """Parse a guest RAM dump into the captured fVGT pre/post pair.
+
+    The block pointer comes from the scratch cell, the pre surface from the
+    block itself (copied by the return cave from the entry-recorded
+    pointer); `marker_link` is read for provenance only. Raises ValueError
+    when the dump cannot be trusted or any success bar fails.
+    """
+    delta_dump, anchors = rt.find_delta(data)
+    if delta_dump is None:
+        raise ValueError("WATCOM banner not found in the dump; cannot map "
+                         "link addresses")
+    scratch_off = scratch_link + delta_dump
+    if scratch_off + 4 > len(data):
+        raise ValueError("scratch cell outside the dump")
+    ptr = _u32(data, scratch_off)
+    if ptr == 0:
+        raise ValueError("no fVGT pair captured (scratch pointer is zero)")
+    block = pair_block_view(data, ptr, delta_dump, delta_load, in_cap=in_cap,
+                            out_cap=out_cap, magic=magic, method=method)
+    inp = block["input"]
+    tag = inp[0:4]
+    in_len = _u32(inp, 4)
+    width = _u16(inp, 8)
+    height = _u16(inp, 10)
+    blockcount = _u16(inp, 12)
+    rowcount = _u16(inp, 14)
+    if in_len < 16:
+        raise ValueError(f"chunk in_len 0x{in_len:x} is below the 16-byte "
+                         f"header")
+    if in_len > in_cap:
+        raise ValueError(f"chunk in_len 0x{in_len:x} over cap 0x{in_cap:x}")
+    expected = chunk_size(width, height, blockcount, rowcount,
+                          block["out_len"])
+    post = block["output"]
+    pre = block["pre"]
+    checks = {
+        "tag_ok": tag == TAG,
+        "dims_ok": (width > 0 and block["out_len"] > 0 and
+                    block["out_len"] <= out_cap and
+                    expected is not None and in_len == expected),
+        "out_nontrivial": (block["out_len"] > 0 and
+                           len(set(post)) > 1),
+        "pre_nontrivial": (block["out_len"] > 0 and len(set(pre)) > 1),
+        "pair_differs": pre != post,
+    }
+    if not all(checks.values()):
+        failed = [k for k, v in checks.items() if not v]
+        raise ValueError(
+            "success bar failed: " + ", ".join(failed) +
+            f" (tag {tag!r}, {width}x{height}, out_len 0x{block['out_len']:x})")
+    marker_off = marker_link + delta_dump
+    marker = _u32(data, marker_off) if marker_off + 4 <= len(data) else None
+    record = dict(block)
+    record.update({
+        "tag": tag, "in_len": in_len, "in_cap": in_cap,
+        "width": width, "height": height,
+        "blockcount": blockcount, "rowcount": rowcount,
+        "delta_dump": delta_dump, "delta_load": delta_load,
+        "anchors": anchors, "checks": checks, "marker": marker,
+        "layout": "pair",
+    })
+    return record
+
+
+def write_golden_pair(record, out_dir, stem="fvgt-01", provenance=None):
+    """Write the pair fixture set; returns the stem.
+
+    ``<stem>.in.bin`` is the bounded input slice, ``.out.bin`` the post
+    surface, ``.pre.bin`` the pre surface; the JSON carries both records'
+    provenance and checks plus a ``layout: pair`` marker.
+    """
+    out_dir = Path(out_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    base = out_dir / stem
+    inp_path = base.with_suffix(".in.bin")
+    out_path = base.with_suffix(".out.bin")
+    pre_path = base.with_suffix(".pre.bin")
+    inp_path.write_bytes(record["input"])
+    out_path.write_bytes(record["output"])
+    pre_path.write_bytes(record["pre"])
+    prov = dict(provenance or {})
+    prov.setdefault("pre", {
+        "source": "entry ctx[10] marker",
+        "marker_link": f"{MARKER_LINK:#x}",
+        "captured_at": "vgt_decode_f return 0xAE20B",
+    })
+    prov.setdefault("post", {
+        "source": "ctx[10]+0x10 at vgt_decode_f return",
+        "captured_at": "vgt_decode_f return 0xAE20B",
+    })
+    meta = {
+        "layout": "pair",
+        "tag": record["tag"].decode("latin1"),
+        "width": record["width"],
+        "height": record["height"],
+        "blockcount": record["blockcount"],
+        "rowcount": record["rowcount"],
+        "in_len": record["in_len"],
+        "in_cap": record["in_cap"],
+        "out_len": record["out_len"],
+        "method": record["method"],
+        "magic": f"{MAGIC:#010x}",
+        "ptr": record["ptr"],
+        "marker": record.get("marker"),
+        "delta_dump": record["delta_dump"],
+        "delta_load": record["delta_load"],
+        "checks": record["checks"],
+        "pre": {
+            "method": PRE_METHOD,
+            "out_len": record["out_len"],
+            "nontrivial": record["checks"]["pre_nontrivial"],
+            "equals_out": not record["checks"]["pair_differs"],
+            "sha256": hashlib.sha256(record["pre"]).hexdigest(),
+        },
+        "provenance": prov,
+        "sha256": {
+            "in": hashlib.sha256(record["input"]).hexdigest(),
+            "out": hashlib.sha256(record["output"]).hexdigest(),
+            "pre": hashlib.sha256(record["pre"]).hexdigest(),
+        },
+    }
+    base.with_suffix(".json").write_text(
+        json.dumps(meta, indent=2, sort_keys=True) + "\n")
+    return base
+
+
 def write_golden(record, out_dir, stem="fvgt-01", provenance=None):
     """Write the .in.bin/.out.bin/.json fixture triple; returns the stem."""
     out_dir = Path(out_dir)
@@ -231,25 +407,47 @@ def main(argv=None):
                          "against the block header)")
     ap.add_argument("--scratch-link", type=lambda s: int(s, 0),
                     default=SCRATCH_LINK)
+    ap.add_argument("--marker-link", type=lambda s: int(s, 0),
+                    default=MARKER_LINK,
+                    help="FU-32 pre-pointer cell (pair layout only)")
+    ap.add_argument("--pair", action="store_true",
+                    help="extract the FU-32 pair block (input + post + pre) "
+                         "instead of the FU-31 single-frame block")
     args = ap.parse_args(argv)
 
     dump = Path(args.dump).read_bytes()
     try:
-        record = extract_frame(dump, delta_load=args.delta_load,
-                               scratch_link=args.scratch_link)
+        if args.pair:
+            record = extract_pair(dump, delta_load=args.delta_load,
+                                  scratch_link=args.scratch_link,
+                                  marker_link=args.marker_link)
+        else:
+            record = extract_frame(dump, delta_load=args.delta_load,
+                                   scratch_link=args.scratch_link)
     except (ValueError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
-    stem = write_golden(record, args.out_dir, stem=args.stem, provenance={
-        "dump": str(args.dump), "trace": str(args.trace or ""),
-        "session": args.session or "",
-    })
-    print(f"tag={record['tag'].decode('latin1')} "
-          f"dims={record['width']}x{record['height']} "
-          f"in_len={record['in_len']} out_len={record['out_len']} "
-          f"ptr=0x{record['ptr']:x}")
-    print(f"checks={record['checks']}")
-    print(f"golden: {stem}.in.bin {stem}.out.bin {stem}.json")
+    provenance = {"dump": str(args.dump), "trace": str(args.trace or ""),
+                  "session": args.session or ""}
+    if args.pair:
+        stem = write_golden_pair(record, args.out_dir, stem=args.stem,
+                                 provenance=provenance)
+        print(f"tag={record['tag'].decode('latin1')} "
+              f"dims={record['width']}x{record['height']} "
+              f"in_len={record['in_len']} out_len={record['out_len']} "
+              f"ptr=0x{record['ptr']:x} marker=0x{record['marker'] or 0:x}")
+        print(f"checks={record['checks']}")
+        print(f"golden: {stem}.in.bin {stem}.out.bin {stem}.pre.bin "
+              f"{stem}.json")
+    else:
+        stem = write_golden(record, args.out_dir, stem=args.stem,
+                            provenance=provenance)
+        print(f"tag={record['tag'].decode('latin1')} "
+              f"dims={record['width']}x{record['height']} "
+              f"in_len={record['in_len']} out_len={record['out_len']} "
+              f"ptr=0x{record['ptr']:x}")
+        print(f"checks={record['checks']}")
+        print(f"golden: {stem}.in.bin {stem}.out.bin {stem}.json")
     return 0
 
 
