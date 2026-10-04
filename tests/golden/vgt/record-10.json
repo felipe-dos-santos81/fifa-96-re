@@ -10,7 +10,9 @@
   "header24": 10068,
   "input_last_nonzero": 8731,
   "input_slice_len": 17408,
+  "length_contract": true,
   "method": 16,
+  "method_raw": 16,
   "out_len": 10068,
   "provenance": {
     "dump": "captures/session-vgt-5/guest.bin",

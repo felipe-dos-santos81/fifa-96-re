@@ -50,8 +50,18 @@ IN_CAP = 0x4400
 OUT_CAP = 0x4000
 MIN_OUT = 0x20
 VGT_MAGIC = 0x54475646
-KNOWN_METHODS = {0x10, 0x16, 0x32, 0x34, 0x46, 0x60, 0x62, 0x66,
-                 0x6A, 0x6E, 0x70, 0x72, 0x7A}
+# Valid selectors (stream[0] & 0xFE) per the 0x9E718 dispatch tree:
+# 0x10 refpack, 0x16 lz_16fb, 0x30/0x32/0x34 huff, 0x46 tree,
+# 0x60/0x62/0x66/0x72 delta_prefix, 0x6A/0x6E literal copy, 0x7A rle.
+# (FU-19's table missed 0x30 and listed 0x70, which the tree rejects.)
+METHOD_SELECTOR = 0xFE
+KNOWN_METHODS = {0x10, 0x16, 0x30, 0x32, 0x34, 0x46, 0x60, 0x62, 0x66,
+                 0x6A, 0x6E, 0x72, 0x7A}
+# Methods whose decoded length is proven to equal the BE24 header length:
+# 0x10 (record-10) and 0x6A/0x6E (dispatch returns EBP=header length via
+# `MOV ESI,EBP` before the literal copy at 0x9E82B). For every other method
+# header24 is informational only.
+LENGTH_CONTRACT_METHODS = {0x10, 0x6A, 0x6E}
 MAX_SLOTS = 64
 NEEDLE = rt.BANNER
 
@@ -98,16 +108,24 @@ def find_guest_region(pid, needle=NEEDLE):
 
 
 def success_bar(record):
-    """Evaluate the FU-20 success bar against a parsed golden record."""
+    """Evaluate the FU-20 success bar against a parsed golden record.
+
+    `length_matches` is enforced only for methods in
+    `LENGTH_CONTRACT_METHODS`; for the others the BE24 header field is not
+    the decoded length and the check is informational (omitted).
+    """
     inp = record["input"]
     out = record["output"]
-    return {
+    selector = record["method"] & METHOD_SELECTOR
+    checks = {
         "signature": len(inp) >= 5 and inp[1] == 0xFB,
-        "method_known": (record["method"] & 0xFE) in KNOWN_METHODS,
-        "length_matches": record["header24"] == record["out_len"],
+        "method_known": selector in KNOWN_METHODS,
         "output_nontrivial": (MIN_OUT <= record["out_len"] <= OUT_CAP
                               and len(set(out)) > 1),
     }
+    if selector in LENGTH_CONTRACT_METHODS:
+        checks["length_matches"] = record["header24"] == record["out_len"]
+    return checks
 
 
 def observed_methods(trace, site_id=ENTRY_SITE):
@@ -215,18 +233,22 @@ def extract_records(data, trace, scratch_link=SCRATCH_LINK,
             break
         ptr = block["next"]
     records = list(reversed(blocks))
-    methods = [r["method"] for r in records]
-    dupes = sorted({m for m in methods if methods.count(m) > 1})
+    selectors = [r["method"] & METHOD_SELECTOR for r in records]
+    dupes = sorted({m for m in selectors if selectors.count(m) > 1})
     if dupes:
         raise ValueError(
             "duplicate method slot(s) "
             + ", ".join(f"0x{m:02x}" for m in dupes)
             + ": copy-once per slot is violated")
+    wanted = None if method is None else {m & METHOD_SELECTOR for m in method}
     for record in records:
         record["delta_load"] = delta_load
         record["delta_dump"] = delta_dump
         record["anchors"] = anchors
         record["checks"] = success_bar(record)
+        if wanted is not None and \
+                (record["method"] & METHOD_SELECTOR) not in wanted:
+            continue
         if not all(record["checks"].values()):
             failed = [k for k, v in record["checks"].items() if not v]
             raise ValueError(
@@ -234,14 +256,14 @@ def extract_records(data, trace, scratch_link=SCRATCH_LINK,
                 f"(method 0x{record['method']:02x}, "
                 f"out_len 0x{record['out_len']:x}, "
                 f"header24 0x{record['header24']:x})")
-    if method is not None:
-        wanted = set(method)
-        missing = sorted(wanted - set(methods))
+    if wanted is not None:
+        missing = sorted(m for m in wanted if m not in selectors)
         if missing:
             raise ValueError(
                 "requested method(s) not captured: "
                 + ", ".join(f"0x{m:02x}" for m in missing))
-        records = [r for r in records if r["method"] in wanted]
+        records = [r for r in records
+                   if (r["method"] & METHOD_SELECTOR) in wanted]
     return records
 
 
@@ -262,12 +284,15 @@ def extract(data, trace, method=None, **kwargs):
 def write_golden(record, out_dir, provenance=None):
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    stem = out_dir / f"record-{record['method']:02x}"
+    selector = record["method"] & METHOD_SELECTOR
+    stem = out_dir / f"record-{selector:02x}"
     (stem.with_suffix(".in.bin")).write_bytes(record["input"])
     (stem.with_suffix(".out.bin")).write_bytes(record["output"])
     last = max((i for i, b in enumerate(record["input"]) if b), default=-1)
     meta = {
-        "method": record["method"],
+        "method": selector,
+        "method_raw": record["method"],
+        "length_contract": selector in LENGTH_CONTRACT_METHODS,
         "out_len": record["out_len"],
         "header24": record["header24"],
         "input_slice_len": len(record["input"]),

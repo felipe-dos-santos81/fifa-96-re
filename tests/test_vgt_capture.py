@@ -1,3 +1,4 @@
+import json
 import struct
 import sys
 import unittest
@@ -252,6 +253,13 @@ class TestGoldenVectors(unittest.TestCase):
                 self.assertIn(inp[0] & 0xFE, vgt.KNOWN_METHODS)
                 self.assertLessEqual(len(out), vgt.OUT_CAP)
                 self.assertGreaterEqual(len(out), vgt.MIN_OUT)
+                meta_data = json.loads(meta.read_text())
+                self.assertEqual(meta_data["method"], inp[0] & 0xFE)
+                self.assertEqual(meta_data["method_raw"], inp[0])
+                self.assertEqual(meta_data["out_len"], len(out))
+                self.assertEqual(
+                    meta_data["length_contract"],
+                    (inp[0] & 0xFE) in vgt.LENGTH_CONTRACT_METHODS)
 
 
 if __name__ == "__main__":

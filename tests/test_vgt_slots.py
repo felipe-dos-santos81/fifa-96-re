@@ -22,13 +22,15 @@ def tprobe(method=0x10, site=1, target_ret=0x29A71F):
     return bytes([probe.T_PROBE]) + struct.pack("<HH", 0, 16) + payload
 
 
-def block_record(method, out_len, order):
+def block_record(method, out_len, order, header24=None):
+    if header24 is None:
+        header24 = out_len
     inp = bytearray(vgt.IN_CAP)
     inp[0] = method
     inp[1] = 0xFB
-    inp[2] = (out_len >> 16) & 0xFF
-    inp[3] = (out_len >> 8) & 0xFF
-    inp[4] = out_len & 0xFF
+    inp[2] = (header24 >> 16) & 0xFF
+    inp[3] = (header24 >> 8) & 0xFF
+    inp[4] = header24 & 0xFF
     for i in range(5, len(inp)):
         inp[i] = (i * 7 + order) & 0xFF
     out = bytes((i * 13 + 1 + order) & 0xFF for i in range(out_len))
@@ -39,12 +41,13 @@ def dump_off(guest, delta_load=DELTA_LOAD, delta_dump=DELTA_DUMP):
     return guest + delta_dump - delta_load
 
 
-def new_block(data, addr, next_ptr, method, out_len, magic=vgt.VGT_MAGIC):
+def new_block(data, addr, next_ptr, method, out_len, magic=vgt.VGT_MAGIC,
+              header24=None):
     struct.pack_into("<I", data, dump_off(addr), next_ptr)
     struct.pack_into("<I", data, dump_off(addr + 4), method)
     struct.pack_into("<I", data, dump_off(addr + 8), out_len)
     struct.pack_into("<I", data, dump_off(addr + 0xC), magic)
-    inp, out = block_record(method, out_len, addr & 0xFF)
+    inp, out = block_record(method, out_len, addr & 0xFF, header24=header24)
     data[dump_off(addr + 0x10):dump_off(addr + 0x10) + len(inp)] = inp
     data[dump_off(addr + 0x10 + vgt.IN_CAP):
          dump_off(addr + 0x10 + vgt.IN_CAP) + len(out)] = out
@@ -57,9 +60,12 @@ def synthetic_dump(records, scratch=SCRATCH, delta_load=DELTA_LOAD,
     banner_at = rt.BANNER_LINK + delta_dump
     data[banner_at:banner_at + len(rt.BANNER)] = rt.BANNER
     head = 0
-    for i, (method, out_len) in enumerate(records):
+    for i, rec in enumerate(records):
+        method, out_len = rec[0], rec[1]
+        header24 = rec[2] if len(rec) > 2 else None
         addr = HEAP + i * STRIDE
-        new_block(data, addr, head, method, out_len, magic=magic)
+        new_block(data, addr, head, method, out_len, magic=magic,
+                  header24=header24)
         head = addr
     struct.pack_into("<I", data, vgt.SCRATCH_LINK + delta_dump, head)
     return bytes(data)
@@ -143,6 +149,40 @@ class TestExtractSlots(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "pass method"):
             vgt.extract(synthetic_dump([(0x10, 0x100), (0x16, 0x80)]),
                         tprobe(0x10))
+
+    def test_selector_set_matches_dispatch_tree(self):
+        # 0x30 (huff) is a valid selector; 0x70 is rejected by the tree.
+        self.assertIn(0x30, vgt.KNOWN_METHODS)
+        self.assertNotIn(0x70, vgt.KNOWN_METHODS)
+        self.assertIn(0x6E, vgt.KNOWN_METHODS)
+        self.assertEqual(vgt.LENGTH_CONTRACT_METHODS, {0x10, 0x6A, 0x6E})
+
+    def test_noncontract_header24_is_informational(self):
+        # huff (raw 0x31 -> selector 0x30) does not carry the decoded
+        # length in the BE24 header field.
+        dump = synthetic_dump([(0x31, 0x80, 0x1234)])
+        records = vgt.extract_records(dump, tprobe(0x31))
+        self.assertEqual(records[0]["method"], 0x31)
+        self.assertEqual(records[0]["checks"],
+                         {"signature": True, "method_known": True,
+                          "output_nontrivial": True})
+
+    def test_contract_method_still_enforces_length(self):
+        dump = synthetic_dump([(0x10, 0x80, 0x99)])
+        with self.assertRaisesRegex(ValueError, "length_matches"):
+            vgt.extract_records(dump, tprobe(0x10))
+
+    def test_filter_ignores_bad_unrequested_slot(self):
+        dump = synthetic_dump([(0x10, 0x80, 0x99), (0x46, 0x40)])
+        with self.assertRaisesRegex(ValueError, "length_matches"):
+            vgt.extract_records(dump, tprobe(0x10))
+        records = vgt.extract_records(dump, tprobe(0x10), method={0x46})
+        self.assertEqual([r["method"] for r in records], [0x46])
+
+    def test_filter_accepts_selector_for_raw_method(self):
+        dump = synthetic_dump([(0x31, 0x80, 0x1234)])
+        records = vgt.extract_records(dump, tprobe(0x31), method={0x30})
+        self.assertEqual([r["method"] for r in records], [0x31])
 
     def test_write_golden_per_method(self):
         import tempfile
