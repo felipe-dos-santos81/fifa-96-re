@@ -1,13 +1,80 @@
 #include "fifa96_loader/fifa96_sfx.h"
 #include <stdint.h>
+#include <string.h>
 
 static uint32_t sfx_u32le(const uint8_t *p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+/* ── FUN_000cbc4c RNG and its seeders (FU-47 §2) ─────────────────────────── */
+
+/* Image 0x112E68 = FUN_000cbcb8(0). */
+static const uint32_t sfx_rng_seed0[6] = {
+  0xF22D0E56u, 0x883126E9u, 0xC624DD2Fu, 0x0702C49Cu, 0x9E353F7Du, 0x6FDF3B64u
+};
+
+/* FUN_000cbcb8 @ 0xCBCB8: cumulative constants (0xCBCC3..0xCBCF5). */
+static const uint32_t sfx_rng_seed_c[6] = {
+  0xF22D0E56u, 0x96041893u, 0x3DF3B646u, 0x40DDE76Du, 0x97327AE1u, 0xD1A9FBE7u
+};
+
+/* 0x4C698: the six bytes read by MOVSX from image 0x101D98. */
+static const int8_t sfx_rng_key[6] = {'A', 'r', 'C', 'a', 'D', 'e'};
+
+void fifa96_sfx_rng_init(struct fifa96_sfx_rng *rng) {
+  if (!rng) return;
+  memcpy(rng->w, sfx_rng_seed0, sizeof sfx_rng_seed0);
+}
+
+void fifa96_sfx_rng_seed(struct fifa96_sfx_rng *rng, uint32_t seed) {
+  if (!rng) return;
+  uint32_t e = seed;
+  for (int i = 0; i < 6; i++) {
+    e += sfx_rng_seed_c[i];
+    rng->w[i] = e;
+  }
+}
+
+void fifa96_sfx_rng_seed_arcade(struct fifa96_sfx_rng *rng, uint32_t seed) {
+  if (!rng) return;
+  for (int i = 0; i < 6; i++)
+    rng->w[i] = (seed << 25) + (uint32_t)sfx_rng_key[i];
+}
+
+uint32_t fifa96_sfx_rng_next(struct fifa96_sfx_rng *rng) {
+  if (!rng) return 0;
+  /* 0xCBC4C..0xCBC83: ADD EAX,[0x12E7C]; then ADC EAX,[w] for
+   * w = 0x12E78, 0x12E74, 0x12E70, 0x12E6C, 0x12E68, storing each running
+   * sum back into w. EAX ends as the new w[0], the returned word. */
+  uint32_t eax = rng->w[5];
+  uint32_t carry = 0;
+  for (int i = 4; i >= 0; i--) {
+    uint64_t s = (uint64_t)eax + rng->w[i] + carry;
+    rng->w[i] = (uint32_t)s;
+    eax = (uint32_t)s;
+    carry = (uint32_t)(s >> 32);
+  }
+  uint32_t ret = eax;
+  /* 0xCBC88: INC w[5]; if it wraps, INC w[4]..w[0] until one does not
+   * (0xCBC90..0xCBCB0); if all wrap, INC EAX (0xCBCB6). The last INC keeps
+   * EAX unchanged, hence `ret` mirrors the original's return register. */
+  if (++rng->w[5] == 0) {
+    int i = 4;
+    for (; i >= 0; i--) {
+      if (++rng->w[i] != 0) break;
+    }
+    if (i < 0) ret++;
+  }
+  return ret;
+}
+
+uint32_t fifa96_sfx_rng_default(void *ctx) {
+  return fifa96_sfx_rng_next((struct fifa96_sfx_rng *)ctx);
+}
+
 /* One randomization draw: FUN_000cbc4c's return, top 16 bits (SHR EAX,0x10 at
- * 0xA78B6/0xA78E6/0xA793D). The generator itself (and its FUN_000cbcb8 seed)
- * is out of FU-43's scope, hence the provider. */
+ * 0xA78B6/0xA78E6/0xA793D). The derived generator is the default provider
+ * (fifa96_sfx_rng_default); the hook stays injectable for tests. */
 static int sfx_draw16(const struct fifa96_sfx_opts *o, uint32_t *r16) {
   if (!o->rand) return -(int)FIFA96_ERR_UNSUPPORTED;
   *r16 = o->rand(o->rand_ctx) >> 16;
@@ -127,7 +194,8 @@ struct sfx_resolved {
   int32_t pitch;   /* record+0xC */
 };
 
-static int sfx_resolve(const struct fifa96_bnk_info *bank, uint32_t id,
+static int sfx_resolve(const struct fifa96_mixer *m,
+                       const struct fifa96_bnk_info *bank, uint32_t id,
                        int32_t caller_pan, uint8_t caller_volume,
                        const struct fifa96_sfx_opts *o,
                        struct fifa96_bnk_entry *e, struct fifa96_eacs_info *ei,
@@ -139,6 +207,10 @@ static int sfx_resolve(const struct fifa96_bnk_info *bank, uint32_t id,
   int prc = fifa96_eacs_parse_bank(bank->src, bank->src_len, e->eacs_off,
                                    e->payload_len, ei);
   if (prc != FIFA96_OK) return prc;
+  /* FU-47 §3 sound-state gate [0x15FC8] (0xA7852..0xA7869): signed 1..5 only,
+   * original -4, checked before the first draw at 0xA789D. */
+  if (m->sound_state < 1 || m->sound_state > 5)
+    return -(int)FIFA96_ERR_TRUNCATED;
   const uint8_t *d = bank->src + e->desc_off;
   int rc2 = sfx_desc_pitch(d, o, &p->pitch);
   if (rc2 != FIFA96_OK) return rc2;
@@ -213,9 +285,13 @@ int fifa96_sfx_arm(struct fifa96_mixer *m, int voice,
   if (((bank->src[e0.desc_off + 0x1C]) & 1u) == 0) {
     struct fifa96_eacs_info ei;
     struct sfx_resolved p;
-    int rc = sfx_resolve(bank, id, opts->pan, opts->volume, opts, &e0, &ei, &p);
+    int rc = sfx_resolve(m, bank, id, opts->pan, opts->volume, opts, &e0, &ei, &p);
     if (rc != FIFA96_OK) return rc;
-    return sfx_start_one(m, voice, bank, &e0, &ei, &p, out ? &out[0] : NULL);
+    rc = sfx_start_one(m, voice, bank, &e0, &ei, &p, out ? &out[0] : NULL);
+    if (rc < 0) return rc;
+    /* The arm stores the descriptor priority for later steals (0xA788A). */
+    (void)fifa96_mixer_set_priority(m, voice, bank->src[e0.desc_off + 0x14]);
+    return rc;
   }
 
   /* Two-voice path (FU-43 §3.2): the split pans/volumes feed the arms for id
@@ -228,17 +304,84 @@ int fifa96_sfx_arm(struct fifa96_mixer *m, int voice,
   struct fifa96_bnk_entry e1;
   struct fifa96_eacs_info ei0, ei1;
   struct sfx_resolved p0, p1;
-  int rc = sfx_resolve(bank, id, span, lv, opts, &e0, &ei0, &p0);
+  int rc = sfx_resolve(m, bank, id, span, lv, opts, &e0, &ei0, &p0);
   if (rc != FIFA96_OK) return rc;
-  rc = sfx_resolve(bank, id + 1, span, rv, opts, &e1, &ei1, &p1);
+  rc = sfx_resolve(m, bank, id + 1, span, rv, opts, &e1, &ei1, &p1);
   if (rc != FIFA96_OK) return rc;
   rc = sfx_start_one(m, voice, bank, &e0, &ei0, &p0, out ? &out[0] : NULL);
   if (rc < 0) return rc;
+  (void)fifa96_mixer_set_priority(m, voice, bank->src[e0.desc_off + 0x14]);
   rc = sfx_start_one(m, voice + 1, bank, &e1, &ei1, &p1, out ? &out[1] : NULL);
   if (rc < 0) {
     fifa96_mixer_stop(m, voice);  /* port atomicity; the original's cleanup
                                      passes the id, 0xA77E2 */
     return rc;
   }
+  (void)fifa96_mixer_set_priority(m, voice + 1, bank->src[e1.desc_off + 0x14]);
   return ((voice + 1) << 16) | voice;
+}
+
+int fifa96_sfx_arm_alloc(struct fifa96_mixer *m,
+                         const struct fifa96_bnk_info *bank, uint32_t id,
+                         const struct fifa96_sfx_opts *opts,
+                         struct fifa96_sfx_voice out[2]) {
+  static const struct fifa96_sfx_opts defaults = {-1, 0x7F, 0x7F, NULL, NULL};
+  if (!opts) opts = &defaults;
+  if (!m || !bank || !bank->src) return -(int)FIFA96_ERR_TRUNCATED;
+  if (id >= FIFA96_BNK_IDS) return -(int)FIFA96_ERR_TRUNCATED;
+  if (opts->volume > FIFA96_SFX_VOLUME_MAX || opts->master > FIFA96_SFX_VOLUME_MAX)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  if (opts->pan != -1 && (opts->pan < 0 || opts->pan > 0xFF))
+    return -(int)FIFA96_ERR_TRUNCATED;
+
+  struct fifa96_bnk_entry e0;
+  fifa96_err_t erc = fifa96_bnk_entry(bank, id, &e0);
+  if (erc != FIFA96_OK) return -(int)erc;
+  const uint8_t *d0 = bank->src + e0.desc_off;
+
+  /* FUN_000a780e 0xA781F..0xA7828 runs the allocator before the EACS tag
+   * (0xA7840) and the gate (0xA7852), so a blocked arm still moves the rotor
+   * and writes the chosen record's +0x12. */
+  int v0 = fifa96_mixer_alloc_voice(m, sfx_u32le(d0), d0[0x14]);
+  if (v0 < 0) return -(int)FIFA96_ERR_NO_VOICE;
+
+  if ((d0[0x1C] & 1u) == 0) {
+    struct fifa96_eacs_info ei;
+    struct sfx_resolved p;
+    int rc = sfx_resolve(m, bank, id, opts->pan, opts->volume, opts, &e0, &ei, &p);
+    if (rc != FIFA96_OK) return rc;
+    rc = sfx_start_one(m, v0, bank, &e0, &ei, &p, out ? &out[0] : NULL);
+    if (rc < 0) return rc;
+    (void)fifa96_mixer_set_priority(m, v0, d0[0x14]);
+    return v0;
+  }
+
+  /* Two-voice: FUN_000a7728 arms id then id+1, each allocating from its own
+   * descriptor (0xA77A3/0xA77D6). Resolve both before starting so an error
+   * leaves no voice armed. */
+  if (id + 1 >= FIFA96_BNK_IDS) return -(int)FIFA96_ERR_NOT_FOUND;
+  uint8_t span, lv, rv;
+  sfx_split(opts->pan, opts->volume, id, &span, &lv, &rv);
+  struct fifa96_bnk_entry e1;
+  erc = fifa96_bnk_entry(bank, id + 1, &e1);
+  if (erc != FIFA96_OK) return -(int)erc;
+  struct fifa96_eacs_info ei0, ei1;
+  struct sfx_resolved p0, p1;
+  int rc = sfx_resolve(m, bank, id, span, lv, opts, &e0, &ei0, &p0);
+  if (rc != FIFA96_OK) return rc;
+  rc = sfx_resolve(m, bank, id + 1, span, rv, opts, &e1, &ei1, &p1);
+  if (rc != FIFA96_OK) return rc;
+  const uint8_t *d1 = bank->src + e1.desc_off;
+  int v1 = fifa96_mixer_alloc_voice(m, sfx_u32le(d1), d1[0x14]);
+  if (v1 < 0) return -(int)FIFA96_ERR_NO_VOICE;
+  rc = sfx_start_one(m, v0, bank, &e0, &ei0, &p0, out ? &out[0] : NULL);
+  if (rc < 0) return rc;
+  (void)fifa96_mixer_set_priority(m, v0, d0[0x14]);
+  rc = sfx_start_one(m, v1, bank, &e1, &ei1, &p1, out ? &out[1] : NULL);
+  if (rc < 0) {
+    fifa96_mixer_stop(m, v0);
+    return rc;
+  }
+  (void)fifa96_mixer_set_priority(m, v1, d1[0x14]);
+  return (v1 << 16) | v0;
 }

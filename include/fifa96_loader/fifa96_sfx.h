@@ -15,14 +15,16 @@
 // and no two-voice flag, so the golden path resolves without randomness; the
 // other branches are ported from the disassembly.
 //
-// Modelled and not modelled, per FU-43's open legs:
+// Modelled and not modelled, per FU-43/FU-47's open legs:
 //   * voice allocation FUN_000a62fa (descriptor +0x00 mask, +0x14 priority)
-//     is not ported: the caller passes the mixer voice, and the two-voice
-//     path uses voice and voice+1 (the original allocates two independent
-//     records and returns (voice2<<16)|voice1, 0xA77F1).
-//   * the sound-state gate [0x15FC8] in 1..5 (0xA7852, error -4) is engine
-//     state and is not modelled; the port always arms. The EACS tag is
-//     checked before any randomization draw, as in the original (0xA7840).
+//     is ported twice: fifa96_sfx_arm keeps the caller-selected voice, while
+//     fifa96_sfx_arm_alloc uses fifa96_mixer_alloc_voice for the original's
+//     allocator policy (FU-47 §1; two-voice allocates independently and
+//     returns (voice2<<16)|voice1, 0xA77F1).
+//   * the sound-state gate [0x15FC8] in 1..5 (0xA7852, error -4) is modelled
+//     as fifa96_mixer.sound_state: the check sits after the EACS tag and
+//     before the first randomization draw, as in the original (0xA7840 then
+//     0xA7852 then 0xA789D). Default state 1 keeps pre-FU-47 callers arming.
 //   * record+0x26 gain = caller volume (record+0x24) x randomized descriptor
 //     volume (record+0x25) x master (0x15FD6) / 0x3F01 (FUN_000b9fdd,
 //     0xB9FEA..0xB9FF5); the mixer volume is that value, kept in 0..0x7F.
@@ -35,9 +37,11 @@
 //     record+0xC pitch, so retail pitch 0 is table[0] 0x10000/shift 16
 //     (0xA78CD writes record+0xC = 0 when +0x0C/+0x10 are zero in every
 //     retail entry).
-//   * randomization draws come from FUN_000cbc4c, a 192-bit carry generator
-//     seeded by FUN_000cbcb8 (out of FU-43 scope); the arm takes a provider
-//     and applies the cited formula with `rand() >> 16` (SHR EAX,0x10).
+//   * randomization draws come from the FUN_000cbc4c generator, ported as
+//     fifa96_sfx_rng_* (FU-47 §2) and usable through
+//     fifa96_sfx_rng_default; the arm still consumes `rand() >> 16`
+//     (SHR EAX,0x10) and a NULL provider plus a needed draw stays
+//     UNSUPPORTED, so tests keep the injectable hook.
 //   * the two-voice branch is static-only in retail (no entry sets +0x1C bit
 //     0) and is ported from the disassembly, including FUN_000a6717's table
 //     DAT_000148e0 = {150,140,130,120,110} (image 0x1148E0) and its
@@ -105,3 +109,50 @@ int fifa96_sfx_arm(struct fifa96_mixer *m, int voice,
                    const struct fifa96_bnk_info *bank, uint32_t id,
                    const struct fifa96_sfx_opts *opts,
                    struct fifa96_sfx_voice out[2]);
+
+// The original arm signature (FUN_000a780e): the voice is chosen by
+// fifa96_mixer_alloc_voice from the descriptor's +0x00 mask and +0x14
+// priority (0xA781F..0xA7825) before the EACS tag (0xA7840), the sound-state
+// gate (0xA7852) and the randomization draws (0xA789D..). The two-voice
+// descriptor flag allocates independently for id and id+1
+// (FUN_000a7728 -> two FUN_000a780e calls, 0xA77A3/0xA77D6) and returns
+// ((voice2)<<16)|voice1. On any error the port leaves no voice armed; the
+// rotor and the chosen record's +0x12 have already moved, as in the original.
+// Returns the armed voice (>= 0) or the packed pair, or the negated
+// fifa96_err_t: NO_VOICE when the allocator matches nothing (original -0x14,
+// 0xA7830), the fifa96_sfx_arm errors otherwise.
+int fifa96_sfx_arm_alloc(struct fifa96_mixer *m,
+                         const struct fifa96_bnk_info *bank, uint32_t id,
+                         const struct fifa96_sfx_opts *opts,
+                         struct fifa96_sfx_voice out[2]);
+
+// FUN_000cbc4c @ 0xCBC4C (FU-47 §2): a six-word 32-bit generator at object-4
+// 0x12E68..0x12E7F (image 0x112E68). Word order is address order: w[0] =
+// [0x12E68] is the word returned each step (SHR EAX,0x10 by the arm), w[5] =
+// [0x12E7C] is the word incremented every step. One step suffix-sums
+// w[5]+w[4]..w[0] into w[4]..w[0] with carries (ADD/ADC chain
+// 0xCBC4C..0xCBC83), increments w[5] (0xCBC88) with a carry cascade up to
+// w[0] (0xCBC90..0xCBCB0), and returns w[0]; a full 192-bit wrap also bumps
+// the returned word (INC EAX 0xCBCB6). Not a standard LCG form; the
+// disassembly is the spec (FU-47 §2.1).
+struct fifa96_sfx_rng { uint32_t w[6]; };
+
+// Image 0x112E68 state = FUN_000cbcb8(0); the default deterministic state.
+void fifa96_sfx_rng_init(struct fifa96_sfx_rng *rng);
+
+// FUN_000cbcb8 @ 0xCBCB8: w[i] = seed + c[0]+..+c[i] with
+// c = {0xF22D0E56, 0x96041893, 0x3DF3B646, 0x40DDE76D, 0x97327AE1,
+// 0xD1A9FBE7}; the six constants are the seed-0 image words' differences.
+void fifa96_sfx_rng_seed(struct fifa96_sfx_rng *rng, uint32_t seed);
+
+// The game's own seeder at 0x4C698: w[i] = (seed << 25) + (int8)key[i] with
+// key = "ArCaDe-CoInOp" (image 0x101D98). Called from 0x493E3 with the tick
+// counter FUN_000cb2a4 ([0x12E88]); the other boot seed is 0x17CC7
+// srand((b[0x66]*ticks + b[0x67]) << 16) (FU-47 §2.3).
+void fifa96_sfx_rng_seed_arcade(struct fifa96_sfx_rng *rng, uint32_t seed);
+
+// One FUN_000cbc4c step; NULL yields 0.
+uint32_t fifa96_sfx_rng_next(struct fifa96_sfx_rng *rng);
+
+// fifa96_sfx_rand_fn adapter: ctx must be struct fifa96_sfx_rng *.
+uint32_t fifa96_sfx_rng_default(void *ctx);

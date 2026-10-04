@@ -23,6 +23,8 @@ static int16_t mix_clamp(int32_t v) {
 void fifa96_mixer_init(struct fifa96_mixer *m) {
   if (!m) return;
   memset(m, 0, sizeof *m);
+  m->next_voice = 0;   /* DAT_000148AC is BSS-zero in the image (FU-47 §0) */
+  m->sound_state = 1;  /* port default: gate open (FU-47 §4) */
 }
 
 int fifa96_mixer_start(struct fifa96_mixer *m, int voice,
@@ -126,6 +128,50 @@ void fifa96_mixer_stop(struct fifa96_mixer *m, int voice) {
 int fifa96_mixer_voice_active(const struct fifa96_mixer *m, int voice) {
   if (!m || voice < 0 || voice >= FIFA96_MIXER_VOICES) return 0;
   return m->voices[voice].active != 0;
+}
+
+/* FUN_000a62fa @ 0xA62FA, FU-47 §1. Both phases walk the 16 voices from the
+ * rotor `next_voice` with wrap (0xA6329..0xA632E), testing bit v of the mask
+ * with `SHL EDX,CL; TEST EDX,ESI` (0xA6309..0xA6314). */
+int fifa96_mixer_alloc_voice(struct fifa96_mixer *m, uint32_t mask,
+                             uint8_t priority) {
+  if (!m) return -(int)FIFA96_ERR_TRUNCATED;
+
+  int i = m->next_voice;
+  for (int n = 0; n < FIFA96_MIXER_VOICES; n++) {
+    if (((mask >> i) & 1u) != 0 && !m->voices[i].active) {
+      m->next_voice = (i + 1) & (FIFA96_MIXER_VOICES - 1);
+      return i;
+    }
+    i = (i + 1) & (FIFA96_MIXER_VOICES - 1);
+  }
+
+  /* Phase 2: phase 1 consumed every free in-mask voice, so whatever remains
+   * is active; no +0x16 test here, exactly like the original. The stored
+   * priority compare is unsigned (0xA6367 MOVZX, 0xA636D JNC). */
+  i = m->next_voice;
+  for (int n = 0; n < FIFA96_MIXER_VOICES; n++) {
+    if (((mask >> i) & 1u) != 0 && m->voices[i].priority <= priority) {
+      m->next_voice = (i + 1) & (FIFA96_MIXER_VOICES - 1);
+      return i;
+    }
+    i = (i + 1) & (FIFA96_MIXER_VOICES - 1);
+  }
+  return -1;
+}
+
+int fifa96_mixer_set_priority(struct fifa96_mixer *m, int voice,
+                              uint8_t priority) {
+  if (!m || voice < 0 || voice >= FIFA96_MIXER_VOICES)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  m->voices[voice].priority = priority;
+  return FIFA96_OK;
+}
+
+int fifa96_mixer_set_sound_state(struct fifa96_mixer *m, int state) {
+  if (!m || state < 0 || state > 5) return -(int)FIFA96_ERR_TRUNCATED;
+  m->sound_state = state;
+  return FIFA96_OK;
 }
 
 void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {

@@ -33,6 +33,7 @@ extern const uint32_t fifa96_mixer_pitch_table[FIFA96_MIXER_PITCH_ENTRIES];
 
 struct fifa96_mixer_voice {
   int active;                   /* +0x00 state: 0 free, 1 active */
+  uint8_t priority;             /* EACSNDF +0x13 steal priority (FU-47 §1) */
   fifa96_eacs_format_t format;  /* selected from f8/f9 (FU-35 §3.1) */
   const uint8_t *data;          /* data base (payload + info->data_off) */
   uint32_t units;               /* cursor units in data (= info->blocks) */
@@ -57,10 +58,39 @@ struct fifa96_mixer_voice {
 
 struct fifa96_mixer {
   struct fifa96_mixer_voice voices[FIFA96_MIXER_VOICES];
+  int next_voice;               /* FU-47: DAT_000148AC allocator rotor, 0..15 */
+  int sound_state;              /* FU-47: [0x15FC8], 1..5 = arm allowed, 0 = off */
 };
 
-/* Zero the voice table. */
+/* Zero the voice table. next_voice = 0 (the BSS rotor) and sound_state = 1
+ * (gate open, the FU-47 port default that preserves the pre-gate behavior). */
 void fifa96_mixer_init(struct fifa96_mixer *m);
+
+// FUN_000a62fa @ 0xA62FA (FU-47 §1): pick a voice for a descriptor voice
+// `mask` (descriptor +0x00, bit v allows voice v) and `priority` (descriptor
+// +0x14). Phase 1 scans from next_voice in wrap order for the first allowed
+// voice with active == 0; phase 2, only when every allowed voice is active,
+// steals the first allowed voice whose stored `priority` is <= the new
+// priority (unsigned byte compare, 0xA636B/0xA636D). On success advances
+// next_voice past the choice (0xA6328..0xA6330) and returns the voice; returns
+// -1 when no allowed voice wins (0xA637D, the original's NULL). The chosen
+// voice is not activated; the arm marks it (+0x16 = 1) after the EACS and
+// sound-state checks, and stores the priority with fifa96_mixer_set_priority.
+int fifa96_mixer_alloc_voice(struct fifa96_mixer *m, uint32_t mask,
+                             uint8_t priority);
+
+// EACSNDF +0x13 (arm 0xA7887..0xA788A): store the descriptor +0x14 priority
+// so later allocations can steal this voice. Returns FIFA96_OK or
+// -(FIFA96_ERR_TRUNCATED) for NULL m or a voice outside 0..15.
+int fifa96_mixer_set_priority(struct fifa96_mixer *m, int voice,
+                              uint8_t priority);
+
+// FU-47 §3: write the sound-system state [0x15FC8]. FUN_000a6265 validates
+// 0..5 and stores the mode; FUN_000a6505 (stop) stores 0. The arm gate
+// (0xA7852..0xA7869) allows only 1..5, so state 0 stops every new arm.
+// Returns FIFA96_OK, or -(FIFA96_ERR_TRUNCATED) for NULL m or state outside
+// 0..5 (the original's -4; nothing is stored on failure).
+int fifa96_mixer_set_sound_state(struct fifa96_mixer *m, int state);
 
 // Arm voice `voice` (0..15) from a parsed EACS header over `payload`
 // (`payload_len` bytes, the [tag][len]-stripped 1SNh/1SNd payload). For the
