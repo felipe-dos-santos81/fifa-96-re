@@ -103,10 +103,17 @@ add_executable(test_eacs_delta tests/test_eacs_delta.c)
 target_link_libraries(test_eacs_delta PRIVATE fifa96_eacs fifa96_file)
 add_test(NAME test_eacs_delta COMMAND test_eacs_delta WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_library(fifa96_mixer src/fifa96_loader/fifa96_mixer.c src/fifa96_loader/fifa96_pacing.c)
+add_library(fifa96_mixer src/fifa96_loader/fifa96_mixer.c
+                          src/fifa96_loader/fifa96_mixer_tables.c
+                          src/fifa96_loader/fifa96_pacing.c)
 add_executable(test_mixer tests/test_mixer.c)
 target_link_libraries(test_mixer PRIVATE fifa96_mixer fifa96_eacs fifa96_file)
 add_test(NAME test_mixer COMMAND test_mixer WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_mixer_calibration tests/test_mixer_calibration.c)
+target_link_libraries(test_mixer_calibration PRIVATE fifa96_mixer fifa96_eacs fifa96_file)
+add_test(NAME test_mixer_calibration COMMAND test_mixer_calibration
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_bigf src/fifa96_loader/fifa96_bigf.c)
 add_executable(test_bigf tests/test_bigf.c)

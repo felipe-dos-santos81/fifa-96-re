@@ -345,8 +345,8 @@ static void test_synthetic_volume_and_pitch_span(void) {
   assert(fifa96_sfx_arm(&m, 0, &info, 7, &no_rand, p) == 0);
   assert(p[0].volume == 0x10 && p[0].gain == 0x10);
 
-  /* pitch +0x0C/+0x10: 100 + ((0xFFFF*8)>>15) - 8 = 107; pitch is reported,
-   * the retail-pitch-0 step stays table[0]. */
+  /* pitch +0x0C/+0x10: 100 + ((0xFFFF*8)>>15) - 8 = 107; FU-46 §1 routes it
+   * through the table head: table[107] = 0x11052 at shift 16. */
   put32le(b + 0x20C, 8);
   put32le(b + 0x210, 100);
   assert(fifa96_bnk_parse(b, sizeof b, &info) == FIFA96_OK);
@@ -357,8 +357,11 @@ static void test_synthetic_volume_and_pitch_span(void) {
   assert(fifa96_sfx_arm(&m, 0, &info, 7, &o, p) == 0);
   assert(p[0].pitch == 107);
   uint64_t step = 0;
-  assert(fifa96_mixer_step_from_rate(16000, 22050u, 0x10000u, 16u, &step) == 0);
+  assert(fifa96_mixer_step_from_pitch(16000, 22050u, 107, &step) == 0);
   assert(m.voices[0].step == step);
+  uint32_t ratio = 0, shift = 0;
+  assert(fifa96_mixer_pitch_ratio(107, &ratio, &shift) == 0);
+  assert(ratio == 0x11052u && shift == 16);
 
   /* negative span (s8) walks the cited logical-shift path and clamps. */
   b[0x21A] = 0xF0;  /* -16 */
@@ -401,6 +404,10 @@ static void test_synthetic_two_voice(void) {
   assert(fifa96_mixer_voice_active(&m, 1) == 1);
   assert(fifa96_mixer_voice_active(&m, 2) == 1);
   assert(m.voices[1].volume == 114 && m.voices[2].volume == 50);
+  /* FU-46 §2: pan 2 -> L factor 0x7F, R factor 4; gain 114 -> L 114 R 3,
+   * gain 50 -> L 50 R 1. */
+  assert(m.voices[1].gain_l == 114 && m.voices[1].gain_r == 3);
+  assert(m.voices[2].gain_l == 50 && m.voices[2].gain_r == 1);
 
   /* mirrored pan 0x80: local 0x7F, esi 0; volB=(0+5)*127/10=63, volA=64;
    * table[0]=150 -> volA=96, volB=94. */
@@ -409,6 +416,9 @@ static void test_synthetic_two_voice(void) {
   assert(fifa96_sfx_arm(&m, 1, &info, 7, &mirror, p) == ((2 << 16) | 1));
   assert(p[0].pan == 0x7F && p[0].caller == 96 && p[0].gain == 96);
   assert(p[1].pan == 0x7F && p[1].caller == 94 && p[1].gain == 94);
+  /* mirrored 0x80 -> p 0x7F: hard right, both channels at the gain. */
+  assert(m.voices[1].gain_l == 0 && m.voices[1].gain_r == 96);
+  assert(m.voices[2].gain_l == 0 && m.voices[2].gain_r == 94);
 
   /* default pan -1: FUN_000a6717's invalid branch takes ESI = id (0xA772E ->
    * 0xA67B0); id 7 >= 5 skips the table, so voice A keeps the caller volume
@@ -419,6 +429,9 @@ static void test_synthetic_two_voice(void) {
   assert(p[1].pan == 0x40 && p[1].caller == 0 && p[1].gain == 0);
   assert(fifa96_mixer_voice_active(&m, 3) == 1);
   assert(fifa96_mixer_voice_active(&m, 4) == 1);
+  /* centre: both reader gains equal the combined gain. */
+  assert(m.voices[3].gain_l == 0x7F && m.voices[3].gain_r == 0x7F);
+  assert(m.voices[4].gain_l == 0 && m.voices[4].gain_r == 0);
 
   /* id+1 absent: NOT_FOUND and nothing armed (port atomicity). */
   put32le(b + 4 * 8, 0);

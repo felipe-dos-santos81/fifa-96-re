@@ -319,16 +319,18 @@ static void test_loop_window_bounds(void) {
 }
 
 static void test_rate_step(void) {
-  /* FU-37 §A.5 tail: v = (rate*ratio)>>shift; step = (v/out_rate) & 0xFF
-   * in the integer word, remainder scaled by 2^32/out_rate. */
+  /* FU-46 (corrects FU-37 §A.5): v = (rate*ratio)>>CL (x86 SHRD, CL 5-bit);
+   * step_int = (v/out_rate) & 0xFF; frac = ((rem<<24)/out_rate)<<8 (the 8.24
+   * fraction scaled into the 32.32 low word, low 8 bits always zero). The
+   * FU-38 literals below are re-pinned for the 24-bit intermediate. */
   static const struct {
     uint32_t rate, out_rate, ratio, shift;
     uint64_t want;
   } cases[] = {
-      {16000, 22050, 0x10000, 16, 3116529557ull},   /* table[0] unity */
-      {48000, 22050, 0x10000, 16, 9349588671ull},   /* integer part 2 */
-      {16000, 22050, 0x10C1B, 16, 3263785578ull},   /* observed table[80] */
-      {65535, 100, 0x10000, 16, 615683561881ull},   /* step_int 655 masked to 143 */
+      {16000, 22050, 0x10000, 16, 3116529408ull},   /* table[0] unity */
+      {48000, 22050, 0x10000, 16, 9349588480ull},   /* integer part 2 */
+      {16000, 22050, 0x10C1B, 16, 3263785472ull},   /* observed table[80] */
+      {65535, 100, 0x10000, 16, 615683561728ull},   /* step_int 655 masked to 143 */
       {22050, 22050, 0x10000, 16, 1ull << 32},      /* unity */
       {0, 22050, 0x10000, 16, 0},                   /* zero rate -> zero step */
   };
@@ -342,6 +344,9 @@ static void test_rate_step(void) {
   assert(fifa96_mixer_step_from_rate(16000, 22050, 0x10000, 16, NULL) ==
          -(int)FIFA96_ERR_TRUNCATED);
   assert(fifa96_mixer_step_from_rate(16000, 0, 0x10000, 16, &st) ==
+         -(int)FIFA96_ERR_TRUNCATED);
+  /* SHRD reads only CL's low 5 bits; the port keeps the cited 9..31 domain. */
+  assert(fifa96_mixer_step_from_rate(16000, 22050, 0x10000, 32, &st) ==
          -(int)FIFA96_ERR_TRUNCATED);
   assert(fifa96_mixer_step_from_rate(16000, 22050, 0x10000, 64, &st) ==
          -(int)FIFA96_ERR_TRUNCATED);

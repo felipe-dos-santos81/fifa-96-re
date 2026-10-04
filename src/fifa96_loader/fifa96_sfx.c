@@ -158,16 +158,22 @@ static int sfx_start_one(struct fifa96_mixer *m, int voice,
                          const struct sfx_resolved *p,
                          struct fifa96_sfx_voice *out) {
   uint64_t step = 0;
-  /* FU-37 §A.5: pitch 0 -> table[0] (0x10000, shift 16). The pitch table and
-   * the pitch randomization calibration are FU-37 open leg 2; retail pitch
-   * is 0 (all descriptors have +0x0C/+0x10 == 0). */
-  if (fifa96_mixer_step_from_rate(ei->rate, FIFA96_SFX_OUT_RATE,
-                                  FIFA96_SFX_PITCH_RATIO,
-                                  FIFA96_SFX_PITCH_SHIFT, &step) != FIFA96_OK)
+  /* FU-46 §1: FUN_000b86C8 head+tail over the record+0xC pitch (retail 0 ->
+   * table[0]/0x10000 shift 16, exactly the old retail constant). */
+  if (fifa96_mixer_step_from_pitch(ei->rate, FIFA96_SFX_OUT_RATE, p->pitch,
+                                   &step) != FIFA96_OK)
     return -(int)FIFA96_ERR_TRUNCATED;
   int rc = fifa96_mixer_start(m, voice, ei, bank->src, bank->src_len,
                               p->gain, step);
   if (rc != FIFA96_OK) return rc;
+  /* FU-46 §2: FUN_000a6579 converts record+0x27 pan and record+0x26 gain
+   * through FUN_000a662c before the arm; centre pan leaves both reader gains
+   * at the combined gain. */
+  rc = fifa96_mixer_set_pan(m, voice, p->pan);
+  if (rc != FIFA96_OK) {
+    fifa96_mixer_stop(m, voice);
+    return rc;
+  }
   if (out) {
     const struct fifa96_mixer_voice *ch = &m->voices[voice];
     out->id = e->id;

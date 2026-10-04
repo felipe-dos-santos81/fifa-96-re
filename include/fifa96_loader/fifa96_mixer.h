@@ -7,7 +7,10 @@
 // state FUN_000b817b @ 0xB817B, mixer tick FUN_000b7f62 @ 0xB7F62,
 // per-format readers 0xB929D (16-bit stereo), 0xB8E8F (8-bit stereo),
 // 0xB8AE1 (16-bit mono), output converter 0xB9E53, step conversion
-// FUN_000b86C8 @ 0xB86C8. Spec: docs/ghidra/FU37_mixer_and_timing.md Part A.
+// FUN_000b86C8 @ 0xB86C8 + pitch table 0xB6B88, pan/gain FUN_000a662c @
+// 0xA662C. Spec: docs/ghidra/FU37_mixer_and_timing.md Part A and
+// docs/ghidra/FU46_mixer_calibration.md (the FU-46 slice corrects the
+// FU-37 §A.5 tail and closes its pitch-table head and packed-pan legs).
 //
 // Deterministic port of the software mixer model. The original keeps 16
 // channel structs (stride 0x6C) and mixes into a 512-frame 32-bit accumulator
@@ -18,18 +21,23 @@
 // voice's row/accumulator state lives here and the packed block is walked as
 // the resampler cursor advances (no staging copy; FU-39 §7 leg 1 covers the
 // runtime staging buffer). Out of scope (open legs): the queue
-// producer/streaming path, the signed arm's one-unit truncation (§4.3), the
-// unsigned bank loader data mapping (§2.2/§7 leg 3), and the pitch-ratio
-// table head.
+// producer/streaming path, the signed arm's one-unit truncation (§4.3), and
+// the unsigned bank loader data mapping (§2.2/§7 leg 3).
 
 #define FIFA96_MIXER_VOICES 16
+
+/* FUN_000b86C8's 1200-entry 1/1200-octave ratio table at image 0xB6B88. */
+#define FIFA96_MIXER_PITCH_ENTRIES 1200
+
+extern const uint32_t fifa96_mixer_pitch_table[FIFA96_MIXER_PITCH_ENTRIES];
 
 struct fifa96_mixer_voice {
   int active;                   /* +0x00 state: 0 free, 1 active */
   fifa96_eacs_format_t format;  /* selected from f8/f9 (FU-35 §3.1) */
   const uint8_t *data;          /* data base (payload + info->data_off) */
   uint32_t units;               /* cursor units in data (= info->blocks) */
-  uint8_t volume;               /* 0..0x7F; readers scale by vol/0x80 */
+  uint8_t volume;               /* combined gain 0..0x7F (record+0x26) */
+  uint8_t gain_l, gain_r;       /* ch+0x64/+0x68 >> 10; set_pan rewrites */
   uint64_t pos;                 /* 32.32 cursor, high 32 = unit index */
   uint64_t step;                /* 32.32 units per output frame */
   int loop;                     /* +0x01 loop flag (header loop_len != 0) */
@@ -65,9 +73,11 @@ void fifa96_mixer_init(struct fifa96_mixer *m);
 // FU-43 §2 bank form (no block header, zero state, info->delta_units packed
 // bytes at data_off, unsigned producer 0xB8610); DELTA_MONO follows the
 // unsigned bank arm (no block header, zero state, declared info->delta_units
-// nibbles at data_off, FU-39 §2.2). `volume` is the EACS 0..0x7F scale (0x7F
-// in the corpus); the packed L/R record conversion FUN_000a662c is not ported.
-// `step` is the 32.32 resample step (see fifa96_mixer_step_from_rate).
+// nibbles at data_off, FU-39 §2.2). `volume` is the record's combined
+// EACSNDF gain (FUN_000b9fdd, 0..0x7F); it is the gain FUN_000a662c scales
+// for both channels, and fifa96_mixer_set_pan may then split it into the
+// per-channel gains +0x64/+0x68. `step` is the 32.32 resample step (see
+// fifa96_mixer_step_from_pitch / fifa96_mixer_step_from_rate).
 // Returns FIFA96_OK or the negated fifa96_err_t:
 //   TRUNCATED   NULL args, voice out of range, volume > 0x7F, a PCM data
 //               region inconsistent with payload_len, or an f10==2 block
@@ -96,15 +106,54 @@ int fifa96_mixer_voice_active(const struct fifa96_mixer *m, int voice);
 // data is stopped and renders silence for the rest of the call.
 void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames);
 
-// FU-37 §A.5 tail (FUN_000b86C8 after the 0xB6B88 table lookup):
-//   v = (rate * ratio) >> shift; step_int = v / out_rate;
-//   step = ((step_int & 0xFF) << 32) | ((v - step_int*out_rate) * 2^32 / out_rate)
-// `ratio`/`shift` are a pitch-table entry and its coarse exponent; ratio
-// 0x10000 with shift 16 is the table's unity entry (table[0], FU-37 §A.5).
-// The pitch+0x2000 -> window-index/CL head and the table itself are FU-37
-// open leg 2 (neutral-pitch calibration), so callers pass ratio/shift or the
-// step directly. Returns FIFA96_OK, or -(FIFA96_ERR_TRUNCATED) for NULL
-// step, out_rate 0 or shift > 63.
+// FUN_000b86C8 head (0xB86C9..0xB86E6): pitch (signed; EACS record+0xC) ->
+// table entry + coarse exponent. E = pitch+0x2000; W walks down from 0x40D0
+// by 0x4B0 with shift starting at 9 while E < W; index = E-W into the
+// 1200-entry table at 0xB6B88. Pitch 0 -> table[0] 0x10000, shift 16 (unity);
+// +/-1200 steps the shift by one (one octave); the window base is +8400.
+// Cites: FUN-46 §1. Returns FIFA96_OK, or -(FIFA96_ERR_TRUNCATED) for NULL
+// out, an index outside the table (pitch > 9599) or shift > 31 (-18001 and
+// below; the original's SHRD would wrap CL mod 32, which is not modelled).
+int fifa96_mixer_pitch_ratio(int32_t pitch, uint32_t *ratio, uint32_t *shift);
+
+// FUN_000b86C8 head+tail: the 32.32 resample step FUN_000b7fe8 stores in
+// ch+0x24/+0x28, from the EACS sample `rate`, the output rate [0x406A0] and
+// the signed pitch argument (FUN_000a6579 builds it from record+0xC/+0x10/
+// +0x11). Retail videos and every retail bank descriptor are pitch 0, i.e.
+// table[0]/shift 16. Returns FIFA96_OK or the pitch_ratio /
+// step_from_rate errors.
+int fifa96_mixer_step_from_pitch(uint32_t rate, uint32_t out_rate,
+                                 int32_t pitch, uint64_t *step);
+
+// FU-46 §1 tail (FUN_000b86C8 after the 0xB6B88 table lookup):
+//   v = (rate * ratio) >> shift;              (MUL 0xB86ED, SHRD 0xB86EF)
+//   step_int = (v / out_rate) & 0xFF;         (DIV 0xB86F9, AND 0xB86FF)
+//   frac = (((v - step_int*out_rate) << 24) / out_rate) << 8;  (0xB870E..B872B)
+//   step = (step_int << 32) | frac;           (+0x24/+0x28)
+// The fraction is the 8.24 step (+0x2C) scaled into the 32.32 low word, so
+// its low 8 bits are always zero; the original's second DIV faults once the
+// masked step_int drives the quotient past 2^32, so the port keeps 64-bit
+// intermediates and stores the low 32 bits (FU-46 §1.3). `ratio`/`shift` are
+// a pitch-table entry and its coarse exponent; ratio 0x10000 with shift 16 is
+// the table's unity entry. Returns FIFA96_OK, or -(FIFA96_ERR_TRUNCATED) for
+// NULL step, out_rate 0 or shift > 31 (the original's SHRD reads CL&31).
 int fifa96_mixer_step_from_rate(uint32_t rate, uint32_t out_rate,
                                 uint32_t ratio, uint32_t shift,
                                 uint64_t *step);
+
+// FUN_000a662c @ 0xA662C: an EACSNDF record's pan byte (+0x27) and combined
+// signed gain (+0x26, FUN_000b9fdd) -> the packed (R<<16)|L the arm extracts
+// for ch+0x64/+0x68 (FUN_000a6579 0xA6601..0xA6608). Pan > 0x7F mirrors
+// (0xFF-pan). For p in 0..0x7F: p<0x40 keeps L 0x7F and raises R to 2p;
+// p==0x40 is 0x7F/0x7F (centre); p>0x40 drops L by (0x7F-p)*0x7E/0x3E and
+// keeps R 0x7F. Each factor is scaled by the gain with /0x7F (32-bit
+// multiply, unsigned DIV, low byte). `left`/`right` receive 0..0x7F for a
+// valid 0..0x7F gain, matching the reader's scale.
+void fifa96_mixer_pan_gains(uint8_t pan, uint8_t gain,
+                            uint8_t *left, uint8_t *right);
+
+// Apply fifa96_mixer_pan_gains to an armed voice using the combined gain
+// passed to fifa96_mixer_start, like FUN_000a6579's arm-time conversion.
+// Returns FIFA96_OK, or -(FIFA96_ERR_TRUNCATED) for NULL m, a bad voice or
+// an inactive voice.
+int fifa96_mixer_set_pan(struct fifa96_mixer *m, int voice, uint8_t pan);

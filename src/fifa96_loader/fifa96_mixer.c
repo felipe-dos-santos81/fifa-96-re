@@ -90,6 +90,8 @@ int fifa96_mixer_start(struct fifa96_mixer *m, int voice,
   ch->data = data;
   ch->units = units;
   ch->volume = volume;
+  ch->gain_l = volume;
+  ch->gain_r = volume;
   ch->pos = 0;
   ch->step = step;
   ch->loop = 0;
@@ -174,21 +176,21 @@ void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
                                  ch->delta_pos, &ch->delta_l, &ch->delta_r);
           ch->delta_pos++;
         }
-        acc_l += sar7((int32_t)ch->delta_l * ch->volume);
-        acc_r += sar7((int32_t)ch->delta_r * ch->volume);
+        acc_l += sar7((int32_t)ch->delta_l * ch->gain_l);
+        acc_r += sar7((int32_t)ch->delta_r * ch->gain_r);
       } else if (ch->format == FIFA96_EACS_FMT_PCM16_STEREO) {
         const uint8_t *p = ch->data + (size_t)unit * 4;
-        acc_l += sar7((int32_t)(int16_t)rd16le(p) * ch->volume);
-        acc_r += sar7((int32_t)(int16_t)rd16le(p + 2) * ch->volume);
+        acc_l += sar7((int32_t)(int16_t)rd16le(p) * ch->gain_l);
+        acc_r += sar7((int32_t)(int16_t)rd16le(p + 2) * ch->gain_r);
       } else if (ch->format == FIFA96_EACS_FMT_PCM8_STEREO) {
-        /* FU-37 §A.3 volume table: 2*vol*signed8(byte). */
+        /* FU-37 §A.3 volume table: 2*vol*signed8(byte), row = gain<<10. */
         const uint8_t *p = ch->data + (size_t)unit * 2;
-        acc_l += 2 * ch->volume * (int32_t)(int8_t)p[0];
-        acc_r += 2 * ch->volume * (int32_t)(int8_t)p[1];
+        acc_l += 2 * ch->gain_l * (int32_t)(int8_t)p[0];
+        acc_r += 2 * ch->gain_r * (int32_t)(int8_t)p[1];
       } else if (ch->format == FIFA96_EACS_FMT_PCM16_MONO) {
         int32_t s = (int16_t)rd16le(ch->data + (size_t)unit * 2);
-        acc_l += sar7(s * ch->volume);
-        acc_r += sar7(s * ch->volume);
+        acc_l += sar7(s * ch->gain_l);
+        acc_r += sar7(s * ch->gain_r);
       } else {
         continue; /* start() rejects every other format */
       }
@@ -201,14 +203,93 @@ void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
   }
 }
 
+int fifa96_mixer_pitch_ratio(int32_t pitch, uint32_t *ratio, uint32_t *shift) {
+  if (!ratio || !shift) return -(int)FIFA96_ERR_TRUNCATED;
+  /* 0xB86C9 ADD EBX,0x2000; 0xB86CF/0xB86D4 init 0x40D0/9; 0xB86D6..E2 walk
+   * down by 0x4B0 while (signed) E < W; 0xB86E4 SUB EBX,EDX. */
+  int32_t e = (int32_t)((uint32_t)pitch + 0x2000u);
+  int32_t w = 0x40d0;
+  uint32_t cl = 9;
+  while (e < w && cl < 32) {
+    w -= 0x4b0;
+    cl++;
+  }
+  int64_t idx = (int64_t)e - (int64_t)w;
+  if (cl > 31 || idx < 0 || idx >= FIFA96_MIXER_PITCH_ENTRIES)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  *ratio = fifa96_mixer_pitch_table[idx];
+  *shift = cl;
+  return FIFA96_OK;
+}
+
 int fifa96_mixer_step_from_rate(uint32_t rate, uint32_t out_rate,
                                 uint32_t ratio, uint32_t shift,
                                 uint64_t *step) {
-  if (!step || out_rate == 0 || shift > 63) return -(int)FIFA96_ERR_TRUNCATED;
-  uint64_t v = ((uint64_t)rate * ratio) >> shift;
-  uint64_t int_part = v / out_rate;
-  uint64_t rem = v - int_part * out_rate;
-  uint64_t frac = (rem << 32) / out_rate;
-  *step = ((int_part & 0xFFu) << 32) | frac;
+  /* SHRD reads CL's low 5 bits; the table head only ever produces 9..31 and
+   * FU-46 §1.3 documents the reject. */
+  if (!step || out_rate == 0 || shift > 31) return -(int)FIFA96_ERR_TRUNCATED;
+  /* 0xB86ED MUL EDX / 0xB86EF SHRD EAX,EDX,CL: low 32 bits of the 64-bit
+   * rate*ratio shifted right by CL. */
+  uint32_t v = (uint32_t)(((uint64_t)rate * ratio) >> shift);
+  /* 0xB86F9 DIV [0x406A0] / 0xB86FF AND EAX,0xFF. */
+  uint32_t int_part = (v / out_rate) & 0xFFu;
+  /* 0xB8711 MUL out_rate / 0xB8717 SUB / 0xB871B MUL 0x1000000 / 0xB8722 DIV
+   * / 0xB8728 SHL 8: the 8.24 fraction scaled into the 32.32 low word. The
+   * original's DIV faults once the masked step_int pushes the quotient past
+   * 2^32 (every step_int >= 256); 64-bit intermediates keep the port defined
+   * and the 32-bit store truncates. */
+  uint32_t rem = v - int_part * out_rate;
+  uint32_t frac =
+      (uint32_t)(((((uint64_t)rem << 24) / out_rate) << 8) & 0xFFFFFFFFu);
+  *step = ((uint64_t)int_part << 32) | frac;
+  return FIFA96_OK;
+}
+
+int fifa96_mixer_step_from_pitch(uint32_t rate, uint32_t out_rate,
+                                 int32_t pitch, uint64_t *step) {
+  uint32_t ratio = 0, shift = 0;
+  int rc = fifa96_mixer_pitch_ratio(pitch, &ratio, &shift);
+  if (rc != FIFA96_OK) return rc;
+  return fifa96_mixer_step_from_rate(rate, out_rate, ratio, shift, step);
+}
+
+/* 0xA6681 MOVSX ESI,byte [ESI+0x26]; 0xA6685/0xA6695 IMUL; 0xA6688 XOR EDX;
+ * 0xA668F DIV 0x7F: a 32-bit product divided unsigned, low byte kept. Valid
+ * 0..0x7F gains stay in 0..0x7F; a >0x7F byte is sign-extended exactly as
+ * the original (the product goes negative, DIV reads it unsigned). */
+static uint8_t pan_scale(uint32_t factor, uint8_t gain) {
+  uint32_t prod = (uint32_t)((int32_t)factor * (int32_t)(int8_t)gain);
+  return (uint8_t)(prod / 0x7Fu);
+}
+
+void fifa96_mixer_pan_gains(uint8_t pan, uint8_t gain,
+                            uint8_t *left, uint8_t *right) {
+  if (!left || !right) return;
+  /* 0xA663A MOVZX EAX,[ESI+0x27]; 0xA663E..0xA664A mirror > 0x7F. */
+  uint32_t p = pan > 0x7F ? (uint32_t)(0xFF - pan) : pan;
+  uint32_t lf, rf;
+  if (p < 0x40) {
+    /* 0xA6651..0xA6659: EBX 0x7F, ECX 2p. */
+    lf = 0x7F;
+    rf = p * 2;
+  } else if (p == 0x40) {
+    /* 0xA6678: EBX 0x7F / ECX = EBX (centre). */
+    lf = 0x7F;
+    rf = 0x7F;
+  } else {
+    /* 0xA665D..0xA666D: (0x7F-p)*0x7E/0x3E (IDIV, truncating). */
+    lf = ((0x7F - p) * 0x7E) / 0x3E;
+    rf = 0x7F;
+  }
+  *left = pan_scale(lf, gain);
+  *right = pan_scale(rf, gain);
+}
+
+int fifa96_mixer_set_pan(struct fifa96_mixer *m, int voice, uint8_t pan) {
+  if (!m || voice < 0 || voice >= FIFA96_MIXER_VOICES)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  struct fifa96_mixer_voice *ch = &m->voices[voice];
+  if (!ch->active) return -(int)FIFA96_ERR_TRUNCATED;
+  fifa96_mixer_pan_gains(pan, ch->volume, &ch->gain_l, &ch->gain_r);
   return FIFA96_OK;
 }

@@ -26,14 +26,15 @@
 //   * record+0x26 gain = caller volume (record+0x24) x randomized descriptor
 //     volume (record+0x25) x master (0x15FD6) / 0x3F01 (FUN_000b9fdd,
 //     0xB9FEA..0xB9FF5); the mixer volume is that value, kept in 0..0x7F.
-//   * pan is resolved per FU-43 +0x18/+0x1D and reported, but the L/R gain
-//     conversion FUN_000a662c (record+0x27 -> ch+0x64/+0x68) is the existing
-//     mixer open leg (fifa96_mixer.h), so both channels use the combined
-//     gain.
-//   * the pitch table FUN_000b86c8 (pitch -> ratio/shift) is FU-37 §A.5 open
-//     leg 2; the arm reports pitch and arms at table[0] (ratio 0x10000,
-//     shift 16), which is the retail pitch-0 case (0xA78CD writes record+0xC
-//     = 0 when +0x0C/+0x10 are zero in every retail entry).
+//   * pan is resolved per FU-43 +0x18/+0x1D and then converted through the
+//     FU-46 §2 FUN_000a662c pan/gain split (record+0x27 -> ch+0x64/+0x68 via
+//     fifa96_mixer_set_pan), exactly like FUN_000a780e's call to FUN_000a6579
+//     at 0xA7991; centre pan leaves both reader gains at the combined gain.
+//   * the pitch table FUN_000b86c8 head+tail is ported (FU-46 §1); the arm
+//     computes the step with fifa96_mixer_step_from_pitch from the
+//     record+0xC pitch, so retail pitch 0 is table[0] 0x10000/shift 16
+//     (0xA78CD writes record+0xC = 0 when +0x0C/+0x10 are zero in every
+//     retail entry).
 //   * randomization draws come from FUN_000cbc4c, a 192-bit carry generator
 //     seeded by FUN_000cbcb8 (out of FU-43 scope); the arm takes a provider
 //     and applies the cited formula with `rand() >> 16` (SHR EAX,0x10).
@@ -44,8 +45,6 @@
 //     0xA772E -> 0xA67B0).
 
 #define FIFA96_SFX_OUT_RATE 22050u    /* FU-37 §A.4: output rate */
-#define FIFA96_SFX_PITCH_RATIO 0x10000u /* FUN_000b86c8 table[0] */
-#define FIFA96_SFX_PITCH_SHIFT 16u
 #define FIFA96_SFX_VOLUME_MAX 0x7Fu
 
 // Randomization provider standing in for FUN_000cbc4c; the arm consumes the
