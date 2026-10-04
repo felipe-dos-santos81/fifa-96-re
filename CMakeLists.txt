@@ -41,6 +41,11 @@ add_executable(test_refpack tests/test_refpack.c)
 target_link_libraries(test_refpack PRIVATE fifa96_refpack fifa96_file)
 add_test(NAME test_refpack COMMAND test_refpack WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_fvgt src/fifa96_loader/fifa96_fvgt.c)
+add_executable(test_fvgt tests/test_fvgt.c)
+target_link_libraries(test_fvgt PRIVATE fifa96_fvgt fifa96_file)
+add_test(NAME test_fvgt COMMAND test_fvgt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_huff src/fifa96_loader/fifa96_huff.c)
 add_executable(test_huff tests/test_huff.c)
 target_link_libraries(test_huff PRIVATE fifa96_huff fifa96_file)
