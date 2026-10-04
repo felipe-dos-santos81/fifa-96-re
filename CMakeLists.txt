@@ -63,6 +63,11 @@ add_executable(test_kvgt tests/test_kvgt.c)
 target_link_libraries(test_kvgt PRIVATE fifa96_kvgt fifa96_file)
 add_test(NAME test_kvgt COMMAND test_kvgt WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_tgv_stream src/fifa96_loader/fifa96_tgv_stream.c)
+add_executable(test_tgv_stream tests/test_tgv_stream.c)
+target_link_libraries(test_tgv_stream PRIVATE fifa96_tgv_stream fifa96_kvgt fifa96_file)
+add_test(NAME test_tgv_stream COMMAND test_tgv_stream WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)
