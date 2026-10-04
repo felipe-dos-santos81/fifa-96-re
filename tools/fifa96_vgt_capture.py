@@ -74,14 +74,36 @@ def _libc():
     return ctypes.CDLL("libc.so.6", use_errno=True)
 
 
-def read_mem(pid, addr, size):
-    """Read a process address range; None when unreadable."""
+def _read_once(pid, addr, size):
+    """One process_vm_readv; the readable prefix or None."""
     buf = ctypes.create_string_buffer(size)
     local = _IOVec(ctypes.cast(buf, ctypes.c_void_p), size)
     remote = _IOVec(ctypes.c_void_p(addr), size)
     n = _libc().process_vm_readv(pid, ctypes.byref(local), 1,
                                  ctypes.byref(remote), 1, ctypes.c_ulong(0))
-    return buf.raw[:n] if n >= 0 else None
+    return buf.raw[:n] if n > 0 else None
+
+
+def read_mem(pid, addr, size, chunk=1 << 20):
+    """Read a process address range in chunks, zero-filling holes.
+
+    A single process_vm_readv over a large region stops at the first
+    unmapped page, which truncated live dumps (the emulated-RAM region can
+    span transient holes). Reading `chunk` bytes at a time and skipping a
+    page past a short read keeps the region layout, so the guest image
+    stays locatable even when a hole appears mid-region.
+    """
+    out = bytearray()
+    while len(out) < size:
+        want = min(chunk, size - len(out))
+        got = _read_once(pid, addr + len(out), want)
+        if not got:
+            out += b"\x00" * want
+            continue
+        out += got
+        if len(got) < want:
+            out += b"\x00" * min(0x1000, size - len(out))
+    return bytes(out)
 
 
 def readable_regions(pid, min_size=4 * 1024 * 1024):

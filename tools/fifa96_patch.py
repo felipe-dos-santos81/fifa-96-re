@@ -328,6 +328,126 @@ fvgt_capture_return:
         jmp  {resume:#x}
 """
 
+# --- fVGT paired pre/post capture (FU-32) ----------------------------------
+# The FU-31 single-frame return cave captures the composited post-state
+# surface (ctx[10]+0x10 at the epilogue). vgt_decode_f's entry swap
+# (ctx[10] <-> ctx[0xb]) leaves the pre-call surface live at ctx[0xb] at
+# the return, and the composite call only writes ctx[10]+0x10, so the
+# pre-state could be read at the return too. This rig instead follows the
+# intended two-point design: a compact entry hook records the pre-call
+# surface pointer (ctx[10] before the swap) in a static marker cell, and
+# the return hook copies the chunk slice, the post surface (ctx[10]+0x10)
+# and the pre surface (marker+0x10) into one extended block.
+#
+# Cave budget: the only spare executable obj1 zero run besides the FU-31
+# run is 0x18A01 (0x2F bytes). A full snapshot entry cave (alloc + 76800
+# B copy) does not fit and is unnecessary because the pre buffer survives
+# the call; the 40-byte marker cave + 4-byte cell do.
+FVGT_ENTRY_TEMPLATE = r"""
+bits 32
+org {cave:#x}
+fvgt_entry_mark:
+        push esi
+        mov  esi, [esp+4]               ; call's return (0xADF01 + delta)
+        lea  esi, [esi-{call_ret:#x}]   ; ESI = load delta
+        mov  eax, [esp+0xc]             ; ctx (cdecl arg 1)
+        mov  eax, [eax+0x28]            ; pre surface ctx[10] before swap
+        mov  [esi+{marker:#x}], eax     ; hand off to the return cave
+        pop  esi
+        add  esp, 4                     ; discard the call's return address
+{displaced}
+        jmp  {resume:#x}
+"""
+
+FVGT_PAIR_TEMPLATE = r"""
+bits 32
+org {cave:#x}
+fvgt_pair_return:
+        pushad
+        pushfd
+        push es
+        mov  esi, [esp+0x28]            ; call's return (0xAE210 + delta)
+        sub  esi, {call_ret:#x}         ; ESI = load delta
+        mov  ebp, [esp+0x28+0x40]       ; chunk (caller arg slot)
+        mov  ebx, [esp+0x28+0x3c]       ; ctx (caller arg slot)
+        test ebp, ebp
+        jz   .done
+        test ebx, ebx
+        jz   .done
+        cmp  dword [ebp], {tag:#x}      ; 'fVGT'
+        jne  .done
+        movzx edx, word [ebp+8]         ; chunk field +8 (index count)
+        test edx, edx
+        jz   .done
+        movzx eax, word [ebp+0xa]       ; chunk field +10 (raw blocks)
+        test eax, eax
+        jz   .done
+        movzx ecx, word [ebx]           ; canvas pitch
+        movzx edx, word [ebx+4]         ; canvas height
+        test ecx, ecx
+        jz   .done
+        test edx, edx
+        jz   .done
+        imul ecx, edx                   ; out_len = pitch*height
+        cmp  ecx, {out_cap:#x}
+        ja   .done
+        mov  edi, [ebx+0x28]            ; post surface ctx[10] (post-swap)
+        test edi, edi
+        jz   .done
+        mov  ebx, [esi+{marker:#x}]     ; pre surface = entry ctx[10]
+        test ebx, ebx                   ; (ctx[0xb] after the entry swap)
+        jz   .done
+        add  edi, 0x10                  ; post pixel plane
+        add  ebx, 0x10                  ; pre pixel plane
+        mov  eax, [esi+{scratch:#x}]    ; existing block (capture-latest)
+        test eax, eax
+        jz   .alloc
+        cmp  dword [eax+0xc], {magic:#x}
+        jne  .alloc                     ; lost magic: heap reset, re-alloc
+        jmp  .fill
+.alloc:
+        push ebx                        ; pre surface (allocator clobbers EBX)
+        push ecx                        ; out_len survives the allocator
+        push 0
+        push {alloc_size:#x}
+        lea  eax, [esi+{scratch:#x}]    ; cell = debug tag string
+        push eax
+        call {alloc:#x}                 ; FUN_00098bf8(tag, size, 0)
+        add  esp, 0xc
+        pop  ecx                        ; out_len
+        pop  ebx                        ; pre surface
+        test eax, eax
+        jz   .done
+        mov  [esi+{scratch:#x}], eax
+        mov  byte [eax+4], {method:#x}  ; method id
+        mov  dword [eax+0xc], {magic:#x}
+.fill:
+        mov  [eax+8], ecx               ; out_len
+        mov  edx, edi                   ; post surface
+        mov  esi, ebp                   ; chunk
+        lea  edi, [eax+0x10]            ; input slice at block+0x10
+        push ecx
+        push ecx                        ; out_len x2 across the copies
+        push ds
+        pop  es
+        cld
+        mov  ecx, {in_cap:#x}
+        rep  movsb
+        pop  ecx
+        mov  esi, edx
+        rep  movsb                      ; post follows the input slice
+        pop  ecx
+        mov  esi, ebx
+        rep  movsb                      ; pre follows the post surface
+.done:
+        pop  es
+        popfd
+        popad
+        add  esp, 4                     ; discard the call's return address
+{displaced}
+        jmp  {resume:#x}
+"""
+
 _DEFAULT_IMAGE = None
 
 
@@ -693,6 +813,120 @@ def build_fvgt_capture(return_target, cave_link, image=None,
                 return_target=return_target)
 
 
+def build_fvgt_entry_cave(target, overwrite, cave_link, marker_link,
+                          image=None, capacity=None):
+    """Assemble the FU-32 entry marker trampoline.
+
+    Entered from a `call` patched over `vgt_decode_f`'s prologue at
+    `target` (0xADEFC). Records the pre-call surface pointer (ctx[10]
+    before the entry swap, cdecl arg 1) into `marker_link` through the
+    load delta recovered from the call's return address. Clobbers only
+    EAX (caller-saved); ESI is restored, flags are left to the displaced
+    prologue. `capacity` defaults to the zero run after the marker cell.
+    """
+    if image is None:
+        image = _default_image()
+    if overwrite < 5:
+        raise ValueError(f"overwrite must cover the 5-byte call, got "
+                         f"{overwrite}")
+    if capacity is None:
+        capacity = zero_run_length(image, marker_link) - 4
+    displaced = "        db " + ",".join(
+        f"0x{b:02x}" for b in image[target:target + overwrite])
+    source = FVGT_ENTRY_TEMPLATE.format(
+        cave=cave_link, displaced=displaced, call_ret=target + 5,
+        resume=target + overwrite, marker=marker_link)
+    cave = _assemble(source, optimize=True)
+    if len(cave) > capacity:
+        raise ValueError(f"fVGT entry cave is {len(cave)} bytes, over the "
+                         f"{capacity:#x} capacity")
+    return cave
+
+
+def build_fvgt_pair_cave(target_ret, overwrite, cave_link, scratch_link,
+                         marker_link, image=None, alloc_link=0x98BF8,
+                         in_cap=FVGT_IN_CAP, out_cap=FVGT_OUT_CAP,
+                         capacity=CAVE_CAPACITY, magic=VGT_MAGIC,
+                         method=FVGT_METHOD, tag=FVGT_TAG):
+    """Assemble the FU-32 paired pre/post capture trampoline.
+
+    Entered from a `call` patched over `vgt_decode_f`'s epilogue at
+    `target_ret` (0xAE20B). The caller frame is still live, so the cave
+    reads ctx/chunk from the argument slots. It copies an `in_cap` chunk
+    slice followed by the post surface (ctx[10]+0x10) and the pre surface
+    (the `marker_link` pointer recorded by the entry hook, +0x10) into
+    one block: 0x10 header + in_cap + 2*out_len. Capture-latest: every
+    later qualifying call overwrites the block in place; a lost magic
+    re-allocates. `next` is left untouched (pair extraction does not walk
+    a chain).
+    """
+    if image is None:
+        image = _default_image()
+    if overwrite < 5:
+        raise ValueError(f"overwrite must cover the 5-byte call, got "
+                         f"{overwrite}")
+    displaced = "        db " + ",".join(
+        f"0x{b:02x}" for b in image[target_ret:target_ret + overwrite])
+    source = FVGT_PAIR_TEMPLATE.format(
+        cave=cave_link, displaced=displaced, call_ret=target_ret + 5,
+        resume=target_ret + overwrite, scratch=scratch_link,
+        marker=marker_link, alloc=alloc_link, in_cap=in_cap, out_cap=out_cap,
+        alloc_size=0x10 + in_cap + 2 * out_cap, magic=magic, method=method,
+        tag=tag)
+    cave = _assemble(source, optimize=True)
+    if len(cave) > capacity:
+        raise ValueError(f"fVGT pair cave is {len(cave)} bytes, over the "
+                         f"{capacity:#x} capacity")
+    return cave
+
+
+def build_fvgt_pair_capture(entry_target, return_target, entry_cave_link,
+                            return_cave_link, image=None, entry_capacity=None,
+                            return_capacity=CAVE_CAPACITY, **return_kw):
+    """Build the FU-32 two-point fVGT pair capture blobs.
+
+    Layouts: entry run = [marker:u32][entry cave], return run =
+    [scratch:u32][return cave]. `entry_capacity` defaults to the measured
+    zero run at `entry_cave_link`; `return_capacity` defaults to the
+    FU-20/21/31 run size (0x103) and is zero-run checked.
+    """
+    if image is None:
+        image = _default_image()
+    if entry_capacity is None:
+        entry_capacity = zero_run_length(image, entry_cave_link)
+    if entry_capacity < 4:
+        raise ValueError(f"entry cave {entry_cave_link:#x} has no zero run")
+    if zero_run_length(image, return_cave_link) < return_capacity:
+        raise ValueError(f"cave {return_cave_link:#x} does not have "
+                         f"{return_capacity:#x} zero bytes")
+    marker_link = entry_cave_link
+    entry_link = entry_cave_link + 4
+    entry_ow = overwrite_len(image, entry_target)
+    entry = build_fvgt_entry_cave(entry_target, entry_ow, entry_link,
+                                  marker_link, image=image,
+                                  capacity=entry_capacity - 4)
+    scratch_link = return_cave_link
+    return_link = return_cave_link + 4
+    ret_ow = overwrite_len(image, return_target)
+    ret = build_fvgt_pair_cave(return_target, ret_ow, return_link,
+                               scratch_link, marker_link, image=image,
+                               capacity=return_capacity - 4, **return_kw)
+    entry_blob = b"\x00" * 4 + entry
+    ret_blob = b"\x00" * 4 + ret
+    if len(entry_blob) > entry_capacity:
+        raise ValueError(f"fVGT pair entry blob is {len(entry_blob)} bytes, "
+                         f"over the {entry_capacity:#x} capacity")
+    if len(ret_blob) > return_capacity:
+        raise ValueError(f"fVGT pair return blob is {len(ret_blob)} bytes, "
+                         f"over the {return_capacity:#x} capacity")
+    return dict(entry_blob=entry_blob, ret_blob=ret_blob,
+                entry_len=len(entry), return_len=len(ret),
+                marker_link=marker_link, entry_link=entry_link,
+                scratch_link=scratch_link, return_link=return_link,
+                entry_ow=entry_ow, ret_ow=ret_ow,
+                entry_target=entry_target, return_target=return_target)
+
+
 def rel32(to, next_ip):
     """Signed 32-bit displacement to `to` from the instruction end `next_ip`."""
     return struct.pack("<i", to - next_ip)
@@ -786,6 +1020,49 @@ def patch_iso_fvgt(data, return_target, cave, capacity=CAVE_CAPACITY, **kw):
     return bytes(out), built
 
 
+def patch_iso_fvgt_pair(data, entry_target, return_target, entry_cave,
+                        return_cave, entry_capacity=None,
+                        return_capacity=CAVE_CAPACITY, **kw):
+    """Return (patched ISO bytes, placement) for the FU-32 pair capture.
+
+    A 5-byte `call` is patched over the entry target (0xADEFC) and over the
+    return target (0xAE20B); the marker blob is written over the zero run
+    at `entry_cave` and the scratch+pair cave blob over the run at
+    `return_cave`.
+    """
+    lba, size = find_iso_file(data, "FIFA96.EXE")
+    base = lba * SECTOR
+    exe = data[base:base + size]
+    info = le.parse(exe)
+    if entry_capacity is None:
+        entry_capacity = zero_run_length(info["image"], entry_cave)
+    built = build_fvgt_pair_capture(
+        entry_target, return_target, entry_cave, return_cave,
+        image=info["image"], entry_capacity=entry_capacity,
+        return_capacity=return_capacity, **kw)
+    writes = []
+    for cave, blob in ((entry_cave, built["entry_blob"]),
+                       (return_cave, built["ret_blob"])):
+        cave_off = link_to_file_offset(info, cave)
+        link_to_file_offset(info, cave + len(blob) - 1)
+        if any(info["image"][cave:cave + len(blob)]):
+            raise ValueError(f"cave {cave:#x} is not zero-filled; refusing "
+                             f"to overwrite live bytes")
+        writes.append((cave_off, blob))
+    calls = []
+    for target, link in ((entry_target, built["entry_link"]),
+                         (return_target, built["return_link"])):
+        off = link_to_file_offset(info, target)
+        link_to_file_offset(info, target + 4)
+        calls.append((off, b"\xe8" + rel32(link, target + 5)))
+    out = bytearray(data)
+    for off, blob in writes:
+        out[base + off:base + off + len(blob)] = blob
+    for off, call in calls:
+        out[base + off:base + off + 5] = call
+    return bytes(out), built
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--iso", required=True, help="input ISO (read-only)")
@@ -805,6 +1082,11 @@ def main(argv=None):
     mode.add_argument("--fvgt-capture", action="store_true",
                       help="patch the FU-31 fVGT single-frame capture "
                            "(return cave at --target only)")
+    mode.add_argument("--fvgt-pair", action="store_true",
+                      help="patch the FU-32 paired fVGT pre/post capture "
+                           "(entry marker + pair return cave)")
+    ap.add_argument("--entry-cave", type=lambda s: int(s, 0),
+                    help="entry marker cave link address for --fvgt-pair")
     ap.add_argument("--return-target", type=lambda s: int(s, 0),
                     default=0x9E859,
                     help="return-hook link address for --vgt-capture")
@@ -821,12 +1103,15 @@ def main(argv=None):
                          "writes no file")
     args = ap.parse_args(argv)
 
-    needs_site = not args.vgt_capture and not args.fvgt_capture
+    needs_site = not args.vgt_capture and not args.fvgt_capture \
+        and not args.fvgt_pair
     if not args.print_overwrite and (
             not args.out or args.cave is None or
+            (args.fvgt_pair and args.entry_cave is None) or
             (needs_site and args.site_id is None)):
-        ap.error("--out and --cave (plus --site-id unless --vgt-capture or "
-                 "--fvgt-capture) are required unless --print-overwrite is "
+        ap.error("--out and --cave (plus --site-id unless --vgt-capture, "
+                 "--fvgt-capture or --fvgt-pair; plus --entry-cave with "
+                 "--fvgt-pair) are required unless --print-overwrite is "
                  "given")
 
     src = Path(args.iso)
@@ -838,7 +1123,21 @@ def main(argv=None):
         if args.print_overwrite:
             print(ow)
             return 0
-        if args.fvgt_capture:
+        if args.fvgt_pair:
+            in_cap = (FVGT_IN_CAP if args.input_cap is None
+                      else args.input_cap)
+            out_cap = (FVGT_OUT_CAP if args.output_cap is None
+                       else args.output_cap)
+            return_capacity = args.cave_capacity
+            if return_capacity is None:
+                return_capacity = zero_run_length(info["image"], args.cave)
+            entry_capacity = zero_run_length(info["image"], args.entry_cave)
+            out, built = patch_iso_fvgt_pair(
+                data, args.target, args.return_target, args.entry_cave,
+                args.cave, entry_capacity=entry_capacity,
+                return_capacity=return_capacity, in_cap=in_cap,
+                out_cap=out_cap)
+        elif args.fvgt_capture:
             capacity = args.cave_capacity
             if capacity is None:
                 capacity = zero_run_length(info["image"], args.cave)
@@ -872,7 +1171,20 @@ def main(argv=None):
         print("error: --out must not overwrite --iso", file=sys.stderr)
         return 1
     dst.write_bytes(out)
-    if args.fvgt_capture:
+    if args.fvgt_pair:
+        print(f"fvgt entry {args.target:#x} overwrite: "
+              f"{built['entry_ow']} bytes (resume "
+              f"{args.target + built['entry_ow']:#x})")
+        print(f"fvgt return {args.return_target:#x} overwrite: "
+              f"{built['ret_ow']} bytes (resume "
+              f"{args.return_target + built['ret_ow']:#x})")
+        print(f"entry cave {args.entry_cave:#x}: marker "
+              f"{built['marker_link']:#x}, entry {built['entry_link']:#x} "
+              f"({built['entry_len']} B), blob {len(built['entry_blob'])} B")
+        print(f"return cave {args.cave:#x}: scratch "
+              f"{built['scratch_link']:#x}, return {built['return_link']:#x} "
+              f"({built['return_len']} B), blob {len(built['ret_blob'])} B")
+    elif args.fvgt_capture:
         print(f"fvgt return {args.target:#x} overwrite: "
               f"{built['ret_ow']} bytes (resume {args.target + built['ret_ow']:#x})")
         print(f"cave {args.cave:#x}: scratch {built['scratch_link']:#x}, "

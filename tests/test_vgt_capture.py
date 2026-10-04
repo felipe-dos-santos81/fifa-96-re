@@ -1,4 +1,7 @@
+import ctypes
 import json
+import mmap
+import os
 import struct
 import sys
 import unittest
@@ -57,6 +60,31 @@ def synthetic_dump(scratch=0x400000, delta_load=0x1FC000,
     elif corrupt == "length":
         data[block_off + 0x10 + 4] ^= 0xFF
     return bytes(data)
+
+
+class TestReadMem(unittest.TestCase):
+    def test_reads_own_memory(self):
+        buf = ctypes.create_string_buffer(b"Q" * 0x3000)
+        data = vgt.read_mem(os.getpid(), ctypes.addressof(buf), 0x3000)
+        self.assertEqual(data, b"Q" * 0x3000)
+
+    def test_spans_an_unmapped_hole(self):
+        size = 0x3000
+        m = mmap.mmap(-1, size)
+        m[:] = b"Z" * size
+        view = ctypes.c_char.from_buffer(m)
+        addr = ctypes.addressof(view)
+        libc = ctypes.CDLL("libc.so.6", use_errno=True)
+        self.assertEqual(libc.munmap(ctypes.c_void_p(addr + 0x1000),
+                                     0x1000), 0)
+        try:
+            data = vgt.read_mem(os.getpid(), addr, size, chunk=0x1000)
+        finally:
+            del view
+            m.close()
+        self.assertEqual(data[:0x1000], b"Z" * 0x1000)
+        self.assertEqual(data[0x1000:0x2000], b"\x00" * 0x1000)
+        self.assertEqual(data[0x2000:0x3000], b"Z" * 0x1000)
 
 
 class TestTemplate(unittest.TestCase):

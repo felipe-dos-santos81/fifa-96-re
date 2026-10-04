@@ -293,6 +293,161 @@ class TestFvgtCave(unittest.TestCase):
         self.assertEqual(bytes(out[base + off_c:base + off_c + 4]), b"\x00" * 4)
 
 
+FVGT_ENTRY = 0xADEFC
+FVGT_ENTRY_RESUME = 0xADF02
+FVGT_ENTRY_DISPLACED = bytes.fromhex("56575583ec28")
+FVGT_ENTRY_LINK = 0x18A01
+FVGT_ENTRY_CAPACITY = 0x2F
+FVGT_PAIR_MARKER = 0x18A01
+
+
+class TestFvgtPairCave(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.iso = ISO.read_bytes()
+        lba, size = patch.find_iso_file(cls.iso, "FIFA96.EXE")
+        cls.info = le.parse(cls.iso[lba * 2048:lba * 2048 + size])
+
+    def _entry(self):
+        return patch.build_fvgt_entry_cave(
+            FVGT_ENTRY, 6, FVGT_ENTRY_LINK + 4, FVGT_PAIR_MARKER,
+            image=self.info["image"])
+
+    def _pair(self):
+        return patch.build_fvgt_pair_cave(
+            FVGT_RETURN, 7, CAVE + 4, CAVE, FVGT_PAIR_MARKER,
+            image=self.info["image"])
+
+    def test_entry_overwrite_is_six_whole_instruction_bytes(self):
+        self.assertEqual(
+            patch.overwrite_len(self.info["image"], FVGT_ENTRY), 6)
+
+    def test_entry_cave_replays_the_displaced_prologue(self):
+        self.assertIn(FVGT_ENTRY_DISPLACED, self._entry())
+
+    def test_entry_cave_jumps_to_verified_resume(self):
+        cave = self._entry()
+        jmp = cave.rindex(b"\xe9")
+        rel = struct.unpack_from("<i", cave, jmp + 1)[0]
+        self.assertEqual(FVGT_ENTRY_LINK + 4 + jmp + 5 + rel,
+                         FVGT_ENTRY_RESUME)
+
+    def test_entry_cave_records_pre_pointer_from_ctx10(self):
+        cave = self._entry()
+        # ctx is cdecl arg 1 at [esp+8] at hook entry; one push shifts it
+        self.assertIn(b"\x8b\x44\x24\x0c", cave)   # mov eax,[esp+0xc]
+        self.assertIn(b"\x8b\x40\x28", cave)       # mov eax,[eax+0x28]
+        self.assertIn(b"\x89\x86" + struct.pack("<I", FVGT_PAIR_MARKER),
+                      cave)                        # mov [esi+marker],eax
+        self.assertIn(b"\x8b\x74\x24\x04", cave)   # mov esi,[esp+4]
+
+    def test_entry_cave_fits_the_only_spare_run(self):
+        self.assertLessEqual(len(self._entry()), FVGT_ENTRY_CAPACITY - 4)
+
+    def test_pair_cave_replays_the_displaced_epilogue(self):
+        self.assertIn(FVGT_DISPLACED, self._pair())
+
+    def test_pair_cave_jumps_to_verified_resume(self):
+        cave = self._pair()
+        jmp = cave.rindex(b"\xe9")
+        rel = struct.unpack_from("<i", cave, jmp + 1)[0]
+        self.assertEqual(CAVE + 4 + jmp + 5 + rel, FVGT_RESUME)
+
+    def test_pair_cave_reads_post_from_ctx10_pre_from_marker(self):
+        cave = self._pair()
+        self.assertIn(b"\x8b\x7b\x28", cave)       # mov edi,[ebx+0x28]
+        self.assertIn(b"\x8b\x9e" + struct.pack("<I", FVGT_PAIR_MARKER),
+                      cave)                        # mov ebx,[esi+marker]
+        self.assertIn(b"\x83\xc7\x10", cave)       # add edi,0x10
+        self.assertIn(b"\x83\xc3\x10", cave)       # add ebx,0x10
+
+    def test_pair_cave_allocates_input_plus_two_surfaces(self):
+        cave = self._pair()
+        size = 0x10 + patch.FVGT_IN_CAP + 2 * patch.FVGT_OUT_CAP
+        self.assertIn(b"\x68" + struct.pack("<I", size), cave)
+        self.assertIn(b"\xc6\x40\x04" + bytes([patch.FVGT_METHOD]), cave)
+        self.assertIn(b"\xc7\x40\x0c" + struct.pack("<I", patch.VGT_MAGIC),
+                      cave)
+
+    def test_pair_cave_preserves_pre_pointer_across_allocator(self):
+        # FUN_00098bf8 preserves only ESI/EDI; the pre surface lives in EBX
+        # and must be spilled around the call
+        cave = self._pair()
+        size = struct.pack(
+            "<I", 0x10 + patch.FVGT_IN_CAP + 2 * patch.FVGT_OUT_CAP)
+        self.assertIn(b"\x53\x51\x6a\x00\x68" + size, cave)
+        call = cave.index(b"\xe8", cave.index(b"\x68" + size))
+        self.assertEqual(cave[call + 5:call + 10],
+                         b"\x83\xc4\x0c\x59\x5b")
+
+    def test_pair_cave_gates_on_chunk_and_dims(self):
+        cave = self._pair()
+        self.assertIn(b"fVGT", cave)
+        self.assertIn(b"\x0f\xb7\x55\x08", cave)
+        self.assertIn(b"\x0f\xb7\x45\x0a", cave)
+        self.assertIn(b"\x0f\xb7\x0b", cave)
+        self.assertIn(b"\x0f\xb7\x53\x04", cave)
+
+    def test_pair_capture_placement_and_zero_cells(self):
+        built = patch.build_fvgt_pair_capture(
+            FVGT_ENTRY, FVGT_RETURN, FVGT_ENTRY_LINK, CAVE,
+            image=self.info["image"])
+        self.assertEqual(built["marker_link"], FVGT_ENTRY_LINK)
+        self.assertEqual(built["entry_link"], FVGT_ENTRY_LINK + 4)
+        self.assertEqual(built["scratch_link"], CAVE)
+        self.assertEqual(built["return_link"], CAVE + 4)
+        self.assertEqual(built["entry_ow"], 6)
+        self.assertEqual(built["ret_ow"], 7)
+        self.assertEqual(built["entry_blob"][:4], b"\x00" * 4)
+        self.assertEqual(built["ret_blob"][:4], b"\x00" * 4)
+        self.assertLessEqual(len(built["entry_blob"]), FVGT_ENTRY_CAPACITY)
+        self.assertLessEqual(len(built["ret_blob"]), 0x103)
+
+    def test_pair_capture_entry_capacity_enforced(self):
+        with self.assertRaises(ValueError):
+            patch.build_fvgt_pair_capture(
+                FVGT_ENTRY, FVGT_RETURN, FVGT_ENTRY_LINK, CAVE,
+                image=self.info["image"], entry_capacity=0x10)
+
+    def test_pair_capture_return_capacity_enforced(self):
+        with self.assertRaises(ValueError):
+            patch.build_fvgt_pair_capture(
+                FVGT_ENTRY, FVGT_RETURN, FVGT_ENTRY_LINK, CAVE,
+                image=self.info["image"], return_capacity=0x40)
+
+    def test_patch_iso_fvgt_pair_changes_only_four_regions(self):
+        out, built = patch.patch_iso_fvgt_pair(
+            self.iso, FVGT_ENTRY, FVGT_RETURN, FVGT_ENTRY_LINK, CAVE)
+        self.assertEqual(len(out), len(self.iso))
+        lba, size = patch.find_iso_file(self.iso, "FIFA96.EXE")
+        base = lba * 2048
+        regions = []
+        for target, link in ((FVGT_ENTRY, built["entry_link"]),
+                             (FVGT_RETURN, built["return_link"])):
+            off_t = patch.link_to_file_offset(self.info, target)
+            off_c = patch.link_to_file_offset(self.info, link - 4)
+            blob = built["entry_blob"] if target == FVGT_ENTRY \
+                else built["ret_blob"]
+            regions.append((off_t, off_t + 5))
+            regions.append((off_c, off_c + len(blob)))
+        diffs = [i for i in range(len(out)) if out[i] != self.iso[i]]
+        self.assertGreater(len(diffs), 5)
+        for d in diffs:
+            rel = d - base
+            self.assertTrue(any(a <= rel < b for a, b in regions),
+                            f"unexpected diff at file offset 0x{rel:x}")
+        off_e = patch.link_to_file_offset(self.info, FVGT_ENTRY)
+        off_r = patch.link_to_file_offset(self.info, FVGT_RETURN)
+        for off, link in ((off_e, built["entry_link"]),
+                          (off_r, built["return_link"])):
+            call = out[base + off:base + off + 5]
+            self.assertEqual(call[0], 0xE8)
+            target = FVGT_ENTRY if link == built["entry_link"] \
+                else FVGT_RETURN
+            self.assertEqual(target + 5 + struct.unpack("<i", call[1:])[0],
+                             link)
+
+
 class TestCli(unittest.TestCase):
     def test_print_overwrite(self):
         buf = io.StringIO()
@@ -309,6 +464,18 @@ class TestCli(unittest.TestCase):
                 patch.main(["--iso", str(ISO), "--target", "0xAE20B",
                             "--vgt-capture", "--fvgt-capture",
                             "--cave", "0x6728D", "--site-id", "1"])
+
+    def test_fvgt_pair_is_mutually_exclusive_with_the_other_modes(self):
+        for other in ("--fvgt-capture", "--vgt-capture"):
+            with self.subTest(other=other):
+                err = io.StringIO()
+                with contextlib.redirect_stderr(err):
+                    with self.assertRaises(SystemExit):
+                        patch.main(["--iso", str(ISO), "--target", "0xADEFC",
+                                    "--return-target", "0xAE20B",
+                                    "--fvgt-pair", other,
+                                    "--entry-cave", "0x18A01",
+                                    "--cave", "0x6728D", "--site-id", "1"])
 
 
 if __name__ == "__main__":
