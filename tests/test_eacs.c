@@ -124,11 +124,13 @@ int main(void) {
 
   /* nonzero data pointer (bank .spc form, FU-35 §2/§6.5) is honored. */
   uint8_t bank[0x30];
+  memset(bank, 0, sizeof bank);
   hdr(bank, 16000, 2, 1, 2, 0, 0, 0, 0, 0x28, 0x7F);
   assert(fifa96_eacs_parse(bank, sizeof bank, &info) == 0);
   assert(info.data_ptr == 0x28 && info.data_off == 0x28 && info.data_len == 8);
   assert(info.block_size == 2 && info.blocks == 4 && info.samples == 16);
-  assert(info.format == FIFA96_EACS_FMT_PCM16_MONO);  /* f10=2 count is FU-35 §6.1 open */
+  assert(info.format == FIFA96_EACS_FMT_DELTA_MONO);  /* FU-39: f10=2 nibble path */
+  assert(info.delta_units == 0);                      /* block header count is 0 */
 
   /* declared count is not trusted: the original overwrites it with the block
    * count (FU-35 §2), so a maximal declared count still parses. */
@@ -148,6 +150,36 @@ int main(void) {
   assert(fifa96_eacs_parse(b, 0x20 + 9, &info) == 0);
   assert(info.block_size == 3 && info.blocks == 3 && info.samples == 3);
   assert(info.format == FIFA96_EACS_FMT_UNKNOWN);
+
+  /* ---- f10==2 adaptive-delta block framing (FU-39 §2.1/§4.3) ---- */
+  /* stereo: the 20-byte block header's count is one byte per decoder unit */
+  hdr(b, 16000, 2, 2, 2, 0, 0, 0, 0, 0, 0x7F);
+  put32le(b + 0x20, 3);
+  assert(fifa96_eacs_parse(b, 0x20 + 0x14 + 3, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO);
+  assert(info.delta_units == 3);
+  assert(info.block_size == 4 && info.blocks == (0x14 + 3) / 4); /* FU-35 nominal */
+
+  /* mono (bank form, FU-39 §2.2): the unsigned producer skips the block
+   * header, so the declared +0x0C count is the nibble count at data_off;
+   * two nibbles per byte with trailing slack allowed (FU-39 §6). */
+  hdr(b, 16000, 2, 1, 2, 0, 3, 0, 0, 0, 0x7F);
+  assert(fifa96_eacs_parse(b, 0x20 + 2, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_MONO && info.delta_units == 3);
+  assert(fifa96_eacs_parse(b, 0x20 + 4, &info) == 0);   /* slack is fine */
+  assert(info.delta_units == 3);
+  put32le(b + 0x0C, 5);                        /* 5 nibbles need 3 bytes */
+  assert(fifa96_eacs_parse(b, 0x20 + 2, &info) == -(int)FIFA96_ERR_TRUNCATED);
+  assert(fifa96_eacs_parse(b, 0x20 + 3, &info) == 0);
+
+  /* truncated block header and block-count overrun (FU-39 §2.1) */
+  hdr(b, 16000, 2, 2, 2, 0, 0, 0, 0, 0, 0x7F);
+  assert(fifa96_eacs_parse(b, 0x20 + 0x13, &info) == -(int)FIFA96_ERR_TRUNCATED);
+  put32le(b + 0x20, 4);
+  assert(fifa96_eacs_parse(b, 0x20 + 0x14 + 3, &info) == -(int)FIFA96_ERR_TRUNCATED);
+  put32le(b + 0x20, 3);
+  assert(fifa96_eacs_parse(b, 0x20 + 0x14 + 3, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 3);
 
   /* block count floors, like the original's DIV. */
   hdr(b, 16000, 2, 2, 0, 0, 0, 0, 0, 0, 0x7F);

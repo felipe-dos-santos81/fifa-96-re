@@ -32,27 +32,67 @@ int fifa96_mixer_start(struct fifa96_mixer *m, int voice,
   if (!m || !info || !payload) return -(int)FIFA96_ERR_TRUNCATED;
   if (voice < 0 || voice >= FIFA96_MIXER_VOICES) return -(int)FIFA96_ERR_TRUNCATED;
   if (volume > FIFA96_MIXER_VOLUME_MAX) return -(int)FIFA96_ERR_TRUNCATED;
-  /* f10 == 2 needs the second-cursor nibble decoder and its 4x sample
-   * accounting; both are FU-37 §A.5/§6.1 open legs. */
-  if (info->f10 == 2) return -(int)FIFA96_ERR_UNSUPPORTED;
   if (info->format == FIFA96_EACS_FMT_UNKNOWN) return -(int)FIFA96_ERR_UNSUPPORTED;
   if (info->block_size == 0) return -(int)FIFA96_ERR_TRUNCATED;
   if (info->data_off > payload_len) return -(int)FIFA96_ERR_TRUNCATED;
   if (info->data_len > payload_len - info->data_off) return -(int)FIFA96_ERR_TRUNCATED;
-  if ((uint64_t)info->blocks * info->block_size > info->data_len)
+
+  int is_delta = info->f10 == 2;
+  const uint8_t *data = payload + info->data_off;
+  uint32_t units = info->blocks;
+  struct fifa96_eacs_delta dst = {0, 0, 0, 0};
+  const uint8_t *dhdr = NULL;
+  uint32_t dcount = 0;
+  uint8_t f9 = 0;
+  if (is_delta) {
+    if (info->format == FIFA96_EACS_FMT_DELTA_STEREO) {
+      /* FU-39 §2.1 signed/video producer 0xB84FE: the 20-byte block header at
+       * data_off carries count + row/acc state, data follows at +0x14. The
+       * arm's u32[data]-1 truncation (FU-39 §4.3) is a runtime streaming
+       * detail and is not modelled by this single-payload port. */
+      if (payload_len - info->data_off < 0x14u) return -(int)FIFA96_ERR_TRUNCATED;
+      int rc = fifa96_eacs_delta_header(payload + info->data_off, 0x14u, &dst, &dcount);
+      if (rc != FIFA96_OK) return rc;
+      if ((size_t)dcount > payload_len - info->data_off - 0x14u)
+        return -(int)FIFA96_ERR_TRUNCATED;
+      data = payload + info->data_off + 0x14u;
+      units = dcount;
+      dhdr = payload + info->data_off;
+    } else if (info->format == FIFA96_EACS_FMT_DELTA_MONO) {
+      /* FU-39 §2.2 unsigned/bank producer 0xB8610: no block header; the
+       * declared nibble count starts at data_off with zero state. The bank
+       * loader's in-memory data mapping stays FU-39 §7 leg 3. */
+      if ((uint64_t)info->delta_units > (uint64_t)(payload_len - info->data_off) * 2u)
+        return -(int)FIFA96_ERR_TRUNCATED;
+      units = info->delta_units;
+      dcount = units;
+    } else {
+      return -(int)FIFA96_ERR_UNSUPPORTED;
+    }
+    f9 = info->format == FIFA96_EACS_FMT_DELTA_STEREO ? 2u : 1u;
+  } else if ((uint64_t)info->blocks * info->block_size > info->data_len) {
     return -(int)FIFA96_ERR_TRUNCATED;
+  }
 
   struct fifa96_mixer_voice *ch = &m->voices[voice];
   ch->active = 1;
   ch->format = info->format;
-  ch->data = payload + info->data_off;
-  ch->units = info->blocks;
+  ch->data = data;
+  ch->units = units;
   ch->volume = volume;
   ch->pos = 0;
   ch->step = step;
   ch->loop = 0;
   ch->loop_start = 0;
   ch->loop_end = 0;
+  ch->delta = is_delta;
+  ch->f9 = f9;
+  ch->delta_hdr = dhdr;
+  ch->delta_units = dcount;
+  ch->delta_pos = 0;
+  ch->delta_state = dst;
+  ch->delta_l = 0;
+  ch->delta_r = 0;
   /* Retail videos force-write loop start -1 / length 0 (FU-37 §A.5); arm
    * only a well-formed window inside the buffer. */
   if (info->loop_len != 0 && info->loop_start >= 0) {
@@ -101,7 +141,32 @@ void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
         ch->active = 0;
         continue;
       }
-      if (ch->format == FIFA96_EACS_FMT_PCM16_STEREO) {
+      if (ch->format == FIFA96_EACS_FMT_DELTA_STEREO ||
+          ch->format == FIFA96_EACS_FMT_DELTA_MONO) {
+        /* FU-39 §3/§4.2: decode lazily up to the cursor unit; the state chain
+         * lives in the voice and is re-initialized from the stored block
+         * header on a backwards cursor (loop wrap). The bank mono arm has no
+         * header and wraps with zero state (FU-39 §2.2). */
+        if (unit < ch->delta_pos) {
+          if (ch->delta_hdr) {
+            uint32_t cnt = 0;
+            fifa96_eacs_delta_header(ch->delta_hdr, 0x14u, &ch->delta_state, &cnt);
+          } else {
+            ch->delta_state.l_row = 0;
+            ch->delta_state.r_row = 0;
+            ch->delta_state.l_acc = 0;
+            ch->delta_state.r_acc = 0;
+          }
+          ch->delta_pos = 0;
+        }
+        while (ch->delta_pos <= unit) {
+          fifa96_eacs_delta_unit(&ch->delta_state, ch->f9, ch->data,
+                                 ch->delta_pos, &ch->delta_l, &ch->delta_r);
+          ch->delta_pos++;
+        }
+        acc_l += sar7((int32_t)ch->delta_l * ch->volume);
+        acc_r += sar7((int32_t)ch->delta_r * ch->volume);
+      } else if (ch->format == FIFA96_EACS_FMT_PCM16_STEREO) {
         const uint8_t *p = ch->data + (size_t)unit * 4;
         acc_l += sar7((int32_t)(int16_t)rd16le(p) * ch->volume);
         acc_r += sar7((int32_t)(int16_t)rd16le(p + 2) * ch->volume);

@@ -40,6 +40,17 @@ static void hdr(uint8_t *b, uint8_t f8, uint8_t f9, uint8_t f10, int8_t voice,
   b[0x1D] = 0x7F;
 }
 
+// Build a 20-byte FU-39 f10==2 block header: count, L/R row codes, s16 L/R
+// accumulate states; the packed data follows at +0x14.
+static void delta_hdr(uint8_t *p, uint32_t count, uint32_t l_code, uint32_t r_code,
+                      int16_t l_acc, int16_t r_acc) {
+  put32le(p, count);
+  put32le(p + 4, l_code);
+  put32le(p + 8, r_code);
+  put32le(p + 0xc, (uint32_t)(uint16_t)l_acc);
+  put32le(p + 0x10, (uint32_t)(uint16_t)r_acc);
+}
+
 static void test_pcm16_stereo_exact(void) {
   uint8_t buf[0x20 + 16];
   hdr(buf, 2, 2, 0, 3, -1, 0);
@@ -120,6 +131,59 @@ static void test_pcm16_mono(void) {
   fifa96_mixer_render(&m, out, 2);
   const int16_t want[4] = {75, 75, -75, -75}; /* duplicated to both channels */
   for (int i = 0; i < 4; i++) assert(out[i] == want[i]);
+}
+
+static void test_delta_stereo_mix(void) {
+  /* Hand-computed FU-39 block: L row 1/acc 100, R row 0/acc -100, data 3A E4
+   * decodes to frames (107,-103), (97,-96) (tests/test_eacs_delta.c); the
+   * PCM16 reader's SAR 7 at volume 64 gives (53,-52), (48,-48). */
+  uint8_t buf[0x20 + 0x14 + 2];
+  hdr(buf, 2, 2, 2, 3, -1, 0);
+  delta_hdr(buf + 0x20, 2, 1, 0, 100, -100);
+  buf[0x34] = 0x3A;
+  buf[0x35] = 0xE4;
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(buf, sizeof buf, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 2);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 64, (uint64_t)1 << 32) == 0);
+  int16_t out[4] = {0};
+  fifa96_mixer_render(&m, out, 2);
+  const int16_t want[4] = {53, -52, 48, -48};
+  for (int i = 0; i < 4; i++) assert(out[i] == want[i]);
+  assert(m.voices[3].delta == 1 && m.voices[3].delta_pos == 2);
+  assert(m.voices[3].delta_state.l_row == 384 && m.voices[3].delta_state.r_row == 128);
+  assert(m.voices[3].pos == ((uint64_t)2 << 32));
+  assert(fifa96_mixer_voice_active(&m, 3) == 1);
+  int16_t stop[2] = {1, 1};
+  fifa96_mixer_render(&m, stop, 1);
+  assert(stop[0] == 0 && stop[1] == 0);
+  assert(fifa96_mixer_voice_active(&m, 3) == 0);
+}
+
+static void test_delta_mono_mix(void) {
+  /* FU-39 §2.2 bank arm: no block header, zero state, declared +0x0C count is
+   * the nibble count. Data 3A E4 -> nibbles 3, A, E from row 0:
+   *   3 -> +4 = 4; A -> 4 + DELTA[0][10] = 1; E -> 1 + DELTA[0][14] = -9.
+   * The mono sample is duplicated to both lanes; volume 64 => SAR 7. */
+  uint8_t buf[0x20 + 2];
+  hdr(buf, 2, 1, 2, 3, -1, 0);
+  put32le(buf + 0x0C, 3);
+  buf[0x20] = 0x3A;
+  buf[0x21] = 0xE4;
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(buf, sizeof buf, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_MONO && info.delta_units == 3);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 64, (uint64_t)1 << 32) == 0);
+  int16_t out[6] = {0};
+  fifa96_mixer_render(&m, out, 3);
+  const int16_t want[6] = {2, 2, 0, 0, -5, -5};
+  for (int i = 0; i < 6; i++) assert(out[i] == want[i]);
 }
 
 static void test_clamp_sum(void) {
@@ -266,14 +330,26 @@ static void test_start_stop_errors(void) {
   assert(fifa96_mixer_start(&m, 3, &info, buf, 0x20, 0x7F, 1) ==
          -(int)FIFA96_ERR_TRUNCATED);
 
-  /* f10 == 2 is the unported second-cursor nibble path (FU-37 open leg). */
+  /* f10 == 2 with an unproven f8/f9 pair has no decoder (FU-39 §1). */
   uint8_t f10buf[0x20 + 16];
-  hdr(f10buf, 2, 2, 2, 3, -1, 0);
+  hdr(f10buf, 3, 1, 2, 3, -1, 0);
   struct fifa96_eacs_info f10info;
   assert(fifa96_eacs_parse(f10buf, sizeof f10buf, &f10info) == 0);
-  assert(f10info.format == FIFA96_EACS_FMT_PCM16_STEREO);
+  assert(f10info.format == FIFA96_EACS_FMT_UNKNOWN);
   assert(fifa96_mixer_start(&m, 3, &f10info, f10buf, sizeof f10buf, 0x7F, 1) ==
          -(int)FIFA96_ERR_UNSUPPORTED);
+
+  /* A hand-built delta info must still carry a full 20-byte block header. */
+  uint8_t shortbuf[0x20 + 0x10];
+  memset(shortbuf, 0, sizeof shortbuf);
+  memcpy(shortbuf, "EACS", 4);
+  struct fifa96_eacs_info dinfo;
+  memset(&dinfo, 0, sizeof dinfo);
+  dinfo.f8 = 2; dinfo.f9 = 2; dinfo.f10 = 2;
+  dinfo.format = FIFA96_EACS_FMT_DELTA_STEREO;
+  dinfo.data_off = 0x20; dinfo.data_len = 0x10; dinfo.block_size = 4; dinfo.blocks = 4;
+  assert(fifa96_mixer_start(&m, 3, &dinfo, shortbuf, sizeof shortbuf, 0x7F, 1) ==
+         -(int)FIFA96_ERR_TRUNCATED);
 
   /* unproven f8/f9 combination (format UNKNOWN). */
   uint8_t unkbuf[0x20 + 16];
@@ -361,6 +437,79 @@ static void test_golden_bank_h_loop(void) {
   free(h);
 }
 
+static void test_golden_delta_mix(void) {
+  uint8_t *h = NULL, *d = NULL;
+  size_t hn = 0, dn = 0;
+  assert(fifa96_file_read("tests/golden/eacs/vid-game-h.eacs", &h, &hn) == 0);
+  assert(fifa96_file_read("tests/golden/eacs/vid-game-d0.eacs", &d, &dn) == 0);
+  assert(hn == 0x45C && dn == 0x43C);
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(h, hn, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 1064);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, info.voice, &info, h, hn, 64, (uint64_t)1 << 32) == 0);
+  int16_t out[16] = {0};
+  fifa96_mixer_render(&m, out, 8);
+  /* Decoded (11,11),(41,41),(104,104),(240,240),(533,533),(407,1164),
+   * (-167,2521),(-1400,5431) at volume 64 (x64 >> 7), hand-checked on the
+   * first bytes 77 77 77 77 77 97 f7 f7. */
+  const int16_t want[16] = {5, 5, 20, 20, 52, 52, 120, 120,
+                            266, 266, 203, 582, -84, 1260, -700, 2715};
+  for (int i = 0; i < 16; i++) assert(out[i] == want[i]);
+
+  int16_t rest[2 * (1064 - 8)];
+  fifa96_mixer_render(&m, rest, 1064 - 8);
+  assert(m.voices[info.voice].pos == ((uint64_t)1064 << 32));
+  /* FU-39 §6 continuity: the voice's carried row/acc state equals the stored
+   * header of the next 1SNd chunk (the engine re-inits from it per dequeue). */
+  struct fifa96_eacs_delta st0;
+  uint32_t count = 0;
+  assert(fifa96_eacs_delta_header(d, dn, &st0, &count) == 0);
+  assert(count == 1064);
+  assert(m.voices[info.voice].delta_state.l_row == st0.l_row);
+  assert(m.voices[info.voice].delta_state.r_row == st0.r_row);
+  assert(m.voices[info.voice].delta_state.l_acc == st0.l_acc);
+  assert(m.voices[info.voice].delta_state.r_acc == st0.r_acc);
+
+  int16_t stop[2] = {1, 1};
+  fifa96_mixer_render(&m, stop, 1);
+  assert(stop[0] == 0 && stop[1] == 0);
+  assert(fifa96_mixer_voice_active(&m, info.voice) == 0);
+  free(h);
+  free(d);
+}
+
+static void test_golden_delta_second_chunk(void) {
+  /* The raw 1SNd payload wrapped in the 32-byte EACS header the video parser
+   * would have produced: the embedded block header carries the state from the
+   * previous chunk, so arming at the second chunk continues the stream (the
+   * port has no queue; FU-39 §7 leg 1 covers runtime staging). */
+  uint8_t *d = NULL;
+  size_t dn = 0;
+  assert(fifa96_file_read("tests/golden/eacs/vid-game-d0.eacs", &d, &dn) == 0);
+  assert(dn == 0x43C);
+  uint8_t *buf = malloc(0x20 + dn);
+  assert(buf);
+  hdr(buf, 2, 2, 2, 0, -1, 0);
+  memcpy(buf + 0x20, d, dn);
+  struct fifa96_eacs_info info;
+  assert(fifa96_eacs_parse(buf, 0x20 + dn, &info) == 0);
+  assert(info.format == FIFA96_EACS_FMT_DELTA_STEREO && info.delta_units == 1064);
+
+  struct fifa96_mixer m;
+  fifa96_mixer_init(&m);
+  assert(fifa96_mixer_start(&m, info.voice, &info, buf, 0x20 + dn, 64, (uint64_t)1 << 32) == 0);
+  int16_t out[8] = {0};
+  fifa96_mixer_render(&m, out, 4);
+  /* decoded (26350,2327),(25742,3747),(22975,6071),(19453,8882) at volume 64 */
+  const int16_t want[8] = {13175, 1163, 12871, 1873, 11487, 3035, 9726, 4441};
+  for (int i = 0; i < 8; i++) assert(out[i] == want[i]);
+  free(buf);
+  free(d);
+}
+
 static void test_pacing_frames_due(void) {
   /* FU-37 §B.3: progress = clock()*15/100 at 100 Hz (vgt_stream_poll). */
   static const struct {
@@ -390,6 +539,8 @@ int main(void) {
   test_pcm16_stereo_fractional_step();
   test_pcm8_stereo_polarity();
   test_pcm16_mono();
+  test_delta_stereo_mix();
+  test_delta_mono_mix();
   test_clamp_sum();
   test_end_of_data_silence();
   test_loop_wrap();
@@ -398,6 +549,8 @@ int main(void) {
   test_start_stop_errors();
   test_golden_bank_h_first_frames();
   test_golden_bank_h_loop();
+  test_golden_delta_mix();
+  test_golden_delta_second_chunk();
   test_pacing_frames_due();
   test_pacing_catch_up();
   printf("test_mixer OK\n");
