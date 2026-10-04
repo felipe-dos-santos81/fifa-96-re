@@ -58,3 +58,21 @@ Chunk layout (confirmed on `VID_BULL.TGV`, FU-29 errata):
 * Asset: `VID_BULL.TGV` chunk walk (offsets above); the first frame chunk
   is the committed `tests/golden/vgt/kvgt-frame-01.bin`.
 * `make test`: 27/27.
+
+## Errata (2026-10-04): the companion chunks are the audio stream
+
+* §3.1 "unidentified" is resolved. `vgt_stream_poll` reads a second
+  stream (`PTR_DAT_000563f4`) alongside the frame stream and routes its
+  chunks through `FUN_000a7d3c` (0xA7D3C), the audio event dispatcher:
+  tag `0x644E5331` (`'1SNd'`, data) queues into the sound subsystem
+  (`0xA7D55..`), `0x684E5331` (`'1SNh'`, header) routes to
+  `FUN_000a79dc`, `0x654E5331` (`'1SNe'`) sets -1 and calls
+  `FUN_000a7b2b`, `0x6c4E5331` (`'1SNl'`) releases via `FUN_00094eff`.
+  (`search_instructions CMP 0x684e5331/0x644e5331`: single hits at
+  `0xA7D51`/`0xA7D6A`, both inside `FUN_000a7d3c`.)
+* Empirical corroboration: the first `'h'` chunk payload is
+  `45 41 43 53` ("EACS") + `80 3e` (LE16 16000 = sample rate) + format
+  bytes `00 00 02 02 00 07 00 ac` then silence; `'d'` payloads are
+  high-entropy sample bytes (~0x1068 bytes per chunk).
+* Porting audio is a separate subsystem and stays out of scope for the
+  file-format layer; the walker skips these chunks.

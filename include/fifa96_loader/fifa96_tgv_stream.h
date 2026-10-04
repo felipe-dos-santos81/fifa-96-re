@@ -9,8 +9,9 @@
 //
 // VIDEO/*.TGV chunk layout: [u32 tag][u32 length][length-8 payload bytes].
 // kVGT frame chunks (tag 0x5447566B) parse with fifa96_kvgt_decode; other
-// tags (observed 0x684E5331 / 0x644E5331, lengths 0x1068-0x1088) are
-// skipped by the walker.
+// tags are the companion audio stream ('1SNh' 0x684E5331 header chunks and
+// '1SNd' 0x644E5331 data chunks, consumed by the sound subsystem via
+// FUN_000a7d3c) and are skipped by the walker.
 //
 // fifa96_tgv_walk_next returns 1 when a chunk is yielded (*chunk/*chunk_len/
 // *is_frame set), 0 at the end of the buffer, or a negated fifa96_err_t code
