@@ -164,6 +164,11 @@ add_executable(test_music tests/test_music.c)
 target_link_libraries(test_music PRIVATE fifa96_music)
 add_test(NAME test_music COMMAND test_music WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_crd src/fifa96_loader/fifa96_crd.c)
+add_executable(test_crd tests/test_crd.c)
+target_link_libraries(test_crd PRIVATE fifa96_crd fifa96_file)
+add_test(NAME test_crd COMMAND test_crd WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)
