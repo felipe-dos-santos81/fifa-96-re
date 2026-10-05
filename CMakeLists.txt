@@ -73,6 +73,12 @@ add_executable(test_tgv_stream tests/test_tgv_stream.c)
 target_link_libraries(test_tgv_stream PRIVATE fifa96_tgv_stream fifa96_kvgt fifa96_file)
 add_test(NAME test_tgv_stream COMMAND test_tgv_stream WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_vgt_player src/fifa96_loader/fifa96_vgt_player.c)
+target_link_libraries(fifa96_vgt_player PRIVATE fifa96_tgv_stream fifa96_kvgt fifa96_fvgt)
+add_executable(test_vgt_player tests/test_vgt_player.c)
+target_link_libraries(test_vgt_player PRIVATE fifa96_vgt_player fifa96_kvgt fifa96_file)
+add_test(NAME test_vgt_player COMMAND test_vgt_player WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)
