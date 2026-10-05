@@ -173,6 +173,11 @@ add_executable(test_match_state tests/test_match_state.c)
 target_link_libraries(test_match_state PRIVATE fifa96_match_state fifa96_match_pace)
 add_test(NAME test_match_state COMMAND test_match_state WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_event_queue src/fifa96_loader/fifa96_event_queue.c)
+add_executable(test_event_queue tests/test_event_queue.c)
+target_link_libraries(test_event_queue PRIVATE fifa96_event_queue)
+add_test(NAME test_event_queue COMMAND test_event_queue WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_input src/fifa96_loader/fifa96_input.c)
 add_executable(test_input tests/test_input.c)
 target_link_libraries(test_input PRIVATE fifa96_input)
