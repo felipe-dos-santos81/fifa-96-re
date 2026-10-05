@@ -162,6 +162,11 @@ add_executable(test_tick tests/test_tick.c)
 target_link_libraries(test_tick PRIVATE fifa96_tick fifa96_pacing)
 add_test(NAME test_tick COMMAND test_tick WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_match_pace src/fifa96_loader/fifa96_match_pace.c)
+add_executable(test_match_pace tests/test_match_pace.c)
+target_link_libraries(test_match_pace PRIVATE fifa96_match_pace)
+add_test(NAME test_match_pace COMMAND test_match_pace WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_sfx_event src/fifa96_loader/fifa96_sfx_event.c)
 add_executable(test_sfx_event tests/test_sfx_event.c)
 target_link_libraries(test_sfx_event PRIVATE fifa96_sfx_event)
