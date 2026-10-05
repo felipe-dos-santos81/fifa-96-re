@@ -310,9 +310,7 @@ static uint32_t pan_scale_wide(uint32_t factor, uint8_t gain) {
   return prod / 0x7Fu;
 }
 
-void fifa96_mixer_pan_gains_wide(uint8_t pan, uint8_t gain,
-                                 uint32_t *left, uint32_t *right) {
-  if (!left || !right) return;
+uint32_t fifa96_mixer_pan_packed(uint8_t pan, uint8_t gain) {
   /* 0xA663A MOVZX EAX,[ESI+0x27]; 0xA663E..0xA664A mirror > 0x7F. */
   uint32_t p = pan > 0x7F ? (uint32_t)(0xFF - pan) : pan;
   uint32_t lf, rf;
@@ -331,10 +329,17 @@ void fifa96_mixer_pan_gains_wide(uint8_t pan, uint8_t gain,
   }
   uint32_t ql = pan_scale_wide(lf, gain);
   uint32_t qr = pan_scale_wide(rf, gain);
-  /* 0xA66A1 SHL EAX,0x10 / 0xA66A4 OR EAX,EBX; consumer 0xA6601 SHR EDI,0x10
-   * and 0xA6605 AND ESI,0x7F. packed = (qr<<16)|ql, so the reader sees
-   * L = ql & 0x7F and R = (packed >> 16) = qr's low 16 | ql's bits 16..31. */
-  uint32_t packed = ((qr << 16) | ql);
+  /* 0xA66A1 SHL EAX,0x10 / 0xA66A4 OR EAX,EBX. */
+  return (qr << 16) | ql;
+}
+
+void fifa96_mixer_pan_gains_wide(uint8_t pan, uint8_t gain,
+                                 uint32_t *left, uint32_t *right) {
+  if (!left || !right) return;
+  /* Consumer 0xA6601 SHR EDI,0x10 and 0xA6605 AND ESI,0x7F: packed = the
+   * a66ab return, so the reader sees L = ql & 0x7F and
+   * R = (packed >> 16) = qr's low 16 | ql's bits 16..31. */
+  uint32_t packed = fifa96_mixer_pan_packed(pan, gain);
   *left = packed & 0x7Fu;
   *right = (packed >> 16) & 0xFFFFu;
 }

@@ -198,6 +198,12 @@ int fifa96_mixer_step_from_rate(uint32_t rate, uint32_t out_rate,
 void fifa96_mixer_pan_gains_wide(uint8_t pan, uint8_t gain,
                                  uint32_t *left, uint32_t *right);
 
+// The raw FUN_000a66ab return value (qr<<16)|ql before any consumer
+// extraction. FU-50's runtime apply FUN_000b811b (0xB813E..0xB8141) reads
+// L = (u16)packed and R = packed >> 16, while the arm-time consumer reads
+// L = packed & 0x7F; the two agree for every 0..0x7F gain byte.
+uint32_t fifa96_mixer_pan_packed(uint8_t pan, uint8_t gain);
+
 // Low-byte compatibility form of fifa96_mixer_pan_gains_wide: unchanged for
 // every retail 0..0x7F gain; a wide R > 0xFF is truncated (the exact value is
 // in the wide helper and in the voice's gain fields).
