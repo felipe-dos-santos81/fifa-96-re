@@ -6,7 +6,8 @@
 // Ghidra: play lookup FUN_000a7728 @ 0xA7728, bank arm FUN_000a780e @ 0xA780E,
 // two-voice split FUN_000a6717 @ 0xA6717, EACSNDF gain FUN_000b9fdd @ 0xB9FDD,
 // master volume FUN_000a6d9b @ 0xA6D9B. Spec: docs/ghidra/FU43_bnk_format.md
-// §3.2.
+// §3.2; the >0x7F two-voice split read-back is FU-48 §2
+// (docs/ghidra/FU48_audio_edge_cases.md).
 //
 // fifa96_sfx_arm is the .BNK play path: global id -> descriptor
 // (fifa96_bnk_entry) -> arm parameters -> fifa96_mixer_start. Every retail

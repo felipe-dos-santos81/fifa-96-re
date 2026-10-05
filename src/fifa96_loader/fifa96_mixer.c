@@ -1,8 +1,6 @@
 #include "fifa96_loader/fifa96_mixer.h"
 #include <string.h>
 
-#define FIFA96_MIXER_VOLUME_MAX 0x7Fu
-
 static uint16_t rd16le(const uint8_t *p) {
   return (uint16_t)((uint16_t)p[0] | ((uint16_t)p[1] << 8));
 }
@@ -33,7 +31,6 @@ int fifa96_mixer_start(struct fifa96_mixer *m, int voice,
                        uint8_t volume, uint64_t step) {
   if (!m || !info || !payload) return -(int)FIFA96_ERR_TRUNCATED;
   if (voice < 0 || voice >= FIFA96_MIXER_VOICES) return -(int)FIFA96_ERR_TRUNCATED;
-  if (volume > FIFA96_MIXER_VOLUME_MAX) return -(int)FIFA96_ERR_TRUNCATED;
   if (info->format == FIFA96_EACS_FMT_UNKNOWN) return -(int)FIFA96_ERR_UNSUPPORTED;
   if (info->block_size == 0) return -(int)FIFA96_ERR_TRUNCATED;
   if (info->data_off > payload_len) return -(int)FIFA96_ERR_TRUNCATED;
@@ -222,21 +219,21 @@ void fifa96_mixer_render(struct fifa96_mixer *m, int16_t *out, size_t frames) {
                                  ch->delta_pos, &ch->delta_l, &ch->delta_r);
           ch->delta_pos++;
         }
-        acc_l += sar7((int32_t)ch->delta_l * ch->gain_l);
-        acc_r += sar7((int32_t)ch->delta_r * ch->gain_r);
+        acc_l += sar7((int32_t)ch->delta_l * (int32_t)ch->gain_l);
+        acc_r += sar7((int32_t)ch->delta_r * (int32_t)ch->gain_r);
       } else if (ch->format == FIFA96_EACS_FMT_PCM16_STEREO) {
         const uint8_t *p = ch->data + (size_t)unit * 4;
-        acc_l += sar7((int32_t)(int16_t)rd16le(p) * ch->gain_l);
-        acc_r += sar7((int32_t)(int16_t)rd16le(p + 2) * ch->gain_r);
+        acc_l += sar7((int32_t)(int16_t)rd16le(p) * (int32_t)ch->gain_l);
+        acc_r += sar7((int32_t)(int16_t)rd16le(p + 2) * (int32_t)ch->gain_r);
       } else if (ch->format == FIFA96_EACS_FMT_PCM8_STEREO) {
         /* FU-37 §A.3 volume table: 2*vol*signed8(byte), row = gain<<10. */
         const uint8_t *p = ch->data + (size_t)unit * 2;
-        acc_l += 2 * ch->gain_l * (int32_t)(int8_t)p[0];
-        acc_r += 2 * ch->gain_r * (int32_t)(int8_t)p[1];
+        acc_l += 2 * (int32_t)ch->gain_l * (int32_t)(int8_t)p[0];
+        acc_r += 2 * (int32_t)ch->gain_r * (int32_t)(int8_t)p[1];
       } else if (ch->format == FIFA96_EACS_FMT_PCM16_MONO) {
         int32_t s = (int16_t)rd16le(ch->data + (size_t)unit * 2);
-        acc_l += sar7(s * ch->gain_l);
-        acc_r += sar7(s * ch->gain_r);
+        acc_l += sar7(s * (int32_t)ch->gain_l);
+        acc_r += sar7(s * (int32_t)ch->gain_r);
       } else {
         continue; /* start() rejects every other format */
       }
@@ -277,13 +274,18 @@ int fifa96_mixer_step_from_rate(uint32_t rate, uint32_t out_rate,
   /* 0xB86ED MUL EDX / 0xB86EF SHRD EAX,EDX,CL: low 32 bits of the 64-bit
    * rate*ratio shifted right by CL. */
   uint32_t v = (uint32_t)(((uint64_t)rate * ratio) >> shift);
-  /* 0xB86F9 DIV [0x406A0] / 0xB86FF AND EAX,0xFF. */
-  uint32_t int_part = (v / out_rate) & 0xFFu;
+  /* 0xB86F9 DIV [0x406A0]: the unmasked first quotient. 0xB870E..0xB8722
+   * multiplies the masked step_int by out_rate and DIVs rem*0x1000000; the
+   * DIV's high word is rem>>8, which is >= out_rate exactly when q >= 256
+   * (rem = 256*floor(q/256)*out_rate + r), so the original raises #DE for
+   * every such input. The port rejects instead of inventing a masked step
+   * (FU-48 §3; q < 256 cannot fault). */
+  uint32_t q = v / out_rate;
+  if (q >= 0x100u) return -(int)FIFA96_ERR_TRUNCATED;
+  /* 0xB86FF AND EAX,0xFF is a no-op for q < 256. */
+  uint32_t int_part = q & 0xFFu;
   /* 0xB8711 MUL out_rate / 0xB8717 SUB / 0xB871B MUL 0x1000000 / 0xB8722 DIV
-   * / 0xB8728 SHL 8: the 8.24 fraction scaled into the 32.32 low word. The
-   * original's DIV faults once the masked step_int pushes the quotient past
-   * 2^32 (every step_int >= 256); 64-bit intermediates keep the port defined
-   * and the 32-bit store truncates. */
+   * / 0xB8728 SHL 8: the 8.24 fraction scaled into the 32.32 low word. */
   uint32_t rem = v - int_part * out_rate;
   uint32_t frac =
       (uint32_t)(((((uint64_t)rem << 24) / out_rate) << 8) & 0xFFFFFFFFu);
@@ -300,16 +302,16 @@ int fifa96_mixer_step_from_pitch(uint32_t rate, uint32_t out_rate,
 }
 
 /* 0xA6681 MOVSX ESI,byte [ESI+0x26]; 0xA6685/0xA6695 IMUL; 0xA6688 XOR EDX;
- * 0xA668F DIV 0x7F: a 32-bit product divided unsigned, low byte kept. Valid
- * 0..0x7F gains stay in 0..0x7F; a >0x7F byte is sign-extended exactly as
- * the original (the product goes negative, DIV reads it unsigned). */
-static uint8_t pan_scale(uint32_t factor, uint8_t gain) {
+ * 0xA668F DIV 0x7F: the 32-bit product is read unsigned, quotient kept whole.
+ * A valid 0..0x7F gain stays in 0..0x7F; a >0x7F byte is negative after the
+ * MOVSX, so its unsigned quotient is large (FU-48 §4). */
+static uint32_t pan_scale_wide(uint32_t factor, uint8_t gain) {
   uint32_t prod = (uint32_t)((int32_t)factor * (int32_t)(int8_t)gain);
-  return (uint8_t)(prod / 0x7Fu);
+  return prod / 0x7Fu;
 }
 
-void fifa96_mixer_pan_gains(uint8_t pan, uint8_t gain,
-                            uint8_t *left, uint8_t *right) {
+void fifa96_mixer_pan_gains_wide(uint8_t pan, uint8_t gain,
+                                 uint32_t *left, uint32_t *right) {
   if (!left || !right) return;
   /* 0xA663A MOVZX EAX,[ESI+0x27]; 0xA663E..0xA664A mirror > 0x7F. */
   uint32_t p = pan > 0x7F ? (uint32_t)(0xFF - pan) : pan;
@@ -327,8 +329,22 @@ void fifa96_mixer_pan_gains(uint8_t pan, uint8_t gain,
     lf = ((0x7F - p) * 0x7E) / 0x3E;
     rf = 0x7F;
   }
-  *left = pan_scale(lf, gain);
-  *right = pan_scale(rf, gain);
+  uint32_t ql = pan_scale_wide(lf, gain);
+  uint32_t qr = pan_scale_wide(rf, gain);
+  /* 0xA66A1 SHL EAX,0x10 / 0xA66A4 OR EAX,EBX; consumer 0xA6601 SHR EDI,0x10
+   * and 0xA6605 AND ESI,0x7F. packed = (qr<<16)|ql, so the reader sees
+   * L = ql & 0x7F and R = (packed >> 16) = qr's low 16 | ql's bits 16..31. */
+  uint32_t packed = ((qr << 16) | ql);
+  *left = packed & 0x7Fu;
+  *right = (packed >> 16) & 0xFFFFu;
+}
+
+void fifa96_mixer_pan_gains(uint8_t pan, uint8_t gain,
+                            uint8_t *left, uint8_t *right) {
+  uint32_t l = 0, r = 0;
+  fifa96_mixer_pan_gains_wide(pan, gain, &l, &r);
+  if (left) *left = (uint8_t)l;
+  if (right) *right = (uint8_t)r;
 }
 
 int fifa96_mixer_set_pan(struct fifa96_mixer *m, int voice, uint8_t pan) {
@@ -336,6 +352,6 @@ int fifa96_mixer_set_pan(struct fifa96_mixer *m, int voice, uint8_t pan) {
     return -(int)FIFA96_ERR_TRUNCATED;
   struct fifa96_mixer_voice *ch = &m->voices[voice];
   if (!ch->active) return -(int)FIFA96_ERR_TRUNCATED;
-  fifa96_mixer_pan_gains(pan, ch->volume, &ch->gain_l, &ch->gain_r);
+  fifa96_mixer_pan_gains_wide(pan, ch->volume, &ch->gain_l, &ch->gain_r);
   return FIFA96_OK;
 }

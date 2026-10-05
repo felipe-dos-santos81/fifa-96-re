@@ -319,10 +319,12 @@ static void test_loop_window_bounds(void) {
 }
 
 static void test_rate_step(void) {
-  /* FU-46 (corrects FU-37 §A.5): v = (rate*ratio)>>CL (x86 SHRD, CL 5-bit);
-   * step_int = (v/out_rate) & 0xFF; frac = ((rem<<24)/out_rate)<<8 (the 8.24
-   * fraction scaled into the 32.32 low word, low 8 bits always zero). The
-   * FU-38 literals below are re-pinned for the 24-bit intermediate. */
+  /* FU-48 §3 corrects FU-46 §1.3's tail generalization: v = (rate*ratio)>>CL
+   * (x86 SHRD, CL 5-bit); step_int = (v/out_rate) & 0xFF; frac =
+   * ((rem<<24)/out_rate)<<8 (the 8.24 fraction scaled into the 32.32 low
+   * word, low 8 bits always zero). The original's second DIV faults (#DE)
+   * once the unmasked first quotient is >= 256, so 65535/100 (q=655) is no
+   * longer a fabricated 615683561728 but TRUNCATED (FU-48 §3). */
   static const struct {
     uint32_t rate, out_rate, ratio, shift;
     uint64_t want;
@@ -330,7 +332,6 @@ static void test_rate_step(void) {
       {16000, 22050, 0x10000, 16, 3116529408ull},   /* table[0] unity */
       {48000, 22050, 0x10000, 16, 9349588480ull},   /* integer part 2 */
       {16000, 22050, 0x10C1B, 16, 3263785472ull},   /* observed table[80] */
-      {65535, 100, 0x10000, 16, 615683561728ull},   /* step_int 655 masked to 143 */
       {22050, 22050, 0x10000, 16, 1ull << 32},      /* unity */
       {0, 22050, 0x10000, 16, 0},                   /* zero rate -> zero step */
   };
@@ -341,6 +342,8 @@ static void test_rate_step(void) {
     assert(st == cases[i].want);
   }
   uint64_t st = 0;
+  assert(fifa96_mixer_step_from_rate(65535, 100, 0x10000, 16, &st) ==
+         -(int)FIFA96_ERR_TRUNCATED);
   assert(fifa96_mixer_step_from_rate(16000, 22050, 0x10000, 16, NULL) ==
          -(int)FIFA96_ERR_TRUNCATED);
   assert(fifa96_mixer_step_from_rate(16000, 0, 0x10000, 16, &st) ==
@@ -370,8 +373,11 @@ static void test_start_stop_errors(void) {
          -(int)FIFA96_ERR_TRUNCATED);
   assert(fifa96_mixer_start(&m, 16, &info, buf, sizeof buf, 0x7F, 1) ==
          -(int)FIFA96_ERR_TRUNCATED);
-  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 0x80, 1) ==
-         -(int)FIFA96_ERR_TRUNCATED);
+  /* FU-48 §4: volume is the raw record+0x26 gain byte 0..0xFF (the original
+   * has no clamp), so 0x80 is accepted; the signed-negative gain is applied
+   * by set_pan. */
+  assert(fifa96_mixer_start(&m, 3, &info, buf, sizeof buf, 0x80, 1) == 0);
+  fifa96_mixer_stop(&m, 3);
   /* info says 16 data bytes; a payload that stops at the header is malformed. */
   assert(fifa96_mixer_start(&m, 3, &info, buf, 0x20, 0x7F, 1) ==
          -(int)FIFA96_ERR_TRUNCATED);

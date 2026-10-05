@@ -139,24 +139,27 @@ static int sfx_desc_pan(const uint8_t *d, int32_t caller_pan,
 }
 
 /* record+0x26 (FUN_000b9fdd @ 0xB9FDD): (s8)volume * (s8)caller *
- * (s8)master / 0x3F01, the EACSNDF combined gain the mixer reads. The port
- * keeps the 0..0x7F mixer scale. */
+ * (s8)master, CDQ; IDIV 0x3F01, `MOV [EBX+0x26],AL` (0xBA007). No clamp: a
+ * negative product stores the low byte (0x80..0xFF), which is the negative
+ * gain byte FUN_000a662c MOVSXes (FU-48 §4). Retail 0..0x7F operands keep
+ * the quotient in 0..0x7F. */
 static uint8_t sfx_gain(uint8_t volume, uint8_t caller, uint8_t master) {
   int32_t g = ((int32_t)(int8_t)volume * (int32_t)(int8_t)caller *
                (int32_t)(int8_t)master) / 0x3F01;
-  if (g > 0x7F) g = 0x7F;
-  if (g < 0) g = 0;
   return (uint8_t)g;
 }
 
 /* FUN_000a6717 @ 0xA6717: split a caller pan/volume into the two voices'
- * volumes and the pan both voices use (local<<16 | left<<8 | right). The
+ * volumes and the pan both voices use. The return is
+ * local<<16 | left<<8 | right (0xA67E0..0xA67E8) and FUN_000a7728 unpacks
+ * eax&0xFF for id+1 and (eax>>8)&0xFF for id with AND 0xFF (0xA777C/0xA7782/
+ * 0xA7796), so each split volume is a raw byte, not a 0..0x7F value. The
  * table is DAT_000148e0 (image 0x1148E0); the invalid-pan branch reads ESI
  * left by the caller, which FUN_000a7728 leaves as the id (0xA772E ->
- * 0xA67B0), so `id` seeds its table lookup. Split volumes are capped at
- * 0x7F: the original packs them as bytes and the >0x7F case (only the
- * invalid-pan branch with id < 5) then reads them back signed, an
- * unexercised static-only artifact. */
+ * 0xA67B0), so `id` seeds its table lookup. id < 5 with the default pan -1
+ * scales left by table[id]/100 and can exceed 0x7F (id 0, volume 0x7F ->
+ * 150*127/100 = 190 = 0xBE): the arm stores the byte and FUN_000b9fdd
+ * MOVSXes it, the signed read-back FU-48 §2 ports. */
 static void sfx_split(int32_t pan, uint8_t volume, uint32_t id,
                       uint8_t *pan_out, uint8_t *left, uint8_t *right) {
   static const uint32_t table[5] = {150, 140, 130, 120, 110};
@@ -181,9 +184,11 @@ static void sfx_split(int32_t pan, uint8_t volume, uint32_t id,
     l = table[esi] * l / 100;
     r = table[esi] * r / 100;
   }
+  /* The original packs each 32-bit value with SHL 8/16 + OR; the callers'
+   * AND 0xFF keeps the low byte (FU-48 §2). */
   *pan_out = (uint8_t)local;
-  *left = (uint8_t)(l > 0x7F ? 0x7F : l);
-  *right = (uint8_t)(r > 0x7F ? 0x7F : r);
+  *left = (uint8_t)l;
+  *right = (uint8_t)r;
 }
 
 struct sfx_resolved {
