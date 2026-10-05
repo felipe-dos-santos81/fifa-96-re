@@ -84,6 +84,12 @@ add_executable(test_blit tests/test_blit.c)
 target_link_libraries(test_blit PRIVATE fifa96_blit fifa96_file)
 add_test(NAME test_blit COMMAND test_blit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_vga src/fifa96_loader/fifa96_vga.c)
+target_link_libraries(fifa96_vga PRIVATE fifa96_blit)
+add_executable(test_vga tests/test_vga.c)
+target_link_libraries(test_vga PRIVATE fifa96_vga fifa96_blit)
+add_test(NAME test_vga COMMAND test_vga WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)
