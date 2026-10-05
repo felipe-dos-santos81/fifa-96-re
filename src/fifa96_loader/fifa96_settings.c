@@ -65,3 +65,37 @@ int fifa96_settings_get(const struct fifa96_settings *settings,
   *out = settings->value[setting];
   return FIFA96_OK;
 }
+
+const int32_t fifa96_match_config_half_lengths
+    [FIFA96_MATCH_CONFIG_HALF_LENGTH_COUNT] = {2, 4, 6, 8, 10, 20, 45, 0};
+
+int fifa96_settings_handoff(const struct fifa96_settings *settings,
+                            uint32_t match_type,
+                            struct fifa96_match_config *config) {
+  if (!settings || !config) return -(int)FIFA96_ERR_TRUNCATED;
+  int32_t half_index = settings->value[0x0E];
+  if (half_index < 0 ||
+      (uint32_t)half_index >= FIFA96_MATCH_CONFIG_HALF_LENGTH_COUNT)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  int competition = match_type == 4u;
+  config->field_4c2f6 = settings->value[0x09];
+  config->field_4c326 = settings->value[0x0F];
+  config->field_4c2e6 = settings->value[0x03];
+  config->field_4c30a = competition ? 0 : settings->value[0x0B];
+  config->field_4c306 = competition ? 0 : settings->value[0x0A];
+  config->field_4c2f2 = competition ? 0 : settings->value[0x10];
+  config->field_4c312 = settings->value[0x02];
+  config->field_4c316 = competition ? 1 : settings->value[0x06];
+  config->clock_halt = competition ? 1 : settings->value[0x0D];
+  config->flag_4c2ee = (match_type == 0u || match_type == 3u) ? 0 : 1;
+  config->zero_4c2fe = 0;
+  config->zero_4c30e = 0;
+  config->zero_4c31a = 0;
+  config->zero_4c31e = 0;
+  int32_t half = competition ? 1
+                             : fifa96_match_config_half_lengths[half_index];
+  config->half_length_minutes = half;
+  config->period_length = half * 0x3C;
+  config->extra_length = half * 0x14;
+  return FIFA96_OK;
+}

@@ -214,6 +214,10 @@ add_executable(test_settings tests/test_settings.c)
 target_link_libraries(test_settings PRIVATE fifa96_settings)
 add_test(NAME test_settings COMMAND test_settings WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(test_settings_handoff tests/test_settings_handoff.c)
+target_link_libraries(test_settings_handoff PRIVATE fifa96_settings)
+add_test(NAME test_settings_handoff COMMAND test_settings_handoff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_voice src/fifa96_loader/fifa96_voice.c)
 target_link_libraries(fifa96_voice PRIVATE fifa96_mixer)
 add_executable(test_voice_control tests/test_voice_control.c)
