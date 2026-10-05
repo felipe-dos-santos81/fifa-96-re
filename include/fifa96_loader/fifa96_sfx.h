@@ -127,6 +127,35 @@ int fifa96_sfx_arm_alloc(struct fifa96_mixer *m,
                          const struct fifa96_sfx_opts *opts,
                          struct fifa96_sfx_voice out[2]);
 
+// The runtime id table DAT_00061c14 (FU-51 §4): 128 slots indexed by global
+// SFX id, each either NULL (id absent) or the bank that registered it. The
+// original table holds the relocated 0x48-byte descriptor pointer per id
+// (FUN_000a75aa 0xA7622) and the play lookup reads DAT_00061c14[id]; the
+// second voice's descriptor is the *next slot* ([0x61C18 + id*4] =
+// table[id+1], 0xA77BA), which may come from a different bank.
+struct fifa96_sfx_id_table {
+  const struct fifa96_bnk_info *bank[FIFA96_BNK_IDS];
+};
+
+// FUN_000a7728 @ 0xA7728: play a global SFX id through the id table.
+//   * id outside 0..0x7F, a NULL slot, or a slot whose bank lacks the id
+//     returns -(FIFA96_ERR_NOT_FOUND) (original -0x13, 0xA7744/0xA775D).
+//   * descriptor +0x1C bit 0 clear: one voice, exactly the
+//     fifa96_sfx_arm_alloc chain (allocator -> EACS tag -> gate -> resolve),
+//     returning the voice index.
+//   * bit 0 set: FUN_000a6717 splits pan/volume; id is armed first, then the
+//     table[id+1] descriptor is required (0xA77B7..0xA77C5). A NULL/missing
+//     id+1 returns -(FIFA96_ERR_NOT_FOUND) with the first voice left armed
+//     (the original has no cleanup there); a second-arm failure stops the
+//     first voice (the FUN_000a6cdc cleanup, 0xA77E2) and returns the arm
+//     error. Success returns (voice2 << 16) | voice1 (0xA77EF).
+// opts NULL = the FUN_000a76ea wrapper defaults; the same validation as
+// fifa96_sfx_arm_alloc applies. out may be NULL.
+int fifa96_sfx_play_id(struct fifa96_mixer *m,
+                       const struct fifa96_sfx_id_table *ids, int32_t id,
+                       const struct fifa96_sfx_opts *opts,
+                       struct fifa96_sfx_voice out[2]);
+
 // FUN_000cbc4c @ 0xCBC4C (FU-47 §2): a six-word 32-bit generator at object-4
 // 0x12E68..0x12E7F (image 0x112E68). Word order is address order: w[0] =
 // [0x12E68] is the word returned each step (SHR EAX,0x10 by the arm), w[5] =

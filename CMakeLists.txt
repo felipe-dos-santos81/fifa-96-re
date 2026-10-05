@@ -155,6 +155,10 @@ add_executable(test_voice_control tests/test_voice_control.c)
 target_link_libraries(test_voice_control PRIVATE fifa96_voice fifa96_mixer fifa96_eacs fifa96_file)
 add_test(NAME test_voice_control COMMAND test_voice_control WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(test_sfx_play_id tests/test_sfx_play_id.c)
+target_link_libraries(test_sfx_play_id PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer fifa96_file)
+add_test(NAME test_sfx_play_id COMMAND test_sfx_play_id WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)

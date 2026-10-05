@@ -267,6 +267,32 @@ static int sfx_start_one(struct fifa96_mixer *m, int voice,
   return voice;
 }
 
+/* FUN_000a780e one-shot with the FUN_000a62fa allocator: allocate from the
+ * descriptor's +0x00 mask and +0x14 priority (0xA781F..0xA7825), then resolve
+ * and start on the chosen voice, storing the priority after the start
+ * (0xA788A). Returns the voice index or a negated fifa96_err_t. */
+static int sfx_arm_alloc_one(struct fifa96_mixer *m,
+                             const struct fifa96_bnk_info *bank, uint32_t id,
+                             int32_t caller_pan, uint8_t caller_volume,
+                             const struct fifa96_sfx_opts *opts,
+                             struct fifa96_sfx_voice *out) {
+  struct fifa96_bnk_entry e;
+  fifa96_err_t erc = fifa96_bnk_entry(bank, id, &e);
+  if (erc != FIFA96_OK) return -(int)erc;
+  const uint8_t *d = bank->src + e.desc_off;
+  int v = fifa96_mixer_alloc_voice(m, sfx_u32le(d), d[0x14]);
+  if (v < 0) return -(int)FIFA96_ERR_NO_VOICE;
+  struct fifa96_eacs_info ei;
+  struct sfx_resolved p;
+  int rc = sfx_resolve(m, bank, id, caller_pan, caller_volume, opts, &e, &ei,
+                       &p);
+  if (rc != FIFA96_OK) return rc;
+  rc = sfx_start_one(m, v, bank, &e, &ei, &p, out);
+  if (rc < 0) return rc;
+  (void)fifa96_mixer_set_priority(m, v, d[0x14]);
+  return v;
+}
+
 int fifa96_sfx_arm(struct fifa96_mixer *m, int voice,
                    const struct fifa96_bnk_info *bank, uint32_t id,
                    const struct fifa96_sfx_opts *opts,
@@ -350,16 +376,9 @@ int fifa96_sfx_arm_alloc(struct fifa96_mixer *m,
   int v0 = fifa96_mixer_alloc_voice(m, sfx_u32le(d0), d0[0x14]);
   if (v0 < 0) return -(int)FIFA96_ERR_NO_VOICE;
 
-  if ((d0[0x1C] & 1u) == 0) {
-    struct fifa96_eacs_info ei;
-    struct sfx_resolved p;
-    int rc = sfx_resolve(m, bank, id, opts->pan, opts->volume, opts, &e0, &ei, &p);
-    if (rc != FIFA96_OK) return rc;
-    rc = sfx_start_one(m, v0, bank, &e0, &ei, &p, out ? &out[0] : NULL);
-    if (rc < 0) return rc;
-    (void)fifa96_mixer_set_priority(m, v0, d0[0x14]);
-    return v0;
-  }
+  if ((d0[0x1C] & 1u) == 0)
+    return sfx_arm_alloc_one(m, bank, id, opts->pan, opts->volume, opts,
+                             out ? &out[0] : NULL);
 
   /* Two-voice: FUN_000a7728 arms id then id+1, each allocating from its own
    * descriptor (0xA77A3/0xA77D6). Resolve both before starting so an error
@@ -388,5 +407,54 @@ int fifa96_sfx_arm_alloc(struct fifa96_mixer *m,
     return rc;
   }
   (void)fifa96_mixer_set_priority(m, v1, d1[0x14]);
+  return (v1 << 16) | v0;
+}
+
+int fifa96_sfx_play_id(struct fifa96_mixer *m,
+                       const struct fifa96_sfx_id_table *ids, int32_t id,
+                       const struct fifa96_sfx_opts *opts,
+                       struct fifa96_sfx_voice out[2]) {
+  static const struct fifa96_sfx_opts defaults = {-1, 0x7F, 0x7F, NULL, NULL};
+  if (!opts) opts = &defaults;
+  if (!m || !ids) return -(int)FIFA96_ERR_TRUNCATED;
+  /* 0xA7738..0xA7742: signed id bound, original -0x13. */
+  if (id < 0 || id >= (int32_t)FIFA96_BNK_IDS)
+    return -(int)FIFA96_ERR_NOT_FOUND;
+  /* 0xA774D..0xA775D: DAT_00061c14[id] == 0 -> -0x13. */
+  const struct fifa96_bnk_info *bank0 = ids->bank[id];
+  if (!bank0) return -(int)FIFA96_ERR_NOT_FOUND;
+  if (opts->volume > FIFA96_SFX_VOLUME_MAX ||
+      opts->master > FIFA96_SFX_VOLUME_MAX)
+    return -(int)FIFA96_ERR_TRUNCATED;
+  if (opts->pan != -1 && (opts->pan < 0 || opts->pan > 0xFF))
+    return -(int)FIFA96_ERR_TRUNCATED;
+
+  struct fifa96_bnk_entry e0;
+  if (fifa96_bnk_entry(bank0, (uint32_t)id, &e0) != FIFA96_OK)
+    return -(int)FIFA96_ERR_NOT_FOUND;
+  if ((bank0->src[e0.desc_off + 0x1C] & 1u) == 0)
+    return sfx_arm_alloc_one(m, bank0, (uint32_t)id, opts->pan, opts->volume,
+                             opts, out ? &out[0] : NULL);
+
+  /* 0xA775F..0xA77F4: FUN_000a6717 split, arm id, require the next table
+   * slot's descriptor ([0x61C18 + id*4] = table[id+1], 0xA77BA; possibly a
+   * different bank), arm id+1. The original returns -0x13 without cleanup
+   * when id+1 is absent (0xA77C4), so the first voice stays armed; a second
+   * arm failure runs FUN_000a6cdc(id) (0xA77E2). */
+  uint8_t span, lv, rv;
+  sfx_split(opts->pan, opts->volume, (uint32_t)id, &span, &lv, &rv);
+  int v0 = sfx_arm_alloc_one(m, bank0, (uint32_t)id, span, lv, opts,
+                             out ? &out[0] : NULL);
+  if (v0 < 0) return v0;
+  if (id + 1 >= (int32_t)FIFA96_BNK_IDS)
+    return -(int)FIFA96_ERR_NOT_FOUND;
+  const struct fifa96_bnk_info *bank1 = ids->bank[id + 1];
+  if (!bank1) return -(int)FIFA96_ERR_NOT_FOUND;
+  int v1 = sfx_arm_alloc_one(m, bank1, (uint32_t)id + 1, span, rv, opts,
+                             out ? &out[1] : NULL);
+  if (v1 < 0) {
+    fifa96_mixer_stop(m, v0);
+    return v1;
+  }
   return (v1 << 16) | v0;
 }
