@@ -15,5 +15,6 @@ typedef enum {
   FIFA96_ERR_VOICE_VOLUME = 14, /* FU-50: volume outside 0..0xFF (original -0xE) */
   FIFA96_ERR_VOICE_SLIDE = 1,   /* FU-50: slide state != 1 (original -1; same value as NOT_FOUND) */
   FIFA96_ERR_FULL = 15,         /* FU-59: tick table has no free slot (original "addtimer - LIST FULL") */
-  FIFA96_ERR_INVALID = 16       /* FU-59: NULL table/function argument */
+  FIFA96_ERR_INVALID = 16,      /* FU-59: NULL table/function argument */
+  FIFA96_ERR_STATE = 17         /* FU-64: lifecycle begin/end called in the wrong state */
 } fifa96_err_t;
