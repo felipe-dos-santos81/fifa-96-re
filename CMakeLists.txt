@@ -204,6 +204,12 @@ add_executable(test_entity_update tests/test_entity_update.c)
 target_link_libraries(test_entity_update PRIVATE fifa96_entity_update)
 add_test(NAME test_entity_update COMMAND test_entity_update WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_control src/fifa96_loader/fifa96_control.c)
+target_link_libraries(fifa96_control PRIVATE fifa96_entity_update)
+add_executable(test_control tests/test_control.c)
+target_link_libraries(test_control PRIVATE fifa96_control fifa96_entity_update)
+add_test(NAME test_control COMMAND test_control WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_input src/fifa96_loader/fifa96_input.c)
 add_executable(test_input tests/test_input.c)
 target_link_libraries(test_input PRIVATE fifa96_input)
