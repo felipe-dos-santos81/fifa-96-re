@@ -79,6 +79,11 @@ add_executable(test_vgt_player tests/test_vgt_player.c)
 target_link_libraries(test_vgt_player PRIVATE fifa96_vgt_player fifa96_kvgt fifa96_file)
 add_test(NAME test_vgt_player COMMAND test_vgt_player WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_blit src/fifa96_loader/fifa96_blit.c)
+add_executable(test_blit tests/test_blit.c)
+target_link_libraries(test_blit PRIVATE fifa96_blit fifa96_file)
+add_test(NAME test_blit COMMAND test_blit WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_envelope src/fifa96_loader/fifa96_envelope.c)
 target_link_libraries(fifa96_envelope PRIVATE fifa96_file)
 add_executable(test_envelope tests/test_envelope.c)
