@@ -120,11 +120,11 @@ add_executable(test_eacs_delta tests/test_eacs_delta.c)
 target_link_libraries(test_eacs_delta PRIVATE fifa96_eacs fifa96_file)
 add_test(NAME test_eacs_delta COMMAND test_eacs_delta WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_pacing src/fifa96_loader/fifa96_pacing.c)
 add_library(fifa96_mixer src/fifa96_loader/fifa96_mixer.c
-                          src/fifa96_loader/fifa96_mixer_tables.c
-                          src/fifa96_loader/fifa96_pacing.c)
+                          src/fifa96_loader/fifa96_mixer_tables.c)
 add_executable(test_mixer tests/test_mixer.c)
-target_link_libraries(test_mixer PRIVATE fifa96_mixer fifa96_eacs fifa96_file)
+target_link_libraries(test_mixer PRIVATE fifa96_mixer fifa96_pacing fifa96_eacs fifa96_file)
 add_test(NAME test_mixer COMMAND test_mixer WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_mixer_calibration tests/test_mixer_calibration.c)
@@ -153,8 +153,14 @@ target_link_libraries(test_sfx_state PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs f
 add_test(NAME test_sfx_state COMMAND test_sfx_state WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_audio_edge tests/test_audio_edge.c)
-target_link_libraries(test_audio_edge PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer fifa96_file)
+target_link_libraries(test_audio_edge PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer fifa96_pacing fifa96_file)
 add_test(NAME test_audio_edge COMMAND test_audio_edge WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_library(fifa96_tick src/fifa96_loader/fifa96_tick.c)
+target_link_libraries(fifa96_tick PRIVATE fifa96_pacing)
+add_executable(test_tick tests/test_tick.c)
+target_link_libraries(test_tick PRIVATE fifa96_tick fifa96_pacing)
+add_test(NAME test_tick COMMAND test_tick WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_sfx_event src/fifa96_loader/fifa96_sfx_event.c)
 add_executable(test_sfx_event tests/test_sfx_event.c)

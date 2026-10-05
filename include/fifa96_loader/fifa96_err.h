@@ -13,5 +13,7 @@ typedef enum {
   FIFA96_ERR_VOICE_PAN = 12,    /* FU-50: pan outside 0..0x7F (original -0xC) */
   FIFA96_ERR_VOICE_STATE = 13,  /* FU-50: record state 0 (original -0xD) */
   FIFA96_ERR_VOICE_VOLUME = 14, /* FU-50: volume outside 0..0xFF (original -0xE) */
-  FIFA96_ERR_VOICE_SLIDE = 1    /* FU-50: slide state != 1 (original -1; same value as NOT_FOUND) */
+  FIFA96_ERR_VOICE_SLIDE = 1,   /* FU-50: slide state != 1 (original -1; same value as NOT_FOUND) */
+  FIFA96_ERR_FULL = 15,         /* FU-59: tick table has no free slot (original "addtimer - LIST FULL") */
+  FIFA96_ERR_INVALID = 16       /* FU-59: NULL table/function argument */
 } fifa96_err_t;
