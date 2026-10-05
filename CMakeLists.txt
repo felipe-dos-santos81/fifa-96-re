@@ -139,6 +139,16 @@ add_executable(test_audio_edge tests/test_audio_edge.c)
 target_link_libraries(test_audio_edge PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer fifa96_file)
 add_test(NAME test_audio_edge COMMAND test_audio_edge WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_sfx_event src/fifa96_loader/fifa96_sfx_event.c)
+add_executable(test_sfx_event tests/test_sfx_event.c)
+target_link_libraries(test_sfx_event PRIVATE fifa96_sfx_event)
+add_test(NAME test_sfx_event COMMAND test_sfx_event WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_library(fifa96_settings src/fifa96_loader/fifa96_settings.c)
+add_executable(test_settings tests/test_settings.c)
+target_link_libraries(test_settings PRIVATE fifa96_settings)
+add_test(NAME test_settings COMMAND test_settings WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)
