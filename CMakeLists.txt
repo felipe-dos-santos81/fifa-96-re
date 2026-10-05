@@ -189,6 +189,11 @@ add_executable(test_frontend tests/test_frontend.c)
 target_link_libraries(test_frontend PRIVATE fifa96_frontend)
 add_test(NAME test_frontend COMMAND test_frontend WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_match_display src/fifa96_loader/fifa96_match_display.c)
+add_executable(test_match_display tests/test_match_display.c)
+target_link_libraries(test_match_display PRIVATE fifa96_match_display)
+add_test(NAME test_match_display COMMAND test_match_display WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_event_queue src/fifa96_loader/fifa96_event_queue.c)
 add_executable(test_event_queue tests/test_event_queue.c)
 target_link_libraries(test_event_queue PRIVATE fifa96_event_queue)
