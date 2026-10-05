@@ -159,6 +159,11 @@ add_executable(test_sfx_play_id tests/test_sfx_play_id.c)
 target_link_libraries(test_sfx_play_id PRIVATE fifa96_sfx fifa96_bnk fifa96_eacs fifa96_mixer fifa96_file)
 add_test(NAME test_sfx_play_id COMMAND test_sfx_play_id WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_music src/fifa96_loader/fifa96_music.c)
+add_executable(test_music tests/test_music.c)
+target_link_libraries(test_music PRIVATE fifa96_music)
+add_test(NAME test_music COMMAND test_music WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
   add_test(NAME test_bind COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_bind.py)
