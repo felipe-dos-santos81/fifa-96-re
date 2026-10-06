@@ -6,10 +6,10 @@ SERVICE = fifa96_loader
 BUILD = build
 CMAKE = cmake
 CTEST = ctest
-FILE ?= tests/golden/fw1.qfs
+FILE ?=
 ARGS ?= --help
 
-.PHONY: help configure build test check run play clean rebuild tsr capture trace
+.PHONY: help configure build test check run clean rebuild tsr capture trace
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -33,11 +33,8 @@ check: test ## Exactly the gate set: configure + strict build + full suite
 
 # ── Run ────────────────────────────────────────────────────────────────────────
 
-run: build ## Build and run the port's container dumper (make run FILE=path, default fw1.qfs)
-	./$(BUILD)/fifa96_dump $(FILE)
-
-play: build ## Build and run the host runner (make play ARGS="video FILE --out build/play")
-	./$(BUILD)/fifa96_play $(ARGS)
+run: build ## Build and run the port on any input (make run FILE=game/FIFAPCCD96.iso; make run ARGS="--help")
+	@if [ -n "$(FILE)" ]; then ./$(BUILD)/fifa96_play auto "$(FILE)"; else ./$(BUILD)/fifa96_play $(ARGS); fi
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 

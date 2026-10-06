@@ -23,6 +23,15 @@ AUDIO_SHA = {
     "viv0": "55b8e1b0ea10cfd62db323519f94e8a1af548acd52dc5d62862dbb028b14f3e0",
     "bnk1": "5560690cd27562849ac26618043249cde153d522f3ff2b579f6585952c2272f1",
 }
+ISO_COUNTS = {
+    "video": 73,
+    "audio": 513,
+    "crd": 1,
+    "sprite": 10,
+}
+ISO_VIDEO0_SHA = "1f7d01c1fa2bda9593c04e974f95038fcc63103b2cb258bbd44109003d2aaa1f"
+ISO_AUDIO0_SHA = "4840a05a9d6c4c3a138d1b55b2e4c1315950c3c783b8ac83da8666663754e034"
+ISO_SPRITE0_SHA = "0732bf3b40ad9272153929b0e58c3eb1a2164c01d683ab8c0d033489fde9e7d9"
 
 
 def run(*args):
@@ -454,6 +463,123 @@ class TestSpriteIso(unittest.TestCase):
         w, h, hdr = ppm_info(blob)
         self.assertEqual(len(blob), hdr + w * h * 3)
         self.assertEqual(hashlib.sha256(blob).hexdigest(), m.group(9))
+
+
+class TestAutoContainer(unittest.TestCase):
+    def test_video_default_three_frames(self):
+        out = PLAY / "auto-video"
+        r = run("auto", str(GOLDEN / "vid_game.tgv"), "--class", "video", "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        frames = sorted(out.glob("video/*/frame-*.ppm"))
+        self.assertEqual([p.name for p in frames],
+                         ["frame-0000.ppm", "frame-0001.ppm", "frame-0002.ppm"])
+        self.assertEqual(len([x for x in r.stdout.splitlines() if x.startswith("frame")]), 3)
+
+    def test_video_max_frames(self):
+        out = PLAY / "auto-video-max"
+        r = run("auto", str(GOLDEN / "vid_game.tgv"), "--class", "video", "--max-frames", "1",
+                "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(sorted(p.name for p in out.glob("video/*/frame-*.ppm")),
+                         ["frame-0000.ppm"])
+
+    def test_eacs_writes_wav(self):
+        raw = (EACS / "bank-h.eacs").read_bytes()
+        rate = struct.unpack_from("<I", raw, 4)[0]
+        data_off = struct.unpack_from("<I", raw, 0x18)[0] or 0x20
+        out = PLAY / "auto-eacs"
+        r = run("auto", str(EACS / "bank-h.eacs"), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual((out / "audio/sample.wav").read_bytes(), wav(raw[data_off:], rate, 2))
+
+    def test_bnk_first_id(self):
+        out = PLAY / "auto-bnk"
+        r = run("auto", str(GOLDEN / "sfx_game.bnk"), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("id=1", r.stdout)
+        _, _, _, blob = wav_fields(out / "audio/sample.wav")
+        self.assertEqual(hashlib.sha256(blob).hexdigest(), AUDIO_SHA["bnk1"])
+
+    def test_bnk_entry_selects_id(self):
+        out = PLAY / "auto-bnk-id"
+        r = run("auto", str(GOLDEN / "sfx_game.bnk"), "--class", "audio", "--entry", "2",
+                "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("id=2", r.stdout)
+
+    def test_crd_summary(self):
+        r = run("auto", str(GOLDEN / "audio/crd-crd0.crd"), "--out", str(PLAY / "auto-crd"))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("auto crd", r.stdout)
+        self.assertIn("tracks=4", r.stdout)
+        self.assertIn("events=16", r.stdout)
+
+    def test_sprite_picks_first_decodable(self):
+        out = PLAY / "auto-art"
+        r = run("auto", str(GOLDEN / "gameart0.pvi"), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        blob = (out / "art/sprite.ppm").read_bytes()
+        line = [x for x in r.stdout.splitlines() if x.startswith("sprite:")][0]
+        self.assertEqual(hashlib.sha256(blob).hexdigest(), line.split("sha256=")[1])
+        ppm_info(blob)
+
+    def test_qfs_envelope_unwraps_to_sprite(self):
+        out = PLAY / "auto-qfs"
+        r = run("auto", str(GOLDEN / "fw1.qfs"), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("decoded kind=shpi", r.stdout)
+        ppm_info((out / "art/sprite.ppm").read_bytes())
+
+    def test_bare_file_is_auto(self):
+        out = PLAY / "auto-bare"
+        r = run(str(GOLDEN / "eacs/bank-h.eacs"), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertTrue((out / "audio/sample.wav").exists())
+
+    def test_list_writes_nothing(self):
+        out = PLAY / "auto-list"
+        r = run("auto", str(GOLDEN / "gameart0.pvi"), "--list", "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("kind=envelope", r.stdout)
+        self.assertIn("envelope:", r.stdout)
+        self.assertFalse(out.exists())
+
+
+@unittest.skipUnless(ISO.exists(), "game/FIFAPCCD96.iso not present")
+class TestAutoIso(unittest.TestCase):
+    def test_list_counts(self):
+        r = run("auto", str(ISO), "--list")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("iso9660 bytes=476033024 files=798", r.stdout)
+        for name, count in ISO_COUNTS.items():
+            self.assertIn("class %s files=%d" % (name, count), r.stdout)
+
+    def test_smoke_pass(self):
+        out = PLAY / "auto-iso"
+        r = run("auto", str(ISO), "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("auto video /VIDEO/VID_ALIE.TGV", r.stdout)
+        self.assertIn("auto audio bnk /SOUND/CHN_ARG0.BNK id=41", r.stdout)
+        self.assertIn("auto crd /SOUND/CRD_CRD0.CRD", r.stdout)
+        self.assertIn("auto audio viv /SOUND/PHR_1HF0.VIV", r.stdout)
+        self.assertIn("sprite: entries=60 entry=35 name=Npost.fsh", r.stdout)
+        frame = (out / "video/VID_ALIE/frame-0000.ppm").read_bytes()
+        self.assertEqual(hashlib.sha256(frame).hexdigest(), ISO_VIDEO0_SHA)
+        audio = (out / "audio/CHN_ARG0.wav").read_bytes()
+        self.assertEqual(hashlib.sha256(audio).hexdigest(), ISO_AUDIO0_SHA)
+        sprite = (out / "art/GAMEART0.ppm").read_bytes()
+        self.assertEqual(hashlib.sha256(sprite).hexdigest(), ISO_SPRITE0_SHA)
+        ppm_info(frame)
+        ppm_info(sprite)
+        wav_fields(out / "audio/CHN_ARG0.wav")
+
+    def test_class_video_modex(self):
+        out = PLAY / "auto-iso-modex"
+        r = run("auto", str(ISO), "--class", "video", "--max-frames", "1", "--modex",
+                "--out", str(out))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        blob = (out / "video/VID_ALIE/frame-0000.modex").read_bytes()
+        self.assertEqual(len(blob), 100 * 80 * 4)
 
 
 if __name__ == "__main__":

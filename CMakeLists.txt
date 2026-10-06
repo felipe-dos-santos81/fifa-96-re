@@ -11,6 +11,11 @@ target_link_libraries(test_file PRIVATE fifa96_file)
 add_test(NAME test_file COMMAND test_file WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_executable(test_load_order tests/test_load_order.c)
 add_test(NAME test_load_order COMMAND test_load_order WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_library(fifa96_iso9660 src/fifa96_loader/fifa96_iso9660.c)
+add_executable(test_iso9660 tests/test_iso9660.c src/fifa96_loader/fifa96_iso9660.c)
+target_compile_options(test_iso9660 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_iso9660 PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_iso9660 COMMAND test_iso9660 WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 add_library(fifa96_tables src/fifa96_loader/fifa96_tables.c)
 target_link_libraries(fifa96_tables PRIVATE fifa96_file)
 add_executable(test_tables tests/test_tables.c)
@@ -100,8 +105,10 @@ add_executable(test_script tests/test_script.c)
 target_link_libraries(test_script PRIVATE fifa96_script fifa96_file)
 add_test(NAME test_script COMMAND test_script WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_executable(fifa96_dump tools/fifa96_dump.c)
-target_link_libraries(fifa96_dump PRIVATE fifa96_envelope fifa96_qfs fifa96_pog fifa96_tgv fifa96_viv fifa96_file)
+add_executable(fifa96_dump tools/fifa96_dump.c tools/fifa96_detect.c)
+target_link_libraries(fifa96_dump PRIVATE fifa96_envelope fifa96_qfs fifa96_pog fifa96_tgv
+                                             fifa96_viv fifa96_bigf fifa96_bnk fifa96_crd
+                                             fifa96_eacs fifa96_file)
 
 add_library(fifa96_trace src/fifa96_loader/fifa96_trace.c)
 add_executable(test_trace tests/test_trace.c)
@@ -236,10 +243,12 @@ add_executable(test_outfield tests/test_outfield.c)
 target_link_libraries(test_outfield PRIVATE fifa96_outfield)
 add_test(NAME test_outfield COMMAND test_outfield WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
-add_executable(fifa96_play tools/fifa96_play.c)
+add_executable(fifa96_play tools/fifa96_play.c tools/fifa96_detect.c)
 target_link_libraries(fifa96_play PRIVATE fifa96_vgt_player fifa96_tgv_stream fifa96_kvgt
                                              fifa96_eacs fifa96_bnk fifa96_bigf fifa96_blit
-                                             fifa96_record fifa96_sprite fifa96_file)
+                                             fifa96_record fifa96_sprite fifa96_file
+                                             fifa96_crd fifa96_iso9660 fifa96_envelope
+                                             fifa96_qfs fifa96_pog fifa96_tgv fifa96_viv)
 
 add_library(fifa96_action_handlers src/fifa96_loader/fifa96_action_handlers.c)
 target_link_libraries(fifa96_action_handlers PRIVATE fifa96_entity_update)

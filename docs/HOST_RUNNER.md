@@ -1,16 +1,59 @@
-# Host runner (`make play`)
+# Host runner (`make run`)
 
-`tools/fifa96_play.c` is a host executable that feeds real assets through the
-ported modules and writes standard outputs. It adds no dependencies; all
-decoding goes through the `fifa96_*` libraries.
+`tools/fifa96_play.c` is the single host executable behind `make run`. It has
+four modes — explicit `video`, `audio`, `sprite`, and `auto`, where `auto` is
+also the default whenever the first argument is a bare `FILE` path. It adds no
+dependencies; all decoding goes through the `fifa96_*` libraries.
 
 ```bash
 make build
 ./build/fifa96_play --help
-make play ARGS="--help"                 # equivalent
+make run ARGS="--help"                  # equivalent
+make run FILE=game/FIFAPCCD96.iso       # flagship: auto mode on the real CD image
 ```
 
-Outputs are never written outside `build/` or the path passed to `--out`.
+`make run FILE=PATH` runs `fifa96_play auto PATH`; `make run ARGS="..."` runs
+the tool directly (use `ARGS` when you also need flags: `make run ARGS="auto
+game/FIFAPCCD96.iso --list"`). Outputs are never written outside `build/` or
+the path passed to `--out`.
+
+## Auto: sniff any input (`auto FILE`, the `make run` default)
+
+```bash
+fifa96_play auto FILE [--list] [--class video|audio|sprite|crd] [--max-frames N]
+               [--entry N | --name NAME] [--modex] [--all] [--out DIR]
+```
+
+`auto` sniffs the input and does the useful thing without a mode flag:
+
+* **ISO9660 image** (PVD `CD001` at sector 16) — walks the directory tree with
+  `fifa96_iso9660` and prints a deterministic class table
+  (`video` = `/VIDEO/*.TGV`, `audio` = `/SOUND/*.BNK` + `/SOUND/*.VIV`,
+  `crd` = `/SOUND/*.CRD`, `sprite` = `/ART/*.PVI`), then runs a **bounded smoke
+  pass**: it decodes the first asset of each class through the ported pipeline
+  and writes outputs under `--out` (default `build/run/`):
+  * video → `OUT/video/<name>/frame-NNNN.ppm` for the first `--max-frames`
+    frames (default 3); `--modex` writes `.modex` planes instead;
+  * audio → the first `.BNK`'s id list plus its first entry (or `--entry ID`)
+    as `OUT/audio/<name>.wav`; the first `.VIV` is listed (records + first
+    names/sizes) and, with `--name NAME`, that record is decoded to WAV;
+  * crd → `fifa96_crd` summary (version/tracks/events) of `/SOUND/CRD_*.CRD`;
+  * sprite → the first `/ART/*.PVI` BIGF entry listing and the first decodable
+    SHPI frame as `OUT/art/<name>.ppm`.
+  Every line of the summary table is stable: source path, size, decoded
+  geometry/format and output paths plus sha256 values. `--class` restricts the
+  pass; `--list` prints only the tree and class counts; `--all` widens the pass
+  but caps at 8 assets per class and says so on stdout.
+* **container file** — detects `0xFB10` envelope, QFS, POG, `kVGT` TGV,
+  VIV/BIGF/BNK/CRD/EACS/PVI with the shared `tools/fifa96_detect.c` sniff,
+  prints the recognized headers, and decodes where the port can: `.TGV` →
+  frames, `.BNK` → list + first-entry WAV, `.PVI` → sprite PPM, `.CRD` →
+  summary, raw `EACS` → WAV; `0xFB10` records are unwrapped up to four codec
+  layers before dispatch (e.g. `fw1.qfs` → SHPI → PPM). Unknown data prints
+  the first 16 bytes.
+
+The smoke pass is deterministic: the class table and the first-asset choice
+are path-sorted, so the same input always yields the same outputs and hashes.
 
 ## Video: raw `.TGV` chunk stream -> PPM / Mode-X
 
@@ -130,5 +173,10 @@ error paths exactly; the committed `tests/golden/gameart0.pvi` covers a real
 raw `.fsh` bank and a nested `.qfs` record, and when
 `game/FIFAPCCD96.iso` is present the suite extracts `/ART/PLAYART.PVI` and runs
 the full 3-stage chain (`jump.qfs`, pinned 30 frames) plus the `xstandd.fsh`
-geometry pin (20×49). Run it directly with `python3 tests/test_play.py` (the
+geometry pin (20×49). `TestAutoContainer` exercises `auto` over the committed
+fixtures (TGV/EACS/BNK/CRD/PVI/QFS), and the CTest `test_iso9660` target
+unit-tests the ISO9660 reader on a synthetic in-memory image under
+ASan/UBSan. When `game/FIFAPCCD96.iso` is present, `TestAutoIso` pins the ISO
+class counts and the bounded smoke-pass outputs (video frame, BNK WAV, sprite
+PPM sha256 values). Run it directly with `python3 tests/test_play.py` (the
 tool must be built).

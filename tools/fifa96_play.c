@@ -10,13 +10,20 @@
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_blit.h"
 #include "fifa96_loader/fifa96_bnk.h"
+#include "fifa96_loader/fifa96_crd.h"
 #include "fifa96_loader/fifa96_eacs.h"
+#include "fifa96_loader/fifa96_envelope.h"
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_file.h"
+#include "fifa96_loader/fifa96_iso9660.h"
+#include "fifa96_loader/fifa96_pog.h"
+#include "fifa96_loader/fifa96_qfs.h"
 #include "fifa96_loader/fifa96_record.h"
 #include "fifa96_loader/fifa96_sprite.h"
 #include "fifa96_loader/fifa96_tgv_stream.h"
 #include "fifa96_loader/fifa96_vgt_player.h"
+#include "fifa96_loader/fifa96_viv.h"
+#include "fifa96_detect.h"
 
 #define PLAY_MAX_PIXELS ((uint64_t)4096u * 4096u)
 #define PLAY_DEFAULT_DIR "build/play"
@@ -170,6 +177,8 @@ static void usage(FILE *fp) {
         "  audio --viv FILE (--name NAME | --index N) [--out PATH] [--print-summary]\n"
         "  sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH] [--palette FILE]\n"
         "              [--print-summary]\n"
+        "  auto FILE [--list] [--class video|audio|sprite|crd] [--max-frames N]\n"
+        "            [--entry N | --name NAME] [--modex] [--all] [--out DIR] [--print-summary]\n"
         "\n"
         "video decodes a raw .TGV chunk stream and writes each selected frame as a P6 PPM;\n"
         "--modex writes the raw 4-plane Mode-X image instead. --out is a directory for a\n"
@@ -369,6 +378,10 @@ static int emit_video_frame(const fifa96_vgt_frame *f, uint32_t index, const cha
   return rc;
 }
 
+static int decode_video(const char *label, const uint8_t *data, size_t n, const char *out,
+                        int modex, int have_max, uint32_t max_frames, int have_frame,
+                        uint32_t frame, int summary);
+
 static int cmd_video(int argc, char **argv) {
   const char *in = NULL;
   const char *out = NULL;
@@ -413,11 +426,17 @@ static int cmd_video(int argc, char **argv) {
     errmsg("cannot read '%s' (%d)", in, (int)fe);
     return 1;
   }
-  uint32_t cap = 0;
-  int sr = scan_canvas(data, n, &cap);
+  int rc = decode_video(in, data, n, out, modex, have_max, max_frames, have_frame, frame, summary);
+  fifa96_file_free(data);
+  return rc;
+}
+
+static int decode_video(const char *label, const uint8_t *data, size_t n, const char *out,
+                        int modex, int have_max, uint32_t max_frames, int have_frame,
+                        uint32_t frame, int summary) {
+  uint32_t cap = 0;  int sr = scan_canvas(data, n, &cap);
   if (sr < 0) {
-    errmsg("malformed TGV stream '%s' (%d)", in, -sr);
-    fifa96_file_free(data);
+    errmsg("malformed TGV stream '%s' (%d)", label, -sr);
     return 1;
   }
   uint8_t *front = xmalloc(cap);
@@ -425,10 +444,9 @@ static int cmd_video(int argc, char **argv) {
   fifa96_vgt_player player;
   int r = fifa96_vgt_player_init(&player, 320, 240, front, cap, back, cap, NULL, NULL);
   if (r != FIFA96_OK) {
-    errmsg("player init for '%s' failed (%d)", in, -r);
+    errmsg("player init for '%s' failed (%d)", label, -r);
     free(front);
     free(back);
-    fifa96_file_free(data);
     return 1;
   }
   fifa96_vgt_player_feed(&player, data, n);
@@ -440,7 +458,7 @@ static int cmd_video(int argc, char **argv) {
     fifa96_vgt_frame f;
     r = fifa96_vgt_player_step(&player, &f);
     if (r < 0) {
-      errmsg("malformed TGV stream '%s' at frame %u (%d)", in, seen, -r);
+      errmsg("malformed TGV stream '%s' at frame %u (%d)", label, seen, -r);
       rc = 1;
       break;
     }
@@ -463,11 +481,10 @@ static int cmd_video(int argc, char **argv) {
     if (have_frame && !written)
       rc = (errmsg("frame %u not present (stream has %u frames)", frame, seen), 1);
     else if (!have_frame && written == 0)
-      rc = (errmsg("no frames decoded from '%s'", in), 1);
+      rc = (errmsg("no frames decoded from '%s'", label), 1);
   }
   free(front);
   free(back);
-  fifa96_file_free(data);
   return rc;
 }
 
@@ -622,6 +639,9 @@ static int write_wav(const char *path, const struct play_pcm *pcm, int summary) 
   return rc;
 }
 
+static int write_wav_from_info(const uint8_t *base, size_t base_len,
+                               const struct fifa96_eacs_info *info, const char *out, int summary);
+
 static int cmd_audio(int argc, char **argv) {
   const char *in = NULL;
   const char *bnk = NULL;
@@ -769,21 +789,23 @@ static int cmd_audio(int argc, char **argv) {
     base_len = n;
   }
 
+  int rc = write_wav_from_info(base, base_len, &info, out, summary);
+  fifa96_file_free(data);
+  return rc;
+}
+
+static int write_wav_from_info(const uint8_t *base, size_t base_len,
+                               const struct fifa96_eacs_info *info, const char *out, int summary) {
   struct play_pcm pcm;
-  if (decode_eacs(base, base_len, &info, &pcm) != 0) {
-    fifa96_file_free(data);
-    return 1;
-  }
+  if (decode_eacs(base, base_len, info, &pcm) != 0) return 1;
   const char *path = out ? out : PLAY_DEFAULT_DIR "/audio.wav";
   if (ensure_parent(path) != 0) {
     errmsg("cannot create parent directory of '%s'", path);
     free(pcm.samples);
-    fifa96_file_free(data);
     return 1;
   }
   int rc = write_wav(path, &pcm, summary);
   free(pcm.samples);
-  fifa96_file_free(data);
   return rc;
 }
 
@@ -818,6 +840,10 @@ static int sprite_leaf(const uint8_t *src, size_t n, uint8_t **owned, const uint
   free(buf);
   return -(int)FIFA96_ERR_UNSUPPORTED;
 }
+
+static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint32_t entry,
+                         const char *name, uint32_t frame, const char *palpath, const char *out,
+                         int summary);
 
 static int cmd_sprite(int argc, char **argv) {
   const char *in = NULL;
@@ -866,15 +892,21 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("cannot read '%s' (%d)", in, (int)fe);
     return 1;
   }
+  int rc = decode_sprite(in, data, n, entry, name, frame, palpath, out, summary);
+  fifa96_file_free(data);
+  return rc;
+}
 
+static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint32_t entry,
+                         const char *name, uint32_t frame, const char *palpath, const char *out,
+                         int summary) {
   uint8_t *outer_owned = NULL;
   const uint8_t *leaf = NULL;
   size_t leaf_len = 0;
   int r = sprite_leaf(data, n, &outer_owned, &leaf, &leaf_len);
   if (r != 0) {
-    errmsg("'%s' does not decode to a BIGF/SHPI container (%d)", in, -r);
+    errmsg("'%s' does not decode to a BIGF/SHPI container (%d)", label, -r);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
 
@@ -890,9 +922,8 @@ static int cmd_sprite(int argc, char **argv) {
   } else {
     struct fifa96_bigf_info bigf;
     if (fifa96_bigf_parse(leaf, leaf_len, &bigf) != FIFA96_OK) {
-      errmsg("'%s' is not a valid BIGF container", in);
+      errmsg("'%s' is not a valid BIGF container", label);
       free(outer_owned);
-      fifa96_file_free(data);
       return 1;
     }
     entries = bigf.count;
@@ -909,17 +940,15 @@ static int cmd_sprite(int argc, char **argv) {
         }
       }
       if (!found) {
-        errmsg("entry '%s' is not present in '%s'", name, in);
+        errmsg("entry '%s' is not present in '%s'", name, label);
         free(outer_owned);
-        fifa96_file_free(data);
         return 1;
       }
     } else {
       fifa96_err_t be = fifa96_bigf_record(&bigf, entry, &off, &size, &rec_name);
       if (be != FIFA96_OK) {
-        errmsg("entry %u is not present in '%s' (%d)", entry, in, (int)be);
+        errmsg("entry %u is not present in '%s' (%d)", entry, label, (int)be);
         free(outer_owned);
-        fifa96_file_free(data);
         return 1;
       }
       sel_entry = entry;
@@ -930,7 +959,6 @@ static int cmd_sprite(int argc, char **argv) {
       errmsg("entry '%s' is not a decodable SHPI sprite bank (%d)", sel_name, r ? -r : -1);
       free(bank_owned);
       free(outer_owned);
-      fifa96_file_free(data);
       return 1;
     }
   }
@@ -941,21 +969,18 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("entry '%s' is not a valid SHPI sprite bank (%d)", sel_name, -r);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   if (bank.count == 0) {
     errmsg("entry '%s' has no frames", sel_name);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   if (frame >= bank.count) {
     errmsg("frame %u not present (entry '%s' has %u frames)", frame, sel_name, bank.count);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   fifa96_sprite_entry fe_entry;
@@ -964,7 +989,6 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("entry '%s' frame %u is not addressable (%d)", sel_name, frame, -r);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   fifa96_sprite_frame sf;
@@ -973,7 +997,6 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("entry '%s' frame %u has no valid header (%d)", sel_name, frame, -r);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   uint64_t pixels = (uint64_t)sf.width * sf.height;
@@ -982,7 +1005,6 @@ static int cmd_sprite(int argc, char **argv) {
            sf.width, sf.height);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
 
@@ -996,7 +1018,6 @@ static int cmd_sprite(int argc, char **argv) {
       fifa96_file_free(pdata);
       free(bank_owned);
       free(outer_owned);
-      fifa96_file_free(data);
       return 1;
     }
     memcpy(pal, pdata, sizeof pal);
@@ -1014,7 +1035,6 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("cannot create parent directory of '%s'", path);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   uint8_t *buf = xmalloc(64 + (size_t)pixels * 3);
@@ -1024,7 +1044,6 @@ static int cmd_sprite(int argc, char **argv) {
     free(buf);
     free(bank_owned);
     free(outer_owned);
-    fifa96_file_free(data);
     return 1;
   }
   for (uint64_t i = 0; i < pixels; i++) {
@@ -1043,8 +1062,597 @@ static int cmd_sprite(int argc, char **argv) {
   free(buf);
   free(bank_owned);
   free(outer_owned);
+  return rc;
+}
+
+
+struct auto_opts {
+  int list_only;
+  int all_mode;
+  int modex;
+  int have_class;
+  int class_sel;
+  int have_entry;
+  uint32_t entry;
+  const char *name;
+  uint32_t max_frames;
+  const char *out;
+};
+
+enum {
+  AUTO_CLASS_VIDEO = 0,
+  AUTO_CLASS_AUDIO,
+  AUTO_CLASS_CRD,
+  AUTO_CLASS_SPRITE,
+  AUTO_CLASS_COUNT
+};
+
+static const char *auto_class_name(int c) {
+  switch (c) {
+    case AUTO_CLASS_VIDEO: return "video";
+    case AUTO_CLASS_AUDIO: return "audio";
+    case AUTO_CLASS_CRD: return "crd";
+    case AUTO_CLASS_SPRITE: return "sprite";
+    default: return "other";
+  }
+}
+
+static int auto_ext_eq(const char *path, const char *ext) {
+  size_t n = strlen(path), m = strlen(ext);
+  if (n < m) return 0;
+  for (size_t i = 0; i < m; i++) {
+    int a = (unsigned char)path[n - m + i];
+    int b = (unsigned char)ext[i];
+    if (a >= 'a' && a <= 'z') a -= ('a' - 'A');
+    if (b >= 'a' && b <= 'z') b -= ('a' - 'A');
+    if (a != b) return 0;
+  }
+  return 1;
+}
+
+static int auto_classify(const char *path) {
+  if (strncmp(path, "/VIDEO/", 7) == 0 && auto_ext_eq(path, ".TGV")) return AUTO_CLASS_VIDEO;
+  if (strncmp(path, "/SOUND/", 7) == 0 && auto_ext_eq(path, ".CRD")) return AUTO_CLASS_CRD;
+  if (strncmp(path, "/ART/", 5) == 0 && auto_ext_eq(path, ".PVI")) return AUTO_CLASS_SPRITE;
+  if (strncmp(path, "/SOUND/", 7) == 0 &&
+      (auto_ext_eq(path, ".BNK") || auto_ext_eq(path, ".VIV")))
+    return AUTO_CLASS_AUDIO;
+  return AUTO_CLASS_COUNT;
+}
+
+struct auto_entry {
+  char *path;
+  uint32_t lba;
+  uint32_t size;
+};
+
+struct auto_list {
+  struct auto_entry *v;
+  size_t n;
+  size_t cap;
+};
+
+static void auto_list_add(struct auto_list *l, const char *path, uint32_t lba, uint32_t size) {
+  if (l->n == l->cap) {
+    size_t cap = l->cap ? l->cap * 2u : 64u;
+    struct auto_entry *v = realloc(l->v, cap * sizeof *v);
+    if (!v) {
+      errmsg("out of memory");
+      exit(1);
+    }
+    l->v = v;
+    l->cap = cap;
+  }
+  size_t plen = strlen(path) + 1;
+  l->v[l->n].path = xmalloc(plen);
+  memcpy(l->v[l->n].path, path, plen);
+  l->v[l->n].lba = lba;
+  l->v[l->n].size = size;
+  l->n++;
+}
+
+static void auto_list_free(struct auto_list *l) {
+  for (size_t i = 0; i < l->n; i++) free(l->v[i].path);
+  free(l->v);
+}
+
+static int auto_entry_cmp(const void *a, const void *b) {
+  const struct auto_entry *x = (const struct auto_entry *)a;
+  const struct auto_entry *y = (const struct auto_entry *)b;
+  return strcmp(x->path, y->path);
+}
+
+static fifa96_err_t auto_collect(void *ctx, const char *path, uint32_t lba, uint32_t size) {
+  auto_list_add((struct auto_list *)ctx, path, lba, size);
+  return FIFA96_OK;
+}
+
+static void auto_stem(const char *path, char *out, size_t cap) {
+  const char *base = strrchr(path, '/');
+  base = base ? base + 1 : path;
+  snprintf(out, cap, "%s", base);
+  char *dot = strrchr(out, '.');
+  if (dot) *dot = '\0';
+}
+
+static uint32_t auto_class_total(const struct auto_list *l, int cls, uint64_t *bytes) {
+  uint32_t n = 0;
+  uint64_t b = 0;
+  for (size_t i = 0; i < l->n; i++) {
+    if (auto_classify(l->v[i].path) == cls) {
+      n++;
+      b += l->v[i].size;
+    }
+  }
+  if (bytes) *bytes = b;
+  return n;
+}
+
+static int auto_iso_extract(const struct fifa96_iso9660 *iso, const struct auto_entry *e,
+                            uint8_t **out) {
+  if (e->size > (512u << 20)) {
+    errmsg("'%s' is %u bytes, refusing to load it", e->path, e->size);
+    return 1;
+  }
+  uint8_t *b = xmalloc(e->size ? e->size : 1);
+  fifa96_err_t err = fifa96_iso9660_read_extent(iso, e->lba, e->size, b, e->size);
+  if (err != FIFA96_OK) {
+    errmsg("cannot read '%s' from the ISO (%d)", e->path, (int)err);
+    free(b);
+    return 1;
+  }
+  *out = b;
+  return 0;
+}
+
+static int auto_audio_bnk(const char *label, const uint8_t *data, size_t n,
+                          const struct auto_opts *o, const char *out, int *decoded) {
+  *decoded = 0;
+  struct fifa96_bnk_info bank;
+  fifa96_err_t e = fifa96_bnk_parse(data, n, &bank);
+  if (e != FIFA96_OK) {
+    errmsg("'%s' is not a valid .BNK (%d)", label, (int)e);
+    return 1;
+  }
+  uint32_t ids[FIFA96_BNK_IDS];
+  uint32_t count = 0;
+  for (uint32_t id = 0; id < FIFA96_BNK_IDS; id++) {
+    struct fifa96_bnk_entry entry;
+    if (fifa96_bnk_entry(&bank, id, &entry) == FIFA96_OK) ids[count++] = id;
+  }
+  printf("auto audio bnk %s bytes=%zu entries=%u ids=", label, n, count);
+  for (uint32_t i = 0; i < count && i < 16; i++) printf("%s%u", i ? "," : "", ids[i]);
+  if (count > 16) printf(",...");
+  printf("\n");
+  if (count == 0) return 0;
+  uint32_t id = o->have_entry ? o->entry : ids[0];
+  struct fifa96_bnk_entry entry;
+  e = fifa96_bnk_entry(&bank, id, &entry);
+  if (e != FIFA96_OK) {
+    errmsg("id %u is not present in '%s' (%d)", id, label, (int)e);
+    return 1;
+  }
+  struct fifa96_eacs_info info;
+  e = fifa96_eacs_parse_bank(data, n, entry.eacs_off, entry.payload_len, &info);
+  if (e != FIFA96_OK) {
+    errmsg("id %u in '%s' has no decodable EACS header (%d)", id, label, (int)e);
+    return 1;
+  }
+  printf("auto audio bnk %s id=%u out=%s\n", label, id, out);
+  *decoded = 1;
+  return write_wav_from_info(data, n, &info, out, 1);
+}
+
+static int auto_audio_viv(const char *label, const uint8_t *data, size_t n,
+                          const struct auto_opts *o, const char *out) {
+  struct fifa96_bigf_info bigf;
+  fifa96_err_t e = fifa96_bigf_parse(data, n, &bigf);
+  if (e != FIFA96_OK) {
+    errmsg("'%s' is not a valid BIGF .VIV (%d)", label, (int)e);
+    return 1;
+  }
+  printf("auto audio viv %s bytes=%zu records=%u first=", label, n, bigf.count);
+  for (uint32_t i = 0; i < bigf.count && i < 8; i++) {
+    uint32_t off = 0, size = 0;
+    const char *nm = NULL;
+    if (fifa96_bigf_record(&bigf, i, &off, &size, &nm) != FIFA96_OK) break;
+    printf("%s%s,%u", i ? ";" : "", nm, size);
+  }
+  printf("\n");
+  if (!o->name) return 0;
+  uint32_t off = 0, size = 0;
+  const char *nm = NULL;
+  int found = 0;
+  for (uint32_t i = 0; i < bigf.count; i++) {
+    if (fifa96_bigf_record(&bigf, i, &off, &size, &nm) != FIFA96_OK) break;
+    if (strcmp(nm, o->name) == 0) {
+      found = 1;
+      break;
+    }
+  }
+  if (!found) {
+    errmsg("record '%s' is not present in '%s'", o->name, label);
+    return 1;
+  }
+  struct fifa96_eacs_info info;
+  e = fifa96_eacs_parse(data + off, size, &info);
+  if (e != FIFA96_OK) {
+    errmsg("record '%s' in '%s' has no decodable EACS header (%d)", o->name, label, (int)e);
+    return 1;
+  }
+  printf("auto audio viv %s name=%s out=%s\n", label, o->name, out);
+  return write_wav_from_info(data + off, size, &info, out, 1);
+}
+
+static int auto_crd(const char *label, const uint8_t *data, size_t n) {
+  struct fifa96_crd crd;
+  int r = fifa96_crd_parse(data, n, &crd);
+  if (r != 0) {
+    errmsg("'%s' is not a valid CRDF (%d)", label, -r);
+    return 1;
+  }
+  printf("auto crd %s bytes=%zu version=%u tracks=%u events=%u\n", label, n, crd.header.version,
+         crd.header.track_count, crd.header.event_count);
+  return 0;
+}
+
+static int auto_sprite_pick(const uint8_t *leaf, size_t leaf_len, uint32_t *entry) {
+  struct fifa96_bigf_info bigf;
+  if (fifa96_bigf_parse(leaf, leaf_len, &bigf) != FIFA96_OK) return 0;
+  for (uint32_t i = 0; i < bigf.count; i++) {
+    uint32_t off = 0, size = 0;
+    const char *nm = NULL;
+    if (fifa96_bigf_record(&bigf, i, &off, &size, &nm) != FIFA96_OK) return 0;
+    uint8_t *owned = NULL;
+    const uint8_t *src = NULL;
+    size_t len = 0;
+    if (sprite_leaf(leaf + off, size, &owned, &src, &len) != 0) continue;
+    fifa96_sprite_bank bank;
+    int ok = memcmp(src, "SHPI", 4) == 0 && fifa96_sprite_bank_parse(src, len, &bank) == 0 &&
+             bank.count > 0;
+    free(owned);
+    if (ok) {
+      *entry = i;
+      return 1;
+    }
+  }
+  return 0;
+}
+
+static int auto_sprite(const char *label, const uint8_t *data, size_t n, const struct auto_opts *o,
+                       const char *out) {
+  uint8_t *peak_owned = NULL;
+  const uint8_t *peak = NULL;
+  size_t peak_len = 0;
+  if (sprite_leaf(data, n, &peak_owned, &peak, &peak_len) == 0 &&
+      memcmp(peak, "BIGF", 4) == 0) {
+    struct fifa96_bigf_info bigf;
+    if (fifa96_bigf_parse(peak, peak_len, &bigf) == FIFA96_OK) {
+      printf("auto sprite %s bytes=%zu entries=%u\n", label, n, bigf.count);
+      for (uint32_t i = 0; i < bigf.count && i < 8; i++) {
+        uint32_t off = 0, size = 0;
+        const char *nm = NULL;
+        if (fifa96_bigf_record(&bigf, i, &off, &size, &nm) != FIFA96_OK) break;
+        printf("auto sprite %s entry[%u]=%s size=%u\n", label, i, nm, size);
+      }
+    }
+  }
+  uint32_t entry = o->entry;
+  if (!o->name && !o->have_entry && peak) {
+    uint32_t pick = 0;
+    if (auto_sprite_pick(peak, peak_len, &pick)) entry = pick;
+  }
+  free(peak_owned);
+  return decode_sprite(label, data, n, entry, o->name, 0, NULL, out, 1);
+}
+
+static int auto_decode_container(const char *label, const uint8_t *data, size_t n,
+                                 fifa96_detect_kind_t kind, const struct auto_opts *o) {
+  char out[4096];
+  switch (kind) {
+    case FIFA96_DETECT_TGV:
+      if (o->have_class && o->class_sel != AUTO_CLASS_VIDEO) return 0;
+      snprintf(out, sizeof out, "%s/video/stream", o->out);
+      return decode_video(label, data, n, out, o->modex, 1, o->max_frames, 0, 0, 1);
+    case FIFA96_DETECT_BNK: {
+      if (o->have_class && o->class_sel != AUTO_CLASS_AUDIO) return 0;
+      int decoded = 0;
+      snprintf(out, sizeof out, "%s/audio/sample.wav", o->out);
+      return auto_audio_bnk(label, data, n, o, out, &decoded);
+    }
+    case FIFA96_DETECT_CRD:
+      if (o->have_class && o->class_sel != AUTO_CLASS_CRD) return 0;
+      return auto_crd(label, data, n);
+    case FIFA96_DETECT_EACS: {
+      if (o->have_class && o->class_sel != AUTO_CLASS_AUDIO) return 0;
+      struct fifa96_eacs_info info;
+      int r = fifa96_eacs_parse(data, n, &info);
+      if (r != 0) return 1;
+      snprintf(out, sizeof out, "%s/audio/sample.wav", o->out);
+      return write_wav_from_info(data, n, &info, out, 1);
+    }
+    case FIFA96_DETECT_BIGF: {
+      struct fifa96_bigf_info bigf;
+      if (fifa96_bigf_parse(data, n, &bigf) != FIFA96_OK) return 1;
+      uint32_t off = 0, size = 0;
+      const char *nm = NULL;
+      int found = 0;
+      if (o->name) {
+        for (uint32_t i = 0; i < bigf.count; i++) {
+          if (fifa96_bigf_record(&bigf, i, &off, &size, &nm) != FIFA96_OK) break;
+          if (strcmp(nm, o->name) == 0) {
+            found = 1;
+            break;
+          }
+        }
+      } else if (fifa96_bigf_record(&bigf, 0, &off, &size, &nm) == FIFA96_OK) {
+        found = 1;
+      }
+      if (found) {
+        struct fifa96_eacs_info info;
+        if (fifa96_eacs_parse(data + off, size, &info) == 0 &&
+            (!o->have_class || o->class_sel == AUTO_CLASS_AUDIO)) {
+          snprintf(out, sizeof out, "%s/audio/sample.wav", o->out);
+          printf("auto audio bigf %s record=%s\n", label, nm);
+          return write_wav_from_info(data + off, size, &info, out, 1);
+        }
+      }
+      if (o->have_class && o->class_sel != AUTO_CLASS_SPRITE) return 0;
+      snprintf(out, sizeof out, "%s/art/sprite.ppm", o->out);
+      return auto_sprite(label, data, n, o, out);
+    }
+    case FIFA96_DETECT_SHPI:
+      if (o->have_class && o->class_sel != AUTO_CLASS_SPRITE) return 0;
+      snprintf(out, sizeof out, "%s/art/sprite.ppm", o->out);
+      return decode_sprite(label, data, n, o->entry, o->name, 0, NULL, out, 1);
+    case FIFA96_DETECT_ENVELOPE:
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+static int auto_envelope(const char *label, const uint8_t *data, size_t n,
+                         const struct auto_opts *o) {
+  uint8_t *owned = NULL;
+  const uint8_t *cur = data;
+  size_t cur_n = n;
+  for (int depth = 0; depth < 4 && cur_n >= 5 && cur[1] == 0xFB; depth++) {
+    size_t cap = play_be24(cur + 2);
+    uint8_t *next = xmalloc(cap ? cap : 1);
+    size_t len = 0;
+    if (fifa96_record_decode(cur, cur_n, next, cap, &len) != 0) {
+      free(next);
+      break;
+    }
+    free(owned);
+    owned = next;
+    cur = next;
+    cur_n = len;
+  }
+  fifa96_detect_kind_t kind = fifa96_detect_kind(cur, cur_n);
+  printf("auto %s decoded kind=%s bytes=%zu\n", label, fifa96_detect_kind_name(kind), cur_n);
+  int rc = 0;
+  if (kind != FIFA96_DETECT_ENVELOPE) rc = auto_decode_container(label, cur, cur_n, kind, o);
+  free(owned);
+  return rc;
+}
+
+static int auto_iso_run(const struct fifa96_iso9660 *iso, struct auto_list *l,
+                        const struct auto_opts *o) {
+  uint32_t cap = o->all_mode ? 8u : 1u;
+  for (int c = 0; c < AUTO_CLASS_COUNT; c++) {
+    uint32_t total = auto_class_total(l, c, NULL);
+    if (total > cap && (!o->have_class || c == o->class_sel))
+      printf("auto: %s cap %u asset(s) of %u in class %s\n",
+             o->all_mode ? "--all" : "default", cap, total, auto_class_name(c));
+  }
+  int viv_seen = 0;
+  for (int c = 0; c < AUTO_CLASS_COUNT; c++) {
+    if (o->have_class && c != o->class_sel) continue;
+    uint32_t done = 0;
+    for (size_t i = 0; i < l->n && done < cap; i++) {
+      struct auto_entry *e = &l->v[i];
+      if (auto_classify(e->path) != c) continue;
+      if (c == AUTO_CLASS_AUDIO && o->name && auto_ext_eq(e->path, ".BNK")) continue;
+      uint8_t *data = NULL;
+      if (auto_iso_extract(iso, e, &data)) return 1;
+      char stem[64], out[4096];
+      auto_stem(e->path, stem, sizeof stem);
+      int counted = 1;
+      int rc = 0;
+      switch (c) {
+        case AUTO_CLASS_VIDEO:
+          snprintf(out, sizeof out, "%s/video/%s", o->out, stem);
+          printf("auto video %s bytes=%u out=%s\n", e->path, e->size, out);
+          rc = decode_video(e->path, data, e->size, out, o->modex, 1, o->max_frames, 0, 0, 1);
+          break;
+        case AUTO_CLASS_AUDIO:
+          if (auto_ext_eq(e->path, ".BNK")) {
+            snprintf(out, sizeof out, "%s/audio/%s.wav", o->out, stem);
+            rc = auto_audio_bnk(e->path, data, e->size, o, out, &counted);
+          } else {
+            snprintf(out, sizeof out, "%s/audio/%s.wav", o->out, stem);
+            rc = auto_audio_viv(e->path, data, e->size, o, out);
+            viv_seen = 1;
+            if (!o->name) counted = 0;
+          }
+          break;
+        case AUTO_CLASS_CRD:
+          rc = auto_crd(e->path, data, e->size);
+          break;
+        default:
+          snprintf(out, sizeof out, "%s/art/%s.ppm", o->out, stem);
+          rc = auto_sprite(e->path, data, e->size, o, out);
+          break;
+      }
+      free(data);
+      if (rc != 0) return rc;
+      if (counted) done++;
+    }
+  }
+  if (!viv_seen && (!o->have_class || o->class_sel == AUTO_CLASS_AUDIO)) {
+    for (size_t i = 0; i < l->n; i++) {
+      struct auto_entry *e = &l->v[i];
+      if (auto_classify(e->path) != AUTO_CLASS_AUDIO || !auto_ext_eq(e->path, ".VIV")) continue;
+      uint8_t *data = NULL;
+      if (auto_iso_extract(iso, e, &data)) return 1;
+      char stem[64], out[4096];
+      auto_stem(e->path, stem, sizeof stem);
+      snprintf(out, sizeof out, "%s/audio/%s.wav", o->out, stem);
+      int rc = auto_audio_viv(e->path, data, e->size, o, out);
+      free(data);
+      if (rc != 0) return rc;
+      break;
+    }
+  }
+  return 0;
+}
+
+struct auto_iso_reader {
+  FILE *fp;
+  uint64_t len;
+};
+
+static fifa96_err_t auto_iso_read(void *ctx, uint64_t off, uint8_t *dst, size_t len) {
+  struct auto_iso_reader *r = (struct auto_iso_reader *)ctx;
+  if (off > r->len || (uint64_t)len > r->len - off) return FIFA96_ERR_TRUNCATED;
+  if (fseek(r->fp, (long)off, SEEK_SET) != 0) return FIFA96_ERR_IO;
+  if (len && fread(dst, 1, len, r->fp) != len) return FIFA96_ERR_SHORT_READ;
+  return FIFA96_OK;
+}
+
+static int auto_iso_exists(const char *path) {
+  FILE *fp = fopen(path, "rb");
+  if (!fp) return 0;
+  uint8_t pvd[6];
+  int is_iso = 0;
+  if (fseek(fp, (long)FIFA96_ISO9660_PVD_SECTOR * (long)FIFA96_ISO9660_SECTOR_SIZE, SEEK_SET) == 0 &&
+      fread(pvd, 1, sizeof pvd, fp) == sizeof pvd && pvd[0] == 1 &&
+      memcmp(pvd + 1, "CD001", 5) == 0)
+    is_iso = 1;
+  fclose(fp);
+  return is_iso;
+}
+
+static int auto_run_iso(const char *path, const struct auto_opts *o) {
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    errmsg("cannot stat '%s'", path);
+    return 1;
+  }
+  FILE *fp = fopen(path, "rb");
+  if (!fp) {
+    errmsg("cannot open '%s'", path);
+    return 1;
+  }
+  struct auto_iso_reader rd;
+  rd.fp = fp;
+  rd.len = (uint64_t)st.st_size;
+  struct fifa96_iso9660 iso;
+  fifa96_err_t e = fifa96_iso9660_open(auto_iso_read, &rd, rd.len, &iso);
+  if (e != FIFA96_OK) {
+    errmsg("'%s' is not a readable ISO9660 image (%d)", path, (int)e);
+    fclose(fp);
+    return 1;
+  }
+  struct auto_list list;
+  memset(&list, 0, sizeof list);
+  e = fifa96_iso9660_walk(&iso, auto_collect, &list);
+  if (e != FIFA96_OK) {
+    errmsg("ISO directory walk failed (%d)", (int)e);
+    auto_list_free(&list);
+    fclose(fp);
+    return 1;
+  }
+  qsort(list.v, list.n, sizeof *list.v, auto_entry_cmp);
+  printf("auto %s iso9660 bytes=%llu files=%zu\n", path, (unsigned long long)rd.len, list.n);
+  for (int c = 0; c < AUTO_CLASS_COUNT; c++) {
+    uint64_t bytes = 0;
+    uint32_t n = auto_class_total(&list, c, &bytes);
+    printf("auto class %s files=%u bytes=%llu\n", auto_class_name(c), n,
+           (unsigned long long)bytes);
+  }
+  int rc = 0;
+  if (o->list_only) {
+    for (size_t i = 0; i < list.n; i++) printf("iso %s %u\n", list.v[i].path, list.v[i].size);
+  } else {
+    rc = auto_iso_run(&iso, &list, o);
+  }
+  auto_list_free(&list);
+  fclose(fp);
+  return rc;
+}
+
+static int auto_container(const char *path, const struct auto_opts *o) {
+  uint8_t *data = NULL;
+  size_t n = 0;
+  fifa96_err_t e = fifa96_file_read(path, &data, &n);
+  if (e != FIFA96_OK) {
+    errmsg("cannot read '%s' (%d)", path, (int)e);
+    return 1;
+  }
+  fifa96_detect_kind_t kind = fifa96_detect_kind(data, n);
+  printf("auto %s container kind=%s bytes=%zu\n", path, fifa96_detect_kind_name(kind), n);
+  fifa96_detect_summary(data, n, "  ");
+  int rc = 0;
+  if (!o->list_only) {
+    if (kind == FIFA96_DETECT_ENVELOPE)
+      rc = auto_envelope(path, data, n, o);
+    else
+      rc = auto_decode_container(path, data, n, kind, o);
+  }
   fifa96_file_free(data);
   return rc;
+}
+
+static int cmd_auto(int argc, char **argv, int first) {
+  struct auto_opts o;
+  memset(&o, 0, sizeof o);
+  o.max_frames = 3;
+  o.out = "build/run";
+  const char *in = NULL;
+  for (int i = first; i < argc; i++) {
+    const char *a = argv[i];
+    if (strcmp(a, "--list") == 0) {
+      o.list_only = 1;
+    } else if (strcmp(a, "--all") == 0) {
+      o.all_mode = 1;
+    } else if (strcmp(a, "--modex") == 0) {
+      o.modex = 1;
+    } else if (strcmp(a, "--print-summary") == 0) {
+    } else if (strcmp(a, "--max-frames") == 0) {
+      if (++i >= argc || !parse_u32(argv[i], &o.max_frames) || o.max_frames == 0)
+        return arg_error("--max-frames needs a count >= 1");
+    } else if (strcmp(a, "--class") == 0) {
+      if (++i >= argc) return arg_error("--class needs video|audio|sprite|crd");
+      if (strcmp(argv[i], "video") == 0) o.class_sel = AUTO_CLASS_VIDEO;
+      else if (strcmp(argv[i], "audio") == 0) o.class_sel = AUTO_CLASS_AUDIO;
+      else if (strcmp(argv[i], "sprite") == 0) o.class_sel = AUTO_CLASS_SPRITE;
+      else if (strcmp(argv[i], "crd") == 0) o.class_sel = AUTO_CLASS_CRD;
+      else return arg_error("unknown class '%s'", argv[i]);
+      o.have_class = 1;
+    } else if (strcmp(a, "--entry") == 0) {
+      if (++i >= argc || !parse_u32(argv[i], &o.entry))
+        return arg_error("--entry needs a non-negative index");
+      o.have_entry = 1;
+    } else if (strcmp(a, "--name") == 0) {
+      if (++i >= argc) return arg_error("--name needs a value");
+      o.name = argv[i];
+    } else if (strcmp(a, "--out") == 0) {
+      if (++i >= argc) return arg_error("--out needs a path");
+      o.out = argv[i];
+    } else if (a[0] == '-') {
+      return arg_error("unknown option '%s'", a);
+    } else if (!in) {
+      in = a;
+    } else {
+      return arg_error("unexpected argument '%s'", a);
+    }
+  }
+  if (!in) return arg_error("auto needs an input FILE");
+  if (auto_iso_exists(in)) return auto_run_iso(in, &o);
+  return auto_container(in, &o);
 }
 
 int main(int argc, char **argv) {
@@ -1059,5 +1667,6 @@ int main(int argc, char **argv) {
   if (strcmp(argv[1], "video") == 0) return cmd_video(argc, argv);
   if (strcmp(argv[1], "audio") == 0) return cmd_audio(argc, argv);
   if (strcmp(argv[1], "sprite") == 0) return cmd_sprite(argc, argv);
-  return arg_error("unknown mode '%s'", argv[1]);
+  if (strcmp(argv[1], "auto") == 0) return cmd_auto(argc, argv, 2);
+  return cmd_auto(argc, argv, 1);
 }
