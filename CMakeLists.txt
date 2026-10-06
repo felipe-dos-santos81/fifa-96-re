@@ -262,6 +262,11 @@ add_executable(test_phase_drivers tests/test_phase_drivers.c)
 target_link_libraries(test_phase_drivers PRIVATE fifa96_action_handlers fifa96_entity_update)
 add_test(NAME test_phase_drivers COMMAND test_phase_drivers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_animation src/fifa96_loader/fifa96_animation.c)
+add_executable(test_animation tests/test_animation.c)
+target_link_libraries(test_animation PRIVATE fifa96_animation)
+add_test(NAME test_animation COMMAND test_animation WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
 target_link_libraries(test_ring_stats PRIVATE fifa96_ring_stats)
