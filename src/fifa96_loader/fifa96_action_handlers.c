@@ -492,3 +492,62 @@ fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
   if (opp_is_duel_type != 0 && opp_metric >= own_metric) *opp_code = 6;
   return FIFA96_OK;
 }
+
+fifa96_err_t fifa96_action_stage_enter(fifa96_action_stage *state, const uint8_t *gates,
+                                       uint8_t gate_count, fifa96_action_stage_out *out) {
+  uint8_t i;
+  if (!state || !gates || !out || gate_count == 0) return -FIFA96_ERR_INVALID;
+  out->allowed = 0;
+  out->reset = 0;
+  out->advance = 0;
+  out->stage = state->stage;
+  for (i = 0; i < gate_count; i++) {
+    if (gates[i] == state->phase) {
+      out->allowed = 1;
+      return FIFA96_OK;
+    }
+  }
+  out->reset = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_stage_tick(fifa96_action_stage *state) {
+  if (!state) return -FIFA96_ERR_INVALID;
+  state->timer89 = (int32_t)((uint32_t)state->timer89 + (uint32_t)state->delta);
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_stage_advance(fifa96_action_stage *state, fifa96_action_stage_out *out) {
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  state->timer89 = 0;
+  state->stage = (uint8_t)(state->stage + 1u);
+  out->allowed = 1;
+  out->reset = 0;
+  out->advance = 1;
+  out->stage = state->stage;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_stage_finish(fifa96_action_stage *state, fifa96_action_stage_out *out) {
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  out->allowed = 1;
+  out->reset = state->occupied != 0;
+  out->advance = 0;
+  out->stage = state->stage;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uint8_t *hold) {
+  if (!set_leader || !hold) return -FIFA96_ERR_INVALID;
+  *set_leader = marker < 3 ? 1 : 0;
+  *hold = marker < 5 ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
+                                        uint32_t *entry) {
+  if (!table || !entry || count == 0) return -FIFA96_ERR_INVALID;
+  if ((uint32_t)phase >= count) return -FIFA96_ERR_INVALID;
+  *entry = table[phase];
+  return FIFA96_OK;
+}

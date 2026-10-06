@@ -211,3 +211,28 @@ fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, 
 fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
                                       uint8_t opp_is_duel_type, uint8_t *own_code,
                                       uint8_t *opp_code);
+
+typedef struct fifa96_action_stage {
+  uint8_t phase;
+  uint8_t stage;
+  uint8_t active;
+  uint8_t occupied;
+  int32_t timer89;
+  uint16_t delta;
+} fifa96_action_stage;
+
+typedef struct fifa96_action_stage_out {
+  uint8_t allowed;
+  uint8_t reset;
+  uint8_t advance;
+  uint8_t stage;
+} fifa96_action_stage_out;
+
+fifa96_err_t fifa96_action_stage_enter(fifa96_action_stage *state, const uint8_t *gates,
+                                       uint8_t gate_count, fifa96_action_stage_out *out);
+fifa96_err_t fifa96_action_stage_tick(fifa96_action_stage *state);
+fifa96_err_t fifa96_action_stage_advance(fifa96_action_stage *state, fifa96_action_stage_out *out);
+fifa96_err_t fifa96_action_stage_finish(fifa96_action_stage *state, fifa96_action_stage_out *out);
+fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uint8_t *hold);
+fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
+                                        uint32_t *entry);
