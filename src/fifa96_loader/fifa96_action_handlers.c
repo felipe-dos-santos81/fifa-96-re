@@ -1,4 +1,5 @@
 #include "fifa96_loader/fifa96_action_handlers.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 
 static const uint8_t kick_atan[257] = {
     0x00, 0x01, 0x01, 0x02, 0x03, 0x03, 0x04, 0x04, 0x05, 0x06, 0x06, 0x07, 0x08, 0x08, 0x09, 0x0A,
@@ -120,5 +121,150 @@ fifa96_err_t fifa96_action_kick_apply(fifa96_action_kick_ball *ball, const fifa9
   else if (hi_word < ball->x) ball->x = hi_word;
   ball->traj = low16((int32_t)ball->traj + add);
   if (ball->comp_z > 0x460) ball->traj = 0x460;
+  return FIFA96_OK;
+}
+
+static int16_t loco_facing_error(int16_t target, int16_t current) {
+  int16_t d = (int16_t)((uint16_t)((uint16_t)target - (uint16_t)current) & 0x3FFu);
+  if (d > 0x200) d = (int16_t)(d - 0x400);
+  return d;
+}
+
+static int32_t loco_stride_error(int16_t target, int16_t current) {
+  int32_t d = (int32_t)((uint16_t)((uint16_t)target - (uint16_t)current) & 0x3FFu);
+  if (d > 0x200) d = 0x400 - d;
+  return d;
+}
+
+fifa96_err_t fifa96_action_locomotion_step(fifa96_action_locomotion *state,
+                                           const uint8_t *heading_table,
+                                           const int16_t *stride_table) {
+  int32_t dx, dz;
+  if (!state || !heading_table || !stride_table) return -FIFA96_ERR_INVALID;
+  dx = low16(state->target_x - state->pos_x);
+  dz = low16(state->target_z - state->pos_z);
+  state->delta_x = (int16_t)dx;
+  state->delta_z = (int16_t)dz;
+  state->distance = (int16_t)fifa96_entity_distance(dx, dz);
+  if (state->distance != 0) {
+    int32_t angle = 0;
+    fifa96_action_kick_angle(dx, dz, &angle);
+    state->desired_facing = (int16_t)angle;
+  } else {
+    state->desired_facing = state->facing;
+  }
+  if (state->direct_face != 0) {
+    int16_t face_target;
+    if ((state->move_attr >> 16) > 0x60) {
+      face_target = state->desired_facing;
+    } else if (state->face_x != 0 || state->face_z != 0) {
+      int32_t fx = low16((int32_t)state->face_x - state->pos_x);
+      int32_t fz = low16((int32_t)state->face_z - state->pos_z);
+      int32_t angle = 0;
+      fifa96_action_kick_angle(fx, fz, &angle);
+      face_target = (int16_t)angle;
+    } else {
+      face_target = state->facing;
+    }
+    {
+      int16_t err = loco_facing_error(face_target, state->facing);
+      if (err != 0) {
+        uint16_t limit = (uint16_t)((uint16_t)(0x10 - (uint16_t)state->speed)
+                                    << (state->has_slot != 0 ? 4 : 2));
+        int16_t turn;
+        if (err > (int16_t)limit) turn = (int16_t)limit;
+        else if ((int32_t)err < -(int32_t)(int16_t)limit) turn = (int16_t)(0u - limit);
+        else turn = err;
+        state->facing = (int16_t)((uint16_t)(state->facing + turn) & 0x3FFu);
+        if (state->facing > 0x200) state->facing = (int16_t)(state->facing - 0x400);
+        state->heading = heading_table[((uint16_t)state->facing & 0x3FFu) >> 5];
+      }
+    }
+  }
+  if (state->distance != 0 || state->speed != 0) {
+    int32_t threshold = state->has_slot != 0 ? 2 : ((state->stride_rate >> 17) + 2);
+    state->body_timer = (uint8_t)(state->body_timer + (uint8_t)state->delta);
+    if ((int16_t)(int32_t)state->body_timer > (int16_t)threshold) {
+      int32_t stride_len;
+      int32_t attr;
+      int32_t index;
+      int32_t tvx, tvz;
+      int16_t old_vx, old_vz;
+      state->body_timer = 0;
+      stride_len = (int32_t)(state->stride & 0x0F) -
+                   (loco_stride_error(state->desired_facing, state->facing) >> 7);
+      if (stride_len < 1) stride_len = 1;
+      attr = state->move_attr >> 19;
+      if ((int16_t)attr > (int16_t)stride_len) attr = stride_len;
+      index = ((int32_t)state->desired_facing & 0x3F0) | attr;
+      tvx = stride_table[index];
+      tvz = stride_table[index + 0x100];
+      old_vx = state->vel_x;
+      old_vz = state->vel_z;
+      if ((int16_t)tvx != old_vx) {
+        int16_t dv = (int16_t)((int16_t)tvx - old_vx);
+        state->vel_x = (dv >= -1 && dv <= 1) ? (int16_t)tvx
+                                             : (int16_t)(old_vx + dv / 2);
+      }
+      if ((int16_t)tvz != old_vz) {
+        int16_t dv = (int16_t)((int16_t)tvz - old_vz);
+        state->vel_z = (dv >= -1 && dv <= 1) ? (int16_t)tvz
+                                             : (int16_t)(old_vz + dv / 2);
+      }
+      if ((int16_t)tvx != old_vx || (int16_t)tvz != old_vz)
+        state->speed = (int16_t)fifa96_entity_distance(state->vel_x, state->vel_z);
+    }
+    if (state->vel_x != 0) state->pos_x += (int32_t)state->delta * state->vel_x;
+    if (state->vel_z != 0) state->pos_z += (int32_t)state->delta * state->vel_z;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_restart_target(int32_t controlled_x,
+                                                     int32_t *target_x, int32_t *target_z) {
+  if (!target_x || !target_z) return -FIFA96_ERR_INVALID;
+  *target_x = -controlled_x;
+  *target_z = 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_hold(uint8_t action_code,
+                                           const fifa96_action_vec3 *pos,
+                                           fifa96_action_vec3 *out, uint8_t *held) {
+  if (!pos || !out || !held) return -FIFA96_ERR_INVALID;
+  *held = 0;
+  if (action_code == 0x10 || action_code == 0x11 || action_code == 0x12) {
+    *out = *pos;
+    *held = 1;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_clamp_placement(int32_t *target_z, int32_t pos_z,
+                                                      int16_t bound_lo, int16_t bound_hi,
+                                                      int32_t opponent_z, uint8_t side,
+                                                      uint8_t settings_latch) {
+  if (!target_z) return -FIFA96_ERR_INVALID;
+  if (bound_lo > *target_z) {
+    if (bound_lo < pos_z) *target_z = bound_lo;
+  } else if (bound_hi < *target_z && bound_hi > pos_z) {
+    *target_z = bound_hi;
+  }
+  if (settings_latch != 0) return FIFA96_OK;
+  if (side == 0) {
+    if (*target_z > opponent_z) *target_z = opponent_z - 0x60;
+  } else if (*target_z < opponent_z) {
+    *target_z = opponent_z + 0x60;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, int32_t cam_z,
+                                                  int16_t cam_vel_x, int16_t cam_vel_z,
+                                                  fifa96_action_vec3 *out) {
+  if (!out) return -FIFA96_ERR_INVALID;
+  out->x = cam_x + (int32_t)cam_vel_x * 4;
+  out->y = cam_y;
+  out->z = cam_z + (int32_t)cam_vel_z * 4;
   return FIFA96_OK;
 }

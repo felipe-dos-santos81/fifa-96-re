@@ -47,3 +47,49 @@ typedef struct fifa96_action_kick_ball {
 
 fifa96_err_t fifa96_action_kick_apply(fifa96_action_kick_ball *ball, const fifa96_action_kick_row *row,
                                       uint8_t mode, uint8_t event_code, uint8_t user_extend);
+
+typedef struct fifa96_action_locomotion {
+  int32_t pos_x;
+  int32_t pos_z;
+  int32_t target_x;
+  int32_t target_z;
+  int16_t delta_x;
+  int16_t delta_z;
+  int16_t distance;
+  int16_t facing;
+  int16_t desired_facing;
+  int16_t speed;
+  int16_t vel_x;
+  int16_t vel_z;
+  int16_t face_x;
+  int16_t face_z;
+  int32_t move_attr;
+  int32_t stride_rate;
+  uint8_t heading;
+  uint8_t has_slot;
+  uint8_t direct_face;
+  uint8_t body_timer;
+  uint8_t stride;
+  uint8_t reserved;
+  uint16_t delta;
+} fifa96_action_locomotion;
+
+fifa96_err_t fifa96_action_locomotion_step(fifa96_action_locomotion *state,
+                                           const uint8_t *heading_table,
+                                           const int16_t *stride_table);
+
+fifa96_err_t fifa96_action_locomotion_restart_target(int32_t controlled_x,
+                                                     int32_t *target_x, int32_t *target_z);
+
+fifa96_err_t fifa96_action_locomotion_hold(uint8_t action_code,
+                                           const fifa96_action_vec3 *pos,
+                                           fifa96_action_vec3 *out, uint8_t *held);
+
+fifa96_err_t fifa96_action_locomotion_clamp_placement(int32_t *target_z, int32_t pos_z,
+                                                      int16_t bound_lo, int16_t bound_hi,
+                                                      int32_t opponent_z, uint8_t side,
+                                                      uint8_t settings_latch);
+
+fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, int32_t cam_z,
+                                                  int16_t cam_vel_x, int16_t cam_vel_z,
+                                                  fifa96_action_vec3 *out);
