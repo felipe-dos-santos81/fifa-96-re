@@ -55,6 +55,42 @@ fifa96_err_t fifa96_sprite_frame_parse(const fifa96_sprite_bank *bank, uint32_t 
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_sprite_chunk_parse(const fifa96_sprite_bank *bank, uint32_t offset,
+                                       fifa96_sprite_chunk *out) {
+  if (!bank || !bank->data || !out) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  fifa96_sprite_frame frame;
+  fifa96_err_t r = fifa96_sprite_frame_parse(bank, offset, &frame);
+  if (r != FIFA96_OK) return r;
+  if (frame.second_offset == 0) return (fifa96_err_t)-FIFA96_ERR_NOT_FOUND;
+  uint32_t chunk = offset + frame.second_offset;
+  if (chunk < offset || chunk >= bank->total_size) return (fifa96_err_t)-FIFA96_ERR_TRUNCATED;
+  out->data = bank->data + chunk;
+  out->length = bank->total_size - chunk;
+  out->type = out->data[0];
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_sprite_chunk_palette(const fifa96_sprite_chunk *chunk, const uint8_t **rgb6,
+                                         uint16_t *count) {
+  if (!chunk || !rgb6 || !count) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  if (chunk->type != 0x22) return (fifa96_err_t)-FIFA96_ERR_BAD_MAGIC;
+  if (chunk->length < 16) return (fifa96_err_t)-FIFA96_ERR_TRUNCATED;
+  uint32_t n = fifa96_read_u16le(chunk->data + 4);
+  if ((uint64_t)16 + (uint64_t)n * 3 > chunk->length)
+    return (fifa96_err_t)-FIFA96_ERR_TRUNCATED;
+  *rgb6 = chunk->data + 16;
+  *count = (uint16_t)n;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_sprite_palette_to_rgb(const uint8_t *rgb6, uint16_t count, uint8_t *rgb8) {
+  if (count != 0 && (!rgb6 || !rgb8)) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < count; i++)
+    for (uint32_t c = 0; c < 3; c++)
+      rgb8[i * 3 + c] = (uint8_t)(((uint32_t)rgb6[i * 3 + c] * 0xFFu) / 0x3Fu);
+  return FIFA96_OK;
+}
+
 int32_t fifa96_sprite_stride(uint32_t bank_index, uint32_t count) {
   int32_t divisor = 5;
   switch (bank_index) {

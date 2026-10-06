@@ -17,7 +17,7 @@ FRAME_RE = re.compile(r"^frame (\d+): (\d+)x(\d+) (ppm|modex) sha256=([0-9a-f]{6
 AUDIO_RE = re.compile(r"^audio: frames=(\d+) rate=(\d+) channels=(\d+) sha256=([0-9a-f]{64})$")
 SPRITE_RE = re.compile(
     r"^sprite: entries=(\d+) entry=(\d+) name=(\S+) frames=(\d+) frame=(\d+) "
-    r"(\d+)x(\d+) (ppm) sha256=([0-9a-f]{64})$")
+    r"(\d+)x(\d+) (ppm) sha256=([0-9a-f]{64})$", re.M)
 PPM_RE = re.compile(rb"^P6\n(\d+) (\d+)\n255\n")
 AUDIO_SHA = {
     "viv0": "55b8e1b0ea10cfd62db323519f94e8a1af548acd52dc5d62862dbb028b14f3e0",
@@ -142,6 +142,20 @@ def build_sprite_bigf(path):
                   ("f001", sprite_frame(PIX1, 2, 2))])
     bank1 = shpi([("s000", sprite_frame(PIX2, 1, 1, word12=0x11223344))])
     path.write_bytes(bigf([("raw.fsh", bank0), ("one.fsh", bank1)]))
+
+
+PAL6 = bytes([1, 32, 63] + [(i * 3) & 63 for i in range(765)])
+PAL8 = bytes((v * 255) // 63 for v in PAL6)
+CHUNK_PAL = bytes.fromhex("22000000000101000001000000000000") + PAL6
+CHUNK_24 = bytes.fromhex("7c000000020000007b000000b4ffffff1000000000000000")
+
+
+def build_palette_sprite(path):
+    pal_bank = shpi([("p000", sprite_frame(b"\x00", 1, 1, second=20) + b"\x00\x00\x00" +
+                      CHUNK_PAL)])
+    player_bank = shpi([("c000", sprite_frame(b"\x05", 1, 1, second=20) + b"\x00\x00\x00" +
+                         CHUNK_24)])
+    path.write_bytes(bigf([("pal.fsh", pal_bank), ("play.fsh", player_bank)]))
 
 
 class TestHelp(unittest.TestCase):
@@ -325,6 +339,50 @@ class TestSpriteSynthetic(unittest.TestCase):
         self.assertEqual(out.read_bytes(), want)
         m = SPRITE_RE.match(r.stdout.strip())
         self.assertEqual(m.group(9), hashlib.sha256(want).hexdigest())
+
+    def test_bank_palette_ppm_exact(self):
+        fixture = PLAY / "sprite-pal.pvi"
+        build_palette_sprite(fixture)
+        out = PLAY / "sprite-bankpal.ppm"
+        r = run("sprite", str(fixture), "--name", "pal.fsh", "--out", str(out),
+                "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("source=bank", r.stdout)
+        want = ppm(b"\x00", PAL8, 1, 1)
+        self.assertEqual(out.read_bytes(), want)
+
+    def test_dump_palette_writes_rgb8(self):
+        fixture = PLAY / "sprite-pal.pvi"
+        build_palette_sprite(fixture)
+        dump = PLAY / "sprite-bankpal.rgb"
+        out = PLAY / "sprite-bankpal2.ppm"
+        r = run("sprite", str(fixture), "--name", "pal.fsh", "--out", str(out),
+                "--dump-palette", str(dump), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(dump.read_bytes(), PAL8)
+
+    def test_file_palette_overrides_bank(self):
+        fixture = PLAY / "sprite-pal.pvi"
+        build_palette_sprite(fixture)
+        pal = bytes(b for i in range(256) for b in ((i * 7) & 255, 255 - i, (i * 3) & 255))
+        palpath = PLAY / "sprite-override.pal"
+        palpath.write_bytes(pal)
+        out = PLAY / "sprite-override.ppm"
+        r = run("sprite", str(fixture), "--name", "pal.fsh", "--out", str(out),
+                "--palette", str(palpath), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("source=file", r.stdout)
+        self.assertEqual(out.read_bytes(), ppm(b"\x00", pal, 1, 1))
+
+    def test_player_chunk_is_not_palette(self):
+        fixture = PLAY / "sprite-pal.pvi"
+        build_palette_sprite(fixture)
+        out = PLAY / "sprite-playerchunk.ppm"
+        r = run("sprite", str(fixture), "--name", "play.fsh", "--out", str(out),
+                "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertIn("source=gray", r.stdout)
+        self.assertEqual(out.read_bytes(), ppm(b"\x05", GRAY, 1, 1))
 
     def test_name_selects_entry_and_frame(self):
         out = PLAY / "sprite-one.ppm"

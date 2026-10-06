@@ -176,6 +176,7 @@ static void usage(FILE *fp) {
         "  audio --bnk FILE --id N [--out PATH] [--print-summary]\n"
         "  audio --viv FILE (--name NAME | --index N) [--out PATH] [--print-summary]\n"
         "  sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH] [--palette FILE]\n"
+        "              [--dump-bank PATH] [--dump-palette PATH]\n"
         "              [--print-summary]\n"
         "  auto FILE [--list] [--class video|audio|sprite|crd] [--max-frames N]\n"
         "            [--entry N | --name NAME] [--modex] [--all] [--out DIR] [--print-summary]\n"
@@ -843,12 +844,14 @@ static int sprite_leaf(const uint8_t *src, size_t n, uint8_t **owned, const uint
 
 static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint32_t entry,
                          const char *name, uint32_t frame, const char *palpath, const char *out,
-                         int summary);
+                         const char *dumppath, const char *dumppalpath, int summary);
 
 static int cmd_sprite(int argc, char **argv) {
   const char *in = NULL;
   const char *out = NULL;
   const char *palpath = NULL;
+  const char *dumppath = NULL;
+  const char *dumppalpath = NULL;
   const char *name = NULL;
   int summary = 0;
   int have_entry = 0;
@@ -872,6 +875,12 @@ static int cmd_sprite(int argc, char **argv) {
     } else if (strcmp(a, "--palette") == 0) {
       if (++i >= argc) return arg_error("--palette needs a file");
       palpath = argv[i];
+    } else if (strcmp(a, "--dump-bank") == 0) {
+      if (++i >= argc) return arg_error("--dump-bank needs a path");
+      dumppath = argv[i];
+    } else if (strcmp(a, "--dump-palette") == 0) {
+      if (++i >= argc) return arg_error("--dump-palette needs a path");
+      dumppalpath = argv[i];
     } else if (strcmp(a, "--print-summary") == 0) {
       summary = 1;
     } else if (a[0] == '-') {
@@ -892,14 +901,15 @@ static int cmd_sprite(int argc, char **argv) {
     errmsg("cannot read '%s' (%d)", in, (int)fe);
     return 1;
   }
-  int rc = decode_sprite(in, data, n, entry, name, frame, palpath, out, summary);
+  int rc = decode_sprite(in, data, n, entry, name, frame, palpath, out, dumppath, dumppalpath,
+                         summary);
   fifa96_file_free(data);
   return rc;
 }
 
 static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint32_t entry,
                          const char *name, uint32_t frame, const char *palpath, const char *out,
-                         int summary) {
+                         const char *dumppath, const char *dumppalpath, int summary) {
   uint8_t *outer_owned = NULL;
   const uint8_t *leaf = NULL;
   size_t leaf_len = 0;
@@ -963,6 +973,21 @@ static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint3
     }
   }
 
+  if (dumppath) {
+    if (ensure_parent(dumppath) != 0) {
+      errmsg("cannot create parent directory of '%s'", dumppath);
+      free(bank_owned);
+      free(outer_owned);
+      return 1;
+    }
+    if (write_file(dumppath, bank_src, bank_len) != 0) {
+      errmsg("cannot write '%s'", dumppath);
+      free(bank_owned);
+      free(outer_owned);
+      return 1;
+    }
+  }
+
   fifa96_sprite_bank bank;
   r = fifa96_sprite_bank_parse(bank_src, bank_len, &bank);
   if (r != 0) {
@@ -1009,6 +1034,7 @@ static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint3
   }
 
   uint8_t pal[768];
+  const char *pal_src = "gray";
   if (palpath) {
     uint8_t *pdata = NULL;
     size_t pn = 0;
@@ -1022,13 +1048,33 @@ static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint3
     }
     memcpy(pal, pdata, sizeof pal);
     fifa96_file_free(pdata);
+    pal_src = "file";
   } else {
-    for (uint32_t i = 0; i < 256; i++) {
-      pal[i * 3] = (uint8_t)i;
-      pal[i * 3 + 1] = (uint8_t)i;
-      pal[i * 3 + 2] = (uint8_t)i;
+    fifa96_sprite_chunk chunk;
+    const uint8_t *rgb6 = NULL;
+    uint16_t count = 0;
+    if (fifa96_sprite_chunk_parse(&bank, fe_entry.offset, &chunk) == FIFA96_OK &&
+        fifa96_sprite_chunk_palette(&chunk, &rgb6, &count) == FIFA96_OK && count == 256 &&
+        fifa96_sprite_palette_to_rgb(rgb6, count, pal) == FIFA96_OK) {
+      pal_src = "bank";
+    } else {
+      for (uint32_t i = 0; i < 256; i++) {
+        pal[i * 3] = (uint8_t)i;
+        pal[i * 3 + 1] = (uint8_t)i;
+        pal[i * 3 + 2] = (uint8_t)i;
+      }
     }
   }
+
+  if (dumppalpath) {
+    if (ensure_parent(dumppalpath) != 0 || write_file(dumppalpath, pal, sizeof pal) != 0) {
+      errmsg("cannot write palette '%s'", dumppalpath);
+      free(bank_owned);
+      free(outer_owned);
+      return 1;
+    }
+  }
+
 
   const char *path = out ? out : PLAY_DEFAULT_DIR "/sprite.ppm";
   if (ensure_parent(path) != 0) {
@@ -1058,6 +1104,7 @@ static int decode_sprite(const char *label, const uint8_t *data, size_t n, uint3
     play_sha256_hex(buf, (size_t)hn + (size_t)pixels * 3, hex);
     printf("sprite: entries=%u entry=%u name=%s frames=%u frame=%u %ux%u ppm sha256=%s\n",
            entries, sel_entry, sel_name, bank.count, frame, sf.width, sf.height, hex);
+    printf("sprite palette: source=%s\n", pal_src);
   }
   free(buf);
   free(bank_owned);
@@ -1343,7 +1390,7 @@ static int auto_sprite(const char *label, const uint8_t *data, size_t n, const s
     if (auto_sprite_pick(peak, peak_len, &pick)) entry = pick;
   }
   free(peak_owned);
-  return decode_sprite(label, data, n, entry, o->name, 0, NULL, out, 1);
+  return decode_sprite(label, data, n, entry, o->name, 0, NULL, out, NULL, NULL, 1);
 }
 
 static int auto_decode_container(const char *label, const uint8_t *data, size_t n,
@@ -1404,7 +1451,7 @@ static int auto_decode_container(const char *label, const uint8_t *data, size_t 
     case FIFA96_DETECT_SHPI:
       if (o->have_class && o->class_sel != AUTO_CLASS_SPRITE) return 0;
       snprintf(out, sizeof out, "%s/art/sprite.ppm", o->out);
-      return decode_sprite(label, data, n, o->entry, o->name, 0, NULL, out, 1);
+      return decode_sprite(label, data, n, o->entry, o->name, 0, NULL, out, NULL, NULL, 1);
     case FIFA96_DETECT_ENVELOPE:
       return 0;
     default:
