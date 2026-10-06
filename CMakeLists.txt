@@ -373,6 +373,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_engine.c
   src/fifa96_engine/fifa96_surface.c
   src/fifa96_engine/fifa96_asset.c
+  src/fifa96_engine/fifa96_cache.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
@@ -391,4 +392,9 @@ add_test(NAME test_engine_surface COMMAND test_engine_surface
 add_executable(test_engine_asset tests/test_engine_asset.c)
 target_link_libraries(test_engine_asset PRIVATE fifa96_engine)
 add_test(NAME test_engine_asset COMMAND test_engine_asset
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_cache tests/test_engine_cache.c)
+target_link_libraries(test_engine_cache PRIVATE fifa96_engine)
+add_test(NAME test_engine_cache COMMAND test_engine_cache
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
