@@ -91,6 +91,17 @@ fifa96_err_t fifa96_sprite_palette_to_rgb(const uint8_t *rgb6, uint16_t count, u
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_sprite_palette_to_bgra(const uint8_t *rgb6, uint16_t count, uint8_t *bgra8) {
+  if (count != 0 && (!rgb6 || !bgra8)) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < count; i++) {
+    bgra8[i * 4] = (uint8_t)(((uint32_t)rgb6[i * 3 + 2] * 0xFFu) / 0x3Fu);
+    bgra8[i * 4 + 1] = (uint8_t)(((uint32_t)rgb6[i * 3 + 1] * 0xFFu) / 0x3Fu);
+    bgra8[i * 4 + 2] = (uint8_t)(((uint32_t)rgb6[i * 3] * 0xFFu) / 0x3Fu);
+    bgra8[i * 4 + 3] = (i == 0xFF) ? 0 : 0xFF;
+  }
+  return FIFA96_OK;
+}
+
 int32_t fifa96_sprite_stride(uint32_t bank_index, uint32_t count) {
   int32_t divisor = 5;
   switch (bank_index) {

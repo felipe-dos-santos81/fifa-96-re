@@ -185,12 +185,39 @@ static void test_palette_to_rgb(void) {
   assert(fifa96_sprite_palette_to_rgb(six, 0, NULL) == FIFA96_OK);
 }
 
+static void test_palette_to_bgra(void) {
+  static const uint8_t six[8] = {0x00, 0x3F, 0x40, 0xFF, 0x01, 0x20, 0x3E, 0x3F};
+  uint8_t out[32];
+  assert(fifa96_sprite_palette_to_bgra(six, 8, out) == FIFA96_OK);
+  assert(out[0] == (uint8_t)((0x40u * 255u) / 63u));
+  assert(out[1] == (uint8_t)((0x3Fu * 255u) / 63u));
+  assert(out[2] == 0x00);
+  assert(out[3] == 0xFF);
+  assert(out[4] == (uint8_t)((0x20u * 255u) / 63u));
+  assert(out[5] == (uint8_t)((1u * 255u) / 63u));
+  assert(out[6] == (uint8_t)((0xFFu * 255u) / 63u));
+  assert(out[7] == 0xFF);
+
+  uint8_t all[768];
+  uint8_t full[1024];
+  memset(all, 0x3F, sizeof all);
+  assert(fifa96_sprite_palette_to_bgra(all, 256, full) == FIFA96_OK);
+  assert(full[254 * 4 + 3] == 0xFF);
+  assert(full[255 * 4 + 3] == 0x00);
+  assert(full[255 * 4 + 0] == 0xFF && full[255 * 4 + 1] == 0xFF && full[255 * 4 + 2] == 0xFF);
+
+  assert(fifa96_sprite_palette_to_bgra(NULL, 1, out) == R_INVALID);
+  assert(fifa96_sprite_palette_to_bgra(six, 1, NULL) == R_INVALID);
+  assert(fifa96_sprite_palette_to_bgra(six, 0, NULL) == FIFA96_OK);
+}
+
 int main(void) {
   build_bank();
   test_chunk_parse();
   test_chunk_parse_errors();
   test_chunk_palette();
   test_palette_to_rgb();
+  test_palette_to_bgra();
   puts("test_sprite_palette: all assertions passed");
   return 0;
 }
