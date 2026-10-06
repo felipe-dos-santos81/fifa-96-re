@@ -236,3 +236,48 @@ fifa96_err_t fifa96_action_stage_finish(fifa96_action_stage *state, fifa96_actio
 fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uint8_t *hold);
 fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
                                         uint32_t *entry);
+
+#define FIFA96_ACTION_SEQUENCE_SCATTER_POINTS 5u
+
+typedef struct fifa96_action_sequence_lane_out {
+  int32_t z;
+  int32_t x;
+  int32_t threshold;
+} fifa96_action_sequence_lane_out;
+
+typedef struct fifa96_action_sequence_duel {
+  uint8_t reset;
+  uint8_t event_id;
+} fifa96_action_sequence_duel;
+
+typedef struct fifa96_action_sequence_press {
+  uint8_t fire;
+  uint8_t reset;
+} fifa96_action_sequence_press;
+
+fifa96_err_t fifa96_action_sequence_select(uint8_t stage, const uint32_t *arms, uint32_t count,
+                                           uint32_t *arm);
+fifa96_err_t fifa96_action_sequence_event(uint8_t anim_byte, uint8_t event_id, uint8_t *post);
+fifa96_err_t fifa96_action_sequence_marker(uint8_t marker, uint8_t want, uint8_t *match);
+fifa96_err_t fifa96_action_sequence_rng_event(uint32_t rng, uint8_t even_id, uint8_t odd_id,
+                                              uint8_t *event_id);
+fifa96_err_t fifa96_action_sequence_countdown(uint32_t rng, uint16_t *countdown);
+fifa96_err_t fifa96_action_sequence_anim_byte(const uint8_t *table, uint8_t index,
+                                              uint16_t *value);
+fifa96_err_t fifa96_action_sequence_lane(uint8_t subtype, uint8_t side, int32_t boost,
+                                         fifa96_action_sequence_lane_out *out);
+fifa96_err_t fifa96_action_sequence_scatter_celebration(const fifa96_action_vec3 *base,
+                                                        int32_t dir_x, int32_t dir_z,
+                                                        const uint32_t *rng,
+                                                        fifa96_action_vec3 *points);
+fifa96_err_t fifa96_action_sequence_scatter_stats(const fifa96_action_vec3 *base, int32_t dir_x,
+                                                  int32_t dir_z, const uint32_t *rng,
+                                                  fifa96_action_vec3 *points);
+fifa96_err_t fifa96_action_sequence_duel_event(int16_t delta_angle, int16_t aim, int16_t facing,
+                                               int16_t atan_delta,
+                                               fifa96_action_sequence_duel *out);
+fifa96_err_t fifa96_action_sequence_press_event(int16_t height, int32_t timer89,
+                                                fifa96_action_sequence_press *out);
+fifa96_err_t fifa96_action_sequence_event_ids(const uint8_t *t344, const uint8_t *t346,
+                                              const uint8_t *t349, const uint8_t *t34c,
+                                              const uint32_t *rng, uint8_t *ids);

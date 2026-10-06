@@ -551,3 +551,170 @@ fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, ui
   *entry = table[phase];
   return FIFA96_OK;
 }
+
+static int32_t fifa96_action_sequence_clamp_x(int32_t value) {
+  if (value > 0x720) return 0x720;
+  if (value < -0x720) return -0x720;
+  return value;
+}
+
+static int32_t fifa96_action_sequence_clamp_z(int32_t value) {
+  if (value > 0xB10) return 0xB10;
+  if (value < -0xB10) return -0xB10;
+  return value;
+}
+
+fifa96_err_t fifa96_action_sequence_select(uint8_t stage, const uint32_t *arms, uint32_t count,
+                                           uint32_t *arm) {
+  if (!arms || !arm || count == 0) return -FIFA96_ERR_INVALID;
+  if ((uint32_t)stage >= count) return -FIFA96_ERR_INVALID;
+  *arm = arms[stage];
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_event(uint8_t anim_byte, uint8_t event_id, uint8_t *post) {
+  if (!post) return -FIFA96_ERR_INVALID;
+  *post = anim_byte != event_id ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_marker(uint8_t marker, uint8_t want, uint8_t *match) {
+  if (!match) return -FIFA96_ERR_INVALID;
+  *match = marker == want ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_rng_event(uint32_t rng, uint8_t even_id, uint8_t odd_id,
+                                              uint8_t *event_id) {
+  if (!event_id) return -FIFA96_ERR_INVALID;
+  *event_id = (rng & 1u) ? odd_id : even_id;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_countdown(uint32_t rng, uint16_t *countdown) {
+  if (!countdown) return -FIFA96_ERR_INVALID;
+  *countdown = (uint16_t)((rng & 0x7Fu) + 0x20u);
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_anim_byte(const uint8_t *table, uint8_t index,
+                                              uint16_t *value) {
+  if (!table || !value) return -FIFA96_ERR_INVALID;
+  *value = (uint16_t)((uint16_t)table[index] - 2u);
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_lane(uint8_t subtype, uint8_t side, int32_t boost,
+                                         fifa96_action_sequence_lane_out *out) {
+  int32_t block;
+  if (!out) return -FIFA96_ERR_INVALID;
+  block = (int32_t)subtype * 6;
+  out->z = side ? block : -block;
+  out->x = 0x7E0 + block;
+  out->threshold = ((int32_t)subtype * ((boost >> 25) * 60)) >> 4;
+  if (side) out->threshold += 60;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_scatter_celebration(const fifa96_action_vec3 *base,
+                                                        int32_t dir_x, int32_t dir_z,
+                                                        const uint32_t *rng,
+                                                        fifa96_action_vec3 *points) {
+  uint32_t i;
+  if (!base || !rng || !points) return -FIFA96_ERR_INVALID;
+  points[0] = *base;
+  points[1].x = (int32_t)((uint32_t)base->x + ((rng[0] & 0x7Fu) + 0xA0u) * (uint32_t)dir_x);
+  points[1].y = base->y;
+  points[1].z = (int32_t)((uint32_t)base->z + ((rng[1] & 0x7Fu) + 0xA0u) * (uint32_t)dir_z);
+  points[2].x = (int32_t)((uint32_t)points[1].x + ((rng[2] & 0x7Fu) + 0x140u) * (uint32_t)dir_x);
+  points[2].y = base->y;
+  points[2].z = (int32_t)((uint32_t)points[1].z + ((rng[3] & 0x7Fu) + 0x20u) * (uint32_t)dir_z);
+  points[3].x = (int32_t)((0x5E0u - (rng[4] & 0x1FFu)) * (uint32_t)dir_x);
+  points[3].y = base->y;
+  points[3].z = (int32_t)((uint32_t)points[2].z + ((rng[5] & 0xFFu) + 0x140u) * (uint32_t)dir_z);
+  points[4].x = (int32_t)((uint32_t)points[3].x + ((rng[6] & 0x7Fu) + 0x50u) * (uint32_t)dir_x);
+  points[4].y = base->y;
+  points[4].z = (int32_t)((uint32_t)points[3].z + ((rng[7] & 0x1FFu) + 0x280u) * (uint32_t)dir_z);
+  for (i = 0; i < FIFA96_ACTION_SEQUENCE_SCATTER_POINTS; i++) {
+    points[i].x = fifa96_action_sequence_clamp_x(points[i].x);
+    points[i].z = fifa96_action_sequence_clamp_z(points[i].z);
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_scatter_stats(const fifa96_action_vec3 *base, int32_t dir_x,
+                                                  int32_t dir_z, const uint32_t *rng,
+                                                  fifa96_action_vec3 *points) {
+  uint32_t i;
+  if (!base || !rng || !points) return -FIFA96_ERR_INVALID;
+  points[0] = *base;
+  points[1].x = (int32_t)((rng[0] % 0xF0u) * (uint32_t)dir_x);
+  points[1].y = base->y;
+  points[1].z = (int32_t)((uint32_t)base->z + ((rng[1] & 0xFFu) + 0x1E0u) * (uint32_t)dir_z);
+  points[2].x = (int32_t)((uint32_t)points[1].x + ((rng[2] & 0x7Fu) + 0x20u) * (uint32_t)dir_x);
+  points[2].y = base->y;
+  points[2].z = (int32_t)((uint32_t)points[1].z + ((rng[3] & 0xFFu) + 0x140u) * (uint32_t)dir_z);
+  points[3].x = points[2].x;
+  points[3].y = base->y;
+  points[3].z = (int32_t)((uint32_t)points[2].z + ((rng[4] & 0xFFu) + 0x3C0u) * (uint32_t)dir_z);
+  points[4].x = (int32_t)((uint32_t)points[3].x + ((rng[5] & 0x7Fu) + 0x50u) * (uint32_t)dir_x);
+  points[4].y = base->y;
+  points[4].z = (int32_t)((uint32_t)points[3].z + ((rng[6] & 0x1FFu) + 0x3C0u) * (uint32_t)dir_z);
+  for (i = 0; i < FIFA96_ACTION_SEQUENCE_SCATTER_POINTS; i++) {
+    points[i].x = fifa96_action_sequence_clamp_x(points[i].x);
+    points[i].z = fifa96_action_sequence_clamp_z(points[i].z);
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_duel_event(int16_t delta_angle, int16_t aim, int16_t facing,
+                                               int16_t atan_delta,
+                                               fifa96_action_sequence_duel *out) {
+  int16_t diff;
+  if (!out) return -FIFA96_ERR_INVALID;
+  out->reset = 0;
+  out->event_id = 0;
+  if (delta_angle <= 0x20 || delta_angle >= 0x70) {
+    out->reset = 1;
+    return FIFA96_OK;
+  }
+  if (aim <= 4) {
+    out->event_id = 0x0C;
+    return FIFA96_OK;
+  }
+  diff = (int16_t)(facing - atan_delta);
+  if (diff < 0) diff = (int16_t)-diff;
+  out->event_id = diff < 0x1000 ? 0x59 : 0x0C;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_press_event(int16_t height, int32_t timer89,
+                                                fifa96_action_sequence_press *out) {
+  if (!out) return -FIFA96_ERR_INVALID;
+  out->fire = height <= 0x30 ? 1 : 0;
+  out->reset = (!out->fire && timer89 > 0x1E) ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_event_ids(const uint8_t *t344, const uint8_t *t346,
+                                              const uint8_t *t349, const uint8_t *t34c,
+                                              const uint32_t *rng, uint8_t *ids) {
+  if (!t344 || !t346 || !t349 || !t34c || !rng || !ids) return -FIFA96_ERR_INVALID;
+  ids[0] = t344[rng[0] & 1u];
+  if (ids[0] == 0x67 && (rng[1] & 1u)) {
+    ids[1] = 0x67;
+    ids[2] = 0x67;
+    ids[3] = 0x67;
+    ids[4] = 0x67;
+    return FIFA96_OK;
+  }
+  ids[1] = ids[0];
+  ids[2] = t349[rng[2] % 3u];
+  ids[3] = t34c[rng[3] % 9u];
+  ids[4] = ids[3];
+  if (rng[4] & 1u) ids[1] = t346[rng[5] % 3u];
+  if (ids[3] == 0x58 || ids[3] == 0x5B || ids[3] == 0x5F || ids[3] == 0x6B) {
+    if ((rng[6] & 3u) == 0) ids[4] = 0x68;
+  }
+  return FIFA96_OK;
+}

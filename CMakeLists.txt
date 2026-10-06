@@ -255,6 +255,9 @@ add_test(NAME test_action_possession COMMAND test_action_possession WORKING_DIRE
 add_executable(test_stage_family tests/test_stage_family.c)
 target_link_libraries(test_stage_family PRIVATE fifa96_action_handlers fifa96_entity_update)
 add_test(NAME test_stage_family COMMAND test_stage_family WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_executable(test_event_sequences tests/test_event_sequences.c)
+target_link_libraries(test_event_sequences PRIVATE fifa96_action_handlers fifa96_entity_update)
+add_test(NAME test_event_sequences COMMAND test_event_sequences WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
