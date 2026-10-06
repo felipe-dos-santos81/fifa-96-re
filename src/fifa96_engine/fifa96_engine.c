@@ -1,5 +1,44 @@
 #include <stdlib.h>
+#include <string.h>
 #include "fifa96_engine/fifa96_engine_internal.h"
+
+static int engine_char_fold(int c) {
+  return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : c;
+}
+
+static int engine_ci_prefix(const char *s, const char *prefix) {
+  while (*prefix) {
+    if (engine_char_fold((unsigned char)*s) != engine_char_fold((unsigned char)*prefix)) return 0;
+    s++;
+    prefix++;
+  }
+  return 1;
+}
+
+static int engine_ci_suffix(const char *s, const char *suffix) {
+  size_t sn = strlen(s), fn = strlen(suffix);
+  if (fn > sn) return 0;
+  s += sn - fn;
+  while (*suffix) {
+    if (engine_char_fold((unsigned char)*s) != engine_char_fold((unsigned char)*suffix)) return 0;
+    s++;
+    suffix++;
+  }
+  return 1;
+}
+
+/* First VIDEO/<name>.TGV in the asset table walk order (case-insensitive).
+ * The real load-order table has not been derived yet, so this bounded scan
+ * is the M1 approximation. Open leg: intro path selection. */
+static const char *engine_find_intro_path(const struct fifa96_asset_table *t) {
+  if (!t) return NULL;
+  for (size_t i = 0; i < t->count; i++) {
+    const char *p = t->entries[i].path;
+    while (*p == '/') p++;
+    if (engine_ci_prefix(p, "VIDEO/") && engine_ci_suffix(p, ".TGV")) return t->entries[i].path;
+  }
+  return NULL;
+}
 
 struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cfg,
                                            fifa96_platform *plat) {
@@ -35,6 +74,23 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
     return -1;
   }
   fifa96_surface_clear(e->surface, 0x00);
+  const char *intro_path = engine_find_intro_path(e->assets);
+  if (intro_path) {
+    e->cache = fifa96_cache_create(e->assets);
+    if (e->cache) {
+      size_t intro_len = 0;
+      const uint8_t *intro_bytes = fifa96_cache_get(e->cache, intro_path, &intro_len);
+      if (intro_bytes && intro_len != 0 &&
+          fifa96_intro_start(&e->intro, e->surface) == 0 &&
+          fifa96_intro_feed(&e->intro, intro_bytes, intro_len) == 0) {
+        e->intro_active = 1;
+      } else {
+        /* unreadable/invalid VIDEO asset: no intro, boot still succeeds. */
+        fifa96_cache_destroy(e->cache);
+        e->cache = NULL;
+      }
+    }
+  }
   e->plat->audio_open(e->plat->self, 22050u, 2);
   e->booted = 1;
   return 0;
@@ -47,6 +103,19 @@ int fifa96_engine_step(struct fifa96_engine *e) {
   uint64_t now = e->plat->now_ns(e->plat->self);
   e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, now - e->last_ns);
   e->last_ns = now;
+  /* Video cadence: 15 frames per 100 PIT ticks (FU-37); at most one intro
+   * frame per engine step, so the tape stays deterministic. */
+  if (e->intro_active) {
+    uint32_t due = fifa96_pacing_frames_due(e->clock.pit.ticks);
+    if (due > e->intro_frames) {
+      if (fifa96_intro_step(&e->intro, e->surface) != 0) {
+        e->intro_active = 0;
+      } else {
+        e->intro_frames++;
+        if (fifa96_intro_done(&e->intro)) e->intro_active = 0;
+      }
+    }
+  }
   fifa96_platform_frame f;
   fifa96_surface_plane(e->surface, &f);
   if (e->plat->present(e->plat->self, &f) != 0) return -1;
@@ -69,6 +138,7 @@ void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_surface_destroy(e->surface);
+  fifa96_cache_destroy(e->cache);
   fifa96_asset_unmount(e->assets);
   free(e);
 }
