@@ -283,6 +283,12 @@ add_executable(test_projection tests/test_projection.c)
 target_link_libraries(test_projection PRIVATE fifa96_projection)
 add_test(NAME test_projection COMMAND test_projection WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_scene src/fifa96_loader/fifa96_scene.c)
+target_link_libraries(fifa96_scene PRIVATE fifa96_projection)
+add_executable(test_scene tests/test_scene.c)
+target_link_libraries(test_scene PRIVATE fifa96_scene)
+add_test(NAME test_scene COMMAND test_scene WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
 target_link_libraries(test_ring_stats PRIVATE fifa96_ring_stats)
