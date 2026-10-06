@@ -8,4 +8,7 @@ build/
 .superpowers/
 captures/
 
+# Ghidra transient project files
+fifa96.rep/**/tmp*.ps
+
 __pycache__/
