@@ -24,6 +24,13 @@ importing a duplicate. Step 2a's *verification* is therefore performed against
 that program, and the Step 2b relabel list is applied at the **real** addresses
 on it.
 
+**Authoritative program.** `/FIFA96.EXE` (Ghidra's native
+`watcom:LE:32:default` LE loader, which applies the LE fixups) is the
+authoritative corrected image for all data addressing. It **supersedes
+`/fifa96_le.bin`** for that purpose; `/fifa96_le.bin` is retained only as the
+offset-form cross-reference witness. **Later tasks must target `/FIFA96.EXE`**,
+never `/fifa96_le.bin`, when resolving data operands.
+
 * Program used: **`FIFA96.EXE`** (Ghidra project path `/FIFA96.EXE`).
 * `ghidra_list_open_programs` → `FIFA96.EXE` current, language
   `watcom:LE:32:default`, compiler `watcom`, 2706 functions / 15239 symbols,
@@ -84,7 +91,7 @@ instruction.
 | `0x55CE0` | `0x155CE0` | all `00` (BSS) | audio/MIDI device block | FU-115; native `CMP/MOV [...]` 50+ sites `0x64f73..0x678ef` |
 | `[0x677C]` | `0x10677C` | all `00` | engine state dword | FU-126/FU-127; native `CMP [0x0010677c],0x1` @ `0x436f2`, `MOV [0x0010677c],0x3` @ `0x437d6` |
 | `[0x6780]` | `0x106780` | all `00` | engine state dword | FU-126/FU-127; native `MOV EAX,[0x00106780]` @ `0x43608`, `CMP [0x00106780],0x2` @ `0x43d1f` |
-| `[0x7300]` | `0x107300` | `00 00 00 00` (next dword `01 00 00 00`) | engine state/pointer dword | FU-126/FU-127; native `MOV [0x00107300],EDX` @ `0x492de`, `MOV EAX,[0x00107300]` @ `0x4937c` |
+| `[0x7300]` | `0x107300` | `00 00 00 00` (`0x107308` = `01 00 00 00`) | engine state/pointer dword | FU-126/FU-127; native `MOV [0x00107300],EDX` @ `0x492de`, `MOV EAX,[0x00107300]` @ `0x4937c` |
 | `[0x7304]` | `0x107304` | `00 00 00 00` (then `01 00 00 00`) | engine state/counter dword | FU-126/FU-127; native `MOV ECX,[0x00107304]` @ `0x49573`, `CMP [0x00107304],0x4` @ `0x4a1a9` |
 | `[0x730C]` | `0x10730C` | all `00` | engine state/pointer dword | FU-126/FU-127; native `MOV [0x0010730c],EBX` @ `0x493be`, `MOV ESI,[0x0010730c]` @ `0x496a1` |
 | `0x4AE44` | `0x14AE44` | all `00` | scratch, element of dword array based `0x14AE40` | FU-114; native `MOV EDX,[EDX*4+0x14ae40]` @ `0x3da89`, `MOV [0x0014ae44],EBP` @ `0x3dc97` |
