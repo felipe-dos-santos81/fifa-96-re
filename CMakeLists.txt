@@ -371,6 +371,7 @@ endif()
 # ── Engine (M1) ────────────────────────────────────────────────────────────────
 add_library(fifa96_engine
   src/fifa96_engine/fifa96_engine.c
+  src/fifa96_engine/fifa96_surface.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
@@ -378,4 +379,9 @@ target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
 add_test(NAME test_engine_platform COMMAND test_engine_platform
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_surface tests/test_engine_surface.c)
+target_link_libraries(test_engine_surface PRIVATE fifa96_engine)
+add_test(NAME test_engine_surface COMMAND test_engine_surface
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
