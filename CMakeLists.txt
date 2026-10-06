@@ -272,6 +272,12 @@ add_executable(test_render tests/test_render.c)
 target_link_libraries(test_render PRIVATE fifa96_render)
 add_test(NAME test_render COMMAND test_render WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_sprite src/fifa96_loader/fifa96_sprite.c)
+target_link_libraries(fifa96_sprite PRIVATE fifa96_file)
+add_executable(test_sprite tests/test_sprite.c)
+target_link_libraries(test_sprite PRIVATE fifa96_sprite)
+add_test(NAME test_sprite COMMAND test_sprite WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
 target_link_libraries(test_ring_stats PRIVATE fifa96_ring_stats)
