@@ -23,3 +23,5 @@ int fifa96_window_define_full(fifa96_window *win, int32_t w, int32_t h);
 int fifa96_window_set(fifa96_window *win, int32_t x, int32_t y, int32_t w, int32_t h);
 int fifa96_window_expand(const fifa96_window *win, fifa96_window_box *saved,
                          const int32_t *pts, int count);
+int fifa96_window_scale(const fifa96_window *win, int32_t *scale_x, int32_t *scale_y);
+int fifa96_window_zoomed(const fifa96_window *win, int *zoomed);

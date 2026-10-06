@@ -82,11 +82,39 @@ static void test_expand(void) {
   assert(fifa96_window_expand(&win, &saved, pts, -1) == W_INVALID);
 }
 
+static void test_scale(void) {
+  fifa96_window win;
+  int32_t sx = 0, sy = 0;
+  int zoomed = -1;
+  fifa96_window_init(&win, 320, 200);
+
+  fifa96_window_set(&win, 0, 0, 320, 200);
+  assert(fifa96_window_scale(&win, &sx, &sy) == FIFA96_OK);
+  assert(sx == 0x10000 && sy == 0x10000);
+  assert(fifa96_window_zoomed(&win, &zoomed) == FIFA96_OK && zoomed == 0);
+
+  fifa96_window_set(&win, 0, 0, 160, 100);
+  assert(fifa96_window_scale(&win, &sx, &sy) == FIFA96_OK);
+  assert(sx == 0x8000 && sy == 0x8000);
+  assert(fifa96_window_zoomed(&win, &zoomed) == FIFA96_OK && zoomed == 1);
+
+  fifa96_window_set(&win, 0, 0, 200, 150);
+  assert(fifa96_window_scale(&win, &sx, &sy) == FIFA96_OK);
+  assert(sx == (200 * 65536) / 320 && sy == (150 * 65536) / 200);
+
+  assert(fifa96_window_scale(NULL, &sx, &sy) == W_INVALID);
+  assert(fifa96_window_scale(&win, NULL, &sy) == W_INVALID);
+  assert(fifa96_window_scale(&win, &sx, NULL) == W_INVALID);
+  assert(fifa96_window_zoomed(NULL, &zoomed) == W_INVALID);
+  assert(fifa96_window_zoomed(&win, NULL) == W_INVALID);
+}
+
 int main(void) {
   test_init();
   test_set();
   test_define_full();
   test_expand();
+  test_scale();
   puts("test_window: all assertions passed");
   return 0;
 }

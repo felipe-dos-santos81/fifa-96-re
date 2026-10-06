@@ -83,3 +83,19 @@ int fifa96_window_expand(const fifa96_window *win, fifa96_window_box *saved,
   if (saved->y1 < max_y) saved->y1 = max_y;
   return FIFA96_OK;
 }
+
+int fifa96_window_scale(const fifa96_window *win, int32_t *scale_x, int32_t *scale_y) {
+  if (!win || !scale_x || !scale_y) return -FIFA96_ERR_INVALID;
+  *scale_x = (int32_t)(((int64_t)win->box.w << 16) / 320);
+  *scale_y = (int32_t)(((int64_t)win->box.h << 16) / 200);
+  return FIFA96_OK;
+}
+
+int fifa96_window_zoomed(const fifa96_window *win, int *zoomed) {
+  if (!win || !zoomed) return -FIFA96_ERR_INVALID;
+  int32_t scale_x, scale_y;
+  int rc = fifa96_window_scale(win, &scale_x, &scale_y);
+  if (rc != FIFA96_OK) return rc;
+  *zoomed = scale_x < 0x10000;
+  return FIFA96_OK;
+}
