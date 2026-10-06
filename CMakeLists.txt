@@ -222,6 +222,11 @@ add_executable(test_ball_pairing tests/test_ball_pairing.c)
 target_link_libraries(test_ball_pairing PRIVATE fifa96_ball_pairing fifa96_entity_update)
 add_test(NAME test_ball_pairing COMMAND test_ball_pairing WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_keeper src/fifa96_loader/fifa96_keeper.c)
+add_executable(test_keeper tests/test_keeper.c)
+target_link_libraries(test_keeper PRIVATE fifa96_keeper)
+add_test(NAME test_keeper COMMAND test_keeper WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
 target_link_libraries(test_ring_stats PRIVATE fifa96_ring_stats)
