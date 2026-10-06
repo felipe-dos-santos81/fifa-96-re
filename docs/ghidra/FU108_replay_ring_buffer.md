@@ -44,7 +44,9 @@ so the header at `[0x9AB0]`: `+0` start index (`*[0x9AB8]`), `+4` `[0x9ABC]`,
   countdown compares against `[0x9AA8]` (FU-107 §4).
 * **step back — `FUN_00063e54`**: while `[0x9a94] > 0` decrements the index
   and re-applies the record slot; at `< 1` sets mode 0x82.
-* **packing — `FUN_00063b80(EAX = dest? , EDX = ring slot)`**: copies the
+* **packing — `FUN_00063b80(EAX = 0x55AA4, EDX = ring slot)`** (role
+  corrected by FU-109 §1: this is the **apply**, record → live state; the
+  packer is `FUN_0006408c`): copies the
   first three dwords, the bytes at source `+0x0A/+0x66/+0x96/+0x31/+0xDB`,
   six dwords from `+0xF6`, the word `+0x116`, six bytes from `+0x10E`, and a
   per-field 16-bit high-word pass (`>>0x10` of `+0x0A`, `+0x66`, `+0x38*4`).
@@ -98,8 +100,10 @@ Analysis-only: no port, capture-rig, ISO, or Ghidra-project change.
 
 ## 6. Open legs
 
-1. **`FUN_00063b80` source/destination roles** and the record field map
-   (`0x118` bytes; reads `+0x0A/+0x31/+0x66/+0x96/+0xDB/+0xF6/+0x10E/+0x116`).
+1. **`FUN_00063b80` source/destination roles** (corrected by FU-109 §1: the
+   apply) and the record field map (`0x118` bytes; reads
+   `+0x0A/+0x31/+0x66/+0x96/+0xDB/+0xF6/+0x10E/+0x116`; packer map in
+   FU-109 §2).
 2. **`FUN_0004a448`** (allocator) and the `&0xA41C` descriptor;
    `FUN_000993ec` (free), `FUN_000974D8`/`FUN_000974DC` (re-sync).
 3. **`FUN_00064AA4`'s jump table** and `FUN_00065920`/`FUN_000125C4`/
