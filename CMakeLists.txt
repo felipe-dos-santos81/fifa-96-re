@@ -236,6 +236,11 @@ add_executable(test_outfield tests/test_outfield.c)
 target_link_libraries(test_outfield PRIVATE fifa96_outfield)
 add_test(NAME test_outfield COMMAND test_outfield WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(fifa96_play tools/fifa96_play.c)
+target_link_libraries(fifa96_play PRIVATE fifa96_vgt_player fifa96_tgv_stream fifa96_kvgt
+                                             fifa96_eacs fifa96_bnk fifa96_bigf fifa96_blit
+                                             fifa96_file)
+
 add_library(fifa96_action_handlers src/fifa96_loader/fifa96_action_handlers.c)
 target_link_libraries(fifa96_action_handlers PRIVATE fifa96_entity_update)
 add_executable(test_action_handlers tests/test_action_handlers.c)
@@ -305,4 +310,5 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME test_vgt_capture COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_vgt_capture.py)
   add_test(NAME test_vgt_slots COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_vgt_slots.py)
   add_test(NAME test_fvgt_extract COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_fvgt_extract.py)
+  add_test(NAME test_play COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_play.py)
 endif()

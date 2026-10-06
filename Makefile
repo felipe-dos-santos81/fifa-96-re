@@ -7,8 +7,9 @@ BUILD = build
 CMAKE = cmake
 CTEST = ctest
 FILE ?= tests/golden/fw1.qfs
+ARGS ?= --help
 
-.PHONY: help configure build test check run clean rebuild tsr capture trace
+.PHONY: help configure build test check run play clean rebuild tsr capture trace
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -34,6 +35,9 @@ check: test ## Exactly the gate set: configure + strict build + full suite
 
 run: build ## Build and run the port's container dumper (make run FILE=path, default fw1.qfs)
 	./$(BUILD)/fifa96_dump $(FILE)
+
+play: build ## Build and run the host runner (make play ARGS="video FILE --out build/play")
+	./$(BUILD)/fifa96_play $(ARGS)
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 
