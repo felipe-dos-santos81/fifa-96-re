@@ -55,13 +55,17 @@ tables through `FUN_0004C4F0` (FU-94 §1).
   ratios at `0x67A4`/`0x67A8` (`FUN_00044394` compares `0x67AC`/`0x67B0`).
 * On a miss, `FUN_000A1A60(yaw, &s, &c)` (`s` = first out = sine, `c` =
   second = cosine; FU-94 §2).
-* Gate `if (0 < s < 0x10000)` — the ratio is only computed for a yaw in
+* Gate `if (0 < cos < 0x10000)` — the ratio is only computed for a yaw in
   `(0°, 90°)`; otherwise the previous values are kept (cache refreshed).
-* `ratio1 = ((src_w/2)·s)>>16 / c` (two-step divide + truncate to whole
-  units, `0x44241..0x44284`), then `FUN_0001D940(4)` — **settings index 4**,
-  default 0 (`FUN_0001DE94`), i.e. the second ratio is computed by default:
-* `ratio2 = ((floor(5·src_w/12)·s)>>16 / c` (`0x44299..0x442E8`); when
-  settings[4] != 0 the store falls back to `ratio1` (`0x44292 → 0x442EB`).
+  (`FUN_0004C3B0` proves the outputs: param_2 = sine, param_3 = cosine, so
+  the gated/multiplied slot is the cosine — corrected in FU-96 §2.)
+* `ratio1 = ((src_w/2)·cos)>>16 / sin` (two-step divide, `0x44241..0x44284`)
+  — i.e. 16.16 of `(src_w/2)·cot(angle)`, then `FUN_0001D940(4)` —
+  **settings index 4**, default 0 (`FUN_0001DE94`), so the second ratio is
+  computed by default:
+* `ratio2` is the same computation with `floor(5·src_w/12)` in place of
+  `src_w/2` (`0x44299..0x442E8`); when settings[4] != 0 the store falls back
+  to `ratio1` (`0x44292 → 0x442EB`).
 * `src_h` participates only in the cache key: both ratios derive from the
   window **width** and the yaw.
 
