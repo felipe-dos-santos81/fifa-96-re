@@ -59,18 +59,18 @@ entries (`(0x7F1C - 0x7E2C)/0x18 = 10`):
 | 0 | -100 | 488 | 1100 | 33900 | 3900 | 4608 |
 | 1 | -2713 | 216 | 3006 | 45550 | 1037 | 3048 |
 | 2 | -1020 | 260 | 1873 | 52414 | 1396 | 3464 |
-| 3 | 100 | 268 | -37 | 48909 | 2394 | 4976 |
-| 4 | -562 | 264 | 3690 | 33344 | 1606 | 3104 |
-| 5 | -4 | 276 | 1502 | 32800 | 1742 | 3545 |
-| 6 | -347 | 380 | 1325 | 62621 | 3852 | 4608 |
-| **7** | **-1388** | **3148** | **432** | **40244** | **6707** | **4608** |
-| 8 | 302 | 729 | -2288 | 28207 | 1896 | 4608 |
-| 9 | — | — | — | — | — | — (next array at 0x7F1C) |
+| 3 | -2706 | 192 | -105 | 50129 | 972 | 3632 |
+| 4 | 100 | 268 | -37 | 48909 | 2394 | 4976 |
+| 5 | -562 | 264 | 3690 | 33344 | 1606 | 3104 |
+| 6 | -4 | 276 | 1502 | 32800 | 1742 | 3545 |
+| **7** | **-347** | **380** | **1325** | **62621** | **3852** | **4608** |
+| 8 | -1388 | 3148 | 432 | 40244 | 6707 | 4608 |
+| 9 | 302 | 729 | -2288 | 28207 | 1896 | 4608 |
 
 Preset 0 is the default (yaw 186.2°, pitch 21.4°, angle 25.3° — the angle
-whose `(w/2)·cot` ≈ screen width, FU-96/97); preset 7 is a high, steep view
-(y 3148, pitch 36.8°), which is what camera 9 is switched to for the
-cinematic setup of §2.
+whose `(w/2)·cot` ≈ screen width, FU-96/97); preset 7 is a yaw-rotated view
+(344.3°) that camera 9 is switched to for the cinematic setup of §2; preset
+8 is the high, steep view (y 3148, pitch 36.8°).
 
 Arrays B (`0x7F1C`, first three entries read, angles constant 4608) and C
 (`0x85AC`, angles 0 and 3430) belong to the other descriptor pointers
@@ -86,6 +86,10 @@ Arrays B (`0x7F1C`, first three entries read, angles constant 4608) and C
   preset.
 * **FU-97 §8 leg 2/3** — descriptor field roles and the home/away blocks
   remain cited only.
+* **FU-99 first issue (erratum)** — the first published table skipped entry 3
+  (the read starting at `0x7E8C` is preset 4, not 3), shifting every row from
+  3 on and mislabelling the high preset as 7 instead of 8. The table above
+  is corrected with `read_memory 0x107E74` for preset 3.
 
 ## 5. Provenance
 
@@ -101,7 +105,6 @@ Ghidra-project change.
    them.
 2. **`FUN_0004CC98`/`FUN_0004FDA4`/`FUN_0004F8C8(10, …, 0xF)`**: the
    camera-transition/animation players called after the preset apply.
-3. **Preset 9**: not stored in array A (`0x7F1C` starts array B); whether any
-   caller uses index 8/9 is unknown.
+3. **Presets 8/9**: stored (table above) but no caller was found using them.
 4. **`FUN_00036B98`** (called at preset apply) and `FUN_0004B7D0`/
    `FUN_0004B818`/`FUN_0004B6FC` (side/branch selectors) are cited only.
