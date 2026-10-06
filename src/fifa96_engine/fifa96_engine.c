@@ -15,10 +15,22 @@ struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cf
 
 int fifa96_engine_boot(struct fifa96_engine *e) {
   if (!e || e->booted) return -1;
-  if (e->plat->init(e->plat->self, e->cfg.width, e->cfg.height, "FIFA 96") != 0) return -1;
+  if (e->cfg.iso_path) {
+    if (fifa96_asset_mount_file(e->cfg.iso_path, &e->assets) != FIFA96_OK) return -1;
+  } else {
+    e->assets = calloc(1, sizeof *e->assets);
+    if (!e->assets) return -1;
+  }
+  if (e->plat->init(e->plat->self, e->cfg.width, e->cfg.height, "FIFA 96") != 0) {
+    fifa96_asset_unmount(e->assets);
+    e->assets = NULL;
+    return -1;
+  }
   e->surface = fifa96_surface_create(e->cfg.width, e->cfg.height);
   if (!e->surface) {
     e->plat->shutdown(e->plat->self);
+    fifa96_asset_unmount(e->assets);
+    e->assets = NULL;
     return -1;
   }
   fifa96_surface_clear(e->surface, 0x00);
@@ -51,6 +63,7 @@ void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_surface_destroy(e->surface);
+  fifa96_asset_unmount(e->assets);
   free(e);
 }
 
