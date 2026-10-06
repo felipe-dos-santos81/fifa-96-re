@@ -91,6 +91,16 @@ fifa96_err_t fifa96_sprite_palette_to_rgb(const uint8_t *rgb6, uint16_t count, u
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_sprite_palette_kit_remap(uint8_t *rgb6, uint16_t count) {
+  if (!rgb6 || count < 166) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  static const uint8_t dst[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
+  static const uint8_t src[10] = {156, 157, 158, 159, 160, 161, 162, 163, 164, 165};
+  for (int i = 0; i < 10; i++)
+    for (int c = 0; c < 3; c++)
+      rgb6[dst[i] * 3 + c] = rgb6[src[i] * 3 + c];
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_sprite_palette_to_bgra(const uint8_t *rgb6, uint16_t count, uint8_t *bgra8) {
   if (count != 0 && (!rgb6 || !bgra8)) return (fifa96_err_t)-FIFA96_ERR_INVALID;
   for (uint32_t i = 0; i < count; i++) {
