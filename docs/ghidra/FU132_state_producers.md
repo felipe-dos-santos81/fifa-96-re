@@ -30,9 +30,11 @@ comes only from the special-render path `FUN_00058bc0`.**
 | `109090` | 3 | `FUN_00058bc0` only (`INC`@`0x58cc7`, `MOV`@`0x58cd6`); `CMP 3`@`0x58cae` |
 | `109094` | 4 | `FUN_000590b0` only (`MOV EBX`@`0x59142`, `MOV EDX`@`0x59189`); reads in `FUN_00058bc0`@`0x58bdd`, `FUN_00058d70`@`0x58d80` |
 
-`ghidra_get_bulk_xrefs(program="/FIFA96.EXE", addresses="0x10677c")` returns 5
-`WRITE` xrefs typed `FUN_000443e8`/`FUN_00044d7c`×2/`FUN_00044e3c`/`FUN_00044f24`
-plus the `0x438e5` write, matching the search.
+`ghidra_get_bulk_xrefs(program="/FIFA96.EXE", addresses="0x10677c")` returns 9
+`WRITE` xrefs: `FUN_000443e8`@`0x444de`, `FUN_00044d7c`@`0x44dd0`,`0x44e0f`,
+`FUN_00044e3c`@`0x44ef0`, `FUN_00044f24`@`0x44f46`, `FUN_000436e4`@`0x43701`,
+`FUN_0004372c`@`0x437d6`,`0x4381b`, plus the orphan `0x438e5` — matching the
+search.
 
 ## 2. Producers
 

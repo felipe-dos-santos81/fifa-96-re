@@ -15,6 +15,12 @@ two genuine static callers (`FUN_0004ad4c` @`0x4AE41`, `FUN_0004aea4`
 
 ## 1. Loader inventory
 
+* **Program-name collision (MCP).** The bridge resolves the `program=` string
+  case-insensitively, so `program="/fifa96.exe"` targets the native
+  `/FIFA96.EXE` (2,706 functions, `_entry` `0x9fd10`), **not** this loader. All
+  loader results in this slice were taken from the loader as the current
+  program (no `program=` argument), confirmed by `get_function_count` = 353 and
+  `get_entry_points` → `11bd:2382`.
 * Program `/fifa96.exe`: MZ, `x86:LE:16:Real Mode Ex`, image `63,632` bytes,
   **353 functions**, 775 symbols. `executable_path` is
   `/media/felipe/FIFAPCCD/fifa96.exe` (the CD is now unmounted); the on-disk
@@ -72,8 +78,9 @@ objects**, not for the appended LE.
 (15,708 instructions scanned) for operand patterns `63ebc`, `290a4`, `9fd10`,
 `100000`, `1fc000` all return **0 matches**. The loader references neither the
 appended LE header (`0x290a4`), nor its entry (`0x9fd10`), nor the data-object
-base (`0x100000`), nor the measured load delta (`0x1fc000`), nor
-`FUN_00063ebc`. Its relocation logic is the DOS/16M 16-bit far-pointer form — a
+base (`0x100000`), nor the `0x1fc000` load delta (measured at run time in
+FU-11/FU-31, not derived in this slice), nor `FUN_00063ebc`. Its relocation
+logic is the DOS/16M 16-bit far-pointer form — a
 different mechanism from the LE `+0x100000` data fixups, which live in the
 appended LE header (FU-130 §§3–6) and are applied by an LE loader. So the
 loader does **not** explain `+0x100000`, and there is no loader-side phase/entry
