@@ -237,6 +237,25 @@ fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uin
 fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
                                         uint32_t *entry);
 
+typedef struct fifa96_action_phase_record {
+  uint32_t handler;
+  uint8_t active;
+  uint8_t reserved[3];
+} fifa96_action_phase_record;
+
+fifa96_err_t fifa96_action_phase_install(fifa96_action_phase_record *records, uint32_t count,
+                                         uint8_t phase, const uint32_t *table,
+                                         uint32_t table_count);
+fifa96_err_t fifa96_action_phase_drive(uint8_t active, uint8_t *drive);
+fifa96_err_t fifa96_action_phase_cell(int8_t x, int8_t z, uint8_t side, fifa96_action_vec3 *out);
+fifa96_err_t fifa96_action_phase_slot(int16_t x, int16_t z, uint8_t side, fifa96_action_vec3 *out);
+fifa96_err_t fifa96_action_phase_ball_entry(int32_t ball_z, uint8_t side, uint32_t *index);
+fifa96_err_t fifa96_action_phase_ball_line(const int16_t *entries, int32_t ball_z, uint8_t side,
+                                           fifa96_action_vec3 *out);
+fifa96_err_t fifa96_action_phase_line_timer(int32_t *timer89, uint16_t delta, uint8_t *ready);
+fifa96_err_t fifa96_action_phase_restart_line(uint8_t axis, int32_t offset, int16_t lateral,
+                                              fifa96_action_vec3 *out);
+
 #define FIFA96_ACTION_SEQUENCE_SCATTER_POINTS 5u
 
 typedef struct fifa96_action_sequence_lane_out {

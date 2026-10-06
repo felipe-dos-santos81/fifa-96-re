@@ -552,6 +552,102 @@ fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, ui
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_action_phase_install(fifa96_action_phase_record *records, uint32_t count,
+                                         uint8_t phase, const uint32_t *table,
+                                         uint32_t table_count) {
+  uint32_t i;
+  if ((!records && count != 0) || !table || table_count == 0) return -FIFA96_ERR_INVALID;
+  if ((uint32_t)phase >= table_count) return -FIFA96_ERR_INVALID;
+  for (i = 0; i < count; i++) records[i].handler = table[phase];
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_drive(uint8_t active, uint8_t *drive) {
+  if (!drive) return -FIFA96_ERR_INVALID;
+  *drive = active == 0 ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_cell(int8_t x, int8_t z, uint8_t side, fifa96_action_vec3 *out) {
+  int32_t vx;
+  int32_t vz;
+  if (!out) return -FIFA96_ERR_INVALID;
+  vx = (int32_t)x * 0x26;
+  vz = (int32_t)z * 0x21;
+  out->x = side ? -vx : vx;
+  out->y = 0;
+  out->z = side ? -vz : vz;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_slot(int16_t x, int16_t z, uint8_t side, fifa96_action_vec3 *out) {
+  int32_t vx;
+  int32_t vz;
+  if (!out) return -FIFA96_ERR_INVALID;
+  vx = (int32_t)x;
+  vz = (int32_t)z;
+  vx += vx >> 2;
+  vz += vz >> 2;
+  out->x = side ? -vx : vx;
+  out->y = 0;
+  out->z = side ? -vz : vz;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_ball_entry(int32_t ball_z, uint8_t side, uint32_t *index) {
+  if (!index) return -FIFA96_ERR_INVALID;
+  if (side == 0) {
+    *index = ball_z > 0 ? 1u : 0u;
+  } else {
+    *index = ball_z < 0 ? 1u : 0u;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_ball_line(const int16_t *entries, int32_t ball_z, uint8_t side,
+                                           fifa96_action_vec3 *out) {
+  uint32_t index;
+  int32_t vx;
+  int32_t vz;
+  if (!entries || !out) return -FIFA96_ERR_INVALID;
+  fifa96_action_phase_ball_entry(ball_z, side, &index);
+  vx = entries[index * 2];
+  vz = entries[index * 2 + 1];
+  vx += vx >> 2;
+  vz += vz >> 2;
+  out->x = side ? -vx : vx;
+  out->y = 0;
+  out->z = side ? -vz : vz;
+  if (ball_z > 0) {
+    out->z -= 0x60;
+  } else {
+    out->z += 0x60;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_line_timer(int32_t *timer89, uint16_t delta, uint8_t *ready) {
+  if (!timer89 || !ready) return -FIFA96_ERR_INVALID;
+  *timer89 = (int32_t)((uint32_t)*timer89 + (uint32_t)delta);
+  *ready = *timer89 >= 0x3C ? 1u : 0u;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_restart_line(uint8_t axis, int32_t offset, int16_t lateral,
+                                              fifa96_action_vec3 *out) {
+  int32_t delta;
+  if (!out) return -FIFA96_ERR_INVALID;
+  delta = (offset >> 25) * 5;
+  if (axis == 0) delta = -delta;
+  out->x = 0x780;
+  out->z = delta;
+  if (lateral < 0x20 && lateral > -0x20) {
+    out->x = 0xCC0;
+    out->z = 0;
+  }
+  return FIFA96_OK;
+}
+
 static int32_t fifa96_action_sequence_clamp_x(int32_t value) {
   if (value > 0x720) return 0x720;
   if (value < -0x720) return -0x720;
