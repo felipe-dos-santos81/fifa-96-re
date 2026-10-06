@@ -123,7 +123,8 @@ fifa96_play audio --viv FILE (--name NAME | --index N) [--out PATH] [--print-sum
 
 ```bash
 fifa96_play sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH]
-                         [--palette FILE] [--print-summary]
+                         [--palette FILE] [--dump-bank PATH] [--dump-palette PATH]
+                         [--print-summary]
 ```
 
 * `FILE` is a sprite bank container: a raw `BIGF`/`SHPI` file, or a
@@ -136,12 +137,16 @@ fifa96_play sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH]
 * `--entry N` (default 0) or `--name NAME` selects the BIGF record; `--frame K`
   (default 0) selects the SHPI frame.
 * The frame is written as a P6 PPM at `--out` (default
-  `build/play/sprite.ppm`). Without `--palette` the 8-bit pixel indices are
-  written as grayscale; `--palette FILE` supplies an RGB table and the first
-  768 bytes are used. The frame's optional second chunk (palette candidate,
-  FU-86 open leg 1) is not consumed.
+  `build/play/sprite.ppm`). Without `--palette` the frame's second chunk is
+  tried first: a type-`0x22` chunk with a 256-entry count (the `PALteam`/
+  `PALsys` palette banks) is converted from 6-bit RGB to 8-bit and used
+  (FU-91); otherwise the 8-bit pixel indices are written as grayscale.
+  `--palette FILE` overrides the bank palette and the first 768 bytes are
+  used. `--dump-bank PATH` writes the resolved SHPI bank;
+  `--dump-palette PATH` writes the active palette as 768-byte 8-bit RGB.
 * `--print-summary` prints
-  `sprite: entries=91 entry=4 name=jump.qfs frames=30 frame=0 36x36 ppm sha256=<hex>`.
+  `sprite: entries=91 entry=4 name=jump.qfs frames=30 frame=0 36x36 ppm sha256=<hex>`
+  followed by `sprite palette: source=bank|file|gray`.
 * A missing entry/name/frame, a palette shorter than 768 bytes, or a record
   that does not reach SHPI exits non-zero with a message on stderr. The game's
   huff decoder over-reads the record for 10 `.qfs` entries (`stumble`,
