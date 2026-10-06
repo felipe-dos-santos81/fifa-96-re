@@ -367,3 +367,15 @@ if(Python3_Interpreter_FOUND)
   add_test(NAME test_fvgt_extract COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_fvgt_extract.py)
   add_test(NAME test_play COMMAND ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/tests/test_play.py)
 endif()
+
+# ── Engine (M1) ────────────────────────────────────────────────────────────────
+add_library(fifa96_engine
+  src/fifa96_engine/fifa96_engine.c
+  src/fifa96_engine/platform_null.c)
+target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
+target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
+
+add_executable(test_engine_platform tests/test_engine_platform.c)
+target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
+add_test(NAME test_engine_platform COMMAND test_engine_platform
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
