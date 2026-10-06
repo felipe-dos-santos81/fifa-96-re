@@ -83,23 +83,57 @@ Direct VGA-DAC uploads (`FUN_000CE754`, FU-57) have callers only in the
 movie/art paths (`FUN_00068194`, `FUN_0006847c`, `FUN_000A1600`,
 `FUN_000A1668`, `0xB2481`) — no sprite-palette DAC site was found.
 
+### Palette consumption (closes the DAC leg)
+
+The palette chunk has its own consumer chain, separate from the per-entity
+translation tables:
+
+* `FUN_00047814(frame)` @0x47814 — the game's palette accessor: reads the
+  frame tag dword, takes `second_offset = *frame >> 8` (the same u24 as
+  bytewise `+1..+3`), and returns `chunk + 16` when `chunk[0] == 0x22`,
+  else 0.
+* Sub-palette geometry: `FUN_0004808c(x)` / `FUN_00048104(x)` select bank
+  frame `(x / 16) * 2` (respectively `* 2 + 1`), call `FUN_00047814`, and
+  return `palette + (x % 16) * 0x30` — i.e. the 768-byte palette is 16
+  sub-palettes of 16 RGB entries; even/odd frames are paired. Bank
+  selection goes through `FUN_000a1918` (frame count) / `FUN_000a1920`
+  (frame select) on the resource pointer from `FUN_0004afb8`.
+* Install: `FUN_00048b60` loads frame 2 of the current palette bank, copies
+  the 768 bytes to the stack, rewrites 10 entries via runtime tables
+  `0x70e8`/`0x70f2` (zero statically), appends two small blocks at
+  `palette+0xF0` (`0x54` B) and `palette+0x186` (`0x4E` B), and stores
+  `FUN_000a154c(table)` in `[0x7104]`. `FUN_00048ed8` copies the palette to
+  `0x4B200`, builds a shuffled copy at `0x4B500`, calls
+  `FUN_00048c8c(1, [0x7104])`, and sets `[0x68e0] = 1` — the very flag that
+  enables the team-kit recolour in `FUN_00048dc0` (§3 above).
+* Conversion: `FUN_000a1368(count, rgb6, out)` writes a 1024-byte table of
+  4-byte entries in order `{B, G, R, A}`, each component `v * 255 / 63`, with
+  `A = 0` only for entry `0xFF` (all others `0xFF`) — the exact 6→8 mapping
+  the port now exposes as `fifa96_sprite_palette_to_bgra`.
+* Install target: `FUN_000a154c` → `FUN_000a129c`, which allocates two named
+  buffers (`0x365C`, `0x3668`), calls `FUN_000a0aa0` and frees; the caller
+  handles are `[0x7100]`, `[0x7104]` and `[0x14478]` (the base written by
+  `FUN_00048c8c` when `param_2 == 0`).
+
 ### Disposition
 
 * **Derived:** the type-`0x22` chunk is a 256-entry 6-bit RGB palette; the
-  sprite colour path translates indices through a 256-byte table installed
-  from per-entity tables built by `FUN_00046f80` from a loaded resource.
-* **Open:** how the 768-byte palette chunk colours reach the DAC (or feed the
-  per-entity table resource) is not evidenced; the `+6/+8/+0xA` header fields
-  are unread by the derived consumer; entity-table resource identity
-  (`0x34e8` name is runtime-built) is open.
+  palette install chain above; the exact `FUN_000a1368` conversion; the
+  sprite-index translation path through `0x14720` installed from per-entity
+  tables built by `FUN_00046f80` from a loaded resource.
+* **Open:** the population of the shuffle tables `0x70e8`/`0x70f2` (zero
+  statically); `FUN_000a0aa0` internals (the final DAC/shade stage); the
+  chunk `+6/+8/+0xA` header fields are unread by the derived consumers;
+  entity-table resource identity (`0x34e8` name is runtime-built) stays open.
 
 ## 4. Port and runner
 
 * `fifa96_sprite_chunk_parse` / `fifa96_sprite_chunk_palette` /
-  `fifa96_sprite_palette_to_rgb` are the ported API (header
-  `fifa96_sprite.h`); `tests/test_sprite_palette.c` covers the chunk layout,
-  a real-size 784-byte palette, truncation, the player `0x7C` rejection and
-  the 6→8 scaling boundaries.
+  `fifa96_sprite_palette_to_rgb` / `fifa96_sprite_palette_to_bgra` are the
+  ported API (header `fifa96_sprite.h`); `tests/test_sprite_palette.c` covers
+  the chunk layout, a real-size 784-byte palette, truncation, the player
+  `0x7C` rejection, the 6→8 scaling boundaries, and the BGRA order with the
+  index-255 alpha exception.
 * Runner (`tools/fifa96_play.c`): sprite mode now resolves the palette
   `--palette FILE` > bank chunk (`source=bank`) > grayscale (`source=gray`),
   prints `sprite palette: source=…` with `--print-summary`, and adds
@@ -123,6 +157,9 @@ Retail verification (read-only): `PALteam.fsh` renders with
 | Resource load | `decompile 0x49138`, xref to 0x46f80 (0x49160) |
 | DAC callers | `get_xrefs_to 0xce754` (5 callers), FU-57 |
 | Chunk bytes | ISO extraction 0x338800 → refpack → BIGF → `PALteam.fsh`/`PALsys.fsh` frame headers and chunks (dump via `fifa96_play sprite --dump-bank`) |
+| Palette accessor / sub-palettes | `decompile 0x47814`, `0x4808c`, `0x48104` |
+| Install chain / kit gate | `decompile 0x48b60`, `0x48ed8`, `0x48c8c` |
+| 6→8 BGRA conversion | `decompile 0xa1368`; install `0xa154c`/`0xa129c` |
 
 ## Provenance
 
