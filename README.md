@@ -34,11 +34,11 @@ the port's golden fixtures — captured byte excerpts committed under
 | Path | What |
 |---|---|
 | `docs/ghidra/loader_rename_map.md` | Real-mode loader evidence map: 30 dated sections, every claim byte-cited — the single source of truth for the loader spine (336 functions analysed) |
-| `docs/ghidra/FU*.md` | Per-slice derivations from the protected-mode LE image: codec maps (FU-19/22/24/25/28/33), containers (FU-29..32), EACS/audio/music (FU-35..53) |
+| `docs/ghidra/FU*.md` | Per-slice derivations from the protected-mode LE image: codec maps (FU-19/22/24/25/28/33), containers (FU-29..32), EACS/audio/music (FU-35..53), presentation (FU-55..57), match logic (FU-58..75) |
 | `docs/ghidra/FU1_FU2_closeout.md`, `FU2_*`, `FU3_*` | Early closeouts: wrapper citations, the capture-resolved filename↔container binding, and the open CRC-over-transformed-content question |
 | `docs/superpowers/plans/`, `docs/superpowers/specs/` | One implementation plan/spec per slice (the process record) |
-| `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (26 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD |
-| `tests/`, `tests/golden/` | CTest suite (44 tests) over captured container/codec/audio bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) |
+| `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
+| `tests/`, `tests/golden/` | CTest suite (64 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) |
 | `tools/fifa96_dump.c` | Container dumper (`make run`) — detects `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
 | `tsr/fifa96_capture.asm` | 16-bit `.COM` capture TSR emitting framed FILE/CODEC/PROBE records over COM1 (`make tsr`) |
@@ -75,11 +75,21 @@ into the port:
   (including the `f10==2` adaptive-delta path) → voice allocation → SFX
   events/settings → deterministic 22050 Hz 16-bit stereo mixer → music
   sequencer (CRDF/CRD), validated against `tests/golden/eacs/` and
-  `tests/golden/audio/`.
+  `tests/golden/audio/`;
+* **presentation chain** — TGV stream player (key/delta frames, sentinels,
+  audio pump) → Mode-X blitter (plane interleave, clip, page flip) → VGA
+  presentation sequence (page addresses, DAC palette upload ordering);
+* **match layer** — INT-8 tick callbacks, 30 Hz frame pacing, input path
+  (device handlers → rings → edge detection), phase/clock state, entity pools
+  and update chain, control slots/selection, camera, ball possession, keeper
+  and outfield dispatch, event pump, history ring, stats, match
+  lifecycle/start/teardown, front-end state dispatch, settings hand-off.
 
-**44 CTest tests** (`make test`, `make check`) are green. Not ported: VGA
-presentation (decoded canvases stop at the buffer), device audio output (the
-mixer is a deterministic model), and match logic. Record selectors `0x16`,
+**64 CTest tests** (`make test`, `make check`) are green. Not ported: physical
+VGA/CRTC timing and device audio output (both modelled as pure data), and the
+match action-handler bodies behind the derived dispatch tables. Match flow on
+the competition screens remains keyboard/mouse-runtime-gated (FU-65). Record
+selectors `0x16`,
 `0x60`, `0x62`, `0x66`, `0x72` and `0x7A` stay **UNSUPPORTED** — FU-28's
 honest negative, since scripted gameplay never dispatched them. The remaining
 legs — the TGV companion-queue producer, several writer sites, and the
@@ -94,7 +104,7 @@ rewritten; corrections land as quoted errata in later sections.
 ## Build and run
 
 ```bash
-make check                     # configure + strict build + full CTest suite (44 tests)
+make check                     # configure + strict build + full CTest suite (64 tests)
 make run FILE=tests/golden/fw1.qfs   # dump any container (envelope/QFS/POG/TGV/VIV auto-detect)
 make tsr                       # assemble build/FIFACAP.COM (capture TSR, needs nasm)
 make capture                   # run the game under the rig via run-fifa96-capture.sh (needs the ISO)
