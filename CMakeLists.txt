@@ -232,6 +232,11 @@ add_executable(test_outfield tests/test_outfield.c)
 target_link_libraries(test_outfield PRIVATE fifa96_outfield)
 add_test(NAME test_outfield COMMAND test_outfield WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_action_handlers src/fifa96_loader/fifa96_action_handlers.c)
+add_executable(test_action_handlers tests/test_action_handlers.c)
+target_link_libraries(test_action_handlers PRIVATE fifa96_action_handlers)
+add_test(NAME test_action_handlers COMMAND test_action_handlers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
 target_link_libraries(test_ring_stats PRIVATE fifa96_ring_stats)
