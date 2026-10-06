@@ -456,7 +456,7 @@ Expected: configure/build fails on `fifa96_platform_sdl3_create` (not defined) o
 
 - `struct sdl_state { SDL_Window *win; SDL_Renderer *ren; SDL_Texture *tex; SDL_AudioStream *stream; int w, h; uint8_t rgba[320*240*4]; uint64_t audio_frames; }`.
 - `init`: `SDL_Init(SDL_INIT_VIDEO | SDL_INIT_AUDIO | SDL_INIT_GAMEPAD)`; `SDL_CreateWindowAndRenderer("FIFA 96", 960, 720, SDL_WINDOW_RESIZABLE, &win, &ren)`; `SDL_SetRenderLogicalPresentation(ren, 320, 240, SDL_LOGICAL_PRESENTATION_INTEGER_SCALE)` (SDL3) or manual scaling fallback for SDL2; `SDL_CreateTexture(ren, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, 320, 240)`.
-- `present`: expand the four Mode-X planes + palette into `rgba` on the CPU (per pixel: `idx = ((plane0>>bit)&1) | ((plane1>>bit)&2) | ((plane2>>bit)&4) | ((plane3>>bit)&8)`, `bit = 7 - (x&7)`, byte `row*80 + (x>>3)`), then `SDL_UpdateTexture` + `SDL_RenderClear` + `SDL_RenderTexture` + `SDL_RenderPresent`.
+- `present`: expand the four Mode-X planes + palette into `rgba` on the CPU (per pixel `(x,y)`: `idx = planes[x & 3][y * 80 + (x >> 2)]`, then `rgb = palette[idx*3..]`), then `SDL_UpdateTexture` + `SDL_RenderClear` + `SDL_RenderTexture` + `SDL_RenderPresent`.
 - `poll`: `SDL_PumpEvents`; `SDL_PollEvent` (QUIT → set a quit flag the engine reads via a `should_quit` hook); map `SDL_SCANCODE_UP/DOWN/LEFT/RIGHT/RETURN/ESCAPE` and gamepad dpad/A into `raw_code`s `1..7`; emit press/release `fifa96_platform_key`.
 - `audio_open`: `SDL_OpenAudioDevice` with `SDL_AUDIO_S16`/2ch/22050 Hz and a callback pulling from a lock-protected ring buffer the engine fills via `audio_submit` (drop-oldest on overflow).
 - `now_ns` = `SDL_GetTicksNS()`; `sleep_ns` = `SDL_DelayNS(ns)`.
@@ -574,13 +574,12 @@ int main(void) {
 
   fifa96_platform_frame f;
   fifa96_surface_plane(s, &f);
-  /* 0x11 = 0b00010001 -> plane 0 bit set, plane 1/2 clear, plane 3 set. */
-  for (size_t i = 0; i < 80u * 240u; i++) {
-    assert(f.planes[0][i] == 0xFFu);
-    assert(f.planes[1][i] == 0x00u);
-    assert(f.planes[2][i] == 0x00u);
-    assert(f.planes[3][i] == 0xFFu);
-  }
+  /* Mode-X planar-chunky: pixel (x,y) is one full byte at planes[x & 3][y*80 + (x>>2)],
+     so a uniform 0x11 surface fills every byte of all four planes with 0x11. */
+  for (int p = 0; p < 4; p++)
+    for (size_t i = 0; i < 80u * 240u; i++)
+      assert(f.planes[p][i] == 0x11u);
+  assert(f.stride == 80u);
   fifa96_surface_clear(s, 0x00);
   fifa96_surface_plane(s, &f);
   assert(f.planes[0][0] == 0x00u && f.planes[3][0] == 0x00u);
@@ -625,7 +624,7 @@ void fifa96_surface_plane(struct fifa96_surface *s, fifa96_platform_frame *out);
 uint64_t fifa96_surface_hash(const struct fifa96_surface *s); /* FNV-1a over indexed + palette */
 ```
 
-Implementation notes: `set_palette6` scales `(v << 2) | (v >> 4)`; `plane` packs each row's eight pixels per byte per plane with `bit = 7 - (x & 7)`, byte index `y * (width / 8) + (x >> 3)`, and sets `out->stride = width / 4` (80), `out->palette = s->palette`, `out->flags = 0`. `hash` is FNV-1a 64 over `indexed` then `palette` (offset basis `14695981039346656037ull`, prime `1099511628211ull`), used by the menu-art and acceptance tests.
+Implementation notes: `set_palette6` scales `(v << 2) | (v >> 4)`; `plane` packs in the repo's derived Mode-X planar-chunky layout (witness `src/fifa96_loader/fifa96_blit.c:55-61`): for pixel `(x, y)`, `planes[x & 3][y * 80 + (x >> 2)] = indexed[y * width + x]` — one full 8-bit byte per pixel, stride 80. It sets `out->stride = width / 4` (80), `out->palette = s->palette`, `out->flags = 0`. `hash` is FNV-1a 64 over `indexed` then `palette` (offset basis `14695981039346656037ull`, prime `1099511628211ull`), used by the menu-art and acceptance tests.
 
 - [ ] **Step 4: Wire the engine to the surface**
 

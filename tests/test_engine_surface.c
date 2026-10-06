@@ -14,16 +14,25 @@ int main(void) {
 
   fifa96_platform_frame f;
   fifa96_surface_plane(s, &f);
-  /* 0x11 = 0b00010001 -> plane 0 bit set; planes 1..3 clear (bit 4 is not a plane). */
-  for (size_t i = 0; i < 80u * 240u; i++) {
-    assert(f.planes[0][i] == 0xFFu);
-    assert(f.planes[1][i] == 0x00u);
-    assert(f.planes[2][i] == 0x00u);
-    assert(f.planes[3][i] == 0x00u);
-  }
+  /* planar-chunky Mode-X: every pixel's full index byte lands in plane x & 3. */
+  for (int p = 0; p < 4; p++)
+    for (size_t i = 0; i < 80u * 240u; i++)
+      assert(f.planes[p][i] == 0x11u);
+  assert(f.stride == 80u);
   fifa96_surface_clear(s, 0x00);
   fifa96_surface_plane(s, &f);
   assert(f.planes[0][0] == 0x00u && f.planes[3][0] == 0x00u);
+
+  /* Non-uniform pixels distinguish the planes and the byte column. */
+  fifa96_surface_clear(s, 0xA5);
+  s->indexed[0] = 0x10;  /* (0,0) -> plane 0, column 0 */
+  s->indexed[1] = 0x20;  /* (1,0) -> plane 1, column 0 */
+  s->indexed[2] = 0x30;  /* (2,0) -> plane 2, column 0 */
+  s->indexed[3] = 0x40;  /* (3,0) -> plane 3, column 0 */
+  fifa96_surface_plane(s, &f);
+  assert(f.planes[0][0] == 0x10u && f.planes[1][0] == 0x20u);
+  assert(f.planes[2][0] == 0x30u && f.planes[3][0] == 0x40u);
+  assert(f.planes[0][1] == 0xA5u);  /* (4,0) -> plane 0, column 1 */
 
   fifa96_surface_destroy(s);
   puts("test_engine_surface OK");

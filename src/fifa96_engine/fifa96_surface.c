@@ -5,7 +5,7 @@
 struct fifa96_surface *fifa96_surface_create(int w, int h) {
   if (w <= 0 || h <= 0) return NULL;
   if (w > FIFA96_SURFACE_MAX_W || h > FIFA96_SURFACE_MAX_H) return NULL;
-  if (w % 8 != 0) return NULL;  /* one byte packs eight pixels per plane row */
+  if (w % 4 != 0) return NULL;  /* one plane per x & 3, four pixels per plane byte column */
   struct fifa96_surface *s = calloc(1, sizeof *s);
   if (!s) return NULL;
   s->width = w;
@@ -35,20 +35,13 @@ void fifa96_surface_set_palette8(struct fifa96_surface *s, const uint8_t rgb8[76
 void fifa96_surface_plane(struct fifa96_surface *s, fifa96_platform_frame *out) {
   if (!s || !out) return;
   const int stride = s->width / 4;      /* Mode-X plane stride, 80 for 320 px */
-  const int row_bytes = s->width / 8;   /* packed 1bpp row, 40 for 320 px */
   for (int p = 0; p < 4; p++) {
     uint8_t *dst = s->planes[p];
-    memset(dst, 0, (size_t)stride * (size_t)s->height);
     for (int y = 0; y < s->height; y++) {
       const uint8_t *src = s->indexed + (size_t)y * (size_t)s->width;
       uint8_t *row = dst + (size_t)y * (size_t)stride;
-      for (int x = 0; x < s->width; x++) {
-        uint8_t bit = (uint8_t)(((src[x] >> p) & 1u) << (7 - (x & 7)));
-        row[x >> 3] |= bit;
-        /* The 80-byte hardware stride holds the 40-byte packed row twice so the
-           whole ABI plane (stride x height) is defined every frame. */
-        row[row_bytes + (x >> 3)] |= bit;
-      }
+      /* planar-chunky Mode-X: pixel (x, y) -> plane x & 3, byte y * 80 + (x >> 2) */
+      for (int x = p; x < s->width; x += 4) row[x >> 2] = src[x];
     }
     out->planes[p] = s->planes[p];
   }
