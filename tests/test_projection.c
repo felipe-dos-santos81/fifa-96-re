@@ -89,14 +89,14 @@ static void test_transform(void) {
 static void test_reciprocal(void) {
   assert(fifa96_projection_reciprocal(320, recip_x) == FIFA96_OK);
   assert(recip_x[0] == 0x200000 && recip_x[9] == 0x200000);
-  assert(recip_x[10] == 1906501);
-  assert(recip_x[255] == 81920);
-  assert(recip_x[256] == 81601);
-  assert(recip_x[512] == 40880);
-  assert(recip_x[1023] == 20480);
+  assert(recip_x[10] == 0x200000);
+  assert(recip_x[255] == 82241);
+  assert(recip_x[256] == 81920);
+  assert(recip_x[512] == 40960);
+  assert(recip_x[1023] == 20500);
   assert(fifa96_projection_reciprocal(200, recip_y) == FIFA96_OK);
-  assert(recip_y[0] == 0x140000 && recip_y[255] == 51200);
-  assert(recip_y[1023] == 12800);
+  assert(recip_y[0] == 0x140000 && recip_y[255] == 51400);
+  assert(recip_y[1023] == 12812);
   assert(fifa96_projection_reciprocal(0, recip_x) == P_INVALID);
   assert(fifa96_projection_reciprocal(-1, recip_x) == P_INVALID);
   assert(fifa96_projection_reciprocal(0x8000, recip_x) == P_INVALID);
@@ -117,25 +117,25 @@ static void test_screen(void) {
   v.z = 0x2000;
   visible = 7;
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &v, &out, &visible) == FIFA96_OK);
-  assert(visible == 1 && out.x == 11796475 && out.y == 6553600);
+  assert(visible == 1 && out.x == 11799040 && out.y == 6553600);
   v.x = -513;
   v.y = 257;
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &v, &out, &visible) == FIFA96_OK);
-  assert(out.x == 9175045 && out.y == 6143204);
+  assert(out.x == 9172480 && out.y == 6142400);
   v.x = 100;
   v.y = -50;
   v.z = 0x10000;
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &v, &out, &visible) == FIFA96_OK);
-  assert(out.x == 10517635 && out.y == 6563561);
+  assert(out.x == 10517760 && out.y == 6563600);
   v.x = 1;
   v.y = 1;
   v.z = 0x3FF;
   visible = 7;
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &v, &out, &visible) == FIFA96_OK);
-  assert(visible == 1 && out.x == 10506240 && out.y == 6540800);
+  assert(visible == 1 && out.x == 10506260 && out.y == 6540788);
   v.z = 0x400;
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &v, &out, &visible) == FIFA96_OK);
-  assert(out.x == 10506160 && out.y == 6540850);
+  assert(out.x == 10506240 && out.y == 6540800);
   v.z = 0x1000000;
   visible = 7;
   out.x = 42;
@@ -175,14 +175,14 @@ static void test_project(void) {
   visible = 7;
   assert(fifa96_projection_project(m, &cam, recip_x, recip_y, &center, &world, &out, &visible) ==
          FIFA96_OK);
-  assert(visible == 1 && out.x == 11796475 && out.y == 6553600);
+  assert(visible == 1 && out.x == 11799040 && out.y == 6553600);
   cam.x = 513;
   cam.z = 0x2000;
   world.x = 1026;
   world.z = 0x4000;
   assert(fifa96_projection_project(m, &cam, recip_x, recip_y, &center, &world, &out, &visible) ==
          FIFA96_OK);
-  assert(out.x == 11796475 && out.y == 6553600);
+  assert(out.x == 11799040 && out.y == 6553600);
   world.z = cam.z + 4;
   visible = 7;
   assert(fifa96_projection_project(m, &cam, recip_x, recip_y, &center, &world, &out, &visible) ==

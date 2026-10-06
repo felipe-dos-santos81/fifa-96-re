@@ -106,8 +106,7 @@ fifa96_err_t fifa96_projection_transform(const int32_t m[9], const fifa96_projec
 fifa96_err_t fifa96_projection_reciprocal(int32_t dim, int32_t *table) {
   if (!table || dim <= 0 || dim > 0x7FFF) return (fifa96_err_t)-FIFA96_ERR_INVALID;
   for (int i = 0; i < FIFA96_PROJECTION_RECIP_COUNT; i++) {
-    int32_t d = i + 1;
-    if (d < 10) d = 10;
+    int32_t d = i < 10 ? 10 : i;
     table[i] = (int32_t)(((int64_t)dim << 16) / d);
   }
   return FIFA96_OK;
