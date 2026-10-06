@@ -40,7 +40,7 @@ the port's golden fixtures — captured byte excerpts committed under
 | `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
 | `tests/`, `tests/golden/` | CTest suite (64 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) |
 | `tools/fifa96_dump.c` | Container dumper (`make run`) — detects `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables |
-| `tools/fifa96_play.c` | Host runner (`make play`, [docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)) — TGV chunk stream → PPM/Mode-X frames, EACS/BNK/VIV → WAV |
+| `tools/fifa96_play.c` | Host runner (`make play`, [docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)) — TGV chunk stream → PPM/Mode-X frames, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
 | `tsr/fifa96_capture.asm` | 16-bit `.COM` capture TSR emitting framed FILE/CODEC/PROBE records over COM1 (`make tsr`) |
 | `run-fifa96.sh`, `run-fifa96-capture.sh` | Original game under DOSBox-X; capture-run driver (`make capture` / `make trace`) |
@@ -107,7 +107,7 @@ rewritten; corrections land as quoted errata in later sections.
 ```bash
 make check                     # configure + strict build + full CTest suite (64 tests)
 make run FILE=tests/golden/fw1.qfs   # dump any container (envelope/QFS/POG/TGV/VIV auto-detect)
-make play ARGS="--help"        # host runner: TGV→PPM/Mode-X, EACS/BNK/VIV→WAV (docs/HOST_RUNNER.md)
+make play ARGS="--help"        # host runner: TGV→PPM/Mode-X, EACS/BNK/VIV→WAV, sprite PVI→PPM (docs/HOST_RUNNER.md)
 make tsr                       # assemble build/FIFACAP.COM (capture TSR, needs nasm)
 make capture                   # run the game under the rig via run-fifa96-capture.sh (needs the ISO)
 make trace TRACE=captures/session-*/trace.bin   # parse a capture

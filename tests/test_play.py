@@ -2,6 +2,7 @@ import hashlib
 import re
 import struct
 import subprocess
+import sys
 import unittest
 from pathlib import Path
 
@@ -11,8 +12,13 @@ GOLDEN = ROOT / "tests" / "golden"
 VGT = GOLDEN / "vgt"
 EACS = GOLDEN / "eacs"
 PLAY = ROOT / "build" / "play"
+ISO = ROOT / "game" / "FIFAPCCD96.iso"
 FRAME_RE = re.compile(r"^frame (\d+): (\d+)x(\d+) (ppm|modex) sha256=([0-9a-f]{64})$")
 AUDIO_RE = re.compile(r"^audio: frames=(\d+) rate=(\d+) channels=(\d+) sha256=([0-9a-f]{64})$")
+SPRITE_RE = re.compile(
+    r"^sprite: entries=(\d+) entry=(\d+) name=(\S+) frames=(\d+) frame=(\d+) "
+    r"(\d+)x(\d+) (ppm) sha256=([0-9a-f]{64})$")
+PPM_RE = re.compile(rb"^P6\n(\d+) (\d+)\n255\n")
 AUDIO_SHA = {
     "viv0": "55b8e1b0ea10cfd62db323519f94e8a1af548acd52dc5d62862dbb028b14f3e0",
     "bnk1": "5560690cd27562849ac26618043249cde153d522f3ff2b579f6585952c2272f1",
@@ -75,12 +81,67 @@ def wav_fields(path):
     return rate, channels, size // (channels * 2), b
 
 
+def ppm_info(blob):
+    m = PPM_RE.match(blob)
+    assert m, blob[:16]
+    return int(m.group(1)), int(m.group(2)), m.end()
+
+
+GRAY = bytes(i for i in range(256) for _ in range(3))
+PIX0 = bytes(range(12))
+PIX1 = bytes([200, 201, 202, 203])
+PIX2 = bytes([7])
+
+
+def sprite_frame(pixels, width, height, second=0, pivot=(0, 0), word12=0):
+    return (bytes([0x7B]) + second.to_bytes(3, "little") +
+            struct.pack("<HHHH", width, height, pivot[0], pivot[1]) +
+            struct.pack("<I", word12) + pixels)
+
+
+def shpi(entries):
+    count = len(entries)
+    off = 16 + 8 * count
+    table = bytearray()
+    blobs = bytearray()
+    for name, blob in entries:
+        table += name.encode() + struct.pack("<I", off)
+        blobs += blob
+        off += len(blob)
+    return (b"SHPI" + struct.pack("<II", off, count) + b"GIMX" +
+            bytes(table) + bytes(blobs))
+
+
+def bigf(records):
+    count = len(records)
+    table_end = 0x10
+    for name, _ in records:
+        table_end += 8 + len(name) + 1
+    off = table_end
+    table = bytearray()
+    data = bytearray()
+    for name, blob in records:
+        table += struct.pack(">II", off, len(blob)) + name.encode() + b"\0"
+        data += blob
+        off += len(blob)
+    return (b"BIGF" + struct.pack(">III", table_end + len(data), count, table_end) +
+            bytes(table) + bytes(data))
+
+
+def build_sprite_bigf(path):
+    bank0 = shpi([("f000", sprite_frame(PIX0, 4, 3, pivot=(2, 1))),
+                  ("f001", sprite_frame(PIX1, 2, 2))])
+    bank1 = shpi([("s000", sprite_frame(PIX2, 1, 1, word12=0x11223344))])
+    path.write_bytes(bigf([("raw.fsh", bank0), ("one.fsh", bank1)]))
+
+
 class TestHelp(unittest.TestCase):
     def test_help_lists_modes(self):
         r = run("--help")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn("video", r.stdout)
         self.assertIn("audio", r.stdout)
+        self.assertIn("sprite", r.stdout)
 
 
 class TestVideo(unittest.TestCase):
@@ -222,6 +283,178 @@ class TestAudioContainers(unittest.TestCase):
                 "--out", str(by_index), "--print-summary")
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertEqual(by_name.read_bytes(), by_index.read_bytes())
+
+
+class TestSpriteSynthetic(unittest.TestCase):
+    def setUp(self):
+        PLAY.mkdir(parents=True, exist_ok=True)
+        self.fixture = PLAY / "sprite-bigf.pvi"
+        build_sprite_bigf(self.fixture)
+
+    def test_grayscale_ppm_exact(self):
+        out = PLAY / "sprite-grey.ppm"
+        r = run("sprite", str(self.fixture), "--frame", "0", "--out", str(out),
+                "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        want = ppm(PIX0, GRAY, 4, 3)
+        self.assertEqual(out.read_bytes(), want)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertIsNotNone(m, r.stdout)
+        self.assertEqual(m.groups()[:8],
+                         ("2", "0", "raw.fsh", "2", "0", "4", "3", "ppm"))
+        self.assertEqual(m.group(9), hashlib.sha256(want).hexdigest())
+
+    def test_palette_ppm_exact(self):
+        pal = bytes(b for i in range(256) for b in ((i * 7) & 255, 255 - i, (i * 3) & 255))
+        palpath = PLAY / "sprite.pal"
+        palpath.write_bytes(pal)
+        out = PLAY / "sprite-rgb.ppm"
+        r = run("sprite", str(self.fixture), "--out", str(out), "--palette", str(palpath),
+                "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        want = ppm(PIX0, pal, 4, 3)
+        self.assertEqual(out.read_bytes(), want)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertEqual(m.group(9), hashlib.sha256(want).hexdigest())
+
+    def test_name_selects_entry_and_frame(self):
+        out = PLAY / "sprite-one.ppm"
+        r = run("sprite", str(self.fixture), "--name", "one.fsh", "--frame", "0",
+                "--out", str(out), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        want = ppm(PIX2, GRAY, 1, 1)
+        self.assertEqual(out.read_bytes(), want)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertEqual(m.groups()[:8],
+                         ("2", "1", "one.fsh", "1", "0", "1", "1", "ppm"))
+
+    def test_entry_index_matches_name(self):
+        by_index = PLAY / "sprite-index.ppm"
+        by_name = PLAY / "sprite-name.ppm"
+        r = run("sprite", str(self.fixture), "--entry", "1", "--out", str(by_index))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = run("sprite", str(self.fixture), "--name", "one.fsh", "--out", str(by_name))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(by_index.read_bytes(), by_name.read_bytes())
+
+    def test_frame_out_of_range_fails(self):
+        r = run("sprite", str(self.fixture), "--frame", "2", "--out", str(PLAY / "x.ppm"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+    def test_unknown_name_fails(self):
+        r = run("sprite", str(self.fixture), "--name", "nope.fsh", "--out", str(PLAY / "x.ppm"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+    def test_entry_and_name_exclusive(self):
+        r = run("sprite", str(self.fixture), "--entry", "0", "--name", "raw.fsh")
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+    def test_short_palette_fails(self):
+        palpath = PLAY / "short.pal"
+        palpath.write_bytes(b"\0" * 767)
+        r = run("sprite", str(self.fixture), "--palette", str(palpath),
+                "--out", str(PLAY / "x.ppm"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+    def test_junk_input_fails(self):
+        bad = PLAY / "bad-bigf.pvi"
+        bad.write_bytes(b"not a container at all")
+        r = run("sprite", str(bad))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+    def test_missing_file_fails(self):
+        r = run("sprite", str(PLAY / "nope.pvi"))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("error", r.stderr.lower())
+
+
+class TestSpriteGolden(unittest.TestCase):
+    def test_raw_shpi_entry(self):
+        out = PLAY / "net.ppm"
+        r = run("sprite", str(GOLDEN / "gameart0.pvi"), "--name", "Net.fsh", "--frame", "0",
+                "--out", str(out), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertIsNotNone(m, r.stdout)
+        self.assertEqual((m.group(1), m.group(3), m.group(4), m.group(5)),
+                         ("60", "Net.fsh", "5", "0"))
+        blob = out.read_bytes()
+        w, h, hdr = ppm_info(blob)
+        self.assertEqual((str(w), str(h)), (m.group(6), m.group(7)))
+        self.assertEqual(len(blob), hdr + w * h * 3)
+        self.assertEqual(hashlib.sha256(blob).hexdigest(), m.group(9))
+
+    def test_qfs_entry_reaches_shpi(self):
+        out = PLAY / "replay.ppm"
+        r = run("sprite", str(GOLDEN / "gameart0.pvi"), "--name", "replay.qfs", "--frame", "0",
+                "--out", str(out), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertIsNotNone(m, r.stdout)
+        self.assertEqual((m.group(1), m.group(3), m.group(4), m.group(5)),
+                         ("60", "replay.qfs", "13", "0"))
+        blob = out.read_bytes()
+        w, h, hdr = ppm_info(blob)
+        self.assertEqual(len(blob), hdr + w * h * 3)
+
+    def test_entry_index_matches_name(self):
+        by_index = PLAY / "net-index.ppm"
+        by_name = PLAY / "net-name.ppm"
+        r = run("sprite", str(GOLDEN / "gameart0.pvi"), "--entry", "36",
+                "--out", str(by_index))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        r = run("sprite", str(GOLDEN / "gameart0.pvi"), "--name", "Net.fsh",
+                "--out", str(by_name))
+        self.assertEqual(r.returncode, 0, r.stderr)
+        self.assertEqual(by_index.read_bytes(), by_name.read_bytes())
+
+
+@unittest.skipUnless(ISO.exists(), "game/FIFAPCCD96.iso not present")
+class TestSpriteIso(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import fifa96_bind
+        PLAY.mkdir(parents=True, exist_ok=True)
+        extents, data = fifa96_bind.iso_files(ISO)
+        off, size = extents["/ART/PLAYART.PVI"]
+        cls.playart = PLAY / "playart.pvi"
+        cls.playart.write_bytes(data[off:off + size])
+
+    def test_raw_bank_frame_geometry(self):
+        out = PLAY / "xstandd.ppm"
+        r = run("sprite", str(self.playart), "--name", "xstandd.fsh", "--frame", "0",
+                "--out", str(out), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertIsNotNone(m, r.stdout)
+        self.assertEqual((m.group(1), m.group(3), m.group(4), m.group(5)),
+                         ("91", "xstandd.fsh", "5", "0"))
+        self.assertEqual((m.group(6), m.group(7)), ("20", "49"))
+        blob = out.read_bytes()
+        w, h, hdr = ppm_info(blob)
+        self.assertEqual((w, h), (20, 49))
+        self.assertEqual(len(blob), hdr + w * h * 3)
+
+    def test_full_chain_jump_qfs(self):
+        out = PLAY / "jump.ppm"
+        r = run("sprite", str(self.playart), "--name", "jump.qfs", "--frame", "0",
+                "--out", str(out), "--print-summary")
+        self.assertEqual(r.returncode, 0, r.stderr)
+        m = SPRITE_RE.match(r.stdout.strip())
+        self.assertIsNotNone(m, r.stdout)
+        self.assertEqual((m.group(1), m.group(2), m.group(3), m.group(4), m.group(5)),
+                         ("91", "4", "jump.qfs", "30", "0"))
+        blob = out.read_bytes()
+        w, h, hdr = ppm_info(blob)
+        self.assertEqual(len(blob), hdr + w * h * 3)
+        self.assertEqual(hashlib.sha256(blob).hexdigest(), m.group(9))
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

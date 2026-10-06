@@ -76,6 +76,47 @@ fifa96_play audio --viv FILE (--name NAME | --index N) [--out PATH] [--print-sum
     --out build/play/t019.wav --print-summary
 ```
 
+## Sprite: BIGF `.pvi` entry -> SHPI bank frame -> PPM
+
+```bash
+fifa96_play sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH]
+                         [--palette FILE] [--print-summary]
+```
+
+* `FILE` is a sprite bank container: a raw `BIGF`/`SHPI` file, or a
+  codec-wrapped record (`[selector, 0xFB, BE24 size, payload]`). The record
+  chain is followed to its SHPI bank with `fifa96_record_decode`
+  (refpack/huff/tree, any nesting) and `fifa96_sprite` (FU-86). `PLAYART.PVI`
+  is refpack -> BIGF, whose `.qfs` entries decode huff(`0x31`) ->
+  refpack(`0x10`) -> tree(`0x46`) -> SHPI; `tests/golden/gameart0.pvi` is
+  refpack -> BIGF with raw `.fsh`/one-stage `.qfs` entries.
+* `--entry N` (default 0) or `--name NAME` selects the BIGF record; `--frame K`
+  (default 0) selects the SHPI frame.
+* The frame is written as a P6 PPM at `--out` (default
+  `build/play/sprite.ppm`). Without `--palette` the 8-bit pixel indices are
+  written as grayscale; `--palette FILE` supplies an RGB table and the first
+  768 bytes are used. The frame's optional second chunk (palette candidate,
+  FU-86 open leg 1) is not consumed.
+* `--print-summary` prints
+  `sprite: entries=91 entry=4 name=jump.qfs frames=30 frame=0 36x36 ppm sha256=<hex>`.
+* A missing entry/name/frame, a palette shorter than 768 bytes, or a record
+  that does not reach SHPI exits non-zero with a message on stderr. The game's
+  huff decoder over-reads the record for 10 `.qfs` entries (`stumble`,
+  `kneesld`, `vollkcka`, `gldsa`, `dummyrfa`, `collairb`, `duckflpa`,
+  `duckflpb`, `bodychk`, `xrready`; FU-86 §3 caveat/leg 9); the port is
+  bounds-checked and rejects those exact slices.
+
+```bash
+./build/fifa96_play sprite tests/golden/gameart0.pvi --name Net.fsh \
+    --frame 0 --out build/play/net.ppm --print-summary
+# ART/PLAYART.PVI lives in the read-only ISO; extract the extent once:
+python3 -c "import sys; sys.path.insert(0,'tools'); import fifa96_bind as b; \
+e,d=b.iso_files('game/FIFAPCCD96.iso'); o,s=e['/ART/PLAYART.PVI']; \
+open('build/play/playart.pvi','wb').write(d[o:o+s])"
+./build/fifa96_play sprite build/play/playart.pvi --name jump.qfs \
+    --frame 0 --out build/play/jump.ppm --print-summary
+```
+
 ## Tests
 
 `tests/test_play.py` (CTest `test_play`) builds a temp 2-chunk stream from the
@@ -83,4 +124,11 @@ committed kVGT/fVGT vectors and checks PPM/Mode-X bytes against independently
 computed expectations, the raw EACS-to-WAV bytes against the fixture PCM, and
 the BNK/VIV decode headers plus sample pins and sha256 values pinned from
 `tests/test_bnk.c` / `tests/test_bigf.c`. It also covers malformed inputs.
-Run it directly with `python3 tests/test_play.py` (the tool must be built).
+The sprite cases build a minimal BIGF+SHPI fixture at runtime and check the
+grayscale/palette PPM bytes, `--entry`/`--name`/`--frame` selection and the
+error paths exactly; the committed `tests/golden/gameart0.pvi` covers a real
+raw `.fsh` bank and a nested `.qfs` record, and when
+`game/FIFAPCCD96.iso` is present the suite extracts `/ART/PLAYART.PVI` and runs
+the full 3-stage chain (`jump.qfs`, pinned 30 frames) plus the `xstandd.fsh`
+geometry pin (20×49). Run it directly with `python3 tests/test_play.py` (the
+tool must be built).

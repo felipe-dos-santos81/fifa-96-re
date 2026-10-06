@@ -13,6 +13,8 @@
 #include "fifa96_loader/fifa96_eacs.h"
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_file.h"
+#include "fifa96_loader/fifa96_record.h"
+#include "fifa96_loader/fifa96_sprite.h"
 #include "fifa96_loader/fifa96_tgv_stream.h"
 #include "fifa96_loader/fifa96_vgt_player.h"
 
@@ -145,6 +147,10 @@ static uint32_t play_le32(const uint8_t *p) {
   return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24);
 }
 
+static uint32_t play_be24(const uint8_t *p) {
+  return ((uint32_t)p[0] << 16) | ((uint32_t)p[1] << 8) | (uint32_t)p[2];
+}
+
 static void errmsg(const char *fmt, ...) {
   va_list ap;
   fputs("fifa96_play: error: ", stderr);
@@ -162,13 +168,18 @@ static void usage(FILE *fp) {
         "  audio FILE [--out PATH] [--print-summary]\n"
         "  audio --bnk FILE --id N [--out PATH] [--print-summary]\n"
         "  audio --viv FILE (--name NAME | --index N) [--out PATH] [--print-summary]\n"
+        "  sprite FILE [--entry N | --name NAME] [--frame K] [--out PATH] [--palette FILE]\n"
+        "              [--print-summary]\n"
         "\n"
         "video decodes a raw .TGV chunk stream and writes each selected frame as a P6 PPM;\n"
         "--modex writes the raw 4-plane Mode-X image instead. --out is a directory for a\n"
         "sequence (default build/play) and a file for --frame K. --max-frames and --frame\n"
         "are exclusive. audio decodes an EACS payload, a .BNK entry or a BIGF .VIV entry\n"
-        "to a 16-bit PCM RIFF WAV (default build/play/audio.wav). --print-summary prints\n"
-        "one geometry/format/sha256 line per written output.\n",
+        "to a 16-bit PCM RIFF WAV (default build/play/audio.wav). sprite decodes a BIGF\n"
+        ".pvi sprite container (optionally codec-wrapped) to the SHPI bank in entry N or\n"
+        "NAME (default entry 0), renders frame K (default 0) to a P6 PPM (grayscale, or\n"
+        "RGB with a 768-byte --palette FILE; default build/play/sprite.ppm). --print-summary\n"
+        "prints one geometry/format/sha256 line per written output.\n",
         fp);
 }
 
@@ -776,6 +787,266 @@ static int cmd_audio(int argc, char **argv) {
   return rc;
 }
 
+static int sprite_leaf(const uint8_t *src, size_t n, uint8_t **owned, const uint8_t **out,
+                       size_t *out_len) {
+  uint8_t *buf = NULL;
+  for (int depth = 0; depth < 8; depth++) {
+    if (n >= 4 && (memcmp(src, "SHPI", 4) == 0 || memcmp(src, "BIGF", 4) == 0)) {
+      *owned = buf;
+      *out = src;
+      *out_len = n;
+      return 0;
+    }
+    if (n < 5 || src[1] != 0xFB) {
+      free(buf);
+      return -(int)FIFA96_ERR_BAD_MAGIC;
+    }
+    size_t cap = play_be24(src + 2);
+    uint8_t *next = xmalloc(cap ? cap : 1);
+    size_t len = 0;
+    int r = fifa96_record_decode(src, n, next, cap, &len);
+    if (r != 0) {
+      free(next);
+      free(buf);
+      return r;
+    }
+    free(buf);
+    buf = next;
+    src = next;
+    n = len;
+  }
+  free(buf);
+  return -(int)FIFA96_ERR_UNSUPPORTED;
+}
+
+static int cmd_sprite(int argc, char **argv) {
+  const char *in = NULL;
+  const char *out = NULL;
+  const char *palpath = NULL;
+  const char *name = NULL;
+  int summary = 0;
+  int have_entry = 0;
+  uint32_t entry = 0;
+  uint32_t frame = 0;
+  for (int i = 2; i < argc; i++) {
+    const char *a = argv[i];
+    if (strcmp(a, "--entry") == 0) {
+      if (++i >= argc || !parse_u32(argv[i], &entry))
+        return arg_error("--entry needs a non-negative index");
+      have_entry = 1;
+    } else if (strcmp(a, "--name") == 0) {
+      if (++i >= argc) return arg_error("--name needs a value");
+      name = argv[i];
+    } else if (strcmp(a, "--frame") == 0) {
+      if (++i >= argc || !parse_u32(argv[i], &frame))
+        return arg_error("--frame needs a non-negative frame index");
+    } else if (strcmp(a, "--out") == 0) {
+      if (++i >= argc) return arg_error("--out needs a path");
+      out = argv[i];
+    } else if (strcmp(a, "--palette") == 0) {
+      if (++i >= argc) return arg_error("--palette needs a file");
+      palpath = argv[i];
+    } else if (strcmp(a, "--print-summary") == 0) {
+      summary = 1;
+    } else if (a[0] == '-') {
+      return arg_error("unknown option '%s'", a);
+    } else if (!in) {
+      in = a;
+    } else {
+      return arg_error("unexpected argument '%s'", a);
+    }
+  }
+  if (!in) return arg_error("sprite needs an input FILE");
+  if (have_entry && name) return arg_error("--entry and --name are exclusive");
+
+  uint8_t *data = NULL;
+  size_t n = 0;
+  fifa96_err_t fe = fifa96_file_read(in, &data, &n);
+  if (fe != FIFA96_OK) {
+    errmsg("cannot read '%s' (%d)", in, (int)fe);
+    return 1;
+  }
+
+  uint8_t *outer_owned = NULL;
+  const uint8_t *leaf = NULL;
+  size_t leaf_len = 0;
+  int r = sprite_leaf(data, n, &outer_owned, &leaf, &leaf_len);
+  if (r != 0) {
+    errmsg("'%s' does not decode to a BIGF/SHPI container (%d)", in, -r);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+
+  uint8_t *bank_owned = NULL;
+  const uint8_t *bank_src = NULL;
+  size_t bank_len = 0;
+  uint32_t entries = 1;
+  uint32_t sel_entry = 0;
+  const char *sel_name = "-";
+  if (memcmp(leaf, "SHPI", 4) == 0) {
+    bank_src = leaf;
+    bank_len = leaf_len;
+  } else {
+    struct fifa96_bigf_info bigf;
+    if (fifa96_bigf_parse(leaf, leaf_len, &bigf) != FIFA96_OK) {
+      errmsg("'%s' is not a valid BIGF container", in);
+      free(outer_owned);
+      fifa96_file_free(data);
+      return 1;
+    }
+    entries = bigf.count;
+    uint32_t off = 0, size = 0;
+    const char *rec_name = NULL;
+    if (name) {
+      int found = 0;
+      for (uint32_t i = 0; i < bigf.count; i++) {
+        if (fifa96_bigf_record(&bigf, i, &off, &size, &rec_name) != FIFA96_OK) break;
+        if (strcmp(rec_name, name) == 0) {
+          found = 1;
+          sel_entry = i;
+          break;
+        }
+      }
+      if (!found) {
+        errmsg("entry '%s' is not present in '%s'", name, in);
+        free(outer_owned);
+        fifa96_file_free(data);
+        return 1;
+      }
+    } else {
+      fifa96_err_t be = fifa96_bigf_record(&bigf, entry, &off, &size, &rec_name);
+      if (be != FIFA96_OK) {
+        errmsg("entry %u is not present in '%s' (%d)", entry, in, (int)be);
+        free(outer_owned);
+        fifa96_file_free(data);
+        return 1;
+      }
+      sel_entry = entry;
+    }
+    sel_name = rec_name;
+    r = sprite_leaf(leaf + off, size, &bank_owned, &bank_src, &bank_len);
+    if (r != 0 || memcmp(bank_src, "SHPI", 4) != 0) {
+      errmsg("entry '%s' is not a decodable SHPI sprite bank (%d)", sel_name, r ? -r : -1);
+      free(bank_owned);
+      free(outer_owned);
+      fifa96_file_free(data);
+      return 1;
+    }
+  }
+
+  fifa96_sprite_bank bank;
+  r = fifa96_sprite_bank_parse(bank_src, bank_len, &bank);
+  if (r != 0) {
+    errmsg("entry '%s' is not a valid SHPI sprite bank (%d)", sel_name, -r);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  if (bank.count == 0) {
+    errmsg("entry '%s' has no frames", sel_name);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  if (frame >= bank.count) {
+    errmsg("frame %u not present (entry '%s' has %u frames)", frame, sel_name, bank.count);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  fifa96_sprite_entry fe_entry;
+  r = fifa96_sprite_bank_entry(&bank, frame, &fe_entry);
+  if (r != 0) {
+    errmsg("entry '%s' frame %u is not addressable (%d)", sel_name, frame, -r);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  fifa96_sprite_frame sf;
+  r = fifa96_sprite_frame_parse(&bank, fe_entry.offset, &sf);
+  if (r != 0) {
+    errmsg("entry '%s' frame %u has no valid header (%d)", sel_name, frame, -r);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  uint64_t pixels = (uint64_t)sf.width * sf.height;
+  if (!sf.pixels || sf.pixel_len < pixels || pixels > PLAY_MAX_PIXELS) {
+    errmsg("entry '%s' frame %u: decoded %u bytes for %ux%u", sel_name, frame, sf.pixel_len,
+           sf.width, sf.height);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+
+  uint8_t pal[768];
+  if (palpath) {
+    uint8_t *pdata = NULL;
+    size_t pn = 0;
+    fifa96_err_t pe = fifa96_file_read(palpath, &pdata, &pn);
+    if (pe != FIFA96_OK || pn < sizeof pal) {
+      errmsg("palette '%s' must be at least 768 bytes (%zu)", palpath, pn);
+      fifa96_file_free(pdata);
+      free(bank_owned);
+      free(outer_owned);
+      fifa96_file_free(data);
+      return 1;
+    }
+    memcpy(pal, pdata, sizeof pal);
+    fifa96_file_free(pdata);
+  } else {
+    for (uint32_t i = 0; i < 256; i++) {
+      pal[i * 3] = (uint8_t)i;
+      pal[i * 3 + 1] = (uint8_t)i;
+      pal[i * 3 + 2] = (uint8_t)i;
+    }
+  }
+
+  const char *path = out ? out : PLAY_DEFAULT_DIR "/sprite.ppm";
+  if (ensure_parent(path) != 0) {
+    errmsg("cannot create parent directory of '%s'", path);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  uint8_t *buf = xmalloc(64 + (size_t)pixels * 3);
+  int hn = snprintf((char *)buf, 64, "P6\n%u %u\n255\n", sf.width, sf.height);
+  if (hn < 0 || hn >= 64) {
+    errmsg("entry '%s' frame %u: cannot format PPM header", sel_name, frame);
+    free(buf);
+    free(bank_owned);
+    free(outer_owned);
+    fifa96_file_free(data);
+    return 1;
+  }
+  for (uint64_t i = 0; i < pixels; i++) {
+    const uint8_t *rgb = pal + (size_t)sf.pixels[i] * 3;
+    buf[(size_t)hn + i * 3] = rgb[0];
+    buf[(size_t)hn + i * 3 + 1] = rgb[1];
+    buf[(size_t)hn + i * 3 + 2] = rgb[2];
+  }
+  int rc = write_file(path, buf, (size_t)hn + (size_t)pixels * 3);
+  if (rc == 0 && summary) {
+    char hex[65];
+    play_sha256_hex(buf, (size_t)hn + (size_t)pixels * 3, hex);
+    printf("sprite: entries=%u entry=%u name=%s frames=%u frame=%u %ux%u ppm sha256=%s\n",
+           entries, sel_entry, sel_name, bank.count, frame, sf.width, sf.height, hex);
+  }
+  free(buf);
+  free(bank_owned);
+  free(outer_owned);
+  fifa96_file_free(data);
+  return rc;
+}
+
 int main(int argc, char **argv) {
   if (argc < 2) {
     usage(stderr);
@@ -787,5 +1058,6 @@ int main(int argc, char **argv) {
   }
   if (strcmp(argv[1], "video") == 0) return cmd_video(argc, argv);
   if (strcmp(argv[1], "audio") == 0) return cmd_audio(argc, argv);
+  if (strcmp(argv[1], "sprite") == 0) return cmd_sprite(argc, argv);
   return arg_error("unknown mode '%s'", argv[1]);
 }

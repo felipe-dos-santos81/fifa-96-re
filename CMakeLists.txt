@@ -239,7 +239,7 @@ add_test(NAME test_outfield COMMAND test_outfield WORKING_DIRECTORY ${CMAKE_SOUR
 add_executable(fifa96_play tools/fifa96_play.c)
 target_link_libraries(fifa96_play PRIVATE fifa96_vgt_player fifa96_tgv_stream fifa96_kvgt
                                              fifa96_eacs fifa96_bnk fifa96_bigf fifa96_blit
-                                             fifa96_file)
+                                             fifa96_record fifa96_sprite fifa96_file)
 
 add_library(fifa96_action_handlers src/fifa96_loader/fifa96_action_handlers.c)
 target_link_libraries(fifa96_action_handlers PRIVATE fifa96_entity_update)
