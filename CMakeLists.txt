@@ -371,13 +371,14 @@ endif()
 # ── Engine (M1) ────────────────────────────────────────────────────────────────
 add_library(fifa96_engine
   src/fifa96_engine/fifa96_engine.c
+  src/fifa96_engine/fifa96_clock.c
   src/fifa96_engine/fifa96_surface.c
   src/fifa96_engine/fifa96_asset.c
   src/fifa96_engine/fifa96_cache.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
-target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660)
+target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
@@ -397,4 +398,9 @@ add_test(NAME test_engine_asset COMMAND test_engine_asset
 add_executable(test_engine_cache tests/test_engine_cache.c)
 target_link_libraries(test_engine_cache PRIVATE fifa96_engine)
 add_test(NAME test_engine_cache COMMAND test_engine_cache
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_clock tests/test_engine_clock.c)
+target_link_libraries(test_engine_clock PRIVATE fifa96_engine)
+add_test(NAME test_engine_clock COMMAND test_engine_clock
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

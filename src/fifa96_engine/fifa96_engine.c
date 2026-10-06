@@ -10,6 +10,7 @@ struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cf
   e->plat = plat;
   if (e->cfg.width == 0) e->cfg.width = 320;
   if (e->cfg.height == 0) e->cfg.height = 240;
+  fifa96_clock_init(&e->clock);
   return e;
 }
 
@@ -41,6 +42,11 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
 
 int fifa96_engine_step(struct fifa96_engine *e) {
   if (!e || !e->booted) return -1;
+  /* Fixed-step clock first, then present: with the null backend (now_ns()
+   * advances on present) every step contributes exactly one step_ns delta. */
+  uint64_t now = e->plat->now_ns(e->plat->self);
+  e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, now - e->last_ns);
+  e->last_ns = now;
   fifa96_platform_frame f;
   fifa96_surface_plane(e->surface, &f);
   if (e->plat->present(e->plat->self, &f) != 0) return -1;
