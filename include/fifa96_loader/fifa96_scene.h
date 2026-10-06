@@ -25,9 +25,9 @@ fifa96_err_t fifa96_scene_sort(uint32_t count, int32_t *keys, uint32_t *values);
 fifa96_err_t fifa96_scene_slot_gate(int32_t threshold, int32_t key, int32_t staged_y,
                                     int32_t lateral, uint8_t *visible);
 
-fifa96_err_t fifa96_scene_depth_override(int32_t d18, int32_t d1c, int32_t d20, int32_t d24,
-                                         int32_t clean_y, int32_t jitter_x, int32_t jitter_y,
-                                         int32_t *jitter_y_out, uint8_t *draw);
+fifa96_err_t fifa96_scene_clip_edges(int32_t left, int32_t top, int32_t right, int32_t bottom,
+                                     int32_t clean_y, int32_t jitter_x, int32_t jitter_y,
+                                     int32_t *jitter_y_out, uint8_t *draw);
 
 fifa96_err_t fifa96_scene_threshold(int32_t field, int32_t reference, int32_t fallback,
                                     int32_t limit, int32_t *out);

@@ -71,23 +71,23 @@ static void test_slot_gate(void) {
   assert(fifa96_scene_slot_gate(0, 0, 0, 0, NULL) == P_INVALID);
 }
 
-static void test_depth_override(void) {
+static void test_clip_edges(void) {
   int32_t y;
   uint8_t draw;
-  assert(fifa96_scene_depth_override(0, 0, 0, 100, 40, 100, 100, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(0, 0, 0, 100, 40, 100, 100, &y, &draw) == FIFA96_OK);
   assert(draw == 0 && y == 100);
-  assert(fifa96_scene_depth_override(0, 50, 0, 100, 40, 100, 50, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(0, 50, 0, 100, 40, 100, 50, &y, &draw) == FIFA96_OK);
   assert(draw == 0 && y == 100);
-  assert(fifa96_scene_depth_override(0, 50, 200, 100, 80, 100, 50, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(0, 50, 200, 100, 80, 100, 50, &y, &draw) == FIFA96_OK);
   assert(draw == 1 && y == 50);
-  assert(fifa96_scene_depth_override(0, 50, 200, 100, 80, 300, 50, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(0, 50, 200, 100, 80, 300, 50, &y, &draw) == FIFA96_OK);
   assert(draw == 0 && y == 100);
-  assert(fifa96_scene_depth_override(400, 50, 200, 100, 80, 250, 50, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(400, 50, 200, 100, 80, 250, 50, &y, &draw) == FIFA96_OK);
   assert(draw == 0 && y == 100);
-  assert(fifa96_scene_depth_override(400, 50, 200, 100, 80, 259, 50, &y, &draw) == FIFA96_OK);
+  assert(fifa96_scene_clip_edges(400, 50, 200, 100, 80, 259, 50, &y, &draw) == FIFA96_OK);
   assert(draw == 0 && y == 100);
-  assert(fifa96_scene_depth_override(0, 0, 0, 0, 0, 0, 0, NULL, &draw) == P_INVALID);
-  assert(fifa96_scene_depth_override(0, 0, 0, 0, 0, 0, 0, &y, NULL) == P_INVALID);
+  assert(fifa96_scene_clip_edges(0, 0, 0, 0, 0, 0, 0, NULL, &draw) == P_INVALID);
+  assert(fifa96_scene_clip_edges(0, 0, 0, 0, 0, 0, 0, &y, NULL) == P_INVALID);
 }
 
 static void test_threshold(void) {
@@ -176,7 +176,7 @@ int main(void) {
   test_build_keys();
   test_sort();
   test_slot_gate();
-  test_depth_override();
+  test_clip_edges();
   test_threshold();
   test_reproject();
   test_slot_project();

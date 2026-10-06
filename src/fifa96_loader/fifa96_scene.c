@@ -44,24 +44,24 @@ fifa96_err_t fifa96_scene_slot_gate(int32_t threshold, int32_t key, int32_t stag
   return FIFA96_OK;
 }
 
-fifa96_err_t fifa96_scene_depth_override(int32_t d18, int32_t d1c, int32_t d20, int32_t d24,
-                                         int32_t clean_y, int32_t jitter_x, int32_t jitter_y,
-                                         int32_t *jitter_y_out, uint8_t *draw) {
+fifa96_err_t fifa96_scene_clip_edges(int32_t left, int32_t top, int32_t right, int32_t bottom,
+                                     int32_t clean_y, int32_t jitter_x, int32_t jitter_y,
+                                     int32_t *jitter_y_out, uint8_t *draw) {
   if (!jitter_y_out || !draw) return (fifa96_err_t)-FIFA96_ERR_INVALID;
-  if (d24 <= jitter_y || clean_y <= d1c) {
-    *jitter_y_out = d24;
+  if (bottom <= jitter_y || clean_y <= top) {
+    *jitter_y_out = bottom;
     *draw = 0;
     return FIFA96_OK;
   }
   int32_t delta = (int32_t)((uint32_t)clean_y - (uint32_t)jitter_y);
-  int32_t candidate = (int32_t)((uint32_t)d20 + ((uint32_t)delta << 1));
-  int32_t alternative = (int32_t)((uint32_t)d18 - ((uint32_t)delta << 1));
+  int32_t candidate = (int32_t)((uint32_t)right + ((uint32_t)delta << 1));
+  int32_t alternative = (int32_t)((uint32_t)left - ((uint32_t)delta << 1));
   if (candidate > jitter_x && alternative < jitter_x) {
     *jitter_y_out = jitter_y;
     *draw = 1;
     return FIFA96_OK;
   }
-  *jitter_y_out = d24;
+  *jitter_y_out = bottom;
   *draw = 0;
   return FIFA96_OK;
 }
