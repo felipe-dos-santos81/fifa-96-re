@@ -268,3 +268,227 @@ fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, 
   out->z = cam_z + (int32_t)cam_vel_z * 4;
   return FIFA96_OK;
 }
+
+fifa96_err_t fifa96_action_possession_reset(fifa96_action_possession *state) {
+  if (!state) return -FIFA96_ERR_INVALID;
+  state->carrier = 0;
+  state->index = 0;
+  state->rotation = 0;
+  state->dir_x = 0;
+  state->dir_z = 0;
+  state->counter_c = 0;
+  state->release_timer = 0;
+  state->counter_e = 0;
+  state->counter_f = 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_possession_claim(fifa96_action_possession *state, int32_t actor,
+                                            int *claimed) {
+  if (!state || !claimed) return -FIFA96_ERR_INVALID;
+  if (state->carrier == actor) {
+    *claimed = 0;
+    return FIFA96_OK;
+  }
+  fifa96_action_possession_reset(state);
+  state->carrier = actor;
+  *claimed = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_possession_timer(int32_t *timer, uint16_t delta) {
+  if (!timer) return -FIFA96_ERR_INVALID;
+  if (*timer < 0x4B0) *timer = *timer + (int32_t)delta;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distance, uint8_t has_slot,
+                                                  int8_t slot_x, int8_t slot_z,
+                                                  const int8_t *type_x, const int8_t *type_z,
+                                                  fifa96_action_dribble_dir *out) {
+  if (!out) return -FIFA96_ERR_INVALID;
+  out->dir_x = 0;
+  out->dir_z = 0;
+  out->speed = 0;
+  out->resolved = 0;
+  if (distance > 0x38) {
+    if (!type_x || !type_z) return -FIFA96_ERR_INVALID;
+    out->dir_x = type_x[type8];
+    out->dir_z = type_z[type8];
+    out->speed = 0x60;
+    out->resolved = 1;
+  } else if (has_slot != 0) {
+    out->dir_x = slot_x;
+    out->dir_z = slot_z;
+    out->speed = 0x30;
+    out->resolved = 1;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,
+                                        fifa96_action_receive_out *out) {
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  out->reset = 0;
+  out->advance = 0;
+  out->handoff = 0;
+  out->stage = state->stage;
+  if (state->stage == 0) {
+    if (state->active == 0) {
+      out->reset = 1;
+      return FIFA96_OK;
+    }
+    if (state->offset_word > 0x40) {
+      if (state->timer89 > 0x3C) {
+        out->reset = 1;
+        out->handoff = state->is_team_target;
+      }
+      return FIFA96_OK;
+    }
+    out->advance = 1;
+    state->timer89 = 0;
+    state->stage = 1;
+    out->stage = 1;
+  }
+  if (state->stage == 1) {
+    if (state->event_flag != 0 || state->offset_word > 0x40) {
+      out->reset = 1;
+      out->handoff = state->is_team_target;
+    }
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_tackle_attempt(const fifa96_action_tackle *state, int *install_0e) {
+  int32_t dx, dz, distance, angle = 0, diff;
+  if (!state || !install_0e) return -FIFA96_ERR_INVALID;
+  *install_0e = 0;
+  if (state->phase != 2 || state->is_tracked == 0) return FIFA96_OK;
+  if (state->cam_f8 < 0x14) return FIFA96_OK;
+  if (state->close_word > 0x180) return FIFA96_OK;
+  if (state->target_height < 0x20 || state->target_height > 0x60) return FIFA96_OK;
+  dx = low16(state->target_x - state->pos_x);
+  dz = low16(state->target_z - state->pos_z);
+  distance = fifa96_entity_distance(dx, dz);
+  if (distance > 0xF0) return FIFA96_OK;
+  if (state->pos_x < -0x210 && state->pos_x > state->camera_x) return FIFA96_OK;
+  if (state->pos_x > 0x210 && state->camera_x < state->pos_x) return FIFA96_OK;
+  if (state->side == 0) {
+    if (state->pos_z < 0x690) return FIFA96_OK;
+  } else if (state->side == 1 && state->pos_z > -0x690) {
+    return FIFA96_OK;
+  }
+  fifa96_action_kick_angle(dx, dz, &angle);
+  if (state->side == 0) {
+    if (angle < -0x100 || angle > 0x100) return FIFA96_OK;
+  } else if (angle > -0x100 && angle < 0x100) {
+    return FIFA96_OK;
+  }
+  diff = (int32_t)((uint16_t)((uint16_t)angle - state->facing) & 0x3FFu);
+  if (diff > 0x200) diff = 0x400 - diff;
+  if (diff > 0x100) return FIFA96_OK;
+  *install_0e = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_tackle_step(fifa96_action_tackle *state, fifa96_action_tackle_out *out) {
+  int32_t dx, dz;
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  out->reset = 0;
+  out->install_0e = 0;
+  out->install_0f = 0;
+  out->stage = state->stage;
+  if (state->phase != 2) {
+    out->reset = 1;
+    return FIFA96_OK;
+  }
+  state->timer89 += state->delta;
+  if (state->stage == 0) {
+    if (state->active == 0) {
+      out->reset = 1;
+      return FIFA96_OK;
+    }
+    state->timer89 = 0;
+    state->stage = 1;
+    out->stage = 1;
+  }
+  if (state->stage == 1) {
+    int install = 0;
+    if (state->lob != 0 || state->timer89 > 0x78) {
+      out->reset = 1;
+      goto tackle_tail;
+    }
+    fifa96_action_tackle_attempt(state, &install);
+    if (install != 0) {
+      out->install_0e = 1;
+      goto tackle_tail;
+    }
+    if (state->slot_button_40 != 0) goto tackle_tail;
+    if (state->flag99 != 0) goto tackle_tail;
+    if (state->field5d != 0) goto tackle_tail;
+    if (state->cam_fa <= state->cam_f2) goto tackle_tail;
+    if (state->is_own == 0) goto tackle_tail;
+    if (state->opp_close >= 0x120) goto tackle_tail;
+    if (state->opp_close > state->opp_bound) goto tackle_tail;
+    if ((int32_t)state->cam_f8 + state->cam_100 < state->cam_fe) goto tackle_tail;
+    dx = low16(state->vector_x - state->pos_x);
+    dz = low16(state->vector_z - state->pos_z);
+    if (fifa96_entity_distance(dx, dz) >= 0x60) goto tackle_tail;
+    out->install_0f = 1;
+    return FIFA96_OK;
+  }
+tackle_tail:
+  if (state->close_word > state->own_bound) out->reset = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, uint8_t input_byte,
+                                     fifa96_action_duel_out *out) {
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  out->wait = 0;
+  out->handoff = 0;
+  out->reset = 0;
+  out->stage = state->stage;
+  state->stride = 2;
+  state->timer89 += (int32_t)delta;
+  if (state->stage == 0) {
+    if (state->animation == 0x55 || state->animation == 0x6A) return FIFA96_OK;
+    state->timer89 = 0;
+    state->stage = 1;
+  }
+  if (state->stage == 1) {
+    int32_t dx = low16(0x900 - state->pos_x);
+    int32_t dz = low16(0 - state->pos_z);
+    state->distance = (int16_t)fifa96_entity_distance(dx, dz);
+    state->delta_x = (int16_t)dx;
+    state->delta_z = (int16_t)dz;
+    state->timer89 = 0;
+    state->stage = 2;
+  }
+  if (state->stage == 2) {
+    if (state->timer89 < 0x78) {
+      out->wait = 1;
+      out->stage = state->stage;
+      return FIFA96_OK;
+    }
+    if (state->timer89 <= 0x12C && (input_byte & 0xF0) == 0 && state->distance >= 0x20) {
+      out->wait = 1;
+      out->stage = state->stage;
+      return FIFA96_OK;
+    }
+    out->handoff = state->has_slot;
+    out->reset = 1;
+  }
+  out->stage = state->stage;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
+                                      uint8_t opp_is_duel_type, uint8_t *own_code,
+                                      uint8_t *opp_code) {
+  if (!own_code || !opp_code) return -FIFA96_ERR_INVALID;
+  *own_code = 5;
+  *opp_code = 0;
+  if (opp_is_duel_type != 0 && opp_metric >= own_metric) *opp_code = 6;
+  return FIFA96_OK;
+}

@@ -93,3 +93,121 @@ fifa96_err_t fifa96_action_locomotion_clamp_placement(int32_t *target_z, int32_t
 fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, int32_t cam_z,
                                                   int16_t cam_vel_x, int16_t cam_vel_z,
                                                   fifa96_action_vec3 *out);
+
+typedef struct fifa96_action_possession {
+  int32_t carrier;
+  uint8_t index;
+  uint8_t rotation;
+  int8_t dir_x;
+  int8_t dir_z;
+  uint8_t counter_c;
+  int8_t release_timer;
+  uint8_t counter_e;
+  uint8_t counter_f;
+} fifa96_action_possession;
+
+fifa96_err_t fifa96_action_possession_reset(fifa96_action_possession *state);
+fifa96_err_t fifa96_action_possession_claim(fifa96_action_possession *state, int32_t actor,
+                                            int *claimed);
+fifa96_err_t fifa96_action_possession_timer(int32_t *timer, uint16_t delta);
+
+typedef struct fifa96_action_dribble_dir {
+  int8_t dir_x;
+  int8_t dir_z;
+  uint16_t speed;
+  uint8_t resolved;
+} fifa96_action_dribble_dir;
+
+fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distance, uint8_t has_slot,
+                                                  int8_t slot_x, int8_t slot_z,
+                                                  const int8_t *type_x, const int8_t *type_z,
+                                                  fifa96_action_dribble_dir *out);
+
+typedef struct fifa96_action_receive {
+  int32_t timer89;
+  int16_t offset_word;
+  uint8_t stage;
+  uint8_t active;
+  uint8_t event_flag;
+  uint8_t is_team_target;
+} fifa96_action_receive;
+
+typedef struct fifa96_action_receive_out {
+  uint8_t reset;
+  uint8_t advance;
+  uint8_t handoff;
+  uint8_t stage;
+} fifa96_action_receive_out;
+
+fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,
+                                        fifa96_action_receive_out *out);
+
+typedef struct fifa96_action_tackle {
+  int32_t pos_x;
+  int32_t pos_z;
+  int32_t camera_x;
+  int32_t target_x;
+  int32_t target_z;
+  int32_t vector_x;
+  int32_t vector_z;
+  int32_t timer89;
+  int16_t target_height;
+  int16_t cam_f8;
+  int16_t close_word;
+  int16_t opp_close;
+  int16_t opp_bound;
+  int16_t own_bound;
+  int16_t cam_f2;
+  int16_t cam_fa;
+  int16_t cam_100;
+  int16_t cam_fe;
+  uint16_t facing;
+  uint16_t delta;
+  uint8_t phase;
+  uint8_t is_tracked;
+  uint8_t active;
+  uint8_t side;
+  uint8_t stage;
+  uint8_t lob;
+  uint8_t has_slot;
+  uint8_t slot_button_40;
+  uint8_t flag99;
+  uint8_t field5d;
+  uint8_t is_own;
+} fifa96_action_tackle;
+
+typedef struct fifa96_action_tackle_out {
+  uint8_t reset;
+  uint8_t install_0e;
+  uint8_t install_0f;
+  uint8_t stage;
+} fifa96_action_tackle_out;
+
+fifa96_err_t fifa96_action_tackle_attempt(const fifa96_action_tackle *state, int *install_0e);
+fifa96_err_t fifa96_action_tackle_step(fifa96_action_tackle *state, fifa96_action_tackle_out *out);
+
+typedef struct fifa96_action_duel {
+  int32_t timer89;
+  int32_t pos_x;
+  int32_t pos_z;
+  int16_t distance;
+  int16_t delta_x;
+  int16_t delta_z;
+  uint8_t stage;
+  uint8_t animation;
+  uint8_t has_slot;
+  uint8_t stride;
+} fifa96_action_duel;
+
+typedef struct fifa96_action_duel_out {
+  uint8_t wait;
+  uint8_t handoff;
+  uint8_t reset;
+  uint8_t stage;
+} fifa96_action_duel_out;
+
+fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, uint8_t input_byte,
+                                     fifa96_action_duel_out *out);
+fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
+                                      uint8_t opp_is_duel_type, uint8_t *own_code,
+                                      uint8_t *opp_code);

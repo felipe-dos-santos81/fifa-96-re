@@ -240,6 +240,9 @@ add_test(NAME test_action_handlers COMMAND test_action_handlers WORKING_DIRECTOR
 add_executable(test_action_locomotion tests/test_action_locomotion.c)
 target_link_libraries(test_action_locomotion PRIVATE fifa96_action_handlers fifa96_entity_update)
 add_test(NAME test_action_locomotion COMMAND test_action_locomotion WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+add_executable(test_action_possession tests/test_action_possession.c)
+target_link_libraries(test_action_possession PRIVATE fifa96_action_handlers fifa96_entity_update)
+add_test(NAME test_action_possession COMMAND test_action_possession WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_ring_stats src/fifa96_loader/fifa96_ring_stats.c)
 add_executable(test_ring_stats tests/test_ring_stats.c)
