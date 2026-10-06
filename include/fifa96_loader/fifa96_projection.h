@@ -18,6 +18,12 @@ typedef struct fifa96_projection_point {
 
 fifa96_err_t fifa96_projection_sincos(int32_t angle, int32_t *sin16, int32_t *cos16);
 
+fifa96_err_t fifa96_projection_view_ratio(int32_t angle, int32_t dim, int32_t *ratio,
+                                          uint8_t *computed);
+
+fifa96_err_t fifa96_projection_view_scale(int32_t angle, int32_t dim, uint8_t skip_second,
+                                          int32_t *ratio1, int32_t *ratio2, uint8_t *computed);
+
 fifa96_err_t fifa96_projection_matrix(int32_t yaw, int32_t pitch, int32_t m[9]);
 
 fifa96_err_t fifa96_projection_transform(const int32_t m[9], const fifa96_projection_vec *v,

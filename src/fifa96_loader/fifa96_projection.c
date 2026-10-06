@@ -74,6 +74,41 @@ fifa96_err_t fifa96_projection_sincos(int32_t angle, int32_t *sin16, int32_t *co
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_projection_view_ratio(int32_t angle, int32_t dim, int32_t *ratio,
+                                          uint8_t *computed) {
+  if (!ratio || !computed) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  *computed = 0;
+  int32_t sin16, cos16;
+  fifa96_err_t rc = fifa96_projection_sincos(angle, &sin16, &cos16);
+  if (rc != FIFA96_OK) return rc;
+  if (!(cos16 > 0 && cos16 < 0x10000)) return FIFA96_OK;
+  int32_t t = (int32_t)(((int64_t)(dim >> 1) * cos16 + 0x8000) >> 16);
+  int32_t q = t / sin16;
+  int32_t rem = t % sin16;
+  uint32_t acc = ((uint32_t)q << 16) + (uint32_t)(int32_t)(((int64_t)rem << 16) / sin16);
+  *ratio = (int32_t)(acc << 16);
+  *computed = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_projection_view_scale(int32_t angle, int32_t dim, uint8_t skip_second,
+                                          int32_t *ratio1, int32_t *ratio2, uint8_t *computed) {
+  if (!ratio1 || !ratio2 || !computed) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  fifa96_err_t rc = fifa96_projection_view_ratio(angle, dim, ratio1, computed);
+  if (rc != FIFA96_OK) return rc;
+  if (!*computed) return FIFA96_OK;
+  if (skip_second) {
+    *ratio2 = *ratio1;
+    return FIFA96_OK;
+  }
+  int32_t dim2 = (int32_t)((int32_t)(((int64_t)10 * dim) / 12) >> 1);
+  uint8_t computed2 = 0;
+  rc = fifa96_projection_view_ratio(angle, dim2, ratio2, &computed2);
+  if (rc != FIFA96_OK) return rc;
+  if (!computed2) *ratio2 = *ratio1;
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_projection_matrix(int32_t yaw, int32_t pitch, int32_t m[9]) {
   if (!m) return (fifa96_err_t)-FIFA96_ERR_INVALID;
   int32_t s2, c2, s1, c1;

@@ -103,6 +103,37 @@ static void test_reciprocal(void) {
   assert(fifa96_projection_reciprocal(320, NULL) == P_INVALID);
 }
 
+static void test_view_ratio(void) {
+  int32_t ratio = 0x123456;
+  int32_t ratio1 = 0, ratio2 = 0;
+  uint8_t computed = 9;
+  assert(fifa96_projection_view_ratio(0x2000, 320, &ratio, &computed) == FIFA96_OK);
+  assert(computed == 1 && ratio == (159 << 16));
+  assert(fifa96_projection_view_ratio(0x2000, 640, &ratio, &computed) == FIFA96_OK);
+  assert(computed == 1 && ratio == (319 << 16));
+  ratio = 0x123456;
+  computed = 9;
+  assert(fifa96_projection_view_ratio(0, 320, &ratio, &computed) == FIFA96_OK);
+  assert(computed == 0 && ratio == 0x123456);
+  assert(fifa96_projection_view_ratio(0x4000, 320, &ratio, &computed) == FIFA96_OK);
+  assert(computed == 0 && ratio == 0x123456);
+  assert(fifa96_projection_view_ratio(0x2000, 320, NULL, &computed) == P_INVALID);
+  assert(fifa96_projection_view_ratio(0x2000, 320, &ratio, NULL) == P_INVALID);
+
+  computed = 9;
+  assert(fifa96_projection_view_scale(0x2000, 320, 0, &ratio1, &ratio2, &computed) == FIFA96_OK);
+  assert(computed == 1 && ratio1 == (159 << 16) && ratio2 == (66 << 16));
+  assert(fifa96_projection_view_scale(0x2000, 320, 1, &ratio1, &ratio2, &computed) == FIFA96_OK);
+  assert(computed == 1 && ratio1 == (159 << 16) && ratio2 == (159 << 16));
+  ratio1 = ratio2 = 0x123456;
+  computed = 9;
+  assert(fifa96_projection_view_scale(0x4000, 320, 0, &ratio1, &ratio2, &computed) == FIFA96_OK);
+  assert(computed == 0 && ratio1 == 0x123456 && ratio2 == 0x123456);
+  assert(fifa96_projection_view_scale(0x2000, 320, 0, NULL, &ratio2, &computed) == P_INVALID);
+  assert(fifa96_projection_view_scale(0x2000, 320, 0, &ratio1, NULL, &computed) == P_INVALID);
+  assert(fifa96_projection_view_scale(0x2000, 320, 0, &ratio1, &ratio2, NULL) == P_INVALID);
+}
+
 static void test_screen(void) {
   fifa96_projection_point center;
   fifa96_projection_point out;
@@ -197,6 +228,7 @@ int main(void) {
   test_matrix();
   test_transform();
   test_reciprocal();
+  test_view_ratio();
   test_screen();
   test_project();
   puts("test_projection: all assertions passed");
