@@ -908,9 +908,10 @@ change.
 * **FU-76 §3.3 code-4 divisor correction.** The divisor register is loaded
   from `row[+8]` and overwritten by the code-4 arm (mode 0x40:
   `traj = 0x90 + (rng & 7) * (0x10 - desc15)`, SI zeroed; else
-  `(rng & 0x7F) + 3`); the divisor line computes `traj = word[0x15873C] +
-  (int16)word[0x158738] / (int16)divisor`, not a speed-multiplied addend. The
-  `0x460` cap compares `word[0x15873C]` (FU-139 §9.2, first-hand).
+  `(rng & 0x7F) + 3`); the divisor line computes
+  `traj += (int16)word[0x158738] / (int16)divisor` (the addend is the traj
+  word `0x15873E`, per `0x7BEB6`). The `0x460` cap compares and clamps
+  `word[0x15873E]` (FU-139 §9.2, first-hand).
 * **FU-139 §3.4 `fifa96_action_kick_range_band` boundary wording.** The band
   is applied only on the no-slot / direction-arm paths (`0x7BBE4`); the wing
   arm (`0x7BB46`) jumps to `0x7BC1A` and keeps the mode byte (FU-139 §9.1).

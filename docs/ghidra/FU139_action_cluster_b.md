@@ -652,16 +652,16 @@ type arm dir = table 0x10F334[type8], 0x10F33C[type8]; FUN_0007B878(dir)
          mode 0x30: {0x1C8, 0x780, 0x30, 0x18, extend=1}
          0x14C1D4[side*2] & 0x10 && (extend || code in {1,3}) -> lo/hi 1.5x
          x < lo -> x = lo; else x > hi -> x = hi; on clamp:
-            angle = FUN_000CD474((int16)x, word[0x15873A]);
+            angle = FUN_000CD474(word[0x15873A], word[0x15873C]);
             word[0x15873A] = FUN_000795A4(x, sin_tab(angle));
             word[0x15873C] = FUN_000795A4(x, sin_tab(angle+0x100))
 0x7BE0B  traj += add
 0x7BE26  if (x != 0 && code != 3) {
              if (code == 4) mode==0x40 ? traj = 0x90 + (rng&7)*(0x10-desc15)
                                       : divisor = (rng&0x7F)+3;
-             if (divisor) traj = word[0x15873C] + (int16)x/(int16)divisor;
+             if (divisor) traj += (int16)word[0x158738]/(int16)divisor;
          }
-0x7BECE  if ((int16)word[0x15873C] > 0x460) traj = 0x460
+0x7BECE  if ((int16)word[0x15873E] > 0x460) traj = 0x460
 0x7BEDE  FUN_0007A490([0x158730], 0x158738, traj, code, sub); return 1
 ```
 
@@ -677,8 +677,9 @@ slot/mode-state clusters), runs `0x8DCD4(camera, target, vector)`, derives the
 speed `((int8)rec[+4][0x10]<<7) + 0x390 + (rng&7)`, halves it for
 `byte[+0x99]` or applies the `0x14C1D4` 1.5x, adds the goal-side drift
 `±(|0xB10-pos_z|>>7)` and the `[0x14C2F6]==1` signed adjust, then folds
-`FUN_000CD474(distance, dx)` into `word[0x15873A]`/`[0x15873C]` via the
-0x114E04 table and `FUN_000795A4` (`(a*b+0x8000)>>16`). `FUN_0007B57C` (235
+`FUN_000CD474(word[0x15873A], word[0x15873C])` into
+`word[0x15873A]`/`[0x15873C]` via the 0x114E04 table and `FUN_000795A4`
+(`(a*b+0x8000)>>16`). `FUN_0007B57C` (235
 insns) starts at the camera + the staged dx/dz (`camera_z - 0x60` for
 non-zero SI), takes the nearest `FUN_0008DE8C` team record within the
 `|angle2-angle1| < 0x80` gate (for SI==0) as a velocity-projected decoy, else
@@ -714,9 +715,10 @@ stage 0 (`0x81512..0x815CD`): `[+0x9E]=1`, the lane/`word[+0x5D]+0x70` vs
 camera x bounds, the side/pos_z bounds, the `0x8DD70` angle inside `±0x100`
 (side 0) or outside (side 1) and the `|angle - word[+0x7D]| <= 0x100` gate ->
 install `0x0E`), the `[0x14C32A]`/`0x15B680==4` `0x40 -> 0x20` downgrade, the
-kick, the post-kick opponent gate (staged z < 0x30, timer < 5, the opponent
-type 6, no slot, lane < 0xD0, `|angle - word[+0x7D]| < 0x55` -> install
-`0x22`), `timer89=0`, `+0x92++`; stage 2: `+0x44`.
+kick, the post-kick opponent gate (staged traj `word[0x15873E]` < 0x30,
+timer < 5, the opponent type 6, no slot, lane `word[+0x6B]` < 0xD0, the
+`FUN_0008DD70(word[+0x6D], word[+0x6F])` angle vs `word[+0x7D]` within `0x55`
+-> install `0x22`), `timer89=0`, `+0x92++`; stage 2: `+0x44`.
 
 Row 0F (`0x82AD0..0x82DCF`): phase != 2 -> reset; `timer89 += delta`; stage 0
 (`0x82B21..0x82BC3`): inactive or `word[+0x85] != 0` -> reset; the
