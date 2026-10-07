@@ -1,0 +1,21 @@
+#pragma once
+#include "fifa96_loader/fifa96_err.h"
+
+struct fifa96_engine;
+struct fifa96_match_run;
+
+/* M2 bridge: hand the engine's front-end off to a match run.
+ *
+ * Call after fifa96_frontend_run_step reports the match-start exit
+ * classification (FU-66 §4/§5): the panel's accepted confirm drives the
+ * FU-66 §2 driver exit, whose port classification is the code-8
+ * FIFA96_FRONTEND_EXIT_STATE16 (the exit tail at 0x1EDFD dispatches state 16,
+ * and the FU-64 §1.1 menu-driven start-match family enters the match setup
+ * with selector 0). Begins `mr` with that selector and sets the engine mode
+ * MATCH through fifa96_match_run_begin. Returns 0, -FIFA96_ERR_INVALID (NULL
+ * arguments), or -FIFA96_ERR_STATE when the engine is unbooted/quitting, the
+ * run is already live, or the front-end is not in the startable state; no
+ * state is mutated on failure. The startable classification is consumed on
+ * success so a live match cannot re-enter. */
+int fifa96_match_bridge_from_frontend(struct fifa96_match_run *mr,
+                                      struct fifa96_engine *eng);

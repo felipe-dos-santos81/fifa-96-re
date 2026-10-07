@@ -28,6 +28,7 @@ struct fifa96_engine {
   int intro_active;             /* intro stream loaded and still stepping */
   uint32_t intro_frames;        /* video frames advanced at 15 fps */
   struct fifa96_frontend_run frontend;
+  struct fifa96_match_run match_run; /* engine-owned run the bridge begins */
   struct fifa96_match_run *match; /* active match driver, NULL when none */
   enum fifa96_engine_mode mode;
   struct fifa96_engine_clock clock;

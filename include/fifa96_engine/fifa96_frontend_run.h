@@ -19,6 +19,7 @@ struct fifa96_frontend_run {
   int      queue_len;
   uint64_t frames;                  /* frames rendered since init */
   int      quit_requested;          /* FIFA96_ENGINE_KEY_QUIT seen since init */
+  int      match_start;             /* FU-66 match-start exit classification */
 };
 
 int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surface *s);

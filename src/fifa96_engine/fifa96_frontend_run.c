@@ -54,11 +54,13 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
   *quit = 0;
   int library_exit = 0;
 
-  /* M1: an accepted CONFIRM (the gated -10 path, or a panel confirm) parks
-   * the library in EXIT and only fifa96_frontend_init clears the confirm
-   * flag. There are no panels/matches to enter at M1, so consume the
-   * accepted confirm and return the front-end to its navigable phase on the
-   * following step; M2 replaces this with the real FU-65/66 transition. */
+  /* A front-end accepted CONFIRM (the gated -10 path) parks the library in
+   * EXIT and only fifa96_frontend_init clears the confirm flag. The M1
+   * wrapping consumes it and returns the front-end to its navigable phase on
+   * the following step; the M1 golden pins that behavior for the front-end
+   * menu, so the FU-66 front-end confirm route stays an open leg until the
+   * boot mode selector is modeled. A panel confirm is consumed here on the
+   * step after its match-start classification was recorded below. */
   if (fr->frontend.confirm != 0) {
     fr->frontend.confirm = 0;
     fifa96_frontend_panel_result(&fr->frontend);
@@ -71,7 +73,22 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
       enum fifa96_frontend_panel_event event = FIFA96_FRONTEND_PANEL_NONE;
       int32_t mapped = code;
       if (fifa96_frontend_panel_event(&fr->frontend, code, 1, 1, &event, &mapped) != 0) continue;
-      if (event == FIFA96_FRONTEND_PANEL_EXIT) fifa96_frontend_panel_result(&fr->frontend);
+      if (event == FIFA96_FRONTEND_PANEL_EXIT) {
+        fifa96_frontend_panel_result(&fr->frontend);
+      } else if (event == FIFA96_FRONTEND_PANEL_CONFIRM) {
+        /* FU-66 §5: the panel's gated -10 (0x1F994 -> r=5) sets [0x5094],
+         * and FU-66 §2 turns the confirm flag into the driver exit. Classify
+         * that transition through the FU-66 §4 code-8 exit tail (0x1EDFD,
+         * `MOV EAX,0x10`): the port's exit state for it is STATE16, the
+         * classification the FU-64 §1.1 menu-driven start-match family
+         * starts from. The bridge consumes this flag. */
+        enum fifa96_frontend_exit exit_state = FIFA96_FRONTEND_EXIT_STATE16;
+        uint32_t state = fr->entry_state;
+        if (fifa96_frontend_exit(&fr->frontend, 8, &exit_state, &state) == 0 &&
+            exit_state == FIFA96_FRONTEND_EXIT_STATE16) {
+          fr->match_start = 1;
+        }
+      }
     } else if (fr->frontend.phase == FIFA96_FRONTEND_PHASE_EXIT) {
       enum fifa96_frontend_exit exit_state = FIFA96_FRONTEND_EXIT_STATE16;
       uint32_t state = fr->entry_state;

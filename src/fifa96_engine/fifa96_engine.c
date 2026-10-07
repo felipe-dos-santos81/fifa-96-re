@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_match_bridge.h"
 #include "fifa96_engine/fifa96_menu_art.h"
 
 static int engine_char_fold(int c) {
@@ -82,6 +83,7 @@ struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cf
   if (e->cfg.width == 0) e->cfg.width = 320;
   if (e->cfg.height == 0) e->cfg.height = 240;
   fifa96_clock_init(&e->clock);
+  fifa96_match_run_init(&e->match_run);
   return e;
 }
 
@@ -200,6 +202,11 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     if (quit) {
       e->quit = 1;
       e->mode = FIFA96_ENGINE_MODE_QUIT;
+    } else if (e->frontend.match_start) {
+      /* M2: the front-end's match-start exit classification hands off to the
+       * engine-owned run; the bridge consumes the classification and starts
+       * the run, which sets the engine mode MATCH. */
+      if (fifa96_match_bridge_from_frontend(&e->match_run, e) != 0) return -1;
     }
   } else if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
     /* Poll one input batch per step (the FRONTEND pattern) and feed it to the
