@@ -738,20 +738,19 @@ fifa96_err_t fifa96_arm_2a_step(struct fifa96_arm_record *rec, uint8_t arm) {
       rec->stage92 = (uint8_t)(rec->stage92 + 1u);
       return FIFA96_OK;
     case 10u: {
-      /* 0x86F83..0x87004: id 0x60, the explicit (dx=0, dz=-100) face octant,
-       * the timer89 >= 0x708 gate, then id 0x64, target (0xCC0, 0), id 0x61
-       * and the [0x10F35C] chase flag. */
+      /* 0x86F83..0x87004: id 0x60, the (dx=0, dz=-100) face octant, the
+       * timer89 >= 0x708 gate, then the (dx=0x64, dz=0) face octant, target
+       * (0xCC0, 0), id 0x61 and the [0x10F35C] chase flag. */
       static const fifa96_arm_vec origin = { 0, 0, 0 };
-      static const fifa96_arm_vec dir = { 0, 0, -100 };
+      static const fifa96_arm_vec dir_negz = { 0, 0, -100 };
+      static const fifa96_arm_vec dir_posx = { 0x64, 0, 0 };
       uint8_t slot;
       if (fifa96_arm_anim_select(0x60, rec->anim_sel, &slot) != FIFA96_OK)
         return -FIFA96_ERR_INVALID;
       rec->anim_sel = slot;                    /* 0x86F95 */
-      (void)fifa96_arm_face(&origin, &dir, &rec->type);   /* 0x86FA3 */
+      (void)fifa96_arm_face(&origin, &dir_negz, &rec->type);  /* 0x86FA3 */
       if (rec->timer89 < 0x708) return FIFA96_OK;         /* 0x86FA8 */
-      if (fifa96_arm_anim_select(0x64, rec->anim_sel, &slot) != FIFA96_OK)
-        return -FIFA96_ERR_INVALID;
-      rec->anim_sel = slot;                    /* 0x86FBD */
+      (void)fifa96_arm_face(&origin, &dir_posx, &rec->type);  /* 0x86FBD */
       rec->target.x = 0xCC0;                   /* 0x86FC7 */
       rec->target.z = 0;                       /* 0x86FDB */
       if (fifa96_arm_anim_select(0x61, rec->anim_sel, &slot) != FIFA96_OK)

@@ -106,8 +106,8 @@ fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec);
  *  9: the distance gate `<= 0x20` syncs target = pos, zeroes the velocity pair,
  *     `timer89` = 0 and sets `[0x10F358]` = 1;
  *  10: id 0x60, the (dx=0, dz=-100) face octant, `timer89 >= 0x708`, then
- *     id 0x64, target = (0xCC0, 0), id 0x61, `timer89` = 0 and
- *     `[0x10F35C]` = 1;
+ *     the (dx=0x64, dz=0) face octant (the +x octant 2), target = (0xCC0, 0),
+ *     id 0x61, `timer89` = 0 and `[0x10F35C]` = 1;
  *  11: epilogue (the pre-dispatch block still ran for selectors 3..127).
  * `distance` is the record's native +0x65 word (the unported `FUN_0008D098`
  * pre-switch walk `0x8D11E` computes it); arm 8 consumes four `0x92AC8` draws

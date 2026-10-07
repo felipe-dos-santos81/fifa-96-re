@@ -1721,8 +1721,9 @@ static void test_arm_2a_arm9_sync_global(void) {
 
 /* Arm 10 (0x86F83): id 0x60 and the (0, -100) face octant run before the
  * timer89 >= 0x708 gate; below it the call returns (face already stored). At
- * or above it: id 0x64, target = (0xCC0, 0), id 0x61, timer89 = 0 and
- * [0x10F35C] = 1. */
+ * or above it: the second face call `0x79C50(rec, DX=0x64, BX=0)` (+x octant
+ * 2), target = (0xCC0, 0), id 0x61, timer89 = 0 and [0x10F35C] = 1. The
+ * 0x64 is a face *direction*, not a 0x6E598 id (`0x86FB4..0x86FBD`). */
 static void test_arm_2a_arm10_anim_face_gate(void) {
   struct fifa96_arm_record rec = arm_rec();
   rec.stage92 = 10;
@@ -1742,8 +1743,8 @@ static void test_arm_2a_arm10_anim_face_gate(void) {
 
   rec.timer89 = 0x708;
   assert(fifa96_arm_2a_step(&rec, 10) == FIFA96_OK);
-  assert(rec.anim_sel == 0x61);          /* 0x60, 0x64, then 0x61 */
-  assert(rec.type == 4);
+  assert(rec.anim_sel == 0x61);          /* 0x60, then 0x61 (0x64 is a face) */
+  assert(rec.type == 2);                 /* the (0x64, 0) second face: +x */
   assert(rec.target.x == 0xCC0 && rec.target.z == 0);
   assert(rec.timer89 == 0 && rec.stage92 == 11);
   assert(rec.global_10f35c == 1);
