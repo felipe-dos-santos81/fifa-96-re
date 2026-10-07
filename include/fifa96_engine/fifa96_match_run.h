@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include "fifa96_engine/fifa96_keys.h"
+#include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_control.h"
@@ -96,22 +97,21 @@ struct fifa96_match_run_render {
 };
 
 /* Minimal derived match record (M2 Task 5 / FU-138 §4, extended by M2 Task 7 /
- * FU-140 §4): the native record is a 0xB2-strided block (FU-137 §3) whose
- * fields the FU-76 §3.1 action-00 body and the FU-79 §7 keeper row 1E read and
- * write. The engine seam keeps one record — the controlled entity the action
- * dispatch can bind today — until the C8/C11 entity pool lands (FU-138 OL-16,
- * carrying FU-137 OL-1). Offsets are the native record fields: pos
+ * FU-140 §4 and M2 Task 8 / FU-141): the native record is a 0xB2-strided block
+ * (FU-137 §3) whose fields the FU-76 §3.1 action-00 body and the FU-79 §7
+ * keeper row 1E read and write. The engine binds these fields to the entity
+ * pool (`mr->entities`, FU-141): the FU-67 update chain copies one pool record
+ * into this staging record, dispatches the record's action code, then drains
+ * the requests back into the pool. Offsets are the native record fields: pos
  * +0x59/+0x5D/+0x61, target +0x4D/+0x51/+0x55, timer +0x89/+0x81, active
  * +0x8D, ran +0x9E, stage +0x8F, ball flag +0x9B, control-slot pointer +0x20,
- * slot direction +0x1D/+0x1E. `install` is the derived seam stand-in for the
- * FU-137 §2 `FUN_0007D9A4` install request (`3`/`0x19` from action 00); the
- * engine does not yet stage `[rec+0x18]`, and `ran`, `install`,
- * `helper_request` and `controlled` are write-only until the C8/C11 pool
- * consumes them. Row 1E's native output triple 0x15774C/0x157750/0x157754 (the
- * camera/place block `FUN_000700F4` consumes) and its per-type placement
- * offsets (object-4 `0x10F334`/`0x10F33C[type8]`, FU-140 §4) have no engine
- * surface yet, so `place_*` and `place_offset_*` are the derived sink/inputs
- * for that row. */
+ * slot direction +0x1D/+0x1E -> +0x20/+0x21. `install` is the derived seam
+ * request for the FU-137 §2 `FUN_0007D9A4` install, consumed by
+ * `fifa96_match_entities_update`; `ran` is set by action 00 and cleared by the
+ * same installer drain. `place_x/y/z` + `place_valid` are the row-1E
+ * `FUN_000700F4` placement request (`0x15774C/50/54`), consumed by the frame
+ * body as the FU-71 `fifa96_camera_init` reset; `helper_request` is the
+ * `FUN_0007876C` slot-merge request, consumed by the FU-141 pool merge. */
 struct fifa96_match_run_record {
   int32_t pos_x;
   int32_t pos_y;       /* native +0x5D, FU-140 row 1E placement height */
@@ -134,6 +134,7 @@ struct fifa96_match_run_record {
   int8_t dir_z;
   int8_t place_offset_x;    /* caller-supplied 0x10F334[type8] (FU-140) */
   int8_t place_offset_z;    /* caller-supplied 0x10F33C[type8] (FU-140) */
+  uint8_t place_valid;      /* row 1E: the placement triple is live (FU-141) */
   uint8_t ran;         /* native +0x9E, set by the action-00 body */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
 };
@@ -151,13 +152,15 @@ struct fifa96_match_run {
   struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
-  struct fifa96_match_run_record record;         /* FU-138 minimal action record */
+  struct fifa96_match_run_record record;         /* FU-141 dispatch staging record */
+  struct fifa96_match_entities entities;         /* FU-141 entity/ball pool */
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };
 
 /* Zero-init a run: lifecycle, pace, match state (clock and score pair), input
- * model, control slot, the minimal action record (FU-138), presentation state
+ * model, control slot, the dispatch staging record (FU-141) and the entity/ball
+ * pool (init seeds the native record reset), presentation state
  * (camera/window/display/scene, rendering disabled), the staging-arena holder
  * (assigned NULL, never freed: init accepts uninitialized memory, so it cannot
  * trust the holder), backend, counters and engine linkage. Must be called
@@ -213,9 +216,11 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
  * pace (blocked = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame, the
  * match state advanced one 0x200 step, the controlled player's FU-70 slot was
  * updated once with the FU-62 §4.3 whole frame delta
- * (`state.frame_delta`, 2 at the 0x200 step = 60 counter units/s), and the
+ * (`state.frame_delta`, 2 at the 0x200 step = 60 counter units/s), the
  * FU-71 camera/display blocks advanced with the same delta (FU-71's
- * FUN_000736AC runs from the frame body FUN_0004B100, not the render driver);
+ * FUN_000736AC runs from the frame body FUN_0004B100, not the render driver),
+ * and the FU-141 entity/ball pool ran the FU-67 chain (team 0, team 1, the
+ * ball pairing) with the FU-137 action dispatch bound to the pool records;
  * 0 = no frame was due; or a -fifa96_err_t. A period end marks the lifecycle
  * over, except when an exit is already staged: the staged EXIT wins because
  * the frame body runs in the clock advance before the exit step consumes it.

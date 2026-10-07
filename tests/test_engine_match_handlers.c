@@ -6,14 +6,17 @@
  * first cluster-A row: action 00 runs the FU-76 §3.1 locomotion step/target on
  * `mr->record` and reports OK. Task 7 (FU-140, cluster C) wires the keeper's
  * fully linear claim/throw row 1E (`fifa96_keeper_claim_place` on `mr->record`);
- * the other six keeper rows stay UNSUPPORTED with their arm/pool legs. Every
- * other action row and all 34 non-zero phase rows still resolve to an explicit
+ * the other six keeper rows stay UNSUPPORTED with their arm legs. Every other
+ * action row and all 34 non-zero phase rows still resolve to an explicit
  * UNSUPPORTED open-leg marker, except phase 0x16 (the native zero/INT3 slot)
  * which is NOT_FOUND by contract. Task 6 (FU-139, cluster B) derives the ball
  * staging/resolver/possession/kick pure helpers but wires no additional row:
- * 05/06/07/0F/18/21/23 still need the absent entity/ball pool and their
- * unported arm support (FU-139 §5, OL-29..OL-32). The seam itself must run a
- * handler and propagate its result when one is present. */
+ * 05/06/07/0F/18/21/23 still need their unported arm support (FU-139 §5,
+ * OL-29..OL-32). Task 8 (FU-141, cluster D/E) lands the entity/ball pool and
+ * drains row 00's install/ran and row 1E's helper/place/actor requests through
+ * it (the frame-body dispatch callback); the rows themselves stay the same two
+ * ported rows because every other body still needs an unported arm. The seam
+ * itself must run a handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -35,8 +38,8 @@
  * 43 are `not ported`, of which 27/29/2B/2C are open legs with no static
  * install arm). FU-139 (cluster B) keeps 05/06/07/0F and the possession/tackle
  * rows 18/21/23 UNSUP: their record-visible cores have tested pure helpers, but
- * the carrier/pursuit/kick/receive/resolution arms and the entity/ball pool
- * they bind to are unported (FU-139 §5). */
+ * the carrier/pursuit/kick/receive/resolution arms are unported (the FU-141
+ * pool they also waited on now exists). */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
@@ -61,30 +64,28 @@ struct fixture {
   struct fifa96_match_run mr;
 };
 
-static struct fixture make_fixture(void) {
+static void make_fixture(struct fixture *f) {
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
   pcfg.step_ns = 10000000ull;
-  struct fixture f;
-  f.plat = fifa96_platform_null_create(&pcfg);
-  assert(f.plat != NULL);
+  f->plat = fifa96_platform_null_create(&pcfg);
+  assert(f->plat != NULL);
   struct fifa96_engine_config ecfg;
   memset(&ecfg, 0, sizeof ecfg);
   ecfg.width = 320;
   ecfg.height = 240;
   ecfg.headless = 1;
-  f.engine = fifa96_engine_create(&ecfg, f.plat);
-  assert(f.engine != NULL);
-  assert(fifa96_engine_boot(f.engine) == 0);
-  fifa96_match_run_init(&f.mr);
-  assert(fifa96_match_run_begin(&f.mr, f.engine, 0) == 0);
-  return f;
+  f->engine = fifa96_engine_create(&ecfg, f->plat);
+  assert(f->engine != NULL);
+  assert(fifa96_engine_boot(f->engine) == 0);
+  fifa96_match_run_init(&f->mr);
+  assert(fifa96_match_run_begin(&f->mr, f->engine, 0) == 0);
 }
 
-static void drop_fixture(struct fixture f) {
-  assert(fifa96_match_run_end(&f.mr) == 0);
-  fifa96_engine_destroy(f.engine);
-  fifa96_platform_destroy(f.plat);
+static void drop_fixture(struct fixture *f) {
+  assert(fifa96_match_run_end(&f->mr) == 0);
+  fifa96_engine_destroy(f->engine);
+  fifa96_platform_destroy(f->plat);
 }
 
 /* Every table row carries its code and an explicit evidence/OpenLeg marker —
@@ -114,20 +115,22 @@ static void test_tables_are_fully_classified(void) {
 /* Per-row dispatch: the FU-137/FU-138 classification is the contract; no
  * unassigned row may return OK (a silent no-op success). */
 static void test_action_rows_dispatch_per_classification(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   for (uint32_t code = 0; code < FIFA96_MATCH_ACTION_ROWS; code++) {
     int rc = fifa96_match_dispatch_action(&f.mr, (uint8_t)code);
     assert(rc == action_expect[code]);
     if (fifa96_match_action_table[code].fn == NULL) assert(rc != FIFA96_OK);
   }
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 /* FU-138 §4: the wired row 00 runs the FU-76 §3.1 body against the run record:
  * timer decay, control-slot move target clamp, and the phase-2 install request
  * (3 active / 0x19 inactive). */
 static void test_action_00_runs_move_step(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   f.mr.state.phase = 2;
   f.mr.record.pos_x = 0x100;
   f.mr.record.pos_z = 0x200;
@@ -170,7 +173,7 @@ static void test_action_00_runs_move_step(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
   assert(f.mr.record.target_x == 0x720);
   assert(f.mr.record.target_z == -0xB10);
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 /* FU-140 §4: the wired keeper row 1E runs the fully linear claim/throw
@@ -183,7 +186,8 @@ static void test_action_00_runs_move_step(void) {
  * stay modelled as record requests/flags until the C8/C11 pool and arm ports
  * land (FU-140 OL-37, carrying OL-16). */
 static void test_action_1E_runs_claim_place(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   f.mr.record.stage = 1;
   f.mr.record.pos_x = 100;
   f.mr.record.pos_y = 20;
@@ -192,11 +196,13 @@ static void test_action_1E_runs_claim_place(void) {
   f.mr.record.place_offset_z = 2;
   assert(f.mr.record.has_slot == 0 && f.mr.record.has_ball == 0);
   assert(f.mr.record.controlled == 0 && f.mr.record.helper_request == 0);
+  assert(f.mr.record.place_valid == 0);
 
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
   assert(f.mr.record.place_x == 52 && f.mr.record.place_y == 76);
   assert(f.mr.record.place_z == 232);
+  assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
 
   /* stage >= 3 blocks the claim but still emits the pre-gate helper request */
@@ -207,7 +213,7 @@ static void test_action_1E_runs_claim_place(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
   assert(f.mr.record.has_ball == 0 && f.mr.record.controlled == 0);
-  assert(f.mr.record.place_x == -1);
+  assert(f.mr.record.place_valid == 0 && f.mr.record.place_x == -1);
 
   /* already holding the ball -> no placement, no actor rebind */
   f.mr.record.stage = 1;
@@ -215,6 +221,7 @@ static void test_action_1E_runs_claim_place(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
   assert(f.mr.record.controlled == 0 && f.mr.record.place_x == -1);
+  assert(f.mr.record.place_valid == 0);
 
   /* stage 6 clears the helper request; a slot suppresses it */
   f.mr.record.stage = 6;
@@ -225,12 +232,14 @@ static void test_action_1E_runs_claim_place(void) {
   f.mr.record.has_slot = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 0);
+  assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 static void test_phase_rows_dispatch_per_classification(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   for (uint32_t phase = 0; phase < FIFA96_MATCH_PHASE_ROWS; phase++) {
     int rc = fifa96_match_dispatch_phase(&f.mr, (uint8_t)phase);
     assert(rc == phase_expect[phase]);
@@ -239,29 +248,31 @@ static void test_phase_rows_dispatch_per_classification(void) {
     else
       assert(rc == UNSUP);
   }
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 /* Out-of-range codes are NOT_FOUND (never OK), including the byte maximum. */
 static void test_out_of_range_is_not_found(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   assert(fifa96_match_dispatch_action(&f.mr, FIFA96_MATCH_ACTION_ROWS) == NOTF);
   assert(fifa96_match_dispatch_action(&f.mr, 0x2Du) == NOTF);
   assert(fifa96_match_dispatch_action(&f.mr, 0xFFu) == NOTF);
   assert(fifa96_match_dispatch_phase(&f.mr, FIFA96_MATCH_PHASE_ROWS) == NOTF);
   assert(fifa96_match_dispatch_phase(&f.mr, 0x23u) == NOTF);
   assert(fifa96_match_dispatch_phase(&f.mr, 0xFFu) == NOTF);
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 /* NULL run -> -INVALID for both dispatchers and the seam runner. */
 static void test_null_arguments_are_invalid(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   assert(fifa96_match_dispatch_action(NULL, 0) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_dispatch_phase(NULL, 0) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_dispatch_row(NULL, &fifa96_match_action_table[0]) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_dispatch_row(&f.mr, NULL) == -FIFA96_ERR_INVALID);
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 static int seam_calls;
@@ -276,7 +287,8 @@ static int seam_handler(struct fifa96_match_run *mr) {
 /* The extensible seam: a row with a handler runs it and returns its result
  * verbatim; a row without one reports UNSUPPORTED without inventing success. */
 static void test_seam_runs_wired_handler(void) {
-  struct fixture f = make_fixture();
+  struct fixture f;
+  make_fixture(&f);
   struct fifa96_match_handler row = {0x00, seam_handler, "test row"};
   seam_calls = 0;
   seam_rc = FIFA96_OK;
@@ -290,7 +302,7 @@ static void test_seam_runs_wired_handler(void) {
   row.fn = NULL;
   assert(fifa96_match_dispatch_row(&f.mr, &row) == UNSUP);
   assert(seam_calls == 2);   /* no handler ran */
-  drop_fixture(f);
+  drop_fixture(&f);
 }
 
 int main(void) {

@@ -189,6 +189,27 @@ static void test_begun_period_end_marks_over(void) {
   drop_fixture(f);
 }
 
+/* FU-141: the frame body drives the derived entity/ball pool once per granted
+ * 30 Hz frame, after the FU-70 control slot and FU-71 camera updates. Ten pace
+ * ticks grant 3 frames, so both team update counters advance 3 times; the
+ * records start on the native reset action 0 (FU-137 §4.3), row 00 runs and
+ * its phase-2 install request is consumed by the FU-137 §2 installer (inactive
+ * -> 0x19). */
+static void test_frame_drives_entity_chain(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  for (int i = 0; i < 10; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  }
+  assert(mr.entities.team[0].update_count == 3);
+  assert(mr.entities.team[1].update_count == 3);
+  assert(mr.entities.team[0].records[0].code == 0x19);
+  assert(mr.entities.team[1].records[0].code == 0x19);
+  assert(mr.entities.team[0].records[5].code == 0x19);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -196,6 +217,7 @@ int main(void) {
   test_null_guard();
   test_engine_step_drives_frame_body();
   test_begun_period_end_marks_over();
+  test_frame_drives_entity_chain();
   puts("test_engine_match_frame OK");
   return 0;
 }

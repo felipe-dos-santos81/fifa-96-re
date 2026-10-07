@@ -3,6 +3,7 @@
 #include <string.h>
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
@@ -72,6 +73,100 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   return 0;
 }
 
+/* FU-141: one pool record -> the FU-138/FU-140 staging record -> the FU-137
+ * action dispatch, then the handler's requests back into the pool record. The
+ * bound FU-70 slot's animation/direction bytes (native slot +0x20/+0x21, the
+ * `slot+0x1D`/`slot+0x1E` high bytes row 00 reads) feed the move target. The
+ * row classification is unchanged: an unported row returns
+ * -FIFA96_ERR_UNSUPPORTED and the pool chain skips it. */
+static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
+  struct fifa96_match_run *mr = ctx;
+  struct fifa96_match_run_record *r = &mr->record;
+  int32_t id = (int32_t)((uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS + e->index);
+  int rc;
+  r->pos_x = e->pos_x;
+  r->pos_y = e->pos_y;
+  r->pos_z = e->pos_z;
+  r->target_x = e->target_x;
+  r->target_z = e->target_z;
+  r->timer89 = e->timer89;
+  r->timer81 = e->timer81;
+  r->delta = (uint16_t)mr->state.frame_delta;
+  r->active = e->active;
+  r->has_slot = e->has_slot;
+  r->has_ball = e->has_ball;
+  r->stage = e->stage;
+  r->place_offset_x = e->place_offset_x;
+  r->place_offset_z = e->place_offset_z;
+  r->ran = e->ran;
+  r->helper_request = 0;
+  r->controlled = 0;
+  r->place_valid = 0;
+  r->install = 0;
+  if (mr->slot.entity == id) {
+    r->dir_x = (int8_t)mr->slot.anim_b;   /* native slot +0x20 */
+    r->dir_z = (int8_t)mr->slot.anim_c;   /* native slot +0x21 */
+  } else {
+    r->dir_x = e->dir_x;
+    r->dir_z = e->dir_z;
+  }
+  rc = fifa96_match_dispatch_action(mr, e->code);
+  e->pos_x = r->pos_x;
+  e->pos_y = r->pos_y;
+  e->pos_z = r->pos_z;
+  e->target_x = r->target_x;
+  e->target_z = r->target_z;
+  e->timer89 = r->timer89;
+  e->ran = r->ran;
+  e->install = r->install;
+  e->helper_request = r->helper_request;
+  e->controlled = r->controlled;
+  e->place_valid = r->place_valid;
+  e->place_x = r->place_x;
+  e->place_y = r->place_y;
+  e->place_z = r->place_z;
+  e->dir_x = r->dir_x;
+  e->dir_z = r->dir_z;
+  return rc;
+}
+
+/* FU-141 frame inputs: the phase/delta plus the FU-71 camera triple used as
+ * the three selection vectors (the native 0x157770/0x157788/0x157794 shadow
+ * the 0x15774C camera position at init, FU-67 §4.1). The 0x1577FA/0x157800/
+ * 0x157806 bucket timers and the 0x10F37C/0x10F388 intercept targets are the
+ * unported camera/track block and executable data (FU-67 S3, FU-130), so they
+ * stay zero and the derived bucket falls to the third vector. */
+static void match_run_entity_frame(const struct fifa96_match_run *mr,
+                                   struct fifa96_match_entities_frame *f) {
+  memset(f, 0, sizeof *f);
+  f->phase = (uint8_t)mr->state.phase;
+  f->delta = (uint16_t)mr->state.frame_delta;
+  for (int v = 0; v < (int)FIFA96_MATCH_ENTITY_SELECT_VECTORS; v++) {
+    f->select_vector[v][0] = mr->render.camera.pos_x;
+    f->select_vector[v][1] = mr->render.camera.pos_y;
+    f->select_vector[v][2] = mr->render.camera.pos_z;
+  }
+  f->cam_z = (int16_t)mr->render.camera.pos_z;
+}
+
+/* FU-141 drains the pool leaves to the engine: a successful slot merge moves
+ * the FU-70 slot binding (and runs the FUN_00078670 clear), and a pending
+ * row-1E placement triple resets the FU-71 camera through the existing
+ * `fifa96_camera_init` (the FU-71 port of FUN_000700F4's field reset). */
+static void match_run_entity_drain(struct fifa96_match_run *mr) {
+  int32_t merged = fifa96_match_entities_take_slot_merge(&mr->entities);
+  int32_t px = 0;
+  int32_t py = 0;
+  int32_t pz = 0;
+  if (merged >= 0) {
+    mr->slot.entity = merged;
+    (void)fifa96_control_slot_merge_reset(&mr->slot);
+  }
+  if (fifa96_match_entities_take_place(&mr->entities, &px, &py, &pz) == 1) {
+    (void)fifa96_camera_init(&mr->render.camera, px, py, pz);
+  }
+}
+
 /* Stable slot identity: the lifecycle cancels by function pointer, so every
  * run shares this one trampoline and the engine bridge keeps a single match
  * callback in the clock's tick table. The trampoline is the sole driver of the
@@ -108,6 +203,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   fifa96_match_state_init(&mr->state);
   mr->score[0] = 0;
   mr->score[1] = 0;
+  (void)fifa96_match_entities_release(&mr->entities);
   return 0;
 }
 
@@ -186,6 +282,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->running = 0;
   mr->stage_owner = NULL;
   memset(&mr->record, 0, sizeof mr->record);
+  (void)fifa96_match_entities_init(&mr->entities);
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -206,7 +303,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
-  memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138 action record */
+  memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
+  (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -281,6 +379,15 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     (void)fifa96_camera_update(&mr->render.camera, (int16_t)mr->state.frame_delta,
                                mr->render.view_class, mr->render.input_bit2);
     (void)fifa96_match_display_update(&mr->render.display, mr->state.frame_delta, 0);
+    /* FU-141: the FU-67 entity chain (selection, record walk with the FU-137
+     * action dispatch, ball pairing) after the slot/camera updates, matching
+     * FUN_0004B100's order. */
+    struct fifa96_match_entities_frame ef;
+    match_run_entity_frame(mr, &ef);
+    rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
+                                      mr);
+    if (rc != FIFA96_OK) return rc;
+    match_run_entity_drain(mr);
   }
   if (period_ended && !fifa96_match_lifecycle_should_exit(&mr->lc)) {
     /* Ordering guard: the frame body runs in the clock advance before

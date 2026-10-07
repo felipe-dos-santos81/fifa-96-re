@@ -5,20 +5,25 @@
  * evidence cells (docs, tested C symbols, estimated port group). FU-138 wires
  * the first cluster-A row: 00 is ported (`fifa96_match_action_00` binds the
  * tested `fifa96_action_move_step`/`_target` bodies to `mr->record`, FU-138
- * §4/OL-16). FU-140 (cluster C) wires the keeper's fully linear claim/throw row
+ * §4). FU-140 (cluster C) wires the keeper's fully linear claim/throw row
  * 1E (`fifa96_match_action_1E` binds the tested `fifa96_keeper_claim_place`
- * body to `mr->record`; FU-140 §4). Every other row is either `not ported` (fn
- * NULL, -FIFA96_ERR_UNSUPPORTED with its port group) or the six remaining
- * keeper rows 19/1A/1B/1C/1D/1F (fn NULL, tested pure parts but unported arms
- * and/or the record pool — OL-16/OL-33..OL-37); the 0x27/0x29/0x2B/0x2C rows
- * are FU-137 open legs (no static install arm found, OL-15). Phase 0x16 is the
- * native zero/INT3 slot and returns -FIFA96_ERR_NOT_FOUND. Later G2 clusters
- * replace a NULL fn with their derived body and update the evidence string;
- * they must not change the code/class of a row without an FU-doc errata. FU-139
- * (cluster B) derives the ball staging/resolver/possession/kick helpers (tested
- * in test_ball_pairing/test_action_handlers) and leaves action rows
- * 05/06/07/0F/18/21/23 unwired with their arms and the entity/ball pool open
- * (FU-139 OL-29..OL-32, carrying OL-16); their evidence strings cite FU-139. */
+ * body to `mr->record`; FU-140 §4). FU-141 (cluster D/E) lands the entity/ball
+ * pool: the frame body walks the pool records, stages each into `mr->record`,
+ * dispatches its action code here, and drains the requests (install/ran,
+ * helper_request, controlled, place_valid) back into the pool — so row 00's and
+ * row 1E's record-visible bodies are now consumed end to end (FU-141 §4). Every
+ * other row is either `not ported` (fn NULL, -FIFA96_ERR_UNSUPPORTED with its
+ * port group) or the six remaining keeper rows 19/1A/1B/1C/1D/1F (fn NULL,
+ * tested pure parts but unported arms — FU-140 OL-33..OL-37); the
+ * 0x27/0x29/0x2B/0x2C rows are FU-137 open legs (no static install arm found,
+ * OL-15). Phase 0x16 is the native zero/INT3 slot and returns
+ * -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with their derived
+ * body and update the evidence string; they must not change the code/class of a
+ * row without an FU-doc errata. FU-139 (cluster B) derives the ball
+ * staging/resolver/possession/kick helpers (tested in
+ * test_ball_pairing/test_action_handlers) and leaves action rows
+ * 05/06/07/0F/18/21/23 unwired with their arms (FU-139 OL-29..OL-32; the pool
+ * they also waited on is now FU-141); their evidence strings cite FU-139. */
 #include <stddef.h>
 
 #include "fifa96_engine/fifa96_match_handlers.h"
@@ -31,9 +36,9 @@
  * `fifa96_action_move_step` (timer89 decay, control-slot move gate, phase-2
  * install request `3`/`0x19`) and, when the slot moves, writes the FU-76 §4
  * clamped step target through `fifa96_action_move_target`. The native tail's
- * install goes through `FUN_0007D9A4` (FU-137 §2); the engine records the
- * request in `mr->record.install` until the record pool and installer arms land
- * (OL-16). */
+ * install goes through `FUN_0007D9A4` (FU-137 §2); the handler records the
+ * request in `mr->record.install` and the C8/FU-141 pool update consumes it
+ * with the derived installer (and clears `ran`). */
 static int fifa96_match_action_00(struct fifa96_match_run *mr) {
   fifa96_action_move_state state;
   fifa96_action_move_out out;
@@ -69,10 +74,13 @@ static int fifa96_match_action_00(struct fifa96_match_run *mr) {
  * ball (`+0x9B == 0`), computes the placement triple (record position plus the
  * caller-supplied per-type offset bytes `0x10F334/0x10F33C[type8] << 4`, y +
  * 0x38), sets the possession flag and binds the record as the actor
- * (`[0x157A83] = rec`). The native camera-place call `FUN_000700F4(rec, place,
- * 1)` is the derived `place_*` sink; the slot-merge body, the camera call and
- * the actor pool stay open (OL-37, carrying OL-16). The body does not write
- * `+0x9E`, so `ran` is untouched. */
+ * (`[0x157A83] = rec`). The native camera-place call
+ * `FUN_000700F4(place_x, place_y, place_z, 1)` (FU-141 erratum: four by-value
+ * args, no record) is the derived `place_*` sink; the C8/FU-141 pool update
+ * consumes the `helper_request` (slot merge `FUN_0007876C`), the `controlled`
+ * actor binding and the placement triple (`place_valid`), leaving the
+ * merge/camera call bodies and the per-type offset table as OL-37. The body
+ * does not write `+0x9E`, so `ran` is untouched. */
 static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
   fifa96_keeper_point pos;
   fifa96_keeper_point place;
@@ -87,6 +95,7 @@ static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
                                  &place, &helper_request, &claimed);
   if (rc != FIFA96_OK) return rc;
   mr->record.helper_request = helper_request;
+  mr->record.place_valid = claimed;
   if (claimed != 0) {
     mr->record.place_x = place.x;
     mr->record.place_y = place.y;
@@ -99,7 +108,7 @@ static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
 
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
-     "FU-138 §4: FU-136 row 00 ported; move_step/target on mr->record; OL-16 pool"},
+     "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
     {0x01, NULL,
      "FU-137 §6: FU-136 row 01: not ported (partial); sequence_select/stage + FU-138 marker_target/stage_wait; OL-17"},
     {0x02, NULL,
@@ -139,7 +148,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x1C, NULL, "FU-140 §2: row 1C not ported (partial); keeper_lunge_track; OL-35"},
     {0x1D, NULL, "FU-140 §2: row 1D not ported (partial); keeper_clear_vector; OL-35"},
     {0x1E, fifa96_match_action_1E,
-     "FU-140 §4: row 1E ported; claim_place on mr->record; slot-merge/camera/actor arms modelled; OL-37 pools"},
+     "FU-140 §4/FU-141: row 1E ported over the entity pool; helper/place/actor requests drained; OL-37 arm bodies"},
     {0x1F, NULL, "FU-140 §2/§3: row 1F not ported (partial); keeper_dive_target/arm_step + input_decide; OL-36"},
     {0x20, NULL, "FU-137 §6: FU-136 row 20: not ported (partial); FU-82 7-arm table 0x84ED0; OL-9"},
     {0x21, NULL,
