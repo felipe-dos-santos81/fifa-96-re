@@ -276,6 +276,28 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41. FU-137 OL-15's actionable
   part is closed by Task 9 (26/28/2A ported; 27/29/2C negative census; 2B dead,
   FU-137 §8).
+* **OL-27/OL-32 closed (M2 arms-and-wiring Task 12).** The event append sinks
+  (`FUN_000928F0`/`FUN_00092820`) are ported as
+  `fifa96_event_ring_append`/`fifa96_event_sink_store` and the rows
+  18/21/23 resolution arms as `fifa96_action_duel_search/_swap/_bind` plus the
+  extended `fifa96_action_duel_step`/`_receive_step`/`_tackle_step`/
+  `_tackle_attempt`; rows 18/21/23 are wired (`fifa96_match_action_18/_21/_23`)
+  — see FU-139 §10. The residual surfaces are the new legs below.
+* **OL-67 — event-ring binding (Task 12).** The ring/sink are loader-tested
+  (FU-139 §10.2) but no engine path drives them; the `0x157758` triple (FU-71
+  track writers `FUN_0006FFC0`/`0x736AC`) and the `[0x112E88]` stamp are caller
+  inputs, and codes >= 0x28 (or negative sign-extended) leave the embedded
+  0x28-byte 0x110F1C eligibility table (the native reads adjacent data).
+* **OL-68 — rows 18/21/23 unmodeled record/presentation inputs (Task 12).**
+  Row 18's `[[rec+0x28]][0]` abort byte (staged 0; shares OL-52) and the bind
+  globals `[0x157AC2]`/`[0x1587D4]`/`[0x1587E3]`/`[0x1074A4]`/`[0x14E574]`;
+  the SWAP slot-word clears; row 21's `+0x44` (staged 0), the camera-velocity
+  zero, the `0x6E598` record writes (OL-52) and the `[0x79B58]` +0x99 gate
+  (the pool has no +0x99); row 23's `[0x1577CA]` exclusion (`is_tracked`
+  stand-in), the `0x71B9C` predictor (camera stand-in), the
+  `word[+0x85]`/`+0x99`/`+0x5D` byte gates and the `[team+0x7C7]` record
+  (`is_own`/`opp_*` staged 0), the slot `+0x10` button byte and the
+  `word[+0x77]` bound (shared OL-65). See FU-139 §10.8.
 * **OL-49 — `FUN_0008CEB8` index-11 overflow — resolved as a bounded model
   (Task 2).** The native helper clamps `last >= 0xB` to `0xB`
   (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB` also stages record

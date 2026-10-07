@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 
 typedef struct fifa96_action_vec3 {
   int32_t x;
@@ -310,11 +311,17 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
 
 typedef struct fifa96_action_receive {
   int32_t timer89;
-  int16_t offset_word;
+  int16_t offset_word;   /* native word[+0x6B] lane */
   uint8_t stage;
   uint8_t active;
-  uint8_t event_flag;
+  uint8_t event_flag;    /* native +0x44 (staged zero; OL-68) */
   uint8_t is_team_target;
+  /* FU-142 OL-32 / M2 Task 12: the row-21 head and resolution arm. */
+  uint8_t phase;         /* native [0x157A4A]>>24 */
+  uint8_t tracked;       /* native rec == [0x157A83] (the controlled actor) */
+  uint8_t type8;         /* native +0x8B>>24 (0x6E598 selector argument) */
+  int32_t pos_x;         /* native +0x59 (0x8DE8C target) */
+  int32_t pos_z;         /* native +0x61 */
 } fifa96_action_receive;
 
 typedef struct fifa96_action_receive_out {
@@ -322,9 +329,20 @@ typedef struct fifa96_action_receive_out {
   uint8_t advance;
   uint8_t handoff;
   uint8_t stage;
+  uint8_t ran;           /* native byte[+0x9E] = 1 (stage 0 only) */
+  int32_t nearest;       /* native 0x8DE8C result index or -1 */
+  uint8_t anim;          /* native 0x6E598 id 0x4A on the resolution arm */
 } fifa96_action_receive_out;
 
+/* FU-142 OL-32 / M2 Task 12: the full row-21 machine `0x85214..0x8539B`.
+ * The phase/tracked head resets (`reset = 1`); the stage-0 lane <= 0x40 arm
+ * runs the `0x8DE8C` nearest over the caller's team candidates (the native's
+ * `[team+0x7A6]` record-11 alias holds the team base), the (dead) angle pair
+ * and the `0x6E598` id `0x4A`, then zeroes the timer and advances the latch.
+ * `team_candidates` is required only when that arm runs. */
 fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,
+                                        const fifa96_entity_candidate *team_candidates,
+                                        uint32_t candidate_count,
                                         fifa96_action_receive_out *out);
 
 typedef struct fifa96_action_tackle {
@@ -359,6 +377,14 @@ typedef struct fifa96_action_tackle {
   uint8_t flag99;
   uint8_t field5d;
   uint8_t is_own;
+  /* FU-142 OL-32 / M2 Task 12: the stage-1 target arm inputs (native
+   * 0x82FF3..0x8305A). `cam_f0` is the word at 0x1577F0 (`dword[0x1577EE] >>
+   * 16`); `cam_f8`/`cam_fe` are word 0x1577FA / word 0x157800. The two vector
+   * triples are the native 0x157794 and 0x157788 dword triples (the FU-141
+   * frame shadows 0x157788/0x157794 with the camera). */
+  int16_t cam_f0;
+  int32_t vec794_x, vec794_y, vec794_z;
+  int32_t vec788_x, vec788_y, vec788_z;
 } fifa96_action_tackle;
 
 typedef struct fifa96_action_tackle_out {
@@ -366,6 +392,12 @@ typedef struct fifa96_action_tackle_out {
   uint8_t install_0e;
   uint8_t install_0f;
   uint8_t stage;
+  uint8_t ran;            /* native byte[+0x9E] = 1 (stage 0) */
+  uint8_t target_set;     /* the stage-1 target triple was written */
+  int32_t target_x;       /* the written +0x4D dword */
+  int32_t target_y;       /* +0x51 */
+  int32_t target_z;       /* +0x55 (already side-nudged) */
+  uint8_t receiver_timer; /* native FUN_00079B58(rec) (gated on +0x99 == 0) */
 } fifa96_action_tackle_out;
 
 fifa96_err_t fifa96_action_tackle_attempt(const fifa96_action_tackle *state, int *install_0e);
@@ -389,6 +421,13 @@ typedef struct fifa96_action_duel_out {
   uint8_t handoff;
   uint8_t reset;
   uint8_t stage;
+  /* FU-142 OL-32 / M2 Task 12: the resolution path (native 0x84A94..0x84AD5)
+   * latches +0x9A, runs the 0x4C324 bind and the 0x7DAB4 reset subset; */
+  uint8_t occupied;    /* native byte[+0x9A] = 1 */
+  uint8_t bind;        /* native FUN_0004C324(0x15774C) request */
+  uint8_t target_set;  /* native stage-1 target write (0x900, 0, 0) */
+  int32_t target_x;    /* the written +0x4D word */
+  int32_t target_z;    /* the written +0x55 word */
 } fifa96_action_duel_out;
 
 fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, uint8_t input_byte,
@@ -396,6 +435,73 @@ fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, 
 fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
                                       uint8_t opp_is_duel_type, uint8_t *own_code,
                                       uint8_t *opp_code);
+
+/* FU-142 OL-32 / M2 Task 12: the row-18 resolution helpers, first-hand.
+ *
+ * `FUN_0008DB6C` (NSEARCH, `0x8DB6C..0x8DC48`, EAX = origin block, EDX = team
+ * base, BX = skip index, ECX = fallback flag): walks 11 records at 0xB2 stride
+ * skipping `[+0x20] != 0`, `i == (int16)skip_index`, `rec == [team+0x7BF]`,
+ * `i == 0 && team[+0x829] == 0`, `[+0x9A] != 0` and `[+0x98] != 0`; the kept
+ * value is `-0x8DC68(origin - rec)`, and the native shell-sorts (gap n/2..1,
+ * no swap on equal) the values with the record indices mirrored, returning the
+ * record of the first index slot. With no candidate and `fallback` set, it
+ * returns the first record with `[+0x20] == 0` and `[+0x9A] == 0` (the other
+ * gates ignored); else NONE (-1). */
+typedef struct fifa96_action_duel_candidate {
+  int16_t pos_x;      /* native +0x59 word */
+  int16_t pos_z;      /* native +0x61 word */
+  uint8_t has_slot;   /* native +0x20 != 0 */
+  uint8_t skip_98;    /* native +0x98 != 0 */
+  uint8_t skip_9a;    /* native +0x9A != 0 */
+  uint8_t is_chosen;  /* derived: record == team+0x7BF (the pointer identity) */
+} fifa96_action_duel_candidate;
+
+typedef struct fifa96_action_duel_search_in {
+  int16_t x;            /* native origin word +0 (0x158897) */
+  int16_t z;            /* native origin word +8 (0x158897) */
+  int16_t skip_index;   /* native BX, sign-extended */
+  uint8_t record0_gate; /* native byte[team+0x829] != 0 */
+  uint8_t fallback;     /* native ECX != 0 */
+} fifa96_action_duel_search_in;
+
+fifa96_err_t fifa96_action_duel_search(fifa96_action_duel_search_in const *in,
+                                       const fifa96_action_duel_candidate *records,
+                                       uint32_t count, int32_t *index);
+
+/* `FUN_000786A0` (SWAP, `0x786A0..0x786EA`): when `from` holds the control
+ * slot and `to` does not, the slot pointer moves (`to[+0x20] =
+ * from[+0x20]`, `[[from+0x20]] = to`, `from[+0x20] = 0`) and the new slot's
+ * words +4/+6/+8/+0xA/+0xC/+0x14/+0x16 are zeroed. The derived surface moves
+ * the record-visible `has_slot` flag only; the slot block's field clears are
+ * the numbered leg OL-68 (the derived engine does not model the slot block). */
+typedef struct fifa96_action_duel_slot {
+  uint8_t has_slot;   /* native record +0x20 != 0 */
+} fifa96_action_duel_slot;
+
+fifa96_err_t fifa96_action_duel_swap(fifa96_action_duel_slot *from,
+                                     fifa96_action_duel_slot *to);
+
+/* `FUN_0004C324` (`0x4C324..0x4C372`, the row-18 resolution bind): runs the
+ * `FUN_00053DC4` recorder-arm latch, then writes the native [0x1074A4]:
+ * `zero_extend(side_826)` from the double-indirect `[0x1587D4]` block plus the
+ * `FUN_00036200(0)` stub when `byte[0x157AC2] >= 4` and the pointer is live,
+ * else `sign_extend(byte[0x1587E6])` (`dword[0x1587E3] >> 24`). The recorder
+ * block and [0x1074A4] are unmodeled (OL-68); `bound` is the derived value and
+ * `stub_36200` the documented no-op request. */
+typedef struct fifa96_action_duel_bind_in {
+  uint8_t mode_157ac2; /* native byte [0x157AC2] */
+  uint8_t team_present;/* native dword [0x1587D4] != 0 */
+  uint8_t side_826;    /* native byte [[[0x1587D4]] + 0x826] */
+  uint8_t fallback_e6; /* native (int8)(dword [0x1587E3] >> 24) */
+} fifa96_action_duel_bind_in;
+
+typedef struct fifa96_action_duel_bind_out {
+  int32_t bound;       /* native [0x1074A4] value */
+  uint8_t stub_36200;  /* native FUN_00036200(0) ran */
+} fifa96_action_duel_bind_out;
+
+fifa96_err_t fifa96_action_duel_bind(fifa96_action_duel_bind_in const *in,
+                                     fifa96_action_duel_bind_out *out);
 
 typedef struct fifa96_action_stage {
   uint8_t phase;

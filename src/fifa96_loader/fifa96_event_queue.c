@@ -1,6 +1,62 @@
 #include <stddef.h>
 #include "fifa96_loader/fifa96_event_queue.h"
 
+/* FU-142 OL-27: the native 0x110F1C eligibility table (first-hand
+ * `read_memory 0x110F1C`, 0x28 bytes). Bit 0 selects the sink's/ring's
+ * stamp+actor+vector fill; codes 0x00, 0x26 and 0x27 are the no-fill entries.
+ * Codes >= 0x28 are the derived boundary (the native sign-extended index reads
+ * the adjacent data; OL-67). */
+#define FIFA96_EVENT_RING_ELIGIBILITY 0x28u
+static const uint8_t event_ring_eligibility[FIFA96_EVENT_RING_ELIGIBILITY] = {
+    0x00, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
+    0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x03,
+    0x03, 0x03, 0x07, 0x07, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x09, 0x07, 0x00,
+    0x00,
+};
+
+static int event_ring_fill(uint8_t code) {
+  if (code >= FIFA96_EVENT_RING_ELIGIBILITY) return 0;
+  return (event_ring_eligibility[code] & 1u) != 0u;
+}
+
+int fifa96_event_sink_store(struct fifa96_event_queue *q, int32_t actor, uint8_t code,
+                            int32_t stamp, const int32_t vector[3]) {
+  if (!q || !vector) return -FIFA96_ERR_INVALID;
+  q->ring.sink.code = code;
+  if (event_ring_fill(code)) {
+    q->ring.sink.stamp = stamp;
+    q->ring.sink.actor = actor;
+    q->ring.sink.vector[0] = vector[0];
+    q->ring.sink.vector[1] = vector[1];
+    q->ring.sink.vector[2] = vector[2];
+  }
+  return 1;
+}
+
+int fifa96_event_ring_append(struct fifa96_event_queue *q, int32_t actor, uint8_t code,
+                             int32_t stamp, const int32_t vector[3]) {
+  struct fifa96_event_ring_entry *entry;
+  if (!q || !vector) return -FIFA96_ERR_INVALID;
+  /* 0x928F9..0x92904: the sink byte (0x15B650, read through the dword at
+   * 0x15B64D) equal to 0x26 suppresses the append; 0x92987 still clears it. */
+  if (q->ring.sink.code != 0x26) {
+    q->ring.index = (uint8_t)((q->ring.index + 1u) % FIFA96_EVENT_RING_SLOTS);
+    entry = &q->ring.entry[q->ring.index];
+    entry->code = code;
+    if (event_ring_fill(code)) {
+      entry->stamp = stamp;
+      entry->actor = actor;
+      entry->vector[0] = vector[0];
+      entry->vector[1] = vector[1];
+      entry->vector[2] = vector[2];
+    }
+    q->ring.sink.code = 0;
+    return 1;
+  }
+  q->ring.sink.code = 0;
+  return 0;
+}
+
 static void queue_command(struct fifa96_event_queue *q, int32_t threshold) {
   q->backend->command(q->backend->ctx, threshold);
   q->ring_pending = 0;
@@ -39,6 +95,19 @@ void fifa96_event_queue_init(struct fifa96_event_queue *q,
     q->slot[i].id = 0;
     q->slot[i].value = 0;
     q->slot[i].param = 0;
+  }
+  q->ring.index = 0;
+  q->ring.sink.code = 0;
+  q->ring.sink.stamp = 0;
+  q->ring.sink.actor = 0;
+  for (i = 0; i < 3u; i++) q->ring.sink.vector[i] = 0;
+  for (i = 0; i < FIFA96_EVENT_RING_SLOTS; i++) {
+    q->ring.entry[i].code = 0;
+    q->ring.entry[i].stamp = 0;
+    q->ring.entry[i].actor = 0;
+    q->ring.entry[i].vector[0] = 0;
+    q->ring.entry[i].vector[1] = 0;
+    q->ring.entry[i].vector[2] = 0;
   }
   if (backend && backend->now) {
     int32_t now = backend->now(backend->ctx);

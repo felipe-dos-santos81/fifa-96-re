@@ -58,7 +58,14 @@
  * (native `0x814B0..0x81737` / `0x82AD0..0x82DCF`) and the full
  * `FUN_0007B9C4` kick path (`fifa96_ball_kick_target`) to the record and the
  * pool ball block, so rows 07/0F flip to `ported`; the unmodeled record bytes
- * and external tables are the OL-65/OL-66 legs. */
+ * and external tables are the OL-65/OL-66 legs. FU-139 §10 (Task 12) closes
+ * OL-27 and OL-32: `fifa96_match_action_18`/`_21`/`_23` bind the ported
+ * row-18/21/23 machines (`fifa96_action_duel_step` + the
+ * `fifa96_action_duel_bind`/`_search`/`_swap` resolution arms,
+ * `fifa96_action_receive_step`, `fifa96_action_tackle_step`/`_attempt`) to
+ * `mr->record`/the entity pool, so rows 18/21/23 flip to `ported`; the
+ * residual record/presentation inputs are the OL-68 leg and the event ring
+ * sinks are ported but not yet driven (OL-67). */
 #include <stddef.h>
 #include <string.h>
 
@@ -647,6 +654,281 @@ static int fifa96_match_action_0F(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== FU-142 OL-32 / M2 arms-and-wiring Task 12: rows 18/21/23 over the pool
+ *
+ * The three machines share the native `FUN_0007DAB4` reset (0x7DABA
+ * `+0x92 = 0xFF`, 0x7DAC4 `+0x89 = 0`, 0x7DAEF the `FUN_0007C990`
+ * forced-decision install when phase 2 and active, else the
+ * `FUN_0007D9A4(rec, 0, 0, 0)` code-0 install). The forced-decision predicate
+ * codes {3,4,6} are the FU-141 OL-44/§3.2 bounded model (the same one the kick
+ * machine's reset uses); the code-0 install cannot ride the `install` request
+ * field (0 = none), so it is applied synchronously through the pool installer,
+ * exactly as the native. The record-side `+0x44`/`+0x99`/`+0x85`/`+0x77` and
+ * the slot word `+0x10` are the staged-zero inputs recorded on OL-68. */
+
+static uint8_t match_duel_carrier(const struct fifa96_match_run *mr, int32_t id) {
+  if (id < 0 || id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  return mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+                 .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS]
+                 .carrier != 0
+             ? 1u
+             : 0u;
+}
+
+/* `FUN_0007C990` bounded code set, mirroring the kick machine's `kick_reset`
+ * (FU-141 OL-44): 0 = the type-5 no-install return (0x7C9C8). */
+static uint8_t match_forced_decision_code(struct fifa96_match_run *mr,
+                                          const struct fifa96_match_entity *e) {
+  int32_t id = mr->record.entity_id;
+  uint32_t team = id >= 0 ? (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS : e->team;
+  const struct fifa96_match_team *t = &mr->entities.team[team];
+  const struct fifa96_match_team *o = &mr->entities.team[1u - team];
+  if (id >= 0 && id == t->target) {
+    if (o->target < 0 || match_duel_carrier(mr, o->target) == 0) {
+      if (e->type == 5u) return 0;
+      return 4;
+    }
+    return 6;
+  }
+  if (id >= 0 && id == t->second) {
+    if (o->target >= 0 && match_duel_carrier(mr, o->target) != 0) return 6;
+    if (t->target < 0 || match_duel_carrier(mr, t->target) == 0) return 4;
+  }
+  return 3;
+}
+
+static void match_row_reset(struct fifa96_match_run *mr, struct fifa96_match_entity *e) {
+  uint8_t code = 0;
+  e->stage92 = 0xFF;   /* 0x7DABA */
+  e->timer89 = 0;      /* 0x7DAC4 */
+  mr->record.stage92 = 0xFF;
+  mr->record.timer89 = 0;
+  if (mr->state.phase == 2 && e->active != 0) {
+    code = match_forced_decision_code(mr, e);
+    if (code == 0) return;   /* 0x7C9C8: no install, the +0x92 = 0xFF stands */
+  }
+  if (fifa96_match_entities_install(e, (uint8_t)mr->state.phase, code, 0) != 0) {
+    mr->record.stage92 = e->stage92;   /* the staged byte (0) */
+    mr->record.timer89 = e->timer89;
+    mr->record.ran = e->ran;
+  }
+}
+
+/* Row 18 `0x849B0..0x84AE1` (FU-78 §7/FU-139 §2). The duel record is staged
+ * into `fifa96_action_duel_step`; the resolution arms run over the pool: the
+ * `FUN_0004C324` bind, the `+0x9A` latch, the NSEARCH/SWAP slot hand-off and
+ * the shared reset. The native `[[rec+0x28]][0]` abort byte is staged zero
+ * (OL-68), and the native 0x158897 search origin (written by FUN_0008A3FC from
+ * the record) is the duel record's own position. */
+static int fifa96_match_action_18(struct fifa96_match_run *mr) {
+  fifa96_action_duel d;
+  fifa96_action_duel_out out;
+  int32_t id = mr->record.entity_id;
+  int rc;
+  memset(&d, 0, sizeof d);
+  d.timer89 = mr->record.timer89;
+  d.pos_x = mr->record.pos_x;
+  d.pos_z = mr->record.pos_z;
+  d.stage = mr->record.stage92;
+  d.animation = 0;
+  d.has_slot = mr->record.has_slot;
+  /* The record's persisted +0x65 metric (written by the stage-1 0x8DCD4 arm;
+   * the frame staging reproduces it from the persisted (0x900,0) target, the
+   * FU-142e OL-60 model). */
+  d.distance = (int16_t)mr->record.distance;
+  rc = fifa96_action_duel_step(&d, mr->record.delta, (uint8_t)mr->input_state[0], &out);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.timer89 = d.timer89;
+  mr->record.stage92 = out.stage;
+  mr->record.timer7b = d.stride;   /* native word[+0x7B] = 2 */
+  if (out.target_set != 0) {
+    mr->record.target_x = out.target_x;
+    mr->record.target_y = 0;
+    mr->record.target_z = out.target_z;
+  }
+  if (out.bind != 0) {
+    fifa96_action_duel_bind_in bin;
+    fifa96_action_duel_bind_out bout;
+    memset(&bin, 0, sizeof bin);
+    bin.mode_157ac2 = mr->global_157ac2;   /* producer unported (OL-68) */
+    rc = fifa96_action_duel_bind(&bin, &bout);
+    if (rc != FIFA96_OK) return rc;
+  }
+  if (out.occupied != 0 && id >= 0 &&
+      id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    uint32_t team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+    struct fifa96_match_entity *e =
+        &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+    e->skip_9a = 1;   /* native byte[+0x9A] = 1 */
+    if (out.handoff != 0) {
+      fifa96_action_duel_candidate cands[FIFA96_MATCH_ENTITY_RECORDS];
+      fifa96_action_duel_search_in sin;
+      int32_t found = -1;
+      uint32_t i;
+      for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+        const struct fifa96_match_entity *c = &mr->entities.team[team].records[i];
+        cands[i].pos_x = (int16_t)c->pos_x;
+        cands[i].pos_z = (int16_t)c->pos_z;
+        cands[i].has_slot = c->has_slot;
+        cands[i].skip_98 = c->skip_98;
+        cands[i].skip_9a = c->skip_9a;
+        cands[i].is_chosen =
+            mr->entities.team[team].chosen == (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + i)
+                ? 1u
+                : 0u;
+      }
+      sin.x = (int16_t)mr->record.pos_x;
+      sin.z = (int16_t)mr->record.pos_z;
+      sin.skip_index = -1;
+      sin.record0_gate = mr->entities.team[team].search_gate;
+      sin.fallback = 1;
+      rc = fifa96_action_duel_search(&sin, cands, FIFA96_MATCH_ENTITY_RECORDS, &found);
+      if (rc != FIFA96_OK) return rc;
+      if (found >= 0) {
+        fifa96_action_duel_slot from;
+        fifa96_action_duel_slot to;
+        struct fifa96_match_entity *target = &mr->entities.team[team].records[found];
+        from.has_slot = e->has_slot;
+        to.has_slot = target->has_slot;
+        rc = fifa96_action_duel_swap(&from, &to);
+        if (rc != FIFA96_OK) return rc;
+        e->has_slot = from.has_slot;
+        target->has_slot = to.has_slot;
+        mr->record.has_slot = e->has_slot;
+      }
+    }
+    if (out.reset != 0) match_row_reset(mr, e);
+  }
+  return FIFA96_OK;
+}
+
+/* Row 21 `0x85214..0x8539B` (FU-78 §4/FU-139 §2). The phase/tracked head, the
+ * camera copy, the stage gates and the 0x8DE8C/0x4A resolution arm run through
+ * `fifa96_action_receive_step`; the reset path and the team-target
+ * ball-actor install 4 + receiver timer are the pool side. */
+static int fifa96_match_action_21(struct fifa96_match_run *mr) {
+  fifa96_action_receive r;
+  fifa96_action_receive_out out;
+  fifa96_entity_candidate cands[FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t id = mr->record.entity_id;
+  struct fifa96_match_entity *e = NULL;
+  uint32_t team = 0;
+  uint32_t i;
+  int rc;
+  if (id >= 0 && id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+    e = &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  }
+  memset(&r, 0, sizeof r);
+  r.timer89 = mr->record.timer89;
+  r.offset_word = (int16_t)mr->record.lane;   /* native word[+0x6B] */
+  r.stage = mr->record.stage92;
+  r.active = mr->record.active;
+  r.event_flag = 0;   /* native +0x44, staged zero (OL-68) */
+  r.is_team_target =
+      id >= 0 && id == mr->entities.team[team].target ? 1u : 0u;
+  r.phase = (uint8_t)mr->state.phase;
+  r.tracked = id >= 0 && id == mr->entities.controlled ? 1u : 0u;
+  r.type8 = mr->record.actor_type;
+  r.pos_x = mr->record.pos_x;
+  r.pos_z = mr->record.pos_z;
+  for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *c = &mr->entities.team[team].records[i];
+    cands[i].x = (int16_t)c->pos_x;
+    cands[i].y = (int16_t)c->pos_z;
+    cands[i].skip_98 = c->skip_98;
+    cands[i].skip_9a = c->skip_9a;
+  }
+  rc = fifa96_action_receive_step(&r, cands, FIFA96_MATCH_ENTITY_RECORDS, &out);
+  if (rc != FIFA96_OK) return rc;
+  /* 0x85242..0x8524C: the camera triple copy runs for every phase-2 tracked
+   * call before the stage dispatch. */
+  if (r.phase == 2 && r.tracked != 0) {
+    mr->record.target_x = mr->render.camera.pos_x;
+    mr->record.target_y = mr->render.camera.pos_y;
+    mr->record.target_z = mr->render.camera.pos_z;
+  }
+  if (out.ran != 0) mr->record.ran = 1;
+  mr->record.timer89 = r.timer89;
+  mr->record.stage92 = out.stage;
+  if (out.reset != 0 && e != NULL) match_row_reset(mr, e);
+  if (out.handoff != 0) {
+    /* 0x85375..0x8538D: install code 4 on the staged ball actor [0x158730]
+     * and the FUN_00079B58 receiver timer on [0x158734]. */
+    int32_t actor = mr->entities.ball.pair.actor;
+    int32_t receiver = mr->entities.ball.pair.receiver;
+    if (actor >= 0 && actor < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      (void)fifa96_match_entities_install(
+          &mr->entities.team[(uint32_t)actor / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)actor % FIFA96_MATCH_ENTITY_RECORDS],
+          (uint8_t)mr->state.phase, 4, 0);
+    if (receiver >= 0 &&
+        receiver < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      mr->entities.team[(uint32_t)receiver / FIFA96_MATCH_ENTITY_RECORDS]
+          .records[(uint32_t)receiver % FIFA96_MATCH_ENTITY_RECORDS]
+          .timer93 = 0x10;
+  }
+  return FIFA96_OK;
+}
+
+/* Row 23 `0x82F84..0x83163` (FU-78 §6/FU-139 §2). The stage machine and the
+ * target arm run through `fifa96_action_tackle_step`/`_attempt`; the
+ * `0x1577xx` camera/track inputs are staged zero or from the engine camera
+ * (the FU-141 frame shadows 0x157788/0x157794 with it) — OL-68. */
+static int fifa96_match_action_23(struct fifa96_match_run *mr) {
+  fifa96_action_tackle t;
+  fifa96_action_tackle_out out;
+  int32_t id = mr->record.entity_id;
+  struct fifa96_match_entity *e = NULL;
+  uint32_t team = 0;
+  int rc;
+  if (id >= 0 && id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+    e = &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  }
+  memset(&t, 0, sizeof t);
+  t.pos_x = mr->record.pos_x;
+  t.pos_z = mr->record.pos_z;
+  t.camera_x = mr->render.camera.pos_x;
+  t.target_x = mr->render.camera.pos_x;   /* 0x71B9C predictor stand-in (OL-68) */
+  t.target_z = mr->render.camera.pos_z;
+  t.target_height = (int16_t)mr->render.camera.pos_y;
+  t.close_word = (int16_t)mr->record.lane;   /* +0x6B */
+  t.timer89 = mr->record.timer89;
+  t.delta = mr->record.delta;
+  t.phase = (uint8_t)mr->state.phase;
+  t.is_tracked = 1;   /* native rec != [0x1577CA]; the exclusion is unmodeled */
+  t.active = mr->record.active;
+  t.side = mr->entities.team[team].side;
+  t.stage = mr->record.stage92;
+  t.has_slot = mr->record.has_slot;
+  t.field5d = mr->record.pos_y != 0 ? 1u : 0u;   /* native dword +0x5D != 0 */
+  t.vec788_x = mr->render.camera.pos_x;
+  t.vec788_y = mr->render.camera.pos_y;
+  t.vec788_z = mr->render.camera.pos_z;
+  t.vec794_x = mr->render.camera.pos_x;
+  t.vec794_y = mr->render.camera.pos_y;
+  t.vec794_z = mr->render.camera.pos_z;
+  t.vector_x = mr->render.camera.pos_x;   /* native word[0x157788] */
+  t.vector_z = mr->render.camera.pos_z;   /* native word[0x157790] */
+  rc = fifa96_action_tackle_step(&t, &out);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.timer89 = t.timer89;
+  mr->record.stage92 = out.stage;
+  if (out.ran != 0) mr->record.ran = 1;
+  if (out.install_0e != 0) mr->record.install = 0x0E;
+  else if (out.install_0f != 0) mr->record.install = 0x0F;
+  if (out.target_set != 0) {
+    mr->record.target_x = out.target_x;
+    mr->record.target_y = out.target_y;
+    mr->record.target_z = out.target_z;
+  }
+  if (out.receiver_timer != 0 && e != NULL) e->timer93 = 0x10;
+  if (out.reset != 0 && e != NULL) match_row_reset(mr, e);
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -681,8 +963,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},
     {0x17, NULL, "FU-137 §6: FU-136 row 17: not ported (partial); FU-81 4-arm table 0x84720; OL-9"},
-    {0x18, NULL,
-     "FU-139 §2/§5: row 18 not ported (partial); duel_step/duel_split; NSEARCH/SWAP + pool OL-32"},
+    {0x18, fifa96_match_action_18,
+     "FU-139 §10/FU-137: row 18 ported (0x849B0..0x84AE1 machine; 0x4C324 bind, 0x8DB6C NSEARCH + 0x786A0 SWAP, 0x7DAB4 reset) over the pool; install arm 0x8A32F; anim row byte and bind globals OL-68"},
     {0x19, NULL, "FU-140 §2/§3: row 19 not ported (partial); keeper_hold_* + FU-140 fallback; OL-33"},
     {0x1A, NULL, "FU-140 §2: row 1A not ported (partial); keeper_reposition_a_gate; OL-34"},
     {0x1B, NULL, "FU-140 §2: row 1B not ported (partial); keeper_reposition_b_finish; OL-34"},
@@ -692,11 +974,11 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-140 §4/FU-141: row 1E ported over the entity pool; helper/place/actor requests drained; OL-37 arm bodies"},
     {0x1F, NULL, "FU-140 §2/§3: row 1F not ported (partial); keeper_dive_target/arm_step + input_decide; OL-36"},
     {0x20, NULL, "FU-137 §6: FU-136 row 20: not ported (partial); FU-82 7-arm table 0x84ED0; OL-9"},
-    {0x21, NULL,
-     "FU-139 §2/§5: row 21 not ported (partial); action_receive_step; claim arm + pool OL-32"},
+    {0x21, fifa96_match_action_21,
+     "FU-139 §10/FU-137: row 21 ported (0x85214..0x8539B machine; camera copy, 0x8DE8C nearest + 0x4A anim arm, 0x7DAB4 reset, team-target ball 4/receiver) over the pool; install arms 0x7D046 (and row-05 0x7F791/0x7F7B6); +0x44 and anim record writes OL-68/OL-52"},
     {0x22, NULL, "FU-137 §6: FU-136 row 22: not ported (partial); sequence_press_event; OL-9"},
-    {0x23, NULL,
-     "FU-139 §2/§5: row 23 not ported (partial); tackle_step/tackle_attempt; target arm + pool OL-32"},
+    {0x23, fifa96_match_action_23,
+     "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},
     {0x25, NULL, "FU-137 §6: FU-136 row 25: not ported (partial); FU-82 7-arm table 0x880B0; OL-9"},
     {0x26, fifa96_match_action_26,

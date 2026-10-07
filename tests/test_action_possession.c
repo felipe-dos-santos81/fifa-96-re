@@ -7,6 +7,7 @@
 #include <string.h>
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 
 _Static_assert(offsetof(fifa96_action_possession, carrier) == 0, "carrier");
 _Static_assert(offsetof(fifa96_action_possession, index) == 4, "index");
@@ -167,47 +168,82 @@ static void test_possession_dribble_dir(void) {
 static void test_receive_step(void) {
   fifa96_action_receive r;
   fifa96_action_receive_out out;
+  fifa96_entity_candidate cands[11];
+  uint32_t i;
+  memset(cands, 0, sizeof cands);
+  for (i = 0; i < 11u; i++) {
+    cands[i].x = 0x400;
+    cands[i].y = 0x400;
+  }
   memset(&r, 0, sizeof r);
+  r.phase = 1;
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.advance == 0 && out.handoff == 0 && out.ran == 0);
+  r.phase = 2;
+  r.tracked = 0;
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.ran == 0);
+  r.tracked = 1;
   r.stage = 0;
   r.active = 0;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 1 && out.advance == 0 && out.handoff == 0);
+  assert(out.ran == 1);   /* native byte[+0x9E]=1 precedes the active test */
   r.active = 1;
   r.offset_word = 0x41;
   r.timer89 = 0x3C;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 0 && out.advance == 0);
   r.timer89 = 0x3D;
   r.is_team_target = 1;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 1 && out.handoff == 1);
   r.is_team_target = 0;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 1 && out.handoff == 0);
+  /* lane <= 0x40: the 0x8DE8C nearest over the caller's candidates, the
+   * 0x8DCD4 metric and the 0x4A animation id, then timer 0 / stage 1. */
   memset(&r, 0, sizeof r);
+  r.phase = 2;
+  r.tracked = 1;
   r.stage = 0;
   r.active = 1;
   r.offset_word = 0x40;
   r.timer89 = 0x100;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  r.pos_x = 0x200;
+  r.pos_z = 0x200;
+  r.type8 = 3;
+  cands[4].x = 0x210;
+  cands[4].y = 0x200;   /* distance 0x10 */
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.advance == 1 && out.stage == 1 && out.reset == 0);
   assert(r.stage == 1 && r.timer89 == 0);
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
-  assert(out.reset == 0);
+  assert(out.ran == 1 && out.nearest == 4 && out.anim == 0x4A);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
+  assert(out.reset == 0 && out.ran == 0);
   r.event_flag = 1;
   r.is_team_target = 1;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 1 && out.handoff == 1);
   r.event_flag = 0;
   r.offset_word = 0x41;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 1);
   memset(&r, 0, sizeof r);
+  r.phase = 2;
+  r.tracked = 1;
   r.stage = 2;
-  assert(fifa96_action_receive_step(&r, &out) == FIFA96_OK);
+  assert(fifa96_action_receive_step(&r, cands, 11, &out) == FIFA96_OK);
   assert(out.reset == 0 && out.advance == 0 && out.handoff == 0);
-  assert(fifa96_action_receive_step(NULL, &out) == ACTION_INVALID);
-  assert(fifa96_action_receive_step(&r, NULL) == ACTION_INVALID);
+  /* The resolution arm requires the caller's candidates. */
+  memset(&r, 0, sizeof r);
+  r.phase = 2;
+  r.tracked = 1;
+  r.active = 1;
+  r.offset_word = 0x40;
+  assert(fifa96_action_receive_step(&r, NULL, 11, &out) == ACTION_INVALID);
+  assert(fifa96_action_receive_step(NULL, cands, 11, &out) == ACTION_INVALID);
+  assert(fifa96_action_receive_step(&r, cands, 11, NULL) == ACTION_INVALID);
 }
 
 static void test_tackle_attempt(void) {
@@ -242,7 +278,9 @@ static void test_tackle_attempt(void) {
   t = tackle_base();
   t.pos_x = 0x211;
   t.target_x = t.pos_x + 0x80;
-  assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 0);
+  /* camera_x == 0 <= pos_x: the native 0x82E85 second gate continues and the
+   * remaining checks install (the pre-Task-12 port inverted this gate). */
+  assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 1);
   t = tackle_base();
   t.pos_z = 0x68F;
   assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 0);
@@ -267,6 +305,14 @@ static void test_tackle_attempt(void) {
   assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 1);
   t.facing = 0x201;
   assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 0);
+  /* The second camera-x gate: pos_x > 0x210 returns only when
+   * camera_x > pos_x (native 0x82E8E..0x82E96 JLE continues). */
+  t = tackle_base();
+  t.pos_x = 0x211;
+  t.camera_x = 0;
+  assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 1);
+  t.camera_x = 0x300;
+  assert(fifa96_action_tackle_attempt(&t, &install) == FIFA96_OK && install == 0);
   assert(fifa96_action_tackle_attempt(NULL, &install) == ACTION_INVALID);
   assert(fifa96_action_tackle_attempt(&t, NULL) == ACTION_INVALID);
 }
@@ -278,6 +324,7 @@ static void test_tackle_step(void) {
   t.delta = 10;
   assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
   assert(out.reset == 0 && out.install_0e == 1 && out.install_0f == 0);
+  assert(out.ran == 1);   /* native byte[+0x9E]=1 (0x82FCC) */
   assert(t.timer89 == 0 && t.stage == 1);
   t = tackle_base();
   t.stage = 0;
@@ -292,6 +339,45 @@ static void test_tackle_step(void) {
   t.is_tracked = 0;
   assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
   assert(out.reset == 0 && out.install_0e == 0 && out.install_0f == 1);
+  /* The stage-1 target arm (native 0x82FF3..0x8305A): only when
+   * (int16)[0x1577F0] > 0x70 and word[0x1577FA] < word[0x157800]. */
+  t = tackle_base();
+  t.is_tracked = 0;
+  t.cam_f0 = 0x70;
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.target_set == 0 && out.receiver_timer == 0);
+  t.cam_f0 = 0x71;
+  t.cam_f8 = 0x14;
+  t.cam_fe = 0x14;   /* not < -> no arm */
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.target_set == 0 && out.receiver_timer == 0);
+  t.cam_fe = 0x15;
+  t.slot_button_40 = 0;
+  t.vec788_x = 0x111;
+  t.vec788_y = 0x222;
+  t.vec788_z = 0x333;
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.target_set == 1 && out.target_x == 0x111 && out.target_y == 0x222 &&
+         out.target_z == 0x333);
+  assert(out.receiver_timer == 1);   /* 0x79B58, gated on +0x99 == 0 */
+  t = tackle_base();
+  t.is_tracked = 0;
+  t.cam_f0 = 0x71;
+  t.cam_f8 = 0x14;
+  t.cam_fe = 0x15;
+  t.slot_button_40 = 1;
+  t.vec794_x = 0x10;
+  t.vec794_y = 0x20;
+  t.vec794_z = 0x30;
+  t.side = 0;
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.target_set == 1 && out.target_z == 0x30 - 0xC0);
+  t.side = 1;
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.target_z == 0x30 + 0xC0);
+  t.flag99 = 1;
+  assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 0);   /* flag99 gates the 0x79B58 call */
   t = tackle_base();
   t.lob = 1;
   assert(fifa96_action_tackle_step(&t, &out) == FIFA96_OK);
@@ -381,9 +467,13 @@ static void test_duel_step(void) {
   assert(d.delta_x == 0x100 && d.delta_z == -0x100);
   assert(d.distance == 0x160);
   assert(out.wait == 1 && out.handoff == 0 && out.reset == 0);
+  /* The stage-1 arm writes the synthetic target (0x900, 0, 0) and zeroes the
+   * metric inputs (native 0x84A28..0x84A67). */
+  assert(out.target_set == 1 && out.target_x == 0x900 && out.target_z == 0);
   d.timer89 = 0x76;
   assert(fifa96_action_duel_step(&d, 1, 0, &out) == FIFA96_OK);
   assert(out.wait == 1 && out.handoff == 0 && out.reset == 0);
+  assert(out.target_set == 0);   /* stage 2 entry does not rewrite the target */
   d.timer89 = 0x77;
   d.distance = 0x20;
   d.has_slot = 1;
@@ -393,12 +483,14 @@ static void test_duel_step(void) {
   d.distance = 0x1F;
   assert(fifa96_action_duel_step(&d, 1, 0, &out) == FIFA96_OK);
   assert(out.handoff == 1 && out.reset == 1 && out.wait == 0);
+  assert(out.bind == 1 && out.occupied == 1);
   d = (fifa96_action_duel){0};
   d.stage = 2;
   d.timer89 = 0x78;
   d.distance = 0x20;
   assert(fifa96_action_duel_step(&d, 1, 0x40, &out) == FIFA96_OK);
   assert(out.handoff == 0 && out.reset == 1);
+  assert(out.bind == 1 && out.occupied == 1);   /* resolution without a slot */
   d = (fifa96_action_duel){0};
   d.stage = 2;
   d.timer89 = 0x12D;
@@ -412,6 +504,7 @@ static void test_duel_step(void) {
   d.distance = 0x20;
   assert(fifa96_action_duel_step(&d, 1, 0x0F, &out) == FIFA96_OK);
   assert(out.wait == 1);
+  assert(out.bind == 0 && out.occupied == 0);   /* waiting never resolves */
   assert(fifa96_action_duel_step(NULL, 1, 0, &out) == ACTION_INVALID);
   assert(fifa96_action_duel_step(&d, 1, 0, NULL) == ACTION_INVALID);
 }
@@ -645,6 +738,183 @@ static void test_duel_split(void) {
   assert(fifa96_action_duel_split(0, 0, 1, &own, NULL) == ACTION_INVALID);
 }
 
+/* FU-142 OL-32 / M2 arms-and-wiring Task 12: the first-hand native surfaces.
+ *
+ * NSEARCH FUN_0008DB6C (0x8DB6C..0x8DC48, 77 insns, EAX = search origin block,
+ * EDX = team base, BX = skip index, ECX = fallback): per record i (0..10,
+ * 0xB2 stride) skip a record with `[+0x20] != 0`, `i == (int16)BX`,
+ * `rec == [team+0x7BF]`, then for i == 0 require `byte[team+0x829] != 0`, then
+ * skip `[+0x9A] != 0` and `[+0x98] != 0`; keep `-(0x8DC68(pos_x - rec.x,
+ * pos_z - rec.z))` and shell-sort (gaps n/2..1, no swap on equal) the value
+ * array with the record indices; the winner is the first index slot. With no
+ * candidate and ECX != 0 the helper returns the first record with `[+0x20]==0`
+ * and `[+0x9A]==0` (the other gates are ignored); else NULL.
+ * SWAP FUN_000786A0 (0x786A0..0x786EA): `from[+0x20] != 0 && to[+0x20] == 0`
+ * moves the slot pointer and clears the new slot's words +4/+6/+8/+0xA/+0xC/
+ * +0x14/+0x16.
+ * BIND FUN_0004C324 (0x4C324..0x4C372): calls FUN_00053DC4 (the recorder-arm
+ * latch), then writes [0x1074A4] = `[0x1587D4] ? [[[0x1587D4]]+0x826]` (zero-
+ * extended) when `byte[0x157AC2] >= 4`, with `FUN_00036200(0)`, else
+ * `(int8)(dword[0x1587E3] >> 24)`.
+ */
+_Static_assert(offsetof(fifa96_action_duel_candidate, pos_x) == 0, "pos_x");
+_Static_assert(offsetof(fifa96_action_duel_candidate, pos_z) == 2, "pos_z");
+_Static_assert(offsetof(fifa96_action_duel_candidate, has_slot) == 4, "has_slot");
+_Static_assert(offsetof(fifa96_action_duel_candidate, skip_98) == 5, "skip_98");
+_Static_assert(offsetof(fifa96_action_duel_candidate, skip_9a) == 6, "skip_9a");
+_Static_assert(offsetof(fifa96_action_duel_candidate, is_chosen) == 7, "is_chosen");
+_Static_assert(offsetof(fifa96_action_duel_search_in, x) == 0, "x");
+_Static_assert(offsetof(fifa96_action_duel_search_in, z) == 2, "z");
+_Static_assert(offsetof(fifa96_action_duel_search_in, skip_index) == 4, "skip_index");
+_Static_assert(offsetof(fifa96_action_duel_search_in, record0_gate) == 6, "record0_gate");
+_Static_assert(offsetof(fifa96_action_duel_search_in, fallback) == 7, "fallback");
+_Static_assert(offsetof(fifa96_action_duel_bind_in, mode_157ac2) == 0, "mode");
+_Static_assert(offsetof(fifa96_action_duel_bind_in, team_present) == 1, "present");
+_Static_assert(offsetof(fifa96_action_duel_bind_in, side_826) == 2, "side");
+_Static_assert(offsetof(fifa96_action_duel_bind_in, fallback_e6) == 3, "fallback_e6");
+_Static_assert(offsetof(fifa96_action_duel_bind_out, bound) == 0, "bound");
+_Static_assert(offsetof(fifa96_action_duel_bind_out, stub_36200) == 4, "stub");
+_Static_assert(offsetof(fifa96_action_duel_out, occupied) == 4, "occupied");
+_Static_assert(offsetof(fifa96_action_duel_out, bind) == 5, "bind");
+_Static_assert(offsetof(fifa96_action_duel_out, target_set) == 6, "target_set");
+_Static_assert(offsetof(fifa96_action_duel_out, target_x) == 8, "target_x");
+_Static_assert(offsetof(fifa96_action_duel_out, target_z) == 12, "target_z");
+_Static_assert(offsetof(fifa96_action_receive, phase) == 10, "phase");
+_Static_assert(offsetof(fifa96_action_receive, tracked) == 11, "tracked");
+_Static_assert(offsetof(fifa96_action_receive, type8) == 12, "type8");
+_Static_assert(offsetof(fifa96_action_receive_out, ran) == 4, "ran");
+_Static_assert(offsetof(fifa96_action_receive_out, nearest) == 8, "nearest");
+_Static_assert(offsetof(fifa96_action_receive_out, anim) == 12, "anim");
+_Static_assert(offsetof(fifa96_action_tackle_out, ran) == 4, "tackle ran");
+_Static_assert(offsetof(fifa96_action_tackle_out, target_set) == 5, "target_set");
+_Static_assert(offsetof(fifa96_action_tackle_out, target_x) == 8, "target_x");
+_Static_assert(offsetof(fifa96_action_tackle_out, receiver_timer) == 20, "receiver_timer");
+
+static void duel_candidates_clear(fifa96_action_duel_candidate *rec) {
+  memset(rec, 0, sizeof(*rec) * 11u);
+}
+
+static void test_duel_search(void) {
+  fifa96_action_duel_candidate rec[11];
+  fifa96_action_duel_search_in in;
+  int32_t index = -99;
+  uint32_t i;
+
+  duel_candidates_clear(rec);
+  memset(&in, 0, sizeof in);
+  in.x = 0x200;
+  in.z = 0x200;
+  in.skip_index = -1;
+  in.record0_gate = 1;
+  rec[0].pos_x = 0x210;                 /* d = 0x10 */
+  rec[1].pos_x = 0x1E0;                 /* d = 0x20 */
+  rec[2].pos_x = 0x100;                 /* d = 0x100 */
+  rec[3].skip_98 = 1;
+  rec[4].has_slot = 1;
+  rec[5].skip_9a = 1;
+  rec[6].is_chosen = 1;
+  for (i = 7; i < 11u; i++) {
+    rec[i].pos_x = 0x400;
+    rec[i].pos_z = 0x400;               /* d = 0x2C0 */
+  }
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 0);                   /* nearest and lowest index */
+  /* Tie: the native sort does not swap equal values, so the earlier record
+   * (lower index) wins (CMP/JGE at 0x8DCB2). */
+  rec[1].pos_x = 0x1F0;                 /* also d = 0x10 */
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 0);
+  /* rec1 closer -> wins. */
+  rec[0].pos_x = 0x180;
+  rec[1].pos_x = 0x210;
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 1);
+  /* skip_index (native BX) excludes record 1. */
+  in.skip_index = 1;
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 0);
+  in.skip_index = -1;
+  /* record0_gate: record 0 is skipped when team+0x829 == 0. */
+  rec[0].pos_x = 0x210;                 /* nearest again */
+  in.record0_gate = 0;
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 1);
+  in.record0_gate = 1;
+  /* The is_chosen exclusion (native [team+0x7BF]). */
+  rec[0].is_chosen = 1;
+  assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
+  assert(index == 1);
+  rec[0].is_chosen = 0;
+  /* No candidate: NULL (-1) unless the fallback flag is set. */
+  duel_candidates_clear(rec);
+  rec[0].skip_98 = 1;
+  rec[1].skip_98 = 1;
+  in.fallback = 0;
+  assert(fifa96_action_duel_search(&in, rec, 2, &index) == FIFA96_OK);
+  assert(index == -1);
+  /* The fallback scan only tests +0x20 and +0x9A (record 0's skip_98 is
+   * ignored) and starts at record 0. */
+  in.fallback = 1;
+  assert(fifa96_action_duel_search(&in, rec, 2, &index) == FIFA96_OK);
+  assert(index == 0);
+  /* An occupied record 0 (either +0x20 or +0x9A) is skipped. */
+  rec[0].skip_9a = 1;
+  assert(fifa96_action_duel_search(&in, rec, 2, &index) == FIFA96_OK);
+  assert(index == 1);
+  assert(fifa96_action_duel_search(NULL, rec, 2, &index) == ACTION_INVALID);
+  assert(fifa96_action_duel_search(&in, NULL, 2, &index) == ACTION_INVALID);
+  assert(fifa96_action_duel_search(&in, rec, 2, NULL) == ACTION_INVALID);
+}
+
+static void test_duel_swap(void) {
+  fifa96_action_duel_slot from;
+  fifa96_action_duel_slot to;
+  from.has_slot = 1;
+  to.has_slot = 0;
+  assert(fifa96_action_duel_swap(&from, &to) == FIFA96_OK);
+  assert(from.has_slot == 0 && to.has_slot == 1);
+  /* from without a slot: no-op. */
+  assert(fifa96_action_duel_swap(&from, &to) == FIFA96_OK);
+  assert(from.has_slot == 0 && to.has_slot == 1);
+  /* to already has a slot: no-op. */
+  from.has_slot = 1;
+  assert(fifa96_action_duel_swap(&from, &to) == FIFA96_OK);
+  assert(from.has_slot == 1 && to.has_slot == 1);
+  assert(fifa96_action_duel_swap(NULL, &to) == ACTION_INVALID);
+  assert(fifa96_action_duel_swap(&from, NULL) == ACTION_INVALID);
+}
+
+static void test_duel_bind(void) {
+  fifa96_action_duel_bind_in in;
+  fifa96_action_duel_bind_out out;
+  memset(&in, 0, sizeof in);
+  /* byte[0x157AC2] >= 4 with a live [0x1587D4] pointer: the side byte is
+   * zero-extended into [0x1074A4] and the 0x36200 stub runs. */
+  in.mode_157ac2 = 4;
+  in.team_present = 1;
+  in.side_826 = 0x05;
+  in.fallback_e6 = 0xE6;
+  assert(fifa96_action_duel_bind(&in, &out) == FIFA96_OK);
+  assert(out.bound == 0x05 && out.stub_36200 == 1);
+  /* mode < 4: the sign-extended 0x1587E6 fallback byte. */
+  in.mode_157ac2 = 3;
+  assert(fifa96_action_duel_bind(&in, &out) == FIFA96_OK);
+  assert(out.bound == -0x1A && out.stub_36200 == 0);
+  /* mode >= 4 without the pointer: same fallback. */
+  in.mode_157ac2 = 4;
+  in.team_present = 0;
+  assert(fifa96_action_duel_bind(&in, &out) == FIFA96_OK);
+  assert(out.bound == -0x1A && out.stub_36200 == 0);
+  /* SETGE is signed on the zero-extended byte: 0x80 >= 4. */
+  in.team_present = 1;
+  in.mode_157ac2 = 0x80;
+  in.side_826 = 0x80;
+  assert(fifa96_action_duel_bind(&in, &out) == FIFA96_OK);
+  assert(out.bound == 0x80 && out.stub_36200 == 1);
+  assert(fifa96_action_duel_bind(NULL, &out) == ACTION_INVALID);
+  assert(fifa96_action_duel_bind(&in, NULL) == ACTION_INVALID);
+}
+
 int main(void) {
   test_possession_reset();
   test_possession_claim();
@@ -655,6 +925,9 @@ int main(void) {
   test_tackle_step();
   test_duel_step();
   test_duel_split();
+  test_duel_search();
+  test_duel_swap();
+  test_duel_bind();
   test_carrier_phase_reset();
   test_carrier_claim_timer_and_timer81();
   test_carrier_stage0_gates();

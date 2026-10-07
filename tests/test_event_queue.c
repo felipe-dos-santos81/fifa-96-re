@@ -1,5 +1,6 @@
 // tests/test_event_queue.c — FU-63 presentation/event pump queue (docs/ghidra/FU63_event_pump.md).
 #include <assert.h>
+#include <stddef.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -487,6 +488,118 @@ static void test_schedule(void) {
   }
 }
 
+/* FU-142 OL-27 / M2 Task 12: the native event append sinks, read first-hand in
+ * /FIFA96.EXE:
+ *  - FUN_000928F0 (0x928F0..0x92993, 50 insns) appends to the 25-entry ring at
+ *    0x15B440 stride 0x15 (code byte + a 4-byte stamp from FUN_000CB2A4 =
+ *    [0x112E88], the actor in EBP and the 12-byte 0x157758 triple) but first
+ *    checks the sink byte 0x15B650: when it is exactly 0x26 the append is
+ *    suppressed, otherwise the sink byte is cleared after the write; the ring
+ *    index byte 0x15B665 advances `(index+1) % 25`;
+ *  - FUN_00092820 (0x92820..0x92860, 26 insns) always stores the code byte to
+ *    the sink and fills the stamp/actor/vector only when the 0x110F1C table
+ *    byte has bit 0 set.
+ * The 0x110F1C table (first-hand 0x110F1C..0x110F43) is a deliberate 0x28-byte
+ * code table (`00` then 24 x `07`, `03 03 03`, `07 07`, 6 x `01`, `09`, `07`,
+ * `00`, `00`); codes 0, 0x26 and 0x27 are the no-fill entries. Codes >= 0x28
+ * are the derived boundary (native reads adjacent data; OL-67). */
+_Static_assert(FIFA96_EVENT_RING_SLOTS == 25u, "25-entry ring");
+_Static_assert(offsetof(struct fifa96_event_ring_entry, code) == 0u, "code");
+_Static_assert(offsetof(struct fifa96_event_ring_entry, stamp) == 4u, "stamp");
+_Static_assert(offsetof(struct fifa96_event_ring_entry, actor) == 8u, "actor");
+_Static_assert(offsetof(struct fifa96_event_ring_entry, vector) == 12u, "vector");
+_Static_assert(offsetof(struct fifa96_event_ring, entry) == 0u, "entry");
+_Static_assert(offsetof(struct fifa96_event_ring, index) == 25u * 24u, "index");
+_Static_assert(offsetof(struct fifa96_event_ring, sink) == 25u * 24u + 4u, "sink");
+
+static const int32_t ring_vector[3] = {0x111, 0x222, 0x333};
+
+static void test_event_ring_init_and_append(void) {
+  struct fifa96_event_queue q;
+  fifa96_event_queue_init(&q, NULL);
+  assert(q.ring.index == 0 && q.ring.sink.code == 0);
+  /* code 1: table[1] == 0x07, bit 0 set -> fill all four fields. The native
+   * cursor is 1-based (INC then IDIV 25 at 0x92913/0x92920), so the first
+   * append lands in entry[1]. */
+  assert(fifa96_event_ring_append(&q, 0x77, 0x01, 0x1234, ring_vector) == 1);
+  assert(q.ring.index == 1);
+  assert(q.ring.entry[1].code == 0x01);
+  assert(q.ring.entry[1].stamp == 0x1234);
+  assert(q.ring.entry[1].actor == 0x77);
+  assert(q.ring.entry[1].vector[0] == 0x111 && q.ring.entry[1].vector[1] == 0x222 &&
+         q.ring.entry[1].vector[2] == 0x333);
+  /* code 0x26: table[0x26] == 0 -> code byte only. */
+  assert(fifa96_event_ring_append(&q, 0x99, 0x26, 0x5555, ring_vector) == 1);
+  assert(q.ring.index == 2);
+  assert(q.ring.entry[2].code == 0x26);
+  assert(q.ring.entry[2].stamp == 0 && q.ring.entry[2].actor == 0);
+  assert(q.ring.entry[2].vector[0] == 0 && q.ring.entry[2].vector[2] == 0);
+  /* code 0: table[0] == 0 -> code byte only. */
+  assert(fifa96_event_ring_append(&q, 0x12, 0x00, 0x7777, ring_vector) == 1);
+  assert(q.ring.entry[3].code == 0x00 && q.ring.entry[3].stamp == 0);
+  /* code 0x25: table[0x25] == 0x07 -> fill; code 0x24: 0x09 -> fill. */
+  assert(fifa96_event_ring_append(&q, 0x13, 0x25, 0x2, ring_vector) == 1);
+  assert(q.ring.entry[4].stamp == 0x2 && q.ring.entry[4].actor == 0x13);
+  assert(fifa96_event_ring_append(&q, 0x14, 0x24, 0x3, ring_vector) == 1);
+  assert(q.ring.entry[5].stamp == 0x3 && q.ring.entry[5].actor == 0x14);
+  assert(q.ring.sink.code == 0);   /* the ring cleared the sink latch */
+  assert(fifa96_event_ring_append(NULL, 1, 1, 1, ring_vector) == -FIFA96_ERR_INVALID);
+  assert(fifa96_event_ring_append(&q, 1, 1, 1, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_event_ring_wraps_at_25(void) {
+  struct fifa96_event_queue q;
+  uint32_t i;
+  fifa96_event_queue_init(&q, NULL);
+  for (i = 0; i < FIFA96_EVENT_RING_SLOTS; i++) {
+    assert(fifa96_event_ring_append(&q, (int32_t)i, (uint8_t)i, (int32_t)i, ring_vector) == 1);
+    assert(q.ring.index == (uint8_t)((i + 1u) % FIFA96_EVENT_RING_SLOTS));
+  }
+  /* the 25th append (new index 24) wrote entry 24; the 26th wraps to 0. */
+  assert(q.ring.entry[24].code == 23);
+  assert(q.ring.entry[0].code == 24);
+  assert(fifa96_event_ring_append(&q, 0xAA, 0x05, 0xBB, ring_vector) == 1);
+  assert(q.ring.index == 1);
+  assert(q.ring.entry[1].code == 0x05 && q.ring.entry[1].actor == 0xAA);
+}
+
+static void test_event_ring_sink_suppression(void) {
+  struct fifa96_event_queue q;
+  fifa96_event_queue_init(&q, NULL);
+  /* A 0x26 sink write suppresses the next ring append (native CMP EAX,0x26 /
+   * JZ 0x92987) and the suppression path still clears the sink latch. */
+  assert(fifa96_event_sink_store(&q, 0x42, 0x26, 7, ring_vector) == 1);
+  /* table[0x26] == 0: the code byte is written, the extras are not. */
+  assert(q.ring.sink.code == 0x26 && q.ring.sink.stamp == 0 && q.ring.sink.actor == 0);
+  assert(fifa96_event_ring_append(&q, 1, 0x05, 9, ring_vector) == 0);
+  assert(q.ring.index == 0);
+  assert(q.ring.sink.code == 0);
+  /* The next append lands normally (entry[1], the native 1-based cursor). */
+  assert(fifa96_event_ring_append(&q, 1, 0x05, 9, ring_vector) == 1);
+  assert(q.ring.index == 1 && q.ring.entry[1].code == 0x05);
+}
+
+static void test_event_sink_store(void) {
+  struct fifa96_event_queue q;
+  fifa96_event_queue_init(&q, NULL);
+  /* Fill entry: code 1. */
+  assert(fifa96_event_sink_store(&q, 0x21, 0x01, 0xDEAD, ring_vector) == 1);
+  assert(q.ring.sink.code == 0x01 && q.ring.sink.stamp == 0xDEAD &&
+         q.ring.sink.actor == 0x21);
+  assert(q.ring.sink.vector[0] == 0x111 && q.ring.sink.vector[2] == 0x333);
+  assert(q.ring.index == 0);   /* the sink never advances the ring index */
+  /* No-fill code 0x26: the code byte is written, the old extras survive
+   * (native skips the field writes). */
+  assert(fifa96_event_sink_store(&q, 0x22, 0x26, 0x1, ring_vector) == 1);
+  assert(q.ring.sink.code == 0x26);
+  assert(q.ring.sink.stamp == 0xDEAD && q.ring.sink.actor == 0x21);
+  /* No-fill code 0. */
+  assert(fifa96_event_sink_store(&q, 0x23, 0x00, 0x2, ring_vector) == 1);
+  assert(q.ring.sink.code == 0x00 && q.ring.sink.actor == 0x21);
+  assert(fifa96_event_sink_store(NULL, 1, 1, 1, ring_vector) == -FIFA96_ERR_INVALID);
+  assert(fifa96_event_sink_store(&q, 1, 1, 1, NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init();
   test_enqueue_full();
@@ -505,6 +618,10 @@ int main(void) {
   test_schedule_fallthrough();
   test_signal_mapping();
   test_schedule();
+  test_event_ring_init_and_append();
+  test_event_ring_wraps_at_25();
+  test_event_ring_sink_suppression();
+  test_event_sink_store();
   puts("test_event_queue: ok");
   return 0;
 }

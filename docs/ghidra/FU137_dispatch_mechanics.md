@@ -373,7 +373,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 15 | 0x087CD0 | not ported | FU-81 §2.1 head mis-decoded; FU-82 §1 stub bucket | OL-14 |
 | 16 | 0x084630 | not ported (partial) | sequence_marker/rng_event; FU-82 §3.6 | OL-9 |
 | 17 | 0x084730 | not ported (partial) | FU-81 4-arm table 0x84720 | OL-9 |
-| 18 | 0x0849B0 | not ported (partial) | duel_step/duel_split; FU-78 §7; FU-139 §2 | OL-11; FU-139 OL-32 |
+| 18 | 0x0849B0 | ported (M2 arms-and-wiring Task 12 / FU-139 §10) | `fifa96_match_action_18` binds `fifa96_action_duel_step` (`0x849B0..0x84AE1`) plus `fifa96_action_duel_bind` (0x4C324), `fifa96_action_duel_search` (0x8DB6C + the 0xA1860 shell sort) and `fifa96_action_duel_swap` (0x786A0) to `mr->record`/the pool; install arm 0x8A32F; `test_engine_match_handlers::test_action_18_runs_body` | OL-68 (anim row byte, bind globals, slot-word clears); OL-52 remark |
 | 19 | 0x0746E4 | not ported (partial) | keeper_hold_* + FU-140 §3 fallback; FU-79 §2 | FU-140 OL-33 |
 | 1A | 0x07662C | not ported (partial) | keeper_reposition_a_gate; FU-79 §3; FU-140 §2 | FU-140 OL-34 |
 | 1B | 0x076D28 | not ported (partial) | keeper_reposition_b_finish; FU-79 §4; FU-140 §2 | FU-140 OL-34 |
@@ -382,9 +382,9 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 1E | 0x07550C | ported (M2 Task 7 / FU-140 §4) | `fifa96_match_action_1E` binds `fifa96_keeper_claim_place` to `mr->record` (FU-79 §7; `test_engine_match_handlers::test_action_1E_runs_claim_place`) | OL-37 closed for the record-visible body; slot-merge/camera/actor arms + record pool OL-37 (carries OL-16) |
 | 1F | 0x076380 | not ported (partial) | keeper_dive_target/arm_step + FU-140 §3 input_decide/arm_camera; FU-79 §8 | FU-140 OL-36 |
 | 20 | 0x084EEC | not ported (partial) | FU-82 §3.7 7-arm table 0x84ED0 | OL-9 |
-| 21 | 0x085214 | not ported (partial) | action_receive_step; FU-78 §4; FU-139 §2 | OL-11; FU-139 OL-32 |
+| 21 | 0x085214 | ported (M2 arms-and-wiring Task 12 / FU-139 §10) | `fifa96_match_action_21` binds `fifa96_action_receive_step` (`0x85214..0x8539B`: phase/tracked, camera copy, the 0x8DE8C nearest + 0x4A arm, the 0x7DAB4 reset and the team-target ball 4/receiver) to `mr->record`/the pool; install arms 0x7D046 and row-05 0x7F791/0x7F7B6; `test_engine_match_handlers::test_action_21_runs_body` | OL-68 (+0x44, camera velocity, 0x79B58 gate); OL-52 remark |
 | 22 | 0x08539C | not ported (partial) | sequence_press_event; FU-82 §3.8 | OL-9 |
-| 23 | 0x082F84 | not ported (partial) | tackle_step/tackle_attempt; FU-78 §6; FU-139 §2 | OL-11; FU-139 OL-32 |
+| 23 | 0x082F84 | ported (M2 arms-and-wiring Task 12 / FU-139 §10) | `fifa96_match_action_23` binds `fifa96_action_tackle_step`/`_attempt` (`0x82F84..0x83163` + `0x82DD0`: stage gates, target arm, installs 0x0E/0x0F, 0x79B58 receiver) to `mr->record`/the pool; install arm 0x7D1B9; `test_engine_match_handlers::test_action_23_runs_body`; the pre-Task-12 `0x82E8E` camera gate is corrected in the FU-139 §10 errata | OL-68 (0x1577xx inputs, +0x85/+0x99/+0x5D, +0x7C7, slot +0x10); OL-65 remark |
 | 24 | 0x086510 | not ported (partial) | sequence_lane/anim_byte; FU-82 §3.9 | OL-9 |
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
 | 26 | 0x0866F4 | ported (M2 arms-and-wiring Task 3 / FU-142 Appendix C) | `fifa96_match_action_26` binds `fifa96_arm_26_step` (`0x866F4..0x8681C` + `0x8DCD4`) to `mr->record`; arm 0x8D74D (§5.2); `test_engine_match_handlers::test_action_26_runs_body` | OL-50 (descriptor bytes) / OL-51 (`0x36200` gate) carry the row's remainder |
@@ -445,17 +445,17 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg | dead |
 |---|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 7 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 34 | 0 | 1 (`2B` FU-142f) |
+| action `0x1106E0` | 45 | 10 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 31 | 0 | 1 (`2B` FU-142f) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
-| **dispatch total** | **80** | **7** | **4** | **68** | **0** | **1** |
+| **dispatch total** | **80** | **10** | **4** | **65** | **0** | **1** |
 
-Dispatch results at this commit: **72 × `-FIFA96_ERR_UNSUPPORTED`** (the 68 not
+Dispatch results at this commit: **69 × `-FIFA96_ERR_UNSUPPORTED`** (the 65 not
 ported rows + the unwired actions `27`/`29`/`2C` + the dead entry `2B`; actions
-`00`, `1E`, `26`, `28`, `2A`, `07` and `0F` no longer count),
-**1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **7 × `FIFA96_OK`** (actions
-`00`, `1E`, `26`, `28`, `2A`, `07` and `0F`); out-of-range -> `-NOT_FOUND`;
-NULL `mr` -> `-INVALID`. All error results are negated, matching the engine
-family convention (`fifa96_match_run_*`).
+`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21` and `23` no longer count),
+**1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **10 × `FIFA96_OK`** (actions
+`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`); out-of-range ->
+`-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are negated, matching
+the engine family convention (`fifa96_match_run_*`).
 
 FU-139 §8 (Task 10) advances action row `05`'s bounded parts (the carrier
 machine stages 0-3 and the staging tail are ported and tested) but adds no
@@ -921,3 +921,31 @@ change.
   `FIFA96_OK` and adds `test_action_07_runs_body`/`test_action_0F_runs_body`.
 * New numbered legs OL-65/OL-66 are registered in FU-142 §6 (row 07/0F
   unmodeled auxiliaries; kick-path external tables/inputs).
+
+## Errata (M2 arms-and-wiring Task 12 / FU-139 §10)
+
+* **§6.1 action rows `18`/`21`/`23` move from `not ported (partial)` to
+  `ported`.** Task 12 ports the row-18/21/23 resolution arms (FU-139 §10):
+  `fifa96_action_duel_search` (NSEARCH `0x8DB6C` + the `0xA1860` shell sort),
+  `fifa96_action_duel_swap` (`0x786A0`), `fifa96_action_duel_bind`
+  (`0x4C324`), the extended `fifa96_action_duel_step`/`_receive_step`/
+  `_tackle_step`/`_tackle_attempt` and the engine handlers
+  `fifa96_match_action_18/_21/_23`. Install arms: `0x8A32F` (18), `0x7D046`
+  (21; the row-05 `0x7F791`/`0x7F7B6` sites too), `0x7D1B9` (23). The wiring
+  gate (arm + full record-visible body + pool binding) passes for all three.
+* **§7 totals update in place:** action ported 7 -> 10 (`18`, `21`, `23`),
+  not ported 34 -> 31; dispatch 72 -> 69 `-UNSUPPORTED`, 7 -> 10 `FIFA96_OK`;
+  `tests/test_engine_match_handlers.c` flips
+  `action_expect[0x18]`/`[0x21]`/`[0x23]` to `FIFA96_OK` and adds
+  `test_action_18_runs_body`/`test_action_21_runs_body`/
+  `test_action_23_runs_body`.
+* **FU-78 §5/§6 tackle-attempt camera gate erratum.** The second camera-x gate
+  in `FUN_00082DD0` (`0x82E85..0x82E96`) returns only when `camera_x > pos_x`
+  (`MOV EAX,[0x15774C]; CMP EAX,[ESI+0x59]; JLE continue`), not when
+  `camera_x < pos_x`; the pre-Task-12 `fifa96_action_tackle_attempt` inverted
+  it. Fixed and pinned by a discriminating fixture (FU-139 §10.5 erratum).
+* **OL-27/OL-32 close** (FU-139 §10): the event ring/sink are ported
+  (`fifa96_event_ring_append`/`_sink_store`), the duel/receive/tackle
+  resolution arms are ported and tested. New numbered legs OL-67 (event-ring
+  binding) and OL-68 (rows 18/21/23 unmodeled record/presentation inputs) are
+  registered in FU-142 §6.

@@ -614,30 +614,56 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
 }
 
 fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,
+                                        const fifa96_entity_candidate *team_candidates,
+                                        uint32_t candidate_count,
                                         fifa96_action_receive_out *out) {
   if (!state || !out) return -FIFA96_ERR_INVALID;
   out->reset = 0;
   out->advance = 0;
   out->handoff = 0;
   out->stage = state->stage;
+  out->ran = 0;
+  out->nearest = -1;
+  out->anim = 0;
+  /* 0x8521F..0x8523D: phase != 2 or rec != [0x157A83] -> FUN_0007DAB4. */
+  if (state->phase != 2u || state->tracked == 0) {
+    out->reset = 1;
+    return FIFA96_OK;
+  }
   if (state->stage == 0) {
+    out->ran = 1;   /* 0x8526F byte[+0x9E] = 1 */
     if (state->active == 0) {
-      out->reset = 1;
+      out->reset = 1;   /* 0x85278..0x8528A */
       return FIFA96_OK;
     }
     if (state->offset_word > 0x40) {
+      /* 0x8528B..0x852AC: the timer-gated reset path. */
       if (state->timer89 > 0x3C) {
         out->reset = 1;
         out->handoff = state->is_team_target;
       }
       return FIFA96_OK;
     }
-    out->advance = 1;
+    /* 0x852AD..0x8534C: the 0x8DE8C nearest arm. The native then computes
+     * `FUN_0008DCD4(pos -> nearest)` and the `FUN_000CD474` angle, but both
+     * compares on the results are dead (no conditional jump between
+     * 0x8530C/0x85320 and the 0x6E598 call); only the nearest selection and
+     * the constant 0x4A animation id are observable. */
+    if (!team_candidates || candidate_count == 0) return -FIFA96_ERR_INVALID;
+    {
+      int16_t best = 0;
+      out->nearest = fifa96_entity_find_nearest(team_candidates, candidate_count,
+                                                0xFFFFFFFFu, (int16_t)state->pos_x,
+                                                (int16_t)state->pos_z, &best);
+    }
+    out->anim = 0x4A;
     state->timer89 = 0;
-    state->stage = 1;
-    out->stage = 1;
+    state->stage = (uint8_t)(state->stage + 1u);
+    out->advance = 1;
+    out->stage = state->stage;
   }
   if (state->stage == 1) {
+    /* 0x85352..0x85361: +0x44 or lane > 0x40 -> the reset path. */
     if (state->event_flag != 0 || state->offset_word > 0x40) {
       out->reset = 1;
       out->handoff = state->is_team_target;
@@ -659,7 +685,8 @@ fifa96_err_t fifa96_action_tackle_attempt(const fifa96_action_tackle *state, int
   distance = fifa96_entity_distance(dx, dz);
   if (distance > 0xF0) return FIFA96_OK;
   if (state->pos_x < -0x210 && state->pos_x > state->camera_x) return FIFA96_OK;
-  if (state->pos_x > 0x210 && state->camera_x < state->pos_x) return FIFA96_OK;
+  /* 0x82E85..0x82E96: pos_x > 0x210 returns only when camera_x > pos_x. */
+  if (state->pos_x > 0x210 && state->camera_x > state->pos_x) return FIFA96_OK;
   if (state->side == 0) {
     if (state->pos_z < 0x690) return FIFA96_OK;
   } else if (state->side == 1 && state->pos_z > -0x690) {
@@ -685,14 +712,21 @@ fifa96_err_t fifa96_action_tackle_step(fifa96_action_tackle *state, fifa96_actio
   out->install_0e = 0;
   out->install_0f = 0;
   out->stage = state->stage;
+  out->ran = 0;
+  out->target_set = 0;
+  out->target_x = 0;
+  out->target_y = 0;
+  out->target_z = 0;
+  out->receiver_timer = 0;
   if (state->phase != 2) {
-    out->reset = 1;
+    out->reset = 1;   /* 0x82F97..0x83156 */
     return FIFA96_OK;
   }
   state->timer89 += state->delta;
   if (state->stage == 0) {
+    out->ran = 1;   /* 0x82FCC byte[+0x9E] = 1 */
     if (state->active == 0) {
-      out->reset = 1;
+      out->reset = 1;   /* 0x82FD5 -> 0x83156 */
       return FIFA96_OK;
     }
     state->timer89 = 0;
@@ -701,11 +735,27 @@ fifa96_err_t fifa96_action_tackle_step(fifa96_action_tackle *state, fifa96_actio
   }
   if (state->stage == 1) {
     int install = 0;
+    /* 0x82FF3..0x8305A: the target arm runs before the window gates. */
+    if (state->cam_f0 > 0x70 && state->cam_f8 < state->cam_fe) {
+      if (state->slot_button_40 != 0) {
+        out->target_x = state->vec794_x;
+        out->target_y = state->vec794_y;
+        out->target_z = state->vec794_z;
+        if (state->side == 0) out->target_z -= 0xC0;
+        else out->target_z += 0xC0;
+      } else {
+        out->target_x = state->vec788_x;
+        out->target_y = state->vec788_y;
+        out->target_z = state->vec788_z;
+      }
+      out->target_set = 1;
+      if (state->flag99 == 0) out->receiver_timer = 1;   /* 0x79B58 */
+    }
     if (state->lob != 0 || state->timer89 > 0x78) {
       out->reset = 1;
       goto tackle_tail;
     }
-    fifa96_action_tackle_attempt(state, &install);
+    (void)fifa96_action_tackle_attempt(state, &install);
     if (install != 0) {
       out->install_0e = 1;
       goto tackle_tail;
@@ -736,7 +786,12 @@ fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, 
   out->handoff = 0;
   out->reset = 0;
   out->stage = state->stage;
-  state->stride = 2;
+  out->occupied = 0;
+  out->bind = 0;
+  out->target_set = 0;
+  out->target_x = 0;
+  out->target_z = 0;
+  state->stride = 2;   /* 0x849B7 word[+0x7B] = 2 */
   state->timer89 += (int32_t)delta;
   if (state->stage == 0) {
     if (state->animation == 0x55 || state->animation == 0x6A) return FIFA96_OK;
@@ -744,8 +799,13 @@ fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, 
     state->stage = 1;
   }
   if (state->stage == 1) {
+    /* 0x84A28..0x84A67: target (0x900, 0, 0), the 0x8DCD4 metric into
+     * +0x65/+0x67/+0x69, timer 0 and the latch +1. */
     int32_t dx = low16(0x900 - state->pos_x);
     int32_t dz = low16(0 - state->pos_z);
+    out->target_set = 1;
+    out->target_x = 0x900;
+    out->target_z = 0;
     state->distance = (int16_t)fifa96_entity_distance(dx, dz);
     state->delta_x = (int16_t)dx;
     state->delta_z = (int16_t)dz;
@@ -763,6 +823,10 @@ fifa96_err_t fifa96_action_duel_step(fifa96_action_duel *state, uint16_t delta, 
       out->stage = state->stage;
       return FIFA96_OK;
     }
+    /* 0x84A94 resolution: FUN_0004C324 bind, the +0x9A latch and, with a
+     * control slot, the NSEARCH/SWAP arm; 0x7DAB4 resets. */
+    out->bind = 1;
+    out->occupied = 1;
     out->handoff = state->has_slot;
     out->reset = 1;
   }
@@ -777,6 +841,102 @@ fifa96_err_t fifa96_action_duel_split(int16_t own_metric, int16_t opp_metric,
   *own_code = 5;
   *opp_code = 0;
   if (opp_is_duel_type != 0 && opp_metric >= own_metric) *opp_code = 6;
+  return FIFA96_OK;
+}
+
+#define FIFA96_DUEL_SEARCH_MAX 11u
+
+fifa96_err_t fifa96_action_duel_search(const fifa96_action_duel_search_in *in,
+                                       const fifa96_action_duel_candidate *records,
+                                       uint32_t count, int32_t *index) {
+  int32_t values[FIFA96_DUEL_SEARCH_MAX];
+  int32_t indices[FIFA96_DUEL_SEARCH_MAX];
+  uint32_t found = 0;
+  uint32_t i;
+  uint32_t gap;
+  if (!in || !records || !index || count == 0 || count > FIFA96_DUEL_SEARCH_MAX)
+    return -FIFA96_ERR_INVALID;
+  *index = -1;
+  for (i = 0; i < count; i++) {
+    const fifa96_action_duel_candidate *rec = &records[i];
+    int32_t dx, dz, d;
+    if (rec->has_slot != 0) continue;                      /* 0x8DB89 */
+    if ((int32_t)i == (int32_t)in->skip_index) continue;   /* 0x8DB8F */
+    if (rec->is_chosen != 0) continue;                     /* 0x8DB9A */
+    if (i == 0 && in->record0_gate == 0) continue;         /* 0x8DBA2 */
+    if (rec->skip_9a != 0) continue;                       /* 0x8DBAF */
+    if (rec->skip_98 != 0) continue;                       /* 0x8DBB8 */
+    dx = (int16_t)((uint16_t)in->x - (uint16_t)rec->pos_x);
+    dz = (int16_t)((uint16_t)in->z - (uint16_t)rec->pos_z);
+    d = (int32_t)(int16_t)fifa96_entity_distance(dx, dz);
+    values[found] = -d;              /* 0x8DBE8 NEG */
+    indices[found] = (int32_t)i;
+    found++;
+  }
+  if (found != 0) {
+    /* The native shell sort (0xA1860 called from 0x8DC08): gap = found/2 down
+     * to 1, insert each value into its gap-ordered slot while
+     * `values[j] < values[j+gap]` (equal values are not swapped), mirroring
+     * every value swap on the index array; the first index slot wins. */
+    gap = found >> 1;
+    while (gap > 0u) {
+      for (i = gap; i < found; i++) {
+        uint32_t j = i - gap;
+        for (;;) {
+          int32_t tmp;
+          if (values[j] >= values[j + gap]) break;
+          tmp = values[j];
+          values[j] = values[j + gap];
+          values[j + gap] = tmp;
+          tmp = indices[j];
+          indices[j] = indices[j + gap];
+          indices[j + gap] = tmp;
+          if (j < gap) break;
+          j -= gap;
+        }
+      }
+      gap >>= 1;
+    }
+    *index = indices[0];
+    return FIFA96_OK;
+  }
+  if (in->fallback != 0) {
+    /* 0x8DC1B..0x8DC41: the first record with +0x20 == 0 and +0x9A == 0. */
+    for (i = 0; i < count; i++) {
+      if (records[i].has_slot == 0 && records[i].skip_9a == 0) {
+        *index = (int32_t)i;
+        return FIFA96_OK;
+      }
+    }
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_duel_swap(fifa96_action_duel_slot *from,
+                                     fifa96_action_duel_slot *to) {
+  if (!from || !to) return -FIFA96_ERR_INVALID;
+  /* 0x786A2/0x786AC: only from-held and to-free. */
+  if (from->has_slot == 0 || to->has_slot != 0) return FIFA96_OK;
+  to->has_slot = 1;
+  from->has_slot = 0;
+  return FIFA96_OK;
+}
+
+/* `FUN_0007C990` forced-decision bounded code set {3,4,6} is the kick
+ * machine's `kick_reset` model; rows 18/21/23 do not need it here (the engine
+ * handler owns the predicate inputs). */
+
+fifa96_err_t fifa96_action_duel_bind(const fifa96_action_duel_bind_in *in,
+                                     fifa96_action_duel_bind_out *out) {
+  if (!in || !out) return -FIFA96_ERR_INVALID;
+  out->bound = 0;
+  out->stub_36200 = 0;
+  if (in->mode_157ac2 >= 4u && in->team_present != 0) {
+    out->bound = (int32_t)in->side_826;   /* zero-extended byte */
+    out->stub_36200 = 1;                  /* 0x4C359 FUN_00036200(0) */
+    return FIFA96_OK;
+  }
+  out->bound = (int32_t)(int8_t)in->fallback_e6;   /* 0x4C363..0x4C36B */
   return FIFA96_OK;
 }
 

@@ -263,7 +263,8 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
 |---|---|---|
 | ported + wired | `00` (cluster A) | unchanged `FIFA96_OK` |
 | ported + wired (Task 11) | `07`,`0F` | `fifa96_action_kick_machine` + `fifa96_ball_kick_target`; `FIFA96_OK` (§9) |
-| pure part advanced (cluster B) | `05`,`06`,`07`,`0F`,`18`,`21`,`23` | still `-FIFA96_ERR_UNSUPPORTED`; seven new tested pure functions |
+| ported + wired (Task 12) | `18`,`21`,`23` | `fifa96_match_action_18/_21/_23` over the pool; `FIFA96_OK` (§10) |
+| pure part advanced (cluster B) | `05`,`06` | still `-FIFA96_ERR_UNSUPPORTED`; the tested pure functions |
 | still unported | all other rows | per FU-137 §6 |
 
 ## 6. Open legs
@@ -278,6 +279,11 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
 * **OL-27 — event append sinks.** `FUN_000928F0` (25-entry ring `0x5B440`,
   stride 0x15) and `FUN_00092820` (`0x5B650`) are presentation-side and
   unported; only the selector mapping is ported.
+  **Status (Task 12): both sinks are ported as `fifa96_event_ring_append` /
+  `fifa96_event_sink_store` on `struct fifa96_event_queue.ring` (§10.1) with
+  the 0x110F1C eligibility table and the 1-based 25-entry cursor; the ring is
+  not yet driven by the engine (no derived consumer) and the 0x157758 payload
+  / `[0x112E88]` stamp are caller inputs (OL-67).**
 * **OL-28 — full kick path.** `FUN_0007B9C4` target selection
   `0x7BA1E..0x7BBE4` (wing target `FUN_0008DCD4`, slot `FUN_0007B878`), the
   mode-bit-0x20 arms `FUN_0007B194`/`FUN_0007B57C` (`0x7BC34..0x7BC80`), the
@@ -307,6 +313,13 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
   arms, the action-code sound arms, `FUN_0004C324` (raw bytes), NSEARCH
   `FUN_0008DB6C` + SWAP `FUN_000786A0`, the row-21 claim arm, the row-23 target
   arm and the row-18 resolution (FU-78 §12 legs 3–9).
+  **Status (Task 12): the row-18/21/23 resolution arms are ported and the rows
+  wired (§10): `fifa96_action_duel_search` (0x8DB6C + 0xA1860 shell sort),
+  `fifa96_action_duel_swap` (0x786A0), `fifa96_action_duel_bind` (0x4C324),
+  the extended `fifa96_action_duel_step`/`fifa96_action_receive_step`/
+  `fifa96_action_tackle_step`/`_attempt`, and the engine handlers
+  `fifa96_match_action_18/_21/_23`. The `FUN_0007A084` special-class/RNG and
+  sound arms (the ball staging tail's receive arm) remain with OL-62.**
 * **OL-16 (carried) — entity/record pool.** The 0xB2 pool, team blocks,
   `[0x157A83]`/`[0x158724]`/`[0x158730]` actor bindings and the `FUN_0007D9A4`
   installer remain the C8/C11 replacement for the one-record stopgap; every
@@ -786,3 +799,168 @@ render hashes unchanged. Write set: `include/fifa96_loader/fifa96_ball_pairing.h
 `CMakeLists.txt` (rng links), `docs/ghidra/FU139_action_cluster_b.md` (this
 section), `docs/ghidra/FU137_dispatch_mechanics.md` (Task-11 errata),
 `docs/ghidra/FU142_installer_arms_scope.md` (OL-65/OL-66, OL-28/OL-31 status).
+
+## 10. Task 12 port — event append sinks and rows 18/21/23 (OL-27/OL-32)
+
+Reviewed read-only in `/FIFA96.EXE` (explicit; Ghidra MCP, no writes). This
+section closes OL-27 (the native event append sinks) and OL-32 (the
+reception/tackle/duel resolution arms) and wires action rows 18/21/23 through
+the engine handlers `fifa96_match_action_18/_21/_23`. The residual
+presentation/global inputs are the numbered legs OL-67/OL-68.
+
+### 10.1 Tool calls (first-hand, read-only)
+
+* `disassemble_bytes`: `0x928F0` (164 B, the ring append), `0x92820` (65 B,
+  the sink), `0x8DB6C` (221 B, NSEARCH), `0x786A0` (75 B, SWAP), `0x4C324`
+  (78 B, bind), `0xA1860` (the shell sort), `0x8A29F..0x8A350` (the row-18
+  install arm), `0x7CFE0..0x7D057` (the row-21 install arm at `0x7D046`),
+  `0x7D140..0x7D1B3` (the row-23 install arm at `0x7D1B9`), `0x82DD0` (the
+  attempt), `0x849B0..0x84AE1` (row 18), `0x85214..0x8539B` (row 21),
+  `0x82F84..0x83163` (row 23), `0x8DC68` (the distance), `0x8DD70` (the angle
+  wrapper), `0x53DC4` (the recorder arm), `0xCB2A4` (`[0x112E88]`), `0x79B58`
+  (the receiver timer), `0x7DAB4` (the shared reset), `0x45001` (the input
+  byte);
+* `read_memory 0x110F1C` (256 B; the deliberate 0x28-byte eligibility table),
+  `0x157758` (zero in the image; the FU-71 track triple);
+* `get_xrefs_to`: `0x928F0` (16 calls, `FUN_0007AE70` ring arms), `0x92820`
+  (33 calls), `0x8DB6C` (6), `0x786A0` (9), `0x4C324` (17), `0x157758`
+  (writers `FUN_0006FFC0`/`0x736AC`), `0x15B665` (ring clear `FUN_000927E0`);
+* Ghidra read-only: no renames, comments, labels, functions or saves.
+
+### 10.2 `FUN_000928F0` / `FUN_00092820` → `fifa96_event_ring_append` / `_sink_store`
+
+* index cell 0x15B665, ring 0x15B440 stride 0x15, sink 0x15B650; the sink check
+  is a dword load at 0x15B64D >> 24 (`0x928F9..0x92904`);
+* the cursor is 1-based: `INC`/`IDIV 25` first, then the entry is written at
+  the new index (`0x92913..0x92938`); the clear function `FUN_000927E0` seeds
+  index 0 and zeroes all 25 code bytes;
+* the ring entry and the sink both lay out `{code byte, stamp dword (from
+  `FUN_000CB2A4` = `[0x112E88]`), actor dword, 12-byte 0x157758 triple}`
+  (`0x9293F..0x92980`, `0x9283F..0x92856`);
+* the 0x110F1C table byte bit 0 selects the extra-field fill; table[0]=0,
+  table[1..0x25] bit 0 set, table[0x26]=table[0x27]=0;
+* the suppression path still clears the sink byte (`0x92987`). Codes >= 0x28
+  are the derived boundary (OL-67).
+* Ported on `struct fifa96_event_ring` (a field of `struct
+  fifa96_event_queue`) with the embedded eligibility table; tests:
+  `tests/test_event_queue.c` `test_event_ring_init_and_append`,
+  `test_event_ring_wraps_at_25`, `test_event_ring_sink_suppression`,
+  `test_event_sink_store`.
+
+### 10.3 `FUN_0008DB6C` (NSEARCH) → `fifa96_action_duel_search`
+
+Eligibility (per 0xB2 record i): `[+0x20] == 0` (0x8DB89), `i != (int16)BX`
+(0x8DB8F), `rec != [team+0x7BF]` (0x8DB9A), `i != 0 || byte[team+0x829] != 0`
+(0x8DBA2), `[+0x9A] == 0` (0x8DBAF), `[+0x98] == 0` (0x8DBB8). The value is
+`-0x8DC68(word[P] - word[rec+0x59], word[P+8] - word[rec+0x61])` (0x8DBDF..0x8DBEA);
+`FUN_000A1860` (called at 0x8DC08) is a gap-sequence shell sort (gap =
+n/2..1, inner `j..j+gap` compare with `JGE` = no swap on equal at `0xA18B2`)
+run over the values with every swap mirrored on the index array; the chosen
+record is the first index slot (`0x8DC10 IMUL [ESP],0xB2`). With no candidate
+and ECX != 0, the first record with `[+0x20]==0 && [+0x9A]==0` is returned
+(0x8DC1B..0x8DC41); else NULL.
+
+### 10.4 `FUN_000786A0` / `FUN_0004C324` → `fifa96_action_duel_swap` / `_bind`
+
+* SWAP: `from[+0x20] != 0 && to[+0x20] == 0` moves the slot pointer
+  (`0x786B0..0x786B5`) and zeroes the new slot's words +4/+6/+8/+0xA/+0xC/
+  +0x14/+0x16 (`0x786BF..0x786E3`); the derived surface moves the record-level
+  `has_slot` flag (the slot block is unmodeled, OL-68).
+* BIND: `FUN_00053DC4` recorder-arm latch (0x14E574), then
+  `byte[0x157AC2] >= 4 && [0x1587D4] != 0` -> `[0x1074A4] = zero_extend(
+  [[[0x1587D4]] + 0x826])` + `FUN_00036200(0)` (`0x4C347..0x4C360`), else
+  `[0x1074A4] = sign_extend(dword[0x1587E3] >> 24)` (`0x4C363..0x4C370`).
+
+### 10.5 Rows 18/21/23 bodies and the wiring gate
+
+* **Row 18** `0x849B0..0x84AE1` (188 insns): `word[+0x7B]=2`, `timer89 +=
+  delta`, the `+0x92` latch 0/1/2, the `[[rec+0x28]][0]` abort (0x55/0x6A), the
+  stage-1 `(0x900,0,0)` target + `0x8DCD4`, the stage-2 window (`0x78..0x12C`,
+  `0x45001 & 0xF0`, the `+0x65` metric < 0x20) and the resolution
+  (`0x4C324`, `+0x9A=1`, NSEARCH+SWAP, `0x7DAB4`). Install arm
+  `0x8A29F..0x8A32F`: `[0x15888F]` record, the per-player accumulator
+  `[0x157B90 + 15*c + type] += byte[0x15888D]`, install 0x18 when
+  `accumulator & 0x7F >= 2` (`0x8A31C..0x8A32F`).
+* **Row 21** `0x85214..0x8539B` (117 insns): phase != 2 or `rec !=
+  [0x157A83]` reset, the camera copy, `+0x9E=1`, the stage limits, the
+  lane<=0x40 arm (`0x8DE8C` over `[[rec]+0x7A6]` with skip -1, the `0x8DCD4`
+  metric and `0xCD474` angle whose two compares are dead, `0x6E598` id 0x4A),
+  `timer89=0`/latch and the stage-1 `+0x44`/lane gates with the reset path's
+  ball install 4 + `0x79B58`. Install arms: `0x7D010..0x7D046` (phase 2 +
+  `0x110680[type]&1` -> install 0x21) and the row-05 `FUN_0007F7E0` sites
+  `0x7F791`/`0x7F7B6`.
+* **Row 23** `0x82F84..0x83163` (132 insns): phase reset, `timer89 += delta`,
+  `+0x9E=1`, stage 0->1, the stage-1 target arm (`dword[0x1577EE]>>16 > 0x70`,
+  `word[0x1577FA] < word[0x157800]`, `slot[+0x10]&0x40` -> the 0x157794 triple
+  with the `side`-signed 0xC0 z nudge else the 0x157788 triple, `0x79B58`),
+  the `+0x85`/timer gates, the `0x82DD0` attempt, the install-0E path, the
+  install-0F gates (`slot&0x40`, `+0x99`, `+0x5D`, `word[0x1577FA] >
+  word[0x1577F2]`, `rec == [team+0x7C7]`, that record's lane/bound, the
+  `0x1577F8/0x157800/0x1577FE` sum and the `0x8DC68` vector distance < 0x60)
+  and the `+0x6B`/`+0x77` tail reset. Install arm `0x7D174..0x7D1B9`: phase 2
+  + `0x110680[type]&1` + `[+0x99]==0` + `dword[+0x5D]==0` -> install 0x23.
+* The gate passes for all three: each has a bounded install arm, the full
+  record-visible body is covered by the tested loader functions
+  (`fifa96_action_duel_step` incl. the resolution requests,
+  `fifa96_action_receive_step` incl. the nearest arm,
+  `fifa96_action_tackle_step`/`_attempt` incl. the target arm) and the pool
+  binding exists (records, teams, ball pair, installer). Rows 18/21/23 flip to
+  `ported`; the engine handlers are `fifa96_match_action_18/_21/_23`.
+* **Erratum (tackle attempt camera gate).** The pre-Task-12 port's second
+  camera-x gate was inverted: first-hand `0x82E8E..0x82E96` returns only when
+  `camera_x > pos_x` (`MOV EAX,[0x15774C]; CMP EAX,[ESI+0x59]; JLE
+  continue`), not when `camera_x < pos_x`. Fixed in
+  `fifa96_action_tackle_attempt`, pinned by the discriminating fixture
+  (`pos_x = 0x211`, `camera_x = 0` installs; `camera_x = 0x300` refuses) and
+  the pre-existing `pos_x = 0x211` case updated to the native result.
+
+### 10.6 Engine wiring and dispatch
+
+`fifa96_match_action_18` stages the record into `fifa96_action_duel_step`
+(district `+0x65` metric staged, OL-60 model), runs the bind request and, on
+the resolution, the `+0x9A` latch + NSEARCH/SWAP over `mr->entities` and the
+shared `FUN_0007DAB4` reset. `_21` stages the receive machine (camera copy,
+nearest over the team records, reset/ball-4/receiver-timer pool side). `_23`
+stages the tackle machine (target arm and installs 0x0E/0x0F; the `0x1577xx`
+camera/track inputs are zero or the engine camera). The shared reset applies
+the `FUN_0007C990` forced-decision bounded codes {3,4,6} (FU-141 OL-44) or the
+code-0 install synchronously through the pool installer; a rejected install
+(occupied/same code) leaves the native `+0x92 = 0xFF`. Dispatch counts move 7
+-> 10 `FIFA96_OK` / 72 -> 69 `-UNSUPPORTED` (FU-137 §7, Task-12 errata).
+
+### 10.7 Tests (this task)
+
+* `tests/test_event_queue.c`: the four ring/sink fixtures (fill/no-fill, the
+  1-based 25-wrap, the 0x26 suppression, the sink extras preserved on
+  no-fill), plus layout `_Static_assert`s.
+* `tests/test_action_possession.c`: `test_duel_search` (eligibility ladder,
+  tie order, skip index, record-0 gate, chosen exclusion, fallback semantics,
+  NULLs), `test_duel_swap`, `test_duel_bind`; the extended
+  `test_duel_step` (resolution bind/occupied, target set), `test_receive_step`
+  (phase/tracked, ran latch, nearest/anim, camera arm inputs), `test_tackle_*`
+  (ran latch, target arms incl. the button/side nudge and the +0x99 receiver
+  gate, the camera-gate fix).
+* `tests/test_engine_match_handlers.c`: `test_action_18_runs_body`,
+  `test_action_21_runs_body`, `test_action_23_runs_body` and the flipped
+  `action_expect[0x18]/[0x21]/[0x23]`.
+
+### 10.8 Open legs (numbered; registered in FU-142 §6)
+
+* **OL-67 — event ring binding.** The ring/sink are loader-tested but no
+  engine path drives them yet; the `0x157758` triple (FU-71 track writers
+  `FUN_0006FFC0`/`0x736AC`) and the `[0x112E88]` stamp are caller inputs, and
+  codes >= 0x28 (or negative sign-extended) are outside the embedded 0x28-byte
+  eligibility table (the native reads the adjacent data).
+* **OL-68 — rows 18/21/23 unmodeled record/presentation inputs.** Row 18's
+  `[[rec+0x28]][0]` abort byte (staged 0; shares OL-52) and the bind globals
+  `[0x157AC2]`/`[0x1587D4]`/`[0x1587E3]`/`[0x1074A4]`/`[0x14E574]` (the bind
+  returns the derived fallback and the stub no-op; `mr->global_157ac2` is the
+  run's zero-staged global); the SWAP slot-word clears; row 21's `+0x44`
+  (staged 0), the camera-velocity zero, the `0x6E598` record writes (OL-52)
+  and the `[0x79B58]` +0x99 gate (the pool has no +0x99; treated open); row
+  23's `[0x1577CA]` exclusion (is_tracked stand-in), the `0x71B9C` predictor
+  triple (camera stand-in), the `word[+0x85]`/`+0x99`/`+0x5D` byte gates and
+  the `[team+0x7C7]` record (`is_own`/`opp_*` staged 0), the slot `+0x10`
+  button byte and the `word[+0x77]` bound (shared OL-65). The shared
+  `FUN_0007DAB4` forced-decision predicate inputs are the pool target
+  fields (the FU-141 OL-44 bounded model).
