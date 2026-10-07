@@ -1026,7 +1026,11 @@ record/presentation inputs are the numbered leg OL-69.
         and skip the fold; else scaled = 0xC0) : the 0x80359..0x803F5 no-slot
         arm (side 0: V1.z < -0x5A0 && V1.z < teammate_z; side 1: > +0x5A0 &&
         > teammate_z -> flag54; actor == team+0x7B2 -> timer89 += delta word
-        and scaled -= low16(timer89); clamp 0x30..0x150)
+        and scaled -= low16(timer89), then 0x803BE..0x803EC compares
+        score[idx(side)] vs score[idx(side^1)] (0x741B4 = `(param ^
+        [0x157ABE]) & 1`, table 0x157AC5; `0x803EC JNC` skips unless own <
+        other, unsigned word) and 0x803EE subtracts low16(timer89) again;
+        clamp 0x30..0x150)
 0x80410 fold V1.x += 0x795A4(scaled, 0x114E04[sin(angle)]);
         V1.z += 0x795A4(scaled, sin(angle+0x100))
 0x80482 actor == team+0x7B6 -> 0x8DCD4(V1, V2) -> angle2; flag54 &&
@@ -1052,9 +1056,10 @@ record/presentation inputs are the numbered leg OL-69.
         : (word[+0x71] < 3 && word[+0x6B] < 0x90 -> 0x6E598 id 0x1C)
 0x8082B [0x157A4F] == 0 -> RET; actor != team+0x7B2 -> 0x809A2;
         else 0x8DE8C(V1, team, skip 0) -> best != rec ? (team+0x7B6 = 0,
-        team+0x7B2 = best) : (team+0x7B2 = rec; 0x8DC68(V1-pos) < 0x8DCD4(
-        carrier, V1).distance ? (V1 += {dx,dz}; 0x8DE8C(V1, team, skip 0,
-        +0x9A latched) -> team+0x7B6) : team+0x7B6 = 0; flag54 ->
+        team+0x7B2 = best) : (team+0x7B2 = rec; 0x808AD CMP CX,[0x8DCD4(
+        carrier, V1).distance]; 0x808B2 JL 0x80903 -> self >= carrier mirrors:
+        V1 += {dx,dz}; 0x8DE8C(V1, team, skip 0, +0x9A latched) ->
+        team+0x7B6; self < carrier -> team+0x7B6 = 0; flag54 ->
         (second == 0 || |second.z|+0x60 < |carrier.z|) ?
         0x8DE8C({0,0,camera_z>=0?0xB10:-0xB10}, team, skip 0, latched) ->
         team+0x7B6)
@@ -1066,11 +1071,13 @@ Widths re-read from the raw bytes: the `dword[addr]>>16` idiom is the word at
 `addr+2` (`[carrier+0x69]` -> `+0x6B`, `[rec+0x69]` -> `+0x6B`, `[rec+0x6F]`
 -> `+0x71`, `[0x15872C]` -> `0x15872F`, `[0x158727]` -> `0x15872A`,
 `0x1587E3`-style byte reads); the `CALL` targets were diffed against the `E8`
-bytes (`0x802BE`->`0x8DCD4`, `0x802D6`->`0x8DD70`, `0x80333`->`0x8DC68`,
-`0x80439`->`0x795A4`, `0x805F4`->`0x79C20`, `0x806C1`->`0x92AC8`,
-`0x80646`/`0x808F0`->`0x79B58`/`0x8DE8C`, `0x808EB`/`0x8098C`->`0x8DE8C`,
-`0x809BE`->`0x79CCC`, `0x809E1`->`0x6DA64`, `0x7D9A4` install sites
-`0x8025E`/`0x807C1`).
+bytes (`0x8025E`/`0x807C1`->`0x7D9A4`, `0x802BE`/`0x808A8`->`0x8DCD4`,
+`0x802D6`/`0x804B5`->`0x8DD70`, `0x80333`/`0x80896`->`0x8DC68`,
+`0x80439`/`0x80472`/`0x80508`/`0x80571`/`0x805AC`->`0x795A4`,
+`0x805F4`->`0x79C20`, `0x80646`->`0x79B58`,
+`0x806F0`/`0x80791`->`0x92AC8`,
+`0x80850`/`0x808EB`/`0x8098C`->`0x8DE8C`,
+`0x809BE`->`0x79CCC`, `0x809E1`->`0x6DA64`).
 
 Boundary note: the plan/brief span `0x801B4..0x81067` (and FU-142 §3's
 "597 insns") covers the row-09 handler `0x80A00..0x81065` past the row-06
@@ -1127,18 +1134,25 @@ reproduces the predicate, so the row-06 entry is bounded; the wiring gate
   +0x9E latch, phase/active resets, the clear-identity flags, the three
   install-4 gates, NULL args), `test_pursuit_fold_and_install_gate` (the
   hand-computed camera metric/fold target (-0xD0, 0x11, 0xB10), the install-9
-  gate with the seed-0 first RNG draw 1, the zero-base refusal, the +0x99
+  gate with the seed-0 first RNG draw 0x200 (`0x200 & 0x1FF = 0 < base`), the
+  zero-base refusal, the +0x99
   block and the parity/0x15872F x-adjust draw), `test_pursuit_second_record_v0`
   (the V0 speed-0x60 arm -> (0,0,0x111)), `test_pursuit_slot_targets`
   (camera vs `0x79C20` + the `0x7D3E4` clamp), `test_pursuit_early_returns`
   (the +0x81 position copy without clamp and the >0x38 height return),
   `test_pursuit_claim_arm` (the `0x8DE8C` non-self write and the
-  `0x79CCC`/`0x6DA64` swap), `test_pursuit_self_nearest_and_swap` (the
-  carrier mirror, the second/height searches and the no-swap case) and
-  `test_pursuit_invalid`.
+  `0x79CCC`/`0x6DA64` swap), `test_pursuit_carrier_mirror_equal` (the
+  `0x808AD` `>=` mirror and the height-gate skip),
+  `test_pursuit_carrier_no_mirror` (the `0x808B2 JL` clear direction),
+  `test_pursuit_height_gate_skip`/`test_pursuit_height_gate_research` (the
+  `0x80952` gate both ways), `test_pursuit_score_second_subtraction` (the
+  `0x803BE..0x803EE` own < other unsigned branch, including the 0x8000 case),
+  `test_pursuit_adjust_gate_signed` (the `(int8)0x15872F < 2` gate with 0xFF)
+  and `test_pursuit_invalid`.
 * `tests/test_engine_match_handlers.c`: `action_expect[0x06] = FIFA96_OK` and
-  `test_action_06_runs_body` (the reset path, the carrier-gate install 4 and
-  the no-slot V1 target (-0xB1) + install 8 over the pool).
+  `test_action_06_runs_body` (the reset path, the carrier-gate install 4, the
+  no-slot V1 target (-0xB1) + install 8, the parity claim arm and the live
+  score second subtraction -> -0x91 over the pool).
 * `make check` 103/103 (engine tests under ASan/UBSan); M1 golden/render pins
   unchanged.
 
