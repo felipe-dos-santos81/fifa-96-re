@@ -1,16 +1,22 @@
-/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5 /
- * FU-142b: the row 0x26 body, the row 0x27 body, the row 0x2C body and the
- * shared 0x36200 stub.
+/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5/6 /
+ * FU-142b/c: the row 0x26 body (Task 3), the row 0x27 body (Task 4), the row
+ * 0x2C body (Task 5), the row 0x29 body (Task 6) and the shared 0x36200 stub.
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: disassemble_bytes 0x866F4, read_memory 0x110778 =
  * row-0x26 table entry 0x000866F4, read_memory 0x10F394 table bytes,
  * disassemble_bytes 0x36200), Appendix D (disassemble_bytes 0x86820,
  * read_memory 0x1103CB = the 96-byte 24-pair table, read_memory 0x158782 /
- * 0x10F372) and Appendix E (disassemble_bytes 0x84598, 152 B; read_memory
+ * 0x10F372), Appendix E (disassemble_bytes 0x84598, 152 B; read_memory
  * 0x110790 = row-0x2C table entry 0x00084598; disassemble_function 0x7DAB4,
- * the reset subset in `fifa96_arm_reset`). */
+ * the reset subset in `fifa96_arm_reset`) and Appendix F (disassemble_bytes
+ * 0x874E4, 596 B; read_memory 0x110784 = row-0x29 table entry 0x000874E4;
+ * the 0x8DE8C nearest and 0x6E1D0 phase-cell windows). */
 #include "fifa96_loader/fifa96_arm_bodies.h"
+
+#include "fifa96_loader/fifa96_action_handlers.h"
+#include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_rng.h"
 
 /* Flat 0x10F394, the 32-byte table pointed to by the runtime [0x157A38]
  * (FUN_00073CD0 stores 0xF394; FU-84 §6 re-reads the same bytes). Row 26 reads
@@ -196,5 +202,135 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
       return -FIFA96_ERR_INVALID;
     rec->anim_sel = sel;
   }
+  return FIFA96_OK;
+}
+
+/* Row 29's `0x874E4` target/velocity sync (the native 3 x MOVSD `+0x59 ->
+ * `+0x4D` plus `word [rec+0x71] = 0` and the `+0x75`/`+0x73` writes; the
+ * derived vel pair covers +0x71..+0x76). */
+static void fifa96_arm_29_sync(struct fifa96_arm_record *rec) {
+  rec->target = rec->pos;
+  rec->vel_x = 0;
+  rec->vel_z = 0;
+}
+
+/* Row 29's nearest-search candidate count: the native `CMP ECX,0xB` walk over
+ * `[rec+0]`'s 0xB2-stride records (0x8DEEC). */
+#define FIFA96_ARM_29_TEAM_RECORDS 11u
+
+fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec) {
+  if (!rec) return -FIFA96_ERR_INVALID;
+  /* The phase-5 path dereferences the RNG state and the team candidate array;
+   * validate both before the prologue write so no partial state is left on
+   * failure (the native has no NULL concept here). */
+  if (rec->phase == 5u && (!rec->rng || !rec->team_candidates))
+    return -FIFA96_ERR_INVALID;
+  rec->timer7b = 2;                          /* 0x874EF */
+  if (rec->phase != 5u) {
+    /* 0x87502..0x87519: sync, then reset; 0x87524..0x8752B: the +0x9A
+     * occupancy pre-check; 0x87531..0x8753C: install code 3. */
+    fifa96_arm_29_sync(rec);
+    if (fifa96_arm_reset(rec) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (rec->skip_9a == 0) rec->install = 3;
+    return FIFA96_OK;
+  }
+  /* 0x87548..0x8755C: timer89 += zero-extended delta. */
+  rec->timer89 = (int32_t)((uint32_t)rec->timer89 + (uint32_t)rec->delta);
+  if (rec->stage92 < 1u) {
+    /* 0x87586..0x8759C: the 0x8DE8C nearest search over [rec+0] (skip index =
+     * byte[[0x157A9F]+0x8D]; the ball position at +0x59/+0x61 as the target).
+     * 0x875A1..0x875A3: only a nearest == this record continues. */
+    int16_t best_distance;
+    int best = fifa96_entity_find_nearest(
+        rec->team_candidates, FIFA96_ARM_29_TEAM_RECORDS, rec->ball_skip,
+        (int16_t)rec->ball_pos.x, (int16_t)rec->ball_pos.z, &best_distance);
+    if (best == -FIFA96_ERR_INVALID) return -FIFA96_ERR_INVALID;
+    if (best == (int)rec->team_index) {
+      /* 0x875A7: [0x157AA3] = [nearest+0], an unmodeled cross-record global
+       * (OL-55). 0x875AC..0x875B1: the 0x36200 stub with native EAX = 2
+       * (the derived no-op drops the store, OL-51). 0x875B6..0x875CD:
+       * sync + [0x10F36C] = rec. */
+      (void)fifa96_arm_stub_36200();
+      fifa96_arm_29_sync(rec);
+      rec->chase = 1;
+      {
+        /* 0x875D7..0x875EC: one RNG word; AL bit 0 -> id 0x5D / 0x46. */
+        uint16_t value;
+        uint8_t id;
+        uint8_t slot;
+        if (fifa96_rng_step(rec->rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+        id = (value & 1u) ? 0x5Du : 0x46u;
+        /* 0x875EF..0x87603: the 0x6E598 selector (ECX/EBX loads dead, OL-52). */
+        if (fifa96_arm_anim_select(id, rec->anim_sel, &slot) != FIFA96_OK)
+          return -FIFA96_ERR_INVALID;
+        rec->anim_sel = slot;
+      }
+    }
+    /* 0x87608..0x8761A: timer89 = 0, stage92 = 1, falling into stage 1. */
+    rec->timer89 = 0;
+    rec->stage92 = 1;
+  } else if (rec->stage92 > 2u) {
+    return FIFA96_OK;                        /* 0x87574 latch epilogue */
+  }
+  if (rec->stage92 == 1u) {
+    if (rec->chase != 0) {
+      /* 0x87620..0x8766C: the chased record syncs and returns; flag44 != 0
+       * re-runs the selector on the stage-0 id (the derived stand-in is the
+       * last resolved id; the native stack re-read is undefined in a
+       * stage-1-only call). */
+      fifa96_arm_29_sync(rec);
+      if (rec->flag44 != 0) {
+        uint8_t slot;
+        if (fifa96_arm_anim_select(rec->anim_sel, rec->anim_sel, &slot) != FIFA96_OK)
+          return -FIFA96_ERR_INVALID;
+        rec->anim_sel = slot;
+      }
+      return FIFA96_OK;
+    }
+    {
+      /* 0x87676..0x87694: ((P[+0xE] << 4) - P[+0xE]) << 3 >> 4, signed compare
+       * (`JG`): a gate above timer89 waits at the target sync (0x87714). */
+      uint32_t gate = (uint32_t)(int32_t)rec->player_e;
+      gate = (gate << 4) - gate;
+      gate <<= 3;
+      if (((int32_t)gate >> 4) > rec->timer89) {
+        fifa96_arm_29_sync(rec);
+        return FIFA96_OK;
+      }
+    }
+    if (rec->active != 0) {
+      /* 0x876C0..0x876D0: the 0x6E1D0 phase-cell wrapper. It reads the
+       * [rec+8] descriptor pair at +0/+1, or +2/+3 when
+       * `[rec+0x826] == [0x157AAC]>>24` (the derived `side_controlled` ruled
+       * as the byte compare, FU-142 Appendix B.3), and negates both axes for
+       * side != 0. */
+      uint32_t which = (rec->side == rec->side_controlled) ? 1u : 0u;
+      fifa96_action_vec3 cell;
+      if (fifa96_action_phase_cell(rec->cell[which][0], rec->cell[which][1],
+                                   rec->side, &cell) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->target.x = cell.x;
+      rec->target.y = cell.y;
+      rec->target.z = cell.z;
+    } else {
+      fifa96_arm_29_sync(rec);               /* 0x876A3..0x876BE */
+    }
+    {
+      /* 0x876D5..0x876EC: the 0x8DCD4 out triple; the distance word
+       * (+0x65) gates `> 0x20` and the dz word is the record lane (+0x69). */
+      int32_t distance;
+      int32_t lane;
+      if (fifa96_arm_dist_stage(&rec->pos, &rec->target, &distance, &lane) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->lane = lane;
+      if (distance > 0x20) return FIFA96_OK;
+    }
+    if (rec->chase != 0) return FIFA96_OK;   /* 0x876EE..0x876FA */
+    rec->timer89 = 0;                        /* 0x87702 */
+    rec->stage92 = 2;                        /* 0x8770C..0x8770E */
+    return FIFA96_OK;
+  }
+  /* 0x87714..0x8772B: stage 2 syncs target=pos and the velocity pair. */
+  fifa96_arm_29_sync(rec);
   return FIFA96_OK;
 }

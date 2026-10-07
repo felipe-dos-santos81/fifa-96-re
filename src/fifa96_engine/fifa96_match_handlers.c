@@ -15,10 +15,10 @@
  * other row is either `not ported` (fn NULL, -FIFA96_ERR_UNSUPPORTED with its
  * port group) or the six remaining keeper rows 19/1A/1B/1C/1D/1F (fn NULL,
  * tested pure parts but unported arms — FU-140 OL-33..OL-37); the
- * 0x29/0x2B rows are FU-137 open legs (no static install arm found, OL-15)
- * and rows 27 (Task 4) / 2C (Task 5) have ported bodies but no static entry
- * (FU-142f/OL-48). Phase 0x16 is the native zero/INT3 slot and returns
- * -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with their derived
+ * 0x2B row is a FU-137 open leg (one-byte RET at the row-29 epilogue, OL-15)
+ * and rows 27 (Task 4) / 2C (Task 5) / 29 (Task 6) have ported bodies but no
+ * static entry (FU-142f/OL-48). Phase 0x16 is the native zero/INT3 slot and
+ * returns -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with their derived
  * body and update the evidence string; they must not change the code/class of a
  * row without an FU-doc errata. FU-139 (cluster B) derives the ball
  * staging/resolver/possession/kick helpers (tested in
@@ -33,8 +33,8 @@
  * 0x79C50/0x6E598 helpers) but keeps the row unwired: no static entry exists
  * (the only reference to 0x86820 is the action-table slot itself, FU-142b
  * Appendix D.1), so the row's evidence names the FU-142f/OL-48 entry verdict.
- * The remaining cluster-G rows stay unwired (29 entry OL-48, 2C body ported
- * in Task 5 but entry OL-48, 28/2A their body tasks). */
+ * The remaining cluster-G rows stay unwired (29/2C bodies ported in Tasks 5/6
+ * but entries OL-48, 28/2A their body tasks). */
 #include <stddef.h>
 #include <string.h>
 
@@ -213,7 +213,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x27, NULL,
      "FU-142b App. D/FU-137 §5.3: row 27 body 0x86820..0x86A02 ported; no static entry found (only the action-table slot 0x11077C references the body); entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},
     {0x28, NULL, "FU-137 arm 0x8D7CF (phase 13/14 player side); body 0x0870E8 unanalyzed; OL-15"},
-    {0x29, NULL, "FU-137 open leg: no install arm or match-code 0x29 reference found; OL-15"},
+    {0x29, NULL,
+     "FU-142c App. F/FU-137 §5.3: row 29 body 0x874E4..0x87738 ported (fifa96_arm_29_step; phase-5 machine, self-install 3); the action-table slot 0x110784 is the only body reference and no static installer of 0x29 exists (the phase-5 handler 0x6E05C has no installer call); entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},
     {0x2A, NULL, "FU-137 arm 0x8D807 (scan [rec+0x9A], store [team+0x831]); body 0x086A34; OL-15"},
     {0x2B, NULL, "FU-137 open leg: native body is one-byte RET 0x87738; no install arm found; OL-15"},
     {0x2C, NULL, "FU-142b App. E/FU-137 §5.3: row 2C body 0x84598..0x8462D ported (fifa96_arm_2c_step + fifa96_arm_reset); the action-table slot is the only reference to the body; entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},

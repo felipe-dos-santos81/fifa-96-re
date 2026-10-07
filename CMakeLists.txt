@@ -279,9 +279,11 @@ target_link_libraries(test_arm_helpers PRIVATE fifa96_arm_helpers)
 add_test(NAME test_arm_helpers COMMAND test_arm_helpers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_arm_bodies src/fifa96_loader/fifa96_arm_bodies.c)
-target_link_libraries(fifa96_arm_bodies PRIVATE fifa96_arm_helpers)
+target_link_libraries(fifa96_arm_bodies PRIVATE fifa96_arm_helpers fifa96_action_handlers
+                                              fifa96_entity_update fifa96_rng)
 add_executable(test_arm_bodies tests/test_arm_bodies.c)
-target_link_libraries(test_arm_bodies PRIVATE fifa96_arm_bodies fifa96_arm_helpers)
+target_link_libraries(test_arm_bodies PRIVATE fifa96_arm_bodies fifa96_arm_helpers
+                                            fifa96_entity_update fifa96_rng)
 add_test(NAME test_arm_bodies COMMAND test_arm_bodies WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_animation src/fifa96_loader/fifa96_animation.c)

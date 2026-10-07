@@ -25,8 +25,11 @@
  * FU-142f/OL-48 entry verdict and its dispatch expectation stays UNSUP. FU-142b
  * Task 5 ports row 2C's body (`fifa96_arm_2c_step` + `fifa96_arm_reset`) under
  * the same verdict: no static entry, `fn == NULL`, OL-48 evidence, UNSUP
- * dispatch. The seam itself must run a handler and propagate its result when
- * one is present. */
+ * dispatch. Task 6 ports row 29's body (`fifa96_arm_29_step`, the phase-5
+ * stage machine) with the same verdict (no static installer of 0x29; the
+ * phase-5 handler installs nothing), so row 29 keeps `fn == NULL`, OL-48
+ * evidence and UNSUP dispatch. The seam itself must run a handler and
+ * propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -47,9 +50,9 @@
  * the FU-142 Appendix C placement machine; the only cluster-G row whose
  * install arm + body + pool binding are all bounded). All other action rows
  * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
- * tested pure parts but unported arms; rows 27 and 2C have ported bodies but
- * unwired with their entries unresolved; the rest are `not ported`, with
- * 29/2B still entry-unresolved). FU-139 (cluster B)
+ * tested pure parts but unported arms; rows 27, 2C and 29 have ported bodies
+ * but are unwired with their entries unresolved; the rest are `not ported`,
+ * with 2B still entry-unresolved). FU-139 (cluster B)
  * keeps 05/06/07/0F and the possession/tackle rows 18/21/23 UNSUP: their
  * record-visible cores have tested pure helpers, but the
  * carrier/pursuit/kick/receive/resolution arms are unported (the FU-141
@@ -334,6 +337,28 @@ static void test_action_2C_unwired_entry(void) {
   drop_fixture(&f);
 }
 
+/* FU-142c (M2 arms-and-wiring Task 6, FU-142 Appendix F): row 29's body
+ * `0x874E4..0x87738` is ported (`fifa96_arm_29_step`) but its entry is
+ * unresolved: the only reference to `0x874E4` in the program is the action
+ * table slot `0x110784` itself; the sole `MOV EDX,0x29` site is
+ * `0x1F53C` inside the non-match `FUN_0001F440` (tail `MOV EAX,0x6B;
+ * CALL 0x13600`, no installer call); the phase-5 handler `0x6E05C..0x6E1B2`
+ * (the body's own phase gate) contains no `FUN_0007D9A4` call; and the body's
+ * own `0x8753C` install is code 3 (the phase != 5 self-install). The row
+ * therefore stays `fn == NULL` with the OL-48 marker and still dispatches
+ * UNSUP. */
+static void test_action_29_unwired_entry(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x29];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-142c") != NULL);
+  assert(strstr(row->evidence, "OL-48") != NULL);
+  assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x29) == UNSUP);
+  drop_fixture(&f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f;
   make_fixture(&f);
@@ -410,6 +435,7 @@ int main(void) {
   test_action_26_runs_body();
   test_action_27_unwired_entry();
   test_action_2C_unwired_entry();
+  test_action_29_unwired_entry();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

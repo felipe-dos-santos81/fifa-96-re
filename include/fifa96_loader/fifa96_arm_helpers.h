@@ -12,6 +12,7 @@
 #pragma once
 #include <stdint.h>
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 
 struct fifa96_rng;
 
@@ -48,6 +49,17 @@ struct fifa96_arm_record {
   uint8_t flag44;          /* native +0x44 anim-row terminal flag (row 27) */
   uint8_t anim_overflow;   /* derived: pair walk left the table (step-cleared) */
   struct fifa96_rng *rng;  /* RNG for the bodies that draw (Tasks 4+) */
+  /* Row 29 (`0x874E4`, FU-142c Appendix F) fields. */
+  uint8_t phase;           /* [0x157A4A]>>24: the phase-5 machine gate */
+  uint8_t skip_9a;         /* +0x9A: occupied/skip byte (install pre-check) */
+  uint8_t team_index;      /* this record's index in `team_candidates` */
+  uint8_t ball_skip;       /* byte [[0x157A9F]+0x8D]: nearest-search skip index */
+  uint8_t chase;           /* derived: [0x10F36C] == this record (stage gates) */
+  uint8_t side_controlled; /* [0x157AAC]>>24: the phase-cell pair selector */
+  uint8_t install;         /* derived install request code, 0 = none (row 29) */
+  int8_t cell[2][2];       /* [rec+8] descriptor: [0] = +0/+1, [1] = +2/+3 */
+  fifa96_arm_vec ball_pos; /* [[0x157A9F]+0x59]: nearest-search target (x, z) */
+  const fifa96_entity_candidate *team_candidates; /* [rec+0]: the 11 records */
 };
 
 /* `FUN_0007DAB4` (`0x7DAB4..0x7DB0C`, 35 instructions) derived reset subset, as

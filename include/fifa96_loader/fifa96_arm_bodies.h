@@ -40,3 +40,27 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec);
  * `fifa96_arm_reset` (stage92 = 0xFF, timer89 = 0, code = 0). NULL `rec` ->
  * -FIFA96_ERR_INVALID. */
 fifa96_err_t fifa96_arm_2c_step(struct fifa96_arm_record *rec);
+
+/* Row 0x29 body `0x874E4..0x87738` (187 instructions; action-table row 0x29 =
+ * 0x874E4 with no static entry, FU-142 OL-48): the phase-5 stage machine per
+ * FU-142 Appendix F. The prologue writes `timer7b = 2`; when the record's
+ * `phase` (`[0x157A4A]>>24`) is not 5 the body syncs `target = pos`, zeroes
+ * the velocity pair, runs the `fifa96_arm_reset` subset and, when
+ * `skip_9a == 0`, requests install code 3 (`install = 3`, consumed by the pool
+ * installer; the native `0x8753C` call). In phase 5 the stage latch runs:
+ * stage 0 runs the `0x8DE8C` nearest search (`fifa96_entity_find_nearest`,
+ * fixed 11 candidates from `team_candidates`, skip `ball_skip`, target
+ * `ball_pos.x/z`) and, when the nearest is this record, stores the chase bit,
+ * syncs the target/velocity, draws one RNG word (`0x92AC8`; `& 1` selects id
+ * 0x5D else 0x46) and resolves it through `fifa96_arm_anim_select`; either way
+ * `timer89 = 0`, `stage92 = 1`, then stage 1 runs in the same call. Stage 1
+ * with `chase` syncs and returns (flag44 != 0 re-runs the selector); otherwise
+ * the `P[+0xE]` gate (`player_e`) waits at the sync; below it, `active != 0`
+ * runs the `0x6E1D0` phase cell (`fifa96_action_phase_cell` over the `cell`
+ * pair selected by `side == side_controlled`) into the target and
+ * `active == 0` syncs target=pos; the `0x8DCD4` distance gate (`> 0x20`
+ * returns, `lane` stored), the chase re-check, then `timer89 = 0`,
+ * `stage92 = 2`. Stage 2 syncs target=pos/velocity only. NULL `rec`, or a
+ * phase-5 call with NULL `rng`/`team_candidates`, -> -FIFA96_ERR_INVALID
+ * before any write. */
+fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec);
