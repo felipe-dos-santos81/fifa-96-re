@@ -1,7 +1,8 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
-#include "fifa96_engine/fifa96_frontend_run.h" /* engine key codes 1..7 */
+#include "fifa96_engine/fifa96_keys.h"
+#include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_control.h"
 #include "fifa96_loader/fifa96_input.h"
 #include "fifa96_loader/fifa96_match_lifecycle.h"
@@ -28,9 +29,6 @@
  * complete caller-supplied backend verbatim, and replaces an incomplete one
  * (any of the four NULL) with the engine defaults; a custom backend must
  * therefore provide all four callbacks. */
-#define FIFA96_ENGINE_KEY_KICK 8
-#define FIFA96_ENGINE_KEY_PASS 9
-
 struct fifa96_engine;
 
 struct fifa96_match_run {
@@ -43,6 +41,7 @@ struct fifa96_match_run {
   uint32_t steps;                                /* run steps since begin */
   int running;                                   /* begin/end balance */
   struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
+  uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
 };
 
@@ -55,11 +54,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr);
  * state == 1 only) into the FU-61 keyboard-handler code byte (directions
  * 0x1/0x2/0x4/0x8 = up/down/right/left, buttons 0x10 kick / 0x20 pass), pass
  * it through the FU-61 identity mapping row into the run's fifa96_input
- * edge/held model, and update the controlled player's FU-70 control slot with
- * the mapped state. A key absent from a later call reads as released through
- * the input model's previous-state array. Returns 0, or -FIFA96_ERR_INVALID
- * when `mr` is NULL; NULL `keys` and `count == 0` are tolerated as a no-input
- * tick. */
+ * edge/held model, and latch the mapped per-player state for the frame body.
+ * A key absent from a later call reads as released through the input model's
+ * previous-state array. The FU-70 control slot is NOT touched here: its update
+ * runs once per granted frame inside fifa96_match_run_frame (FU-70 §1.1).
+ * Returns 0, or -FIFA96_ERR_INVALID when `mr` is NULL; NULL `keys` and
+ * `count == 0` are tolerated as a no-input poll. */
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
                            size_t count);
 
@@ -72,9 +72,11 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
                            uint32_t selector);
 
 /* Exactly one 10 ms/100 Hz pace tick of the match frame body. Feeds the FU-60
- * pace (blocked = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame and
- * the match state advanced one 0x200 step, 0 = no frame was due, or a
- * -fifa96_err_t. A period end marks the lifecycle over.
+ * pace (blocked = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame, the
+ * match state advanced one 0x200 step and the controlled player's FU-70 slot
+ * was updated once with the FU-62 §4.3 whole frame delta
+ * (`state.frame_delta`, 2 at the 0x200 step = 60 counter units/s); 0 = no
+ * frame was due; or a -fifa96_err_t. A period end marks the lifecycle over.
  *
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */

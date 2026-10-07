@@ -1,17 +1,10 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_engine/fifa96_surface.h"
 #include "fifa96_loader/fifa96_frontend.h"
-
-#define FIFA96_ENGINE_KEY_UP      1
-#define FIFA96_ENGINE_KEY_DOWN    2
-#define FIFA96_ENGINE_KEY_LEFT    3
-#define FIFA96_ENGINE_KEY_RIGHT   4
-#define FIFA96_ENGINE_KEY_CONFIRM 5
-#define FIFA96_ENGINE_KEY_DECLINE 6
-#define FIFA96_ENGINE_KEY_QUIT    7
 
 /* Engine-level front-end driver: maps platform keys to the game codes the
  * fifa96_frontend state machine understands, queues them, and steps the

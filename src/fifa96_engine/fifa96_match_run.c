@@ -26,11 +26,6 @@ static const uint8_t match_run_input_row[FIFA96_INPUT_MAP_ROW] = {
   0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 };
 
-/* FU-70's slot counter advances by the frame-clock high word once per 30 Hz
- * frame; the engine polls input per step, so one unit per poll approximates a
- * frame tick (the exact frame-clock delta is a Task 16 concern). */
-#define FIFA96_MATCH_RUN_SLOT_DELTA 1u
-
 /* Engine keys -> FU-61 §1.2 keyboard-handler codes. Directions: the handler
  * ORs 0x1 (0x46934, flag 0x112BEC = scancode 0x48 keypad 8/up), 0x2 (0x46941,
  * 0x50 keypad 2/down), 0x8 (0x46945, 0x4B keypad 4/left) and 0x4 (0x46952,
@@ -67,9 +62,7 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   (void)fifa96_input_map(raw, match_run_input_row, &mapped);
   current[0] = mapped;
   (void)fifa96_input_update(&mr->input, current);
-  (void)fifa96_control_slot_update(&mr->slot, current[0], FIFA96_MATCH_RUN_SLOT_DELTA,
-                                   match_run_slot_map, match_run_anim_a, match_run_anim_b,
-                                   match_run_anim_c);
+  memcpy(mr->input_state, current, sizeof current);   /* sampled slot input */
   return 0;
 }
 
@@ -130,6 +123,7 @@ static void fifa96_match_run_install_defaults(struct fifa96_match_run *mr) {
  * ordinal 0, side 0). */
 static void fifa96_match_run_reset_input(struct fifa96_match_run *mr) {
   fifa96_input_init(&mr->input);
+  memset(mr->input_state, 0, sizeof mr->input_state);
   memset(&mr->slot, 0, sizeof mr->slot);
   (void)fifa96_control_slot_init(&mr->slot, 0, 1, 0, 0);
 }
@@ -179,6 +173,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
 
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
+  uint32_t granted;
   int period_ended = 0;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
@@ -190,11 +185,21 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   pending = fifa96_match_pace_pending(&mr->pace);
   rc = fifa96_match_state_tick(&mr->state, &mr->pace, 0, 0, &period_ended);
   if (rc != 0) return rc;
+  granted = fifa96_match_pace_pending(&mr->pace) - pending;
+  /* FU-70 §1.1: the slot machine runs from the frame body once per granted
+   * 30 Hz frame with the FU-62 §4.3 whole-frame delta (2 at the 0x200 step,
+   * i.e. 60 counter units/s). One pace tick grants at most one frame today;
+   * the loop keeps one update per grant if that ever changes. */
+  for (uint32_t i = 0; i < granted; i++) {
+    (void)fifa96_control_slot_update(&mr->slot, mr->input_state[0],
+                                     (uint8_t)mr->state.frame_delta, match_run_slot_map,
+                                     match_run_anim_a, match_run_anim_b, match_run_anim_c);
+  }
   if (period_ended) {
     rc = fifa96_match_lifecycle_mark_over(&mr->lc);
     if (rc != 0) return rc;
   }
-  return fifa96_match_pace_pending(&mr->pace) != pending;
+  return granted != 0;
 }
 
 int fifa96_match_run_step(struct fifa96_match_run *mr) {
