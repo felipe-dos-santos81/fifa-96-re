@@ -377,12 +377,14 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_cache.c
   src/fifa96_engine/fifa96_intro.c
   src/fifa96_engine/fifa96_frontend_run.c
+  src/fifa96_engine/fifa96_match_run.c
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
-                                          fifa96_frontend fifa96_sprite)
+                                          fifa96_frontend fifa96_sprite fifa96_match_lifecycle
+                                          fifa96_match_pace)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
@@ -427,4 +429,9 @@ add_test(NAME test_engine_menu_art COMMAND test_engine_menu_art
 add_executable(test_engine_m1 tests/test_engine_m1.c)
 target_link_libraries(test_engine_m1 PRIVATE fifa96_engine)
 add_test(NAME test_engine_m1 COMMAND test_engine_m1
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_lifecycle tests/test_engine_match_lifecycle.c)
+target_link_libraries(test_engine_match_lifecycle PRIVATE fifa96_engine)
+add_test(NAME test_engine_match_lifecycle COMMAND test_engine_match_lifecycle
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

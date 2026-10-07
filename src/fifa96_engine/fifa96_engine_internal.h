@@ -5,12 +5,14 @@
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_frontend_run.h"
 #include "fifa96_engine/fifa96_intro.h"
+#include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_surface.h"
 
 enum fifa96_engine_mode {
   FIFA96_ENGINE_MODE_INTRO = 0,
   FIFA96_ENGINE_MODE_FRONTEND = 1,
-  FIFA96_ENGINE_MODE_QUIT = 2
+  FIFA96_ENGINE_MODE_QUIT = 2,
+  FIFA96_ENGINE_MODE_MATCH = 3
 };
 
 struct fifa96_engine {
@@ -26,6 +28,7 @@ struct fifa96_engine {
   int intro_active;             /* intro stream loaded and still stepping */
   uint32_t intro_frames;        /* video frames advanced at 15 fps */
   struct fifa96_frontend_run frontend;
+  struct fifa96_match_run *match; /* active match driver, NULL when none */
   enum fifa96_engine_mode mode;
   struct fifa96_engine_clock clock;
   uint64_t last_ns;      /* now_ns() at the previous step; 0 before the first */

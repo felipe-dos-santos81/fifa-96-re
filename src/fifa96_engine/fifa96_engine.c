@@ -193,6 +193,14 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       e->quit = 1;
       e->mode = FIFA96_ENGINE_MODE_QUIT;
     }
+  } else if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
+    /* The clock advance above already fired the run's 100 Hz callback; this
+     * dispatch consumes the lifecycle state (Task 13 adds the frame body). */
+    if (!e->match) {
+      e->mode = FIFA96_ENGINE_MODE_FRONTEND;
+    } else if (fifa96_match_run_step(e->match) < 0) {
+      return -1;
+    }
   }
   fifa96_platform_frame f;
   fifa96_surface_plane(e->surface, &f);
@@ -214,6 +222,7 @@ int fifa96_engine_should_quit(const struct fifa96_engine *e) {
 }
 void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
+  if (e->match && e->match->running) fifa96_match_run_end(e->match);
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_surface_destroy(e->surface);
   fifa96_cache_destroy(e->cache);
