@@ -532,6 +532,11 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
 #define MATCH_STAGE_DECODE_STAGES 4
 #define MATCH_STAGE_FRAME_SIZE 5
 #define MATCH_STAGE_FRAME_DURATION 0x50u   /* FU-84 §4 row 1 (walk) */
+/* FU-84's frame index is a byte and fifa96_render_resolve accepts the signed
+ * non-negative half (0..0x7F, `fi = (int8_t)frame_index` in fifa96_render.c);
+ * the staged table covers the whole resolver domain so no accepted index can
+ * read past it. */
+#define MATCH_STAGE_FRAMES_MAX 128u
 
 /* One BIGF entry after decode: an owned SHPI image, or the unloaded slot the
  * renderer skips (FU-85 §1.2: a NULL bank handle). */
@@ -545,7 +550,6 @@ struct match_stage_set {
   struct match_stage_item *items;
   uint32_t count;       /* slots = BIGF entry count (indices stay stable) */
   uint32_t loaded;      /* slots with a decoded SHPI bank */
-  uint32_t max_frames;  /* largest SHPI frame count in the set */
 };
 
 static void match_stage_set_free(struct match_stage_set *set) {
@@ -692,7 +696,6 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
       set->items[i].len = bank_len;
       set->items[i].count = bank_count;
       set->loaded++;
-      if (bank_count > set->max_frames) set->max_frames = bank_count;
     } else if (got < 0) {
       set->items[i].data = NULL;   /* shaped like a bank but undecodable */
     }
@@ -730,10 +733,13 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   struct fifa96_render_bank *banks;
   uint8_t *frames;
   uint32_t total;
-  uint32_t max_frames;
   int rc;
 
   if (!mr || !s || !player_bank || !pitch_bank) return -FIFA96_ERR_INVALID;
+  /* A live run guarantees the engine (and its asset table) outlives the arena
+   * the run takes ownership of; staging after end would otherwise strand the
+   * arena (end releases once) or reach a destroyed engine. */
+  if (!mr->running) return -FIFA96_ERR_STATE;
   if (!mr->engine || !mr->engine->assets) return -FIFA96_ERR_STATE;
 
   memset(&player, 0, sizeof player);
@@ -769,9 +775,8 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
    * point into the SHPI copies) and the SHPI images. Nothing touches mr until
    * the whole build succeeds. */
   total = player.count + pitch.count;
-  max_frames = player.max_frames > pitch.max_frames ? player.max_frames : pitch.max_frames;
   const size_t bank_align = _Alignof(struct fifa96_render_bank);
-  frames_len = (size_t)max_frames * MATCH_STAGE_FRAME_SIZE;
+  frames_len = (size_t)MATCH_STAGE_FRAMES_MAX * MATCH_STAGE_FRAME_SIZE;
   banks_off = match_stage_pad(frames_len, bank_align);
   data_off = match_stage_pad(banks_off + (size_t)total * sizeof *banks, 4u);
   for (uint32_t i = 0; i < player.count; i++)
@@ -792,10 +797,10 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   banks = (struct fifa96_render_bank *)(void *)(arena + banks_off);
 
   /* FU-84 §4 frame records: the row-1 walk evidence stores sprite = frame
-   * index with duration 0x50, so staging derives that identity table for the
-   * largest staged bank; the real per-row tables are executable object-4 data
-   * (0x10E200..0x10EF00), not ISO assets (open leg). */
-  for (uint32_t i = 0; i < max_frames; i++) {
+   * index with duration 0x50, so staging derives that identity table across
+   * the resolver's whole 128-index domain; the real per-row tables are
+   * executable object-4 data (0x10E200..0x10EF00), not ISO assets (open leg). */
+  for (uint32_t i = 0; i < MATCH_STAGE_FRAMES_MAX; i++) {
     frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 0] = (uint8_t)MATCH_STAGE_FRAME_DURATION;
     frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 1] = 0;
     frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 2] = 0;
@@ -805,6 +810,7 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
 
   size_t cursor = data_off;
   uint32_t slot = 0;
+  uint32_t base_slot = 0;
   const struct match_stage_set *sets[2] = { &player, &pitch };
   for (int which = 0; which < 2; which++) {
     const struct match_stage_set *set = sets[which];
@@ -816,9 +822,16 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
       b->base = copy;
       b->offsets = (const int32_t *)(const void *)(copy + 0x14);
       b->count = set->items[i].count;
-      b->step = fifa96_sprite_stride(slot, set->items[i].count);
+      /* The FU-86 §4.1 stride switch indexes the animator-record array of the
+       * container the bank came from (the player container is the derived
+       * 0x57DE8 array; indices 0..90). Appended containers have no derived
+       * animator identity (open leg), so their banks use a container-local
+       * index instead of leaking into the player switch's classes (the old
+       * global slot 0x5B hit /2 by accident). */
+      b->step = fifa96_sprite_stride(slot - base_slot, set->items[i].count);
       cursor += match_stage_pad(set->items[i].len, 4u);
     }
+    base_slot += set->count;
   }
 
   free(mr->stage_owner);

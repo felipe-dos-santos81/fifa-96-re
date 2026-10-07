@@ -492,6 +492,7 @@ add_test(NAME test_engine_match_bridge COMMAND test_engine_match_bridge
 
 add_executable(test_engine_match_staging tests/test_engine_match_staging.c)
 target_link_libraries(test_engine_match_staging PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_staging PRIVATE src)
 target_compile_options(test_engine_match_staging PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_staging PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_staging COMMAND test_engine_match_staging
