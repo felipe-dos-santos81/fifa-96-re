@@ -94,7 +94,9 @@ static void test_phase_derivation(void) {
 }
 
 /* CONFIRM is the FU-66 fire key (action code -10): with the M1 constant
- * confirm gate the library records a real CONFIRM. */
+ * confirm gate the library records a real CONFIRM. The M1 wrapper then
+ * releases the confirm-driven EXIT on the following step so the menu keeps
+ * accepting input (the real FU-65/66 post-confirm transition is M2). */
 static void test_confirm_gate(void) {
   struct fifa96_surface *s = fifa96_surface_create(320, 240);
   struct fifa96_frontend_run fr;
@@ -105,6 +107,15 @@ static void test_confirm_gate(void) {
   press(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
   assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
   assert(fr.frontend.confirm == 1);
+  assert(quit == 0);
+
+  /* The next event completes the return to the front-end: the menu is not
+   * locked in EXIT and still accepts navigation. */
+  press(&fr, FIFA96_ENGINE_KEY_DOWN, 1);
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fr.phase == FIFA96_FRONTEND_PHASE_FRONTEND);
+  assert(fr.frontend.confirm == 0);
+  assert(quit == 0);
 
   fifa96_surface_destroy(s);
 }

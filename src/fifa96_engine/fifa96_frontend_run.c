@@ -52,6 +52,16 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
   *quit = 0;
   int library_exit = 0;
 
+  /* M1: an accepted CONFIRM (the gated -10 path, or a panel confirm) parks
+   * the library in EXIT and only fifa96_frontend_init clears the confirm
+   * flag. There are no panels/matches to enter at M1, so consume the
+   * accepted confirm and return the front-end to its navigable phase on the
+   * following step; M2 replaces this with the real FU-65/66 transition. */
+  if (fr->frontend.confirm != 0) {
+    fr->frontend.confirm = 0;
+    fifa96_frontend_panel_result(&fr->frontend);
+  }
+
   if (fifa96_frontend_driver(&fr->frontend) != 0) return -1;
   for (int i = 0; i < fr->queue_len; i++) {
     int32_t code = fr->queue[i];
@@ -97,9 +107,8 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
     uint32_t state = fr->entry_state;
     if (fifa96_frontend_entry_state(&fr->frontend, &state) == 1) fr->entry_state = state;
   }
-  /* An accepted CONFIRM parks the driver in EXIT but the run resumes on the
-   * next input (Task 10's tape selects, then declines, then quits); only the
-   * QUIT key or a settings exit leaves the engine. */
+  /* Only the QUIT key or a settings exit leaves the engine; an accepted
+   * CONFIRM is consumed at the top of the following step (see above). */
   if (fr->quit_requested || library_exit) *quit = 1;
 
   fifa96_surface_clear(s, 0);   /* Task 9 replaces this stub with the menu art */
