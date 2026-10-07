@@ -28,10 +28,11 @@ static int fifa96_match_run_cancel(void *ctx) {
 static int fifa96_match_run_teardown(void *ctx) {
   struct fifa96_match_run *mr = ctx;
   if (!mr) return -FIFA96_ERR_INVALID;
-  /* The foundation owns no match assets yet; clear the per-match counters.
-   * Task 13 extends this to the match state block. */
+  /* The foundation owns no match assets yet; clear the per-match counters and
+   * the match clock/period block. */
   mr->ticks = 0;
   mr->steps = 0;
+  fifa96_match_state_init(&mr->state);
   return 0;
 }
 
@@ -54,6 +55,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
   fifa96_match_pace_init(&mr->pace);
+  fifa96_match_state_init(&mr->state);
   mr->engine = NULL;
   mr->backend.register_callback = NULL;
   mr->backend.cancel_callback = NULL;
@@ -78,6 +80,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->engine = eng;
   mr->ticks = 0;
   mr->steps = 0;
+  fifa96_match_state_init(&mr->state); /* fresh match clock */
   int rc = fifa96_match_lifecycle_begin(&mr->lc, &mr->backend, &mr->pace, selector);
   if (rc != 0) {
     mr->engine = NULL;
@@ -89,12 +92,33 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   return 0;
 }
 
+int fifa96_match_run_frame(struct fifa96_match_run *mr) {
+  uint32_t pending;
+  int period_ended = 0;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  /* One 100 Hz pace tick (FU-60): fifa96_match_state_tick consumes the pace
+   * grant and, when granted, advances the Q8 clock by one
+   * FIFA96_MATCH_STATE_STEP with clock_halt = 0. The pending count is the
+   * grant observable, so this reports whether the 30 Hz frame actually ran. */
+  pending = fifa96_match_pace_pending(&mr->pace);
+  rc = fifa96_match_state_tick(&mr->state, &mr->pace, 0, 0, &period_ended);
+  if (rc != 0) return rc;
+  if (period_ended) {
+    rc = fifa96_match_lifecycle_mark_over(&mr->lc);
+    if (rc != 0) return rc;
+  }
+  return fifa96_match_pace_pending(&mr->pace) != pending;
+}
+
 int fifa96_match_run_step(struct fifa96_match_run *mr) {
+  int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->steps++;
   if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
-  return 0;
+  rc = fifa96_match_run_frame(mr);
+  return rc < 0 ? rc : 0; /* the exit step keeps 1; live steps stay 0 */
 }
 
 int fifa96_match_run_end(struct fifa96_match_run *mr) {

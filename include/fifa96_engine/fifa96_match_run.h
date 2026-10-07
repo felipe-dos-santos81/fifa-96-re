@@ -2,6 +2,7 @@
 #include <stdint.h>
 #include "fifa96_loader/fifa96_match_lifecycle.h"
 #include "fifa96_loader/fifa96_match_pace.h"
+#include "fifa96_loader/fifa96_match_state.h"
 
 /* Engine-level match driver (M2 foundation): owns the FU-64 lifecycle and the
  * FU-60 pace and binds them to an engine.
@@ -27,6 +28,7 @@ struct fifa96_engine;
 struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
+  struct fifa96_match_state state;               /* match clock/period block */
   struct fifa96_engine *engine;                  /* engine holding this run */
   struct fifa96_match_lifecycle_backend backend; /* engine callbacks or stub */
   uint32_t ticks;                                /* 100 Hz match callback hits */
@@ -45,8 +47,14 @@ void fifa96_match_run_init(struct fifa96_match_run *mr);
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector);
 
-/* One engine step of the run. Drives the lifecycle: 0 while live, the end
- * result (1 = post-exit) on the exit step, or a -fifa96_err_t. */
+/* One 100 Hz pace tick of the match frame body. Feeds the FU-60 pace (blocked
+ * = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame and the match state
+ * advanced one 0x200 step, 0 = no frame was due, or a -fifa96_err_t. A period
+ * end marks the lifecycle over. */
+int fifa96_match_run_frame(struct fifa96_match_run *mr);
+
+/* One engine step of the run. Drives the lifecycle and the frame body: 0 while
+ * live, the end result (1 = post-exit) on the exit step, or a -fifa96_err_t. */
 int fifa96_match_run_step(struct fifa96_match_run *mr);
 
 /* Tear the match down through the lifecycle and clear the engine linkage.
