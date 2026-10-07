@@ -273,6 +273,7 @@ add_test(NAME test_phase_drivers COMMAND test_phase_drivers WORKING_DIRECTORY ${
 
 # ── Cluster-G arms/bodies (FU-142b) ────────────────────────────────────────────
 add_library(fifa96_arm_helpers src/fifa96_loader/fifa96_arm_helpers.c)
+target_link_libraries(fifa96_arm_helpers PRIVATE fifa96_action_handlers)
 add_executable(test_arm_helpers tests/test_arm_helpers.c)
 target_link_libraries(test_arm_helpers PRIVATE fifa96_arm_helpers)
 add_test(NAME test_arm_helpers COMMAND test_arm_helpers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

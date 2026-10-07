@@ -28,8 +28,12 @@
  * `0x866F4..0x8681C` body (`fifa96_arm_26_step`, FU-142 Appendix C) and the
  * FU-141 pool binding are all bounded, so the row flips to `ported` and its
  * stage92/timer7b/lane results are repacked into the pool record by the frame
- * body. The remaining cluster-G rows stay unwired (27/29/2C entry OL-48,
- * 28/2A their body tasks). */
+ * body. FU-142b Task 4 ports row 27's body (`fifa96_arm_27_step` + the
+ * 0x79C50/0x6E598 helpers) but keeps the row unwired: no static entry exists
+ * (the only reference to 0x86820 is the action-table slot itself, FU-142b
+ * Appendix D.1), so the row's evidence names the FU-142f/OL-48 entry verdict.
+ * The remaining cluster-G rows stay unwired (29/2C entry OL-48, 28/2A their
+ * body tasks). */
 #include <stddef.h>
 #include <string.h>
 
@@ -205,7 +209,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x25, NULL, "FU-137 §6: FU-136 row 25: not ported (partial); FU-82 7-arm table 0x880B0; OL-9"},
     {0x26, fifa96_match_action_26,
      "FU-142b §C/FU-137 §5.2: row 26 ported (0x866F4..0x8681C + 0x8DCD4) over the pool; arm 0x8D74D; stage92/timer7b/lane repacked"},
-    {0x27, NULL, "FU-137 open leg: no install arm found (EDX=0x27 at 0x756D5 is an anim arg); body 0x086820 cut; OL-15"},
+    {0x27, NULL,
+     "FU-142b App. D/FU-137 §5.3: row 27 body 0x86820..0x86A02 ported; no static entry found (only the action-table slot 0x11077C references the body); entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},
     {0x28, NULL, "FU-137 arm 0x8D7CF (phase 13/14 player side); body 0x0870E8 unanalyzed; OL-15"},
     {0x29, NULL, "FU-137 open leg: no install arm or match-code 0x29 reference found; OL-15"},
     {0x2A, NULL, "FU-137 arm 0x8D807 (scan [rec+0x9A], store [team+0x831]); body 0x086A34; OL-15"},

@@ -17,3 +17,14 @@ fifa96_err_t fifa96_arm_stub_36200(void);
  * `player_d` outside the 32-byte 0x10F394 table -> -FIFA96_ERR_INVALID with the
  * record unchanged (hardening divergence, Appendix C.3). */
 fifa96_err_t fifa96_arm_26_step(struct fifa96_arm_record *rec);
+
+/* Row 0x27 body `0x86820..0x86A02` (136 instructions; action-table row 0x27 =
+ * 0x86820 with no static entry, FU-142 OL-48): the placement + face + paired
+ * animation machine per FU-142 Appendix D.3. The walk covers the prologue
+ * timer (`+0x89 += [0x157A64]`), the `(0x780, ±6*(active>>1))` placement, the
+ * `0x8DCD4` lane gate (|dz| < 0x20 -> retarget `0xCC0`), the face call
+ * (`fifa96_arm_face`), the 0..7 `[0x158782]` cycle read into the 0x1103CB
+ * 24-pair animation table, the stage-1 select and the stage-2 pair walk with
+ * the `[0x10F374]` cursor and the `+0x44` negative-time gate. NULL `rec` ->
+ * -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec);

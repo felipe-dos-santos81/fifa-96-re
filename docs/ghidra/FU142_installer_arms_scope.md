@@ -200,11 +200,27 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   C.2) with the shared helper `0x8DCD4` (`fifa96_arm_dist_stage`, C.3) and the
   `0x36200` stub surface (C.4); row 26 is wired (`fifa96_match_action_26`, the
   first cluster-G wiring), and the row's descriptor byte and stub-gate
-  remainders are OL-50/OL-51. Rows 27/28/29/2A/2C stay unported.**
+  remainders are OL-50/OL-51. Status (Task 4): row 27's body is ported
+  (`fifa96_arm_27_step`, Appendix D.3) with the shared helpers `0x79C50`
+  (`fifa96_arm_face`, D.4) and `0x6E598` (`fifa96_arm_anim_select`, D.5); the
+  row stays unwired (no entry, OL-48) and its remainder surfaces are
+  OL-52/OL-53. Rows 28/29/2A/2C stay unported.**
 * **OL-48 — dynamic entry for 27/29/2C; 2B dead verdict.** No static install
   arm exists (FU-137 §5.3 re-cited); a runtime/reachability pass is the
   precondition for scheduling those three rows. 0x2B is confirmed a shared-RET
   dead entry (§1.1) pending that pass's ratification.
+  **Status (Task 4): row 27's body is ported but the entry stays unresolved.**
+  First-hand this slice (Appendix D.1): `get_xrefs_to 0x86820` returns exactly
+  one reference — the action-table slot `0x11077C`; `search_byte_patterns
+  20 68 08 00` finds that same slot as the only occurrence of the body
+  pointer; `MOV EDX,0x27` has two sites (`0x756D5` inside the keeper handler,
+  the `CALL 0x6E598` animation arg; `0x1F52E` in `FUN_0001F440`, whose tail
+  `0x1F55D MOV EAX,0x6B; CALL 0x13600` is not an installer), `MOV DX,0x27`
+  returns the same two, `MOV ECX,0x27` has no real site, and `0x8CEB8`'s 15
+  arms (Appendix A.4) stage no code 0x27. A register-derived installer
+  argument cannot be excluded by a constant census, so the FU-142f
+  runtime/reachability pass remains the precondition; row 27 keeps `fn ==
+  NULL` and the `-FIFA96_ERR_UNSUPPORTED` dispatch.
 * Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41, FU-137 OL-15 (closes
   nothing new; the 0x26/0x28/0x2A arms stay as classified until their bodies
   land).
@@ -219,6 +235,23 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   exhaustion as `chosen831 = FIFA96_MATCH_ENTITY_NONE` + `arm2a_overflow = 1`
   with no pool record written. Nothing observable is lost: the aliased tail
   byte is outside the derived record surface. See Appendix B.4.
+* **OL-52 — row-27 animation-selector record surface.** `fifa96_arm_anim_select`
+  ports only `FUN_0006E598`'s deterministic id resolution/clamp (Appendix
+  D.5). The native record writes — row pointer `[rec+0x28]`, flag fan-out
+  `+0x43/+0x44/+0x45/+0x46/+0x3F`, frame resolve `FUN_0006E490`, accumulator
+  `[rec+0x32] = 0` — the side-sensitive `[0x57A6C]` write and the
+  `([0x57A4A]>>24 != 2 && DX == 0)` RNG reroll (`RNG & 3` -> `{0, 0x62,
+  0x65}`) are unported; row 27's `0x1103CB` ids are never 0, so the reroll is
+  unreachable from the row and its stage-2 `+0x44` consumer is the staged
+  `flag44` stand-in. Full model: FU-84 §1.
+* **OL-53 — row-27 pair-walk globals and bounds.** Native `[0x158782]` (the
+  0..7 cycle, seeded `RNG & 7` by `FUN_0007D8D0` `0x7D8FC`) and the high word
+  of `[0x10F372]` (`0x10F374`, the pair cursor, BSS zero) are process globals
+  shared by every record; the derived record carries them per record. The
+  native cursor is unbounded and walks dword pairs past the 96-byte `0x1103CB`
+  table into the adjacent `0x11042B` data; the derived model stops at the 24th
+  pair and sets `anim_overflow` instead (no adjacent-data read). Multi-record
+  interleaving is not modelled.
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -677,6 +710,187 @@ Write set of this appendix (Task 3): `include/fifa96_loader/fifa96_arm_helpers.h
 `include/fifa96_engine/fifa96_match_run.h`,
 `src/fifa96_engine/fifa96_match_run.c`, `tests/test_engine_match_handlers.c`,
 `CMakeLists.txt`, this appendix and the §6 OL-47 / §7 additions.
+
+## Appendix D (FU142b / M2 arms-and-wiring Task 4) — row 0x27 body + `0x79C50` face + `0x6E598` anim selector first-hand window
+
+Task 4 of the follow-up plan ports action row 0x27 (`0x86820..0x86A02`, 136
+instructions), its two helpers `FUN_00079C50` (`0x79C50..0x79C98`, 28 insns)
+and `FUN_0006E598` (`0x6E598..0x6E713`) and the `0x1103CB` animation table
+into the tested loader symbols `fifa96_arm_27_step` / `fifa96_arm_face` /
+`fifa96_arm_anim_select`. The row has **no static entry** and therefore stays
+unwired (OL-48): D.1 records what an entry would be, where the slices
+searched and the negative result. This appendix is its evidence gate: the
+exact fields, constants and branch sites below are read first-hand this slice
+and are what the port implements.
+
+### D.1 Entry probe (what would constitute an entry; where searched; negative result)
+
+An entry for the row body would be one of: (a) a direct `CALL`/code pointer to
+`0x86820`; (b) a match-code `MOV EDX,0x27` (installer argument) or
+`MOV ECX,0x27` (FU-142a arm argument) feeding `FUN_0007D9A4` (FU-137 §2
+installer) or `FUN_0008CEB8`; (c) any non-action-table pointer to the body.
+
+| probe (read-only `/FIFA96.EXE`) | result |
+|---|---|
+| `get_xrefs_to 0x86820` | **1 reference: DATA from `0x11077C`** — the action-table slot `0x1106E0 + 0x27*4` |
+| `search_instructions operand 0x86820` | 0 matches |
+| `search_byte_patterns 20 68 08 00` (the little-endian body pointer) | **1 hit: `0x11077C`** — the action-table slot itself; no other pointer table holds the body |
+| `search_instructions mnemonic=MOV operand="EDX, 0x27"` | 2 sites. `0x756D5` inside the keeper handler: `MOV EDX,0x27; MOV EAX,[EBP-0xC]; MOV ECX,[ECX+0x8B]; XOR EBX,EBX; SAR ECX,0x18; CALL 0x6E598` (`0x756D5..0x756E8`, the FU-137 §5.3 animation-row argument). `0x1F52E` in `FUN_0001F440`: a jump-table selector (EDX = 0x25/0x27/0x2B/0x29/0x26/0x28/0x2A) whose common tail `0x1F55D MOV EAX,0x6B; CALL 0x13600` is a generic call, not an installer |
+| `search_instructions mnemonic=MOV operand="DX, 0x27"` | the same two sites |
+| `search_instructions mnemonic=MOV operand="ECX, 0x27"` | 0 (only `ECX,0x270F`/`0x2710` constants) |
+| `get_xrefs_to 0x8CEB8` | 15 refs, all `UNCONDITIONAL_CALL` inside `FUN_0008D098`; Appendix A.4 lists the staged codes 0, 3, 0x15, 0x25, 0x26, 0x28, 0x2A — **no 0x27** |
+| `get_xrefs_to 0x7D9A4` | 77 call sites, none reached by an `EDX=0x27` constant site above |
+
+**Negative result: the body has no static entry; the action-table slot is the
+only reference to it anywhere in the program image.** A register-derived
+(`EDX` loaded from a record field) installer argument cannot be excluded by a
+constant census, so the entry stays unresolved and the FU-142f
+runtime/reachability pass remains the precondition (OL-48). The row keeps
+`fifa96_match_action_table[0x27].fn == NULL` and dispatches
+`-FIFA96_ERR_UNSUPPORTED` (evidence string names FU-142b/OL-48).
+
+### D.2 The `0x1103CB` animation table (first-hand read, 96 B)
+
+`read_memory 0x1103CB` returned 96 bytes; `get_xrefs_to 0x1103CB` shows the
+only code reader is the row-27 `MOV EDI,0x1103CB` at `0x86846`. The table is
+24 little-endian `{id word, time word}` pairs (the native reads the low word as
+the id and treats the high word as a signed time):
+
+| offset | pairs (id, time) |
+|---|---|
+| `+0x00` | `{0x006B, 0x0168}`, `{0x0068, 0xFFFF}`, `{0x0003, 0x0078}` |
+| `+0x0C` | `{0x0003, 0x001E}`, `{0x0016, 0xFFFF}`, `{0x0003, 0x00F0}` |
+| `+0x18` | `{0x0015, 0x001E}`, `{0x0056, 0x00F0}`, `{0x0015, 0x00F0}` |
+| `+0x24` | `{0x0067, 0x0168}`, `{0x0003, 0x0078}`, `{0x0003, 0x0078}` |
+| `+0x30` | `{0x0015, 0x001E}`, `{0x0050, 0xFFFF}`, `{0x0003, 0x00F0}` |
+| `+0x3C` | `{0x0003, 0x001E}`, `{0x001A, 0xFFFF}`, `{0x0015, 0x00F0}` |
+| `+0x48` | `{0x0003, 0x001E}`, `{0x0019, 0xFFFF}`, `{0x0015, 0x00F0}` |
+| `+0x54` | `{0x0015, 0x001E}`, `{0x0068, 0xFFFF}`, `{0x0003, 0x00F0}` |
+
+The eight nominal 12-byte rows are the `[0x158782]` 0..7 cycle; the stage-2
+walk treats the table as one flat 24-pair sequence (`3*cycle + cursor`), so a
+cursor can continue into the following nominal row. The 96th byte ends at
+`0x11042A`; the adjacent `0x11042B` data (a separate word-table family) is the
+native unbounded-read target (OL-53).
+
+### D.3 Row 0x27 body `0x86820..0x86A02` (site-annotated)
+
+Entry: EAX = record; no stack args. Prologue `PUSH EBX/ECX/EDX/ESI/EDI;
+MOV ESI,EAX` (`0x86820..0x86825`).
+
+| # | site | instruction (first-hand) | derived effect |
+|---|---|---|---|
+| 1 | `0x86827..0x86837` | `XOR EAX,EAX; MOV EDX,[ESI+0x89]; MOV AX,[0x157A64]; ADD EDX,EAX; MOV [ESI+0x89],EDX` | `timer89 += zero-extend(delta word)`, 32-bit wrap |
+| 2 | `0x8683d..0x86843` | `MOV EDX,[ESI+0x8A]; SAR EDX,0x19` | `d = (int8)active >> 1` (byte `+0x8D`) |
+| 3 | `0x86846..0x8687d` | `EDI=0x1103CB; EAX=4d; [ESI+0x4D]=0x780; EAX-=EDX (3d); DL=[ESI+0x8D]&1; [ESI+0x55]=0; EAX+=EAX (6d); EBX=MOVSX(DL); CWDE; (NEG); ADD [ESI+0x55],EAX` | `target.x=0x780`; `target.z = ±(int16)(6d)`, `+` when `active & 1` |
+| 4 | `0x8687f..0x86888` | `LEA EBX,[ESI+0x65]; LEA EDX,[ESI+0x4D]; LEA EAX,[ESI+0x59]; CALL 0x8DCD4` | helper writes `{distance +0x65, dx +0x67, dz +0x69}` |
+| 5 | `0x8688d..0x868b5` | `CMP word [ESI+0x69],0; JL negate; EAX=[ESI+0x67] SAR 16` (= the `+0x69` word); `CMP EAX,0x20; JGE 0x868b7`; else `[ESI+0x4D]=0xCC0; [ESI+0x55]=0` | `|lane| = |dz| = |target.z - pos.z|`; `< 0x20` -> retarget `(0xCC0, 0)` |
+| 6 | `0x868b7..0x868c6` | `CMP byte [ESI+0x8D],0; SETZ AL; JNZ 0x869FD` | `active != 0` returns after the placement |
+| 7 | `0x868cc..0x868e7` | `AL=[ESI+0x92]; CMP AL,1 JC 0x868e5; JBE 0x86905; CMP AL,2 JZ 0x86981; JMP 0x869FD` | stage latch: 0/1 -> S1, 2 -> S2, else return |
+| 8 | `0x868ed..0x868ff` | `DL=[ESI+0x92]; [ESI+0x89]=0; INC DL; MOV [ESI+0x92],DL` | stage 0: `timer89=0; stage92=1`, falls into S1 |
+| 9 | S1 `0x86905..0x86913` | `EBX=[ESI+0x67] SAR 16` (dz); `EDX=[ESI+0x65] SAR 16` (dx); `EAX=ESI; CALL 0x79C50` | face (`D.4`) on the pre-retarget `(dx, dz)` |
+| 10 | S1 `0x86918..0x86933` | `BX=[0x158782]; INC EBX; AX=BX; [0x158782]=BX; CMP AX,8; JL; [0x158782]=0` | `anim_cycle = (anim_cycle + 1) mod 8` (row seed `RNG & 7`, D.6) |
+| 11 | S1 `0x8693a..0x8695c` | `AX=[0x158782]; EDX=2AX; EAX=3AX; EDX=MOVSX word [EDI+EAX*4]; EAX=ESI; EBX=0; CALL 0x6E598` | select `pairs[3*cycle].id` (`0x1103CB + 12*cycle`) |
+| 12 | S1 `0x86961..0x8697b` | `[ESI+0x89]=0; DH=[ESI+0x92]; EAX=0; INC DH; [0x10F374]=AX; [ESI+0x92]=DH` | `timer89=0; anim_cursor=0; stage92=2`; falls into S2 |
+| 13 | S2 `0x86981..0x869a4` | `AX=[0x158782]; EAX=3AX; EAX<<=2; EDI+=EAX; EAX=[0x10F372] SAR 16; EAX<<=2; EAX+=EDI; BX=[EAX+2]` | `pair = 3*cycle + cursor`; read `pairs[pair].time` |
+| 14 | S2 `0x869a8..0x869c4` | `TEST BX,BX; JGE positive; CMP byte [ESI+0x44],0; JZ no-fire` / positive: `EBX=[EAX] SAR 16; ECX=[ESI+0x89]; CMP EBX,ECX; JGE no-fire` | fire iff (`time < 0` && `+0x44 != 0`) or (`time >= 0` && `timer89 > time`) |
+| 15 | S2 fire `0x869cc..0x869f8` | `DI=[0x10F374]; EAX+=4; [ESI+0x89]=0; EBX=0; EDI++; EDX=MOVSX word [EAX]; EAX=ESI; [0x10F374]=DI; CALL 0x6E598` | `timer89=0; cursor++`; select `pairs[pair+1].id` |
+| 16 | `0x869fd..0x86A02` | `POP EDI/ESI/EDX/ECX/EBX; RET` | return (one NOP pad at `0x86A03`) |
+
+Constants: `0x780`, `0xCC0`, `0x20` lateral gate, `6` (`4d - d` then doubled),
+the `0x1103CB` table, `8` (cycle wrap), delta word `0x157A64`, cycle
+`[0x158782]`, cursor `[0x10F372]` high word (`0x10F374`), the `+0x44`
+negative-time gate. The body requests no install code and writes no `+0x9E`,
+so the derived `install`/`ran` staging passes through untouched.
+
+### D.4 The face helper `FUN_00079C50` (`0x79C50..0x79C98`, 28 insns)
+
+Register contract: EAX = entity/record, DX/BX = two signed 16-bit direction
+components. `TEST DX,DX / JNZ`; `TEST BX,BX / JNZ`
+(`0x79C54..0x79C5C`): both zero -> `MOVSX AX, byte [EAX+0x8E]` and return
+(`0x79C5E..0x79C68`), no writes. Otherwise
+`PUSH BX; PUSH DX; CALL 0xCD474` (cdecl: `[EBP+8] = DX`, `[EBP+0xC] = BX`),
+`MOV word [ESI+0x7D],AX` (`0x79C76`), then
+`EAX = [ESI+0x7B] >> 16 = word [ESI+0x7D]` (the angle just stored),
+`+0x40 & 0x3FF >> 7`, `MOV byte [ESI+0x8E],AL`, `CBW`, return
+(`0x79C7A..0x79C98`).
+
+Row 27's call (`0x86905..0x86913`) passes `DX = [rec+0x65]>>16 = dx` and
+`BX = [rec+0x67]>>16 = dz`, i.e. the `0x8DCD4` out triple's x/z deltas (the
+dword/SAR-16 loads read the `+0x67`/`+0x69` words of the 6-byte vector). The
+angle primitive is the already-ported `FUN_000CD474` =
+`fifa96_action_kick_angle(x, z, &angle)` (FU-76 §5.77, 257-byte atan table
+`0x14072C`; port argument order x = the native first cdecl argument = DX).
+
+### D.5 The animation selector `FUN_0006E598` (`0x6E598..0x6E713`)
+
+First-hand block map (the full model is FU-84 §1; only the id-resolution
+subset is ported here):
+
+* `0x6E59C..0x6E608` side-sensitive `[0x57A6C]` write (ball-z sign vs team
+  side, then `DX in {0x2C,0x2D,0x2E,0x35,0x37,0x39,0x3B,0x5C}` -> 1 else 0);
+  **unmodeled (OL-52)**;
+* `0x6E608..0x6E61C` `([0x57A4A]>>24 != 2 && DX == 0)` gate for the reroll;
+  **unmodeled (OL-52)**;
+* `0x6E622..0x6E655` current row `[rec+0x28]`: row byte 0 non-zero and not in
+  `{0x62,0x63,0x64,0x65}` -> keep it (no RNG);
+* `0x6E659..0x6E685` otherwise `CALL 0x92AC8` (RNG) and
+  `switch (RNG & 3) { 0,3 -> 0; 1 -> 0x62; 2 -> 0x65 }` (jump table
+  `0x6E588`); **unmodeled (OL-52)**;
+* `0x6E68E..0x6E69B` clamp `(int16)DX < 0 || >= 0x6F` -> 0;
+* `0x6E69D..0x6E713` row pointer `[0x57588] + DX*9` -> `[rec+0x28]`, flag
+  fan-out `bit4 -> +0x3F=2`, `bit5 -> +0x3F=-2`, `bit0 -> +0x44`, `bit1 ->
+  +0x43`, `bit2 -> +0x45`, `+0x46=1`, frame resolve `FUN_0006E490(rec,
+  &rec+0x28, BX)` and `word [rec+0x32] = 0`; **unmodeled (OL-52)**.
+
+Row 27's two calls (`0x8695C`, `0x869F8`) pass `EBX = 0` and the `0x1103CB`
+id word in `EDX`; every table id is in `3..0x6B`, so the phase/reroll branch
+is never entered from this row. The derived `fifa96_arm_anim_select` returns
+the resolved id (the clamp + current-row continuation) and the step records it
+in `anim_sel`; `flag44` is the staged stand-in for the native `+0x44` written
+by the unmodeled fan-out.
+
+### D.6 Port mapping and derived surfaces
+
+* `fifa96_arm_helpers.{h,c}`: record-view additions `anim_cycle` (`0x158782`),
+  `anim_cursor` (`0x10F374`), `anim_sel` (last resolved id, derived
+  observation), `flag44` (native `+0x44` stand-in), `anim_overflow` (derived
+  bound flag); `fifa96_arm_face` (D.4) and `fifa96_arm_anim_select` (D.5).
+  `fifa96_arm_face` calls the ported `fifa96_action_kick_angle` (link adds
+  `fifa96_action_handlers`).
+* `fifa96_arm_bodies.{h,c}`: the 24-pair `0x1103CB` table (D.2) and
+  `fifa96_arm_27_step` (D.3). NULL `rec` -> `-FIFA96_ERR_INVALID`.
+* Derived-surface decisions, all recorded here: (a) the native cycle/cursor
+  globals are carried per record (OL-53); (b) the pair walk is bounded at 24
+  pairs with `anim_overflow` instead of the native adjacent read (OL-53);
+  (c) the face helper recomputes the `(dx, dz)` words from its position/target
+  arguments and the step passes the pre-retarget target (the native call at
+  `0x86913` reads the `0x8DCD4` output written before the `0x868a9`
+  retarget); (d) the zero-direction guard leaves `*out_lane` unchanged (the
+  caller seeds it with `type` = `+0x8E`); (e) the native `+0x7D` angle word
+  has no row-27 consumer and is not exposed.
+* Engine: `fifa96_match_action_table[0x27].fn` stays **NULL** (no static
+  entry, D.1); the evidence string becomes `"...body ported (FU-142b); entry
+  unresolved (FU-142f/OL-48); -UNSUPPORTED"`; `tests/test_engine_match_handlers.c`
+  asserts the UNSUP dispatch and the OL-48 marker. No `fifa96_match_run`
+  staging change (the row is unwired).
+* Tested: `tests/test_arm_helpers.c` (`test_face_*` 6 functions,
+  `test_anim_select_*` 5 functions), `tests/test_arm_bodies.c`
+  (`test_arm_27_*` 11 functions), `tests/test_engine_match_handlers.c`
+  `test_action_27_unwired_entry`.
+
+### D.7 Open legs (numbered)
+
+* OL-48 (entry) — D.1; row stays unwired.
+* OL-52 (selector record surface) and OL-53 (pair-walk globals/bounds) — §6.
+
+Write set of this appendix (Task 4): `include/fifa96_loader/fifa96_arm_helpers.h`,
+`src/fifa96_loader/fifa96_arm_helpers.c`,
+`include/fifa96_loader/fifa96_arm_bodies.h`,
+`src/fifa96_loader/fifa96_arm_bodies.c`, `tests/test_arm_helpers.c`,
+`tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c`,
+`tests/test_engine_match_handlers.c`, `CMakeLists.txt`, the FU-137 errata and
+this appendix. No engine record change: row 27 stays unwired.
 
 ## 8. No-write statement
 

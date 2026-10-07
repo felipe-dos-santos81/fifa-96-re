@@ -363,7 +363,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 24 | 0x086510 | not ported (partial) | sequence_lane/anim_byte; FU-82 §3.9 | OL-9 |
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
 | 26 | 0x0866F4 | ported (M2 arms-and-wiring Task 3 / FU-142 Appendix C) | `fifa96_match_action_26` binds `fifa96_arm_26_step` (`0x866F4..0x8681C` + `0x8DCD4`) to `mr->record`; arm 0x8D74D (§5.2); `test_engine_match_handlers::test_action_26_runs_body` | OL-50 (descriptor bytes) / OL-51 (`0x36200` gate) carry the row's remainder |
-| 27 | 0x086820 | **open leg** | no install arm (§5.3); FU-76 §2 listing cut | OL-15 |
+| 27 | 0x086820 | unwired (M2 arms-and-wiring Task 4 / FU-142 Appendix D) | body `0x86820..0x86A02` (136 insns) ported as `fifa96_arm_27_step` with the `0x79C50`/`0x6E598` helpers (`fifa96_arm_face`/`fifa96_arm_anim_select`); **no static entry** — the only reference to `0x86820` is the action-table slot `0x11077C`, the `MOV EDX,0x27` sites are animation args, `MOV ECX,0x27` has no site, `0x8CEB8` stages no 0x27 (FU-142 D.1) | OL-48 (entry; FU-142f); FU-142 OL-52/OL-53 remainder |
 | 28 | 0x0870E8 | not ported | arm 0x8D7CF (§5.2); body unanalyzed (FU-76 §2) | OL-15 |
 | 29 | 0x0874E4 | **open leg** | no install arm and no match-code reference (§5.3) | OL-15 |
 | 2A | 0x086A34 | not ported | arm 0x8D807 record scan (§5.2); body unported (FU-76 §2/§7 leg 7) | OL-15 |
@@ -420,16 +420,16 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 0 | 38 | 4 (`27`, `29`, `2B`, `2C`) |
+| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 1 (`27` FU-142b body, entry OL-48) | 38 | 3 (`29`, `2B`, `2C`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **3** | **1** | **72** | **4** |
+| **dispatch total** | **80** | **3** | **2** | **72** | **3** |
 
 Dispatch results at this commit: **76 × `-FIFA96_ERR_UNSUPPORTED`** (the 72 not
-ported rows + the 4 open legs; actions `1E` and `26` no longer count), **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **3 × `FIFA96_OK`** (actions `00`,
-`1E` and `26`); out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error
-results are negated, matching the engine family convention
-(`fifa96_match_run_*`).
+ported rows + the unwired action `27` + the 3 open legs; actions `1E` and `26`
+no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **3 ×
+`FIFA96_OK`** (actions `00`, `1E` and `26`); out-of-range -> `-NOT_FOUND`; NULL
+`mr` -> `-INVALID`. All error results are negated, matching the engine family
+convention (`fifa96_match_run_*`).
 
 ## 8. Open legs
 
@@ -600,3 +600,35 @@ change.
   the OL-48 entry verdict).
 * §5.2 is unchanged by this task; the `0x26` zero-extended side-test handling
   stands as recorded in the Task 2 errata.
+
+## Errata (M2 arms-and-wiring Task 4 / FU-142b)
+
+* §6.1 action row `27` moves from `open leg`/OL-15 to `unwired`: Task 4 ported
+  the body `0x86820..0x86A02` (136 instructions) as `fifa96_arm_27_step`,
+  plus the shared `0x79C50` face helper (`fifa96_arm_face`, the FU-76 §5
+  `fifa96_action_kick_angle` angle primitive) and the `0x6E598` id-resolution
+  subset (`fifa96_arm_anim_select`) — FU-142 Appendix D. The entry stays
+  unresolved: first-hand, the only reference to `0x86820` in `/FIFA96.EXE` is
+  the action-table slot `0x11077C`; the two `MOV EDX,0x27` sites are
+  animation-row arguments (`0x756D5` -> `CALL 0x6E598`; `0x1F52E` -> the
+  `FUN_0001F440` jump-table tail `0x1F55D CALL 0x13600`), `MOV ECX,0x27` has
+  no real site and `0x8CEB8`'s 15 arms stage no code 0x27 (FU-142 D.1). A
+  register-derived installer argument cannot be excluded by a constant census,
+  so FU-142f (runtime/reachability) remains the precondition.
+  `fifa96_match_action_table[0x27].fn` stays **NULL**, its evidence names
+  `FU-142b ... entry unresolved (FU-142f/OL-48)`, and the dispatch result is
+  unchanged (`-FIFA96_ERR_UNSUPPORTED`). The row's remainder surfaces are
+  FU-142 OL-52 (unmodeled selector record writes, `[0x57A6C]` side byte and
+  RNG reroll) and OL-53 (pair-walk globals and the bounded 24-pair read).
+* §7 totals update in place: action unwired 0 -> 1 (`27`), open leg 4 -> 3
+  (`29`, `2B`, `2C`); dispatch total unwired 1 -> 2, open leg 4 -> 3, ported 3,
+  not ported 72. The dispatch-result paragraph is updated in place:
+  `-UNSUPPORTED` stays 76, `FIFA96_OK` stays 3, `-NOT_FOUND` unchanged (phase
+  `0x16`).
+* `tests/test_engine_match_handlers.c` gains `test_action_27_unwired_entry`
+  (row fn NULL, evidence names FU-142b/OL-48/UNSUPPORTED, dispatch UNSUP);
+  `action_expect[0x27]` stays `UNSUP`.
+* The `fifa96_arm_record` view (loader-side) gains `anim_cycle`, `anim_cursor`,
+  `anim_sel`, `flag44` and `anim_overflow`; `fifa96_match_run` staging is
+  unchanged because the row is unwired. Rows 28/29/2A/2C keep their classes
+  (28/2A their FU-142d/e body tasks; 29/2C the OL-48 entry verdict).

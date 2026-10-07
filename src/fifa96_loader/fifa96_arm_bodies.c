@@ -1,10 +1,12 @@
-/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Task 3 /
- * FU-142b: the row 0x26 body and the shared 0x36200 stub.
+/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4 /
+ * FU-142b: the row 0x26 body, the row 0x27 body and the shared 0x36200 stub.
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: disassemble_bytes 0x866F4, read_memory 0x110778 =
  * row-0x26 table entry 0x000866F4, read_memory 0x10F394 table bytes,
- * disassemble_bytes 0x36200). */
+ * disassemble_bytes 0x36200) and Appendix D (disassemble_bytes 0x86820,
+ * read_memory 0x1103CB = the 96-byte 24-pair table, read_memory 0x158782 /
+ * 0x10F372). */
 #include "fifa96_loader/fifa96_arm_bodies.h"
 
 /* Flat 0x10F394, the 32-byte table pointed to by the runtime [0x157A38]
@@ -55,5 +57,108 @@ fifa96_err_t fifa96_arm_26_step(struct fifa96_arm_record *rec) {
   rec->target.z = 0;
   rec->timer89 = 0;
   rec->stage92 = (uint8_t)(rec->stage92 + 1u);
+  return FIFA96_OK;
+}
+
+/* Flat 0x1103CB: 96 bytes = 24 {id, time} pairs (first-hand read, Appendix
+ * D.2). The stage-1 call selects the row's pair-0 id word (0x86956); the
+ * stage-2 walk reads the current pair's high word as a signed time (0x869a4)
+ * and, on fire, the next pair's low word as the next id (0x869e9). */
+static const struct fifa96_arm_27_pair {
+  uint16_t id;
+  int16_t time;
+} fifa96_arm_27_pairs[24] = {
+  { 0x006B, 0x0168 }, { 0x0068, -1 },     { 0x0003, 0x0078 },
+  { 0x0003, 0x001E }, { 0x0016, -1 },     { 0x0003, 0x00F0 },
+  { 0x0015, 0x001E }, { 0x0056, 0x00F0 }, { 0x0015, 0x00F0 },
+  { 0x0067, 0x0168 }, { 0x0003, 0x0078 }, { 0x0003, 0x0078 },
+  { 0x0015, 0x001E }, { 0x0050, -1 },     { 0x0003, 0x00F0 },
+  { 0x0003, 0x001E }, { 0x001A, -1 },     { 0x0015, 0x00F0 },
+  { 0x0003, 0x001E }, { 0x0019, -1 },     { 0x0015, 0x00F0 },
+  { 0x0015, 0x001E }, { 0x0068, -1 },     { 0x0003, 0x00F0 }
+};
+
+fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
+  fifa96_arm_vec tgt;
+  uint8_t face;
+  uint8_t sel;
+  int32_t distance;
+  int32_t lane;
+  uint32_t pair;
+  int16_t thr;
+  if (!rec) return -FIFA96_ERR_INVALID;
+  /* 0x86829..0x86837: timer89 += zero-extended delta word. */
+  rec->timer89 = (int32_t)((uint32_t)rec->timer89 + (uint32_t)rec->delta);
+  /* 0x8683d..0x8687d: target.x = 0x780, target.z =
+   * +/- (int16)(6 * ((int8)active >> 1)) with the sign in active bit 0. */
+  {
+    int16_t off16 = (int16_t)(6 * ((int32_t)((int8_t)rec->active) >> 1));
+    rec->target.x = 0x780;
+    rec->target.z = (rec->active & 1u) ? (int32_t)off16 : -(int32_t)off16;
+  }
+  tgt = rec->target;             /* face reads the pre-retarget triple (0x86913) */
+  /* 0x8687f..0x86888: the shared 0x8DCD4 distance/out triple. */
+  if (fifa96_arm_dist_stage(&rec->pos, &tgt, &distance, &lane) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  rec->lane = lane;
+  /* 0x8688d..0x868b5: |lane| < 0x20 -> retarget (0xCC0, 0). */
+  if (lane < 0) lane = -lane;
+  if (lane < 0x20) {
+    rec->target.x = 0xCC0;
+    rec->target.z = 0;
+  }
+  /* 0x868b7..0x868c6: an active record ends after the placement. */
+  if (rec->active != 0) return FIFA96_OK;
+  /* 0x868cc..0x868e7: the stage latch; 0 -> 1, 1 -> face/select, 2 -> walk. */
+  if (rec->stage92 == 0) {
+    rec->timer89 = 0;
+    rec->stage92 = 1;
+  }
+  if (rec->stage92 == 1) {
+    /* 0x86905..0x86913: face on the (dx, dz) direction. */
+    face = rec->type;
+    if (fifa96_arm_face(&rec->pos, &tgt, &face) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    rec->type = face;
+    /* 0x86918..0x86933: [0x158782] + 1, wrapping at 8. */
+    rec->anim_cycle = (uint8_t)(rec->anim_cycle + 1u);
+    if (rec->anim_cycle >= 8u) rec->anim_cycle = 0;
+    /* 0x8693a..0x8695c: play the row's pair-0 id. */
+    if (fifa96_arm_anim_select((uint8_t)fifa96_arm_27_pairs[3u * rec->anim_cycle].id,
+                               rec->anim_sel, &sel) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    rec->anim_sel = sel;
+    /* 0x86961..0x8697b: timer89 = 0, [0x10F374] = 0, stage 1 -> 2. */
+    rec->timer89 = 0;
+    rec->anim_cursor = 0;
+    rec->stage92 = (uint8_t)(rec->stage92 + 1u);
+  }
+  if (rec->stage92 == 2) {
+    /* 0x86981..0x869a4: pair = row base 3*cycle + cursor. */
+    rec->anim_overflow = 0;
+    pair = 3u * (uint32_t)rec->anim_cycle + (uint32_t)rec->anim_cursor;
+    if (pair >= 24u) {
+      rec->anim_overflow = 1;    /* derived bound; native reads past 0x11042B */
+      return FIFA96_OK;
+    }
+    thr = fifa96_arm_27_pairs[pair].time;
+    if (thr >= 0) {
+      /* 0x869b7..0x869c4: fire iff time < timer89 (JGE skips). */
+      if (rec->timer89 <= (int32_t)thr) return FIFA96_OK;
+    } else {
+      /* 0x869af..0x869b5: negative time fires iff +0x44 != 0. */
+      if (rec->flag44 == 0) return FIFA96_OK;
+    }
+    /* 0x869c6..0x869f8: fire; timer89 = 0, cursor++, play the next id. */
+    rec->timer89 = 0;
+    rec->anim_cursor++;
+    if (pair + 1u >= 24u) {
+      rec->anim_overflow = 1;
+      return FIFA96_OK;
+    }
+    if (fifa96_arm_anim_select((uint8_t)fifa96_arm_27_pairs[pair + 1u].id,
+                               rec->anim_sel, &sel) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    rec->anim_sel = sel;
+  }
   return FIFA96_OK;
 }
