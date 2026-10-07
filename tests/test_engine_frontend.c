@@ -120,6 +120,34 @@ static void test_confirm_gate(void) {
   fifa96_surface_destroy(s);
 }
 
+/* The step renders the front-end menu (Task 9) instead of the Task-8 clear:
+ * the frame differs from a bare clear and the highlight follows the
+ * selection, independent of the per-frame cursor toggle. */
+static void test_menu_render(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+
+  fifa96_surface_clear(s, 0);
+  uint64_t cleared = fifa96_surface_hash(s);
+  int quit = 0;
+  /* Step 1 draws with frames==0: cursor off, selection row 0. */
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  uint64_t row0 = fifa96_surface_hash(s);
+  assert(row0 != cleared);
+
+  /* Step 2 consumes the DOWN press (cursor on); step 3 renders the moved
+   * selection with the cursor off again, so row0 vs row1 isolates the
+   * selection. */
+  press(&fr, FIFA96_ENGINE_KEY_DOWN, 1);
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  uint64_t row1 = fifa96_surface_hash(s);
+  assert(row1 != row0);
+
+  fifa96_surface_destroy(s);
+}
+
 /* Engine dispatch: boot without assets starts in the front-end mode and the
  * QUIT key makes fifa96_engine_should_quit flip. */
 static void test_engine_mode(void) {
@@ -153,6 +181,7 @@ int main(void) {
   test_input_edges();
   test_phase_derivation();
   test_confirm_gate();
+  test_menu_render();
   test_engine_mode();
   puts("test_engine_frontend OK");
   return 0;

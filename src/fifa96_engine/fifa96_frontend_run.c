@@ -1,5 +1,6 @@
 #include <string.h>
 #include "fifa96_engine/fifa96_frontend_run.h"
+#include "fifa96_engine/fifa96_menu_art.h"
 
 #define FRONTEND_RUN_QUEUE_CAP 8
 
@@ -24,6 +25,7 @@ int fifa96_frontend_run_init(struct fifa96_frontend_run *fr, struct fifa96_surfa
   if (!fr || !s) return -1;
   memset(fr, 0, sizeof *fr);
   fifa96_frontend_init(&fr->frontend);
+  fifa96_menu_art_init(NULL);
   fr->surface = s;
   fr->phase = fr->frontend.phase;
   uint32_t state = 0;
@@ -86,6 +88,14 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
       /* M1 gate: the per-state prompt is an open leg, so the constant gate
        * lets -10 (CONFIRM's action code) be accepted as a real CONFIRM. */
       if (fifa96_frontend_event(&fr->frontend, code, 1, &event, &mapped) != 0) continue;
+      if (event == FIFA96_FRONTEND_EVENT_MENU) {
+        if (mapped == 0) {
+          fr->selected_row =
+              (fr->selected_row + FIFA96_MENU_VISIBLE_ROWS - 1) % FIFA96_MENU_VISIBLE_ROWS;
+        } else if (mapped == 1) {
+          fr->selected_row = (fr->selected_row + 1) % FIFA96_MENU_VISIBLE_ROWS;
+        }
+      }
       if (event == FIFA96_FRONTEND_EVENT_EXIT ||
           event == FIFA96_FRONTEND_EVENT_SETTINGS ||
           event == FIFA96_FRONTEND_EVENT_SETTINGS_ALT) {
@@ -111,7 +121,12 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
    * CONFIRM is consumed at the top of the following step (see above). */
   if (fr->quit_requested || library_exit) *quit = 1;
 
-  fifa96_surface_clear(s, 0);   /* Task 9 replaces this stub with the menu art */
+  struct fifa96_menu_state menu = {
+      .entry_state = fr->entry_state,
+      .selected_row = fr->selected_row,
+      .cursor_on = (fr->frames & 1) != 0,
+  };
+  fifa96_menu_art_draw(s, &menu);
   fr->frames++;
   return 0;
 }

@@ -21,6 +21,7 @@ struct fifa96_frontend_run {
   struct fifa96_surface *surface;
   uint32_t phase;                   /* mirrors fifa96_frontend.phase */
   uint32_t entry_state;             /* FU-65 state table index */
+  int      selected_row;            /* menu highlight, FU135 row window */
   int      queue[8];                /* pending mapped key codes */
   int      queue_len;
   uint64_t frames;                  /* frames rendered since init */
