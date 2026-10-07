@@ -510,3 +510,151 @@ fifa96_err_t fifa96_action_sequence_event_ids(const uint8_t *t344, const uint8_t
 fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_z,
                                                    int16_t *vel_x, int16_t *vel_z,
                                                    int16_t *speed);
+
+/* ===== FU-139 §9 (M2 arms-and-wiring Task 11): rows 07/0F kick machines =====
+ *
+ * `row 0x07` (`0x814B0..0x81737`, FU-76 §3.2 first-hand re-verified):
+ *   - phase != 2 or `word[+0x81] != 0` -> the `FUN_0007DAB4` tail (`0x814B8`);
+ *   - `timer89 += (uint16)delta` (`0x814D9`, word zero-extended);
+ *   - stage 0 (`0x81512..0x815CD`): `[+0x9E]=1`; the gate
+ *     (`lane > 0x40` or `(int16)(word[+0x5D]+0x70) < word[0x157750]`) with
+ *     `timer89 > 0x3C` resets, else waits; the target through the tested
+ *     `fifa96_action_kick_stage_target`, then `timer89 = 0`, `+0x92++`;
+ *   - stage 1 (`0x815CD..0x816FC`): the mode word SI (`0x40` for the
+ *     `[team+0x7CB]` record, else `word[slot+6]`, else `0x40` when the staged
+ *     byte `0x158743 == 3`, else -1); SI == 0x40 runs the `FUN_0007E600`
+ *     decision (ported inline; a non-zero result requests install `0x0E` and
+ *     returns); the `[0x14C32A]`/`[0x15B680]==4` downgrade to `0x20`; the kick
+ *     request (`fifa96_ball_kick_target` with `mode = SI`); the post-kick
+ *     opponent `0x22` invoke (staged z `< 0x30`, `timer89 < 5`, the opponent
+ *     `+0x8E==6`, no slot, lane `< 0xD0`, `|angle - word[+0x7D]| < 0x55`);
+ *     `timer89 = 0`, `+0x92++`;
+ *   - stage 2 (`0x816FC`): `byte[+0x44] != 0` -> the tail;
+ *   - the `FUN_0007DAB4` tail (`0x81702`): the reset (with the `0x7C990`
+ *     forced-decision install when phase 2 and active) and, for the team
+ *     target, ball-actor install 4 + the `FUN_00079B58` receiver timer.
+ * `row 0x0F` (`0x82AD0..0x82DCF`):
+ *   - phase != 2 -> reset; `timer89 += (uint16)delta`;
+ *   - stage 0 (`0x82B21..0x82BC3`): inactive or `word[+0x85] != 0` resets;
+ *     the `0x8DCD4` distance to the `0x157788` target with the `< 0x50`
+ *     half-vector position nudge, the `0x79B6C` re-anchor/face (anim `0x26`
+ *     when inactive), `[+0x9E]=1`, `timer89 = 0`, `+0x92++`;
+ *   - stage 1 (`0x82BC9..0x82DA2`): the `0x79B1C` snap, `byte[+0x44]` reset,
+ *     `word[+0x81]` wait, the `FUN_0007876C` slot-merge request
+ *     (`team+0x828`, `lane < 0xF0`, `[0x1586D7]==0`), the `FUN_00078A84` slot
+ *     backup, the lane/bound and opponent-height gates, the lane `0x30` and
+ *     `pos_y+0x80` gates, the `FUN_00078AA4` slot restore, kick 1
+ *     (`mode = (int16)word[slot+6]`, the native dword[slot+4]>>16), the
+ *     predictor distance vs lane and the
+ *     corner kick (`0x6DBCC` code 2/3, camera-led staging and the
+ *     `0x40`/`0x20` mode with the slot temporarily nulled), then the
+ *     `word[+0x81] = 2*word[+0x85] - word[+0x87] + 0x1E` reload.
+ * Declared requests: the `0x78B00`/`0x78A84`/`0x78AA4` slot-block calls, the
+ * `0x7C990` install and the `0x79B58` receiver timer are caller requests
+ * (OL-65); `0x71B9C`/`0x70B94` predictor sources and the `0x6DBCC` table are
+ * caller inputs (OL-66); the native `FUN_0007B9C4` calls themselves are
+ * returned as `kick`/`corner_kick` requests the engine runs through
+ * `fifa96_ball_kick_target` (no library cycle). NULL `state`/`out` ->
+ * -FIFA96_ERR_INVALID. */
+
+struct fifa96_rng;
+
+typedef struct fifa96_action_kick {
+  uint8_t row;               /* 0x07 or 0x0F */
+  uint8_t phase;             /* [0x157A4A]>>24 */
+  uint8_t stage92;           /* +0x92 (in/out) */
+  uint8_t active;            /* +0x8D */
+  uint8_t type8;             /* +0x8B>>24 */
+  uint8_t type;              /* +0x8E>>24 */
+  uint8_t has_slot;          /* +0x20 != 0 */
+  uint8_t byte44;            /* +0x44 */
+  uint8_t byte99;            /* +0x99 */
+  uint8_t side;              /* team[+0x826] */
+  uint8_t is_team_target;    /* rec == [team+0x7B2] */
+  uint8_t is_team_second;    /* rec == [team+0x7B6] (0x7C990) */
+  uint8_t is_team_cb;        /* rec == [team+0x7CB] (row 07 stage 1) */
+  uint8_t team_slot_pool;    /* team[+0x828] (row 0F merge gate) */
+  uint8_t merge_gate_1586d7; /* byte[0x1586D7] != 0 blocks the merge */
+  uint8_t team_mode_82b;     /* team[+0x82B] (row 0F corner mode) */
+  uint8_t downgrade_gate;    /* byte[0x14C32A] (row 07 mode downgrade) */
+  uint16_t downgrade_word;   /* dword[0x15B680] == 4 (row 07 downgrade) */
+  uint8_t decision_excluded; /* rec == [0x1577CA] (0x7E600 gate) */
+  uint8_t has_desc_e;        /* (int8)rec[+4][+0xE] (0x7E600 divisor) */
+  uint8_t opp_target_present;/* [[team+0x7A6]+0x7B2] != 0 (0x7C990) */
+  uint8_t opp_target_carrier;/* that record's +0x9F bit 0 (0x7C990) */
+  uint8_t team_target_present;/* [team+0x7B2] != 0 (0x7C990) */
+  uint8_t team_target_carrier;/* [team+0x7B2]+0x9F bit 0 (0x7C990) */
+  uint8_t post_kick;         /* in: the engine ran `out.kick` */
+  int16_t kick_z;            /* in: (int16)word[0x15873C] after the kick */
+  uint8_t kick_done;         /* in: 1 = kick 1 ran, 2 = corner kick ran */
+  uint8_t kick_staged;       /* in: the kick request staged a row */
+  uint8_t staged_code;       /* in: byte 0x158743 (row 07 SI / corner code) */
+  uint8_t opp_present;       /* in: [[team+0x7A6]+0x7B2] != 0 (row 07) */
+  uint8_t facing;            /* +0x8E octant (in/out; 0x79C50 result) */
+  uint16_t delta;            /* [0x157A64] */
+  uint16_t timer81;          /* +0x81 (in/out) */
+  uint16_t word85, word87;   /* +0x85/+0x87 (row 0F reload) */
+  int32_t timer89;           /* +0x89 (in/out) */
+  int32_t pos_x, pos_z;      /* +0x59/+0x61 */
+  int32_t pos_y;             /* +0x5D dword (row 0F snap copies it) */
+  int16_t pos_y_word;        /* (int16)word[+0x5D] */
+  int16_t ball_height;       /* word[0x157750] */
+  int16_t lane_word;         /* (int16)word[+0x6B] */
+  int16_t bound_word;        /* (int16)word[+0x77] */
+  int16_t face_word7d;       /* (int16)word[+0x7D] (0x7E600/opponent) */
+  int16_t slot_word6;        /* word[slot+6] */
+  int16_t kick_vec_x;        /* row 0F corner staging vector (0x158738) */
+  int16_t kick_vec_height;   /* 0x15873A */
+  int16_t kick_vec_z;        /* 0x15873C */
+  struct fifa96_rng *rng;    /* row 0F corner face draw (0x92AC8) */
+  /* row 07 opponent view ([[team+0x7A6]+0x7B2]) */
+  int16_t opp_lane_word;     /* opponent (int16)word[+0x6B] */
+  int16_t opp_plane_word;    /* opponent (int16)word[+0x6D] */
+  int16_t opp_face_word;     /* opponent (int16)word[+0x7D] */
+  uint8_t opp_type;          /* opponent +0x8E>>24 */
+  uint8_t opp_has_slot;      /* opponent +0x20 != 0 */
+  /* row 0F opponent height gate ([[team+0x7A6]+0x7C7]) */
+  uint8_t opp2_present;
+  int16_t opp2_pos_y_word;   /* (int16)word[+0x5D] */
+  int16_t opp2_lane_word;    /* (int16)word[+0x6B] */
+  /* caller-supplied block inputs */
+  int32_t camera_x, camera_y, camera_z;         /* 0x15774C/50/54 */
+  int32_t stage_target_x, stage_target_y, stage_target_z; /* 0x157788 (0F) */
+  int32_t predictor_x, predictor_y, predictor_z; /* 0x71B9C(4) (0x7E600) */
+  const int8_t *type_off_x;   /* 0x10F334[type8] */
+  const int8_t *type_off_z;   /* 0x10F33C[type8] */
+  int16_t corner_x, corner_z; /* 0x6DBCC cell output (row 0F) */
+  uint8_t corner_code;        /* 0x6DBCC return 2/3 (row 0F) */
+  /* stage-0 outputs */
+  int32_t target_x, target_y, target_z;         /* +0x4D/+0x51/+0x55 */
+  uint8_t target_resolved;
+} fifa96_action_kick;
+
+typedef struct fifa96_action_kick_out {
+  uint8_t ran;              /* +0x9E latch (both rows' stage 0) */
+  uint8_t reset;            /* FUN_0007DAB4 ran (stage92 = 0xFF, timer89 = 0) */
+  uint8_t reset_install;    /* 0x7C990/0x7D9A4 install issued */
+  uint8_t reset_code;       /* code that install carries (0 = action 0) */
+  uint8_t slot_callback;    /* 0x78B00 slot callback request (reset path) */
+  uint8_t defender_install; /* 0x7E600 decision -> install 0x0E */
+  uint8_t kick;             /* run fifa96_ball_kick_target(mode = kick_mode) */
+  uint8_t kick_mode;        /* SI mode word low byte */
+  uint8_t opponent_invoke;  /* post-kick install 0x22 on the opponent */
+  uint8_t ball_install;     /* tail install 4 on [0x158730] */
+  uint8_t receiver_timer;   /* tail FUN_00079B58([0x158734]) */
+  uint8_t slot_merge;       /* row 0F FUN_0007876C request */
+  uint8_t slot_backup;      /* row 0F FUN_00078A84 request */
+  uint8_t slot_restore;     /* row 0F FUN_00078AA4 request */
+  uint8_t snap;             /* row 0F FUN_00079B1C applied (target = pos) */
+  uint8_t camera_face;      /* row 0F FUN_00079B6C applied */
+  uint8_t anim;             /* row 0F resolved animation id */
+  uint8_t corner_kick;      /* row 0F corner kick request (corner_code) */
+  uint8_t corner_face;      /* the corner 0x79C50 face ran (0x8E/+0x7D) */
+  uint8_t corner_kick_mode; /* 0x40 code-3 / 0x20 rng mode */
+  uint8_t stage;            /* resulting +0x92 */
+  int16_t timer81_reload;   /* row 0F word[+0x81] reload value */
+  uint8_t timer81_set;      /* the reload ran (BX != 0 path) */
+} fifa96_action_kick_out;
+
+fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
+                                        fifa96_action_kick_out *out);

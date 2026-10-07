@@ -436,6 +436,42 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   caller is not statically located in the `0x7F194..0x7F7C9` window. The port
   treats `+0x92` as an input (FU-139 §8.7).
 
+* **OL-65 — row 07/0F unmodeled record/presentation auxiliaries (Task 11).**
+  The machines in `fifa96_action_kick_machine` emit tracked requests for the
+  native calls whose bodies stay unported: the `0x78B00` slot clear
+  (`slot_callback`), the `0x78A84`/`0x78AA4` slot backup/restore
+  (`slot_backup`/`slot_restore`; the engine's FU-70 slot block has no
+  `+6/+10` pair), the `0x79B58` receiver timer (the engine sets the pool
+  receiver's `+0x93 = 0x10` directly), the `0x79B1C` snap and the `0x79B6C`
+  re-anchor (modelled through the target/face outputs), the `0x7C990` install
+  decision (ported bounded, `reset_code`) and the `0x7E600` defender decision
+  (ported bounded; the `0x71B9C` predictor triple is a caller input, FU-139
+  §9.4). The record bytes `+0x44` (row 0F anim-row terminal), `+0x85`/`+0x87`
+  (row 0F reload operands), `+0x99`, `+0x9D`, the roster descriptor bytes
+  `rec[+4][+0xD..+0x15]`, the `[0x1577CA]` decision exclusion, the
+  `[0x14C32A]`/`[0x15B680]` downgrade gates, `[0x1586D7]`, the team `+0x7CB`
+  callback record and the `[0x157A4D]` mode-state byte are all staged zero
+  (their producers are unported); `word[+0x77]` (the lane bound) has no pool
+  producer, so the derived row-0F stage-1 lane gate waits (the loader fixture
+  pins the bounded pass).
+* **OL-66 — kick-path external block inputs (Task 11).** The two mode arms
+  `FUN_0007B194`/`FUN_0007B57C` read the camera block (`0x15774C/50/54`), the
+  goal-side phase `[0x157A49]`, the mode-state `[0x157A4D]`, the
+  `[0x14C2F6]`/`[0x14C326]` gates and the per-side `0x14C1D4` range words
+  (zero in the image; runtime-populated by an unported producer); the
+  `0x8DE8C` nearest arm takes the caller's team candidates. The engine passes
+  its FU-71 camera triple and zeros for the rest; the `0x71B9C`/`0x70B94`
+  predictor block and the `0x6DBCC` corner table (`[team+0x7DB]` +
+  `0x1577D6`) are caller inputs. `FUN_0007E600`'s `0x110680` type gate, the
+  `0x1104BB` recompute table, the `0x1104CA` sector mask and the four 10-byte
+  event-row tables (0x1102FE/0x11016E/0x110196/0x11024A) are embedded from
+  the EXE image in `fifa96_match_handlers.c` (first-hand reads).
+* **OL-28/OL-31 status (Task 11).** OL-28 (the `FUN_0007B9C4` target
+  selection + mode arms + code-4 RNG/divisor) and OL-31 (the row 07/0F kick
+  machines) are ported as `fifa96_ball_kick_target` and
+  `fifa96_action_kick_machine` with rows 07/0F wired (FU-139 §9); the
+  residuals are OL-62 (staging-tail algebra, shared) and OL-65/OL-66 above.
+
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
 * **§6.1 row `2C`** — "prologue-only body" is wrong: `0x84598..0x8462D` is a

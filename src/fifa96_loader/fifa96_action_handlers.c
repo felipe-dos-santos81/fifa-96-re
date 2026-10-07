@@ -3,6 +3,7 @@
 #include <string.h>
 
 #include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_rng.h"
 
 static const uint8_t kick_atan[257] = {
     0x00, 0x01, 0x01, 0x02, 0x03, 0x03, 0x04, 0x04, 0x05, 0x06, 0x06, 0x07, 0x08, 0x08, 0x09, 0x0A,
@@ -1128,5 +1129,393 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
   *vel_x = (int16_t)((int32_t)type_x * scale);
   *vel_z = (int16_t)((int32_t)type_z * scale);
   *speed = (int16_t)fifa96_entity_distance(*vel_x, *vel_z);
+  return FIFA96_OK;
+}
+
+/* ===== FU-139 §9 (Task 11): rows 07/0F kick machines =====
+ *
+ * First-hand evidence: /FIFA96.EXE `disassemble_bytes` `0x814B0..0x81760`
+ * (row 07, 186+ insns), `0x82AD0..0x82B60` + `0x82B60..0x82DD0` (row 0F);
+ * helper decompiles `0x7DAB4` (reset), `0x7C990` (forced-decision install),
+ * `0x7E600` (the defender decision), `0x79B1C` (snap), `0x79B6C`
+ * (re-anchor/face), `0x79B58` (receiver timer), `0x78A84`/`0x78AA4`
+ * (slot backup/restore), `0x78B00` (slot clear); `read_memory 0x110680` (the
+ * per-type decision gate bytes `03 00 00 03 03 03 03 02 ...`); Ghidra
+ * read-only. */
+
+/* `0x110680[type]`: the FUN_0007E600 per-type decision gate (bytes 0..25). */
+static const uint8_t kick_decision_gate[26] = {
+    0x03, 0x00, 0x00, 0x03, 0x03, 0x03, 0x03, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00,
+    0x00, 0x00, 0x00, 0x02, 0x02, 0x02, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03,
+};
+
+/* `FUN_0007DAB4` (`0x7DAB4..0x7DB0C`) plus the `FUN_0007C990` forced-decision
+ * install (`0x7C990..0x7CA4C`). `plain` forces the non-0x7C990 path
+ * (`FUN_0007D9A4(rec, 0, 0, 0)`). The native slot callback `FUN_00078B00` is
+ * the `slot_callback` request (presentation-side, OL-65). */
+static fifa96_err_t kick_reset(const fifa96_action_kick *state,
+                               fifa96_action_kick_out *out) {
+  uint8_t code = 0;
+  out->reset = 1;
+  out->reset_install = 1;
+  out->reset_code = 0;
+  if (state->has_slot != 0) out->slot_callback = 1;
+  /* 0x7DAEF: only phase 2 + an active record reaches FUN_0007C990; every
+   * other path takes the FUN_0007D9A4(rec, 0, 0, 0) install. */
+  if (state->phase != 2u || state->active == 0u) return FIFA96_OK;
+  if (state->is_team_target) {
+    if (state->opp_target_present == 0 || state->opp_target_carrier == 0) {
+      if (state->type == 5u) {
+        out->reset_install = 0;    /* 0x7C9C8: type 5 returns without install */
+        return FIFA96_OK;
+      }
+      code = 4;
+    } else {
+      code = 6;
+    }
+    out->reset_code = code;
+    return FIFA96_OK;
+  }
+  if (state->is_team_second) {
+    if (state->opp_target_present != 0 && state->opp_target_carrier != 0) {
+      out->reset_code = 6;
+      return FIFA96_OK;
+    }
+    if (state->team_target_present == 0 || state->team_target_carrier == 0) {
+      out->reset_code = 4;
+      return FIFA96_OK;
+    }
+  }
+  out->reset_code = 3;
+  return FIFA96_OK;
+}
+
+/* `FUN_0007E600` (`0x7E600..0x7E7C5`, 176 insns): the defender decision that
+ * installs action `0x0E` on the record. Bounded inputs: phase, the 0x110680
+ * type gate, `[0x1577CA]`, the lane `0x180` bound, the `0x71B9C` predictor
+ * triple (caller input), the `0x8DCD4` pos/predictor distance <= 0xF0 and
+ * <= lane, the camera x bounds, the side/pos_z bounds, the `0x8DD70` angle
+ * inside +/-0x100 (side 0) or outside (side 1) and the `|angle - word[+0x7D]|`
+ * `0x100` gate. */
+static uint8_t kick_decision(const fifa96_action_kick *s) {
+  int16_t dx, dz;
+  int32_t distance;
+  int32_t angle = 0;
+  int32_t diff;
+  if (s->phase != 2) return 0;
+  if (s->type >= sizeof kick_decision_gate ||
+      (kick_decision_gate[s->type] & 1u) == 0)
+    return 0;
+  if (s->decision_excluded != 0) return 0;
+  if (s->lane_word > 0x180) return 0;
+  if (s->predictor_y > 0x60 || s->predictor_y < 0x20) return 0;
+  dx = (int16_t)((uint16_t)s->predictor_x - (uint16_t)s->pos_x);
+  dz = (int16_t)((uint16_t)s->predictor_z - (uint16_t)s->pos_z);
+  distance = fifa96_entity_distance(dx, dz);
+  if (distance > 0xF0) return 0;
+  if ((int16_t)distance > s->lane_word) return 0;
+  if (s->pos_x < -0x1E0 && s->pos_x > s->camera_x) return 0;
+  if (s->pos_x > 0x1E0 && s->camera_x < s->pos_x) return 0;
+  if (s->side == 0u) {
+    if ((int16_t)s->pos_z < 0x7B0) return 0;
+  } else if (s->side == 1u) {
+    if ((int16_t)s->pos_z > -0x7B0) return 0;
+  }
+  if (fifa96_action_kick_angle(dx, dz, &angle) != FIFA96_OK) return 0;
+  if (s->side == 0u) {
+    if (angle < -0x100 || angle > 0x100) return 0;
+  } else if (angle > -0x100 && angle < 0x100) {
+    return 0;
+  }
+  diff = (int32_t)(((uint16_t)((uint16_t)angle - (uint16_t)s->face_word7d)) & 0x3FFu);
+  if (diff > 0x200) diff = 0x400 - diff;
+  if (diff > 0x100) return 0;
+  return 1;
+}
+
+/* The `0x79C50` face fold: stores the angle at +0x7D and the octant at +0x8E
+ * (the tested `fifa96_arm_face` semantics; inlined for the static-link cycle
+ * with `fifa96_arm_helpers`). */
+static fifa96_err_t kick_face(fifa96_action_kick *s, int16_t dx, int16_t dz) {
+  int32_t angle = 0;
+  if (dx == 0 && dz == 0) return FIFA96_OK;
+  if (fifa96_action_kick_angle(dx, dz, &angle) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  s->face_word7d = (int16_t)angle;
+  s->facing = (uint8_t)(((uint32_t)(angle + 0x40) & 0x3FFu) >> 7u);
+  return FIFA96_OK;
+}
+
+/* The row-07 reset tail `0x81702`: FUN_0007DAB4 then, for the team target,
+ * the ball-actor install 4 ([0x158730]) and the FUN_00079B58 receiver timer
+ * ([0x158734]). */
+static fifa96_err_t kick_tail_07(fifa96_action_kick *s,
+                                 fifa96_action_kick_out *out) {
+  if (kick_reset(s, out) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if (s->is_team_target != 0) {
+    out->ball_install = 1;
+    out->receiver_timer = 1;
+  }
+  return FIFA96_OK;
+}
+
+static fifa96_err_t kick_machine_07(fifa96_action_kick *s,
+                                    fifa96_action_kick_out *out) {
+  if (s->kick_done == 0u) {
+    if (s->phase != 2u || s->timer81 != 0u) return kick_tail_07(s, out);
+    s->timer89 = (int32_t)((uint32_t)s->timer89 + (uint32_t)(uint16_t)s->delta);
+  }
+  switch (s->stage92) {
+  case 0: {
+    int16_t t = (int16_t)((uint16_t)s->pos_y_word + 0x70u);
+    out->ran = 1;                                  /* 0x81512 */
+    if (s->lane_word > 0x40 || (int32_t)t < (int32_t)s->ball_height) {
+      if (s->timer89 > 0x3C) return kick_tail_07(s, out);  /* 0x81538 */
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+    if (s->type_off_x == NULL || s->type_off_z == NULL)
+      return -FIFA96_ERR_INVALID;
+    {
+      fifa96_action_vec3 camera;
+      fifa96_action_vec3 target;
+      uint8_t resolved = 0;
+      /* The native resolved arm leaves +0x51 untouched, so seed the out
+       * triple with the record's current target. */
+      target.x = s->target_x;
+      target.y = s->target_y;
+      target.z = s->target_z;
+      camera.x = s->camera_x;
+      camera.y = s->camera_y;
+      camera.z = s->camera_z;
+      if (fifa96_action_kick_stage_target(s->has_slot, (uint16_t)s->slot_word6,
+                                          s->type8, &camera, s->type_off_x,
+                                          s->type_off_z, &target,
+                                          &resolved) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      s->target_x = target.x;
+      s->target_y = target.y;
+      s->target_z = target.z;
+      s->target_resolved = resolved;
+    }
+    s->timer89 = 0;                                /* 0x815B5 */
+    s->stage92 = (uint8_t)(s->stage92 + 1u);
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+  case 1: {
+    int16_t si = 0;
+    if (s->kick_done == 0u) {
+    if (s->is_team_cb != 0u) si = 0x40;
+    else if (s->has_slot != 0u) si = s->slot_word6;
+    else if (s->staged_code == 3u) si = 0x40;
+    else si = -1;
+    if (si == 0x40) {
+      if (kick_decision(s) != 0) {                 /* 0x81605..0x81617 */
+        out->defender_install = 1;
+        out->stage = s->stage92;
+        return FIFA96_OK;
+      }
+    }
+    if (s->downgrade_gate != 0u && s->downgrade_word == 4u && si == 0x40)
+      si = 0x20;                                   /* 0x8161D..0x81637 */
+    out->kick = 1;
+    out->kick_mode = (uint8_t)(uint16_t)si;
+    out->stage = s->stage92;
+    return FIFA96_OK;
+    }
+    /* 0x8164B..0x816E4: the post-kick opponent invoke. */
+    if (s->kick_staged != 0u && s->kick_z < 0x30 && s->timer89 < 5 &&
+        s->opp_present != 0u && s->opp_type == 6u && s->opp_has_slot == 0u &&
+        s->opp_lane_word < 0xD0) {
+      int32_t angle = 0;
+      int32_t diff;
+      if (fifa96_action_kick_angle(s->opp_lane_word, s->opp_plane_word,
+                                   &angle) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      diff = (int32_t)(((uint16_t)((uint16_t)angle -
+                                   (uint16_t)s->opp_face_word)) &
+                       0x3FFu);
+      if (diff > 0x200) diff = 0x400 - diff;
+      if (diff < 0x55) out->opponent_invoke = 1;
+    }
+    s->timer89 = 0;
+    s->stage92 = (uint8_t)(s->stage92 + 1u);
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+  case 2:
+    if (s->byte44 != 0u) return kick_tail_07(s, out);
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  default:
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+}
+
+static fifa96_err_t kick_machine_0F(fifa96_action_kick *s,
+                                    fifa96_action_kick_out *out) {
+  if (s->kick_done == 0u) {
+    if (s->phase != 2u) return kick_reset(s, out);
+    s->timer89 = (int32_t)((uint32_t)s->timer89 + (uint32_t)(uint16_t)s->delta);
+  }
+  switch (s->stage92) {
+  case 0: {
+    if (s->active == 0u) return kick_reset(s, out);   /* 0x82B21 */
+    if (s->word85 != 0u) return kick_reset(s, out);   /* 0x82B3B */
+    {
+      /* 0x82B49: 0x8DCD4(pos, 0x157788, local); below 0x50 the position
+       * advances by the half vector (SAR 17 of the dword addends). */
+      int16_t dx = (int16_t)((uint16_t)s->stage_target_x - (uint16_t)s->pos_x);
+      int16_t dz = (int16_t)((uint16_t)s->stage_target_z - (uint16_t)s->pos_z);
+      int16_t distance = (int16_t)fifa96_entity_distance(dx, dz);
+      if (distance < 0x50) {
+        s->pos_x = (int32_t)((uint32_t)s->pos_x + (uint32_t)(dx >> 1));
+        s->pos_z = (int32_t)((uint32_t)s->pos_z + (uint32_t)(dz >> 1));
+      }
+    }
+    /* 0x82B84: 0x79B6C re-anchor: target = pos, y = 0, lane/vel zero, the
+     * camera-facing fold and the anim (inactive -> 0x26; active -> 0). */
+    s->target_x = s->pos_x;
+    s->target_y = 0;
+    s->target_z = s->pos_z;
+    s->face_word7d = 0;
+    if (kick_face(s, (int16_t)((uint16_t)s->camera_x - (uint16_t)s->pos_x),
+                  (int16_t)((uint16_t)s->camera_z - (uint16_t)s->pos_z)) !=
+        FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    out->camera_face = 1;
+    out->anim = (s->active != 0u) ? 0u : 0x26u;
+    out->ran = 1;                                  /* 0x82BAA */
+    s->timer89 = 0;
+    s->stage92 = (uint8_t)(s->stage92 + 1u);
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+  case 1: {
+    if (s->kick_done == 1u || s->kick_done == 2u) goto kick_reload;
+    /* 0x82BC9: 0x79B1C snap. */
+    s->target_x = s->pos_x;
+    s->target_y = s->pos_y;
+    s->target_z = s->pos_z;
+    out->snap = 1;
+    if (s->byte44 != 0u) return kick_reset(s, out);   /* 0x82BD0 */
+    if (s->timer81 != 0u) {                              /* 0x82BDD */
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+    if (s->has_slot == 0u) {                             /* 0x82BF1 */
+      if (s->team_slot_pool != 0u && s->lane_word < 0xF0 &&
+          s->merge_gate_1586d7 == 0u)
+        out->slot_merge = 1;
+    }
+    if (s->has_slot != 0u && s->slot_word6 != 0)         /* 0x82C19 */
+      out->slot_backup = 1;
+    if (s->lane_word > s->bound_word) {                  /* 0x82C30 */
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+    if (s->opp2_present != 0u) {                         /* 0x82C3E */
+      int16_t self_margin =
+          (int16_t)((uint16_t)s->ball_height -
+                    (uint16_t)((uint16_t)s->pos_y_word + 0x70u));
+      int16_t opp_margin =
+          (int16_t)((uint16_t)s->ball_height -
+                    (uint16_t)((uint16_t)s->opp2_pos_y_word + 0x70u));
+      if (self_margin > opp_margin && s->lane_word > s->opp2_lane_word) {
+        out->stage = s->stage92;
+        return FIFA96_OK;
+      }
+    }
+    if (s->lane_word > 0x30) {                           /* 0x82C85 */
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+    if ((int16_t)((uint16_t)s->pos_y_word + 0x80u) < s->ball_height) {
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+    if (s->has_slot != 0u) {                             /* 0x82CAC */
+      out->slot_restore = 1;
+      if (s->slot_word6 != 0) {
+        out->kick = 1;
+        out->kick_mode = (uint8_t)(uint16_t)s->slot_word6;
+        out->stage = s->stage92;
+        return FIFA96_OK;
+      }
+    }
+    {
+      /* 0x82CDA: the predictor distance vs the lane. */
+      int16_t dx = (int16_t)((uint16_t)s->predictor_x - (uint16_t)s->pos_x);
+      int16_t dz = (int16_t)((uint16_t)s->predictor_z - (uint16_t)s->pos_z);
+      int16_t distance = (int16_t)fifa96_entity_distance(dx, dz);
+      if (distance <= s->lane_word) goto kick_reload;
+    }
+    /* 0x82D19..0x82D81: the corner staging (0x6DBCC code + cell, the camera
+     * triple, the code-3/RNG mode and the face) then kick 2 with the slot
+     * temporarily nulled. */
+    {
+      int16_t dx = (int16_t)((uint16_t)s->corner_x - (uint16_t)s->camera_x);
+      int16_t dz = (int16_t)((uint16_t)s->corner_z - (uint16_t)s->camera_z);
+      int16_t distance = (int16_t)fifa96_entity_distance(dx, dz);
+      s->kick_vec_x = distance;
+      s->kick_vec_height = dx;
+      s->kick_vec_z = dz;
+      out->corner_kick = 1;
+      s->staged_code = s->corner_code;
+      if (s->corner_code == 3u) {
+        out->corner_kick_mode = 0x40;
+      } else {
+        uint16_t r = 0;
+        out->corner_kick_mode = 0x20;
+        if (s->rng == NULL) return -FIFA96_ERR_INVALID;
+        if (fifa96_rng_step(s->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+        if ((r & 7u) != 0) {
+          if (kick_face(s, s->kick_vec_height, s->kick_vec_z) != FIFA96_OK)
+            return -FIFA96_ERR_INVALID;
+          out->corner_face = 1;
+        }
+      }
+      out->stage = s->stage92;
+      return FIFA96_OK;
+    }
+  kick_reload:
+    /* 0x82DA2..0x82DBE: word[+0x81] = 2*word[+0x85] - word[+0x87] + 0x1E. */
+    out->timer81_reload = (int16_t)(uint16_t)(((uint16_t)s->word85 << 1) -
+                                              (uint16_t)s->word87 + 0x1Eu);
+    out->timer81_set = 1;
+    s->timer81 = (uint16_t)out->timer81_reload;
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+  default:
+    out->stage = s->stage92;
+    return FIFA96_OK;
+  }
+}
+
+fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
+                                        fifa96_action_kick_out *out) {
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  out->stage = state->stage92;
+  /* The reset consequences are applied here (FUN_0007DAB4 0x7DABA/0x7DAC4). */
+  if (state->row == 0x07u) {
+    fifa96_err_t rc = kick_machine_07(state, out);
+    if (rc != FIFA96_OK) return rc;
+  } else if (state->row == 0x0Fu) {
+    fifa96_err_t rc = kick_machine_0F(state, out);
+    if (rc != FIFA96_OK) return rc;
+  } else {
+    return -FIFA96_ERR_INVALID;
+  }
+  if (out->reset != 0) {
+    state->stage92 = 0xFFu;
+    state->timer89 = 0;
+    out->stage = state->stage92;
+  } else {
+    out->stage = state->stage92;
+  }
   return FIFA96_OK;
 }

@@ -356,7 +356,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 04 | 0x07E7C8 | not ported (partial) | locomotion_camera_lead; FU-77 §2.4 | OL-8 |
 | 05 | 0x07F194 | not ported (partial) | carrier machine stages 0-3 + staging tail ported (FU-139 §8 Task 10: `fifa96_action_carrier_arm` `0x7F194..0x7F665`, `fifa96_ball_pair_stage_tail` `0x7A8D1..0x7AA2F`, plus FU-78 possession helpers); stage-0 target algebra `0x7F3A1..0x7F57B` + `FUN_0007F7E0` fallback unported, row unwired | FU-139 OL-63 (residual); OL-8 |
 | 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row; FU-139 §2 | OL-8; FU-139 OL-30 |
-| 07 | 0x0814B0 | not ported (partial) | kick_angle/kick_apply + FU-139 event row/band/stage target; FU-76 §3.2, FU-77 §2.7 | OL-8; FU-139 OL-31 |
+| 07 | 0x0814B0 | ported (M2 arms-and-wiring Task 11 / FU-139 §9) | `fifa96_match_action_07` binds `fifa96_action_kick_machine` (`0x814B0..0x81737`) and `fifa96_ball_kick_target` (`FUN_0007B9C4`, `0x7B9C4..0x7BF16` incl. the `FUN_0007B878` dir arm and both mode arms) to `mr->record`/the pool ball block; defender 0x0E / opponent 0x22 / ball 4 requests; `test_engine_match_handlers::test_action_07_runs_body` | OL-65 (record/presentation auxiliaries) / OL-66 (external block inputs) / OL-62 remark |
 | 08 | 0x081068 | not ported (partial) | FU-75 §1.6 chase-gate installer only | OL-8 |
 | 09 | 0x080A00 | not ported (partial) | FU-81 arm table 0x809F0; stage helpers | OL-9 |
 | 0A | 0x081738 | not ported | FU-76 §2; installer 0x7CDD8 has no xrefs | OL-14 |
@@ -364,7 +364,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 0C | 0x081C90 | not ported (partial) | FU-81 7-arm table 0x81C74 | OL-9 |
 | 0D | 0x08251C | not ported (partial) | FU-82 §3.4 4-arm table 0x8250C; FU-138 velocity_scale | OL-9; FU-138 OL-22 |
 | 0E | 0x082710 | not ported | FU-81 §2.1 gate/head; tackle helpers only install 0x0E | OL-9 |
-| 0F | 0x082AD0 | not ported | FU-76 §2; KICK 0x7B9C4 body; FU-139 §2 | OL-8; FU-139 OL-31 |
+| 0F | 0x082AD0 | ported (M2 arms-and-wiring Task 11 / FU-139 §9) | `fifa96_match_action_0F` binds `fifa96_action_kick_machine` (`0x82AD0..0x82DCF`: `0x79B1C` snap, `0x79B6C` re-anchor/face, the `0x7876C` merge request, the predictor distance and the corner kick) and `fifa96_ball_kick_target`; `test_engine_match_handlers::test_action_0F_runs_body` | OL-65 (`+0x77` bound, `+0x85/87`) / OL-66 (predictor/corner tables) / OL-62 remark |
 | 10 | 0x0855F0 | not ported (partial) | FU-81 7-arm table 0x855B8 | OL-9 |
 | 11 | 0x085DE4 | not ported (partial) | FU-81 10-arm table 0x85DA0 | OL-9 |
 | 12 | 0x083D68 | not ported (partial) | FU-81 tables 0x83D2C/0x83D4C | OL-9 |
@@ -445,22 +445,30 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg | dead |
 |---|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 5 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 36 | 0 | 1 (`2B` FU-142f) |
+| action `0x1106E0` | 45 | 7 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 34 | 0 | 1 (`2B` FU-142f) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
-| **dispatch total** | **80** | **5** | **4** | **70** | **0** | **1** |
+| **dispatch total** | **80** | **7** | **4** | **68** | **0** | **1** |
 
-Dispatch results at this commit: **74 × `-FIFA96_ERR_UNSUPPORTED`** (the 70 not
+Dispatch results at this commit: **72 × `-FIFA96_ERR_UNSUPPORTED`** (the 68 not
 ported rows + the unwired actions `27`/`29`/`2C` + the dead entry `2B`; actions
-`00`, `1E`, `26`, `28` and `2A` no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`**
-(phase `0x16`) and **5 × `FIFA96_OK`** (actions `00`, `1E`, `26`, `28` and `2A`);
-out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are
-negated, matching the engine family convention (`fifa96_match_run_*`).
+`00`, `1E`, `26`, `28`, `2A`, `07` and `0F` no longer count),
+**1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **7 × `FIFA96_OK`** (actions
+`00`, `1E`, `26`, `28`, `2A`, `07` and `0F`); out-of-range -> `-NOT_FOUND`;
+NULL `mr` -> `-INVALID`. All error results are negated, matching the engine
+family convention (`fifa96_match_run_*`).
 
 FU-139 §8 (Task 10) advances action row `05`'s bounded parts (the carrier
 machine stages 0-3 and the staging tail are ported and tested) but adds no
 dispatch: the stage-0 target algebra and the `FUN_0007F7E0` fallback stay
-unported (OL-63) and the row remains `not ported (partial)` with `fn == NULL`,
-so the counts above are unchanged.
+unported (OL-63) and the row remains `not ported (partial)` with `fn == NULL`.
+
+FU-139 §9 (Task 11) closes OL-28 and OL-31: `fifa96_ball_kick_target`
+(`FUN_0007B9C4` full bounded path incl. `FUN_0007B878` and both mode arms) and
+`fifa96_action_kick_machine` (rows 07/0F) are ported and tested, rows `07` and
+`0F` flip to `ported` with `fn != NULL`, and the counts above move 5 -> 7 OK /
+74 -> 72 UNSUP. The request surfaces (defender 0x0E, opponent 0x22, ball 4,
+reset/merge) drain through the FU-141 pool installer; the unmodeled record
+bytes and external tables are the OL-65/OL-66 legs.
 
 ## 8. Open legs
 
@@ -874,3 +882,41 @@ change.
 * New numbered legs OL-62..OL-64 are registered in FU-142 §6 with their
   FU-139 §8 detail (staging-tail residual, row-05 residual + non-wiring
   verdict, and the stage-0 -> stage-1 re-install edge).
+
+## Errata (M2 arms-and-wiring Task 11 / FU-139 §9)
+
+* **§6.1 action rows `07` and `0F` flip to `ported`.** `FUN_0007B9C4`
+  (`0x7B9C4..0x7BF16`) is ported in full as `fifa96_ball_kick_target`
+  (prologue/vector, slot latch + L1/L2, the `FUN_0007B878` direction arm, the
+  negative-mode band, the `FUN_0007B194`/`FUN_0007B57C` mode arms, the
+  `FUN_0007AE70` row resolver on the EXE row tables, the lower-first clamp with
+  the `0x114E04` angle fold, the code-4 RNG/divisor arm and the `0x460` cap,
+  then the `FUN_0007A490` stage + staging tail). The row machines
+  (`0x814B0..0x81737`, `0x82AD0..0x82DCF`) are `fifa96_action_kick_machine`
+  with `kick`/`corner_kick` requests run through `fifa96_ball_kick_target` by
+  the engine handlers. The pre-Task-11 prose that called row `07`
+  `not ported (partial)`/OL-31 and row `0F` `KICK 0x7B9C4 body; OL-31` is
+  superseded (FU-139 §9, FU-142 OL-28/OL-31 status).
+* **FU-76 §3.3 `0x58742 & 0x20` arm condition corrected.** The mode arms run
+  from the fresh `0x158742` byte at `0x7BC1A..0x7BC80`: inactive + `& 0x20` ->
+  `FUN_0007B57C(actor, vector, 0)`; active + byte `== 0x40` ->
+  `FUN_0007B194(actor, vector, traj)`; active + (`& 0x20` or L1) ->
+  `FUN_0007B57C(actor, vector, L1)` (L1 = active && phase 2 && slot word
+  `0x20` bit && `slot[+0x23] < 7`). FU-76 §3.3's `([0x58742] & 0x20) &&
+  [rec+0x8D] != 0` conflates the two `B57C` arms and omits the active
+  `== 0x40` precedence.
+* **FU-76 §3.3 code-4 divisor correction.** The divisor register is loaded
+  from `row[+8]` and overwritten by the code-4 arm (mode 0x40:
+  `traj = 0x90 + (rng & 7) * (0x10 - desc15)`, SI zeroed; else
+  `(rng & 0x7F) + 3`); the divisor line computes `traj = word[0x15873C] +
+  (int16)word[0x158738] / (int16)divisor`, not a speed-multiplied addend. The
+  `0x460` cap compares `word[0x15873C]` (FU-139 §9.2, first-hand).
+* **FU-139 §3.4 `fifa96_action_kick_range_band` boundary wording.** The band
+  is applied only on the no-slot / direction-arm paths (`0x7BBE4`); the wing
+  arm (`0x7BB46`) jumps to `0x7BC1A` and keeps the mode byte (FU-139 §9.1).
+* **§7 totals update in place:** action ported 5 -> 7 (`07`, `0F`), not ported
+  36 -> 34; dispatch 74 -> 72 `-UNSUPPORTED`, 5 -> 7 `FIFA96_OK`;
+  `tests/test_engine_match_handlers.c` flips `action_expect[0x07]`/`[0x0F]` to
+  `FIFA96_OK` and adds `test_action_07_runs_body`/`test_action_0F_runs_body`.
+* New numbered legs OL-65/OL-66 are registered in FU-142 §6 (row 07/0F
+  unmodeled auxiliaries; kick-path external tables/inputs).

@@ -246,8 +246,8 @@ native side effects (the exact failure FU-138 §7 rejected):
 |---|---|---|
 | 05 | carrier stage machine (target algebra, `FUN_0007F7E0`, snap/hand-off animation) | OL-29 |
 | 06 | 597-insn pursuit body (target algebra, RNG, installs 8/9/4) | OL-30 |
-| 07 | kick machine (`FUN_0007E600`, opponent `0x22` invoke, ball-actor install 4, `FUN_0007DAB4`) + full `FUN_0007B9C4` target selection | OL-31/OL-28 |
-| 0F | second kick machine (predictor, RNG mode, timer reload) | OL-31 |
+| 07 | kick machine (`FUN_0007E600`, opponent `0x22` invoke, ball-actor install 4, `FUN_0007DAB4`) + full `FUN_0007B9C4` target selection | OL-31/OL-28 — **closed in §9 (Task 11); row wired** |
+| 0F | second kick machine (predictor, RNG mode, timer reload) | OL-31 — **closed in §9 (Task 11); row wired** |
 | 18/21/23 | resolution/claim/target arms + NSEARCH/SWAP + team/opponent records | OL-32 |
 | all | 0xB2 record pool, teams, `[0x158730]` actor binding | OL-16 (carried) |
 
@@ -262,6 +262,7 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
 | group | rows | state |
 |---|---|---|
 | ported + wired | `00` (cluster A) | unchanged `FIFA96_OK` |
+| ported + wired (Task 11) | `07`,`0F` | `fifa96_action_kick_machine` + `fifa96_ball_kick_target`; `FIFA96_OK` (§9) |
 | pure part advanced (cluster B) | `05`,`06`,`07`,`0F`,`18`,`21`,`23` | still `-FIFA96_ERR_UNSUPPORTED`; seven new tested pure functions |
 | still unported | all other rows | per FU-137 §6 |
 
@@ -283,6 +284,9 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
   code-4 RNG branch and the divisor line (`0x7BE40..0x7BEC0`), the `0x114E04`
   angle fold and the `0x158736` speed source remain unported (FU-76 §7 leg 5
   extended).
+  **Status (Task 11): the whole bounded path is ported as
+  `fifa96_ball_kick_target` (§9); the residuals are the shared staging-tail
+  algebra OL-62 and the external-input legs OL-66 (FU-142 §6).**
 * **OL-29 — row 05 carrier arms.** Stage 0 tail `0x7F3A1..0x7F57B`
   (`FUN_0007F7E0` fallback, camera target algebra, `FUN_00092820`,
   `FUN_00071C94`, `FUN_00079CCC`/`FUN_0006DA64`) and stages 1–3
@@ -296,6 +300,9 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
 * **OL-31 — rows 07/0F kick machines.** `FUN_0007E600` decision, the opponent
   `0x22` invoke, the ball-actor install 4, the tail `FUN_0007DAB4`, the row-0F
   predictor/RNG/timer reload, and the stage-0 gate are unported.
+  **Status (Task 11): the machines are ported as `fifa96_action_kick_machine`
+  and rows 07/0F are wired (§9); the unmodeled record/presentation auxiliaries
+  are OL-65 and the external block inputs OL-66 (FU-142 §6).**
 * **OL-32 — reception/tackle/duel arms.** `FUN_0007A084` special-class/RNG
   arms, the action-code sound arms, `FUN_0004C324` (raw bytes), NSEARCH
   `FUN_0008DB6C` + SWAP `FUN_000786A0`, the row-21 claim arm, the row-23 target
@@ -575,3 +582,205 @@ pinned render hashes unchanged (no render path touched). Write set:
 `docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 05, §7 note, Task-10
 errata), `docs/ghidra/FU142_installer_arms_scope.md` (§6 leg registry).
 `game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.
+
+## 9. Task 11 port — the `FUN_0007B9C4` kick path and the rows 07/0F machines (OL-28/OL-31)
+
+Reviewed read-only in `/FIFA96.EXE` (explicit; Ghidra MCP, no writes). This
+section closes OL-28 and OL-31: the full bounded `FUN_0007B9C4` path is ported
+as `fifa96_ball_kick_target` (`fifa96_ball_pairing.{h,c}`), the row 07/0F
+machines as `fifa96_action_kick_machine` (`fifa96_action_handlers.{h,c}`), and
+both rows are wired through the engine handlers `fifa96_match_action_07`/`_0F`
+over the pool. The residual legs are OL-62 (shared staging-tail algebra),
+OL-65 (unmodeled record/presentation auxiliaries) and OL-66 (external block
+inputs/tables).
+
+### 9.1 Tool calls (first-hand, read-only)
+
+* `disassemble_bytes` `0x7B9C4..0x7BC34` (177 insns) and `0x7BC34..0x7BF17`
+  (213 insns) — the full `FUN_0007B9C4`;
+* `disassemble_bytes` `0x7B194..0x7B44F` (219 insns), `0x7B44F..0x7B57C`
+  (101 insns) — `FUN_0007B194`; `0x7B57C..0x7B878` (235 insns) —
+  `FUN_0007B57C`; `0x7B878..0x7B9C4` (109 insns) — `FUN_0007B878`;
+* `decompile_function` `0x7B9C4`, `0x7B878`, `0x7B194`, `0x795A4`, `0x92AC8`
+  (cross-checked against the bytes);
+* `read_memory 0x114E04` (64 B: 0, 402, 804, 1206, 1608, ... — the FU-88 sine
+  table), `0x14C1D4` (all-zero per-side range words in the image);
+* row 07: `disassemble_bytes` `0x814B0..0x81760`; row 0F:
+  `0x82AD0..0x82B60`, `0x82B60..0x82DD0`;
+* helper decompiles: `0x7DAB4`, `0x7C990`, `0x7E600`, `0x71B9C`, `0x79B1C`,
+  `0x79B6C`, `0x79B58`, `0x78A84`, `0x78AA4`, `0x78B00`, `0x741B4`, `0x8DD70`,
+  `0x8DC68`, `0x6DBCC`;
+* `read_memory 0x1104CA` (24 B resolver mask), `0x1104A0` (48 B: the `0x1104BB`
+  recompute table), `0x11016E` (40 B carry rows), `0x110196` (180 B active
+  rows), `0x11024A` (180 B idle rows), `0x1102FE` (60 B height rows),
+  `0x10F334`/`0x10F33C` (32 B each, the per-type kick direction bytes).
+
+### 9.2 `FUN_0007B9C4` `0x7B9C4..0x7BF16` → `fifa96_ball_kick_target`
+
+Entry `EAX = actor` (0 reuses `[0x158730]`), `DL = mode` stored to `0x158742`,
+`EBX = 6-byte input vector or NULL`. Flow with fresh sites:
+
+```
+0x7B9D4  if (EAX) [0x158730] = EAX else EBP = [0x158730]
+0x7B9E5  byte [0x158742] = DL
+0x7B9EB  if (EBX) copy 6 B EBX -> 0x158738 else zero the triple
+0x7BA17  word [0x15873E] = 0
+0x7BA1E  if ([EBP+0x20] == 0) -> 0x7BBE4 (band)
+0x7BA29  if ((int8)mode != word[slot+6]) word[slot+6] = (int16)(int8)mode
+0x7BA4A  L1 = active && phase==2 && (slotword6 & 0x20) && slot[+0x23] < 7
+0x7BA8A  L2 = phase==2 && (slotword6 & 0x10)
+0x7BABD  if (L2 && active && |pos_x| > 0x420 && ((side==0 && pos_z>0x7B0)
+         || (side==1 && pos_z<-0x7B0))) -> wing (0x7BB13):
+         local = {±0xF0, 0, pos_z}; 0x8DCD4(camera, local, 0x158738);
+         goto 0x7BC1A
+0x7BB4B  dir_x = (int8)slot[+0x20]; dir_z = (int8)slot[+0x21]
+         if (dirs nonzero) -> FUN_0007B878(dir)
+         else if (!active) -> type arm
+         else if ((mode & 0x30) || ball_height || pos_y) {
+             if (L2 && !pos_y) -> FUN_0007B878(0,0) else type arm
+         } else if (type in {0x10,0x11,0x12}) -> type arm
+         else return 0
+type arm dir = table 0x10F334[type8], 0x10F33C[type8]; FUN_0007B878(dir)
+0x7BBE4  if ((int8)[0x158742] < 0) [0x158742] = band(x)
+0x7BC1A  inactive: (flags & 0x20) -> B57C(actor, vector, 0)
+         active: flags == 0x40 -> B194(actor, vector, traj)
+                 else (flags & 0x20) || L1 -> B57C(actor, vector, L1)
+0x7BC80  row = FUN_0007AE70(actor, (int8)flags, word[0x15873A], word[0x15873C])
+0x7BCA2  row == 0 || row[0] == 0 -> return 0
+0x7BCB6  code = row[0] -> 0x158743; sub = row[9] -> 0x158744
+         lo = row[+2]; hi = row[+4]; add = row[+6]; divisor = row[8]
+         mode 0x30: {0x1C8, 0x780, 0x30, 0x18, extend=1}
+         0x14C1D4[side*2] & 0x10 && (extend || code in {1,3}) -> lo/hi 1.5x
+         x < lo -> x = lo; else x > hi -> x = hi; on clamp:
+            angle = FUN_000CD474((int16)x, word[0x15873A]);
+            word[0x15873A] = FUN_000795A4(x, sin_tab(angle));
+            word[0x15873C] = FUN_000795A4(x, sin_tab(angle+0x100))
+0x7BE0B  traj += add
+0x7BE26  if (x != 0 && code != 3) {
+             if (code == 4) mode==0x40 ? traj = 0x90 + (rng&7)*(0x10-desc15)
+                                      : divisor = (rng&0x7F)+3;
+             if (divisor) traj = word[0x15873C] + (int16)x/(int16)divisor;
+         }
+0x7BECE  if ((int16)word[0x15873C] > 0x460) traj = 0x460
+0x7BEDE  FUN_0007A490([0x158730], 0x158738, traj, code, sub); return 1
+```
+
+`FUN_0007B878` (109 insns) resolves the event row for `code = (int16)slot_word6`
+and `x/z = dir_x/dir_z`, clamps `min(slot23,0x3C)^2 * (int8)row[1]` to
+`row[2]..row[4]` (with the same `0x14C1D4`/slot-word 1.5x), applies `*0xB5>>8`
+when both dirs are nonzero, writes `dx = dir_x*speed`, `dz = dir_z*speed` and
+the `FUN_0008DC68` distance into `out[0]`; a NULL row zeroes the triple.
+
+`FUN_0007B194` (mode 0x40, 219 insns) builds a goal-line target
+`{x, 0, ±0xB40}` from 11..13 RNG draws (the no-slot phase-1/no-slot/random,
+slot/mode-state clusters), runs `0x8DCD4(camera, target, vector)`, derives the
+speed `((int8)rec[+4][0x10]<<7) + 0x390 + (rng&7)`, halves it for
+`byte[+0x99]` or applies the `0x14C1D4` 1.5x, adds the goal-side drift
+`±(|0xB10-pos_z|>>7)` and the `[0x14C2F6]==1` signed adjust, then folds
+`FUN_000CD474(distance, dx)` into `word[0x15873A]`/`[0x15873C]` via the
+0x114E04 table and `FUN_000795A4` (`(a*b+0x8000)>>16`). `FUN_0007B57C` (235
+insns) starts at the camera + the staged dx/dz (`camera_z - 0x60` for
+non-zero SI), takes the nearest `FUN_0008DE8C` team record within the
+`|angle2-angle1| < 0x80` gate (for SI==0) as a velocity-projected decoy, else
+stages the goal-line fallback `±(0xB10 + rng&0xF)`, `±(0xD0 - rng&0x1F)`,
+optionally `±0x30`, speed 0x5A0 and the same fold; `[0x14C326] > 0` returns
+unchanged.
+
+Ported surfaces: `fifa96_ball_kick_target(state, actor, slot, input, ctx, rng,
+mode, out)` and the `fifa96_ball_kick_actor`/`_slot`/`_ctx`/`_out` views. The
+`0x114E04` fold is implemented exactly (the 257-entry table, the bit-8 index
+negation with the 0x100 wrap and the bit-9 value negation, then
+`FUN_000795A4`); every native call body is either ported (`0x8DCD4` via the
+tested `fifa96_arm_dist_stage`, `0x8DC68` via `fifa96_entity_distance`,
+`0x8DE8C` via `fifa96_entity_find_nearest`, `0xCD474` via
+`fifa96_action_kick_angle`, `0x92AC8` via `fifa96_rng_step`, `0x7AE70` via the
+tested resolver, `0x7A490` via `fifa96_ball_pair_stage` + `_stage_tail`) or a
+documented request (the tail's `FUN_0007A084`/`0x78B00`, OL-62). The caller
+supplies the four 10-byte row tables, the `0x1104CA` sector mask, the
+`0x1104BB` recompute table, the `0x10F334/33C` direction tables, the camera,
+the `0x14C1D4` word and the team candidates (OL-66).
+
+### 9.3 Rows 07/0F → `fifa96_action_kick_machine`
+
+Row 07 (`0x814B0..0x81737`): phase != 2 or `+0x81 != 0` -> the tail
+`0x81702` (`FUN_0007DAB4` then, for the team target, install 4 on the staged
+ball actor and `FUN_00079B58` on the receiver); `timer89 += (uint16)delta`;
+stage 0 (`0x81512..0x815CD`): `[+0x9E]=1`, the lane/`word[+0x5D]+0x70` vs
+`0x157750` gate (timer > 0x3C -> tail), the tested stage target, `timer89=0`,
+`+0x92++`; stage 1 (`0x815CD..0x816FC`): the SI mode word (`0x40` for the
+`[team+0x7CB]` record, the slot word, `0x40` for staged code 3, else -1), the
+`FUN_0007E600` decision (`0x110680` type gate, the `0x71B9C(4)` predictor in
+`0x20..0x60`, the pos/predictor `0x8DCD4` distance <= 0xF0 and <= lane, the
+camera x bounds, the side/pos_z bounds, the `0x8DD70` angle inside `±0x100`
+(side 0) or outside (side 1) and the `|angle - word[+0x7D]| <= 0x100` gate ->
+install `0x0E`), the `[0x14C32A]`/`0x15B680==4` `0x40 -> 0x20` downgrade, the
+kick, the post-kick opponent gate (staged z < 0x30, timer < 5, the opponent
+type 6, no slot, lane < 0xD0, `|angle - word[+0x7D]| < 0x55` -> install
+`0x22`), `timer89=0`, `+0x92++`; stage 2: `+0x44`.
+
+Row 0F (`0x82AD0..0x82DCF`): phase != 2 -> reset; `timer89 += delta`; stage 0
+(`0x82B21..0x82BC3`): inactive or `word[+0x85] != 0` -> reset; the
+`0x8DCD4(pos, 0x157788)` distance < 0x50 advances pos by the half vector; the
+`0x79B6C` re-anchor (target = pos, y = 0, the camera face, anim 0x26 when
+inactive), `[+0x9E]=1`, `timer89=0`, `+0x92++`; stage 1
+(`0x82BC9..0x82DA2`): the `0x79B1C` snap, `+0x44` reset, `+0x81` wait, the
+`0x7876C` merge request (`team+0x828`, lane < 0xF0, `[0x1586D7]==0`), the
+`0x78A84` slot backup, the lane/bound and opponent-height gates, the lane 0x30
+and `pos_y+0x80` gates, the `0x78AA4` slot restore, kick 1
+(`mode = word[slot+6]`), the predictor distance vs lane and the corner kick
+(`0x6DBCC` code 2/3 into the camera-led vector with the slot temporarily
+nulled, mode 0x40 for code 3 else 0x20 with the `0x92AC8` face gate), then
+`word[+0x81] = 2*word[+0x85] - word[+0x87] + 0x1E`.
+
+The port splits the native synchronous `FUN_0007B9C4` calls into
+`kick`/`corner_kick` requests the engine runs (`kick_done` 1/2 re-enters the
+machine); the reset consequences (`+0x92 = 0xFF`, `+0x89 = 0`) are applied by
+the dispatcher and the requests (defender 0x0E, opponent 0x22, ball 4,
+reset/merge) are drained by the FU-141 pool installer. The record bytes
+`+0x44/+0x85/+0x87/+0x99/+0x9D`, the roster descriptor, the `[0x1577CA]`
+exclusion, the `[0x1586D7]` gate, the `[team+0x7CB]`/`[0x7C7]` pointers and
+the `0x71B9C`/`0x6DBCC` tables are staged zero / caller inputs (OL-65/OL-66).
+
+### 9.4 Engine wiring
+
+`fifa96_match_action_07`/`_0F` stage `mr->record` (plus the new derived
+`entity_id`/`actor_type` fields) into `fifa96_action_kick`, run the machine,
+run the requested kick(s) through `fifa96_ball_kick_target` on
+`mr->entities.ball.pair` with the embedded EXE tables, repack
+`timer89`/`timer81`/`stage92`/targets/`type`/`ran`/`install`/`helper_request`,
+and resolve the opponent (`team[1-team].target` -> 0x22 install) and the
+receiver timer through the pool. Rows 07/0F flip to `ported`:
+`action_expect[0x07] = action_expect[0x0F] = FIFA96_OK`; dispatch counts
+74 -> 72 `-UNSUPPORTED` / 5 -> 7 `FIFA96_OK` (FU-137 §6.1/§7, Task-11 errata).
+
+### 9.5 Tests
+
+* `tests/test_ball_pairing.c`: `test_kick_target_resolves_and_stages`
+  (resolver row + staging), `test_kick_target_clamp_and_angle_fold` (the
+  lower-bound clamp and the exact 0x114E04 fold values),
+  `test_kick_target_code4_rng_divisor` (the seed-0 divisor `x/3` traj and the
+  inactive code-4 clear), `test_kick_target_negative_band_and_no_row` (the
+  band + the row[0]==0 path), `test_kick_target_slot_dir_arm` (the `0x7B878`
+  speed/dx/dz), `test_kick_target_invalid` (NULLs).
+* `tests/test_action_handlers.c`: `test_kick_machine_07_reset_and_stage0`,
+  `test_kick_machine_07_decision_and_post`,
+  `test_kick_machine_07_reset_decision` (the 0x7C990 codes),
+  `test_kick_machine_0F_stage0`, `test_kick_machine_0F_reload_and_corner`,
+  `test_kick_machine_invalid`.
+* `tests/test_engine_match_handlers.c`: `test_action_07_runs_body`,
+  `test_action_0F_runs_body`, the flipped `action_expect[0x07]`/`[0x0F]`.
+
+### 9.6 Repo state (this task)
+
+`make check` 103/103 (engine tests under ASan/UBSan); M1 golden and pinned
+render hashes unchanged. Write set: `include/fifa96_loader/fifa96_ball_pairing.h`,
+`src/fifa96_loader/fifa96_ball_pairing.c`,
+`include/fifa96_loader/fifa96_action_handlers.h`,
+`src/fifa96_loader/fifa96_action_handlers.c`,
+`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`,
+`src/fifa96_engine/fifa96_match_handlers.c`, `tests/test_ball_pairing.c`,
+`tests/test_action_handlers.c`, `tests/test_engine_match_handlers.c`,
+`CMakeLists.txt` (rng links), `docs/ghidra/FU139_action_cluster_b.md` (this
+section), `docs/ghidra/FU137_dispatch_mechanics.md` (Task-11 errata),
+`docs/ghidra/FU142_installer_arms_scope.md` (OL-65/OL-66, OL-28/OL-31 status).

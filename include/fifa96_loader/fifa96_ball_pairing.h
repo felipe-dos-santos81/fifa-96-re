@@ -152,3 +152,129 @@ int fifa96_ball_pair_stage_tail(fifa96_ball_pair_state *state,
                                 fifa96_ball_stage_tail_actor *actor,
                                 const uint8_t *recompute_table,
                                 fifa96_ball_stage_tail_out *out);
+
+/* ===== FU-139 §9 (M2 arms-and-wiring Task 11): the FUN_0007B9C4 kick path =====
+ *
+ * The native `FUN_0007B9C4` (`0x7B9C4..0x7BF16`, 337 instructions) stages the
+ * kick into the FU-73 §1 ball block: entry `EAX = actor` (0 reuses
+ * `[0x158730]`), `EDX = mode` byte stored to `0x158742`, `EBX = 6-byte input
+ * vector or NULL`. This port reproduces the full bounded flow first-hand:
+ *   - prologue (`0x7B9D4..0x7BA17`): actor latch, mode store, 6-byte vector
+ *     copy (or zero), trajectory word zero;
+ *   - slot latch (`0x7BA1E..0x7BA85`): `word[slot+6] == (int8)mode` equality
+ *     and latch, the L1 flag (`+0x8D && phase==2 && word6&0x20 && slot[+0x23] <
+ *     7`) and the L2 flag (`phase==2 && word6&0x10`);
+ *   - normal arm (`0x7BA85..0x7BBE4`): the wing target (`0x7BB13..0x7BB46`,
+ *     `FUN_0008DCD4(camera, ±0xF0/pos_z local)`) or the slot/type direction
+ *     arm (`0x7BB4B..0x7BBE2`, type table `0x10F334/0x10F33C` or slot
+ *     `+0x20/+0x21`) through `FUN_0007B878` (ported here as
+ *     `kick_dir_vector`: the `0x1104CA`-free event resolver on the slot word
+ *     and direction, the side range `word[0x14C1D4+side*2]` 0x10-bit + slot
+ *     word 0x50-bit 1.5×, `slot23² * row[1]` clamped to `row[2]..row[4]`, the
+ *     diagonal `*0xB5>>8` and the `FUN_0008DC68` distance);
+ *   - negative-mode band (`0x7BBE4..0x7BC15`) via the tested
+ *     `fifa96_action_kick_range_band`;
+ *   - mode arms (`0x7BC1A..0x7BC80`): the inactive `B57C` arm, the active
+ *     mode-0x40 `B194` arm (both ported: goal-line RNG target construction,
+ *     `0x8DCD4`, `FUN_000CD474`, the 0x114E04 fold over the re-derived speed,
+ *     the nearest-record `FUN_0008DE8C` decoy and the `0x14C2F6` adjust) and
+ *     the active `B57C` arm (`mode & 0x20` or L1);
+ *   - event row (`0x7BC80..0x7BCC8`) through the tested
+ *     `fifa96_action_kick_event_row` and the caller's four 10-byte row tables;
+ *   - row application (`0x7BCB6..0x7BE0B`): code/sub-code/traj-add staging,
+ *     the mode-0x30 override, the `0x14C1D4` 1.5×, the lower-first clamp and
+ *     the `0x114E04` angle fold (the native idiom is ported exactly: the
+ *     257-entry sine table, `FUN_000CD474` through the tested
+ *     `fifa96_action_kick_angle`, and `FUN_000795A4`'s `(*speed*value+0x8000)
+ *     >>16`);
+ *   - code-4 RNG/divisor (`0x7BE26..0x7BEC0`): the `row[0] == 4` arm
+ *     (mode 0x40: `traj = 0x90 + (rng&7)*(0x10 - desc15)`; else the
+ *     `(rng&0x7F)+3` divisor) and `traj = (int16)dz + (int16)x/divisor`;
+ *   - the `0x460` cap and the final `fifa96_ball_pair_stage` +
+ *     `fifa96_ball_pair_stage_tail` (native `FUN_0007A490`).
+ * `out->receive` is the unported `FUN_0007A084` request and `out->slot_cb` the
+ * unported `0x78B00` callback (both OL-62); everything else is ported. NULL
+ * `state`/`actor`/`slot`/`ctx`/`rng`/`out` -> -FIFA96_ERR_INVALID. */
+typedef struct fifa96_ball_kick_slot {
+  uint8_t present;    /* [rec+0x20] != 0 */
+  int16_t word6;      /* word[slot+6] (in/out: the mode latch) */
+  uint8_t counter23;  /* byte[slot+0x23] */
+  int8_t dir_x;       /* (int8)byte[slot+0x20] */
+  int8_t dir_z;       /* (int8)byte[slot+0x21] */
+  int8_t anim_1d;     /* (int8)(slot[+0x1D]>>24) */
+} fifa96_ball_kick_slot;
+
+typedef struct fifa96_ball_kick_actor {
+  int32_t id;                  /* record identity; 0 reuses `state->actor` */
+  int32_t pos_x, pos_y, pos_z; /* +0x59/+0x5D/+0x61 (stage-tail nudge in/out) */
+  int32_t vel_x, vel_z;        /* +0x71/+0x73 dwords */
+  int32_t nudge_x;             /* dword[+0x6B] (stage-tail SAR-17 addend) */
+  int32_t nudge_z;             /* dword[+0x6D] */
+  uint8_t active;              /* +0x8D */
+  uint8_t type;                /* +0x8E>>24 */
+  uint8_t actor_type;          /* +0x8B>>24 */
+  uint8_t anim_9d;             /* +0x9D */
+  uint8_t byte_99;             /* +0x99 */
+  int8_t desc_e;               /* (int8)(rec[+4][+0xE]>>24) */
+  int8_t desc_10;              /* (int8)rec[+4][+0x10] */
+  int8_t desc_11;              /* (int8)rec[+4][+0x11] */
+  int8_t desc_15;              /* (int8)rec[+4][+0x15] */
+  uint8_t side;                /* team[+0x826] */
+  uint8_t sub_phase1;          /* [0x157A49]>>24 == 1 */
+  uint8_t facing;              /* +0x8E low byte (stage-tail face in/out) */
+} fifa96_ball_kick_actor;
+
+typedef struct fifa96_ball_kick_candidate {
+  int32_t pos_x, pos_z;   /* found record +0x59/+0x61 */
+  int16_t vel_x, vel_z;   /* found record words +0x71/+0x73 */
+} fifa96_ball_kick_candidate;
+
+typedef struct fifa96_ball_kick_ctx {
+  int32_t camera_x, camera_y, camera_z; /* 0x15774C/50/54 */
+  uint8_t phase;             /* [0x157A4A]>>24 */
+  uint8_t mode_state;        /* [0x157A4D] (B194 slot arm) */
+  int32_t goal_gate;         /* [0x14C2F6] == 1 arm */
+  int32_t arm_gate;          /* [0x14C326] > 0 short-circuits FUN_0007B57C */
+  uint16_t side_range;       /* word[0x14C1D4 + side*2] */
+  int16_t ball_height;       /* word[0x157750] */
+  /* The sign-extended per-type direction bytes `0x10F334[type8]` /
+   * `0x10F33C[type8]` the slot/type arm reads (caller-supplied per the house
+   * table convention; the native loads them at `0x7BBC2`/`0x7BBCA`). */
+  const int8_t *type_dir_x;
+  const int8_t *type_dir_z;
+  /* FUN_0008DE8C candidate records for FUN_0007B57C (the actor's team block);
+   * `candidate_skip` is the native `(int16)actor[+0x8D]` and `self_index` the
+   * found-record identity comparison stand-in (the native pointer equality
+   * `found == actor`). */
+  const fifa96_entity_candidate *candidates;
+  uint32_t candidate_count;
+  uint32_t candidate_skip;
+  int32_t self_index;
+  /* Parallel full-record view of `candidates` (the found record's +0x59/
+   * +0x61/+0x71/+0x73 fields the decoy arm reads); 1:1 by index. */
+  const struct fifa96_ball_kick_candidate *team_records;
+  const uint8_t *sector_table;    /* 0x1104CA resolver bitmask table */
+  const uint8_t *recompute_table; /* 0x1104BB stage-tail eligibility table */
+  const uint8_t *event_rows[4];   /* 0x1102FE/16E/196/24A, 10-byte rows */
+} fifa96_ball_kick_ctx;
+
+typedef struct fifa96_ball_kick_out {
+  uint8_t staged;   /* 1 = the row was applied and staged (native return 1) */
+  uint8_t band;     /* resulting 0x158742 byte (after the negative-mode band) */
+  uint8_t receive;  /* stage-tail FUN_0007A084 request (OL-62) */
+  uint8_t cleared;  /* stage-tail inactive 4/5/7 whole-block reset */
+  uint8_t slot_cb;  /* stage-tail 0x78B00 callback request (OL-62) */
+  uint8_t nudge;    /* stage-tail recompute nudge ran */
+  uint8_t anim;     /* stage-tail resolved 0x6E598 id */
+} fifa96_ball_kick_out;
+
+struct fifa96_rng;
+
+fifa96_err_t fifa96_ball_kick_target(fifa96_ball_pair_state *state,
+                                     fifa96_ball_kick_actor *actor,
+                                     fifa96_ball_kick_slot *slot,
+                                     const fifa96_ball_pair_vector *input,
+                                     const fifa96_ball_kick_ctx *ctx,
+                                     struct fifa96_rng *rng,
+                                     uint8_t mode,
+                                     fifa96_ball_kick_out *out);

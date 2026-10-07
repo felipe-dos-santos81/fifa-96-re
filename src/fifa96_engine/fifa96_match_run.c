@@ -115,6 +115,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
     r->distance = distance;
   }
   r->type = e->type;
+  r->actor_type = e->actor_type;
+  r->entity_id = id;
   r->vel_x = e->vel_x;
   r->vel_z = e->vel_z;
   /* FU-142d: the row-28 pool fields. The team-side/flag830 and the resolved

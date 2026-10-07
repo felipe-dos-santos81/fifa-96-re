@@ -152,6 +152,11 @@ struct fifa96_match_run_record {
   int8_t place_offset_z;    /* caller-supplied 0x10F33C[type8] (FU-140) */
   uint8_t place_valid;      /* row 1E: the placement triple is live (FU-141) */
   uint8_t ran;         /* native +0x9E, set by the action-00 body */
+  /* FU-139 §9 (Task 11): the current pool record identity and its +0x8B
+   * actor-type byte, staged so rows 07/0F can resolve the team candidates and
+   * the kick direction table. */
+  int32_t entity_id;   /* team*11 + index, or NONE */
+  uint8_t actor_type;  /* native +0x8B>>24 */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
   /* FU-142d (row 28, Appendix G) staging: the native record +0x8E facing byte
    * and +0x71/+0x73 velocity pair the body writes, the derived scratch gates

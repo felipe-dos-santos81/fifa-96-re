@@ -7,6 +7,7 @@
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_ball_pairing.h"
+#include "fifa96_loader/fifa96_rng.h"
 
 _Static_assert(offsetof(fifa96_ball_pair_vector, x) == 0, "x");
 _Static_assert(offsetof(fifa96_ball_pair_vector, height) == 2, "height");
@@ -586,6 +587,259 @@ static void test_stage_tail_face_anim_and_slot(void) {
   assert(out.anim == 0);
 }
 
+
+/* ===== FU-139 §9 (Task 11): the FUN_0007B9C4 kick path fixtures ===== */
+
+static void row10_set(uint8_t *row, uint8_t code, int16_t lo, int16_t hi, int16_t add,
+                      uint8_t divisor, uint8_t sub) {
+  memset(row, 0, 10);
+  row[0] = code;
+  row[1] = 0;
+  row[2] = (uint8_t)lo;
+  row[3] = (uint8_t)((uint16_t)lo >> 8);
+  row[4] = (uint8_t)hi;
+  row[5] = (uint8_t)((uint16_t)hi >> 8);
+  row[6] = (uint8_t)add;
+  row[7] = (uint8_t)((uint16_t)add >> 8);
+  row[8] = divisor;
+  row[9] = sub;
+}
+
+/* The ACTIVE table at index 3 (class 0, band 1, idx 1) with a synthetic
+ * sector table bit 0 set and the no-slot active actor. */
+static void kick_fixture(fifa96_ball_pair_state *st, fifa96_ball_kick_actor *a,
+                         fifa96_ball_kick_slot *sl, fifa96_ball_kick_ctx *ctx,
+                         struct fifa96_rng *rng, uint8_t rows[4][200],
+                         const uint8_t **event_rows) {
+  static const uint8_t sector[32] = {1};
+  static const uint8_t recompute[16] = {0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 0};
+  memset(st, 0, sizeof *st);
+  memset(a, 0, sizeof *a);
+  memset(sl, 0, sizeof *sl);
+  memset(ctx, 0, sizeof *ctx);
+  memset(rows, 0, 4 * 200);
+  event_rows[0] = rows[0];
+  event_rows[1] = rows[1];
+  event_rows[2] = rows[2];
+  event_rows[3] = rows[3];
+  a->id = 7;
+  a->active = 1;
+  a->side = 0;
+  a->pos_x = 0;
+  a->pos_y = 0;
+  a->pos_z = 0;
+  ctx->phase = 2;
+  ctx->sector_table = sector;
+  ctx->recompute_table = recompute;
+  ctx->camera_x = 0;
+  ctx->camera_y = 0;
+  ctx->camera_z = 0;
+  ctx->ball_height = 0x20;
+  ctx->event_rows[2] = rows[2];
+  ctx->event_rows[3] = rows[3];
+  ctx->event_rows[1] = rows[1];
+  ctx->event_rows[0] = rows[0];
+  (void)event_rows;
+  fifa96_rng_seed(rng, 0);
+}
+
+static void test_kick_target_resolves_and_stages(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  /* code 0x10 -> class 0; x == z == 0 -> sector = facing (0) -> idx 1;
+   * d = 0x20 -> band 1; active -> ACTIVE table index 2*1 + 6*0 + 1 = 3. */
+  row10_set(rows[2] + 30, 2, 0x100, 0x500, 0x20, 0, 0x11);
+  input.x = 0x200;
+  input.height = 0;
+  input.z = 0;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert(st.actor == 7);
+  assert(st.flags == 0x10);
+  assert(st.code == 2);
+  assert(st.sub_code == 0x11);
+  assert(st.traj == 0x20);
+  assert(st.vector.x == 0x200);   /* within [0x100, 0x500] -> no fold */
+  assert(st.vector.height == 0);
+  assert(st.vector.z == 0);
+}
+
+static void test_kick_target_clamp_and_angle_fold(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 30, 2, 0x300, 0x500, 0, 0, 0);
+  input.x = 0x200;     /* x < lo -> clamp to 0x300 then fold */
+  input.height = 0;    /* angle = kick_angle(0x300, 0) = 0x100 */
+  input.z = 0;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert(st.vector.x == 0x300);
+  /* 0x114E04 at angle 0x100: bit8 -> table[0x100] = 65536, bit9 clear;
+   * (0x300 * 65536 + 0x8000) >> 16 = 0x300.  angle+0x100 = 0x200: bit9 ->
+   * -table[0] = 0. */
+  assert(st.vector.height == 0x300);
+  assert(st.vector.z == 0);
+}
+
+static void test_kick_target_code4_rng_divisor(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  /* code 4, x stays 0x300: divisor = (rng & 0x7F) + 3. Seed 0 first draw
+   * 0x200 -> divisor 3; traj = dz + x/3 = 0x100 + 0x100 = 0x200. */
+  row10_set(rows[2] + 30, 4, 0x100, 0x500, 0x20, 0, 0);
+  input.x = 0x300;
+  input.height = 0;
+  input.z = 0x100;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(st.traj == 0x200);
+
+  /* An inactive code-4 stage is one of the 4/5/7 whole-block resets: the
+   * RNG/divisor traj is written and then wiped by the FU-73 §1 clear (native
+   * 0x7A97F..0x7A9D9), so the observable result is the reset block. */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  /* code 0x40 -> class 2, idx 0; inactive -> IDLE; d = 0x10 -> band 0 ->
+   * index 2*0 + 6*2 + 0 = 12. */
+  row10_set(rows[3] + 120, 4, 0x100, 0x500, 0x00, 0, 0);
+  a.active = 0;
+  a.desc_15 = 0;
+  ctx.ball_height = 0x10;
+  input.x = 0x300;
+  input.height = 0;
+  input.z = 0x100;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x40, &out) ==
+         FIFA96_OK);
+  assert(out.cleared == 1);
+  assert(out.staged == 1);
+  assert(st.code == 2);        /* clear seed */
+  assert(st.traj == 0);
+  assert(st.vector.x == 0 && st.vector.z == 0);
+}
+
+static void test_kick_target_negative_band_and_no_row(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 30, 1, 0x100, 0x500, 0x10, 0, 0);
+  input.x = 0;
+  input.height = 0;
+  input.z = 0;
+  /* negative mode with no slot -> band 0x20 (x < 0x5A0); the resolver then
+   * runs with code 0x20 (class 1, band 1, idx 1 -> ACTIVE index 8). */
+  row10_set(rows[2] + 90, 1, 0x100, 0x500, 0x10, 0, 0);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0xFF, &out) ==
+         FIFA96_OK);
+  assert(out.band == 0x20);
+  assert(st.flags == 0x20);
+  assert(out.staged == 1);
+  assert(st.code == 1);
+
+  /* row[0] == 0 -> staged 0 but the vector/mode stay staged. */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 30, 0, 0, 0, 0, 0, 0);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 0);
+}
+
+static void test_kick_target_slot_dir_arm(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  input.x = 0;
+  input.height = 0;
+  input.z = 0;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  sl.present = 1;
+  sl.word6 = 0x10;      /* L2 requires phase 2 && word6 & 0x10: true */
+  sl.counter23 = 0;
+  sl.dir_x = 1;
+  sl.dir_z = 0;
+  a.active = 1;         /* L2 && active -> the wing arm is considered, but
+                         * |pos_x| <= 0x420 so the dir arm runs */
+  a.pos_x = 0;
+  a.pos_z = 0;
+  /* resolver code = word6 = 0x10, x = 1, z = 0 -> angle sector 2 (kick_angle
+   * (1,0) = 0x100 -> sector = ((0x100 + 0x40) & 0x3FF) >> 7 = 2); class 0;
+   * has_slot && code != 0x60, no fast carry -> ACTIVE/IDLE: active -> ACTIVE
+   * index 2*band + 6*0 + idx. d = 0x20 -> band 1, idx = sector_table[0] bit 2
+   * = 0 -> index 2. */
+  row10_set(rows[2] + 20, 2, 0x64, 0x400, 0, 0, 0);
+  row10_set(rows[3] + 20, 2, 0x64, 0x400, 0, 0, 0);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  /* row[2]=0x64, dir nonzero, counter 0 -> product 0 -> speed = 0x64;
+   * diagonal guard not taken (dir_z == 0); dx = 1*0x64, dz = 0. */
+  assert(st.vector.height == 0x64);
+  assert(st.vector.z == 0);
+  assert(st.vector.x == 0x64);   /* entity distance(0x64, 0) */
+  assert(sl.word6 == 0x10);      /* equal mode -> no latch change */
+}
+
+static void test_kick_target_invalid(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  memset(&st, 0, sizeof st);
+  memset(&a, 0, sizeof a);
+  memset(&sl, 0, sizeof sl);
+  memset(&ctx, 0, sizeof ctx);
+  assert(fifa96_ball_kick_target(NULL, &a, &sl, NULL, &ctx, &rng, 0, &out) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_ball_kick_target(&st, NULL, &sl, NULL, &ctx, &rng, 0, &out) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_ball_kick_target(&st, &a, NULL, NULL, &ctx, &rng, 0, &out) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, NULL, NULL, &rng, 0, &out) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, NULL, &ctx, NULL, 0, &out) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, NULL, &ctx, &rng, 0, NULL) ==
+         (fifa96_err_t)-FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_offset_zero_and_axes();
   test_offset_metric_branches();
@@ -611,6 +865,12 @@ int main(void) {
   test_stage_tail_recompute_and_receive();
   test_stage_tail_inactive_subcode_and_clear();
   test_stage_tail_face_anim_and_slot();
+  test_kick_target_resolves_and_stages();
+  test_kick_target_clamp_and_angle_fold();
+  test_kick_target_code4_rng_divisor();
+  test_kick_target_negative_band_and_no_row();
+  test_kick_target_slot_dir_arm();
+  test_kick_target_invalid();
   puts("test_ball_pairing: ok");
   return 0;
 }
