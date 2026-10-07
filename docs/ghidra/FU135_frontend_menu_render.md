@@ -279,3 +279,39 @@ Port write set: `include/fifa96_engine/fifa96_menu_art.h`,
 `include/fifa96_engine/fifa96_frontend_run.h`,
 `tests/test_engine_menu_art.c`, `tests/test_engine_frontend.c`,
 `CMakeLists.txt`. Analysis-only otherwise; no Ghidra/project/ISO write.
+
+## 7. Erratum (M1 gate fix wave, 2026-10-06): no `OPTIONS.INV` in the ISO
+
+The M1 gate review enumerated the retail image and found **no OPTIONS-like
+path anywhere in the 798 files**, so the `options.inv` load recorded in §2
+does not resolve to a top-level ISO file. The engine's menu art therefore
+always takes the procedural fallback at M1 (as §5 already allows), and the
+real front-end art asset remains unresolved (open legs 2 and 3 carry the
+container-identity question unchanged).
+
+Enumeration command and output (repo tool, read-only; full path list):
+
+```
+$ ./build/fifa96_play auto game/FIFAPCCD96.iso --list | head -1
+auto game/FIFAPCCD96.iso iso9660 bytes=476033024 files=798
+
+$ ./build/fifa96_play auto game/FIFAPCCD96.iso --list | grep -c '^iso '
+798
+
+$ ./build/fifa96_play auto game/FIFAPCCD96.iso --list | grep -ci 'options'
+0
+
+$ ./build/fifa96_play auto game/FIFAPCCD96.iso --list | grep -ci '\.inv'
+0
+```
+
+(`grep -i` makes both checks case-insensitive; the walk is the same
+`fifa96_iso9660_walk` used by the engine's asset table.) The three `0x1009C4`
+xrefs in §2 (`0x1E3E1`, `0x1F608`, `0x1FA68`) are unchanged and still real:
+the string is loaded and passed to `FUN_000659F8(2, ...)`/`FUN_000A157C`, so
+the file must come from a resolver outside the plain ISO9660 namespace (e.g.
+a virtual/overlay name, a different disc, or a code-generated buffer). That
+resolution — and the entry-to-surface binding from open leg 2 — is the
+remaining front-end art open leg; nothing in §1–§6 is retracted.
+
+This erratum is append-only: earlier rows were not rewritten.
