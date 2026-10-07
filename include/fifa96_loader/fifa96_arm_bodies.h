@@ -54,7 +54,9 @@ fifa96_err_t fifa96_arm_2c_step(struct fifa96_arm_record *rec);
  * syncs the target/velocity, draws one RNG word (`0x92AC8`; `& 1` selects id
  * 0x5D else 0x46) and resolves it through `fifa96_arm_anim_select`; either way
  * `timer89 = 0`, `stage92 = 1`, then stage 1 runs in the same call. Stage 1
- * with `chase` syncs and returns (flag44 != 0 re-runs the selector); otherwise
+ * with `chase` syncs and returns (flag44 != 0 re-runs the selector, a
+ * modeled no-op: identity for the native 0x5D/0x46 id domain; the selector's
+ * native record writes stay OL-52); otherwise
  * the `P[+0xE]` gate (`player_e`) waits at the sync; below it, `active != 0`
  * runs the `0x6E1D0` phase cell (`fifa96_action_phase_cell` over the `cell`
  * pair selected by `side == side_controlled`) into the target and

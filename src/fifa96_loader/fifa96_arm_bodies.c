@@ -225,6 +225,9 @@ fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec) {
    * failure (the native has no NULL concept here). */
   if (rec->phase == 5u && (!rec->rng || !rec->team_candidates))
     return -FIFA96_ERR_INVALID;
+  /* The install request is per call: the pool drain consumes `install`, so a
+   * stale request from a previous call must not survive this one. */
+  rec->install = 0;
   rec->timer7b = 2;                          /* 0x874EF */
   if (rec->phase != 5u) {
     /* 0x87502..0x87519: sync, then reset; 0x87524..0x8752B: the +0x9A
@@ -277,7 +280,11 @@ fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec) {
       /* 0x87620..0x8766C: the chased record syncs and returns; flag44 != 0
        * re-runs the selector on the stage-0 id (the derived stand-in is the
        * last resolved id; the native stack re-read is undefined in a
-       * stage-1-only call). */
+       * stage-1-only call). The re-select is a **modeled no-op**: for the
+       * native id domain (0x5D/0x46) the derived selector is the identity,
+       * and the native selector's record writes stay OL-52; the branch is
+       * kept for site fidelity (deleting it changes no observable derived
+       * state, pinned by the rng-even reselect fixture). */
       fifa96_arm_29_sync(rec);
       if (rec->flag44 != 0) {
         uint8_t slot;

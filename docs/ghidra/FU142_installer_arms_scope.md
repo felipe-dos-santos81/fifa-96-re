@@ -1271,9 +1271,15 @@ FU-142c/OL-48).
 * `fifa96_arm_bodies.{h,c}`: `fifa96_arm_29_step` (F.2). The prologue writes
   `timer7b = 2`; the phase != 5 path syncs target/velocity, runs
   `fifa96_arm_reset` and, when `skip_9a == 0`, records `install = 3` (the
-  pool installer consumes it; see the §6 OL-54 decision). Phase 5 runs the
-  derived stage latch with the native falls-through exactly as F.2 (stage 0
-  -> stage 1 in one call; the wait `JG` syncs target/pos; stage 2 syncs).
+  pool installer consumes it; see the §6 OL-54 decision). The step clears
+  `install` at entry (after the phase-5 input validation) because the request
+  is per call — a stale request must not survive into the binder/drain.
+  Phase 5 runs the derived stage latch with the native falls-through exactly
+  as F.2 (stage 0 -> stage 1 in one call; the wait `JG` syncs target/pos;
+  stage 2 syncs). The stage-1 `flag44 != 0` re-select is a **modeled no-op**:
+  for the native id domain (0x5D/0x46) the derived selector is the identity,
+  so the branch changes no observable state and is kept for site fidelity
+  (the native selector's record writes stay OL-52).
 * Derived fields the appendix adds to `struct fifa96_arm_record`:
   `phase` (`[0x157A4A]>>24`), `skip_9a` (`+0x9A`), `team_index` (the
   record's index in the candidate array), `ball_skip`

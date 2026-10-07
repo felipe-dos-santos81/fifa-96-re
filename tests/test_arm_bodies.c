@@ -973,6 +973,32 @@ static void test_arm_29_nearest_respects_exclusions(void) {
   assert(rec.anim_sel == 0x5D);
 }
 
+/* The install request is per call: a stale request from a previous call is
+ * cleared on every successful path, because Task 9's binder/drain consumes
+ * the field (a surviving stale `install = 3` would double-install). */
+static void test_arm_29_install_cleared_per_call(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  fifa96_entity_candidate cand[11];
+  struct fifa96_rng rng;
+  memset(cand, 0, sizeof cand);
+  memset(&rng, 0, sizeof rng);
+  /* occupied reset path: the stale request is not re-issued and is cleared */
+  rec.phase = 4;
+  rec.skip_9a = 1;
+  rec.install = 3;
+  assert(fifa96_arm_29_step(&rec) == FIFA96_OK);
+  assert(rec.install == 0);
+  /* phase-5 latch path: the stale request never survives the call either */
+  rec = arm_rec();
+  rec.phase = 5;
+  rec.rng = &rng;
+  rec.team_candidates = cand;
+  rec.stage92 = 2;
+  rec.install = 3;
+  assert(fifa96_arm_29_step(&rec) == FIFA96_OK);
+  assert(rec.install == 0);
+}
+
 static void test_arm_29_invalid(void) {
   struct fifa96_arm_record rec = arm_rec();
   fifa96_entity_candidate cand[11];
@@ -1038,6 +1064,7 @@ int main(void) {
   test_arm_29_stage2_syncs_target();
   test_arm_29_stage_past_prologue_only();
   test_arm_29_nearest_respects_exclusions();
+  test_arm_29_install_cleared_per_call();
   test_arm_29_invalid();
   puts("test_arm_bodies OK");
   return 0;
