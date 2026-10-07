@@ -754,6 +754,8 @@ static int fifa96_match_action_18(struct fifa96_match_run *mr) {
     bin.mode_157ac2 = mr->global_157ac2;   /* producer unported (OL-68) */
     rc = fifa96_action_duel_bind(&bin, &bout);
     if (rc != FIFA96_OK) return rc;
+    /* bout.bound/stub_36200 are derived for the loader tests and have no
+     * engine consumer (OL-68). */
   }
   if (out.occupied != 0 && id >= 0 &&
       id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
@@ -842,6 +844,8 @@ static int fifa96_match_action_21(struct fifa96_match_run *mr) {
   }
   rc = fifa96_action_receive_step(&r, cands, FIFA96_MATCH_ENTITY_RECORDS, &out);
   if (rc != FIFA96_OK) return rc;
+  /* out.nearest/out.anim are derived for the loader tests and have no engine
+   * consumer (OL-52/OL-68). */
   /* 0x85242..0x8524C: the camera triple copy runs for every phase-2 tracked
    * call before the stage dispatch. */
   if (r.phase == 2 && r.tracked != 0) {

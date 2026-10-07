@@ -963,4 +963,9 @@ code-0 install synchronously through the pool installer; a rejected install
   the `[team+0x7C7]` record (`is_own`/`opp_*` staged 0), the slot `+0x10`
   button byte and the `word[+0x77]` bound (shared OL-65). The shared
   `FUN_0007DAB4` forced-decision predicate inputs are the pool target
-  fields (the FU-141 OL-44 bounded model).
+  fields (the FU-141 OL-44 bounded model), and its slot callback
+  `FUN_00078B00` (`0x7DAD2`, called when `[rec+0x20] != 0`) is dropped by the
+  engine's `match_row_reset` (the kick machine's `kick_reset` surfaces the
+  same call as `slot_callback`). The receive `out.nearest`/`out.anim` and the
+  bind `bound`/`stub_36200` outputs are computed for the loader tests and
+  have no engine consumer (OL-52/OL-68 scope).
