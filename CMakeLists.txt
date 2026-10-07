@@ -385,7 +385,9 @@ target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_match_lifecycle
                                           fifa96_match_pace fifa96_match_state fifa96_input
-                                          fifa96_control)
+                                          fifa96_control fifa96_camera fifa96_projection
+                                          fifa96_scene fifa96_render fifa96_window
+                                          fifa96_match_display)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
@@ -445,4 +447,9 @@ add_test(NAME test_engine_match_frame COMMAND test_engine_match_frame
 add_executable(test_engine_match_input tests/test_engine_match_input.c)
 target_link_libraries(test_engine_match_input PRIVATE fifa96_engine)
 add_test(NAME test_engine_match_input COMMAND test_engine_match_input
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_render tests/test_engine_match_render.c)
+target_link_libraries(test_engine_match_render PRIVATE fifa96_engine)
+add_test(NAME test_engine_match_render COMMAND test_engine_match_render
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

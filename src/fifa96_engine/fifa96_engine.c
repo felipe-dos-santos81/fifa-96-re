@@ -213,8 +213,14 @@ int fifa96_engine_step(struct fifa96_engine *e) {
     if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
       if (!e->match) {
         e->mode = FIFA96_ENGINE_MODE_FRONTEND;
-      } else if (fifa96_match_run_step(e->match) < 0) {
-        return -1;
+      } else {
+        if (fifa96_match_run_step(e->match) < 0) return -1;
+        /* One presentation pass per presented frame: recompose the indexed
+         * match canvas before the surface->planes conversion below. The run
+         * no-ops while rendering is disabled (the Task 12-14 fixtures). */
+        if (e->mode == FIFA96_ENGINE_MODE_MATCH &&
+            fifa96_match_run_render(e->match, e->surface) != 0)
+          return -1;
       }
     }
   }
