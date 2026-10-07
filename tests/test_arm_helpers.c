@@ -207,12 +207,18 @@ static void test_face_invalid(void) {
 }
 
 /* --- `FUN_0006E598` id-resolution subset (row 27 0x8695C/0x869F8) -----------
- * First-hand `0x6E598..0x6E713`: a non-zero kind skips the phase/reroll block
- * (`0x6E608..0x6E61C`) and reaches the clamp `(int16)kind < 0 || >= 0x6F -> 0`
- * (`0x6E68E..0x6E69B`); kind 0 with a current row byte in `1..0x61`/`0x66..0x6E`
- * re-selects it (`0x6E622..0x6E655`), otherwise the native RNG reroll maps
- * RNG&3 to `{0, 0x62, 0x65}` (`0x6E659..0x6E685`) — the unmodelled open leg,
- * with the derived deterministic fallback 0. */
+ * First-hand `0x6E598..0x6E713`: a non-zero kind skips the current-row/RNG
+ * block (`0x6E608..0x6E61C`) and reaches the clamp `(int16)kind < 0 || >= 0x6F
+ * -> 0` (`0x6E68E..0x6E69B`). For kind 0 the native reads the current row
+ * `[rec+0x28]` (`0x6E622..0x6E627`): a NULL pointer takes the RNG reroll
+ * (`0x6E627` -> `0x6E659`, RNG `0x92AC8`, `RNG & 3` -> `{0, 0x62, 0x65}` at
+ * `0x6E659..0x6E685`); a row byte 0 of `0` or `0x62..0x65` sets EAX=0 and
+ * keeps that byte (`0x6E62F`/`0x6E638..0x6E64A` -> `0x6E653` -> `0x6E657
+ * JZ 0x6E687`); a non-zero non-special byte sets EAX=1 and takes the same RNG
+ * reroll (`0x6E64C..0x6E651`). The derived helper covers the native
+ * special-byte keep rule with the caller-supplied row-byte stand-in; the
+ * native `[rec+0x28]` source and the RNG draws are the OL-52 open leg, with
+ * derived reroll fallback 0. */
 
 static void test_anim_select_passthrough(void) {
   uint8_t slot = 0xFF;
@@ -220,6 +226,9 @@ static void test_anim_select_passthrough(void) {
   assert(slot == 0x3C);
   assert(fifa96_arm_anim_select(0x6E, 0x00, &slot) == FIFA96_OK);
   assert(slot == 0x6E);
+  /* kind != 0 skips the current-row block entirely (0x6E608/0x6E61C). */
+  assert(fifa96_arm_anim_select(3, 0x62, &slot) == FIFA96_OK);
+  assert(slot == 3);
 }
 
 static void test_anim_select_clamps(void) {
@@ -232,27 +241,30 @@ static void test_anim_select_clamps(void) {
   assert(slot == 0);
 }
 
-static void test_anim_select_zero_continues_current_row(void) {
-  uint8_t slot = 0xFF;
-  assert(fifa96_arm_anim_select(0, 0x12, &slot) == FIFA96_OK);
-  assert(slot == 0x12);
-  assert(fifa96_arm_anim_select(0, 0x6E, &slot) == FIFA96_OK);
-  assert(slot == 0x6E);
-}
-
-/* The `{0x62..0x65}` current rows and the no-current-row case take the native
- * RNG reroll; the derived deterministic fallback is id 0 (open leg OL-52). */
-static void test_anim_select_zero_reroll_fallback(void) {
+/* kind 0 with the native special row bytes 0 / 0x62..0x65 keeps the byte
+ * (`0x6E62F`/`0x6E638..0x6E64A` -> `0x6E653` EAX=0 -> `0x6E657 JZ 0x6E687`). */
+static void test_anim_select_zero_special_keeps_row(void) {
   uint8_t slot = 0xFF;
   assert(fifa96_arm_anim_select(0, 0x00, &slot) == FIFA96_OK);
-  assert(slot == 0);
+  assert(slot == 0x00);
   assert(fifa96_arm_anim_select(0, 0x62, &slot) == FIFA96_OK);
-  assert(slot == 0);
+  assert(slot == 0x62);
   assert(fifa96_arm_anim_select(0, 0x63, &slot) == FIFA96_OK);
-  assert(slot == 0);
+  assert(slot == 0x63);
   assert(fifa96_arm_anim_select(0, 0x64, &slot) == FIFA96_OK);
-  assert(slot == 0);
+  assert(slot == 0x64);
   assert(fifa96_arm_anim_select(0, 0x65, &slot) == FIFA96_OK);
+  assert(slot == 0x65);
+}
+
+/* kind 0 with a non-zero non-special row byte takes the native RNG reroll
+ * (`0x6E64C..0x6E651` -> `0x6E659..0x6E685`); the draws are the OL-52 open
+ * leg, so the derived deterministic fallback is id 0. */
+static void test_anim_select_zero_reroll_fallback(void) {
+  uint8_t slot = 0xFF;
+  assert(fifa96_arm_anim_select(0, 0x12, &slot) == FIFA96_OK);
+  assert(slot == 0);
+  assert(fifa96_arm_anim_select(0, 0x6E, &slot) == FIFA96_OK);
   assert(slot == 0);
 }
 
@@ -277,7 +289,7 @@ int main(void) {
   test_face_invalid();
   test_anim_select_passthrough();
   test_anim_select_clamps();
-  test_anim_select_zero_continues_current_row();
+  test_anim_select_zero_special_keeps_row();
   test_anim_select_zero_reroll_fallback();
   test_anim_select_invalid();
   puts("test_arm_helpers OK");

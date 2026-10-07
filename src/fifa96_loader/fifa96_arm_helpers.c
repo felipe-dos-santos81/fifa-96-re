@@ -69,12 +69,15 @@ fifa96_err_t fifa96_arm_face(const fifa96_arm_vec *pos, const fifa96_arm_vec *ta
 fifa96_err_t fifa96_arm_anim_select(uint8_t kind, uint8_t row, uint8_t *out_slot) {
   uint8_t slot;
   if (!out_slot) return -FIFA96_ERR_INVALID;
-  slot = kind;
-  if (kind == 0) {
-    /* 0x6E622..0x6E655: a current row byte in 1..0x61/0x66..0x6E re-selects
-     * itself; otherwise the native RNG reroll (0x6E659..0x6E685) is the
-     * documented open leg (OL-52) and the derived fallback is id 0. */
-    if (row != 0 && !(row >= 0x62u && row <= 0x65u)) slot = row;
+  if (kind != 0) {
+    slot = kind;
+  } else {
+    /* 0x6E62F..0x6E655 + 0x6E687: the native keeps the current row byte when
+     * it is 0 or 0x62..0x65 (EAX=0 -> 0x6E657 JZ 0x6E687); a non-zero
+     * non-special byte (EAX=1, 0x6E64C) and the NULL row pointer (0x6E627)
+     * take the RNG reroll, which stays OL-52 with the derived fallback 0.
+     * `row` is the caller's stand-in for byte[[rec+0x28]] (header contract). */
+    if (row == 0 || (row >= 0x62u && row <= 0x65u)) slot = row;
     else slot = 0;
   }
   /* 0x6E68E..0x6E69B: (int16)id < 0 || >= 0x6F -> 0. */

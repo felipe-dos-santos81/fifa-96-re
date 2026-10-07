@@ -87,6 +87,8 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
   uint32_t pair;
   int16_t thr;
   if (!rec) return -FIFA96_ERR_INVALID;
+  /* The derived bound flag reports this call's walk: cleared on entry. */
+  rec->anim_overflow = 0;
   /* 0x86829..0x86837: timer89 += zero-extended delta word. */
   rec->timer89 = (int32_t)((uint32_t)rec->timer89 + (uint32_t)rec->delta);
   /* 0x8683d..0x8687d: target.x = 0x780, target.z =
@@ -134,7 +136,6 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
   }
   if (rec->stage92 == 2) {
     /* 0x86981..0x869a4: pair = row base 3*cycle + cursor. */
-    rec->anim_overflow = 0;
     pair = 3u * (uint32_t)rec->anim_cycle + (uint32_t)rec->anim_cursor;
     if (pair >= 24u) {
       rec->anim_overflow = 1;    /* derived bound; native reads past 0x11042B */

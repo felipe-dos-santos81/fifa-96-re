@@ -236,14 +236,17 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   with no pool record written. Nothing observable is lost: the aliased tail
   byte is outside the derived record surface. See Appendix B.4.
 * **OL-52 — row-27 animation-selector record surface.** `fifa96_arm_anim_select`
-  ports only `FUN_0006E598`'s deterministic id resolution/clamp (Appendix
-  D.5). The native record writes — row pointer `[rec+0x28]`, flag fan-out
-  `+0x43/+0x44/+0x45/+0x46/+0x3F`, frame resolve `FUN_0006E490`, accumulator
-  `[rec+0x32] = 0` — the side-sensitive `[0x57A6C]` write and the
-  `([0x57A4A]>>24 != 2 && DX == 0)` RNG reroll (`RNG & 3` -> `{0, 0x62,
-  0x65}`) are unported; row 27's `0x1103CB` ids are never 0, so the reroll is
-  unreachable from the row and its stage-2 `+0x44` consumer is the staged
-  `flag44` stand-in. Full model: FU-84 §1.
+  ports the non-zero id clamp and the native `kind == 0` special-byte keep
+  rule (row bytes 0/0x62..0x65; Appendix D.5). The native `[rec+0x28]`
+  row-pointer source — the derived `row` argument is a caller stand-in (the
+  step passes its last resolved id, not the `0x10EF00` row byte) — the RNG
+  reroll `RNG & 3 -> {0, 0x62, 0x65}` (which the native takes for a NULL
+  pointer and for a non-zero non-special row byte), the record writes — row
+  pointer `[rec+0x28]`, flag fan-out `+0x43/+0x44/+0x45/+0x46/+0x3F`, frame
+  resolve `FUN_0006E490`, accumulator `[rec+0x32] = 0` — and the
+  side-sensitive `[0x57A6C]` write stay unported. Row 27's `0x1103CB` ids are
+  never 0, so the branch is unreachable from the row and its stage-2 `+0x44`
+  consumer is the staged `flag44` stand-in. Full model: FU-84 §1.
 * **OL-53 — row-27 pair-walk globals and bounds.** Native `[0x158782]` (the
   0..7 cycle, seeded `RNG & 7` by `FUN_0007D8D0` `0x7D8FC`) and the high word
   of `[0x10F372]` (`0x10F374`, the pair cursor, BSS zero) are process globals
@@ -832,23 +835,34 @@ subset is ported here):
   **unmodeled (OL-52)**;
 * `0x6E608..0x6E61C` `([0x57A4A]>>24 != 2 && DX == 0)` gate for the reroll;
   **unmodeled (OL-52)**;
-* `0x6E622..0x6E655` current row `[rec+0x28]`: row byte 0 non-zero and not in
-  `{0x62,0x63,0x64,0x65}` -> keep it (no RNG);
-* `0x6E659..0x6E685` otherwise `CALL 0x92AC8` (RNG) and
+* `0x6E622..0x6E655` + `0x6E687` current row `[rec+0x28]`: `EDI == 0` (NULL
+  pointer) -> RNG (`0x6E627` -> `0x6E659`); row byte 0 `CL` == 0
+  (`0x6E62D..0x6E62F`) or in `{0x62,0x63,0x64,0x65}`
+  (`0x6E638..0x6E64A`) -> EAX=0 -> `0x6E657 JZ 0x6E687`, which **keeps that
+  byte** (`EDX = byte[[rec+0x28]]`); a non-zero non-special byte -> EAX=1
+  (`0x6E64C..0x6E651`) -> RNG;
+* `0x6E659..0x6E685` RNG `CALL 0x92AC8` and
   `switch (RNG & 3) { 0,3 -> 0; 1 -> 0x62; 2 -> 0x65 }` (jump table
   `0x6E588`); **unmodeled (OL-52)**;
 * `0x6E68E..0x6E69B` clamp `(int16)DX < 0 || >= 0x6F` -> 0;
-* `0x6E69D..0x6E713` row pointer `[0x57588] + DX*9` -> `[rec+0x28]`, flag
+* `0x6E69D..0x6E713` row pointer `[0x157588] + DX*9` -> `[rec+0x28]`, flag
   fan-out `bit4 -> +0x3F=2`, `bit5 -> +0x3F=-2`, `bit0 -> +0x44`, `bit1 ->
   +0x43`, `bit2 -> +0x45`, `+0x46=1`, frame resolve `FUN_0006E490(rec,
   &rec+0x28, BX)` and `word [rec+0x32] = 0`; **unmodeled (OL-52)**.
 
 Row 27's two calls (`0x8695C`, `0x869F8`) pass `EBX = 0` and the `0x1103CB`
-id word in `EDX`; every table id is in `3..0x6B`, so the phase/reroll branch
-is never entered from this row. The derived `fifa96_arm_anim_select` returns
-the resolved id (the clamp + current-row continuation) and the step records it
-in `anim_sel`; `flag44` is the staged stand-in for the native `+0x44` written
-by the unmodeled fan-out.
+id word in `EDX`; every table id is in `3..0x6B`, so the current-row/RNG
+branch is never entered from this row. The derived
+`fifa96_arm_anim_select` covers the non-zero clamp and the native
+special-byte keep rule, with the caller-supplied `row` argument as a stand-in
+for `byte[[rec+0x28]]` (the row-27 step passes its last resolved id
+`anim_sel`; the `0x10EF00` row-table byte is neither staged nor established to
+equal it), and the step records the resolved id in `anim_sel`; the RNG draws
+and the native row-pointer source stay OL-52. `kind` is `uint8_t`, so the
+native signed 16-bit id is representable only for 0..0xFF (low-byte-lossless
+for the `0x1103CB` ids 0..0x6B; a 16-bit argument outside that range is not
+modelled). `flag44` is the staged stand-in for the native `+0x44` written by
+the unmodeled fan-out.
 
 ### D.6 Port mapping and derived surfaces
 
@@ -874,7 +888,7 @@ by the unmodeled fan-out.
   unresolved (FU-142f/OL-48); -UNSUPPORTED"`; `tests/test_engine_match_handlers.c`
   asserts the UNSUP dispatch and the OL-48 marker. No `fifa96_match_run`
   staging change (the row is unwired).
-* Tested: `tests/test_arm_helpers.c` (`test_face_*` 6 functions,
+* Tested: `tests/test_arm_helpers.c` (`test_face_*` 5 functions,
   `test_anim_select_*` 5 functions), `tests/test_arm_bodies.c`
   (`test_arm_27_*` 11 functions), `tests/test_engine_match_handlers.c`
   `test_action_27_unwired_entry`.

@@ -45,7 +45,7 @@ struct fifa96_arm_record {
   uint16_t anim_cursor;    /* [0x10F374] 0x1103CB pair cursor (row 27) */
   uint8_t anim_sel;        /* last id resolved by 0x6E598 (row 27 derived) */
   uint8_t flag44;          /* native +0x44 anim-row terminal flag (row 27) */
-  uint8_t anim_overflow;   /* derived: pair walk left the 24-pair table */
+  uint8_t anim_overflow;   /* derived: pair walk left the table (step-cleared) */
   struct fifa96_rng *rng;  /* RNG for the bodies that draw (Tasks 4+) */
 };
 
@@ -81,15 +81,27 @@ fifa96_err_t fifa96_arm_face(const fifa96_arm_vec *pos, const fifa96_arm_vec *ta
                              uint8_t *out_lane);
 
 /* `FUN_0006E598` id-resolution subset (`0x6E598..0x6E713`) as used by row 27
- * at `0x8695C`/`0x869F8`. First-hand: a non-zero `kind` skips the current-row
- * continuation/reroll branch and clamps `(int16)kind < 0 || >= 0x6F` to 0
- * (`0x6E68E..0x6E69B`); `kind == 0` with a current row byte in `1..0x61` or
- * `0x66..0x6E` re-selects that current row (`0x6E622..0x6E655`), otherwise
- * the native draws RNG `0x92AC8` and maps `RNG & 3` to `{0, 0x62, 0x65}`
- * (`0x6E659..0x6E685`). The derived helper covers the deterministic
- * resolution/clamp: `kind != 0` -> `kind`; `kind == 0` and a valid non-zero
- * `row` -> `row`; `kind == 0` and `row == 0` or `row in {0x62..0x65}` -> 0
- * (the RNG reroll draws and the `[0x57A4A]>>24 == 2` phase gate are the
- * documented open leg; row 27's `0x1103CB` ids are never 0). NULL `out_slot`
- * -> -FIFA96_ERR_INVALID. */
+ * at `0x8695C`/`0x869F8`. First-hand: a non-zero `kind` skips the
+ * current-row/RNG block (`0x6E608..0x6E61C`) and clamps `(int16)kind < 0 ||
+ * >= 0x6F` to 0 (`0x6E68E..0x6E69B`). For `kind == 0` the native reads the
+ * current row `[rec+0x28]` (`0x6E622..0x6E627`): a NULL pointer takes the RNG
+ * reroll (`0x6E659`); a row byte 0 of `0` or `0x62..0x65` keeps that byte
+ * (`0x6E62F`/`0x6E638..0x6E64A` -> `0x6E653` EAX=0 -> `0x6E657 JZ 0x6E687`);
+ * a non-zero non-special byte takes the RNG reroll `0x92AC8`
+ * (`0x6E64C..0x6E651`), `RNG & 3` -> `{0, 0x62, 0x65}` (`0x6E659..0x6E685`).
+ *
+ * Derived surface: `kind != 0` -> clamp -> `kind`; `kind == 0` models only the
+ * native special-byte keep rule with the caller-supplied `row` as a stand-in
+ * for the row byte (`row == 0` or `row in {0x62..0x65}` -> `row`). The native
+ * source (`byte[[rec+0x28]]`; the row-27 step passes its last resolved id
+ * `anim_sel`, and the 0x10EF00 row-table byte is neither staged nor
+ * established to equal it), the RNG reroll and the `[0x57A4A]>>24 == 2` phase
+ * gate are unmodeled (OL-52); the derived reroll fallback is 0. Every
+ * `0x1103CB` id is `3..0x6B`, so the branch is unreachable from row 27.
+ *
+ * `kind` is `uint8_t` and cannot represent the native signed 16-bit id: it is
+ * exact for the `0x1103CB` ids (0..0x6B, low-byte-lossless) and for values
+ * `>= 0x6F` (the native clamps every positive id >= 0x6F to 0), but a 16-bit
+ * argument outside 0..0xFF (e.g. `0x0168`, or a negative word) truncates and
+ * is not modelled. NULL `out_slot` -> -FIFA96_ERR_INVALID. */
 fifa96_err_t fifa96_arm_anim_select(uint8_t kind, uint8_t row, uint8_t *out_slot);
