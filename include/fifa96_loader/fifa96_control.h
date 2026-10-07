@@ -34,6 +34,11 @@ int fifa96_control_slot_init(fifa96_control_slot *slot, uint8_t player, uint8_t 
 int fifa96_control_slot_update(fifa96_control_slot *slot, uint8_t input, uint8_t delta,
                                const uint8_t map[16], const uint8_t anim_a[16],
                                const uint8_t anim_b[16], const uint8_t anim_c[16]);
+/* FU-141: the FUN_00078670 slot clear the slot merge FUN_0007876C calls after
+ * binding the requester: zeroes +4/+6 (pressed/released), +8/+0xA (selection
+ * scratch), +0xC (held) and the first dword of +0x14, leaving the held/raw
+ * history and the player identity intact. NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_control_slot_merge_reset(fifa96_control_slot *slot);
 int fifa96_control_pick_ranked(const fifa96_control_candidate *candidates, uint32_t count,
                                int16_t skip_index);
 int fifa96_control_reselect(uint8_t phase, int controlled_present, int ball_present,

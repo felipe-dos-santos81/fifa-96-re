@@ -301,6 +301,27 @@ static void test_target_bucket_boundaries(void) {
   assert(fifa96_control_target_bucket(32767, 0, -1) == 2);
 }
 
+static void test_slot_merge_reset_zeroes_derived_words(void) {
+  /* FU-141: FUN_00078670 zeroes slot +4/+6 (+8/+0xA) +0xC (+0x14/+0x16) only;
+   * the edge history and the player identity stay. */
+  fifa96_control_slot slot;
+  memset(&slot, 0xAA, sizeof slot);
+  assert(fifa96_control_slot_merge_reset(&slot) == FIFA96_OK);
+  assert(slot.pressed == 0);
+  assert(slot.released == 0);
+  assert(slot.held == 0);
+  assert(slot.reserved_08[0] == 0 && slot.reserved_08[1] == 0);
+  assert(slot.reserved_08[2] == 0 && slot.reserved_08[3] == 0);
+  assert(slot.reserved_14[0] == 0 && slot.reserved_14[1] == 0);
+  assert(slot.reserved_14[2] == 0 && slot.reserved_14[3] == 0);
+  assert(slot.held_prev == 0xAAAA);
+  assert(slot.prev_mapped == 0xAAAA);
+  assert(slot.raw == 0xAAAA);
+  assert(slot.entity == (int32_t)0xAAAAAAAA);
+  assert(slot.player == 0xAA && slot.counter == 0xAA);
+  assert(fifa96_control_slot_merge_reset(NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_slot_init_fields();
   test_slot_init_invalid();
@@ -330,6 +351,7 @@ int main(void) {
   test_reselect_target_word_wrap();
   test_reselect_invalid_arguments();
   test_target_bucket_boundaries();
+  test_slot_merge_reset_zeroes_derived_words();
   puts("test_control: ok");
   return 0;
 }

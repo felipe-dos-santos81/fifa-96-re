@@ -323,6 +323,11 @@ add_executable(test_sfx_event tests/test_sfx_event.c)
 target_link_libraries(test_sfx_event PRIVATE fifa96_sfx_event)
 add_test(NAME test_sfx_event COMMAND test_sfx_event WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_rng src/fifa96_loader/fifa96_rng.c)
+add_executable(test_rng tests/test_rng.c)
+target_link_libraries(test_rng PRIVATE fifa96_rng)
+add_test(NAME test_rng COMMAND test_rng WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_settings src/fifa96_loader/fifa96_settings.c)
 add_executable(test_settings tests/test_settings.c)
 target_link_libraries(test_settings PRIVATE fifa96_settings)
@@ -380,6 +385,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_bridge.c
   src/fifa96_engine/fifa96_match_run.c
   src/fifa96_engine/fifa96_match_handlers.c
+  src/fifa96_engine/fifa96_match_entities.c
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
@@ -390,7 +396,8 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_match_pace fifa96_match_state fifa96_input
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window
-                                          fifa96_match_display fifa96_action_handlers fifa96_keeper)
+                                          fifa96_match_display fifa96_action_handlers fifa96_keeper
+                                          fifa96_ball_pairing)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
@@ -513,6 +520,14 @@ target_include_directories(test_engine_match_handlers PRIVATE src)
 target_compile_options(test_engine_match_handlers PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_handlers PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_handlers COMMAND test_engine_match_handlers
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_entities tests/test_engine_match_entities.c)
+target_link_libraries(test_engine_match_entities PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_entities PRIVATE src)
+target_compile_options(test_engine_match_entities PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_entities PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_entities COMMAND test_engine_match_entities
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 find_package(SDL3 QUIET)

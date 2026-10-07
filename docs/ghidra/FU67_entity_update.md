@@ -647,3 +647,23 @@ Ghidra-project change. Port write set:
 `tests/test_entity_update.c`, `CMakeLists.txt` (one library/test block).
 `make test`: 55/55 before, **56/56 after**; ASan+UBSan `test_entity_update`
 clean. `game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.
+
+## Errata (M2 Task 8 / FU-141)
+
+* **§4.2 selection vectors** — the "one of the 3-dword vectors
+  0x57788/0x57794/0x57770" choice is derived in /FIFA96.EXE
+  (`FUN_0008D8EC 0x8D948..0x8D9A6`): `word[0x1577FA] < word[0x157800]` takes
+  0x157788; else `< word[0x157806]` takes 0x157794; else 0x157770 plus the
+  `0x1577BE/0x1577C0` lead terms. The interception target is
+  `0x10F37C + side*0xC`, its skip index is `[[team+0x7B2]+0x8A]>>24` (the
+  `+0x8D` byte), and the side compare is on the two `+0x826` bytes
+  (`0x8D9E3`), not the block order.
+* **§4.2 team update counter** — `[team+0x82C]` increments and wraps at `0xB`
+  (`0x8D8F7..0x8D912`); the team timer `[+0x7CB]/[+0x81E]/[+0x820]` decrements
+  by the `[0x157A64]` word with the signed `[+0x81E]>>16` limit
+  (`0x8DAF3..0x8DB2B`).
+* **§3.2 record `+0x8D`** — the interception skip reads `[rec+0x8A]>>24`,
+  which is the `+0x8D` byte, so `+0x8D` doubles as the active flag and the
+  skip index (the pool maps it to `active`, FU-141 §1.2/§2.2).
+* The pool/chain port is `fifa96_match_entities` (FU-141); FU-67's S1..S6
+  map is unchanged otherwise.

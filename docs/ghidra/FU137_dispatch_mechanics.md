@@ -536,3 +536,19 @@ Write set: this doc; `include/fifa96_engine/fifa96_match_handlers.h`;
 `src/fifa96_engine/fifa96_match_handlers.c`; `tests/test_engine_match_handlers.c`;
 `CMakeLists.txt` (engine source + test registration). No asset/ISO/Ghidra
 change.
+
+## Errata (M2 Task 8 / FU-141)
+
+* **§4.1 record timer source** — "word `[rec+0x81]` and byte `[rec+0x93]` are
+  decremented by `[0x157A62]`/its low byte" is refined: `FUN_0007CA54`
+  (`0x7CA6E`/`0x7CA9A`) loads the word `[0x157A64]` (the frame delta) and
+  compares it against `[rec+0x7F]>>16` (word timer) or the raw byte (byte
+  timer) with a signed-word/zero-extended-word compare. Ported exactly in
+  `fifa96_match_entities` (FU-141 §2.3).
+* **OL-1 record surface** — the C8/FU-141 pool closes the record-surface half:
+  the 0xB2 record pool, the team blocks and the request drains for the two
+  wired rows exist (`fifa96_match_entities`). The machine/arm halves
+  (FUN_0007CA54/FUN_000782D0, installer invoke, animation arms) remain
+  FU-141 OL-42..OL-44.
+* **§6.1 action rows `00`/`1E`** — stay `ported`; their evidence strings now
+  cite FU-141 and the pool binding. No other row changes class (FU-141 §6).

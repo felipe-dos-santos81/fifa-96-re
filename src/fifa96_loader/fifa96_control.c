@@ -59,6 +59,22 @@ int fifa96_control_slot_update(fifa96_control_slot *slot, uint8_t input, uint8_t
   return FIFA96_OK;
 }
 
+int fifa96_control_slot_merge_reset(fifa96_control_slot *slot) {
+  if (!slot) return -FIFA96_ERR_INVALID;
+  slot->pressed = 0;      /* FUN_00078670 0x78674 */
+  slot->released = 0;     /* 0x7867A */
+  slot->reserved_08[0] = 0;
+  slot->reserved_08[1] = 0; /* word +8, 0x78680 */
+  slot->reserved_08[2] = 0;
+  slot->reserved_08[3] = 0; /* word +0xA, 0x78686 */
+  slot->held = 0;         /* 0x78698 word +0xC */
+  slot->reserved_14[0] = 0;
+  slot->reserved_14[1] = 0; /* word +0x14, 0x7868C */
+  slot->reserved_14[2] = 0;
+  slot->reserved_14[3] = 0; /* word +0x16, 0x78692 */
+  return FIFA96_OK;
+}
+
 int fifa96_control_pick_ranked(const fifa96_control_candidate *candidates, uint32_t count,
                                int16_t skip_index) {
   uint16_t best = 0xFFFFu;

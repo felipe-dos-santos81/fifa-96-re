@@ -348,3 +348,17 @@ touched). Port write set: `include/fifa96_loader/fifa96_keeper.h`,
 `tests/test_engine_match_handlers.c`, `CMakeLists.txt` (engine links
 `fifa96_keeper`), `docs/ghidra/FU137_dispatch_mechanics.md` (errata).
 `game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.
+
+## Errata (M2 Task 8 / FU-141)
+
+* **§2/§4 row `1E` camera-place call shape** — the native call is
+  `FUN_000700F4(place_x, place_y, place_z, flag)`, not `(rec, place, 1)`:
+  row `1E` pushes `1`, `[0x157754]`, `[0x157750]`, `[0x15774C]` at
+  `0x7559E..0x755C7` and `FUN_000700F4` ends `RET 0x10` (4 dword args) and
+  copies the triple from `[ESP+0x1c]` (`0x7014E MOVSD x3`); no record pointer
+  is passed. The port's `place_*` sink/`place_valid` request is unchanged.
+* **OL-37 (row 1E arms)** — the C8/FU-141 entity pool now exists: the
+  `helper_request` is consumed by the `FUN_0007876C` merge, `controlled` feeds
+  the pool actor and the placement triple is applied through the FU-71
+  `fifa96_camera_init`. The remaining OL-37 items are the merge/camera call
+  bodies and the per-type offset table (FU-141 OL-42/OL-44).
