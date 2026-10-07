@@ -55,3 +55,9 @@ int fifa96_intro_done(const struct fifa96_intro *in) {
   if (!in) return 1;
   return fifa96_vgt_player_ended(&in->player);
 }
+
+void fifa96_intro_abort(struct fifa96_intro *in) {
+  if (!in) return;
+  in->started = 0;
+  in->player.ended = 1;
+}

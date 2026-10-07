@@ -18,3 +18,7 @@ int fifa96_intro_start(struct fifa96_intro *in, struct fifa96_surface *s);
 int fifa96_intro_feed(struct fifa96_intro *in, const uint8_t *stream, size_t len);
 int fifa96_intro_step(struct fifa96_intro *in, struct fifa96_surface *s);
 int fifa96_intro_done(const struct fifa96_intro *in);
+
+/* Marks playback finished (done() reports 1, further steps touch nothing)
+ * without writing to the target surface — used for input-skip. */
+void fifa96_intro_abort(struct fifa96_intro *in);

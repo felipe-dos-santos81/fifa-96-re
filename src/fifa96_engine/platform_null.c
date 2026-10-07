@@ -20,13 +20,16 @@ static int n_init(void *self, int w, int h, const char *title) {
   return 0;
 }
 static void n_shutdown(void *self) { (void)self; }
+/* At most one tape entry per call: a scripted press/release pair then spans
+ * two engine steps, so per-frame M2 tapes replay deterministically. */
 static int n_poll(void *self, fifa96_platform_key *out, size_t cap, int *count) {
   struct null_state *s = self;
-  size_t n = 0;
-  while (s->tape_pos < s->cfg.tape_len && n < cap) {
-    out[n++] = s->cfg.tape[s->tape_pos++];
-  }
-  *count = (int)n;
+  if (!count) return -1;
+  *count = 0;
+  if (!out || cap == 0) return 0;
+  if (s->tape_pos >= s->cfg.tape_len) return 0;
+  out[0] = s->cfg.tape[s->tape_pos++];
+  *count = 1;
   return 0;
 }
 static int n_present(void *self, const fifa96_platform_frame *f) {

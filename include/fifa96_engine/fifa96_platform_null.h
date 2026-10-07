@@ -4,7 +4,7 @@
 #include "fifa96_engine/fifa96_platform.h"
 
 struct fifa96_platform_null_config {
-  const fifa96_platform_key *tape;  /* scripted input, replayed on poll */
+  const fifa96_platform_key *tape;  /* scripted input; poll returns one entry per call */
   size_t tape_len;
   uint64_t step_ns;                 /* virtual clock step per now_ns() call */
   int audio_ring_frames;            /* default 4096 when 0 */

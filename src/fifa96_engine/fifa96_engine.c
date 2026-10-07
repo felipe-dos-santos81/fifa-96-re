@@ -28,17 +28,48 @@ static int engine_ci_suffix(const char *s, const char *suffix) {
   return 1;
 }
 
-/* First VIDEO/<name>.TGV in the asset table walk order (case-insensitive).
- * The real load-order table has not been derived yet, so this bounded scan
- * is the M1 approximation. Open leg: intro path selection. */
+static int engine_path_eq(const char *path, const char *want) {
+  while (*path == '/') path++;
+  while (*path && *want) {
+    if (engine_char_fold((unsigned char)*path) != engine_char_fold((unsigned char)*want)) return 0;
+    path++;
+    want++;
+  }
+  return *path == '\0' && *want == '\0';
+}
+
+/* M1 heuristic: prefer VIDEO/VID_INTR.TGV (verified present in the ISO) as the
+ * boot intro, else the first VIDEO/<name>.TGV in asset-table walk order. The
+ * real intro comes from the load-order table (still underived), so the
+ * explicit-name preference is the recorded approximation. Open leg: intro
+ * path selection vs the load-order table. */
 static const char *engine_find_intro_path(const struct fifa96_asset_table *t) {
   if (!t) return NULL;
+  const char *fallback = NULL;
   for (size_t i = 0; i < t->count; i++) {
     const char *p = t->entries[i].path;
     while (*p == '/') p++;
-    if (engine_ci_prefix(p, "VIDEO/") && engine_ci_suffix(p, ".TGV")) return t->entries[i].path;
+    if (!engine_ci_prefix(p, "VIDEO/") || !engine_ci_suffix(p, ".TGV")) continue;
+    if (engine_path_eq(t->entries[i].path, "VIDEO/VID_INTR.TGV")) return t->entries[i].path;
+    if (!fallback) fallback = t->entries[i].path;
   }
-  return NULL;
+  return fallback;
+}
+
+/* Front-end-mapped presses; any of them skips the intro (M1 uses CONFIRM).
+ * QUIT is handled separately: it exits the engine. */
+static int engine_key_mapped(int32_t raw_code) {
+  switch (raw_code) {
+    case FIFA96_ENGINE_KEY_UP:
+    case FIFA96_ENGINE_KEY_DOWN:
+    case FIFA96_ENGINE_KEY_LEFT:
+    case FIFA96_ENGINE_KEY_RIGHT:
+    case FIFA96_ENGINE_KEY_CONFIRM:
+    case FIFA96_ENGINE_KEY_DECLINE:
+      return 1;
+    default:
+      return 0;
+  }
 }
 
 struct fifa96_engine *fifa96_engine_create(const struct fifa96_engine_config *cfg,
@@ -115,20 +146,42 @@ int fifa96_engine_step(struct fifa96_engine *e) {
   e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, now - e->last_ns);
   e->last_ns = now;
   if (e->mode == FIFA96_ENGINE_MODE_INTRO) {
+    /* Input-skip during the intro: QUIT exits, any other mapped press aborts
+     * playback and enters the front-end immediately. The skip key is consumed
+     * here and never queued for fifa96_frontend_run_input. */
+    fifa96_platform_key keys[32];
+    int n = 0;
+    if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    for (int i = 0; i < n; i++) {
+      if (keys[i].state != 1) continue;   /* press events only */
+      if (keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {
+        e->quit = 1;
+        e->mode = FIFA96_ENGINE_MODE_QUIT;
+      } else if (engine_key_mapped(keys[i].raw_code)) {
+        e->mode = FIFA96_ENGINE_MODE_FRONTEND;
+      } else {
+        continue;
+      }
+      e->intro_active = 0;
+      fifa96_intro_abort(&e->intro);
+      break;
+    }
     /* Video cadence: 15 frames per 100 PIT ticks (FU-37); at most one intro
      * frame per engine step, so the tape stays deterministic. */
-    if (e->intro_active) {
-      uint32_t due = fifa96_pacing_frames_due(e->clock.pit.ticks);
-      if (due > e->intro_frames) {
-        if (fifa96_intro_step(&e->intro, e->surface) != 0) {
-          e->intro_active = 0;
-        } else {
-          e->intro_frames++;
-          if (fifa96_intro_done(&e->intro)) e->intro_active = 0;
+    if (e->mode == FIFA96_ENGINE_MODE_INTRO) {
+      if (e->intro_active) {
+        uint32_t due = fifa96_pacing_frames_due(e->clock.pit.ticks);
+        if (due > e->intro_frames) {
+          if (fifa96_intro_step(&e->intro, e->surface) != 0) {
+            e->intro_active = 0;
+          } else {
+            e->intro_frames++;
+            if (fifa96_intro_done(&e->intro)) e->intro_active = 0;
+          }
         }
       }
+      if (!e->intro_active) e->mode = FIFA96_ENGINE_MODE_FRONTEND;
     }
-    if (!e->intro_active) e->mode = FIFA96_ENGINE_MODE_FRONTEND;
   } else if (e->mode == FIFA96_ENGINE_MODE_FRONTEND) {
     fifa96_platform_key keys[32];
     int n = 0;
