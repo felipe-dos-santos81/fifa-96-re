@@ -2,24 +2,66 @@
  *
  * The per-row evidence strings are the compact form of the FU-137 §6.1
  * (action) and §6.2 (phase) classification tables; FU-136 §2/§3 hold the full
- * evidence cells (docs, tested C symbols, estimated port group). Every row is
- * either `not ported` (fn NULL, -FIFA96_ERR_UNSUPPORTED with its port group) or
- * the two `unwired` rows 00/1E (fn NULL, tested library bodies that need the
- * not-yet-ported record/entity model before they can bind to a match run —
- * open leg OL-1); the 0x27/0x29/0x2B/0x2C rows are FU-137 open legs (no static
- * install arm found, OL-15). Phase 0x16 is the native zero/INT3 slot and
- * returns -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with
+ * evidence cells (docs, tested C symbols, estimated port group). FU-138 wires
+ * the first cluster-A row: 00 is ported (`fifa96_match_action_00` binds the
+ * tested `fifa96_action_move_step`/`_target` bodies to `mr->record`, FU-138
+ * §4/OL-16). Every other row is either `not ported` (fn NULL,
+ * -FIFA96_ERR_UNSUPPORTED with its port group) or the `unwired` row 1E (fn
+ * NULL, tested library body that needs the entity/record model and keeper
+ * binding — open leg OL-1); the 0x27/0x29/0x2B/0x2C rows are FU-137 open legs
+ * (no static install arm found, OL-15). Phase 0x16 is the native zero/INT3 slot
+ * and returns -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with
  * their derived body and update the evidence string; they must not change the
  * code/class of a row without an FU-doc errata. */
 #include <stddef.h>
 
 #include "fifa96_engine/fifa96_match_handlers.h"
+#include "fifa96_engine/fifa96_match_run.h"
+#include "fifa96_loader/fifa96_action_handlers.h"
+
+/* FU-138 §4: action 00 — the FU-76 §3.1 generic outfield step. The derived
+ * record core runs `fifa96_action_move_step` (timer89 decay, control-slot move
+ * gate, phase-2 install request `3`/`0x19`) and, when the slot moves, writes
+ * the FU-76 §4 clamped step target through `fifa96_action_move_target`. The
+ * native tail's install goes through `FUN_0007D9A4` (FU-137 §2); the engine
+ * records the request in `mr->record.install` until the record pool and
+ * installer arms land (OL-16). */
+static int fifa96_match_action_00(struct fifa96_match_run *mr) {
+  fifa96_action_move_state state;
+  fifa96_action_move_out out;
+  fifa96_action_vec3 target;
+  int rc;
+  state.timer89 = mr->record.timer89;
+  state.timer81 = mr->record.timer81;
+  state.delta = mr->record.delta;
+  state.phase = mr->state.phase;
+  state.active = mr->record.active;
+  state.has_slot = mr->record.has_slot;
+  state.dir_x = mr->record.dir_x;
+  state.dir_z = mr->record.dir_z;
+  rc = fifa96_action_move_step(&state, &out);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.timer89 = state.timer89;
+  if (out.move != 0) {
+    rc = fifa96_action_move_target(mr->record.pos_x, mr->record.pos_z, mr->record.dir_x,
+                                   mr->record.dir_z, &target);
+    if (rc != FIFA96_OK) return rc;
+    mr->record.target_x = target.x;
+    mr->record.target_z = target.z;
+  }
+  mr->record.install = out.install != 0 ? out.code : 0;
+  return FIFA96_OK;
+}
 
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
-    {0x00, NULL, "FU-137 §6: FU-136 row 00: unwired; fifa96_action_move_step/_target tested; OL-1"},
-    {0x01, NULL, "FU-137 §6: FU-136 row 01: not ported (partial); sequence_select/stage helpers; OL-9"},
-    {0x02, NULL, "FU-137 §6: FU-136 row 02: not ported (partial); locomotion_restart_target; OL-9"},
-    {0x03, NULL, "FU-137 §6: FU-136 row 03: not ported (partial); locomotion_hold/clamp_placement; OL-8"},
+    {0x00, fifa96_match_action_00,
+     "FU-138 §4: FU-136 row 00 ported; move_step/target on mr->record; OL-16 pool"},
+    {0x01, NULL,
+     "FU-137 §6: FU-136 row 01: not ported (partial); sequence_select/stage + FU-138 marker_target/stage_wait; OL-17"},
+    {0x02, NULL,
+     "FU-137 §6: FU-136 row 02: not ported (partial); locomotion_restart_target + FU-138 restart_wait; OL-18"},
+    {0x03, NULL,
+     "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, NULL, "FU-137 §6: FU-136 row 04: not ported (partial); locomotion_camera_lead; OL-8"},
     {0x05, NULL, "FU-137 §6: FU-136 row 05: not ported (partial); possession_reset/claim/timer; OL-8"},
     {0x06, NULL, "FU-137 §6: FU-136 row 06: not ported; FU-77 §2.6 derived, no port; OL-8"},
@@ -29,7 +71,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x0A, NULL, "FU-137 §6: FU-136 row 0A: not ported; installer 0x7CDD8 has no xrefs; OL-14"},
     {0x0B, NULL, "FU-137 §6: FU-136 row 0B: not ported (partial); sequence_duel_event; OL-9"},
     {0x0C, NULL, "FU-137 §6: FU-136 row 0C: not ported (partial); FU-81 7-arm table 0x81C74; OL-9"},
-    {0x0D, NULL, "FU-137 §6: FU-136 row 0D: not ported (partial); FU-82 4-arm table 0x8250C; OL-9"},
+    {0x0D, NULL,
+     "FU-137 §6: FU-136 row 0D: not ported (partial); FU-82 4-arm 0x8250C + FU-138 velocity_scale; OL-22"},
     {0x0E, NULL, "FU-137 §6: FU-136 row 0E: not ported; FU-81 gate/head, no body port; OL-9"},
     {0x0F, NULL, "FU-137 §6: FU-136 row 0F: not ported; FU-76 KICK 0x7B9C4 body; OL-8"},
     {0x10, NULL, "FU-137 §6: FU-136 row 10: not ported (partial); FU-81 7-arm table 0x855B8; OL-9"},

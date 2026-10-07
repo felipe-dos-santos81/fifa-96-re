@@ -390,7 +390,7 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_match_pace fifa96_match_state fifa96_input
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window
-                                          fifa96_match_display)
+                                          fifa96_match_display fifa96_action_handlers)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)

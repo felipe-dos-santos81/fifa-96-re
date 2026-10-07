@@ -94,6 +94,23 @@ fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, 
                                                   int16_t cam_vel_x, int16_t cam_vel_z,
                                                   fifa96_action_vec3 *out);
 
+/* FU-138 §3: row 02 stage-0 wait (native `0x7E0B0..0x7E0F0`). `lane` is the
+ * native dword `[rec+0x69]>>16` (FU-75 lane word); `ready` fires at timer `0x78`
+ * when `lane > 0x40`, else at timer `0xA`; the `lane > 0x40` ready path is the
+ * one the native pairs with `FUN_0007DAB4` (`reset`). */
+fifa96_err_t fifa96_action_locomotion_restart_wait(int16_t lane, int32_t timer89,
+                                                   uint8_t *ready, uint8_t *reset);
+
+/* FU-138 §3: row 03 placement counter (native `0x7E2E0..0x7E2F4`):
+ * `counter = min((move_attr >> 22) + 1, limit)` over the unsigned 16-bit
+ * words the native writes to `rec+0x7B`/`rec+0x79`. */
+fifa96_err_t fifa96_action_locomotion_placement_counter(int32_t move_attr, uint16_t limit,
+                                                        uint16_t *counter);
+
+/* FU-138 §3: row 03 phase-1 side clamp (native `0x7E3CA..0x7E417`): side 0 caps
+ * the target z at `-0x20`, side 1 floors it at `+0x20`. */
+fifa96_err_t fifa96_action_locomotion_phase1_clamp(uint8_t side, int32_t *target_z);
+
 typedef struct fifa96_action_possession {
   int32_t carrier;
   uint8_t index;
@@ -234,6 +251,11 @@ fifa96_err_t fifa96_action_stage_tick(fifa96_action_stage *state);
 fifa96_err_t fifa96_action_stage_advance(fifa96_action_stage *state, fifa96_action_stage_out *out);
 fifa96_err_t fifa96_action_stage_finish(fifa96_action_stage *state, fifa96_action_stage_out *out);
 fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uint8_t *hold);
+
+/* FU-138 §3: shared timed-arm gate (native row 01 `0x7DC80`, row 0E `0x8276A`,
+ * row 12 `0x83E26`): an arm advances once its accumulated `+0x89` timer reaches
+ * the arm's threshold. */
+fifa96_err_t fifa96_action_stage_wait(int32_t timer89, int32_t threshold, uint8_t *ready);
 fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
                                         uint32_t *entry);
 
@@ -277,6 +299,16 @@ typedef struct fifa96_action_sequence_press {
 fifa96_err_t fifa96_action_sequence_select(uint8_t stage, const uint32_t *arms, uint32_t count,
                                            uint32_t *arm);
 fifa96_err_t fifa96_action_sequence_event(uint8_t anim_byte, uint8_t event_id, uint8_t *post);
+
+/* FU-138 §3: row 01 marker target (native `0x7DBDC..0x7DC39`). When the marker
+ * (`rec+0x8F >> 24`) is >= 2 the position triple is copied to the output;
+ * otherwise the caller-supplied pre-reset x (`lead_x`, the native `rec+0x4D`
+ * the unported camera-reset call leaves) selects the ±0x30 kickoff target with
+ * y and z cleared. */
+fifa96_err_t fifa96_action_sequence_marker_target(uint8_t marker,
+                                                  const fifa96_action_vec3 *pos,
+                                                  int32_t lead_x,
+                                                  fifa96_action_vec3 *out);
 fifa96_err_t fifa96_action_sequence_marker(uint8_t marker, uint8_t want, uint8_t *match);
 fifa96_err_t fifa96_action_sequence_rng_event(uint32_t rng, uint8_t even_id, uint8_t odd_id,
                                               uint8_t *event_id);
@@ -300,3 +332,12 @@ fifa96_err_t fifa96_action_sequence_press_event(int16_t height, int32_t timer89,
 fifa96_err_t fifa96_action_sequence_event_ids(const uint8_t *t344, const uint8_t *t346,
                                               const uint8_t *t349, const uint8_t *t34c,
                                               const uint32_t *rng, uint8_t *ids);
+
+/* FU-138 §3: row 0D stage-0 velocity seed (native `0x825B2..0x82613`). The
+ * caller-supplied `type_x`/`type_z` (the sign-extended `[0x10F334]`/`[0x10F33C]`
+ * entries the native reads at `rec+0x8B>>24`) are scaled by 3 when both are
+ * nonzero else by 4 into `rec+0x73`/`rec+0x75`; `speed` is their entity
+ * distance (`FUN_0008DC68`). */
+fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_z,
+                                                   int16_t *vel_x, int16_t *vel_z,
+                                                   int16_t *speed);

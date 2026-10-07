@@ -187,11 +187,119 @@ static void test_kick_apply(void) {
   assert(fifa96_action_kick_apply(&b, NULL, 0, 0, 0) == ACTION_INVALID);
 }
 
+// FU-138 action cluster A rows 01/02/03/0D derived helpers.
+static void test_stage_wait(void) {
+  uint8_t ready;
+  assert(fifa96_action_stage_wait(0x3B, 0x3C, &ready) == FIFA96_OK && ready == 0);
+  assert(fifa96_action_stage_wait(0x3C, 0x3C, &ready) == FIFA96_OK && ready == 1);
+  assert(fifa96_action_stage_wait(0x78, 0x78, &ready) == FIFA96_OK && ready == 1);
+  assert(fifa96_action_stage_wait(-1, 0, &ready) == FIFA96_OK && ready == 0);
+  assert(fifa96_action_stage_wait(0, -1, &ready) == FIFA96_OK && ready == 1);
+  assert(fifa96_action_stage_wait(0, 0, NULL) == ACTION_INVALID);
+}
+
+static void test_sequence_marker_target(void) {
+  fifa96_action_vec3 pos, out;
+  pos.x = 0x100;
+  pos.y = 0x50;
+  pos.z = -0x200;
+  memset(&out, 0xAB, sizeof(out));
+  assert(fifa96_action_sequence_marker_target(2, &pos, 0x77, &out) == FIFA96_OK);
+  assert(out.x == 0x100 && out.y == 0x50 && out.z == -0x200);
+  assert(fifa96_action_sequence_marker_target(0xFF, &pos, -5, &out) == FIFA96_OK);
+  assert(out.x == 0x100 && out.y == 0x50 && out.z == -0x200);
+  assert(fifa96_action_sequence_marker_target(1, &pos, 5, &out) == FIFA96_OK);
+  assert(out.x == 0x30 && out.y == 0 && out.z == 0);
+  assert(fifa96_action_sequence_marker_target(0, &pos, -1, &out) == FIFA96_OK);
+  assert(out.x == -0x30 && out.y == 0 && out.z == 0);
+  assert(fifa96_action_sequence_marker_target(1, &pos, 0, &out) == FIFA96_OK);
+  assert(out.x == 0x30);
+  assert(fifa96_action_sequence_marker_target(1, NULL, 0, &out) == ACTION_INVALID);
+  assert(fifa96_action_sequence_marker_target(1, &pos, 0, NULL) == ACTION_INVALID);
+}
+
+static void test_locomotion_restart_wait(void) {
+  uint8_t ready, reset;
+  assert(fifa96_action_locomotion_restart_wait(0x40, 0x9, &ready, &reset) == FIFA96_OK);
+  assert(ready == 0 && reset == 0);
+  assert(fifa96_action_locomotion_restart_wait(0x40, 0xA, &ready, &reset) == FIFA96_OK);
+  assert(ready == 1 && reset == 0);
+  assert(fifa96_action_locomotion_restart_wait(0x41, 0x77, &ready, &reset) == FIFA96_OK);
+  assert(ready == 0 && reset == 0);
+  assert(fifa96_action_locomotion_restart_wait(0x41, 0x78, &ready, &reset) == FIFA96_OK);
+  assert(ready == 1 && reset == 1);
+  assert(fifa96_action_locomotion_restart_wait(-1, 0xA, &ready, &reset) == FIFA96_OK);
+  assert(ready == 1 && reset == 0);
+  assert(fifa96_action_locomotion_restart_wait(0x40, 0, NULL, &reset) == ACTION_INVALID);
+  assert(fifa96_action_locomotion_restart_wait(0x40, 0, &ready, NULL) == ACTION_INVALID);
+}
+
+static void test_locomotion_placement_counter(void) {
+  uint16_t counter;
+  assert(fifa96_action_locomotion_placement_counter(0, 5, &counter) == FIFA96_OK);
+  assert(counter == 1);
+  assert(fifa96_action_locomotion_placement_counter(4 << 22, 3, &counter) == FIFA96_OK);
+  assert(counter == 3);
+  assert(fifa96_action_locomotion_placement_counter(0xFF << 22, 0xFFFF, &counter) == FIFA96_OK);
+  assert(counter == 0x100);
+  assert(fifa96_action_locomotion_placement_counter(-1, 5, &counter) == FIFA96_OK);
+  assert(counter == 0);
+  assert(fifa96_action_locomotion_placement_counter(0, 0, &counter) == FIFA96_OK);
+  assert(counter == 0);
+  assert(fifa96_action_locomotion_placement_counter(0, 5, NULL) == ACTION_INVALID);
+}
+
+static void test_locomotion_phase1_clamp(void) {
+  int32_t z;
+  z = -0x20;
+  assert(fifa96_action_locomotion_phase1_clamp(0, &z) == FIFA96_OK && z == -0x20);
+  z = -0x21;
+  assert(fifa96_action_locomotion_phase1_clamp(0, &z) == FIFA96_OK && z == -0x21);
+  z = 0;
+  assert(fifa96_action_locomotion_phase1_clamp(0, &z) == FIFA96_OK && z == -0x20);
+  z = 0x100;
+  assert(fifa96_action_locomotion_phase1_clamp(0, &z) == FIFA96_OK && z == -0x20);
+  z = 0x20;
+  assert(fifa96_action_locomotion_phase1_clamp(1, &z) == FIFA96_OK && z == 0x20);
+  z = 0x21;
+  assert(fifa96_action_locomotion_phase1_clamp(1, &z) == FIFA96_OK && z == 0x21);
+  z = 0;
+  assert(fifa96_action_locomotion_phase1_clamp(1, &z) == FIFA96_OK && z == 0x20);
+  z = -0x100;
+  assert(fifa96_action_locomotion_phase1_clamp(1, &z) == FIFA96_OK && z == 0x20);
+  assert(fifa96_action_locomotion_phase1_clamp(0, NULL) == ACTION_INVALID);
+}
+
+static void test_sequence_velocity_scale(void) {
+  int16_t vx, vz, speed;
+  assert(fifa96_action_sequence_velocity_scale(0, 0, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == 0 && vz == 0 && speed == 0);
+  assert(fifa96_action_sequence_velocity_scale(0x10, 0, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == 0x40 && vz == 0 && speed == 0x40);
+  assert(fifa96_action_sequence_velocity_scale(0x10, 0x20, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == 0x30 && vz == 0x60 && speed == 0x6C);
+  assert(fifa96_action_sequence_velocity_scale(-1, 0x10, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == -3 && vz == 0x30 && speed == 0x30);
+  assert(fifa96_action_sequence_velocity_scale(-1, 0, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == -4 && vz == 0 && speed == 4);
+  assert(fifa96_action_sequence_velocity_scale(0x4000, 0x4000, &vx, &vz, &speed) == FIFA96_OK);
+  assert(vx == (int16_t)0xC000 && vz == (int16_t)0xC000 && speed == 0x5800);
+  assert(fifa96_action_sequence_velocity_scale(1, 1, NULL, &vz, &speed) == ACTION_INVALID);
+  assert(fifa96_action_sequence_velocity_scale(1, 1, &vx, NULL, &speed) == ACTION_INVALID);
+  assert(fifa96_action_sequence_velocity_scale(1, 1, &vx, &vz, NULL) == ACTION_INVALID);
+}
+
 int main(void) {
   test_move_target();
   test_move_step();
   test_kick_angle();
   test_kick_apply();
+  test_stage_wait();
+  test_sequence_marker_target();
+  test_locomotion_restart_wait();
+  test_locomotion_placement_counter();
+  test_locomotion_phase1_clamp();
+  test_sequence_velocity_scale();
   puts("test_action_handlers: all assertions passed");
   return 0;
 }

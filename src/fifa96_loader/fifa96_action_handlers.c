@@ -269,6 +269,36 @@ fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, 
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_action_locomotion_restart_wait(int16_t lane, int32_t timer89, uint8_t *ready,
+                                                   uint8_t *reset) {
+  int32_t threshold;
+  if (!ready || !reset) return -FIFA96_ERR_INVALID;
+  threshold = lane > 0x40 ? 0x78 : 0xA;
+  *ready = timer89 >= threshold ? 1u : 0u;
+  *reset = (*ready != 0 && lane > 0x40) ? 1u : 0u;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_placement_counter(int32_t move_attr, uint16_t limit,
+                                                        uint16_t *counter) {
+  uint16_t value;
+  if (!counter) return -FIFA96_ERR_INVALID;
+  value = (uint16_t)((move_attr >> 22) + 1);
+  if (value > limit) value = limit;
+  *counter = value;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_locomotion_phase1_clamp(uint8_t side, int32_t *target_z) {
+  if (!target_z) return -FIFA96_ERR_INVALID;
+  if (side == 0) {
+    if (*target_z > -0x20) *target_z = -0x20;
+  } else if (*target_z < 0x20) {
+    *target_z = 0x20;
+  }
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_action_possession_reset(fifa96_action_possession *state) {
   if (!state) return -FIFA96_ERR_INVALID;
   state->carrier = 0;
@@ -544,6 +574,12 @@ fifa96_err_t fifa96_action_stage_marker(int32_t marker, uint8_t *set_leader, uin
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_action_stage_wait(int32_t timer89, int32_t threshold, uint8_t *ready) {
+  if (!ready) return -FIFA96_ERR_INVALID;
+  *ready = timer89 >= threshold ? 1u : 0u;
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_action_phase_select(uint8_t phase, const uint32_t *table, uint32_t count,
                                         uint32_t *entry) {
   if (!table || !entry || count == 0) return -FIFA96_ERR_INVALID;
@@ -671,6 +707,19 @@ fifa96_err_t fifa96_action_sequence_select(uint8_t stage, const uint32_t *arms, 
 fifa96_err_t fifa96_action_sequence_event(uint8_t anim_byte, uint8_t event_id, uint8_t *post) {
   if (!post) return -FIFA96_ERR_INVALID;
   *post = anim_byte != event_id ? 1 : 0;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_marker_target(uint8_t marker, const fifa96_action_vec3 *pos,
+                                                  int32_t lead_x, fifa96_action_vec3 *out) {
+  if (!pos || !out) return -FIFA96_ERR_INVALID;
+  if (marker >= 2) {
+    *out = *pos;
+    return FIFA96_OK;
+  }
+  out->x = lead_x < 0 ? -0x30 : 0x30;
+  out->y = 0;
+  out->z = 0;
   return FIFA96_OK;
 }
 
@@ -812,5 +861,17 @@ fifa96_err_t fifa96_action_sequence_event_ids(const uint8_t *t344, const uint8_t
   if (ids[3] == 0x58 || ids[3] == 0x5B || ids[3] == 0x5F || ids[3] == 0x6B) {
     if ((rng[6] & 3u) == 0) ids[4] = 0x68;
   }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_z,
+                                                   int16_t *vel_x, int16_t *vel_z,
+                                                   int16_t *speed) {
+  int32_t scale;
+  if (!vel_x || !vel_z || !speed) return -FIFA96_ERR_INVALID;
+  scale = (type_x != 0 && type_z != 0) ? 3 : 4;
+  *vel_x = (int16_t)((int32_t)type_x * scale);
+  *vel_z = (int16_t)((int32_t)type_z * scale);
+  *speed = (int16_t)fifa96_entity_distance(*vel_x, *vel_z);
   return FIFA96_OK;
 }

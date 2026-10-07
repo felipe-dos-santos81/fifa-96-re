@@ -185,6 +185,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->steps = 0;
   mr->running = 0;
   mr->stage_owner = NULL;
+  memset(&mr->record, 0, sizeof mr->record);
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -205,6 +206,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
+  memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138 action record */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */

@@ -2,12 +2,12 @@
  *
  * The two native tables are action `0x1106E0[45]` (codes 0x00..0x2C, sole reader
  * `FUN_0007D9A4 @ 0x7DA77`) and phase `0x110794[35]` (phases 0x00..0x22, sole
- * reader `FUN_0006D920 @ 0x6D9B3`) — FU-137 §1/§2. At this commit nothing is
- * wired into the engine dispatch (FU-137 §6: 0 ported, 2 unwired, 73 not
- * ported, 4 open leg), so every row must resolve to an explicit UNSUPPORTED
- * open-leg marker, except phase 0x16 (the native zero/INT3 slot) which is
- * NOT_FOUND by contract. The seam itself must run a handler and propagate its
- * result when one is present. */
+ * reader `FUN_0006D920 @ 0x6D9B3`) — FU-137 §1/§2. Task 5 (FU-138) wires the
+ * first cluster-A row: action 00 runs the FU-76 §3.1 locomotion step/target on
+ * `mr->record` and reports OK; every other action row and all 34 non-zero phase
+ * rows still resolve to an explicit UNSUPPORTED open-leg marker, except phase
+ * 0x16 (the native zero/INT3 slot) which is NOT_FOUND by contract. The seam
+ * itself must run a handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -21,12 +21,13 @@
 #define UNSUP (-FIFA96_ERR_UNSUPPORTED)
 #define NOTF (-FIFA96_ERR_NOT_FOUND)
 
-/* FU-137 §6 row classification mapped to the dispatch contract: every action
- * row is UNSUPPORTED at this commit (00/1E are `unwired` — tested library
- * bodies with no record/entity binding yet; the other 43 are `not ported`, of
- * which 27/29/2B/2C are open legs with no static install arm). */
+/* FU-137 §6 row classification mapped to the dispatch contract, updated by
+ * FU-138 for row 00 (ported: `fifa96_match_action_00`). All other action rows
+ * are UNSUPPORTED (1E is `unwired` — tested library body with no record/entity
+ * binding yet; the other 43 are `not ported`, of which 27/29/2B/2C are open
+ * legs with no static install arm). */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
@@ -99,15 +100,63 @@ static void test_tables_are_fully_classified(void) {
                 "NOT_FOUND") != NULL);
 }
 
-/* Per-row dispatch: the FU-137 classification is the contract; no unassigned
- * row may return OK (a silent no-op success). */
+/* Per-row dispatch: the FU-137/FU-138 classification is the contract; no
+ * unassigned row may return OK (a silent no-op success). */
 static void test_action_rows_dispatch_per_classification(void) {
   struct fixture f = make_fixture();
   for (uint32_t code = 0; code < FIFA96_MATCH_ACTION_ROWS; code++) {
     int rc = fifa96_match_dispatch_action(&f.mr, (uint8_t)code);
     assert(rc == action_expect[code]);
-    assert(rc != FIFA96_OK);   /* nothing is wired at this commit */
+    if (fifa96_match_action_table[code].fn == NULL) assert(rc != FIFA96_OK);
   }
+  drop_fixture(f);
+}
+
+/* FU-138 §4: the wired row 00 runs the FU-76 §3.1 body against the run record:
+ * timer decay, control-slot move target clamp, and the phase-2 install request
+ * (3 active / 0x19 inactive). */
+static void test_action_00_runs_move_step(void) {
+  struct fixture f = make_fixture();
+  f.mr.state.phase = 2;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.timer89 = 100;
+  f.mr.record.delta = 10;
+  f.mr.record.timer81 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.dir_x = 1;
+  f.mr.record.dir_z = 2;
+
+  assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
+  assert(f.mr.record.timer89 == 90);
+  assert(f.mr.record.target_x == 0x100 + 128);
+  assert(f.mr.record.target_z == 0x200 + 256);
+  assert(f.mr.record.install == 0);
+
+  f.mr.record.timer89 = 5;
+  f.mr.record.has_slot = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
+  assert(f.mr.record.timer89 == -5);
+  assert(f.mr.record.install == 3); /* active != 0 */
+  assert(f.mr.record.target_x == 0x100 + 128); /* no slot -> no move */
+
+  f.mr.record.timer89 = 0;
+  f.mr.record.install = 0;
+  f.mr.record.active = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
+  assert(f.mr.record.install == 0x19);
+
+  f.mr.record.pos_x = 0x700;
+  f.mr.record.pos_z = -0xB00;
+  f.mr.record.dir_x = 2;
+  f.mr.record.dir_z = -2;
+  f.mr.record.timer89 = 0;
+  f.mr.record.timer81 = 5; /* install gate held by timer81 */
+  f.mr.record.has_slot = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x720);
+  assert(f.mr.record.target_z == -0xB10);
   drop_fixture(f);
 }
 
@@ -178,6 +227,7 @@ static void test_seam_runs_wired_handler(void) {
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
+  test_action_00_runs_move_step();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

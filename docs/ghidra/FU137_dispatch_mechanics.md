@@ -12,11 +12,13 @@ record in EAX (code in EDX, no stack arguments); the two record machines
 (`FUN_0007CA54` outfield, `FUN_000782D0` keeper) share one skeleton; the
 `0x26`–`0x2C` installer arms are now bounded (0x26 at `0x8D74D`, 0x28 at
 `0x8D7CF`, 0x2A at `0x8D807`; 0x27/0x29/0x2B/0x2C have no static install arm);
-of the 80 dispatch rows **0 are wired, 3 are unwired (2 action + the phase
-zero slot), 73 are not ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** —
-`fifa96_match_handlers.c` returns `-FIFA96_ERR_UNSUPPORTED` for every classified
-row and `-FIFA96_ERR_NOT_FOUND` for the phase zero slot, never a silent no-op
-(all error results are negated per the engine family convention).
+of the 80 dispatch rows **1 is ported (action `00`, wired by M2 Task 5 /
+FU-138), 2 are unwired (action `1E` and the phase zero slot), 73 are not
+ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** — every still-unwired or
+unported row returns `-FIFA96_ERR_UNSUPPORTED`, the phase zero slot returns
+`-FIFA96_ERR_NOT_FOUND`, and never a silent no-op (all error results are
+negated per the engine family convention). The Task-5 update is recorded in the
+errata at the end of this doc.
 
 ## Method
 
@@ -298,10 +300,10 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 
 | code | native | class | handler / evidence | open leg |
 |---|---|---|---|---|
-| 00 | 0x07DB10 | unwired | `fifa96_action_move_step`/`_move_target`; `test_action_handlers`; FU-76 §3.1/§4 | OL-1 |
-| 01 | 0x07DBC0 | not ported (partial) | sequence_select/stage helpers; FU-76 §2, FU-82 §3.1 | OL-9 |
-| 02 | 0x07DFCC | not ported (partial) | locomotion_restart_target; FU-77 §2.2 | OL-9 |
-| 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3 | OL-8 |
+| 00 | 0x07DB10 | ported (M2 Task 5 / FU-138 §4) | `fifa96_match_action_00` binds `fifa96_action_move_step`/`_move_target` to `mr->record` (FU-76 §3.1/§4; `test_engine_match_handlers::test_action_00_runs_move_step`) | OL-1 closed for row 00; record pool OL-16 |
+| 01 | 0x07DBC0 | not ported (partial) | sequence_select/stage helpers; FU-76 §2, FU-82 §3.1; FU-138 marker_target/stage_wait | OL-9; FU-138 OL-17 |
+| 02 | 0x07DFCC | not ported (partial) | locomotion_restart_target; FU-77 §2.2; FU-138 restart_wait | OL-9; FU-138 OL-18 |
+| 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3; FU-138 counter/phase1_clamp | OL-8; FU-138 OL-19 |
 | 04 | 0x07E7C8 | not ported (partial) | locomotion_camera_lead; FU-77 §2.4 | OL-8 |
 | 05 | 0x07F194 | not ported (partial) | possession_reset/claim/timer; FU-78 §2/§3 | OL-8 |
 | 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row | OL-8 |
@@ -311,7 +313,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 0A | 0x081738 | not ported | FU-76 §2; installer 0x7CDD8 has no xrefs | OL-14 |
 | 0B | 0x081908 | not ported (partial) | sequence_duel_event; FU-82 §3.3 | OL-9 |
 | 0C | 0x081C90 | not ported (partial) | FU-81 7-arm table 0x81C74 | OL-9 |
-| 0D | 0x08251C | not ported (partial) | FU-82 §3.4 4-arm table 0x8250C | OL-9 |
+| 0D | 0x08251C | not ported (partial) | FU-82 §3.4 4-arm table 0x8250C; FU-138 velocity_scale | OL-9; FU-138 OL-22 |
 | 0E | 0x082710 | not ported | FU-81 §2.1 gate/head; tackle helpers only install 0x0E | OL-9 |
 | 0F | 0x082AD0 | not ported | FU-76 §2; KICK 0x7B9C4 body | OL-8 |
 | 10 | 0x0855F0 | not ported (partial) | FU-81 7-arm table 0x855B8 | OL-9 |
@@ -394,23 +396,25 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 0 | 2 (`00`, `1E`) | 39 | 4 (`27`, `29`, `2B`, `2C`) |
+| action `0x1106E0` | 45 | 1 (`00`, M2 Task 5 / FU-138) | 1 (`1E`) | 39 | 4 (`27`, `29`, `2B`, `2C`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **0** | **3** | **73** | **4** |
+| **dispatch total** | **80** | **1** | **2** | **73** | **4** |
 
-Dispatch results at this commit: **79 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
-ported rows + the 2 unwired action rows + the 4 open legs) and **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`); out-of-range -> `-NOT_FOUND`; NULL
-`mr` -> `-INVALID`. All error results are negated, matching the engine family
-convention (`fifa96_match_run_*`).
+Dispatch results at this commit: **78 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
+ported rows + the 1 unwired action row `1E` + the 4 open legs), **1 ×
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **1 × `FIFA96_OK`** (action `00`);
+out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are
+negated, matching the engine family convention (`fifa96_match_run_*`).
 
 ## 8. Open legs
 
 1. **OL-1 — entity/record model and machine binding.** The 0xB2-stride record,
    its `[rec+0x18]` handler slot, and the record fields the machines stage
    (`+0x81`, `+0x89`, `+0x91`, `+0x92`, `+0x9A`, `+0x9E`, `+0x9F`) have no
-   engine surface, so action 00/1E's tested bodies cannot bind to a match run.
-   Blocks wiring those two rows.
+   engine surface, so action 1E's tested body cannot yet bind to a match run.
+   Task 5 (FU-138 §4) added the minimal one-record action surface and wired
+   action 00 through it; 1E still waits for the keeper row and the full record
+   pool (FU-138 OL-16).
 2. **OL-2 — installer tails/reset chain.** `FUN_0007DAB4` (reset/chooser),
    `FUN_0006E8E8`, `FUN_00079B1C`, `FUN_00079F3C`, `FUN_0007BF20` are not
    ported; handler side effects through them are absent.
@@ -453,6 +457,20 @@ convention (`fifa96_match_run_*`).
 * Phase dispatch is per-record (11 × 0xB2), not global; the engine seam's
   `fifa96_match_dispatch_phase(mr, phase)` is therefore a row resolver only —
   Task 10 must add the record walk and keep the zero-slot `NOT_FOUND`.
+
+## Errata (M2 Task 5 / FU-138)
+
+* §6.1 action row `00` moves from `unwired`/OL-1 to `ported`: Task 5 added
+  `fifa96_match_action_00` (bound to the minimal `mr->record` surface) and
+  updated the §7 totals and dispatch-result paragraph in place. The row's RE
+  evidence is unchanged (FU-76 §3.1/§4); the class change is a wiring status
+  update the §6 rubric anticipates ("body in C **and** wired"). The record pool
+  is FU-138 OL-16 = the carried remainder of this doc's OL-1.
+* Action rows `01`/`02`/`03`/`0D` keep their `not ported (partial)` class; FU-138
+  §3 adds their derived pure parts (`sequence_marker_target`, `stage_wait`,
+  `locomotion_restart_wait`, `locomotion_placement_counter`,
+  `locomotion_phase1_clamp`, `sequence_velocity_scale`) as additional tested
+  helper coverage. Their wiring stays open (FU-138 OL-17..OL-20).
 
 ## Provenance
 

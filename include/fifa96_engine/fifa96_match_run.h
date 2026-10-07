@@ -95,6 +95,30 @@ struct fifa96_match_run_render {
   uint8_t remap[256];                       /* indexed translation + 0xFF key */
 };
 
+/* Minimal derived match record (M2 Task 5 / FU-138 §4): the native record is a
+ * 0xB2-strided block (FU-137 §3) whose fields the FU-76 §3.1 action-00 body
+ * reads and writes. The engine seam keeps one record — the controlled entity
+ * the action dispatch can bind today — until the C8/C11 entity pool lands
+ * (FU-138 OL-16, carrying FU-137 OL-1). Offsets are the native record fields:
+ * pos +0x59/+0x61, target +0x4D/+0x55, timer +0x89/+0x81, active +0x8D,
+ * control-slot pointer +0x20, slot direction +0x1D/+0x1E. `install` is the
+ * derived seam stand-in for the FU-137 §2 `FUN_0007D9A4` install request
+ * (`3`/`0x19` from action 00); the engine does not yet stage `[rec+0x18]`. */
+struct fifa96_match_run_record {
+  int32_t pos_x;
+  int32_t pos_z;
+  int32_t target_x;
+  int32_t target_z;
+  int32_t timer89;
+  uint16_t timer81;
+  uint16_t delta;      /* FU-62 frame delta, native [0x157A64] */
+  uint8_t active;
+  uint8_t has_slot;
+  int8_t dir_x;
+  int8_t dir_z;
+  uint8_t install;     /* derived install request of the last dispatch, 0 = none */
+};
+
 struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
@@ -108,18 +132,19 @@ struct fifa96_match_run {
   struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
+  struct fifa96_match_run_record record;         /* FU-138 minimal action record */
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };
 
 /* Zero-init a run: lifecycle, pace, match state (clock and score pair), input
- * model, control slot, presentation state (camera/window/display/scene,
- * rendering disabled), the staging-arena holder (assigned NULL, never freed:
- * init accepts uninitialized memory, so it cannot trust the holder), backend,
- * counters and engine linkage. Must be called before the first begin on a run.
- * A staged run must be released by end (or the next begin) before
- * re-initialization; a direct re-init leaves the arena unreachable and leaks
- * it. NULL is a no-op. */
+ * model, control slot, the minimal action record (FU-138), presentation state
+ * (camera/window/display/scene, rendering disabled), the staging-arena holder
+ * (assigned NULL, never freed: init accepts uninitialized memory, so it cannot
+ * trust the holder), backend, counters and engine linkage. Must be called
+ * before the first begin on a run. A staged run must be released by end (or the
+ * next begin) before re-initialization; a direct re-init leaves the arena
+ * unreachable and leaks it. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
 
 /* One match input poll: fold the engine key presses in `keys` (codes 1..9;
