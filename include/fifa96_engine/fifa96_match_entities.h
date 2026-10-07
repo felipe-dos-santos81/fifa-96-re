@@ -14,7 +14,8 @@
  *     (FU-67 §3.2, FU-74 §2, FU-137 §2, FU-138/FU-140 row maps);
  *   - team fields: side +0x826, slot-pool byte +0x828, search gate +0x829,
  *     mode +0x82A, update counter +0x82C, timer cluster +0x7CB/+0x81E/+0x820,
- *     controlled pointer +0x7B2, secondary +0x7B6, chosen +0x7BF,
+ *     target pointer +0x7B2 (the `[0x157A83]` controlled actor is a separate
+ *     global), secondary +0x7B6, chosen +0x7BF,
  *     interception +0x7BA, flag +0x7BE (FU-67 §3.1/§4.2, FU-75 §4);
  *   - the ball record at flat 0x15880C (x/y/z, heading, appearance; FU-120 §2)
  *     and the FU-139 §3.1 staging block (0x158730).
@@ -159,7 +160,9 @@ int fifa96_match_entities_release(struct fifa96_match_entities *pool);
 /* One team's FU-67 chain step (counter, selection, interception, timer,
  * keeper record 0, outfield records 1..10 with the action callback and the
  * per-record request drains). Exposed for order tests; normally reached
- * through fifa96_match_entities_update. */
+ * through fifa96_match_entities_update. The phase/delta are latched from
+ * `frame` here too, so a direct call is safe (the frame inputs are the same
+ * ones fifa96_match_entities_update gates the ball pairing on). */
 int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32_t team,
                                       const struct fifa96_match_entities_frame *frame,
                                       fifa96_match_entity_action_fn action, void *ctx);
@@ -188,10 +191,12 @@ int fifa96_match_entities_install(struct fifa96_match_entity *entity, uint8_t ph
 
 /* The FU-138/FU-139 slot merge FUN_0007876C + FUN_00078670 over the pool:
  * requires the requester to have no slot and the team's +0x828 byte; ranks the
- * team's slot-holding records (record 0 unconditionally, later records by the
- * signed-word distance `FUN_0008DC68`, greater wins); on success the requester
- * gains the slot, the donor loses it and the requester is recorded for
- * fifa96_match_entities_take_slot_merge. Returns 1 merged, 0 not, -INVALID. */
+ * team's slot-holding records (the first slot-holder unconditionally, later
+ * holders only by a strictly greater signed-word distance `FUN_0008DC68`; the
+ * native counter at 0x787E4 counts slot-holders only); on success the
+ * requester gains the slot, the donor loses it and the requester is recorded
+ * for fifa96_match_entities_take_slot_merge. Returns 1 merged, 0 not,
+ * -INVALID. */
 int fifa96_match_entities_merge_slot(struct fifa96_match_entities *pool, uint32_t team,
                                      uint32_t record);
 

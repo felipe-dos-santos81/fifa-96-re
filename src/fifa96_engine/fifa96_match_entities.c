@@ -123,6 +123,7 @@ int fifa96_match_entities_merge_slot(struct fifa96_match_entities *pool, uint32_
   struct fifa96_match_entity *requester;
   int best = -1;
   int16_t best_distance = 0;
+  uint32_t slot_holders = 0;
   if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS ||
       record >= FIFA96_MATCH_ENTITY_RECORDS)
     return -FIFA96_ERR_INVALID;
@@ -133,16 +134,19 @@ int fifa96_match_entities_merge_slot(struct fifa96_match_entities *pool, uint32_
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     const struct fifa96_match_entity *candidate = &t->records[i];
     int32_t distance;
-    if (candidate->has_slot == 0) continue;                  /* 0x787A3 */
+    if (candidate->has_slot == 0) continue;                  /* 0x787A3/A7 */
     distance = (int32_t)(int16_t)fifa96_entity_distance(
         (int16_t)(requester->pos_x - candidate->pos_x),
         (int16_t)(requester->pos_z - candidate->pos_z));
-    /* Record 0 is taken unconditionally; later records only when their
-     * signed-word distance is strictly greater (0x787C6..0x787D0). */
-    if (i == 0 || (int16_t)distance > best_distance) {
+    /* The native counter (`INC ECX` at 0x787E4) increments only for
+     * slot-holding candidates; `TEST CX,CX` (0x787C6) therefore takes the
+     * *first slot-holder* unconditionally, and later holders only when their
+     * signed-word distance is strictly greater. */
+    if (slot_holders == 0 || (int16_t)distance > best_distance) {
       best = (int)i;
       best_distance = (int16_t)distance;
     }
+    slot_holders++;
   }
   if (best < 0) return 0;
   requester->has_slot = 1;
@@ -212,6 +216,7 @@ static void team_select_intercept(struct fifa96_match_entities *pool, uint32_t t
                                   const struct fifa96_match_entities_frame *frame) {
   struct fifa96_match_team *team = &pool->team[t];
   struct fifa96_match_entity *controlled;
+  struct fifa96_match_entity *target;
   fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
   uint32_t side;
   int16_t best = 0;
@@ -224,6 +229,10 @@ static void team_select_intercept(struct fifa96_match_entities *pool, uint32_t t
   if (pool->team[controlled->team].side != team->side) return;
   if (entity_abs(frame->cam_z) <= 0x480) return;
   if (((frame->cam_z < 0) ? 1u : 0u) != team->side) return;
+  /* `0x8DA2C MOV EBX,[EBP+0x7B2]; MOV EBX,[EBX+0x8A]; SAR EBX,0x18` reads the
+   * *team target's* +0x8D byte, not the controlled actor's. */
+  target = entity_by_id(pool, team->target);
+  if (!target) return;
   side = team->side;
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     const struct fifa96_match_entity *e = &team->records[i];
@@ -232,10 +241,10 @@ static void team_select_intercept(struct fifa96_match_entities *pool, uint32_t t
     candidates[i].skip_98 = e->skip_98;
     candidates[i].skip_9a = e->skip_9a;
   }
-  /* Skip index = controlled[+0x8A]>>24, i.e. the +0x8D byte; the target base
+  /* Skip index = team target[+0x8A]>>24, i.e. its +0x8D byte; the target base
    * is 0x10F37C + side*0xC (0x8DA4D). */
   index = fifa96_entity_find_nearest(
-      candidates, FIFA96_MATCH_ENTITY_RECORDS, (int16_t)(int8_t)controlled->active,
+      candidates, FIFA96_MATCH_ENTITY_RECORDS, (int16_t)(int8_t)target->active,
       frame->intercept_x[side], frame->intercept_y[side], &best);
   if (index >= 0 && team->records[index].has_slot != 0)
     index = FIFA96_MATCH_ENTITY_NONE;                       /* 0x8DA5D */
@@ -250,6 +259,10 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
                                       fifa96_match_entity_action_fn action, void *ctx) {
   struct fifa96_match_team *t;
   if (!pool || !frame || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  /* Latch the frame inputs here so a direct team call is safe (the update
+   * wrapper sets the same values before the ball pairing reads them). */
+  pool->phase = frame->phase;
+  pool->delta = frame->delta;
   t = &pool->team[team];
   t->update_count = (uint8_t)(t->update_count + 1);          /* 0x8D8F7 */
   if (t->update_count >= 0xBu) t->update_count = 0;

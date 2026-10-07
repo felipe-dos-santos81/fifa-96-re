@@ -251,11 +251,13 @@ requester[+0x20] = donor slot; donor[+0x20] = 0; slot[0] = requester;
 FUN_00078670(slot);                             0x78809..0x78814
 ```
 
-The ranked pick is "record 0 unconditionally, later records by strictly
-greater signed-word distance" (the native's `TEST CX,CX`/`JLE` at
-`0x787C6..0x787D0`; `FUN_0008DC68` preserves ECX, verified this slice). The
-pool moves the `has_slot` flags and records the merge; the frame body moves
-the FU-70 slot binding and calls `fifa96_control_slot_merge_reset`
+The ranked pick is "the first slot-holding candidate unconditionally, later
+slot-holders only by a strictly greater signed-word distance": the native
+counter `INC ECX` at `0x787E4` is bypassed for no-slot candidates
+(`0x787A7 JZ 0x787E5`), so `TEST CX,CX` at `0x787C6` means "no slot-holder
+seen yet", not "record 0" (`FUN_0008DC68` preserves ECX, verified this
+slice). The pool moves the `has_slot` flags and records the merge; the frame
+body moves the FU-70 slot binding and calls `fifa96_control_slot_merge_reset`
 (`FUN_00078670`: zeroes slot `+4,+6,+8,+0xA,+0xC,+0x14,+0x16` only, pinned in
 `test_control`).
 
@@ -425,8 +427,10 @@ and their request fields are consumed rather than left write-only.
   else `< word[0x157806]` -> `0x157794`; else `0x157770` plus the
   `0x1577BE/0x1577C0` lead terms (`0x8D948..0x8D9A6`). Also derived: the
   interception target is `0x10F37C + side*0xC` with skip
-  `[[team+0x7B2]+0x8A]>>24` (the `+0x8D` byte) and the side compare is on
-  the two `+0x826` bytes (`0x8D9E3`), not the block order.
+  `[[team+0x7B2]+0x8A]>>24` — the *team target's* `+0x8D` byte
+  (`0x8DA2C MOV EBX,[EBP+0x7B2]; MOV EBX,[EBX+0x8A]; SAR EBX,0x18`), not the
+  `[0x157A83]` actor's — and the side compare is on the two `+0x826` bytes
+  (`0x8D9E3`), not the block order.
 * **FU-120 §2** — confirmed at flat `0x15880C` in `/FIFA96.EXE`
   (`search_instructions 15880c`); the `-0x720`/`0x1560` reset writers are
   `FUN_000886D4 0x8873A/0x88746`.

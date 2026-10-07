@@ -334,23 +334,34 @@ static void test_update_selection_buckets(void) {
 
 /* FUN_0008D8EC 0x8D9BD..0x8DAE9 interception selection: only when the
  * controlled record exists, its team side matches, |[0x157754]| > 0x480 and
- * the sign of [0x157754] matches the side; skip = controlled[+0x8A]>>24 (the
- * +0x8D byte); a found record holding a control slot is rejected. */
+ * the sign of [0x157754] matches the side; skip = the *team target's*
+ * ([team+0x7B2]) +0x8A>>24 byte, i.e. that record's +0x8D active byte
+ * (0x8DA2C: `MOV EBX,[EBP+0x7B2]; MOV EBX,[EBX+0x8A]; SAR EBX,0x18` — not the
+ * controlled actor [0x157A83]); a found record holding a control slot is
+ * rejected. */
 static void test_update_intercept_select(void) {
   struct fifa96_match_entities pool;
   struct fifa96_match_entities_frame f = zero_frame();
   assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
   f.phase = 2;
   f.cam_z = 0x500;
-  f.intercept_x[0] = 10;
+  f.intercept_x[0] = 0;
   f.intercept_y[0] = 0;
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     pool.team[TEAM0].records[i].pos_x = 0x400;
   }
-  pool.team[TEAM0].records[3].pos_x = 10; /* nearest to the 0x10F37C target */
+  pool.team[TEAM0].records[3].pos_x = 10; /* nearest if its rival is skipped */
   pool.team[TEAM0].records[3].pos_z = 0;
+  pool.team[TEAM0].records[4].pos_x = 5; /* nearest overall, skipped */
+  pool.team[TEAM0].records[4].pos_z = 0;
+  pool.team[TEAM0].records[5].pos_x = 15;
+  pool.team[TEAM0].records[5].pos_z = 0;
+  /* The controlled actor and the team target differ: the skip must come from
+   * the target (index 2, active 4), not the controlled record (index 1). */
   pool.controlled = TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 1;
-  pool.team[TEAM0].records[1].active = 1; /* skip 1 (the controlled record) */
+  pool.team[TEAM0].target = TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 2;
+  pool.team[TEAM0].records[1].active = 1;
+  pool.team[TEAM0].records[2].active = 4;
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(pool.team[TEAM0].intercept == 3);
   /* the found record holds a slot -> rejected */
@@ -372,11 +383,20 @@ static void test_update_intercept_select(void) {
   pool.team[TEAM0].side = 1;
   pool.team[TEAM1].side = 0;
   f.cam_z = -0x500;
-  f.intercept_x[1] = 10; /* side 1 target */
+  f.intercept_x[1] = 0; /* side 1 target */
   f.intercept_y[1] = 0;
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(pool.team[TEAM0].intercept == 3);
   assert(pool.team[TEAM1].intercept == NONE);
+  /* a NONE team target with no selectable candidate is guarded (the native
+   * would dereference NULL; the port skips the interception) */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    pool.team[TEAM0].records[i].skip_98 = 1;
+  pool.team[TEAM0].target = NONE;
+  pool.team[TEAM0].intercept = 5;
+  assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
+  assert(pool.team[TEAM0].target == NONE);
+  assert(pool.team[TEAM0].intercept == NONE);
 }
 
 /* Update counter wraps at 0xB (0x8D8F7..0x8D912) and the record timer pair
@@ -469,10 +489,12 @@ static void test_update_consumes_requests(void) {
   assert(fifa96_match_entities_take_slot_merge(&pool) == NONE);
 }
 
-/* The ranked slot merge (FUN_0007876C + FUN_00078670): candidate 0 is taken
- * unconditionally when it holds a slot, later candidates replace it only when
- * their signed-word distance is greater; the requester takes the slot and the
- * donor loses it. */
+/* The ranked slot merge (FUN_0007876C + FUN_00078670): the first
+ * slot-holding candidate is taken unconditionally (the native counter at
+ * 0x787E4 increments only for slot-holders; no-slot candidates bypass it at
+ * 0x787A7) and later slot-holders replace it only when their signed-word
+ * distance is strictly greater; the requester takes the slot and the donor
+ * loses it. */
 static void test_merge_slot_ranked(void) {
   struct fifa96_match_entities pool;
   assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
@@ -500,11 +522,25 @@ static void test_merge_slot_ranked(void) {
   team->records[3].pos_x = 0;
   assert(fifa96_match_entities_merge_slot(&pool, TEAM0, 3) == 1);
   assert(team->records[3].has_slot == 1 && team->records[4].has_slot == 0);
+  /* The native counter at 0x787E4 increments only for slot-holding
+   * candidates, so the *first slot-holder* is taken unconditionally, even
+   * when record 0 has no slot and that holder's distance is <= 0. */
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  team = &pool.team[TEAM0];
+  team->slot_pool = 1;
+  team->records[1].has_slot = 1; /* record 0 has no slot */
+  team->records[1].pos_x = 0;    /* d = 0 */
+  team->records[3].pos_x = 0;
+  assert(fifa96_match_entities_merge_slot(&pool, TEAM0, 3) == 1);
+  assert(team->records[3].has_slot == 1 && team->records[1].has_slot == 0);
+  assert(fifa96_match_entities_take_slot_merge(&pool) ==
+         (int32_t)(TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 3));
   /* gates: requester already has a slot, no pool flag, no donor */
   assert(fifa96_match_entities_merge_slot(&pool, TEAM0, 3) == 0);
   assert(fifa96_match_entities_merge_slot(&pool, TEAM1, 3) == 0); /* slot_pool 0 */
   team->records[3].has_slot = 0;
   team->records[0].has_slot = 0;
+  team->records[1].has_slot = 0;
   team->records[4].has_slot = 0;
   assert(fifa96_match_entities_merge_slot(&pool, TEAM0, 3) == 0);
   assert(fifa96_match_entities_merge_slot(NULL, TEAM0, 3) == -FIFA96_ERR_INVALID);
