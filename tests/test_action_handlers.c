@@ -423,6 +423,23 @@ static void test_kick_event_row_angle_sector(void) {
   assert(row.index == 7); /* band 0: 0 + 6*1 + idx(1) */
 }
 
+/* FU-139 §7: the fallback sector is the sign-extended actor[+0x8E] byte and
+ * the native `SAR EAX,CL` masks the shift count to 5 bits, so sector 0xE1
+ * (-31) shifts by 1, not out of range. */
+static void test_kick_event_row_sector_mask(void) {
+  fifa96_action_kick_event e = kick_event();
+  fifa96_action_kick_event_out row;
+  static const uint8_t sector_shift[1] = {0x02};
+  e.code = 0x10; /* class 0 */
+  e.sector_byte = 0xE1;
+  e.height = 0x1000;
+  e.ball_height = 0x1050; /* height table, d >= 0x38 */
+  assert(fifa96_action_kick_event_row(&e, sector_shift, &row) == FIFA96_OK);
+  assert(row.found == 1);
+  assert(row.table == FIFA96_ACTION_KICK_EVENT_TABLE_HEIGHT);
+  assert(row.index == 1); /* 2*class(0) + ((0x02 >> (0xE1 & 0x1F)) & 1) */
+}
+
 static void test_kick_event_row_none_and_invalid(void) {
   fifa96_action_kick_event e = kick_event();
   fifa96_action_kick_event_out row;
@@ -458,12 +475,28 @@ static void test_kick_event_append(void) {
   assert(out.direct == 0 && out.code == 0x0F);
   assert(fifa96_action_kick_event_append(0, 0x01, &out) == FIFA96_OK);
   assert(out.direct == 0 && out.code == 0x0D);
+  assert(fifa96_action_kick_event_append(0, 0x03, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x11);
+  assert(fifa96_action_kick_event_append(0, 0x04, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x0A);
+  assert(fifa96_action_kick_event_append(0, 0x05, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x09);
+  assert(fifa96_action_kick_event_append(0, 0x06, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x14);
+  assert(fifa96_action_kick_event_append(0, 0x07, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x13);
+  assert(fifa96_action_kick_event_append(0, 0x08, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x16);
   assert(fifa96_action_kick_event_append(0, 0x09, &out) == FIFA96_OK);
   assert(out.direct == 0 && out.code == 0x16);
   assert(fifa96_action_kick_event_append(0, 0x0A, &out) == FIFA96_OK);
   assert(out.direct == 0 && out.code == 3);
+  assert(fifa96_action_kick_event_append(0, 0x0B, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 4);
   assert(fifa96_action_kick_event_append(0, 0x0C, &out) == FIFA96_OK);
   assert(out.direct == 0 && out.code == 4);
+  assert(fifa96_action_kick_event_append(0, 0x0D, &out) == FIFA96_OK);
+  assert(out.direct == 0 && out.code == 0x10);
   assert(fifa96_action_kick_event_append(0, 0x0E, &out) == FIFA96_OK);
   assert(out.direct == 0 && out.code == 0x0C);
   assert(fifa96_action_kick_event_append(0, 0, &out) == FIFA96_OK);
@@ -562,6 +595,7 @@ int main(void) {
   test_kick_event_row_code60();
   test_kick_event_row_band_and_state();
   test_kick_event_row_angle_sector();
+  test_kick_event_row_sector_mask();
   test_kick_event_row_none_and_invalid();
   test_kick_event_append();
   test_kick_stage_target();
