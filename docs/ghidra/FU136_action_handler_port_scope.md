@@ -6,26 +6,29 @@ every row to the C surface that exists in the repo today, and decide whether
 the remaining not-ported + unwired work fits the ~4-task threshold or forces
 M2 to split into its own spec.
 
-Result in one line: **both tables are fully enumerated in `/FIFA96.EXE` (action
+Result in one line: both tables are fully enumerated in `/FIFA96.EXE` (action
 table `0x1106E0`, 45 slots read only by `FUN_0007D9A4 0x7DA77`; phase table
 `0x110794`, 35 slots read only by `FUN_0006D920 0x6D9B3`); of the 80 rows,
-**0 are wired, 3 are fully covered by tested C symbols but uncalled (2 action
-rows: `0x00`, `0x1E`; 1 phase row: phase `0x16` zero/INT3), and 77 are not
-ported** (43 rows have partial, tested helper coverage only); the surrounding
-support machinery (installer, record machines, input-row handlers, ball
-staging/resolver/kick target selection, entity frame chain, tracker/selection,
-RNG, phase-driver bodies) is likewise unwired or unported, and the realistic
-remaining work is **~13 implementation tasks (range 12-15), well over the
-4-task threshold → `M2_SCOPE: split`** (spec §12).**
+**0 are wired, 3 are fully covered by tested C symbols but uncalled** (2 action
+rows: `0x00`, `0x1E`; 1 phase row: phase `0x16` zero/INT3, no handler body by
+design), and **77 are not ported** (43 rows have partial, tested helper
+coverage only); the surrounding support machinery (installer, record machines,
+input-row handlers, ball staging/resolver/kick target selection, entity frame
+chain, tracker/selection, RNG, phase-driver bodies) is likewise unwired or
+unported, and the realistic remaining work is **~13 implementation tasks
+(range 12-15), well over the 4-task threshold -> `M2_SCOPE: split`** (spec
+§12).
 
 ## Method
 
 * Authoritative program **`/FIFA96.EXE`** (native Watcom LE loader, object-4
   data fixups applied, FU-130/FU-131), used explicitly per the task brief;
-  `/fifa96_le.bin` was not touched. Code addresses are identical between the
-  two programs (FU-130 §6), so every `FUN_*` address below is valid for both;
-  data pointers in the native program are already resolved (`0x1106E0` holds
-  runtime handler addresses, not raw `+0x10000` offsets).
+  `/fifa96_le.bin` was not touched. Code addresses are byte-identical between
+  the two programs (FU-130 §6); some function definitions exist only in the
+  flat image (e.g. the `0x8D807` install site), so definitions are stated per
+  program where they differ. Data pointers in the native program are already
+  resolved (`0x1106E0` holds runtime handler addresses, not raw `+0x10000`
+  offsets).
 * **Ghidra read-only.** The only tool calls made on `/FIFA96.EXE` are
   `read_memory 0x1106E0` (180 B, 45 dwords), `read_memory 0x110794` (140 B,
   35 dwords), `search_instructions 0x1106e0` and `search_instructions
@@ -122,7 +125,7 @@ are in the evidence cell. "Task" is the estimated implementation group from
 | 05 | 0x07F194 | not ported (partial) | FU-78 §2/§3; `fifa96_action_possession_reset/_claim/_timer/_dribble_dir`; `test_action_possession`; stage-0 tail, stages 1-3, `FUN_0007F7E0` unported | T16-B |
 | 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns) derived, no port row; `0x14E04` folds/receiver picks unported | T16-B |
 | 07 | 0x0814B0 | not ported (partial) | FU-76 §3.2, FU-77 §2.7; `fifa96_action_kick_angle`, `fifa96_action_kick_apply`; `test_action_handlers`; stage machine, target selection `0x7BA1E..`, `0x22` invoke, tail unported | T16-B |
-| 08 | 0x081068 | not ported | FU-75 §1.6 chase gate is the *installer* (`fifa96_outfield_chase_action`, `test_outfield`), not the body; FU-76 §2 row only | T16-B |
+| 08 | 0x081068 | not ported (partial) | FU-75 §1.6 chase gate is the *installer* (`fifa96_outfield_chase_action`, `test_outfield`), not the body; FU-76 §2 row only | T16-B |
 | 09 | 0x080A00 | not ported (partial) | FU-81 §2.1 arm table `0x809F0`; `fifa96_action_stage_*`; `test_stage_family`; arms unported | T16-C |
 | 0A | 0x081738 | not ported | FU-76 §2 only; FU-75 §1.9 installer `0x7CDD8` has no xrefs; body unported | T16-H |
 | 0B | 0x081908 | not ported (partial) | FU-82 §3.3; `fifa96_action_sequence_duel_event` + `..._event`; `test_event_sequences`; arms 0/2 and nearest/install-`0x0C` unported | T16-C |
@@ -139,7 +142,7 @@ are in the evidence cell. "Task" is the estimated implementation group from
 | 16 | 0x084630 | not ported (partial) | FU-82 §3.6; `fifa96_action_sequence_marker`, `..._rng_event`; stage 1 polar pop/timer unported | T16-C |
 | 17 | 0x084730 | not ported (partial) | FU-81 §2.1 (4-arm table `0x84720`); `fifa96_action_stage_*`; arms unported | T16-C |
 | 18 | 0x0849B0 | not ported (partial) | FU-78 §7; `fifa96_action_duel_step`, `fifa96_action_duel_split`; `test_action_possession`; resolution side-select + NSEARCH/SWAP (slot transfer) unported | T16-E |
-| 19 | 0x0746E4 | not ported (partial) | FU-79 §2; `fifa96_keeper_hold_track/_guard/_intercept`, `..._guard_clamp`; `test_keeper_bodies`; predictor, weighted fallback, `[rec+0x1C]` tail unported | T16-D |
+| 19 | 0x0746E4 | not ported (partial) | FU-79 §2; `fifa96_keeper_hold_track`, `fifa96_keeper_hold_guard`, `fifa96_keeper_hold_intercept`, `fifa96_keeper_guard_clamp`; `test_keeper_bodies`; predictor, weighted fallback, `[rec+0x1C]` tail unported | T16-D |
 | 1A | 0x07662C | not ported (partial) | FU-79 §3 (5-arm table `0x76618`); `fifa96_keeper_reposition_a_gate`; stages 1-4 unported | T16-D |
 | 1B | 0x076D28 | not ported (partial) | FU-79 §4 (5-arm table `0x76D14`); `fifa96_keeper_reposition_b_finish`; stages 0-3 unported | T16-D |
 | 1C | 0x077728 | not ported (partial) | FU-79 §5; `fifa96_keeper_lunge_track`; rotated arm and steering `FUN_00076B28` unported | T16-D |
@@ -156,7 +159,7 @@ are in the evidence cell. "Task" is the estimated implementation group from
 | 27 | 0x086820 | not ported | FU-76 §2 (listing cut at `0x8687F`); no port | T16-H |
 | 28 | 0x0870E8 | not ported | FU-76 §2 (unclassified action-shaped); no port | T16-H |
 | 29 | 0x0874E4 | not ported | FU-76 §2 (unclassified action-shaped); no port | T16-H |
-| 2A | 0x086A34 | not ported | FU-76 §2/§7 leg 7 (`[team+0x831]` chosen-record action, installer `0x8D807` caller unlocated); no port | T16-H |
+| 2A | 0x086A34 | not ported | FU-76 §2/§7 leg 7 (`[team+0x831]` chosen-record action); the install at `0x8D807` is inside `FUN_0008D098` (called from `FUN_000740A0`) in the native DB, a conditional phase arm; no port | T16-H |
 | 2B | 0x087738 | not ported (no work) | FU-76 §2: one-byte `RET` stub; no install site; no C work if confirmed dead | T16-H |
 | 2C | 0x084598 | not ported | FU-76 §2: prologue only, no install site; body unanalyzed | T16-H |
 
@@ -194,7 +197,7 @@ partial at the install layer; the class reflects the target body.
 | 13 | 0x06E244 | not ported | FU-83 §2/§3.1 camera-bound scatter; no body port | T16-G |
 | 14 | 0x06E244 | not ported | same as phase 13 | T16-G |
 | 15 | 0x06DCC8 | not ported (partial) | same as phase 02 | T16-G |
-| 16 | 0x00000000 | unwired | FU-83 §2: zero entry (INT3), no handler by design; `fifa96_action_phase_install` zero-slot behavior tested in `test_phase_drivers` | T16-G (wire) |
+| 16 | 0x00000000 | unwired (dispatch-only, no body) | FU-83 §2: zero entry (INT3), no handler by design, so there is **no handler body to port** and no code work to schedule; `fifa96_action_phase_install` zero-slot behavior tested in `test_phase_drivers` | T16-G (wire only) |
 | 17 | 0x088DC8 | not ported | FU-83 §2/§3.2 timeline; no body port | T16-G |
 | 18 | 0x08922C | not ported | FU-83 §2/§3.2 timeline; no body port | T16-G |
 | 19 | 0x089FA4 | not ported | FU-83 §2/§3.2 timeline (installs action `0x16`); no body port | T16-G |
@@ -289,9 +292,16 @@ hand-over are the controller's next action, not this probe's.
 
 ## 7. Open legs
 
-1. **Slot `0x2A` installer `0x8D807`** has no defined function/caller (FU-76
-   §7 leg 7); whether the row is reachable is unproven, so its estimate may
-   be zero or one slice.
+1. **Slot `0x2A` install site `0x8D807`**: there is no function entry at
+   `0x8D807`; it is undefined in the flat image (FU-76 §7 leg 7) but lies
+   inside defined `FUN_0008D098` (body `0x8D098..0x8D820`) in the native
+   `/FIFA96.EXE` DB, whose sole caller is `FUN_000740A0` (match-phase entry,
+   FU-83 §1.2). The site is statically reachable through `FUN_0008D098`'s
+   phase arm, conditionally on the phase-2 record-1..10 scan (the
+   `0x8D7D4..0x8D807` block reproduces FU-76's quote: scan `[rec+0x9A]`,
+   `EDX=0x2A`, `[team+0x831]=EAX`, `CALL 0x7D9A4`), so the row is not treated
+   as unreachable; the estimate stays T16-H (one slice, conditional code
+   path).
 2. **Rows `0x26`,`0x27`,`0x28`,`0x29`,`0x2A`,`0x2C`** are classified from
    entry blocks/one body cut only; the amount of RE needed per row is not yet
    bounded (T16-H is a 1-task placeholder, could be 2).
