@@ -310,13 +310,14 @@ static void test_arm_reset_invalid(void) {
 }
 
 /* --- `FUN_000513EC` camera stop (row-2A arm-2 site 0x86B6E, Appendix H) ----
- * First-hand `0x513EC..0x51440` (33 instructions): the routine clears the
- * `[0x4E584]`/`[0x4E580]` gate dwords, calls the `[0x4E5A8]`-gated table
- * callback via `[0x14E570]+0x38`, sets camera mode `[0x4E578] = 2` and on first
- * entry latches `[0x4E574]` after the `FUN_00064074` recorder-gate clear. The
- * derived engine models none of those globals (the camera-mode/recorder block
- * is unported), so the derived surface is a documented stateless no-op: every
- * call returns FIFA96_OK and touches no caller state. */
+ * First-hand `0x513EC..0x51440` (33 instructions; EXE operands, the FU-118
+ * doc's 0x4E5xx + 0x100000): the routine clears the
+ * `[0x14E584]`/`[0x14E580]` gate dwords, calls the `[0x14E5A8]`-gated table
+ * callback via `[0x14E570]+0x38`, sets camera mode `[0x14E578] = 2` and on
+ * first entry latches `[0x14E574]` after the `FUN_00064074` recorder-gate
+ * clear. The derived engine models none of those globals (the camera-mode/
+ * recorder block is unported), so the derived surface is a documented
+ * stateless no-op: every call returns FIFA96_OK and touches no caller state. */
 static void test_camera_stop_returns_ok(void) {
   assert(fifa96_arm_camera_stop() == FIFA96_OK);
 }

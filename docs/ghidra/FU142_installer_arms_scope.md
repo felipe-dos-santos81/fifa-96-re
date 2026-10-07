@@ -392,10 +392,11 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `+0x67`/`+0x69` writes are not restaged because no wired row consumes a
   walk-written lane (rows 26/27/28/29 recompute it in their own prologues).
 * **OL-61 — the `0x513EC` camera stop (Task 8).** First-hand (`0x513EC..0x51440`,
-  33 instructions) every effect is on the camera-mode/recorder block: the
-  `[0x4E584]`/`[0x4E580]` clears (`0x513F9`/`0x513FF`), the `[0x4E5A8]`-gated
-  callback through `[0x14E570]+0x38` (`0x51413`), `[0x4E578] = 2` (`0x51421`)
-  and the `[0x4E574]` first-entry latch + `FUN_00064074` recorder clear
+  33 instructions; EXE operands, i.e. the FU-118 doc's `0x4E5xx` + `0x100000`)
+  every effect is on the camera-mode/recorder block: the
+  `[0x14E584]`/`[0x14E580]` clears (`0x513F9`/`0x513FF`), the `[0x14E5A8]`-gated
+  callback through `[0x14E570]+0x38` (`0x51413`), `[0x14E578] = 2` (`0x51421`)
+  and the `[0x14E574]` first-entry latch + `FUN_00064074` recorder clear
   (`0x5142B..0x51435`). The derived engine models none of those globals, so
   `fifa96_arm_camera_stop` is a documented no-op returning FIFA96_OK (FU-118
   surface; the camera-mode consumers `FUN_000505D0`/FU-103 stay unported).
@@ -1621,6 +1622,9 @@ table below are fixed from the first-hand windows it cites.
 * `get_xrefs_to 0x8DCD4` — 78 call sites; `0x8D11E` is the `FUN_0008D098`
   pre-switch walk and none lies inside the record machines
   `FUN_0007CA54`/`FUN_000782D0`, so `+0x65` has no later per-frame writer;
+* (fix round 1) `disassemble_bytes 0x86F83` (135 B, 30 instructions) — the
+  arm-10 re-read that corrected the `0x86FBD` callee from `0x6E598` to
+  `0x79C50` (register setup `EDX = 0x64`, `EAX = rec`, `EBX = 0`);
 * repo `grep` over `src/`, `include/`, `tests/` for the helper ground truth.
 
 ### H.2 Entry census and decision (first-hand)
@@ -1664,7 +1668,7 @@ Prologue `0x86A34..0x86A89`: `EDX = [rec+0x89]`, `AX = word [0x157A64]`,
 | 7 | `0x86DBF..0x86E5F` | `+0x65 > 0x240` -> epilogue; `d = 0x540 - |pos.x|`; `target.z = 0x930 - offset(d)`; `pos.x > -0x510` -> epilogue; else `target = (-0x540, 0x588)`, `timer89 = 0`, `stage92++` |
 | 8 | `0x86E60..0x86F2E` | `+0x65 > 0x240` -> epilogue; `d = 0x930 - |pos.z|`; `target.x = -0x540 + offset(d)`; `pos.z > 0x5B8` -> epilogue; four `CALL 0x92AC8`: `target.x = ±(d1 & 0x1FF)` by `d3` bit 0, `target.z = ±(d2 & 0x1FF)` by `d4` bit 0; `timer89 = 0`; `stage92++` |
 | 9 | `0x86F2F..0x86F82` | `+0x65 > 0x20` -> epilogue; 3 x MOVSD `target = pos`; `word +0x71/+0x75/+0x73 = 0`; `timer89 = 0`; `[0x10F358] = 1`; `stage92++` |
-| 10 | `0x86F83..0x87009` | `0x6E598` id `0x60`; `0x79C50(rec, DX = 0, BX = -100)`; `timer89 < 0x708` -> epilogue; `0x6E598` id `0x64`; `target.x = 0xCC0`; `target.z = 0`; `0x6E598` id `0x61`; `timer89 = 0`; `[0x10F35C] = 1`; `stage92++` |
+| 10 | `0x86F83..0x87009` | `0x6E598` id `0x60`; `0x79C50(rec, DX = 0, BX = -100)`; `timer89 < 0x708` -> epilogue; `0x79C50(rec, DX = 0x64, BX = 0)` (the +x octant 2, `0x86FBD`); `target.x = 0xCC0`; `target.z = 0`; `0x6E598` id `0x61`; `timer89 = 0`; `[0x10F35C] = 1`; `stage92++` |
 | 11 | `0x8700A` | shared epilogue RET (the pre-dispatch block already ran for signed selectors 3..127) |
 
 The `offset(d)` chain is `0x180 -> 0x90 / 0xC0 -> 0x120 / 0x60 -> 0x1B0 /
@@ -1672,16 +1676,21 @@ else 0x240` (`0x86C0C..0x86C3A` and its four siblings); the position tails are
 32-bit `CMP [rec+0x59]/[rec+0x61], imm; JL/JG` (`0x86C43`, `0x86CE4`,
 `0x86D85`, `0x86E26`). Arm 0's `0x79C50` call passes `DX = BX = 0`
 (`XOR EAX,EAX; MOVSX EBX,AX; MOVSX EDX,AX`), i.e. the zero-direction no-op;
-arm 10's passes `DX = 0`, `BX = 0xFFFFFF9C` (-100), i.e. the -z octant 4.
+arm 10's first passes `DX = 0`, `BX = 0xFFFFFF9C` (-100), i.e. the -z octant 4,
+and its post-gate second `0x79C50` (`0x86FBD`) passes `DX = 0x64`, `BX = 0`,
+i.e. the +x octant 2 (a face call, **not** a `0x6E598` id — first-hand
+`0x86FB4..0x86FBD`; corrected in fix round 1).
 
 ### H.4 The `0x513EC` camera stop (first-hand, re-verified on `/FIFA96.EXE`)
 
-`0x513EC..0x51440`, 33 instructions: `[0x4E584] = 0` / `[0x4E580] = 0`
-(`0x513F9`/`0x513FF`), the `[0x4E5A8] != 0` callback `CALL [EDX+0x38]` with
-`EDX = 0x14E570` (`0x51413`), `[0x4E578] = 2` (`0x51421`), and the
-`[0x4E574] == 0` first-entry arm `FUN_00064074()` + `[0x4E574] = 1`
-(`0x5142B..0x51435`). This matches FU-118 §1 (its provenance was
-`/fifa96_le.bin`; the same bytes are in the authoritative `/FIFA96.EXE`). None
+`0x513EC..0x51440`, 33 instructions (operands as the EXE image addresses; the
+FU-118 doc's `0x4E5xx` are these minus the `0x100000` LE image delta):
+`[0x14E584] = 0` / `[0x14E580] = 0` (`0x513F9`/`0x513FF`), the
+`[0x14E5A8] != 0` callback `CALL [EDX+0x38]` with `EDX = 0x14E570`
+(`0x51413`), `[0x14E578] = 2` (`0x51421`), and the `[0x14E574] == 0`
+first-entry arm `FUN_00064074()` + `[0x14E574] = 1` (`0x5142B..0x51435`). This
+matches FU-118 §1 (its provenance was `/fifa96_le.bin`; the same bytes are in
+the authoritative `/FIFA96.EXE`, with the image-address delta above). None
 of those globals is modeled by the derived engine, so the derived surface is
 `fifa96_arm_camera_stop()` = documented no-op returning FIFA96_OK (OL-61).
 

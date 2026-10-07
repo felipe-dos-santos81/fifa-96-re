@@ -27,10 +27,11 @@ fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec) {
 fifa96_err_t fifa96_arm_camera_stop(void) {
   /* First-hand /FIFA96.EXE 0x513EC..0x51440 (33 instructions): all of the
    * routine's effects are on the unported camera-mode/recorder block
-   * (`[0x4E584]/[0x4E580]` clear 0x513F9/0x513FF, the `[0x4E5A8]`-gated
-   * callback via `[0x14E570]+0x38` 0x51413, `[0x4E578] = 2` 0x51421, the
-   * `[0x4E574]` first-entry latch + `FUN_00064074` 0x5142B..0x51435), so the
-   * derived surface is a documented no-op (Appendix H open leg). */
+   * (`[0x14E584]/[0x14E580]` clear 0x513F9/0x513FF, the `[0x14E5A8]`-gated
+   * callback via `[0x14E570]+0x38` 0x51413, `[0x14E578] = 2` 0x51421, the
+   * `[0x14E574]` first-entry latch + `FUN_00064074` 0x5142B..0x51435), so the
+   * derived surface is a documented no-op (Appendix H open leg). The FU-118
+   * doc's 0x4E5xx are these EXE operands minus the 0x100000 LE image delta. */
   return FIFA96_OK;
 }
 

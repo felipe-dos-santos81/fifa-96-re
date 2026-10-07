@@ -93,14 +93,17 @@ struct fifa96_arm_record {
 fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec);
 
 /* `FUN_000513EC` (`0x513EC..0x51440`, 33 instructions; the FU-118 camera/replay
- * stop) as called by row 2A arm 2 (`0x86B6E`). First-hand on /FIFA96.EXE:
- * clears the two gate dwords `[0x4E584]`/`[0x4E580]` (`0x513F9`/`0x513FF`),
- * invokes the `[0x4E5A8]`-gated callback through the `0x14E570` table slot +0x38
- * (`0x51413`), sets camera mode `[0x4E578] = 2` (`0x51421`) and, on first entry
- * (`[0x4E574] == 0`), calls `FUN_00064074` (recorder-gate clear, `0x51430`) and
- * latches `[0x4E574] = 1` (`0x51435`). None of those globals is modeled by the
- * derived engine (the camera-mode/recorder block is unported), so the derived
- * surface is a documented no-op returning FIFA96_OK (Appendix H open leg). */
+ * stop) as called by row 2A arm 2 (`0x86B6E`). First-hand on /FIFA96.EXE: the
+ * operands are the EXE image addresses (the FU-118 doc's `0x4E5xx` are these
+ * minus the `0x100000` LE image delta): clears the two gate dwords
+ * `[0x14E584]`/`[0x14E580]` (`0x513F9`/`0x513FF`), invokes the
+ * `[0x14E5A8]`-gated callback through the `0x14E570` table slot +0x38
+ * (`0x51413`), sets camera mode `[0x14E578] = 2` (`0x51421`) and, on first
+ * entry (`[0x14E574] == 0`), calls `FUN_00064074` (recorder-gate clear,
+ * `0x51430`) and latches `[0x14E574] = 1` (`0x51435`). None of those globals is
+ * modeled by the derived engine (the camera-mode/recorder block is unported),
+ * so the derived surface is a documented no-op returning FIFA96_OK
+ * (Appendix H open leg). */
 fifa96_err_t fifa96_arm_camera_stop(void);
 
 /* `FUN_0008DCD4`: from = the position triple, to = the target triple, both read
