@@ -26,9 +26,9 @@
 #define M1_STEP_CAP 5000
 #define M1_TRANSCRIPT_CAP (1u << 20)
 
-/* Skip-intro CONFIRM, menu DOWN x2, CONFIRM, DECLINE, then QUIT. The null
- * backend replays the whole tape on the first front-end poll, so the QUIT
- * pair lands well inside the step cap. */
+/* Skip-intro CONFIRM, menu DOWN x2, CONFIRM (select), DECLINE, then QUIT.
+ * The null backend releases one entry per poll and the engine polls once per
+ * step, so each press/release is observed on its own step. */
 static const fifa96_platform_key M1_TAPE[] = {
     {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
     {FIFA96_ENGINE_KEY_DOWN, 1},    {FIFA96_ENGINE_KEY_DOWN, 0},
@@ -37,6 +37,12 @@ static const fifa96_platform_key M1_TAPE[] = {
     {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
     {FIFA96_ENGINE_KEY_QUIT, 1},    {FIFA96_ENGINE_KEY_QUIT, 0},
 };
+
+/* Every tape entry except the trailing QUIT pair. The engine must survive all
+ * of them (navigation spread across steps) and quit on the QUIT press, so the
+ * pre-quit steps alone present at least three front-end frames. */
+#define M1_PRE_QUIT_ENTRIES (sizeof M1_TAPE / sizeof M1_TAPE[0] - 2)
+_Static_assert(M1_PRE_QUIT_ENTRIES >= 4, "tape must present >= 3 front-end frames before quit");
 
 static int file_exists(const char *path) {
   FILE *f = fopen(path, "rb");
@@ -98,6 +104,10 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     assert(st.presents == last_presents + 1u);   /* one present per step */
     last_presents = st.presents;
     assert(st.present_hash != 0u);
+    /* Only the QUIT key may end the run: the engine must still be alive after
+     * every pre-QUIT entry has been consumed one step at a time. */
+    if ((size_t)steps <= M1_PRE_QUIT_ENTRIES)
+      assert(fifa96_engine_should_quit(e) == 0);
     int n = snprintf(transcript + used, cap - used,
                      "frame=%" PRIu64 " hash=%016" PRIx64 "\n",
                      st.presents, st.present_hash);
@@ -105,6 +115,13 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     used += (size_t)n;
   }
   assert(fifa96_engine_should_quit(e) == 1);     /* QUIT must arrive within the cap */
+  assert(steps == (int)M1_PRE_QUIT_ENTRIES + 1); /* quit exactly on the QUIT press */
+  {   /* one entry per step: >= 3 of the presents are front-end frames */
+    struct fifa96_platform_null_stats end_st;
+    fifa96_platform_null_stats(plat, &end_st);
+    assert(end_st.presents == (uint64_t)steps);
+    assert(end_st.presents - 1u >= 3u);
+  }
 
   fifa96_platform_null_stats(plat, out_stats);
   *out_len = used;

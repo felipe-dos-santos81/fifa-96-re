@@ -109,6 +109,24 @@ int main(void) {
   assert(fifa96_intro_step(&intro, s) == 0);
   assert(memcmp(s->palette, palette, 768) == 0);
 
+  /* input-skip: abort marks playback done without touching the surface */
+  {
+    struct fifa96_surface *as = fifa96_surface_create(W, H);
+    assert(as);
+    fifa96_surface_clear(as, 0x17);
+    uint64_t before = fifa96_surface_hash(as);
+    struct fifa96_intro ab;
+    assert(fifa96_intro_start(&ab, as) == 0);
+    assert(fifa96_intro_feed(&ab, key, klen) == 0);
+    assert(fifa96_intro_done(&ab) == 0);
+    fifa96_intro_abort(&ab);
+    assert(fifa96_intro_done(&ab) == 1);
+    assert(fifa96_intro_step(&ab, as) == 0);      /* ended: no decode, no blit */
+    assert(fifa96_surface_hash(as) == before);    /* surface untouched */
+    fifa96_surface_destroy(as);
+  }
+  fifa96_intro_abort(NULL);                       /* defensive no-op */
+
   /* zero-size and oversized frames are refused before touching the surface */
   static const uint8_t empty_rec[5] = {0x6A, 0xFB, 0, 0, 0};
   uint8_t chunk[0x14 + sizeof empty_rec];
