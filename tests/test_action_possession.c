@@ -445,6 +445,7 @@ static void test_carrier_phase_reset(void) {
   c.phase = 1;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
   assert(out.reset == 1);
+  assert(out.ran_set == 1);   /* 0x7F19F runs before the phase gate */
   assert(out.claim == 0 && out.stage == 0 && out.tail == 0 && out.handoff == 0);
   assert(p.carrier == 0x1234);   /* no claim on the reset path */
 }
@@ -461,6 +462,7 @@ static void test_carrier_claim_timer_and_timer81(void) {
   c.delta = 1;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
   assert(out.claim == 1 && p.carrier == 0x77);
+  assert(out.ran_set == 1);
   assert(out.team_target == 1);
   assert(c.timer89 == 0x4B0);
   assert(out.target_camera == 1);
@@ -529,21 +531,28 @@ static void test_carrier_stage0_gates(void) {
   assert(out.dirs == 1 && out.dir_x == 0x12 && out.dir_z == 0xF0);
   assert(out.tail == 1);
 
-  /* No type, no slot, team gates pass -> the 0x7876C merge request. */
+  /* No type, no slot, team gates pass -> the 0x7876C merge request; the
+   * continuation (slot arm/tail vs FUN_0007F7E0 + type8 gate) belongs to the
+   * merge result, so `tail` is not claimed. */
   c = carrier_base();
   c.ball_height = 0x38;
   c.team_slot_pool = 1;
   c.team_chosen = 0;
   c.active = 1;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
-  assert(out.slot_merge == 1 && out.fallback == 0 && out.tail == 1);
+  assert(out.slot_merge == 1 && out.fallback == 0 && out.tail == 0);
 
-  /* Team gates fail -> the FUN_0007F7E0 fallback. */
+  /* Team gates fail -> the FUN_0007F7E0 fallback; 0x7F374..0x7F380 only lets
+   * type8 == 5 continue into the tail. */
   c = carrier_base();
   c.ball_height = 0x38;
   c.team_slot_pool = 0;
+  c.type8 = 4;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
-  assert(out.fallback == 1 && out.slot_merge == 0 && out.tail == 1);
+  assert(out.fallback == 1 && out.slot_merge == 0 && out.tail == 0);
+  c.type8 = 5;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.fallback == 1 && out.tail == 1);
 
   /* The type tables are only required when the type arm is taken. */
   c = carrier_base();

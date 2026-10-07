@@ -418,7 +418,9 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`0x7AA37`), the `FUN_0007A084` reception body (the `receive` flag models the
   call), the `0x92820`/`0x8F188` sinks, `0x92AC8` RNG draws and the `0x157736`
   speed source. The derived `fifa96_ball_pair_stage_tail` ends at `0x7AA2F`
-  (FU-139 §8.2/§8.7).
+  (FU-139 §8.2/§8.7); its `0x6E598` `reserved45` (EBX) input feeds only the
+  unmodeled `FUN_0006E490` frame resolve, so it is not the derived `row`
+  stand-in and is not bound.
 * **OL-63 — row-05 residual and non-wiring (Task 10).** Stage 0's target
   algebra `0x7F3A1..0x7F57B` (camera/local target copies, the `0x8DC68`
   accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`,
@@ -426,9 +428,10 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   and the `FUN_0007F7E0` fallback `0x7F7E0..0x801B2` (installs code 7/0x11,
   rotates `0x158729`) are unported; the plan's wiring gate therefore keeps
   `fifa96_match_action_table[0x05].fn` NULL (evidence names this leg; FU-137
-  §6.1/§7 Task-10 errata, FU-139 §8.6).
+  §6.1/§7 Task-10 errata, FU-139 §8.6). The `0x7F19F` `+0x9E` latch is tracked
+  through `out.ran_set` so a future wiring cannot drop it silently.
 * **OL-64 — row-05 stage 0 → 1 edge (Task 10).** The row-05 body writes `+0x92`
-  only at `0x7F5C7`/`0x7F616`/`0x7F62D`; the stage-0 path never advances the
+  only at `0x7F5D9`/`0x7F616`/`0x7F630`; the stage-0 path never advances the
   latch, so the native 0→1 transition is an external re-install of code 5 whose
   caller is not statically located in the `0x7F194..0x7F7C9` window. The port
   treats `+0x92` as an input (FU-139 §8.7).

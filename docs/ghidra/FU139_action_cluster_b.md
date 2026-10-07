@@ -434,7 +434,12 @@ eligibility table, the nudge gate/addends, the active/inactive classification,
 the clear, the face (through the tested `fifa96_arm_face`), the animation
 (`fifa96_arm_anim_select`) and the slot-callback request. The `receive`,
 `camera_zero` and `slot_cb` outputs are derived requests/no-ops for the
-unported `FUN_0007A084`, the camera block and `FUN_00078B00` (OL-62).
+unported `FUN_0007A084`, the camera block and `FUN_00078B00` (OL-62). The
+native `0x6E598` EBX input is `byte[0x158745]` (`reserved45`), read only by the
+unmodeled `FUN_0006E490` frame resolve (`0x6E701..0x6E706`); it is *not* the
+`byte[[rec+0x28]]` row the derived helper's `row` stands for, so the call
+passes `row = 0` and the `reserved45` value is deliberately not bound
+(OL-62).
 
 ### 8.3 Row `05` `0x7F194..0x7F665` → `fifa96_action_carrier_arm`
 
@@ -460,7 +465,8 @@ First-hand flow (site-annotated; the FU-78 §3 stage table `0x7F184` =
 0x7F32D  team gates (team+0x828 != 0 && team+0x7BF == 0 &&
          (team+0x829 != 0 || +0x8D != 0)) -> CALL 0x7876C (slot merge)
 0x7F361  else CALL 0x7F7E0 (fallback, unported)
-0x7F386  [0x5872A] = dir_x; [0x5872B] = dir_z
+0x7F374  CMP type8,5 / JNZ 0x7F65C              ; only type8 == 5 continues
+0x7F386  [0x5872A] = dir_x; [0x5872B] = dir_z  ; (type/slot arms fall in here)
 0x7F3A1..0x7F57B  the stage-0 target algebra (unported, OL-63)
 0x7F57C  stage 1: 0x92820(rec,0x26); 0x1577BE/C0/C2 = 0;
          anim = (+0x8D != 0) ? 6 : 0x30 via 0x6E598; +0x89 = 0; +0x92++
@@ -474,12 +480,16 @@ First-hand flow (site-annotated; the FU-78 §3 stage table `0x7F184` =
 
 Ported: `fifa96_action_carrier_arm(&state, &carrier, type_dir_x, type_dir_z,
 &out)` (`include/fifa96_loader/fifa96_action_handlers.h`) with the FU-78
-`possession_claim`/`_timer`/`dribble_dir` helpers and the 0x79B1C snap,
-0x79C50 face and 0x6E598 animation folds inline (the `fifa96_arm_helpers`
-library already depends on `fifa96_action_handlers`, so reusing those symbols
-here would create a link cycle); the unported calls are explicit request flags
-(`sink`, `slot_merge`, `fallback`, `tail`, `camera_zero`) with the numbered
-legs. The stage table is honoured exactly (0-3; >3 returns).
+`possession_claim`/`_timer`/`dribble_dir` helpers, the `ran_set` latch (native
+`0x7F19F` `byte[+0x9E] = 1`, the engine `ran` field, set before the phase gate)
+and the 0x79B1C snap, 0x79C50 face and 0x6E598 animation folds inline (the
+`fifa96_arm_helpers` library already depends on `fifa96_action_handlers`, so
+reusing those symbols here would create a link cycle); the unported calls are
+explicit request flags (`sink`, `slot_merge`, `fallback`, `tail`,
+`camera_zero`) with the numbered legs. The stage table is honoured exactly
+(0-3; >3 returns); `tail` mirrors the native continuations (type/slot arms
+unconditional, fallback only at `type8 == 5`, merge request left to the merge
+result).
 
 ### 8.4 The staging-block vector erratum
 
@@ -500,12 +510,14 @@ mapping.
   latches, the 4/5/7 clear field-by-field, the fall-through anim), and
   `test_stage_tail_face_anim_and_slot` (octants 2/0, the zero-direction seed,
   the 0x6F clamp, the slot callback) + NULLs.
-* `tests/test_action_possession.c`: `test_carrier_phase_reset`,
-  `test_carrier_claim_timer_and_timer81`, `test_carrier_stage0_gates` (lane
-  0x40/0x41, close/bound, release countdown, airborne, type/slot/merge/fallback
-  arms + table NULLs), `test_carrier_stage1` (sink/camera/anim 6 vs 0x30,
-  latch), `test_carrier_stage2_and_stage3` (snap, slot face, `word[slot+6]`,
-  `+0x44`, hand-off, stage > 3) + NULLs.
+* `tests/test_action_possession.c`: `test_carrier_phase_reset` (the `ran_set`
+  latch set on the early reset return), `test_carrier_claim_timer_and_timer81`,
+  `test_carrier_stage0_gates` (lane 0x40/0x41, close/bound, release countdown,
+  airborne, type/slot arms with `tail == 1`, the merge request with
+  `tail == 0`, the fallback `type8 == 5` tail gate with `type8 == 4` vs `5`,
+  + table NULLs), `test_carrier_stage1` (sink/camera/anim 6 vs 0x30, latch),
+  `test_carrier_stage2_and_stage3` (snap, slot face, `word[slot+6]`, `+0x44`,
+  hand-off, stage > 3) + NULLs.
 * `tests/test_engine_match_handlers.c`: `test_action_05_unwired_carrier` pins
   `fn == NULL`, the FU-139/OL-63/UNSUPPORTED evidence and `UNSUP` dispatch.
 
@@ -528,7 +540,10 @@ loader-level, tested symbols consumed by the future T11/T12 arms.
   `0x78B00` slot callback (`0x7AA37`), `FUN_0007A084`'s body, the local target
   algebra with `0x92820`/`0x8F188` sinks, `0x92AC8` RNG draws and the
   `0x157736` speed source all remain unported; the nudge's second addend
-  (dword `0x15873A`>>16 == `0x15873C`) is caller-supplied.
+  (dword `0x15873A`>>16 == `0x15873C`) is caller-supplied. The native
+  `0x6E598` EBX input (`reserved45`) feeds only the unmodeled `FUN_0006E490`
+  frame resolve, so it is not bound to the derived `row` stand-in (which
+  represents `byte[[rec+0x28]]`, §8.2).
 * **OL-63 — row-05 residual / non-wiring.** Stage 0's target algebra
   `0x7F3A1..0x7F57B` (the camera/local target copies, the `0x8DC68` metric
   accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`, the `0x15872D`
@@ -536,10 +551,11 @@ loader-level, tested symbols consumed by the future T11/T12 arms.
   and the `FUN_0007F7E0` fallback (`0x7F7E0..0x801B2`; installs code 7/0x11,
   rotates `0x158729`, calls `0x7E528`/`0x8DCD4`/`0x92AC8`/`0x6DBCC`/`0x741B4`/
   `0x8DD70`/`0x92820`/`0x7D9A4`) are unported; row 05 stays unwired with this
-  leg.
+  leg. The `0x7F19F` `+0x9E` latch is tracked through `out.ran_set` (the engine
+  `ran` field) so a future wiring cannot drop it silently.
 * **OL-64 — stage-0 → stage-1 edge.** Row 05's body never writes `+0x92` on
   the stage-0 path (`0x7F274..0x7F57B` has no `+0x92` store; the only stores
-  are `0x7F5C7`, `0x7F616`, `0x7F62D`), so the native 0→1 transition is an
+  are `0x7F5D9`, `0x7F616`, `0x7F630`), so the native 0→1 transition is an
   external re-install (the installer `FUN_0007D9A4` stages the BL byte into
   `+0x92`) whose caller is not statically located in this window; the port
   models the stage byte as an input.

@@ -484,6 +484,9 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
   if (!state || !carrier || !out) return -FIFA96_ERR_INVALID;
   memset(out, 0, sizeof *out);
   out->stage = carrier->stage92;   /* unchanged unless the latch machine writes */
+  /* 0x7F19F: byte[EAX+0x9E] = 1, unconditional, before the phase check (the
+   * engine `ran` field). */
+  out->ran_set = 1;
   /* 0x7F1A6..0x7F1BA: phase != 2 -> FUN_0007DAB4 and return. */
   if (carrier->phase != 2) {
     out->reset = 1;
@@ -530,19 +533,25 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
         out->dirs = 1;
         out->dir_x = (uint8_t)dir.dir_x;
         out->dir_z = (uint8_t)dir.dir_z;
+        /* 0x7F386..0x7F57B: the dir-byte writes and the unported stage-0
+         * target algebra (0x92820/0x71C94/0x79CCC/0x6DA64 and the record
+         * target writes, OL-63). */
+        out->tail = 1;
       } else if (carrier->team_slot_pool != 0 && carrier->team_chosen == 0 &&
                  (carrier->team_search_gate != 0 || carrier->active != 0)) {
-        /* 0x7F32D..0x7F35F: the team gates reach FUN_0007876C (request). */
+        /* 0x7F32D..0x7F35F: the team gates reach FUN_0007876C (request); the
+         * native continuation is the merge result (a slot -> 0x7F30A slot arm
+         * -> tail, no slot -> the FUN_0007F7E0 fallback + type8 gate), so the
+         * caller owns whether `tail` runs. */
         out->slot_merge = 1;
       } else {
-        /* 0x7F361..0x7F36F: FUN_0007F7E0 (unported). */
+        /* 0x7F361..0x7F36F: FUN_0007F7E0 (unported); 0x7F374..0x7F380 gates
+         * the continuation on `[rec+0x8E]>>24 == 5`, so only that case
+         * reaches the dir-byte writes/tail. */
         out->fallback = 1;
+        if (carrier->type8 == 5u) out->tail = 1;
       }
     }
-    /* 0x7F386..0x7F57B: the dir-byte writes and the stage-0 target algebra
-     * (0x92820/0x71C94/0x79CCC/0x6DA64 and the record target writes) are
-     * unported (OL-63). */
-    out->tail = 1;
     return FIFA96_OK;
   case 1:
     /* 0x7F57C..0x7F585: FUN_00092820(rec, 0x26) (presentation-side, OL-27). */
@@ -550,7 +559,9 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
     /* 0x7F58A..0x7F598: camera velocity 0x1577BE/C0/C2 = 0 (derived). */
     out->camera_zero = 1;
     /* 0x7F598..0x7F5C2: anim code active ? 6 : 0x30 through 0x6E598 (both
-     * constants are below the helper's 0x6F clamp, so the clamp never fires). */
+     * constants are below the helper's 0x6F clamp, so the clamp never fires).
+     * The id-resolution subset is `fifa96_arm_anim_select`
+     * (fifa96_arm_helpers.c); inline for the link-cycle reason above. */
     out->anim = carrier->active != 0 ? 6u : 0x30u;
     /* 0x7F5C7..0x7F5D9: timer 0, latch +1. */
     carrier->timer89 = 0;
@@ -562,7 +573,10 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
     if (carrier->has_slot == 0) return FIFA96_OK;
     /* 0x7F5EF..0x7F5F1: FUN_00079B1C snap (target = pos, lane/velocity zero). */
     out->snap = 1;
-    /* 0x7F5F6..0x7F607: the 0x79C50 face over slot[+0x1D]/[+0x1E]. */
+    /* 0x7F5F6..0x7F607: the 0x79C50 face over slot[+0x1D]/[+0x1E]. This is the
+     * same fold as `fifa96_arm_face` (fifa96_arm_helpers.c); it is inline here
+     * because `fifa96_arm_helpers` already links this library (a call would
+     * create a static-library cycle). Keep the two in sync. */
     {
       int32_t dx = carrier->slot_dir_x;
       int32_t dz = carrier->slot_dir_z;

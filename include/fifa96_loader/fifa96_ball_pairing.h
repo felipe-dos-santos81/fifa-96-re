@@ -116,9 +116,12 @@ int fifa96_ball_pair_receive_target(const fifa96_ball_pair_vec3i *base,
  * native word 0x15873A, `vector.z` the native word 0x15873C — the block vector
  * is the `FUN_0008DCD4` out triple, FU-139 §8 erratum), and every path resolves
  * an animation id through `0x6E598` (`kind` = the block sub-code; the native
- * EBX/ECX inputs and the RNG reroll stay OL-52/OL-62). A live control slot
- * (`actor.has_slot`) runs the unported `0x78B00` callback (reported as
- * `slot_cb`, OL-62). The tail's per-code target algebra
+ * EBX input is the block `reserved45`, used only by the unmodeled
+ * `FUN_0006E490` frame resolve at `0x6E701..0x6E706`, *not* the current-row
+ * byte the derived helper's `row` stands for — `byte[[rec+0x28]]` — so this
+ * call passes `row = 0`; EBX/ECX and the RNG reroll stay OL-52/OL-62). A live
+ * control slot (`actor.has_slot`) runs the unported `0x78B00` callback
+ * (reported as `slot_cb`, OL-62). The tail's per-code target algebra
  * (`0x7AA30..0x7AE2F`) is unported (OL-62): this function ends at the
  * `0x7AA2F` call. NULL state/actor/recompute_table/out ->
  * -FIFA96_ERR_INVALID. */

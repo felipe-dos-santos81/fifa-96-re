@@ -212,6 +212,8 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
 
 /* FU-139 §8 (Task 10): the row-05 carrier machine `0x7F194..0x7F665`
  * (first-hand this slice). The bounded record-visible parts:
+ *   - `0x7F19F`: `ran_set` — the unconditional `byte[+0x9E] = 1` latch (the
+ *     engine `ran` field) runs before the phase check on every call;
  *   - `0x7F1A6`: phase != 2 -> `reset` (native FUN_0007DAB4) and return;
  *   - `0x7F1BF..0x7F205`: `claim` the possession block for `actor`;
  *   - `0x7F20B..0x7F217`: `team_target` (native team+0x7B2 = rec, +0x7B6 = 0);
@@ -224,11 +226,15 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
  *     return; else `set_control`; `close_word > bound_word`,
  *     `release_timer > 0` or an airborne record wait; the type arm
  *     (`ball_height > 0x38`) takes the caller's `type_dir_*[type8]` with speed
- *     0x60, the slot arm the caller's `slot_dir_*` with speed 0x30, the
- *     team-gate path raises the `slot_merge` request (native FUN_0007876C at
- *     `0x7F356`) and the remaining path the `fallback` request (native
- *     `FUN_0007F7E0`, unported, OL-63); in all cases the native then runs the
- *     `0x7F3A1..0x7F57B` target algebra, reported as `tail` (unported, OL-63);
+ *     0x60 and the slot arm the caller's `slot_dir_*` with speed 0x30; both
+ *     then run the `0x7F386` dir-byte writes and the unported
+ *     `0x7F3A1..0x7F57B` target algebra (`tail`, OL-63). The team-gate path
+ *     raises the `slot_merge` request (native FUN_0007876C at `0x7F356`): its
+ *     continuation is the merge result (a slot -> the slot arm/tail, no slot ->
+ *     the fallback path), so `tail` is not claimed here. The remaining path
+ *     raises `fallback` (native `FUN_0007F7E0`, unported, OL-63) and only
+ *     continues into the dir-byte writes/tail when `[rec+0x8E]>>24 == 5`
+ *     (`0x7F374..0x7F380`), so `tail` mirrors that gate;
  *     stage 1 (`0x7F57C..0x7F5E8`): `sink` (native FUN_00092820(rec,0x26),
  *     OL-27), `camera_zero` (0x1577BE/C0/C2), the 0x6E598 animation id
  *     (active -> 6, inactive -> 0x30), timer 0 and the latch advance;
@@ -273,6 +279,7 @@ typedef struct fifa96_action_carrier {
 } fifa96_action_carrier;
 
 typedef struct fifa96_action_carrier_out {
+  uint8_t ran_set;        /* native +0x9E = 1 latch (0x7F19F; engine `ran`) */
   uint8_t reset;          /* native FUN_0007DAB4 */
   uint8_t claim;          /* possession block claim (FU-78) */
   uint8_t team_target;    /* native team+0x7B2 = rec, +0x7B6 = 0 */
@@ -289,7 +296,8 @@ typedef struct fifa96_action_carrier_out {
   uint8_t camera_zero;    /* native 0x1577BE/C0/C2 zero (stage 1) */
   uint8_t stage;          /* resulting native +0x92 */
   uint8_t snap;           /* native FUN_00079B1C snap (target = pos) */
-  uint8_t face;           /* resulting native +0x8E low byte */
+  uint8_t face;           /* stage-2 result (native +0x8E low byte); 0 on the
+                           * stages/returns that never run the face arm */
   uint8_t anim;           /* resolved 0x6E598 id (stage 1) */
   uint8_t handoff;        /* native stage-3 ball-actor install 4 + receiver timer */
 } fifa96_action_carrier_out;

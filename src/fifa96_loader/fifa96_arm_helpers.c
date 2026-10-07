@@ -77,7 +77,10 @@ fifa96_err_t fifa96_arm_face(const fifa96_arm_vec *pos, const fifa96_arm_vec *ta
   int32_t angle;
   if (!pos || !target || !out_lane) return -FIFA96_ERR_INVALID;
   /* 0x8DCDD..0x8DCED: the same 16-bit word differences 0x8DCD4 takes; row 27
-   * passes the dx/dz words to 0x79C50 (0x86905..0x86913). */
+   * passes the dx/dz words to 0x79C50 (0x86905..0x86913). Row 05's carrier
+   * stage 2 (fifa96_action_handlers.c, fifa96_action_carrier_arm) applies the
+   * same fold inline because this library already links that one (static-link
+   * cycle) — keep the two in sync. */
   dx = (int16_t)((uint16_t)target->x - (uint16_t)pos->x);
   dz = (int16_t)((uint16_t)target->z - (uint16_t)pos->z);
   /* 0x79C59..0x79C68: zero direction returns the stored +0x8E byte untouched
@@ -93,6 +96,9 @@ fifa96_err_t fifa96_arm_face(const fifa96_arm_vec *pos, const fifa96_arm_vec *ta
 fifa96_err_t fifa96_arm_anim_select(uint8_t kind, uint8_t row, uint8_t *out_slot) {
   uint8_t slot;
   if (!out_slot) return -FIFA96_ERR_INVALID;
+  /* Row 05's carrier stage 1 applies the same clamp inline
+   * (fifa96_action_handlers.c, fifa96_action_carrier_arm; static-link cycle
+   * prevents a call) — keep the two in sync. */
   if (kind != 0) {
     slot = kind;
   } else {

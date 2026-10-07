@@ -856,7 +856,11 @@ change.
   `0x71C94`/`0x79CCC`/`0x6DA64` call bodies and the record target writes) and
   the `FUN_0007F7E0` fallback remain unported, so the wiring gate keeps
   `fn == NULL` with the refined leg **OL-63**; the §7 counts and dispatch
-  results are unchanged by this task (74 UNSUP / 5 OK / 1 NOTF).
+  results are unchanged by this task (74 UNSUP / 5 OK / 1 NOTF). The native
+  `0x7F19F` `byte[+0x9E] = 1` latch (the engine `ran` field) is tracked through
+  `fifa96_action_carrier_out.ran_set` so a future wiring cannot drop it, and
+  `tail` mirrors the `0x7F374..0x7F380` `type8 == 5` gate on the fallback path
+  (fix round 1).
 * **§8 OL-15 remainder / row-05 evidence** — the `fifa96_match_handlers.c` row
   `05` evidence names FU-139 §8 and OL-63; `tests/test_engine_match_handlers.c`
   gains `test_action_05_unwired_carrier` (fn NULL, evidence names
