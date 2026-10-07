@@ -321,6 +321,18 @@ program** — they are open legs (OL-15), not schedulable ports. (`0x27`'s only
 match-code constant is an animation-row argument, a distinct meaning of the
 same byte, so it is **not** evidence of an action install.)
 
+**Errata (M2 arms-and-wiring Task 9 / FU-142f).** The constant census above is
+refined to a whole-call-site classification (FU-142 Appendix I): all 77
+`FUN_0007D9A4` call sites were re-read first-hand; every EDX argument is a
+constant or a bounded register-derived set (I.3/I.4), no control-flow path
+bypasses the final write (I.5), and no stored pointer to the installer exists
+(`search_byte_patterns a4 d9 07 00` = no matches), so no indirect entry can
+target it (I.6). The reachable installer code domain is therefore
+**{0x00..0x26} ∪ {0x28, 0x2A}** and the codes never passed are exactly
+**0x27/0x29/0x2B/0x2C**. The "no installer arm found" rows are a negative
+census, not merely an unsearched region: 27/29/2C stay unwired with OL-48
+recorded as the negative verdict (FU-142 §6), and 2B is a dead entry.
+
 ## 6. Per-row classification (all 80 rows)
 
 Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
@@ -331,6 +343,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | `unwired` | `-FIFA96_ERR_UNSUPPORTED` | body fully covered by tested C symbols, no record/entity binding yet (open leg OL-1). Phase `0x16` is the zero/INT3 slot: dispatch-only, returns `-FIFA96_ERR_NOT_FOUND`. |
 | `not ported` | `-FIFA96_ERR_UNSUPPORTED` | a needed part of the body has no C function; the row names its port group/open leg. |
 | `open leg` | `-FIFA96_ERR_UNSUPPORTED` | FU-137 could not bound a static entry for the row (no install arm), so it is not schedulable as a port task yet; numbered OL. |
+| `dead entry` | `-FIFA96_ERR_UNSUPPORTED` | the native entry has no distinct body (aliases another row's epilogue) and/or the exhaustive installer census never passes its code; not schedulable, no actionable leg. |
 
 ### 6.1 Table A — action rows `0x1106E0[code]`
 
@@ -375,12 +388,12 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 24 | 0x086510 | not ported (partial) | sequence_lane/anim_byte; FU-82 §3.9 | OL-9 |
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
 | 26 | 0x0866F4 | ported (M2 arms-and-wiring Task 3 / FU-142 Appendix C) | `fifa96_match_action_26` binds `fifa96_arm_26_step` (`0x866F4..0x8681C` + `0x8DCD4`) to `mr->record`; arm 0x8D74D (§5.2); `test_engine_match_handlers::test_action_26_runs_body` | OL-50 (descriptor bytes) / OL-51 (`0x36200` gate) carry the row's remainder |
-| 27 | 0x086820 | unwired (M2 arms-and-wiring Task 4 / FU-142 Appendix D) | body `0x86820..0x86A02` (136 insns) ported as `fifa96_arm_27_step` with the `0x79C50`/`0x6E598` helpers (`fifa96_arm_face`/`fifa96_arm_anim_select`); **no static entry** — the only reference to `0x86820` is the action-table slot `0x11077C`, the `MOV EDX,0x27` sites are animation args, `MOV ECX,0x27` has no site, `0x8CEB8` stages no 0x27 (FU-142 D.1) | OL-48 (entry; FU-142f); FU-142 OL-52/OL-53 remainder |
+| 27 | 0x086820 | unwired (M2 arms-and-wiring Task 4 / FU-142 Appendix D; entry verdict FU-142f App. I) | body `0x86820..0x86A02` (136 insns) ported as `fifa96_arm_27_step` with the `0x79C50`/`0x6E598` helpers (`fifa96_arm_face`/`fifa96_arm_anim_select`); **no entry** — the only reference to `0x86820` is the action-table slot `0x11077C`, the `MOV EDX,0x27` sites are animation args, `MOV ECX,0x27` has no site, and the FU-142f census of all 77 `FUN_0007D9A4` call sites (register-derived args resolved) finds no 0x27 invocation and no stored installer pointer (FU-142 D.1/I) | OL-48 (entry; FU-142f negative census); FU-142 OL-52/OL-53 remainder |
 | 28 | 0x0870E8 | ported (M2 arms-and-wiring Task 7 / FU-142 Appendix G) | `fifa96_match_action_28` binds `fifa96_arm_28_step` (`0x870E8..0x874E3`, 4-arm table `0x870D8` + internal `0x87014` gate helper; the `0x114E04` fold reuses `fifa96_projection_sincos`) to `mr->record`; arm 0x8D7CF (§5.2); entry resolved (the arm installs code 0x28; the only body ref is the action-table slot 0x110780); `test_engine_match_handlers::test_action_28_runs_body` | OL-56 (global inputs/RNG seed) / OL-57 (`[0x157AA3]`, row-byte stand-in) / OL-58 (chosen-record resolution) carry the row's remainder |
-| 29 | 0x0874E4 | unwired (M2 arms-and-wiring Task 6 / FU-142 Appendix F) | body `0x874E4..0x87738` (187 insns) ported as `fifa96_arm_29_step` (the phase-5 stage machine: `0x8DE8C` nearest, `0x6E1D0` phase cell, `0x92AC8` RNG, `0x6E598` selector, `fifa96_arm_reset`, self-install code 3); **no static entry** — the only reference to `0x874E4` is the action-table slot `0x110784`, the sole `MOV EDX,0x29` site is `0x1F53C` in the non-match `FUN_0001F440`, `MOV ECX,0x29` has no site, the phase-5 handler `0x6E05C..0x6E1B2` contains no installer call and `0x8CEB8`'s 15 arms stage no 0x29 (FU-142 F.3) | OL-48 (entry; FU-142f); FU-142 OL-55 remainder |
+| 29 | 0x0874E4 | unwired (M2 arms-and-wiring Task 6 / FU-142 Appendix F; entry verdict FU-142f App. I) | body `0x874E4..0x87738` (187 insns) ported as `fifa96_arm_29_step` (the phase-5 stage machine: `0x8DE8C` nearest, `0x6E1D0` phase cell, `0x92AC8` RNG, `0x6E598` selector, `fifa96_arm_reset`, self-install code 3); **no entry** — the only reference to `0x874E4` is the action-table slot `0x110784`, the sole `MOV EDX,0x29` site is `0x1F53C` in the non-match `FUN_0001F440`, the phase-5 handler `0x6E05C..0x6E1B2` contains no installer call, and the FU-142f census of all 77 `FUN_0007D9A4` call sites finds no 0x29 invocation (FU-142 F.3/I) | OL-48 (entry; FU-142f negative census); FU-142 OL-55 remainder |
 | 2A | 0x086A34 | ported (M2 arms-and-wiring Task 8 / FU-142 Appendix H) | `fifa96_match_action_2A` binds `fifa96_arm_2a_step` (`0x86A34..0x87010`, 12-arm table `0x86A04`; the `0x513EC` camera stop is the `fifa96_arm_camera_stop` derived no-op) to `mr->record`; arm 0x8D807 (§5.2); entry resolved (the arm installs code 0x2A); the frame staging computes the `+0x65` distance word; `test_engine_match_handlers::test_action_2A_runs_body` | OL-59 (`[0x157AA3]` store) / OL-60 (`+0x65` dispatch-time recompute) / OL-61 (camera-stop block) carry the row's remainder; `0x36200` value OL-51 |
-| 2B | 0x087738 | **open leg** | one-byte RET 0x87738; no install arm (§5.3); dead if confirmed | OL-15 |
-| 2C | 0x084598 | unwired (M2 arms-and-wiring Task 5 / FU-142 Appendix E) | body `0x84598..0x8462D` (48 insns) ported as `fifa96_arm_2c_step` with the shared `FUN_0007DAB4` reset subset (`fifa96_arm_reset`); **no static entry** — the only reference to `0x84598` is the action-table slot `0x110790`, the three `MOV EDX,0x2C` sites are non-match constants (0x3035E/0x40A8E/0x40C5C, none calls `0x7D9A4`), `MOV ECX,0x2C` has no site, `0x8CEB8` stages no 0x2C (FU-142 E.4) | OL-48 (entry; FU-142f); FU-142 OL-54 remainder |
+| 2B | 0x087738 | **dead entry** (FU-142f) | native entry `0x87738` is the final `RET` of the row-29 body (the shared epilogue, FU-142 §1.1), not a standalone stub; the FU-142f census passes no 0x2B; the helpers at `0x8773C`/`0x8776C` belong to no action row | OL-15 (closed by the FU-142f verdict) |
+| 2C | 0x084598 | unwired (M2 arms-and-wiring Task 5 / FU-142 Appendix E; entry verdict FU-142f App. I) | body `0x84598..0x8462D` (48 insns) ported as `fifa96_arm_2c_step` with the shared `FUN_0007DAB4` reset subset (`fifa96_arm_reset`); **no entry** — the only reference to `0x84598` is the action-table slot `0x110790`, the three `MOV EDX,0x2C` sites are non-match constants (0x3035E/0x40A8E/0x40C5C, none calls `0x7D9A4`), `MOV ECX,0x2C` has no site, and the FU-142f census of all 77 `FUN_0007D9A4` call sites finds no 0x2C invocation (FU-142 E.4/I) | OL-48 (entry; FU-142f negative census); FU-142 OL-54 remainder |
 
 ### 6.2 Table B — phase rows `0x110794[phase]`
 
@@ -430,14 +443,14 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 ## 7. Totals
 
-| surface | rows | ported | unwired | not ported | open leg |
-|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 5 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48) | 36 | 1 (`2B`) |
-| phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **5** | **4** | **70** | **1** |
+| surface | rows | ported | unwired | not ported | open leg | dead |
+|---|---|---|---|---|---|---|
+| action `0x1106E0` | 45 | 5 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 36 | 0 | 1 (`2B` FU-142f) |
+| phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
+| **dispatch total** | **80** | **5** | **4** | **70** | **0** | **1** |
 
 Dispatch results at this commit: **74 × `-FIFA96_ERR_UNSUPPORTED`** (the 70 not
-ported rows + the unwired actions `27`/`29`/`2C` + the open leg `2B`; actions
+ported rows + the unwired actions `27`/`29`/`2C` + the dead entry `2B`; actions
 `00`, `1E`, `26`, `28` and `2A` no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`**
 (phase `0x16`) and **5 × `FIFA96_OK`** (actions `00`, `1E`, `26`, `28` and `2A`);
 out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are
@@ -490,7 +503,12 @@ negated, matching the engine family convention (`fifa96_match_run_*`).
     is a 187-instruction phase-5 stage machine (FU-142 Appendix F); the 0x28
     body is a 294-instruction 4-arm machine with an internal gate helper
     (FU-142 Appendix G); the 0x2A body is a 409-instruction 12-arm machine
-    plus the 0x513EC camera-stop call (FU-142 Appendix H).**
+    plus the 0x513EC camera-stop call (FU-142 Appendix H). Task 9 (FU-142f)
+    status: the FU-142 Appendix I census classifies all 77 `FUN_0007D9A4` call
+    sites (register-derived arguments included, bypass/indirect checks done);
+    the installer code domain is {0x00..0x26} ∪ {0x28,0x2A}, so 27/29/2C are
+    never passed and stay unwired with the OL-48 negative verdict, and 2B is a
+    dead entry (class `dead entry`, this leg's actionable part closed).**
 
 ## 9. Concerns
 
@@ -792,3 +810,29 @@ change.
   and the five globals; `struct fifa96_match_entity` gains the six scratch
   cells. The engine's first wired RNG-drawing row is row 28 (OL-56 carries the
   native seed `settings[0x18]`). Rows 27/29/2C/2A keep their classes.
+
+## Errata (M2 arms-and-wiring Task 9 / FU-142f)
+
+* **Entry closure for 27/29/2C (FU-142 Appendix I).** All 77 `FUN_0007D9A4`
+  call sites are classified first-hand: 73 are immediate-code calls, six are
+  register-derived and resolve to bounded sets (e.g. `{0x19,3}`, `{4,0x19}`,
+  `{8,9}`, helper-param `{0,0x19,0x15,0x25,0x26,0x28}`), four have
+  control-flow entries bypassing the linear write and are covered by their
+  union sets, and one (`0x766b4`) is a callee-preserved EDX=4. The union is
+  {0x00..0x26} ∪ {0x28,0x2A}; 0x27/0x29/0x2C are never passed. No stored
+  installer pointer exists (`search_byte_patterns a4 d9 07 00` = no matches),
+  the action table's sole reader is the installer itself (`0x7DA77`), and each
+  body pointer occurs only in its table slot — no indirect entry exists.
+  Rows 27/29/2C stay unwired with the **OL-48 negative verdict** (not wireable
+  without claiming an entry the program does not have); their evidence strings
+  and the `test_engine_match_handlers` per-row pins now name FU-142f.
+* **§6.1 row 2B -> `dead entry`.** `0x87738` is the row-29 shared epilogue RET
+  (FU-142 §1.1), not a standalone stub, and the census passes no 0x2B. OL-15's
+  actionable part closes; §7 gains the `dead` column (open leg 1 -> 0, dead 1)
+  and the dispatch-result paragraph now names 2B as a dead entry (arithmetic
+  unchanged: 74 UNSUP / 5 OK / 1 NOTF).
+* **§6 classifier** gains the `dead entry` class (no distinct body and/or the
+  code is never installed; not schedulable, no actionable leg).
+* `tests/test_engine_match_handlers.c` gains `test_dead_2b_evidence` and pins
+  `FU-142f` in the 27/29/2C entry tests; the `fifa96_match_handlers.c`
+  evidence strings cite `FU-142f App. I`.

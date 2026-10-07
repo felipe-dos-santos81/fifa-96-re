@@ -262,9 +262,20 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   installer argument cannot be excluded by a constant census, so the FU-142f
   runtime/reachability pass remains the precondition; row 29 keeps `fn ==
   NULL` and the `-FIFA96_ERR_UNSUPPORTED` dispatch.
-* Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41, FU-137 OL-15 (closes
-  nothing new; the 0x26/0x28/0x2A arms stay as classified until their bodies
-  land).
+  **Status (Task 9): the FU-142f pass is complete as a written reachability
+  argument (runtime capture unavailable, Appendix I.1) and its verdict is
+  negative for all three rows.** All 77 `FUN_0007D9A4` call sites are
+  classified (Appendix I.3), every register-derived argument is resolved
+  (I.4), control-flow bypasses are checked (I.5) and indirect/stored-pointer
+  entries are excluded (I.6): the reachable installer code domain is
+  {0x00..0x26} ∪ {0x28,0x2A}, so **no installer invocation passes
+  0x27/0x29/0x2C**. Rows 27/29/2C stay unwired (`fn == NULL`,
+  `-FIFA96_ERR_UNSUPPORTED`, FU-137 class `unwired`) and OL-48 now records the
+  final negative census rather than an open precondition. 2B is confirmed
+  dead (§1.1/I.8).
+* Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41. FU-137 OL-15's actionable
+  part is closed by Task 9 (26/28/2A ported; 27/29/2C negative census; 2B dead,
+  FU-137 §8).
 * **OL-49 — `FUN_0008CEB8` index-11 overflow — resolved as a bounded model
   (Task 2).** The native helper clamps `last >= 0xB` to `0xB`
   (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB` also stages record
@@ -412,6 +423,9 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * **§6.1 row `2B`** — the one-byte RET is the final instruction of the row-29
   body (shared epilogue at `0x87738`), not a standalone stub; the two helpers
   that follow (`0x8773C`, `0x8776C`) belong to no action row.
+  **Status (Task 9): confirmed dead — the installer census passes no 0x2B
+  (Appendix I.8); FU-137 §6.1 now classes it `dead entry` and OL-15 is closed
+  by the verdict.**
 * **§6.1 row `29`** — the body exists and self-installs code 3 via
   `FUN_0007D9A4` (`0x8753C`); "no match-code reference" remains true only for
   an *installer of* 0x29, so the row's open-leg status is unchanged.
@@ -455,6 +469,12 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   byte against an arithmetic-shifted controlled byte, and the 3/0x25 compare
   is a full 16-bit word compare; both port asymmetries are recorded in
   Appendix B.3 and the FU-137 §5.2 errata.
+* **§5.3 constant census (Task 9)** — the census's "no installer arm found" is
+  refined from a constant-only search to a whole-call-site classification:
+  all 77 `FUN_0007D9A4` call sites have a bounded EDX code set (Appendix I.3)
+  and no stored installer pointer exists (I.6), so the installer code domain
+  is {0x00..0x26} ∪ {0x28,0x2A} and 0x27/0x29/0x2B/0x2C are never passed.
+  FU-137 §5.3 carries the corresponding errata.
 
 ## Appendix A (FU142a / M2 arms-and-wiring Task 1) — `FUN_0008CEB8` first-hand window
 
@@ -1773,6 +1793,242 @@ Write set of this appendix (Task 8):
 `tests/test_engine_match_frame.c`, `tests/test_engine_match_phase_machine.c`,
 the FU-137 §5.2/§6.1/§7 errata and this appendix. `CMakeLists.txt` needed no
 change (the arm bodies/engine libraries already link `fifa96_arm_helpers`).
+
+## Appendix I (FU142f / M2 arms-and-wiring Task 9) — dynamic entry closure for rows 27/29/2C and the 2B dead verdict
+
+Task 9 closes OL-48. The plan's method is the operator-approved DOSBox-X
+runtime trace of `FUN_0007D9A4` (entry recording, controller-serialized) or,
+if capture is unavailable, a written reachability argument. The verdict here
+is the written reachability argument, extended from the plan's
+`FUN_0008D098`-state-machine fallback to the whole installer call graph: all
+**77** first-hand `FUN_0007D9A4` call sites are classified, every
+register-derived argument is resolved, every control-flow bypass is checked,
+and the stored-pointer/indirect-entry class is excluded. Result: **no
+installer invocation anywhere in the program passes 0x27/0x29/0x2C**; the
+only codes absent from the observed 0x00..0x2C domain are exactly
+0x27/0x29/0x2B/0x2C. Rows 27/29/2C stay unwired (`fn == NULL`,
+`-FIFA96_ERR_UNSUPPORTED`) with OL-48 recorded as the final negative census;
+2B is a dead entry (shared row-29 epilogue RET, §1.1).
+
+### I.1 Why the runtime-capture path was not used
+
+* The probe rig's templates (`tools/fifa96_patch.py`: `CAVE_TEMPLATE`,
+  `VGT_ENTRY_TEMPLATE`, `FVGT_*`) report the call's return halves in the
+  EBX/EDX slots (lines 30–35, 45–47) and can pack only an entry **EAX** into
+  the site word (`--capture-eax`); no template captures the installer's EDX
+  code argument. An entry recording would need new rig code, outside this
+  task's file set.
+* `tools/keys/` holds front-end/visitor key flows only; no sequence drives a
+  live match, and a finite trace can only ever prove a positive entry — it
+  cannot establish the negative verdict the three rows need.
+* The operator-serialized live session is a controller/human action, not
+  available to this implementer slice. The brief's fallback therefore applies.
+
+### I.2 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+| call | result |
+|---|---|
+| `get_xrefs_to 0x7D9A4` | **77 references, all `UNCONDITIONAL_CALL`**; no DATA ref (I.3) |
+| `search_instructions operand=7d9a4` | `match_count=77`, `instructions_scanned=234711`; every match a `CALL` (no `MOV reg,0x7D9A4`, no indirect operand) |
+| `search_byte_patterns a4 d9 07 00` | **no matches** — the installer address bytes occur nowhere in the image (no stored function pointer) |
+| decompiler scan (DecompInterface Pcode over the 17 defined containing functions) | 35 call ops with argument expressions; the 42 calls in undefined/table-only bodies covered by the raw listing + I.5 |
+| `disassemble_bytes` windows | `0x79A70`/`0x78520`/`0x7C9F0`/`0x76640`/`0x7DB80`/`0x80780`/`0x7D9A4`/`0x7DA42`/`0x7DAC1`/`0x8CEB8`/`0x80230`/`0x80670`/`0x7F0F0`/`0x7E870`/`0x76220`/`0x781E0` (bytes in I.4) |
+| script: row-06 `[ESP+0x50]` writer scan | 3 writers: `0x80280` (BX = 0 after `0x80270 XOR EBX,EBX`), `0x8069B` (8), `0x807A2` (9) |
+| FU-137 §1.1 (carried) | action table `0x1106E0` sole reader `0x7DA77 ADD EAX,0x1106e0` |
+
+### I.3 The 77-site installer census
+
+`EDX source` is the last write on the linear path to each call; I.5 proves no
+control-flow entry bypasses it (the four flagged sites are the ones whose code
+set below already unions every path). All sites call `FUN_0007D9A4`
+(`EDX` = code, FU-137 §2).
+
+| call site | EDX source (first-hand) | possible code(s) |
+|---|---|---|
+| `00079aac` | MOVSX EDX,DX / MOV EDX,0x19\|0x3 | {0x19,0x3} |
+| `00078576` | MOVSX EDX,AX / MOV EAX,0x19\|0x4 | {0x19,0x4} |
+| `000782bf` | MOV EDX,0x1c + JMP 0x78200 after MOV EDX,0x4 | {0x4,0x1a,0x1b,0x1c} |
+| `0006dcbc` | MOV EDX, 0x7 | {0x7} |
+| `0007cd24` | MOV EDX, 0x8 | {0x8} |
+| `0007ca48` | MOVSX EDX,DX / MOV EDX,6\|4\|3 | {0x3,0x4,0x6} |
+| `00078236` | MOV EDX, 0x1a | {0x1a} |
+| `0007825e` | MOV EDX, 0x1a | {0x1a} |
+| `00078285` | MOV EDX, 0x1a | {0x1a} |
+| `000782a2` | MOV EDX, 0x1b | {0x1b} |
+| `0008cf3f` | MOV EDX,[ESP-2]; SAR EDX,0x10 (helper param) | A.4: {0,0x19,0x15,0x25,0x26,0x28} |
+| `0008d200` | MOV EDX, 0x1 | {0x1} |
+| `0008d238` | MOV EDX, 0x2 | {0x2} |
+| `0008d291` | MOV EDX, 0x4 | {0x4} |
+| `0008d349` | MOV EDX, 0x10 | {0x10} |
+| `0008d421` | MOV EDX, 0x11 | {0x11} |
+| `0008d475` | MOV EDX, 0x14 | {0x14} |
+| `0008d546` | MOV EDX, 0x13 | {0x13} |
+| `0008d569` | MOV EDX, 0x1f | {0x1f} |
+| `0008d5c7` | MOV EDX, 0x12 | {0x12} |
+| `0008d62c` | MOVSX EDX,AX = 0x1d + (phase==9) | {0x1d,0x1e} |
+| `0008d807` | MOV EDX, 0x2a | {0x2a} |
+| `00080190` | MOV EDX, 0x7 | {0x7} |
+| `000762a4` | MOV EDX, 0x1c | {0x1c} |
+| `0007634b` | MOVSX EDX,AX / AX=0x1b+ge; JMPs after EDX=4\|0x19 | {0x4,0x19,0x1b,0x1c} |
+| `0007ce93` | MOV EDX, 0xb | {0xb} |
+| `0007d149` | MOV EDX, 0x7 | {0x7} |
+| `0007d1b9` | MOV EDX, 0x23 | {0x23} |
+| `0007db03` | XOR EDX, EDX | {0} |
+| `00075b67` | MOV EDX, 0x5 | {0x5} |
+| `0007655c` | MOV EDX, 0x1b | {0x1b} |
+| `000766b4` | no EDX write; caller MOV EDX,0x4 survives FUN_0007DAB4 | {0x4} |
+| `00077719` | MOV EDX, 0x19 | {0x19} |
+| `0007f928` | MOV EDX, 0x7 | {0x7} |
+| `0007f970` | MOV EDX, 0x7 | {0x7} |
+| `0007e5c9` | MOV EDX, 0x7 | {0x7} |
+| `0007f791` | MOV EDX, 0x21 | {0x21} |
+| `0007f7b6` | MOV EDX, 0x21 | {0x21} |
+| `0007f64d` | MOV EDX, 0x4 | {0x4} |
+| `00080efa` | MOV EDX, 0xc | {0xc} |
+| `00080f6a` | MOV EDX, 0xd | {0xd} |
+| `000844e7` | MOV EDX, 0x4 | {0x4} |
+| `00084dab` | MOV EDX, 0x13 | {0x13} |
+| `00085ca1` | MOV EDX, 0x4 | {0x4} |
+| `00086436` | MOV EDX, 0x4 | {0x4} |
+| `000899ab` | MOV EDX, 0x20 | {0x20} |
+| `0008990a` | MOV EDX, 0x19 | {0x19} |
+| `0008994c` | MOV EDX, 0x3 | {0x3} |
+| `000899cd` | MOV EDX, 0x1f | {0x1f} |
+| `0008a0a0` | MOV EDX, 0x16 | {0x16} |
+| `0008a32f` | MOV EDX, 0x18 | {0x18} |
+| `0007dba3` | MOVSX EDX,AX / MOV EAX,0x19\|0x3 | {0x19,0x3} |
+| `0007e05a` | MOV EDX, 0x4 | {0x4} |
+| `0007e85c` | MOV EDX, 0x4 | {0x4} |
+| `0007e8ca` | MOV EDX, 0x19 | {0x19} |
+| `0007eb5c` | MOV EDX, 0xf | {0xf} |
+| `0007ed6a` | MOV EDX, 0xb | {0xb} |
+| `0007ef33` | MOV EDX, 0x7 | {0x7} |
+| `0007f120` | MOV EDX, 0x6 | {0x6} |
+| `0007f133` | MOV EDX,0x5 + JMPs after EDX=6\|MOVSX AX | {0x3,0x19,0x5,0x6} |
+| `0007e7b2` | MOV EDX, 0xe | {0xe} |
+| `0008025e` | MOV EDX, 0x4 | {0x4} |
+| `000807c1` | MOV EDX,[ESP+0x4e]; SAR 0x10 (stack word 0/8/9) | {0x8,0x9} |
+| `000816df` | MOV EDX, 0x22 | {0x22} |
+| `00081722` | MOV EDX, 0x4 | {0x4} |
+| `00081beb` | MOV EDX, 0xc | {0xc} |
+| `00083145` | MOV EDX, 0xf | {0xf} |
+| `00082f70` | MOV EDX, 0xe | {0xe} |
+| `00085383` | MOV EDX, 0x4 | {0x4} |
+| `0008753c` | MOV EDX, 0x3 | {0x3} |
+| `00089740` | MOV EDX, 0x17 | {0x17} |
+| `0008b750` | MOV EDX, 0x24 | {0x24} |
+| `0008b78b` | MOV EDX, 0x24 | {0x24} |
+| `0007ce1a` | MOV EDX, 0xa | {0xa} |
+| `0007cf05` | MOV EDX, 0x8 | {0x8} |
+| `0007cfb2` | MOV EDX, 0x9 | {0x9} |
+| `0007d046` | MOV EDX, 0x21 | {0x21} |
+
+Union across the 77 sites: **0x00..0x26 (complete) + 0x28 + 0x2A**. Codes in
+0x00..0x2C that are never passed: **0x27, 0x29, 0x2B, 0x2C** — exactly rows
+27, 29, 2B, 2C.
+
+### I.4 Register-derived sites (first-hand windows, bytes cited)
+
+1. `0x79aac` (`FUN_0007997C`): `0x79a95 JNZ 0x79a9e`; `0x79a97 MOV EDX,0x19`
+   (`ba19000000`); `0x79a9e MOV EDX,0x3` (`ba03000000`); `0x79aa3 MOVSX
+   EDX,DX` (`0fbfd2`) — code {0x19,3}.
+2. `0x78576` (`FUN_000782D0`, keeper machine): `0x7854C MOV EAX,0x4` /
+   `0x78553 MOV EAX,0x19`; `0x78558 MOVSX DX,byte [EBP+0x91]`; `0x78567
+   MOVSX EDX,AX` (`0fbfd0`) — code {0x19,4}.
+3. `0x7ca48` (`FUN_0007C990`): `0x7ca0c MOV EDX,0x6` / `0x7ca28 MOV EDX,0x4`
+   / `0x7ca2f MOV EDX,0x3`; `0x7ca41 MOVSX EDX,DX` — code {6,4,3}.
+4. `0x766b4` (row-1A window `0x7662C`): `0x766a6 MOV EDX,0x4`
+   (`ba04000000`); `0x766ab CALL 0x7DAB4`; FUN_0007DAB4's `0x7DAB6 PUSH EDX`
+   (`52`) is paired with `POP EDX` on **both** returns (`0x7DAF7` `5a`,
+   `0x7DB09` `5a`), so the caller's 4 survives the reset — code {4}.
+5. `0x7dba3` (row-00 body): `0x7db90 JNZ 0x7db99`; `0x7db92 MOV EAX,0x19` /
+   `0x7db99 MOV EAX,0x3`; `0x7db9e MOVSX EDX,AX` — code {0x19,3}.
+6. `0x8cf3f` (`FUN_0008CEB8`): `0x8cf32 MOV EDX,[ESP-2]` (`8b5424fe`) /
+   `0x8cf3c SAR EDX,0x10` (`c1fa10`); the parked CX with the index-0 code-3
+   coercion (`0x8cf19..0x8cf25`) — the 15 callers stage only
+   {0,3→0x19,0x15,0x25,0x26,0x28} (Appendix A.4, re-read).
+7. `0x807c1` (row-06 body): `0x807b1 MOV EDX,[ESP+0x4e]` / `0x807be SAR
+   EDX,0x10` = word `[ESP+0x50]`; its only writers are `0x80280 MOV
+   [ESP+0x50],BX` with `0x80270 XOR EBX,EBX` (0), `0x8069B` (8) and `0x807A2`
+   (9); `0x807A9 CMP word [ESP+0x50],0 / JZ 0x807C6` skips the call at 0 —
+   code {8,9}.
+8. `0x8d62c` (`FUN_0008D098`): `0x8d607 MOV EAX,[0x157A4A]`; `SAR 0x18`;
+   `AND EAX,0xFF`; `CMP EAX,9`; `SETZ AL`; `ADD EAX,0x1D`; `0x8d621 MOVSX
+   EDX,AX` — code {0x1D,0x1E}.
+9. `0x782bf` (arm `0x77EAC`): linear `0x782b6 MOV EDX,0x1c`; bypass `0x78200
+   JMP 0x782bb` reached after `0x781fb MOV EDX,0x4`; the `0x77E98` table arms
+   stage 0x1A/0x1B — code {4,0x1a,0x1b,0x1c}.
+10. `0x7634b` (`FUN_00076130`): `0x7632c MOV EAX,[EBP+0x63]`; `SAR 0x10`;
+    `CMP EAX,0x70`; `SETGE AL`; `ADD EAX,0x1B`; `0x76346 MOVSX EDX,AX` (code
+    {0x1B,0x1C}); bypasses `0x76241 JMP 0x7634b` after `0x76238 MOV EDX,0x4`
+    and `0x7626a JMP 0x7634b` after `0x76256 MOV EDX,0x19` — code
+    {4,0x19,0x1b,0x1c}.
+11. `0x7f133`: linear `0x7f12a MOV EDX,0x5`; bypass `0x7f108 MOV EDX,0x6` +
+    `0x7f111 JMP 0x7f131`; bypass `0x7e87e MOVSX EDX,AX` (AX from
+    `0x7e872/0x7e879` = {3,0x19}) + `0x7e883 JMP 0x7f133` — code
+    {5,6,3,0x19}.
+
+No register-derived site can produce a code outside its set, and no set
+contains 0x27/0x29/0x2B/0x2C.
+
+### I.5 Control-flow bypass check (all 77 sites)
+
+For every call site the nearest preceding instruction writing
+DX/EDX/DL/DH was found via Ghidra's instruction result objects, then every
+reference (including computed jumps) targeting any address in
+`[write_end, call]` was enumerated: only 4 sites had an entry bypassing the
+linear write — `0x782bf`, `0x8cf3f`, `0x7634b`, `0x7f133` — and each bypass
+value is one of the constants already unioned in I.4 (#9, #6, #10, #11).
+`0x766b4` has no EDX write in 60 instructions and is the callee-preservation
+case (#4). The remaining 72 calls have an immediately preceding constant write
+with no bypassing reference.
+
+### I.6 No indirect installer entry
+
+* All 77 references are direct `CALL`; `search_byte_patterns a4 d9 07 00`
+  finds the installer address nowhere in the image, so no static pointer
+  (data word, table entry, immediate `MOV reg,imm32`) to `0x7D9A4` exists.
+* The action table `0x1106E0` has exactly one reader, `0x7DA77`
+  (`ADD EAX,0x1106E0`, FU-137 §1.1), so code 0x27/0x29/0x2C cannot load its
+  handler slot except through the installer.
+* The record handler slot `[rec+0x18]` is written by the installer
+  (`0x7DA8F MOV [ESI+0x18],EAX`); the body pointers themselves
+  (`0x86820`, `0x84598`, `0x874E4`) appear nowhere in the image except their
+  action-table slots (Appendices D.1/E.4/F.3, re-read).
+* Therefore a 27/29/2C body can execute only if an installer invocation
+  passes its code; I.3–I.5 exclude every such invocation.
+
+### I.7 Reachability conclusion and per-row verdict
+
+The installer code domain actually reachable in the program is
+{0x00..0x26} ∪ {0x28, 0x2A}. **Rows 27/29/2C have no entry**: no direct,
+register-derived or stored-pointer installer path passes their code, and the
+bodies are unreachable under the static program model. Wiring them would
+claim a native entry the program does not have, so per the evidence gate they
+stay `fn == NULL`, dispatch `-FIFA96_ERR_UNSUPPORTED`, FU-137 class `unwired`,
+and OL-48 carries the verdict record: **negative census, no entry found**
+(the residual, unobservable-by-static-means class is a runtime-constructed
+call to the installer; no byte in the image supports one; a DOSBox-X entry
+trace would only ratify the negative). The rows' ported bodies and fixtures
+remain as the Task 4/5/6 artifacts.
+
+### I.8 The 2B dead verdict (final)
+
+`0x87738` is the `RET` byte of row 29's epilogue (shared entry, §1.1), not a
+standalone stub; the two helpers after it (`0x8773C..`/`0x8776C..`) belong to
+no action row. The census finds no 0x2B invocation anywhere. **2B is a dead
+entry**: `fn == NULL`, expectation stays `UNSUP`, FU-137 §6.1 records the
+refinement (class `dead entry`, OL-15 closed by the verdict).
+
+### I.9 Wiring decision and write set
+
+No row was wired (no positive entry): `fifa96_match_action_table[0x27/0x29/
+0x2C].fn` stay NULL and `0x2B` stays NULL; `include/fifa96_engine/
+fifa96_match_run.h` and `src/fifa96_engine/fifa96_match_run.c` are untouched
+(no binders). Task 9 write set: `src/fifa96_engine/fifa96_match_handlers.c`
+(evidence strings + header), `tests/test_engine_match_handlers.c` (FU-142f
+pins + `test_dead_2b_evidence`), the FU-137 §5.3/§6.1/§7 errata and this
+appendix.
 
 ## 8. No-write statement
 

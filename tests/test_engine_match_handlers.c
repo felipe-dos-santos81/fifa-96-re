@@ -35,8 +35,16 @@
  * (Task 8) wires row 2A the same way: arm 0x8D807 installs code 0x2A, the
  * `0x86A34..0x87010` 12-arm body (Appendix H) and the distance/flag830/global
  * pool binding are bounded, so `fifa96_match_action_2A` sets the row's `fn`
- * and its expectation flips to FIFA96_OK. The seam itself must run a handler
- * and propagate its result when one is present. */
+ * and its expectation flips to FIFA96_OK. FU-142f (Task 9) closes the entry
+ * question for the three remaining bodies: an exhaustive first-hand census of
+ * all 77 `FUN_0007D9A4` call sites (constants and every register-derived
+ * argument; Appendix I) finds no 0x27/0x29/0x2C invocation anywhere, and no
+ * stored pointer to the installer exists (the address bytes occur nowhere in
+ * the image), so rows 27/29/2C keep `fn == NULL`, their OL-48 evidence and
+ * UNSUP dispatch. Row 2B's entry 0x87738 is the shared row-29 epilogue RET
+ * (FU-142 §1.1), not a standalone stub, and the same census finds no 0x2B
+ * invocation: its evidence records the FU-142f dead verdict. The seam itself
+ * must run a handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -61,8 +69,9 @@
  * Appendix H 12-arm machine). All other action rows
  * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
  * tested pure parts but unported arms; rows 27, 2C and 29 have ported bodies
- * but are unwired with their entries unresolved; the rest are `not ported`,
- * with 2B still entry-unresolved). FU-139 (cluster B)
+ * but are unwired with their entries unresolved per the FU-142f census; the
+ * rest are `not ported`, with 2B now a dead entry per FU-142f). FU-139
+ * (cluster B)
  * keeps 05/06/07/0F and the possession/tackle rows 18/21/23 UNSUP: their
  * record-visible cores have tested pure helpers, but the
  * carrier/pursuit/kick/receive/resolution arms are unported (the FU-141
@@ -448,65 +457,97 @@ static void test_action_2A_overflow_fixture(void) {
   drop_fixture(&f);
 }
 
-/* FU-142b (M2 arms-and-wiring Task 4, FU-142 Appendix D): row 27's body
- * `0x86820..0x86A02` is ported (`fifa96_arm_27_step` + the 0x79C50/0x6E598
- * helpers) but its entry is unresolved: the only reference to `0x86820` in
- * the program is the action-table slot `0x11077C` itself, the two `MOV
- * EDX,0x27` sites are animation-row arguments (0x756D5 -> `CALL 0x6E598`,
- * 0x1F52E -> the FUN_0001F440 jump-table tail), `MOV ECX,0x27` has no site
- * and `0x8CEB8`'s 15 installer arms stage no code 0x27. The row therefore
- * stays `fn == NULL` with the OL-48 marker and still dispatches UNSUP. */
+/* FU-142b (M2 arms-and-wiring Task 4, FU-142 Appendix D) + FU-142f (Task 9,
+ * FU-142 Appendix I): row 27's body `0x86820..0x86A02` is ported
+ * (`fifa96_arm_27_step` + the 0x79C50/0x6E598 helpers) but its entry is
+ * unresolved: the only reference to `0x86820` in the program is the
+ * action-table slot `0x11077C` itself, the two `MOV EDX,0x27` sites are
+ * animation-row arguments (0x756D5 -> `CALL 0x6E598`, 0x1F52E -> the
+ * FUN_0001F440 jump-table tail), `MOV ECX,0x27` has no site and the 0x8CEB8
+ * arms stage no code 0x27. FU-142f extends the census to all 77
+ * `FUN_0007D9A4` call sites including every register-derived argument
+ * (Appendix I): none passes 0x27 and no stored installer pointer exists. The
+ * row therefore stays `fn == NULL` with the FU-142f/OL-48 marker and still
+ * dispatches UNSUP. */
 static void test_action_27_unwired_entry(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x27];
   make_fixture(&f);
   assert(row->fn == NULL);
   assert(strstr(row->evidence, "FU-142b") != NULL);
+  assert(strstr(row->evidence, "FU-142f") != NULL);
   assert(strstr(row->evidence, "OL-48") != NULL);
   assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(action_expect[0x27] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x27) == UNSUP);
   drop_fixture(&f);
 }
 
-/* FU-142b (M2 arms-and-wiring Task 5, FU-142 Appendix E): row 2C's body
- * `0x84598..0x8462D` is ported (`fifa96_arm_2c_step` + the shared
- * `fifa96_arm_reset`) but its entry is unresolved: the only reference to
- * `0x84598` in the program is the action-table slot `0x110790` itself, the
- * three `MOV EDX,0x2C` sites are non-match constants (0x3035E/0x40A8E/0x40C5C,
- * none calls FUN_0007D9A4), `MOV ECX,0x2C` has no site and `0x8CEB8`'s 15
- * installer arms stage no code 0x2C. The row therefore stays `fn == NULL`
- * with the OL-48 marker and still dispatches UNSUP. */
+/* FU-142b (M2 arms-and-wiring Task 5, FU-142 Appendix E) + FU-142f (Task 9,
+ * FU-142 Appendix I): row 2C's body `0x84598..0x8462D` is ported
+ * (`fifa96_arm_2c_step` + the shared `fifa96_arm_reset`) but its entry is
+ * unresolved: the only reference to `0x84598` in the program is the
+ * action-table slot `0x110790` itself, the three `MOV EDX,0x2C` sites are
+ * non-match constants (0x3035E/0x40A8E/0x40C5C, none calls FUN_0007D9A4),
+ * `MOV ECX,0x2C` has no site and the 0x8CEB8 arms stage no code 0x2C.
+ * FU-142f's exhaustive 77-site installer census (Appendix I) finds no 0x2C
+ * invocation and no stored installer pointer. The row therefore stays
+ * `fn == NULL` with the FU-142f/OL-48 marker and still dispatches UNSUP. */
 static void test_action_2C_unwired_entry(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x2C];
   make_fixture(&f);
   assert(row->fn == NULL);
   assert(strstr(row->evidence, "FU-142b") != NULL);
+  assert(strstr(row->evidence, "FU-142f") != NULL);
   assert(strstr(row->evidence, "OL-48") != NULL);
   assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(action_expect[0x2C] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x2C) == UNSUP);
   drop_fixture(&f);
 }
 
-/* FU-142c (M2 arms-and-wiring Task 6, FU-142 Appendix F): row 29's body
- * `0x874E4..0x87738` is ported (`fifa96_arm_29_step`) but its entry is
- * unresolved: the only reference to `0x874E4` in the program is the action
- * table slot `0x110784` itself; the sole `MOV EDX,0x29` site is
- * `0x1F53C` inside the non-match `FUN_0001F440` (tail `MOV EAX,0x6B;
- * CALL 0x13600`, no installer call); the phase-5 handler `0x6E05C..0x6E1B2`
- * (the body's own phase gate) contains no `FUN_0007D9A4` call; and the body's
- * own `0x8753C` install is code 3 (the phase != 5 self-install). The row
- * therefore stays `fn == NULL` with the OL-48 marker and still dispatches
- * UNSUP. */
+/* FU-142c (M2 arms-and-wiring Task 6, FU-142 Appendix F) + FU-142f (Task 9,
+ * FU-142 Appendix I): row 29's body `0x874E4..0x87738` is ported
+ * (`fifa96_arm_29_step`) but its entry is unresolved: the only reference to
+ * `0x874E4` in the program is the action table slot `0x110784` itself; the
+ * sole `MOV EDX,0x29` site is `0x1F53C` inside the non-match `FUN_0001F440`
+ * (tail `MOV EAX,0x6B; CALL 0x13600`, no installer call); the phase-5
+ * handler `0x6E05C..0x6E1B2` (the body's own phase gate) contains no
+ * `FUN_0007D9A4` call; and the body's own `0x8753C` install is code 3 (the
+ * phase != 5 self-install). FU-142f's exhaustive 77-site installer census
+ * (Appendix I) finds no 0x29 invocation and no stored installer pointer. The
+ * row therefore stays `fn == NULL` with the FU-142f/OL-48 marker and still
+ * dispatches UNSUP. */
 static void test_action_29_unwired_entry(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x29];
   make_fixture(&f);
   assert(row->fn == NULL);
   assert(strstr(row->evidence, "FU-142c") != NULL);
+  assert(strstr(row->evidence, "FU-142f") != NULL);
   assert(strstr(row->evidence, "OL-48") != NULL);
   assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(action_expect[0x29] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x29) == UNSUP);
+  drop_fixture(&f);
+}
+
+/* FU-142f (M2 arms-and-wiring Task 9, FU-142 Appendix I): row 2B's native
+ * entry 0x87738 is the final `RET` of the row-29 body — the shared epilogue
+ * (FU-142 §1.1), not a standalone stub — and the exhaustive installer census
+ * finds no 0x2B invocation anywhere. Dead entry: `fn == NULL`, expectation
+ * UNSUP, evidence records the FU-142f dead verdict. */
+static void test_dead_2b_evidence(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x2B];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-142f") != NULL);
+  assert(strstr(row->evidence, "dead") != NULL);
+  assert(strstr(row->evidence, "0x87738") != NULL);
+  assert(action_expect[0x2B] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2B) == UNSUP);
   drop_fixture(&f);
 }
 
@@ -590,6 +631,7 @@ int main(void) {
   test_action_27_unwired_entry();
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();
+  test_dead_2b_evidence();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();
