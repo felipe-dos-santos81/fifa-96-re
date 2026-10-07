@@ -38,13 +38,13 @@ int fifa96_intro_step(struct fifa96_intro *in, struct fifa96_surface *s) {
   if (r == 0) return 0;  /* stream ended (or already ended): surface untouched */
   uint32_t w = frame.width;
   uint32_t h = frame.height;
-  if (w == 0 || h == 0 || w > FIFA96_INTRO_W || h > FIFA96_INTRO_H)
+  if (w == 0 || h == 0 || w > (uint32_t)s->width || h > (uint32_t)s->height)
     return -(int)FIFA96_ERR_TRUNCATED;
   size_t need = (size_t)w * (size_t)h;
   if (!frame.pixels || frame.pixels_len < need) return -(int)FIFA96_ERR_TRUNCATED;
   /* Blit the frame at (0,0); the region outside stays untouched. */
   for (uint32_t y = 0; y < h; y++) {
-    memcpy(s->indexed + (size_t)y * FIFA96_INTRO_W,
+    memcpy(s->indexed + (size_t)y * (size_t)s->width,
            frame.pixels + (size_t)y * w, w);
   }
   if (frame.palette_changed) fifa96_surface_set_palette8(s, frame.palette);

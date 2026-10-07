@@ -50,6 +50,25 @@ static size_t build_kvgt(uint8_t *dst, uint16_t w, uint16_t h, const uint8_t *re
   return n;
 }
 
+/* A frame that does not fit the destination surface is refused and the
+ * surface stays at its sentinel. */
+static void assert_refused_on(int sw, int sh, const uint8_t *stream, size_t stream_len) {
+  struct fifa96_surface *sm = fifa96_surface_create(sw, sh);
+  assert(sm);
+  fifa96_surface_clear(sm, 0x3C);
+  size_t n = (size_t)sw * (size_t)sh;
+  uint8_t *sentinel = malloc(n);
+  assert(sentinel);
+  memset(sentinel, 0x3C, n);
+  struct fifa96_intro bad;
+  assert(fifa96_intro_start(&bad, sm) == 0);
+  assert(fifa96_intro_feed(&bad, stream, stream_len) == 0);
+  assert(fifa96_intro_step(&bad, sm) < 0);
+  assert(memcmp(sm->indexed, sentinel, n) == 0);
+  fifa96_surface_destroy(sm);
+  free(sentinel);
+}
+
 int main(void) {
   size_t klen = 0;
   uint8_t *key = slurp("tests/golden/vgt/kvgt-frame-01.bin", &klen);
@@ -107,6 +126,11 @@ int main(void) {
   for (int y = 0; y < FH; y++)
     assert(memcmp(s->indexed + (size_t)y * W, expect + (size_t)y * FW, FW) == 0);
   assert(s->indexed[150 * W + 10] == 0x5A);
+
+  /* a frame that does not fit the destination surface is refused too:
+   * 96x100 against 64x240 (too wide) and 128x96 (too tall) */
+  assert_refused_on(64, 240, key, klen);
+  assert_refused_on(128, 96, key, klen);
 
   /* defensive surfaces */
   assert(fifa96_intro_start(NULL, s) < 0);
