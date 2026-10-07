@@ -91,6 +91,15 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
       }
     }
   }
+  if (fifa96_frontend_run_init(&e->frontend, e->surface) != 0) {
+    e->plat->shutdown(e->plat->self);
+    fifa96_cache_destroy(e->cache);
+    fifa96_asset_unmount(e->assets);
+    e->cache = NULL;
+    e->assets = NULL;
+    return -1;
+  }
+  e->mode = e->intro_active ? FIFA96_ENGINE_MODE_INTRO : FIFA96_ENGINE_MODE_FRONTEND;
   e->plat->audio_open(e->plat->self, 22050u, 2);
   e->booted = 1;
   return 0;
@@ -103,17 +112,31 @@ int fifa96_engine_step(struct fifa96_engine *e) {
   uint64_t now = e->plat->now_ns(e->plat->self);
   e->step_ticks = (uint32_t)fifa96_clock_advance_ns(&e->clock, now - e->last_ns);
   e->last_ns = now;
-  /* Video cadence: 15 frames per 100 PIT ticks (FU-37); at most one intro
-   * frame per engine step, so the tape stays deterministic. */
-  if (e->intro_active) {
-    uint32_t due = fifa96_pacing_frames_due(e->clock.pit.ticks);
-    if (due > e->intro_frames) {
-      if (fifa96_intro_step(&e->intro, e->surface) != 0) {
-        e->intro_active = 0;
-      } else {
-        e->intro_frames++;
-        if (fifa96_intro_done(&e->intro)) e->intro_active = 0;
+  if (e->mode == FIFA96_ENGINE_MODE_INTRO) {
+    /* Video cadence: 15 frames per 100 PIT ticks (FU-37); at most one intro
+     * frame per engine step, so the tape stays deterministic. */
+    if (e->intro_active) {
+      uint32_t due = fifa96_pacing_frames_due(e->clock.pit.ticks);
+      if (due > e->intro_frames) {
+        if (fifa96_intro_step(&e->intro, e->surface) != 0) {
+          e->intro_active = 0;
+        } else {
+          e->intro_frames++;
+          if (fifa96_intro_done(&e->intro)) e->intro_active = 0;
+        }
       }
+    }
+    if (!e->intro_active) e->mode = FIFA96_ENGINE_MODE_FRONTEND;
+  } else if (e->mode == FIFA96_ENGINE_MODE_FRONTEND) {
+    fifa96_platform_key keys[32];
+    int n = 0;
+    if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    fifa96_frontend_run_input(&e->frontend, keys, (size_t)n);
+    int quit = 0;
+    if (fifa96_frontend_run_step(&e->frontend, e->surface, &quit) != 0) return -1;
+    if (quit) {
+      e->quit = 1;
+      e->mode = FIFA96_ENGINE_MODE_QUIT;
     }
   }
   fifa96_platform_frame f;
@@ -126,14 +149,14 @@ int fifa96_engine_step(struct fifa96_engine *e) {
 int fifa96_engine_run(struct fifa96_engine *e) {
   while (e && !e->quit) {
     if (fifa96_engine_step(e) != 0) return -1;
-    fifa96_platform_key keys[32];
-    int n = 0;
-    e->plat->poll(e->plat->self, keys, 32, &n);
   }
   return 0;
 }
 
-int fifa96_engine_should_quit(const struct fifa96_engine *e) { return e ? e->quit : 1; }
+int fifa96_engine_should_quit(const struct fifa96_engine *e) {
+  if (!e) return 1;
+  return e->quit != 0 || e->mode == FIFA96_ENGINE_MODE_QUIT;
+}
 void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
   if (e->booted) e->plat->shutdown(e->plat->self);
