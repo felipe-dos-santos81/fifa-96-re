@@ -101,11 +101,13 @@ static int fifa96_match_run_cancel(void *ctx) {
 static int fifa96_match_run_teardown(void *ctx) {
   struct fifa96_match_run *mr = ctx;
   if (!mr) return -FIFA96_ERR_INVALID;
-  /* The foundation owns no match assets yet; clear the per-match counters and
-   * the match clock/period block. */
+  /* The foundation owns no match assets yet; clear the per-match counters,
+   * the match clock/period block and the per-side goal words. */
   mr->ticks = 0;
   mr->steps = 0;
   fifa96_match_state_init(&mr->state);
+  mr->score[0] = 0;
+  mr->score[1] = 0;
   return 0;
 }
 
@@ -171,6 +173,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   fifa96_match_lifecycle_init(&mr->lc);
   fifa96_match_pace_init(&mr->pace);
   fifa96_match_state_init(&mr->state);
+  mr->score[0] = 0;
+  mr->score[1] = 0;
   mr->engine = NULL;
   mr->backend.register_callback = NULL;
   mr->backend.cancel_callback = NULL;
@@ -199,6 +203,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->ticks = 0;
   mr->steps = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
+  mr->score[0] = 0;                    /* fresh match score pair */
+  mr->score[1] = 0;
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -218,6 +224,29 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->running = 1;
   eng->match = mr;
   eng->mode = FIFA96_ENGINE_MODE_MATCH;
+  /* FU-62 §4.6: the state-init zero length would complete a period on the
+   * first second, so begin installs the derived lengths for the selector. */
+  uint16_t period = selector == 0 ? FIFA96_MATCH_RUN_PERIOD_SECONDS_DEFAULT
+                                  : FIFA96_MATCH_RUN_PERIOD_SECONDS_RESET;
+  uint16_t extra = selector == 0 ? FIFA96_MATCH_RUN_EXTRA_SECONDS_DEFAULT
+                                 : FIFA96_MATCH_RUN_EXTRA_SECONDS_RESET;
+  (void)fifa96_match_run_set_period(mr, period, extra);
+  return 0;
+}
+
+int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
+                                uint16_t extra_seconds) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  mr->state.period_length = period_seconds;
+  mr->state.extra_length = extra_seconds;
+  return 0;
+}
+
+int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side) {
+  if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  mr->score[side]++;
   return 0;
 }
 
@@ -251,11 +280,27 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                mr->render.view_class, mr->render.input_bit2);
     (void)fifa96_match_display_update(&mr->render.display, mr->state.frame_delta, 0);
   }
-  if (period_ended) {
+  if (period_ended && !fifa96_match_lifecycle_should_exit(&mr->lc)) {
+    /* Ordering guard: the frame body runs in the clock advance before
+     * run_step consumes the exit staging, so a period end coinciding with a
+     * staged request_exit must not clobber EXIT->OVER (a staged EXIT wins). */
     rc = fifa96_match_lifecycle_mark_over(&mr->lc);
     if (rc != 0) return rc;
   }
   return granted != 0;
+}
+
+int fifa96_match_run_resolve(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER) {
+    (void)fifa96_match_lifecycle_resolve_over(&mr->lc);   /* OVER -> POST */
+  }
+  if (mr->lc.screen == FIFA96_MATCH_SCREEN_POST) {
+    (void)fifa96_match_lifecycle_request_exit(&mr->lc);   /* POST -> EXIT */
+  }
+  if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
+  return 0;
 }
 
 int fifa96_match_run_step(struct fifa96_match_run *mr) {

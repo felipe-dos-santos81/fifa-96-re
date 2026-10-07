@@ -40,6 +40,18 @@ struct fifa96_surface;
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
 
+/* Derived period lengths in whole seconds (FU-62 §4.6: the clock compares
+ * `period_seconds == [0x5881A]` for periods 0/1 and `[0x5881C]` for periods
+ * 2/3, both = `[0x4C1D1]` minutes × 60/20). The default settings half-length
+ * index 0 selects 2 minutes (FU-68 §4.1: table flat 0x37170 = {2,4,6,...};
+ * `fifa96_settings_defaults` value[0x0E] = 0), which is what begin installs
+ * for selector 0 (the menu/boot path, FU-64 §1.1). A non-zero selector takes
+ * the `FUN_0004A228 -> FUN_0004B508` reset override 0x3C/0x1E (60 s / 30 s). */
+#define FIFA96_MATCH_RUN_PERIOD_SECONDS_DEFAULT 120u
+#define FIFA96_MATCH_RUN_EXTRA_SECONDS_DEFAULT 40u
+#define FIFA96_MATCH_RUN_PERIOD_SECONDS_RESET 60u
+#define FIFA96_MATCH_RUN_EXTRA_SECONDS_RESET 30u
+
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
  * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes. */
 struct fifa96_match_run_entity {
@@ -87,6 +99,7 @@ struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
   struct fifa96_match_state state;               /* match clock/period block */
+  uint16_t score[2];                             /* per-side goal words (FU-72 §2.4) */
   struct fifa96_engine *engine;                  /* engine holding this run */
   struct fifa96_match_lifecycle_backend backend; /* engine callbacks or stub */
   uint32_t ticks;                                /* 100 Hz match callback hits */
@@ -99,13 +112,14 @@ struct fifa96_match_run {
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };
 
-/* Zero-init a run: lifecycle, pace, match state, input model, control slot,
- * presentation state (camera/window/display/scene, rendering disabled), the
- * staging-arena holder (assigned NULL, never freed: init accepts
- * uninitialized memory, so it cannot trust the holder), backend, counters and
- * engine linkage. Must be called before the first begin on a run. A staged run
- * must be released by end (or the next begin) before re-initialization; a
- * direct re-init leaves the arena unreachable and leaks it. NULL is a no-op. */
+/* Zero-init a run: lifecycle, pace, match state (clock and score pair), input
+ * model, control slot, presentation state (camera/window/display/scene,
+ * rendering disabled), the staging-arena holder (assigned NULL, never freed:
+ * init accepts uninitialized memory, so it cannot trust the holder), backend,
+ * counters and engine linkage. Must be called before the first begin on a run.
+ * A staged run must be released by end (or the next begin) before
+ * re-initialization; a direct re-init leaves the arena unreachable and leaks
+ * it. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
 
 /* One match input poll: fold the engine key presses in `keys` (codes 1..9;
@@ -122,14 +136,34 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
                            size_t count);
 
 /* Wire the run to a booted, non-quitting engine (MATCH mode), reset the match
- * clock, counters, input model, control slot and presentation state for a
- * fresh match (rendering disabled; the full-surface FU-92 window is sized from
- * the engine surface), and start the lifecycle. Returns 0,
+ * clock (including the score pair), counters, input model, control slot and
+ * presentation state for a fresh match (rendering disabled; the full-surface
+ * FU-92 window is sized from the engine surface), install the derived FU-62
+ * period lengths for the selector (see the FIFA96_MATCH_RUN_*_SECONDS_*
+ * constants), and start the lifecycle. Returns 0,
  * -FIFA96_ERR_INVALID (NULL arguments), -FIFA96_ERR_STATE (unbooted/QUIT
  * engine, run already live, or another run live on the engine), or the
  * lifecycle's register failure. */
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector);
+
+/* Write the FU-62 §4.6 period lengths the clock's period-end check reads
+ * ([0x5881A] regular periods 0/1, [0x5881C] extra periods 2/3), in whole
+ * seconds. Values are written verbatim (zero reproduces the state-init
+ * end-on-first-second behavior); a live match normally keeps begin's derived
+ * default. Returns 0, -FIFA96_ERR_INVALID (NULL) or -FIFA96_ERR_STATE (run
+ * not live). */
+int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_seconds,
+                                uint16_t extra_seconds);
+
+/* Derived score plumbing: increment one side's goal word, the FU-72 §2.4
+ * `FUN_00093944` write (`INC word [side*2 + 0x57AC5]`). side 0/1; begin and
+ * teardown reset the pair. The original's trigger is the nine FUN_00093944
+ * call sites in the not-yet-ported action/phase handler cluster, so only the
+ * derived increment is exposed here — wiring an event source is an open leg
+ * for the G2/G3 handler tasks. Returns 0, -FIFA96_ERR_INVALID (NULL or
+ * side > 1), or -FIFA96_ERR_STATE (run not live). */
+int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
 
 /* Exactly one 10 ms/100 Hz pace tick of the match frame body. Feeds the FU-60
  * pace (blocked = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame, the
@@ -139,7 +173,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
  * FU-71 camera/display blocks advanced with the same delta (FU-71's
  * FUN_000736AC runs from the frame body FUN_0004B100, not the render driver);
  * 0 = no frame was due; or a -fifa96_err_t. A period end marks the lifecycle
- * over.
+ * over, except when an exit is already staged: the staged EXIT wins because
+ * the frame body runs in the clock advance before the exit step consumes it.
  *
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */
@@ -205,6 +240,16 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
  * sprite banks in it). */
 int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surface *s,
                            const char *player_bank, const char *pitch_bank);
+
+/* Resolve the post-period screen chain (FU-64 §6): OVER -> POST
+ * (`resolve_over`, the `[0x5FFC]=3` period resolution), POST -> EXIT (the
+ * leave staging `[0x5FFC]=4`), then, when EXIT is current, run the existing
+ * run_end path (pace hold + register cancel + teardown + post-exit) so the
+ * engine returns to FRONTEND. A screen that is still ACTIVE is a no-op
+ * (nothing has ended). Returns the run_end result (1 = post-exit ran, 0 =
+ * plain teardown), 0 when there was no OVER/POST/EXIT screen to resolve,
+ * -FIFA96_ERR_INVALID (NULL) or -FIFA96_ERR_STATE (run not live). */
+int fifa96_match_run_resolve(struct fifa96_match_run *mr);
 
 /* One engine step of the run: drives the lifecycle only (the frame body runs
  * on the registered 100 Hz tick hook). 0 while live, the end result

@@ -498,6 +498,14 @@ target_link_options(test_engine_match_staging PRIVATE -fsanitize=address,undefin
 add_test(NAME test_engine_match_staging COMMAND test_engine_match_staging
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(test_engine_match_completion tests/test_engine_match_completion.c)
+target_link_libraries(test_engine_match_completion PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_completion PRIVATE src)
+target_compile_options(test_engine_match_completion PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_completion PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_completion COMMAND test_engine_match_completion
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 find_package(SDL3 QUIET)
 if(SDL3_FOUND)
   message(STATUS "engine: SDL3 found -> building fifa96 + test_engine_sdl3")
