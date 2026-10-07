@@ -11,7 +11,8 @@
  * menu-driven start-match family enters the setup with selector 0
  * (FU-64 §1.1, `XOR EAX,EAX` at 0x180A8).
  *
- * The event sequence below is tests/test_frontend.c's: code 8 opens the panel
+ * The event sequence below mirrors tests/test_engine_frontend.c::
+ * test_phase_derivation: the DECLINE code 8 opens the panel
  * (frontend_result), the gated -10 confirm (panel_event) accepts the menu
  * selection, and the driver leaves to EXIT. A front-end (not panel) CONFIRM
  * is deliberately NOT startable: the M1 wrapping of that confirm is pinned by
@@ -73,10 +74,11 @@ static void step(struct fifa96_engine *e) {
   assert(quit == 0);
 }
 
-/* tests/test_frontend.c's sequence to the startable classification: decline
- * leaves the front-end loop for the panel (code 8 -> PANEL), the confirm gate
- * accepts the selection (-10 -> PANEL_CONFIRM), and the exit classification
- * is the code-8 STATE16. */
+/* The wrapper sequence of tests/test_engine_frontend.c::test_phase_derivation
+ * to the startable classification: decline leaves the front-end loop for the
+ * panel (code 8 -> PANEL), the confirm gate accepts the selection (-10 ->
+ * PANEL_CONFIRM), and the exit classifier resolves it like
+ * tests/test_frontend.c::test_exit_classification's code-8 STATE16. */
 static void drive_to_match_start(struct fifa96_engine *e) {
   press(e, FIFA96_ENGINE_KEY_DECLINE);
   step(e);

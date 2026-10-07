@@ -81,7 +81,10 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
          * that transition through the FU-66 §4 code-8 exit tail (0x1EDFD,
          * `MOV EAX,0x10`): the port's exit state for it is STATE16, the
          * classification the FU-64 §1.1 menu-driven start-match family
-         * starts from. The bridge consumes this flag. */
+         * starts from. The bridge consumes this flag. The original confirm
+         * path exits without a state dispatch (state 16 on the panel path is
+         * the non-confirm 4/5 tail), so this is the port's startable
+         * stand-in per C1-OL3. */
         enum fifa96_frontend_exit exit_state = FIFA96_FRONTEND_EXIT_STATE16;
         uint32_t state = fr->entry_state;
         if (fifa96_frontend_exit(&fr->frontend, 8, &exit_state, &state) == 0 &&

@@ -495,6 +495,7 @@ if(SDL3_FOUND)
   add_executable(test_engine_sdl3 tests/test_engine_sdl3.c
                  src/fifa96_engine/platform_sdl3.c)
   target_link_libraries(test_engine_sdl3 PRIVATE fifa96_engine SDL3::SDL3)
+  target_include_directories(test_engine_sdl3 PRIVATE src)
   target_compile_options(test_engine_sdl3 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
   target_link_options(test_engine_sdl3 PRIVATE -fsanitize=address,undefined)
   add_test(NAME test_engine_sdl3 COMMAND test_engine_sdl3

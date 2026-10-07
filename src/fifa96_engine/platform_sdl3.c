@@ -120,15 +120,24 @@ static int sdl3_present(void *self, const fifa96_platform_frame *f) {
   return 0;
 }
 
-static int32_t sdl3_map_scancode(SDL_Scancode sc) {
-  switch (sc) {
-    case SDL_SCANCODE_UP:     return FIFA96_ENGINE_KEY_UP;
-    case SDL_SCANCODE_DOWN:   return FIFA96_ENGINE_KEY_DOWN;
-    case SDL_SCANCODE_LEFT:   return FIFA96_ENGINE_KEY_LEFT;
-    case SDL_SCANCODE_RIGHT:  return FIFA96_ENGINE_KEY_RIGHT;
-    case SDL_SCANCODE_RETURN: return FIFA96_ENGINE_KEY_CONFIRM;
-    case SDL_SCANCODE_ESCAPE: return FIFA96_ENGINE_KEY_QUIT;
-    default:                  return 0;
+/* Pure scancode -> engine key mapping (no SDL state needed), shared by the
+ * poll path below and tests/test_engine_sdl3.c. Keyboard bindings: arrows
+ * navigate, RETURN confirms, BACKSPACE is the primary panel-back/DECLINE key
+ * with X as the secondary, Z/C are the match KICK/PASS actions, ESCAPE
+ * quits. 0 = unmapped. */
+int fifa96_platform_sdl3_map_scancode(int scancode) {
+  switch (scancode) {
+    case SDL_SCANCODE_UP:        return FIFA96_ENGINE_KEY_UP;
+    case SDL_SCANCODE_DOWN:      return FIFA96_ENGINE_KEY_DOWN;
+    case SDL_SCANCODE_LEFT:      return FIFA96_ENGINE_KEY_LEFT;
+    case SDL_SCANCODE_RIGHT:     return FIFA96_ENGINE_KEY_RIGHT;
+    case SDL_SCANCODE_RETURN:    return FIFA96_ENGINE_KEY_CONFIRM;
+    case SDL_SCANCODE_BACKSPACE: return FIFA96_ENGINE_KEY_DECLINE;
+    case SDL_SCANCODE_X:         return FIFA96_ENGINE_KEY_DECLINE;
+    case SDL_SCANCODE_Z:         return FIFA96_ENGINE_KEY_KICK;
+    case SDL_SCANCODE_C:         return FIFA96_ENGINE_KEY_PASS;
+    case SDL_SCANCODE_ESCAPE:    return FIFA96_ENGINE_KEY_QUIT;
+    default:                     return 0;
   }
 }
 
@@ -183,10 +192,12 @@ static int sdl3_poll(void *self, fifa96_platform_key *out, size_t cap, int *coun
         break;
       case SDL_EVENT_KEY_DOWN:
         if (!ev.key.repeat)
-          sdl3_push_key(out, cap, count, sdl3_map_scancode(ev.key.scancode), 1);
+          sdl3_push_key(out, cap, count,
+                        fifa96_platform_sdl3_map_scancode((int)ev.key.scancode), 1);
         break;
       case SDL_EVENT_KEY_UP:
-        sdl3_push_key(out, cap, count, sdl3_map_scancode(ev.key.scancode), 0);
+        sdl3_push_key(out, cap, count,
+                      fifa96_platform_sdl3_map_scancode((int)ev.key.scancode), 0);
         break;
       case SDL_EVENT_GAMEPAD_ADDED:
         sdl3_pad_added(s, ev.gdevice.which);
