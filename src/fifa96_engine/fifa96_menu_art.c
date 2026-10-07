@@ -75,7 +75,11 @@ int fifa96_menu_art_init(struct fifa96_asset_table *assets_or_null) {
   uint8_t *bytes = NULL;
   size_t len = 0;
   if (fifa96_asset_read(assets_or_null, path, &bytes, &len) != FIFA96_OK ||
-      bytes == NULL || len == 0) {
+      bytes == NULL) {
+    return 0;
+  }
+  if (len == 0) {
+    fifa96_asset_free(bytes);
     return 0;
   }
 

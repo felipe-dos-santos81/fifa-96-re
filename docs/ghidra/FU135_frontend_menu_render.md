@@ -84,7 +84,7 @@ handler itself: the tail runs the generic event pump at `0x14B56`.
 The front-end setup `FUN_0001E3A8` loads **`"options.inv"`** before building
 the widget list:
 
-* `read_memory 0x1009B0` — the string block holds `options.dat` at `0x1009BC`
+* `read_memory 0x1009B0` — the string block holds `options.dat` at `0x1009B8`
   and `"options.inv"` at `0x1009C4` (NUL at `0x1009CF`).
 * `disassemble_bytes 0x1E3A8`: `0x1E3E1 MOV EAX,0x1009C4` /
   `0x1E3E6 MOV EBX,0x5` / `0x1E3EB CALL 0x19ABC`.

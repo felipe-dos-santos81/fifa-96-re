@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_menu_art.h"
 
 static int engine_char_fold(int c) {
   return (c >= 'a' && c <= 'z') ? c - ('a' - 'A') : c;
@@ -99,6 +100,7 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
     e->assets = NULL;
     return -1;
   }
+  fifa96_menu_art_init(e->assets);
   e->mode = e->intro_active ? FIFA96_ENGINE_MODE_INTRO : FIFA96_ENGINE_MODE_FRONTEND;
   e->plat->audio_open(e->plat->self, 22050u, 2);
   e->booted = 1;
