@@ -391,65 +391,91 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
+target_compile_options(test_engine_platform PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_platform PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_platform COMMAND test_engine_platform
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_surface tests/test_engine_surface.c)
 target_link_libraries(test_engine_surface PRIVATE fifa96_engine)
+target_compile_options(test_engine_surface PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_surface PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_surface COMMAND test_engine_surface
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_asset tests/test_engine_asset.c)
 target_link_libraries(test_engine_asset PRIVATE fifa96_engine)
+target_compile_options(test_engine_asset PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_asset PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_asset COMMAND test_engine_asset
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_cache tests/test_engine_cache.c)
 target_link_libraries(test_engine_cache PRIVATE fifa96_engine)
+target_compile_options(test_engine_cache PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_cache PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_cache COMMAND test_engine_cache
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_clock tests/test_engine_clock.c)
 target_link_libraries(test_engine_clock PRIVATE fifa96_engine)
+target_compile_options(test_engine_clock PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_clock PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_clock COMMAND test_engine_clock
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_intro tests/test_engine_intro.c)
 target_link_libraries(test_engine_intro PRIVATE fifa96_engine)
+target_compile_options(test_engine_intro PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_intro PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_intro COMMAND test_engine_intro
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_frontend tests/test_engine_frontend.c)
 target_link_libraries(test_engine_frontend PRIVATE fifa96_engine)
+target_compile_options(test_engine_frontend PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_frontend PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_frontend COMMAND test_engine_frontend
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_menu_art tests/test_engine_menu_art.c)
 target_link_libraries(test_engine_menu_art PRIVATE fifa96_engine)
+target_compile_options(test_engine_menu_art PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_menu_art PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_menu_art COMMAND test_engine_menu_art
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_m1 tests/test_engine_m1.c)
 target_link_libraries(test_engine_m1 PRIVATE fifa96_engine)
+target_compile_options(test_engine_m1 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_m1 PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_m1 COMMAND test_engine_m1
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_match_lifecycle tests/test_engine_match_lifecycle.c)
 target_link_libraries(test_engine_match_lifecycle PRIVATE fifa96_engine)
+target_compile_options(test_engine_match_lifecycle PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_lifecycle PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_lifecycle COMMAND test_engine_match_lifecycle
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_match_frame tests/test_engine_match_frame.c)
 target_link_libraries(test_engine_match_frame PRIVATE fifa96_engine)
+target_compile_options(test_engine_match_frame PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_frame PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_frame COMMAND test_engine_match_frame
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_match_input tests/test_engine_match_input.c)
 target_link_libraries(test_engine_match_input PRIVATE fifa96_engine)
+target_compile_options(test_engine_match_input PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_input PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_input COMMAND test_engine_match_input
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_match_render tests/test_engine_match_render.c)
 target_link_libraries(test_engine_match_render PRIVATE fifa96_engine)
+target_compile_options(test_engine_match_render PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_render PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_render COMMAND test_engine_match_render
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
