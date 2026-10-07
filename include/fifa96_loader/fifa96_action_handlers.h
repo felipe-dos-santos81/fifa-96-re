@@ -48,6 +48,76 @@ typedef struct fifa96_action_kick_ball {
 fifa96_err_t fifa96_action_kick_apply(fifa96_action_kick_ball *ball, const fifa96_action_kick_row *row,
                                       uint8_t mode, uint8_t event_code, uint8_t user_extend);
 
+/* FU-139 §3.5: the FUN_0007AE70 event-row resolver (native 0x7AE79..0x7B018)
+ * selects one 10-byte event row from one of four native tables; the returned
+ * `table` id names the native base (HEIGHT 0x1102FE, CARRY 0x11016E, ACTIVE
+ * 0x110196, IDLE 0x11024A) and `index` is the row index (row = table + 10 *
+ * index). `sector_table` is the caller-supplied native bitmask table
+ * 0x1104CA; `code` is the native mode/event byte. `found == 0` reproduces the
+ * native NULL return (`d < 0x38` while the actor height dword is nonzero). */
+typedef enum fifa96_action_kick_event_table {
+  FIFA96_ACTION_KICK_EVENT_TABLE_HEIGHT = 0,
+  FIFA96_ACTION_KICK_EVENT_TABLE_CARRY = 1,
+  FIFA96_ACTION_KICK_EVENT_TABLE_ACTIVE = 2,
+  FIFA96_ACTION_KICK_EVENT_TABLE_IDLE = 3,
+} fifa96_action_kick_event_table;
+
+typedef struct fifa96_action_kick_event {
+  uint8_t code;         /* native EDX mode/event byte */
+  uint8_t subtype;      /* actor[+0x8B] >> 24 */
+  uint8_t sector_byte;  /* actor[+0x8E] low byte, when x == z == 0 */
+  uint8_t active;       /* actor[+0x8D] != 0 */
+  uint8_t has_slot;     /* actor[+0x20] != 0 */
+  uint8_t slot_counter; /* slot[+0x23] */
+  uint8_t phase;        /* [0x157A4A] >> 24 */
+  int16_t x;            /* native EBX word */
+  int16_t z;            /* native ECX word */
+  int16_t ball_height;  /* word [0x157750] */
+  int32_t height;       /* dword actor[+0x5D] (zero test and low word band) */
+} fifa96_action_kick_event;
+
+typedef struct fifa96_action_kick_event_out {
+  uint8_t found;
+  uint8_t table;
+  uint32_t index;
+} fifa96_action_kick_event_out;
+
+fifa96_err_t fifa96_action_kick_event_row(const fifa96_action_kick_event *event,
+                                          const uint8_t *sector_table,
+                                          fifa96_action_kick_event_out *out);
+
+/* FU-139 §3.4: the FUN_0007B9C4 negative-mode range band (native
+ * 0x7BBE4..0x7BC15): a non-negative mode is returned unchanged; a negative
+ * one becomes 0x20 when x < 0x5A0, 0x30 when x < 0x780, else 0x10. */
+fifa96_err_t fifa96_action_kick_range_band(int8_t mode, int16_t ball_x,
+                                           uint8_t *band);
+
+/* FU-139 §3.6: the FUN_0007AE70 tail append selector (native
+ * 0x7B01A..0x7B09F, jump table flat 0x7AE38). `direct == 1` names the native
+ * FUN_00092820 path, `direct == 0` the FUN_000928F0 ring path; `code` is the
+ * native selector argument. The actor action byte takes precedence over the
+ * row[0] fallback. */
+typedef struct fifa96_action_kick_append {
+  uint8_t direct;
+  uint8_t code;
+} fifa96_action_kick_append;
+
+fifa96_err_t fifa96_action_kick_event_append(uint8_t actor_action, uint8_t row0,
+                                             fifa96_action_kick_append *out);
+
+/* FU-139 §3.7: row 07 stage-0 target (native 0x8154C..0x815B5). When the
+ * record has a control slot and the slot word is 0x60 or 0x8000, x/z are the
+ * camera words plus the caller-supplied sign-extended type-offset table
+ * entries shifted left 4 (`resolved = 1`; the native arm leaves y untouched);
+ * otherwise the whole camera triple is copied (`resolved = 0`). */
+fifa96_err_t fifa96_action_kick_stage_target(uint8_t has_slot, uint16_t slot_word,
+                                             uint8_t type8,
+                                             const fifa96_action_vec3 *camera,
+                                             const int8_t *offset_x,
+                                             const int8_t *offset_z,
+                                             fifa96_action_vec3 *out,
+                                             uint8_t *resolved);
+
 typedef struct fifa96_action_locomotion {
   int32_t pos_x;
   int32_t pos_z;

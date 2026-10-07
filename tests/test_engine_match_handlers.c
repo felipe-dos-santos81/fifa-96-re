@@ -6,8 +6,12 @@
  * first cluster-A row: action 00 runs the FU-76 §3.1 locomotion step/target on
  * `mr->record` and reports OK; every other action row and all 34 non-zero phase
  * rows still resolve to an explicit UNSUPPORTED open-leg marker, except phase
- * 0x16 (the native zero/INT3 slot) which is NOT_FOUND by contract. The seam
- * itself must run a handler and propagate its result when one is present. */
+ * 0x16 (the native zero/INT3 slot) which is NOT_FOUND by contract. Task 6
+ * (FU-139, cluster B) derives the ball staging/resolver/possession/kick pure
+ * helpers but wires no additional row: 05/06/07/0F/18/21/23 still need the
+ * absent entity/ball pool and their unported arm support (FU-139 §5,
+ * OL-29..OL-32), so their expectations stay UNSUP. The seam itself must run a
+ * handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -25,7 +29,10 @@
  * FU-138 for row 00 (ported: `fifa96_match_action_00`). All other action rows
  * are UNSUPPORTED (1E is `unwired` — tested library body with no record/entity
  * binding yet; the other 43 are `not ported`, of which 27/29/2B/2C are open
- * legs with no static install arm). */
+ * legs with no static install arm). FU-139 (cluster B) keeps 05/06/07/0F and
+ * the possession/tackle rows 18/21/23 UNSUP: their record-visible cores have
+ * tested pure helpers, but the carrier/pursuit/kick/receive/resolution arms and
+ * the entity/ball pool they bind to are unported (FU-139 §5). */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,

@@ -305,9 +305,9 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 02 | 0x07DFCC | not ported (partial) | locomotion_restart_target; FU-77 §2.2; FU-138 restart_wait | OL-9; FU-138 OL-18 |
 | 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3; FU-138 counter/phase1_clamp | OL-8; FU-138 OL-19 |
 | 04 | 0x07E7C8 | not ported (partial) | locomotion_camera_lead; FU-77 §2.4 | OL-8 |
-| 05 | 0x07F194 | not ported (partial) | possession_reset/claim/timer; FU-78 §2/§3 | OL-8 |
-| 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row | OL-8 |
-| 07 | 0x0814B0 | not ported (partial) | kick_angle/kick_apply; FU-76 §3.2, FU-77 §2.7 | OL-8 |
+| 05 | 0x07F194 | not ported (partial) | possession_reset/claim/timer; FU-78 §2/§3; FU-139 staging/resolver | OL-8; FU-139 OL-29 |
+| 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row; FU-139 §2 | OL-8; FU-139 OL-30 |
+| 07 | 0x0814B0 | not ported (partial) | kick_angle/kick_apply + FU-139 event row/band/stage target; FU-76 §3.2, FU-77 §2.7 | OL-8; FU-139 OL-31 |
 | 08 | 0x081068 | not ported (partial) | FU-75 §1.6 chase-gate installer only | OL-8 |
 | 09 | 0x080A00 | not ported (partial) | FU-81 arm table 0x809F0; stage helpers | OL-9 |
 | 0A | 0x081738 | not ported | FU-76 §2; installer 0x7CDD8 has no xrefs | OL-14 |
@@ -315,7 +315,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 0C | 0x081C90 | not ported (partial) | FU-81 7-arm table 0x81C74 | OL-9 |
 | 0D | 0x08251C | not ported (partial) | FU-82 §3.4 4-arm table 0x8250C; FU-138 velocity_scale | OL-9; FU-138 OL-22 |
 | 0E | 0x082710 | not ported | FU-81 §2.1 gate/head; tackle helpers only install 0x0E | OL-9 |
-| 0F | 0x082AD0 | not ported | FU-76 §2; KICK 0x7B9C4 body | OL-8 |
+| 0F | 0x082AD0 | not ported | FU-76 §2; KICK 0x7B9C4 body; FU-139 §2 | OL-8; FU-139 OL-31 |
 | 10 | 0x0855F0 | not ported (partial) | FU-81 7-arm table 0x855B8 | OL-9 |
 | 11 | 0x085DE4 | not ported (partial) | FU-81 10-arm table 0x85DA0 | OL-9 |
 | 12 | 0x083D68 | not ported (partial) | FU-81 tables 0x83D2C/0x83D4C | OL-9 |
@@ -324,7 +324,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 15 | 0x087CD0 | not ported | FU-81 §2.1 head mis-decoded; FU-82 §1 stub bucket | OL-14 |
 | 16 | 0x084630 | not ported (partial) | sequence_marker/rng_event; FU-82 §3.6 | OL-9 |
 | 17 | 0x084730 | not ported (partial) | FU-81 4-arm table 0x84720 | OL-9 |
-| 18 | 0x0849B0 | not ported (partial) | duel_step/duel_split; FU-78 §7 | OL-11 |
+| 18 | 0x0849B0 | not ported (partial) | duel_step/duel_split; FU-78 §7; FU-139 §2 | OL-11; FU-139 OL-32 |
 | 19 | 0x0746E4 | not ported (partial) | keeper_hold_*; FU-79 §2 | OL-10 |
 | 1A | 0x07662C | not ported (partial) | keeper_reposition_a_gate; FU-79 §3 | OL-10 |
 | 1B | 0x076D28 | not ported (partial) | keeper_reposition_b_finish; FU-79 §4 | OL-10 |
@@ -333,9 +333,9 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 1E | 0x07550C | unwired | `fifa96_keeper_claim_place`; `test_keeper_bodies`; FU-79 §7/§11 | OL-1 |
 | 1F | 0x076380 | not ported (partial) | keeper_dive_target/arm_step; FU-79 §8 | OL-10 |
 | 20 | 0x084EEC | not ported (partial) | FU-82 §3.7 7-arm table 0x84ED0 | OL-9 |
-| 21 | 0x085214 | not ported (partial) | action_receive_step; FU-78 §4 | OL-11 |
+| 21 | 0x085214 | not ported (partial) | action_receive_step; FU-78 §4; FU-139 §2 | OL-11; FU-139 OL-32 |
 | 22 | 0x08539C | not ported (partial) | sequence_press_event; FU-82 §3.8 | OL-9 |
-| 23 | 0x082F84 | not ported (partial) | tackle_step/tackle_attempt; FU-78 §6 | OL-11 |
+| 23 | 0x082F84 | not ported (partial) | tackle_step/tackle_attempt; FU-78 §6; FU-139 §2 | OL-11; FU-139 OL-32 |
 | 24 | 0x086510 | not ported (partial) | sequence_lane/anim_byte; FU-82 §3.9 | OL-9 |
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
 | 26 | 0x0866F4 | not ported | arm 0x8D74D (§5.2); body unanalyzed (FU-76 §2 METRIC only) | OL-15 |
@@ -472,6 +472,22 @@ negated, matching the engine family convention (`fifa96_match_run_*`).
   `locomotion_phase1_clamp`, `sequence_velocity_scale`) as additional tested
   helper coverage. Their wiring stays open (01 → FU-138 OL-17, 02 → OL-18,
   03 → OL-19, 0D → OL-22).
+
+## Errata (M2 Task 6 / FU-139)
+
+* §6.1 action rows `05`/`06`/`07`/`0F`/`18`/`21`/`23` keep their class
+  (`not ported` / `not ported (partial)`); their evidence cells gain the FU-139
+  cross-refs and their leg cells the new actionable legs `OL-29`..`OL-32`
+  (carrying OL-1/OL-16). FU-139 §3.7 adds seven tested pure helpers
+  (ball clear/stage, reception target, kick range band, event-row resolver,
+  append selector, row-07 stage-0 target); FU-139 §4 records why no row is
+  wired (unported arms + absent entity/ball pool). §7 totals and the
+  dispatch-result paragraph are unchanged: `1 × FIFA96_OK` (action `00`),
+  `78 × -FIFA96_ERR_UNSUPPORTED`, `1 × -FIFA96_ERR_NOT_FOUND` (phase `0x16`).
+* The `fifa96_match_handlers.c` evidence strings for those rows are updated in
+  place (compact form of the new §6.1 cells); `test_engine_match_handlers.c`
+  keeps their dispatch expectations `UNSUPPORTED` and documents the FU-139
+  reason.
 
 ## Provenance
 

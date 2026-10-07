@@ -94,3 +94,43 @@ int fifa96_ball_pair_release(fifa96_ball_pair_actor *actor) {
   actor->has_ball = 0;
   return FIFA96_OK;
 }
+
+int fifa96_ball_pair_clear(fifa96_ball_pair_state *state) {
+  if (!state) return -FIFA96_ERR_INVALID;
+  state->actor = 0;
+  state->receiver = 0;
+  state->vector.x = 0;
+  state->vector.height = 0;
+  state->vector.z = 0;
+  state->traj = 0;
+  state->angle = 0;
+  state->flags = 0x20;
+  state->code = 2;
+  state->sub_code = 0;
+  state->reserved45 = 0;
+  state->ack = 0;
+  return FIFA96_OK;
+}
+
+int fifa96_ball_pair_stage(fifa96_ball_pair_state *state, int32_t actor,
+                           const fifa96_ball_pair_vector *vector, int16_t traj,
+                           uint8_t code) {
+  if (!state || !vector) return -FIFA96_ERR_INVALID;
+  state->actor = actor;
+  state->vector = *vector;
+  state->traj = traj;
+  state->code = code;
+  return FIFA96_OK;
+}
+
+int fifa96_ball_pair_receive_target(const fifa96_ball_pair_vec3i *base,
+                                    int32_t lead_x, int32_t lead_z,
+                                    fifa96_ball_pair_vec3i *out) {
+  if (!base || !out) return -FIFA96_ERR_INVALID;
+  out->x = (int32_t)((uint32_t)base->x +
+                     ((uint32_t)(lead_x >> 16) << 5));
+  out->y = base->y;
+  out->z = (int32_t)((uint32_t)base->z +
+                     ((uint32_t)(lead_z >> 16) << 5));
+  return FIFA96_OK;
+}

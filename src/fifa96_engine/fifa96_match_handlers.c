@@ -12,7 +12,11 @@
  * (no static install arm found, OL-15). Phase 0x16 is the native zero/INT3 slot
  * and returns -FIFA96_ERR_NOT_FOUND. Later G2 clusters replace a NULL fn with
  * their derived body and update the evidence string; they must not change the
- * code/class of a row without an FU-doc errata. */
+ * code/class of a row without an FU-doc errata. FU-139 (cluster B) derives the
+ * ball staging/resolver/possession/kick helpers (tested in
+ * test_ball_pairing/test_action_handlers) and leaves action rows
+ * 05/06/07/0F/18/21/23 unwired with their arms and the entity/ball pool open
+ * (FU-139 OL-29..OL-32, carrying OL-16); their evidence strings cite FU-139. */
 #include <stddef.h>
 
 #include "fifa96_engine/fifa96_match_handlers.h"
@@ -65,9 +69,12 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x03, NULL,
      "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, NULL, "FU-137 §6: FU-136 row 04: not ported (partial); locomotion_camera_lead; OL-8"},
-    {0x05, NULL, "FU-137 §6: FU-136 row 05: not ported (partial); possession_reset/claim/timer; OL-8"},
-    {0x06, NULL, "FU-137 §6: FU-136 row 06: not ported; FU-77 §2.6 derived, no port; OL-8"},
-    {0x07, NULL, "FU-137 §6: FU-136 row 07: not ported (partial); kick_angle/kick_apply; OL-8"},
+    {0x05, NULL,
+     "FU-139 §2/§5: row 05 not ported (partial); possession_reset/claim/timer/dribble_dir; carrier arms OL-29"},
+    {0x06, NULL,
+     "FU-139 §2/§5: row 06 not ported; FU-77 §2.6 597-insn pursuit body unported; OL-30"},
+    {0x07, NULL,
+     "FU-139 §2/§5: row 07 not ported (partial); kick_angle/apply + FU-139 resolver/stage target; kick machine OL-31"},
     {0x08, NULL, "FU-137 §6: FU-136 row 08: not ported (partial); chase-gate installer only; OL-8"},
     {0x09, NULL, "FU-137 §6: FU-136 row 09: not ported (partial); FU-81 arm table 0x809F0; OL-9"},
     {0x0A, NULL, "FU-137 §6: FU-136 row 0A: not ported; installer 0x7CDD8 has no xrefs; OL-14"},
@@ -76,7 +83,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x0D, NULL,
      "FU-137 §6: FU-136 row 0D: not ported (partial); FU-82 4-arm 0x8250C + FU-138 velocity_scale; OL-22"},
     {0x0E, NULL, "FU-137 §6: FU-136 row 0E: not ported; FU-81 gate/head, no body port; OL-9"},
-    {0x0F, NULL, "FU-137 §6: FU-136 row 0F: not ported; FU-76 KICK 0x7B9C4 body; OL-8"},
+    {0x0F, NULL,
+     "FU-139 §2/§5: row 0F not ported; KICK 0x7B9C4 body (FU-76 §2/§3.3); machine OL-31"},
     {0x10, NULL, "FU-137 §6: FU-136 row 10: not ported (partial); FU-81 7-arm table 0x855B8; OL-9"},
     {0x11, NULL, "FU-137 §6: FU-136 row 11: not ported (partial); FU-81 10-arm table 0x85DA0; OL-9"},
     {0x12, NULL, "FU-137 §6: FU-136 row 12: not ported (partial); FU-81 tables 0x83D2C/0x83D4C; OL-9"},
@@ -85,7 +93,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},
     {0x17, NULL, "FU-137 §6: FU-136 row 17: not ported (partial); FU-81 4-arm table 0x84720; OL-9"},
-    {0x18, NULL, "FU-137 §6: FU-136 row 18: not ported (partial); duel_step/duel_split; OL-11"},
+    {0x18, NULL,
+     "FU-139 §2/§5: row 18 not ported (partial); duel_step/duel_split; NSEARCH/SWAP + pool OL-32"},
     {0x19, NULL, "FU-137 §6: FU-136 row 19: not ported (partial); keeper_hold_* helpers; OL-10"},
     {0x1A, NULL, "FU-137 §6: FU-136 row 1A: not ported (partial); keeper_reposition_a_gate; OL-10"},
     {0x1B, NULL, "FU-137 §6: FU-136 row 1B: not ported (partial); keeper_reposition_b_finish; OL-10"},
@@ -94,9 +103,11 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x1E, NULL, "FU-137 §6: FU-136 row 1E: unwired; fifa96_keeper_claim_place tested; OL-1"},
     {0x1F, NULL, "FU-137 §6: FU-136 row 1F: not ported (partial); keeper_dive_target/arm_step; OL-10"},
     {0x20, NULL, "FU-137 §6: FU-136 row 20: not ported (partial); FU-82 7-arm table 0x84ED0; OL-9"},
-    {0x21, NULL, "FU-137 §6: FU-136 row 21: not ported (partial); action_receive_step; OL-11"},
+    {0x21, NULL,
+     "FU-139 §2/§5: row 21 not ported (partial); action_receive_step; claim arm + pool OL-32"},
     {0x22, NULL, "FU-137 §6: FU-136 row 22: not ported (partial); sequence_press_event; OL-9"},
-    {0x23, NULL, "FU-137 §6: FU-136 row 23: not ported (partial); tackle_step/tackle_attempt; OL-11"},
+    {0x23, NULL,
+     "FU-139 §2/§5: row 23 not ported (partial); tackle_step/tackle_attempt; target arm + pool OL-32"},
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},
     {0x25, NULL, "FU-137 §6: FU-136 row 25: not ported (partial); FU-82 7-arm table 0x880B0; OL-9"},
     {0x26, NULL, "FU-137 arm 0x8D74D (phase 13/14 non-controlled side); body 0x0866F4 unanalyzed; OL-15"},

@@ -25,6 +25,19 @@ _Static_assert(offsetof(fifa96_ball_pair_targets, team0_target) == 0, "team0_tar
 _Static_assert(offsetof(fifa96_ball_pair_targets, team0_second) == 4, "team0_second");
 _Static_assert(offsetof(fifa96_ball_pair_targets, team1_target) == 8, "team1_target");
 _Static_assert(offsetof(fifa96_ball_pair_targets, team1_second) == 12, "team1_second");
+_Static_assert(offsetof(fifa96_ball_pair_vec3i, x) == 0, "vec3i x");
+_Static_assert(offsetof(fifa96_ball_pair_vec3i, y) == 4, "vec3i y");
+_Static_assert(offsetof(fifa96_ball_pair_vec3i, z) == 8, "vec3i z");
+_Static_assert(offsetof(fifa96_ball_pair_state, actor) == 0, "actor");
+_Static_assert(offsetof(fifa96_ball_pair_state, receiver) == 4, "receiver");
+_Static_assert(offsetof(fifa96_ball_pair_state, vector) == 8, "vector");
+_Static_assert(offsetof(fifa96_ball_pair_state, traj) == 14, "traj");
+_Static_assert(offsetof(fifa96_ball_pair_state, angle) == 16, "angle");
+_Static_assert(offsetof(fifa96_ball_pair_state, flags) == 18, "flags");
+_Static_assert(offsetof(fifa96_ball_pair_state, code) == 19, "code");
+_Static_assert(offsetof(fifa96_ball_pair_state, sub_code) == 20, "sub_code");
+_Static_assert(offsetof(fifa96_ball_pair_state, reserved45) == 21, "reserved45");
+_Static_assert(offsetof(fifa96_ball_pair_state, ack) == 22, "ack");
 
 static fifa96_ball_pair_vector vector(int16_t x, int16_t height, int16_t z) {
   fifa96_ball_pair_vector v;
@@ -296,6 +309,62 @@ static void test_possess_and_release(void) {
   assert(fifa96_ball_pair_release(NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-139 §3.1: FU-73 §1 block clear (native 0x7A028..0x7A081): pointer/vector/
+ * trajectory/angle words zero, flags 0x20, code 2, the three tail bytes 0. */
+static void test_state_clear(void) {
+  fifa96_ball_pair_state s;
+  memset(&s, 0xAB, sizeof s);
+  assert(fifa96_ball_pair_clear(&s) == FIFA96_OK);
+  assert(s.actor == 0 && s.receiver == 0);
+  assert(s.vector.x == 0 && s.vector.height == 0 && s.vector.z == 0);
+  assert(s.traj == 0 && s.angle == 0);
+  assert(s.flags == 0x20 && s.code == 2);
+  assert(s.sub_code == 0 && s.reserved45 == 0 && s.ack == 0);
+  assert(fifa96_ball_pair_clear(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-139 §3.1: FU-73 §1 stage core (native 0x7A4D3..0x7A4EA): actor, the
+ * 6-byte vector, the trajectory word and the event code byte; the flag bytes
+ * are untouched by the core. */
+static void test_state_stage(void) {
+  fifa96_ball_pair_state s;
+  fifa96_ball_pair_vector v = vector(0x123, -0x456, 0x789);
+  memset(&s, 0, sizeof s);
+  s.flags = 0x11;
+  s.ack = 1;
+  assert(fifa96_ball_pair_stage(&s, 0x42, &v, 0x99, 7) == FIFA96_OK);
+  assert(s.actor == 0x42 && s.receiver == 0);
+  assert(s.vector.x == 0x123 && s.vector.height == -0x456);
+  assert(s.vector.z == 0x789);
+  assert(s.traj == 0x99 && s.code == 7);
+  assert(s.flags == 0x11 && s.ack == 1);
+  assert(fifa96_ball_pair_stage(NULL, 1, &v, 1, 1) == -FIFA96_ERR_INVALID);
+  assert(fifa96_ball_pair_stage(&s, 1, NULL, 1, 1) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-139 §3.3: FU-73 §3.3 reception lead (native 0x7A2FF..0x7A331): the base
+ * triple copied and x/z advanced by the camera-velocity words' high halves
+ * scaled by 0x20; y untouched. */
+static void test_receive_target(void) {
+  fifa96_ball_pair_vec3i base;
+  fifa96_ball_pair_vec3i out;
+  base.x = 100;
+  base.y = 200;
+  base.z = 300;
+  assert(fifa96_ball_pair_receive_target(&base, 0x00010000, 0xFFFF0000, &out) ==
+         FIFA96_OK);
+  assert(out.x == 100 + 0x20);
+  assert(out.y == 200);
+  assert(out.z == 300 - 0x20);
+  assert(fifa96_ball_pair_receive_target(&base, 0x8000, 0x7FFF, &out) ==
+         FIFA96_OK);
+  assert(out.x == 100 && out.y == 200 && out.z == 300);
+  assert(fifa96_ball_pair_receive_target(NULL, 0, 0, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_ball_pair_receive_target(&base, 0, 0, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_offset_zero_and_axes();
   test_offset_metric_branches();
@@ -315,6 +384,9 @@ int main(void) {
   test_assign_teams();
   test_assign_invalid();
   test_possess_and_release();
+  test_state_clear();
+  test_state_stage();
+  test_receive_target();
   puts("test_ball_pairing: ok");
   return 0;
 }

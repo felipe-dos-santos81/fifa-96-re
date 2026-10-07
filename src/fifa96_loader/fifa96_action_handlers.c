@@ -124,6 +124,122 @@ fifa96_err_t fifa96_action_kick_apply(fifa96_action_kick_ball *ball, const fifa9
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_action_kick_range_band(int8_t mode, int16_t ball_x,
+                                           uint8_t *band) {
+  if (!band) return -FIFA96_ERR_INVALID;
+  if (mode >= 0) {
+    *band = (uint8_t)mode;
+    return FIFA96_OK;
+  }
+  if (ball_x < 0x5A0) *band = 0x20;
+  else if (ball_x < 0x780) *band = 0x30;
+  else *band = 0x10;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_kick_event_row(const fifa96_action_kick_event *event,
+                                          const uint8_t *sector_table,
+                                          fifa96_action_kick_event_out *out) {
+  int32_t class_id;
+  int16_t sector;
+  uint32_t idx;
+  int16_t d;
+  if (!event || !sector_table || !out) return -FIFA96_ERR_INVALID;
+  out->found = 0;
+  out->table = 0;
+  out->index = 0;
+  class_id = event->code == 0x40 ? 2 : ((event->code & 0x10) ? 0 : 1);
+  if (event->x == 0 && event->z == 0) {
+    sector = (int16_t)(int8_t)event->sector_byte;
+  } else {
+    int32_t angle = 0;
+    fifa96_err_t rc = fifa96_action_kick_angle(event->x, event->z, &angle);
+    if (rc != FIFA96_OK) return rc;
+    sector = (int16_t)((uint16_t)((angle + 0x40) & 0x3FF) >> 7);
+  }
+  if (event->code == 0x40) {
+    idx = 0;
+  } else {
+    idx = ((uint32_t)sector_table[event->subtype] >>
+           ((uint8_t)sector & 0x1Fu)) &
+          1u;
+  }
+  d = (int16_t)(event->ball_height - (int16_t)event->height);
+  if (event->height != 0) {
+    if (d < 0x38) return FIFA96_OK;
+    out->table = FIFA96_ACTION_KICK_EVENT_TABLE_HEIGHT;
+    out->index = (uint32_t)(2 * class_id) + idx;
+  } else if (event->has_slot != 0 && event->active != 0 &&
+             event->phase == 2 && class_id == 1 && event->slot_counter < 7) {
+    out->table = FIFA96_ACTION_KICK_EVENT_TABLE_CARRY;
+    out->index = idx;
+  } else if (event->has_slot != 0 && event->code == 0x60) {
+    out->table = FIFA96_ACTION_KICK_EVENT_TABLE_CARRY;
+    out->index = idx + 2;
+  } else {
+    int32_t band = d < 0x20 ? 0 : (d < 0x70 ? 1 : 2);
+    out->table = event->active != 0 ? FIFA96_ACTION_KICK_EVENT_TABLE_ACTIVE
+                                    : FIFA96_ACTION_KICK_EVENT_TABLE_IDLE;
+    out->index = (uint32_t)(2 * band + 6 * class_id) + idx;
+  }
+  out->found = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_kick_event_append(uint8_t actor_action, uint8_t row0,
+                                             fifa96_action_kick_append *out) {
+  static const uint8_t row_codes[14] = {
+      0x0D, 0x0F, 0x11, 0x0A, 0x09, 0x14, 0x13,
+      0x16, 0x16, 0x03, 0x04, 0x04, 0x10, 0x0C,
+  };
+  if (!out) return -FIFA96_ERR_INVALID;
+  out->direct = 0;
+  out->code = 0;
+  switch (actor_action) {
+    case 0x11: out->code = 2; return FIFA96_OK;
+    case 0x12: out->code = 7; return FIFA96_OK;
+    case 0x13:
+    case 0x20: out->code = 8; return FIFA96_OK;
+    case 1:
+      out->direct = 1;
+      out->code = 1;
+      return FIFA96_OK;
+    case 0x10: out->code = 3; return FIFA96_OK;
+    default: break;
+  }
+  if (row0 >= 1 && row0 <= 0x0E) {
+    out->code = row_codes[row0 - 1];
+  } else {
+    out->direct = 1;
+    out->code = 0;
+  }
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_kick_stage_target(uint8_t has_slot, uint16_t slot_word,
+                                             uint8_t type8,
+                                             const fifa96_action_vec3 *camera,
+                                             const int8_t *offset_x,
+                                             const int8_t *offset_z,
+                                             fifa96_action_vec3 *out,
+                                             uint8_t *resolved) {
+  if (!camera || !offset_x || !offset_z || !out || !resolved)
+    return -FIFA96_ERR_INVALID;
+  if (has_slot != 0 && (slot_word == 0x60 || slot_word == 0x8000)) {
+    out->x = (int32_t)((uint32_t)camera->x +
+                       ((uint32_t)(int32_t)offset_x[type8] << 4));
+    out->z = (int32_t)((uint32_t)camera->z +
+                       ((uint32_t)(int32_t)offset_z[type8] << 4));
+    *resolved = 1;
+  } else {
+    out->x = camera->x;
+    out->y = camera->y;
+    out->z = camera->z;
+    *resolved = 0;
+  }
+  return FIFA96_OK;
+}
+
 static int16_t loco_facing_error(int16_t target, int16_t current) {
   int16_t d = (int16_t)((uint16_t)((uint16_t)target - (uint16_t)current) & 0x3FFu);
   if (d > 0x200) d = (int16_t)(d - 0x400);
