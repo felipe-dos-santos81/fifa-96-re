@@ -134,6 +134,14 @@ int fifa96_engine_boot(struct fifa96_engine *e) {
   fifa96_menu_art_init(e->assets);
   e->mode = e->intro_active ? FIFA96_ENGINE_MODE_INTRO : FIFA96_ENGINE_MODE_FRONTEND;
   e->plat->audio_open(e->plat->self, 22050u, 2);
+  /* Clock baseline: in real-time mode discard everything that happened before
+   * boot (platform init, asset mount, front-end init) so the first step does
+   * not fire a burst of catch-up PIT ticks. Headless runs keep the legacy
+   * last_ns = 0: their host clock (the null backend) is step-driven and
+   * already counts the first step as one full step_ns, so baselining there
+   * would shift the pinned one-tick-per-step cadence (test_engine_platform,
+   * test_engine_m1, test_engine_match_frame). */
+  if (!e->cfg.headless) e->last_ns = e->plat->now_ns(e->plat->self);
   e->booted = 1;
   return 0;
 }
