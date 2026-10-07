@@ -184,6 +184,37 @@ static void test_staged_exit_survives_period_end(void) {
   drop_fixture(f);
 }
 
+/* G1 live-loop exit: begin on the engine-owned run, force the period end the
+ * same way the boundary test does (1 s period, class-1 phase so the clock
+ * runs), then drive the real engine dispatch until it leaves MATCH. The 100 Hz
+ * trampoline marks the lifecycle OVER during a step's clock advance and the
+ * run step must drive resolve (OVER -> POST -> EXIT -> end) so the engine
+ * returns to FRONTEND with no live match. Bound: 1 s period = 100 steps; 300
+ * steps is three periods, so a run that never exits fails the loop. Finding 3
+ * (recorded): the selector-0/phase-0 default never ends a period without the
+ * Task 10 phase driver, hence the forced class-1 phase here. */
+static void test_live_period_end_exits_to_frontend(void) {
+  struct fixture f = make_fixture(10000000ull);
+  assert(fifa96_match_run_begin(&f.engine->match_run, f.engine, 0) == 0);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(f.engine->match == &f.engine->match_run);
+  assert(fifa96_match_run_set_period(&f.engine->match_run, 1, 1) == 0);
+  f.engine->match_run.state.phase = 2;   /* class 1: the clock always runs */
+
+  int steps = 0;
+  while (f.engine->mode == FIFA96_ENGINE_MODE_MATCH && steps < 3 * TICKS_PER_SECOND) {
+    assert(fifa96_engine_step(f.engine) == 0);
+    steps++;
+  }
+  assert(steps < 3 * TICKS_PER_SECOND);   /* the loop exits through the engine */
+  assert(steps >= TICKS_PER_SECOND);      /* ...after the forced period end */
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  assert(f.engine->match_run.running == 0);
+
+  drop_fixture(f);
+}
+
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
  * both, add_goal increments one side, invalid sides are rejected without a
  * write, and teardown/begin reset the pair. The original's trigger is the
@@ -224,6 +255,7 @@ int main(void) {
   test_set_period_and_active_resolve();
   test_period_end_resolve_returns_to_frontend();
   test_staged_exit_survives_period_end();
+  test_live_period_end_exits_to_frontend();
   test_score_plumbing();
   puts("test_engine_match_completion OK");
   return 0;

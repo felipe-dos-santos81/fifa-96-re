@@ -252,8 +252,12 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
 int fifa96_match_run_resolve(struct fifa96_match_run *mr);
 
 /* One engine step of the run: drives the lifecycle only (the frame body runs
- * on the registered 100 Hz tick hook). 0 while live, the end result
- * (1 = post-exit) on the exit step, or a -fifa96_err_t. */
+ * on the registered 100 Hz tick hook). 0 while live; the end result
+ * (1 = post-exit) when the step exits, either from a staged EXIT or from a
+ * period-end OVER, which this step drives through fifa96_match_run_resolve
+ * (OVER -> POST -> EXIT -> end, compressed into this step; POST screen pacing
+ * is an open leg); or a -fifa96_err_t. After the step has ended the run,
+ * further steps return -FIFA96_ERR_STATE. */
 int fifa96_match_run_step(struct fifa96_match_run *mr);
 
 /* Tear the match down through the lifecycle and clear the engine linkage.

@@ -153,7 +153,11 @@ static void test_engine_step_drives_frame_body(void) {
 
 /* Period end on a begun lifecycle: begin registers the 100 Hz hook, 100 PIT
  * ticks (10 ms each) grant the 30 frames that complete the 1 s period, and
- * the frame body marks that same begun lifecycle over. */
+ * the frame body marks that same begun lifecycle over. The 100th tick is
+ * driven through a direct frame-body call: an engine step would now resolve
+ * the OVER in the same step (G1 live exit, pinned by
+ * test_engine_match_completion::test_live_period_end_exits_to_frontend), and
+ * this test's contract is the frame body's mark_over itself. */
 static void test_begun_period_end_marks_over(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -166,11 +170,13 @@ static void test_begun_period_end_marks_over(void) {
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
 
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < 99; i++) {
     assert(fifa96_engine_step(f.engine) == 0);
   }
-  assert(mr.ticks == 100);
-  assert(mr.steps == 100);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);   /* period still open */
+  assert(fifa96_match_run_frame(&mr) == 1);             /* 30th grant: period end */
+  assert(mr.ticks == 99);                  /* 99 trampoline hits; direct call has no tick */
+  assert(mr.steps == 99);
   assert(mr.pace.pending == 30);
   assert(mr.state.period == 1);
   assert(mr.state.period_seconds == 0);

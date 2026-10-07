@@ -308,6 +308,17 @@ int fifa96_match_run_step(struct fifa96_match_run *mr) {
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->steps++;
   if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
+  /* G1 live exit path: the frame body runs on the registered 100 Hz trampoline
+   * during this engine step's clock advance, so a period end has just marked
+   * the FU-64 lifecycle OVER when the step runs. Drive the post-period chain
+   * through the single resolve entry (OVER -> POST -> EXIT -> run_end); the
+   * one-step compression is deliberate for G1 and POST screen pacing is an
+   * open leg for the Task 10 phase driver. Re-entry guard: resolve's run_end
+   * clears running and the engine linkage, so a later step returns
+   * -FIFA96_ERR_STATE and the engine's MATCH dispatch leaves through its
+   * !e->match arm instead of stepping an ended run. */
+  if (mr->lc.screen == FIFA96_MATCH_SCREEN_OVER)
+    return fifa96_match_run_resolve(mr);
   /* The frame body does NOT run here: the registered 100 Hz trampoline
    * (fifa96_match_run_tick) already consumed this step's PIT ticks from the
    * engine clock, so pace/state advance once per 10 ms regardless of how many
