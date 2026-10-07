@@ -38,9 +38,10 @@
 #define M1_STEP_CAP 5000
 #define M1_TRANSCRIPT_CAP (1u << 20)
 
-/* Menu CONFIRM, DOWN x2, CONFIRM (select), DECLINE, then QUIT. The null
- * backend releases one entry per poll and the engine polls once per step, so
- * each press/release is observed on its own step after the intro padding. */
+/* Skip-intro CONFIRM, menu DOWN x2, CONFIRM (select), DECLINE, then QUIT.
+ * The null backend releases one entry per poll and the engine polls once per
+ * step, so each press/release is observed on its own step; the intro padding
+ * delays the skip CONFIRM until after real intro playback. */
 static const fifa96_platform_key M1_NAV_KEYS[] = {
     {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
     {FIFA96_ENGINE_KEY_DOWN, 1},    {FIFA96_ENGINE_KEY_DOWN, 0},
