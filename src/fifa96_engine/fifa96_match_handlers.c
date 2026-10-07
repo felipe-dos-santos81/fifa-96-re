@@ -23,12 +23,20 @@
  * staging/resolver/possession/kick helpers (tested in
  * test_ball_pairing/test_action_handlers) and leaves action rows
  * 05/06/07/0F/18/21/23 unwired with their arms (FU-139 OL-29..OL-32; the pool
- * they also waited on is now FU-141); their evidence strings cite FU-139. */
+ * they also waited on is now FU-141); their evidence strings cite FU-139.
+ * FU-142b (cluster G) wires row 26: the FU-142a arm 0x8D74D, the ported
+ * `0x866F4..0x8681C` body (`fifa96_arm_26_step`, FU-142 Appendix C) and the
+ * FU-141 pool binding are all bounded, so the row flips to `ported` and its
+ * stage92/timer7b/lane results are repacked into the pool record by the frame
+ * body. The remaining cluster-G rows stay unwired (27/29/2C entry OL-48,
+ * 28/2A their body tasks). */
 #include <stddef.h>
+#include <string.h>
 
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
+#include "fifa96_loader/fifa96_arm_bodies.h"
 #include "fifa96_loader/fifa96_keeper.h"
 
 /* FU-138 §4: action 00 — the FU-76 §3.1 generic outfield step. The derived
@@ -106,6 +114,43 @@ static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* FU-142b (FU-142 Appendix C): action 0x26 — the cluster-G placement machine
+ * `0x866F4..0x8681C`. The derived step runs the FU-142a-installed record's
+ * stage latch: stage 0 waits out `15 * rec[+4][+0xE]` on the [0x157A64]-fed
+ * timer89, stage 1 aims the target at (0x780, ±6*(active>>1)) and, when the
+ * 0x8DCD4 lane (|target.z - pos.z|) is inside 0x20, retargets (0xCC0, 0) and
+ * advances to stage 2; stage > 1 only refreshes timer89/timer7b. `timer7b` is
+ * the 0x10F394[rec[+4][+0xD]] >> 1 read. The native body requests no install,
+ * so `install`/`ran` stay as staged; `player_d`/`player_e` stand in for the
+ * native rec[+4] descriptor bytes (Appendix C.5 open leg). */
+static int fifa96_match_action_26(struct fifa96_match_run *mr) {
+  struct fifa96_arm_record rec;
+  int rc;
+  memset(&rec, 0, sizeof rec);
+  rec.pos.x = mr->record.pos_x;
+  rec.pos.y = mr->record.pos_y;
+  rec.pos.z = mr->record.pos_z;
+  rec.target.x = mr->record.target_x;
+  rec.target.z = mr->record.target_z;
+  rec.timer89 = mr->record.timer89;
+  rec.timer7b = mr->record.timer7b;
+  rec.delta = mr->record.delta;
+  rec.active = mr->record.active;
+  rec.stage92 = mr->record.stage92;
+  rec.lane = mr->record.lane;
+  rec.player_d = mr->record.player_d;
+  rec.player_e = mr->record.player_e;
+  rc = fifa96_arm_26_step(&rec);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.target_x = rec.target.x;
+  mr->record.target_z = rec.target.z;
+  mr->record.timer89 = rec.timer89;
+  mr->record.timer7b = rec.timer7b;
+  mr->record.stage92 = rec.stage92;
+  mr->record.lane = rec.lane;
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -158,7 +203,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-139 §2/§5: row 23 not ported (partial); tackle_step/tackle_attempt; target arm + pool OL-32"},
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},
     {0x25, NULL, "FU-137 §6: FU-136 row 25: not ported (partial); FU-82 7-arm table 0x880B0; OL-9"},
-    {0x26, NULL, "FU-137 arm 0x8D74D (phase 13/14 non-controlled side); body 0x0866F4 unanalyzed; OL-15"},
+    {0x26, fifa96_match_action_26,
+     "FU-142b §C: row 26 ported (0x866F4..0x8681C + 0x8DCD4) over the pool; stage92/timer7b/lane repacked"},
     {0x27, NULL, "FU-137 open leg: no install arm found (EDX=0x27 at 0x756D5 is an anim arg); body 0x086820 cut; OL-15"},
     {0x28, NULL, "FU-137 arm 0x8D7CF (phase 13/14 player side); body 0x0870E8 unanalyzed; OL-15"},
     {0x29, NULL, "FU-137 open leg: no install arm or match-code 0x29 reference found; OL-15"},

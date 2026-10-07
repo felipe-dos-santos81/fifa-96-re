@@ -271,6 +271,18 @@ add_executable(test_phase_drivers tests/test_phase_drivers.c)
 target_link_libraries(test_phase_drivers PRIVATE fifa96_action_handlers fifa96_entity_update)
 add_test(NAME test_phase_drivers COMMAND test_phase_drivers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+# ── Cluster-G arms/bodies (FU-142b) ────────────────────────────────────────────
+add_library(fifa96_arm_helpers src/fifa96_loader/fifa96_arm_helpers.c)
+add_executable(test_arm_helpers tests/test_arm_helpers.c)
+target_link_libraries(test_arm_helpers PRIVATE fifa96_arm_helpers)
+add_test(NAME test_arm_helpers COMMAND test_arm_helpers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_library(fifa96_arm_bodies src/fifa96_loader/fifa96_arm_bodies.c)
+target_link_libraries(fifa96_arm_bodies PRIVATE fifa96_arm_helpers)
+add_executable(test_arm_bodies tests/test_arm_bodies.c)
+target_link_libraries(test_arm_bodies PRIVATE fifa96_arm_bodies fifa96_arm_helpers)
+add_test(NAME test_arm_bodies COMMAND test_arm_bodies WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_animation src/fifa96_loader/fifa96_animation.c)
 add_executable(test_animation tests/test_animation.c)
 target_link_libraries(test_animation PRIVATE fifa96_animation)
@@ -398,7 +410,7 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
-                                          fifa96_ball_pairing)
+                                          fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)

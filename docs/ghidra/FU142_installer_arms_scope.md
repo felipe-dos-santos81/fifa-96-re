@@ -196,6 +196,11 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (six bodies, ~1220 insns) but unported; each waits for its FU-142b..e task
   and for the unported helpers `0x8DCD4`, `0x79C50`, `0x6E598`, `0x513EC`,
   `0x7DAB4`, `0x6E1D0` (pure part covered by `fifa96_action_phase_cell`).
+  **Status (Task 3): row 26's body is ported (`fifa96_arm_26_step`, Appendix
+  C.2) with the shared helper `0x8DCD4` (`fifa96_arm_dist_stage`, C.3) and the
+  `0x36200` stub surface (C.4); row 26 is wired (`fifa96_match_action_26`, the
+  first cluster-G wiring), and the row's descriptor byte and stub-gate
+  remainders are OL-50/OL-51. Rows 27/28/29/2A/2C stay unported.**
 * **OL-48 — dynamic entry for 27/29/2C; 2B dead verdict.** No static install
   arm exists (FU-137 §5.3 re-cited); a runtime/reachability pass is the
   precondition for scheduling those three rows. 0x2B is confirmed a shared-RET
@@ -232,6 +237,12 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * First-hand instruction counts for the seven row windows are in §1; FU-137's
   "body unanalyzed/unported" cells can cite §1/§3 of this doc when they are
   updated.
+* **§2 rows 28/2A `0x36200` "stub"** — first-hand it is
+  `MOV [0x105FC4],EAX; RET` (5-byte instruction + RET), not a bare no-op; the
+  store gates the unported camera/coordinate step `FUN_00036208`
+  (`0x36211 CMP [0x105FC4],1; JNZ return`, FU-62 §3.3). Task 3 ports the
+  derived surface as a documented no-op (OL-51) because neither row 26 nor the
+  engine models `0x105FC4`; the callers' appendices (Task 7/8) pin the value.
 * **§5.1 loop bound** — FU-137's pseudo-code `for (i = first; i <=
   min(last,10); i++)` is off by one against the first-hand bytes: the native
   clamp is `last >= 0xB -> 0xB` (`0x8CEE2` `CMP ESI,0xB` / `0x8CEE7`
@@ -532,6 +543,138 @@ Write set of this appendix (Task 2): `include/fifa96_engine/fifa96_match_phase_m
 `src/fifa96_engine/fifa96_match_run.c`,
 `tests/test_engine_match_phase_machine.c`, `tests/test_engine_match_frame.c`,
 this appendix, the §6 OL-46/OL-49 updates and the §7 addition.
+
+## Appendix C (FU142b / M2 arms-and-wiring Task 3) — row 0x26 body + `0x8DCD4` helper + `0x36200` stub first-hand window
+
+Task 3 of the follow-up plan (`docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`)
+ports action row 0x26 (`0x866F4..0x8681C`) and its shared helper `FUN_0008DCD4`
+(`0x8DCD4..0x8DDBB`), produces the `0x36200` stub surface and performs the first
+cluster-G wiring (`fifa96_match_action_26`, table row 0x26 `fn` set). This
+appendix is its evidence gate: the exact fields, constants and branch sites
+below are read first-hand this slice and are what the port implements.
+
+### C.1 Tool calls (Ghidra read-only, explicit /FIFA96.EXE)
+
+* `get_function_by_address 0x866F4` — no function (table-referenced body), as
+  FU-142 §1 records;
+* `disassemble_bytes 0x866F4` (304 B) — the full 90-instruction body to the RET
+  at `0x8681C` plus the row-27 prologue (`instructions_total 95`);
+* `read_memory 0x110778` (8 B) — action-table entries `f4 66 08 00` (code 0x26
+  -> `0x000866F4`) and `20 68 08 00` (code 0x27 -> `0x00086820`);
+* `get_function_by_address 0x8DCD4` — defined, body `0x8DCD4..0x8DDBB` (61 insns);
+* `decompile_function 0x8DCD4` + `disassemble_function 0x8DCD4` — the octagonal
+  distance formula and the 6-byte out vector;
+* `read_memory 0x10F394` (40 B) — the 32-byte table behind `[0x157A38]`
+  (`06×8 07×8 0F 0F 0F 0E 0D 0D 0C 0B 0B 0A 09 09 08 07 07 06`; FU-84 §6
+  corroborates the pointer value `0xF394` installed by `FUN_00073CD0`);
+* `read_memory 0x157A38` (16 B) — zero in the file image (BSS; the runtime
+  pointer is installed by `FUN_00073CD0`), so the port resolves the indirection
+  to flat `0x10F394`;
+* `disassemble_bytes 0x36200` (16 B) — `A3 C4 5F 10 00 C3` =
+  `MOV [0x105FC4],EAX; RET`.
+
+No writes: no rename/comment/label/function/script/project save. Repo:
+`make check` 101/101 before, 103/103 after (two new suites).
+
+### C.2 Row 0x26 body `0x866F4..0x8681C` (site-annotated)
+
+Entry: EAX = record; no stack args. Prologue `PUSH EBX/ECX/EDX/ESI; MOV ECX,EAX`
+(`0x866F4..0x866F8`).
+
+| # | site | instruction (first-hand) | derived effect |
+|---|---|---|---|
+| 1 | `0x866FC..0x8670D` | `MOV EDX,[ECX+0x89]; XOR EAX,EAX; MOV AX,[0x157A64]; ADD EDX,EAX; MOV [ECX+0x89],EDX` | `timer89 += zero-extend(delta word)`, 32-bit wrap |
+| 2 | `0x8670A..0x86729` | `MOV EAX,[ECX+0x4]` (P); `MOV EAX,[EAX+0xA]; SAR 0x18` (`P[+0xD]`); `MOV EDX,[0x157A38]; MOV AL,[EDX+EAX]; AND 0xFF; SAR 1; MOV [ECX+0x7B],AX` | `timer7b = 0x10F394[rec[+4][+0xD]] >> 1` |
+| 3 | `0x8672D..0x86740` | `MOV AL,[ECX+0x92]; CMP AL,1; JC 0x8673E; JBE 0x86782` | latch: 0 -> stage-0 arm; 1 -> placement; >= 2 -> `POP…RET` (`0x86739..0x8673D`) |
+| 4 | stage 0 `0x86746..0x8677C` | `P=[ECX+4]; EDX=[P+0xB]; SAR 0x18` (`P[+0xE]`); `EAX=EDX<<4; EAX-=EDX; EAX<<=4; EAX>>=4` (=15·d); `CMP EAX,[ECX+0x89]; JG RET`; else `[ECX+0x89]=0; MOV AH,[ECX+0x92]; INC AH; MOV [ECX+0x92],AH` | wait until `timer89 >= 15 * rec[+4][+0xE]` (signed), then `timer89=0; stage92=1`; falls into the placement |
+| 5 | placement `0x86782..0x867C2` | `EDX=[ECX+0x8A]; SAR 0x19` (= `(int8)rec[+0x8D] >> 1`); `EAX=6·EDX`; `AL=[ECX+0x8D]&1`; `[ECX+0x4D]=0x780`; `[ECX+0x55]=0`; `EDX=MOVSX(DX)`; sign? `+` : `NEG`; `[ECX+0x55] += EDX` | `target.x=0x780`; `target.z = ±(int16)(6·((int8)active>>1))`, `+` when `active & 1`, `-` otherwise |
+| 6 | `0x867C4..0x867D1` | `EBX=&rec+0x65; EDX=&rec+0x4D; EAX=&rec+0x59; CALL 0x8DCD4` | helper writes `{distance +0x65, dx +0x67, dz +0x69}` |
+| 7 | `0x867D6..0x867F0` | `CMP word [ECX+0x69],0; JL negate; MOV EAX,[ECX+0x67]; SAR 0x10; CMP EAX,0x20; JGE RET` | `|lane| = |dz| = |target.z - pos.z|`; `>= 0x20` -> RET |
+| 8 | `0x867F2..0x8681C` | `[ECX+0x4D]=0xCC0; [ECX+0x55]=0; MOV DL,[ECX+0x92]; [ECX+0x89]=0; INC DL; MOV [ECX+0x92],DL`; `POP…RET` | `target=(0xCC0,0); timer89=0; stage92++` (byte wrap) |
+
+Constants: `0x780`, `0xCC0`, `0x20` lateral gate, `6` (`4d - d` then doubled),
+`15` (`d<<4 - d`), table `0x10F394`, delta word `0x157A64`. The body writes no
+install code and no `+0x9E`, so the derived `install`/`ran` staging passes
+through untouched.
+
+### C.3 The shared helper `FUN_0008DCD4` (`0x8DCD4..0x8DDBB`, 61 insns)
+
+Register contract (Watcom): EAX = from (position triple), EDX = to (target
+triple), EBX = out (`record+0x65`). Only the low words are read: `from[0]`,
+`from[4]` (i.e. `+0x59`, `+0x61`) and `to[0]`, `to[4]` (`+0x4D`, `+0x55`); the
+y components are never read.
+
+```
+dx = (int16)(to.x_word - from.x_word)
+dz = (int16)(to.z_word - from.z_word)
+out[1] = dx; out[2] = dz            ; the 6-byte {distance, dx, dz} layout FU-79 §2.9
+ma = |dx|; mb = |dz|                 ; 16-bit negate
+if ma < mb:  d = ma>>2; if (mb>>1) < ma: d = ((d + (ma>>1))>>1); d = d + mb
+elif mb < ma: d = mb>>2; tmp = ma; if (ma>>1) < mb: d = ((d + (mb>>1))>>1); d = d + tmp
+else:         d = ((ma>>1) + (ma>>2))>>1; d = d + ma
+out[0] = (int16)d
+```
+
+Two derived-surface notes:
+
+* the 16-bit truncations matter: `(0x7FFF, 0x7FFF) -> 45054 -> -20482`, pinned
+  by `test_arm_helpers::test_dist_stage_distance_wraps16`; the port keeps the
+  native short arithmetic step for step;
+* the C surface exposes `out_distance` and `out_lane` (the `+0x69` dz word,
+  sign-extended). The `+0x67` dx word has no Task-3 consumer; it is recorded
+  here as not exposed, and a later row body that reads it extends the surface
+  then (never repurposes `out_lane`).
+
+### C.4 The `0x36200` stub
+
+`0x36200`: `A3 C4 5F 10 00` `MOV [0x105FC4],EAX`; `C3` RET (5-byte instruction
++ RET). The store target gates the unported camera/coordinate step
+`FUN_00036208` (`0x36211 CMP [0x105FC4],1; JNZ return`, FU-62 §3.3). Neither
+row 0x26 (this task) nor the derived engine models `0x105FC4` or that camera
+step, so `fifa96_arm_stub_36200` is a **documented derived no-op** returning
+FIFA96_OK; the stored value's surface is deferred to the Task 7/8 appendices
+that port its callers (rows 28/2A).
+
+### C.5 Port mapping and derived surfaces
+
+* `fifa96_arm_helpers.{h,c}`: `fifa96_arm_vec`, `struct fifa96_arm_record` (all
+  cluster-G native fields by offset; Task 3 adds `delta`, `timer7b`,
+  `player_d`, `player_e`, `lane`), `fifa96_arm_dist_stage` (C.3).
+* `fifa96_arm_bodies.{h,c}`: `fifa96_arm_stub_36200` (C.4) and
+  `fifa96_arm_26_step` (C.2). Validation hardening: NULL `rec` or `player_d`
+  outside 0..31 returns `-FIFA96_ERR_INVALID` before any state write (the
+  native reads adjacent memory for a stray index; the derived table domain is
+  exactly 32 and the pool/record cannot produce a stray index).
+* Engine: `fifa96_match_run_record` gains `stage92`/`timer7b`/`lane` and the
+  `player_d`/`player_e` descriptor stand-ins; `match_run_dispatch_entity`
+  stages them (descriptor bytes as the derived 0 default) and repacks
+  `stage92`/`timer7b`/`lane`; `fifa96_match_action_26` maps the record through
+  `fifa96_arm_26_step`; action-table row 0x26 `fn` is set (first wiring), which
+  flips the FU-137 §6.1 class to `ported`.
+* Tested: `tests/test_arm_helpers.c` (`test_dist_stage_*`, 8 cases),
+  `tests/test_arm_bodies.c` (`test_arm_stub_36200`, `test_arm_26_*`, 11
+  cases), `tests/test_engine_match_handlers.c::test_action_26_runs_body` plus
+  the flipped `action_expect[0x26]`.
+
+### C.6 Open legs (numbered)
+
+* **OL-50 — row-26 descriptor bytes.** `rec[+0x4]` is a per-player descriptor
+  pointer whose dword `+0xA`/`+0xB` high bytes (`P[+0xD]`/`P[+0xE]`) feed
+  `timer7b` and the stage-0 gate. The FU-141 pool does not model it; the derived
+  staging supplies `player_d = player_e = 0`. The native descriptor's
+  producer/roster binding stays unported.
+* **OL-51 — `0x36200` gate global.** The `[0x105FC4]` store and its
+  `FUN_00036208` reader (FU-62 §3.3) are unported; the stub stays a derived
+  no-op until the row-28/2A callers' appendices land.
+
+Write set of this appendix (Task 3): `include/fifa96_loader/fifa96_arm_helpers.h`,
+`src/fifa96_loader/fifa96_arm_helpers.c`,
+`include/fifa96_loader/fifa96_arm_bodies.h`,
+`src/fifa96_loader/fifa96_arm_bodies.c`, `tests/test_arm_helpers.c`,
+`tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c`,
+`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`, `tests/test_engine_match_handlers.c`,
+`CMakeLists.txt`, this appendix and the §6 OL-47 / §7 additions.
 
 ## 8. No-write statement
 

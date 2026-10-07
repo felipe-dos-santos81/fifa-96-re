@@ -362,7 +362,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 23 | 0x082F84 | not ported (partial) | tackle_step/tackle_attempt; FU-78 §6; FU-139 §2 | OL-11; FU-139 OL-32 |
 | 24 | 0x086510 | not ported (partial) | sequence_lane/anim_byte; FU-82 §3.9 | OL-9 |
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
-| 26 | 0x0866F4 | not ported | arm 0x8D74D (§5.2); body unanalyzed (FU-76 §2 METRIC only) | OL-15 |
+| 26 | 0x0866F4 | ported (M2 arms-and-wiring Task 3 / FU-142 Appendix C) | `fifa96_match_action_26` binds `fifa96_arm_26_step` (`0x866F4..0x8681C` + `0x8DCD4`) to `mr->record`; arm 0x8D74D (§5.2); `test_engine_match_handlers::test_action_26_runs_body` | OL-50 (descriptor bytes) / OL-51 (`0x36200` gate) carry the row's remainder |
 | 27 | 0x086820 | **open leg** | no install arm (§5.3); FU-76 §2 listing cut | OL-15 |
 | 28 | 0x0870E8 | not ported | arm 0x8D7CF (§5.2); body unanalyzed (FU-76 §2) | OL-15 |
 | 29 | 0x0874E4 | **open leg** | no install arm and no match-code reference (§5.3) | OL-15 |
@@ -420,14 +420,14 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 2 (`00` FU-138; `1E` FU-140) | 0 | 39 | 4 (`27`, `29`, `2B`, `2C`) |
+| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 0 | 38 | 4 (`27`, `29`, `2B`, `2C`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **2** | **1** | **73** | **4** |
+| **dispatch total** | **80** | **3** | **1** | **72** | **4** |
 
-Dispatch results at this commit: **77 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
-ported rows + the 4 open legs; action `1E` no longer counts), **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **2 × `FIFA96_OK`** (actions `00`
-and `1E`); out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error
+Dispatch results at this commit: **76 × `-FIFA96_ERR_UNSUPPORTED`** (the 72 not
+ported rows + the 4 open legs; actions `1E` and `26` no longer count), **1 ×
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **3 × `FIFA96_OK`** (actions `00`,
+`1E` and `26`); out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error
 results are negated, matching the engine family convention
 (`fifa96_match_run_*`).
 
@@ -576,3 +576,27 @@ change.
   FU-141 OL-42..OL-44.
 * **§6.1 action rows `00`/`1E`** — stay `ported`; their evidence strings now
   cite FU-141 and the pool binding. No other row changes class (FU-141 §6).
+
+## Errata (M2 arms-and-wiring Task 3 / FU-142b)
+
+* §6.1 action row `26` moves from `not ported`/OL-15 to `ported`: Task 3 added
+  `fifa96_match_action_26`, binding the ported `fifa96_arm_26_step`
+  (`0x866F4..0x8681C`, 90 instructions) through the shared `0x8DCD4` helper
+  (`fifa96_arm_dist_stage`) to `mr->record`. The install arm 0x8D74D (§5.2)
+  was already derived by FU-142a, and the FU-141 pool now stages/repacks the
+  row's `stage92`/`timer7b`/`lane` fields; the row is the first cluster-G
+  wiring because its arm + body + pool binding are all bounded. The row's
+  remaining RE surface is the unmodeled `rec[+0x4]` descriptor bytes
+  (`P[+0xD]`/`P[+0xE]`, FU-142 OL-50) and the `0x36200` gate global
+  (FU-142 OL-51).
+* §7 totals and the dispatch-result paragraph are updated in place: action
+  ported 2 -> 3, not ported 39 -> 38; dispatch 77 -> 76 ×
+  `-FIFA96_ERR_UNSUPPORTED`, 2 -> 3 × `FIFA96_OK`, `-NOT_FOUND` unchanged
+  (phase `0x16`).
+* The `fifa96_match_run_record` staging surface gains the FU-142b fields
+  (`stage92`, `timer7b`, `lane`, `player_d`, `player_e`); the two descriptor
+  bytes are the derived 0 default until FU-142 OL-50 closes. Rows
+  27/28/29/2A/2C keep their classes (28/2A their FU-142d/e body tasks; 27/29/2C
+  the OL-48 entry verdict).
+* §5.2 is unchanged by this task; the `0x26` zero-extended side-test handling
+  stands as recorded in the Task 2 errata.

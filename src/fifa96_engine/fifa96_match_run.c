@@ -96,6 +96,12 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->has_slot = e->has_slot;
   r->has_ball = e->has_ball;
   r->stage = e->stage;
+  r->stage92 = e->stage92;
+  r->timer7b = e->timer7b;
+  r->lane = e->lane;
+  r->player_d = 0;   /* native rec[+4][+0xD]; the roster descriptor is
+                      * unmodeled by the pool (FU-142b Appendix C) */
+  r->player_e = 0;   /* native rec[+4][+0xE] (same) */
   r->place_offset_x = e->place_offset_x;
   r->place_offset_z = e->place_offset_z;
   r->ran = e->ran;
@@ -117,6 +123,9 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->target_x = r->target_x;
   e->target_z = r->target_z;
   e->timer89 = r->timer89;
+  e->stage92 = r->stage92;
+  e->timer7b = r->timer7b;
+  e->lane = r->lane;
   e->ran = r->ran;
   e->install = r->install;
   e->helper_request = r->helper_request;

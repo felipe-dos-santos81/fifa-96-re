@@ -112,7 +112,11 @@ struct fifa96_match_run_render {
  * same installer drain. `place_x/y/z` + `place_valid` are the row-1E
  * `FUN_000700F4` placement request (`0x15774C/50/54`), consumed by the frame
  * body as the FU-71 `fifa96_camera_init` reset; `helper_request` is the
- * `FUN_0007876C` slot-merge request, consumed by the FU-141 pool merge. */
+ * `FUN_0007876C` slot-merge request, consumed by the FU-141 pool merge. FU-142b
+ * adds the row-26 fields `stage92` (native +0x92, the 0/1/2 latch), `timer7b`
+ * (+0x7B), `lane` (+0x69 dz word) and the `player_d`/`player_e` stand-ins for
+ * the native `rec[+4]` descriptor bytes +0xD/+0xE (the roster descriptor is
+ * unmodeled; the pool path stages 0). */
 struct fifa96_match_run_record {
   int32_t pos_x;
   int32_t pos_y;       /* native +0x5D, FU-140 row 1E placement height */
@@ -131,6 +135,11 @@ struct fifa96_match_run_record {
   uint8_t helper_request;   /* FU-140 row 1E: FUN_0007876C slot-merge request */
   uint8_t controlled;       /* FU-140 row 1E: native [0x157A83] = rec */
   uint8_t stage;            /* native +0x8F stage byte (FU-140 row 1E) */
+  uint8_t stage92;          /* native +0x92 stage latch (FU-142b row 26) */
+  uint16_t timer7b;         /* native +0x7B (FU-142b row 26) */
+  int32_t lane;             /* native +0x69 dz word, sign-extended (FU-142b) */
+  int8_t player_d;          /* rec[+4][+0xD] table index (FU-142b row 26) */
+  int8_t player_e;          /* rec[+4][+0xE] stage-0 gate (FU-142b row 26) */
   int8_t dir_x;
   int8_t dir_z;
   int8_t place_offset_x;    /* caller-supplied 0x10F334[type8] (FU-140) */
