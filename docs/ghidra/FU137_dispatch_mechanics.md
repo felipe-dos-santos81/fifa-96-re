@@ -769,7 +769,7 @@ change.
   FU-142e body task) and the 0x28 body window.
 * `tests/test_engine_match_handlers.c` gains `test_action_28_runs_body` and
   flips `action_expect[0x28]` to `FIFA96_OK`; `tests/test_arm_bodies.c` gains
-  `test_arm_28_*` (18 cases); `tests/test_engine_match_frame.c` gains
+  `test_arm_28_*` (16 cases); `tests/test_engine_match_frame.c` gains
   `test_action_28_repack_round_trips_fields` (pool staging/repack round-trip:
   scratch persistence, `type`, the resolved chosen triple and the latches).
 * The `fifa96_arm_record` view gains the row-28 scratch/global/chosen fields;

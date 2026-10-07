@@ -1525,7 +1525,7 @@ copies land at `[ESP]` (`0x7D8C0`) and `[ESP+0x10]` (`0x7D8B0`), so the
   `rng` -> `-FIFA96_ERR_INVALID` at that site (the native has no NULL
   concept); no-draw paths (arm 3/>3, gates below their thresholds) tolerate a
   NULL `rng`.
-* Tested: `tests/test_arm_bodies.c` (`test_arm_28_*`, 18 cases),
+* Tested: `tests/test_arm_bodies.c` (`test_arm_28_*`, 16 cases),
   `tests/test_engine_match_handlers.c::test_action_28_runs_body` and
   `tests/test_engine_match_frame.c::test_action_28_repack_round_trips_fields`
   (pool staging/repack round-trip: scratch persistence, `type`, the resolved
