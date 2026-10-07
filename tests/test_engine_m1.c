@@ -8,6 +8,18 @@
  * self-consistency instead, and the golden comparison is skipped so CI
  * without the asset still passes.
  *
+ * Step cadence: the null backend advances now_ns() by one step_ns per present
+ * and this test sets step_ns = 10 ms, so every engine step is exactly one
+ * 100 Hz PIT tick. Intro video plays at 15 frames per 100 ticks (FU-37) --
+ * frame 1 lands on step 7 (7 * 15 / 100 = 1) and each next frame ~6.7 steps
+ * later -- and the tape is consumed one entry per step (the engine polls once
+ * per step). The leading M1_INTRO_PAD_STEPS release-only entries are ignored
+ * during playback, so the skip CONFIRM reaches the engine only after 102
+ * real VIDEO/VID_INTR.TGV frames (the last at step 680); it aborts the rest
+ * of the stream and the navigation entries then drive the front-end. The
+ * golden therefore pins the real intro frames (distinct present-hash chain
+ * links, one per presented step) before the menu frames.
+ *
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m1 > tests/golden/engine/m1-frames.txt
  */
@@ -26,10 +38,10 @@
 #define M1_STEP_CAP 5000
 #define M1_TRANSCRIPT_CAP (1u << 20)
 
-/* Skip-intro CONFIRM, menu DOWN x2, CONFIRM (select), DECLINE, then QUIT.
- * The null backend releases one entry per poll and the engine polls once per
- * step, so each press/release is observed on its own step. */
-static const fifa96_platform_key M1_TAPE[] = {
+/* Menu CONFIRM, DOWN x2, CONFIRM (select), DECLINE, then QUIT. The null
+ * backend releases one entry per poll and the engine polls once per step, so
+ * each press/release is observed on its own step after the intro padding. */
+static const fifa96_platform_key M1_NAV_KEYS[] = {
     {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
     {FIFA96_ENGINE_KEY_DOWN, 1},    {FIFA96_ENGINE_KEY_DOWN, 0},
     {FIFA96_ENGINE_KEY_DOWN, 1},    {FIFA96_ENGINE_KEY_DOWN, 0},
@@ -38,10 +50,19 @@ static const fifa96_platform_key M1_TAPE[] = {
     {FIFA96_ENGINE_KEY_QUIT, 1},    {FIFA96_ENGINE_KEY_QUIT, 0},
 };
 
+/* Release-only padding consumed while the intro plays: 680 ignored entries at
+ * 10 ms per step carry playback through 102 decoded VID_INTR frames, after
+ * which the navigation CONFIRM aborts the intro instead of skipping it on
+ * step 1. */
+#define M1_INTRO_PAD_STEPS 680u
+#define M1_NAV_KEYS_LEN (sizeof M1_NAV_KEYS / sizeof M1_NAV_KEYS[0])
+#define M1_TAPE_LEN (M1_INTRO_PAD_STEPS + M1_NAV_KEYS_LEN)
+
 /* Every tape entry except the trailing QUIT pair. The engine must survive all
- * of them (navigation spread across steps) and quit on the QUIT press, so the
- * pre-quit steps alone present at least three front-end frames. */
-#define M1_PRE_QUIT_ENTRIES (sizeof M1_TAPE / sizeof M1_TAPE[0] - 2)
+ * of them (intro + navigation spread across steps) and quit on the QUIT
+ * press, so the pre-quit steps present the intro and at least three
+ * front-end frames. */
+#define M1_PRE_QUIT_ENTRIES (M1_TAPE_LEN - 2)
 _Static_assert(M1_PRE_QUIT_ENTRIES >= 4, "tape must present >= 3 front-end frames before quit");
 
 static int file_exists(const char *path) {
@@ -76,9 +97,14 @@ static char *slurp(const char *path, size_t *len) {
  * ISO and no-assets modes. */
 static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len,
                      struct fifa96_platform_null_stats *out_stats) {
+  fifa96_platform_key tape[M1_TAPE_LEN];
+  for (size_t i = 0; i < M1_INTRO_PAD_STEPS; i++)
+    tape[i] = (fifa96_platform_key){FIFA96_ENGINE_KEY_UP, 0};
+  memcpy(tape + M1_INTRO_PAD_STEPS, M1_NAV_KEYS, sizeof M1_NAV_KEYS);
+
   struct fifa96_platform_null_config pcfg = {0};
-  pcfg.tape = M1_TAPE;
-  pcfg.tape_len = sizeof M1_TAPE / sizeof M1_TAPE[0];
+  pcfg.tape = tape;
+  pcfg.tape_len = M1_TAPE_LEN;
   pcfg.step_ns = 10000000ull;   /* one 100 Hz PIT tick per step, deterministic */
   fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
   assert(plat != NULL);
