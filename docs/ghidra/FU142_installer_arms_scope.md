@@ -240,7 +240,8 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * **§2 rows 28/2A `0x36200` "stub"** — first-hand it is
   `MOV [0x105FC4],EAX; RET` (5-byte instruction + RET), not a bare no-op; the
   store gates the unported camera/coordinate step `FUN_00036208`
-  (`0x36211 CMP [0x105FC4],1; JNZ return`, FU-62 §3.3). Task 3 ports the
+  (`0x3621E CMP dword [0x105FC4],1; SETZ/JZ return`; the `0x36211` gate above
+  tests `[0x105FB4] < 0`, FU-62 §3.3). Task 3 ports the
   derived surface as a documented no-op (OL-51) because neither row 26 nor the
   engine models `0x105FC4`; the callers' appendices (Task 7/8) pin the value.
 * **§5.1 loop bound** — FU-137's pseudo-code `for (i = first; i <=
@@ -548,7 +549,7 @@ this appendix, the §6 OL-46/OL-49 updates and the §7 addition.
 
 Task 3 of the follow-up plan (`docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`)
 ports action row 0x26 (`0x866F4..0x8681C`) and its shared helper `FUN_0008DCD4`
-(`0x8DCD4..0x8DDBB`), produces the `0x36200` stub surface and performs the first
+(`0x8DCD4..0x8DD5B`), produces the `0x36200` stub surface and performs the first
 cluster-G wiring (`fifa96_match_action_26`, table row 0x26 `fn` set). This
 appendix is its evidence gate: the exact fields, constants and branch sites
 below are read first-hand this slice and are what the port implements.
@@ -561,7 +562,7 @@ below are read first-hand this slice and are what the port implements.
   at `0x8681C` plus the row-27 prologue (`instructions_total 95`);
 * `read_memory 0x110778` (8 B) — action-table entries `f4 66 08 00` (code 0x26
   -> `0x000866F4`) and `20 68 08 00` (code 0x27 -> `0x00086820`);
-* `get_function_by_address 0x8DCD4` — defined, body `0x8DCD4..0x8DDBB` (61 insns);
+* `get_function_by_address 0x8DCD4` — defined, body `0x8DCD4..0x8DD5B` (61 insns);
 * `decompile_function 0x8DCD4` + `disassemble_function 0x8DCD4` — the octagonal
   distance formula and the 6-byte out vector;
 * `read_memory 0x10F394` (40 B) — the 32-byte table behind `[0x157A38]`
@@ -597,7 +598,7 @@ Constants: `0x780`, `0xCC0`, `0x20` lateral gate, `6` (`4d - d` then doubled),
 install code and no `+0x9E`, so the derived `install`/`ran` staging passes
 through untouched.
 
-### C.3 The shared helper `FUN_0008DCD4` (`0x8DCD4..0x8DDBB`, 61 insns)
+### C.3 The shared helper `FUN_0008DCD4` (`0x8DCD4..0x8DD5B`, 61 insns)
 
 Register contract (Watcom): EAX = from (position triple), EDX = to (target
 triple), EBX = out (`record+0x65`). Only the low words are read: `from[0]`,
@@ -629,7 +630,8 @@ Two derived-surface notes:
 
 `0x36200`: `A3 C4 5F 10 00` `MOV [0x105FC4],EAX`; `C3` RET (5-byte instruction
 + RET). The store target gates the unported camera/coordinate step
-`FUN_00036208` (`0x36211 CMP [0x105FC4],1; JNZ return`, FU-62 §3.3). Neither
+`FUN_00036208` (`0x3621E CMP dword [0x105FC4],1; SETZ/JZ return`; the
+`0x36211` gate above tests `[0x105FB4] < 0`, FU-62 §3.3). Neither
 row 0x26 (this task) nor the derived engine models `0x105FC4` or that camera
 step, so `fifa96_arm_stub_36200` is a **documented derived no-op** returning
 FIFA96_OK; the stored value's surface is deferred to the Task 7/8 appendices
