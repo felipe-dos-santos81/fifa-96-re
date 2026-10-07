@@ -379,6 +379,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_frontend_run.c
   src/fifa96_engine/fifa96_match_bridge.c
   src/fifa96_engine/fifa96_match_run.c
+  src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
@@ -504,6 +505,14 @@ target_include_directories(test_engine_match_completion PRIVATE src)
 target_compile_options(test_engine_match_completion PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_completion PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_completion COMMAND test_engine_match_completion
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_handlers tests/test_engine_match_handlers.c)
+target_link_libraries(test_engine_match_handlers PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_handlers PRIVATE src)
+target_compile_options(test_engine_match_handlers PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_handlers PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_handlers COMMAND test_engine_match_handlers
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 find_package(SDL3 QUIET)
