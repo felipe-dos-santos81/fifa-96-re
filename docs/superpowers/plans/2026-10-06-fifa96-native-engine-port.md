@@ -980,7 +980,7 @@ int fifa96_intro_step(struct fifa96_intro *in, struct fifa96_surface *s);
 int fifa96_intro_done(const struct fifa96_intro *in);
 ```
 
-`fifa96_intro.c`: `start` calls `fifa96_vgt_player_init(&in->player, 320, 240, in->canvas, sizeof in->canvas, in->scratch, sizeof in->scratch, on_audio, in)`; `feed` calls `fifa96_vgt_player_feed`; `step` calls `fifa96_vgt_player_step`, and on a frame copies `frame->pixels` over `s->indexed` (row-major 320×240), calls `fifa96_surface_set_palette8(s, frame->palette)` when `palette_changed`, and returns 0; `done` returns `fifa96_vgt_player_ended`. `on_audio` forwards companion `1SNh/1SNd` chunks to the engine mixer when M2 wires it; for M1 it is a no-op (record as an open leg: audio during video, FU-37 §B).
+`fifa96_intro.c`: `start` calls `fifa96_vgt_player_init(&in->player, 320, 240, in->canvas, sizeof in->canvas, in->scratch, sizeof in->scratch, on_audio, in)`; `feed` calls `fifa96_vgt_player_feed`; `step` calls `fifa96_vgt_player_step`; on a frame it blits `frame->pixels` (`frame->width`×`frame->height`, row-major) into `s->indexed` at (0,0), copying `min(width,320)` pixels per row for `min(height,240)` rows — real VIDEO streams are arbitrary sizes (96×100 clips exist) — and errors only for `pixels_len < width*height`, zero dimensions, or dimensions exceeding the surface; then `fifa96_surface_set_palette8(s, frame->palette)` when `palette_changed`, and returns 0. `done` returns `fifa96_vgt_player_ended`. `on_audio` forwards companion `1SNh/1SNd` chunks to the engine mixer when M2 wires it; for M1 it is a no-op (open leg: audio during video, FU-37 §B).
 
 - [ ] **Step 4: Wire into engine boot/intro**
 

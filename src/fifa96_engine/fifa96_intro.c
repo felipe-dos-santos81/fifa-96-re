@@ -4,7 +4,6 @@
 
 #define FIFA96_INTRO_W 320u
 #define FIFA96_INTRO_H 240u
-#define FIFA96_INTRO_PIXELS (FIFA96_INTRO_W * FIFA96_INTRO_H)
 
 /* Companion 1SNh/1SNd audio is not mixed in M1; the player still consumes
  * the chunks so the video stream keeps advancing. Open leg: FU-37 §B. */
@@ -37,9 +36,17 @@ int fifa96_intro_step(struct fifa96_intro *in, struct fifa96_surface *s) {
   int r = fifa96_vgt_player_step(&in->player, &frame);
   if (r < 0) return r;
   if (r == 0) return 0;  /* stream ended (or already ended): surface untouched */
-  if (!frame.pixels || frame.pixels_len < FIFA96_INTRO_PIXELS)
+  uint32_t w = frame.width;
+  uint32_t h = frame.height;
+  if (w == 0 || h == 0 || w > FIFA96_INTRO_W || h > FIFA96_INTRO_H)
     return -(int)FIFA96_ERR_TRUNCATED;
-  memcpy(s->indexed, frame.pixels, FIFA96_INTRO_PIXELS);
+  size_t need = (size_t)w * (size_t)h;
+  if (!frame.pixels || frame.pixels_len < need) return -(int)FIFA96_ERR_TRUNCATED;
+  /* Blit the frame at (0,0); the region outside stays untouched. */
+  for (uint32_t y = 0; y < h; y++) {
+    memcpy(s->indexed + (size_t)y * FIFA96_INTRO_W,
+           frame.pixels + (size_t)y * w, w);
+  }
   if (frame.palette_changed) fifa96_surface_set_palette8(s, frame.palette);
   return 0;
 }
