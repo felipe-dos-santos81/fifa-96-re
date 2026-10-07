@@ -96,12 +96,15 @@ struct fifa96_match_run {
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
+  void *stage_owner;                             /* Task 2 staging arena (owned) */
 };
 
 /* Zero-init a run: lifecycle, pace, match state, input model, control slot,
- * presentation state (camera/window/display/scene, rendering disabled),
- * backend, counters and engine linkage. Must be called before the first begin
- * on a run. NULL is a no-op. */
+ * presentation state (camera/window/display/scene, rendering disabled), the
+ * staging-arena holder (assigned NULL, never freed: init accepts
+ * uninitialized memory, so a live arena must be released by end/begin/stage
+ * first), backend, counters and engine linkage. Must be called before the
+ * first begin on a run. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
 
 /* One match input poll: fold the engine key presses in `keys` (codes 1..9;
@@ -162,6 +165,41 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * or -FIFA96_ERR_STATE when enabled without the sprite assets (frames/banks/
  * sprite_data); no partial canvas is written on validation failure. */
 int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *s);
+
+/* Stage the match sprite assets for rendering (M2 Task 2). Reads the two
+ * caller-supplied ISO bank container paths through the run engine's mounted
+ * asset table (`fifa96_asset_lookup` + `fifa96_cache_get`), decodes each to
+ * its SHPI sprite banks (FU-86: a raw .fsh slice or a nested
+ * huff(0x31)->refpack(0x10)->tree(0x46) .qfs chain; the first stage is fed the
+ * container tail because the original huff reader is unbounded, FU-86 §3
+ * caveat/leg 9), then fills `render.frames` (FU-84 §4 5-byte records: duration
+ * 0x50, aux 0, sprite = frame index — the row-1 walk evidence; the real
+ * per-row tables live in the executable's object-4 data, FU-84 §3.1/§4, not on
+ * the ISO, open leg), `render.banks` (one record per BIGF entry, in container
+ * order; the FU-84 row +8 index selects the player container's slots; an entry
+ * the port cannot decode stays an unloaded NULL-handle slot, FU-85 §1.2) and
+ * `render.sprite_data` (one owned arena backing frames/banks), and sizes the
+ * FU-92 window to the full surface `s`. `render.enabled` becomes 1 only after
+ * the whole stage succeeds.
+ *
+ * Bank identity: FU-86 names art/playart.pvi as the player animation container
+ * (91 banks, its data cross-check quotes /ART/PLAYART.PVI from the retail ISO)
+ * and art/gameart0.pvi as the match art container (its cross-check quotes
+ * /ART/GAMEART0.PVI); which of the second container's banks serve the pitch
+ * stage is not derivable from the FU docs (numbered open leg), so the caller
+ * supplies both paths, as the interface requires.
+ *
+ * Idempotent: a re-stage builds the replacement arena first and swaps it in
+ * only on success. A failure leaves the run bit-identical (the previous stage,
+ * if any, stays live). The arena is owned by the run and released by the next
+ * successful stage, by begin (which resets presentation) and by end.
+ *
+ * Returns 0, -FIFA96_ERR_INVALID (NULL mr/s/path), -FIFA96_ERR_STATE (the run
+ * is not bound to a booted engine asset table), -FIFA96_ERR_NOT_FOUND (a bank
+ * path is absent from the table), or -FIFA96_ERR_UNSUPPORTED (a container is
+ * present but the port cannot reach sprite banks in it). */
+int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surface *s,
+                           const char *player_bank, const char *pitch_bank);
 
 /* One engine step of the run: drives the lifecycle only (the frame body runs
  * on the registered 100 Hz tick hook). 0 while live, the end result

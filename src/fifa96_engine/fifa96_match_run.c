@@ -1,8 +1,11 @@
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_projection.h"
+#include "fifa96_loader/fifa96_record.h"
 #include "fifa96_loader/fifa96_scene.h"
 #include "fifa96_loader/fifa96_sprite.h"
 
@@ -146,6 +149,23 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
 }
 
+/* Release the Task 2 staging arena. Runs only on initialized runs: init must
+ * accept uninitialized memory (tests memset 0xAA and re-init), so the owner
+ * slot is assigned NULL there and never freed; begin/end/stage call this only
+ * after init. A run whose render state was set without staging (owner NULL) is
+ * left untouched. */
+static void match_run_release_stage(struct fifa96_match_run *mr) {
+  if (!mr->stage_owner) return;
+  free(mr->stage_owner);
+  mr->stage_owner = NULL;
+  mr->render.frames = NULL;
+  mr->render.banks = NULL;
+  mr->render.bank_count = 0;
+  mr->render.sprite_data = NULL;
+  mr->render.sprite_data_len = 0;
+  mr->render.enabled = 0;
+}
+
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -160,6 +180,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->ticks = 0;
   mr->steps = 0;
   mr->running = 0;
+  mr->stage_owner = NULL;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -179,6 +200,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->steps = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
+  match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
   if (eng->surface) {
     /* FU-92: the derived window setter clamps to the surface; the live match's
@@ -253,6 +275,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   if (!mr->running) return -FIFA96_ERR_STATE;
   int rc = fifa96_match_lifecycle_end(&mr->lc, &mr->pace);
   struct fifa96_engine *eng = mr->engine;
+  match_run_release_stage(mr);
   mr->running = 0;
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
@@ -497,4 +520,329 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     }
   }
   return 0;
+}
+
+/* Task 2 asset staging (FU-84/85/86). The decode chain mirrors the game's
+ * resource path: a container record (`[selector 0xFB BE24 size payload]`) is
+ * decoded once, then the payload is a BIGF v2 directory (FU-41/FU-86 §2) whose
+ * entries are raw SHPI .fsh slices or nested record chains that decode to SHPI
+ * (FU-86 §3). Stage 1 is fed the container tail, not the bounded record slice:
+ * the original huff reader is unbounded and 10 PLAYART .qfs entries need the
+ * following bytes (FU-86 §3 caveat / leg 9); every other stage is exact. */
+#define MATCH_STAGE_DECODE_STAGES 4
+#define MATCH_STAGE_FRAME_SIZE 5
+#define MATCH_STAGE_FRAME_DURATION 0x50u   /* FU-84 §4 row 1 (walk) */
+
+/* One BIGF entry after decode: an owned SHPI image, or the unloaded slot the
+ * renderer skips (FU-85 §1.2: a NULL bank handle). */
+struct match_stage_item {
+  uint8_t *data;
+  uint32_t len;
+  uint32_t count;
+};
+
+struct match_stage_set {
+  struct match_stage_item *items;
+  uint32_t count;       /* slots = BIGF entry count (indices stay stable) */
+  uint32_t loaded;      /* slots with a decoded SHPI bank */
+  uint32_t max_frames;  /* largest SHPI frame count in the set */
+};
+
+static void match_stage_set_free(struct match_stage_set *set) {
+  if (set->items) {
+    for (uint32_t i = 0; i < set->count; i++) free(set->items[i].data);
+    free(set->items);
+  }
+  memset(set, 0, sizeof *set);
+}
+
+/* Decode a whole bank container to its BIGF v2 bytes: a raw BIGF file or the
+ * refpack record form both FU-86 containers use. Returns 0 with a
+ * caller-freeable buffer, -1 when the port cannot decode it. */
+static int match_stage_container(const uint8_t *file, size_t file_len, uint8_t **out,
+                                 size_t *out_len) {
+  *out = NULL;
+  *out_len = 0;
+  if (file_len >= 4 && memcmp(file, "BIGF", 4) == 0) {
+    uint8_t *copy = malloc(file_len);
+    if (!copy) return -1;
+    memcpy(copy, file, file_len);
+    *out = copy;
+    *out_len = file_len;
+    return 0;
+  }
+  if (file_len >= 5 && file[1] == 0xFB) {
+    size_t declared = ((size_t)file[2] << 16) | ((size_t)file[3] << 8) | (size_t)file[4];
+    if (declared == 0) return -1;
+    uint8_t *buf = malloc(declared);
+    if (!buf) return -1;
+    size_t n = 0;
+    if (fifa96_record_decode(file, file_len, buf, declared, &n) != 0) {
+      free(buf);
+      return -1;
+    }
+    *out = buf;
+    *out_len = n;
+    return 0;
+  }
+  return -1;
+}
+
+/* Decode one BIGF entry to a SHPI image. `entry_len` is the entry's bounded
+ * BIGF record size (used for the raw SHPI form, whose declared total equals it,
+ * FU-86 §4) and `raw_len` the container tail from the entry's offset (the
+ * stage-1 over-read allowance noted above). Returns 1 with an owned copy and
+ * its frame count, 0 when the entry is not a sprite bank (fonts, .dat tables),
+ * -1 when it is SHPI/record shaped but the port cannot decode it. */
+static int match_stage_entry(const uint8_t *raw, size_t entry_len, size_t raw_len,
+                             uint8_t **out, uint32_t *out_len, uint32_t *out_count) {
+  *out = NULL;
+  *out_len = 0;
+  *out_count = 0;
+  if (raw_len >= 4 && memcmp(raw, "SHPI", 4) == 0) {
+    fifa96_sprite_bank bank;
+    if (fifa96_sprite_bank_parse(raw, entry_len, &bank) != FIFA96_OK) return -1;
+    uint8_t *copy = malloc(bank.total_size);
+    if (!copy) return -1;
+    memcpy(copy, raw, bank.total_size);
+    *out = copy;
+    *out_len = bank.total_size;
+    *out_count = bank.count;
+    return 1;
+  }
+  if (raw_len < 5 || raw[1] != 0xFB) return 0;
+  const uint8_t *src = raw;
+  size_t src_len = raw_len;
+  uint8_t *cur = NULL;
+  for (int stage = 0; stage < MATCH_STAGE_DECODE_STAGES; stage++) {
+    if (src_len >= 4 && memcmp(src, "SHPI", 4) == 0) {
+      fifa96_sprite_bank bank;
+      if (fifa96_sprite_bank_parse(src, src_len, &bank) != FIFA96_OK) {
+        free(cur);
+        return -1;
+      }
+      uint8_t *copy = malloc(bank.total_size);
+      if (!copy) {
+        free(cur);
+        return -1;
+      }
+      memcpy(copy, src, bank.total_size);
+      free(cur);
+      *out = copy;
+      *out_len = bank.total_size;
+      *out_count = bank.count;
+      return 1;
+    }
+    if (src_len < 5 || src[1] != 0xFB) {
+      free(cur);
+      return -1;
+    }
+    size_t declared = ((size_t)src[2] << 16) | ((size_t)src[3] << 8) | (size_t)src[4];
+    if (declared == 0) {
+      free(cur);
+      return -1;
+    }
+    uint8_t *dst = malloc(declared);
+    if (!dst) {
+      free(cur);
+      return -1;
+    }
+    size_t n = 0;
+    if (fifa96_record_decode(src, src_len, dst, declared, &n) != 0) {
+      free(dst);
+      free(cur);
+      return -1;
+    }
+    free(cur);
+    cur = dst;
+    src = dst;
+    src_len = n;
+  }
+  free(cur);
+  return -1;
+}
+
+/* Decode every BIGF entry of one container into a slot-stable set: slot i is
+ * container entry i, so the player container's indices are exactly the FU-84
+ * row +8 bank indices (observed 0..89). Entries the port cannot decode stay
+ * unloaded slots, the renderer's skippable state (FU-85 §1.2). */
+static int match_stage_set_build(struct match_stage_set *set, const uint8_t *file,
+                                 size_t file_len) {
+  memset(set, 0, sizeof *set);
+  uint8_t *container = NULL;
+  size_t container_len = 0;
+  if (match_stage_container(file, file_len, &container, &container_len) != 0) return -1;
+  struct fifa96_bigf_info info;
+  if (fifa96_bigf_parse(container, container_len, &info) != FIFA96_OK) goto fail;
+  if (info.count == 0) goto fail;
+  set->items = calloc(info.count, sizeof *set->items);
+  if (!set->items) goto fail;
+  set->count = (uint32_t)info.count;
+  for (size_t i = 0; i < info.count; i++) {
+    uint32_t off = 0;
+    uint32_t size = 0;
+    if (fifa96_bigf_record(&info, i, &off, &size, NULL) != FIFA96_OK) goto fail;
+    uint8_t *bank = NULL;
+    uint32_t bank_len = 0;
+    uint32_t bank_count = 0;
+    int got = match_stage_entry(container + off, size, container_len - off, &bank,
+                                &bank_len, &bank_count);
+    if (got == 1) {
+      set->items[i].data = bank;
+      set->items[i].len = bank_len;
+      set->items[i].count = bank_count;
+      set->loaded++;
+      if (bank_count > set->max_frames) set->max_frames = bank_count;
+    } else if (got < 0) {
+      set->items[i].data = NULL;   /* shaped like a bank but undecodable */
+    }
+  }
+  free(container);
+  return 0;
+fail:
+  free(container);
+  match_stage_set_free(set);
+  return -1;
+}
+
+/* Round an arena cursor up to `align`. SHPI copies need 4 for the int32 offset
+ * table at SHPI+0x14 (FU-86 §4: directory entries {name[4], u32 offset}); the
+ * bank record array needs its natural alignment for UBSan-clean access. */
+static size_t match_stage_pad(size_t n, size_t align) {
+  return (n + align - 1u) & ~(align - 1u);
+}
+
+int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surface *s,
+                           const char *player_bank, const char *pitch_bank) {
+  struct match_stage_set player;
+  struct match_stage_set pitch;
+  struct fifa96_cache *cache;
+  const uint8_t *file;
+  size_t file_len;
+  uint32_t lba = 0;
+  uint32_t size = 0;
+  size_t frames_len;
+  size_t banks_off;
+  size_t data_off;
+  size_t data_len = 0;
+  size_t arena_len;
+  uint8_t *arena = NULL;
+  struct fifa96_render_bank *banks;
+  uint8_t *frames;
+  uint32_t total;
+  uint32_t max_frames;
+  int rc;
+
+  if (!mr || !s || !player_bank || !pitch_bank) return -FIFA96_ERR_INVALID;
+  if (!mr->engine || !mr->engine->assets) return -FIFA96_ERR_STATE;
+
+  memset(&player, 0, sizeof player);
+  memset(&pitch, 0, sizeof pitch);
+  cache = fifa96_cache_create(mr->engine->assets);
+  if (!cache) return -FIFA96_ERR_UNSUPPORTED;
+
+  /* Player animation container (FU-86 §1: PLAYART, 91 banks). */
+  if (fifa96_asset_lookup(mr->engine->assets, player_bank, &lba, &size) != FIFA96_OK) {
+    rc = -FIFA96_ERR_NOT_FOUND;
+    goto out_cache;
+  }
+  file = fifa96_cache_get(cache, player_bank, &file_len);
+  if (!file || file_len == 0 || match_stage_set_build(&player, file, file_len) != 0 ||
+      player.loaded == 0) {
+    rc = -FIFA96_ERR_UNSUPPORTED;
+    goto out_sets;
+  }
+
+  /* Second (pitch/match art) container (FU-86 §1: GAMEART0; identity open). */
+  if (fifa96_asset_lookup(mr->engine->assets, pitch_bank, &lba, &size) != FIFA96_OK) {
+    rc = -FIFA96_ERR_NOT_FOUND;
+    goto out_sets;
+  }
+  file = fifa96_cache_get(cache, pitch_bank, &file_len);
+  if (!file || file_len == 0 || match_stage_set_build(&pitch, file, file_len) != 0 ||
+      pitch.loaded == 0) {
+    rc = -FIFA96_ERR_UNSUPPORTED;
+    goto out_sets;
+  }
+
+  /* One arena owns the frame table, the bank records (bases/offset tables
+   * point into the SHPI copies) and the SHPI images. Nothing touches mr until
+   * the whole build succeeds. */
+  total = player.count + pitch.count;
+  max_frames = player.max_frames > pitch.max_frames ? player.max_frames : pitch.max_frames;
+  const size_t bank_align = _Alignof(struct fifa96_render_bank);
+  frames_len = (size_t)max_frames * MATCH_STAGE_FRAME_SIZE;
+  banks_off = match_stage_pad(frames_len, bank_align);
+  data_off = match_stage_pad(banks_off + (size_t)total * sizeof *banks, 4u);
+  for (uint32_t i = 0; i < player.count; i++)
+    if (player.items[i].data) data_len += match_stage_pad(player.items[i].len, 4u);
+  for (uint32_t i = 0; i < pitch.count; i++)
+    if (pitch.items[i].data) data_len += match_stage_pad(pitch.items[i].len, 4u);
+  if (data_off + data_len > 0xFFFFFFFFu) {
+    rc = -FIFA96_ERR_UNSUPPORTED;   /* sprite_data_len is 32-bit */
+    goto out_sets;
+  }
+  arena_len = data_off + data_len;
+  arena = calloc(1, arena_len);
+  if (!arena) {
+    rc = -FIFA96_ERR_UNSUPPORTED;
+    goto out_sets;
+  }
+  frames = arena;
+  banks = (struct fifa96_render_bank *)(void *)(arena + banks_off);
+
+  /* FU-84 §4 frame records: the row-1 walk evidence stores sprite = frame
+   * index with duration 0x50, so staging derives that identity table for the
+   * largest staged bank; the real per-row tables are executable object-4 data
+   * (0x10E200..0x10EF00), not ISO assets (open leg). */
+  for (uint32_t i = 0; i < max_frames; i++) {
+    frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 0] = (uint8_t)MATCH_STAGE_FRAME_DURATION;
+    frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 1] = 0;
+    frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 2] = 0;
+    frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 3] = 0;
+    frames[(size_t)i * MATCH_STAGE_FRAME_SIZE + 4] = (uint8_t)i;
+  }
+
+  size_t cursor = data_off;
+  uint32_t slot = 0;
+  const struct match_stage_set *sets[2] = { &player, &pitch };
+  for (int which = 0; which < 2; which++) {
+    const struct match_stage_set *set = sets[which];
+    for (uint32_t i = 0; i < set->count; i++, slot++) {
+      struct fifa96_render_bank *b = &banks[slot];
+      if (!set->items[i].data) continue;   /* unloaded slot stays zeroed */
+      uint8_t *copy = arena + cursor;
+      memcpy(copy, set->items[i].data, set->items[i].len);
+      b->base = copy;
+      b->offsets = (const int32_t *)(const void *)(copy + 0x14);
+      b->count = set->items[i].count;
+      b->step = fifa96_sprite_stride(slot, set->items[i].count);
+      cursor += match_stage_pad(set->items[i].len, 4u);
+    }
+  }
+
+  free(mr->stage_owner);
+  mr->stage_owner = arena;
+  struct fifa96_match_run_render *r = &mr->render;
+  r->frames = frames;
+  r->banks = banks;
+  r->bank_count = total;
+  r->fixed60 = NULL;   /* runtime-populated records, not ISO assets (FU-85 leg 8) */
+  r->fixed61 = NULL;
+  r->mirror = NULL;    /* 0x10F2E7 is executable data, not on the ISO (FU-85 §1.3) */
+  r->sprite_data = arena;
+  r->sprite_data_len = (uint32_t)arena_len;
+  (void)fifa96_window_init(&r->window, s->width, s->height);
+  (void)fifa96_window_define_full(&r->window, s->width, s->height);
+  r->enabled = 1;
+  arena = NULL;
+  rc = 0;
+
+out_sets:
+  match_stage_set_free(&player);
+  match_stage_set_free(&pitch);
+out_cache:
+  free(arena);
+  fifa96_cache_destroy(cache);
+  return rc;
 }

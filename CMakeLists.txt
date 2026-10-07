@@ -384,7 +384,8 @@ add_library(fifa96_engine
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
-                                          fifa96_frontend fifa96_sprite fifa96_match_lifecycle
+                                          fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
+                                          fifa96_match_lifecycle
                                           fifa96_match_pace fifa96_match_state fifa96_input
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window
@@ -487,6 +488,13 @@ target_include_directories(test_engine_match_bridge PRIVATE src)
 target_compile_options(test_engine_match_bridge PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_bridge PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_bridge COMMAND test_engine_match_bridge
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_staging tests/test_engine_match_staging.c)
+target_link_libraries(test_engine_match_staging PRIVATE fifa96_engine)
+target_compile_options(test_engine_match_staging PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_staging PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_staging COMMAND test_engine_match_staging
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 find_package(SDL3 QUIET)
