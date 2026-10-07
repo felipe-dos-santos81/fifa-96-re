@@ -9,7 +9,7 @@ CTEST = ctest
 FILE ?=
 ARGS ?= --help
 
-.PHONY: help configure build test check run clean rebuild tsr capture trace
+.PHONY: help configure build test check run game clean rebuild tsr capture trace
 
 # ── Build & test ───────────────────────────────────────────────────────────────
 
@@ -35,6 +35,10 @@ check: test ## Exactly the gate set: configure + strict build + full suite
 
 run: build ## Build and run the port on any input (make run FILE=game/FIFAPCCD96.iso; make run ARGS="--help")
 	@if [ -n "$(FILE)" ]; then ./$(BUILD)/fifa96_play auto "$(FILE)"; else ./$(BUILD)/fifa96_play $(ARGS); fi
+
+game: build ## Build and run the native engine (needs SDL3 + game/FIFAPCCD96.iso)
+	@test -x $(BUILD)/fifa96 || { echo "fifa96 not built (SDL3 missing)"; exit 1; }
+	./$(BUILD)/fifa96 $(if $(FILE),$(FILE),game/FIFAPCCD96.iso)
 
 # ── Maintenance ────────────────────────────────────────────────────────────────
 

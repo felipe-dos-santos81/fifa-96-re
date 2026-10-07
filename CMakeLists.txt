@@ -479,3 +479,20 @@ target_compile_options(test_engine_match_render PRIVATE -fsanitize=address,undef
 target_link_options(test_engine_match_render PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_render COMMAND test_engine_match_render
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+find_package(SDL3 QUIET)
+if(SDL3_FOUND)
+  message(STATUS "engine: SDL3 found -> building fifa96 + test_engine_sdl3")
+  add_executable(test_engine_sdl3 tests/test_engine_sdl3.c
+                 src/fifa96_engine/platform_sdl3.c)
+  target_link_libraries(test_engine_sdl3 PRIVATE fifa96_engine SDL3::SDL3)
+  target_compile_options(test_engine_sdl3 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+  target_link_options(test_engine_sdl3 PRIVATE -fsanitize=address,undefined)
+  add_test(NAME test_engine_sdl3 COMMAND test_engine_sdl3
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+  add_executable(fifa96 src/fifa96_engine/fifa96_main.c
+                 src/fifa96_engine/platform_sdl3.c)
+  target_link_libraries(fifa96 PRIVATE fifa96_engine SDL3::SDL3)
+else()
+  message(STATUS "engine: SDL3 NOT found -> headless-only build")
+endif()
