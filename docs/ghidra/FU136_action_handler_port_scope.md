@@ -29,11 +29,12 @@ unported, and the realistic remaining work is **~13 implementation tasks
   program where they differ. Data pointers in the native program are already
   resolved (`0x1106E0` holds runtime handler addresses, not raw `+0x10000`
   offsets).
-* **Ghidra read-only.** The only tool calls made on `/FIFA96.EXE` are
+* **Ghidra read-only.** The tool calls made on `/FIFA96.EXE` are
   `read_memory 0x1106E0` (180 B, 45 dwords), `read_memory 0x110794` (140 B,
-  35 dwords), `search_instructions 0x1106e0` and `search_instructions
-  0x110794`. No renames, comments, function creation, scripts or project
-  saves.
+  35 dwords), `search_instructions 0x1106e0`, `search_instructions 0x110794`,
+  plus (fix round 1) `get_function_by_address 0x8D807`,
+  `get_function_callers 0x8D098` and `disassemble_bytes 0x8D7D4..0x8D80C`.
+  No renames, comments, function creation, scripts or project saves.
 * **C-port verification is against the repo, not the docs.** Every "C symbol"
   cell was checked with `grep` over `src/` and `tests/`; every "test" cell
   names an existing `tests/*.c` binary registered in `CMakeLists.txt`. The
@@ -344,9 +345,12 @@ hand-over are the controller's next action, not this probe's.
 Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit):
 `read_memory 0x1106E0` (180 B), `read_memory 0x110794` (140 B),
 `search_instructions operand 0x1106e0` (1 match `FUN_0007D9A4 @ 0x7DA77`),
-`search_instructions operand 0x110794` (1 match `FUN_0006D920 @ 0x6D9B3`).
-No other Ghidra tool call was made; `/fifa96_le.bin` and `/fifa96.exe` were
-not touched.
+`search_instructions operand 0x110794` (1 match `FUN_0006D920 @ 0x6D9B3`);
+fix round 1 only: `get_function_by_address 0x8D807` (-> `FUN_0008D098`,
+`0x8D098..0x8D820`), `get_function_callers 0x8D098` (sole `FUN_000740A0`),
+`disassemble_bytes 0x8D7D4..0x8D80C` (the `EDX=0x2A` record-scan/install
+block). No other Ghidra tool call was made; `/fifa96_le.bin` and `/fifa96.exe`
+were not touched.
 
 Repo checks: `grep -rn` over `src/` and `tests/` for every cited symbol;
 `CMakeLists.txt` test registrations; `make check` = 89/89 (100%).
