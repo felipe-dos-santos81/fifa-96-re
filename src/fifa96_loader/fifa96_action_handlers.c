@@ -1215,7 +1215,7 @@ static uint8_t kick_decision(const fifa96_action_kick *s) {
   if (distance > 0xF0) return 0;
   if ((int16_t)distance > s->lane_word) return 0;
   if (s->pos_x < -0x1E0 && s->pos_x > s->camera_x) return 0;
-  if (s->pos_x > 0x1E0 && s->camera_x < s->pos_x) return 0;
+  if (s->pos_x > 0x1E0 && s->camera_x > s->pos_x) return 0;   /* 0x7E6C8 */
   if (s->side == 0u) {
     if ((int16_t)s->pos_z < 0x7B0) return 0;
   } else if (s->side == 1u) {
@@ -1317,7 +1317,7 @@ static fifa96_err_t kick_machine_07(fifa96_action_kick *s,
         return FIFA96_OK;
       }
     }
-    if (s->downgrade_gate != 0u && s->downgrade_word == 4u && si == 0x40)
+    if (s->downgrade_gate != 0u && s->downgrade_word == 4 && si == 0x40)
       si = 0x20;                                   /* 0x8161D..0x81637 */
     out->kick = 1;
     out->kick_mode = (uint8_t)(uint16_t)si;
@@ -1325,13 +1325,13 @@ static fifa96_err_t kick_machine_07(fifa96_action_kick *s,
     return FIFA96_OK;
     }
     /* 0x8164B..0x816E4: the post-kick opponent invoke. */
-    if (s->kick_staged != 0u && s->kick_z < 0x30 && s->timer89 < 5 &&
+    if (s->kick_staged != 0u && s->kick_traj < 0x30 && s->timer89 < 5 &&
         s->opp_present != 0u && s->opp_type == 6u && s->opp_has_slot == 0u &&
         s->opp_lane_word < 0xD0) {
       int32_t angle = 0;
       int32_t diff;
-      if (fifa96_action_kick_angle(s->opp_lane_word, s->opp_plane_word,
-                                   &angle) != FIFA96_OK)
+      if (fifa96_action_kick_angle(s->opp_angle_x, s->opp_angle_z, &angle) !=
+          FIFA96_OK)
         return -FIFA96_ERR_INVALID;
       diff = (int32_t)(((uint16_t)((uint16_t)angle -
                                    (uint16_t)s->opp_face_word)) &
@@ -1386,7 +1386,7 @@ static fifa96_err_t kick_machine_0F(fifa96_action_kick *s,
         FIFA96_OK)
       return -FIFA96_ERR_INVALID;
     out->camera_face = 1;
-    out->anim = (s->active != 0u) ? 0u : 0x26u;
+    out->anim = 0;   /* 0x6E598(active path); 0x26 is unreachable (0x82B21) */
     out->ran = 1;                                  /* 0x82BAA */
     s->timer89 = 0;
     s->stage92 = (uint8_t)(s->stage92 + 1u);
@@ -1450,7 +1450,10 @@ static fifa96_err_t kick_machine_0F(fifa96_action_kick *s,
       int16_t dx = (int16_t)((uint16_t)s->predictor_x - (uint16_t)s->pos_x);
       int16_t dz = (int16_t)((uint16_t)s->predictor_z - (uint16_t)s->pos_z);
       int16_t distance = (int16_t)fifa96_entity_distance(dx, dz);
-      if (distance <= s->lane_word) goto kick_reload;
+      if (distance <= s->lane_word) {   /* BX == 0 -> 0x82DA5 returns */
+        out->stage = s->stage92;
+        return FIFA96_OK;
+      }
     }
     /* 0x82D19..0x82D81: the corner staging (0x6DBCC code + cell, the camera
      * triple, the code-3/RNG mode and the face) then kick 2 with the slot

@@ -686,17 +686,51 @@ static void test_kick_target_clamp_and_angle_fold(void) {
   kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
   row10_set(rows[2] + 30, 2, 0x300, 0x500, 0, 0, 0);
   input.x = 0x200;     /* x < lo -> clamp to 0x300 then fold */
-  input.height = 0;    /* angle = kick_angle(0x300, 0) = 0x100 */
-  input.z = 0;
+  input.height = 0;    /* 0x7BD83: angle = kick_angle(word[0x15873A], */
+  input.z = 0;         /* word[0x15873C]) = kick_angle(0, 0) = 0x80 */
   assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
          FIFA96_OK);
   assert(out.staged == 1);
   assert(st.vector.x == 0x300);
-  /* 0x114E04 at angle 0x100: bit8 -> table[0x100] = 65536, bit9 clear;
-   * (0x300 * 65536 + 0x8000) >> 16 = 0x300.  angle+0x100 = 0x200: bit9 ->
-   * -table[0] = 0. */
-  assert(st.vector.height == 0x300);
-  assert(st.vector.z == 0);
+  /* Native derivation (0x7BD7A..0x7BE05, table 0x114E04): angle 0x80 ->
+   * bit8 = 0, bit9 = 0 -> idx 0x80 -> 46340; (0x300*46340 + 0x8000) >> 16 =
+   * 543.  angle+0x100 = 0x180 -> bit8 = 1 -> idx = 0x100 - 0x80 = 0x80 ->
+   * 46340, bit9 = 0 -> 543. */
+  assert(st.vector.height == 543);
+  assert(st.vector.z == 543);
+}
+
+/* The 0x114E04 index fold is bit8-sensitive: angle 0x180 (bit8 = 1) takes
+ * `idx = 0x100 - (angle & 0xFF)`, so speed 0x780 folds to 1358 and
+ * angle+0x100 = 0x280 (bit9 = 1) to -1358. */
+static void test_kick_target_bit8_fold(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  /* x 0x700 < lo 0x780 -> clamp; angle = kick_angle(1, -1) = 0x200 - 0x80 =
+   * 0x180 (0x7BD8C).  The resolver's x/z are the same (1, -1): class 0,
+   * sector = ((0x180 + 0x40) & 0x3FF) >> 7 = 3, idx 0, band 1 -> ACTIVE
+   * index 2 -> rows[2] + 20. */
+  row10_set(rows[2] + 20, 2, 0x780, 0x800, 0, 0, 0);
+  input.x = 0x700;
+  input.height = 1;
+  input.z = -1;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert(st.vector.x == 0x780);
+  /* Native: idx(0x180) = 0x80 -> 46340; (0x780*46340 + 0x8000) >> 16 = 1358.
+   * idx(0x280) = 0x80 with bit9 -> -46340; floor((0x780*-46340 + 0x8000) >>
+   * 16) = -1358. */
+  assert(st.vector.height == 1358);
+  assert(st.vector.z == -1358);
 }
 
 static void test_kick_target_code4_rng_divisor(void) {
@@ -711,14 +745,15 @@ static void test_kick_target_code4_rng_divisor(void) {
   fifa96_ball_pair_vector input;
   kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
   /* code 4, x stays 0x300: divisor = (rng & 0x7F) + 3. Seed 0 first draw
-   * 0x200 -> divisor 3; traj = dz + x/3 = 0x100 + 0x100 = 0x200. */
+   * 0x200 -> divisor 3; native 0x7BEB6 reads word[0x15873E] (traj), so
+   * traj = (0 + add 0x20) + 0x300/3 = 0x20 + 0x100 = 0x120. */
   row10_set(rows[2] + 30, 4, 0x100, 0x500, 0x20, 0, 0);
   input.x = 0x300;
   input.height = 0;
   input.z = 0x100;
   assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
          FIFA96_OK);
-  assert(st.traj == 0x200);
+  assert(st.traj == 0x120);
 
   /* An inactive code-4 stage is one of the 4/5/7 whole-block resets: the
    * RNG/divisor traj is written and then wiped by the FU-73 §1 clear (native
@@ -867,6 +902,7 @@ int main(void) {
   test_stage_tail_face_anim_and_slot();
   test_kick_target_resolves_and_stages();
   test_kick_target_clamp_and_angle_fold();
+  test_kick_target_bit8_fold();
   test_kick_target_code4_rng_divisor();
   test_kick_target_negative_band_and_no_row();
   test_kick_target_slot_dir_arm();

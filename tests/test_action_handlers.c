@@ -661,6 +661,27 @@ static void test_kick_machine_07_decision_and_post(void) {
   assert(out.kick == 0);
   assert(s.stage92 == 1);
 
+  /* The 0x7E6C8 camera-x gate is one-sided: pos_x 0x200 with camera_x 0x100
+   * passes (camera_x <= pos_x), camera_x 0x300 refuses. */
+  kick_state_init(&s, 0x07);
+  s.stage92 = 1;
+  s.is_team_cb = 1;
+  s.type = 0;
+  s.lane_word = 0x100;
+  s.pos_x = 0x200;
+  s.pos_z = 0x7B0;
+  s.camera_x = 0x100;
+  s.predictor_x = 0x210;
+  s.predictor_y = 0x30;
+  s.predictor_z = 0x7B0;
+  s.face_word7d = 0x100;
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
+  assert(out.defender_install == 1);
+  s.camera_x = 0x300;   /* camera_x > pos_x -> 0x7E6D0 fails */
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
+  assert(out.defender_install == 0);
+  assert(out.kick == 1);
+
   /* A refused decision (lane > 0x180) requests the kick; the
    * [0x14C32A]/[0x15B680]==4 downgrade turns SI 0x40 into 0x20. */
   kick_state_init(&s, 0x07);
@@ -672,30 +693,33 @@ static void test_kick_machine_07_decision_and_post(void) {
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.defender_install == 0);
   assert(out.kick == 1 && out.kick_mode == 0x20);
-  /* post-kick: staged z 0x20, timer 0, the opponent type-6 no-slot record
-   * with the facing match (angle 0x100 == opp face 0x100). */
+  /* post-kick: staged traj 0x20, timer 0, the opponent type-6 no-slot record
+   * with the (word[+0x6D], word[+0x6F]) angle matching word[+0x7D]. */
   s.kick_done = 1;
   s.kick_staged = 1;
-  s.kick_z = 0x20;
+  s.kick_traj = 0x20;
   s.timer89 = 0;
   s.opp_present = 1;
   s.opp_type = 6;
   s.opp_has_slot = 0;
   s.opp_lane_word = 0x80;
-  s.opp_plane_word = 0;
+  s.opp_angle_x = 1;    /* kick_angle(1, 0) == 0x100 */
+  s.opp_angle_z = 0;
   s.opp_face_word = 0x100;
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.opponent_invoke == 1);
   assert(s.timer89 == 0 && s.stage92 == 2);
 
-  /* The staged z >= 0x30 blocks the invoke. */
+  /* The staged traj >= 0x30 blocks the invoke. */
   s.kick_done = 1;
   s.kick_staged = 1;
-  s.kick_z = 0x30;
+  s.kick_traj = 0x30;
   s.opp_present = 1;
   s.opp_type = 6;
   s.opp_has_slot = 0;
   s.opp_lane_word = 0x80;
+  s.opp_angle_x = 1;
+  s.opp_angle_z = 0;
   s.opp_face_word = 0x100;
   s.stage92 = 1;
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
@@ -779,7 +803,9 @@ static void test_kick_machine_0F_reload_and_corner(void) {
   fifa96_action_kick_out out;
   struct fifa96_rng rng;
 
-  /* stage 1 straight to the timer reload. */
+  /* The reload (0x82DA7) only runs when a kick ran (BX != 0 at 0x82DA2):
+   * kick 1 first, then re-entry with kick_done = 1. word85 0x10, word87 4 ->
+   * 2*0x10 - 4 + 0x1E = 0x3A. */
   kick_state_init(&s, 0x0F);
   s.stage92 = 1;
   s.pos_y_word = 0x40;
@@ -787,19 +813,41 @@ static void test_kick_machine_0F_reload_and_corner(void) {
   s.lane_word = 0x20;
   s.bound_word = 0x40;
   s.timer81 = 0;
-  s.word85 = 0x10;
-  s.word87 = 4;
-  s.predictor_x = 0;
-  s.predictor_z = 0.5;
-  s.pos_x = 0;
-  s.pos_z = 0;
+  s.has_slot = 1;
+  s.slot_word6 = 0x60;
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.snap == 1);
+  assert(out.slot_restore == 1);
+  assert(out.kick == 1 && out.kick_mode == 0x60);
+  assert(out.timer81_set == 0);
+  s.kick_done = 1;
+  s.word85 = 0x10;
+  s.word87 = 4;
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.timer81_set == 1);
-  assert(out.timer81_reload == 0x20 - 4 + 0x1E);
-  assert(s.timer81 == (uint16_t)out.timer81_reload);
+  assert(out.timer81_reload == 0x3A);
+  assert(s.timer81 == 0x3A);
 
-  /* no slot with the merge gates -> slot_merge. */
+  /* No kick and predictor distance <= lane: BX == 0 -> 0x82DA5 returns
+   * without the reload. */
+  kick_state_init(&s, 0x0F);
+  s.stage92 = 1;
+  s.pos_y_word = 0x40;
+  s.ball_height = 0x40;
+  s.lane_word = 0x20;
+  s.bound_word = 0x40;
+  s.timer81 = 7;
+  s.predictor_x = 0x10;
+  s.predictor_z = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.word85 = 0x10;
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
+  assert(out.timer81_set == 0);
+  assert(s.timer81 == 7);
+
+  /* No slot with the merge gates and a near predictor: slot_merge, no
+   * reload (the 0x7876C request is independent of the kick). */
   kick_state_init(&s, 0x0F);
   s.stage92 = 1;
   s.pos_y_word = 0x40;
@@ -808,12 +856,15 @@ static void test_kick_machine_0F_reload_and_corner(void) {
   s.bound_word = 0x40;
   s.team_slot_pool = 1;
   s.merge_gate_1586d7 = 0;
-  s.word85 = 1;
+  s.predictor_x = 0x10;
+  s.predictor_z = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.slot_merge == 1);
-  assert(out.timer81_set == 1);
+  assert(out.timer81_set == 0);
 
-  /* a far predictor and a corner: code 2 with a seed-0 first draw 0x200 ->
+  /* A far predictor and a corner: code 2 with a seed-0 first draw 0x200 ->
    * (rng & 7) == 0 -> no face, mode 0x20. */
   kick_state_init(&s, 0x0F);
   s.stage92 = 1;
@@ -833,10 +884,11 @@ static void test_kick_machine_0F_reload_and_corner(void) {
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.corner_kick == 1);
   assert(out.corner_kick_mode == 0x20);
+  assert(out.corner_face == 0);
   assert(s.kick_vec_height == 0x100);
   assert(s.kick_vec_z == 0x200);
   assert(s.kick_vec_x == (int16_t)fifa96_entity_distance(0x100, 0x200));
-  /* after the corner kick the reload runs. */
+  /* after the corner kick (BX = 1) the reload runs. */
   s.kick_done = 2;
   s.word85 = 0x10;
   s.word87 = 0;

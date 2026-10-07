@@ -577,7 +577,7 @@ typedef struct fifa96_action_kick {
   uint8_t merge_gate_1586d7; /* byte[0x1586D7] != 0 blocks the merge */
   uint8_t team_mode_82b;     /* team[+0x82B] (row 0F corner mode) */
   uint8_t downgrade_gate;    /* byte[0x14C32A] (row 07 mode downgrade) */
-  uint16_t downgrade_word;   /* dword[0x15B680] == 4 (row 07 downgrade) */
+  int32_t downgrade_word;    /* dword[0x15B680] == 4 (row 07 downgrade) */
   uint8_t decision_excluded; /* rec == [0x1577CA] (0x7E600 gate) */
   uint8_t has_desc_e;        /* (int8)rec[+4][+0xE] (0x7E600 divisor) */
   uint8_t opp_target_present;/* [[team+0x7A6]+0x7B2] != 0 (0x7C990) */
@@ -585,7 +585,7 @@ typedef struct fifa96_action_kick {
   uint8_t team_target_present;/* [team+0x7B2] != 0 (0x7C990) */
   uint8_t team_target_carrier;/* [team+0x7B2]+0x9F bit 0 (0x7C990) */
   uint8_t post_kick;         /* in: the engine ran `out.kick` */
-  int16_t kick_z;            /* in: (int16)word[0x15873C] after the kick */
+  int16_t kick_traj;         /* in: word[0x15873E] after the kick (0x81654) */
   uint8_t kick_done;         /* in: 1 = kick 1 ran, 2 = corner kick ran */
   uint8_t kick_staged;       /* in: the kick request staged a row */
   uint8_t staged_code;       /* in: byte 0x158743 (row 07 SI / corner code) */
@@ -608,11 +608,12 @@ typedef struct fifa96_action_kick {
   int16_t kick_vec_z;        /* 0x15873C */
   struct fifa96_rng *rng;    /* row 0F corner face draw (0x92AC8) */
   /* row 07 opponent view ([[team+0x7A6]+0x7B2]) */
-  int16_t opp_lane_word;     /* opponent (int16)word[+0x6B] */
-  int16_t opp_plane_word;    /* opponent (int16)word[+0x6D] */
+  int16_t opp_lane_word;     /* opponent (int16)word[+0x6B] (the <0xD0 gate) */
   int16_t opp_face_word;     /* opponent (int16)word[+0x7D] */
   uint8_t opp_type;          /* opponent +0x8E>>24 */
   uint8_t opp_has_slot;      /* opponent +0x20 != 0 */
+  int16_t opp_angle_x;       /* opponent (int16)dword[+0x6D] = word[+0x6D] */
+  int16_t opp_angle_z;       /* opponent (int16)dword[+0x6F] = word[+0x6F] */
   /* row 0F opponent height gate ([[team+0x7A6]+0x7C7]) */
   uint8_t opp2_present;
   int16_t opp2_pos_y_word;   /* (int16)word[+0x5D] */

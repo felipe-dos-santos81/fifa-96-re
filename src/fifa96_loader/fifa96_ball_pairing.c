@@ -263,7 +263,7 @@ static int32_t kick_sin(int32_t angle) {
   int32_t bit9 = (int32_t)((u >> 9) & 1u);
   int32_t v;
   idx = (int32_t)(((uint32_t)idx ^ (0u - (uint32_t)bit8)) & 0xFFu);
-  idx -= bit8;
+  idx += bit8;   /* 0x7BDA9 SUB EAX,ECX with ECX = -bit8 */
   v = kick_sin_table[idx];
   return bit9 ? -v : v;
 }
@@ -472,7 +472,7 @@ static fifa96_err_t kick_arm_40(const fifa96_ball_kick_actor *actor,
   if ((int16_t)traj < 0x20) traj = 0x20;
   state->traj = (int16_t)traj;
   kick_triple(ctx, local.x, local.z, &state->vector);
-  if (fifa96_action_kick_angle(state->vector.x, state->vector.height, &angle) !=
+  if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
       FIFA96_OK)
     return -FIFA96_ERR_INVALID;
   if (fifa96_rng_step(rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
@@ -607,7 +607,7 @@ static fifa96_err_t kick_arm_20(const fifa96_ball_kick_actor *actor,
   state->vector.x = 0x5A0;
   {
     int32_t angle = 0;
-    if (fifa96_action_kick_angle(state->vector.x, state->vector.z, &angle) !=
+    if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
         FIFA96_OK)
       return -FIFA96_ERR_INVALID;
     state->vector.height = kick_fold(0x5A0, angle);
@@ -791,7 +791,7 @@ kick_modes:
     state->vector.x = lo;
     {
       int32_t angle = 0;
-      if (fifa96_action_kick_angle(state->vector.x, state->vector.height, &angle) !=
+      if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
           FIFA96_OK)
         return -FIFA96_ERR_INVALID;
       state->vector.height = kick_fold(state->vector.x, angle);
@@ -801,7 +801,7 @@ kick_modes:
     state->vector.x = hi;
     {
       int32_t angle = 0;
-      if (fifa96_action_kick_angle(state->vector.x, state->vector.height, &angle) !=
+      if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
           FIFA96_OK)
         return -FIFA96_ERR_INVALID;
       state->vector.height = kick_fold(state->vector.x, angle);
@@ -823,10 +823,10 @@ kick_modes:
     }
     if (divisor != 0) {
       state->traj =
-          (int16_t)(state->vector.z + (int16_t)state->vector.x / (int16_t)divisor);
+          (int16_t)(state->traj + (int16_t)state->vector.x / (int16_t)divisor);
     }
   }
-  if ((int16_t)state->vector.z > 0x460) state->traj = 0x460;
+  if ((int16_t)state->traj > 0x460) state->traj = 0x460;
   /* 0x7BEDE..0x7BF0A: the FUN_0007A490 stage + code-keyed tail. */
   {
     fifa96_ball_pair_vector staged = state->vector;

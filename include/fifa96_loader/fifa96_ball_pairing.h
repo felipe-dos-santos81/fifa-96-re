@@ -184,13 +184,15 @@ int fifa96_ball_pair_stage_tail(fifa96_ball_pair_state *state,
  *   - row application (`0x7BCB6..0x7BE0B`): code/sub-code/traj-add staging,
  *     the mode-0x30 override, the `0x14C1D4` 1.5×, the lower-first clamp and
  *     the `0x114E04` angle fold (the native idiom is ported exactly: the
- *     257-entry sine table, `FUN_000CD474` through the tested
+ *     257-entry sine table, `FUN_000CD474(word[0x15873A], word[0x15873C])` =
+ *     `(vector.height, vector.z)` through the tested
  *     `fifa96_action_kick_angle`, and `FUN_000795A4`'s `(*speed*value+0x8000)
  *     >>16`);
  *   - code-4 RNG/divisor (`0x7BE26..0x7BEC0`): the `row[0] == 4` arm
  *     (mode 0x40: `traj = 0x90 + (rng&7)*(0x10 - desc15)`; else the
- *     `(rng&0x7F)+3` divisor) and `traj = (int16)dz + (int16)x/divisor`;
- *   - the `0x460` cap and the final `fifa96_ball_pair_stage` +
+ *     `(rng&0x7F)+3` divisor) and `traj += (int16)vector.x/(int16)divisor`;
+ *   - the `0x460` cap on `word[0x15873E]` (traj) and the final
+ *     `fifa96_ball_pair_stage` +
  *     `fifa96_ball_pair_stage_tail` (native `FUN_0007A490`).
  * `out->receive` is the unported `FUN_0007A084` request and `out->slot_cb` the
  * unported `0x78B00` callback (both OL-62); everything else is ported. NULL
