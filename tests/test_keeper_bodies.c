@@ -29,6 +29,30 @@ _Static_assert(offsetof(fifa96_keeper_rep_a_out, install_code) == 0, "install_co
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, reset) == 1, "reset");
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, stage_advance) == 2, "stage_advance");
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, flag_9e) == 3, "flag_9e");
+_Static_assert(offsetof(fifa96_keeper_input, has_slot) == 0, "has_slot");
+_Static_assert(offsetof(fifa96_keeper_input, phase) == 1, "phase");
+_Static_assert(offsetof(fifa96_keeper_input, human_phase) == 2, "human_phase");
+_Static_assert(offsetof(fifa96_keeper_input, event_flag) == 3, "event_flag");
+_Static_assert(offsetof(fifa96_keeper_input, team_side) == 4, "team_side");
+_Static_assert(offsetof(fifa96_keeper_input, type8) == 5, "type8");
+_Static_assert(offsetof(fifa96_keeper_input, type_gate) == 6, "type_gate");
+_Static_assert(offsetof(fifa96_keeper_input, is_actor) == 7, "is_actor");
+_Static_assert(offsetof(fifa96_keeper_input, lane) == 8, "lane");
+_Static_assert(offsetof(fifa96_keeper_input, cam_x) == 12, "cam_x");
+_Static_assert(offsetof(fifa96_keeper_input, cam_y) == 16, "cam_y");
+_Static_assert(offsetof(fifa96_keeper_input, cam_z) == 20, "cam_z");
+_Static_assert(offsetof(fifa96_keeper_input, pos_x) == 24, "pos_x");
+_Static_assert(offsetof(fifa96_keeper_input, pos_z) == 28, "pos_z");
+_Static_assert(offsetof(fifa96_keeper_input, slot_dir_x) == 32, "slot_dir_x");
+_Static_assert(offsetof(fifa96_keeper_input, slot_dir_z) == 33, "slot_dir_z");
+_Static_assert(offsetof(fifa96_keeper_decision, install) == 0, "install");
+_Static_assert(offsetof(fifa96_keeper_decision, invoke) == 1, "invoke");
+_Static_assert(offsetof(fifa96_keeper_decision, copy_cam) == 2, "copy_cam");
+_Static_assert(offsetof(fifa96_keeper_decision, copy_pos) == 3, "copy_pos");
+_Static_assert(offsetof(fifa96_keeper_decision, clear_c5c) == 4, "clear_c5c");
+_Static_assert(offsetof(fifa96_keeper_decision, target_x) == 8, "target_x");
+_Static_assert(offsetof(fifa96_keeper_decision, target_y) == 12, "target_y");
+_Static_assert(offsetof(fifa96_keeper_decision, target_z) == 16, "target_z");
 
 static fifa96_keeper_point point(int32_t x, int32_t y, int32_t z) {
   fifa96_keeper_point p;
@@ -295,6 +319,220 @@ static void test_lunge_track(void) {
                                    NULL) == BODY_INVALID);
 }
 
+static void test_hold_fallback(void) {
+  fifa96_keeper_point cam = point(800, 7, 100);
+  fifa96_keeper_point out;
+  assert(fifa96_keeper_hold_fallback(&cam, 0, 0, 0x780, 0x9F1, 1, 0, 0, &out) == FIFA96_OK);
+  assert(out.x == 175 && out.y == 0 && out.z == -0x9F0);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x780, 0x9F1, 1, 0, 0, &out) == FIFA96_OK);
+  assert(out.z == 0x9F0);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, 0, 0, 0x9F1, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.z == -0x9F0);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0, 0x9F0, 1, 0, 0, &out) == FIFA96_OK);
+  assert(out.x == 175 && out.z == 0x9F0);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x77F, 0x9F1, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.x == 175);
+  cam = point(-800, 7, 100);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, 0, 0, 0, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.x == -175);
+  cam = point(0x8000, 0, 0);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, 0, 0, 0, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.x == 0x1C00);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0x10000000, 0, 0, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.z == 0xAE0);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, (int32_t)0xF0000000, 0, 0, 0, 0, 0,
+                                     &out) == FIFA96_OK);
+  assert(out.z == -0xAE0);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, (int32_t)0xFFF00000, 0, 0, 0, 0, 0,
+                                     &out) == FIFA96_OK);
+  assert(out.z == -0x9F1);
+
+  cam = point(10, 0, 0x9D0);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x77F, 0x9F1, 1, 0x00010000, 0x00030000,
+                                     &out) == FIFA96_OK);
+  assert(out.x == 106 && out.y == 0 && out.z == 0x9F0);
+  cam = point(0x1000, 0, -0x10);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x77F, 0x9F1, 1, 0x00010000, 0x00010000,
+                                     &out) == FIFA96_OK);
+  assert(out.x == 0xC0);
+  cam = point(100, 0, -0x10);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x77F, 0x9F1, 1, 0x00010000,
+                                     (int32_t)0xFFFF0000, &out) == FIFA96_OK);
+  assert(out.x == -0xC0);
+  cam = point(0, 0, 0);
+  assert(fifa96_keeper_hold_fallback(&cam, 1, 0, 0x77F, 0x9F1, 1, 0x0000FFFF, 0,
+                                     &out) == BODY_INVALID);
+  assert(fifa96_keeper_hold_fallback(NULL, 0, 0, 0, 0, 0, 0, 0, &out) == BODY_INVALID);
+  assert(fifa96_keeper_hold_fallback(&cam, 0, 0, 0, 0, 0, 0, 0, NULL) == BODY_INVALID);
+}
+
+static void test_arm_camera(void) {
+  fifa96_keeper_point target = point(-1, -1, -1);
+  uint8_t hook = 0xAA;
+  assert(fifa96_keeper_arm_camera(0, 0, 0, &target, &hook) == FIFA96_OK);
+  assert(target.x == 0 && target.y == 0 && target.z == -0xB10 && hook == 1);
+  assert(fifa96_keeper_arm_camera(0, 0, 0x10, &target, &hook) == FIFA96_OK);
+  assert(target.z == 0xB10 && hook == 1);
+  assert(fifa96_keeper_arm_camera(0, 1, 0, &target, &hook) == FIFA96_OK);
+  assert(target.z == 0xB10 && hook == 1);
+  assert(fifa96_keeper_arm_camera(1, 0, 0, &target, &hook) == FIFA96_OK);
+  assert(target.z == -0xB10 && hook == 0);
+  target = point(-1, -1, -1);
+  assert(fifa96_keeper_arm_camera(2, 0, 0, &target, &hook) == FIFA96_OK);
+  assert(target.x == -1 && target.y == -1 && target.z == -1 && hook == 0);
+  assert(fifa96_keeper_arm_camera(0, 0, 0, NULL, &hook) == BODY_INVALID);
+  assert(fifa96_keeper_arm_camera(0, 0, 0, &target, NULL) == BODY_INVALID);
+}
+
+static fifa96_keeper_input input_slot(uint8_t phase, uint8_t side) {
+  fifa96_keeper_input in;
+  in.has_slot = 1;
+  in.phase = phase;
+  in.human_phase = 0;
+  in.event_flag = 0;
+  in.team_side = side;
+  in.type8 = 0x19;
+  in.type_gate = 1;
+  in.is_actor = 0;
+  in.lane = 0;
+  in.cam_x = 0;
+  in.cam_y = 0;
+  in.cam_z = 0;
+  in.pos_x = 0;
+  in.pos_z = 0;
+  in.slot_dir_x = 0;
+  in.slot_dir_z = 0;
+  return in;
+}
+
+static void test_input_decide_gates(void) {
+  fifa96_keeper_decision d;
+  fifa96_keeper_input in = input_slot(2, 0);
+  in.has_slot = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0 && d.invoke == 0 && d.copy_cam == 0 && d.copy_pos == 0);
+  in = input_slot(2, 0);
+  in.lane = 0x61;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+  in.lane = 0x60;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 4 && d.invoke == 1 && d.target_x == 0 && d.target_z == 0);
+  in = input_slot(2, 0);
+  in.cam_x = 0x421;
+  in.lane = 0x60;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 4);
+  in = input_slot(5, 0);
+  in.lane = 0x60;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+  in = input_slot(5, 0);
+  in.human_phase = 1;
+  in.event_flag = 1;
+  in.lane = 0x40;
+  in.cam_x = 0x111;
+  in.cam_y = 0x222;
+  in.cam_z = 0x333;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19 && d.invoke == 1 && d.copy_cam == 1);
+  assert(d.target_x == 0x111 && d.target_y == 0x222 && d.target_z == 0x333);
+  in.human_phase = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+  in.human_phase = 1;
+  in.event_flag = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+}
+
+static void test_input_decide_camera_box(void) {
+  fifa96_keeper_decision d;
+  fifa96_keeper_input in = input_slot(2, 0);
+  in.cam_x = 0x420;
+  in.cam_z = -0x7B0;
+  in.lane = 0x40;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19 && d.copy_cam == 1);
+  in.cam_z = -0x7AF;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 4);
+  in = input_slot(2, 1);
+  in.cam_z = 0x7B0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19);
+  in.cam_z = 0x7AF;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 4);
+  in = input_slot(2, 0);
+  in.cam_x = -0x420;
+  in.cam_z = -0x7B0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19);
+  in.cam_x = -0x421;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 4);
+}
+
+static void test_input_decide_type_and_actor_gates(void) {
+  fifa96_keeper_decision d;
+  fifa96_keeper_input in = input_slot(2, 0);
+  in.cam_z = -0x7B0;
+  in.lane = 0x40;
+  in.type8 = 0x0A;
+  in.type_gate = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+  in.type_gate = 1;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19);
+  in.type8 = 0x1F;
+  in.type_gate = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x19);
+  in.type8 = 0x19;
+  in.type_gate = 1;
+  in.is_actor = 1;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+  in.is_actor = 0;
+  in.type8 = 5;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0);
+}
+
+static void test_input_decide_slot_direction(void) {
+  fifa96_keeper_decision d;
+  fifa96_keeper_input in = input_slot(2, 0);
+  in.cam_z = -0x7B0;
+  in.lane = 0x41;
+  in.pos_x = 0x100;
+  in.pos_z = 0x200;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x1C && d.copy_pos == 1 && d.copy_cam == 0);
+  assert(d.target_x == 0x100 && d.target_y == 0xA0 && d.target_z == 0x200);
+  in.slot_dir_z = 1;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x1C && d.copy_pos == 0 && d.clear_c5c == 1);
+  assert(d.target_x == 0x100 && d.target_y == 0x40 && d.target_z == 0x270);
+  in.slot_dir_z = -1;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.install == 0x1C);
+  assert(d.target_z == 0x190);
+  in.pos_z = 0xAA0;
+  in.slot_dir_z = 1;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.target_z == 0xAF0 && d.install == 0x1B);
+  in.slot_dir_x = -2;
+  in.pos_x = 0x100;
+  in.pos_z = 0x200;
+  in.slot_dir_z = 0;
+  assert(fifa96_keeper_input_decide(&in, &d) == FIFA96_OK);
+  assert(d.target_x == 0x20 && d.install == 0x1C);
+  assert(fifa96_keeper_input_decide(NULL, &d) == BODY_INVALID);
+  assert(fifa96_keeper_input_decide(&in, NULL) == BODY_INVALID);
+}
+
 int main(void) {
   test_distance();
   test_vec_from_delta();
@@ -309,6 +547,12 @@ int main(void) {
   test_reposition_a_gate();
   test_reposition_b_finish();
   test_lunge_track();
+  test_hold_fallback();
+  test_arm_camera();
+  test_input_decide_gates();
+  test_input_decide_camera_box();
+  test_input_decide_type_and_actor_gates();
+  test_input_decide_slot_direction();
   puts("test_keeper_bodies: all assertions passed");
   return 0;
 }

@@ -325,13 +325,13 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 16 | 0x084630 | not ported (partial) | sequence_marker/rng_event; FU-82 §3.6 | OL-9 |
 | 17 | 0x084730 | not ported (partial) | FU-81 4-arm table 0x84720 | OL-9 |
 | 18 | 0x0849B0 | not ported (partial) | duel_step/duel_split; FU-78 §7; FU-139 §2 | OL-11; FU-139 OL-32 |
-| 19 | 0x0746E4 | not ported (partial) | keeper_hold_*; FU-79 §2 | OL-10 |
-| 1A | 0x07662C | not ported (partial) | keeper_reposition_a_gate; FU-79 §3 | OL-10 |
-| 1B | 0x076D28 | not ported (partial) | keeper_reposition_b_finish; FU-79 §4 | OL-10 |
-| 1C | 0x077728 | not ported (partial) | keeper_lunge_track; FU-79 §5 | OL-10 |
-| 1D | 0x074EB0 | not ported (partial) | keeper_clear_vector; FU-79 §6 | OL-10 |
-| 1E | 0x07550C | unwired | `fifa96_keeper_claim_place`; `test_keeper_bodies`; FU-79 §7/§11 | OL-1 |
-| 1F | 0x076380 | not ported (partial) | keeper_dive_target/arm_step; FU-79 §8 | OL-10 |
+| 19 | 0x0746E4 | not ported (partial) | keeper_hold_* + FU-140 §3 fallback; FU-79 §2 | FU-140 OL-33 |
+| 1A | 0x07662C | not ported (partial) | keeper_reposition_a_gate; FU-79 §3; FU-140 §2 | FU-140 OL-34 |
+| 1B | 0x076D28 | not ported (partial) | keeper_reposition_b_finish; FU-79 §4; FU-140 §2 | FU-140 OL-34 |
+| 1C | 0x077728 | not ported (partial) | keeper_lunge_track; FU-79 §5; FU-140 §2 | FU-140 OL-35 |
+| 1D | 0x074EB0 | not ported (partial) | keeper_clear_vector; FU-79 §6; FU-140 §2 | FU-140 OL-35 |
+| 1E | 0x07550C | ported (M2 Task 7 / FU-140 §4) | `fifa96_match_action_1E` binds `fifa96_keeper_claim_place` to `mr->record` (FU-79 §7; `test_engine_match_handlers::test_action_1E_runs_claim_place`) | OL-37 closed for the record-visible body; slot-merge/camera/actor arms + record pool OL-37 (carries OL-16) |
+| 1F | 0x076380 | not ported (partial) | keeper_dive_target/arm_step + FU-140 §3 input_decide/arm_camera; FU-79 §8 | FU-140 OL-36 |
 | 20 | 0x084EEC | not ported (partial) | FU-82 §3.7 7-arm table 0x84ED0 | OL-9 |
 | 21 | 0x085214 | not ported (partial) | action_receive_step; FU-78 §4; FU-139 §2 | OL-11; FU-139 OL-32 |
 | 22 | 0x08539C | not ported (partial) | sequence_press_event; FU-82 §3.8 | OL-9 |
@@ -396,25 +396,27 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 1 (`00`, M2 Task 5 / FU-138) | 1 (`1E`) | 39 | 4 (`27`, `29`, `2B`, `2C`) |
+| action `0x1106E0` | 45 | 2 (`00` FU-138; `1E` FU-140) | 0 | 39 | 4 (`27`, `29`, `2B`, `2C`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **1** | **2** | **73** | **4** |
+| **dispatch total** | **80** | **2** | **1** | **73** | **4** |
 
-Dispatch results at this commit: **78 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
-ported rows + the 1 unwired action row `1E` + the 4 open legs), **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **1 × `FIFA96_OK`** (action `00`);
-out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are
-negated, matching the engine family convention (`fifa96_match_run_*`).
+Dispatch results at this commit: **77 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
+ported rows + the 4 open legs; action `1E` no longer counts), **1 ×
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **2 × `FIFA96_OK`** (actions `00`
+and `1E`); out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error
+results are negated, matching the engine family convention
+(`fifa96_match_run_*`).
 
 ## 8. Open legs
 
 1. **OL-1 — entity/record model and machine binding.** The 0xB2-stride record,
    its `[rec+0x18]` handler slot, and the record fields the machines stage
    (`+0x81`, `+0x89`, `+0x91`, `+0x92`, `+0x9A`, `+0x9E`, `+0x9F`) have no
-   engine surface, so action 1E's tested body cannot yet bind to a match run.
-   Task 5 (FU-138 §4) added the minimal one-record action surface and wired
-   action 00 through it; 1E still waits for the keeper row and the full record
-   pool (FU-138 OL-16).
+   engine surface. Task 5 (FU-138 §4) added the minimal one-record action
+   surface and wired action 00 through it; Task 7 (FU-140 §4) bound the keeper
+   claim row 1E to the same record (its own fields `+0x8F`/`+0x9B`/`+0x5D` and
+   derived request flags). Every other row still waits for the full record pool
+   (FU-138 OL-16, FU-140 OL-37).
 2. **OL-2 — installer tails/reset chain.** `FUN_0007DAB4` (reset/chooser),
    `FUN_0006E8E8`, `FUN_00079B1C`, `FUN_00079F3C`, `FUN_0007BF20` are not
    ported; handler side effects through them are absent.
@@ -431,7 +433,9 @@ negated, matching the engine family convention (`fifa96_match_run_*`).
    most scatter/duel bodies).
 8. **OL-8 — action bodies group B** (03, 04, 05, 06, 07, 08, 0F).
 9. **OL-9 — action bodies group C** (01, 02, 09, 0B–17, 20, 22, 24, 25).
-10. **OL-10 — keeper bodies** (19–1D, 1F) + `FUN_00076130` input handler.
+10. **OL-10 — keeper bodies** (19–1D, 1F) + `FUN_00076130` input handler;
+    FU-140 refines these into OL-33..OL-36 (row 1E's arms are OL-37) after
+    porting the pure parts.
 11. **OL-11 — duel/tackle/receive bodies** (18, 21, 23) + NSEARCH/SWAP.
 12. **OL-12 — entity frame chain** `FUN_0004B100`, control slots, camera/track.
 13. **OL-13 — phase bodies** (34 rows) + phase entry wrappers.
@@ -488,6 +492,25 @@ negated, matching the engine family convention (`fifa96_match_run_*`).
   place (compact form of the new §6.1 cells); `test_engine_match_handlers.c`
   keeps their dispatch expectations `UNSUPPORTED` and documents the FU-139
   reason.
+
+## Errata (M2 Task 7 / FU-140)
+
+* §6.1 action row `1E` moves from `unwired`/OL-1 to `ported`: Task 7 added
+  `fifa96_match_action_1E` (bound to the extended minimal `mr->record` surface,
+  FU-140 §4) and updated the §7 totals and dispatch-result paragraph in place.
+  The row's RE evidence is refined by FU-140 §2/§3 (the full 59-instruction
+  body re-read; `stage`/`has_ball`/`pos_y` fields and the `FUN_0007876C` /
+  `FUN_000700F4` request stand-ins). The record pool is FU-140 OL-37 = the
+  carried remainder of OL-1/OL-16.
+* Action rows `19`/`1A`/`1B`/`1C`/`1D`/`1F` keep their `not ported (partial)`
+  class; FU-140 §3 adds three tested pure helpers (`keeper_input_decide` for
+  `FUN_00076130`, `keeper_hold_fallback` for the row-19 weighted camera
+  fallback, `keeper_arm_camera` for the row-1F prologue) and re-numbers the
+  actionable legs OL-33..OL-37 (carrying OL-16). FU-140 corrects four FU-79
+  claims (FU-140 Errata).
+* The `fifa96_match_handlers.c` evidence strings for the keeper rows are
+  updated in place (compact form of the new §6.1 cells); the engine links
+  `fifa96_keeper` for the wired row.
 
 ## Provenance
 

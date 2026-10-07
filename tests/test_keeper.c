@@ -178,6 +178,36 @@ static void test_keeper_select_errors(void) {
   assert(fifa96_keeper_select_action(&s, 1, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-140 re-verification of the keeper machine forced-action tail
+ * (0x784EF..0x78576): the five rows are timer -> 0, phase/not-controlled ->
+ * 0x19, opponent type-5 -> 0x19, own type-5 -> keep current, else 4; the
+ * selection only reports a change when the row differs from the current
+ * action, and the type gate suppresses the whole tail. */
+static void test_keeper_forced_rows(void) {
+  fifa96_keeper_state s;
+  uint8_t next = 0xAA;
+  s = state(1, 2, 1, 0, 0, 0);
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 1 && next == 0);
+  s = state(0, 1, 1, 0, 0, 0);
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 1 && next == 0x19);
+  s = state(0, 2, 0, 0, 0, 0);
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 1 && next == 0x19);
+  s = state(0, 2, 1, 0, 1, 1);
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 1 && next == 0x19);
+  s = state(0, 2, 1, 1, 0, 0);
+  next = 0xAA;
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_keeper_select_action(&s, 1, 0x19, &next) == 0 && next == 0xAA);
+  s = state(0, 2, 1, 0, 0, 0);
+  assert(fifa96_keeper_select_action(&s, 1, 0x1A, &next) == 1 && next == 4);
+  next = 0xAA;
+  assert(fifa96_keeper_select_action(&s, 1, 4, &next) == 0 && next == 0xAA);
+  s = state(0, 2, 1, 0, 0, 0);
+  next = 0xAA;
+  assert(fifa96_keeper_select_action(&s, 0, 0x1A, &next) == 0 && next == 0xAA);
+}
+
 int main(void) {
   test_dispatch_order();
   test_dispatch_single_and_empty();
@@ -187,6 +217,7 @@ int main(void) {
   test_keeper_select_phase_and_control();
   test_keeper_select_opponent_and_own_type();
   test_keeper_select_errors();
+  test_keeper_forced_rows();
   puts("test_keeper: all assertions passed");
   return 0;
 }

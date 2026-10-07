@@ -4,13 +4,15 @@
  * `FUN_0007D9A4 @ 0x7DA77`) and phase `0x110794[35]` (phases 0x00..0x22, sole
  * reader `FUN_0006D920 @ 0x6D9B3`) — FU-137 §1/§2. Task 5 (FU-138) wires the
  * first cluster-A row: action 00 runs the FU-76 §3.1 locomotion step/target on
- * `mr->record` and reports OK; every other action row and all 34 non-zero phase
- * rows still resolve to an explicit UNSUPPORTED open-leg marker, except phase
- * 0x16 (the native zero/INT3 slot) which is NOT_FOUND by contract. Task 6
- * (FU-139, cluster B) derives the ball staging/resolver/possession/kick pure
- * helpers but wires no additional row: 05/06/07/0F/18/21/23 still need the
- * absent entity/ball pool and their unported arm support (FU-139 §5,
- * OL-29..OL-32), so their expectations stay UNSUP. The seam itself must run a
+ * `mr->record` and reports OK. Task 7 (FU-140, cluster C) wires the keeper's
+ * fully linear claim/throw row 1E (`fifa96_keeper_claim_place` on `mr->record`);
+ * the other six keeper rows stay UNSUPPORTED with their arm/pool legs. Every
+ * other action row and all 34 non-zero phase rows still resolve to an explicit
+ * UNSUPPORTED open-leg marker, except phase 0x16 (the native zero/INT3 slot)
+ * which is NOT_FOUND by contract. Task 6 (FU-139, cluster B) derives the ball
+ * staging/resolver/possession/kick pure helpers but wires no additional row:
+ * 05/06/07/0F/18/21/23 still need the absent entity/ball pool and their
+ * unported arm support (FU-139 §5, OL-29..OL-32). The seam itself must run a
  * handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
@@ -26,18 +28,20 @@
 #define NOTF (-FIFA96_ERR_NOT_FOUND)
 
 /* FU-137 §6 row classification mapped to the dispatch contract, updated by
- * FU-138 for row 00 (ported: `fifa96_match_action_00`). All other action rows
- * are UNSUPPORTED (1E is `unwired` — tested library body with no record/entity
- * binding yet; the other 43 are `not ported`, of which 27/29/2B/2C are open
- * legs with no static install arm). FU-139 (cluster B) keeps 05/06/07/0F and
- * the possession/tackle rows 18/21/23 UNSUP: their record-visible cores have
- * tested pure helpers, but the carrier/pursuit/kick/receive/resolution arms and
- * the entity/ball pool they bind to are unported (FU-139 §5). */
+ * FU-138 for row 00 (ported: `fifa96_match_action_00`) and by FU-140 for row
+ * 1E (ported: `fifa96_match_action_1E`, the fully linear claim/throw
+ * placement). All other action rows are UNSUPPORTED (the six remaining keeper
+ * rows 19/1A/1B/1C/1D/1F have tested pure parts but unported arms; the other
+ * 43 are `not ported`, of which 27/29/2B/2C are open legs with no static
+ * install arm). FU-139 (cluster B) keeps 05/06/07/0F and the possession/tackle
+ * rows 18/21/23 UNSUP: their record-visible cores have tested pure helpers, but
+ * the carrier/pursuit/kick/receive/resolution arms and the entity/ball pool
+ * they bind to are unported (FU-139 §5). */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 1E */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 1E */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 28 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
 };
 
@@ -169,6 +173,62 @@ static void test_action_00_runs_move_step(void) {
   drop_fixture(f);
 }
 
+/* FU-140 §4: the wired keeper row 1E runs the fully linear claim/throw
+ * placement body (0x7550C..0x755D3, FU-79 §7): the pre-gate slot-merge helper
+ * request (`stage < 6 && !has_slot`), then, while `stage < 3` and the record
+ * does not hold the ball, the per-type offset placement (native
+ * `0x10F334/0x10F33C[type8]`, caller-supplied here), the possession flag
+ * (+0x9B) and the actor binding ([0x157A83] = rec). The slot-merge body
+ * (FUN_0007876C), the camera-place call (FUN_000700F4) and the actor pointer
+ * stay modelled as record requests/flags until the C8/C11 pool and arm ports
+ * land (FU-140 OL-37, carrying OL-16). */
+static void test_action_1E_runs_claim_place(void) {
+  struct fixture f = make_fixture();
+  f.mr.record.stage = 1;
+  f.mr.record.pos_x = 100;
+  f.mr.record.pos_y = 20;
+  f.mr.record.pos_z = 200;
+  f.mr.record.place_offset_x = -3;
+  f.mr.record.place_offset_z = 2;
+  assert(f.mr.record.has_slot == 0 && f.mr.record.has_ball == 0);
+  assert(f.mr.record.controlled == 0 && f.mr.record.helper_request == 0);
+
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.helper_request == 1);
+  assert(f.mr.record.place_x == 52 && f.mr.record.place_y == 76);
+  assert(f.mr.record.place_z == 232);
+  assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
+
+  /* stage >= 3 blocks the claim but still emits the pre-gate helper request */
+  f.mr.record.stage = 3;
+  f.mr.record.has_ball = 0;
+  f.mr.record.controlled = 0;
+  f.mr.record.place_x = -1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.helper_request == 1);
+  assert(f.mr.record.has_ball == 0 && f.mr.record.controlled == 0);
+  assert(f.mr.record.place_x == -1);
+
+  /* already holding the ball -> no placement, no actor rebind */
+  f.mr.record.stage = 1;
+  f.mr.record.has_ball = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.helper_request == 1);
+  assert(f.mr.record.controlled == 0 && f.mr.record.place_x == -1);
+
+  /* stage 6 clears the helper request; a slot suppresses it */
+  f.mr.record.stage = 6;
+  f.mr.record.has_ball = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.helper_request == 0);
+  f.mr.record.stage = 1;
+  f.mr.record.has_slot = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.helper_request == 0);
+  assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
+  drop_fixture(f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f = make_fixture();
   for (uint32_t phase = 0; phase < FIFA96_MATCH_PHASE_ROWS; phase++) {
@@ -237,6 +297,7 @@ int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
   test_action_00_runs_move_step();
+  test_action_1E_runs_claim_place();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

@@ -278,3 +278,124 @@ fifa96_err_t fifa96_keeper_lunge_track(const fifa96_keeper_vec *delta, int16_t a
   *steer_z = 0x40;
   return FIFA96_OK;
 }
+
+fifa96_err_t fifa96_keeper_hold_fallback(const fifa96_keeper_point *cam, uint8_t side,
+                                         int32_t cam_vel_z, int32_t lane, int32_t dir,
+                                         uint16_t dir_word, int32_t vel_x, int32_t lead_x,
+                                         fifa96_keeper_point *out) {
+  int32_t base;
+  int32_t x;
+  if (!cam || !out) return -FIFA96_ERR_INVALID;
+  base = side == 0 ? -0x9F0 : 0x9F0;
+  base += keeper_trunc_shift((int16_t)(cam_vel_z >> 16), 4);
+  if (base > 0xAE0) base = 0xAE0;
+  else if (base < -0xAE0) base = -0xAE0;
+  if (lane >= 0x780 || (dir < 0 ? (int32_t)(0u - (uint32_t)dir) : dir) <= 0x9F0 ||
+      dir_word == 0) {
+    int16_t w = (int16_t)cam->x;
+    if (w >= 0) {
+      x = ((int32_t)w >> 3) + ((int32_t)w >> 4) + ((int32_t)w >> 5);
+    } else {
+      int32_t nw = (int16_t)(-(int32_t)w);
+      x = -((nw >> 3) + (nw >> 4) + (nw >> 5));
+    }
+  } else {
+    uint32_t ubase = (uint32_t)base;
+    uint32_t ucamz = (uint32_t)cam->z;
+    int32_t absbase = base < 0 ? (int32_t)(0u - ubase) : (int32_t)ubase;
+    int32_t abscamz = cam->z < 0 ? (int32_t)(0u - ucamz) : (int32_t)ucamz;
+    int32_t num = absbase - abscamz;
+    int32_t den = (int32_t)((uint32_t)(vel_x >> 16) * 16u);
+    int32_t quot;
+    int32_t lead;
+    if (den == 0) return -FIFA96_ERR_INVALID;
+    quot = num / (den < 0 ? -den : den);
+    lead = (int32_t)((uint32_t)(lead_x >> 16) * 16u);
+    x = (int32_t)((uint32_t)cam->x + (uint32_t)lead * (uint32_t)quot);
+    if (x > 0xC0) x = 0xC0;
+    else if (x < -0xC0) x = -0xC0;
+  }
+  out->x = x;
+  out->y = 0;
+  out->z = base;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_keeper_arm_camera(uint8_t stage, uint8_t team_side, uint8_t phase,
+                                      fifa96_keeper_point *target, uint8_t *camera_hook) {
+  if (!target || !camera_hook) return -FIFA96_ERR_INVALID;
+  *camera_hook = 0;
+  if (stage >= 2) return FIFA96_OK;
+  target->x = 0;
+  target->y = 0;
+  target->z = (team_side != 0 || phase == 0x10) ? 0xB10 : -0xB10;
+  if (stage < 1) *camera_hook = 1;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_keeper_input_decide(const fifa96_keeper_input *in,
+                                        fifa96_keeper_decision *out) {
+  uint8_t inside;
+  if (!in || !out) return -FIFA96_ERR_INVALID;
+  out->install = 0;
+  out->invoke = 0;
+  out->copy_cam = 0;
+  out->copy_pos = 0;
+  out->clear_c5c = 0;
+  out->target_x = 0;
+  out->target_y = 0;
+  out->target_z = 0;
+  if (in->has_slot == 0) return FIFA96_OK;
+  if (in->phase == 2) {
+    uint32_t ux = (uint32_t)in->cam_x;
+    int32_t ax = in->cam_x < 0 ? (int32_t)(0u - ux) : (int32_t)ux;
+    if (ax > 0x420) inside = 0;
+    else if (in->team_side != 0 ? in->cam_z >= 0x7B0 : in->cam_z <= -0x7B0) inside = 1;
+    else inside = 0;
+  } else {
+    if (in->human_phase != 1 || in->event_flag == 0) return FIFA96_OK;
+    inside = 1;
+  }
+  if (in->type8 != 0x1F && (in->type_gate & 1u) == 0) return FIFA96_OK;
+  if (in->is_actor != 0 || in->type8 == 5) return FIFA96_OK;
+  if (inside == 0) {
+    if (in->lane > 0x60) return FIFA96_OK;
+    out->install = 4;
+    out->invoke = 1;
+    return FIFA96_OK;
+  }
+  if (in->lane <= 0x40) {
+    out->copy_cam = 1;
+    out->install = 0x19;
+    out->invoke = 1;
+    out->target_x = in->cam_x;
+    out->target_y = in->cam_y;
+    out->target_z = in->cam_z;
+    return FIFA96_OK;
+  }
+  if (in->slot_dir_x == 0 && in->slot_dir_z == 0) {
+    out->copy_pos = 1;
+    out->install = 0x1C;
+    out->invoke = 1;
+    out->target_x = in->pos_x;
+    out->target_y = 0xA0;
+    out->target_z = in->pos_z;
+    return FIFA96_OK;
+  }
+  out->target_x = in->pos_x + (int32_t)in->slot_dir_x * 0x70;
+  out->target_z = in->pos_z + (int32_t)in->slot_dir_z * 0x70;
+  if (out->target_z > 0xAF0) out->target_z = 0xAF0;
+  else if (out->target_z < -0xAF0) out->target_z = -0xAF0;
+  out->target_y = 0x40;
+  out->clear_c5c = 1;
+  {
+    int32_t dx = out->target_x - in->pos_x;
+    int32_t dz = out->target_z - in->pos_z;
+    int16_t dist = 0;
+    fifa96_err_t rc = fifa96_keeper_distance((int16_t)dx, (int16_t)dz, &dist);
+    if (rc != FIFA96_OK) return rc;
+    out->install = (uint8_t)(0x1B + (dist >= 0x70 ? 1 : 0));
+  }
+  out->invoke = 1;
+  return FIFA96_OK;
+}

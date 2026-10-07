@@ -95,28 +95,45 @@ struct fifa96_match_run_render {
   uint8_t remap[256];                       /* indexed translation + 0xFF key */
 };
 
-/* Minimal derived match record (M2 Task 5 / FU-138 §4): the native record is a
- * 0xB2-strided block (FU-137 §3) whose fields the FU-76 §3.1 action-00 body
- * reads and writes. The engine seam keeps one record — the controlled entity
- * the action dispatch can bind today — until the C8/C11 entity pool lands
- * (FU-138 OL-16, carrying FU-137 OL-1). Offsets are the native record fields:
- * pos +0x59/+0x61, target +0x4D/+0x55, timer +0x89/+0x81, active +0x8D,
- * ran +0x9E, control-slot pointer +0x20, slot direction +0x1D/+0x1E. `install`
- * is the derived seam stand-in for the FU-137 §2 `FUN_0007D9A4` install request
- * (`3`/`0x19` from action 00); the engine does not yet stage `[rec+0x18]`, and
- * both `ran` and `install` are write-only until the C8/C11 pool consumes them. */
+/* Minimal derived match record (M2 Task 5 / FU-138 §4, extended by M2 Task 7 /
+ * FU-140 §4): the native record is a 0xB2-strided block (FU-137 §3) whose
+ * fields the FU-76 §3.1 action-00 body and the FU-79 §7 keeper row 1E read and
+ * write. The engine seam keeps one record — the controlled entity the action
+ * dispatch can bind today — until the C8/C11 entity pool lands (FU-138 OL-16,
+ * carrying FU-137 OL-1). Offsets are the native record fields: pos
+ * +0x59/+0x5D/+0x61, target +0x4D/+0x51/+0x55, timer +0x89/+0x81, active
+ * +0x8D, ran +0x9E, stage +0x8F, ball flag +0x9B, control-slot pointer +0x20,
+ * slot direction +0x1D/+0x1E. `install` is the derived seam stand-in for the
+ * FU-137 §2 `FUN_0007D9A4` install request (`3`/`0x19` from action 00); the
+ * engine does not yet stage `[rec+0x18]`, and `ran`, `install`,
+ * `helper_request` and `controlled` are write-only until the C8/C11 pool
+ * consumes them. Row 1E's native output triple 0x15774C/0x157750/0x157754 (the
+ * camera/place block `FUN_000700F4` consumes) and its per-type placement
+ * offsets (object-4 `0x10F334`/`0x10F33C[type8]`, FU-140 §4) have no engine
+ * surface yet, so `place_*` and `place_offset_*` are the derived sink/inputs
+ * for that row. */
 struct fifa96_match_run_record {
   int32_t pos_x;
+  int32_t pos_y;       /* native +0x5D, FU-140 row 1E placement height */
   int32_t pos_z;
   int32_t target_x;
   int32_t target_z;
+  int32_t place_x;     /* FU-140 row 1E: native 0x15774C */
+  int32_t place_y;     /* native 0x157750 */
+  int32_t place_z;     /* native 0x157754 */
   int32_t timer89;
   uint16_t timer81;
   uint16_t delta;      /* FU-62 frame delta, native [0x157A64] */
   uint8_t active;
   uint8_t has_slot;
+  uint8_t has_ball;         /* native +0x9B (FU-140 row 1E) */
+  uint8_t helper_request;   /* FU-140 row 1E: FUN_0007876C slot-merge request */
+  uint8_t controlled;       /* FU-140 row 1E: native [0x157A83] = rec */
+  uint8_t stage;            /* native +0x8F stage byte (FU-140 row 1E) */
   int8_t dir_x;
   int8_t dir_z;
+  int8_t place_offset_x;    /* caller-supplied 0x10F334[type8] (FU-140) */
+  int8_t place_offset_z;    /* caller-supplied 0x10F33C[type8] (FU-140) */
   uint8_t ran;         /* native +0x9E, set by the action-00 body */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
 };

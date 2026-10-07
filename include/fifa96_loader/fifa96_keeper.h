@@ -70,6 +70,36 @@ typedef struct fifa96_keeper_rep_a_out {
   uint8_t flag_9e;
 } fifa96_keeper_rep_a_out;
 
+typedef struct fifa96_keeper_input {
+  uint8_t has_slot;
+  uint8_t phase;
+  uint8_t human_phase;
+  uint8_t event_flag;
+  uint8_t team_side;
+  uint8_t type8;
+  uint8_t type_gate;
+  uint8_t is_actor;
+  int32_t lane;
+  int32_t cam_x;
+  int32_t cam_y;
+  int32_t cam_z;
+  int32_t pos_x;
+  int32_t pos_z;
+  int8_t slot_dir_x;
+  int8_t slot_dir_z;
+} fifa96_keeper_input;
+
+typedef struct fifa96_keeper_decision {
+  uint8_t install;
+  uint8_t invoke;
+  uint8_t copy_cam;
+  uint8_t copy_pos;
+  uint8_t clear_c5c;
+  int32_t target_x;
+  int32_t target_y;
+  int32_t target_z;
+} fifa96_keeper_decision;
+
 fifa96_err_t fifa96_keeper_distance(int16_t x, int16_t z, int16_t *distance);
 fifa96_err_t fifa96_keeper_vec_from_delta(const fifa96_keeper_point *from,
                                           const fifa96_keeper_point *to,
@@ -102,3 +132,11 @@ fifa96_err_t fifa96_keeper_reposition_b_finish(uint8_t is_controlled, uint8_t hu
 fifa96_err_t fifa96_keeper_lunge_track(const fifa96_keeper_vec *delta, int16_t angle,
                                        fifa96_keeper_point *pos, uint8_t *on_target,
                                        int16_t *steer_x, int16_t *steer_z, uint8_t *event_code);
+fifa96_err_t fifa96_keeper_hold_fallback(const fifa96_keeper_point *cam, uint8_t side,
+                                         int32_t cam_vel_z, int32_t lane, int32_t dir,
+                                         uint16_t dir_word, int32_t vel_x, int32_t lead_x,
+                                         fifa96_keeper_point *out);
+fifa96_err_t fifa96_keeper_arm_camera(uint8_t stage, uint8_t team_side, uint8_t phase,
+                                      fifa96_keeper_point *target, uint8_t *camera_hook);
+fifa96_err_t fifa96_keeper_input_decide(const fifa96_keeper_input *in,
+                                        fifa96_keeper_decision *out);
