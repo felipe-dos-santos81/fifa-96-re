@@ -820,7 +820,7 @@ static void test_duel_search(void) {
   assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
   assert(index == 0);                   /* nearest and lowest index */
   /* Tie: the native sort does not swap equal values, so the earlier record
-   * (lower index) wins (CMP/JGE at 0x8DCB2). */
+   * (lower index) wins (0xA1860; CMP at 0xA18B0 / JGE at 0xA18B2). */
   rec[1].pos_x = 0x1F0;                 /* also d = 0x10 */
   assert(fifa96_action_duel_search(&in, rec, 11, &index) == FIFA96_OK);
   assert(index == 0);
