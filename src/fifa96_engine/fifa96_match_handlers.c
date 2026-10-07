@@ -204,7 +204,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},
     {0x25, NULL, "FU-137 §6: FU-136 row 25: not ported (partial); FU-82 7-arm table 0x880B0; OL-9"},
     {0x26, fifa96_match_action_26,
-     "FU-142b §C: row 26 ported (0x866F4..0x8681C + 0x8DCD4) over the pool; stage92/timer7b/lane repacked"},
+     "FU-142b §C/FU-137 §5.2: row 26 ported (0x866F4..0x8681C + 0x8DCD4) over the pool; arm 0x8D74D; stage92/timer7b/lane repacked"},
     {0x27, NULL, "FU-137 open leg: no install arm found (EDX=0x27 at 0x756D5 is an anim arg); body 0x086820 cut; OL-15"},
     {0x28, NULL, "FU-137 arm 0x8D7CF (phase 13/14 player side); body 0x0870E8 unanalyzed; OL-15"},
     {0x29, NULL, "FU-137 open leg: no install arm or match-code 0x29 reference found; OL-15"},
