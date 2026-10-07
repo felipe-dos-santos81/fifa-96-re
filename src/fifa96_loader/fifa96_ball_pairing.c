@@ -1,5 +1,9 @@
 #include "fifa96_loader/fifa96_ball_pairing.h"
 
+#include <string.h>
+
+#include "fifa96_loader/fifa96_arm_helpers.h"
+
 int fifa96_ball_pair_offset(const fifa96_ball_pair_vector *from,
                             const fifa96_ball_pair_vector *to,
                             fifa96_ball_pair_delta *out) {
@@ -132,5 +136,65 @@ int fifa96_ball_pair_receive_target(const fifa96_ball_pair_vec3i *base,
   out->y = base->y;
   out->z = (int32_t)((uint32_t)base->z +
                      ((uint32_t)(lead_z >> 16) << 5));
+  return FIFA96_OK;
+}
+
+int fifa96_ball_pair_stage_tail(fifa96_ball_pair_state *state,
+                                fifa96_ball_stage_tail_actor *actor,
+                                const uint8_t *recompute_table,
+                                fifa96_ball_stage_tail_out *out) {
+  int8_t code;
+  if (!state || !actor || !recompute_table || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  out->face = actor->facing;   /* the resulting +0x8E byte when no face runs */
+  code = (int8_t)state->code;
+  /* 0x7A8D1..0x7A8DC: MOVSX DX,[0x158743]; TEST DX,DX; JL -> 0x7A8EF.
+   * 0x7A8DE..0x7A8ED: CMP EAX,0xF / JGE, then CMP byte[EAX+0x1104BB],0. */
+  if (code < 0 || code >= 0x0F || recompute_table[(uint8_t)code] == 0) {
+    out->receive = 1;     /* 0x7A8EF CALL 0x7A084 (unported, OL-62) */
+  } else {
+    out->recompute = 1;
+    /* 0x7A8F6..0x7A91A: the sign-extended word[+0x6B] gate, then the two
+     * unaligned dword addends shifted right 17 and added to +0x59/+0x61. */
+    if (actor->lane_gate < 0x60) {
+      actor->pos_x = (int32_t)((uint32_t)actor->pos_x + (uint32_t)(actor->nudge_x >> 17));
+      actor->pos_z = (int32_t)((uint32_t)actor->pos_z + (uint32_t)(actor->nudge_z >> 17));
+      out->nudge = 1;
+    }
+    out->camera_zero = 1; /* 0x7A91D..0x7A92D: 0x1577BE/C0/C2 = 0 (derived) */
+  }
+  /* 0x7A934..0x7A941: byte [EBP+0x8D] == 0. */
+  if (actor->active == 0) {
+    if (code == 2) {
+      state->sub_code = 0x30;   /* 0x7A949 */
+    } else if (code == 1 || code == 3 || code == 6) {
+      state->sub_code = 0x31;   /* 0x7A964 */
+    } else if (code == 7 || code == 4 || code == 5) {
+      /* 0x7A97F..0x7A9D9: the inactive whole-block reset (FU-73 §1 clear). */
+      out->cleared = 1;
+      return fifa96_ball_pair_clear(state);
+    }
+  }
+  /* 0x7A9DE..0x7AA0C: codes 1/2/3/6 call 0x79C50 with DX/BX = the staged
+   * vector's second/third words (`0x7A9F5..0x7AA09`: dword 0x158738 >> 16 and
+   * dword 0x15873A >> 16). */
+  if (code == 1 || code == 2 || code == 3 || code == 6) {
+    const fifa96_arm_vec from = {0, 0, 0};
+    fifa96_arm_vec to;
+    to.x = state->vector.height;
+    to.y = 0;
+    to.z = state->vector.z;
+    if (fifa96_arm_face(&from, &to, &out->face) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    actor->facing = out->face;
+  }
+  /* 0x7AA0E..0x7AA2B: EDX = (int8)[0x158744] sub-code, EBX = (int8)[0x158745]
+   * (the derived helper's row stand-in is 0; the native [rec+0x28] source and
+   * RNG reroll stay OL-52), ECX = type8, then CALL 0x6E598. */
+  if (fifa96_arm_anim_select(state->sub_code, 0, &out->anim) != FIFA96_OK) {
+    return -FIFA96_ERR_INVALID;
+  }
+  /* 0x7AA30..0x7AA39: MOV EAX,[EBP+0x20]; TEST; JZ; CALL 0x78B00. */
+  if (actor->has_slot != 0) out->slot_cb = 1;
+  /* The 0x7AA3C..0x7AE2F per-code target algebra is unported (OL-62). */
   return FIFA96_OK;
 }

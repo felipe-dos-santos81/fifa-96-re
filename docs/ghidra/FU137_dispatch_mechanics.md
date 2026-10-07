@@ -354,7 +354,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 02 | 0x07DFCC | not ported (partial) | locomotion_restart_target; FU-77 §2.2; FU-138 restart_wait | OL-9; FU-138 OL-18 |
 | 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3; FU-138 counter/phase1_clamp | OL-8; FU-138 OL-19 |
 | 04 | 0x07E7C8 | not ported (partial) | locomotion_camera_lead; FU-77 §2.4 | OL-8 |
-| 05 | 0x07F194 | not ported (partial) | possession_reset/claim/timer; FU-78 §2/§3; FU-139 staging/resolver | OL-8; FU-139 OL-29 |
+| 05 | 0x07F194 | not ported (partial) | carrier machine stages 0-3 + staging tail ported (FU-139 §8 Task 10: `fifa96_action_carrier_arm` `0x7F194..0x7F665`, `fifa96_ball_pair_stage_tail` `0x7A8D1..0x7AA2F`, plus FU-78 possession helpers); stage-0 target algebra `0x7F3A1..0x7F57B` + `FUN_0007F7E0` fallback unported, row unwired | FU-139 OL-63 (residual); OL-8 |
 | 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row; FU-139 §2 | OL-8; FU-139 OL-30 |
 | 07 | 0x0814B0 | not ported (partial) | kick_angle/kick_apply + FU-139 event row/band/stage target; FU-76 §3.2, FU-77 §2.7 | OL-8; FU-139 OL-31 |
 | 08 | 0x081068 | not ported (partial) | FU-75 §1.6 chase-gate installer only | OL-8 |
@@ -455,6 +455,12 @@ ported rows + the unwired actions `27`/`29`/`2C` + the dead entry `2B`; actions
 (phase `0x16`) and **5 × `FIFA96_OK`** (actions `00`, `1E`, `26`, `28` and `2A`);
 out-of-range -> `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are
 negated, matching the engine family convention (`fifa96_match_run_*`).
+
+FU-139 §8 (Task 10) advances action row `05`'s bounded parts (the carrier
+machine stages 0-3 and the staging tail are ported and tested) but adds no
+dispatch: the stage-0 target algebra and the `FUN_0007F7E0` fallback stay
+unported (OL-63) and the row remains `not ported (partial)` with `fn == NULL`,
+so the counts above are unchanged.
 
 ## 8. Open legs
 
@@ -836,3 +842,31 @@ change.
 * `tests/test_engine_match_handlers.c` gains `test_dead_2b_evidence` and pins
   `FU-142f` in the 27/29/2C entry tests; the `fifa96_match_handlers.c`
   evidence strings cite `FU-142f App. I`.
+
+## Errata (M2 arms-and-wiring Task 10 / FU-139 §8)
+
+* **§6.1 action row `05` stays `not ported (partial)` but advances.** Task 10
+  ports the bounded row-05 carrier machine
+  (`fifa96_action_carrier_arm`, `0x7F194..0x7F665`: phase/claim/timer head, the
+  stage-0 gates with the existing dribble-dir helper, stages 1-3 with the
+  `0x92820`/`0x6E598`/`0x79B1C`/`0x79C50`/`0x7D9A4` surfaces) and the
+  `FUN_0007A490` code-keyed staging tail
+  (`fifa96_ball_pair_stage_tail`, `0x7A8D1..0x7AA2F`), both tested (FU-139 §8).
+  The stage-0 target algebra (`0x7F3A1..0x7F57B`, incl. the
+  `0x71C94`/`0x79CCC`/`0x6DA64` call bodies and the record target writes) and
+  the `FUN_0007F7E0` fallback remain unported, so the wiring gate keeps
+  `fn == NULL` with the refined leg **OL-63**; the §7 counts and dispatch
+  results are unchanged by this task (74 UNSUP / 5 OK / 1 NOTF).
+* **§8 OL-15 remainder / row-05 evidence** — the `fifa96_match_handlers.c` row
+  `05` evidence names FU-139 §8 and OL-63; `tests/test_engine_match_handlers.c`
+  gains `test_action_05_unwired_carrier` (fn NULL, evidence names
+  FU-139/OL-63/UNSUPPORTED, `action_expect[0x05]` stays `UNSUP`).
+* **FU-139 §3.3 staging-block vector erratum** — the block at `0x158738` holds
+  the `FUN_0008DCD4` out triple `{distance, dx, dz}`, not `{x, height, z}`
+  (first-hand: `0x7F666 0x7F6AF..0x7F6BB` writes it, and the staging tail reads
+  dword `0x158738` >> 16 as the x addend and dword `0x15873A` >> 16 as the z
+  addend at `0x7AA75..0x7AA99`). `fifa96_ball_pair_state.vector` is unchanged
+  (no repurposing); FU-139 §8 records the semantic correction.
+* New numbered legs OL-62..OL-64 are registered in FU-142 §6 with their
+  FU-139 §8 detail (staging-tail residual, row-05 residual + non-wiring
+  verdict, and the stage-0 -> stage-1 re-install edge).

@@ -411,6 +411,27 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`0x5142B..0x51435`). The derived engine models none of those globals, so
   `fifa96_arm_camera_stop` is a documented no-op returning FIFA96_OK (FU-118
   surface; the camera-mode consumers `FUN_000505D0`/FU-103 stay unported).
+* **OL-62 — staging-tail residual (M2 arms-and-wiring Task 10).**
+  `FUN_0007A490 0x7AA3C..0x7AE2F` after the animation resolution: the per-code
+  jump table flat `0x7A458` (14 arms: `0x7AACB/0x7AB83/0x7AC57/0x7AD0F/0x7ADA0/
+  0x7ADBA/0x7ADEC`, five defaults to `0x7AE2F`), the `0x78B00` slot callback
+  (`0x7AA37`), the `FUN_0007A084` reception body (the `receive` flag models the
+  call), the `0x92820`/`0x8F188` sinks, `0x92AC8` RNG draws and the `0x157736`
+  speed source. The derived `fifa96_ball_pair_stage_tail` ends at `0x7AA2F`
+  (FU-139 §8.2/§8.7).
+* **OL-63 — row-05 residual and non-wiring (Task 10).** Stage 0's target
+  algebra `0x7F3A1..0x7F57B` (camera/local target copies, the `0x8DC68`
+  accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`,
+  `FUN_00079CCC`+`FUN_0006DA64`, the `0x15872D` write and the `0x157A4F` gate)
+  and the `FUN_0007F7E0` fallback `0x7F7E0..0x801B2` (installs code 7/0x11,
+  rotates `0x158729`) are unported; the plan's wiring gate therefore keeps
+  `fifa96_match_action_table[0x05].fn` NULL (evidence names this leg; FU-137
+  §6.1/§7 Task-10 errata, FU-139 §8.6).
+* **OL-64 — row-05 stage 0 → 1 edge (Task 10).** The row-05 body writes `+0x92`
+  only at `0x7F5C7`/`0x7F616`/`0x7F62D`; the stage-0 path never advances the
+  latch, so the native 0→1 transition is an external re-install of code 5 whose
+  caller is not statically located in the `0x7F194..0x7F7C9` window. The port
+  treats `+0x92` as an input (FU-139 §8.7).
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 

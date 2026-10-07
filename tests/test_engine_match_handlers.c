@@ -43,7 +43,11 @@
  * the image), so rows 27/29/2C keep `fn == NULL`, their OL-48 evidence and
  * UNSUP dispatch. Row 2B's entry 0x87738 is the shared row-29 epilogue RET
  * (FU-142 §1.1), not a standalone stub, and the same census finds no 0x2B
- * invocation: its evidence records the FU-142f dead verdict. The seam itself
+ * invocation: its evidence records the FU-142f dead verdict. FU-139 §8
+ * (Task 10) ports the row-05 carrier machine and the ball staging tail but
+ * keeps row 05 unwired: the stage-0 target algebra and the FUN_0007F7E0
+ * fallback are unported (OL-63), so `fn` stays NULL with the leg in the
+ * evidence. The seam itself
  * must run a handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
@@ -551,6 +555,28 @@ static void test_dead_2b_evidence(void) {
   drop_fixture(&f);
 }
 
+/* FU-139 §8 (M2 arms-and-wiring Task 10): row 05's bounded parts are ported
+ * (`fifa96_action_carrier_arm`, native `0x7F194..0x7F665` stages 0-3, and the
+ * staging tail `fifa96_ball_pair_stage_tail`, native `0x7A8D1..0x7AA2F`) but
+ * the stage-0 target algebra (`0x7F3A1..0x7F57B`, with the
+ * `0x92820`/`0x71C94`/`0x79CCC`/`0x6DA64` call bodies) and the `FUN_0007F7E0`
+ * fallback remain unported. The wiring gate (plan Global Constraints: install
+ * arm + full record-visible body + pool binding all bounded) therefore keeps
+ * the row `fn == NULL`, its evidence names the OL-63 leg and the dispatch
+ * stays UNSUP. */
+static void test_action_05_unwired_carrier(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x05];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-139") != NULL);
+  assert(strstr(row->evidence, "OL-63") != NULL);
+  assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(action_expect[0x05] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x05) == UNSUP);
+  drop_fixture(&f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f;
   make_fixture(&f);
@@ -632,6 +658,7 @@ int main(void) {
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();
   test_dead_2b_evidence();
+  test_action_05_unwired_carrier();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

@@ -27,7 +27,13 @@
  * test_ball_pairing/test_action_handlers) and leaves action rows
  * 05/06/07/0F/18/21/23 unwired with their arms (FU-139 OL-29..OL-32; the pool
  * they also waited on is now FU-141); their evidence strings cite FU-139.
- * FU-142b (cluster G) wires row 26: the FU-142a arm 0x8D74D, the ported
+ * FU-139 §8 (Task 10) adds the ball staging tail
+ * (`fifa96_ball_pair_stage_tail`, native 0x7A8D1..0x7AA2F) and the bounded
+ * row-05 carrier machine (`fifa96_action_carrier_arm`, native
+ * 0x7F194..0x7F665) with tests; row 05 stays unwired because its stage-0
+ * target algebra (0x7F3A1..0x7F57B) and the `FUN_0007F7E0` fallback are
+ * unported (OL-63), so the binding gate keeps `fn == NULL` and the evidence
+ * names the leg. FU-142b (cluster G) wires row 26: the FU-142a arm 0x8D74D, the ported
  * `0x866F4..0x8681C` body (`fifa96_arm_26_step`, FU-142 Appendix C) and the
  * FU-141 pool binding are all bounded, so the row flips to `ported` and its
  * stage92/timer7b/lane results are repacked into the pool record by the frame
@@ -298,7 +304,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, NULL, "FU-137 §6: FU-136 row 04: not ported (partial); locomotion_camera_lead; OL-8"},
     {0x05, NULL,
-     "FU-139 §2/§5: row 05 not ported (partial); possession_reset/claim/timer/dribble_dir; carrier arms OL-29"},
+     "FU-139 §8/§5: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 unbounded; unwired; -UNSUPPORTED; OL-63"},
     {0x06, NULL,
      "FU-139 §2/§5: row 06 not ported; FU-77 §2.6 597-insn pursuit body unported; OL-30"},
     {0x07, NULL,

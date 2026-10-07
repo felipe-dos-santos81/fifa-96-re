@@ -224,9 +224,10 @@ target_link_libraries(test_camera PRIVATE fifa96_camera fifa96_entity_update)
 add_test(NAME test_camera COMMAND test_camera WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_ball_pairing src/fifa96_loader/fifa96_ball_pairing.c)
-target_link_libraries(fifa96_ball_pairing PRIVATE fifa96_entity_update)
+target_link_libraries(fifa96_ball_pairing PRIVATE fifa96_entity_update fifa96_arm_helpers)
 add_executable(test_ball_pairing tests/test_ball_pairing.c)
-target_link_libraries(test_ball_pairing PRIVATE fifa96_ball_pairing fifa96_entity_update)
+target_link_libraries(test_ball_pairing PRIVATE fifa96_ball_pairing fifa96_entity_update
+                                                fifa96_arm_helpers)
 add_test(NAME test_ball_pairing COMMAND test_ball_pairing WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_keeper src/fifa96_loader/fifa96_keeper.c)

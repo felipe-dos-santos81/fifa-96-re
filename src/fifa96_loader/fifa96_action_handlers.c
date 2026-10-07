@@ -1,4 +1,7 @@
 #include "fifa96_loader/fifa96_action_handlers.h"
+
+#include <string.h>
+
 #include "fifa96_loader/fifa96_entity_update.h"
 
 static const uint8_t kick_atan[257] = {
@@ -470,6 +473,129 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
     out->resolved = 1;
   }
   return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
+                                       fifa96_action_carrier *carrier,
+                                       const int8_t *type_dir_x,
+                                       const int8_t *type_dir_z,
+                                       fifa96_action_carrier_out *out) {
+  int claimed = 0;
+  if (!state || !carrier || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  out->stage = carrier->stage92;   /* unchanged unless the latch machine writes */
+  /* 0x7F1A6..0x7F1BA: phase != 2 -> FUN_0007DAB4 and return. */
+  if (carrier->phase != 2) {
+    out->reset = 1;
+    return FIFA96_OK;
+  }
+  /* 0x7F1BF..0x7F205: claim the 0x58724 block for the actor. */
+  if (fifa96_action_possession_claim(state, carrier->actor, &claimed) != FIFA96_OK) {
+    return -FIFA96_ERR_INVALID;
+  }
+  out->claim = (uint8_t)claimed;
+  /* 0x7F20B..0x7F217: team+0x7B2 = rec; team+0x7B6 = 0. */
+  out->team_target = 1;
+  /* 0x7F221..0x7F23A: the capped additive timer. */
+  if (fifa96_action_possession_timer(&carrier->timer89, carrier->delta) != FIFA96_OK) {
+    return -FIFA96_ERR_INVALID;
+  }
+  /* 0x7F240..0x7F248: word+0x81 != 0 returns. */
+  if (carrier->timer81 != 0) return FIFA96_OK;
+  /* 0x7F24E..0x7F258: the camera triple copy to +0x4D/+0x51/+0x55. */
+  out->target_camera = 1;
+  switch (carrier->stage92) {
+  case 0:
+    /* 0x7F274..0x7F27D: lane > 0x40 clears the controlled actor. */
+    if (carrier->lane > 0x40) {
+      out->clear_control = 1;
+      return FIFA96_OK;
+    }
+    /* 0x7F291..0x7F2A2: [0x157A83] = rec, then close > bound waits. */
+    out->set_control = 1;
+    if ((int16_t)carrier->lane > carrier->bound_word) return FIFA96_OK;
+    /* 0x7F2A8: an active release countdown waits. */
+    if (state->release_timer > 0) return FIFA96_OK;
+    /* 0x7F2B5: an airborne record waits. */
+    if (carrier->airborne != 0) return FIFA96_OK;
+    {
+      fifa96_action_dribble_dir dir;
+      if (fifa96_action_possession_dribble_dir(carrier->type8, carrier->ball_height,
+                                               carrier->has_slot, carrier->slot_dir_x,
+                                               carrier->slot_dir_z, type_dir_x, type_dir_z,
+                                               &dir) != FIFA96_OK) {
+        return -FIFA96_ERR_INVALID;
+      }
+      if (dir.resolved != 0) {
+        out->dirs = 1;
+        out->dir_x = (uint8_t)dir.dir_x;
+        out->dir_z = (uint8_t)dir.dir_z;
+      } else if (carrier->team_slot_pool != 0 && carrier->team_chosen == 0 &&
+                 (carrier->team_search_gate != 0 || carrier->active != 0)) {
+        /* 0x7F32D..0x7F35F: the team gates reach FUN_0007876C (request). */
+        out->slot_merge = 1;
+      } else {
+        /* 0x7F361..0x7F36F: FUN_0007F7E0 (unported). */
+        out->fallback = 1;
+      }
+    }
+    /* 0x7F386..0x7F57B: the dir-byte writes and the stage-0 target algebra
+     * (0x92820/0x71C94/0x79CCC/0x6DA64 and the record target writes) are
+     * unported (OL-63). */
+    out->tail = 1;
+    return FIFA96_OK;
+  case 1:
+    /* 0x7F57C..0x7F585: FUN_00092820(rec, 0x26) (presentation-side, OL-27). */
+    out->sink = 1;
+    /* 0x7F58A..0x7F598: camera velocity 0x1577BE/C0/C2 = 0 (derived). */
+    out->camera_zero = 1;
+    /* 0x7F598..0x7F5C2: anim code active ? 6 : 0x30 through 0x6E598 (both
+     * constants are below the helper's 0x6F clamp, so the clamp never fires). */
+    out->anim = carrier->active != 0 ? 6u : 0x30u;
+    /* 0x7F5C7..0x7F5D9: timer 0, latch +1. */
+    carrier->timer89 = 0;
+    carrier->stage92 = (uint8_t)(carrier->stage92 + 1);
+    out->stage = carrier->stage92;
+    return FIFA96_OK;
+  case 2:
+    /* 0x7F5E9..0x7F5ED: no control slot waits. */
+    if (carrier->has_slot == 0) return FIFA96_OK;
+    /* 0x7F5EF..0x7F5F1: FUN_00079B1C snap (target = pos, lane/velocity zero). */
+    out->snap = 1;
+    /* 0x7F5F6..0x7F607: the 0x79C50 face over slot[+0x1D]/[+0x1E]. */
+    {
+      int32_t dx = carrier->slot_dir_x;
+      int32_t dz = carrier->slot_dir_z;
+      out->face = carrier->facing;
+      if (dx != 0 || dz != 0) {
+        int32_t angle = 0;
+        if (fifa96_action_kick_angle(dx, dz, &angle) != FIFA96_OK) {
+          return -FIFA96_ERR_INVALID;
+        }
+        out->face = (uint8_t)(((uint32_t)(angle + 0x40) & 0x3FFu) >> 7u);
+      }
+      carrier->facing = out->face;
+    }
+    /* 0x7F60C..0x7F614: word[slot+6] == 0 waits. */
+    if (carrier->slot_live == 0) return FIFA96_OK;
+    /* 0x7F616..0x7F61A: latch loops to 0. */
+    carrier->stage92 = 0;
+    out->stage = 0;
+    return FIFA96_OK;
+  case 3:
+    /* 0x7F627..0x7F62B: byte+0x44 == 0 waits. */
+    if (carrier->event_flag44 == 0) return FIFA96_OK;
+    /* 0x7F62D..0x7F630: latch 0. */
+    carrier->stage92 = 0;
+    out->stage = 0;
+    /* 0x7F637..0x7F657: only the team target hands the ball actor to code 4
+     * and arms the receiver timer (FUN_00079B58). */
+    if (carrier->is_team_target != 0) out->handoff = 1;
+    return FIFA96_OK;
+  default:
+    /* 0x7F261..0x7F267: CMP AL,3 / JA -> 0x7F65C return. */
+    return FIFA96_OK;
+  }
 }
 
 fifa96_err_t fifa96_action_receive_step(fifa96_action_receive *state,

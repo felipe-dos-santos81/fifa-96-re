@@ -210,6 +210,96 @@ fifa96_err_t fifa96_action_possession_dribble_dir(uint8_t type8, int32_t distanc
                                                   const int8_t *type_x, const int8_t *type_z,
                                                   fifa96_action_dribble_dir *out);
 
+/* FU-139 §8 (Task 10): the row-05 carrier machine `0x7F194..0x7F665`
+ * (first-hand this slice). The bounded record-visible parts:
+ *   - `0x7F1A6`: phase != 2 -> `reset` (native FUN_0007DAB4) and return;
+ *   - `0x7F1BF..0x7F205`: `claim` the possession block for `actor`;
+ *   - `0x7F20B..0x7F217`: `team_target` (native team+0x7B2 = rec, +0x7B6 = 0);
+ *   - `0x7F221..0x7F23A`: the capped/additive `timer89` (FU-78 helper);
+ *   - `0x7F240`: word+0x81 != 0 returns;
+ *   - `0x7F24E..0x7F258`: `target_camera` (the camera triple copy to
+ *     +0x4D/+0x51/+0x55);
+ *   - stage dispatch on +0x92 (`0x7F259..0x7F26C`):
+ *     stage 0 (`0x7F274..0x7F57B`): `lane > 0x40` -> `clear_control` and
+ *     return; else `set_control`; `close_word > bound_word`,
+ *     `release_timer > 0` or an airborne record wait; the type arm
+ *     (`ball_height > 0x38`) takes the caller's `type_dir_*[type8]` with speed
+ *     0x60, the slot arm the caller's `slot_dir_*` with speed 0x30, the
+ *     team-gate path raises the `slot_merge` request (native FUN_0007876C at
+ *     `0x7F356`) and the remaining path the `fallback` request (native
+ *     `FUN_0007F7E0`, unported, OL-63); in all cases the native then runs the
+ *     `0x7F3A1..0x7F57B` target algebra, reported as `tail` (unported, OL-63);
+ *     stage 1 (`0x7F57C..0x7F5E8`): `sink` (native FUN_00092820(rec,0x26),
+ *     OL-27), `camera_zero` (0x1577BE/C0/C2), the 0x6E598 animation id
+ *     (active -> 6, inactive -> 0x30), timer 0 and the latch advance;
+ *     stage 2 (`0x7F5E9..0x7F626`): no slot waits; else `snap` (native
+ *     `FUN_00079B1C`: target = pos, lane/velocity words zeroed) and the
+ *     0x79C50 face from `slot_dir_*`; a zero slot word waits, else the latch
+ *     loops to 0;
+ *     stage 3 (`0x7F627..0x7F65C`): `+0x44` gates; latch 0 and the
+ *     `handoff` request (native install code 4 on the staged ball actor
+ *     `[0x158730]` + FUN_00079B58 receiver timer on `[0x158734]`) only for the
+ *     team target; stages > 3 return unchanged.
+ * All other native side effects (the record target writes of the stage-0 tail,
+ * the 0x92820/0x71C94/0x79CCC/0x6DA64/0x7F7E0 call bodies, the camera/record
+ * globals) are unported requests or no-ops with the numbered legs above; the
+ * row is therefore NOT wired (binding gate, plan Global Constraints). NULL
+ * `state`/`carrier`/`out` -> -FIFA96_ERR_INVALID; NULL `type_dir_*` is invalid
+ * only when the type arm is taken. */
+typedef struct fifa96_action_carrier {
+  int32_t actor;          /* native EBP: the record pointer identity */
+  int32_t timer89;        /* +0x89 (in/out: capped/additive, stage-1 clear) */
+  int32_t lane;           /* sign-extended word[+0x6B] (native [+0x69]>>16) */
+  int32_t ball_height;    /* dword [0x157750] (dribble type-arm gate) */
+  int16_t timer81;        /* word +0x81 */
+  int16_t close_word;     /* word +0x6B */
+  int16_t bound_word;     /* word +0x77 */
+  uint16_t delta;         /* word [0x157A64] */
+  uint8_t phase;          /* [0x157A4A] >> 24 */
+  uint8_t stage92;        /* +0x92 (in/out: the stage latch) */
+  uint8_t active;         /* +0x8D */
+  uint8_t airborne;       /* dword +0x5D != 0 */
+  uint8_t has_slot;       /* +0x20 != 0 */
+  uint8_t slot_live;      /* stage 2: word[slot+6] != 0 */
+  uint8_t type8;          /* +0x8B >> 24 */
+  uint8_t event_flag44;   /* +0x44 */
+  uint8_t is_team_target; /* rec == [[rec]+0x7B2] */
+  uint8_t facing;         /* +0x8E low byte (in/out: the stage-2 face) */
+  uint8_t team_slot_pool; /* byte [team+0x828] */
+  uint8_t team_chosen;    /* [team+0x7BF] != 0 */
+  uint8_t team_search_gate; /* byte [team+0x829] */
+  int8_t slot_dir_x;      /* slot[+0x1D]>>24 (stage-2 face dx) */
+  int8_t slot_dir_z;      /* slot[+0x1E]>>24 (stage-2 face dz) */
+} fifa96_action_carrier;
+
+typedef struct fifa96_action_carrier_out {
+  uint8_t reset;          /* native FUN_0007DAB4 */
+  uint8_t claim;          /* possession block claim (FU-78) */
+  uint8_t team_target;    /* native team+0x7B2 = rec, +0x7B6 = 0 */
+  uint8_t set_control;    /* native [0x157A83] = rec */
+  uint8_t clear_control;  /* native [0x157A83] = 0 */
+  uint8_t target_camera;  /* native rec+0x4D/+0x51/+0x55 = camera triple */
+  uint8_t dirs;           /* native 0x5872A/B dir bytes live */
+  uint8_t dir_x;          /* native [0x5872A] */
+  uint8_t dir_z;          /* native [0x5872B] */
+  uint8_t fallback;       /* native FUN_0007F7E0 (unported, OL-63) */
+  uint8_t tail;           /* native stage-0 tail 0x7F3A1..0x7F57B (unported, OL-63) */
+  uint8_t slot_merge;     /* native FUN_0007876C request (0x7F356) */
+  uint8_t sink;           /* native FUN_00092820 request (OL-27) */
+  uint8_t camera_zero;    /* native 0x1577BE/C0/C2 zero (stage 1) */
+  uint8_t stage;          /* resulting native +0x92 */
+  uint8_t snap;           /* native FUN_00079B1C snap (target = pos) */
+  uint8_t face;           /* resulting native +0x8E low byte */
+  uint8_t anim;           /* resolved 0x6E598 id (stage 1) */
+  uint8_t handoff;        /* native stage-3 ball-actor install 4 + receiver timer */
+} fifa96_action_carrier_out;
+
+fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
+                                       fifa96_action_carrier *carrier,
+                                       const int8_t *type_dir_x,
+                                       const int8_t *type_dir_z,
+                                       fifa96_action_carrier_out *out);
+
 typedef struct fifa96_action_receive {
   int32_t timer89;
   int16_t offset_word;

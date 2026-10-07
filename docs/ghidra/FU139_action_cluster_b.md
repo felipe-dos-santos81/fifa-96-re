@@ -271,6 +271,9 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
   (`FUN_0007A490 0x7A8D1..0x7AE2F`: `0x7A941` sub-code `0x30`/`0x31`, inactive
   4/5/7 block reset `0x7A97F..0x7A9D9`, active `FUN_00079C50`/`FUN_0006E598`
   arms `0x7A9DE..0x7AA2B`, `[0x158744/45]` stack writes) is unported.
+  **Status (Task 10): the bounded half `0x7A8D1..0x7AA2F` is ported as
+  `fifa96_ball_pair_stage_tail` (§8.2); the residual target algebra
+  `0x7AA3C..0x7AE2F` is OL-62 (the eligibility set is `{1,2,3,6,0xE}`, §8.2).**
 * **OL-27 — event append sinks.** `FUN_000928F0` (25-entry ring `0x5B440`,
   stride 0x15) and `FUN_00092820` (`0x5B650`) are presentation-side and
   unported; only the selector mapping is ported.
@@ -285,6 +288,9 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
   `FUN_00071C94`, `FUN_00079CCC`/`FUN_0006DA64`) and stages 1–3
   (`0x7F57C..0x7F665`: animation select, `FUN_00079B1C`/`FUN_00079C50`, ball
   actor/receiver hand-off) are unported (FU-78 §3.4/OL-2).
+  **Status (Task 10): stages 0 head/1/2/3 and the stage-0 dir selection are
+  ported as `fifa96_action_carrier_arm` (§8.3); the stage-0 target algebra and
+  the `FUN_0007F7E0` fallback are OL-63, and the 0→1 latch edge is OL-64.**
 * **OL-30 — row 06 pursuit.** The 597-instruction body (FU-77 §2.6): target
   construction, `0x114E04` folds, RNG gates, installs 8/9/4.
 * **OL-31 — rows 07/0F kick machines.** `FUN_0007E600` decision, the opponent
@@ -355,3 +361,201 @@ touched). Port write set: `include/fifa96_loader/fifa96_ball_pairing.h`,
 `tests/test_engine_match_handlers.c` (comments only),
 `docs/ghidra/FU137_dispatch_mechanics.md` (errata). `game/FIFAPCCD96.iso`
 untouched; `fifa96.rep/**` churn not staged.
+
+## 8. Task 10 port — ball staging tail and row-05 carrier machine (FU-142-follow / M2 arms-and-wiring T10)
+
+Reviewed read-only in `/FIFA96.EXE` (explicit; Ghidra MCP, no writes). This
+section closes the *bounded* half of OL-26 and OL-29: the `FUN_0007A490`
+code-keyed staging tail and the row-05 carrier machine stages 0-3, with the
+staging-tail target algebra and the `FUN_0007F7E0` fallback left as numbered
+legs (OL-62..OL-64). No row is wired (see §8.6).
+
+### 8.1 Tool calls (first-hand, read-only)
+
+* `disassemble_bytes 0x7A8D1..0x7A9E0` (70 insns), `0x7A9DE..0x7AB20`
+  (95 insns), `0x7AB1F..0x7AB60` (18 insns), `0x7AB60..0x7AD00` (124 insns) —
+  the `FUN_0007A490` tail `0x7A8D1..0x7AE2F`;
+* `read_memory 0x1104A0` (48 B) — the eligibility byte table `0x1104BB`
+  (`... 00 01 01 01 00 00 01 00 00 00 00 00 00 00 01` for offsets
+  `0x1104BB..0x1104C9`, i.e. codes `0..0xE`);
+* `read_memory 0x7A458` (56 B) — the per-code jump table (used below for the
+  residual leg);
+* `disassemble_bytes 0x7F194..0x7F390` (127 insns), `0x7F38F..0x7F580`
+  (139 insns), `0x7F57C..0x7F7D0` (203 insns) — row `05` `0x7F194..0x7F665`
+  plus the helpers at `0x7F666`/`0x7F6F0`;
+* `read_memory 0x7F184` (16 B) — the row-05 stage table;
+* `disassemble_bytes 0x71C94..0x71D00` + `0x71D00..0x71E20` (the
+  `FUN_00071C94` camera/track family), `0x79CCC..0x79D59` (`FUN_00079CCC`),
+  `0x79B1C..0x79B58` (`FUN_00079B1C` snap), `0x6DA64..0x6DB40`
+  (`FUN_0006DA64` block swap), `0x7F7E0..0x7F9C0` (`FUN_0007F7E0` head;
+  residual).
+
+### 8.2 The staging tail `0x7A8D1..0x7AA2F` → `fifa96_ball_pair_stage_tail`
+
+Native flow, site-annotated (all first-hand this slice):
+
+```
+0x7A8D1  DX = (int8)byte[0x158743]              ; the staged event code
+0x7A8D9  TEST DX,DX; JL 0x7A8EF                 ; negative -> receive
+0x7A8E1  CMP EAX,0xF; JGE 0x7A8EF               ; >= 0xF   -> receive
+0x7A8E6  CMP byte[EAX+0x1104BB],0; JNZ 0x7A8F6  ; eligibility table
+0x7A8EF  CALL 0x7A084; JMP 0x7A934              ; reception (unported)
+0x7A8F6  gate: (int32)[+0x69]>>16 < 0x60        ; == word[+0x6B], signed
+0x7A901  +0x59 += (dword[+0x6B])>>17            ; arithmetic SAR 17
+0x7A90C  +0x61 += (dword[+0x6D])>>17
+0x7A91D  0x1577BE/C0/C2 = 0                     ; camera velocity
+0x7A934  if (byte[+0x8D] == 0) {
+0x7A941    code 2   -> byte[0x158744] = 0x30
+0x7A955    code 1/3/6 -> 0x31
+0x7A970    code 7/4/5 -> the whole-block reset 0x7A97F..0x7A9D9
+0x7A9DE  }
+0x7A9DE  if (code in {1,2,3,6})
+0x7A9F5    DX = (int16)(dword[0x158738]>>16)    ; word 0x15873A
+0x7AA01    BX = (int16)(dword[0x15873A]>>16)    ; word 0x15873C
+0x7AA09    CALL 0x79C50                          ; face
+0x7AA0E  EDX = (int8)byte[0x158744] (sub-code)
+0x7AA14  EBX = (int8)byte[0x158745] (reserved45)
+0x7AA1A  ECX = (int8)[+0x8B]>>24 (type8)
+0x7AA2B  CALL 0x6E598                            ; animation id
+0x7AA30  if ([+0x20]) CALL 0x78B00               ; slot callback
+0x7AA3C..0x7AE2F                                 ; per-code target algebra
+```
+
+The `0x1104BB` bytes read this slice are
+`{0,1,1,1,0,0,1,0,0,0,0,0,0,0,1}` for codes 0..0xE, so the eligibility arm is
+`{1,2,3,6,0xE}` (not only `{1,2,3,6}` as the earlier FU-139 §3.1/§6 prose
+implied). The inactive 4/5/7 reset is exactly the FU-73 §1 clear
+(`0x158730`/`34` = 0, words `738/73A/73C/73E/740` = 0, flags `0x20`, code 2,
+the three tail bytes 0) — ported by reusing `fifa96_ball_pair_clear`.
+
+Ported: `fifa96_ball_pair_stage_tail(&state, &actor, recompute_table, &out)`
+(`include/fifa96_loader/fifa96_ball_pairing.h`), with the caller-supplied
+eligibility table, the nudge gate/addends, the active/inactive classification,
+the clear, the face (through the tested `fifa96_arm_face`), the animation
+(`fifa96_arm_anim_select`) and the slot-callback request. The `receive`,
+`camera_zero` and `slot_cb` outputs are derived requests/no-ops for the
+unported `FUN_0007A084`, the camera block and `FUN_00078B00` (OL-62).
+
+### 8.3 Row `05` `0x7F194..0x7F665` → `fifa96_action_carrier_arm`
+
+First-hand flow (site-annotated; the FU-78 §3 stage table `0x7F184` =
+`{0x7F274, 0x7F57C, 0x7F5E9, 0x7F627}` re-read as bytes
+`74f20700 7cf50700 e9f50700 27f60700`):
+
+```
+0x7F19F  byte[+0x9E] = 1
+0x7F1A6  phase != 2 -> CALL 0x7DAB4; RET       ; reset
+0x7F1BF  if ([0x58724] != rec) { block clear 0x7F1C7..0x7F205; }
+0x7F20B  [rec][+0x7B2] = rec; [rec][+0x7B6] = 0
+0x7F221  if (+0x89 < 0x4B0) +0x89 += zero-ext [0x157A64]
+0x7F240  if (word[+0x81] != 0) RET
+0x7F24E  rec+0x4D/51/55 = camera 0x15774C/50/54
+0x7F259  AL = byte[+0x92]; if AL > 3 RET
+0x7F274  stage 0: (int32)[+0x69]>>16 > 0x40 -> [0x157A83]=0; RET
+0x7F291  [0x157A83] = rec; if word[+0x6B] > word[+0x77] RET
+0x7F2A8  if (byte[0x15872D] > 0) RET
+0x7F2B5  if (dword[+0x5D] != 0) RET
+0x7F2BF  type arm (dword[0x157750] > 0x38): dir = 0x10F334/33C[type8], speed 0x60
+0x7F304  slot arm: dir = slot[+0x20/+0x21], speed 0x30
+0x7F32D  team gates (team+0x828 != 0 && team+0x7BF == 0 &&
+         (team+0x829 != 0 || +0x8D != 0)) -> CALL 0x7876C (slot merge)
+0x7F361  else CALL 0x7F7E0 (fallback, unported)
+0x7F386  [0x5872A] = dir_x; [0x5872B] = dir_z
+0x7F3A1..0x7F57B  the stage-0 target algebra (unported, OL-63)
+0x7F57C  stage 1: 0x92820(rec,0x26); 0x1577BE/C0/C2 = 0;
+         anim = (+0x8D != 0) ? 6 : 0x30 via 0x6E598; +0x89 = 0; +0x92++
+0x7F5E9  stage 2: no slot RET; CALL 0x79B1C (snap);
+         CALL 0x79C50(rec, slot[+0x1D]>>24, slot[+0x1E]>>24);
+         word[slot+6] == 0 -> RET; +0x92 = 0
+0x7F627  stage 3: byte[+0x44] == 0 -> RET; +0x92 = 0;
+         if (rec == [rec][+0x7B2]) { 0x7D9A4([0x158730], 4, 0, 0);
+         0x79B58([0x158734]) }
+```
+
+Ported: `fifa96_action_carrier_arm(&state, &carrier, type_dir_x, type_dir_z,
+&out)` (`include/fifa96_loader/fifa96_action_handlers.h`) with the FU-78
+`possession_claim`/`_timer`/`dribble_dir` helpers and the 0x79B1C snap,
+0x79C50 face and 0x6E598 animation folds inline (the `fifa96_arm_helpers`
+library already depends on `fifa96_action_handlers`, so reusing those symbols
+here would create a link cycle); the unported calls are explicit request flags
+(`sink`, `slot_merge`, `fallback`, `tail`, `camera_zero`) with the numbered
+legs. The stage table is honoured exactly (0-3; >3 returns).
+
+### 8.4 The staging-block vector erratum
+
+`0x158738` holds the `FUN_0008DCD4` out triple `{word distance, word dx, word
+dz}`: `0x7F666` (`0x7F6AF..0x7F6BB`) writes it with `EAX = rec+0x59`,
+`EDX = &local`, `EBX = 0x158738`, and the staging tail reads dword
+`0x158738`>>16 as the target-x addend (`0x7AA75`) and dword `0x15873A`>>16 as
+the target-z addend (`0x7AA8C`/`0x7AA94`). FU-139 §3.3's "x/middle/z" C field
+naming is therefore semantically `{distance, dx, dz}`; the struct is unchanged
+(never repurpose a field) and `fifa96_ball_pair_stage_tail` documents the
+mapping.
+
+### 8.5 Tests
+
+* `tests/test_ball_pairing.c`: `test_stage_tail_recompute_and_receive` (the
+  eligibility table domain, negative/0xF wraps, the nudge gate/addends, the
+  camera-zero arm), `test_stage_tail_inactive_subcode_and_clear` (0x30/0x31
+  latches, the 4/5/7 clear field-by-field, the fall-through anim), and
+  `test_stage_tail_face_anim_and_slot` (octants 2/0, the zero-direction seed,
+  the 0x6F clamp, the slot callback) + NULLs.
+* `tests/test_action_possession.c`: `test_carrier_phase_reset`,
+  `test_carrier_claim_timer_and_timer81`, `test_carrier_stage0_gates` (lane
+  0x40/0x41, close/bound, release countdown, airborne, type/slot/merge/fallback
+  arms + table NULLs), `test_carrier_stage1` (sink/camera/anim 6 vs 0x30,
+  latch), `test_carrier_stage2_and_stage3` (snap, slot face, `word[slot+6]`,
+  `+0x44`, hand-off, stage > 3) + NULLs.
+* `tests/test_engine_match_handlers.c`: `test_action_05_unwired_carrier` pins
+  `fn == NULL`, the FU-139/OL-63/UNSUPPORTED evidence and `UNSUP` dispatch.
+
+### 8.6 Wiring decision (evidence-gated)
+
+Row `05` is **not wired**. The plan's wiring gate requires install arm + full
+record-visible body + pool binding; the stage-0 target algebra
+(`0x7F3A1..0x7F57B`) writes the record target triple and swaps a 20-byte block
+via `FUN_0006DA64`, and the `FUN_0007F7E0` fallback installs a code — all
+outside this slice. Per the T6/T9 reviewed precedent (conditional gate;
+honest negative over an unsupported claim), `fifa96_match_action_table[0x05].fn`
+stays NULL and the evidence names **OL-63**. The ported functions are
+loader-level, tested symbols consumed by the future T11/T12 arms.
+
+### 8.7 Open legs (numbered; registered in FU-142 §6)
+
+* **OL-62 — staging-tail residual.** `FUN_0007A490 0x7AA3C..0x7AE2F`: the
+  per-code jump table flat `0x7A458` (`{0x7AACB,0x7AB83,0x7AC57,0x7AD0F,
+  0x7ADA0,0x7AE2F,0x7AE2F,0x7ADBA,0x7ADEC,0x7AE2F x5}`), the
+  `0x78B00` slot callback (`0x7AA37`), `FUN_0007A084`'s body, the local target
+  algebra with `0x92820`/`0x8F188` sinks, `0x92AC8` RNG draws and the
+  `0x157736` speed source all remain unported; the nudge's second addend
+  (dword `0x15873A`>>16 == `0x15873C`) is caller-supplied.
+* **OL-63 — row-05 residual / non-wiring.** Stage 0's target algebra
+  `0x7F3A1..0x7F57B` (the camera/local target copies, the `0x8DC68` metric
+  accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`, the `0x15872D`
+  write, the `0x157A4F` gate, `FUN_00079CCC` with `+0x9A`, `FUN_0006DA64`)
+  and the `FUN_0007F7E0` fallback (`0x7F7E0..0x801B2`; installs code 7/0x11,
+  rotates `0x158729`, calls `0x7E528`/`0x8DCD4`/`0x92AC8`/`0x6DBCC`/`0x741B4`/
+  `0x8DD70`/`0x92820`/`0x7D9A4`) are unported; row 05 stays unwired with this
+  leg.
+* **OL-64 — stage-0 → stage-1 edge.** Row 05's body never writes `+0x92` on
+  the stage-0 path (`0x7F274..0x7F57B` has no `+0x92` store; the only stores
+  are `0x7F5C7`, `0x7F616`, `0x7F62D`), so the native 0→1 transition is an
+  external re-install (the installer `FUN_0007D9A4` stages the BL byte into
+  `+0x92`) whose caller is not statically located in this window; the port
+  models the stage byte as an input.
+
+### 8.8 Repo state (this task)
+
+`make check` 103/103 (library tests also under ASan/UBSan); M1 golden and
+pinned render hashes unchanged (no render path touched). Write set:
+`include/fifa96_loader/fifa96_ball_pairing.h`,
+`src/fifa96_loader/fifa96_ball_pairing.c`,
+`include/fifa96_loader/fifa96_action_handlers.h`,
+`src/fifa96_loader/fifa96_action_handlers.c`,
+`tests/test_ball_pairing.c`, `tests/test_action_possession.c`,
+`src/fifa96_engine/fifa96_match_handlers.c`,
+`tests/test_engine_match_handlers.c`, `CMakeLists.txt` (ball-pairing link adds
+`fifa96_arm_helpers`), `docs/ghidra/FU139_action_cluster_b.md` (this section),
+`docs/ghidra/FU137_dispatch_mechanics.md` (§6.1 row 05, §7 note, Task-10
+errata), `docs/ghidra/FU142_installer_arms_scope.md` (§6 leg registry).
+`game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.

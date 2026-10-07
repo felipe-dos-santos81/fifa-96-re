@@ -365,6 +365,227 @@ static void test_receive_target(void) {
          -FIFA96_ERR_INVALID);
 }
 
+/* FU-139 §8 (Task 10): the `FUN_0007A490` code-keyed staging tail
+ * (`0x7A8D1..0x7AA2F`, first-hand). The caller-supplied recompute table is the
+ * native eligibility byte `0x1104BB[code]` read this slice:
+ * `{0,1,1,1,0,0,1,0,0,0,0,0,0,0,1}` for codes 0..0xE (codes 1/2/3/6/0xE take
+ * the nudge/camera arm; everything else the native `FUN_0007A084` call). */
+static const uint8_t stage_tail_recompute[15] = {0, 1, 1, 1, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1};
+
+static fifa96_ball_stage_tail_actor stage_actor(void) {
+  fifa96_ball_stage_tail_actor a;
+  memset(&a, 0, sizeof a);
+  a.pos_x = 0x1000;
+  a.pos_z = 0x2000;
+  a.nudge_x = 0x20000;    /* dword[+0x6B] */
+  a.nudge_z = 0xFFFE0000; /* dword[+0x6D] */
+  a.lane_gate = 0x5F;
+  a.active = 1;
+  a.type8 = 3;
+  a.facing = 0x77;
+  return a;
+}
+
+/* `0x7A8D1..0x7A93B`: the eligible codes take the recompute arm
+ * (`[+0x69]>>16 < 0x60` then the two `>>17` dword adds, then the camera-velocity
+ * zero); every other signed code calls the unported reception `FUN_0007A084`
+ * (`receive == 1`, no nudge, no camera zero). */
+static void test_stage_tail_recompute_and_receive(void) {
+  fifa96_ball_pair_state s;
+  fifa96_ball_stage_tail_actor a;
+  fifa96_ball_stage_tail_out out;
+
+  memset(&s, 0, sizeof s);
+  s.code = 1;
+  a = stage_actor();
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.recompute == 1 && out.receive == 0);
+  assert(out.nudge == 1 && out.camera_zero == 1);
+  assert(a.pos_x == 0x1000 + 1 && a.pos_z == 0x2000 - 1);
+
+  memset(&s, 0, sizeof s);
+  s.code = 0xE;
+  a = stage_actor();
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.recompute == 1 && out.receive == 0);
+
+  memset(&s, 0, sizeof s);
+  s.code = 0;
+  a = stage_actor();
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.receive == 1 && out.recompute == 0);
+  assert(out.nudge == 0 && out.camera_zero == 0);
+  assert(a.pos_x == 0x1000 && a.pos_z == 0x2000);
+
+  memset(&s, 0, sizeof s);
+  s.code = 0x0F;
+  a = stage_actor();
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.receive == 1 && out.recompute == 0);
+
+  memset(&s, 0, sizeof s);
+  s.code = (uint8_t)-1;   /* signed -1 -> the native MAS < 0 arm */
+  a = stage_actor();
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.receive == 1 && out.recompute == 0);
+
+  /* lane gate at 0x60 suppresses the nudge but keeps the camera zero. */
+  memset(&s, 0, sizeof s);
+  s.code = 2;
+  a = stage_actor();
+  a.lane_gate = 0x60;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.nudge == 0 && out.camera_zero == 1);
+  assert(a.pos_x == 0x1000 && a.pos_z == 0x2000);
+  assert(fifa96_ball_pair_stage_tail(NULL, &a, stage_tail_recompute, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_ball_pair_stage_tail(&s, NULL, stage_tail_recompute, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_ball_pair_stage_tail(&s, &a, NULL, &out) == -FIFA96_ERR_INVALID);
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
+/* `0x7A934..0x7A9D9`: an inactive actor with code 2 latches sub-code 0x30,
+ * codes 1/3/6 latch 0x31, codes 4/5/7 run the whole-block reset
+ * (`fifa96_ball_pair_clear`), and every other inactive code falls through to
+ * the active face/anim arm. An active actor never rewrites the sub-code. */
+static void test_stage_tail_inactive_subcode_and_clear(void) {
+  fifa96_ball_pair_state s;
+  fifa96_ball_stage_tail_actor a;
+  fifa96_ball_stage_tail_out out;
+
+  memset(&s, 0, sizeof s);
+  s.code = 2;
+  a = stage_actor();
+  a.active = 0;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(s.sub_code == 0x30 && out.cleared == 0);
+
+  memset(&s, 0, sizeof s);
+  s.code = 1;
+  a = stage_actor();
+  a.active = 0;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(s.sub_code == 0x31);
+  s.sub_code = 0;
+  s.code = 3;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(s.sub_code == 0x31);
+  s.sub_code = 0;
+  s.code = 6;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(s.sub_code == 0x31);
+
+  /* Active code 2: the sub-code write is skipped (native JNZ 0x7A9DE). */
+  memset(&s, 0, sizeof s);
+  s.code = 2;
+  s.sub_code = 0x11;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(s.sub_code == 0x11);
+
+  /* Inactive 4/5/7 -> the 0x7A97F..0x7A9D9 whole-block reset. */
+  for (uint8_t code = 4; code <= 7; code++) {
+    if (code == 6) continue;   /* 6 latches 0x31 instead */
+    memset(&s, 0xAB, sizeof s);
+    s.code = code;
+    a = stage_actor();
+    a.active = 0;
+    assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+    assert(out.cleared == 1);
+    assert(s.actor == 0 && s.receiver == 0);
+    assert(s.vector.x == 0 && s.vector.height == 0 && s.vector.z == 0);
+    assert(s.traj == 0 && s.angle == 0);
+    assert(s.flags == 0x20 && s.code == 2);
+    assert(s.sub_code == 0 && s.reserved45 == 0 && s.ack == 0);
+    assert(out.anim == 0);
+  }
+
+  /* Inactive code 0 falls through to the anim arm without a sub-code write. */
+  memset(&s, 0, sizeof s);
+  s.code = 0;
+  s.sub_code = 0x22;
+  a = stage_actor();
+  a.active = 0;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.cleared == 0 && s.sub_code == 0x22);
+  assert(out.anim == 0x22);
+}
+
+/* `0x7A9DE..0x7AA2B`: codes 1/2/3/6 take the 0x79C50 face with
+ * `dx = word[0x15873A]` and `dz = word[0x15873C]` (the staged block's second
+ * and third words; `state->vector.height`/`state->vector.z`), every code takes
+ * the 0x6E598 animation resolution with `kind = sub_code`, and a live control
+ * slot runs the unported `0x78B00` callback. */
+static void test_stage_tail_face_anim_and_slot(void) {
+  fifa96_ball_pair_state s;
+  fifa96_ball_stage_tail_actor a;
+  fifa96_ball_stage_tail_out out;
+
+  memset(&s, 0, sizeof s);
+  s.code = 1;
+  s.vector.height = 0x100;   /* dx -> +x octant 2 */
+  s.vector.z = 0;
+  s.sub_code = 0x33;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.face == 2);
+  assert(a.facing == 2);
+  assert(out.anim == 0x33);
+  assert(out.slot_cb == 0);
+
+  /* dz-only -> octant 0; the zero-direction guard keeps the seed. */
+  memset(&s, 0, sizeof s);
+  s.code = 2;
+  s.vector.height = 0;
+  s.vector.z = 0x100;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.face == 0);
+  memset(&s, 0, sizeof s);
+  s.code = 6;
+  s.vector.height = 0;
+  s.vector.z = 0;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.face == 0x77);
+
+  /* Non-face code with a slot: only the anim resolution + the slot callback. */
+  memset(&s, 0, sizeof s);
+  s.code = 4;
+  s.sub_code = 0x40;
+  a = stage_actor();
+  a.active = 1;
+  a.has_slot = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.face == 0x77);
+  assert(out.anim == 0x40);
+  assert(out.slot_cb == 1);
+
+  /* kind 0 resolves through the derived row stand-in. */
+  memset(&s, 0, sizeof s);
+  s.code = 0;
+  s.sub_code = 0;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.anim == 0);
+
+  /* The 0x6F clamp. */
+  memset(&s, 0, sizeof s);
+  s.code = 4;
+  s.sub_code = 0x6F;
+  a = stage_actor();
+  a.active = 1;
+  assert(fifa96_ball_pair_stage_tail(&s, &a, stage_tail_recompute, &out) == FIFA96_OK);
+  assert(out.anim == 0);
+}
+
 int main(void) {
   test_offset_zero_and_axes();
   test_offset_metric_branches();
@@ -387,6 +608,9 @@ int main(void) {
   test_state_clear();
   test_state_stage();
   test_receive_target();
+  test_stage_tail_recompute_and_receive();
+  test_stage_tail_inactive_subcode_and_clear();
+  test_stage_tail_face_anim_and_slot();
   puts("test_ball_pairing: ok");
   return 0;
 }

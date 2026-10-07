@@ -416,6 +416,209 @@ static void test_duel_step(void) {
   assert(fifa96_action_duel_step(&d, 1, 0, NULL) == ACTION_INVALID);
 }
 
+/* FU-139 §8 (Task 10): the row-05 carrier machine (`0x7F194..0x7F665`,
+ * first-hand). `fifa96_action_carrier_arm` covers the bounded entries: the
+ * phase/claim/timer head, the stage-0 gates with the ported dribble-dir
+ * helper, stages 1-3 (0x92820/0x6E598/0x79B1C/0x79C50/0x7D9A4 surfaces) and
+ * the derived requests for the unported stage-0 tail and `FUN_0007F7E0`
+ * fallback (OL-63). */
+static fifa96_action_carrier carrier_base(void) {
+  fifa96_action_carrier c;
+  memset(&c, 0, sizeof c);
+  c.actor = 0x77;
+  c.phase = 2;
+  c.active = 1;
+  c.facing = 0x5;
+  c.type8 = 3;
+  c.stage92 = 0;
+  return c;
+}
+
+static const int8_t carrier_type_x[16] = {0, 1, 0, -1};
+static const int8_t carrier_type_z[16] = {1, 0, -1, 0};
+
+/* `0x7F1A6`: a non-phase-2 record resets (`fifa96_arm_reset`). */
+static void test_carrier_phase_reset(void) {
+  fifa96_action_carrier c = carrier_base();
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p = possession_dirty();
+  c.phase = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.reset == 1);
+  assert(out.claim == 0 && out.stage == 0 && out.tail == 0 && out.handoff == 0);
+  assert(p.carrier == 0x1234);   /* no claim on the reset path */
+}
+
+/* `0x7F1BF..0x7F23A`: claim the possession block, write the team pointers,
+ * cap/add the timer, and bail before the stage switch while `+0x81 != 0`. */
+static void test_carrier_claim_timer_and_timer81(void) {
+  fifa96_action_carrier c = carrier_base();
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p;
+  memset(&p, 0, sizeof p);
+  p.carrier = 0x11;
+  c.timer89 = 0x4AF;
+  c.delta = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.claim == 1 && p.carrier == 0x77);
+  assert(out.team_target == 1);
+  assert(c.timer89 == 0x4B0);
+  assert(out.target_camera == 1);
+  /* same carrier -> claimed == 0 */
+  c.timer81 = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.claim == 0);
+  assert(out.target_camera == 0);   /* early return before the camera copy */
+  c.timer81 = 0;
+  c.timer89 = 0x4B0;
+  c.delta = 5;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(c.timer89 == 0x4B0);
+  assert(fifa96_action_carrier_arm(NULL, &c, carrier_type_x, carrier_type_z, &out) == ACTION_INVALID);
+  assert(fifa96_action_carrier_arm(&p, NULL, carrier_type_x, carrier_type_z, &out) == ACTION_INVALID);
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, NULL) == ACTION_INVALID);
+}
+
+/* `0x7F274..0x7F3A0`: stage-0 head gates and the dribble-dir arms. */
+static void test_carrier_stage0_gates(void) {
+  fifa96_action_carrier c = carrier_base();
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p = possession_dirty();
+
+  /* lane > 0x40 clears the controlled actor and returns. */
+  c.lane = 0x41;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.clear_control == 1 && out.set_control == 0 && out.tail == 0);
+  assert(out.team_target == 1);
+
+  /* lane <= 0x40 sets the controlled actor; close > bound waits. */
+  c = carrier_base();
+  c.lane = 0x40;
+  c.close_word = 0x40;
+  c.bound_word = 0x3F;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.set_control == 1 && out.tail == 0);
+
+  /* release countdown active -> wait. */
+  c.close_word = 0x20;
+  c.bound_word = 0x3F;
+  p.release_timer = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.set_control == 1 && out.tail == 0 && out.dirs == 0);
+
+  /* airborne -> wait. */
+  p.release_timer = 0;
+  c.airborne = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.tail == 0);
+
+  /* Type arm: `[0x157750] > 0x38` -> per-type dir bytes, speed 0x60. */
+  c = carrier_base();
+  c.ball_height = 0x39;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.dirs == 1 && out.dir_x == (uint8_t)carrier_type_x[3] && out.dir_z == (uint8_t)carrier_type_z[3]);
+  assert(out.tail == 1 && out.fallback == 0 && out.slot_merge == 0);
+
+  /* Slot arm: `[0x157750] <= 0x38` with a slot -> slot bytes, speed 0x30. */
+  c = carrier_base();
+  c.ball_height = 0x38;
+  c.has_slot = 1;
+  c.slot_dir_x = 0x12;
+  c.slot_dir_z = 0xF0;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.dirs == 1 && out.dir_x == 0x12 && out.dir_z == 0xF0);
+  assert(out.tail == 1);
+
+  /* No type, no slot, team gates pass -> the 0x7876C merge request. */
+  c = carrier_base();
+  c.ball_height = 0x38;
+  c.team_slot_pool = 1;
+  c.team_chosen = 0;
+  c.active = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.slot_merge == 1 && out.fallback == 0 && out.tail == 1);
+
+  /* Team gates fail -> the FUN_0007F7E0 fallback. */
+  c = carrier_base();
+  c.ball_height = 0x38;
+  c.team_slot_pool = 0;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.fallback == 1 && out.slot_merge == 0 && out.tail == 1);
+
+  /* The type tables are only required when the type arm is taken. */
+  c = carrier_base();
+  c.ball_height = 0x39;
+  assert(fifa96_action_carrier_arm(&p, &c, NULL, carrier_type_z, &out) == ACTION_INVALID);
+  c.ball_height = 0x38;
+  c.has_slot = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, NULL, NULL, &out) == FIFA96_OK);
+}
+
+/* `0x7F57C..0x7F5E8`: stage 1 runs the 0x92820 sink, zeros the camera
+ * velocity, resolves the animation (active -> 6, inactive -> 0x30), clears the
+ * timer and advances the latch. */
+static void test_carrier_stage1(void) {
+  fifa96_action_carrier c = carrier_base();
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p = possession_dirty();
+  c.stage92 = 1;
+  c.active = 1;
+  c.timer89 = 0x55;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.sink == 1 && out.camera_zero == 1);
+  assert(out.anim == 6);
+  assert(c.timer89 == 0);
+  assert(out.stage == 2 && out.snap == 0 && out.handoff == 0);
+  c = carrier_base();
+  c.stage92 = 1;
+  c.active = 0;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.anim == 0x30);
+}
+
+/* `0x7F5E9..0x7F665`: stage 2 snaps, faces by the slot direction and loops to
+ * stage 0 while the slot word is live; stage 3 resets the latch and hands the
+ * ball actor to code 4 only for the team target. */
+static void test_carrier_stage2_and_stage3(void) {
+  fifa96_action_carrier c = carrier_base();
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p = possession_dirty();
+
+  c.stage92 = 2;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.snap == 0 && out.stage == 2);
+
+  c.has_slot = 1;
+  c.slot_live = 0;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.snap == 1 && out.face == 0x5);   /* zero direction keeps the seed */
+  assert(out.stage == 2);
+
+  c.slot_live = 1;
+  c.slot_dir_x = 0x64;
+  c.slot_dir_z = 0;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.snap == 1 && out.face == 2 && out.stage == 0);
+
+  c = carrier_base();
+  c.stage92 = 3;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.stage == 3 && out.handoff == 0);
+  c.event_flag44 = 1;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.stage == 0 && out.handoff == 0);
+  c.is_team_target = 1;
+  c.stage92 = 3;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.stage == 0 && out.handoff == 1);
+
+  /* stages > 3 fall straight through (native CMP AL,3 / JA). */
+  c = carrier_base();
+  c.stage92 = 4;
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.stage == 4 && out.sink == 0 && out.snap == 0);
+}
+
 static void test_duel_split(void) {
   uint8_t own = 0;
   uint8_t opp = 0;
@@ -443,6 +646,11 @@ int main(void) {
   test_tackle_step();
   test_duel_step();
   test_duel_split();
+  test_carrier_phase_reset();
+  test_carrier_claim_timer_and_timer81();
+  test_carrier_stage0_gates();
+  test_carrier_stage1();
+  test_carrier_stage2_and_stage3();
   puts("test_action_possession: all assertions passed");
   return 0;
 }
