@@ -68,7 +68,8 @@ static void test_input_edges(void) {
 }
 
 /* The library state machine is applied to the queue: code 8 (decline) opens
- * the panel, a gated confirm in the panel reports the exit. */
+ * the panel; a gated confirm is accepted by the library and parks the driver
+ * in its exit phase (the engine quit is the QUIT key or a settings exit). */
 static void test_phase_derivation(void) {
   struct fifa96_surface *s = fifa96_surface_create(320, 240);
   struct fifa96_frontend_run fr;
@@ -85,8 +86,25 @@ static void test_phase_derivation(void) {
 
   press(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
   assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fr.frontend.confirm == 1);
   assert(fr.phase == FIFA96_FRONTEND_PHASE_EXIT);
-  assert(quit == 1);
+  assert(quit == 0);
+
+  fifa96_surface_destroy(s);
+}
+
+/* CONFIRM is the FU-66 fire key (action code -10): with the M1 constant
+ * confirm gate the library records a real CONFIRM. */
+static void test_confirm_gate(void) {
+  struct fifa96_surface *s = fifa96_surface_create(320, 240);
+  struct fifa96_frontend_run fr;
+  assert(fifa96_frontend_run_init(&fr, s) == 0);
+  assert(fr.frontend.confirm == 0);
+
+  int quit = 0;
+  press(&fr, FIFA96_ENGINE_KEY_CONFIRM, 1);
+  assert(fifa96_frontend_run_step(&fr, s, &quit) == 0);
+  assert(fr.frontend.confirm == 1);
 
   fifa96_surface_destroy(s);
 }
@@ -123,6 +141,7 @@ int main(void) {
   test_wrapper_contract();
   test_input_edges();
   test_phase_derivation();
+  test_confirm_gate();
   test_engine_mode();
   puts("test_engine_frontend OK");
   return 0;

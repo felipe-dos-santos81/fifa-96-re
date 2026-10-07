@@ -50,6 +50,7 @@ int fifa96_frontend_run_input(struct fifa96_frontend_run *fr, const fifa96_platf
 int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surface *s, int *quit) {
   if (!fr || !s || !quit) return -1;
   *quit = 0;
+  int library_exit = 0;
 
   if (fifa96_frontend_driver(&fr->frontend) != 0) return -1;
   for (int i = 0; i < fr->queue_len; i++) {
@@ -64,15 +65,25 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
       uint32_t state = fr->entry_state;
       if (fifa96_frontend_exit(&fr->frontend, code, &exit_state, &state) == 0) {
         fr->entry_state = state;
+        if (exit_state == FIFA96_FRONTEND_EXIT_SETTINGS ||
+            exit_state == FIFA96_FRONTEND_EXIT_SETTINGS_ALT) {
+          library_exit = 1;
+        }
       }
     } else {
       enum fifa96_frontend_event event = FIFA96_FRONTEND_EVENT_NONE;
       int32_t mapped = code;
-      if (fifa96_frontend_event(&fr->frontend, code, 0, &event, &mapped) != 0) continue;
+      /* M1 gate: the per-state prompt is an open leg, so the constant gate
+       * lets -10 (CONFIRM's action code) be accepted as a real CONFIRM. */
+      if (fifa96_frontend_event(&fr->frontend, code, 1, &event, &mapped) != 0) continue;
       if (event == FIFA96_FRONTEND_EVENT_EXIT ||
           event == FIFA96_FRONTEND_EVENT_SETTINGS ||
           event == FIFA96_FRONTEND_EVENT_SETTINGS_ALT) {
         fifa96_frontend_frontend_result(&fr->frontend, mapped);
+      }
+      if (event == FIFA96_FRONTEND_EVENT_SETTINGS ||
+          event == FIFA96_FRONTEND_EVENT_SETTINGS_ALT) {
+        library_exit = 1;
       }
     }
   }
@@ -86,7 +97,10 @@ int fifa96_frontend_run_step(struct fifa96_frontend_run *fr, struct fifa96_surfa
     uint32_t state = fr->entry_state;
     if (fifa96_frontend_entry_state(&fr->frontend, &state) == 1) fr->entry_state = state;
   }
-  if (fr->quit_requested || fr->frontend.phase == FIFA96_FRONTEND_PHASE_EXIT) *quit = 1;
+  /* An accepted CONFIRM parks the driver in EXIT but the run resumes on the
+   * next input (Task 10's tape selects, then declines, then quits); only the
+   * QUIT key or a settings exit leaves the engine. */
+  if (fr->quit_requested || library_exit) *quit = 1;
 
   fifa96_surface_clear(s, 0);   /* Task 9 replaces this stub with the menu art */
   fr->frames++;
