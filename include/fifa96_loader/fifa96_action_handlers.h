@@ -786,7 +786,9 @@ fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
  *     has-slot offside c0/camdist arm and the `0x114E04` fold of V1 (the
  *     camera or position triple);
  *   - `0x80359..0x803F5` the no-slot `flag54` (V1.z past +-0x5A0 and the
- *     teammate z), the teammate `+0x89` timer and the 0x30..0x150 scale clamp;
+ *     teammate z), the teammate `+0x89` timer (subtracted once, and a second
+ *     time at `0x803EE` when the own score word is below the other,
+ *     `0x803BE..0x803EC`) and the 0x30..0x150 scale clamp;
  *   - `0x80482..0x805B8` the `+0x7B6` V0 block (`0x8DCD4(V1, V2)`, the speed
  *     `lane_dword >> 18` fast arm when `flag54` and `|V1.z| < 0x930`, else
  *     0x60, folded into V0.x/V0.z);
@@ -806,9 +808,11 @@ fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
  *     bytes -> id `0x1C` when speed `< 3` and lane `< 0x90`);
  *   - `0x8082B..0x809A2` the `[0x157A4F]` parity claim arm: the `0x8DE8C`
  *     search over the team mates (skip index 0) -> team `+0x7B2`; when the
- *     record itself is nearest, the `0x8DCD4` carrier mirror and the
- *     `+0x7B6` searches (the `flag54` height arm re-searches from
- *     `{0,0,+-0xB10}`);
+ *     record itself is nearest, the `0x8DCD4` carrier mirror runs when the
+ *     self distance is `>=` the carrier distance (`0x808AD CMP CX` /
+ *     `0x808B2 JL 0x80903`) and the `+0x7B6` searches follow (the `flag54`
+ *     height arm re-searches from `{0,0,+-0xB10}`); otherwise team `+0x7B6`
+ *     is cleared;
  *   - `0x809A2..0x809EF` the `0x79CCC` callback search (signed 0x7FBC
  *     threshold, index-0 fallback) -> the `0x6DA64` swap request when the
  *     found mate is within 0xC0.
@@ -859,7 +863,8 @@ typedef struct fifa96_action_pursuit {
   int8_t desc_e;          /* (int8)rec[+4][+0xE] (the install-9 base) */
   int8_t byte90;          /* (int8)+0x90 (the install-9 shift) */
   uint8_t parity;         /* [0x157A4F] frame toggle (FUN_0004B100 0x4B11A) */
-  uint8_t byte_15872f;    /* byte[0x15872F] (the x-adjust gate; row-05 producer) */
+  int8_t byte_15872f;     /* (int8)byte[0x15872F] (the x-adjust gate; row-05
+                           * producer; native 0x806D0 SAR 0x18 -> signed) */
   int16_t adjust_x;       /* byte[0x15872A] (the target-x addend; row-05 producer) */
   int32_t score_own;      /* word[0x157AC5 + 2*idx(side)] */
   int32_t score_other;    /* word[0x157AC5 + 2*idx(side^1)] */

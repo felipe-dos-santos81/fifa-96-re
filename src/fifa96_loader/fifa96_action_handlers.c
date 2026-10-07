@@ -1833,6 +1833,11 @@ fifa96_err_t fifa96_action_pursuit_step(fifa96_action_pursuit *state,
     if (state->actor == state->team_target) {
       state->timer89 += (int32_t)state->delta;
       scaled = (int16_t)((uint16_t)scaled - (uint16_t)state->timer89);
+      /* 0x803BE..0x803EC: score[idx(side)] vs score[idx(side^1)], unsigned
+       * word; `JNC 0x803F5` skips unless own < other, in which case 0x803EE
+       * subtracts the teammate timer a second time. */
+      if ((uint16_t)state->score_own < (uint16_t)state->score_other)
+        scaled = (int16_t)((uint16_t)scaled - (uint16_t)state->timer89);
     }
     if (scaled > 0x150) scaled = 0x150;                     /* 0x803F5 */
     else if (scaled < 0x30) scaled = 0x30;
@@ -1902,7 +1907,7 @@ after_fold:
       if (metric <= 0x60) {                                 /* 0x80696 */
         install = 8;
       } else if (state->byte99 == 0u && state->carrier_speed > 4) {
-        if (state->parity != 0u && state->byte_15872f < 2u) { /* 0x806C7 */
+        if (state->parity != 0u && state->byte_15872f < 2) {   /* 0x806C7; 0x806DB JGE signed */
           uint16_t r = 0;
           int32_t gate =
               (int32_t)state->desc_c | (int32_t)(uint8_t)state->byte9d;
@@ -1981,7 +1986,7 @@ after_fold:
         int16_t cdx = (int16_t)((uint16_t)v1_x - (uint16_t)state->carrier_pos_x);
         int16_t cdz = (int16_t)((uint16_t)v1_z - (uint16_t)state->carrier_pos_z);
         int32_t cdist = fifa96_entity_distance(cdx, cdz);
-        if ((int16_t)self_dist < (int16_t)cdist) {          /* 0x808AD */
+        if ((int16_t)self_dist >= (int16_t)cdist) {         /* 0x808AD/0x808B2 JL */
           v1_x += cdx;                                      /* 0x808B4 */
           v1_z += cdz;
         } else {

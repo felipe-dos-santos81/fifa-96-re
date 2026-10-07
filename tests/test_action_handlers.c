@@ -1035,7 +1035,8 @@ static void test_pursuit_entry_and_carrier_gate(void) {
  * the receiver timer runs; target = V1, clamped (0x7D3E4). The V4 metric
  * 8DC68(0x61, 0) = 0x61 > 0x60 with parity 0 skips the adjust arm and reaches
  * the install-9 gate: base = 0xF << 0 = 0xF; the seed-0 first FUN_00092AC8
- * draw is 0x0001 (w0 after one step), 1 < 0xF -> install 9. The anim gate:
+ * draw is 0x200 (the first "ArCaDe" chain step), so (rng & 0x1FF) = 0 < 0xF
+ * -> install 9. The anim gate:
  * row byte 0, speed 0 < 3, lane word 0x80 < 0x90 -> id 0x1C. */
 static void test_pursuit_fold_and_install_gate(void) {
   fifa96_action_pursuit s;
@@ -1098,7 +1099,8 @@ static void test_pursuit_fold_and_install_gate(void) {
   /* The parity + byte[0x15872F] adjust arm (0x806C7..0x8070C) draws first and
    * shifts the target x by byte[0x15872A]<<6 when (rng & 0xF) > gate. With
    * parity 1, byte 0x15872F = 0, desc[+0xC] = 0 and +0x9D = 0 the seed-0 first
-   * draw 0x0001 has (1 & 0xF) = 1 > 0, so target x grows by adjust_x<<6. */
+   * draw 0x200 has (0x200 & 0xF) = 0, not > 0, so the x stays; the install
+   * gate then draws 0x725, (0x725 & 0x1FF) = 0x125 >= base 0xF -> no install. */
   pursuit_init(&s, &rng);
   assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
   s.has_slot = 0;
@@ -1109,6 +1111,7 @@ static void test_pursuit_fold_and_install_gate(void) {
   s.adjust_x = 2;
   s.word6d = 0x61;
   assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_x == 0);   /* no adjust from the low-nibble-0 draw */
   assert(out.install == 0 && out.swap == 0);
 }
 
@@ -1277,16 +1280,12 @@ static void test_pursuit_claim_arm(void) {
   assert(out.swap == 1 && out.swap_index == 2);
 }
 
-/* Self-nearest, the carrier mirror and the flag54 second search.
- * Camera (0,0,0x600), side 1, teammate_z 0 -> flag54 (V1.z 0x600 > 0x5A0).
- * scaled 0xA2, fold -> V1 = (0, 0, 0x6A2); target = V1; receiver timer.
- * Self (mate 3) at (0,0x6A2) wins the first search; self distance 0x6A2 <
- * the carrier distance 0x95E (carrier at (0,0x1000)), so V1 mirrors by
- * (0, -0x95E) to (0,0,-0x2BC). The 0x808EB search (self latched) picks mate
- * 5 at (0,0xB10) (0xD6C) over the far mates (0x18BC); the flag54 height gate
- * 0xB10+0x60 < 0x1000 re-searches and keeps mate 5 (distance 0). The 0x79CCC
- * search then finds mate 5 at 0xB10 >= 0xC0 -> no swap. */
-static void test_pursuit_self_nearest_and_swap(void) {
+/* The carrier mirror (`0x808AD CMP CX,[ESP+0x24]; 0x808B2 JL 0x80903`): the
+ * mirror at `0x808B4` runs when the self distance is >= the carrier distance.
+ * Common derivation: camera (0,0,0x600), side 1 -> dist 0x510, scaled 0xA2,
+ * angle 0, fold V1 = (0,0,0x6A2); flag54 (V1.z > 0x5A0 and > teammate z);
+ * target = V1, receiver timer. */
+static void test_pursuit_carrier_mirror_equal(void) {
   fifa96_action_pursuit s;
   fifa96_action_pursuit_out out;
   struct fifa96_rng rng;
@@ -1301,18 +1300,25 @@ static void test_pursuit_self_nearest_and_swap(void) {
   s.parity = 1;
   s.teammate_z = 0;
   s.pos_x = 0;
-  s.pos_z = 0;
+  s.pos_z = 0x6A2;            /* self sits exactly on V1: self_dist 0 */
   s.camera_x = 0;
   s.camera_y = 0;
   s.camera_z = 0x600;
   s.carrier_pos_x = 0;
-  s.carrier_pos_z = 0x1000;
+  s.carrier_pos_z = 0x6A2;    /* cdist 0 == self_dist: the >= mirror runs */
   mates[3].x = 0;
   mates[3].z = 0x6A2;
   mates[3].pos_z = 0x6A2;
+  /* The mirror delta is 0, so V1' = V1; the 0x808EB search (self latched)
+   * picks mate 5 at V1+(0,0x100) over mate 6 at the {0,0,0xB10} fallback
+   * origin (0x34E). The height gate then skips (0x7A2+0x60 >= 0x6A2), so a
+   * wrongly taken re-search would pick mate 6 instead. */
   mates[5].x = 0;
-  mates[5].z = 0xB10;
-  mates[5].pos_z = 0xB10;
+  mates[5].z = 0x7A2;
+  mates[5].pos_z = 0x7A2;
+  mates[6].x = 0;
+  mates[6].z = 0xB10;
+  mates[6].pos_z = 0xB10;
   assert(fifa96_action_pursuit_step(&s, mates, 11, &out) == FIFA96_OK);
   assert(out.target_set == 1);
   assert(out.target_z == 0x6A2);
@@ -1322,6 +1328,175 @@ static void test_pursuit_self_nearest_and_swap(void) {
   assert(out.team_second_set == 1);
   assert(out.team_second_index == 5);
   assert(out.swap == 0);
+}
+
+/* self_dist 0x5E < cdist 0x95E (carrier at (0,0x1000)): `0x808B2 JL 0x80903`
+ * clears team+0x7B6 and skips the mirror and the 0x808EB search; flag54 is 0
+ * (V1.z 0x6A2 <= teammate 0x700), so the second write stays NONE. Mate 5 at
+ * the would-be mirrored point (0,0,-0x2BC) would be picked by a mirroring
+ * port, so this fixture pins the direction. */
+static void test_pursuit_carrier_no_mirror(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[11];
+  pursuit_mates_init(mates, 11);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 3;
+  s.team_target = 3;
+  s.self_index = 3;
+  s.parity = 1;
+  s.teammate_z = 0x700;
+  s.pos_x = 0;
+  s.pos_z = 0x700;
+  s.camera_x = 0;
+  s.camera_y = 0;
+  s.camera_z = 0x600;
+  s.carrier_pos_x = 0;
+  s.carrier_pos_z = 0x1000;
+  mates[3].x = 0;
+  mates[3].z = 0x700;
+  mates[3].pos_z = 0x700;
+  mates[5].x = 0;
+  mates[5].z = -0x2BC;
+  mates[5].pos_z = -0x2BC;
+  assert(fifa96_action_pursuit_step(&s, mates, 11, &out) == FIFA96_OK);
+  assert(out.target_z == 0x6A2);
+  assert(out.receiver_timer == 0);
+  assert(out.team_target_index == FIFA96_ACTION_PURSUIT_SELF);
+  assert(out.team_second_set == 1);
+  assert(out.team_second_index == FIFA96_ACTION_PURSUIT_NONE);
+  assert(out.swap == 0);
+}
+
+/* The flag54 height gate research (`0x80952` fails, `0x80956..0x809A2`):
+ * self at (0,0x4A2) and carrier at (0,0x8A2) give self_dist == cdist == 0x200,
+ * so the `>=` mirror runs and V1 (0,0,0x6A2) maps to V1' = (0,0,0x4A2). Mate 5
+ * sits exactly on V1' (first-search distance 0x200 ties self; the strict `<`
+ * keeps the earlier self index 3) and wins the 0x808EB search; the gate then
+ * fails (|0x4A2| + 0x60 < |0x8A2|), so the re-search from {0,0,0xB10}
+ * (camera_z 0x600 >= 0) picks mate 6. The 0x79CCC search from the self
+ * position finds mate 5 at distance 0 -> the 0x6DA64 swap request. */
+static void test_pursuit_height_gate_research(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[11];
+  pursuit_mates_init(mates, 11);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 3;
+  s.team_target = 3;
+  s.self_index = 3;
+  s.parity = 1;
+  s.teammate_z = 0;
+  s.pos_x = 0;
+  s.pos_z = 0x4A2;
+  s.camera_x = 0;
+  s.camera_y = 0;
+  s.camera_z = 0x600;
+  s.carrier_pos_x = 0;
+  s.carrier_pos_z = 0x8A2;
+  mates[3].x = 0;
+  mates[3].z = 0x4A2;
+  mates[3].pos_z = 0x4A2;
+  mates[5].x = 0;
+  mates[5].z = 0x4A2;
+  mates[5].pos_z = 0x4A2;
+  mates[6].x = 0;
+  mates[6].z = 0xB10;
+  mates[6].pos_z = 0xB10;
+  assert(fifa96_action_pursuit_step(&s, mates, 11, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_z == 0x6A2);
+  assert(out.receiver_timer == 1);
+  assert(out.team_target_index == FIFA96_ACTION_PURSUIT_SELF);
+  assert(out.team_second_index == 6);
+  assert(out.swap == 1 && out.swap_index == 5);
+}
+
+/* The conditional second teammate-timer subtraction (`0x803BE..0x803EE`):
+ * score[idx(side)] < score[idx(side^1)] (unsigned 16-bit, `0x803EC JNC`)
+ * subtracts the +0x89 word again. Camera (0,0,0), side 1 -> scaled 0xB1,
+ * angle 0, fold puts the target z at the final scaled word; timer89 0x10 and
+ * delta 0. Own < other -> 0xB1 - 0x10 - 0x10 = 0x91; own >= other -> 0xA1. */
+static void test_pursuit_score_second_subtraction(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 1;
+  s.team_target = 1;
+  s.timer89 = 0x10;
+  s.delta = 0;
+  s.score_own = 0;
+  s.score_other = 1;   /* own < other: the second subtraction runs */
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_z == 0x91);
+  assert(out.install == 8);
+
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 1;
+  s.team_target = 1;
+  s.timer89 = 0x10;
+  s.score_own = 1;
+  s.score_other = 1;   /* equal: JNC skips */
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_z == 0xA1);
+
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 1;
+  s.team_target = 1;
+  s.timer89 = 0x10;
+  s.score_own = 1;
+  s.score_other = 0x8000;   /* unsigned 1 < 0x8000 (a signed compare skips) */
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_z == 0x91);
+}
+
+/* The x-adjust gate byte is signed (`0x806D0 MOV EAX,[0x15872C]; SAR 0x18` ->
+ * `(int8)byte[0x15872F] < 2` at `0x806D8/0x806DB JGE`). The seed-0 chain
+ * draws 0x200, 0x725, 0x133F; the fixture warms up one step so the parity arm
+ * consumes 0x725 -- (0x725 & 0xF) = 5 > gate 0 -- and shifts the V0 target x
+ * by adjust_x<<6 = 0x80. The install gate then consumes 0x133F,
+ * (0x133F & 0x1FF) = 0x13F >= base 0xF, so no install. With the byte 0xFF
+ * (-1) read unsigned (`0xFF < 2u` false) the arm would be skipped and the
+ * target x would stay 0. */
+static void test_pursuit_adjust_gate_signed(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  uint16_t warm = 0;
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  assert(fifa96_rng_step(&rng, &warm) == FIFA96_OK);
+  assert(warm == 0x200);   /* hand-derived first draw */
+  s.has_slot = 0;
+  s.actor = 0;
+  s.team_target = FIFA96_ACTION_PURSUIT_NONE;
+  s.parity = 1;
+  s.byte_15872f = (int8_t)-1;
+  s.adjust_x = 2;
+  s.desc_c = 0;
+  s.word6d = 0x61;   /* metric in (0x60,0x90]: reaches the adjust arm */
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x80);
+  assert(out.install == 0);
 }
 
 /* Missing candidate records for a search arm is an error (the native reads the
@@ -1378,7 +1553,11 @@ int main(void) {
   test_pursuit_slot_targets();
   test_pursuit_early_returns();
   test_pursuit_claim_arm();
-  test_pursuit_self_nearest_and_swap();
+  test_pursuit_carrier_mirror_equal();
+  test_pursuit_carrier_no_mirror();
+  test_pursuit_height_gate_research();
+  test_pursuit_score_second_subtraction();
+  test_pursuit_adjust_gate_signed();
   test_pursuit_invalid();
   puts("test_action_handlers: all assertions passed");
   return 0;

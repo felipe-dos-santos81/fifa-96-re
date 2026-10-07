@@ -888,6 +888,34 @@ static void test_action_06_runs_body(void) {
   assert(f.mr.entities.team[0].target == 2);
   assert(f.mr.entities.team[0].second == FIFA96_MATCH_ENTITY_NONE);
   drop_fixture(&f);
+
+  /* Live scores feed the 0x803EE conditional second subtraction: score[0] 0
+   * < score[1] 1 with timer89 0x10 and delta 0 subtracts the timer twice, so
+   * the side-0 fold puts target z at -0x91 (a single subtraction gives
+   * -0xA1). */
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.frame_delta = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0x10;
+  f.mr.record.delta = 0;
+  f.mr.score[0] = 0;
+  f.mr.score[1] = 1;
+  f.mr.entities.team[0].target = 1;
+  f.mr.entities.ball.carrier = 5;
+  f.mr.entities.ball.y = 0;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0);
+  assert(f.mr.record.target_z == -0x91);
+  assert(f.mr.record.install == 8);
+  drop_fixture(&f);
 }
 
 static void test_phase_rows_dispatch_per_classification(void) {
