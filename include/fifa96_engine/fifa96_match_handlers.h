@@ -18,9 +18,12 @@
  * row carries the ported handler (`fn`, NULL while unported) and an evidence
  * string naming the FU doc/function or the numbered open leg. The dispatchers
  * never guess: a classified-but-unported row returns
- * FIFA96_ERR_UNSUPPORTED with its open-leg marker, a zero/unassigned native
- * slot or an out-of-range code returns FIFA96_ERR_NOT_FOUND, and only a
- * present handler can return FIFA96_OK; NULL `mr` is -FIFA96_ERR_INVALID. */
+ * `-FIFA96_ERR_UNSUPPORTED` with its open-leg marker, a zero/unassigned native
+ * slot or an out-of-range code returns `-FIFA96_ERR_NOT_FOUND`, and only a
+ * present handler can return `FIFA96_OK`; NULL `mr` is `-FIFA96_ERR_INVALID`.
+ * All error results are negated, matching the engine family convention
+ * (`fifa96_match_run_*`, `fifa96_*` libraries), so `rc < 0` is always an
+ * error. */
 #pragma once
 #include <stdint.h>
 #include "fifa96_loader/fifa96_err.h"
@@ -51,19 +54,24 @@ extern const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_
 extern const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_ROWS];
 
 /* Run one table row: NULL `mr` or `row` -> -FIFA96_ERR_INVALID; `row->fn ==
- * NULL` -> FIFA96_ERR_UNSUPPORTED (explicit open-leg marker, never a silent
+ * NULL` -> -FIFA96_ERR_UNSUPPORTED (explicit open-leg marker, never a silent
  * success); otherwise the handler's return value verbatim. This is the shared
  * core of both dispatchers and the unit-test entry for the seam. */
 int fifa96_match_dispatch_row(struct fifa96_match_run *mr,
                               const struct fifa96_match_handler *row);
 
 /* Dispatch action code 0x00..0x2C. NULL `mr` -> -FIFA96_ERR_INVALID; a code
- * past the table -> FIFA96_ERR_NOT_FOUND; otherwise the row's classification
+ * past the table -> -FIFA96_ERR_NOT_FOUND; otherwise the row's classification
  * as in fifa96_match_dispatch_row. */
 int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code);
 
 /* Dispatch phase 0x00..0x22. NULL `mr` -> -FIFA96_ERR_INVALID; a phase past
  * the table or the native zero slot FIFA96_MATCH_PHASE_INT3_SLOT ->
- * FIFA96_ERR_NOT_FOUND; otherwise the row's classification as in
- * fifa96_match_dispatch_row. */
+ * -FIFA96_ERR_NOT_FOUND; otherwise the row's classification as in
+ * fifa96_match_dispatch_row.
+ *
+ * Forward compatibility: the original phase call is per record
+ * (`FUN_0008D098` walks 11 records at 0xB2 stride calling
+ * `[rec+0x1C](rec, rec+0x4D)`); this seam passes only `mr` today. Task 10
+ * (plan C10) may extend the handler typedef when it adds the record walk. */
 int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase);

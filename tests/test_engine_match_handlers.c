@@ -18,8 +18,8 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 
-#define UNSUP FIFA96_ERR_UNSUPPORTED
-#define NOTF FIFA96_ERR_NOT_FOUND
+#define UNSUP (-FIFA96_ERR_UNSUPPORTED)
+#define NOTF (-FIFA96_ERR_NOT_FOUND)
 
 /* FU-137 §6 row classification mapped to the dispatch contract: every action
  * row is UNSUPPORTED at this commit (00/1E are `unwired` — tested library
@@ -76,19 +76,27 @@ static void drop_fixture(struct fixture f) {
 }
 
 /* Every table row carries its code and an explicit evidence/OpenLeg marker —
- * "resolves to a handler or an explicit open leg", never a silent slot. */
+ * "resolves to a handler or an explicit open leg", never a silent slot: an
+ * unported row (fn == NULL) must name its numbered OL- marker, except the
+ * phase zero slot which has no handler by design and says so. */
 static void test_tables_are_fully_classified(void) {
   for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++) {
-    assert(fifa96_match_action_table[i].code == i);
-    assert(fifa96_match_action_table[i].evidence != NULL);
-    assert(fifa96_match_action_table[i].evidence[0] != '\0');
+    const struct fifa96_match_handler *row = &fifa96_match_action_table[i];
+    assert(row->code == i);
+    assert(row->evidence != NULL);
+    assert(row->evidence[0] != '\0');
+    if (row->fn == NULL) assert(strstr(row->evidence, "OL-") != NULL);
   }
   for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++) {
-    assert(fifa96_match_phase_table[i].code == i);
-    assert(fifa96_match_phase_table[i].evidence != NULL);
-    assert(fifa96_match_phase_table[i].evidence[0] != '\0');
+    const struct fifa96_match_handler *row = &fifa96_match_phase_table[i];
+    assert(row->code == i);
+    assert(row->evidence != NULL);
+    assert(row->evidence[0] != '\0');
+    if (row->fn == NULL && i != FIFA96_MATCH_PHASE_INT3_SLOT)
+      assert(strstr(row->evidence, "OL-") != NULL);
   }
-  assert(fifa96_match_phase_table[FIFA96_MATCH_PHASE_INT3_SLOT].evidence != NULL);
+  assert(strstr(fifa96_match_phase_table[FIFA96_MATCH_PHASE_INT3_SLOT].evidence,
+                "NOT_FOUND") != NULL);
 }
 
 /* Per-row dispatch: the FU-137 classification is the contract; no unassigned

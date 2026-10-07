@@ -14,8 +14,9 @@ record in EAX (code in EDX, no stack arguments); the two record machines
 `0x8D7CF`, 0x2A at `0x8D807`; 0x27/0x29/0x2B/0x2C have no static install arm);
 of the 80 dispatch rows **0 are wired, 3 are unwired (2 action + the phase
 zero slot), 73 are not ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** —
-`fifa96_match_handlers.c` returns `FIFA96_ERR_UNSUPPORTED` for every classified
-row and `FIFA96_ERR_NOT_FOUND` for the phase zero slot, never a silent no-op.
+`fifa96_match_handlers.c` returns `-FIFA96_ERR_UNSUPPORTED` for every classified
+row and `-FIFA96_ERR_NOT_FOUND` for the phase zero slot, never a silent no-op
+(all error results are negated per the engine family convention).
 
 ## Method
 
@@ -289,9 +290,9 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | class | dispatch result | definition |
 |---|---|---|
 | `ported` | `FIFA96_OK` | row body in C **and** wired into `fifa96_match_action_table`/`_phase_table` (`fn != NULL`). |
-| `unwired` | `FIFA96_ERR_UNSUPPORTED` | body fully covered by tested C symbols, no record/entity binding yet (open leg OL-1). Phase `0x16` is the zero/INT3 slot: dispatch-only, returns `FIFA96_ERR_NOT_FOUND`. |
-| `not ported` | `FIFA96_ERR_UNSUPPORTED` | a needed part of the body has no C function; the row names its port group/open leg. |
-| `open leg` | `FIFA96_ERR_UNSUPPORTED` | FU-137 could not bound a static entry for the row (no install arm), so it is not schedulable as a port task yet; numbered OL. |
+| `unwired` | `-FIFA96_ERR_UNSUPPORTED` | body fully covered by tested C symbols, no record/entity binding yet (open leg OL-1). Phase `0x16` is the zero/INT3 slot: dispatch-only, returns `-FIFA96_ERR_NOT_FOUND`. |
+| `not ported` | `-FIFA96_ERR_UNSUPPORTED` | a needed part of the body has no C function; the row names its port group/open leg. |
+| `open leg` | `-FIFA96_ERR_UNSUPPORTED` | FU-137 could not bound a static entry for the row (no install arm), so it is not schedulable as a port task yet; numbered OL. |
 
 ### 6.1 Table A — action rows `0x1106E0[code]`
 
@@ -375,7 +376,7 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 | 13 | 0x06E244 | not ported | FU-83 camera-bound scatter | OL-13 |
 | 14 | 0x06E244 | not ported | same as 13 | OL-13 |
 | 15 | 0x06DCC8 | not ported (partial) | same as 02 | OL-13 |
-| 16 | **0x00000000** | unwired (zero slot) | native zero entry, loader INT3 stub, no body by design; dispatch -> `FIFA96_ERR_NOT_FOUND` | — |
+| 16 | **0x00000000** | unwired (zero slot) | native zero entry, loader INT3 stub, no body by design; dispatch -> `-FIFA96_ERR_NOT_FOUND` | — |
 | 17 | 0x088DC8 | not ported | FU-83 §3.2 timeline | OL-13 |
 | 18 | 0x08922C | not ported | FU-83 §3.2 timeline | OL-13 |
 | 19 | 0x089FA4 | not ported | FU-83 §3.2 timeline; installs action 0x16 | OL-13 |
@@ -394,13 +395,14 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
 | action `0x1106E0` | 45 | 0 | 2 (`00`, `1E`) | 39 | 4 (`27`, `29`, `2B`, `2C`) |
-| phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> NOT_FOUND) | 34 | 0 |
+| phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
 | **dispatch total** | **80** | **0** | **3** | **73** | **4** |
 
-Dispatch results at this commit: **79 × `FIFA96_ERR_UNSUPPORTED`** (the 73 not
+Dispatch results at this commit: **79 × `-FIFA96_ERR_UNSUPPORTED`** (the 73 not
 ported rows + the 2 unwired action rows + the 4 open legs) and **1 ×
-`FIFA96_ERR_NOT_FOUND`** (phase `0x16`); out-of-range -> `NOT_FOUND`; NULL `mr`
--> `-INVALID`.
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`); out-of-range -> `-NOT_FOUND`; NULL
+`mr` -> `-INVALID`. All error results are negated, matching the engine family
+convention (`fifa96_match_run_*`).
 
 ## 8. Open legs
 
