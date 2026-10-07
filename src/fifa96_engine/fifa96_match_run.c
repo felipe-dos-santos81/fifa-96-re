@@ -4,11 +4,14 @@
 
 /* Stable slot identity: the lifecycle cancels by function pointer, so every
  * run shares this one trampoline and the engine bridge keeps a single match
- * callback in the clock's tick table. */
+ * callback in the clock's tick table. The trampoline is the sole driver of the
+ * frame body: one call per PIT tick, so the pace stays at 100 Hz even when an
+ * engine step spans 0..N ticks (FU-60 drives the pace from the INT-8 ISR). */
 static void fifa96_match_run_tick(void *user) {
   struct fifa96_match_run *mr = user;
   if (!mr) return;
   mr->ticks++;
+  (void)fifa96_match_run_frame(mr);
 }
 
 static int fifa96_match_run_register(void *ctx) {
@@ -97,10 +100,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   int period_ended = 0;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
-  /* One 100 Hz pace tick (FU-60): fifa96_match_state_tick consumes the pace
-   * grant and, when granted, advances the Q8 clock by one
-   * FIFA96_MATCH_STATE_STEP with clock_halt = 0. The pending count is the
-   * grant observable, so this reports whether the 30 Hz frame actually ran. */
+  /* One 100 Hz pace tick (FU-60), driven from fifa96_match_run_tick:
+   * fifa96_match_state_tick consumes the pace grant and, when granted,
+   * advances the Q8 clock by one FIFA96_MATCH_STATE_STEP with clock_halt = 0.
+   * The pending count is the grant observable, so this reports whether the
+   * 30 Hz frame actually ran. */
   pending = fifa96_match_pace_pending(&mr->pace);
   rc = fifa96_match_state_tick(&mr->state, &mr->pace, 0, 0, &period_ended);
   if (rc != 0) return rc;
@@ -112,13 +116,15 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
 }
 
 int fifa96_match_run_step(struct fifa96_match_run *mr) {
-  int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->steps++;
   if (fifa96_match_lifecycle_should_exit(&mr->lc)) return fifa96_match_run_end(mr);
-  rc = fifa96_match_run_frame(mr);
-  return rc < 0 ? rc : 0; /* the exit step keeps 1; live steps stay 0 */
+  /* The frame body does NOT run here: the registered 100 Hz trampoline
+   * (fifa96_match_run_tick) already consumed this step's PIT ticks from the
+   * engine clock, so pace/state advance once per 10 ms regardless of how many
+   * ticks one engine step spans. */
+  return 0;
 }
 
 int fifa96_match_run_end(struct fifa96_match_run *mr) {

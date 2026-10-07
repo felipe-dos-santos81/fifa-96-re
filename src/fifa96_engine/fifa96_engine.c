@@ -194,8 +194,9 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       e->mode = FIFA96_ENGINE_MODE_QUIT;
     }
   } else if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
-    /* The clock advance above already fired the run's 100 Hz callback; this
-     * dispatch consumes the lifecycle state (Task 13 adds the frame body). */
+    /* The clock advance above fired the run's 100 Hz tick hook once per PIT
+     * tick, driving one frame-body pace tick per 10 ms; this dispatch consumes
+     * the lifecycle state (exit staging). */
     if (!e->match) {
       e->mode = FIFA96_ENGINE_MODE_FRONTEND;
     } else if (fifa96_match_run_step(e->match) < 0) {
