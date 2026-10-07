@@ -444,9 +444,10 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
       s->opp_present = 1;
       s->opp_type = opp->type;
       s->opp_has_slot = opp->has_slot;
-      s->opp_lane_word = opp->lane_x;
-      s->opp_plane_word = opp->lane_z;
-      s->opp_face_word = 0;   /* +0x7D facing word unmodeled (OL-65) */
+      s->opp_lane_word = opp->lane_x;    /* +0x6B (<0xD0 gate) */
+      s->opp_angle_x = opp->lane_z;      /* dword[+0x6D]>>16 = word[+0x6D] */
+      s->opp_angle_z = 0;                /* word[+0x6F] unmodeled (OL-65) */
+      s->opp_face_word = 0;              /* +0x7D facing word unmodeled (OL-65) */
     }
   }
   s->camera_x = mr->render.camera.pos_x;
@@ -598,11 +599,14 @@ static int fifa96_match_action_07(struct fifa96_match_run *mr) {
   if (rc != FIFA96_OK) return rc;
   if (out.kick != 0) {
     fifa96_ball_kick_out bo;
-    rc = match_kick_run(mr, &s, NULL, out.kick_mode, s.has_slot, &bo);
+    /* 0x8163C: EBX = 0x158738, i.e. the staged vector is passed to
+     * FUN_0007B9C4 unchanged (a self-copy). */
+    rc = match_kick_run(mr, &s, &mr->entities.ball.pair.vector, out.kick_mode,
+                        s.has_slot, &bo);
     if (rc != FIFA96_OK) return rc;
     s.kick_done = 1;
     s.kick_staged = bo.staged;
-    s.kick_z = (int16_t)mr->entities.ball.pair.vector.z;
+    s.kick_traj = (int16_t)mr->entities.ball.pair.traj;
     rc = fifa96_action_kick_machine(&s, &out);
     if (rc != FIFA96_OK) return rc;
   }
