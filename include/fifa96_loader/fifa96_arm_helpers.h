@@ -3,7 +3,7 @@
  * distance/staging helper.
  *
  * Native evidence (read-only /FIFA96.EXE, FU-142 Appendix C): the helper body
- * `0x8DCD4..0x8DDBB` is 61 instructions taking EAX = record+0x59 (position),
+ * `0x8DCD4..0x8DD5B` is 61 instructions taking EAX = record+0x59 (position),
  * EDX = record+0x4D (target) and EBX = record+0x65 (out) and writing the
  * 6-byte vector `{word distance, word dx, word dz}` (FU-79 §2.9 records the
  * same layout). The record view carries the cluster-G native fields by offset;

@@ -3,7 +3,7 @@
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: decompile_function + disassemble_function 0x8DCD4,
- * 61 instructions, body 0x8DCD4..0x8DDBB; the two row-0x26-era call sites
+ * 61 instructions, body 0x8DCD4..0x8DD5B; the two row-0x26-era call sites
  * 0x867D1 and 0x8D11E). */
 #include "fifa96_loader/fifa96_arm_helpers.h"
 

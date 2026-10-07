@@ -3,7 +3,7 @@
  *
  * Evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C (Ghidra
  * read-only /FIFA96.EXE: get_function_by_address/decompile_function/
- * disassemble_function 0x8DCD4, 61 instructions, body 0x8DCD4..0x8DDBB). The
+ * disassemble_function 0x8DCD4, 61 instructions, body 0x8DCD4..0x8DD5B). The
  * native writes a 6-byte out vector `{word distance, word dx, word dz}` at
  * rec+0x65: the derived surface keeps `distance` and `lane` (= the dz word) and
  * drops dx, which no Task-3 consumer reads (Appendix C.3). */
