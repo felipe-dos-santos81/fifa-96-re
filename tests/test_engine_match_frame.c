@@ -265,6 +265,69 @@ static void test_phase_machine_hook(void) {
   }
 }
 
+/* FU-142b: the row-26 body round-trips through the FU-141 pool record staging
+ * and repack (`match_run_dispatch_entity`). Both fixtures are pool team-0
+ * records with code 0x26 at phase 2 (no installer arm, no period end):
+ *  - record 1 (stage92 = 2): the body returns after the prologue, so the
+ *    staged lane/targets round-trip unchanged while `timer89` gains one delta
+ *    per granted frame (3 grants) and `timer7b` takes the staged `player_d = 0`
+ *    table value (6 >> 1 = 3);
+ *  - record 2 (stage92 = 0, pos.z = 10): the latch walks 0 -> 1 -> 2 in the
+ *    first grant (`target.z = +6` from active 3, `lane = 6 - 10 = -4` inside
+ *    the `0x20` gate -> retarget `(0xCC0, 0)`), then the prologue adds the two
+ *    remaining deltas.
+ * A broken staged stage92 would leave the latch at the 0xFF reset seed (or run
+ * it on the pass record), a broken lane/target staging would zero the pass
+ * round-trip, and an unstaged `player_d` would be 0 here but out of range if
+ * garbage were passed through (the body rejects before writing). */
+static void test_action_26_repack_round_trips_fields(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *pass;
+  struct fifa96_match_entity *latch;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;       /* no period end inside the 10 ticks */
+
+  pass = &mr.entities.team[0].records[1];
+  pass->code = 0x26;
+  pass->stage92 = 2;                 /* past the latch: prologue only */
+  pass->timer89 = 100;
+  pass->timer7b = 0xABCD;
+  pass->lane = 0x00DEADBE;
+  pass->target_x = 0x111;
+  pass->target_z = 0x222;
+  pass->active = 3;
+
+  latch = &mr.entities.team[0].records[2];
+  latch->code = 0x26;
+  latch->stage92 = 0;
+  latch->timer89 = 0;
+  latch->timer7b = 0;
+  latch->lane = 0;
+  latch->target_x = 0x999;
+  latch->target_z = 0x999;
+  latch->active = 3;
+  latch->pos_z = 10;                 /* target.z = +6 -> lane = -4 */
+
+  for (int i = 0; i < 10; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);   /* 3 granted frames, delta 2 */
+  }
+
+  assert(pass->code == 0x26);                 /* staged current code */
+  assert(pass->stage92 == 2);                 /* staged latch, not rewritten */
+  assert(pass->timer89 == 106);               /* 100 + 3 * delta 2 */
+  assert(pass->timer7b == 3);                 /* player_d staged 0 */
+  assert(pass->lane == 0x00DEADBE);           /* no helper call at stage 2 */
+  assert(pass->target_x == 0x111 && pass->target_z == 0x222);
+
+  assert(latch->code == 0x26);
+  assert(latch->stage92 == 2);                /* 0 -> 1 -> 2, repacked */
+  assert(latch->timer89 == 4);                /* grant 1 zeroes; +2, +2 */
+  assert(latch->timer7b == 3);
+  assert(latch->lane == -4);                  /* target.z +6 vs pos.z 10 */
+  assert(latch->target_x == 0xCC0 && latch->target_z == 0);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -274,6 +337,7 @@ int main(void) {
   test_begun_period_end_marks_over();
   test_frame_drives_entity_chain();
   test_phase_machine_hook();
+  test_action_26_repack_round_trips_fields();
   puts("test_engine_match_frame OK");
   return 0;
 }

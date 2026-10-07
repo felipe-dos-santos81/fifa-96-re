@@ -97,6 +97,25 @@ static void test_dist_stage_difference_wraps16(void) {
   assert(lane == -0x7FFF);
 }
 
+/* |dx| > |dz| with |dx|>>1 < |dz|: the second-branch adjust
+ * `d = ((|dz|>>2) + (|dz|>>1)) >> 1`. Both dx signs, since the branch reads
+ * the magnitudes. */
+static void test_dist_stage_max_branch_adjust(void) {
+  fifa96_arm_vec from = { 0, 0, 0 };
+  fifa96_arm_vec to = { 0x64, 0, 0x40 };   /* dx = +100, dz = 64 */
+  int32_t distance = -1;
+  int32_t lane = -1;
+  assert(fifa96_arm_dist_stage(&from, &to, &distance, &lane) == FIFA96_OK);
+  assert(distance == 124);                 /* (16 + 32) >> 1 + 100 */
+  assert(lane == 0x40);
+
+  from.x = 0x64;
+  to.x = 0;                                /* dx = -100, |dx| unchanged */
+  assert(fifa96_arm_dist_stage(&from, &to, &distance, &lane) == FIFA96_OK);
+  assert(distance == 124);
+  assert(lane == 0x40);
+}
+
 static void test_dist_stage_invalid(void) {
   const fifa96_arm_vec from = { 0, 0, 0 };
   const fifa96_arm_vec to = { 1, 2, 3 };
@@ -114,6 +133,7 @@ int main(void) {
   test_dist_stage_diagonal();
   test_dist_stage_min_branch_adjust();
   test_dist_stage_min_branch_plain();
+  test_dist_stage_max_branch_adjust();
   test_dist_stage_distance_wraps16();
   test_dist_stage_difference_wraps16();
   test_dist_stage_invalid();
