@@ -14,6 +14,10 @@ struct fifa96_menu_state {
   int cursor_on;
 };
 
+/* (Re)loads menu art; NULL resets to the built-in fallback renderer.
+ * Initialization order: fifa96_frontend_run_init() resets the renderer to the
+ * fallback, so callers wanting asset-backed menus must call
+ * fifa96_menu_art_init(assets) after it (fifa96_engine_boot does). */
 int fifa96_menu_art_init(struct fifa96_asset_table *assets_or_null);
 void fifa96_menu_art_draw(struct fifa96_surface *s, const struct fifa96_menu_state *st);
 
