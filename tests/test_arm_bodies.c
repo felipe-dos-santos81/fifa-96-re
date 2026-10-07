@@ -404,6 +404,159 @@ static void test_arm_27_invalid(void) {
   assert(fifa96_arm_27_step(NULL) == ARM_INVALID);
 }
 
+/* --- Row 0x2C body `0x84598..0x8462D` (48 instructions, Appendix E) --------
+ * Stage latch: 0 with active==0 -> reset immediately (0x845B7..0x845BE ->
+ * 0x84622); 0 with active!=0 -> timer89=0, stage 1, then the stage-1 select
+ * and the stage-2 countdown run in the same call (0x845C0..0x84620); 1 ->
+ * select + countdown; 2 -> countdown; >= 3 -> return (0x845AE). The select is
+ * `0x6E598` with the constant id 0x5D (`EDX=0x5D`, `EBX=0`; the `ECX` load is
+ * dead — FU-84 §1 says ECX is not an input) resolved by
+ * `fifa96_arm_anim_select` into `anim_sel`. The countdown subtracts the
+ * zero-extended `[0x157A64]` word (`MOV CX` after `XOR ECX,ECX`); a result not
+ * strictly positive calls `FUN_0007DAB4` (`fifa96_arm_reset`: stage92=0xFF,
+ * timer89=0, code=0). */
+
+/* stage 0 with active 0 jumps straight to the reset; the anim select is
+ * skipped (anim_sel untouched). */
+static void test_arm_2c_stage0_inactive_resets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.active = 0;
+  rec.timer89 = 0x55;
+  rec.code = 0x2C;
+  rec.anim_sel = 0x11;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+  assert(rec.anim_sel == 0x11);
+}
+
+/* stage 0 with active != 0 runs the constant-id select in the same call
+ * (anim_sel = 0x5D) and the countdown then drives the reset. */
+static void test_arm_2c_stage0_active_selects_then_resets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.active = 1;
+  rec.timer89 = 0x55;
+  rec.delta = 3;
+  rec.code = 0x2C;
+  rec.anim_sel = 0x11;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.anim_sel == 0x5D);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+}
+
+/* stage 1 selects 0x5D, zeroes timer89 and advances to 2; the same call then
+ * counts that zero down into the reset. */
+static void test_arm_2c_stage1_selects_then_resets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 1;
+  rec.active = 0;
+  rec.delta = 1;
+  rec.code = 0x2C;
+  rec.anim_sel = 0x11;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.anim_sel == 0x5D);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+}
+
+/* stage 2 above the delta: timer89 -= delta stays positive, so the row waits
+ * (stage stays 2, no select, no reset). */
+static void test_arm_2c_stage2_above_delta_waits(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 0x100;
+  rec.delta = 1;
+  rec.code = 0x2C;
+  rec.anim_sel = 0x11;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.timer89 == 0xFF);
+  assert(rec.stage92 == 2);
+  assert(rec.code == 0x2C);
+  assert(rec.anim_sel == 0x11);
+}
+
+/* The countdown return is `> 0` (JG): exactly delta reaches 0 and resets. */
+static void test_arm_2c_stage2_equal_delta_resets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 5;
+  rec.delta = 5;
+  rec.code = 0x2C;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+}
+
+/* `[0x157A64]` is a zero-extended word (`XOR ECX,ECX; MOV CX,...`): delta
+ * 0x8000 subtracts +0x8000, so timer89 0x4000 goes negative and resets (a
+ * sign-extended model would keep 0xC000 and wait); timer89 0x10000 with delta
+ * 0xFFFF wraps to 1 and waits. */
+static void test_arm_2c_delta_zero_extended(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 0x4000;
+  rec.delta = 0x8000;
+  rec.code = 0x2C;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 0xFF);
+  rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 0x10000;
+  rec.delta = 0xFFFF;
+  rec.code = 0x2C;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.timer89 == 1);
+  assert(rec.stage92 == 2);
+  assert(rec.code == 0x2C);
+}
+
+/* delta 0 subtracts nothing and the reset still runs (the countdown's `JG`
+ * needs strictly positive). */
+static void test_arm_2c_delta_zero_resets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 0;
+  rec.delta = 0;
+  rec.code = 0x2C;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+}
+
+/* stage >= 3 returns at the prologue pop (0x845AE): every field, timer89
+ * included, is untouched. 0xFF is the reset sentinel and follows the same
+ * path. */
+static void test_arm_2c_stage_past_untouched(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 3;
+  rec.timer89 = 0x1234;
+  rec.delta = 9;
+  rec.code = 0x2C;
+  rec.anim_sel = 0x11;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 3);
+  assert(rec.timer89 == 0x1234);
+  assert(rec.code == 0x2C);
+  assert(rec.anim_sel == 0x11);
+  rec.stage92 = 0xFF;
+  rec.delta = 0;
+  assert(fifa96_arm_2c_step(&rec) == FIFA96_OK);
+  assert(rec.timer89 == 0x1234);
+  assert(rec.code == 0x2C);
+}
+
+static void test_arm_2c_invalid(void) {
+  assert(fifa96_arm_2c_step(NULL) == ARM_INVALID);
+}
+
 int main(void) {
   test_arm_stub_36200();
   test_arm_26_stage_past();
@@ -427,6 +580,15 @@ int main(void) {
   test_arm_27_pair_walk_overflow_bounded();
   test_arm_27_stage_past_prologue_only();
   test_arm_27_invalid();
+  test_arm_2c_stage0_inactive_resets();
+  test_arm_2c_stage0_active_selects_then_resets();
+  test_arm_2c_stage1_selects_then_resets();
+  test_arm_2c_stage2_above_delta_waits();
+  test_arm_2c_stage2_equal_delta_resets();
+  test_arm_2c_delta_zero_extended();
+  test_arm_2c_delta_zero_resets();
+  test_arm_2c_stage_past_untouched();
+  test_arm_2c_invalid();
   puts("test_arm_bodies OK");
   return 0;
 }

@@ -204,7 +204,10 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`fifa96_arm_27_step`, Appendix D.3) with the shared helpers `0x79C50`
   (`fifa96_arm_face`, D.4) and `0x6E598` (`fifa96_arm_anim_select`, D.5); the
   row stays unwired (no entry, OL-48) and its remainder surfaces are
-  OL-52/OL-53. Rows 28/29/2A/2C stay unported.**
+  OL-52/OL-53. Status (Task 5): row 2C's body is ported (`fifa96_arm_2c_step`,
+  Appendix E.2) with the shared `FUN_0007DAB4` reset subset
+  (`fifa96_arm_reset`, E.3); the row stays unwired (no entry, OL-48) and its
+  remainder surface is OL-54. Rows 28/29/2A stay unported.**
 * **OL-48 — dynamic entry for 27/29/2C; 2B dead verdict.** No static install
   arm exists (FU-137 §5.3 re-cited); a runtime/reachability pass is the
   precondition for scheduling those three rows. 0x2B is confirmed a shared-RET
@@ -220,6 +223,17 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   arms (Appendix A.4) stage no code 0x27. A register-derived installer
   argument cannot be excluded by a constant census, so the FU-142f
   runtime/reachability pass remains the precondition; row 27 keeps `fn ==
+  NULL` and the `-FIFA96_ERR_UNSUPPORTED` dispatch.
+  **Status (Task 5): row 2C's body is ported but the entry stays unresolved.**
+  First-hand this slice (Appendix E.4): `get_xrefs_to 0x84598` returns exactly
+  one reference — the action-table slot `0x110790`; `search_byte_patterns
+  98 45 08 00` finds that same slot as the only occurrence of the body
+  pointer; `MOV EDX,0x2C` has three sites (`0x3035E` in `FUN_000302DC`,
+  `0x40A8E`/`0x40C5C` in `FUN_00040A5C`), none an installer arm (the FU-137
+  §5.3 census records none calls `0x7D9A4`), and `MOV ECX,0x2C` has no site;
+  `0x8CEB8`'s 15 arms (Appendix A.4) stage no code 0x2C. A register-derived
+  installer argument cannot be excluded by a constant census, so the FU-142f
+  runtime/reachability pass remains the precondition; row 2C keeps `fn ==
   NULL` and the `-FIFA96_ERR_UNSUPPORTED` dispatch.
 * Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41, FU-137 OL-15 (closes
   nothing new; the 0x26/0x28/0x2A arms stay as classified until their bodies
@@ -255,12 +269,27 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   table into the adjacent `0x11042B` data; the derived model stops at the 24th
   pair and sets `anim_overflow` instead (no adjacent-data read). Multi-record
   interleaving is not modelled.
+* **OL-54 — `FUN_0007DAB4` remainder (reset callbacks and installer tail).**
+  The full native reset also calls `FUN_00078B00([rec+0x20])` when the slot
+  pointer is non-zero (`0x7DAD2`) and takes the phase-2 forced-decision arm
+  `FUN_0007C990(rec)` when `[0x157A4A]>>24 == 2 && [rec+0x8D] != 0`
+  (`0x7DAEF`; FU-141 OL-44 already documents the forced decision as the pool
+  call). The `FUN_0007D9A4(rec,0,0,0)` tail may overwrite `+0x92` with its
+  staged byte 0, clear `+0x9E`, copy `+0x79 -> +0x7B` and clear the carrier
+  bit when it accepts the code; the derived subset adopts FU-141 §3.4's
+  `stage92 = 0xFF` init-seed reading and represents the code-0 re-install as
+  `code = 0` (Appendix E.3). `fifa96_arm_reset` models none of those; the
+  pool's installer/drain owns their derived equivalent when a wired row
+  requests the reset (Task 6/7).
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
 * **§6.1 row `2C`** — "prologue-only body" is wrong: `0x84598..0x8462D` is a
   real 48-instruction stage machine (stage latch `+0x92` 0/1/2; calls
   `0x6E598`, `0x7DAB4`). Its *entry* is still unresolved (OL-48).
+  **Status (Task 5): the body is ported as `fifa96_arm_2c_step` with the
+  shared `fifa96_arm_reset` (Appendix E); the row stays unwired (OL-48) and
+  its remainder is OL-54.**
 * **§6.1 row `2B`** — the one-byte RET is the final instruction of the row-29
   body (shared epilogue at `0x87738`), not a standalone stub; the two helpers
   that follow (`0x8773C`, `0x8776C`) belong to no action row.
@@ -905,6 +934,147 @@ Write set of this appendix (Task 4): `include/fifa96_loader/fifa96_arm_helpers.h
 `tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c`,
 `tests/test_engine_match_handlers.c`, `CMakeLists.txt`, the FU-137 errata and
 this appendix. No engine record change: row 27 stays unwired.
+
+## Appendix E (FU142b / M2 arms-and-wiring Task 5) — row 0x2C body + `FUN_0007DAB4` reset subset first-hand window
+
+Task 5 of the follow-up plan ports action row 0x2C (`0x84598..0x8462D`, 48
+instructions) and the `FUN_0007DAB4` derived reset subset
+(`fifa96_arm_reset`, `0x7DAB4..0x7DB0C`, 35 instructions) into the tested
+loader symbols `fifa96_arm_2c_step` / `fifa96_arm_reset`. The row has **no
+static entry** and therefore stays unwired (OL-48): E.4 records the entry
+probe and its negative result. This appendix is its evidence gate: the exact
+fields, constants and branch sites below are read first-hand this slice and
+are what the port implements.
+
+### E.1 Tool calls (Ghidra read-only, explicit /FIFA96.EXE)
+
+* `get_function_by_address 0x84598` — "No function found" (table-referenced
+  body, like the other six row entries);
+* `disassemble_bytes 0x84598` (152 B) — 49 instructions to the `RET` at
+  `0x8462D` plus the `MOV EAX,EAX` pad at `0x8462E` (the next action row 0x16
+  starts at `0x84630`);
+* `read_memory 0x110790` (4 B) — action-table entry `98 45 08 00` (code 0x2C
+  -> `0x00084598`);
+* `get_xrefs_to 0x84598` — **1 reference: DATA from `0x110790`** (the
+  action-table slot itself);
+* `search_byte_patterns 98 45 08 00` — **1 hit: `0x110790`**;
+* `search_instructions mnemonic=MOV operand="EDX, 0x2C"` — 3 sites
+  (`0x3035E` in `FUN_000302DC`, `0x40A8E`/`0x40C5C` in `FUN_00040A5C`), all
+  non-match constants (the FU-137 §5.3 census records none calls `0x7D9A4`);
+  `operand="ECX, 0x2C"` — 0 sites;
+* `get_function_by_address 0x7DAB4` — defined, body `0x7DAB4..0x7DB0C`;
+* `disassemble_function 0x7DAB4` (35 instructions) + `decompile_function`
+  (source-equivalent reset listing).
+
+No writes: no rename/comment/label/function/script/project save.
+
+### E.2 Row 0x2C body `0x84598..0x8462D` (site-annotated)
+
+Entry: EAX = record; no stack args. Prologue `PUSH EBX/ECX/EDX/ESI; MOV
+ESI,EAX` (`0x84598..0x8459C`).
+
+| # | site | instruction (first-hand) | derived effect |
+|---|---|---|---|
+| 1 | `0x8459E..0x845AC` | `MOV AL,[ESI+0x92]; CMP AL,1; JC 0x845B3; JBE 0x845D8; CMP AL,2; JZ 0x84607` | stage latch: 0 -> S0, 1 -> S1, 2 -> S2 |
+| 2 | `0x845AE..0x845B2` | `POP ESI/EDX/ECX/EBX; RET` | stage >= 3 returns untouched |
+| 3 | `0x845B3..0x845BE` | `TEST AL,AL; JNZ 0x84629` (unreachable: AL == 0 here); `CMP byte [ESI+0x8D],0; JZ 0x84622` | S0: `active == 0` -> reset |
+| 4 | `0x845C0..0x845D2` | `MOV DL,[ESI+0x92]; MOV dword [ESI+0x89],0; INC DL; MOV [ESI+0x92],DL` | S0: `timer89 = 0; stage92 = 1` (falls into S1) |
+| 5 | `0x845D8..0x845EA` | `MOV EDX,0x5D; MOV EAX,ESI; MOV ECX,[ESI+0x8B]; XOR EBX,EBX; SAR ECX,0x18; CALL 0x6E598` | select id `0x5D` (ECX dead, D.5/FU-84 §1; EBX = frame 0) |
+| 6 | `0x845EF..0x84601` | `MOV DH,[ESI+0x92]; MOV dword [ESI+0x89],0; INC DH; MOV [ESI+0x92],DH` | `timer89 = 0; stage92++` (1 -> 2) |
+| 7 | `0x84607..0x84620` | `XOR ECX,ECX; MOV EDX,[ESI+0x89]; MOV CX,word [0x157A64]; SUB EDX,ECX; MOV [ESI+0x89],EDX; TEST EDX,EDX; JG 0x84629` | `timer89 -= zero-extend(delta word)`; `> 0` waits |
+| 8 | `0x84622..0x84624` | `MOV EAX,ESI; CALL 0x7DAB4` | reset (E.3) |
+| 9 | `0x84629..0x8462D` | `POP ESI/EDX/ECX/EBX; RET` | return |
+
+Constants: `0x5D` (the constant selector id), the `+0x157A64` delta word.
+The body requests no install code and writes no `+0x9E`, so the derived
+`install`/`ran` staging passes through untouched.
+
+Derived-control-flow note: because S1 zeroes `timer89` before the S2
+countdown, *any* call that reaches S1 (from S0 with `active != 0`, or an
+entry at S1) resets in the same call; only an entry at S2 with
+`timer89 > delta` waits. The port reproduces this exactly — it is not a
+"machine waits out the animation" reading. The `0x845B5 JNZ` is dead under
+the `JC` (AL == 0); the port has no corresponding branch. The `MOV
+ECX,[ESI+0x8B]>>24` load is dead for `FUN_0006E598` (FU-84 §1: ECX is not
+an input and the selector overwrites it); the port does not stage a type
+argument.
+
+### E.3 The reset `FUN_0007DAB4` (`0x7DAB4..0x7DB0C`, 35 insns) and the derived subset
+
+First-hand listing:
+
+| site | instruction | effect |
+|---|---|---|
+| `0x7DABA` | `MOV byte [EAX+0x92],0xFF` | `stage92 = 0xFF` |
+| `0x7DAC1..0x7DAC4` | `MOV EDX,[EAX+0x20]; MOV dword [EAX+0x89],0` | `timer89 = 0` |
+| `0x7DACE..0x7DAD4` | `TEST EDX,EDX; JZ; MOV EAX,EDX; CALL 0x78B00` | slot callback if `[rec+0x20] != 0` |
+| `0x7DAD9..0x7DAE4` | `EAX=[0x157A4A]; SAR 0x18; CMP 2; JNZ 0x7DAFB` | phase test |
+| `0x7DAE6..0x7DAF1` | `CMP byte [ESI+0x8D],0; JZ 0x7DAFB; MOV EAX,ESI; CALL 0x7C990` | phase-2 forced-decision arm for active records |
+| `0x7DAFB..0x7DB03` | `XOR ECX,ECX; XOR EBX,EBX; XOR EDX,EDX; CALL 0x7D9A4` | code-0 re-install (staged, no invoke) |
+| `0x7DB08..0x7DB0C` | `POP *; RET` | return |
+
+Derived `fifa96_arm_reset` (FU-141 §3.4's init-seed subset): `stage92 = 0xFF`,
+`timer89 = 0`, `code = 0`. The `[rec+0x20]` callback, the phase-2 forced
+arm and the native installer's accepted-install tail (`+0x92` overwrite,
+`+0x9E` clear, `+0x7B <- +0x79`, carrier bit) stay OL-54; the FU-141 §3.4
+phase-2 arm is the documented pool call (OL-44) and the re-install is
+represented by the record's `+0x91` code byte (the same reading
+`fifa96_match_entities_init` uses, `fifa96_match_entities.c` lines 39-40).
+
+### E.4 Entry probe (what would constitute an entry; where searched; negative result)
+
+Same method as D.1. An entry would be (a) a `CALL`/code pointer to
+`0x84598`, (b) a match-code `MOV EDX,0x2C` (installer argument) or `MOV
+ECX,0x2C` (FU-142a arm argument), (c) any non-action-table pointer to the
+body.
+
+| probe (read-only `/FIFA96.EXE`) | result |
+|---|---|
+| `get_xrefs_to 0x84598` | **1 reference: DATA from `0x110790`** — the action-table slot `0x1106E0 + 0x2C*4` |
+| `search_byte_patterns 98 45 08 00` | **1 hit: `0x110790`** — no other pointer table holds the body |
+| `search_instructions mnemonic=MOV operand="EDX, 0x2C"` | 3 sites, all non-match (`0x3035E` in `FUN_000302DC`; `0x40A8E`/`0x40C5C` in `FUN_00040A5C`); the FU-137 §5.3 census records none calls `0x7D9A4` |
+| `search_instructions mnemonic=MOV operand="ECX, 0x2C"` | 0 |
+| `get_xrefs_to 0x8CEB8` | 15 refs, all inside `FUN_0008D098`; Appendix A.4 lists the staged codes — **no 0x2C** |
+
+**Negative result: the body has no static entry; the action-table slot is
+the only reference to it anywhere in the program image.** A register-derived
+installer argument cannot be excluded by a constant census, so the entry
+stays unresolved and the FU-142f runtime/reachability pass remains the
+precondition (OL-48). The row keeps `fifa96_match_action_table[0x2C].fn ==
+NULL` and dispatches `-FIFA96_ERR_UNSUPPORTED` (evidence string names
+FU-142b/OL-48).
+
+### E.5 Port mapping and derived surfaces
+
+* `fifa96_arm_helpers.{h,c}`: `fifa96_arm_reset` (E.3), shared with Task 6's
+  row 29; NULL `rec` -> `-FIFA96_ERR_INVALID`.
+* `fifa96_arm_bodies.{h,c}`: `fifa96_arm_2c_step` (E.2). The stage-1 select
+  reuses `fifa96_arm_anim_select` (Task 4) with the constant id `0x5D`; the
+  resolved id is recorded in the derived `anim_sel` observation (as row 27
+  does), the native row-pointer/flags writes stay OL-52. The stage-2
+  countdown uses the derived `delta` word (zero-extended) with the native
+  signed `JG` test. NULL `rec` -> `-FIFA96_ERR_INVALID`.
+* Engine: `fifa96_match_action_table[0x2C].fn` stays **NULL** (no static
+  entry, E.4); the evidence string becomes `"...body ported (FU-142b);
+  entry unresolved (FU-142f/OL-48); -UNSUPPORTED"`.
+* Tested: `tests/test_arm_helpers.c` (`test_arm_reset_fields`,
+  `test_arm_reset_invalid`), `tests/test_arm_bodies.c` (`test_arm_2c_*`, 9
+  cases), `tests/test_engine_match_handlers.c::test_action_2C_unwired_entry`.
+
+### E.6 Open legs (numbered)
+
+* OL-48 (entry) — E.4; row stays unwired.
+* OL-54 (reset callbacks/installer tail) — §6.
+* OL-52 (selector record surface) carries the row-2C selector call's
+  unmodeled native writes — D.5.
+
+Write set of this appendix (Task 5): `include/fifa96_loader/fifa96_arm_helpers.h`,
+`src/fifa96_loader/fifa96_arm_helpers.c`,
+`include/fifa96_loader/fifa96_arm_bodies.h`,
+`src/fifa96_loader/fifa96_arm_bodies.c`, `tests/test_arm_helpers.c`,
+`tests/test_arm_bodies.c`, `src/fifa96_engine/fifa96_match_handlers.c`,
+`tests/test_engine_match_handlers.c`, the FU-137 errata and this appendix.
+No engine record change: row 2C stays unwired.
 
 ## 8. No-write statement
 

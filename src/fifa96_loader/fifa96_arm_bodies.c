@@ -1,12 +1,15 @@
-/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4 /
- * FU-142b: the row 0x26 body, the row 0x27 body and the shared 0x36200 stub.
+/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5 /
+ * FU-142b: the row 0x26 body, the row 0x27 body, the row 0x2C body and the
+ * shared 0x36200 stub.
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: disassemble_bytes 0x866F4, read_memory 0x110778 =
  * row-0x26 table entry 0x000866F4, read_memory 0x10F394 table bytes,
- * disassemble_bytes 0x36200) and Appendix D (disassemble_bytes 0x86820,
+ * disassemble_bytes 0x36200), Appendix D (disassemble_bytes 0x86820,
  * read_memory 0x1103CB = the 96-byte 24-pair table, read_memory 0x158782 /
- * 0x10F372). */
+ * 0x10F372) and Appendix E (disassemble_bytes 0x84598, 152 B; read_memory
+ * 0x110790 = row-0x2C table entry 0x00084598; disassemble_function 0x7DAB4,
+ * the reset subset in `fifa96_arm_reset`). */
 #include "fifa96_loader/fifa96_arm_bodies.h"
 
 /* Flat 0x10F394, the 32-byte table pointed to by the runtime [0x157A38]
@@ -77,6 +80,38 @@ static const struct fifa96_arm_27_pair {
   { 0x0003, 0x001E }, { 0x0019, -1 },     { 0x0015, 0x00F0 },
   { 0x0015, 0x001E }, { 0x0068, -1 },     { 0x0003, 0x00F0 }
 };
+
+fifa96_err_t fifa96_arm_2c_step(struct fifa96_arm_record *rec) {
+  uint8_t slot;
+  if (!rec) return -FIFA96_ERR_INVALID;
+  /* 0x8459E..0x845AC: the stage latch; 2 falls to the countdown and >= 3
+   * returns at the prologue pop (0x845AE..0x845B2). */
+  if (rec->stage92 == 0) {
+    /* 0x845B7..0x845BE: an inactive record jumps straight to the reset. */
+    if (rec->active == 0) return fifa96_arm_reset(rec);   /* 0x84622..0x84624 */
+    rec->timer89 = 0;                                     /* 0x845C6 */
+    rec->stage92 = 1;                                     /* 0x845D0..0x845D2 */
+  } else if (rec->stage92 > 2) {
+    return FIFA96_OK;
+  }
+  if (rec->stage92 == 1) {
+    /* 0x845D8..0x845EA: 0x6E598(rec, id 0x5D, frame 0). EDX=0x5D is a
+     * constant; the `MOV ECX,[rec+0x8B]>>24` load is dead (FU-84 §1: ECX is
+     * not an input) and EBX=0 is the frame index dropped by the derived
+     * selector (FU-142 OL-52). `rec->anim_sel` is the row-byte stand-in and
+     * records the resolved id. */
+    if (fifa96_arm_anim_select(0x5D, rec->anim_sel, &slot) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    rec->anim_sel = slot;
+    rec->timer89 = 0;                                     /* 0x845F5 */
+    rec->stage92 = (uint8_t)(rec->stage92 + 1u);          /* 0x845FF..0x84601 */
+  }
+  /* 0x84607..0x84620: timer89 -= zero-extended word [0x157A64]; the row
+   * waits while the result is strictly positive (signed JG). */
+  rec->timer89 = (int32_t)((uint32_t)rec->timer89 - (uint32_t)rec->delta);
+  if (rec->timer89 > 0) return FIFA96_OK;
+  return fifa96_arm_reset(rec);                           /* 0x84622..0x84624 */
+}
 
 fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
   fifa96_arm_vec tgt;

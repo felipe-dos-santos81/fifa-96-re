@@ -368,7 +368,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 29 | 0x0874E4 | **open leg** | no install arm and no match-code reference (§5.3) | OL-15 |
 | 2A | 0x086A34 | not ported | arm 0x8D807 record scan (§5.2); body unported (FU-76 §2/§7 leg 7) | OL-15 |
 | 2B | 0x087738 | **open leg** | one-byte RET 0x87738; no install arm (§5.3); dead if confirmed | OL-15 |
-| 2C | 0x084598 | **open leg** | prologue-only body; no install arm (§5.3); body unanalyzed | OL-15 |
+| 2C | 0x084598 | unwired (M2 arms-and-wiring Task 5 / FU-142 Appendix E) | body `0x84598..0x8462D` (48 insns) ported as `fifa96_arm_2c_step` with the shared `FUN_0007DAB4` reset subset (`fifa96_arm_reset`); **no static entry** — the only reference to `0x84598` is the action-table slot `0x110790`, the three `MOV EDX,0x2C` sites are non-match constants (0x3035E/0x40A8E/0x40C5C, none calls `0x7D9A4`), `MOV ECX,0x2C` has no site, `0x8CEB8` stages no 0x2C (FU-142 E.4) | OL-48 (entry; FU-142f); FU-142 OL-54 remainder |
 
 ### 6.2 Table B — phase rows `0x110794[phase]`
 
@@ -420,16 +420,16 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 1 (`27` FU-142b body, entry OL-48) | 38 | 3 (`29`, `2B`, `2C`) |
+| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 2 (`27` FU-142b, `2C` FU-142b body ported, entries OL-48) | 38 | 2 (`29`, `2B`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **3** | **2** | **72** | **3** |
+| **dispatch total** | **80** | **3** | **3** | **72** | **2** |
 
 Dispatch results at this commit: **76 × `-FIFA96_ERR_UNSUPPORTED`** (the 72 not
-ported rows + the unwired action `27` + the 3 open legs; actions `1E` and `26`
-no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **3 ×
-`FIFA96_OK`** (actions `00`, `1E` and `26`); out-of-range -> `-NOT_FOUND`; NULL
-`mr` -> `-INVALID`. All error results are negated, matching the engine family
-convention (`fifa96_match_run_*`).
+ported rows + the unwired actions `27`/`2C` + the 2 open legs; actions `1E`
+and `26` no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and
+**3 × `FIFA96_OK`** (actions `00`, `1E` and `26`); out-of-range -> `-NOT_FOUND`;
+NULL `mr` -> `-INVALID`. All error results are negated, matching the engine
+family convention (`fifa96_match_run_*`).
 
 ## 8. Open legs
 
@@ -469,7 +469,11 @@ convention (`fifa96_match_run_*`).
     install arm found for 27/29/2B/2C anywhere in the program; 0x2B's body is a
     one-byte RET and 0x27's only constant is an animation-row argument. These
     four rows stay unscheduled until a reachability/dynamic pass (or the FU-142
-    probe for plan C9) resolves their entry.
+    probe for plan C9) resolves their entry. **Status (FU-142b Tasks 3-5): row
+    26 is ported/wired; rows 27 and 2C have ported bodies but their entries
+    stay unresolved (OL-48/FU-142f); 29/2B remain unscheduled. The 0x2C body is
+    not "prologue-only": it is a 48-instruction stage machine (FU-142 §7 /
+    Appendix E).**
 
 ## 9. Concerns
 
@@ -632,3 +636,45 @@ change.
   `anim_sel`, `flag44` and `anim_overflow`; `fifa96_match_run` staging is
   unchanged because the row is unwired. Rows 28/29/2A/2C keep their classes
   (28/2A their FU-142d/e body tasks; 29/2C the OL-48 entry verdict).
+
+## Errata (M2 arms-and-wiring Task 5 / FU-142b)
+
+* §6.1 action row `2C` moves from `open leg`/OL-15 to `unwired`: Task 5 ported
+  the body `0x84598..0x8462D` (48 instructions) as `fifa96_arm_2c_step`, plus
+  the shared `FUN_0007DAB4` derived reset subset (`fifa96_arm_reset`,
+  `stage92 = 0xFF`, `timer89 = 0`, `code = 0`) — FU-142 Appendix E.
+  "Prologue-only body" (§6.1/§5.3's wording) is corrected per FU-142 §7: the
+  body is a real stage-latch machine (`+0x92` 0/1/2, calls the constant-id
+  `0x6E598` selector (id 0x5D) and `0x7DAB4`). The entry stays unresolved:
+  first-hand, the only reference to `0x84598` in `/FIFA96.EXE` is the
+  action-table slot `0x110790`; the three `MOV EDX,0x2C` sites are non-match
+  constants (`0x3035E` in `FUN_000302DC`, `0x40A8E`/`0x40C5C` in
+  `FUN_00040A5C`; none calls `0x7D9A4`), `MOV ECX,0x2C` has no site and
+  `0x8CEB8`'s 15 arms stage no code 0x2C (FU-142 E.4). A register-derived
+  installer argument cannot be excluded by a constant census, so FU-142f
+  (runtime/reachability) remains the precondition.
+  `fifa96_match_action_table[0x2C].fn` stays **NULL**, its evidence names
+  `FU-142b ... entry unresolved (FU-142f/OL-48)`, and the dispatch result is
+  unchanged (`-FIFA96_ERR_UNSUPPORTED`). The row's remainder surface is
+  FU-142 OL-54 (the reset's `[rec+0x20]` slot callback, the phase-2
+  forced-decision arm and the native installer's accepted-install tail).
+* §7 totals update in place: action unwired 1 -> 2 (`27`, `2C`), open leg
+  4 -> 2 (`29`, `2B`); dispatch total unwired 2 -> 3, open leg 3 -> 2, ported
+  3, not ported 72. The dispatch-result paragraph is updated in place:
+  `-UNSUPPORTED` stays 76, `FIFA96_OK` stays 3, `-NOT_FOUND` unchanged (phase
+  `0x16`).
+* §5.3 row `0x2C` — the constant census re-verifies first-hand this slice (3
+  `MOV EDX,0x2C` sites, none an installer, plus 1 body-pointer hit at the
+  action-table slot); the "body unanalyzed" cell is superseded by the FU-142
+  §1/Appendix E window (48 instructions, `0x84598..0x8462D`).
+* §8 OL-15 gains the FU-142b Tasks 3-5 status (row 26 wired; rows 27/2C bodies
+  ported with entries OL-48; 29/2B unscheduled) and the 0x2C
+  "prologue-only" correction.
+* `tests/test_engine_match_handlers.c` gains `test_action_2C_unwired_entry`
+  (row fn NULL, evidence names FU-142b/OL-48/UNSUPPORTED, dispatch UNSUP);
+  `action_expect[0x2C]` stays `UNSUP`.
+* The `fifa96_arm_record` view is unchanged; the loader-side helper surface
+  gains `fifa96_arm_reset` and the body surface `fifa96_arm_2c_step`.
+  `fifa96_match_run` staging is unchanged because the row is unwired. Rows
+  28/29/2A keep their classes (28/2A their FU-142d/e body tasks; 29 the
+  OL-48 entry verdict).

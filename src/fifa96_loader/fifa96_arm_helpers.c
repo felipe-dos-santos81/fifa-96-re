@@ -1,15 +1,28 @@
-/* src/fifa96_loader/fifa96_arm_helpers.c — M2 arms-and-wiring Tasks 3/4 /
+/* src/fifa96_loader/fifa96_arm_helpers.c — M2 arms-and-wiring Tasks 3/4/5 /
  * FU-142b: the shared cluster-G helpers `FUN_0008DCD4` (distance/staging),
- * `FUN_00079C50` (face) and the `FUN_0006E598` id-resolution subset.
+ * `FUN_00079C50` (face), the `FUN_0006E598` id-resolution subset and the
+ * `FUN_0007DAB4` reset subset (`fifa96_arm_reset`).
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: decompile_function + disassemble_function 0x8DCD4,
  * 61 instructions, body 0x8DCD4..0x8DD5B; the two row-0x26-era call sites
  * 0x867D1 and 0x8D11E) and Appendix D (disassemble_function 0x79C50, 28
- * instructions; disassemble_function 0x6E598, 0x6E598..0x6E713). */
+ * instructions; disassemble_function 0x6E598, 0x6E598..0x6E713); Appendix E
+ * (disassemble_function 0x7DAB4, 35 instructions, body 0x7DAB4..0x7DB0C). */
 #include "fifa96_loader/fifa96_arm_helpers.h"
 
 #include "fifa96_loader/fifa96_action_handlers.h"
+
+fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec) {
+  if (!rec) return -FIFA96_ERR_INVALID;
+  /* First-hand 0x7DAB4: the two unconditional writes (0x7DABA/0x7DAC4) and
+   * the code-0 re-install (0x7DAFB..0x7DB03, `XOR ECX/EBX/EDX` then
+   * `CALL 0x7D9A4`), represented as the record's +0x91 code byte. */
+  rec->stage92 = 0xFF;
+  rec->timer89 = 0;
+  rec->code = 0;
+  return FIFA96_OK;
+}
 
 fifa96_err_t fifa96_arm_dist_stage(const fifa96_arm_vec *from, const fifa96_arm_vec *to,
                                    int32_t *out_distance, int32_t *out_lane) {

@@ -272,6 +272,43 @@ static void test_anim_select_invalid(void) {
   assert(fifa96_arm_anim_select(3, 0, NULL) == ARM_INVALID);
 }
 
+/* --- `FUN_0007DAB4` derived reset subset (row 2C 0x84624, Appendix E) ------
+ * First-hand `0x7DAB4..0x7DB0C` (35 instructions): `[rec+0x92] = 0xFF`
+ * (0x7DABA), `[rec+0x89] = 0` (0x7DAC4), then `FUN_0007D9A4(rec, code 0,
+ * staged 0, no-invoke)` (0x7DAFB..0x7DB03). The derived subset (FU-141 §3.4)
+ * keeps `stage92 = 0xFF`, `timer89 = 0` and the code-0 re-install (`code = 0`);
+ * the `[rec+0x20]` slot callback, the phase-2 forced-decision arm and the
+ * installer's accepted-install tail stay the OL-54/open-pool surfaces. */
+
+/* The reset writes exactly its three fields; every other record field is
+ * untouched. */
+static void test_arm_reset_fields(void) {
+  struct fifa96_arm_record rec;
+  rec.stage92 = 0x77;
+  rec.timer89 = 0x1234;
+  rec.code = 0x2C;
+  rec.target.x = 0x780;
+  rec.target.z = -6;
+  rec.lane = 0x40;
+  rec.active = 3;
+  rec.anim_sel = 0x11;
+  rec.delta = 7;
+  assert(fifa96_arm_reset(&rec) == FIFA96_OK);
+  assert(rec.stage92 == 0xFF);
+  assert(rec.timer89 == 0);
+  assert(rec.code == 0);
+  assert(rec.target.x == 0x780);
+  assert(rec.target.z == -6);
+  assert(rec.lane == 0x40);
+  assert(rec.active == 3);
+  assert(rec.anim_sel == 0x11);
+  assert(rec.delta == 7);
+}
+
+static void test_arm_reset_invalid(void) {
+  assert(fifa96_arm_reset(NULL) == ARM_INVALID);
+}
+
 int main(void) {
   test_dist_stage_axis();
   test_dist_stage_lane_sign();
@@ -292,6 +329,8 @@ int main(void) {
   test_anim_select_zero_special_keeps_row();
   test_anim_select_zero_reroll_fallback();
   test_anim_select_invalid();
+  test_arm_reset_fields();
+  test_arm_reset_invalid();
   puts("test_arm_helpers OK");
   return 0;
 }

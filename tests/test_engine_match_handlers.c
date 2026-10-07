@@ -22,9 +22,11 @@
  * dispatch expectation flips to FIFA96_OK for exactly that row. FU-142b
  * Task 4 ports row 27's body (`fifa96_arm_27_step`) but no static entry
  * exists, so row 27 keeps `fn == NULL`, its evidence names the
- * FU-142f/OL-48 entry verdict and its dispatch expectation stays UNSUP. The
- * seam itself must run a handler and propagate its result when one is
- * present. */
+ * FU-142f/OL-48 entry verdict and its dispatch expectation stays UNSUP. FU-142b
+ * Task 5 ports row 2C's body (`fifa96_arm_2c_step` + `fifa96_arm_reset`) under
+ * the same verdict: no static entry, `fn == NULL`, OL-48 evidence, UNSUP
+ * dispatch. The seam itself must run a handler and propagate its result when
+ * one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -45,9 +47,9 @@
  * the FU-142 Appendix C placement machine; the only cluster-G row whose
  * install arm + body + pool binding are all bounded). All other action rows
  * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
- * tested pure parts but unported arms; row 27's body is ported but unwired
- * with its entry unresolved; the rest are `not ported`, with 29/2B/2C still
- * entry-unresolved). FU-139 (cluster B)
+ * tested pure parts but unported arms; rows 27 and 2C have ported bodies but
+ * unwired with their entries unresolved; the rest are `not ported`, with
+ * 29/2B still entry-unresolved). FU-139 (cluster B)
  * keeps 05/06/07/0F and the possession/tackle rows 18/21/23 UNSUP: their
  * record-visible cores have tested pure helpers, but the
  * carrier/pursuit/kick/receive/resolution arms are unported (the FU-141
@@ -312,6 +314,26 @@ static void test_action_27_unwired_entry(void) {
   drop_fixture(&f);
 }
 
+/* FU-142b (M2 arms-and-wiring Task 5, FU-142 Appendix E): row 2C's body
+ * `0x84598..0x8462D` is ported (`fifa96_arm_2c_step` + the shared
+ * `fifa96_arm_reset`) but its entry is unresolved: the only reference to
+ * `0x84598` in the program is the action-table slot `0x110790` itself, the
+ * three `MOV EDX,0x2C` sites are non-match constants (0x3035E/0x40A8E/0x40C5C,
+ * none calls FUN_0007D9A4), `MOV ECX,0x2C` has no site and `0x8CEB8`'s 15
+ * installer arms stage no code 0x2C. The row therefore stays `fn == NULL`
+ * with the OL-48 marker and still dispatches UNSUP. */
+static void test_action_2C_unwired_entry(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x2C];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-142b") != NULL);
+  assert(strstr(row->evidence, "OL-48") != NULL);
+  assert(strstr(row->evidence, "UNSUPPORTED") != NULL);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2C) == UNSUP);
+  drop_fixture(&f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f;
   make_fixture(&f);
@@ -387,6 +409,7 @@ int main(void) {
   test_action_1E_runs_claim_place();
   test_action_26_runs_body();
   test_action_27_unwired_entry();
+  test_action_2C_unwired_entry();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

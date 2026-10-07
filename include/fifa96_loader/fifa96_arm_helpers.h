@@ -1,6 +1,7 @@
-/* include/fifa96_loader/fifa96_arm_helpers.h — M2 arms-and-wiring Task 3 /
- * FU-142b: the cluster-G record view and the shared `FUN_0008DCD4`
- * distance/staging helper.
+/* include/fifa96_loader/fifa96_arm_helpers.h — M2 arms-and-wiring Tasks 3/4/5
+ * / FU-142b: the cluster-G record view, the shared `FUN_0008DCD4`
+ * distance/staging helper, the `0x79C50`/`0x6E598` row-27 helpers and the
+ * `FUN_0007DAB4` reset subset used by rows 2C/29.
  *
  * Native evidence (read-only /FIFA96.EXE, FU-142 Appendix C): the helper body
  * `0x8DCD4..0x8DD5B` is 61 instructions taking EAX = record+0x59 (position),
@@ -48,6 +49,18 @@ struct fifa96_arm_record {
   uint8_t anim_overflow;   /* derived: pair walk left the table (step-cleared) */
   struct fifa96_rng *rng;  /* RNG for the bodies that draw (Tasks 4+) */
 };
+
+/* `FUN_0007DAB4` (`0x7DAB4..0x7DB0C`, 35 instructions) derived reset subset, as
+ * called by row 2C at `0x84624` and (later) row 29. First-hand:
+ * `[rec+0x92] = 0xFF` (`0x7DABA`), `[rec+0x89] = 0` (`0x7DAC4`), then
+ * `FUN_0007D9A4(rec, code 0, staged 0, no-invoke)` (`0x7DAFB..0x7DB03`).
+ * The derived subset (FU-141 §3.4) sets `stage92 = 0xFF`, `timer89 = 0` and
+ * the code-0 re-install (`code = 0`). The native `[rec+0x20]` slot callback
+ * `FUN_00078B00` (`0x7DAD2`), the phase-2 `FUN_0007C990` forced-decision arm
+ * (`0x7DAEF`, FU-141 OL-44) and the native installer's accepted-install tail
+ * (which would overwrite `+0x92` with the staged byte) stay FU-142 OL-54.
+ * NULL `rec` -> -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec);
 
 /* `FUN_0008DCD4`: from = the position triple, to = the target triple, both read
  * as their low 16-bit words; the native out vector is

@@ -28,3 +28,15 @@ fifa96_err_t fifa96_arm_26_step(struct fifa96_arm_record *rec);
  * the `[0x10F374]` cursor and the `+0x44` negative-time gate. NULL `rec` ->
  * -FIFA96_ERR_INVALID. */
 fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec);
+
+/* Row 0x2C body `0x84598..0x8462D` (48 instructions; action-table row 0x2C =
+ * 0x84598 with no static entry, FU-142 OL-48): the stage-latch machine per
+ * FU-142 Appendix E. Stage 0 with `active == 0` resets immediately; stage 0
+ * with `active != 0` advances to 1 and runs the stage-1 block in the same
+ * call; stage 1 selects the constant `0x6E598` id 0x5D through
+ * `fifa96_arm_anim_select` and advances to 2; stage 2 subtracts the
+ * zero-extended `[0x157A64]` word from `timer89` and resets when the result is
+ * not strictly positive; stage >= 3 returns untouched. The reset is
+ * `fifa96_arm_reset` (stage92 = 0xFF, timer89 = 0, code = 0). NULL `rec` ->
+ * -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_arm_2c_step(struct fifa96_arm_record *rec);
