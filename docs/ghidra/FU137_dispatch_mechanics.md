@@ -264,6 +264,30 @@ Other `FUN_0008D098` arms (context, not in range): code `0` at `0x8D19F`
 `0x8D475`, code `0x1F` at `0x8D569`, code `0x12` at `0x8D5C7`, code
 `0x1D`/`0x1E` at `0x8D62C`.
 
+**Errata (M2 arms-and-wiring Task 2 / FU142a, §5.2 first-hand re-read).** The
+state 0x13/0x14 entry is `0x8D693` (switch `0x8D178 MOV AL,[0x157A4D]`, table
+`0x8D040`; entries `0x8D08C`/`0x8D090`), not a bare `0x8D720` block: the
+entry block `0x8D693..0x8D727` runs `0x651F0`(0xD), tests `[0x157AC2] < 4` and
+writes the row-28 body globals `[0x10F364]`/`[0x10F368]` before the arms; the
+derived subset starts at the side test. The switch byte **is** the phase byte
+(`0x157A4D` is byte 3 of the `0x157A4A` dword read at `0x8D75F`
+`SAR EAX,0x18`), so state and phase cannot differ natively. The `0x26` side
+test is `zero_extend(byte [EBP+0x826]) == sign_extend(byte3 [0x157AAC])`
+(`0x8D72E XOR EAX,EAX`/`0x8D733 MOV AL` vs `0x8D730 SAR EDX,0x18`): a
+controlled byte `>= 0x80` sign-extends negative and can never equal the
+0..255 side, so the native always takes the 0x26 arm for such a byte; the
+port's ruled byte compare (`(uint8_t)side_controlled != team->side`, FU-142
+Appendix B.3) differs only at `side == side_controlled >= 0x80`, unreachable
+for the pool's 0/1 sides. The 3/0x25 arms compare the full 16-bit
+`[0x157AC5]`/`[0x157AC7]` words (`0x8D76C MOV AX` / `0x8D772 CMP AX`); the
+port stores and compares their low bytes (Appendix B.3). The 0x2A scan
+exhaustion exits at `EDX=0xB` with `EAX=team+0x7A6`, stores that pointer in
+`+0x831` and installs 0x2A at the aliased `+0x91 = team+0x837` (next team
+block `+0x2`); the derived model flags the overflow instead (`arm2a_overflow`,
+Appendix B.4, resolves FU142 OL-49). `FUN_0008D098`'s only callers are
+`FUN_000740A0` `0x740C8`/`0x740DB`, which write `[0x157A4D]` from AL, call it
+once per team (`0x1588A4 + side*0x835`) and then handle phase 2.
+
 ### 5.3 Constant census for `0x27`, `0x29`, `0x2B`, `0x2C`
 
 `search_instructions mnemonic=mov` over the whole program for `EDX,imm` (the

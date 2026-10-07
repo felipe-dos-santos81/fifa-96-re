@@ -32,6 +32,13 @@ static void test_init_resets_state(void) {
   assert(mr.state.phase == 0);
   assert(mr.state.prev_phase == 0);
   assert(mr.state.aux_flag == 0);
+  /* FU-142a: the installer-arms machine is reset with the run state */
+  assert(mr.phase_machine.state == 0);
+  assert(mr.phase_machine.phase == 0);
+  assert(mr.phase_machine.side_controlled == 0);
+  assert(mr.phase_machine.arm2a_overflow == 0);
+  assert(mr.phase_machine.chosen831[0] == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr.phase_machine.chosen831[1] == FIFA96_MATCH_ENTITY_NONE);
 }
 
 /* 1000 granted-cadence calls deliver exactly 300 frames (10 s at 30 Hz): the
@@ -129,9 +136,13 @@ static void test_engine_step_drives_frame_body(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   mr.state.total_seconds = 99;
+  mr.phase_machine.state = 0x13;      /* begin must reset the FU-142a machine */
+  mr.phase_machine.arm2a_overflow = 1;
 
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(mr.state.total_seconds == 0);   /* fresh match clock */
+  assert(mr.phase_machine.state == 0);   /* fresh installer-arms machine */
+  assert(mr.phase_machine.arm2a_overflow == 0);
   assert(mr.pace.pending == 0);
 
   for (int i = 0; i < 30; i++) {
@@ -210,6 +221,50 @@ static void test_frame_drives_entity_chain(void) {
   assert(mr.entities.team[0].records[5].code == 0x19);
 }
 
+/* FU-142a: the frame body runs the FUN_0008D098 state 0x13/0x14 arm block
+ * once per granted frame, after the FU-141 entity chain. State/phase 0x13 with
+ * side_controlled 0: team 1 (side 1) is the non-controlled side and all its
+ * records stage 0x26; team 0 (controlled, ac5 == ac7) stages 3 (record 0 ->
+ * 0x19). At phase 2 the hook is off: the entity chain still runs row 00 but no
+ * arm code appears on any record. */
+static void test_phase_machine_hook(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x13;
+  mr.phase_machine.state = 0x13;
+  mr.phase_machine.phase = 0x13;
+  mr.phase_machine.side_controlled = 0;
+  mr.state.period_length = 90;        /* no period end inside the 10 ticks */
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    mr.entities.team[0].records[i].active = 1; /* installer keeps code 3 */
+  for (int i = 0; i < 10; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);   /* 3 granted frames */
+  }
+  assert(mr.entities.team[1].records[0].code == 0x26);
+  assert(mr.entities.team[1].records[10].code == 0x26);
+  assert(mr.entities.team[0].records[0].code == 0x19);
+  assert(mr.entities.team[0].records[1].code == 3);
+  assert(mr.phase_machine.arm2a_overflow == 0);
+
+  struct fifa96_match_run mr2;
+  fifa96_match_run_init(&mr2);
+  mr2.state.phase = 2;                /* not the 0x13/0x14 slice */
+  mr2.phase_machine.state = 2;
+  mr2.state.period_length = 90;
+  for (int i = 0; i < 10; i++) {
+    assert(fifa96_match_run_frame(&mr2) >= 0);
+  }
+  for (uint32_t t = 0; t < 2; t++) {
+    for (uint32_t r = 0; r < FIFA96_MATCH_ENTITY_RECORDS; r++) {
+      uint8_t code = mr2.entities.team[t].records[r].code;
+      /* 0x19 is excluded from the discriminator: row 00 installs it at
+       * phase 2 for inactive records (the positive fixture above). */
+      assert(code != 0x26 && code != 3 && code != 0x25 &&
+             code != 0x28 && code != 0x2A);
+    }
+  }
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -218,6 +273,7 @@ int main(void) {
   test_engine_step_drives_frame_body();
   test_begun_period_end_marks_over();
   test_frame_drives_entity_chain();
+  test_phase_machine_hook();
   puts("test_engine_match_frame OK");
   return 0;
 }

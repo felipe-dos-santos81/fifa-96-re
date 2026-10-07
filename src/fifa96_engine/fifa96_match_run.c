@@ -283,6 +283,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->stage_owner = NULL;
   memset(&mr->record, 0, sizeof mr->record);
   (void)fifa96_match_entities_init(&mr->entities);
+  (void)fifa96_match_phase_machine_init(&mr->phase_machine);
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -305,6 +306,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->score[1] = 0;
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
+  (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -388,6 +390,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                       mr);
     if (rc != FIFA96_OK) return rc;
     match_run_entity_drain(mr);
+    /* FU-142a: the FUN_0008D098 state 0x13/0x14 arm block runs after the
+     * FU-141 chain, once per granted frame (the FUN_000740A0 order: the
+     * state byte is set, then FUN_0008D098 runs for both teams). */
+    if (mr->state.phase == 0x13u || mr->state.phase == 0x14u)
+      (void)fifa96_match_phase_machine_step(mr);
   }
   if (period_ended && !fifa96_match_lifecycle_should_exit(&mr->lc)) {
     /* Ordering guard: the frame body runs in the clock advance before

@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_match_entities.h"
+#include "fifa96_engine/fifa96_match_phase_machine.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_control.h"
@@ -154,13 +155,15 @@ struct fifa96_match_run {
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
   struct fifa96_match_run_record record;         /* FU-141 dispatch staging record */
   struct fifa96_match_entities entities;         /* FU-141 entity/ball pool */
+  struct fifa96_match_phase_machine phase_machine; /* FU-142a installer-arms machine */
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };
 
 /* Zero-init a run: lifecycle, pace, match state (clock and score pair), input
- * model, control slot, the dispatch staging record (FU-141) and the entity/ball
- * pool (init seeds the native record reset), presentation state
+ * model, control slot, the dispatch staging record (FU-141), the entity/ball
+ * pool (init seeds the native record reset), the FU-142a installer-arms
+ * machine (zeroed, chosen831 seeded NONE), presentation state
  * (camera/window/display/scene, rendering disabled), the staging-arena holder
  * (assigned NULL, never freed: init accepts uninitialized memory, so it cannot
  * trust the holder), backend, counters and engine linkage. Must be called
@@ -221,6 +224,9 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
  * FUN_000736AC runs from the frame body FUN_0004B100, not the render driver),
  * and the FU-141 entity/ball pool ran the FU-67 chain (team 0, team 1, the
  * ball pairing) with the FU-137 action dispatch bound to the pool records;
+ * then, when the phase is 0x13/0x14, the FU-142a
+ * `fifa96_match_phase_machine_step` ran the FUN_0008D098 installer arms once
+ * (the FUN_000740A0 order);
  * 0 = no frame was due; or a -fifa96_err_t. A period end marks the lifecycle
  * over, except when an exit is already staged: the staged EXIT wins because
  * the frame body runs in the clock advance before the exit step consumes it.

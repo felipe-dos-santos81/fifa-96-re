@@ -186,7 +186,12 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   unported (FU-137 OL-5); the state 0x13/0x14 arm block (`0x8D720..0x8D813`),
   `FUN_0008CEB8` (165 B) and the `0x2A` record scan are bounded here but need
   the FU-142a port; the unsigned 0x2A no-free-record edge (install into
-  `team+0x7A6`) is recorded as a porting hazard.
+  `team+0x7A6`) is recorded as a porting hazard. **Status (Task 2): the state
+  0x13/0x14 subset (`0x8D693..0x8D820`), `FUN_0008CEB8` and the 0x2A scan are
+  ported and tested (`fifa96_match_phase_machine_step`, FU-142 Appendix B);
+  the remaining states of the 1928-B function (0..0x15 switch arms, the
+  pre-switch record walk `0x8D0A6..0x8D166`, the entry RNG block
+  `0x8D693..0x8D727`) stay unported.**
 * **OL-47 — cluster-G row bodies.** Rows 26/27/28/29/2A/2C bodies are bounded
   (six bodies, ~1220 insns) but unported; each waits for its FU-142b..e task
   and for the unported helpers `0x8DCD4`, `0x79C50`, `0x6E598`, `0x513EC`,
@@ -198,13 +203,17 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41, FU-137 OL-15 (closes
   nothing new; the 0x26/0x28/0x2A arms stay as classified until their bodies
   land).
-* **OL-49 — `FUN_0008CEB8` index-11 overflow.** The native helper clamps
-  `last >= 0xB` to `0xB` (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB`
-  also stages record index 11 at `team+0x7A6` — the same spill the `0x2A` arm
-  targets directly (`0x8D7F6` exit). All 15 static call sites pass `BX=0xA`,
-  so the path is unreachable from the program; the derived pool models records
-  0..10 and the port clamps to 10. Task 2's `0x2A` hazard appendix owns the
-  overflow-slot model if one is added.
+* **OL-49 — `FUN_0008CEB8` index-11 overflow — resolved as a bounded model
+  (Task 2).** The native helper clamps `last >= 0xB` to `0xB`
+  (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB` also stages record
+  index 11 at `team+0x7A6` — the same spill the `0x2A` arm drives at its scan
+  exhaustion (`0x8D7F6` exit, install code byte `team+0x837` = the next team
+  block `+0x2`; Appendix B.4). All 15 static call sites pass `BX=0xA`, so the
+  helper path is unreachable from the program; the derived pool models records
+  0..10, so the helper keeps its clamp to 10 and the `0x2A` scan models
+  exhaustion as `chosen831 = FIFA96_MATCH_ENTITY_NONE` + `arm2a_overflow = 1`
+  with no pool record written. Nothing observable is lost: the aliased tail
+  byte is outside the derived record surface. See Appendix B.4.
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -229,6 +238,15 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `MOV word [ESP+4],0xB`; raw `83 FE 0B 7C 07 66 C7 44 24 04 0B 00`), i.e.
   `min(last,11)` with a first guard of `first in 0..10`. The port clamps to 10
   because the derived pool has no index 11 (OL-49).
+* **§5.2 state vs phase** — the state switch byte `[0x157A4D]` (`0x8D178`) and
+  the phase `[0x157A4A]>>24` are the *same* native byte (`0x157A4D` is byte 3
+  of the `0x157A4A` dword; both 0x13/0x14 switch entries target `0x8D693`).
+  The Task 2 port keeps the plan's two-field gate (`pm->state` +
+  `mr->state.phase`) and reads the arm-block phase from `mr->state.phase`
+  (Appendix B.2/B.3). The native `0x26` side compare is a zero-extended side
+  byte against an arithmetic-shifted controlled byte, and the 3/0x25 compare
+  is a full 16-bit word compare; both port asymmetries are recorded in
+  Appendix B.3 and the FU-137 §5.2 errata.
 
 ## Appendix A (FU142a / M2 arms-and-wiring Task 1) — `FUN_0008CEB8` first-hand window
 
@@ -337,6 +355,183 @@ Write set of this appendix (Task 1): `include/fifa96_engine/fifa96_match_phase_m
 `include/fifa96_engine/fifa96_match_entities.h` (team tail fields + init seed),
 `tests/test_engine_match_phase_machine.c`, `CMakeLists.txt`, this appendix and
 the §6/§7 additions. §8 below describes the Task 9 probe slice, not this one.
+
+## Appendix B (FU142a / M2 arms-and-wiring Task 2) — `FUN_0008D098` state 0x13/0x14 arm block first-hand window
+
+Task 2 of the follow-up plan ports the state 0x13/0x14 subset of the 1928-B
+`FUN_0008D098` phase machine — the installer arms `0x26`/`0x28`/`0x2A` and the
+context arms `3`/`0x25` — into `fifa96_match_phase_machine_step`. This appendix
+is its evidence gate: the exact fields, constants and branch sites below are
+read first-hand this slice and are what the port implements.
+
+### B.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `get_function_by_address 0x8D098` — defined, body `0x8D098..0x8D820`
+  (1928 B);
+* `disassemble_bytes` windows: `0x8D098` (220 B: prologue, pre-switch record
+  walk, state switch), `0x8D174` (140 B: switch targets), `0x8D600` (300 B:
+  the state 0x13/0x14 entry block `0x8D693..0x8D727`), `0x8D720` (260 B: the
+  arm block `0x8D722..0x8D820`);
+* `read_memory 0x8D040` (88 B = 22 dwords, the state jump table);
+* `get_xrefs_to 0x8D098` — 2 refs, both `FUN_000740A0` (`0x740C8`,
+  `0x740DB`); `get_xrefs_to 0x8D693` — table-data refs `0x8D08C`/`0x8D090`
+  (entries 0x13/0x14) plus the computed jump `0x8D18A`;
+* `disassemble_function 0x740A0` (25 insns, the per-team caller).
+
+No writes: no rename/comment/label/function/script/project save.
+
+### B.2 State dispatch and entry block
+
+Prologue `PUSH EBX/ECX/EDX/ESI/EDI/EBP; SUB ESP,0x100; MOV EBP,EAX`
+(`0x8D098..0x8D0A4`) takes EAX = team block base. Before the switch the
+function runs a record walk over the 11 records (skip `+0x9A`; calls
+`FUN_0006D920`, the record's `+0x1C` callback and `FUN_0008DCD4`) at
+`0x8D0A6..0x8D166` — common to every state and outside this slice's subset
+(the helpers are unported; `0x8DCD4` is Task 3).
+
+State switch: `0x8D178 MOV AL,[0x157A4D]`; `0x8D17D CMP AL,0x15`;
+`0x8D17F JA 0x8D814` (epilogue); `0x8D185 AND EAX,0xFF`;
+`0x8D18A JMP dword CS:[EAX*4+0x8D040]`. The 22-entry table (read first-hand)
+sends **both 0x13 and 0x14 to `0x8D693`** (entries `0x8D08C`/`0x8D090`);
+0x15 goes to `0x8D77B` (the bare code-3 arm), 0x11/0x12 to the epilogue. The
+switch byte is byte 3 of the `0x157A4A` dword (`0x157A4A + 3 = 0x157A4D`), so
+`0x8D75F MOV EAX,[0x157A4A]; SAR EAX,0x18` re-reads the value the switch
+selected on: **state and phase are the same native byte**.
+
+Entry block `0x8D693..0x8D727` (runs before the arms; out of the derived
+subset — row-28/2A body context): `MOV EAX,0xD; CALL 0x651F0`
+(`0x8D693`/`0x8D698`); `MOV AL,[0x157AC2]; CMP EAX,4; JGE 0x8D703`
+(`0x8D69F..0x8D6A7`); below 4 an RNG block (`CALL 0x92AC8`) writes
+`[0x10F364]`/`[0x10F368]`; at/above 4 the side test
+`CMP byte [EBP+0x826],0` selects `[0x10F364] = 0xFFFFFD30` (side 0) / `0x2D0`
+(side 1) and `[0x10F368] = 0x5A0` (`0x8D703..0x8D722`). Those globals belong
+to the FU-142 §1 row-28 body; the derived step does not model them (Task 7).
+
+### B.3 Arm block decision logic `0x8D728..0x8D820` (site-annotated)
+
+* **side test** `0x8D728 MOV EDX,[0x157AAC]`; `0x8D72E XOR EAX,EAX`;
+  `0x8D730 SAR EDX,0x18`; `0x8D733 MOV AL,byte [EBP+0x826]`;
+  `0x8D739 CMP EAX,EDX`; `0x8D73B JZ 0x8D75F`. Native equality is
+  `zero_extend(side) == sign_extend(byte3 [0x157AAC])`.
+* **arm 0x26** (side mismatch) `0x8D73D..0x8D75E`: `PUSH -1`,
+  `MOV ECX,0x26` (`0x8D73F`), `MOV EBX,0xA`, `MOV EAX,EBP`, `XOR EDX,EDX`,
+  `CALL FUN_0008CEB8` (`0x8D74D`), then the full epilogue
+  `ADD ESP,0x100; POP EBP/EDI/ESI/EDX/ECX/EBX; RET` (`0x8D752..0x8D75E`) —
+  the per-team call ends there; no later arm runs for that team.
+* **phase test** `0x8D75F..0x8D76A`: `[0x157A4A]>>24 == 0x13` -> the
+  3/0x25 pair; else `0x8D7BF` (the 0x28/0x2A half).
+* **word compare** `0x8D76C MOV AX,[0x157AC5]`;
+  `0x8D772 CMP AX,word [0x157AC7]`; `0x8D779 JNZ 0x8D79D`.
+* **arm 3** (words equal) `0x8D77B..0x8D79C`: `PUSH -1`, `MOV ECX,3`
+  (`0x8D77D`), `MOV EBX,0xA`, `MOV EAX,EBP`, `XOR EDX,EDX`,
+  `CALL FUN_0008CEB8` (`0x8D78B`), epilogue.
+* **arm 0x25** (words differ) `0x8D79D..0x8D7BE`: same shape, `MOV ECX,0x25`
+  (`0x8D79F`), `CALL` (`0x8D7AD`), epilogue.
+* **arm 0x28** (phase != 0x13) `0x8D7BF..0x8D7D3`: `PUSH -1`,
+  `MOV ECX,0x28` (`0x8D7C1`), `MOV EBX,0xA`, `MOV EAX,EBP`, `XOR EDX,EDX`,
+  `CALL FUN_0008CEB8` (`0x8D7CF`); no RET — execution falls into the 0x2A
+  scan (B.4).
+
+Hazards (recorded, not silently fixed):
+
+* **side-test asymmetry.** The native equality holds iff
+  `side_controlled < 0x80 && side == side_controlled` (the arithmetic shift
+  makes a controlled byte >= 0x80 negative, while the zero-extended side is
+  0..255). The port implements the plan's byte compare
+  (`(uint8_t)pm->side_controlled != team->side`); the two forms differ only
+  when `side == side_controlled >= 0x80`, where the native installs 0x26 and
+  the byte model would not. The pool's team `side` is 0/1 (`init` seeds
+  `(uint8_t)t`), so the divergence is unreachable; the Task 2 fixture pins the
+  plan's required edge (`side_controlled = 0x80`, `side = 0` -> both teams
+  take the 0x26 arm).
+* **word vs low-byte `[0x157AC5]`/`[0x157AC7]`.** The native compares the full
+  16-bit words (`MOV AX`/`CMP AX`); Task 1's `ac5`/`ac7` fields store the low
+  bytes, so the port compares bytes. The forms differ only when the two words
+  differ solely above bit 7.
+* The 0x26 arm and the 3/0x25 arms end the per-team call with a RET; only the
+  phase-0x14 half continues into the scan.
+
+### B.4 The 0x2A scan and the bounded overflow model (resolves OL-49)
+
+Native `0x8D7D4..0x8D820`:
+
+| site | instruction |
+|---|---|
+| `0x8D7D4` | `MOV EDX,1` (scan starts at record 1, not 0) |
+| `0x8D7D9` | `LEA EAX,[EBP+0xB2]` (record 1) |
+| `0x8D7DF` | `JMP 0x8D7F0` (loop test first) |
+| `0x8D7E1` | `CMP byte [EAX+0x9A],0` |
+| `0x8D7E8` | `JZ 0x8D7F8` (first `+0x9A == 0` wins) |
+| `0x8D7EA` | `INC EDX` |
+| `0x8D7EB` | `ADD EAX,0xB2` |
+| `0x8D7F0` | `MOVSX ECX,DX` |
+| `0x8D7F3` | `CMP ECX,0xB` |
+| `0x8D7F6` | `JL 0x8D7E1` (loop while index < 11) |
+| `0x8D7F8` | `MOV EDX,0x2A` |
+| `0x8D7FD` | `XOR ECX,ECX` (staged byte 0) |
+| `0x8D7FF` | `XOR EBX,EBX` |
+| `0x8D801` | `MOV [EBP+0x831],EAX` (chosen record pointer) |
+| `0x8D807` | `CALL FUN_0007D9A4` (install 0x2A into EAX) |
+| `0x8D80C` | `XOR EBX,EBX` |
+| `0x8D80E` | `MOV [0x10F35C],EBX` (row-28 global, not modeled) |
+| `0x8D814..0x8D820` | epilogue `ADD ESP,0x100; POP *; RET` |
+
+Exhaustion: when no record 1..10 has `+0x9A == 0` the loop exits at
+`EDX = 0xB` with `EAX = EBP + 0xB2*11 = team+0x7A6` (record 11, one past the
+11-record array: 11 * 0xB2 = 0x7A6), stores that pointer into `+0x831` and
+installs 0x2A there — the code byte is `record11 + 0x91 = team+0x837`, i.e.
+**the next team block + 0x2** (team 0: `0x1588A4 + 0x837 = 0x1590DB =
+0x1590D9 + 2`).
+
+Bounded model (OL-49 resolution): the derived pool models records 0..10 only.
+On exhaustion the step writes `chosen831 = FIFA96_MATCH_ENTITY_NONE` and
+`arm2a_overflow = 1` and stages nothing; any scan that finds a record clears
+the flag (it reports the latest scan's outcome). On a find, `chosen831` holds
+the derived encoded id `11*team + record` (the pool id scheme) instead of the
+native pointer, and the direct stage is
+`fifa96_match_entities_install(&records[i], pool->phase, 0x2A, 0)`. The 0x28
+arm does not set `+0x9A`, so (exactly as natively) the scan may pick the
+record the 0x28 arm just staged and overwrite it with 0x2A; record 0 is never
+eligible because the scan starts at 1.
+
+### B.5 Caller and cadence
+
+`get_xrefs_to 0x8D098` = 2, both in `FUN_000740A0` (`0x740C8`, `0x740DB`).
+It does `MOV AH,[0x157A4D]; MOV [0x157A4E],AH; MOV [0x157A4D],AL` (installs
+the new state, saves the previous), then
+`EAX = 0x1588A4 + DX*0x835; XOR DL,0x1; CALL FUN_0008D098` and repeats with
+the flipped side (`0x740B4..0x740DB`), then handles phase 2 (`0x740E0`). One
+state transition therefore invokes the machine once per team; the derived
+frame hook calls `fifa96_match_phase_machine_step` once per granted frame and
+the step loops both team blocks.
+
+### B.6 Port mapping and derived surfaces
+
+* `struct fifa96_match_phase_machine`: `state`/`phase` (two views of the
+  native `0x157A4D` byte; the step gates on the machine `state` and the run
+  `state.phase` and reads the arm-block phase from the latter),
+  `side_controlled`, `ac5`/`ac7`, `arm2a_overflow`, `chosen831[2]` (Task 1
+  shape). The native per-team `+0x831` is the pool's
+  `struct fifa96_match_team.chosen831` (encoded id or NONE): the Task 2 arms
+  write that field, so the machine's `chosen831[2]` array stays a seeded
+  Task-1 field with no Task-2 consumer.
+* `fifa96_match_phase_machine_step(struct fifa96_match_run *)` in
+  `src/fifa96_engine/fifa96_match_phase_machine.c`; the machine is embedded in
+  `struct fifa96_match_run` (`phase_machine`), reset by init/begin, and called
+  from `fifa96_match_run_frame` after the FU-141 chain when the run phase is
+  0x13/0x14 (the per-team `FUN_000740A0` order).
+* Tested: `tests/test_engine_match_phase_machine.c` (`test_step_gate`,
+  `test_step_arm26_side_mismatch`, `test_step_arm25_3_phase13`,
+  `test_step_arm28_2a_phase14`, `test_step_2a_overflow`,
+  `test_step_side_hi_bit`) and `tests/test_engine_match_frame.c`
+  (`test_phase_machine_hook` plus the init/begin reset assertions).
+
+Write set of this appendix (Task 2): `include/fifa96_engine/fifa96_match_phase_machine.h`,
+`src/fifa96_engine/fifa96_match_phase_machine.c`,
+`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`,
+`tests/test_engine_match_phase_machine.c`, `tests/test_engine_match_frame.c`,
+this appendix, the §6 OL-46/OL-49 updates and the §7 addition.
 
 ## 8. No-write statement
 

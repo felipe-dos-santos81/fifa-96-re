@@ -22,11 +22,24 @@
  * `FUN_0006D920` and the per-record loop), `[0x157AAC]>>24` (controlled side,
  * 0x8D728), the low bytes of the `[0x157AC5]`/`[0x157AC7]` words
  * (0x8D76C/0x8D772) and the per-team `+0x831` chosen-record cache the 0x2A
- * arm writes (0x8D801). The step/arm bodies land in plan Task 2 (Gate G1). */
+ * arm writes (0x8D801). The native state switch byte at `0x157A4D` IS the high
+ * byte of the `0x157A4A` dword (0x157A4A + 3), so `state` and `phase` are two
+ * views of the same native byte; the derived step keeps the plan's two-field
+ * gate and reads the arm-block phase from `mr->state.phase`.
+ *
+ * `fifa96_match_phase_machine_step` is the state 0x13/0x14 subset of
+ * `FUN_0008D098` (Task 2, FU-142 Appendix B): the state switch jump table
+ * (`0x8D040`) sends both 0x13 and 0x14 to `0x8D693`, whose arm block runs the
+ * `0x26`/3/0x25/0x28 arms and the `0x2A` record scan over one team block per
+ * call; the native caller `FUN_000740A0` (`0x740C8`/`0x740DB`) invokes it once
+ * per team right after writing `[0x157A4D]`, so the derived step loops both
+ * teams. */
 #pragma once
 #include <stdint.h>
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_loader/fifa96_err.h"
+
+struct fifa96_match_run;   /* step argument; defined in fifa96_match_run.h */
 
 struct fifa96_match_phase_machine {
   uint8_t state;           /* [0x157A4D] switch value (0x8D178) */
@@ -52,3 +65,23 @@ int fifa96_match_phase_machine_init(struct fifa96_match_phase_machine *pm);
 int fifa96_match_arm_install_multi(struct fifa96_match_entities *pool, uint32_t team,
                                    uint8_t first, uint8_t last, uint8_t code,
                                    int skip_code);
+
+/* The `FUN_0008D098` state 0x13/0x14 arm block over one run (FU-142
+ * Appendix B). A no-op returning FIFA96_OK unless `pm->state` and
+ * `mr->state.phase` are both 0x13/0x14 (native: the state switch value and
+ * the phase are the same byte; the derived gate keeps both fields). Per team:
+ *  - `+0x826 != (uint8_t)side_controlled` (0x8D728..0x8D73B) -> stage 0x26
+ *    across records 0..10 and return (0x8D74D, the per-team call RETs);
+ *  - phase 0x13 (0x8D767): `ac5 != ac7` -> 0x25, else 3 (record 0 pre-coerced
+ *    to 0x19 by the helper's index-0 rule); both return;
+ *  - phase 0x14: stage 0x28 across records 0..10 (0x8D7CF), then scan records
+ *    1..10 for the first `skip_9a == 0` (0x8D7D4..0x8D7F6): found ->
+ *    `chosen831 = 11*team + i` and a direct `fifa96_match_entities_install`
+ *    of 0x2A into it; none -> `chosen831 = FIFA96_MATCH_ENTITY_NONE` and
+ *    `arm2a_overflow = 1` (the bounded model of the native scan exiting at
+ *    EDX=0xB into the record-11 alias `team+0x7A6`, install byte at
+ *    `team+0x837` = the next block +0x2; no pool record is written).
+ * `arm2a_overflow` reports the latest scan's outcome (cleared by a found
+ * scan). The installer phase argument is the pool's latched `phase`. Returns
+ * FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_phase_machine_step(struct fifa96_match_run *mr);
