@@ -232,8 +232,19 @@ int fifa96_engine_step(struct fifa96_engine *e) {
 }
 
 int fifa96_engine_run(struct fifa96_engine *e) {
-  while (e && !e->quit) {
+  if (!e) return 0;
+  /* Sleep to the engine's fixed-step deadline so a real backend does not
+   * busy-spin: each iteration adds one clock tick (10 ms) to the absolute
+   * deadline and yields the remaining time via the backend. A no-op
+   * sleep_ns (null backend) keeps headless runs deterministic. */
+  uint64_t tick_ns = e->clock.tick_ns;
+  uint64_t deadline = e->plat->now_ns(e->plat->self);
+  while (!e->quit) {
     if (fifa96_engine_step(e) != 0) return -1;
+    if (tick_ns == 0) continue;
+    deadline += tick_ns;
+    uint64_t now = e->plat->now_ns(e->plat->self);
+    if (deadline > now) e->plat->sleep_ns(e->plat->self, deadline - now);
   }
   return 0;
 }
