@@ -222,7 +222,9 @@ int fifa96_engine_should_quit(const struct fifa96_engine *e) {
 }
 void fifa96_engine_destroy(struct fifa96_engine *e) {
   if (!e) return;
-  if (e->match && e->match->running) fifa96_match_run_end(e->match);
+  /* Ownership contract in fifa96_match_run.h: a run alive at destroy must
+   * outlive this call; end it before the engine state is freed. */
+  if (e->match) fifa96_match_run_end(e->match);
   if (e->booted) e->plat->shutdown(e->plat->self);
   fifa96_surface_destroy(e->surface);
   fifa96_cache_destroy(e->cache);

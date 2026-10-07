@@ -42,17 +42,38 @@ static int fifa96_match_run_post_exit(void *ctx) {
   return 0;
 }
 
+static void fifa96_match_run_install_defaults(struct fifa96_match_run *mr) {
+  mr->backend.register_callback = fifa96_match_run_register;
+  mr->backend.cancel_callback = fifa96_match_run_cancel;
+  mr->backend.teardown = fifa96_match_run_teardown;
+  mr->backend.post_exit = fifa96_match_run_post_exit;
+  mr->backend.ctx = mr;
+}
+
+void fifa96_match_run_init(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  fifa96_match_lifecycle_init(&mr->lc);
+  fifa96_match_pace_init(&mr->pace);
+  mr->engine = NULL;
+  mr->backend.register_callback = NULL;
+  mr->backend.cancel_callback = NULL;
+  mr->backend.teardown = NULL;
+  mr->backend.post_exit = NULL;
+  mr->backend.ctx = NULL;
+  mr->ticks = 0;
+  mr->steps = 0;
+  mr->running = 0;
+}
+
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector) {
   if (!mr || !eng) return -FIFA96_ERR_INVALID;
+  if (!eng->booted || eng->mode == FIFA96_ENGINE_MODE_QUIT) return -FIFA96_ERR_STATE;
   if (mr->running) return -FIFA96_ERR_STATE;
   if (eng->match && eng->match != mr) return -FIFA96_ERR_STATE;
-  if (!mr->backend.register_callback) {
-    mr->backend.register_callback = fifa96_match_run_register;
-    mr->backend.cancel_callback = fifa96_match_run_cancel;
-    mr->backend.teardown = fifa96_match_run_teardown;
-    mr->backend.post_exit = fifa96_match_run_post_exit;
-    mr->backend.ctx = mr;
+  if (!mr->backend.register_callback || !mr->backend.cancel_callback ||
+      !mr->backend.teardown || !mr->backend.post_exit) {
+    fifa96_match_run_install_defaults(mr);
   }
   mr->engine = eng;
   mr->ticks = 0;

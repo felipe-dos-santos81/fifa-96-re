@@ -4,10 +4,24 @@
 #include "fifa96_loader/fifa96_match_pace.h"
 
 /* Engine-level match driver (M2 foundation): owns the FU-64 lifecycle and the
- * FU-60 pace and binds them to an engine. `backend` doubles as the injection
- * seam: `begin` installs the engine-backed callbacks when the field is zeroed
- * and otherwise uses the caller-supplied backend verbatim (headless tests
- * count the lifecycle callbacks through a stub). */
+ * FU-60 pace and binds them to an engine.
+ *
+ * Lifecycle: always call fifa96_match_run_init before first use — begin reads
+ * the struct, so a non-initialized run (including one with a stale function
+ * pointer in `backend`) is undefined behavior. begin is the only start and
+ * end (or the exit-step implicit end) the only stop; the begin/end balance is
+ * tracked in `running`.
+ *
+ * Ownership: the run passed to begin stays caller-owned and must remain alive
+ * until fifa96_match_run_end returns or fifa96_engine_destroy runs, whichever
+ * comes first. The engine ends a live run at destroy before freeing itself,
+ * so a running run must outlive the engine call.
+ *
+ * Backend injection: `backend` doubles as the seam for headless tests. begin
+ * installs the engine-backed callbacks when all four are zeroed, uses a
+ * complete caller-supplied backend verbatim, and replaces an incomplete one
+ * (any of the four NULL) with the engine defaults; a custom backend must
+ * therefore provide all four callbacks. */
 struct fifa96_engine;
 
 struct fifa96_match_run {
@@ -20,8 +34,14 @@ struct fifa96_match_run {
   int running;                                   /* begin/end balance */
 };
 
-/* Wire the run to the engine (MATCH mode) and start the lifecycle. Returns 0,
- * a -fifa96_err_t, or the lifecycle's register failure. */
+/* Zero-init a run: lifecycle, pace, backend, counters and engine linkage.
+ * Must be called before the first begin on a run. NULL is a no-op. */
+void fifa96_match_run_init(struct fifa96_match_run *mr);
+
+/* Wire the run to a booted, non-quitting engine (MATCH mode) and start the
+ * lifecycle. Returns 0, -FIFA96_ERR_INVALID (NULL arguments),
+ * -FIFA96_ERR_STATE (unbooted/QUIT engine, run already live, or another run
+ * live on the engine), or the lifecycle's register failure. */
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector);
 
