@@ -300,7 +300,7 @@ Entry: `EAX = rec`. Gates in order (all constants quoted):
 0x82E4B  FUN_0008DCD4(rec+0x59, &vec, &off)
 0x82E59  if (off.distance > 0xF0) return 0
 0x82E72  if (rec[+0x59] < -0x210 && rec[+0x59] > [0x5774C]) return 0
-0x82E85  if (rec[+0x59] >  0x210 && [0x5774C] < rec[+0x59]) return 0
+0x82E85  if (rec[+0x59] >  0x210 && [0x5774C] > rec[+0x59]) return 0   ; camera_x > pos_x
 0x82EA3  if (side == 0 && rec[+0x61] < 0x690) return 0
 0x82EB7  if (side == 1 && rec[+0x61] > -0x690) return 0
 0x82EDD  angle = FUN_0008DD70(off.dx, off.dz)
@@ -557,6 +557,14 @@ before, **67/67 after**.
   (`0x79B58`), which sets `byte [rec+0x93] = 0x10` only when `[rec+0x99]==0`;
   code 0x23 calls it from the stage-1 target arm (`0x83057`), it is not the
   action timer (`+0x89`).
+* §5 tackle-attempt camera gate `0x82E85` — **corrected (M2 Task 12 / FU-139
+  §10.5)**: the listing's `[0x5774C] < rec[+0x59]` was inverted. First-hand
+  `0x82E8E MOV EAX,[0x15774C]; 0x82E93 CMP EAX,[ESI+0x59]; 0x82E96 JLE
+  0x82EA3` continues when `camera_x <= pos_x`, so the attempt returns only
+  when `camera_x > pos_x`. The pre-Task-12 `fifa96_action_tackle_attempt` had
+  the inverted gate; it is fixed and pinned by the discriminating fixture
+  (`pos_x = 0x211`: `camera_x = 0` installs, `camera_x = 0x300` refuses).
+  Cross-reference: FU-139 §10.5 erratum and the FU-137 Task-12 errata.
 * FU-76 §2 code 05 "body reads the `0x58724` block (`[0x58724..0x5872F]`),
   `RESET`" — **extended**: the claim/timer/target selection and the four-stage
   table `0x7F184` are derived; the block field map is §2.
