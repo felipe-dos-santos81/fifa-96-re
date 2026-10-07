@@ -10,5 +10,6 @@ captures/
 
 # Ghidra transient project files
 fifa96.rep/**/tmp*.ps
+fifa96.rep/**/*.grf
 
 __pycache__/
