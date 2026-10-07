@@ -32,13 +32,25 @@
  * state; this test is the bridge/wiring contract test, so it reads them. */
 #include "fifa96_engine/fifa96_engine_internal.h"
 
+/* The derived default staging pair is read from the retail ISO when it is
+ * present (the staging test's convention); without it the bridge must keep the
+ * soft-failure path (start, rendering disabled). */
+#define BRIDGE_ISO_PATH "game/FIFAPCCD96.iso"
+
+static int bridge_file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
+}
+
 struct fixture {
   fifa96_platform *plat;
   struct fifa96_engine *engine;
 };
 
 static struct fixture make_fixture(const fifa96_platform_key *tape,
-                                   size_t tape_len) {
+                                   size_t tape_len, const char *iso_path) {
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
   pcfg.tape = tape;
@@ -49,6 +61,7 @@ static struct fixture make_fixture(const fifa96_platform_key *tape,
   assert(f.plat != NULL);
   struct fifa96_engine_config ecfg;
   memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = iso_path;
   ecfg.width = 320;
   ecfg.height = 240;
   ecfg.headless = 1;
@@ -94,7 +107,7 @@ static void drive_to_match_start(struct fifa96_engine *e) {
 /* A fresh front-end is not in the startable state: the bridge refuses and
  * mutates nothing. */
 static void test_fresh_frontend_not_startable(void) {
-  struct fixture f = make_fixture(NULL, 0);
+  struct fixture f = make_fixture(NULL, 0, NULL);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   struct fifa96_frontend_run before = f.engine->frontend;
@@ -117,7 +130,7 @@ static void test_fresh_frontend_not_startable(void) {
  * its M1 unwind is pinned by tests/golden/engine/m1-frames.txt, so the
  * FU-66 front-end confirm route stays an open leg (see the wrapper). */
 static void test_frontend_confirm_is_not_startable(void) {
-  struct fixture f = make_fixture(NULL, 0);
+  struct fixture f = make_fixture(NULL, 0, NULL);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
 
@@ -136,7 +149,7 @@ static void test_frontend_confirm_is_not_startable(void) {
  * begin, and the end returns the engine to FRONTEND; the sequence can be
  * replayed to begin again. */
 static void test_bridge_starts_and_rebegins(void) {
-  struct fixture f = make_fixture(NULL, 0);
+  struct fixture f = make_fixture(NULL, 0, NULL);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
 
@@ -148,6 +161,9 @@ static void test_bridge_starts_and_rebegins(void) {
   assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
   assert(f.engine->match == &mr);
   assert(f.engine->frontend.match_start == 0);   /* classification consumed */
+  /* G1 soft-failure pin: no mounted ISO, so the entry staging finds no banks
+   * and the match still starts with rendering disabled. */
+  assert(mr.render.enabled == 0);
 
   assert(fifa96_match_bridge_from_frontend(&mr, f.engine) == -FIFA96_ERR_STATE);
   assert(mr.running == 1);
@@ -174,7 +190,7 @@ static void test_engine_step_wires_bridge(void) {
       {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
       {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
   };
-  struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0]);
+  struct fixture f = make_fixture(tape, sizeof tape / sizeof tape[0], NULL);
 
   assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
   assert(f.engine->match == NULL);
@@ -193,11 +209,43 @@ static void test_engine_step_wires_bridge(void) {
   drop_fixture(f);
 }
 
+/* G1 live staging: with the retail ISO mounted, a successful bridge begin
+ * stages the derived default match art pair (FU-86 §1/§2: /ART/PLAYART.PVI as
+ * the 91-bank player animation container and /ART/GAMEART0.PVI as the match
+ * art container; the pitch-bank identity stays Task 2's recorded open leg), so
+ * the engine-owned run enters MATCH with rendering enabled. End releases the
+ * staged arena again. */
+static void test_bridge_stages_render_with_iso(void) {
+  if (!bridge_file_exists(BRIDGE_ISO_PATH)) {
+    fprintf(stderr, "SKIP bridge staging case (no %s)\n", BRIDGE_ISO_PATH);
+    return;
+  }
+  struct fixture f = make_fixture(NULL, 0, BRIDGE_ISO_PATH);
+
+  drive_to_match_start(f.engine);
+  assert(fifa96_match_bridge_from_frontend(&f.engine->match_run, f.engine) == 0);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(f.engine->match == &f.engine->match_run);
+  assert(f.engine->match_run.running == 1);
+  assert(f.engine->match_run.render.enabled == 1);
+  assert(f.engine->match_run.render.frames != NULL);
+  assert(f.engine->match_run.render.banks != NULL);
+  assert(f.engine->match_run.render.bank_count > 91);
+  assert(f.engine->match_run.render.sprite_data != NULL);
+  assert(f.engine->match_run.render.sprite_data_len > 0);
+
+  assert(fifa96_match_run_end(&f.engine->match_run) == 0);
+  assert(f.engine->match_run.render.enabled == 0);   /* arena released */
+
+  drop_fixture(f);
+}
+
 int main(void) {
   test_fresh_frontend_not_startable();
   test_frontend_confirm_is_not_startable();
   test_bridge_starts_and_rebegins();
   test_engine_step_wires_bridge();
+  test_bridge_stages_render_with_iso();
   puts("test_engine_match_bridge OK");
   return 0;
 }
