@@ -718,7 +718,6 @@ fifa96_err_t fifa96_action_sequence_marker_target(uint8_t marker, const fifa96_a
     return FIFA96_OK;
   }
   out->x = lead_x < 0 ? -0x30 : 0x30;
-  out->y = 0;
   out->z = 0;
   return FIFA96_OK;
 }

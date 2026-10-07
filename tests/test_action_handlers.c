@@ -208,10 +208,12 @@ static void test_sequence_marker_target(void) {
   assert(out.x == 0x100 && out.y == 0x50 && out.z == -0x200);
   assert(fifa96_action_sequence_marker_target(0xFF, &pos, -5, &out) == FIFA96_OK);
   assert(out.x == 0x100 && out.y == 0x50 && out.z == -0x200);
+  out.y = 0x5A;
   assert(fifa96_action_sequence_marker_target(1, &pos, 5, &out) == FIFA96_OK);
-  assert(out.x == 0x30 && out.y == 0 && out.z == 0);
+  assert(out.x == 0x30 && out.y == 0x5A && out.z == 0);
+  out.y = 0x5A;
   assert(fifa96_action_sequence_marker_target(0, &pos, -1, &out) == FIFA96_OK);
-  assert(out.x == -0x30 && out.y == 0 && out.z == 0);
+  assert(out.x == -0x30 && out.y == 0x5A && out.z == 0);
   assert(fifa96_action_sequence_marker_target(1, &pos, 0, &out) == FIFA96_OK);
   assert(out.x == 0x30);
   assert(fifa96_action_sequence_marker_target(1, NULL, 0, &out) == ACTION_INVALID);

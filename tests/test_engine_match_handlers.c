@@ -127,8 +127,10 @@ static void test_action_00_runs_move_step(void) {
   f.mr.record.has_slot = 1;
   f.mr.record.dir_x = 1;
   f.mr.record.dir_z = 2;
+  assert(f.mr.record.ran == 0);
 
   assert(fifa96_match_dispatch_action(&f.mr, 0x00) == FIFA96_OK);
+  assert(f.mr.record.ran == 1);
   assert(f.mr.record.timer89 == 90);
   assert(f.mr.record.target_x == 0x100 + 128);
   assert(f.mr.record.target_z == 0x200 + 256);

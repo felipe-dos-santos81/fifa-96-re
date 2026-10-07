@@ -20,17 +20,19 @@
 #include "fifa96_loader/fifa96_action_handlers.h"
 
 /* FU-138 §4: action 00 — the FU-76 §3.1 generic outfield step. The derived
- * record core runs `fifa96_action_move_step` (timer89 decay, control-slot move
- * gate, phase-2 install request `3`/`0x19`) and, when the slot moves, writes
- * the FU-76 §4 clamped step target through `fifa96_action_move_target`. The
- * native tail's install goes through `FUN_0007D9A4` (FU-137 §2); the engine
- * records the request in `mr->record.install` until the record pool and
- * installer arms land (OL-16). */
+ * record core sets `[rec+0x9E]=1` (native `0x7DB1C`), runs
+ * `fifa96_action_move_step` (timer89 decay, control-slot move gate, phase-2
+ * install request `3`/`0x19`) and, when the slot moves, writes the FU-76 §4
+ * clamped step target through `fifa96_action_move_target`. The native tail's
+ * install goes through `FUN_0007D9A4` (FU-137 §2); the engine records the
+ * request in `mr->record.install` until the record pool and installer arms land
+ * (OL-16). */
 static int fifa96_match_action_00(struct fifa96_match_run *mr) {
   fifa96_action_move_state state;
   fifa96_action_move_out out;
   fifa96_action_vec3 target;
   int rc;
+  mr->record.ran = 1;
   state.timer89 = mr->record.timer89;
   state.timer81 = mr->record.timer81;
   state.delta = mr->record.delta;

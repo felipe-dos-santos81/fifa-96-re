@@ -301,10 +301,11 @@ fifa96_err_t fifa96_action_sequence_select(uint8_t stage, const uint32_t *arms, 
 fifa96_err_t fifa96_action_sequence_event(uint8_t anim_byte, uint8_t event_id, uint8_t *post);
 
 /* FU-138 §3: row 01 marker target (native `0x7DBDC..0x7DC39`). When the marker
- * (`rec+0x8F >> 24`) is >= 2 the position triple is copied to the output;
- * otherwise the caller-supplied pre-reset x (`lead_x`, the native `rec+0x4D`
- * the unported camera-reset call leaves) selects the ±0x30 kickoff target with
- * y and z cleared. */
+ * (`rec+0x8F >> 24`) is >= 2 the position triple is copied to the output
+ * (including y); otherwise the caller-supplied pre-reset x (`lead_x`, the
+ * native `rec+0x4D` the unported camera-reset call leaves) selects the ±0x30
+ * kickoff x with z cleared — the native branch writes `+0x4D` and `+0x55`
+ * only, so `out->y` is left untouched. */
 fifa96_err_t fifa96_action_sequence_marker_target(uint8_t marker,
                                                   const fifa96_action_vec3 *pos,
                                                   int32_t lead_x,

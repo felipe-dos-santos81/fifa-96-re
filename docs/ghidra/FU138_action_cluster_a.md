@@ -68,8 +68,8 @@ native record offsets.
 
 | code | handler | gate / entry (verified) | timer | stage / arms | record-visible body | class / open leg |
 |---|---|---|---|---|---|---|
-| 00 | `07DB10` | none; phase-2 install gate | `+0x89 -= [0x157A64]` while `>0` | — | slot move target `FUN_00079C20(rec, slot+0x1D>>24, slot+0x1E>>24)` clamped by `FUN_0007D3E4`; install `3` when `+0x8D!=0` else `0x19` when phase 2, `+0x81==0`, `+0x89<=0` (full body FU-76 §3.1, re-read at `0x7DB10..0x7DBAC`) | **ported + wired (FU-138 §4)** |
-| 01 | `07DBC0` | phase `==1` else tail `0x7DFB8` | `+0x89 += delta` (`0x7DC42`) | `0x7DBB0` 4 arms | marker `+0x8F>>24 >=2` copies `+0x59` triple; else the camera-reset x picks `x = (x<0)?-0x30:0x30`, `z=0` (`0x7DBDC..0x7DC39`); arm 0 waits `+0x89>=0x3C` then sound `0x974DC(0x1E)` + advance (`0x7DC80..0x7DCB4`) | partial: `sequence_marker_target`, `stage_wait` ported; celebration chain/nearest/ball stage/sound arms open (OL-17) |
+| 00 | `07DB10` | none; phase-2 install gate | `+0x89 -= [0x157A64]` while `>0` | — | `[+0x9E]=1` on entry (`0x7DB1C`); slot move target `FUN_00079C20(rec, slot+0x1D>>24, slot+0x1E>>24)` clamped by `FUN_0007D3E4`; install `3` when `+0x8D!=0` else `0x19` when phase 2, `+0x81==0`, `+0x89<=0` (full body FU-76 §3.1, re-read at `0x7DB10..0x7DBAC`) | **ported + wired (FU-138 §4)** |
+| 01 | `07DBC0` | phase `==1` else tail `0x7DFB8` | `+0x89 += delta` (`0x7DC42`) | `0x7DBB0` 4 arms | marker `+0x8F>>24 >=2` copies `+0x59` triple; else the camera-reset x picks `x = (x<0)?-0x30:0x30`, `z=0` with y untouched (`0x7DBDC..0x7DC39`); arm 0 waits `+0x89>=0x3C` then sound `0x974DC(0x1E)` + advance (`0x7DC80..0x7DCB4`) | partial: `sequence_marker_target`, `stage_wait` ported; celebration chain/nearest/ball stage/sound arms open (OL-17) |
 | 02 | `07DFCC` | phase `1`/`2`, else reset `0x7E192` | phase-2 `+0x89 += delta` (`0x7E06B..0x7E081`) | inline `0..2` | phase 1: `target=( -[team+0x7B2].x, 0)`, `+0x89=0`, `+0x92=0` (`0x7DFEB..0x7E016`); phase 2 with slot: install `4` invoke-now (`0x7E04C..0x7E05A`); else target = ball `0x5774C` triple; arm 0 waits `0x78` when `dword[+0x69]>>16 > 0x40` (reset) else `0xA` (`0x7E0B0..0x7E0F0`) | partial: `locomotion_restart_target`, `locomotion_restart_wait` ported; nearest/vector/`0x92820`/ball stage arms open (OL-18) |
 | 03 | `07E1A4` | phases `0x13/0x14` special; else slot/hold chain | — | inline | `0x13/0x14`: `target=(0x780,0,0)`, metric via `0x8DCD4`, `target.x=0xAE0` when metric `<0x30` (`0x7E1E0..0x7E20A`); slot arm writes `FUN_00079C20` dir step and `+0x7B=+0x79` (`0x7E25F..0x7E27C`); counter `+0x7B=min((+0x63>>22)+1,+0x79)` (`0x7E2E0..0x7E2F4`); phase-2 bounds `team+0x80C[+0x8D]` + opponent line `±0x60` (`0x7E309..0x7E399`); phase-1 side clamp `∓0x20` (`0x7E3CA..0x7E417`) | partial: `locomotion_hold`, `locomotion_clamp_placement`, `locomotion_placement_counter`, `locomotion_phase1_clamp` ported; `[rec+0x1C]`, `FUN_00079F3C`, phase-7 ball scan open (OL-19) |
 | 04 | `07E7C8` | phase `==2` else reset (`0x7E7E2`); `+0x81!=0` return | — | inline | camera-lead arm `camera + vel<<2` (`0x7EB95`, FU-77 §2.4); wing vectors `0x57794`/`0x57788`; installs `4/0x19/0xF/0xB/7/6/5` | not ported: ranked decision/RNG/vectors (OL-20; `locomotion_camera_lead` already ported) |
@@ -103,8 +103,8 @@ where the site was previously quoted by the named FU doc.
 | function | native site | semantics |
 |---|---|---|
 | `fifa96_action_stage_wait(timer89, threshold, &ready)` | row 01 `0x7DC80`; row 0E `0x8276A`; row 12 `0x83E26` | `ready = timer89 >= threshold` — the shared timed-arm gate (FU-81 §2 chain step 4) |
-| `fifa96_action_sequence_marker_target(marker, pos, lead_x, &out)` | row 01 `0x7DBDC..0x7DC39` | `marker = +0x8F>>24`; `>=2` copies the position triple (`MOVSD ×3` at `0x7DC31..0x7DC39`); else `out.x = lead_x < 0 ? -0x30 : 0x30` (`0x7DC06..0x7DC18`), `out.y = out.z = 0` |
-| `fifa96_action_locomotion_restart_wait(lane, timer89, &ready, &reset)` | row 02 arm 0 `0x7E0B0..0x7E0F0` | `lane = dword[+0x69]>>16` (`0x7E0B0..0x7E0B6`); threshold `0x78` when `lane > 0x40` else `0xA` (`0x7E0BB`, `0x7E0D1`); `reset` marks the `lane > 0x40` ready path that calls `FUN_0007DAB4` (`0x7E0CA`) |
+| `fifa96_action_sequence_marker_target(marker, pos, lead_x, &out)` | row 01 `0x7DBDC..0x7DC39` | `marker = +0x8F>>24`; `>=2` copies the position triple including y (`MOVSD ×3` at `0x7DC31..0x7DC39`); else `out.x = lead_x < 0 ? -0x30 : 0x30` (`0x7DC06..0x7DC18`) and `out.z = 0`, with `out.y` left untouched — the native branch writes `+0x4D`/`+0x55` only |
+| `fifa96_action_locomotion_restart_wait(lane, timer89, &ready, &reset)` | row 02 arm 0 `0x7E0B0..0x7E0F0` | `lane = dword[+0x69]>>16` (`0x7E0B0..0x7E0B6`); threshold `0x78` when `lane > 0x40` else `0xA` (`0x7E0BB`, `0x7E0D1`); `reset` marks the `lane > 0x40` ready path that calls `FUN_0007DAB4` (`0x7E0CA`). The ready tail `0x7E0DE..0x7E0F0` (`+0x89=0`, `+0x92++`) is the existing `fifa96_action_stage_advance` behavior; the `0x7E0F6..0x7E0FD` `+0x59` triple copy opens stage-1 arm 1 (OL-18) |
 | `fifa96_action_locomotion_placement_counter(move_attr, limit, &counter)` | row 03 `0x7E2E0..0x7E2F4` | `counter = min((uint16)((move_attr>>22)+1), limit)` (native `SAR 0x16`, `INC`, `CMP AX,DX`/`JBE`) |
 | `fifa96_action_locomotion_phase1_clamp(side, &target_z)` | row 03 `0x7E3CA..0x7E417` | side 0 caps `target_z` at `-0x20`; side 1 floors it at `+0x20` (native `JLE -0x20` / `JGE 0x20`) |
 | `fifa96_action_sequence_velocity_scale(type_x, type_z, &vel_x, &vel_z, &speed)` | row 0D arm 0 `0x825B2..0x82613` | `scale = (type_x != 0 && type_z != 0) ? 3 : 4` (`0x825CB..0x825E1`); `vel = type*scale` (`IMUL`, 16-bit store); `speed = fifa96_entity_distance(vel_x, vel_z)` (`0x825F7 CALL 0x8DC68`) |
@@ -124,15 +124,15 @@ gains the minimal derived record surface (no pool, no team walk):
 * `struct fifa96_match_run_record` in `fifa96_match_run.h` with the FU-76 §3.1
   fields: `pos_x/+0x59`, `pos_z/+0x61`, `target_x/+0x4D`, `target_z/+0x55`,
   `timer89/+0x89`, `timer81/+0x81`, `delta/[0x157A64]`, `active/+0x8D`,
-  `has_slot/+0x20`, `dir_x`/`dir_z` (`slot+0x1D/+0x1E>>24`) and `install` (the
-  derived `FUN_0007D9A4` request stand-in).
+  `ran/+0x9E`, `has_slot/+0x20`, `dir_x`/`dir_z` (`slot+0x1D/+0x1E>>24`) and
+  `install` (the derived `FUN_0007D9A4` request stand-in).
 * `mr->record`, zeroed by `fifa96_match_run_init` and `fifa96_match_run_begin`
   (fresh match).
-* `fifa96_match_action_00` (in `fifa96_match_handlers.c`) unpacks the record
-  into `fifa96_action_move_state`, runs `fifa96_action_move_step`, repacks
-  `timer89`, and on `move` runs `fifa96_action_move_target` into
-  `target_x/target_z`; an install request lands in `record.install`
-  (`3` active / `0x19` inactive).
+* `fifa96_match_action_00` (in `fifa96_match_handlers.c`) sets `ran = 1`
+  (native `0x7DB1C`), unpacks the record into `fifa96_action_move_state`, runs
+  `fifa96_action_move_step`, repacks `timer89`, and on `move` runs
+  `fifa96_action_move_target` into `target_x/target_z`; an install request
+  lands in `record.install` (`3` active / `0x19` inactive).
 * `fifa96_match_action_table[0] = {00, fifa96_match_action_00, ...}` — the
   FU-137 §6.1 row 00 class moves `unwired -> ported` (FU-137 errata).
 
@@ -157,7 +157,10 @@ table is unchanged (`34 × UNSUPPORTED + 1 × NOT_FOUND`).
 * **OL-16 — record pool / team binding (carries FU-137 OL-1).** The engine keeps
   one record; the native action dispatch runs per record of a 0xB2-strided team
   pool (FU-137 §3) and stages `[rec+0x18]` through `FUN_0007D9A4`. C8/C11 own
-  the pool; row `1E` (keeper) and future rows bind there.
+  the pool; row `1E` (keeper) and future rows bind there. `record.ran` (+0x9E)
+  and `record.install` currently have **no consumer** (write-only seam state),
+  so the C8/C11 pool replacement must drain both alongside adding the remaining
+  record fields.
 * **OL-17 — row 01 arms.** Celebration-id chain, `FUN_0008DE8C` nearest, ball
   stage `FUN_0007A490`, `FUN_000974DC` sound and the `FUN_0008F188` ring
   signals are unported (FU-82 §3.1).

@@ -470,7 +470,8 @@ negated, matching the engine family convention (`fifa96_match_run_*`).
   §3 adds their derived pure parts (`sequence_marker_target`, `stage_wait`,
   `locomotion_restart_wait`, `locomotion_placement_counter`,
   `locomotion_phase1_clamp`, `sequence_velocity_scale`) as additional tested
-  helper coverage. Their wiring stays open (FU-138 OL-17..OL-20).
+  helper coverage. Their wiring stays open (01 → FU-138 OL-17, 02 → OL-18,
+  03 → OL-19, 0D → OL-22).
 
 ## Provenance
 

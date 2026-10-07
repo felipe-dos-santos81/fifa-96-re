@@ -101,9 +101,10 @@ struct fifa96_match_run_render {
  * the action dispatch can bind today — until the C8/C11 entity pool lands
  * (FU-138 OL-16, carrying FU-137 OL-1). Offsets are the native record fields:
  * pos +0x59/+0x61, target +0x4D/+0x55, timer +0x89/+0x81, active +0x8D,
- * control-slot pointer +0x20, slot direction +0x1D/+0x1E. `install` is the
- * derived seam stand-in for the FU-137 §2 `FUN_0007D9A4` install request
- * (`3`/`0x19` from action 00); the engine does not yet stage `[rec+0x18]`. */
+ * ran +0x9E, control-slot pointer +0x20, slot direction +0x1D/+0x1E. `install`
+ * is the derived seam stand-in for the FU-137 §2 `FUN_0007D9A4` install request
+ * (`3`/`0x19` from action 00); the engine does not yet stage `[rec+0x18]`, and
+ * both `ran` and `install` are write-only until the C8/C11 pool consumes them. */
 struct fifa96_match_run_record {
   int32_t pos_x;
   int32_t pos_z;
@@ -116,6 +117,7 @@ struct fifa96_match_run_record {
   uint8_t has_slot;
   int8_t dir_x;
   int8_t dir_z;
+  uint8_t ran;         /* native +0x9E, set by the action-00 body */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
 };
 
