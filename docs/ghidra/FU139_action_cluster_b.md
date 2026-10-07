@@ -77,7 +77,7 @@ native record offsets.
 | code | handler | gate / entry (verified) | timer | stage / arms | record-visible body | class / open leg |
 |---|---|---|---|---|---|---|
 | 05 | `07F194` | ✓ `[+0x9E]=1` then phase `!=2` → `FUN_0007DAB4`, return (`0x7F19F..0x7F1BA`) | ✓ `+0x89 < 0x4B0` then `+= [0x157A64]` (`0x7F221..0x7F23A`) | ✓ `+0x92 <= 3` jump table flat `0x7F184`; stage 0 head `0x7F274..` | carrier claim (`[0x158724] != rec` → block clear + set, `0x7F1BF..0x7F205`); team `+0x7B2=rec`/`+0x7B6=0`; camera triple copy `→+0x4D..55`; stage 0 gates (`+0x6B > 0x40`, `[0x57A83]`, `+0x6B > +0x77`, release timer `0x15872D`, airborne `+0x5D`) + type-table dribble dir (`0x10F334`/`0x10F33C`, speed `0x60`/`0x30`); stages 1–3 (animation, snap, hand-off 4) per FU-78 §3.2–3.4 | not ported (partial): `possession_reset/claim/timer/dribble_dir` tested; carrier arms OL-29 |
-| 06 | `0801B4` | ✓ `[+0x9E]=1`; phase `!=2` → `FUN_0007DAB4` + clear `team+0x7B2/0x7B6`, return (`0x801BF..0x80223`); ✓ `[+0x8D]==0` → same reset (`0x801E5`) | — | — | ✓ carrier gate `[0x158724]==0` or carrier `[+0x69]>>16 > 0x90` or `[0x157750] > 0x70` → `FUN_0007D9A4(rec,4,invoke-now)` (`0x8022D..0x80263`); else 597-insn pursuit target algebra (metric/atan/vector/RNG, installs 8/9/4) per FU-77 §2.6 | not ported: body OL-30 |
+| 06 | `0801B4` | ✓ `[+0x9E]=1`; phase `!=2` → `FUN_0007DAB4` + clear `team+0x7B2/0x7B6`, return (`0x801BF..0x80223`); ✓ `[+0x8D]==0` → same reset (`0x801E5`) | — | — | ✓ carrier gate `[0x158724]==0` or carrier `[+0x69]>>16 > 0x90` or `[0x157750] > 0x70` → `FUN_0007D9A4(rec,4,invoke-now)` (`0x8022D..0x80263`); else the 597-insn pursuit target algebra (metric/atan/vector/RNG, installs 8/9/4) per FU-77 §2.6 | ported + wired (Task 13): `fifa96_action_pursuit_step` (§11); the unmodeled record bytes/lead/swap are OL-69 |
 | 07 | `0814B0` | ✓ phase `!=2` or `word[+0x81]!=0` → tail `0x81702` (`0x814B8..0x814D1`) | ✓ `+0x89 += [0x157A64]` (`0x814D9..0x814ED`) | ✓ `+0x92` 0/1/2/tail (`0x814F3..0x8150C`) | stage 0 (`0x81512..0x815B5`): `[+0x9E]=1`; gate `([+0x69]>>16 > 0x40` or `(int16)(word[+0x5D]+0x70) < [0x157750])` with `+0x89 > 0x3C` → tail else wait; target = slot word `0x60`/`0x8000` arm (camera + type-offset table bytes
 `0x10F334`/`0x10F33C` << 4) or camera triple; stage 1 KICK `FUN_0007B9C4` + opponent `0x22` invoke + `[+0x89]=0,+0x92++`; tail resets and installs `4` on `[0x158730]` | not ported (partial): `kick_angle/apply` + FU-139 resolver/stage target; machine OL-31 |
 | 0F | `082AD0` | ✓ phase `!=2` → `FUN_0007DAB4`, return (`0x82ADB..0x82AEF`) | ✓ `+0x89 += [0x157A64]` (`0x82AF6..0x82B0A`) | ✓ `+0x92` 0/1/2 (`0x82B10..0x82B1C`) | stage 0: active gate, `word[+0x85]!=0` → reset; metric to vector `0x157788`, pos nudge `>>0x11`, face/anim 4; stage 1: predictor `FUN_00071B9C([0x157A62]>>16)`, distance compare, first/second `FUN_0007B9C4` (slot temporarily nulled, mode from slot or RNG `0x40`/`0x20`), then `word[+0x81] = 2*word[+0x85] - word[+0x87] + 0x1E` (`0x82B61..0x82DBE`) | not ported: machine OL-31 |
@@ -245,7 +245,7 @@ native side effects (the exact failure FU-138 §7 rejected):
 | row | what is missing | leg |
 |---|---|---|
 | 05 | carrier stage machine (target algebra, `FUN_0007F7E0`, snap/hand-off animation) | OL-29 |
-| 06 | 597-insn pursuit body (target algebra, RNG, installs 8/9/4) | OL-30 |
+| 06 | ~~597-insn pursuit body~~ — closed in §11 (Task 13): ported as `fifa96_action_pursuit_step`, row wired | OL-30 (closed); OL-69 remainder |
 | 07 | kick machine (`FUN_0007E600`, opponent `0x22` invoke, ball-actor install 4, `FUN_0007DAB4`) + full `FUN_0007B9C4` target selection | OL-31/OL-28 — **closed in §9 (Task 11); row wired** |
 | 0F | second kick machine (predictor, RNG mode, timer reload) | OL-31 — **closed in §9 (Task 11); row wired** |
 | 18/21/23 | resolution/claim/target arms + NSEARCH/SWAP + team/opponent records | OL-32 |
@@ -264,7 +264,8 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
 | ported + wired | `00` (cluster A) | unchanged `FIFA96_OK` |
 | ported + wired (Task 11) | `07`,`0F` | `fifa96_action_kick_machine` + `fifa96_ball_kick_target`; `FIFA96_OK` (§9) |
 | ported + wired (Task 12) | `18`,`21`,`23` | `fifa96_match_action_18/_21/_23` over the pool; `FIFA96_OK` (§10) |
-| pure part advanced (cluster B) | `05`,`06` | still `-FIFA96_ERR_UNSUPPORTED`; the tested pure functions |
+| ported + wired (Task 13) | `06` | `fifa96_action_pursuit_step` + `fifa96_match_action_06` over the pool; `FIFA96_OK` (§11) |
+| pure part advanced (cluster B) | `05` | still `-FIFA96_ERR_UNSUPPORTED`; the tested pure functions |
 | still unported | all other rows | per FU-137 §6 |
 
 ## 6. Open legs
@@ -303,6 +304,11 @@ FU-137 errata section; their class stays `not ported (partial)`/`not ported`.
   the `FUN_0007F7E0` fallback are OL-63, and the 0→1 latch edge is OL-64.**
 * **OL-30 — row 06 pursuit.** The 597-instruction body (FU-77 §2.6): target
   construction, `0x114E04` folds, RNG gates, installs 8/9/4.
+  **Status (Task 13): closed.** The body `0x801B4..0x809EF` is ported as
+  `fifa96_action_pursuit_step` (§11) and row 06 is wired through
+  `fifa96_match_action_06`; the plan's `0x81067` span end covers the row-09
+  handler (`0x80A00`, the action-table slot `0x1106E0[9]`), which stays
+  unwired. The residual unmodeled record/presentation inputs are OL-69.
 * **OL-31 — rows 07/0F kick machines.** `FUN_0007E600` decision, the opponent
   `0x22` invoke, the ball-actor install 4, the tail `FUN_0007DAB4`, the row-0F
   predictor/RNG/timer reload, and the stage-0 gate are unported.
@@ -969,3 +975,198 @@ code-0 install synchronously through the pool installer; a rejected install
   same call as `slot_callback`). The receive `out.nearest`/`out.anim` and the
   bind `bound`/`stub_36200` outputs are computed for the loader tests and
   have no engine consumer (OL-52/OL-68 scope).
+## 11. Task 13 port — row 06 pursuit machine (OL-30)
+
+Reviewed read-only in `/FIFA96.EXE` (explicit; Ghidra MCP, no writes). This
+section closes OL-30: the native row-06 body `0x801B4..0x809EF` is ported as
+`fifa96_action_pursuit_step` (the contract comment in
+`include/fifa96_loader/fifa96_action_handlers.h`) and action row 06 is wired
+through `fifa96_match_action_06` over the FU-141 pool. The residual unmodeled
+record/presentation inputs are the numbered leg OL-69.
+
+### 11.1 Tool calls (first-hand, read-only)
+
+* `disassemble_bytes`: `0x801B4..0x803B4` (155 insns), `0x803B4..0x80534`
+  (116), `0x80534..0x806B4` (124), `0x806B4..0x808B4` (138),
+  `0x808B4..0x80960` (50) — row 06 RET is `0x809EF` (~597 insns); the row-09
+  function starts at `0x80A00` (its prologue `PUSH ... SUB ESP,0x10`) and its
+  stage jump table is flat `0x809F0` `{0x80A3F,0x80BFB,0x80FCC,0x8103A}`;
+* `read_memory 0x809F0` (16 B) and `0x1106E0` (40 B; slot 9 = `0x80A00`,
+  confirming the row-09 boundary);
+* `decompile_function`: `0x8DCD4` (`{distance,dx,dz}` triple),
+  `0x8DD70` (`JMP 0xCD474` thunk), `0x8DC68` (octagonal distance),
+  `0x795A4` (`(a*b+0x8000)>>16`), `0x8DE8C` (11 x 0xB2 nearest, skip-index
+  argument, unsigned min 0xFFFF), `0x79CCC` (callback nearest, signed min
+  0x7FBC, first-record fallback), `0x79C20` (`target = pos + dir*0x80`, y=0),
+  `0x7D3E4` (x `±0x720`, z `±0xB10`), `0x79B58` (`+0x93 = 0x10` when
+  `+0x99 == 0`), `0x7D9A4` (installer EAX/DX/BL/ECX, FU-137 §2),
+  `0x7DAB4` (reset), `0x741B4` (`(param ^ [0x157ABE]) & 1`), `0x6DA64`
+  (the +8/+0xC/+0x10/+0x14 dword and +0x90 byte swap), `0x4B100` (frame body:
+  `[0x157A4F] ^= 1` at `0x4B11A`, store `0x4B129`), `0x4B02C`
+  (`[0x157A4F] = 0` at `0x4B038`);
+* `get_xrefs_to`: `0x158724` (writers `FUN_0007F144`, row 05, `0x819B7`),
+  `0x15872A`/`0x15872F` (only row-05 writers), `0x157ABE` (writers
+  `FUN_0007417C`/`0x742B4`), `0x157A4F` (writers `FUN_0004B02C`/`FUN_0004B100`,
+  readers row 05 and row 06 `0x806C7`/`0x8082B`/`0x809A2`);
+* Ghidra read-only: no renames, comments, labels, functions or saves.
+
+### 11.2 Row 06 body `0x801B4..0x809EF` (site-annotated)
+
+```
+0x801BF byte[rec+0x9E] = 1
+0x801D4 phase [0x157A4A]>>24 != 2 -> 0x7DAB4, RET
+0x801E5 byte[rec+0x8D] == 0 -> 0x7DAB4; clear team+0x7B2/+0x7B6 when == rec; RET
+0x8022D [0x158724] == 0 || (int16)(dword[carrier+0x69]>>16) > 0x90
+        || dword[0x157750] > 0x70 -> 0x7D9A4(rec, 4, staged 0, invoke 1); RET
+0x8026D 0x8DCD4(camera 0x15774C, {0,0,side?0xB10:-0xB10}) -> {dist,dx,dz};
+        0x8DD70(dx,dz) -> angle; V1 = camera triple; scaled = (int16)dist
+        (< 0x780 ? >>3 : >>4)
+0x802F7 has_slot ? the 0x802FD..0x80354 offside c0/camdist arm (pos_z-cam_z
+        word sign vs V2.z; 0x8DC68(pos_x-cam_x, d) < 0x150 -> V1 = pos triple
+        and skip the fold; else scaled = 0xC0) : the 0x80359..0x803F5 no-slot
+        arm (side 0: V1.z < -0x5A0 && V1.z < teammate_z; side 1: > +0x5A0 &&
+        > teammate_z -> flag54; actor == team+0x7B2 -> timer89 += delta word
+        and scaled -= low16(timer89); clamp 0x30..0x150)
+0x80410 fold V1.x += 0x795A4(scaled, 0x114E04[sin(angle)]);
+        V1.z += 0x795A4(scaled, sin(angle+0x100))
+0x80482 actor == team+0x7B6 -> 0x8DCD4(V1, V2) -> angle2; flag54 &&
+        |V1.z| < 0x930 -> speed = dword[rec+0x69] >> 18, else speed = 0x60;
+        V0.x = V1.x + fold(speed, angle2); V0.z = V1.z + fold(speed,
+        angle2+0x100)
+0x805BC target: has_slot && (byte[slot+0x10]&0x30) -> camera triple;
+        has_slot -> 0x79C20(pos, (int8)slot+0x20, (int8)slot+0x21);
+        no slot && word[+0x81] != 0 -> target = pos triple, RET;
+        no slot && dword[0x157750] > 0x38 -> RET; else target = V1
+        (actor == team+0x7B2) or V0; flag54 -> 0x79B58(rec)
+0x8064B V4: wx = word[+0x6D] + ([0x1577C0]<<2), wz = word[+0x6F] +
+        ([0x1577C2]<<2) (16-bit stores); 0x8DC68(wx,wz) = metric;
+        metric <= 0x60 -> install 8; metric > 0x60 && +0x99 == 0 &&
+        carrier word +0x71 > 4 -> [parity && byte[0x15872F] < 2 ->
+        rng; (rng&0xF) > (desc[+0xC] | +0x9D) -> target.x += byte[0x15872A]<<6]
+        [metric <= 0x90 -> base = (desc[+0xE] | +0x9D) << (3 - (int8)+0x90 +
+        (int16)(score_other - score_own)); > 0xF clamp; rng; (rng&0x1FF) <
+        base -> install 9]
+0x807A9 install != 0 -> 0x7D9A4(rec, install, staged 0, invoke 1)
+0x807C6 0x7D3E4 target clamp; row_byte [[rec+0x28]][0] == 0x1C ?
+        (word[+0x71] > 4 || word[+0x6B] > 0xC0 -> 0x6E598 id 2)
+        : (word[+0x71] < 3 && word[+0x6B] < 0x90 -> 0x6E598 id 0x1C)
+0x8082B [0x157A4F] == 0 -> RET; actor != team+0x7B2 -> 0x809A2;
+        else 0x8DE8C(V1, team, skip 0) -> best != rec ? (team+0x7B6 = 0,
+        team+0x7B2 = best) : (team+0x7B2 = rec; 0x8DC68(V1-pos) < 0x8DCD4(
+        carrier, V1).distance ? (V1 += {dx,dz}; 0x8DE8C(V1, team, skip 0,
+        +0x9A latched) -> team+0x7B6) : team+0x7B6 = 0; flag54 ->
+        (second == 0 || |second.z|+0x60 < |carrier.z|) ?
+        0x8DE8C({0,0,camera_z>=0?0xB10:-0xB10}, team, skip 0, latched) ->
+        team+0x7B6)
+0x809A2 [0x157A4F] != 0 -> 0x79CCC(pos, team, skip 0, +0x9A latched);
+        best != rec && distance < 0xC0 -> 0x6DA64(best, rec); RET
+```
+
+Widths re-read from the raw bytes: the `dword[addr]>>16` idiom is the word at
+`addr+2` (`[carrier+0x69]` -> `+0x6B`, `[rec+0x69]` -> `+0x6B`, `[rec+0x6F]`
+-> `+0x71`, `[0x15872C]` -> `0x15872F`, `[0x158727]` -> `0x15872A`,
+`0x1587E3`-style byte reads); the `CALL` targets were diffed against the `E8`
+bytes (`0x802BE`->`0x8DCD4`, `0x802D6`->`0x8DD70`, `0x80333`->`0x8DC68`,
+`0x80439`->`0x795A4`, `0x805F4`->`0x79C20`, `0x806C1`->`0x92AC8`,
+`0x80646`/`0x808F0`->`0x79B58`/`0x8DE8C`, `0x808EB`/`0x8098C`->`0x8DE8C`,
+`0x809BE`->`0x79CCC`, `0x809E1`->`0x6DA64`, `0x7D9A4` install sites
+`0x8025E`/`0x807C1`).
+
+Boundary note: the plan/brief span `0x801B4..0x81067` (and FU-142 §3's
+"597 insns") covers the row-09 handler `0x80A00..0x81065` past the row-06
+`RET 0x809EF`; row 09 is the action-table slot `0x1106E0[9]` and stays
+unwired (OL-9). The row-06 port bounds only `0x801B4..0x809EF`.
+
+### 11.3 The `0x114E04` fold reuse
+
+The five row-06 fold sites (`0x80439`, `0x80472`, `0x80508`, `0x80571`,
+`0x805AC`) carry the same inline byte-shift quadrant idiom (`SHL AH,7;
+SBB EDX,EDX; ADD AH,AH; SBB ECX,ECX; XOR EAX,ECX; AND EAX,0xFF; SUB
+EAX,ECX; MOV EAX,[EAX*4+0x114E04]; XOR EAX,EDX; SUB EAX,EDX`) as FU-139 §9's
+`kick_sin`/`kick_fold`. Task 13 exposes Task 11's implementation as
+`fifa96_ball_fold` (`include/fifa96_loader/fifa96_ball_pairing.h`; the
+`kick_fold` uses now call it) instead of duplicating the 257-entry table in
+`fifa96_action_handlers.c`. The fold speed is the native 32-bit EBX: the
+camera arm passes the sign-extended `(int16)scaled` and the V0 arm passes
+`dword[rec+0x69] >> 18` (native `SAR 0x12`).
+
+### 11.4 Engine wiring
+
+`fifa96_match_action_06` stages the record and the team mate view
+(`fifa96_action_pursuit_mate`: x/z words for the searches and the full
+`pos_z` dword for the `0x8092B`/`0x80943` height gate), resolves the
+`[0x158724]` carrier stand-in as the pool ball carrier (`fifa96_match_entities
+.ball.carrier`; the row-05 claim is unported, OL-63), the team
+`+0x7B2`/`+0x7B6` identities, `teammate_z`, the run scores (`mr->score`) and
+the `[0x157A4F]` parity (the run's new `pass_parity`, toggled once per granted
+frame body at the FUN_0004B100 site `0x4B11A`; cleared by init/begin like
+FUN_0004B02C), then drains the loader's requests: the target triple, the
+`install` 4/8/9 into the pool installer, `receiver_timer` -> `timer93 = 0x10`,
+the `team.target`/`team.second` index writes (SELF -> the actor id, NONE ->
+`FIFA96_MATCH_ENTITY_NONE`), the `clear_*` flags and the shared
+`FUN_0007DAB4` reset (`match_row_reset`). `out.anim` (the `0x6E598` call) and
+`out.swap` (the `0x6DA64` metadata swap) have no derived consumer (OL-52/OL-69).
+
+Row-06 install arms (first-hand): the carrier-gate `0x8025E` `EDX=4, ECX=1`;
+the gate arms `0x807C1` with EDX = the `+0x50` word (8 or 9), ECX=1, EBX=0.
+The native invoke-now semantics are the derived `record.install` request
+(the FU-139 §9/§10 drain model).
+
+Entry arm: `FUN_0007C990` (decompiled this slice) installs code 6 through
+`FUN_0007D9A4(rec, 6, 0, 0)` when the record is `team+0x7B2` (or
+`team+0x7B6`) and the opponent's target record holds the ball
+(`byte[+0x9F] & 1`) — the same forced-decision arm the shared
+`FUN_0007DAB4` reset tail calls. The derived engine's
+`match_forced_decision_code`/`match_row_reset` (FU-141 OL-44 bounded model)
+reproduces the predicate, so the row-06 entry is bounded; the wiring gate
+(arm + full record-visible body + pool binding) passes.
+
+### 11.5 Tests
+
+* `tests/test_action_handlers.c`: `test_pursuit_entry_and_carrier_gate` (the
+  +0x9E latch, phase/active resets, the clear-identity flags, the three
+  install-4 gates, NULL args), `test_pursuit_fold_and_install_gate` (the
+  hand-computed camera metric/fold target (-0xD0, 0x11, 0xB10), the install-9
+  gate with the seed-0 first RNG draw 1, the zero-base refusal, the +0x99
+  block and the parity/0x15872F x-adjust draw), `test_pursuit_second_record_v0`
+  (the V0 speed-0x60 arm -> (0,0,0x111)), `test_pursuit_slot_targets`
+  (camera vs `0x79C20` + the `0x7D3E4` clamp), `test_pursuit_early_returns`
+  (the +0x81 position copy without clamp and the >0x38 height return),
+  `test_pursuit_claim_arm` (the `0x8DE8C` non-self write and the
+  `0x79CCC`/`0x6DA64` swap), `test_pursuit_self_nearest_and_swap` (the
+  carrier mirror, the second/height searches and the no-swap case) and
+  `test_pursuit_invalid`.
+* `tests/test_engine_match_handlers.c`: `action_expect[0x06] = FIFA96_OK` and
+  `test_action_06_runs_body` (the reset path, the carrier-gate install 4 and
+  the no-slot V1 target (-0xB1) + install 8 over the pool).
+* `make check` 103/103 (engine tests under ASan/UBSan); M1 golden/render pins
+  unchanged.
+
+### 11.6 Repo state (this task)
+
+Action rows wired 10/80 -> **11/80** (`06`); dispatch 69 UNSUP / 10 OK /
+1 NOTF -> **68 UNSUP / 11 OK / 1 NOTF**; action class `06` `not ported` ->
+`ported`; FU-137 §7 totals move with it. Out-of-brief file: the loader header
+contract, `CMakeLists.txt` (`fifa96_action_handlers` now links
+`fifa96_ball_pairing` for the shared fold), `fifa96_match_run.{h,c}` (the
+`pass_parity` run field) and the `fifa96_ball_fold` exposure in
+`fifa96_ball_pairing.{h,c}`; all named in the Task 13 report.
+
+### 11.7 Open legs (numbered; registered in FU-142 §6)
+
+* **OL-69 — row 06 unmodeled record/presentation inputs.** The record bytes
+  `+0x90` (the install-9 shift), `+0x99` (the gate block), `+0x9D` (the
+  install-9 OR term), the roster-descriptor bytes `rec[+4][+0xC]` (the
+  x-adjust gate) and `rec[+4][+0xE]` (the install-9 base), the row byte
+  `[[rec+0x28]][0]` (the `0x6E598` id gate, shares OL-52), the camera-track
+  lead words `0x1577C0`/`0x1577C2` and the `+0x6F` word are staged zero in
+  the engine; the row-05 `0x15872A`/`0x15872F` bytes (its carrier claim
+  producers, OL-63) are staged zero; the `[0x157ABE]` side-mirror byte behind
+  the score index is staged 0; the `[0x158724]` carrier is the pool ball
+  carrier stand-in; the `0x79CCC` callback position is the record's own
+  position (the `[rec+0x1C]` phase handler is unported); the `0x6DA64` swap
+  moves opaque record metadata the derived pool does not model. The native
+  install-9 shift leaks the descriptor-pointer upper bits when the shift
+  count exceeds 16; the derived model shifts the low 16 bits (unreachable for
+  the bounded shift range and the real score deltas) and records the choice
+  here. No parity claim is made over the staged-zero inputs.

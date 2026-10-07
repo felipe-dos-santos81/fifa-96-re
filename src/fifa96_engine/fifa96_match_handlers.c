@@ -65,7 +65,15 @@
  * `fifa96_action_receive_step`, `fifa96_action_tackle_step`/`_attempt`) to
  * `mr->record`/the entity pool, so rows 18/21/23 flip to `ported`; the
  * residual record/presentation inputs are the OL-68 leg and the event ring
- * sinks are ported but not yet driven (OL-67). */
+ * sinks are ported but not yet driven (OL-67). FU-139 §11 (Task 13) closes
+ * OL-30: `fifa96_match_action_06` binds `fifa96_action_pursuit_step`
+ * (native `0x801B4..0x809EF`: the `0x8DCD4`/`0x8DD70` camera metric, the
+ * `0x114E04` folds, the RNG install gates 8/9 and the carrier-gate install 4,
+ * the `0x8DE8C`/`0x79CCC` mate selections) to `mr->record` and the pool, so
+ * row 06 flips to `ported`; the unmodeled record bytes/lead/swap are OL-69.
+ * The plan's OL-30 span end `0x81067` covers the row-09 handler
+ * (`0x80A00..0x81065`, the action-table slot `0x1106E0[9]`), which stays
+ * unwired (OL-9). */
 #include <stddef.h>
 #include <string.h>
 
@@ -933,6 +941,140 @@ static int fifa96_match_action_23(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* Map a row-06 pursuit selection (NONE / SELF / mate index) to a pool id. */
+static int32_t match_pursuit_id(uint32_t team, int32_t actor, int32_t index) {
+  if (index == FIFA96_ACTION_PURSUIT_NONE) return FIFA96_MATCH_ENTITY_NONE;
+  if (index == FIFA96_ACTION_PURSUIT_SELF) return actor;
+  return (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+}
+
+/* FU-139 §11 (M2 arms-and-wiring Task 13 / OL-30): row 06 pursuit over the
+ * pool. `fifa96_action_pursuit_step` runs the native target construction
+ * (`0x8DCD4` metric, the `0x8DD70` angle, the `0x114E04` folds), the V4 RNG
+ * install gates and the `0x8DE8C`/`0x79CCC` mate selections; the handler
+ * resolves the team mate view, the `[0x158724]` carrier stand-in (the derived
+ * pool ball carrier), the `team+0x7B2/+0x7B6` identities, the run scores and
+ * the `[0x157A4F]` frame parity, then drains the requests: the target triple,
+ * the install (4/8/9), the receiver timer, the team target/second writes, the
+ * `FUN_0007DAB4` reset and the documented `0x6DA64` swap request. The record
+ * `+0x90/+0x99/+0x9D`, the roster descriptor bytes, the row byte
+ * `[[rec+0x28]]`, the row-05 `0x15872A/0x15872F` block and the camera-track
+ * lead words are staged zero (OL-69); the `0x79CCC` callback position is the
+ * record's own position stand-in (OL-69). */
+static int fifa96_match_action_06(struct fifa96_match_run *mr) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  fifa96_action_pursuit_mate mates[FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t id = mr->record.entity_id;
+  int32_t tid;
+  uint32_t team = 0;
+  struct fifa96_match_entity *e = NULL;
+  const struct fifa96_match_entity *carrier = NULL;
+  uint32_t i;
+  int rc;
+  if (id >= 0 && id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+    e = &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  }
+  memset(&s, 0, sizeof s);
+  s.actor = id;
+  s.timer89 = mr->record.timer89;
+  s.pos_x = mr->record.pos_x;
+  s.pos_y = mr->record.pos_y;
+  s.pos_z = mr->record.pos_z;
+  /* native +0x71 (word = the anim speed) and the +0x69 dword: the low word is
+   * the unported pre-frame walk's dz (recomputed from pos/target, FU-142e
+   * OL-60) and the high word the record lane (+0x6B, pool `lane_x`). */
+  s.vel_x = mr->record.vel_x;
+  s.lane_dword = (int32_t)(((uint32_t)(uint16_t)(e != NULL ? e->lane_x : 0) << 16) |
+                           (uint16_t)((uint16_t)mr->record.target_z -
+                                      (uint16_t)mr->record.pos_z));
+  s.word6d = e != NULL ? e->lane_z : 0;   /* +0x6D */
+  s.word6f = 0;                           /* +0x6F unmodeled (OL-69) */
+  s.timer81 = mr->record.timer81;
+  s.delta = mr->record.delta;
+  s.phase = (uint8_t)mr->state.phase;
+  s.active = mr->record.active;
+  s.has_slot = mr->record.has_slot;
+  s.slot_gate = 0;                        /* byte[slot+0x10] & 0x30 (OL-69) */
+  s.slot_dir_x = mr->record.dir_x;
+  s.slot_dir_z = mr->record.dir_z;
+  s.side = mr->entities.team[team].side;
+  s.type8 = mr->record.actor_type;
+  s.row_byte = 0;                         /* [[rec+0x28]] (OL-52/OL-69) */
+  s.byte99 = 0;                           /* +0x99 (OL-69) */
+  s.byte9d = 0;                           /* +0x9D (OL-69) */
+  s.desc_c = 0;                           /* rec[+4][+0xC] (OL-69) */
+  s.desc_e = 0;                           /* rec[+4][+0xE] (OL-69) */
+  s.byte90 = 0;                           /* +0x90 (OL-69) */
+  s.parity = mr->pass_parity;             /* [0x157A4F] (0x4B11A) */
+  s.byte_15872f = 0;                      /* row-05 producer (OL-63/OL-69) */
+  s.adjust_x = 0;                         /* byte[0x15872A] (OL-63/OL-69) */
+  s.score_own = mr->score[team];          /* word[0x157AC5 + 2*side] */
+  s.score_other = mr->score[1u - team];
+  s.carrier = mr->entities.ball.carrier;  /* [0x158724] stand-in (OL-69) */
+  if (s.carrier >= 0 &&
+      s.carrier < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    carrier = &mr->entities.team[(uint32_t)s.carrier / FIFA96_MATCH_ENTITY_RECORDS]
+                   .records[(uint32_t)s.carrier % FIFA96_MATCH_ENTITY_RECORDS];
+    s.carrier_lane = carrier->lane_x;
+    s.carrier_speed = (int16_t)carrier->vel_x;
+    s.carrier_pos_x = carrier->pos_x;
+    s.carrier_pos_z = carrier->pos_z;
+  }
+  tid = mr->entities.team[team].target;
+  s.team_target = tid;
+  s.team_second = mr->entities.team[team].second;
+  s.teammate_z = 0;
+  if (tid >= 0 &&
+      tid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+    s.teammate_z = mr->entities.team[(uint32_t)tid / FIFA96_MATCH_ENTITY_RECORDS]
+                       .records[(uint32_t)tid % FIFA96_MATCH_ENTITY_RECORDS]
+                       .pos_z;
+  }
+  s.self_index = id >= 0 ? id % (int32_t)FIFA96_MATCH_ENTITY_RECORDS : 0;
+  s.ball_height = mr->entities.ball.y;    /* derived 0x157750 (OL-65) */
+  s.camera_x = mr->render.camera.pos_x;
+  s.camera_y = mr->render.camera.pos_y;
+  s.camera_z = mr->render.camera.pos_z;
+  s.lead_x = 0;                           /* word[0x1577C0] (OL-69) */
+  s.lead_z = 0;                           /* word[0x1577C2] */
+  s.rng = &mr->rng;
+  for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *m = &mr->entities.team[team].records[i];
+    mates[i].x = (int16_t)m->pos_x;
+    mates[i].z = (int16_t)m->pos_z;
+    mates[i].pos_z = m->pos_z;
+    mates[i].skip_98 = m->skip_98;
+    mates[i].skip_9a = m->skip_9a;
+  }
+  rc = fifa96_action_pursuit_step(&s, mates, FIFA96_MATCH_ENTITY_RECORDS, &out);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.timer89 = s.timer89;
+  if (out.ran != 0) mr->record.ran = 1;
+  if (out.target_set != 0) {
+    mr->record.target_x = out.target_x;
+    mr->record.target_y = out.target_y;
+    mr->record.target_z = out.target_z;
+  }
+  if (out.install != 0) mr->record.install = out.install;
+  if (out.receiver_timer != 0 && e != NULL) e->timer93 = 0x10;   /* 0x79B58 */
+  if (out.team_target_set != 0) {
+    mr->entities.team[team].target = match_pursuit_id(team, id, out.team_target_index);
+  }
+  if (out.team_second_set != 0) {
+    mr->entities.team[team].second = match_pursuit_id(team, id, out.team_second_index);
+  }
+  if (out.clear_target != 0 && mr->entities.team[team].target == id)
+    mr->entities.team[team].target = FIFA96_MATCH_ENTITY_NONE;
+  if (out.clear_second != 0 && mr->entities.team[team].second == id)
+    mr->entities.team[team].second = FIFA96_MATCH_ENTITY_NONE;
+  if (out.reset != 0 && e != NULL) match_row_reset(mr, e);
+  /* out.anim (0x6E598) and out.swap (0x6DA64) have no derived consumer
+   * (OL-52/OL-69). */
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -945,8 +1087,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x04, NULL, "FU-137 §6: FU-136 row 04: not ported (partial); locomotion_camera_lead; OL-8"},
     {0x05, NULL,
      "FU-139 §8/§5: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 unbounded; unwired; -UNSUPPORTED; OL-63"},
-    {0x06, NULL,
-     "FU-139 §2/§5: row 06 not ported; FU-77 §2.6 597-insn pursuit body unported; OL-30"},
+    {0x06, fifa96_match_action_06,
+     "FU-139 §11 (Task 13/OL-30): row 06 ported (0x801B4..0x809EF pursuit machine; 0x8DCD4 metric + 0x8DD70 angle + 0x114E04 folds, RNG installs 8/9, carrier-gate install 4, 0x8DE8C/0x79CCC selections) over the pool; row-09 0x80A00 boundary; record bytes/lead/swap OL-69"},
     {0x07, fifa96_match_action_07,
      "FU-139 §9/FU-137 §5.2: row 07 ported (0x814B0..0x81737 machine; 0x7B9C4 kick path) over the pool; defender 0x0E/opponent 0x22/ball 4 requests; descriptor bytes and predictor OL-65/OL-66"},
     {0x08, NULL, "FU-137 §6: FU-136 row 08: not ported (partial); chase-gate installer only; OL-8"},

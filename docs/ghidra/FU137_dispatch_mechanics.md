@@ -355,7 +355,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3; FU-138 counter/phase1_clamp | OL-8; FU-138 OL-19 |
 | 04 | 0x07E7C8 | not ported (partial) | locomotion_camera_lead; FU-77 §2.4 | OL-8 |
 | 05 | 0x07F194 | not ported (partial) | carrier machine stages 0-3 + staging tail ported (FU-139 §8 Task 10: `fifa96_action_carrier_arm` `0x7F194..0x7F665`, `fifa96_ball_pair_stage_tail` `0x7A8D1..0x7AA2F`, plus FU-78 possession helpers); stage-0 target algebra `0x7F3A1..0x7F57B` + `FUN_0007F7E0` fallback unported, row unwired | FU-139 OL-63 (residual); OL-8 |
-| 06 | 0x0801B4 | not ported | FU-77 §2.6 (597 insns), no port row; FU-139 §2 | OL-8; FU-139 OL-30 |
+| 06 | 0x0801B4 | ported (M2 arms-and-wiring Task 13 / FU-139 §11) | `fifa96_match_action_06` binds `fifa96_action_pursuit_step` (`0x801B4..0x809EF`: the `0x8DCD4`/`0x8DD70` camera metric, the `0x114E04` folds, the carrier-gate install 4 and the RNG installs 8/9, the `0x79C20` slot target, the `0x8DE8C`/`0x79CCC` mate selections and the `0x6DA64` swap request) to `mr->record`/the pool; the plan span end `0x81067` is the row-09 body `0x80A00` (slot `0x1106E0[9]`, unwired OL-9); `test_engine_match_handlers::test_action_06_runs_body` | OL-69 (record bytes, lead, callback position, swap); OL-52 remark |
 | 07 | 0x0814B0 | ported (M2 arms-and-wiring Task 11 / FU-139 §9) | `fifa96_match_action_07` binds `fifa96_action_kick_machine` (`0x814B0..0x81737`) and `fifa96_ball_kick_target` (`FUN_0007B9C4`, `0x7B9C4..0x7BF16` incl. the `FUN_0007B878` dir arm and both mode arms) to `mr->record`/the pool ball block; defender 0x0E / opponent 0x22 / ball 4 requests; `test_engine_match_handlers::test_action_07_runs_body` | OL-65 (record/presentation auxiliaries) / OL-66 (external block inputs) / OL-62 remark |
 | 08 | 0x081068 | not ported (partial) | FU-75 §1.6 chase-gate installer only | OL-8 |
 | 09 | 0x080A00 | not ported (partial) | FU-81 arm table 0x809F0; stage helpers | OL-9 |
@@ -445,15 +445,17 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg | dead |
 |---|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 10 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 31 | 0 | 1 (`2B` FU-142f) |
+| action `0x1106E0` | 45 | 11 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12; `06` FU-139 §11 Task 13) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 30 | 0 | 1 (`2B` FU-142f) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
-| **dispatch total** | **80** | **10** | **4** | **65** | **0** | **1** |
+| **dispatch total** | **80** | **11** | **4** | **64** | **0** | **1** |
 
-Dispatch results at this commit: **69 × `-FIFA96_ERR_UNSUPPORTED`** (the 65 not
-ported rows + the unwired actions `27`/`29`/`2C` + the dead entry `2B`; actions
-`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21` and `23` no longer count),
-**1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **10 × `FIFA96_OK`** (actions
-`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`); out-of-range ->
+Dispatch results at this commit (Task 13 update): **68 ×
+`-FIFA96_ERR_UNSUPPORTED`** (the 64 not ported rows + the unwired actions
+`27`/`29`/`2C` + the dead entry `2B`; actions `00`, `1E`, `26`, `28`, `2A`,
+`07`, `0F`, `18`, `21`, `23` and `06` no longer count), **1 ×
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **11 × `FIFA96_OK`** (actions
+`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`, `06`);
+out-of-range ->
 `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are negated, matching
 the engine family convention (`fifa96_match_run_*`).
 
@@ -469,6 +471,15 @@ FU-139 §9 (Task 11) closes OL-28 and OL-31: `fifa96_ball_kick_target`
 74 -> 72 UNSUP. The request surfaces (defender 0x0E, opponent 0x22, ball 4,
 reset/merge) drain through the FU-141 pool installer; the unmodeled record
 bytes and external tables are the OL-65/OL-66 legs.
+
+FU-139 §11 (Task 13) closes OL-30: `fifa96_action_pursuit_step`
+(`0x801B4..0x809EF`, the carrier gate + target construction + `0x114E04`
+folds + RNG installs 8/9 + the `0x8DE8C`/`0x79CCC` selections) and
+`fifa96_match_action_06` are ported and tested, row `06` flips to `ported`
+with `fn != NULL`, and the counts move 10 -> 11 OK / 69 -> 68 UNSUP. The plan
+span `0x801B4..0x81067` includes the row-09 handler `0x80A00` (slot
+`0x1106E0[9]`), which stays `not ported (partial)` (OL-9); the row-06
+remainder is OL-69.
 
 ## 8. Open legs
 
@@ -949,3 +960,29 @@ change.
   resolution arms are ported and tested. New numbered legs OL-67 (event-ring
   binding) and OL-68 (rows 18/21/23 unmodeled record/presentation inputs) are
   registered in FU-142 §6.
+
+## Errata (M2 arms-and-wiring Task 13 / FU-139 §11)
+
+* **§6.1 action row `06` moves from `not ported` to `ported`.** Task 13 ports
+  the row-06 pursuit body (`0x801B4..0x809EF`, ~597 instructions) as
+  `fifa96_action_pursuit_step` (FU-139 §11) and wires
+  `fifa96_match_action_06` over the FU-141 pool. The loader consumes Task 3's
+  material through the FU-141 entity view and the Task-11 fold: the
+  `0x114E04` quadrant idiom (`0x80439`/`0x80472`/`0x80508`/`0x80571`/
+  `0x805AC`) is shared through the new `fifa96_ball_fold` surface
+  (`fifa96_ball_pairing.h`; the former static `kick_fold`).
+* **§7 totals update in place:** action ported 10 -> 11 (`06`), not ported
+  31 -> 30; dispatch 69 -> 68 `-UNSUPPORTED`, 10 -> 11 `FIFA96_OK`;
+  `tests/test_engine_match_handlers.c` flips `action_expect[0x06]` to
+  `FIFA96_OK` and adds `test_action_06_runs_body`.
+* **OL-30 span erratum.** FU-142 §3's "row 06 `0x801B4..0x81067` (597 insns)"
+  mixes two functions: the row-06 body RETs at `0x809EF`; `0x80A00..0x81065`
+  is the row-09 handler (action table `0x1106E0[9]`, jump table `0x809F0`),
+  which stays unwired (OL-9). The port bounds `0x801B4..0x809EF`.
+* **OL-30 closes; OL-69 opens.** The new numbered leg covers row 06's
+  unmodeled record/presentation inputs (record `+0x90/+0x99/+0x9D`, the
+  descriptor bytes, `[[rec+0x28]]`, the `0x1577C0/0x1577C2` lead words, the
+  row-05 `0x15872A/0x15872F` bytes, the `[0x157ABE]` mirror, the callback
+  position stand-in and the opaque `0x6DA64` swap) and the `[0x157A4F]`
+  parity producer (the run's `pass_parity`, first-hand `FUN_0004B100`
+  `0x4B11A`/`0x4B129`); registered in FU-142 §6.

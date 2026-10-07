@@ -269,8 +269,10 @@ static int32_t kick_sin(int32_t angle) {
 }
 
 /* `FUN_000795A4` (`0x795A4..0x795C2`): `(int64)a * b + 0x8000 >> 16`, the low
- * word stored. */
-static int16_t kick_fold(int16_t speed, int32_t angle) {
+ * word stored. Public so the FU-139 §11 row-06 pursuit machine (and any later
+ * `0x114E04` consumer) shares this exact fold instead of duplicating the
+ * table and the quadrant decode. */
+int16_t fifa96_ball_fold(int32_t speed, int32_t angle) {
   int64_t v = ((int64_t)speed * (int64_t)kick_sin(angle) + 0x8000) >> 16;
   return (int16_t)(uint16_t)(uint32_t)(int32_t)v;
 }
@@ -502,8 +504,8 @@ static fifa96_err_t kick_arm_40(const fifa96_ball_kick_actor *actor,
       if (angle > 0x200) angle = (int16_t)(angle - 0x400);
     }
   }
-  state->vector.height = kick_fold(state->vector.x, angle);
-  state->vector.z = kick_fold(state->vector.x, angle + 0x100);
+  state->vector.height = fifa96_ball_fold(state->vector.x, angle);
+  state->vector.z = fifa96_ball_fold(state->vector.x, angle + 0x100);
   return FIFA96_OK;
 }
 
@@ -610,8 +612,8 @@ static fifa96_err_t kick_arm_20(const fifa96_ball_kick_actor *actor,
     if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
         FIFA96_OK)
       return -FIFA96_ERR_INVALID;
-    state->vector.height = kick_fold(0x5A0, angle);
-    state->vector.z = kick_fold(0x5A0, angle + 0x100);
+    state->vector.height = fifa96_ball_fold(0x5A0, angle);
+    state->vector.z = fifa96_ball_fold(0x5A0, angle + 0x100);
   }
   return FIFA96_OK;
 }
@@ -794,8 +796,8 @@ kick_modes:
       if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
           FIFA96_OK)
         return -FIFA96_ERR_INVALID;
-      state->vector.height = kick_fold(state->vector.x, angle);
-      state->vector.z = kick_fold(state->vector.x, angle + 0x100);
+      state->vector.height = fifa96_ball_fold(state->vector.x, angle);
+      state->vector.z = fifa96_ball_fold(state->vector.x, angle + 0x100);
     }
   } else if (hi < state->vector.x) {
     state->vector.x = hi;
@@ -804,8 +806,8 @@ kick_modes:
       if (fifa96_action_kick_angle(state->vector.height, state->vector.z, &angle) !=
           FIFA96_OK)
         return -FIFA96_ERR_INVALID;
-      state->vector.height = kick_fold(state->vector.x, angle);
-      state->vector.z = kick_fold(state->vector.x, angle + 0x100);
+      state->vector.height = fifa96_ball_fold(state->vector.x, angle);
+      state->vector.z = fifa96_ball_fold(state->vector.x, angle + 0x100);
     }
   }
   /* 0x7BE0B..0x7BEC0: the trajectory add, code-4 RNG and divisor. */

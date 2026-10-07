@@ -765,3 +765,138 @@ typedef struct fifa96_action_kick_out {
 
 fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
                                         fifa96_action_kick_out *out);
+
+/* ===== FU-139 §11 (M2 arms-and-wiring Task 13 / OL-30): row 06 pursuit =====
+ *
+ * The native row-06 handler is `0x801B4..0x809EF` (~597 instructions). The
+ * plan/OL span `0x801B4..0x81067` extends past the function's RET at `0x809EF`
+ * over the row-09 handler (`0x80A00..0x81065`, the action-table slot
+ * `0x1106E0[9]`) and the row-09 stage jump table at `0x809F0`; this surface
+ * bounds the row-06 body only (first-hand bytes; FU-139 §11).
+ *
+ * The body in order (first-hand sites in FU-139 §11):
+ *   - `0x801BF` `byte[+0x9E] = 1`; `0x801D4` phase != 2 -> `reset`;
+ *   - `0x801E5` `+0x8D == 0` -> `reset` + `clear_target`/`clear_second` when
+ *     the team's `+0x7B2`/`+0x7B6` point at the record;
+ *   - `0x8022D..0x80263` the carrier gate (`[0x158724] == 0` or carrier word
+ *     `+0x6B > 0x90` or the `[0x157750]` dword `> 0x70`) -> `install = 4`
+ *     (native invoke-now) and return;
+ *   - `0x8026D..0x80354` the camera metric/fold: `0x8DCD4(camera, {0,0,
+ *     side ? 0xB10 : -0xB10})`, the `0x8DD70` angle, the `0x780` scale, the
+ *     has-slot offside c0/camdist arm and the `0x114E04` fold of V1 (the
+ *     camera or position triple);
+ *   - `0x80359..0x803F5` the no-slot `flag54` (V1.z past +-0x5A0 and the
+ *     teammate z), the teammate `+0x89` timer and the 0x30..0x150 scale clamp;
+ *   - `0x80482..0x805B8` the `+0x7B6` V0 block (`0x8DCD4(V1, V2)`, the speed
+ *     `lane_dword >> 18` fast arm when `flag54` and `|V1.z| < 0x930`, else
+ *     0x60, folded into V0.x/V0.z);
+ *   - `0x805BC..0x80646` the target: the slot byte `+0x10 & 0x30` -> the
+ *     camera triple, else `0x79C20(pos, slot dir)`; no slot with
+ *     `word[+0x81] != 0` -> target = pos and return; else the ball height
+ *     dword `> 0x38` returns, target = V1 (actor == team+0x7B2) or V0, and
+ *     V1 -> `receiver_timer` when `flag54`;
+ *   - `0x8064B..0x807A2` the V4 `0x8DC68(word[+0x6D]+lead_x<<2,
+ *     word[+0x6F]+lead_z<<2)` metric and the install gates: `<= 0x60` ->
+ *     install 8; `(0x60,0x90]` with `+0x99 == 0` and the carrier speed `> 4`
+ *     reaches the parity/`0x15872F` x-adjust and the RNG install-9 threshold
+ *     `(desc[+0xE] | +0x9D) << (3 - (int8)+0x90 + score delta)` clamped to
+ *     0xF; `> 0x90` installs nothing;
+ *   - `0x807C6..0x80829` the `0x7D3E4` target clamp and the `0x6E598` anim id
+ *     (row byte `0x1C` -> id 2 when speed `> 4` or lane `> 0xC0`; other row
+ *     bytes -> id `0x1C` when speed `< 3` and lane `< 0x90`);
+ *   - `0x8082B..0x809A2` the `[0x157A4F]` parity claim arm: the `0x8DE8C`
+ *     search over the team mates (skip index 0) -> team `+0x7B2`; when the
+ *     record itself is nearest, the `0x8DCD4` carrier mirror and the
+ *     `+0x7B6` searches (the `flag54` height arm re-searches from
+ *     `{0,0,+-0xB10}`);
+ *   - `0x809A2..0x809EF` the `0x79CCC` callback search (signed 0x7FBC
+ *     threshold, index-0 fallback) -> the `0x6DA64` swap request when the
+ *     found mate is within 0xC0.
+ *
+ * Native call bodies/results the derived engine does not model stay explicit
+ * requests/inputs: `0x7DAB4` (`reset`), `0x7D9A4` (`install`), the `0x7D3E4`
+ * clamp (applied here), `0x79B58` (`receiver_timer`), the `0x6E598` id
+ * (`anim`), the `0x8DE8C`/`0x79CCC` selections (team target/second indices),
+ * and `0x6DA64` (`swap`; the native swaps opaque record metadata). The
+ * callback-position source (`[rec+0x1C]`) is caller-supplied through
+ * `mates[].x/z` (the record position stand-in). NULL `state`/`out` ->
+ * `-FIFA96_ERR_INVALID`; a NULL/empty `mates` array is invalid only when a
+ * search arm runs. */
+#define FIFA96_ACTION_PURSUIT_NONE (-1)
+#define FIFA96_ACTION_PURSUIT_SELF (-2)
+
+typedef struct fifa96_action_pursuit_mate {
+  int16_t x;        /* native +0x59 word (the 0x8DE8C/0x79CCC distances) */
+  int16_t z;        /* native +0x61 word */
+  int32_t pos_z;    /* native +0x61 dword (the 0x8092B/0x80943 height gate) */
+  uint8_t skip_98;  /* native +0x98 != 0 */
+  uint8_t skip_9a;  /* native +0x9A != 0 */
+} fifa96_action_pursuit_mate;
+
+typedef struct fifa96_action_pursuit {
+  int32_t actor;          /* native EBP identity (team+0x7B2/+0x7B6 compares) */
+  int32_t timer89;        /* +0x89 (the teammate arm adds delta) */
+  int32_t pos_x, pos_z;   /* dwords +0x59/+0x61 */
+  int32_t pos_y;          /* dword +0x5D (the position-triple target copy) */
+  int32_t lane_dword;     /* dword +0x69 (low = the walk dz, high = word +0x6B) */
+  int32_t vel_x;          /* dword +0x71 (low word = the anim speed) */
+  int16_t word6d;         /* word +0x6D (V4 metric origin x) */
+  int16_t word6f;         /* word +0x6F (V4 metric origin z) */
+  int16_t timer81;        /* word +0x81 (the no-slot position-only return) */
+  uint16_t delta;         /* [0x157A64] frame-delta word */
+  uint8_t phase;          /* [0x157A4A] >> 24 */
+  uint8_t active;         /* +0x8D */
+  uint8_t has_slot;       /* +0x20 != 0 */
+  uint8_t slot_gate;      /* byte[slot+0x10] & 0x30 != 0 */
+  int8_t slot_dir_x;      /* (int8)byte[slot+0x20] */
+  int8_t slot_dir_z;      /* (int8)byte[slot+0x21] */
+  uint8_t side;           /* team+0x826 */
+  uint8_t type8;          /* +0x8B >> 24 (the 0x6E598 third argument) */
+  uint8_t row_byte;       /* byte[[rec+0x28]] (the 0x6E598 id gate) */
+  uint8_t byte99;         /* +0x99 */
+  uint8_t byte9d;         /* +0x9D */
+  int8_t desc_c;          /* (int8)rec[+4][+0xC] (the x-adjust gate) */
+  int8_t desc_e;          /* (int8)rec[+4][+0xE] (the install-9 base) */
+  int8_t byte90;          /* (int8)+0x90 (the install-9 shift) */
+  uint8_t parity;         /* [0x157A4F] frame toggle (FUN_0004B100 0x4B11A) */
+  uint8_t byte_15872f;    /* byte[0x15872F] (the x-adjust gate; row-05 producer) */
+  int16_t adjust_x;       /* byte[0x15872A] (the target-x addend; row-05 producer) */
+  int32_t score_own;      /* word[0x157AC5 + 2*idx(side)] */
+  int32_t score_other;    /* word[0x157AC5 + 2*idx(side^1)] */
+  int32_t carrier;        /* [0x158724] identity or NONE */
+  int16_t carrier_lane;   /* word[carrier+0x6B] (the > 0x90 gate) */
+  int16_t carrier_speed;  /* word[carrier+0x71] (the > 4 install gate) */
+  int32_t carrier_pos_x, carrier_pos_z; /* carrier +0x59/+0x61 dwords */
+  int32_t team_target;    /* team+0x7B2 identity or NONE */
+  int32_t team_second;    /* team+0x7B6 identity or NONE */
+  int32_t teammate_z;     /* [team+0x7B2]+0x61 dword (the no-slot flag54 gate) */
+  int32_t self_index;     /* the actor's index in `mates` */
+  int32_t ball_height;    /* dword [0x157750] */
+  int32_t camera_x, camera_y, camera_z; /* 0x15774C/50/54 */
+  int16_t lead_x, lead_z; /* word[0x1577C0], word[0x1577C2] */
+  struct fifa96_rng *rng; /* the two 0x92AC8 gates */
+} fifa96_action_pursuit;
+
+typedef struct fifa96_action_pursuit_out {
+  uint8_t ran;             /* native byte[+0x9E] = 1 */
+  uint8_t reset;           /* native FUN_0007DAB4 */
+  uint8_t clear_target;    /* actor == team+0x7B2 -> clear it */
+  uint8_t clear_second;    /* actor == team+0x7B6 -> clear it */
+  uint8_t install;         /* 0 = none, else 4/8/9 (native invoke-now) */
+  uint8_t target_set;
+  int32_t target_x, target_y, target_z;
+  uint8_t receiver_timer;  /* native FUN_00079B58(rec) (the flag54 arm) */
+  uint8_t anim_set;
+  uint8_t anim;            /* native 0x6E598 id 2 or 0x1C */
+  uint8_t team_target_set;
+  int32_t team_target_index; /* NONE / SELF / `mates` index */
+  uint8_t team_second_set;
+  int32_t team_second_index; /* NONE or `mates` index */
+  uint8_t swap;            /* native FUN_0006DA64 request */
+  int32_t swap_index;      /* the mate swapped with the actor */
+} fifa96_action_pursuit_out;
+
+fifa96_err_t fifa96_action_pursuit_step(fifa96_action_pursuit *state,
+                                        const fifa96_action_pursuit_mate *mates,
+                                        uint32_t mate_count,
+                                        fifa96_action_pursuit_out *out);

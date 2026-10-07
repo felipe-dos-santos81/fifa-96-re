@@ -253,7 +253,8 @@ target_link_libraries(fifa96_play PRIVATE fifa96_vgt_player fifa96_tgv_stream fi
                                              fifa96_qfs fifa96_pog fifa96_tgv fifa96_viv)
 
 add_library(fifa96_action_handlers src/fifa96_loader/fifa96_action_handlers.c)
-target_link_libraries(fifa96_action_handlers PRIVATE fifa96_entity_update fifa96_rng)
+target_link_libraries(fifa96_action_handlers PRIVATE fifa96_entity_update fifa96_rng
+                                                        fifa96_ball_pairing)
 add_executable(test_action_handlers tests/test_action_handlers.c)
 target_link_libraries(test_action_handlers PRIVATE fifa96_action_handlers fifa96_entity_update)
 add_test(NAME test_action_handlers COMMAND test_action_handlers WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

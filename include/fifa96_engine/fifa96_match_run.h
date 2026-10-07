@@ -211,6 +211,12 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* FU-139 §11 (Task 13): the native [0x157A4F] frame toggle
+   * (FUN_0004B100 0x4B11A `XOR AH,1` / 0x4B129 store; cleared by the match
+   * reset FUN_0004B02C 0x4B038). Row 06's claim arm and the second-half
+   * searches run only on the odd frames; the derived frame body toggles it
+   * once per granted 30 Hz frame before the entity chain. */
+  uint8_t pass_parity;
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };

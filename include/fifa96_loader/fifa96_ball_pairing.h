@@ -58,6 +58,15 @@ typedef struct fifa96_ball_pair_targets {
   int32_t team1_second;
 } fifa96_ball_pair_targets;
 
+/* FU-139 §9: the `0x114E04` angle fold (the native byte-shift quadrant idiom
+ * over the 257-entry sine table, then `FUN_000795A4`
+ * `(int64)speed * sin + 0x8000 >> 16`, low word). `fifa96_ball_kick_target`
+ * uses it (`0x7BD97..0x7BDB6` and the four sibling copies) and the FU-139 §11
+ * row-06 pursuit machine reuses it through this surface. `speed` is the native
+ * 32-bit multiplier (the kick arms pass a sign-extended word, row 06 a
+ * `dword[rec+0x69] >> 18`); `angle` is the native 10-bit-packed angle. */
+int16_t fifa96_ball_fold(int32_t speed, int32_t angle);
+
 int fifa96_ball_pair_offset(const fifa96_ball_pair_vector *from,
                             const fifa96_ball_pair_vector *to,
                             fifa96_ball_pair_delta *out);

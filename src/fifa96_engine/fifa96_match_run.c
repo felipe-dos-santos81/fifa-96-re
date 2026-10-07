@@ -369,6 +369,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->pass_parity = 0;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -401,6 +402,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -469,6 +471,9 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * most one frame today; the loop keeps one update per grant if that ever
    * changes. */
   for (uint32_t i = 0; i < granted; i++) {
+    /* FU-139 §11: the native FUN_0004B100 toggles [0x157A4F] at frame entry
+     * (0x4B11A/0x4B129), before the entity chain; row 06's claim arm reads it. */
+    mr->pass_parity ^= 1u;
     (void)fifa96_control_slot_update(&mr->slot, mr->input_state[0],
                                      (uint8_t)mr->state.frame_delta, match_run_slot_map,
                                      match_run_anim_a, match_run_anim_b, match_run_anim_c);

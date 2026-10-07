@@ -25,7 +25,11 @@
  * FU-142f/OL-48 entry verdict and its dispatch expectation stays UNSUP. FU-142b
  * Task 5 ports row 2C's body (`fifa96_arm_2c_step` + `fifa96_arm_reset`) under
  * the same verdict: no static entry, `fn == NULL`, OL-48 evidence, UNSUP
- * dispatch. Task 6 ports row 29's body (`fifa96_arm_29_step`, the phase-5
+ * dispatch. FU-139 §10 (Task 12) wires the possession/tackle rows 18/21/23
+ * (`fifa96_match_action_18`/`_21`/`_23` bind the duel/receive/tackle machines
+ * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
+ * to FIFA96_OK and the resolution/claim/target tests run over the pool.
+ * Task 6 ports row 29's body (`fifa96_arm_29_step`, the phase-5
  * stage machine) with the same verdict (no static installer of 0x29; the
  * phase-5 handler installs nothing), so row 29 keeps `fn == NULL`, OL-48
  * evidence and UNSUP dispatch. FU-142d (Task 7) wires row 28: the FU-142a arm
@@ -47,7 +51,10 @@
  * (Task 10) ports the row-05 carrier machine and the ball staging tail but
  * keeps row 05 unwired: the stage-0 target algebra and the FUN_0007F7E0
  * fallback are unported (OL-63), so `fn` stays NULL with the leg in the
- * evidence. The seam itself
+ * evidence. FU-139 §11 (Task 13) wires row 06: `fifa96_match_action_06` binds
+ * `fifa96_action_pursuit_step` (`0x801B4..0x809EF`) over the pool, so
+ * `action_expect[0x06]` flips to FIFA96_OK; the plan's `..0x81067` span end is
+ * the row-09 handler (`0x80A00`, slot `0x1106E0[9]`), which stays UNSUP. The seam itself
  * must run a handler and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
@@ -81,7 +88,7 @@
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP,
+    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
@@ -805,6 +812,84 @@ static void test_action_23_runs_body(void) {
   drop_fixture(&f);
 }
 
+/* FU-139 §11 (M2 arms-and-wiring Task 13 / OL-30): the wired row 06 pursuit
+ * machine (`0x801B4..0x809EF`). The reset path, the carrier-gate install 4,
+ * and the full no-slot V1 target + install 8/anim path over the pool. */
+static void test_action_06_runs_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  /* phase != 2 -> the shared 0x7DAB4 reset (code-0 install on the pool). */
+  f.mr.state.phase = 1;
+  f.mr.record.entity_id = 1;
+  f.mr.entities.team[0].records[1].code = 0x06;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  /* The 0x7DAB4 code-0 install clears the +0x9E latch (0x7DA88) and stages
+   * +0x92 = 0 (0x7DA95, the accepted install). */
+  assert(f.mr.record.ran == 0);
+  assert(f.mr.record.stage92 == 0 && f.mr.record.timer89 == 0);
+  assert(f.mr.entities.team[0].records[1].code == 0);
+  drop_fixture(&f);
+
+  /* Carrier absent -> the early install 4 (invoke) request. */
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 4);
+  assert(f.mr.record.ran == 1);
+  drop_fixture(&f);
+
+  /* Carrier present, no slot: the camera metric/fold path. team 0 side 0 ->
+   * V2 = {0,0,-0xB10}; camera (0,0,0) -> dx 0, dz -0xB10 -> scaled 0xB1,
+   * angle 0x200; V1 folds to (0, 0, -0xB1); actor == team target -> target =
+   * V1; the V4 metric is 0 -> install 8. */
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.frame_delta = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.entities.team[0].target = 1;
+  f.mr.entities.ball.carrier = 5;
+  f.mr.entities.ball.y = 0;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 8);
+  assert(f.mr.record.target_x == 0);
+  assert(f.mr.record.target_z == -0xB1);
+  assert(f.mr.record.ran == 1);
+  drop_fixture(&f);
+
+  /* pass_parity 1 runs the claim arm: mate 2 at the target (0,0,-0xB1) beats
+   * the actor (0xB1 away) -> team+0x7B2 = entity id 2, team+0x7B6 = NONE. */
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.state.frame_delta = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.entities.team[0].target = 1;
+  f.mr.entities.ball.carrier = 5;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.team[0].records[2].pos_x = 0;
+  f.mr.entities.team[0].records[2].pos_z = -0xB1;
+  f.mr.pass_parity = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.entities.team[0].target == 2);
+  assert(f.mr.entities.team[0].second == FIFA96_MATCH_ENTITY_NONE);
+  drop_fixture(&f);
+}
+
 static void test_phase_rows_dispatch_per_classification(void) {
   struct fixture f;
   make_fixture(&f);
@@ -892,6 +977,7 @@ int main(void) {
   test_action_18_runs_body();
   test_action_21_runs_body();
   test_action_23_runs_body();
+  test_action_06_runs_body();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

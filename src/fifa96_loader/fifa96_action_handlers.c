@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "fifa96_loader/fifa96_ball_pairing.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_rng.h"
 
@@ -1679,6 +1680,352 @@ fifa96_err_t fifa96_action_kick_machine(fifa96_action_kick *state,
     out->stage = state->stage92;
   } else {
     out->stage = state->stage92;
+  }
+  return FIFA96_OK;
+}
+
+/* ===== FU-139 §11 (M2 arms-and-wiring Task 13 / OL-30): row 06 pursuit =====
+ *
+ * First-hand evidence: /FIFA96.EXE, `disassemble_bytes` `0x801B4..0x803B4`,
+ * `0x803B4..0x80534`, `0x80534..0x806B4`, `0x806B4..0x808B4`,
+ * `0x808B4..0x80960` (row 06, ~597 instructions, RET at `0x809EF`; the
+ * `0x80A00` handler is the action-table slot `0x1106E0[9]`), `decompile_function
+ * 0x8DCD4`/`0x8DC68`/`0x8DD70`/`0x79C20`/`0x7D3E4`/`0x79B58`/`0x7D9A4`/
+ * `0x7DAB4`/`0x8DE8C`/`0x79CCC`/`0x6DA64`/`0x741B4`/`0x4B100`, and
+ * `read_memory 0x809F0`. The derived contract is the header comment. */
+
+/* The native `0x8DE8C` candidate scan (skip index 0, the +0x98/+0x9A gates,
+ * unsigned 16-bit minimum, NONE when no candidate). `self_latched` reproduces
+ * the `byte[rec+0x9A] = 1` latch the native sets around the second/third call
+ * sites (0x808E4/0x80985) without mutating the caller's view. */
+static int32_t pursuit_nearest(const fifa96_action_pursuit_mate *mates, uint32_t count,
+                               int32_t target_x, int32_t target_z, int32_t self_index,
+                               int self_latched) {
+  uint16_t best = 0xFFFFu;
+  int32_t best_index = FIFA96_ACTION_PURSUIT_NONE;
+  for (uint32_t i = 0; i < count; i++) {
+    uint16_t d;
+    if (i == 0u) continue;
+    if (mates[i].skip_98 != 0 || mates[i].skip_9a != 0) continue;
+    if (self_latched && (int32_t)i == self_index) continue;
+    d = (uint16_t)fifa96_entity_distance(
+        (int16_t)((uint16_t)target_x - (uint16_t)mates[i].x),
+        (int16_t)((uint16_t)target_z - (uint16_t)mates[i].z));
+    if (d < best) {
+      best = d;
+      best_index = (int32_t)i;
+    }
+  }
+  return best_index;
+}
+
+/* The native `0x79CCC` callback-position scan (skip index 0, the +0x98/+0x9A
+ * gates, self's +0x9A latch): the signed 16-bit minimum against the 0x7FBC
+ * seed, with the native's first-record fallback when nothing qualifies. The
+ * callback position is the caller's `mates[]` position (the native's
+ * `[rec+0x1C]` phase-handler output is unported). */
+static int32_t pursuit_callback_search(const fifa96_action_pursuit_mate *mates,
+                                       uint32_t count, int32_t self_x, int32_t self_z,
+                                       int32_t self_index, int32_t *out_distance) {
+  int32_t best = 0x7FBC;
+  int32_t best_index = 0;
+  for (uint32_t i = 0; i < count; i++) {
+    int32_t d;
+    if (i == 0u) continue;
+    if (mates[i].skip_98 != 0 || mates[i].skip_9a != 0) continue;
+    if ((int32_t)i == self_index) continue;
+    d = fifa96_entity_distance((int16_t)((uint16_t)self_x - (uint16_t)mates[i].x),
+                               (int16_t)((uint16_t)self_z - (uint16_t)mates[i].z));
+    if ((int16_t)d < (int16_t)best) {
+      best = d;
+      best_index = (int32_t)i;
+    }
+  }
+  *out_distance = (int16_t)best;
+  return best_index;
+}
+
+fifa96_err_t fifa96_action_pursuit_step(fifa96_action_pursuit *state,
+                                        const fifa96_action_pursuit_mate *mates,
+                                        uint32_t mate_count,
+                                        fifa96_action_pursuit_out *out) {
+  int32_t v1_x, v1_y, v1_z;
+  int32_t v0_x = 0, v0_z = 0;
+  int32_t angle = 0, angle2 = 0;
+  int32_t distance = 0;
+  int32_t scaled;
+  int32_t flag54 = 0;
+  int32_t install = 0;
+  int32_t anim = 0;
+  int target_set = 0;
+  int32_t target_x = 0, target_y = 0, target_z = 0;
+  int32_t v2_z;
+
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  out->team_target_index = FIFA96_ACTION_PURSUIT_NONE;
+  out->team_second_index = FIFA96_ACTION_PURSUIT_NONE;
+  out->ran = 1;                                             /* 0x801BF */
+
+  if (state->phase != 2u) {                                 /* 0x801D4 */
+    out->reset = 1;
+    return FIFA96_OK;
+  }
+  if (state->active == 0u) {                                /* 0x801E5 */
+    out->reset = 1;
+    out->clear_target = state->actor == state->team_target ? 1u : 0u;
+    out->clear_second = state->actor == state->team_second ? 1u : 0u;
+    return FIFA96_OK;
+  }
+  if (state->carrier == FIFA96_ACTION_PURSUIT_NONE ||       /* 0x8022D */
+      state->carrier_lane > 0x90 ||                         /* 0x8023A */
+      state->ball_height > 0x70) {                          /* 0x80247 */
+    out->install = 4;                                       /* 0x80250 */
+    return FIFA96_OK;
+  }
+
+  /* 0x8026D..0x802D6: the camera metric to {0, 0, side ? 0xB10 : -0xB10}
+   * through 0x8DCD4 and the 0x8DD70/0xCD474 angle. */
+  v2_z = state->side != 0u ? 0xB10 : -0xB10;
+  {
+    int16_t dx = (int16_t)((uint16_t)0u - (uint16_t)state->camera_x);
+    int16_t dz = (int16_t)((uint16_t)v2_z - (uint16_t)state->camera_z);
+    distance = fifa96_entity_distance(dx, dz);
+    if (fifa96_action_kick_angle(dx, dz, &angle) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+  }
+  v1_x = state->camera_x;                                   /* 0x802E4 */
+  v1_y = state->camera_y;
+  v1_z = state->camera_z;
+  scaled = (int16_t)distance;                               /* 0x802DB */
+  scaled = scaled < 0x780 ? (scaled >> 3) : (scaled >> 4);  /* 0x802E7..0x802F4 */
+
+  if (state->has_slot != 0u) {                              /* 0x802F7 */
+    /* 0x802FD..0x80338: the has-slot offside c0/camdist arm. */
+    int16_t d = (int16_t)((uint16_t)state->pos_z - (uint16_t)state->camera_z);
+    int camdist = 0;
+    if (d >= 0) {
+      if (d == 0 || v2_z <= 0) scaled = 0xC0;
+      else camdist = 1;
+    } else if (v2_z < 0) {
+      camdist = 1;
+    } else {
+      scaled = 0xC0;
+    }
+    if (camdist) {
+      int32_t d2 = fifa96_entity_distance(
+          (int16_t)((uint16_t)state->pos_x - (uint16_t)state->camera_x), d);
+      if ((int16_t)d2 >= 0x150) scaled = 0xC0;              /* 0x80340 */
+      else {
+        v1_x = state->pos_x;                                /* 0x8034A */
+        v1_y = state->pos_y;
+        v1_z = state->pos_z;
+        goto after_fold;
+      }
+    }
+  } else {
+    /* 0x80359..0x803B7: the no-slot flag54 and the teammate timer. */
+    if (state->side == 0u) {
+      if (v1_z < -0x5A0 && v1_z < state->teammate_z) flag54 = 1;
+    } else {
+      if (v1_z > 0x5A0 && v1_z > state->teammate_z) flag54 = 1;
+    }
+    if (state->actor == state->team_target) {
+      state->timer89 += (int32_t)state->delta;
+      scaled = (int16_t)((uint16_t)scaled - (uint16_t)state->timer89);
+    }
+    if (scaled > 0x150) scaled = 0x150;                     /* 0x803F5 */
+    else if (scaled < 0x30) scaled = 0x30;
+  }
+
+  /* 0x80410..0x8047E: the 0x114E04 fold of V1 by the scaled speed. */
+  v1_x += fifa96_ball_fold(scaled, angle);
+  v1_z += fifa96_ball_fold(scaled, angle + 0x100);
+
+after_fold:
+  if (state->actor == state->team_second) {                 /* 0x80482 */
+    /* 0x80492..0x805B8: the V0 block over 0x8DCD4(V1, V2). */
+    int16_t dx3 = (int16_t)((uint16_t)0u - (uint16_t)v1_x);
+    int16_t dz3 = (int16_t)((uint16_t)v2_z - (uint16_t)v1_z);
+    if (fifa96_action_kick_angle(dx3, dz3, &angle2) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    if (flag54 != 0 && (v1_z < 0 ? -v1_z : v1_z) < 0x930) { /* 0x804BC..0x804D5 */
+      int32_t speed = state->lane_dword >> 18;              /* 0x804FE */
+      v0_x = v1_x + fifa96_ball_fold(speed, angle2);
+      v0_z = v1_z + fifa96_ball_fold(speed, angle2 + 0x100);
+    } else {                                                /* 0x80548 */
+      v0_x = v1_x + fifa96_ball_fold(0x60, angle2);
+      v0_z = v1_z + fifa96_ball_fold(0x60, angle2 + 0x100);
+    }
+  }
+
+  /* 0x805BC..0x80646: the target selection. */
+  if (state->has_slot != 0u) {
+    if (state->slot_gate != 0u) {                           /* 0x805D6 */
+      target_x = state->camera_x;
+      target_y = state->camera_y;
+      target_z = state->camera_z;
+    } else {                                                /* 0x805E6 */
+      target_x = state->pos_x + (int32_t)state->slot_dir_x * 0x80;
+      target_y = 0;
+      target_z = state->pos_z + (int32_t)state->slot_dir_z * 0x80;
+    }
+    target_set = 1;
+  } else {
+    if (state->timer81 != 0) {                              /* 0x805FE..0x80611 */
+      out->target_set = 1;
+      out->target_x = state->pos_x;
+      out->target_y = state->pos_y;
+      out->target_z = state->pos_z;
+      return FIFA96_OK;
+    }
+    if (state->ball_height > 0x38) return FIFA96_OK;        /* 0x8061B */
+    if (state->actor == state->team_target) {               /* 0x80628 */
+      target_x = v1_x;
+      target_y = v1_y;
+      target_z = v1_z;
+    } else {
+      target_x = v0_x;
+      target_y = 0;
+      target_z = v0_z;
+    }
+    target_set = 1;
+    if (flag54 != 0) out->receiver_timer = 1;               /* 0x8063C */
+
+    /* 0x8064B..0x807A2: the V4 metric and the install gates. */
+    {
+      int16_t wx = (int16_t)((uint16_t)state->word6d +
+                             (uint16_t)((int32_t)state->lead_x * 4));
+      int16_t wz = (int16_t)((uint16_t)state->word6f +
+                             (uint16_t)((int32_t)state->lead_z * 4));
+      int16_t metric = (int16_t)fifa96_entity_distance(wx, wz);
+      if (metric <= 0x60) {                                 /* 0x80696 */
+        install = 8;
+      } else if (state->byte99 == 0u && state->carrier_speed > 4) {
+        if (state->parity != 0u && state->byte_15872f < 2u) { /* 0x806C7 */
+          uint16_t r = 0;
+          int32_t gate =
+              (int32_t)state->desc_c | (int32_t)(uint8_t)state->byte9d;
+          if (fifa96_rng_step(state->rng, &r) != FIFA96_OK)
+            return -FIFA96_ERR_INVALID;
+          if ((uint32_t)(r & 0xFu) > (uint32_t)gate)        /* 0x806F8 */
+            target_x += (int32_t)state->adjust_x << 6;      /* 0x8070C */
+        }
+        if (metric <= 0x90) {                               /* 0x80716 */
+          int32_t base =
+              (int32_t)(int16_t)((uint16_t)(int16_t)state->desc_e |
+                                 (uint16_t)state->byte9d);
+          int32_t delta =
+              (int16_t)((uint16_t)state->score_other - (uint16_t)state->score_own);
+          int32_t shift = 3 - (int32_t)state->byte90 + delta;
+          int32_t thresh = base;
+          uint16_t r = 0;
+          if ((int16_t)shift > 0) {
+            uint32_t sh = (uint32_t)(int16_t)shift & 0x1Fu;
+            thresh = (int16_t)(uint16_t)((uint32_t)(uint16_t)base << sh);
+            if (thresh > 0xF) thresh = 0xF;
+          }
+          if (fifa96_rng_step(state->rng, &r) != FIFA96_OK)
+            return -FIFA96_ERR_INVALID;
+          if ((uint32_t)(r & 0x1FFu) < (uint32_t)thresh) install = 9;
+        }
+      }
+    }
+  }
+
+  /* 0x807C6: the 0x7D3E4 clamp; then the 0x6E598 anim gate (0x807CE). */
+  if (target_x > 0x720) target_x = 0x720;
+  else if (target_x < -0x720) target_x = -0x720;
+  if (target_z > 0xB10) target_z = 0xB10;
+  else if (target_z < -0xB10) target_z = -0xB10;
+  if (target_set) {
+    out->target_set = 1;
+    out->target_x = target_x;
+    out->target_y = target_y;
+    out->target_z = target_z;
+  }
+  if (install != 0) out->install = install;
+  {
+    int16_t speed = (int16_t)state->vel_x;                  /* dword[+0x6F]>>16 */
+    int16_t lane_w = (int16_t)(state->lane_dword >> 16);    /* dword[+0x69]>>16 */
+    if (state->row_byte == 0x1Cu) {
+      if (speed > 4 || lane_w > 0xC0) anim = 2;             /* 0x807DD/0x807E8 */
+    } else if (speed < 3 && lane_w < 0x90) {                /* 0x807FC */
+      anim = 0x1C;
+    }
+    if (anim != 0) {
+      out->anim_set = 1;
+      out->anim = (uint8_t)anim;
+    }
+  }
+
+  if (state->parity == 0u) return FIFA96_OK;                /* 0x8082B */
+  if (!mates || mate_count == 0) return -FIFA96_ERR_INVALID;
+
+  if (state->actor == state->team_target) {
+    /* 0x80842..0x809A2: the claim arm. */
+    int32_t best = pursuit_nearest(mates, mate_count, (int16_t)v1_x,
+                                   (int16_t)v1_z, state->self_index, 0);
+    out->team_target_set = 1;
+    if (best != state->self_index) {
+      out->team_target_index = best;                        /* NONE or the mate */
+      out->team_second_set = 1;
+      out->team_second_index = FIFA96_ACTION_PURSUIT_NONE;  /* 0x80859..0x80867 */
+    } else {
+      int int_self = 1;
+      out->team_target_index = FIFA96_ACTION_PURSUIT_SELF;  /* 0x80872 */
+      {
+        int32_t self_dist = fifa96_entity_distance(
+            (int16_t)((uint16_t)v1_x - (uint16_t)state->pos_x),
+            (int16_t)((uint16_t)v1_z - (uint16_t)state->pos_z));
+        int16_t cdx = (int16_t)((uint16_t)v1_x - (uint16_t)state->carrier_pos_x);
+        int16_t cdz = (int16_t)((uint16_t)v1_z - (uint16_t)state->carrier_pos_z);
+        int32_t cdist = fifa96_entity_distance(cdx, cdz);
+        if ((int16_t)self_dist < (int16_t)cdist) {          /* 0x808AD */
+          v1_x += cdx;                                      /* 0x808B4 */
+          v1_z += cdz;
+        } else {
+          out->team_second_set = 1;                         /* 0x80903 */
+          out->team_second_index = FIFA96_ACTION_PURSUIT_NONE;
+          int_self = 0;
+        }
+        if (int_self) {
+          int32_t best2 = pursuit_nearest(mates, mate_count, (int16_t)v1_x,
+                                          (int16_t)v1_z, state->self_index, 1);
+          out->team_second_set = 1;                         /* 0x808EB */
+          out->team_second_index = best2;
+        }
+      }
+      if (flag54 != 0) {                                    /* 0x80911 */
+        int skip = 0;
+        if (out->team_second_index >= 0) {
+          int32_t second_z = mates[out->team_second_index].pos_z;
+          int32_t abs_second = second_z < 0 ? -second_z : second_z;
+          int32_t abs_carrier = state->carrier_pos_z < 0 ? -state->carrier_pos_z
+                                                         : state->carrier_pos_z;
+          if (abs_second + 0x60 >= abs_carrier) skip = 1;   /* 0x80952 */
+        }
+        if (!skip) {                                        /* 0x80956..0x809A2 */
+          int32_t best3 = pursuit_nearest(
+              mates, mate_count, 0, state->camera_z >= 0 ? 0xB10 : -0xB10,
+              state->self_index, 1);
+          out->team_second_set = 1;
+          out->team_second_index = best3;
+        }
+      }
+    }
+  }
+
+  /* 0x809A2..0x809EF: the 0x79CCC callback search and the 0x6DA64 swap. */
+  {
+    int32_t cb_dist = 0;
+    int32_t cb_best = pursuit_callback_search(
+        mates, mate_count, (int16_t)state->pos_x, (int16_t)state->pos_z,
+        state->self_index, &cb_dist);
+    if (cb_best != state->self_index && (int16_t)cb_dist < 0xC0) {
+      out->swap = 1;
+      out->swap_index = cb_best;
+    }
   }
   return FIFA96_OK;
 }

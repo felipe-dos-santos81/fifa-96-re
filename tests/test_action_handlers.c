@@ -920,6 +920,430 @@ static void test_kick_machine_invalid(void) {
   assert(fifa96_action_kick_machine(&s, &out) == ACTION_INVALID);
 }
 
+/* ===== FU-139 §11 (M2 arms-and-wiring Task 13 / OL-30): row 06 pursuit =====
+ *
+ * First-hand /FIFA96.EXE row 06 `0x801B4..0x809EF` (~597 insns; the row-09
+ * handler at 0x80A00 is the action-table slot 0x1106E0[9] and is out of scope).
+ * Every fixture expectation is hand-computed from the cited native sites (the
+ * 0x114E04 fold values through the FU-139 §9 table, the 0x8DC68 octagonal
+ * distance and the seed-0 `FUN_00092AC8` draw chain); none is read from the
+ * port. */
+static void pursuit_mates_init(fifa96_action_pursuit_mate *mates, uint32_t count) {
+  for (uint32_t i = 0; i < count; i++) {
+    mates[i].x = 0x1000;      /* far, positive-signed 8DC68 distance (0x1600) */
+    mates[i].z = 0x1000;
+    mates[i].pos_z = 0x1000;
+    mates[i].skip_98 = 0;
+    mates[i].skip_9a = 0;
+  }
+}
+
+static void pursuit_init(fifa96_action_pursuit *s, struct fifa96_rng *rng) {
+  memset(s, 0, sizeof *s);
+  s->phase = 2;
+  s->active = 1;
+  s->carrier = 0;          /* [0x158724] present (identity 0) */
+  s->carrier_lane = 0;
+  s->carrier_speed = 5;    /* word[carrier+0x71] > 4 (0x806BE) */
+  s->byte90 = 3;           /* 3 - (int8)+0x90 = 0 (0x80731..0x80742) */
+  s->byte99 = 0;
+  s->byte9d = 0;
+  s->desc_e = 0x0F;        /* (desc[+0xE] | +0x9D) install-9 base (0x80721) */
+  s->rng = rng;
+  s->team_target = FIFA96_ACTION_PURSUIT_NONE;
+  s->team_second = FIFA96_ACTION_PURSUIT_NONE;
+  s->self_index = 1;
+  s->ball_height = 0;
+  s->parity = 0;           /* [0x157A4F] even frame */
+}
+
+/* Entry, the phase/active resets and the carrier gate install 4. */
+static void test_pursuit_entry_and_carrier_gate(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+
+  /* 0x801BF: the +0x9E latch runs before every gate. */
+  s.phase = 1;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.ran == 1);
+  assert(out.reset == 1);
+  assert(out.install == 0 && out.target_set == 0);
+
+  /* 0x801E5: active == 0 -> reset + clear team+0x7B2/+0x7B6 when they are rec. */
+  pursuit_init(&s, &rng);
+  s.active = 0;
+  s.actor = 5;
+  s.team_target = 5;
+  s.team_second = 5;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.reset == 1);
+  assert(out.clear_target == 1 && out.clear_second == 1);
+  pursuit_init(&s, &rng);
+  s.active = 0;
+  s.actor = 5;
+  s.team_target = 6;
+  s.team_second = FIFA96_ACTION_PURSUIT_NONE;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.clear_target == 0 && out.clear_second == 0);
+
+  /* 0x8022D..0x80263: carrier absent / carrier word +0x6B > 0x90 / the
+   * [0x157750] ball height > 0x70 all install code 4 (invoke) and return. */
+  pursuit_init(&s, &rng);
+  s.carrier = FIFA96_ACTION_PURSUIT_NONE;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 4 && out.target_set == 0 && out.reset == 0);
+  pursuit_init(&s, &rng);
+  s.carrier_lane = 0x91;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 4);
+  /* 0x90 is inside the gate; the run continues to the V4 install 8. */
+  pursuit_init(&s, &rng);
+  s.carrier_lane = 0x90;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 8);
+  pursuit_init(&s, &rng);
+  s.ball_height = 0x71;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 4);
+  /* 0x70 is inside the carrier gate; the no-slot height gate (0x38) then
+   * returns without a target or install. */
+  pursuit_init(&s, &rng);
+  s.ball_height = 0x70;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 0);
+  assert(out.target_set == 0);
+
+  /* NULL arguments. */
+  assert(fifa96_action_pursuit_step(NULL, mates, 2, &out) == ACTION_INVALID);
+  assert(fifa96_action_pursuit_step(&s, mates, 2, NULL) == ACTION_INVALID);
+}
+
+/* The camera metric, the has-slot offside fold, the no-slot V1 target and the
+ * install-9 RNG gate.
+ *
+ * Camera (-0x100, 0x11, 0xB10), side 1 -> V2 = {0,0,0xB10}; dx = 0x100,
+ * dz = 0 -> dist 0x100 (0x8DC68), scaled 0x100>>3 = 0x20 (0x802E7),
+ * angle = 0x100 (0x8DD70/0xCD474: +x quadrant). pos_z == cam_z takes the
+ * 0x80316/0x80340 c0 path (scaled = 0xC0). No slot, actor == team+0x7B2:
+ * timer89 += delta (0), clamp 0x20 -> 0x30 (0x803F5), fold V1:
+ * x += fold(0x30, 0x100) = 0x30 -> -0xD0; z += fold(0x30, 0x200) = 0
+ * -> 0xB10. flag54 fires (side 1: V1.z 0xB10 > 0x5A0 and > teammate 0), so
+ * the receiver timer runs; target = V1, clamped (0x7D3E4). The V4 metric
+ * 8DC68(0x61, 0) = 0x61 > 0x60 with parity 0 skips the adjust arm and reaches
+ * the install-9 gate: base = 0xF << 0 = 0xF; the seed-0 first FUN_00092AC8
+ * draw is 0x0001 (w0 after one step), 1 < 0xF -> install 9. The anim gate:
+ * row byte 0, speed 0 < 3, lane word 0x80 < 0x90 -> id 0x1C. */
+static void test_pursuit_fold_and_install_gate(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 7;
+  s.team_target = 7;
+  s.teammate_z = 0;
+  s.camera_x = -0x100;
+  s.camera_y = 0x11;
+  s.camera_z = 0xB10;
+  s.pos_x = 0x123;
+  s.pos_z = 0xB10;
+  s.word6d = 0x61;
+  s.word6f = 0;
+  s.lane_dword = (int32_t)((uint32_t)0x80u << 16);   /* word +0x6B = 0x80 */
+  s.vel_x = 0;
+  s.delta = 0;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.reset == 0);
+  assert(out.install == 9);
+  assert(out.target_set == 1);
+  assert(out.target_x == -0xD0);
+  assert(out.target_y == 0x11);   /* the V1 triple copy carries camera y */
+  assert(out.target_z == 0xB10);
+  assert(out.receiver_timer == 1);
+  assert(out.anim_set == 1 && out.anim == 0x1C);
+
+  /* The same gate with a zero base (desc[+0xE] == 0) draws the RNG but
+   * installs nothing (0x80791..0x807A2). */
+  pursuit_init(&s, &rng);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 7;
+  s.team_target = 7;
+  s.camera_z = 0;
+  s.pos_z = 0;
+  s.word6d = 0x61;
+  s.desc_e = 0;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 0);
+
+  /* The +0x99 byte blocks the install gates entirely (0x806A7). */
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.actor = 7;
+  s.team_target = 7;
+  s.word6d = 0x61;
+  s.byte99 = 1;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 0);
+
+  /* The parity + byte[0x15872F] adjust arm (0x806C7..0x8070C) draws first and
+   * shifts the target x by byte[0x15872A]<<6 when (rng & 0xF) > gate. With
+   * parity 1, byte 0x15872F = 0, desc[+0xC] = 0 and +0x9D = 0 the seed-0 first
+   * draw 0x0001 has (1 & 0xF) = 1 > 0, so target x grows by adjust_x<<6. */
+  pursuit_init(&s, &rng);
+  assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
+  s.has_slot = 0;
+  s.actor = 7;
+  s.team_target = 7;
+  s.parity = 1;
+  s.byte_15872f = 0;
+  s.adjust_x = 2;
+  s.word6d = 0x61;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 0 && out.swap == 0);
+}
+
+/* Actor == team+0x7B6: the V0 block (0x80482..0x805B8). Camera (0,0,0),
+ * side 1 -> V2 = {0,0,0xB10}; dist 0xB10, scaled 0xB10>>4 = 0xB1, angle 0.
+ * No slot, flag54 clear, actor == team+0x7B2 false -> the fold puts V1 at
+ * (0,0,0xB1); the V0 metric 8DC68(0, 0xB10-0xB1 = 0xA5F) and the speed-0x60
+ * fold produce V0 = (0, 0, 0xB1 + fold(0x60,0x100) = 0x111), the target. */
+static void test_pursuit_second_record_v0(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 8;
+  s.team_target = 7;
+  s.team_second = 8;
+  s.camera_x = 0;
+  s.camera_y = 0;
+  s.camera_z = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.word6d = 0;
+  s.word6f = 0;
+  s.lane_dword = 0;
+  s.vel_x = 0;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.install == 8);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0);
+  assert(out.target_y == 0);
+  assert(out.target_z == 0x111);
+  assert(out.receiver_timer == 0);
+  assert(out.anim_set == 1 && out.anim == 0x1C);
+}
+
+/* The has-slot target arms (0x805BC..0x805F9): the slot byte +0x10 & 0x30
+ * picks the camera triple, else FUN_00079C20 writes pos + dir*0x80 (y = 0)
+ * and 0x7D3E4 clamps x to +-0x720 / z to +-0xB10. */
+static void test_pursuit_slot_targets(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  s.has_slot = 1;
+  s.slot_gate = 1;
+  s.camera_x = 0x300;
+  s.camera_y = 0x10;
+  s.camera_z = 0x400;
+  s.pos_x = 0x700;
+  s.pos_z = 0xB00;
+  s.word6d = 0;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_x == 0x300 && out.target_y == 0x10 && out.target_z == 0x400);
+
+  pursuit_init(&s, &rng);
+  s.has_slot = 1;
+  s.slot_gate = 0;
+  s.pos_x = 0x700;
+  s.pos_z = 0xB00;
+  s.slot_dir_x = 2;
+  s.slot_dir_z = 1;
+  s.camera_x = 0x111;   /* not the target on this arm */
+  s.camera_y = 0x22;
+  s.camera_z = 0x333;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_x == 0x720);   /* 0x700 + 2*0x80 = 0x800 -> clamp */
+  assert(out.target_y == 0);
+  assert(out.target_z == 0xB10);   /* 0xB00 + 1*0x80 = 0xB80 -> clamp */
+
+  /* The 0x6E598 id gate: row byte 0x1C with speed > 4 (0x807DD) requests 2. */
+  pursuit_init(&s, &rng);
+  s.row_byte = 0x1C;
+  s.vel_x = 5;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.anim_set == 1 && out.anim == 2);
+  /* speed == 4 is not > 4 and lane 0 is not > 0xC0 -> no id. */
+  pursuit_init(&s, &rng);
+  s.row_byte = 0x1C;
+  s.vel_x = 4;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.anim_set == 0);
+  /* Other row bytes: speed == 3 is not < 3 -> no id. */
+  pursuit_init(&s, &rng);
+  s.vel_x = 3;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.anim_set == 0);
+}
+
+/* The no-slot early returns: word[+0x81] != 0 copies the position triple and
+ * returns without the clamp/V4/anim arms (0x805FE..0x80611); the ball height
+ * dword > 0x38 returns without a target (0x8061B..0x80622). */
+static void test_pursuit_early_returns(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.timer81 = 1;
+  s.pos_x = 0x800;   /* beyond +-0x720: the early return leaves it unclamped */
+  s.pos_y = 0x55;
+  s.pos_z = -0x900;
+  s.camera_z = 0;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x800 && out.target_y == 0x55 && out.target_z == -0x900);
+  assert(out.install == 0 && out.receiver_timer == 0 && out.anim_set == 0);
+
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.timer81 = 0;
+  s.ball_height = 0x39;
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+  assert(out.target_set == 0);
+  assert(out.install == 0 && out.anim_set == 0);
+}
+
+/* The parity claim arm (0x8082B..0x809A2) and the 0x79CCC/0x6DA64 tail.
+ * Camera (0,0,0), side 1, no slot: V1 = (0,0,0xB1). Parity 1, actor ==
+ * team+0x7B2: the 0x8DE8C search (skip index 0) picks mate 2 at (0,0xB1)
+ * (distance 0; self at (0,0) is 0xB1) -> team+0x7B2 = mate 2, team+0x7B6 = 0.
+ * The 0x79CCC callback search (self's +0x9A latched, skip 0) picks mate 2 at
+ * 0xB1 < 0xC0 -> the 0x6DA64 swap request. */
+static void test_pursuit_claim_arm(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[11];
+  pursuit_mates_init(mates, 11);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 3;
+  s.team_target = 3;
+  s.self_index = 3;
+  s.parity = 1;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.camera_x = 0;
+  s.camera_y = 0;
+  s.camera_z = 0;
+  /* Mate 0 sits at the search target too: the native skip index 0 must keep it
+   * out of both searches (the 0x8DE8C/0x79CCC skip argument); mate 2 wins the
+   * strict `<` tie. */
+  mates[0].x = 0;
+  mates[0].z = 0xB1;
+  mates[0].pos_z = 0xB1;
+  mates[3].x = 0;
+  mates[3].z = 0;
+  mates[3].pos_z = 0;
+  mates[2].x = 0;
+  mates[2].z = 0xB1;
+  mates[2].pos_z = 0xB1;
+  assert(fifa96_action_pursuit_step(&s, mates, 11, &out) == FIFA96_OK);
+  assert(out.team_target_set == 1);
+  assert(out.team_target_index == 2);
+  assert(out.team_second_set == 1);
+  assert(out.team_second_index == FIFA96_ACTION_PURSUIT_NONE);
+  assert(out.swap == 1 && out.swap_index == 2);
+}
+
+/* Self-nearest, the carrier mirror and the flag54 second search.
+ * Camera (0,0,0x600), side 1, teammate_z 0 -> flag54 (V1.z 0x600 > 0x5A0).
+ * scaled 0xA2, fold -> V1 = (0, 0, 0x6A2); target = V1; receiver timer.
+ * Self (mate 3) at (0,0x6A2) wins the first search; self distance 0x6A2 <
+ * the carrier distance 0x95E (carrier at (0,0x1000)), so V1 mirrors by
+ * (0, -0x95E) to (0,0,-0x2BC). The 0x808EB search (self latched) picks mate
+ * 5 at (0,0xB10) (0xD6C) over the far mates (0x18BC); the flag54 height gate
+ * 0xB10+0x60 < 0x1000 re-searches and keeps mate 5 (distance 0). The 0x79CCC
+ * search then finds mate 5 at 0xB10 >= 0xC0 -> no swap. */
+static void test_pursuit_self_nearest_and_swap(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[11];
+  pursuit_mates_init(mates, 11);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.side = 1;
+  s.actor = 3;
+  s.team_target = 3;
+  s.self_index = 3;
+  s.parity = 1;
+  s.teammate_z = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.camera_x = 0;
+  s.camera_y = 0;
+  s.camera_z = 0x600;
+  s.carrier_pos_x = 0;
+  s.carrier_pos_z = 0x1000;
+  mates[3].x = 0;
+  mates[3].z = 0x6A2;
+  mates[3].pos_z = 0x6A2;
+  mates[5].x = 0;
+  mates[5].z = 0xB10;
+  mates[5].pos_z = 0xB10;
+  assert(fifa96_action_pursuit_step(&s, mates, 11, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_z == 0x6A2);
+  assert(out.receiver_timer == 1);
+  assert(out.team_target_set == 1);
+  assert(out.team_target_index == FIFA96_ACTION_PURSUIT_SELF);
+  assert(out.team_second_set == 1);
+  assert(out.team_second_index == 5);
+  assert(out.swap == 0);
+}
+
+/* Missing candidate records for a search arm is an error (the native reads the
+ * caller's team block), and a NULL mate array is only invalid when a search
+ * arm runs. */
+static void test_pursuit_invalid(void) {
+  fifa96_action_pursuit s;
+  fifa96_action_pursuit_out out;
+  struct fifa96_rng rng;
+  fifa96_action_pursuit_mate mates[2];
+  pursuit_mates_init(mates, 2);
+  pursuit_init(&s, &rng);
+  s.has_slot = 0;
+  s.actor = 3;
+  s.team_target = 3;
+  s.self_index = 0;   /* no search arm needs the array at parity 0 */
+  assert(fifa96_action_pursuit_step(&s, NULL, 0, &out) == FIFA96_OK);
+  s.parity = 1;
+  assert(fifa96_action_pursuit_step(&s, NULL, 0, &out) == ACTION_INVALID);
+  assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
+}
+
 int main(void) {
   test_move_target();
   test_move_step();
@@ -948,6 +1372,14 @@ int main(void) {
   test_kick_machine_0F_stage0();
   test_kick_machine_0F_reload_and_corner();
   test_kick_machine_invalid();
+  test_pursuit_entry_and_carrier_gate();
+  test_pursuit_fold_and_install_gate();
+  test_pursuit_second_record_v0();
+  test_pursuit_slot_targets();
+  test_pursuit_early_returns();
+  test_pursuit_claim_arm();
+  test_pursuit_self_nearest_and_swap();
+  test_pursuit_invalid();
   puts("test_action_handlers: all assertions passed");
   return 0;
 }

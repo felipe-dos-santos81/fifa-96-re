@@ -122,7 +122,7 @@ FU-138/FU-139/FU-141 where already bounded there.
 | OL-27 event append sinks | `FUN_000928F0` `0x928F0..0x92994` (164 B) + `FUN_00092820` `0x92820..0x92861` (65 B) | 25-entry ring `0x5B440` stride 0x15 + `0x5B650` sink | 1 |
 | OL-28 full kick path | `FUN_0007B9C4` `0x7B9C4..0x7BF16` (1362 B); mode arms `FUN_0007B194` (962 B), `FUN_0007B57C` (761 B); mode-bit arms `0x7BC34..0x7BC80`, code-4 RNG/divisor `0x7BE40..0x7BEC0` (FU-139 §6) | target selection + wing/slot + angle fold `0x114E04` | 1–2 |
 | OL-29 row 05 carrier arms | row 05 `0x7F194..0x7F7C9` RETs (padding to `0x7F7E0`, first-hand); fallback `FUN_0007F7E0` `0x7F7E0..0x801B2` (2514 B); `FUN_00071C94` (350 B), `FUN_00079CCC` (141 B); stages 1–3 `0x7F57C..0x7F665` (FU-139 §6) | stage-0 target algebra, snap/hand-off animation, ball actor/receiver hand-off | 1–2 |
-| OL-30 row 06 pursuit | row 06 `0x801B4..0x81067` (597 insns, FU-139 §2) | target construction, `0x114E04` folds, RNG gates, installs 8/9/4 | 1–2 |
+| OL-30 row 06 pursuit | row 06 `0x801B4..0x809EF` (~597 insns, FU-139 §2; the `..0x81067` span end is the row-09 body `0x80A00`, slot `0x1106E0[9]`) | target construction, `0x114E04` folds, RNG gates, installs 8/9/4 | **closed (Task 13, Appendix J; FU-139 §11); remainder OL-69** |
 | OL-31 rows 07/0F kick machines | `FUN_0007E600` `0x7E600..0x7E7C4` (452 B); row 07 `0x814B0`, row 0F `0x82AD0..0x82DD0` (FU-139 §2) | decision, opponent 0x22 invoke, ball-actor install 4, fun-0F predictor/RNG/timer reload, `FUN_0007DAB4` tail | 2 |
 | OL-32 reception/tackle/duel arms | `FUN_0007A084` `0x7A084..0x7A456` (978 B); NSEARCH `FUN_0008DB6C` `0x8DB6C..0x8DC49` (221 B); SWAP `FUN_000786A0` `0x786A0..0x786EB` (75 B); `FUN_0004C324` `0x4C324..0x4C372` (78 B); row 18/21/23 arms (FU-139 §6) | special-class/RNG arms, sound arms, NSEARCH/SWAP, row-21 claim, row-23 target, row-18 resolution | 1–2 |
 | OL-38 outfield decide/chase wiring | rows 04 `0x7E7C8` / 08 `0x81068..0x81188` (FU-138/FU-141 §7); `FUN_0007DAB4` `0x7DAB4..0x7DB0C` (88 B); `FUN_00079B58` (16 B); `FUN_00079C50` `0x79C50..0x79C98` (72 B); per-type gate `0x110680`; input tables `0x1109D0`/`0x1109E4` (FU-137 §4.1, FU-141 §7) | input-row dispatch, no-edge arm, forced decision, chase gate; then rows 04/08 wire | 1–2 |
@@ -2138,3 +2138,61 @@ script/project save. `/fifa96_le.bin` and `/fifa96.exe` untouched.
 
 Repo: `make check` 100/100 before and after the probe (no source change). Write
 set: this doc only.
+
+## Appendix J (M2 arms-and-wiring Task 13 / FU-139 §11) — row 06 pursuit machine first-hand window
+
+Task 13 closes OL-30. The native row-06 body is bounded first-hand as
+`0x801B4..0x809EF` (~597 instructions; RET at `0x809EF`), ported as
+`fifa96_action_pursuit_step` and wired through `fifa96_match_action_06` over
+the FU-141 pool. The detailed site-annotated derivation, the engine mapping
+and the tests live in FU-139 §11; this appendix records the first-hand window,
+the boundary erratum and the interface mapping.
+
+### J.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `disassemble_bytes`: `0x801B4..0x803B4` (155), `0x803B4..0x80534` (116),
+  `0x80534..0x806B4` (124), `0x806B4..0x808B4` (138), `0x808B4..0x80960` (50);
+  the row-09 prologue at `0x80A00`;
+* `read_memory`: `0x809F0` (16 B; the row-09 stage table
+  `{0x80A3F,0x80BFB,0x80FCC,0x8103A}`), `0x1106E0` (slot 9 = `0x80A00`);
+* `decompile_function`: `0x8DCD4`, `0x8DD70`, `0x8DC68`, `0x795A4`, `0x8DE8C`,
+  `0x79CCC`, `0x79C20`, `0x7D3E4`, `0x79B58`, `0x7D9A4`, `0x7DAB4`, `0x741B4`,
+  `0x6DA64`, `0x4B100`, `0x4B02C`;
+* `get_xrefs_to`: `0x158724`, `0x15872A`, `0x15872F`, `0x157ABE`, `0x157A4F`;
+* no renames, comments, labels, functions, scripts or project saves.
+
+### J.2 Boundary erratum
+
+FU-142 §3's `0x801B4..0x81067` (and the plan/brief) is the span between row 06
+and row 08, not one function: row 06 ends at `0x809EF`; the row-09 handler
+(`0x80A00..0x81065`, the action-table slot `0x1106E0[9]` with its `0x809F0`
+jump table) belongs to action row 09, stays `not ported (partial)` and keeps
+`fn == NULL` (OL-9). The Task-13 port and its install-arm census
+(`0x8025E` code 4 with `ECX=1` invoke; `0x807C1` codes 8/9 with `ECX=1`)
+cover row 06 only.
+
+### J.3 Interface mapping (native → `fifa96_action_pursuit_step`)
+
+| native input | derived field |
+|---|---|
+| EBP record identity | `actor`/`self_index` |
+| `+0x89`, `+0x59/+0x5D/+0x61` | `timer89`, `pos_*` |
+| `dword[+0x69]` (low dz, high `+0x6B`) | `lane_dword` |
+| `dword[+0x6F]>>16` (`+0x71` word) | `vel_x` |
+| `word[+0x6D]/[+0x6F]` | `word6d`/`word6f` |
+| `+0x81`, `[0x157A64]`, `[0x157A4A]>>24`, `+0x8D`, `+0x20` | `timer81`, `delta`, `phase`, `active`, `has_slot` |
+| `byte[slot+0x10]&0x30`, slot `+0x1D/+0x1E` (`+0x20/+0x21` bytes) | `slot_gate`, `slot_dir_x/z` |
+| `team+0x826`, `+0x8B>>24`, `[[rec+0x28]]`, `+0x99`, `+0x9D`, `rec[+4][+0xC]/[+0xE]`, `+0x90` | `side`, `type8`, `row_byte`, `byte99`, `byte9d`, `desc_c/e`, `byte90` |
+| `[0x157A4F]`, `[0x15872F]`, `[0x15872A]` | `parity`, `byte_15872f`, `adjust_x` |
+| `word[0x157AC5 + 2*idx]` pair | `score_own`/`score_other` |
+| `[0x158724]` and its `+0x6B`/`+0x71`/`+0x59..61` | `carrier`, `carrier_lane`, `carrier_speed`, `carrier_pos_*` |
+| `team+0x7B2/+0x7B6` identities, `[team+0x7B2]+0x61` | `team_target`/`team_second`, `teammate_z` |
+| `[0x157750]`, camera `0x15774C..54`, `word[0x1577C0/C2]`, `team block` (`0xB2` stride, `+0x59/+0x61/+0x98/+0x9A`) | `ball_height`, `camera_*`, `lead_x/z`, `mates[]` |
+| `FUN_00092AC8` | `rng` |
+
+The output side maps the native requests: `install` (4/8/9, invoke-now),
+`target_*`, `receiver_timer` (`0x79B58`), `anim` (`0x6E598`), the
+`team_target_index`/`team_second_index` writes (NONE/SELF/`mates` index),
+`swap` (`0x6DA64`), `reset` (`0x7DAB4`) and the `clear_target`/`clear_second`
+identity clears. All unmodeled inputs are the numbered OL-69 leg (FU-139
+§11.7), staged zero/stand-in in the engine; no parity claim is made over them.
