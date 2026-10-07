@@ -49,6 +49,23 @@ struct fifa96_arm_record {
   uint8_t flag44;          /* native +0x44 anim-row terminal flag (row 27) */
   uint8_t anim_overflow;   /* derived: pair walk left the table (step-cleared) */
   struct fifa96_rng *rng;  /* RNG for the bodies that draw (Tasks 4+) */
+  /* Row 28 (`0x870E8`, FU-142d Appendix G) fields. The native body keeps its
+   * stage gates in record scratch dwords (+0xA0/+0xA1 bytes, +0xA2/+0xA6 and
+   * +0xAA/+0xAE dwords) and reads five process globals plus the chosen-record
+   * pointer [team+0x831]; the appendix pins each one. */
+  int32_t scratch_a2;      /* +0xA2: the 0x87014 gate A / arm-0 fall gate */
+  int32_t scratch_a6;      /* +0xA6: the 0x87014 gate B / arm-2 z offset */
+  int32_t scratch_aa;      /* +0xAA: approach timer A (arm 2 re-roll gate) */
+  int32_t scratch_ae;      /* +0xAE: approach timer B (arm 2 hard-approach) */
+  uint8_t scratch_a0;      /* +0xA0: RNG bit written by arm 1 */
+  uint8_t scratch_a1;      /* +0xA1: RNG bit written by arm 1 when a0 == 0 */
+  int32_t global_10f358;   /* [0x10F358]: arm-2 re-roll/hard-approach gate */
+  int32_t global_10f35c;   /* [0x10F35C]: arm-2 chosen-record chase flag */
+  int32_t global_10f364;   /* [0x10F364]: arm-0 set-piece target x */
+  int32_t global_10f368;   /* [0x10F368]: arm-0 set-piece target z */
+  uint8_t global_157ac2;   /* [0x157AC2]: arm-0 side-negation mode byte */
+  fifa96_arm_vec chosen_pos; /* [team+0x831]+0x59 triple (handler-resolved) */
+  uint8_t chosen_ok;       /* derived: chosen831 resolved to a pool record */
   /* Row 29 (`0x874E4`, FU-142c Appendix F) fields. */
   uint8_t phase;           /* [0x157A4A]>>24: the phase-5 machine gate */
   uint8_t skip_9a;         /* +0x9A: occupied/skip byte (install pre-check) */

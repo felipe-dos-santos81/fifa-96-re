@@ -1,6 +1,7 @@
-/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5/6 /
- * FU-142b/c: the row 0x26 body (Task 3), the row 0x27 body (Task 4), the row
- * 0x2C body (Task 5), the row 0x29 body (Task 6) and the shared 0x36200 stub.
+/* src/fifa96_loader/fifa96_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5/6/7 /
+ * FU-142b/c/d: the row 0x26 body (Task 3), the row 0x27 body (Task 4), the row
+ * 0x2C body (Task 5), the row 0x29 body (Task 6), the row 0x28 4-arm body
+ * (Task 7) and the shared 0x36200 stub.
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C
  * (read-only /FIFA96.EXE: disassemble_bytes 0x866F4, read_memory 0x110778 =
@@ -9,13 +10,17 @@
  * read_memory 0x1103CB = the 96-byte 24-pair table, read_memory 0x158782 /
  * 0x10F372), Appendix E (disassemble_bytes 0x84598, 152 B; read_memory
  * 0x110790 = row-0x2C table entry 0x00084598; disassemble_function 0x7DAB4,
- * the reset subset in `fifa96_arm_reset`) and Appendix F (disassemble_bytes
+ * the reset subset in `fifa96_arm_reset`), Appendix F (disassemble_bytes
  * 0x874E4, 596 B; read_memory 0x110784 = row-0x29 table entry 0x000874E4;
- * the 0x8DE8C nearest and 0x6E1D0 phase-cell windows). */
+ * the 0x8DE8C nearest and 0x6E1D0 phase-cell windows) and Appendix G
+ * (disassemble_bytes 0x870E8, 1024 B; read_memory 0x110780 = row-0x28 table
+ * entry 0x000870E8; read_memory 0x870D8 = the 4-arm table; disassemble_bytes
+ * 0x87014, 200 B; read_memory 0x7D8B0 and 0x114E04). */
 #include "fifa96_loader/fifa96_arm_bodies.h"
 
 #include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_rng.h"
 
 /* Flat 0x10F394, the 32-byte table pointed to by the runtime [0x157A38]
@@ -201,6 +206,216 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec) {
                                rec->anim_sel, &sel) != FIFA96_OK)
       return -FIFA96_ERR_INVALID;
     rec->anim_sel = sel;
+  }
+  return FIFA96_OK;
+}
+
+/* Row 0x28 (`0x870E8..0x874E3`, 294 instructions; Appendix G). The native
+ * prologue runs the shared 0x8DCD4 out triple and the 0x79C50 face call before
+ * the stage92 jump table `0x870D8` = {0x87147, 0x87276, 0x87364, 0x874DA}.
+ * `arm` is that table selector (the native stage92 byte; > 3 -> epilogue). */
+
+/* The native x/z folds (`0x87184..0x871C6` / `0x871CD..0x87216`) are the
+ * byte-shift quadrant idiom over the 257-entry 0x114E04 table followed by
+ * `IMUL 0x90; ADD 0x8000; ADC; SHRD 16`. The port reuses the already-ported
+ * table + quadrant fold (`fifa96_projection_sincos`, FU-88) at the 1024-step
+ * angle `(int8)active * 0x40` and applies the same 0x90 multiply/round; the
+ * equivalence was brute-forced over all 256 active values against a literal
+ * transcription of the native idiom (Appendix G.2) and is pinned by the arm-0
+ * fold fixtures. */
+static int32_t fifa96_arm_28_disp(int32_t component) {
+  return (int32_t)(((int64_t)component * 0x90 + 0x8000) >> 16);
+}
+
+/* The shared `0x87014` stage-gate setup (`0x87014..0x870D5`, 54 instructions;
+ * first-hand `get_xrefs_to 0x87014` = exactly the two row-28 call sites
+ * `0x872C5`/`0x873A9`). Six RNG draws: +0xA2 = max(draw0 & 0xFF, 0x48) signed
+ * by draw1 bit 0, +0xA6 = max(draw2 & 0xFF, 0x48) signed by draw3 bit 0,
+ * timer89 = 0, +0xAA = (draw4 & 0xFF) + 0x78, +0xAE = +0xAA + (draw5 & 0xFF). */
+static fifa96_err_t fifa96_arm_28_setup(struct fifa96_arm_record *rec) {
+  uint16_t r;
+  int32_t gate;
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  gate = (int32_t)(r & 0xFFu);
+  rec->scratch_a2 = gate < 0x48 ? 0x48 : gate;              /* 0x8701E..0x8702C */
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if (r & 1u) rec->scratch_a2 = -rec->scratch_a2;           /* 0x87036..0x87056 */
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  gate = (int32_t)(r & 0xFFu);
+  rec->scratch_a6 = gate < 0x48 ? 0x48 : gate;              /* 0x87058..0x8706B */
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  if (r & 1u) rec->scratch_a6 = -rec->scratch_a6;           /* 0x87075..0x87098 */
+  rec->timer89 = 0;                                         /* 0x8709A */
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  rec->scratch_aa = (int32_t)(r & 0xFFu) + 0x78;            /* 0x870A4..0x870B1 */
+  if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  rec->scratch_ae = rec->scratch_aa + (int32_t)(r & 0xFFu); /* 0x870B7..0x870CC */
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_arm_28_step(struct fifa96_arm_record *rec, uint8_t arm) {
+  int32_t distance;
+  int32_t lane;
+  uint8_t face;
+  if (!rec) return -FIFA96_ERR_INVALID;
+  /* Prologue `0x870E8..0x87127`: EAX=rec, EBX=rec+0x65; the 0x8DCD4 out triple
+   * (pos +0x59 vs target +0x4D) then the 0x79C50 face call on the dx/dz words
+   * (+0x67/+0x69 -> +0x8E octant). */
+  if (fifa96_arm_dist_stage(&rec->pos, &rec->target, &distance, &lane) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  rec->lane = lane;
+  face = rec->type;
+  if (fifa96_arm_face(&rec->pos, &rec->target, &face) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  rec->type = face;
+  /* 0x8712C..0x8713F: stage92 jump; the table's arm 3 (0x874DA) is the shared
+   * epilogue, and > 3 also exits. */
+  if (arm > 3u) return FIFA96_OK;
+  if (arm == 0u) {
+    /* 0x87147: [0x157AA3] = [rec+0] (unmodeled cross-record store, OL-57);
+     * 0x87154: the 0x36200 stub with native EAX=2 (no-op, OL-51). */
+    (void)fifa96_arm_stub_36200();
+    rec->target.x = rec->global_10f364;                     /* 0x87159..0x87166 */
+    rec->target.z = rec->global_10f368;
+    /* 0x87169..0x87181: below mode 4, a side-0 team negates the z target. */
+    if (rec->global_157ac2 < 4u && rec->side == 0u)
+      rec->target.z = -rec->target.z;
+    {
+      /* 0x87184..0x87216: the two 0x114E04 folds (x = cos, z = sin). */
+      int32_t sin16, cos16;
+      uint32_t angle = (uint32_t)(int32_t)(int8_t)rec->active << 12;
+      if (fifa96_projection_sincos((int32_t)angle, &sin16, &cos16) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->target.x += fifa96_arm_28_disp(cos16);
+      rec->target.z += fifa96_arm_28_disp(sin16);
+    }
+    /* 0x87213..0x87237: skip the constant-id 0x6E598 call when the current row
+     * byte is already 0x15 (`anim_sel` is the derived stand-in, OL-57). */
+    if (rec->anim_sel != 0x15u) {
+      uint8_t slot;
+      if (fifa96_arm_anim_select(0x15, rec->anim_sel, &slot) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->anim_sel = slot;
+    }
+    /* 0x8723C..0x87245: the 0x8DCD4 distance word (+0x65) gates > 0x60. */
+    if (distance > 0x60) return FIFA96_OK;
+    {
+      /* 0x8724B..0x87270: one draw, timer89 = 0, stage92++, +0xA2 gate. */
+      uint16_t r;
+      if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      rec->timer89 = 0;
+      rec->stage92 = (uint8_t)(rec->stage92 + 1u);
+      rec->scratch_a2 = (int32_t)(r & 0x7Fu) + 0x20;
+    }
+    /* Falls through into arm 1 (`0x87270` -> `0x87276`). */
+  }
+  if (arm == 0u || arm == 1u) {
+    /* 0x87276..0x87294: timer89 += zero-extended delta; below the +0xA2 gate
+     * the record waits (JL epilogue; signed compare). */
+    rec->timer89 = (int32_t)((uint32_t)rec->timer89 + (uint32_t)rec->delta);
+    if (rec->timer89 < rec->scratch_a2) return FIFA96_OK;
+    {
+      /* 0x8729A..0x872A7: re-arm +0xA2. */
+      uint16_t r;
+      if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      rec->scratch_a2 = (int32_t)(r & 0x7Fu) + 0x20;
+    }
+    rec->timer89 = 0;                                       /* 0x872B0 */
+    if (rec->flag830 == 0u) {
+      /* 0x8733A..0x87363: flag830 clear -> target = pos, constant id 1. */
+      uint8_t slot;
+      rec->target = rec->pos;
+      if (fifa96_arm_anim_select(1, rec->anim_sel, &slot) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->anim_sel = slot;
+      return FIFA96_OK;
+    }
+    /* 0x872C3..0x87335: flag830 set -> the 0x87014 setup, then the +0xAA/
+     * +0xAE/+0xA0/+0xA1 draws, timer89 = 0, stage92++. */
+    if (fifa96_arm_28_setup(rec) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    {
+      uint16_t r;
+      if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      rec->scratch_aa = (int32_t)(r & 0xFFu) + 0xF0;        /* 0x872CA..0x872D9 */
+      if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      rec->scratch_ae = (int32_t)(r & 0x7Fu) + 0x20;        /* 0x872DF..0x872EC */
+      if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      rec->scratch_a0 = (uint8_t)(r & 1u);                  /* 0x872F2..0x872F9 */
+      rec->scratch_a1 = 0;                                  /* 0x87305 */
+      if (rec->scratch_a0 == 0u) {
+        if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+        rec->scratch_a1 = (uint8_t)(r & 1u);                /* 0x87310..0x87317 */
+      }
+    }
+    rec->timer89 = 0;                                       /* 0x87323 */
+    rec->stage92 = (uint8_t)(rec->stage92 + 1u);            /* 0x8732D..0x8732F */
+    return FIFA96_OK;
+  }
+  /* arm == 2 (`0x87364..0x874D9`); every other selector jumped to the epilogue
+   * or returned above. */
+  if (arm != 2u) return FIFA96_OK;
+  rec->timer89 = (int32_t)((uint32_t)rec->timer89 + (uint32_t)rec->delta);
+  if (rec->timer89 > rec->scratch_aa && rec->global_10f358 == 0) {
+    /* 0x8738E..0x873CA: timer89 = 0, re-arm +0xAA, the 0x87014 setup, then the
+     * id from the 0x7D8B0 dwords low words indexed by RNG & 3. */
+    static const uint8_t vb[4] = { 0x15u, 0x19u, 0x03u, 0x02u };
+    uint16_t r;
+    uint8_t slot;
+    rec->timer89 = 0;
+    if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    rec->scratch_aa = (int32_t)(r & 0xFFu) + 0x78;
+    if (fifa96_arm_28_setup(rec) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (fifa96_arm_anim_select(vb[r & 3u], rec->anim_sel, &slot) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    rec->anim_sel = slot;
+  }
+  if (rec->global_10f35c != 0) {
+    /* 0x873D8..0x87432: above the +0xAE gate, target = (0xCC0, +0xA6), the
+     * constant id 0x15 and the latch advance. */
+    if (rec->timer89 > rec->scratch_ae) {
+      uint8_t slot;
+      rec->target.z = rec->scratch_a6;
+      rec->target.x = 0xCC0;
+      if (fifa96_arm_anim_select(0x15, rec->anim_sel, &slot) != FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      rec->anim_sel = slot;
+      rec->timer89 = 0;
+      rec->stage92 = (uint8_t)(rec->stage92 + 1u);
+    }
+    return FIFA96_OK;
+  }
+  /* 0x87433..0x87468: target = the chosen record's position triple
+   * ([team+0x831]+0x59) plus the two gate offsets, then the 0x8DCD4 distance
+   * word gates >= 0x20. A missing chosen record leaves the target (derived
+   * bound, OL-58). */
+  if (rec->chosen_ok != 0u) {
+    rec->target.x = rec->chosen_pos.x;
+    rec->target.y = rec->chosen_pos.y;
+    rec->target.z = rec->chosen_pos.z;
+  }
+  rec->target.x += rec->scratch_a2;
+  rec->target.z += rec->scratch_a6;
+  if (distance >= 0x20) return FIFA96_OK;
+  if (rec->global_10f358 == 0) return FIFA96_OK;
+  /* 0x87473..0x874D5: target = pos, the velocity word triple zeroed, then the
+   * +0xAE hard-approach gate; above it a new +0xAE and the id from the 0x7D8C0
+   * dwords low words indexed by RNG & 3. */
+  rec->target = rec->pos;
+  rec->vel_x = 0;
+  rec->vel_z = 0;
+  if (rec->scratch_ae >= rec->timer89) return FIFA96_OK;   /* 0x8749A JGE */
+  {
+    static const uint8_t vc[4] = { 0x00u, 0x58u, 0x5Bu, 0x6Bu };
+    uint16_t r;
+    uint8_t slot;
+    rec->timer89 = 0;
+    if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    rec->scratch_ae = (int32_t)(r & 0x7Fu) + 0x20;
+    if (fifa96_rng_step(rec->rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (fifa96_arm_anim_select(vc[r & 3u], rec->anim_sel, &slot) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    rec->anim_sel = slot;
   }
   return FIFA96_OK;
 }

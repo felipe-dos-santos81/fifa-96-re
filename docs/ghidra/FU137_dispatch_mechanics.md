@@ -364,7 +364,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 25 | 0x0880CC | not ported (partial) | FU-82 §3.10 7-arm table 0x880B0 | OL-9 |
 | 26 | 0x0866F4 | ported (M2 arms-and-wiring Task 3 / FU-142 Appendix C) | `fifa96_match_action_26` binds `fifa96_arm_26_step` (`0x866F4..0x8681C` + `0x8DCD4`) to `mr->record`; arm 0x8D74D (§5.2); `test_engine_match_handlers::test_action_26_runs_body` | OL-50 (descriptor bytes) / OL-51 (`0x36200` gate) carry the row's remainder |
 | 27 | 0x086820 | unwired (M2 arms-and-wiring Task 4 / FU-142 Appendix D) | body `0x86820..0x86A02` (136 insns) ported as `fifa96_arm_27_step` with the `0x79C50`/`0x6E598` helpers (`fifa96_arm_face`/`fifa96_arm_anim_select`); **no static entry** — the only reference to `0x86820` is the action-table slot `0x11077C`, the `MOV EDX,0x27` sites are animation args, `MOV ECX,0x27` has no site, `0x8CEB8` stages no 0x27 (FU-142 D.1) | OL-48 (entry; FU-142f); FU-142 OL-52/OL-53 remainder |
-| 28 | 0x0870E8 | not ported | arm 0x8D7CF (§5.2); body unanalyzed (FU-76 §2) | OL-15 |
+| 28 | 0x0870E8 | ported (M2 arms-and-wiring Task 7 / FU-142 Appendix G) | `fifa96_match_action_28` binds `fifa96_arm_28_step` (`0x870E8..0x874E3`, 4-arm table `0x870D8` + internal `0x87014` gate helper; the `0x114E04` fold reuses `fifa96_projection_sincos`) to `mr->record`; arm 0x8D7CF (§5.2); entry resolved (the arm installs code 0x28; the only body ref is the action-table slot 0x110780); `test_engine_match_handlers::test_action_28_runs_body` | OL-56 (global inputs/RNG seed) / OL-57 (`[0x157AA3]`, row-byte stand-in) / OL-58 (chosen-record resolution) carry the row's remainder |
 | 29 | 0x0874E4 | unwired (M2 arms-and-wiring Task 6 / FU-142 Appendix F) | body `0x874E4..0x87738` (187 insns) ported as `fifa96_arm_29_step` (the phase-5 stage machine: `0x8DE8C` nearest, `0x6E1D0` phase cell, `0x92AC8` RNG, `0x6E598` selector, `fifa96_arm_reset`, self-install code 3); **no static entry** — the only reference to `0x874E4` is the action-table slot `0x110784`, the sole `MOV EDX,0x29` site is `0x1F53C` in the non-match `FUN_0001F440`, `MOV ECX,0x29` has no site, the phase-5 handler `0x6E05C..0x6E1B2` contains no installer call and `0x8CEB8`'s 15 arms stage no 0x29 (FU-142 F.3) | OL-48 (entry; FU-142f); FU-142 OL-55 remainder |
 | 2A | 0x086A34 | not ported | arm 0x8D807 record scan (§5.2); body unported (FU-76 §2/§7 leg 7) | OL-15 |
 | 2B | 0x087738 | **open leg** | one-byte RET 0x87738; no install arm (§5.3); dead if confirmed | OL-15 |
@@ -420,14 +420,14 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg |
 |---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 3 (`00` FU-138; `1E` FU-140; `26` FU-142b) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48) | 38 | 1 (`2B`) |
+| action `0x1106E0` | 45 | 4 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48) | 37 | 1 (`2B`) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 |
-| **dispatch total** | **80** | **3** | **4** | **72** | **1** |
+| **dispatch total** | **80** | **4** | **4** | **71** | **1** |
 
-Dispatch results at this commit: **76 × `-FIFA96_ERR_UNSUPPORTED`** (the 72 not
+Dispatch results at this commit: **75 × `-FIFA96_ERR_UNSUPPORTED`** (the 71 not
 ported rows + the unwired actions `27`/`29`/`2C` + the open leg `2B`; actions
-`1E` and `26` no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and
-**3 × `FIFA96_OK`** (actions `00`, `1E` and `26`); out-of-range -> `-NOT_FOUND`;
+`1E`, `26` and `28` no longer count), **1 × `-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and
+**4 × `FIFA96_OK`** (actions `00`, `1E`, `26` and `28`); out-of-range -> `-NOT_FOUND`;
 NULL `mr` -> `-INVALID`. All error results are negated, matching the engine
 family convention (`fifa96_match_run_*`).
 
@@ -470,12 +470,14 @@ family convention (`fifa96_match_run_*`).
     one-byte RET and 0x27's only constant is an animation-row argument. These
     four rows stay unscheduled until a reachability/dynamic pass (or the FU-142
     probe for plan C9) resolves their entry. **Status (FU-142b Tasks 3-5,
-    FU-142c Task 6): row 26 is ported/wired; rows 27, 2C and 29 have ported
-    bodies but their entries stay unresolved (OL-48/FU-142f); 2B remains
+    FU-142c Task 6, FU-142d Task 7): rows 26 and 28 are ported/wired; rows 27,
+    2C and 29 have ported bodies but their entries stay unresolved
+    (OL-48/FU-142f); 2A remains unported (its FU-142e body task); 2B remains
     unscheduled (the shared row-29 epilogue RET entry, FU-142 §1.1). The 0x2C
     body is not "prologue-only": it is a 48-instruction stage machine (FU-142
     §7 / Appendix E); the 0x29 body is a 187-instruction phase-5 stage machine
-    (FU-142 Appendix F).**
+    (FU-142 Appendix F); the 0x28 body is a 294-instruction 4-arm machine with
+    an internal gate helper (FU-142 Appendix G).**
 
 ## 9. Concerns
 
@@ -729,3 +731,51 @@ change.
   `fifa96_arm_29_step`. `fifa96_match_run` staging is unchanged because the
   row is unwired. Rows 28/2A keep their classes (their FU-142d/e body tasks);
   OL-54's pool-drain decision is recorded in FU-142 §6.
+
+## Errata (M2 arms-and-wiring Task 7 / FU-142d)
+
+* §6.1 action row `28` moves from `not ported`/OL-15 to `ported`: Task 7 ported
+  the body `0x870E8..0x874E3` (294 instructions, 4-arm jump table `0x870D8`)
+  and its internal `0x87014` gate helper as `fifa96_arm_28_step` — FU-142
+  Appendix G. The body is the two-stage approach machine: the prologue
+  `0x8DCD4` out triple + `0x79C50` face; arm 0 builds the set-piece target
+  `([0x10F364], [0x10F368])` (side-0 z negate below mode 4) and adds the
+  `0x114E04` fold (`(int8)active` -> `144*cos/sin`, ported through the existing
+  `fifa96_projection_sincos`); arm 1 waits on `+0xA2` and either syncs
+  `target = pos` (team `flag830` clear) or runs the six-draw `0x87014` setup
+  and latches; arm 2 runs the `+0xAA`/`+0xAE` approach, the `0x7D8B0`/`0x7D8C0`
+  animation-id tables and the `[team+0x831]` chosen-record copy. The **entry is
+  resolved** (unlike 27/29/2C): `get_xrefs_to 0x870E8` returns exactly the
+  action-table slot `0x110780` and the FU-142a arm `0x8D7CF` statically
+  installs code 0x28 (`FUN_0008CEB8` -> `FUN_0007D9A4`; FU-142 G.2).
+  `fifa96_match_action_table[0x28].fn` is set, its evidence names
+  `FU-142d`, and the dispatch result is `FIFA96_OK`
+  (`test_engine_match_handlers::test_action_28_runs_body`). The row's remainder
+  surfaces are FU-142 OL-56 (the five process-global inputs
+  `0x10F358/35C/364/368`/`0x157AC2` and the derived RNG seed 0; first-hand
+  writers are `FUN_0008D098`'s entry block/row 2A/installer clear/init),
+  OL-57 (the `[0x157AA3]` store and the `[rec+0x28]` row-byte stand-in) and
+  OL-58 (the chosen-record pointer -> pool-id resolution and the missing-chosen
+  bounded model).
+* §7 totals update in place: action ported 3 -> 4 (`28`), not ported 38 -> 37;
+  dispatch total ported 3 -> 4, not ported 72 -> 71. The dispatch-result
+  paragraph is updated in place: `-UNSUPPORTED` 76 -> 75, `FIFA96_OK` 3 -> 4,
+  `-NOT_FOUND` unchanged (phase `0x16`).
+* §5.2 arm `0x28` — re-verified first-hand this slice: `PUSH -1; MOV ECX,0x28;
+  MOV EBX,0xA; MOV EAX,EBP; XOR EDX,EDX; CALL FUN_0008CEB8` at
+  `0x8D7BF..0x8D7CF`, falling into the 0x2A scan; the arm's code is now backed
+  by a ported, wired body (FU-142 Appendix G).
+* §8 OL-15 gains the FU-142d Task 7 status (row 28 ported/wired; 2A still its
+  FU-142e body task) and the 0x28 body window.
+* `tests/test_engine_match_handlers.c` gains `test_action_28_runs_body` and
+  flips `action_expect[0x28]` to `FIFA96_OK`; `tests/test_arm_bodies.c` gains
+  `test_arm_28_*` (18 cases); `tests/test_engine_match_frame.c` gains
+  `test_action_28_repack_round_trips_fields` (pool staging/repack round-trip:
+  scratch persistence, `type`, the resolved chosen triple and the latches).
+* The `fifa96_arm_record` view gains the row-28 scratch/global/chosen fields;
+  `fifa96_match_run_record` gains `target_y`, `vel_x/vel_z`, `type`, `side`,
+  `flag830`, the chosen triple, the six scratch cells and the five globals;
+  `struct fifa96_match_run` gains `struct fifa96_rng rng` (seeded 0 by begin)
+  and the five globals; `struct fifa96_match_entity` gains the six scratch
+  cells. The engine's first wired RNG-drawing row is row 28 (OL-56 carries the
+  native seed `settings[0x18]`). Rows 27/29/2C/2A keep their classes.

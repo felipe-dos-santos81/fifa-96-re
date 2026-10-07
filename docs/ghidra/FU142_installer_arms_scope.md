@@ -211,7 +211,12 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`fifa96_arm_29_step`, Appendix F.2) with the `0x8DE8C` nearest search, the
   `0x6E1D0` phase cell (`fifa96_action_phase_cell`), the `0x92AC8` RNG draw
   and the `0x6E598` selector; the row stays unwired (no entry, OL-48) and its
-  remainder surface is OL-55. Rows 28/2A stay unported.**
+  remainder surface is OL-55. Status (Task 7): row 28's body is ported
+  (`fifa96_arm_28_step`, Appendix G) with the internal `0x87014` stage-gate
+  helper; row 28 is wired (`fifa96_match_action_28`, the second cluster-G
+  wiring) because the `0x8D7CF` arm, the full 4-arm body and the pool binding
+  are bounded, and the row's remainder surfaces are OL-56..OL-58. Row 2A stays
+  unported.**
 * **OL-48 — dynamic entry for 27/29/2C; 2B dead verdict.** No static install
   arm exists (FU-137 §5.3 re-cited); a runtime/reachability pass is the
   precondition for scheduling those three rows. 0x2B is confirmed a shared-RET
@@ -326,6 +331,41 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   global-points-at-another-record state is not representable per call — the
   same per-record-global treatment as row 27's OL-53). The `[0x157A9F]` ball
   pointer is likewise a caller-supplied position/skip pair.
+* **OL-56 — row-28 process-global inputs and the match RNG seed (Task 7).**
+  The body reads five process globals whose producers are unported:
+  `[0x10F358]` (writers: `FUN_0007D8D0` init `0x7D97D`, row 2A `0x86AB0`/
+  `0x86F70`; row-28 reads `0x87384`/`0x8746A`), `[0x10F35C]` (writers init
+  `0x7D983`, `FUN_000886D4` `0x887EC`, row 2A `0x86AAB`/`0x86FFE`, the arm-0x2A
+  installer clear `0x8D80E`; row-28 read `0x873CF`), `[0x10F364]` (`FUN_0008D098`
+  entry block `0x8D6D4`/`0x8D71D`, init `0x7D995`; row-28 read `0x87159`),
+  `[0x10F368]` (entry block `0x8D6DB`/`0x8D722` plus its `0x8D6FB` read-write,
+  init `0x7D98F`; row-28 read `0x87161`) and `[0x157AC2]` (writers `0x73F82`,
+  `0x4B0DE`, `0x4BA20/31`, `0x38990`, `0x88D6A`; entry-block read `0x8D69F`;
+  row-28 read `0x8716B`). The derived engine keeps the five as run-level staging fields
+  (`fifa96_match_run.global_*`) defaulting to 0; the derived step consumes them
+  through `fifa96_arm_record.global_*`. The native match RNG seed is
+  `FUN_0001D940(0x18)` = `settings[0x18]` at the match-init call `0x493F2`
+  (FU-60 §0x493E8); the engine seeds its `struct fifa96_rng` with the derived 0
+  in `fifa96_match_run_begin` (the corpus has no static default for the runtime
+  settings block).
+* **OL-57 — row-28 `[0x157AA3]` store and the `[rec+0x28]` row-byte gate
+  (Task 7).** Arm 0 stores the team back-pointer `[rec+0]` into the process
+  global `[0x157AA3]` (`0x8714A`; the same global row 29/2A write) — dropped,
+  no derived consumer. The `0x87213..0x87237` gate reads `byte[[rec+0x28]]`
+  (the current-row descriptor) and skips the constant `0x6E598` id 0x15 when it
+  is already 0x15; the derived step uses `anim_sel` (the last resolved id) as
+  the stand-in, and the `0x36200` call's native `EAX = 2` value stays the
+  argument-less no-op of OL-51.
+* **OL-58 — row-28 chosen-record resolution (Task 7).** The native
+  `[team+0x831]` is a record **pointer** (the 0x2A scan stores `EAX =
+  team+0xB2*(i+1)` at `0x8D801`; arm 2 copies `[that+0x59..0x61]` into the
+  target at `0x87433`). The derived pool stores the Task-2 encoded id
+  (`11*team+record` or NONE), so `match_run_dispatch_entity` resolves it to a
+  `chosen_pos` triple (`chosen_ok`). When the id is NONE (the 0x2A overflow
+  bounded model, OL-49) the derived arm 2 leaves the target unchanged instead
+  of dereferencing the native aliased tail pointer — a bounded-model
+  divergence, pinned by `test_arm_28_arm2_chosen_missing_bounded`. The native
+  chosen-pointer chain into record 11 stays outside the derived record surface.
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -345,7 +385,9 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   the entry stays unresolved (OL-48, F.3) and the row's remainder is OL-55.**
 * **§5.2 arm `0x28` condition** — the arm fires when `[0x157A4A]>>24 != 0x13`
   in the state 0x13/0x14 block (i.e. the 0x14 half); when phase is 0x13 the
-  0x25/3 arms run instead (first-hand `0x8D75F..0x8D7CF`).
+  0x25/3 arms run instead (first-hand `0x8D75F..0x8D7CF`). **Status (Task 7):
+  the arm's full body is ported and wired (Appendix G, `fifa96_match_action_28`
+  with `fifa96_arm_28_step`).**
 * First-hand instruction counts for the seven row windows are in §1; FU-137's
   "body unanalyzed/unported" cells can cite §1/§3 of this doc when they are
   updated.
@@ -356,6 +398,8 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   tests `[0x105FB4] < 0`, FU-62 §3.3). Task 3 ports the
   derived surface as a documented no-op (OL-51) because neither row 26 nor the
   engine models `0x105FC4`; the callers' appendices (Task 7/8) pin the value.
+  **Status (Task 7): Appendix G pins row 28's call value (`EAX = 2`, `0x8714F`)
+  and keeps the derived no-op (the global stays OL-51).**
 * **§5.1 loop bound** — FU-137's pseudo-code `for (i = first; i <=
   min(last,10); i++)` is off by one against the first-hand bytes: the native
   clamp is `last >= 0xB -> 0xB` (`0x8CEE2` `CMP ESI,0xB` / `0x8CEE7`
@@ -1333,6 +1377,183 @@ Write set of this appendix (Task 6):
 `tests/test_engine_match_handlers.c`, `CMakeLists.txt` (arm-bodies link deps),
 the FU-137 errata and this appendix. No engine record change: row 29 stays
 unwired.
+
+## Appendix G (FU142d / M2 arms-and-wiring Task 7) — row 0x28 body + `0x87014` helper + `0x114E04` fold first-hand window
+
+Task 7 of the follow-up plan
+(`docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`) ports action
+row 0x28 (`0x870E8..0x874E3`, 294 instructions, the 4-arm jump table `0x870D8`)
+and its internal `0x87014` gate helper, exercises the fold through the
+already-ported `0x114E04` sine table (`fifa96_projection_sincos`, FU-88), and
+performs the second cluster-G wiring (`fifa96_match_action_28`; the FU-142a arm
+`0x8D7CF` installs code 0x28). This appendix is its evidence gate: the exact
+fields, constants and branch sites below are read first-hand this slice and are
+what the port implements.
+
+### G.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `get_function_by_address 0x870E8` — no function (table-referenced body);
+* `disassemble_bytes 0x870E8` (1024 B; 298 instructions through `0x874E7`, the
+  row RET at `0x874E3` followed by row 29's prologue pushes);
+* `read_memory 0x110780` (8 B: `e8 70 08 00 e4 74 08 00` = action-table row
+  0x28 `0x870E8`, row 0x29 `0x874E4`);
+* `read_memory 0x870D8` (24 B: the 4-dword table `0x87147`, `0x87276`,
+  `0x87364`, `0x874DA`, then the body prologue bytes `53 51 52 56 57 55 83 EC`);
+* `disassemble_bytes 0x87014` (200 B; 54 instructions, body `0x87014..0x870D5`);
+* `disassemble_function 0x8DCD4` (61 insns, `0x8DCD4..0x8DD5B`) and
+  `disassemble_function 0x79C50` (28 insns, `0x79C50..0x79C98`) — the prologue
+  helpers, carried from Appendices C/D;
+* `get_xrefs_to 0x870E8` — 1 ref, the action-table slot `0x110780` (DATA);
+* `get_xrefs_to 0x87014` — 2 refs, exactly the row-28 call sites `0x872C5` and
+  `0x873A9`;
+* `get_xrefs_to 0x10F358` (5: writers `0x7D97D` `FUN_0007D8D0`, `0x86AB0`/
+  `0x86F70`; readers `0x87384`/`0x8746A`), `0x10F35C` (6: writers `0x7D983`,
+  `0x887EC` `FUN_000886D4`, `0x8D80E` `FUN_0008D098`, `0x86AAB`/`0x86FFE`;
+  reader `0x873CF`), `0x10F364` (5: writers `0x7D995`, `0x8D6D4`, `0x8D6FB`
+  read-write, `0x8D71D`, `0x8D722`; readers `0x87159`, `0x6E274`), `0x10F368`
+  (6: same shape; readers `0x87161`, `0x6E267`), `0x157AC2` (56: writers
+  include `0x73F82`, `0x4B0DE`, `0x4BA20/31`, `0x38990`, `0x88D6A`; entry-block
+  read `0x8D69F`; row-28 read `0x8716B`), `0x157AA3` (14: row-28 write
+  `0x8714A`, row-2A writes `0x86A65`/`0x86B78`, row-29 `0x875A7`, other row
+  arms);
+* `read_memory 0x7D8B0` (32 B: dwords `0x15`, `0x19`, `0x03`, `0x02`,
+  `0x00`, `0x58`, `0x5B`, `0x6B`);
+* `read_memory 0x114E04` (4096 B; the table is 257 dwords, `0x114E04..0x115207`,
+  ending `0x0000FFFE`, `0x00010000`);
+* `read_memory 0x10F358` (28 B, file image all zero — runtime/BSS) and
+  `read_memory 0x157AA0` (40 B zeros);
+* `disassemble_bytes 0x8D6C0` (128 B) / `0x8D7B8` (88 B) — the entry block and
+  0x2A scan context re-cited from Appendix B.
+
+No writes: no rename/comment/label/function/script/project save.
+
+### G.2 Entry census and body layout (first-hand)
+
+`get_xrefs_to 0x870E8` returns exactly one reference, the action-table slot
+`0x110780` (read this slice: `0x000870E8`). Unlike rows 27/29/2C the entry is
+**resolved**: the FU-142a arm `0x8D7CF` (`FUN_0008D098` state 0x13/0x14,
+phase != 0x13) stages code 0x28 into all free team records through
+`FUN_0008CEB8` -> `FUN_0007D9A4`, and the installer's action-code byte is what
+`FUN_0006D920` later resolves through the action table (FU-137 §1.3/§2). No
+constant census is needed: the arm is a static installer of row 28.
+
+Body layout (`0x870E8..0x874E3`):
+
+| site | block |
+|---|---|
+| `0x870E8..0x87114` | prologue: `EBP = rec`; 16 B from `0x7D8B0` -> `[ESP+0x10]`, 16 B from `0x7D8C0` -> `[ESP]`; `EBX = rec+0x65`, `EDX = rec+0x4D`, `EAX = rec+0x59`; `CALL 0x8DCD4` |
+| `0x87119..0x87127` | `EAX = rec`; `EBX = word [rec+0x69]` (`SAR 16` of the `+0x67` dword), `EDX = word [rec+0x67]` (`SAR 16` of the `+0x65` dword); `CALL 0x79C50` |
+| `0x8712C..0x8713F` | `AL = [rec+0x92]`; `CMP AL,3; JA 0x874DA`; `JMP CS:[EAX*4+0x870D8]` |
+| arm 0 `0x87147..0x87270` | store `[0x157AA3]`; stub `0x36200(EAX=2)`; target = `[0x10F364]`/`[0x10F368]` (+ side-0 negate below mode 4); the two `0x114E04` folds; the `[rec+0x28]`-gated constant id 0x15; the distance gate; one RNG draw, latch + `+0xA2`, falls through to arm 1 |
+| arm 1 `0x87276..0x87336` + tail `0x8733A..0x87363` | `timer89 += delta` vs `+0xA2`; re-arm `+0xA2`; `flag830 == 0` -> (tail) target = pos, id 1; `flag830 != 0` -> `0x87014` setup + four draws, latch |
+| arm 2 `0x87364..0x874D5` | `timer89 += delta`; `+0xAA` gate + `[0x10F358]` -> `0x87014` + the `0x7D8B0` id; `[0x10F35C]` -> (0xCC0, `+0xA6`) + id 0x15 + latch, else the chosen-record copy + `+0xA2`/`+0xA6`, distance `>= 0x20` return, `[0x10F358]` hard-approach sync/velocity + the `0x7D8C0` id |
+| epilogue `0x874DA..0x874E3` | `ADD ESP,0x20`; POP EBP/EDI/ESI/EDX/ECX/EBX; RET (also jump-table arm 3) |
+
+Hazard notes: the jump selector is the **entry** `stage92` read after the
+prologue (the prologue does not touch `+0x92`); the `0x8733A` block is
+physically before arm 2 and is reachable only from arm 1's `flag830 == 0`
+branch; arm 0's offset when the mode byte is below 4 is a **negate of the
+whole z target**, not a sign-magnitude class; the two arm-1/arm-2 gate compares
+are signed (`JL`/`JLE`/`JGE`).
+
+### G.3 The internal helper `0x87014` (`0x87014..0x870D5`, 54 insns)
+
+First-hand the helper takes `EAX = rec` and draws from `0x92AC8` six times:
+`+0xA2 = max(RNG0 & 0xFF, 0x48)` then negated when `RNG1 & 1`; `+0xA6 =
+max(RNG2 & 0xFF, 0x48)` then negated when `RNG3 & 1`; `[rec+0x89] = 0`;
+`+0xAA = (RNG4 & 0xFF) + 0x78`; `+0xAE = +0xAA + (RNG5 & 0xFF)` (the `max`
+stores are `0x87021..0x8702C`/`0x87060..0x8706B`; the sign arms
+`0x87043..0x87056`/`0x87085..0x87098`). `get_xrefs_to 0x87014` is exactly the
+two row-28 sites, so — contrary to the plan's Task 8 note that row 2A consumes
+it — the helper is **row-28-only**; row 2A's window merely precedes it in the
+image. The derived port keeps it file-local in `fifa96_arm_bodies.c` for the
+row-28 step.
+
+### G.4 The `0x114E04` fold (`0x87184..0x871C6` x / `0x871CD..0x87216` z)
+
+Both folds load `EAX = [rec+0x8A] SAR 24` (the `(int8)+0x8D` active byte),
+`SHL EAX,6`, then run a byte-shift quadrant idiom: the x fold computes
+`ECX = EAX + 0x100` and shifts `CH`, the z fold shifts `AH`; each ends
+`MOV EAX,[EAX*4+0x114E04]` with an `XOR/SUB` sign fix and applies
+`IMUL EDX` by `0x90`, `ADD EAX,0x8000`, `ADC EDX,0`, `SHRD EAX,EDX,16`. The
+first-hand table is 257 dwords (`0x114E04..0x115207`; index 256 = `0x10000`).
+
+The port **reuses the already-ported table + quadrant fold**
+(`fifa96_projection_sincos`, FU-88) at the 1024-step angle
+`(int8)active * 0x40 << 6 = (int8)active << 12` and applies the same
+`(component * 0x90 + 0x8000) >> 16`: x uses `cos16`, z uses `sin16`, matching
+the fold's `+0x100` x offset (a 90-degree phase shift). Equivalence was
+brute-forced over all 256 active values with a Python transcription of the
+native instruction sequence against the projection call (0 mismatches) and is
+pinned by the `test_arm_28_arm0_fold_table_pins` fixture (0/22.5/45/67.5/90/
+-22.5/180 degrees -> (144,0)/(133,55)/(102,102)/(55,133)/(0,144)/(133,-55)/
+(-144,0)).
+
+### G.5 The `0x7D8B0`/`0x7D8C0` animation-id tables
+
+`read_memory 0x7D8B0` (32 B) = dwords `{0x15, 0x19, 0x03, 0x02}` then
+`{0x00, 0x58, 0x5B, 0x6B}`. The first arm-2 block loads
+`EDX = [ESP + EAX*4 + 0xE]; SAR EDX,0x10` with `EAX = RNG & 3`: the frame
+copies land at `[ESP]` (`0x7D8C0`) and `[ESP+0x10]` (`0x7D8B0`), so the
+`+0xE` dword displacement + `SAR 16` selects the low word of
+`0x7D8B0[RNG & 3]` = `{0x15, 0x19, 0x03, 0x02}`. The hard-approach block loads
+`EDX = [ESP + EAX*4 - 0x2]; SAR EDX,0x10`, i.e. the low word of
+`0x7D8C0[RNG & 3]` = `{0x00, 0x58, 0x5B, 0x6B}`. All ids are passed through
+`fifa96_arm_anim_select` (Appendix D.5).
+
+### G.6 Port mapping and derived surfaces
+
+* `fifa96_err_t fifa96_arm_28_step(struct fifa96_arm_record *rec, uint8_t arm)`
+  in `src/fifa96_loader/fifa96_arm_bodies.c`; `arm` is the entry stage92 jump
+  selector (`0..3`; > 3 and arm 3 take the epilogue).
+* `struct fifa96_arm_record` gains the row-28 scratch (`scratch_a0/a1/a2/a6/
+  aa/ae`), the five process-global stand-ins (`global_10f358/35c/364/368/
+  157ac2`), the resolved `chosen_pos`/`chosen_ok` and `lane` reuse (already
+  present). No field is repurposed.
+* Engine: `struct fifa96_match_run_record` gains `target_y`, `vel_x/vel_z`,
+  `type`, `side`, `flag830`, `chosen_ok/chosen_x/chosen_z`, the six scratch
+  cells and the five globals; `struct fifa96_match_entity` gains the six
+  scratch cells (the native record `+0xA0..+0xAE` persist across frames);
+  `struct fifa96_match_run` gains `struct fifa96_rng rng` and the five globals.
+  `match_run_dispatch_entity` stages/repacks them and resolves the pool's
+  `chosen831` into `chosen_x/chosen_z/chosen_ok`; `fifa96_match_run_begin`
+  seeds the RNG with the derived 0 (OL-56).
+* `fifa96_match_action_table[0x28].fn = fifa96_match_action_28`; evidence
+  names FU-142d; dispatch expectation flips to `FIFA96_OK`; FU-137 §6.1 class
+  `ported` (OL-56..OL-58 carry the remainder).
+* Validation/hardening: NULL `rec` -> `-FIFA96_ERR_INVALID`; a draw on a NULL
+  `rng` -> `-FIFA96_ERR_INVALID` at that site (the native has no NULL
+  concept); no-draw paths (arm 3/>3, gates below their thresholds) tolerate a
+  NULL `rng`.
+* Tested: `tests/test_arm_bodies.c` (`test_arm_28_*`, 18 cases),
+  `tests/test_engine_match_handlers.c::test_action_28_runs_body` and
+  `tests/test_engine_match_frame.c::test_action_28_repack_round_trips_fields`
+  (pool staging/repack round-trip: scratch persistence, `type`, the resolved
+  chosen triple and the arm latches).
+
+### G.7 Open legs (numbered)
+
+* OL-56 — the five process-global inputs and the match RNG seed (§6).
+* OL-57 — the `[0x157AA3]` store, the `[rec+0x28]` row-byte stand-in and the
+  `0x36200` value 2 (shared OL-51) (§6).
+* OL-58 — the chosen-record pointer/ID resolution and the missing-chosen
+  bounded model (§6).
+* OL-52 (selector record surface) carries the arm's `0x6E598` calls' unmodeled
+  native writes; OL-49/OL-54 also apply where the 0x2A scan/reset feed the
+  row's inputs.
+
+Write set of this appendix (Task 7):
+`include/fifa96_loader/fifa96_arm_helpers.h`,
+`include/fifa96_loader/fifa96_arm_bodies.h`,
+`src/fifa96_loader/fifa96_arm_bodies.c`,
+`include/fifa96_engine/fifa96_match_entities.h`,
+`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`,
+`src/fifa96_engine/fifa96_match_handlers.c`, `tests/test_arm_bodies.c`,
+`tests/test_engine_match_handlers.c`, `tests/test_engine_match_frame.c`,
+`CMakeLists.txt` (arm-bodies link dep),
+the §6 OL-47/OL-56..OL-58 updates, the §7 refinements, the FU-137 errata and
+this appendix.
 
 ## 8. No-write statement
 

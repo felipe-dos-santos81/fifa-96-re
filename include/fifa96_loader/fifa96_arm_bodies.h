@@ -1,5 +1,5 @@
-/* include/fifa96_loader/fifa96_arm_bodies.h — M2 arms-and-wiring Task 3 /
- * FU-142b: the cluster-G row bodies. Task 3 lands row 0x26 and the shared
+/* include/fifa96_loader/fifa96_arm_bodies.h — M2 arms-and-wiring Tasks 3-7 /
+ * FU-142b/c/d: the cluster-G row bodies. Task 3 lands row 0x26 and the shared
  * `0x36200` stub; later tasks (4-8) add the remaining rows. */
 #pragma once
 #include "fifa96_loader/fifa96_arm_helpers.h"
@@ -40,6 +40,19 @@ fifa96_err_t fifa96_arm_27_step(struct fifa96_arm_record *rec);
  * `fifa96_arm_reset` (stage92 = 0xFF, timer89 = 0, code = 0). NULL `rec` ->
  * -FIFA96_ERR_INVALID. */
 fifa96_err_t fifa96_arm_2c_step(struct fifa96_arm_record *rec);
+
+/* Row 0x28 body `0x870E8..0x874E3` (294 instructions; action-table row 0x28 =
+ * 0x870E8 at `0x110780`; the FU-142a arm `0x8D7CF` installs code 0x28, so the
+ * entry is resolved): the 4-arm stage machine per FU-142 Appendix G. `arm` is
+ * the native stage92 jump selector (`0..3`; > 3 takes the epilogue); the
+ * prologue runs the `0x8DCD4` out triple + `0x79C50` face, arm 0 builds the
+ * set-piece target and the 0x114E04 angle fold (via
+ * `fifa96_projection_sincos`), arm 1 runs the `+0xA2` gate / flag830 branch
+ * with the `0x87014` six-draw setup, arm 2 runs the `+0xAA`/`+0xAE` approach
+ * with the `0x7D8B0`/`0x7D8C0` animation-id tables and the chosen-record
+ * (`[team+0x831]`) target copy. NULL `rec` -> -FIFA96_ERR_INVALID; a draw on a
+ * NULL `rng` -> -FIFA96_ERR_INVALID at that site (hardening). */
+fifa96_err_t fifa96_arm_28_step(struct fifa96_arm_record *rec, uint8_t arm);
 
 /* Row 0x29 body `0x874E4..0x87738` (187 instructions; action-table row 0x29 =
  * 0x874E4 with no static entry, FU-142 OL-48): the phase-5 stage machine per

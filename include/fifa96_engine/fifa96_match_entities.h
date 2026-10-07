@@ -77,6 +77,15 @@ struct fifa96_match_entity {
   int16_t lane_x, lane_z;               /* +0x6B / +0x6D lane words */
   int32_t lane;                         /* +0x69, lane = >>16 */
   int8_t dir_x, dir_z;                  /* bound slot direction +0x20/+0x21 */
+  /* Row-28 derived scratch cells (native record +0xA0..+0xAE; FU-142d
+   * Appendix G). The native body keeps its stage gates there, so the pool
+   * carries them across frames. */
+  int32_t scratch_a2;      /* +0xA2 */
+  int32_t scratch_a6;      /* +0xA6 */
+  int32_t scratch_aa;      /* +0xAA */
+  int32_t scratch_ae;      /* +0xAE */
+  uint8_t scratch_a0;      /* +0xA0 */
+  uint8_t scratch_a1;      /* +0xA1 */
   uint8_t install;       /* derived installer request of the last dispatch */
   uint8_t helper_request;/* derived slot-merge request (keeper claim) */
   uint8_t controlled;    /* derived actor request ([0x157A83] = rec) */

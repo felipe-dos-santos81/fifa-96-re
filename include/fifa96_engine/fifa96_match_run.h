@@ -13,6 +13,7 @@
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
 #include "fifa96_loader/fifa96_render.h"
+#include "fifa96_loader/fifa96_rng.h"
 #include "fifa96_loader/fifa96_window.h"
 
 /* Engine-level match driver (M2 foundation): owns the FU-64 lifecycle and the
@@ -122,6 +123,7 @@ struct fifa96_match_run_record {
   int32_t pos_y;       /* native +0x5D, FU-140 row 1E placement height */
   int32_t pos_z;
   int32_t target_x;
+  int32_t target_y;     /* native +0x51 (row-28 target = pos copies) */
   int32_t target_z;
   int32_t place_x;     /* FU-140 row 1E: native 0x15774C */
   int32_t place_y;     /* native 0x157750 */
@@ -147,6 +149,30 @@ struct fifa96_match_run_record {
   uint8_t place_valid;      /* row 1E: the placement triple is live (FU-141) */
   uint8_t ran;         /* native +0x9E, set by the action-00 body */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
+  /* FU-142d (row 28, Appendix G) staging: the native record +0x8E facing byte
+   * and +0x71/+0x73 velocity pair the body writes, the derived scratch gates
+   * (native +0xA0..+0xAE, carried by the pool), the team +0x830 flag, the
+   * resolved [team+0x831] chosen-record position and the five process globals
+   * the body reads (their native producers are unported, OL-56). */
+  int32_t vel_x, vel_z;     /* native +0x71/+0x73 (arm-2 zero writes) */
+  uint8_t type;             /* native +0x8E>>24 facing octant (prologue face) */
+  uint8_t side;             /* team +0x826 side (arm-0 negation gate) */
+  uint8_t flag830;          /* team +0x830 (arm-1 gate) */
+  uint8_t chosen_ok;        /* derived: team+0x831 resolved to a pool record */
+  int32_t chosen_x;         /* resolved [team+0x831]+0x59 x */
+  int32_t chosen_y;         /* resolved [team+0x831]+0x5D y */
+  int32_t chosen_z;         /* resolved [team+0x831]+0x61 z */
+  int32_t scratch_a2;       /* native +0xA2 derived gate A */
+  int32_t scratch_a6;       /* native +0xA6 derived gate B */
+  int32_t scratch_aa;       /* native +0xAA approach timer A */
+  int32_t scratch_ae;       /* native +0xAE approach timer B */
+  uint8_t scratch_a0;       /* native +0xA0 RNG bit */
+  uint8_t scratch_a1;       /* native +0xA1 RNG bit */
+  int32_t global_10f358;    /* native [0x10F358] arm-2 re-roll gate */
+  int32_t global_10f35c;    /* native [0x10F35C] arm-2 chase flag */
+  int32_t global_10f364;    /* native [0x10F364] arm-0 set-piece x */
+  int32_t global_10f368;    /* native [0x10F368] arm-0 set-piece z */
+  uint8_t global_157ac2;    /* native [0x157AC2] arm-0 mode byte */
 };
 
 struct fifa96_match_run {
@@ -165,6 +191,17 @@ struct fifa96_match_run {
   struct fifa96_match_run_record record;         /* FU-141 dispatch staging record */
   struct fifa96_match_entities entities;         /* FU-141 entity/ball pool */
   struct fifa96_match_phase_machine phase_machine; /* FU-142a installer-arms machine */
+  /* FU-142d: the match RNG (seeded by begin, zerod by init; the native seeds at
+   * match init FUN_000493A0/0x493F2 with settings[0x18] via FUN_0001D940, whose
+   * value/producer is unported — the derived seed is 0, OL-56) and the five
+   * row-28 process globals, staged to zero until their native producers (the
+   * FUN_0008D098 entry block/row 2A/installer clear) are modelled (OL-56). */
+  struct fifa96_rng rng;
+  int32_t global_10f358;
+  int32_t global_10f35c;
+  int32_t global_10f364;
+  int32_t global_10f368;
+  uint8_t global_157ac2;
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };

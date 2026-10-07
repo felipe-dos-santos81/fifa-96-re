@@ -88,6 +88,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->pos_y = e->pos_y;
   r->pos_z = e->pos_z;
   r->target_x = e->target_x;
+  r->target_y = e->target_y;
   r->target_z = e->target_z;
   r->timer89 = e->timer89;
   r->timer81 = e->timer81;
@@ -99,6 +100,42 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->stage92 = e->stage92;
   r->timer7b = e->timer7b;
   r->lane = e->lane;
+  r->type = e->type;
+  r->vel_x = e->vel_x;
+  r->vel_z = e->vel_z;
+  /* FU-142d: the row-28 pool fields. The team-side/flag830 and the resolved
+   * [team+0x831] chosen-record position are this call's inputs; the five
+   * process globals come from the run (producers unported, OL-56). */
+  r->side = mr->entities.team[e->team].side;
+  r->flag830 = mr->entities.team[e->team].flag830;
+  r->scratch_a2 = e->scratch_a2;
+  r->scratch_a6 = e->scratch_a6;
+  r->scratch_aa = e->scratch_aa;
+  r->scratch_ae = e->scratch_ae;
+  r->scratch_a0 = e->scratch_a0;
+  r->scratch_a1 = e->scratch_a1;
+  r->global_10f358 = mr->global_10f358;
+  r->global_10f35c = mr->global_10f35c;
+  r->global_10f364 = mr->global_10f364;
+  r->global_10f368 = mr->global_10f368;
+  r->global_157ac2 = mr->global_157ac2;
+  {
+    const struct fifa96_match_team *team = &mr->entities.team[e->team];
+    r->chosen_ok = 0;
+    r->chosen_x = 0;
+    r->chosen_y = 0;
+    r->chosen_z = 0;
+    if (team->chosen831 >= 0 &&
+        (uint32_t)team->chosen831 <
+            FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) {
+      uint32_t ct = (uint32_t)team->chosen831 / FIFA96_MATCH_ENTITY_RECORDS;
+      uint32_t ci = (uint32_t)team->chosen831 % FIFA96_MATCH_ENTITY_RECORDS;
+      r->chosen_x = mr->entities.team[ct].records[ci].pos_x;
+      r->chosen_y = mr->entities.team[ct].records[ci].pos_y;
+      r->chosen_z = mr->entities.team[ct].records[ci].pos_z;
+      r->chosen_ok = 1;
+    }
+  }
   r->player_d = 0;   /* native rec[+4][+0xD]; the roster descriptor is
                       * unmodeled by the pool (FU-142b Appendix C) */
   r->player_e = 0;   /* native rec[+4][+0xE] (same) */
@@ -121,11 +158,21 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->pos_y = r->pos_y;
   e->pos_z = r->pos_z;
   e->target_x = r->target_x;
+  e->target_y = r->target_y;
   e->target_z = r->target_z;
   e->timer89 = r->timer89;
   e->stage92 = r->stage92;
   e->timer7b = r->timer7b;
   e->lane = r->lane;
+  e->type = r->type;
+  e->vel_x = r->vel_x;
+  e->vel_z = r->vel_z;
+  e->scratch_a2 = r->scratch_a2;
+  e->scratch_a6 = r->scratch_a6;
+  e->scratch_aa = r->scratch_aa;
+  e->scratch_ae = r->scratch_ae;
+  e->scratch_a0 = r->scratch_a0;
+  e->scratch_a1 = r->scratch_a1;
   e->ran = r->ran;
   e->install = r->install;
   e->helper_request = r->helper_request;
@@ -293,6 +340,12 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   memset(&mr->record, 0, sizeof mr->record);
   (void)fifa96_match_entities_init(&mr->entities);
   (void)fifa96_match_phase_machine_init(&mr->phase_machine);
+  memset(&mr->rng, 0, sizeof mr->rng);
+  mr->global_10f358 = 0;
+  mr->global_10f35c = 0;
+  mr->global_10f364 = 0;
+  mr->global_10f368 = 0;
+  mr->global_157ac2 = 0;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -316,6 +369,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
+  /* FU-142d: a fresh match seeds the RNG (the native FUN_000493A0 match-init
+   * seed call 0x493F2) with the derived seed 0 and clears the row-28 process
+   * globals (OL-56). */
+  (void)fifa96_rng_seed(&mr->rng, 0);
+  mr->global_10f358 = 0;
+  mr->global_10f35c = 0;
+  mr->global_10f364 = 0;
+  mr->global_10f368 = 0;
+  mr->global_157ac2 = 0;
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */

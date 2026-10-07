@@ -1,14 +1,17 @@
-/* tests/test_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5/6 / FU-142b/c: the
- * cluster-G row bodies (`0x866F4` row 26, `0x86820` row 27, `0x84598` row 2C,
- * `0x874E4` row 29) and the shared 0x36200 stub.
+/* tests/test_arm_bodies.c — M2 arms-and-wiring Tasks 3/4/5/6/7 / FU-142b/c/d:
+ * the cluster-G row bodies (`0x866F4` row 26, `0x86820` row 27, `0x84598` row
+ * 2C, `0x874E4` row 29, `0x870E8` row 28) and the shared 0x36200 stub.
  *
  * Evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix C (Ghidra
  * read-only /FIFA96.EXE: disassemble_bytes 0x866F4, 304 B; read_memory 0x110778
  * proving action-table row 0x26 = 0x866F4; read_memory 0x10F394 for the
  * 0x157A38 table; disassemble_bytes 0x36200), Appendix D (row 27), Appendix E
- * (row 2C) and Appendix F (row 29: disassemble_bytes 0x874E4, 596 B;
+ * (row 2C), Appendix F (row 29: disassemble_bytes 0x874E4, 596 B;
  * read_memory 0x110784 proving action-table row 0x29 = 0x874E4; the 0x8DE8C /
- * 0x6E1D0 helper windows). */
+ * 0x6E1D0 helper windows) and Appendix G (row 28: disassemble_bytes 0x870E8,
+ * 1024 B; read_memory 0x110780 proving action-table row 0x28 = 0x870E8;
+ * read_memory 0x870D8 = the 4-arm table; disassemble_bytes 0x87014; the
+ * 0x7D8B0/C0 id tables and the 257-dword 0x114E04 table). */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -1017,6 +1020,423 @@ static void test_arm_29_invalid(void) {
   assert(rec.timer7b == 0);
 }
 
+/* --- Row 0x28 body `0x870E8..0x874E3` (294 instructions, Appendix G) ------
+ * The 4-arm jump table `0x870D8` = {0x87147, 0x87276, 0x87364, 0x874DA}; the
+ * prologue runs the `0x8DCD4` out triple + `0x79C50` face before the stage92
+ * switch. Arm 0 builds target = ([0x10F364], [0x10F368]) (+ side-0 negate when
+ * [0x157AC2] < 4) and adds the `0x114E04` folds of (int8)active * 22.5 degrees:
+ * x += 144*cos, z += 144*sin (first-hand fold pins below were generated from a
+ * literal transcription of the native byte-shift idiom over the first-hand
+ * 257-dword table; they agree with `fifa96_projection_sincos` for all 256
+ * active values). Arm 1 waits on `+0xA2`, then either target = pos (flag830
+ * clear, id 1) or the `0x87014` setup and the `+0xAA`/`+0xAE`/`+0xA0`/`+0xA1`
+ * draws with the latch advancing to 2. Arm 2 runs the `+0xAA` gate, the
+ * `0x7D8B0` id table, the `[0x10F35C]`/chosen-record branch (target = chosen
+ * position + `+0xA2`/`+0xA6`, zero velocity, the `0x7D8C0` id table) and the
+ * `0xCC0`/`+0xA6` chase target with id 0x15. RNG expectations below are pinned
+ * for `fifa96_rng_seed(seed)` (the derived transcription of
+ * `FUN_00092AA0`/`FUN_00092AC8`); each comment names the seed. */
+
+/* arm 3 (and > 3) is the shared epilogue: the prologue still runs (face writes
+ * the dx=+0x200 octant), and no stage/scratch/timer state changes. */
+static void test_arm_28_arm3_epilogue_only(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 3;
+  rec.timer89 = 7;
+  rec.delta = 3;
+  rec.pos.x = 0;
+  rec.target.x = 0x200;          /* dx = +0x200, dz = 0 */
+  rec.target.z = 0;
+  rec.type = 0x55;
+  assert(fifa96_arm_28_step(&rec, 3) == FIFA96_OK);
+  assert(rec.type == 2);         /* +x octant (0x100 - atan[0]) */
+  assert(rec.timer89 == 7);
+  assert(rec.stage92 == 3);
+  assert(rec.target.x == 0x200 && rec.target.z == 0);
+  assert(rec.scratch_a2 == 0 && rec.scratch_aa == 0);
+  /* > 3 takes the same epilogue; the prologue tolerates a NULL rng. */
+  assert(fifa96_arm_28_step(&rec, 4) == FIFA96_OK);
+  assert(rec.timer89 == 7);
+  assert(fifa96_arm_28_step(&rec, 0xFF) == FIFA96_OK);
+  assert(rec.stage92 == 3);
+}
+
+/* arm 0 with the distance gate open (prologue distance 0x200 > 0x60): the
+ * set-piece target + folds are written, the constant id 0x15 is selected and
+ * the call returns before any RNG draw (NULL rng is fine). */
+static void test_arm_28_arm0_setpiece_target_and_fold(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.pos.x = 0x200;             /* prologue distance 0x200 > 0x60 */
+  rec.pos.z = 0x10;
+  rec.target.x = 0;
+  rec.target.z = 0;
+  rec.active = 1;                /* 22.5 degrees: x +133, z +55 */
+  rec.global_10f364 = 0x100;
+  rec.global_10f368 = 0x200;
+  rec.global_157ac2 = 4;         /* >= 4: no side-0 negation */
+  rec.timer89 = 5;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.x == 0x100 + 133);
+  assert(rec.target.z == 0x200 + 55);
+  assert(rec.anim_sel == 0x15);  /* constant-id select (0x87225) */
+  assert(rec.timer89 == 5);      /* returned at the distance gate */
+  assert(rec.stage92 == 0);
+  assert(rec.lane == -0x10);     /* 0x8DCD4 out[2] = target.z - pos.z */
+}
+
+/* `[0x157AC2] < 4` with a side-0 team negates the z target before the folds
+ * (0x87175..0x87181); side 1 and mode >= 4 keep the sign. */
+static void test_arm_28_arm0_mode_negates_side0_z(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.pos.x = 0x200;
+  rec.target.x = 0;
+  rec.target.z = 0;
+  rec.active = 0;                /* folds: x +144, z 0 */
+  rec.global_10f364 = 0x100;
+  rec.global_10f368 = 0x200;
+  rec.global_157ac2 = 3;         /* < 4 */
+  rec.side = 0;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.x == 0x100 + 144);
+  assert(rec.target.z == -0x200);
+  rec.target.z = 0;
+  rec.side = 1;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.z == 0x200);
+  rec.target.z = 0;
+  rec.side = 0;
+  rec.global_157ac2 = 4;         /* >= 4: no negation even for side 0 */
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.z == 0x200);
+}
+
+/* The 0x114E04 fold pins (x = 144*cos, z = 144*sin of active * 22.5 degrees),
+ * read through the set-piece base (0, 0). */
+static void test_arm_28_arm0_fold_table_pins(void) {
+  static const struct { uint8_t active; int32_t x, z; } cases[] = {
+    { 0x00, 144, 0 },      /* 0 deg */
+    { 0x01, 133, 55 },     /* 22.5 deg */
+    { 0x02, 102, 102 },    /* 45 deg */
+    { 0x03, 55, 133 },     /* 67.5 deg */
+    { 0x04, 0, 144 },      /* 90 deg */
+    { 0xFF, 133, -55 },    /* -22.5 deg */
+    { 0x08, -144, 0 },     /* 180 deg */
+  };
+  for (unsigned i = 0; i < sizeof cases / sizeof cases[0]; i++) {
+    struct fifa96_arm_record rec = arm_rec();
+    rec.stage92 = 0;
+    rec.pos.x = 0x200;
+    rec.target.x = 0;
+    rec.target.z = 0;
+    rec.active = cases[i].active;
+    rec.global_157ac2 = 4;
+    assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+    assert(rec.target.x == cases[i].x);
+    assert(rec.target.z == cases[i].z);
+  }
+}
+
+/* Arm 0 inside the distance gate falls through into arm 1: one draw seeds
+ * +0xA2 = (RNG & 0x7F) + 0x20 and the latch advances to 1; arm 1 then adds the
+ * delta and waits below the gate. seed 0: draw 512 -> 0x20. */
+static void test_arm_28_arm0_falls_into_arm1(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 0);
+  rec.rng = &rng;
+  rec.stage92 = 0;
+  rec.pos.x = 0;                 /* distance 0, gate open */
+  rec.target.x = 0;
+  rec.target.z = 0;
+  rec.active = 0;
+  rec.global_157ac2 = 4;
+  rec.timer89 = 5;
+  rec.delta = 0;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.x == 144);   /* arm 0 fold */
+  assert(rec.stage92 == 1);      /* arm 0 latch, arm 1 wait */
+  assert(rec.timer89 == 0);
+  assert(rec.scratch_a2 == 0x20);
+  assert(rec.anim_sel == 0x15);
+}
+
+/* Arm 1 with flag830 clear and the delta pushing past +0xA2: one re-arm draw,
+ * target = pos and the constant id 1, latch stays 1 (0x8733A). seed 0:
+ * d1 512 -> +0xA2 0x20 (arm 0), d2 1829 -> +0xA2 0x45. */
+static void test_arm_28_arm1_flag830_clear_syncs_pos(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 0);
+  rec.rng = &rng;
+  rec.stage92 = 0;
+  rec.pos.x = 0x11;
+  rec.pos.z = 0x22;
+  rec.target.x = 0;
+  rec.target.z = 0;
+  rec.active = 0;
+  rec.global_157ac2 = 4;
+  rec.delta = 0xFFFF;            /* timer89 0 + delta >> gate */
+  rec.flag830 = 0;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.scratch_a2 == 0x45);
+  assert(rec.timer89 == 0);
+  assert(rec.stage92 == 1);
+  assert(rec.target.x == 0x11 && rec.target.z == 0x22);
+  assert(rec.anim_sel == 1);
+  assert(rec.scratch_a6 == 0 && rec.scratch_aa == 0 && rec.scratch_ae == 0);
+}
+
+/* Arm 1 with flag830 set runs the 0x87014 setup (six draws) plus the arm's
+ * four draws and latches to 2; seed 1 pins every scratch cell, the flag830=1
+ * path stops after +0xA0 = 1 (the +0xA1 draw is conditional). Expected:
+ * +0xA2 -72, +0xA6 -187, +0xAA 354, +0xAE 35, +0xA0 1, +0xA1 0. */
+static void test_arm_28_arm1_flag830_set_scratch_machine(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 1);
+  rec.rng = &rng;
+  rec.stage92 = 1;
+  rec.timer89 = 0;
+  rec.delta = 0xFFFF;
+  rec.scratch_a2 = 1;            /* gate fires immediately */
+  rec.flag830 = 1;
+  rec.target.x = 0xAA; rec.target.z = 0xBB;
+  assert(fifa96_arm_28_step(&rec, 1) == FIFA96_OK);
+  assert(rec.scratch_a2 == -0x48);
+  assert(rec.scratch_a6 == -187);
+  assert(rec.scratch_aa == 354);
+  assert(rec.scratch_ae == 35);
+  assert(rec.scratch_a0 == 1);
+  assert(rec.scratch_a1 == 0);
+  assert(rec.timer89 == 0);
+  assert(rec.stage92 == 2);
+  assert(rec.target.x == 0xAA && rec.target.z == 0xBB);
+}
+
+/* The +0xA1 draw happens only when +0xA0 == 0 (0x8730C..0x87317): seed 4 has
+ * d10 even / d11 odd, so +0xA1 = 1 and +0xA6 stays positive (d5 even).
+ * Expected: +0xA2 -72, +0xA6 187, +0xAA 356, +0xAE 38, +0xA0 0, +0xA1 1. */
+static void test_arm_28_arm1_flag830_set_a1_draw(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 4);
+  rec.rng = &rng;
+  rec.stage92 = 1;
+  rec.timer89 = 0;
+  rec.delta = 0xFFFF;
+  rec.scratch_a2 = 1;
+  rec.flag830 = 1;
+  assert(fifa96_arm_28_step(&rec, 1) == FIFA96_OK);
+  assert(rec.scratch_a2 == -0x48);
+  assert(rec.scratch_a6 == 187);
+  assert(rec.scratch_aa == 356);
+  assert(rec.scratch_ae == 38);
+  assert(rec.scratch_a0 == 0);
+  assert(rec.scratch_a1 == 1);
+  assert(rec.stage92 == 2);
+}
+
+/* Arm 2 above the +0xAA gate with [0x10F358] == 0: timer89 = 0, the gate
+ * re-roll, the 0x87014 setup and the 0x7D8B0 id table. seed 0: +0xAA 210,
+ * +0xA2 -72, +0xA6 -187, +0xAE 309, id draw & 3 = 1 -> 0x19. The [0x10F35C]
+ * chase flag then blocks the second block (timer89 0 not > +0xAE). */
+static void test_arm_28_arm2_aa_gate_vb_table(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 0);
+  rec.rng = &rng;
+  rec.stage92 = 2;
+  rec.timer89 = 0;
+  rec.delta = 0xFFFF;            /* timer89 > +0xAA (1) */
+  rec.scratch_aa = 1;
+  rec.global_10f358 = 0;
+  rec.global_10f35c = 1;
+  rec.scratch_ae = 0x7FFF;       /* second block waits */
+  rec.target.x = 0xAA; rec.target.z = 0xBB;
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.scratch_aa == 210);
+  assert(rec.scratch_a2 == -0x48);
+  assert(rec.scratch_a6 == -187);
+  assert(rec.scratch_ae == 309);
+  assert(rec.anim_sel == 0x19);  /* vb draw & 3 = 1 */
+  assert(rec.timer89 == 0);
+  assert(rec.stage92 == 2);
+  assert(rec.target.x == 0xAA && rec.target.z == 0xBB);
+  /* with [0x10F358] != 0 the re-roll block is skipped (0x87384 JNZ) and the
+   * [0x10F35C] chase gate compares the raw timer (signed) against +0xAE */
+  rec = arm_rec();
+  fifa96_rng_seed(&rng, 0);
+  rec.rng = &rng;
+  rec.stage92 = 2;
+  rec.timer89 = 0;
+  rec.delta = 0x1000;            /* timer89 = 0x1000 */
+  rec.scratch_aa = 1;
+  rec.global_10f358 = 1;
+  rec.global_10f35c = 1;
+  rec.scratch_ae = 0x2000;       /* 0x1000 not > 0x2000 -> waits */
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.timer89 == 0x1000);
+  assert(rec.scratch_aa == 1);
+  assert(rec.stage92 == 2);
+}
+
+/* Arm 2 with [0x10F35C] != 0 above the +0xAE gate: target = (0xCC0, +0xA6),
+ * the constant id 0x15, timer89 = 0 and the latch advances to 3 (0x873EA). */
+static void test_arm_28_arm2_chase_cc0_anim15(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 5;
+  rec.delta = 0;
+  rec.scratch_aa = 0x7FFF;       /* first block skipped */
+  rec.global_10f35c = 1;
+  rec.scratch_ae = 0;
+  rec.scratch_a6 = -0x22;
+  rec.target.x = 7; rec.target.z = 9;
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.target.x == 0xCC0);
+  assert(rec.target.z == -0x22);
+  assert(rec.anim_sel == 0x15);
+  assert(rec.timer89 == 0);
+  assert(rec.stage92 == 3);
+}
+
+/* Arm 2 with [0x10F35C] == 0: target = the chosen record position + the two
+ * gate offsets (0x87433..0x87462). With the prologue distance < 0x20 and
+ * [0x10F358] == 0 the call returns there. */
+static void test_arm_28_arm2_chosen_target_offsets(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 5;
+  rec.delta = 0;
+  rec.scratch_aa = 0x7FFF;
+  rec.global_10f35c = 0;
+  rec.global_10f358 = 0;
+  rec.chosen_ok = 1;
+  rec.chosen_pos.x = 0x100;
+  rec.chosen_pos.y = 0x33;
+  rec.chosen_pos.z = 0x200;
+  rec.scratch_a2 = 5;
+  rec.scratch_a6 = -7;
+  rec.target.x = 0; rec.target.z = 0;   /* prologue distance 0 */
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.target.x == 0x105);
+  assert(rec.target.y == 0x33);         /* the copy takes the x/y/z triple */
+  assert(rec.target.z == 0x1F9);
+  assert(rec.timer89 == 5);
+  assert(rec.stage92 == 2);
+}
+
+/* A missing chosen record (OL-58 bounded model) leaves the target triple and
+ * still applies the two gate offsets; no crash, no invented position. */
+static void test_arm_28_arm2_chosen_missing_bounded(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.delta = 0;
+  rec.scratch_aa = 0x7FFF;
+  rec.global_10f35c = 0;
+  rec.global_10f358 = 0;
+  rec.chosen_ok = 0;
+  rec.chosen_pos.y = 0x77;
+  rec.scratch_a2 = 5;
+  rec.scratch_a6 = -7;
+  rec.target.x = 0x10; rec.target.y = 0x44; rec.target.z = 0x20;
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.target.x == 0x15);
+  assert(rec.target.y == 0x44);         /* no chosen triple -> y untouched */
+  assert(rec.target.z == 0x19);
+}
+
+/* Arm 2 hard approach ([0x10F358] != 0, distance < 0x20): target = pos, the
+ * velocity words zero, and below the +0xAE gate it returns (0x8749A JGE). */
+static void test_arm_28_arm2_hard_approach_syncs(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.timer89 = 5;
+  rec.delta = 0;
+  rec.scratch_aa = 0x7FFF;
+  rec.global_10f35c = 0;
+  rec.global_10f358 = 1;
+  rec.chosen_ok = 1;
+  rec.chosen_pos.x = 0;
+  rec.chosen_pos.z = 0;
+  rec.scratch_a6 = -7;
+  rec.scratch_ae = 0x7FFF;       /* timer89 5 not > +0xAE */
+  rec.pos.x = 0x31; rec.pos.z = 0x42;
+  rec.target.x = 0x31; rec.target.z = 0x42;  /* prologue distance 0 */
+  rec.vel_x = 9; rec.vel_z = 9;
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.target.x == 0x31 && rec.target.z == 0x42);
+  assert(rec.vel_x == 0 && rec.vel_z == 0);
+  assert(rec.timer89 == 5);
+  assert(rec.stage92 == 2);
+}
+
+/* Arm 2 hard approach above the +0xAE gate: the +0xAE re-roll and the 0x7D8C0
+ * id table (0x874A6..0x874D5). seed 0: d1 512 -> +0xAE 0x20, d2 1829 & 3 = 1
+ * -> 0x58. */
+static void test_arm_28_arm2_hard_approach_reroll_vc(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 0);
+  rec.rng = &rng;
+  rec.stage92 = 2;
+  rec.timer89 = 5;
+  rec.delta = 0;
+  rec.scratch_aa = 0x7FFF;
+  rec.global_10f35c = 0;
+  rec.global_10f358 = 1;
+  rec.chosen_ok = 1;
+  rec.chosen_pos.x = 0;
+  rec.chosen_pos.z = 0;
+  rec.scratch_ae = 0;            /* timer89 5 > +0xAE */
+  rec.vel_x = 9; rec.vel_z = 9;
+  assert(fifa96_arm_28_step(&rec, 2) == FIFA96_OK);
+  assert(rec.scratch_ae == 0x20);
+  assert(rec.anim_sel == 0x58);
+  assert(rec.timer89 == 0);
+  assert(rec.vel_x == 0 && rec.vel_z == 0);
+  assert(rec.stage92 == 2);
+}
+
+/* The arm-0 row-byte gate (0x87213..0x87237): anim_sel already 0x15 skips the
+ * constant-id select. */
+static void test_arm_28_arm0_row_byte_gate(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.pos.x = 0x200;
+  rec.active = 0;
+  rec.global_157ac2 = 4;
+  rec.anim_sel = 0x15;
+  assert(fifa96_arm_28_step(&rec, 0) == FIFA96_OK);
+  assert(rec.anim_sel == 0x15);
+}
+
+/* NULL rec and a draw on a NULL rng are invalid; a no-draw path tolerates a
+ * NULL rng. */
+static void test_arm_28_invalid(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  assert(fifa96_arm_28_step(NULL, 0) == ARM_INVALID);
+  /* arm 0 inside the distance gate draws -> NULL rng aborts */
+  rec.stage92 = 0;
+  rec.pos.x = 0;
+  rec.target.x = 0;
+  rec.target.z = 0;
+  rec.global_157ac2 = 4;
+  rec.rng = NULL;
+  assert(fifa96_arm_28_step(&rec, 0) == ARM_INVALID);
+  /* arm 1 below the +0xA2 gate draws nothing -> NULL rng is fine */
+  rec = arm_rec();
+  rec.stage92 = 1;
+  rec.timer89 = 0;
+  rec.delta = 0;
+  rec.scratch_a2 = 10;
+  rec.rng = NULL;
+  assert(fifa96_arm_28_step(&rec, 1) == FIFA96_OK);
+  assert(rec.timer89 == 0);
+}
+
 int main(void) {
   test_arm_stub_36200();
   test_arm_26_stage_past();
@@ -1066,6 +1486,22 @@ int main(void) {
   test_arm_29_nearest_respects_exclusions();
   test_arm_29_install_cleared_per_call();
   test_arm_29_invalid();
+  test_arm_28_arm3_epilogue_only();
+  test_arm_28_arm0_setpiece_target_and_fold();
+  test_arm_28_arm0_mode_negates_side0_z();
+  test_arm_28_arm0_fold_table_pins();
+  test_arm_28_arm0_falls_into_arm1();
+  test_arm_28_arm1_flag830_clear_syncs_pos();
+  test_arm_28_arm1_flag830_set_scratch_machine();
+  test_arm_28_arm1_flag830_set_a1_draw();
+  test_arm_28_arm2_aa_gate_vb_table();
+  test_arm_28_arm2_chase_cc0_anim15();
+  test_arm_28_arm2_chosen_target_offsets();
+  test_arm_28_arm2_chosen_missing_bounded();
+  test_arm_28_arm2_hard_approach_syncs();
+  test_arm_28_arm2_hard_approach_reroll_vc();
+  test_arm_28_arm0_row_byte_gate();
+  test_arm_28_invalid();
   puts("test_arm_bodies OK");
   return 0;
 }

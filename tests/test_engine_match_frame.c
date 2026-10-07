@@ -328,6 +328,84 @@ static void test_action_26_repack_round_trips_fields(void) {
   assert(latch->target_x == 0xCC0 && latch->target_z == 0);
 }
 
+/* FU-142d: the row-28 body round-trips through the FU-141 pool record staging
+ * and repack, and the pool resolves `team+0x831` into the chosen-record
+ * position. Two pool team-0 records carry code 0x28 at phase 2 (no installer
+ * arm, no period end); the run RNG is seeded 0 (draws 512, 1829, 4927, 11195,
+ * 22605, 41818, 6755, 52849, 54403, 17912, 16644, ...).
+ *  - record 1 (stage92 = 0): frame 1 runs arm 0 (target = [0x10F364/368] folds
+ *    -> (144, 0)), draws 512 -> `scratch_a2 = 0x20` and latches to stage 1;
+ *    frames 2-3 wait below the gate (timer89 2 -> 6) while the prologue face
+ *    repacks `type` (octant 2 for the +x target).
+ *  - record 2 (stage92 = 1, scratch_a2 = 1, team flag830 = 1): frame 1 fires,
+ *    runs the `0x87014` six-draw setup plus the arm's four draws (a2 -72,
+ *    a6 77, aa 371, ae 152, a0 0, a1 1) and latches to stage 2; frames 2-3 run
+ *    arm 2's chosen-record path with team `chosen831` = record 5, so each call
+ *    resets the target to record 5's position plus the two gate offsets:
+ *    (0x140, 0x1E0) + (-72, 77) = (0xF8, 0x22D) with `target_y = 0x55`. The
+ *    prologue distance stays above 0x20 so each call returns after the copy.
+ * A broken scratch repack would re-run the setup path on frames 2-3 (changing
+ * the pinned scratch cells), a broken `chosen` resolution would leave the
+ * target at the staged value and a broken `type` repack would keep 0x33. */
+static void test_action_28_repack_round_trips_fields(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *latch;
+  struct fifa96_match_entity *chase;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  /* phase 0: the record walk still dispatches every code, but the phase-2
+   * team selection/ball pairing (which rewrites a selected record's target)
+   * stays off so the row-28 target writes are observable. */
+  mr.state.phase = 0;
+  mr.state.period_length = 90;       /* no period end inside the 10 ticks */
+
+  latch = &mr.entities.team[0].records[1];
+  latch->code = 0x28;
+  latch->stage92 = 0;
+  latch->timer89 = 0;
+  latch->active = 0;                 /* folds: x +144, z 0 */
+  latch->type = 0x33;
+  latch->target_x = 0;
+  latch->target_z = 0;
+
+  chase = &mr.entities.team[0].records[2];
+  chase->code = 0x28;
+  chase->stage92 = 1;
+  chase->timer89 = 0;
+  chase->scratch_a2 = 1;             /* fires on the first frame's delta 2 */
+  chase->target_x = 0xAA;
+  chase->target_z = 0xBB;
+  mr.entities.team[0].flag830 = 1;
+
+  mr.entities.team[0].chosen831 = 11 * 0 + 5;   /* record 5 of team 0 */
+  mr.entities.team[0].records[5].pos_x = 0x140;
+  mr.entities.team[0].records[5].pos_y = 0x55;
+  mr.entities.team[0].records[5].pos_z = 0x1E0;
+
+  for (int i = 0; i < 10; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);   /* 3 granted frames, delta 2 */
+  }
+
+  assert(latch->code == 0x28);
+  assert(latch->stage92 == 1);                 /* arm 0 latch, arm 1 wait */
+  assert(latch->timer89 == 6);                 /* +2 per granted frame */
+  assert(latch->scratch_a2 == 0x20);           /* seed-0 draw 512 & 0x7F */
+  assert(latch->target_x == 144 && latch->target_z == 0);
+  assert(latch->type == 2);                    /* +x face octant repacked */
+
+  assert(chase->code == 0x28);
+  assert(chase->stage92 == 2);                 /* flag path latch */
+  assert(chase->timer89 == 4);                 /* zeroed, then +2, +2 */
+  assert(chase->scratch_a2 == -72);
+  assert(chase->scratch_a6 == 77);
+  assert(chase->scratch_aa == 371);
+  assert(chase->scratch_ae == 152);
+  assert(chase->scratch_a0 == 0);
+  assert(chase->scratch_a1 == 1);
+  assert(chase->target_x == 0xF8 && chase->target_z == 0x22D);
+  assert(chase->target_y == 0x55);             /* chosen triple y */
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -338,6 +416,7 @@ int main(void) {
   test_frame_drives_entity_chain();
   test_phase_machine_hook();
   test_action_26_repack_round_trips_fields();
+  test_action_28_repack_round_trips_fields();
   puts("test_engine_match_frame OK");
   return 0;
 }
