@@ -18,8 +18,8 @@ resolver (class/sector/idx/band → one of four 10-byte tables: `0x1102FE`,
 the `row[0]`/actor-action append selector (flat `0x7AE38`) and row 07's stage-0
 target are ported as seven tested pure functions; no row is wired because every
 cluster-B body still needs unported arms and/or the absent entity/ball pool
-(FU-139 OL-29..OL-32, carrying FU-137 OL-1/OL-16), so the dispatch stays
-`1 × OK + 44 × UNSUPPORTED`.**
+(FU-139 OL-29..OL-32, carrying FU-137 OL-1/OL-16), so the FU-137 action
+table stays `1 × OK + 44 × UNSUPPORTED`.**
 
 ## Method
 
@@ -78,7 +78,8 @@ native record offsets.
 |---|---|---|---|---|---|---|
 | 05 | `07F194` | ✓ `[+0x9E]=1` then phase `!=2` → `FUN_0007DAB4`, return (`0x7F19F..0x7F1BA`) | ✓ `+0x89 < 0x4B0` then `+= [0x157A64]` (`0x7F221..0x7F23A`) | ✓ `+0x92 <= 3` jump table flat `0x7F184`; stage 0 head `0x7F274..` | carrier claim (`[0x158724] != rec` → block clear + set, `0x7F1BF..0x7F205`); team `+0x7B2=rec`/`+0x7B6=0`; camera triple copy `→+0x4D..55`; stage 0 gates (`+0x6B > 0x40`, `[0x57A83]`, `+0x6B > +0x77`, release timer `0x15872D`, airborne `+0x5D`) + type-table dribble dir (`0x10F334`/`0x10F33C`, speed `0x60`/`0x30`); stages 1–3 (animation, snap, hand-off 4) per FU-78 §3.2–3.4 | not ported (partial): `possession_reset/claim/timer/dribble_dir` tested; carrier arms OL-29 |
 | 06 | `0801B4` | ✓ `[+0x9E]=1`; phase `!=2` → `FUN_0007DAB4` + clear `team+0x7B2/0x7B6`, return (`0x801BF..0x80223`); ✓ `[+0x8D]==0` → same reset (`0x801E5`) | — | — | ✓ carrier gate `[0x158724]==0` or carrier `[+0x69]>>16 > 0x90` or `[0x157750] > 0x70` → `FUN_0007D9A4(rec,4,invoke-now)` (`0x8022D..0x80263`); else 597-insn pursuit target algebra (metric/atan/vector/RNG, installs 8/9/4) per FU-77 §2.6 | not ported: body OL-30 |
-| 07 | `0814B0` | ✓ phase `!=2` or `word[+0x81]!=0` → tail `0x81702` (`0x814B8..0x814D1`) | ✓ `+0x89 += [0x157A64]` (`0x814D9..0x814ED`) | ✓ `+0x92` 0/1/2/tail (`0x814F3..0x8150C`) | stage 0 (`0x81512..0x815B5`): `[+0x9E]=1`; gate `([+0x69]>>16 > 0x40` or `(int16)(word[+0x5D]+0x70) < [0x157750])` with `+0x89 > 0x3C` → tail else wait; target = slot word `0x60`/`0x8000` arm (camera + type table `0x10F331`/`0x10F339` << 4) or camera triple; stage 1 KICK `FUN_0007B9C4` + opponent `0x22` invoke + `[+0x89]=0,+0x92++`; tail resets and installs `4` on `[0x158730]` | not ported (partial): `kick_angle/apply` + FU-139 resolver/stage target; machine OL-31 |
+| 07 | `0814B0` | ✓ phase `!=2` or `word[+0x81]!=0` → tail `0x81702` (`0x814B8..0x814D1`) | ✓ `+0x89 += [0x157A64]` (`0x814D9..0x814ED`) | ✓ `+0x92` 0/1/2/tail (`0x814F3..0x8150C`) | stage 0 (`0x81512..0x815B5`): `[+0x9E]=1`; gate `([+0x69]>>16 > 0x40` or `(int16)(word[+0x5D]+0x70) < [0x157750])` with `+0x89 > 0x3C` → tail else wait; target = slot word `0x60`/`0x8000` arm (camera + type-offset table bytes
+`0x10F334`/`0x10F33C` << 4) or camera triple; stage 1 KICK `FUN_0007B9C4` + opponent `0x22` invoke + `[+0x89]=0,+0x92++`; tail resets and installs `4` on `[0x158730]` | not ported (partial): `kick_angle/apply` + FU-139 resolver/stage target; machine OL-31 |
 | 0F | `082AD0` | ✓ phase `!=2` → `FUN_0007DAB4`, return (`0x82ADB..0x82AEF`) | ✓ `+0x89 += [0x157A64]` (`0x82AF6..0x82B0A`) | ✓ `+0x92` 0/1/2 (`0x82B10..0x82B1C`) | stage 0: active gate, `word[+0x85]!=0` → reset; metric to vector `0x157788`, pos nudge `>>0x11`, face/anim 4; stage 1: predictor `FUN_00071B9C([0x157A62]>>16)`, distance compare, first/second `FUN_0007B9C4` (slot temporarily nulled, mode from slot or RNG `0x40`/`0x20`), then `word[+0x81] = 2*word[+0x85] - word[+0x87] + 0x1E` (`0x82B61..0x82DBE`) | not ported: machine OL-31 |
 | 18 | `0849B0` | ✓ none (`+0x7B=2` at entry, `0x849B7`); `[+0x89] += [0x157A64]` (`0x849BD..0x849D3`) | ✓ | ✓ `+0x92` 0/1/2 (`0x849D9..0x849E7`) | stage 0 animation abort `0x55`/`0x6A` (`0x849F4..0x84A0A`); stage 1 target `(0x900,0)` + metric `FUN_0008DCD4`; stage 2 window `0x78..0x12C` + input byte + distance `< 0x20`; resolution NSEARCH `FUN_0008DB6C` + SWAP `FUN_000786A0` (FU-78 §7) | not ported (partial): `duel_step/split` tested; resolution OL-32 |
 | 21 | `085214` | ✓ phase `!=2` or `rec != [0x157A83]` → `FUN_0007DAB4`, return (`0x8521F..0x8523D`); ✓ camera triple copy (`0x85242..0x8524C`) | ✓ stage 0/1 gates (`0x85269..0x85361`) | ✓ `+0x92` 0/1/default (`0x85253..0x8525F`) | stage 0 inactive → reset (no hand-off); offset `+0x6B > 0x40` with `+0x89 > 0x3C` → reset path; else nearest `FUN_0008DE8C` + metric + angle + event `0x4A` and `+0x89=0,+0x92++`; stage 1 event flag `+0x44` or offset `+0x41` → reset path with ball-actor install 4 + `FUN_00079B58` (FU-78 §4) | not ported (partial): `action_receive_step` tested; claim arm OL-32 |
@@ -186,11 +187,18 @@ are presentation-side and unported: **OL-27**.
 ### 3.6 Row 07 stage-0 target
 
 `0x8154C..0x815B5` (✓): when `[rec+0x20] != 0` and the slot word `[slot+6]` is
-`0x60` or `0x8000`, `out.x = [0x15774C] + (int8)table[0x10F331 + type8] << 4`
-and `out.z = [0x157754] + (int8)table[0x10F339 + type8] << 4` (y untouched);
-otherwise the camera triple `0x15774C..54` is copied. `type8 =
-[rec+0x8B]>>24`. Ported as `fifa96_action_kick_stage_target`. The stage-0 gate
-above it (`0x81512..0x81548`) is documented in §2 but not ported (OL-31).
+`0x60` or `0x8000`, `out.x = [0x15774C] + (int8)table[0x10F334 + type8] << 4`
+and `out.z = [0x157754] + (int8)table[0x10F33C + type8] << 4` (y untouched);
+otherwise the camera triple `0x15774C..54` is copied. The native addressing is
+a dword load at `0x10F331 + type8` followed by `SAR 24` (`0x81571`/`0x81577`,
+`0x8158E`/`0x81597`), i.e. the sign-extended byte three bytes into the record:
+the x-offset base is `0x10F334` and the z-offset base `0x10F33C` — the same
+bytes FU-138 §3 reads for the row-0D velocity tables, not the raw `0x10F331`/
+`0x10F339` load addresses. `type8 = [rec+0x8B]>>24`. Ported as
+`fifa96_action_kick_stage_target` (the caller supplies the two extracted
+per-type byte tables, so the port is unaffected by the addressing). The
+stage-0 gate above it (`0x81512..0x81548`) is documented in §2 but not ported
+(OL-31).
 
 ### 3.7 Ported pure functions
 
@@ -216,9 +224,10 @@ convention). Byte citations are §3's windows.
 * `tests/test_action_handlers.c`: layout asserts; range-band boundaries
   (`0x59F`/`0x5A0`/`0x77F`/`0x780`, non-negative pass-through, negative x);
   resolver fixtures for the height table, fast carry, `code 0x60`, the three
-  bands with both state tables, the angle-derived sector, the `d < 0x38` none
-  path and NULLs; all 20 append-selector branches; stage-target slot/camera
-  arms and NULLs.
+  bands with both state tables, the angle-derived sector, the sign-extended
+  `0xE1` sector mask (`& 0x1F`), the `d < 0x38` none path and NULLs; all 20
+  append-selector branches (6 actor actions + 14 `row[0]` entries, plus the
+  default/over-range direct paths); stage-target slot/camera arms and NULLs.
 * The plan's "kick moves the ball per the derived trajectory table" is
   `test_kick_resolver_selects_row_and_moves_ball`: the resolver picks row index
   0 of the height table, the test reads that row from a synthetic 10-byte table
