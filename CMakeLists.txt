@@ -423,3 +423,8 @@ add_executable(test_engine_menu_art tests/test_engine_menu_art.c)
 target_link_libraries(test_engine_menu_art PRIVATE fifa96_engine)
 add_test(NAME test_engine_menu_art COMMAND test_engine_menu_art
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_m1 tests/test_engine_m1.c)
+target_link_libraries(test_engine_m1 PRIVATE fifa96_engine)
+add_test(NAME test_engine_m1 COMMAND test_engine_m1
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
