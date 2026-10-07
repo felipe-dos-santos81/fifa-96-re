@@ -1,11 +1,16 @@
 #pragma once
+#include <stddef.h>
 #include <stdint.h>
+#include "fifa96_engine/fifa96_frontend_run.h" /* engine key codes 1..7 */
+#include "fifa96_loader/fifa96_control.h"
+#include "fifa96_loader/fifa96_input.h"
 #include "fifa96_loader/fifa96_match_lifecycle.h"
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
 
 /* Engine-level match driver (M2 foundation): owns the FU-64 lifecycle and the
- * FU-60 pace and binds them to an engine.
+ * FU-60 pace, the FU-61 input model and the controlled player's FU-70 control
+ * slot, and binds them to an engine.
  *
  * Lifecycle: always call fifa96_match_run_init before first use — begin reads
  * the struct, so a non-initialized run (including one with a stale function
@@ -23,6 +28,9 @@
  * complete caller-supplied backend verbatim, and replaces an incomplete one
  * (any of the four NULL) with the engine defaults; a custom backend must
  * therefore provide all four callbacks. */
+#define FIFA96_ENGINE_KEY_KICK 8
+#define FIFA96_ENGINE_KEY_PASS 9
+
 struct fifa96_engine;
 
 struct fifa96_match_run {
@@ -34,17 +42,32 @@ struct fifa96_match_run {
   uint32_t ticks;                                /* 100 Hz match callback hits */
   uint32_t steps;                                /* run steps since begin */
   int running;                                   /* begin/end balance */
+  struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
+  fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
 };
 
-/* Zero-init a run: lifecycle, pace, match state, backend, counters and engine
- * linkage. Must be called before the first begin on a run. NULL is a no-op. */
+/* Zero-init a run: lifecycle, pace, match state, input model, control slot,
+ * backend, counters and engine linkage. Must be called before the first begin
+ * on a run. NULL is a no-op. */
 void fifa96_match_run_init(struct fifa96_match_run *mr);
 
+/* One match input poll: fold the engine key presses in `keys` (codes 1..9;
+ * state == 1 only) into the FU-61 keyboard-handler code byte (directions
+ * 0x1/0x2/0x4/0x8 = up/down/right/left, buttons 0x10 kick / 0x20 pass), pass
+ * it through the FU-61 identity mapping row into the run's fifa96_input
+ * edge/held model, and update the controlled player's FU-70 control slot with
+ * the mapped state. A key absent from a later call reads as released through
+ * the input model's previous-state array. Returns 0, or -FIFA96_ERR_INVALID
+ * when `mr` is NULL; NULL `keys` and `count == 0` are tolerated as a no-input
+ * tick. */
+int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
+                           size_t count);
+
 /* Wire the run to a booted, non-quitting engine (MATCH mode), reset the match
- * clock and counters for a fresh match, and start the lifecycle. Returns 0,
- * -FIFA96_ERR_INVALID (NULL arguments), -FIFA96_ERR_STATE (unbooted/QUIT
- * engine, run already live, or another run live on the engine), or the
- * lifecycle's register failure. */
+ * clock, counters, input model and control slot for a fresh match, and start
+ * the lifecycle. Returns 0, -FIFA96_ERR_INVALID (NULL arguments),
+ * -FIFA96_ERR_STATE (unbooted/QUIT engine, run already live, or another run
+ * live on the engine), or the lifecycle's register failure. */
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
                            uint32_t selector);
 

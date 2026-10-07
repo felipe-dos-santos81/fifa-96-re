@@ -1,6 +1,77 @@
 #include <stddef.h>
+#include <string.h>
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
+
+/* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
+ * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
+static const uint8_t match_run_slot_map[16] = {
+  0, 5, 10, 0, 6, 4, 2, 0, 9, 1, 8, 0, 0, 0, 0, 0
+};
+static const uint8_t match_run_anim_a[16] = {
+  0, 1, 5, 0, 3, 2, 4, 0, 7, 8, 6, 0, 0, 0, 0, 0
+};
+static const uint8_t match_run_anim_b[16] = {
+  0, 1, 1, 0, 0xFF, 0xFF, 0xFF, 0, 1, 0, 0, 0xFF, 0xFF, 0xFF, 0, 1
+};
+static const uint8_t match_run_anim_c[16] = {
+  0, 0, 0xFF, 0xFF, 0xFF, 0, 1, 1, 1, 0, 0, 0x40, 0, 0, 0, 0
+};
+
+/* FU-61 §2.3 sampler mapping rows: row 0/1 is the identity pinned by
+ * tests/test_input.c (`row_identity`). The view-dependent row index [0x7DEC]
+ * (FUN_0004CAE4/FUN_0004CA70) belongs to the match camera (Task 15), so the
+ * engine keeps the default identity row here. */
+static const uint8_t match_run_input_row[FIFA96_INPUT_MAP_ROW] = {
+  0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+};
+
+/* FU-70's slot counter advances by the frame-clock high word once per 30 Hz
+ * frame; the engine polls input per step, so one unit per poll approximates a
+ * frame tick (the exact frame-clock delta is a Task 16 concern). */
+#define FIFA96_MATCH_RUN_SLOT_DELTA 1u
+
+/* Engine keys -> FU-61 §1.2 keyboard-handler codes. Directions: the handler
+ * ORs 0x1 (0x46934, flag 0x112BEC = scancode 0x48 keypad 8/up), 0x2 (0x46941,
+ * 0x50 keypad 2/down), 0x8 (0x46945, 0x4B keypad 4/left) and 0x4 (0x46952,
+ * 0x4D keypad 6/right); the diagonal flags at 0x4695F..0x4698F (keypad
+ * 7/9/1/3) OR 0x9/0x5/0xA/0x6, cross-checking those axis assignments.
+ * Buttons: KICK 0x10, PASS 0x20 (the 0x40 long-ball and 0x80 keeper arms have
+ * no engine key yet). */
+static int match_run_map_key(int32_t raw_code, uint8_t *code) {
+  switch (raw_code) {
+    case FIFA96_ENGINE_KEY_UP:    *code = 0x01u; return 1;
+    case FIFA96_ENGINE_KEY_DOWN:  *code = 0x02u; return 1;
+    case FIFA96_ENGINE_KEY_LEFT:  *code = 0x08u; return 1;
+    case FIFA96_ENGINE_KEY_RIGHT: *code = 0x04u; return 1;
+    case FIFA96_ENGINE_KEY_KICK:  *code = 0x10u; return 1;
+    case FIFA96_ENGINE_KEY_PASS:  *code = 0x20u; return 1;
+    default:                      return 0;
+  }
+}
+
+int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
+                           size_t count) {
+  uint8_t current[FIFA96_INPUT_PLAYERS] = { 0, 0, 0, 0 };
+  uint8_t raw = 0;
+  uint8_t mapped = 0;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (keys) {
+    for (size_t i = 0; i < count; i++) {
+      uint8_t code = 0;
+      if (keys[i].state != 1) continue;   /* press events only */
+      if (!match_run_map_key(keys[i].raw_code, &code)) continue;
+      raw |= code;
+    }
+  }
+  (void)fifa96_input_map(raw, match_run_input_row, &mapped);
+  current[0] = mapped;
+  (void)fifa96_input_update(&mr->input, current);
+  (void)fifa96_control_slot_update(&mr->slot, current[0], FIFA96_MATCH_RUN_SLOT_DELTA,
+                                   match_run_slot_map, match_run_anim_a, match_run_anim_b,
+                                   match_run_anim_c);
+  return 0;
+}
 
 /* Stable slot identity: the lifecycle cancels by function pointer, so every
  * run shares this one trampoline and the engine bridge keeps a single match
@@ -54,6 +125,15 @@ static void fifa96_match_run_install_defaults(struct fifa96_match_run *mr) {
   mr->backend.ctx = mr;
 }
 
+/* Fresh-match input state: zero the FU-61 edge/held model and bind the
+ * controlled player's FU-70 slot (player 0, raw map select 1 per FU-70 §1.4,
+ * ordinal 0, side 0). */
+static void fifa96_match_run_reset_input(struct fifa96_match_run *mr) {
+  fifa96_input_init(&mr->input);
+  memset(&mr->slot, 0, sizeof mr->slot);
+  (void)fifa96_control_slot_init(&mr->slot, 0, 1, 0, 0);
+}
+
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -68,6 +148,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->ticks = 0;
   mr->steps = 0;
   mr->running = 0;
+  fifa96_match_run_reset_input(mr);
 }
 
 int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *eng,
@@ -84,6 +165,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->ticks = 0;
   mr->steps = 0;
   fifa96_match_state_init(&mr->state); /* fresh match clock */
+  fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   int rc = fifa96_match_lifecycle_begin(&mr->lc, &mr->backend, &mr->pace, selector);
   if (rc != 0) {
     mr->engine = NULL;

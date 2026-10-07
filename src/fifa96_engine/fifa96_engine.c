@@ -194,13 +194,28 @@ int fifa96_engine_step(struct fifa96_engine *e) {
       e->mode = FIFA96_ENGINE_MODE_QUIT;
     }
   } else if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
-    /* The clock advance above fired the run's 100 Hz tick hook once per PIT
-     * tick, driving one frame-body pace tick per 10 ms; this dispatch consumes
-     * the lifecycle state (exit staging). */
-    if (!e->match) {
-      e->mode = FIFA96_ENGINE_MODE_FRONTEND;
-    } else if (fifa96_match_run_step(e->match) < 0) {
-      return -1;
+    /* Poll one input batch per step (the FRONTEND pattern) and feed it to the
+     * run's FU-61/FU-70 input path; QUIT leaves the engine and is never a
+     * match key. The clock advance above fired the run's 100 Hz tick hook once
+     * per PIT tick, driving one frame-body pace tick per 10 ms; this dispatch
+     * consumes the lifecycle state (exit staging). */
+    fifa96_platform_key keys[32];
+    int n = 0;
+    if (e->plat->poll(e->plat->self, keys, 32, &n) != 0) return -1;
+    if (e->match) (void)fifa96_match_run_input(e->match, keys, (size_t)n);
+    for (int i = 0; i < n; i++) {
+      if (keys[i].state == 1 && keys[i].raw_code == FIFA96_ENGINE_KEY_QUIT) {
+        e->quit = 1;
+        e->mode = FIFA96_ENGINE_MODE_QUIT;
+        break;
+      }
+    }
+    if (e->mode == FIFA96_ENGINE_MODE_MATCH) {
+      if (!e->match) {
+        e->mode = FIFA96_ENGINE_MODE_FRONTEND;
+      } else if (fifa96_match_run_step(e->match) < 0) {
+        return -1;
+      }
     }
   }
   fifa96_platform_frame f;
