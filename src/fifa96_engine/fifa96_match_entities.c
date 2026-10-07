@@ -31,6 +31,7 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
     team->second = FIFA96_MATCH_ENTITY_NONE;
     team->chosen = FIFA96_MATCH_ENTITY_NONE;
     team->intercept = FIFA96_MATCH_ENTITY_NONE;
+    team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
       struct fifa96_match_entity *e = &team->records[i];
       e->team = (uint8_t)t;

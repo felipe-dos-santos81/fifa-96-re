@@ -198,6 +198,13 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * Carried: FU-139 OL-26..OL-32, FU-141 OL-38/OL-41, FU-137 OL-15 (closes
   nothing new; the 0x26/0x28/0x2A arms stay as classified until their bodies
   land).
+* **OL-49 — `FUN_0008CEB8` index-11 overflow.** The native helper clamps
+  `last >= 0xB` to `0xB` (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB`
+  also stages record index 11 at `team+0x7A6` — the same spill the `0x2A` arm
+  targets directly (`0x8D7F6` exit). All 15 static call sites pass `BX=0xA`,
+  so the path is unreachable from the program; the derived pool models records
+  0..10 and the port clamps to 10. Task 2's `0x2A` hazard appendix owns the
+  overflow-slot model if one is added.
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -216,6 +223,120 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * First-hand instruction counts for the seven row windows are in §1; FU-137's
   "body unanalyzed/unported" cells can cite §1/§3 of this doc when they are
   updated.
+* **§5.1 loop bound** — FU-137's pseudo-code `for (i = first; i <=
+  min(last,10); i++)` is off by one against the first-hand bytes: the native
+  clamp is `last >= 0xB -> 0xB` (`0x8CEE2` `CMP ESI,0xB` / `0x8CEE7`
+  `MOV word [ESP+4],0xB`; raw `83 FE 0B 7C 07 66 C7 44 24 04 0B 00`), i.e.
+  `min(last,11)` with a first guard of `first in 0..10`. The port clamps to 10
+  because the derived pool has no index 11 (OL-49).
+
+## Appendix A (FU142a / M2 arms-and-wiring Task 1) — `FUN_0008CEB8` first-hand window
+
+Task 1 of the follow-up plan (`docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`)
+ports the helper. This appendix is its evidence gate: the exact fields,
+constants and the 15 call-site shapes below are read first-hand this slice and
+are what the port (`fifa96_match_arm_install_multi`, `fifa96_match_phase_machine.c`)
+implements.
+
+### A.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `decompile_function 0x8CEB8`, `disassemble_function 0x8CEB8` — 52
+  instructions, body `0x8CEB8..0x8CF5D` (the FU-142 §2 span; final `RET 0x4`
+  at `0x8CF5B`), `FUN_0008D098` sole caller;
+* `read_memory 0x8CEDB` (32 B) — raw clamp/guard bytes;
+* `get_xrefs_to 0x8CEB8` — 15 refs, all `UNCONDITIONAL_CALL` from
+  `FUN_0008D098`;
+* `disassemble_bytes` windows: `0x8D170..0x8D1D0` (`0x8D19F`, `0x8D1C1`),
+  `0x8D280..0x8D2D0` (`0x8D2B3`), `0x8D340..0x8D380` (`0x8D36B`),
+  `0x8D400..0x8D448`/`0x8D430..0x8D4C0` (`0x8D45C`, `0x8D489`, `0x8D4B2`),
+  `0x8D550..0x8D610` (`0x8D58B`, `0x8D5E9`), `0x8D620..0x8D6A0` (`0x8D64B`,
+  `0x8D681`), `0x8D720..0x8D824` (`0x8D74D`, `0x8D78B`, `0x8D7AD`, `0x8D7CF`).
+
+No writes: no rename/comment/label/function/script/project save. Repo:
+`make check` 100/100 before, 101/101 after (new
+`test_engine_match_phase_machine`).
+
+### A.2 Register contract (re-derived from the 52 instructions)
+
+Prologue `PUSH ESI; PUSH EDI; SUB ESP,8`; BX is parked at `[ESP+4]`, CX at
+`[ESP]`; the skip argument is read back at `[ESP+0x14]`.
+
+| register | meaning | first-hand site |
+|---|---|---|
+| EAX | team block base (record 0) | `0x8CEF7 ADD ESI,EAX` |
+| DX | first record index (signed word) | `0x8CEC6 TEST DX,DX` |
+| BX | last record index (signed word) | `0x8CEC2 MOV [ESP+4],BX` |
+| CX | install code (word) | `0x8CEC2 MOV [ESP],CX` |
+| stack `[esp+4]` | skip-if-current code (word) | `0x8CF04 MOV ECX,[ESP+0x14]` |
+
+### A.3 Decision logic (site-annotated)
+
+* **first guard** `0x8CEC6..0x8CED5`: `first < 0` or `first >= 0xB` exits
+  (`TEST DX,DX / JL`; `MOVSX ESI,DX / CMP ESI,0xB / JGE`).
+* **last clamp** `0x8CEDB..0x8CEE7`: `last >= 0xB` becomes `0xB`; raw bytes
+  `83 FE 0B 7C 07 66 C7 44 24 04 0B 00`.
+* **record walk** `0x8CEEE..0x8CF45`: record pointer `base + i*0xB2`
+  (`IMUL ESI,EDI,0xB2` 0x8CEF1), advanced by `ADD ESI,0xB2` (0x8CF45);
+  loop test `EDI <= SAR([ESP+2],0x10)` (`0x8CF4B..0x8CF54`).
+* **skip occupied** `0x8CEFB`: `CMP byte [ESI+0x9A],0 / JNZ`.
+* **skip current code** `0x8CF04..0x8CF13`: `MOVSX DX,byte [ESI+0x91]` (the
+  record's `+0x91` sign-extended) vs the skip word; equal -> skip.
+* **index-0 code-3 pre-coercion** `0x8CF15..0x8CF25`: `TEST EDI,EDI / JNZ`;
+  parked install code `SAR([ESP-2],0x10) == 3` -> `EDX = 0x19`. It keys on
+  the loop index, not on the record's `+0x8D` active flag (the installer's
+  own inactive-3 coercion in `fifa96_match_entities_install` would run after).
+* **stage** `0x8CF2A..0x8CF3F`: `EAX = rec`, `EDX = code`, `ECX = 0`,
+  `EBX = 0` -> `CALL FUN_0007D9A4` (FU-137 §2: not invoke-now, staged byte 0).
+* Native return is void; the derived C surface returns the staged count
+  (records whose `fifa96_match_entities_install` returned 1).
+
+### A.4 The 15 call sites (all `EAX=EBP`, `EBX=0xA`)
+
+| site | first | code | skip | shape |
+|---|---|---|---|---|
+| `0x8D19F` | 0 | 0 | `0xC` | state 0/0xA/0x0F arm (target `0x8D192`) |
+| `0x8D1C1` | 0 | 3 | -1 | state arm |
+| `0x8D2B3` | 0 | 3 | -1 | side compare follows (`0x8D2B8` vs `[EBP+0x826]`) |
+| `0x8D36B` | 0 | 3 | -1 | side compare follows |
+| `0x8D45C` | 1 | 0x15 | -1 | side-equal branch (`0x8D449`) |
+| `0x8D489` | 0 | 0 | -1 | side-mismatch branch of the same compare |
+| `0x8D4B2` | 0 | 3 | -1 | side compare follows |
+| `0x8D58B` | 0 | 3 | -1 | side compare follows |
+| `0x8D5E9` | 0 | 3 | -1 | side compare, then phase==9 compare |
+| `0x8D64B` | 0 | 0 | -1 | side-mismatch loop edge (`0x8D63E..0x8D66F`) |
+| `0x8D681` | 1 | 0 | -1 | side-equal counterpart of `0x8D64B` |
+| `0x8D74D` | 0 | 0x26 | -1 | state 0x13/0x14 + `[EBP+0x826] != [0x157AAC]>>24` |
+| `0x8D78B` | 0 | 3 | -1 | phase `== 0x13` + `word[0x157AC5] == word[0x157AC7]` |
+| `0x8D7AD` | 0 | 0x25 | -1 | phase `== 0x13` + the two words differ |
+| `0x8D7CF` | 0 | 0x28 | -1 | phase `!= 0x13` (the 0x14 half) |
+
+Every site pushes `last` as `0xA`; only the state-arm `0x8D19F` uses a
+non-`-1` skip (`0xC`), and only `0x8D45C`/`0x8D681` start at record 1.
+
+### A.5 Port mapping and derived surfaces
+
+* `fifa96_match_arm_install_multi(pool, team, first, last, code, skip_code)`
+  in `src/fifa96_engine/fifa96_match_phase_machine.c`; the loop bound is
+  `min(last, FIFA96_MATCH_ENTITY_RECORDS-1)` = `min(last,10)` for the reasons
+  in OL-49; `first >= FIFA96_MATCH_ENTITY_RECORDS` returns 0 (0x8CED2).
+* `pool->phase` supplies the installer's `[0x157A4A]>>24` argument.
+* `struct fifa96_match_team` gains `flag830` (`+0x830`) and `chosen831`
+  (`+0x831`, encoded entity id or NONE; `fifa96_match_entities_init` seeds
+  NONE like `target`/`second`/`chosen`/`intercept`). Task 1's helper does not
+  write them; the Task 2 `0x2A` arm does (`0x8D801`).
+* `struct fifa96_match_phase_machine` holds the `FUN_0008D098` gate globals
+  (`[0x157A4D]`, `[0x157A4A]>>24`, `[0x157AAC]>>24`, `[0x157AC5]`/`[0x157AC7]`
+  low bytes) plus `arm2a_overflow` and the per-team `chosen831` cache;
+  `fifa96_match_phase_machine_init` zeroes it and seeds the cache NONE.
+* Tested: `tests/test_engine_match_phase_machine.c`
+  (`test_init_defaults`, `test_install_multi_stages`, `test_install_multi_skips`,
+  `test_install_multi_record0_coerce`, `test_install_multi_bounds`).
+
+Write set of this appendix (Task 1): `include/fifa96_engine/fifa96_match_phase_machine.h`,
+`src/fifa96_engine/fifa96_match_phase_machine.c`,
+`include/fifa96_engine/fifa96_match_entities.h` (team tail fields + init seed),
+`tests/test_engine_match_phase_machine.c`, `CMakeLists.txt`, this appendix and
+the §6/§7 additions. §8 below describes the Task 9 probe slice, not this one.
 
 ## 8. No-write statement
 

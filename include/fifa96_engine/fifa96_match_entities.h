@@ -16,7 +16,9 @@
  *     mode +0x82A, update counter +0x82C, timer cluster +0x7CB/+0x81E/+0x820,
  *     target pointer +0x7B2 (the `[0x157A83]` controlled actor is a separate
  *     global), secondary +0x7B6, chosen +0x7BF,
- *     interception +0x7BA, flag +0x7BE (FU-67 §3.1/§4.2, FU-75 §4);
+ *     interception +0x7BA, flag +0x7BE (FU-67 §3.1/§4.2, FU-75 §4),
+ *     team-tail byte +0x830 and chosen-record cache +0x831 (FU-142 §2, the
+ *     0x2A arm writes +0x831);
  *   - the ball record at flat 0x15880C (x/y/z, heading, appearance; FU-120 §2)
  *     and the FU-139 §3.1 staging block (0x158730).
  *
@@ -99,6 +101,8 @@ struct fifa96_match_team {
   int32_t chosen;           /* +0x7BF encoded entity id or NONE */
   int32_t intercept;        /* +0x7BA encoded entity id or NONE */
   struct fifa96_match_entity records[FIFA96_MATCH_ENTITY_RECORDS];
+  uint8_t flag830;          /* +0x830 team-tail byte (FU-142 §2) */
+  int32_t chosen831;        /* +0x831 encoded entity id or NONE (0x2A arm) */
 };
 
 /* FU-120 §2 ball record plus the FU-139 §3.1 staging block. The update chain
