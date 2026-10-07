@@ -183,9 +183,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   if (eng->surface) {
     /* FU-92: the derived window setter clamps to the surface; the live match's
      * 160x100 sequence / zoom window selection is an open leg, so the fresh
-     * match starts from the full surface window. */
-    (void)fifa96_window_init(&mr->render.window, eng->surface->width,
-                             eng->surface->height);
+     * match starts from the full surface window (define_full sets the screen
+     * dimensions and applies the window). */
     (void)fifa96_window_define_full(&mr->render.window, eng->surface->width,
                                     eng->surface->height);
   }
@@ -267,10 +266,19 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
  * cover rectangle (fifa96_render_cover_rect); each output row then samples the
  * sprite at the 16.16 source step and writes through the remap, 0xFF
  * transparent (the FU-85 §2 0xCEABC span writer's semantics) into the indexed
- * canvas. `dst_w` may be negative to mirror (the resolver's out1 flag). */
+ * canvas.
+ *
+ * `scale` is the signed FU-85 §2 size factor (`size * scale >> 16`); a negative
+ * scale mirrors both axes through the library's signed placement/source
+ * stepping, and the resolver's out1 flag flips x only. A zero destination size
+ * is off-canvas (skipped). */
 static int match_run_draw_sprite(struct fifa96_surface *s, const fifa96_sprite_frame *sprite,
-                                 const uint8_t *remap, int32_t x, int32_t y, int32_t dst_w,
-                                 int32_t dst_h, const fifa96_render_clip *clip) {
+                                 const uint8_t *remap, int32_t x, int32_t y, int32_t scale,
+                                 int mirrored, const fifa96_render_clip *clip) {
+  int32_t dst_w = (int32_t)(((int64_t)sprite->width * scale) >> 16);
+  int32_t dst_h = (int32_t)(((int64_t)sprite->height * scale) >> 16);
+  if (dst_w == 0 || dst_h == 0) return 0;
+  if (mirrored) dst_w = -dst_w;
   int32_t dst_x = 0;
   int32_t dst_y = 0;
   fifa96_err_t err = fifa96_render_place(sprite->width, sprite->height, sprite->pivot_x,
@@ -344,6 +352,14 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     center.x = (s->width >> 1) << 16;
     center.y = (s->height >> 1) << 16;
   }
+  /* The window's screen dimensions come from the engine surface at begin, but
+   * s is a caller argument: clamp the clip to the target surface so the span
+   * blit can never write past its logical width/height (or overflow the
+   * column scratch). */
+  if (clip.left < 0) clip.left = 0;
+  if (clip.top < 0) clip.top = 0;
+  if (clip.right > s->width) clip.right = s->width;
+  if (clip.bottom > s->height) clip.bottom = s->height;
 
   int32_t matrix[9];
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
@@ -400,9 +416,11 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
 
   /* FU-89 §2: seed the depth keys from the jittered z and shell-sort
    * descending. keys[0] stays 0 (the original's seeding quirk: keys[1..count]
-   * are written from list[0..count-1], so the index-0 gate is inert). The
-   * near-depth threshold [0x54350] is not derived in this task, so the gate
-   * runs with threshold 0 (the FU-88 near plane still culls z < 5). */
+   * are written from list[0..count-1], so the index-0 gate is inert). Open
+   * legs (no derived source for the engine's scene yet): the near-depth
+   * threshold `[0x54350]` (FU-89 §6) and the per-slot lateral `[0x9A74]`
+   * `> 0x8E0` cull (FU-89 §3.2); the gate therefore runs with threshold and
+   * lateral 0 (the FU-88 near plane still culls z < 5). */
   int32_t keys[FIFA96_MATCH_RUN_RENDER_SLOTS + 1];
   uint32_t values[FIFA96_MATCH_RUN_RENDER_SLOTS];
   keys[0] = 0;
@@ -453,19 +471,30 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
 
     /* FU-85 §2 sprite size: scale = ((clean_y - jitter_y + 0x1000) & ~0xFFFF)
      *                       * 0x5D1 / 0x10000
-     *   (the 0x571FD sequence); the frame's header size scales by it with the
-     *   32x32->16 fixup (FUN_00057080's SHRD), i.e. `size * scale >> 16`. */
+     *   (the 0x571FD sequence); each frame header size scales by the signed
+     *   factor with the 32x32->16 fixup (FUN_00057080's SHRD), i.e.
+     *   `size * scale >> 16` (negative scale = mirrored). */
     uint32_t delta = (uint32_t)slots[v].clean.y - (uint32_t)slots[v].jitter.y;
     uint32_t size_base = (delta + 0x1000u) & 0xFFFF0000u;
     int32_t scale = (int32_t)(((int64_t)(int32_t)size_base * 0x5D1) >> 16);
-    int32_t dst_w = (int32_t)(((int64_t)sprite.width * scale) >> 16);
-    int32_t dst_h = (int32_t)(((int64_t)sprite.height * scale) >> 16);
-    if (dst_w <= 0 || dst_h <= 0) continue;
-    if (frame.mirrored) dst_w = -dst_w;
     int32_t x = (int32_t)((int64_t)slots[v].clean.x >> 16);
     int32_t y = (int32_t)((int64_t)slots[v].clean.y >> 16);
-    int rc = match_run_draw_sprite(s, &sprite, r->remap, x, y, dst_w, dst_h, &clip);
+    int rc = match_run_draw_sprite(s, &sprite, r->remap, x, y, scale, frame.mirrored, &clip);
     if (rc != 0) return rc;
+    /* FU-85 §2 second pass: composite animator classes resolve an overlay
+     * frame (out2) and the original blits it with a second FUN_00057080 call
+     * (0x57241) using the same scale/position. Draw it over the main frame;
+     * an unparseable overlay is treated as absent, like the blitter's NULL
+     * return. */
+    if (frame.overlay && (uintptr_t)frame.overlay >= (uintptr_t)r->sprite_data) {
+      fifa96_sprite_frame overlay;
+      if (fifa96_sprite_frame_parse(&sprite_bank,
+                                    (uint32_t)(frame.overlay - r->sprite_data),
+                                    &overlay) == FIFA96_OK) {
+        rc = match_run_draw_sprite(s, &overlay, r->remap, x, y, scale, frame.mirrored, &clip);
+        if (rc != 0) return rc;
+      }
+    }
   }
   return 0;
 }

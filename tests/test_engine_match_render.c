@@ -16,14 +16,16 @@
  *   (0, 0x70, 0x200).
  *
  *   clean  z = 0x200: z < 0x400 so no z normalisation shift; index 0x200.
- *          recip_x[0x200] = (320<<16)/0x201 = 40880
- *          recip_y[0x200] = (240<<16)/0x201 = 30660
+ *          recip_x[0x200] = (320<<16)/0x200 = 40960
+ *          recip_y[0x200] = (240<<16)/0x200 = 30720
+ *          (fifa96_projection_reciprocal divides by max(i,10), so the index
+ *          itself is the divisor at 0x200).
  *          clean  = centre + (0, 0) = (160<<16, 120<<16) = (160.0, 120.0)
- *   jitter py = 0x70 * 30660 = 3433920
- *          jitter = (160<<16, (120<<16) - 3433920) = (160.0, 67.6)
+ *   jitter py = 0x70 * 30720 = 3440640
+ *          jitter = (160<<16, (120<<16) - 3440640) = (160.0, 67.5)
  *
  *   FU-85 §2 sprite scale (clean_y - jitter_y as the size reference):
- *          d = 3433920; (d + 0x1000) & 0xFFFF0000 = 0x340000 (52 px);
+ *          d = 3440640; (d + 0x1000) & 0xFFFF0000 = 0x340000 (52.5 -> 52 px);
  *          scale = 0x340000 * 0x5D1 / 0x10000 = 77428.
  *   sprite 32x32 -> dest = (32 * 77428) >> 16 = 37 px (both axes).
  *   pivot (16,16), placed at the clean point (160,120):
@@ -234,6 +236,92 @@ static void test_zero_window_uses_surface(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* Composite classes resolve an overlay frame (FU-85 §2 out2) and the original
+ * blits it in a second FUN_00057080 pass at the same scale. Fixture: anim id
+ * 0x40 -> the overlay comes from banks[bank_index+1]; a 16x16 solid-0x22
+ * overlay over the 32x32 solid-0x11 main frame gets its own destination size
+ * 16*77428 >> 16 = 18 and pivot placement (18<<16)/16 = 73728,
+ * (73728*8)>>16 = 9 -> (160-9, 120-9) = (151,111) 18x18. */
+static void test_composite_overlay_is_blitted(void) {
+  struct render_fixture f;
+  fixture_init(&f);
+  uint8_t data[BLOB_LEN + 16 + 16 * 16];
+  memcpy(data, f.blob, BLOB_LEN);
+  uint8_t *overlay = data + BLOB_LEN;
+  memset(overlay, 0x00, 16);
+  memset(overlay + 16, 0x22, 16 * 16);
+  overlay[4] = 16;
+  overlay[6] = 16;
+  overlay[8] = 8;
+  overlay[10] = 8;
+  int32_t offsets0[2] = { 0, 0 };
+  int32_t offsets1[2] = { (int32_t)BLOB_LEN, 0 };
+  struct fifa96_render_bank banks[2];
+  banks[0].base = data;
+  banks[0].offsets = offsets0;
+  banks[0].count = 2;
+  banks[0].step = 1;
+  banks[1].base = data;
+  banks[1].offsets = offsets1;
+  banks[1].count = 2;
+  banks[1].step = 1;
+  f.mr.render.sprite_data = data;
+  f.mr.render.sprite_data_len = (uint32_t)sizeof data;
+  f.mr.render.banks = banks;
+  f.mr.render.bank_count = 2;
+  f.mr.render.entities[0].stage.anim_id = 0x40;
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[102 * 320 + 142] == 0x11);   /* main frame corner */
+  assert(f.s->indexed[138 * 320 + 178] == 0x11);
+  assert(f.s->indexed[111 * 320 + 151] == 0x22);   /* overlay rect */
+  assert(f.s->indexed[128 * 320 + 168] == 0x22);
+  assert(f.s->indexed[111 * 320 + 150] == 0x11);   /* around the overlay */
+  assert(f.s->indexed[111 * 320 + 169] == 0x11);
+  assert(f.s->indexed[110 * 320 + 151] == 0x11);
+  assert(f.s->indexed[129 * 320 + 151] == 0x11);
+  fifa96_surface_destroy(f.s);
+}
+
+/* A mirrored resolver frame passes a negative destination width through the
+ * signed `fifa96_render_place`/`fifa96_render_cover_rect` path (the negative
+ * scale branch). Fixture: anim id 0x36 always mirrors; the source's right half
+ * (x 16..31) is 0x33, the left half 0x11. dst_w = -37 places the mirrored
+ * rect at (141,102): output column 0 samples source x=31 (0x33) and the last
+ * column samples source x=0 (0x11). */
+static void test_mirrored_frame_uses_signed_size(void) {
+  struct render_fixture f;
+  fixture_init(&f);
+  for (int y = 0; y < 32; y++)
+    for (int x = 16; x < 32; x++) f.blob[16 + y * 32 + x] = 0x33;
+  f.mr.render.entities[0].stage.anim_id = 0x36;
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[102 * 320 + 141] == 0x33);
+  assert(f.s->indexed[102 * 320 + 177] == 0x11);
+  assert(f.s->indexed[138 * 320 + 141] == 0x33);
+  assert(f.s->indexed[138 * 320 + 177] == 0x11);
+  fifa96_surface_destroy(f.s);
+}
+
+/* The window's clip can outgrow the surface handed to render (the window was
+ * sized from the engine surface at begin). The clip must clamp to the target:
+ * the fixture's (142,102) rect is fully outside a 16x12 surface and nothing
+ * past width*height may be written. */
+static void test_clip_clamped_to_smaller_surface(void) {
+  struct render_fixture f;
+  fixture_init(&f);
+  fifa96_surface_destroy(f.s);
+  f.s = fifa96_surface_create(16, 12);
+  assert(f.s != NULL);
+  fifa96_surface_clear(f.s, 0);
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  for (int i = 16 * 12; i < FIFA96_SURFACE_MAX_W * FIFA96_SURFACE_MAX_H; i++)
+    assert(f.s->indexed[i] == 0);
+  fifa96_surface_destroy(f.s);
+}
+
 struct engine_fixture {
   fifa96_platform *plat;
   struct fifa96_engine *engine;
@@ -301,6 +389,9 @@ int main(void) {
   test_null_and_disabled();
   test_fixture_pins_hash_and_geometry();
   test_zero_window_uses_surface();
+  test_composite_overlay_is_blitted();
+  test_mirrored_frame_uses_signed_size();
+  test_clip_clamped_to_smaller_surface();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");
   return 0;

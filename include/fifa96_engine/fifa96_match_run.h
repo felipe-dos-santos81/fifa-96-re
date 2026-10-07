@@ -146,9 +146,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * FU-85/88/89 chain — FU-88 view matrix from `yaw`/`pitch`, reciprocal divide
  * (surface width/height), per-entity FU-85 §4 staging plus the FU-89 §7
  * jitter, FU-89 depth key seeding/sort and window clip, FU-85 resolver over
- * the caller-supplied FU-84 frame table/banks, `fifa96_render_place` pivot
- * placement and `fifa96_render_cover_rect` clipping, and an indexed span blit
- * through `render.remap` (0xFF transparent) into `s->indexed`; presentation
+ * the caller-supplied FU-84 frame table/banks, the second overlay-frame pass
+ * for the composite classes (FU-85 §2 second `FUN_00057080`), signed-scale
+ * `fifa96_render_place` pivot placement and `fifa96_render_cover_rect`
+ * clipping, and an indexed span blit through `render.remap` (0xFF
+ * transparent) into `s->indexed`; the clip is clamped to `s` and presentation
  * stays `fifa96_surface_plane`'s job. Window scale (FU-93) is recomputed into
  * `window_scale_x`/`window_scale_y`/`window_zoomed` for the future HUD seam.
  *
