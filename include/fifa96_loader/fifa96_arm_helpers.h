@@ -26,6 +26,7 @@ struct fifa96_arm_record {
   fifa96_arm_vec target;   /* +0x4D/+0x51/+0x55 */
   int32_t vel_x, vel_z;    /* +0x71/+0x73 */
   int32_t lane;            /* +0x69: the 0x8DCD4 dz word, sign-extended */
+  int32_t distance;        /* +0x65: the 0x8DCD4 out[0] word row 2A gates on */
   uint16_t timer81;        /* +0x81 */
   uint16_t timer7b;        /* +0x7B (row 26 writes it from the 0x10F394 table) */
   uint8_t timer93;         /* +0x93 */
@@ -90,6 +91,17 @@ struct fifa96_arm_record {
  * (which would overwrite `+0x92` with the staged byte) stay FU-142 OL-54.
  * NULL `rec` -> -FIFA96_ERR_INVALID. */
 fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec);
+
+/* `FUN_000513EC` (`0x513EC..0x51440`, 33 instructions; the FU-118 camera/replay
+ * stop) as called by row 2A arm 2 (`0x86B6E`). First-hand on /FIFA96.EXE:
+ * clears the two gate dwords `[0x4E584]`/`[0x4E580]` (`0x513F9`/`0x513FF`),
+ * invokes the `[0x4E5A8]`-gated callback through the `0x14E570` table slot +0x38
+ * (`0x51413`), sets camera mode `[0x4E578] = 2` (`0x51421`) and, on first entry
+ * (`[0x4E574] == 0`), calls `FUN_00064074` (recorder-gate clear, `0x51430`) and
+ * latches `[0x4E574] = 1` (`0x51435`). None of those globals is modeled by the
+ * derived engine (the camera-mode/recorder block is unported), so the derived
+ * surface is a documented no-op returning FIFA96_OK (Appendix H open leg). */
+fifa96_err_t fifa96_arm_camera_stop(void);
 
 /* `FUN_0008DCD4`: from = the position triple, to = the target triple, both read
  * as their low 16-bit words; the native out vector is

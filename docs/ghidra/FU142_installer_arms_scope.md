@@ -215,8 +215,13 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`fifa96_arm_28_step`, Appendix G) with the internal `0x87014` stage-gate
   helper; row 28 is wired (`fifa96_match_action_28`, the second cluster-G
   wiring) because the `0x8D7CF` arm, the full 4-arm body and the pool binding
-  are bounded, and the row's remainder surfaces are OL-56..OL-58. Row 2A stays
-  unported.**
+  are bounded, and the row's remainder surfaces are OL-56..OL-58. Status
+  (Task 8): row 2A's body is ported (`fifa96_arm_2a_step`, Appendix H) with the
+  `0x513EC` camera-stop derived no-op; row 2A is wired
+  (`fifa96_match_action_2A`, the third cluster-G wiring) because the `0x8D807`
+  arm, the full 12-arm body and the pool binding (staged `+0x65` distance, team
+  `+0x830`, the `[0x10F358]`/`[0x10F35C]` globals) are bounded, and the row's
+  remainder surfaces are OL-59..OL-61.**
 * **OL-48 — dynamic entry for 27/29/2C; 2B dead verdict.** No static install
   arm exists (FU-137 §5.3 re-cited); a runtime/reachability pass is the
   precondition for scheduling those three rows. 0x2B is confirmed a shared-RET
@@ -338,16 +343,22 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `0x7D983`, `FUN_000886D4` `0x887EC`, row 2A `0x86AAB`/`0x86FFE`, the arm-0x2A
   installer clear `0x8D80E`; row-28 read `0x873CF`), `[0x10F364]` (`FUN_0008D098`
   entry block `0x8D6D4`/`0x8D71D`, init `0x7D995`; row-28 read `0x87159`),
-  `[0x10F368]` (entry block `0x8D6DB`/`0x8D722` plus its `0x8D6FB` read-write,
-  init `0x7D98F`; row-28 read `0x87161`) and `[0x157AC2]` (writers `0x73F82`,
-  `0x4B0DE`, `0x4BA20/31`, `0x38990`, `0x88D6A`; entry-block read `0x8D69F`;
-  row-28 read `0x8716B`). The derived engine keeps the five as run-level staging fields
-  (`fifa96_match_run.global_*`) defaulting to 0; the derived step consumes them
-  through `fifa96_arm_record.global_*`. The native match RNG seed is
-  `FUN_0001D940(0x18)` = `settings[0x18]` at the match-init call `0x493F2`
-  (FU-60 §0x493E8); the engine seeds its `struct fifa96_rng` with the derived 0
-  in `fifa96_match_run_begin` (the corpus has no static default for the runtime
-  settings block).
+   `[0x10F368]` (entry block `0x8D6DB`/`0x8D722` plus its `0x8D6FB` read-write,
+   init `0x7D98F`; row-28 read `0x87161`) and `[0x157AC2]` (writers `0x73F82`,
+   `0x4B0DE`, `0x4BA20/31`, `0x38990`, `0x88D6A`; entry-block read `0x8D69F`;
+   row-28 read `0x8716B`). The derived engine keeps the five as run-level staging fields
+   (`fifa96_match_run.global_*`) defaulting to 0; the derived step consumes them
+   through `fifa96_arm_record.global_*`. The native match RNG seed is
+   `FUN_0001D940(0x18)` = `settings[0x18]` at the match-init call `0x493F2`
+   (FU-60 §0x493E8); the engine seeds its `struct fifa96_rng` with the derived 0
+   in `fifa96_match_run_begin` (the corpus has no static default for the runtime
+   settings block).
+   **Status (Task 8): the `[0x10F35C]` arm-tail clear (`0x8D80E`) is ported in
+   `fifa96_match_phase_machine_step` (FU-137 §5.2 errata); row 2A's arm 0/9/10
+   writes to `[0x10F358]`/`[0x10F35C]` are staged through
+   `mr->record.global_10f358/35c` and repacked to the run by the frame dispatch
+   (H.6). The remaining producers (init/entry block, `FUN_000886D4`) stay
+   unported.**
 * **OL-57 — row-28 `[0x157AA3]` store and the `[rec+0x28]` row-byte gate
   (Task 7).** Arm 0 stores the team back-pointer `[rec+0]` into the process
   global `[0x157AA3]` (`0x8714A`; the same global row 29/2A write) — dropped,
@@ -366,6 +377,28 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   of dereferencing the native aliased tail pointer — a bounded-model
   divergence, pinned by `test_arm_28_arm2_chosen_missing_bounded`. The native
   chosen-pointer chain into record 11 stays outside the derived record surface.
+* **OL-59 — row-2A `[0x157AA3]` stores (Task 8).** The prologue (`0x86A65`,
+  stage92 > 2) and arm 2 (`0x86B78`) store the record pointer into the process
+  global `[0x157AA3]` — the same global rows 28/29 write (OL-57/OL-55). The
+  derived arm drops both stores: the pool binds records directly and no derived
+  consumer reads the global.
+* **OL-60 — row-2A `+0x65` distance model (Task 8).** Row 2A never computes the
+  distance; it reads the `+0x65` word (`[rec+0x63] SAR 16` at `0x86AFE` etc.)
+  that the unported `FUN_0008D098` pre-switch walk writes (`0x8D11E`:
+  `0x8DCD4(pos, target)` per non-occupied record, before the installer arms).
+  The derived frame staging recomputes the word from the dispatch call's
+  pos/target (H.5); the native one-frame staleness (the row body runs in the
+  next frame's record-machine tail, after the walk) is not modeled. The walk's
+  `+0x67`/`+0x69` writes are not restaged because no wired row consumes a
+  walk-written lane (rows 26/27/28/29 recompute it in their own prologues).
+* **OL-61 — the `0x513EC` camera stop (Task 8).** First-hand (`0x513EC..0x51440`,
+  33 instructions) every effect is on the camera-mode/recorder block: the
+  `[0x4E584]`/`[0x4E580]` clears (`0x513F9`/`0x513FF`), the `[0x4E5A8]`-gated
+  callback through `[0x14E570]+0x38` (`0x51413`), `[0x4E578] = 2` (`0x51421`)
+  and the `[0x4E574]` first-entry latch + `FUN_00064074` recorder clear
+  (`0x5142B..0x51435`). The derived engine models none of those globals, so
+  `fifa96_arm_camera_stop` is a documented no-op returning FIFA96_OK (FU-118
+  surface; the camera-mode consumers `FUN_000505D0`/FU-103 stay unported).
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -391,6 +424,12 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
 * First-hand instruction counts for the seven row windows are in §1; FU-137's
   "body unanalyzed/unported" cells can cite §1/§3 of this doc when they are
   updated.
+* **§5.2 arm `0x2A` tail (Task 8).** The arm clears `[0x10F35C]` at
+  `0x8D80C..0x8D80E` on both the found and the overflow fall-through path;
+  Task 2's port omitted the write (OL-56 recorded it as an unported writer) and
+  Task 8 completed it in `fifa96_match_phase_machine_step` because row 2A's
+  arm 10 sets the flag and the derived frame reads it back. See the FU-137
+  §5.2 errata and Appendix H.
 * **§2 rows 28/2A `0x36200` "stub"** — first-hand it is
   `MOV [0x105FC4],EAX; RET` (5-byte instruction + RET), not a bare no-op; the
   store gates the unported camera/coordinate step `FUN_00036208`
@@ -1554,6 +1593,177 @@ Write set of this appendix (Task 7):
 `CMakeLists.txt` (arm-bodies link dep),
 the §6 OL-47/OL-56..OL-58 updates, the §7 refinements, the FU-137 errata and
 this appendix.
+
+## Appendix H (FU142e / M2 arms-and-wiring Task 8) — row 0x2A body + `0x513EC` camera stop first-hand window
+
+Task 8 of the follow-up plan (`docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md`)
+ports action row 0x2A (`0x86A34..0x87010`, 409 instructions + the 12-dword
+jump table `0x86A04`), its `0x513EC` camera-stop call and the engine wiring.
+This appendix is its evidence gate: the exact fields, constants and branch
+table below are fixed from the first-hand windows it cites.
+
+### H.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `disassemble_bytes 0x86A34` (1500 B, 409 instructions, body
+  `0x86A34..0x8700F`); `read_memory 0x87010` (4 B) = `C3 8D 40 00`: the final
+  RET at `0x87010` plus the 3-byte `LEA EAX,[EAX]` pad before the row-28-only
+  helper `0x87014` (G.3 — **row 2A does not consume `0x87014`**; the plan's
+  Task 8 note is superseded);
+* `read_memory 0x86A04` (48 B) — the 12-dword arm jump table;
+* `read_memory 0x1106E0` (180 B) — action-table row `0x2A` at offset 0xA8 =
+  `0x00086A34` (file bytes `34 6a 08 00`);
+* `disassemble_bytes 0x8D7CF` (72 B, 19 instructions) — the `0x8D807` arm, its
+  scan and the `0x8D80C..0x8D80E` `[0x10F35C]` clear;
+* `disassemble_bytes 0x513EC` (100 B, 33 instructions, body
+  `0x513EC..0x51440`);
+* `get_xrefs_to 0x86A34` — 1 reference, the action-table slot `0x110788`;
+  `search_byte_patterns 34 6A 08 00` — that same slot is the only occurrence;
+* `get_xrefs_to 0x8DCD4` — 78 call sites; `0x8D11E` is the `FUN_0008D098`
+  pre-switch walk and none lies inside the record machines
+  `FUN_0007CA54`/`FUN_000782D0`, so `+0x65` has no later per-frame writer;
+* repo `grep` over `src/`, `include/`, `tests/` for the helper ground truth.
+
+### H.2 Entry census and decision (first-hand)
+
+The body is not a Ghidra function (`get_function_by_address 0x86A34` =
+"no function definition", §1). Entry census: `get_xrefs_to 0x86A34` returns
+exactly the action-table slot `0x110788`; the body pointer bytes occur nowhere
+else. The static entry is the FU-142a arm `0x8D807` (Appendix B.4, re-read
+this slice): state 0x13/0x14, player side, the 0x28 install, the records 1..10
+first-`+0x9A == 0` scan (`0x8D7D4..0x8D7F6`), `[team+0x831] = EAX`
+(`0x8D801`), `FUN_0007D9A4(rec, 0x2A, 0, 0)` (`0x8D807`) and the
+`[0x10F35C] = 0` tail (`0x8D80C..0x8D80E`). Arm + body + pool binding are all
+bounded, so **row 2A is wired** (the same gate as rows 26/28).
+
+Layout: jump table `0x86A04..0x86A33`, main body `0x86A34..0x87010` (RET),
+3-byte pad, then the unrelated row-28 helper `0x87014..0x870D5`.
+
+### H.3 The 12-arm jump table and per-arm windows
+
+`read_memory 0x86A04` = `{0x86A91, 0x86AFE, 0x86B5F, 0x86BA2, 0x86BDC, 0x86C7D,
+0x86D1E, 0x86DBF, 0x86E60, 0x86F2F, 0x86F83, 0x8700A}`; entry 11 is the shared
+epilogue at `0x8700A` (six POPs + RET, pop order EBP/EDI/ESI/EDX/ECX/EBX,
+matching the six prologue pushes).
+
+Prologue `0x86A34..0x86A89`: `EDX = [rec+0x89]`, `AX = word [0x157A64]`,
+`EDX += EAX`, `[rec+0x89] = EDX` (`0x86A3E..0x86A55`, zero-extended delta);
+`EAX = dword [rec+0x8F] SAR 24` = the sign-extended `[rec+0x92]` byte,
+`CMP EAX,2; JLE` — for signed values > 2 the block `0x86A60..0x86A71` runs
+(`EAX = 2`; `[0x157AA3] = EBP`; `word [rec+0x7B] = 4`; `CALL 0x36200`); then
+`AL = [rec+0x92]`, `CMP AL,0xB; JA 0x8700A`, `JMP CS:[EAX*4+0x86A04]`.
+
+| arm | window (RET/jump) | first-hand effects |
+|---|---|---|
+| 0 | `0x86A91..0x86AFD` | `target.x = -0x720`, `target.z = 0`, `[team+0x830] = 0`, `[0x10F35C] = 0`, `[0x10F358] = 0`; `0x79C50(rec, 0, 0)`; `0x6E598` id `0x60`; `timer89 = 0`; `stage92++` |
+| 1 | `0x86AFE..0x86B5E` | `(int16)+0x65 > 0x20` -> epilogue; `0x6E598` id `0x61`; `[team+0x830] = 1`; `target = (-0x540, 0)`; `timer89 = 0`; `stage92++` |
+| 2 | `0x86B5F..0x86BA1` | `+0x65 > 0x20` -> epilogue; `CALL 0x513EC`; `EAX = 2`; `[0x157AA3] = rec`; `CALL 0x36200`; `timer89 = 0`; `stage92++` |
+| 3 | `0x86BA2..0x86BDB` | `timer89 < 0x78` (signed) -> epilogue; `target = (-0x540, -0x930)`; `timer89 = 0`; `stage92++` |
+| 4 | `0x86BDC..0x86C7C` | `+0x65 > 0x240` -> epilogue; `d = 0x930 - |pos.z|`; `target.x = -0x540 + {0x90 if d>0x180, 0x120 if d>0xC0, 0x1B0 if d>0x60, else 0x240}`; `pos.z > -0x900` -> epilogue; else `target = (0x540, -0x930)`, `timer89 = 0`, `stage92++` |
+| 5 | `0x86C7D..0x86D1D` | `+0x65 > 0x240` -> epilogue; `d = 0x540 - |pos.x|`; `target.z = -0x930 + offset(d)`; `pos.x < 0x510` -> epilogue; else `target = (0x540, 0x930)`, `timer89 = 0`, `stage92++` |
+| 6 | `0x86D1E..0x86DBE` | `+0x65 > 0x240` -> epilogue; `d = 0x930 - |pos.z|`; `target.x = 0x540 - offset(d)`; `pos.z < 0x900` -> epilogue; else `target = (-0x540, 0x930)`, `timer89 = 0`, `stage92++` |
+| 7 | `0x86DBF..0x86E5F` | `+0x65 > 0x240` -> epilogue; `d = 0x540 - |pos.x|`; `target.z = 0x930 - offset(d)`; `pos.x > -0x510` -> epilogue; else `target = (-0x540, 0x588)`, `timer89 = 0`, `stage92++` |
+| 8 | `0x86E60..0x86F2E` | `+0x65 > 0x240` -> epilogue; `d = 0x930 - |pos.z|`; `target.x = -0x540 + offset(d)`; `pos.z > 0x5B8` -> epilogue; four `CALL 0x92AC8`: `target.x = ±(d1 & 0x1FF)` by `d3` bit 0, `target.z = ±(d2 & 0x1FF)` by `d4` bit 0; `timer89 = 0`; `stage92++` |
+| 9 | `0x86F2F..0x86F82` | `+0x65 > 0x20` -> epilogue; 3 x MOVSD `target = pos`; `word +0x71/+0x75/+0x73 = 0`; `timer89 = 0`; `[0x10F358] = 1`; `stage92++` |
+| 10 | `0x86F83..0x87009` | `0x6E598` id `0x60`; `0x79C50(rec, DX = 0, BX = -100)`; `timer89 < 0x708` -> epilogue; `0x6E598` id `0x64`; `target.x = 0xCC0`; `target.z = 0`; `0x6E598` id `0x61`; `timer89 = 0`; `[0x10F35C] = 1`; `stage92++` |
+| 11 | `0x8700A` | shared epilogue RET (the pre-dispatch block already ran for signed selectors 3..127) |
+
+The `offset(d)` chain is `0x180 -> 0x90 / 0xC0 -> 0x120 / 0x60 -> 0x1B0 /
+else 0x240` (`0x86C0C..0x86C3A` and its four siblings); the position tails are
+32-bit `CMP [rec+0x59]/[rec+0x61], imm; JL/JG` (`0x86C43`, `0x86CE4`,
+`0x86D85`, `0x86E26`). Arm 0's `0x79C50` call passes `DX = BX = 0`
+(`XOR EAX,EAX; MOVSX EBX,AX; MOVSX EDX,AX`), i.e. the zero-direction no-op;
+arm 10's passes `DX = 0`, `BX = 0xFFFFFF9C` (-100), i.e. the -z octant 4.
+
+### H.4 The `0x513EC` camera stop (first-hand, re-verified on `/FIFA96.EXE`)
+
+`0x513EC..0x51440`, 33 instructions: `[0x4E584] = 0` / `[0x4E580] = 0`
+(`0x513F9`/`0x513FF`), the `[0x4E5A8] != 0` callback `CALL [EDX+0x38]` with
+`EDX = 0x14E570` (`0x51413`), `[0x4E578] = 2` (`0x51421`), and the
+`[0x4E574] == 0` first-entry arm `FUN_00064074()` + `[0x4E574] = 1`
+(`0x5142B..0x51435`). This matches FU-118 §1 (its provenance was
+`/fifa96_le.bin`; the same bytes are in the authoritative `/FIFA96.EXE`). None
+of those globals is modeled by the derived engine, so the derived surface is
+`fifa96_arm_camera_stop()` = documented no-op returning FIFA96_OK (OL-61).
+
+### H.5 The `+0x65` distance input (row 2A does not compute it)
+
+Row 2A's gates read the record's `+0x65` word (`MOV EAX,[EBP+0x63]; SAR
+0x10`) but no call in its window writes it. First-hand `get_xrefs_to 0x8DCD4`:
+the only relevant writer is the `FUN_0008D098` pre-switch record walk
+(`0x8D11E`, FU-137 §3): per record with `[+0x9A] == 0`, the phase handler runs
+and then `0x8DCD4(rec+0x59, rec+0x4D, rec+0x65)` writes the out triple
+`{distance +0x65, dx +0x67, dz +0x69}` (Appendix C.3). The 0x2A install
+(ECX = 0) does not invoke the handler, so the row body runs in the next frame's
+record-machine tail and reads that walk value (one frame stale). The derived
+binding models the walk's record-visible effect by recomputing the distance
+word from this dispatch call's staged pos/target
+(`fifa96_arm_dist_stage`, `match_run_dispatch_entity`) — a bounded model
+recorded as OL-60; the `+0x69` lane stays owned by rows 26/27/28/29, which
+recompute it in their own prologues.
+
+### H.6 Port mapping and derived surfaces
+
+* `fifa96_err_t fifa96_arm_2a_step(struct fifa96_arm_record *rec, uint8_t arm)`
+  in `src/fifa96_loader/fifa96_arm_bodies.c`; `arm` is the raw `[rec+0x92]`
+  selector byte: the signed > 2 pre-dispatch gate and the unsigned > 0xB
+  epilogue exit are applied exactly as the native (`(int8_t)arm > 2`,
+  `arm > 11`), then selectors 0..10 run their arm and 11 takes `default`.
+* `struct fifa96_arm_record` gains `distance` (`+0x65`); no field is
+  repurposed. `fifa96_arm_camera_stop` lives in
+  `include/fifa96_loader/fifa96_arm_helpers.h` /
+  `src/fifa96_loader/fifa96_arm_helpers.c` with the other shared family ports.
+* Engine: `struct fifa96_match_run_record` gains `distance`;
+  `match_run_dispatch_entity` stages it (H.5) and repacks the row-2A outputs
+  `target_x/y/z`, `timer89`, `timer7b`, `stage92`, `type`, `flag830`,
+  `vel_x/vel_z` and `global_10f358/35c`; the `flag830` and global writes land
+  on `mr->entities.team[e->team].flag830` and `mr->global_10f358/35c` so the
+  later records of the same frame see them (the native writes are
+  process-wide). The globals-comment in `fifa96_match_run.h` (row 28, OL-56)
+  now also covers row 2A.
+* `fifa96_match_action_table[0x2A].fn = fifa96_match_action_2A`; evidence names
+  FU-142e; dispatch expectation flips to `FIFA96_OK`; FU-137 §6.1 class
+  `ported` (OL-59..OL-61 carry the remainder; `0x36200` value stays OL-51).
+* Arm-tail completion (this task): `fifa96_match_phase_machine_step` now
+  performs the arm's `[0x10F35C] = 0` write (`0x8D80C..0x8D80E`) on both the
+  found and overflow paths. Task 2 had ported the arm without it; row 2A's
+  arm 10 sets the flag and the derived frame reads it back, so the write is
+  part of the bounded arm (FU-137 §5.2 errata; OL-56 status).
+* Validation/hardening: NULL `rec` -> `-FIFA96_ERR_INVALID`; arm 8's draws on a
+  NULL `rng` -> `-FIFA96_ERR_INVALID` at the draw site (the native has no NULL
+  concept); no-draw paths tolerate a NULL `rng`.
+* Tested: `tests/test_arm_helpers.c` (`test_camera_stop_returns_ok`,
+  `test_camera_stop_stateless_repeat`); `tests/test_arm_bodies.c`
+  (`test_arm_2a_arm0..arm11` + `test_arm_2a_prologue_delta` +
+  `test_arm_2a_invalid`, 14 cases); `tests/test_engine_match_handlers.c`
+  (`test_action_2A_runs_body`, `test_action_2A_overflow_fixture` + the flipped
+  `action_expect[0x2A]`); `tests/test_engine_match_frame.c`
+  (`test_action_2A_repack_round_trips_fields`: pool distance staging, the
+  flag830/global repacks and the arms 0/1/9/10 latches);
+  `tests/test_engine_match_phase_machine.c` (the `0x8D80E` clear in
+  `test_step_arm28_2a_phase14`).
+
+### H.7 Open legs (numbered)
+
+* OL-59 — the `[0x157AA3]` store (prologue + arm 2) (§6).
+* OL-60 — the `+0x65` dispatch-time recompute vs the native walk staleness (§6).
+* OL-61 — the entire `0x513EC` camera-mode/recorder block (§6).
+* OL-52 (selector record surface) carries the arm's non-zero `0x6E598` calls'
+  unmodeled native writes; OL-51 carries the `0x36200` EAX=2 values; OL-49/OL-54
+  feed the row's install path.
+
+Write set of this appendix (Task 8):
+`include/fifa96_loader/fifa96_arm_helpers.h`,
+`src/fifa96_loader/fifa96_arm_helpers.c`,
+`include/fifa96_loader/fifa96_arm_bodies.h`,
+`src/fifa96_loader/fifa96_arm_bodies.c`,
+`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`,
+`src/fifa96_engine/fifa96_match_handlers.c`,
+`src/fifa96_engine/fifa96_match_phase_machine.c`, `tests/test_arm_helpers.c`,
+`tests/test_arm_bodies.c`, `tests/test_engine_match_handlers.c`,
+`tests/test_engine_match_frame.c`, `tests/test_engine_match_phase_machine.c`,
+the FU-137 §5.2/§6.1/§7 errata and this appendix. `CMakeLists.txt` needed no
+change (the arm bodies/engine libraries already link `fifa96_arm_helpers`).
 
 ## 8. No-write statement
 

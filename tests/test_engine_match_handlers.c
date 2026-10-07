@@ -31,9 +31,12 @@
  * evidence and UNSUP dispatch. FU-142d (Task 7) wires row 28: the FU-142a arm
  * 0x8D7CF, the ported `0x870E8..0x874E3` 4-arm body + `0x87014` helper
  * (Appendix G) and the pool binding are bounded, so `fifa96_match_action_28`
- * sets the row's `fn` and the dispatch expectation flips to FIFA96_OK. The
- * seam itself must run a handler and propagate its result when one is
- * present. */
+ * sets the row's `fn` and the dispatch expectation flips to FIFA96_OK. FU-142e
+ * (Task 8) wires row 2A the same way: arm 0x8D807 installs code 0x2A, the
+ * `0x86A34..0x87010` 12-arm body (Appendix H) and the distance/flag830/global
+ * pool binding are bounded, so `fifa96_match_action_2A` sets the row's `fn`
+ * and its expectation flips to FIFA96_OK. The seam itself must run a handler
+ * and propagate its result when one is present. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -53,8 +56,9 @@
  * placement) and by FU-142b for row 26 (ported: `fifa96_match_action_26`,
  * the FU-142 Appendix C placement machine; the first cluster-G row whose
  * install arm + body + pool binding are all bounded) and by FU-142d for row
- * 28 (ported: `fifa96_match_action_28`, the FU-142 Appendix G 4-arm machine).
- * All other action rows
+ * 28 (ported: `fifa96_match_action_28`, the FU-142 Appendix G 4-arm machine)
+ * and by FU-142e for row 2A (ported: `fifa96_match_action_2A`, the FU-142
+ * Appendix H 12-arm machine). All other action rows
  * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
  * tested pure parts but unported arms; rows 27, 2C and 29 have ported bodies
  * but are unwired with their entries unresolved; the rest are `not ported`,
@@ -68,7 +72,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP,
-    /* 28 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
 /* FU-137 §6 phase classification: phase 0x16 is the native table's zero entry
@@ -368,6 +372,82 @@ static void test_action_28_runs_body(void) {
   drop_fixture(&f);
 }
 
+/* FU-142e (FU-142 Appendix H): the wired cluster-G row 2A runs the
+ * `0x86A34..0x87010` 12-arm machine over `mr->record`; the staged arm is the
+ * record's stage92 and the native `+0x65` distance word is
+ * `mr->record.distance` (staged by the frame path from pos/target; set
+ * directly here). Arm 0 writes (-0x720, 0), clears team flag830 and both
+ * globals and advances to stage 1; arm 8 draws four run-RNG words into the
+ * target. A no-op handler would leave the target and stage untouched. */
+static void test_action_2A_runs_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 5;
+  f.mr.record.delta = 3;
+  f.mr.record.target_x = 0x111;
+  f.mr.record.target_z = 0x222;
+  f.mr.record.distance = 0;
+  f.mr.record.flag830 = 7;
+  f.mr.record.global_10f358 = 9;
+  f.mr.record.global_10f35c = 9;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
+  assert(f.mr.record.target_x == -0x720);
+  assert(f.mr.record.target_z == 0);
+  assert(f.mr.record.flag830 == 0);
+  assert(f.mr.record.global_10f358 == 0);
+  assert(f.mr.record.global_10f35c == 0);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 1);
+
+  /* arm 8 through the run RNG (seed 63: 0x7801, 0xEB29, 0xD746, 0x3DC7):
+   * target = (-1, +297), timer89 = 0, latch advances to 9 */
+  assert(fifa96_rng_seed(&f.mr.rng, 63) == FIFA96_OK);
+  f.mr.record.stage92 = 8;
+  f.mr.record.distance = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer89 = 5;
+  f.mr.record.delta = 0;
+  f.mr.record.target_x = 0x10;
+  f.mr.record.target_z = 0x20;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
+  assert(f.mr.record.target_x == -1);
+  assert(f.mr.record.target_z == 297);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 9);
+  drop_fixture(&f);
+}
+
+/* FU-142e: the FU-142a arm's overflow (all records 1..10 occupied) leaves
+ * `chosen831 == NONE` and no 0x2A install; the arm tail clears the `[0x10F35C]`
+ * chase flag (`0x8D80E`). Dispatching row 2A anyway is still FIFA96_OK because
+ * the body reads no chosen-record field. */
+static void test_action_2A_overflow_fixture(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 0x14;
+  f.mr.phase_machine.state = 0x14;
+  f.mr.phase_machine.side_controlled = 0;   /* team 0 controlled */
+  f.mr.global_10f35c = 1;
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    f.mr.entities.team[0].records[i].skip_9a = 1;
+  assert(fifa96_match_phase_machine_step(&f.mr) == FIFA96_OK);
+  assert(f.mr.phase_machine.arm2a_overflow == 1);
+  assert(f.mr.entities.team[0].chosen831 == FIFA96_MATCH_ENTITY_NONE);
+  assert(f.mr.global_10f35c == 0);          /* 0x8D80E arm tail clear */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(f.mr.entities.team[0].records[i].code != 0x2A);
+
+  f.mr.record.stage92 = 0;
+  f.mr.record.distance = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.target_x = 0x111;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
+  assert(f.mr.record.target_x == -0x720);
+  assert(f.mr.record.stage92 == 1);
+  drop_fixture(&f);
+}
+
 /* FU-142b (M2 arms-and-wiring Task 4, FU-142 Appendix D): row 27's body
  * `0x86820..0x86A02` is ported (`fifa96_arm_27_step` + the 0x79C50/0x6E598
  * helpers) but its entry is unresolved: the only reference to `0x86820` in
@@ -505,6 +585,8 @@ int main(void) {
   test_action_1E_runs_claim_place();
   test_action_26_runs_body();
   test_action_28_runs_body();
+  test_action_2A_runs_body();
+  test_action_2A_overflow_fixture();
   test_action_27_unwired_entry();
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();

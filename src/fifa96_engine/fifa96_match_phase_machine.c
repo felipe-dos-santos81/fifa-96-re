@@ -83,6 +83,11 @@ int fifa96_match_phase_machine_step(struct fifa96_match_run *mr) {
       pm->arm2a_overflow = 1;
       team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
     }
+    /* 0x8D80C..0x8D80E: the 0x2A arm tail clears the [0x10F35C] chase flag
+     * (both the found and the overflow path fall through it). Task 8 completed
+     * this write of the arm Task 2 ported, because row 2A's arm 10 sets the
+     * flag and the derived frame reads it back (FU-142 Appendix H; OL-56). */
+    mr->global_10f35c = 0;
   }
   return FIFA96_OK;
 }

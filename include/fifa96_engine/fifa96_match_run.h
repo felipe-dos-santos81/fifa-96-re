@@ -117,7 +117,10 @@ struct fifa96_match_run_render {
  * adds the row-26 fields `stage92` (native +0x92, the 0/1/2 latch), `timer7b`
  * (+0x7B), `lane` (+0x69 dz word) and the `player_d`/`player_e` stand-ins for
  * the native `rec[+4]` descriptor bytes +0xD/+0xE (the roster descriptor is
- * unmodeled; the pool path stages 0). */
+ * unmodeled; the pool path stages 0). FU-142e adds `distance` (+0x65): the
+ * unported FUN_0008D098 pre-switch walk (`0x8D11E`) writes the 0x8DCD4 out
+ * triple for every free record before the installer arms, so the frame staging
+ * recomputes the word from this dispatch's pos/target and row 2A gates on it. */
 struct fifa96_match_run_record {
   int32_t pos_x;
   int32_t pos_y;       /* native +0x5D, FU-140 row 1E placement height */
@@ -140,6 +143,7 @@ struct fifa96_match_run_record {
   uint8_t stage92;          /* native +0x92 stage latch (FU-142b row 26) */
   uint16_t timer7b;         /* native +0x7B (FU-142b row 26) */
   int32_t lane;             /* native +0x69 dz word, sign-extended (FU-142b) */
+  int32_t distance;         /* native +0x65 0x8DCD4 out[0] word (FU-142e row 2A) */
   int8_t player_d;          /* rec[+4][+0xD] table index (FU-142b row 26) */
   int8_t player_e;          /* rec[+4][+0xE] stage-0 gate (FU-142b row 26) */
   int8_t dir_x;

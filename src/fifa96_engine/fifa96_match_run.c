@@ -4,6 +4,7 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
+#include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
@@ -100,6 +101,19 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->stage92 = e->stage92;
   r->timer7b = e->timer7b;
   r->lane = e->lane;
+  /* FU-142e: reproduce the unported FUN_0008D098 pre-switch walk (`0x8D11E`),
+   * which calls 0x8DCD4(pos, target) into `+0x65/+0x67/+0x69` for every free
+   * record before the installer arms; the derived staging computes the word
+   * row 2A gates on from this call's pos/target. The +0x69 lane stays owned by
+   * the rows that consume it (26/27/28/29 recompute it in their prologues). */
+  {
+    fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
+    fifa96_arm_vec to = { r->target_x, r->target_y, r->target_z };
+    int32_t distance = 0;
+    int32_t lane_unused = 0;
+    (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane_unused);
+    r->distance = distance;
+  }
   r->type = e->type;
   r->vel_x = e->vel_x;
   r->vel_z = e->vel_z;
@@ -183,6 +197,13 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->place_z = r->place_z;
   e->dir_x = r->dir_x;
   e->dir_z = r->dir_z;
+  /* FU-142e: row 2A writes the team `+0x830` flag (arms 0/1) and the
+   * `[0x10F358]`/`[0x10F35C]` process globals (arms 0/9/10); the native writes
+   * are process-wide, so the staged values land back on the pool/run for the
+   * later records of the same frame (the frame staging reads them again). */
+  mr->entities.team[e->team].flag830 = r->flag830;
+  mr->global_10f358 = r->global_10f358;
+  mr->global_10f35c = r->global_10f35c;
   return rc;
 }
 

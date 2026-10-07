@@ -1437,6 +1437,373 @@ static void test_arm_28_invalid(void) {
   assert(rec.timer89 == 0);
 }
 
+/* --- Row 0x2A body `0x86A34..0x87010` (409 instructions, Appendix H) ------
+ * The 12-dword jump table `0x86A04` = {0x86A91, 0x86AFE, 0x86B5F, 0x86BA2,
+ * 0x86BDC, 0x86C7D, 0x86D1E, 0x86DBF, 0x86E60, 0x86F2F, 0x86F83, 0x8700A};
+ * entry 11 (0x8700A) is the shared epilogue RET. The prologue always adds the
+ * zero-extended `[0x157A64]` delta to timer89; when the signed stage92 byte
+ * is > 2 it also writes timer7b = 4 and runs the 0x36200 stub (native EAX=2),
+ * then stage92 > 0xB (unsigned) goes to the epilogue. The native `+0x65`
+ * distance word (the unported FUN_0008D098 pre-switch walk 0x8D11E) is the
+ * `distance` input; arm 8's four 0x92AC8 draws are pinned for seed 63
+ * (0x7801, 0xEB29, 0xD746, 0x3DC7). The 0x79C50 face calls use explicit
+ * direction words: arm 0 passes (0, 0) (the zero-direction no-op) and arm 10
+ * passes (0, -100) (octant 4). */
+
+/* Arm 0 (0x86A91): target = (-0x720, 0), team flag830 = 0, both globals = 0,
+ * the (0,0) face no-op leaves +0x8E, id 0x60, timer89 = 0, latch 0 -> 1. */
+static void test_arm_2a_arm0_target_and_clears(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.timer89 = 5;
+  rec.delta = 3;
+  rec.target.x = 0x111;
+  rec.target.z = 0x222;
+  rec.type = 0x77;
+  rec.flag830 = 7;
+  rec.global_10f358 = 9;
+  rec.global_10f35c = 9;
+  rec.anim_sel = 0x99;
+  assert(fifa96_arm_2a_step(&rec, 0) == FIFA96_OK);
+  assert(rec.target.x == -0x720);
+  assert(rec.target.z == 0);
+  assert(rec.flag830 == 0);
+  assert(rec.global_10f358 == 0);
+  assert(rec.global_10f35c == 0);
+  assert(rec.type == 0x77);      /* (dx,dz) = (0,0): no face write */
+  assert(rec.anim_sel == 0x60);  /* constant id 0x60 */
+  assert(rec.timer89 == 0);
+  assert(rec.stage92 == 1);
+}
+
+/* Arm 1 (0x86AFE): the distance gate `> 0x20` returns after the prologue;
+ * `<= 0x20` selects id 0x61, sets flag830 = 1, target = (-0x540, 0),
+ * timer89 = 0 and advances the latch. */
+static void test_arm_2a_arm1_distance_gate(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 1;
+  rec.distance = 0x21;
+  rec.delta = 0;
+  rec.timer89 = 7;
+  rec.target.x = 0x111;
+  rec.target.z = 0x222;
+  rec.flag830 = 3;
+  rec.anim_sel = 0x99;
+  assert(fifa96_arm_2a_step(&rec, 1) == FIFA96_OK);
+  assert(rec.target.x == 0x111 && rec.target.z == 0x222);
+  assert(rec.flag830 == 3 && rec.anim_sel == 0x99);
+  assert(rec.timer89 == 7 && rec.stage92 == 1);
+
+  rec.distance = 0x20;
+  assert(fifa96_arm_2a_step(&rec, 1) == FIFA96_OK);
+  assert(rec.target.x == -0x540 && rec.target.z == 0);
+  assert(rec.flag830 == 1 && rec.anim_sel == 0x61);
+  assert(rec.timer89 == 0 && rec.stage92 == 2);
+}
+
+/* Arm 2 (0x86B5F): the distance gate then the 0x513EC camera stop (the derived
+ * no-op), timer89 = 0 and the latch advance. */
+static void test_arm_2a_arm2_latch(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 2;
+  rec.distance = 0x21;
+  rec.delta = 0;
+  rec.timer89 = 7;
+  rec.target.x = 0x111;
+  assert(fifa96_arm_2a_step(&rec, 2) == FIFA96_OK);
+  assert(rec.timer89 == 7 && rec.stage92 == 2 && rec.target.x == 0x111);
+
+  rec.distance = 0x20;
+  assert(fifa96_arm_2a_step(&rec, 2) == FIFA96_OK);
+  assert(rec.timer89 == 0 && rec.stage92 == 3);
+  assert(rec.target.x == 0x111);   /* the body writes no target in arm 2 */
+}
+
+/* Arm 3 (0x86BA2): timer89 < 0x78 (signed, negatives included) returns after
+ * the pre-dispatch block (timer7b = 4); >= 0x78 writes (-0x540, -0x930). */
+static void test_arm_2a_arm3_timer_gate(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 3;
+  rec.delta = 0;
+  rec.timer89 = 0x77;
+  rec.timer7b = 0;
+  rec.target.x = 0x111;
+  rec.target.z = 0x222;
+  assert(fifa96_arm_2a_step(&rec, 3) == FIFA96_OK);
+  assert(rec.timer7b == 4);        /* stage92 3 > 2 pre-dispatch block */
+  assert(rec.timer89 == 0x77 && rec.stage92 == 3);
+  assert(rec.target.x == 0x111 && rec.target.z == 0x222);
+
+  rec.timer89 = -1;                /* signed JL: negative waits too */
+  assert(fifa96_arm_2a_step(&rec, 3) == FIFA96_OK);
+  assert(rec.timer89 == -1 && rec.stage92 == 3);
+
+  rec.timer89 = 0x78;
+  assert(fifa96_arm_2a_step(&rec, 3) == FIFA96_OK);
+  assert(rec.target.x == -0x540 && rec.target.z == -0x930);
+  assert(rec.timer89 == 0 && rec.stage92 == 4);
+}
+
+/* Arm 4 (0x86BDC): pos.z thresholds (0x930 - |pos.z|) add 0x90/0x120/0x1B0/
+ * 0x240 into target.x; the tail continues to (0x540, -0x930) only when
+ * pos.z <= -0x900. */
+static void test_arm_2a_arm4_posz_branches(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 4;
+  rec.delta = 0;
+  rec.distance = 0;
+  rec.target.z = 0x222;
+
+  rec.distance = 0x241;
+  rec.target.x = 0x111;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == 0x111 && rec.target.z == 0x222);
+  assert(rec.stage92 == 4);
+
+  rec.distance = 0;
+  /* d = 0x930 > 0x180 -> +0x90; pos.z = 0 > -0x900 -> return */
+  rec.pos.z = 0;
+  rec.target.x = 0x111;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == -0x4B0);
+  assert(rec.target.z == 0x222 && rec.stage92 == 4);
+
+  /* d = 0x130 (0xC0 < d <= 0x180) -> +0x120 */
+  rec.pos.z = 0x800;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == -0x420);
+
+  /* d = 0x90 (0x60 < d <= 0xC0) -> +0x1B0 */
+  rec.pos.z = 0x8A0;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == -0x390);
+
+  /* d = 0x60 -> +0x240 */
+  rec.pos.z = 0x8D0;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == -0x300);
+
+  /* tail: pos.z = -0x900 is not > -0x900 -> (-0x540, -0x930), latch */
+  rec.pos.z = -0x900;
+  assert(fifa96_arm_2a_step(&rec, 4) == FIFA96_OK);
+  assert(rec.target.x == 0x540 && rec.target.z == -0x930);
+  assert(rec.timer89 == 0 && rec.stage92 == 5);
+}
+
+/* Arm 5 (0x86C7D): pos.x thresholds (0x540 - |pos.x|) add into target.z; the
+ * tail continues to (0x540, 0x930) at pos.x >= 0x510 (exactly 0x510 passes). */
+static void test_arm_2a_arm5_posx_branches(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 5;
+  rec.delta = 0;
+  rec.distance = 0;
+  rec.pos.x = 0;
+  rec.target.x = 0x111;
+  rec.target.z = 0x222;
+  assert(fifa96_arm_2a_step(&rec, 5) == FIFA96_OK);
+  assert(rec.target.z == -0x8A0);          /* -0x930 + 0x90 */
+  assert(rec.target.x == 0x111);           /* pos.x < 0x510 -> return */
+  assert(rec.stage92 == 5);
+
+  rec.pos.x = 0x510;                       /* d = 0x30 -> +0x240, tail passes */
+  assert(fifa96_arm_2a_step(&rec, 5) == FIFA96_OK);
+  assert(rec.target.x == 0x540 && rec.target.z == 0x930);
+  assert(rec.timer89 == 0 && rec.stage92 == 6);
+}
+
+/* Arm 6 (0x86D1E): pos.z thresholds (0x930 - |pos.z|) subtract from target.x;
+ * the tail continues to (-0x540, 0x930) at pos.z >= 0x900. */
+static void test_arm_2a_arm6_posz_subtract(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 6;
+  rec.delta = 0;
+  rec.distance = 0;
+  rec.pos.z = 0;
+  rec.target.x = 0x555;
+  rec.target.z = 0x222;
+  assert(fifa96_arm_2a_step(&rec, 6) == FIFA96_OK);
+  assert(rec.target.x == 0x4B0);           /* 0x540 - 0x90 */
+  assert(rec.target.z == 0x222 && rec.stage92 == 6);
+
+  rec.pos.z = 0x900;                       /* d = 0x30 -> -0x240, tail passes */
+  assert(fifa96_arm_2a_step(&rec, 6) == FIFA96_OK);
+  assert(rec.target.x == -0x540 && rec.target.z == 0x930);
+  assert(rec.timer89 == 0 && rec.stage92 == 7);
+}
+
+/* Arm 7 (0x86DBF): pos.x thresholds (0x540 - |pos.x|) subtract from target.z;
+ * the tail continues to (-0x540, 0x588) at pos.x <= -0x510. */
+static void test_arm_2a_arm7_posx_subtract(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 7;
+  rec.delta = 0;
+  rec.distance = 0;
+  rec.pos.x = 0;
+  rec.target.x = 0x111;
+  rec.target.z = 0x999;
+  assert(fifa96_arm_2a_step(&rec, 7) == FIFA96_OK);
+  assert(rec.target.z == 0x8A0);           /* 0x930 - 0x90 */
+  assert(rec.target.x == 0x111 && rec.stage92 == 7);
+
+  rec.pos.x = -0x510;                      /* d = 0x30 -> -0x240, tail passes */
+  assert(fifa96_arm_2a_step(&rec, 7) == FIFA96_OK);
+  assert(rec.target.x == -0x540 && rec.target.z == 0x588);
+  assert(rec.timer89 == 0 && rec.stage92 == 8);
+}
+
+/* Arm 8 (0x86E60): the distance and pos.z gates, then four RNG draws. seed 63:
+ * d1 0x7801 -> |x| 1, d2 0xEB29 -> |z| 0x129, d3 0xD746 bit 0 clear -> x = -1,
+ * d4 0x3DC7 bit 0 set -> z = +297. The whole path needs a non-NULL rng; the
+ * pos.z tail `> 0x5B8` returns before the first draw. */
+static void test_arm_2a_arm8_rng_target(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  struct fifa96_rng rng;
+  fifa96_rng_seed(&rng, 63);
+  rec.rng = &rng;
+  rec.stage92 = 8;
+  rec.delta = 0;
+  rec.timer89 = 5;
+  rec.distance = 0;
+  rec.pos.z = 0;                           /* <= 0x5B8: the draws run */
+  assert(fifa96_arm_2a_step(&rec, 8) == FIFA96_OK);
+  assert(rec.target.x == -1);
+  assert(rec.target.z == 297);
+  assert(rec.timer89 == 0 && rec.stage92 == 9);
+
+  rec = arm_rec();
+  rec.stage92 = 8;
+  rec.distance = 0;
+  rec.pos.z = 0x5B9;                       /* > 0x5B8: no draws; the x branch
+                                            * already wrote target.x */
+  rec.target.x = 0x11;
+  rec.target.z = 0x22;
+  assert(fifa96_arm_2a_step(&rec, 8) == FIFA96_OK);
+  assert(rec.target.x == -0x4B0);          /* -0x540 + 0x90 */
+  assert(rec.target.z == 0x22);
+  assert(rec.stage92 == 8);
+
+  rec = arm_rec();
+  rec.stage92 = 8;
+  rec.distance = 0x241;                    /* distance gate first */
+  rec.target.x = 0x33;
+  assert(fifa96_arm_2a_step(&rec, 8) == FIFA96_OK);
+  assert(rec.target.x == 0x33);
+}
+
+/* Arm 9 (0x86F2F): the distance gate `<= 0x20` syncs the full target triple to
+ * pos, zeroes the velocity pair, timer89 = 0 and sets [0x10F358] = 1. */
+static void test_arm_2a_arm9_sync_global(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 9;
+  rec.delta = 0;
+  rec.distance = 0x21;
+  rec.timer89 = 5;
+  rec.target.x = 0x111;
+  assert(fifa96_arm_2a_step(&rec, 9) == FIFA96_OK);
+  assert(rec.target.x == 0x111 && rec.timer89 == 5 && rec.stage92 == 9);
+  assert(rec.global_10f358 == 0);
+
+  rec.distance = 0x20;
+  rec.pos.x = 0x11;
+  rec.pos.y = 0x22;
+  rec.pos.z = 0x33;
+  rec.target.x = 0x44;
+  rec.target.y = 0x55;
+  rec.target.z = 0x66;
+  rec.vel_x = 7;
+  rec.vel_z = 8;
+  assert(fifa96_arm_2a_step(&rec, 9) == FIFA96_OK);
+  assert(rec.target.x == 0x11 && rec.target.y == 0x22 && rec.target.z == 0x33);
+  assert(rec.vel_x == 0 && rec.vel_z == 0);
+  assert(rec.timer89 == 0 && rec.stage92 == 10);
+  assert(rec.global_10f358 == 1);
+}
+
+/* Arm 10 (0x86F83): id 0x60 and the (0, -100) face octant run before the
+ * timer89 >= 0x708 gate; below it the call returns (face already stored). At
+ * or above it: id 0x64, target = (0xCC0, 0), id 0x61, timer89 = 0 and
+ * [0x10F35C] = 1. */
+static void test_arm_2a_arm10_anim_face_gate(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 10;
+  rec.delta = 0;
+  rec.timer89 = 0x707;
+  rec.type = 0x77;
+  rec.anim_sel = 0x99;
+  rec.target.x = 0x111;
+  rec.target.z = 0x222;
+  rec.global_10f35c = 0;
+  assert(fifa96_arm_2a_step(&rec, 10) == FIFA96_OK);
+  assert(rec.anim_sel == 0x60);
+  assert(rec.type == 4);                 /* (dx,dz) = (0,-100) octant */
+  assert(rec.target.x == 0x111 && rec.target.z == 0x222);
+  assert(rec.timer89 == 0x707 && rec.stage92 == 10);
+  assert(rec.global_10f35c == 0);
+
+  rec.timer89 = 0x708;
+  assert(fifa96_arm_2a_step(&rec, 10) == FIFA96_OK);
+  assert(rec.anim_sel == 0x61);          /* 0x60, 0x64, then 0x61 */
+  assert(rec.type == 4);
+  assert(rec.target.x == 0xCC0 && rec.target.z == 0);
+  assert(rec.timer89 == 0 && rec.stage92 == 11);
+  assert(rec.global_10f35c == 1);
+}
+
+/* The shared epilogue (table entry 11 = 0x8700A) and the unsigned > 0xB exit:
+ * the prologue delta still lands; the pre-dispatch block (timer7b = 4) runs
+ * for signed selectors 3..127 and is skipped for 0..2 and the negative bytes
+ * 0x80..0xFF. */
+static void test_arm_2a_arm11_epilogue(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 11;
+  rec.timer89 = 5;
+  rec.delta = 3;
+  rec.timer7b = 0;
+  rec.target.x = 0x111;
+  assert(fifa96_arm_2a_step(&rec, 11) == FIFA96_OK);
+  assert(rec.timer89 == 8);
+  assert(rec.timer7b == 4);
+  assert(rec.target.x == 0x111 && rec.stage92 == 11);
+
+  assert(fifa96_arm_2a_step(&rec, 12) == FIFA96_OK);
+  assert(rec.timer89 == 11 && rec.timer7b == 4);
+
+  rec.timer7b = 0x77;
+  rec.delta = 1;
+  assert(fifa96_arm_2a_step(&rec, 0xFF) == FIFA96_OK);
+  assert(rec.timer89 == 12);
+  assert(rec.timer7b == 0x77);           /* (int8)0xFF = -1: no pre-block */
+  assert(rec.stage92 == 11);
+  assert(fifa96_arm_2a_step(&rec, 0x80) == FIFA96_OK);
+  assert(rec.timer7b == 0x77);
+}
+
+/* The prologue adds the zero-extended [0x157A64] delta word (0xFFFF adds
+ * 0xFFFF, not -1) and writes nothing else for selectors 0..2. */
+static void test_arm_2a_prologue_delta(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  rec.stage92 = 0;
+  rec.timer89 = 5;
+  rec.delta = 0xFFFF;
+  rec.timer7b = 0x77;
+  rec.distance = 0x21;                   /* arm 2 returns at the gate */
+  assert(fifa96_arm_2a_step(&rec, 2) == FIFA96_OK);
+  assert(rec.timer89 == 5 + 0xFFFF);
+  assert(rec.timer7b == 0x77);           /* 2 is not > 2 */
+  assert(rec.stage92 == 0);
+}
+
+static void test_arm_2a_invalid(void) {
+  struct fifa96_arm_record rec = arm_rec();
+  assert(fifa96_arm_2a_step(NULL, 0) == ARM_INVALID);
+  /* arm 8 inside both gates with a NULL rng aborts at the first draw */
+  rec.stage92 = 8;
+  rec.distance = 0;
+  rec.pos.z = 0;
+  rec.rng = NULL;
+  assert(fifa96_arm_2a_step(&rec, 8) == ARM_INVALID);
+}
+
 int main(void) {
   test_arm_stub_36200();
   test_arm_26_stage_past();
@@ -1502,6 +1869,20 @@ int main(void) {
   test_arm_28_arm2_hard_approach_reroll_vc();
   test_arm_28_arm0_row_byte_gate();
   test_arm_28_invalid();
+  test_arm_2a_arm0_target_and_clears();
+  test_arm_2a_arm1_distance_gate();
+  test_arm_2a_arm2_latch();
+  test_arm_2a_arm3_timer_gate();
+  test_arm_2a_arm4_posz_branches();
+  test_arm_2a_arm5_posx_branches();
+  test_arm_2a_arm6_posz_subtract();
+  test_arm_2a_arm7_posx_subtract();
+  test_arm_2a_arm8_rng_target();
+  test_arm_2a_arm9_sync_global();
+  test_arm_2a_arm10_anim_face_gate();
+  test_arm_2a_arm11_epilogue();
+  test_arm_2a_prologue_delta();
+  test_arm_2a_invalid();
   puts("test_arm_bodies OK");
   return 0;
 }

@@ -79,3 +79,38 @@ fifa96_err_t fifa96_arm_28_step(struct fifa96_arm_record *rec, uint8_t arm);
  * phase-5 call with NULL `rng`/`team_candidates`, -> -FIFA96_ERR_INVALID
  * before any write. */
 fifa96_err_t fifa96_arm_29_step(struct fifa96_arm_record *rec);
+
+/* Row 0x2A body `0x86A34..0x87010` (409 instructions; action-table row 0x2A =
+ * 0x86A34 at `0x110788`; the FU-142a arm `0x8D807` installs code 0x2A, so the
+ * entry is resolved): the 12-dword jump table `0x86A04` machine per FU-142
+ * Appendix H. `arm` is the native `[rec+0x92]` selector: a signed byte > 2
+ * first runs the pre-dispatch block (`[0x157AA3] = rec` dropped, `timer7b = 4`,
+ * the `0x36200` stub with native EAX=2), then selector 0..10 runs its arm and
+ * 11..255 takes the shared epilogue RET.
+ *  0: target = (-0x720, 0), team `flag830` = 0, `[0x10F358]`/`[0x10F35C]` = 0,
+ *     the zero-direction face no-op, constant anim id 0x60, `timer89` = 0 and
+ *     the latch advances;
+ *  1: the `+0x65` distance gate `<= 0x20`, then id 0x61, `flag830` = 1,
+ *     target = (-0x540, 0), `timer89` = 0, latch advances;
+ *  2: the distance gate, then the `0x513EC` camera stop
+ *     (`fifa96_arm_camera_stop`), target = (-0x540, 0),
+ *     `timer89` = 0, latch advances;
+ *  3: `timer89 >= 0x78`, then target = (-0x540, -0x930), `timer89` = 0;
+ *  4..8: the distance gate `<= 0x240` and the `0x930 - |pos.z|` (4/6/8) or
+ *     `0x540 - |pos.x|` (5/7) thresholds add/subtract 0x90/0x120/0x1B0/0x240
+ *     into one target axis, then a position tail gate continues to corner
+ *     targets (4: (-0x540,-0x930) below z -0x900; 5: (0x540, 0x930) at x
+ *     >= 0x510; 6: (-0x540, 0x930) at z >= 0x900; 7: (-0x540, 0x588) at x
+ *     <= -0x510); arm 8's tail z <= 0x5B8 draws four RNG words into target
+ *     (`d1 & 0x1FF`/`d2 & 0x1FF` signed by `d3`/`d4` bit 0);
+ *  9: the distance gate `<= 0x20` syncs target = pos, zeroes the velocity pair,
+ *     `timer89` = 0 and sets `[0x10F358]` = 1;
+ *  10: id 0x60, the (dx=0, dz=-100) face octant, `timer89 >= 0x708`, then
+ *     id 0x64, target = (0xCC0, 0), id 0x61, `timer89` = 0 and
+ *     `[0x10F35C]` = 1;
+ *  11: epilogue (the pre-dispatch block still ran for selectors 3..127).
+ * `distance` is the record's native +0x65 word (the unported `FUN_0008D098`
+ * pre-switch walk `0x8D11E` computes it); arm 8 consumes four `0x92AC8` draws
+ * through `fifa96_rng_step`. NULL `rec` -> -FIFA96_ERR_INVALID; a draw on a
+ * NULL `rng` -> -FIFA96_ERR_INVALID at that site. */
+fifa96_err_t fifa96_arm_2a_step(struct fifa96_arm_record *rec, uint8_t arm);

@@ -309,6 +309,23 @@ static void test_arm_reset_invalid(void) {
   assert(fifa96_arm_reset(NULL) == ARM_INVALID);
 }
 
+/* --- `FUN_000513EC` camera stop (row-2A arm-2 site 0x86B6E, Appendix H) ----
+ * First-hand `0x513EC..0x51440` (33 instructions): the routine clears the
+ * `[0x4E584]`/`[0x4E580]` gate dwords, calls the `[0x4E5A8]`-gated table
+ * callback via `[0x14E570]+0x38`, sets camera mode `[0x4E578] = 2` and on first
+ * entry latches `[0x4E574]` after the `FUN_00064074` recorder-gate clear. The
+ * derived engine models none of those globals (the camera-mode/recorder block
+ * is unported), so the derived surface is a documented stateless no-op: every
+ * call returns FIFA96_OK and touches no caller state. */
+static void test_camera_stop_returns_ok(void) {
+  assert(fifa96_arm_camera_stop() == FIFA96_OK);
+}
+
+static void test_camera_stop_stateless_repeat(void) {
+  assert(fifa96_arm_camera_stop() == FIFA96_OK);
+  assert(fifa96_arm_camera_stop() == FIFA96_OK);
+}
+
 int main(void) {
   test_dist_stage_axis();
   test_dist_stage_lane_sign();
@@ -331,6 +348,8 @@ int main(void) {
   test_anim_select_invalid();
   test_arm_reset_fields();
   test_arm_reset_invalid();
+  test_camera_stop_returns_ok();
+  test_camera_stop_stateless_repeat();
   puts("test_arm_helpers OK");
   return 0;
 }

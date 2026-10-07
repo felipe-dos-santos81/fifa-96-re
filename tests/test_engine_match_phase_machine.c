@@ -226,10 +226,12 @@ static void test_step_arm25_3_phase13(void) {
  * team stages 0x28 across records 0..10, then the scan takes the first record
  * 1..10 with `+0x9A == 0` (record 1 here), caches its encoded id at
  * `team+0x831` and overwrites it with 0x2A; the scan starts at record 1, so
- * record 0 keeps 0x28. The non-controlled team gets 0x26. */
+ * record 0 keeps 0x28. The non-controlled team gets 0x26. The arm tail clears
+ * `[0x10F35C]` (0x8D80E; Task 8 completed the write). */
 static void test_step_arm28_2a_phase14(void) {
   struct fifa96_match_run mr;
   step_setup(&mr, 0x14, 0x14, TEAM0);
+  mr.global_10f35c = 1;
   assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[0].code == 0x28);
   assert(mr.entities.team[0].records[1].code == 0x2A);
@@ -237,6 +239,7 @@ static void test_step_arm28_2a_phase14(void) {
     assert(mr.entities.team[0].records[i].code == 0x28);
   assert(mr.entities.team[0].chosen831 == 1); /* 11*team + record */
   assert(mr.phase_machine.arm2a_overflow == 0);
+  assert(mr.global_10f35c == 0);              /* 0x8D80E arm tail */
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
     assert(mr.entities.team[1].records[i].code == 0x26);
   assert(mr.entities.team[1].chosen831 == NONE);

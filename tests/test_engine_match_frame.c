@@ -406,6 +406,82 @@ static void test_action_28_repack_round_trips_fields(void) {
   assert(chase->target_y == 0x55);             /* chosen triple y */
 }
 
+/* Run ticks until exactly one granted 30 Hz frame body ran (the pace grants
+ * 3 frames per 10 ticks; the loop bound is generous but deterministic). */
+static void one_granted_frame(struct fifa96_match_run *mr) {
+  for (int i = 0; i < 16; i++) {
+    int rc = fifa96_match_run_frame(mr);
+    assert(rc >= 0);
+    if (rc == 1) return;
+  }
+  assert(!"no granted frame within 16 ticks");
+}
+
+/* FU-142e: row 2A round-trips through the pool staging/repack at phase 0 (the
+ * record walk dispatches every code; no installer arm and no phase-2 target
+ * rewrite). Record 1 (stage92 0): the first granted frame runs arm 0 -> target
+ * (-0x720, 0), team flag830 0, globals 0, latch 1, timer89 0. The next frames
+ * wait at the arm-1 distance gate (staged from pos/target: 0x720 > 0x20),
+ * adding delta 2 each. Poking pos = target stages distance 0 and fires arm 1:
+ * id 0x61, flag830 1 (repacked to the team), target (-0x540, 0), latch 2.
+ * Stage 9 with pos = target runs arm 9: target = pos, velocity zero and
+ * [0x10F358] = 1 (repacked to the run). Stage 10 with timer89 + delta reaching
+ * 0x708 runs arm 10: target (0xCC0, 0) and [0x10F35C] = 1 (repacked). A missing
+ * distance staging breaks the arm-1/9 gates; a missing flag830/global repack
+ * fails the assertions. */
+static void test_action_2A_repack_round_trips_fields(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rush;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0;
+  mr.state.period_length = 90;       /* no period end inside the loop */
+  rush = &mr.entities.team[0].records[1];
+  rush->code = 0x2A;
+  rush->stage92 = 0;
+  rush->timer89 = 0;
+  rush->target_x = 0x111;
+  rush->target_z = 0x222;
+  mr.entities.team[0].flag830 = 1;
+
+  one_granted_frame(&mr);                          /* arm 0 */
+  assert(rush->stage92 == 1);
+  assert(rush->target_x == -0x720 && rush->target_z == 0);
+  assert(rush->timer89 == 0);
+  assert(mr.entities.team[0].flag830 == 0);        /* arm-0 clear repacked */
+  assert(mr.global_10f358 == 0 && mr.global_10f35c == 0);
+
+  one_granted_frame(&mr);                          /* arm 1 waits */
+  assert(rush->stage92 == 1 && rush->timer89 == 2);
+  one_granted_frame(&mr);
+  assert(rush->timer89 == 4 && rush->target_x == -0x720);
+
+  rush->pos_x = -0x720;                            /* staged distance 0 */
+  rush->pos_z = 0;
+  one_granted_frame(&mr);                          /* arm 1 fires */
+  assert(rush->stage92 == 2);
+  assert(rush->target_x == -0x540 && rush->target_z == 0);
+  assert(rush->timer89 == 0);
+  assert(mr.entities.team[0].flag830 == 1);        /* arm-1 set repacked */
+
+  rush->stage92 = 9;                               /* arm 9 syncs and sets */
+  rush->pos_x = 0x44; rush->pos_y = 0x55; rush->pos_z = 0x66;
+  rush->target_x = 0x44; rush->target_y = 0x55; rush->target_z = 0x66;
+  rush->vel_x = 7; rush->vel_z = 8;
+  one_granted_frame(&mr);
+  assert(rush->stage92 == 10);
+  assert(rush->target_x == 0x44 && rush->target_z == 0x66);
+  assert(rush->vel_x == 0 && rush->vel_z == 0);
+  assert(mr.global_10f358 == 1);                   /* arm-9 global repacked */
+
+  rush->stage92 = 10;                              /* arm 10 timer gate */
+  rush->timer89 = 0x706;                           /* + delta 2 = 0x708 */
+  rush->target_x = 0; rush->target_z = 0;
+  one_granted_frame(&mr);
+  assert(rush->stage92 == 11);
+  assert(rush->target_x == 0xCC0 && rush->target_z == 0);
+  assert(mr.global_10f35c == 1);                   /* arm-10 global repacked */
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -417,6 +493,7 @@ int main(void) {
   test_phase_machine_hook();
   test_action_26_repack_round_trips_fields();
   test_action_28_repack_round_trips_fields();
+  test_action_2A_repack_round_trips_fields();
   puts("test_engine_match_frame OK");
   return 0;
 }

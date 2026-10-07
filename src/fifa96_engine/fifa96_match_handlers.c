@@ -37,8 +37,12 @@
  * code 0x28, the `0x870E8..0x874E3` 4-arm machine plus its `0x87014` helper
  * are ported (`fifa96_arm_28_step`, FU-142 Appendix G) and the pool binding
  * (scratch gates, team flag830, resolved chosen831, globals) is bounded, so
- * the row flips to `ported`. The remaining cluster-G rows stay unwired
- * (29/2C bodies ported in Tasks 5/6 but entries OL-48, 2A its body task). */
+ * the row flips to `ported`. FU-142e (Task 8) ports and wires row 2A: the arm
+ * `0x8D807` installs code 0x2A, the `0x86A34..0x87010` 12-arm machine
+ * (`fifa96_arm_2a_step`, FU-142 Appendix H) and the pool binding (staged
+ * distance, team flag830, the two process globals) are bounded, so the row
+ * flips to `ported`. The remaining cluster-G rows stay unwired (29/2C bodies
+ * ported in Tasks 5/6 but entries OL-48). */
 #include <stddef.h>
 #include <string.h>
 
@@ -226,6 +230,58 @@ static int fifa96_match_action_28(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* FU-142e (FU-142 Appendix H): action 0x2A — the 12-arm stage machine
+ * `0x86A34..0x87010`. The derived step runs the prologue (timer89 += delta
+ * and, for a signed stage byte > 2, timer7b = 4 + the 0x36200 stub), then the
+ * jump table: arm 0 clears the target/globals/team flag, arms 1/2 gate on the
+ * staged `distance` (+0x65), arms 3..8 are the corner/return target algebra
+ * (arm 8 draws four RNG words into the target), arm 9 syncs target = pos and
+ * sets `[0x10F358]`, arm 10 runs the anim/face/timer sequence and sets
+ * `[0x10F35C]`, and 11..255 take the epilogue. The record staging carries
+ * `distance`, `type`, `flag830`, the velocity pair and the two globals; the
+ * frame repack (match_run.c) lands `flag830` on the pool team and the globals
+ * on the run. The `0x513EC` camera stop and the `[0x157AA3]` store stay
+ * derived no-ops (Appendix H open legs); the `0x36200` call value (native
+ * EAX=2) stays the OL-51 no-op. */
+static int fifa96_match_action_2A(struct fifa96_match_run *mr) {
+  struct fifa96_arm_record rec;
+  int rc;
+  memset(&rec, 0, sizeof rec);
+  rec.pos.x = mr->record.pos_x;
+  rec.pos.y = mr->record.pos_y;
+  rec.pos.z = mr->record.pos_z;
+  rec.target.x = mr->record.target_x;
+  rec.target.y = mr->record.target_y;
+  rec.target.z = mr->record.target_z;
+  rec.distance = mr->record.distance;
+  rec.timer89 = mr->record.timer89;
+  rec.timer7b = mr->record.timer7b;
+  rec.delta = mr->record.delta;
+  rec.type = mr->record.type;
+  rec.stage92 = mr->record.stage92;   /* the same byte the handler passes as arm */
+  rec.flag830 = mr->record.flag830;
+  rec.vel_x = mr->record.vel_x;
+  rec.vel_z = mr->record.vel_z;
+  rec.global_10f358 = mr->record.global_10f358;
+  rec.global_10f35c = mr->record.global_10f35c;
+  rec.rng = &mr->rng;
+  rc = fifa96_arm_2a_step(&rec, mr->record.stage92);
+  if (rc != FIFA96_OK) return rc;
+  mr->record.target_x = rec.target.x;
+  mr->record.target_y = rec.target.y;
+  mr->record.target_z = rec.target.z;
+  mr->record.timer89 = rec.timer89;
+  mr->record.timer7b = rec.timer7b;
+  mr->record.stage92 = rec.stage92;
+  mr->record.type = rec.type;
+  mr->record.flag830 = rec.flag830;
+  mr->record.vel_x = rec.vel_x;
+  mr->record.vel_z = rec.vel_z;
+  mr->record.global_10f358 = rec.global_10f358;
+  mr->record.global_10f35c = rec.global_10f35c;
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -286,7 +342,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-142d App. G/FU-137 §5.2: row 28 ported (0x870E8..0x874E3, 4-arm table 0x870D8 + 0x87014 helper) over the pool; arm 0x8D7CF; scratch/target/type/vel repacked"},
     {0x29, NULL,
      "FU-142c App. F/FU-137 §5.3: row 29 body 0x874E4..0x87738 ported (fifa96_arm_29_step; phase-5 machine, self-install 3); the action-table slot 0x110784 is the only body reference and no static installer of 0x29 exists (the phase-5 handler 0x6E05C has no installer call); entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},
-    {0x2A, NULL, "FU-137 arm 0x8D807 (scan [rec+0x9A], store [team+0x831]); body 0x086A34; OL-15"},
+    {0x2A, fifa96_match_action_2A,
+     "FU-142e App. H/FU-137 §5.2: row 2A ported (0x86A34..0x87010, 12-arm table 0x86A04 + 0x513EC camera-stop no-op) over the pool; arm 0x8D807; distance/flag830/global/target/vel repacked"},
     {0x2B, NULL, "FU-137 open leg: native body is one-byte RET 0x87738; no install arm found; OL-15"},
     {0x2C, NULL, "FU-142b App. E/FU-137 §5.3: row 2C body 0x84598..0x8462D ported (fifa96_arm_2c_step + fifa96_arm_reset); the action-table slot is the only reference to the body; entry unresolved (FU-142f/OL-48); -UNSUPPORTED"},
 };

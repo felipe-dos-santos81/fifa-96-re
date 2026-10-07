@@ -24,6 +24,16 @@ fifa96_err_t fifa96_arm_reset(struct fifa96_arm_record *rec) {
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_arm_camera_stop(void) {
+  /* First-hand /FIFA96.EXE 0x513EC..0x51440 (33 instructions): all of the
+   * routine's effects are on the unported camera-mode/recorder block
+   * (`[0x4E584]/[0x4E580]` clear 0x513F9/0x513FF, the `[0x4E5A8]`-gated
+   * callback via `[0x14E570]+0x38` 0x51413, `[0x4E578] = 2` 0x51421, the
+   * `[0x4E574]` first-entry latch + `FUN_00064074` 0x5142B..0x51435), so the
+   * derived surface is a documented no-op (Appendix H open leg). */
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_arm_dist_stage(const fifa96_arm_vec *from, const fifa96_arm_vec *to,
                                    int32_t *out_distance, int32_t *out_lane) {
   int16_t dx;
