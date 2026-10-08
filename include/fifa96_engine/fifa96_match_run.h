@@ -213,6 +213,19 @@ struct fifa96_match_run {
   struct fifa96_match_pace pace;
   struct fifa96_match_state state;               /* match clock/period block */
   uint16_t score[2];                             /* per-side goal words (FU-72 §2.4) */
+  /* C3-OL2 (M2 playability Task 4): the FUN_00093944 writer's state cells —
+   * native [0x15B670] last scoring side, [0x15B6B4] tracked goal-difference
+   * side (-1 = the plain-increment sentinel) and [0x15B6A4] max goal
+   * difference — plus the id the latest score event posted to FUN_0009252C
+   * (0 = none), the engine's observability seam. The native producers
+   * (FUN_00092D8C's
+   * tracked-side pick from the unported team+0x828 flags at 0x1590CC/0x159901
+   * and FUN_00092E2C's resets) are unported (OL-87), so init/begin install the
+   * carried defaults: last_side/tracked_side -1, max_diff 0. */
+  int32_t score_last_side;
+  int32_t score_tracked_side;
+  int32_t score_max_diff;
+  uint8_t score_last_event;
   /* FU-143 wiring (M2 playability Task 3): the FU-62 second-rollover
    * completion (`period_seconds == limit + aux_seconds`) for the latest tick,
    * staged by fifa96_match_run_frame from fifa96_match_state_tick's
@@ -315,6 +328,30 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
  * tasks. Returns 0, -FIFA96_ERR_INVALID (NULL or
  * side > 1), or -FIFA96_ERR_STATE (run not live). */
 int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
+
+/* C3-OL2 (M2 playability Task 4): the derived `FUN_00093944` score-event
+ * source (`fifa96_action_score_event`, FU-142 App. I.10 / FU-72 §2.4 errata)
+ * run over the match's live score pair and state cells. Increments one side's
+ * goal word, records the side and, when `score_tracked_side` is not the
+ * carried -1, updates the tracked-side goal difference and posts the native
+ * threshold event id; the id the latest call posted lands in
+ * `score_last_event` (0 = none). `probe` is the unported `FUN_000CBC4C` byte
+ * (the writer reads it
+ * only on the `score[side] == 1 && score[other] < 3` non-tracked arm; the
+ * engine passes 0).
+ *
+ * The native invokers are the eleven goal-screen handler sites
+ * (`0x93D98..0x9486E`, FU-142 App. I.10), driven by the `FUN_0008A938`
+ * situation queue and the period-indexed handler table `0x110F78`; the whole
+ * screen cluster, the clock's goal scanner (`FUN_0008AF38 0x8B63E`) and the
+ * `FUN_0009252C` dispatch are unported (OL-77/OL-87/OL-88/OL-89), so no wired
+ * dispatch reaches this source yet — the run exposes it on the live-run API and
+ * the M2 tape's goal step uses it. `fifa96_match_run_add_goal` stays the FU-72
+ * plain increment for those unported paths. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL `mr` or `side > 1`), or -FIFA96_ERR_STATE (run not
+ * live). A writer failure (invalid staged tracked side) leaves the run
+ * untouched. */
+int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uint8_t probe);
 
 /* Exactly one 10 ms/100 Hz pace tick of the match frame body. Feeds the FU-60
  * pace (blocked = 0, clock_halt = 0): 1 = the pace granted a 30 Hz frame, the

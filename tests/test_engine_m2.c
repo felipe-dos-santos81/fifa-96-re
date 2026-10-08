@@ -30,9 +30,10 @@
  *      staged into dedicated pool records and dispatched through the engine's
  *      per-record chain (00 and the arm-staged 26/28/2A already dispatched);
  *      the test asserts the observed OK set;
- *   4. the score step: `fifa96_match_run_add_goal(mr, 0)` (no wired body
- *      contains the native FUN_00093944 score writer — see the report / the
- *      FU-142f carried leg), pinned by `state=2/1-0` lines;
+ *   4. the score step: the derived FUN_00093944 score source
+ *      `fifa96_match_run_score_event(mr, 0, 0)` (C3-OL2, playability Task 4;
+ *      no wired body contains a native writer site — see the report / FU-142
+ *      App. I.10), pinned by `state=2/1-0` lines;
  *   5. the forced 1 s period end (`state=2/1-0` on the resolving frame), the
  *      OVER -> POST -> EXIT -> run_end compression returning the engine to
  *      FRONTEND, and 20 post-exit front-end frames.
@@ -57,6 +58,14 @@
  * `[0x157AC0]` producer are unported, so the tape cannot drop the forcing.
  * This test's golden byte-comparison is the tape-mode record the task asks
  * for: byte-identical = forcing kept, no re-pin.
+ *
+ * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
+ * direct `fifa96_match_run_add_goal`. Its tracked-side default is the carried
+ * -1 (the native FUN_00092D8C producer reads the unported team+0x828 flags,
+ * OL-87), so the writer reduces to the FU-72 increment + last-side record and
+ * the transcript stays BYTE-IDENTICAL: no frame moves and the golden is not
+ * re-pinned. `add_goal` stays for paths whose native writers remain unported
+ * (the period-indexed goal-screen handler cluster, OL-77/OL-87).
  *
  * Wired-row dispatch set: the tape stages the Gate-G3 rows (06/07/0F/18/21/23)
  * and keeper row 1E into pool record 1..7 of team 0 at the mechanics step; row
@@ -231,7 +240,10 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     /* Every wired row dispatched FIFA96_OK during the replay. */
     res->mask_final = mr->dispatched_ok;
     assert(res->mask_final == M2_WIRED_MASK);
-    assert(fifa96_match_run_add_goal(mr, 0) == 0);      /* the tape's score step */
+    /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
+     * carried tracked-side default -1 it is the FU-72 increment + last side. */
+    assert(fifa96_match_run_score_event(mr, 0, 0) == 0);
+    assert(mr->score_last_side == 0 && mr->score_last_event == 0);
   }
 }
 

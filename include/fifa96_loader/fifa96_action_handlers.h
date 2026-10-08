@@ -1002,3 +1002,38 @@ fifa96_err_t fifa96_action_pursuit_step(fifa96_action_pursuit *state,
                                         const fifa96_action_pursuit_mate *mates,
                                         uint32_t mate_count,
                                         fifa96_action_pursuit_out *out);
+
+/* ===== C3-OL2 (M2 playability Task 4): the FUN_00093944 goal writer =====
+ *
+ * The native per-side goal writer `FUN_00093944(side EAX)` (`0x93944..0x93B7D`,
+ * first-hand `/FIFA96.EXE`; FU-72 §2.4 + the Task-4 erratum in FU-142
+ * App. I.10): `side` 0/1 increments the word `[0x157AC5 + side*2]` (`0x9394B`)
+ * and stores the side to `[0x15B670]` (`0x93959`); when the tracked side
+ * `[0x15B6B4]` is not the -1 sentinel it maintains that side's goal difference
+ * in `[0x15B6A4]` (`0x93967..0x93992`, signed int16 diff) and posts threshold
+ * ids through `FUN_0009252C`: 0x9A (diff+3 == max_diff > 3, tracked arm), 0x9B
+ * (3-0), 0x9C (5, other < 3), 0x9D (9, other < 5), 0x9E (4, other < 2), 0x9F
+ * (7, other < 3), 0xA0 (9, other < 4) and 0xD3 (score 1, other < 3 and the
+ * `FUN_000CBC4C` probe's low two bits set, non-tracked arm). Every posting arm
+ * returns immediately (the shared epilogue).
+ *
+ * `state` carries the four native cells; `probe` is the `FUN_000CBC4C` return
+ * byte (unported helper, caller-supplied; the native consumes it only on the
+ * `score[side] == 1 && score[side^1] < 3` non-tracked arm). `tracked_side`
+ * other than -1/0/1 -> -FIFA96_ERR_INVALID (hardening: the native indexes the
+ * score pair unchecked); NULL `state`/`out` or `side > 1` likewise. Invalid
+ * arguments leave `state` untouched. */
+typedef struct fifa96_action_score {
+  uint16_t score[2];    /* native 0x157AC5 / 0x157AC7 goal words */
+  int32_t last_side;    /* native 0x15B670: side of the last increment */
+  int32_t tracked_side; /* native 0x15B6B4; -1 = no bookkeeping/events */
+  int32_t max_diff;     /* native 0x15B6A4: max tracked-side goal difference */
+} fifa96_action_score;
+
+typedef struct fifa96_action_score_out {
+  uint8_t posted;       /* 1 = the native FUN_0009252C was called */
+  uint8_t post_id;      /* 0x9A..0xA0 / 0xD3 when posted, else 0 */
+} fifa96_action_score_out;
+
+fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side,
+                                       uint8_t probe, fifa96_action_score_out *out);

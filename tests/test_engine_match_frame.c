@@ -495,6 +495,62 @@ static void test_phase_drive_begun_end_resets_phase(void) {
   drop_fixture(f);
 }
 
+/* C3-OL2 (M2 playability Task 4): the derived FUN_00093944 score-event writer
+ * wired as the live run's score source. The native callers are the unported
+ * period-indexed goal-screen handlers (first-hand census, FU-142 App. I.10:
+ * 11 sites at 0x93D98..0x9486E; no wired action/phase row contains one), so
+ * the run exposes the derived source on the same live-run API the M2 tape's
+ * score step uses. The carried tracked-side default is -1 (the native
+ * FUN_00092D8C producer reads the unported team+0x828 flags, OL-87): the
+ * source is then the FU-72 increment + last-side record. Staging the tracked
+ * side exercises the full bookkeeping and the 0x9B/0x9E posts; the derived
+ * loader branches are fixtured in test_action_handlers.c. */
+static void test_score_event_wired_run_path(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.score_tracked_side == -1);
+  assert(mr.score_last_side == -1);
+  assert(mr.score_max_diff == 0);
+  assert(mr.score_last_event == 0);
+
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+
+  /* Goal 1: the carried -1 default is the plain increment + last side. */
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);
+  assert(mr.score_last_side == 0 && mr.score_last_event == 0);
+  assert(mr.score_max_diff == 0);
+
+  /* Goals 2-3 with the tracked side staged: 3-0 posts the native 0x9B. */
+  mr.score_tracked_side = 0;
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 2 && mr.score_last_event == 0);
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 3 && mr.score_last_event == 0x9B);
+
+  /* Goal 4 on the non-tracked arm: 4-0 with the tracked side flipped to 1 is
+   * own 4, other 0 -> the native 0x9E. */
+  mr.score_tracked_side = 1;
+  assert(fifa96_match_run_score_event(&mr, 0, 3) == 0);
+  assert(mr.score[0] == 4 && mr.score_last_event == 0x9E);
+
+  /* The live frame body still runs with the updated score (rendering stays
+   * off, so no parity claim over the unmodeled screen/presentation paths). */
+  assert(fifa96_match_run_frame(&mr) >= 0);
+
+  assert(fifa96_match_run_score_event(NULL, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_score_event(&mr, 2, 0) == -FIFA96_ERR_INVALID);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+
+  struct fifa96_match_run dead;
+  fifa96_match_run_init(&dead);
+  assert(fifa96_match_run_score_event(&dead, 0, 0) == -FIFA96_ERR_STATE);
+}
+
 /* Run ticks until exactly one granted 30 Hz frame body ran (the pace grants
  * 3 frames per 10 ticks; the loop bound is generous but deterministic). */
 static void one_granted_frame(struct fifa96_match_run *mr) {
@@ -586,6 +642,7 @@ int main(void) {
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
   test_phase_drive_begun_end_resets_phase();
+  test_score_event_wired_run_path();
   puts("test_engine_match_frame OK");
   return 0;
 }

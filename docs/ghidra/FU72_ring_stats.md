@@ -438,3 +438,54 @@ change. Port write set: `include/fifa96_loader/fifa96_ring_stats.h`,
 `CMakeLists.txt` (one library/test block). `make test`: 60/60 before, **61/61
 after**; ASan+UBSan `test_ring_stats` clean. `game/FIFAPCCD96.iso` untouched;
 `fifa96.rep/**` churn not staged.
+
+## 8. Errata — C3-OL2 (M2 playability Task 4)
+
+First-hand re-verification on `/FIFA96.EXE` (read-only) of the `FUN_00093944`
+goal writer and its eleven call sites; the full window, tables and citations
+live in FU-142 Appendix L.
+
+* **§2.4 "posts the threshold event ids 0x9A/0x9B/0x9C/0x9D/0x9E/0x9F/0xA0" —
+  extended with the 0xD3 arm.** When `side != [0x15B6B4]`, `score[side] == 1`,
+  `score[side^1] < 3` and the `FUN_000CBC4C` return byte has bit 0 or 1 set
+  (`0x939D1 CALL 0xCBC4C` / `0x939D6 TEST AL,3`), the writer posts id **0xD3**
+  and returns (`0x939DA..0x939DF`, shared `0x93B73` `CALL 0x9252C`).
+* **§2.4 "maintains the goal-difference bookkeeping `[0x5B6A4]`/`[0x5B6B4]`"
+  — exact decode.** `[0x15B6B4] == -1` returns after the increment and the
+  `[0x15B670]` store only (`0x9395E..0x93961`); otherwise
+  `diff = (int16)(score[other] - score[tracked])` (`other = tracked == 0 ? 1 :
+  0`, `0x9398B MOVSX DX`) updates `[0x15B6A4] = max(...)` (`0x93992`), and the
+  tracked arm's 0x9A test is `diff + 3 == max_diff && max_diff > 3`
+  (`0x93AA6..0x93AB4`). The non-tracked arm's 0x9E/0x9F/0xA0 checks are
+  `4/other<2`, `7/other<3`, `9/other<4`; the tracked arm's are `3-0`, `5/other<3`,
+  `9/other<5`. Every posting arm returns through the shared epilogue: at most
+  one id per call.
+* **§2.4 call-site contexts — all eleven are goal-screen handler sites.**
+  `0x93D98`/`0x93DA1` in `0x93BBC`, `0x94026`/`0x9402F` in `0x93E20`,
+  `0x941E5`/`0x941EE` in `0x940A4`, `0x94489`/`0x94492` in `0x94270`,
+  `0x94667`/`0x94670` in `0x944FC`, `0x9486E` in `0x946C4`. The six handlers
+  are period-indexed by the table at flat `0x110F78` (installed into
+  `[0x15B6D4]` by `FUN_00092E2C 0x92EC4..0x92EF7` from `(int16)[0x15B680]`),
+  each dispatching the pending id `[0x15B6A8] - 1` through its own inline
+  table (side map in FU-142 L.4). No action/phase table slot contains a
+  `0x93xxx` address, so no wired dispatch reaches a writer site (this is the
+  task's carried leg OL-87/OL-88).
+* **§2.4 "Reset writers: `FUN_00092E2C` ... (match reset ...)" — confirmed
+  and placed.** `FUN_00092E2C` zeroes the score pair at `0x92E7B`/`0x92E82`
+  and `[0x15B6A4]` at `0x92E5B`; `FUN_00092D8C` writes `[0x15B6B4]` (`1` when
+  `[0x1590CC]==0`, `0` when `[0x159901]==0`, else `-1`; `0x92DEF/0x92E00/
+  0x92E08`) and is called from the replay/screen setup `FUN_0003BB1C`/
+  `FUN_00038630`, not the match init.
+* **§2.4 "call sites" + §6 "corrected to eleven" — confirmed**: `get_xrefs_to
+  0x93944` = 11 `UNCONDITIONAL_CALL` at the addresses listed above; the
+  `0x9252C` helper's empty Ghidra xref list (FU-63 §5) is an artifact of the
+  unanalyzed goal cluster — the writer is its caller.
+* **§4 "Not ported: ... the goal words (a plain two-counter array whose event
+  side effects are out of scope)" — superseded.** The writer is now ported as
+  `fifa96_action_score_event` (`include/fifa96_loader/fifa96_action_handlers.h`)
+  and wired as `fifa96_match_run_score_event`; the engine carries the writer's
+  `last_side`/`tracked_side`/`max_diff` cells with the -1 tracked default
+  (producer unported, OL-87) and captures the posted id in `score_last_event`.
+  `fifa96_match_run_add_goal` remains the plain increment for the unported
+  gameplay paths. The M2 tape's goal step runs the derived source and stays
+  byte-identical (FU-142 L.6/L.8).

@@ -81,12 +81,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   `dispatched_ok` stayed `0x1` (row `00` only). **Kick and score are not
   interactively reachable:** the zeroed FU-141 pool dispatches row `00`
   only (kick rows `07`/`0F` need the unported possession/selection legs) and
-  the FU-72 score writers are unported (`C3-OL2`). The class-1 phase-2 period
+  the derived FU-72 score writer has no wired gameplay invoker yet (the
+  goal-screen handler cluster and the clock's goal scanner stay unported,
+  OL-87/OL-88). The class-1 phase-2 period
   end is now derived (the FU-143 phase driver is wired), but the interactive
   match cannot reach phase 2 without the unported kickoff entry (`OL-79`/
   `OL-84`). The M2-B tape covers the sequence headlessly by declaring/forcing
-  its kickoff/mechanics phases and calling `fifa96_match_run_add_goal`
-  (recorded carry).
+  its kickoff/mechanics phases and calling the derived
+  `fifa96_match_run_score_event` for the goal step (C3-OL2; the carried
+  tracked-side default keeps it byte-identical to the old increment).
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -155,10 +158,21 @@ the build also produces the windowed `fifa96` target (`make game`).
   post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B tape
   keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics) and
   stays byte-identical. See FU-143 §9 (integration errata).
-- **Score event source (child `C3-OL2`):** the FU-72 `FUN_00093944` writers live
-  in the unported action/phase clusters; `fifa96_match_run_add_goal` exposes the
-  derived increment only, and the tape drives it directly (recorded in FU-142
-  Appendix I).
+- **Score event source (child `C3-OL2`, closed; invokers open).** The FU-72
+  `FUN_00093944` writer is derived and ported
+  (`fifa96_action_score_event`, FU-142 Appendix L): score increment, last-side
+  and tracked-side goal-difference bookkeeping, and the
+  `FUN_0009252C` threshold posts (0x9A..0xA0, 0xD3). It is wired as the live
+  run's source (`fifa96_match_run_score_event`, with the writer's four state
+  cells and `score_last_event`), and the M2 tape's goal step uses it
+  (transcript byte-identical). The native invokers are unported, so gameplay
+  goals cannot reach it: **OL-87** (the six period-indexed goal-screen handlers
+  `0x110F78` + the `[0x15B6D4]` scheduler `FUN_000948AC` + the tracked-side
+  producer `FUN_00092D8C`), **OL-88** (goal detection: `FUN_0008AF38
+  0x8B623..0x8B63E` -> `FUN_00088940` -> `FUN_0008A938(6, side)`), **OL-89**
+  (posted-id dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe). The engine
+  carries tracked side -1 (`add_goal`-equivalent) until OL-87 lands;
+  `fifa96_match_run_add_goal` remains for those unported paths.
 - Retail front-end art asset (no OPTIONS-like path exists in the ISO).
 - Per-row cluster legs carried in FU-139/FU-141/FU-142 (`OL-56`…`OL-71`:
   unmodeled record bytes, process globals, camera/track inputs, roster

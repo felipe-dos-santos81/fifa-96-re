@@ -47,6 +47,12 @@ _Static_assert(offsetof(fifa96_action_kick_event_out, table) == 1, "table");
 _Static_assert(offsetof(fifa96_action_kick_event_out, index) == 4, "index");
 _Static_assert(offsetof(fifa96_action_kick_append, direct) == 0, "direct");
 _Static_assert(offsetof(fifa96_action_kick_append, code) == 1, "code");
+_Static_assert(offsetof(fifa96_action_score, score) == 0, "score");
+_Static_assert(offsetof(fifa96_action_score, last_side) == 4, "last_side");
+_Static_assert(offsetof(fifa96_action_score, tracked_side) == 8, "tracked_side");
+_Static_assert(offsetof(fifa96_action_score, max_diff) == 12, "max_diff");
+_Static_assert(offsetof(fifa96_action_score_out, posted) == 0, "posted");
+_Static_assert(offsetof(fifa96_action_score_out, post_id) == 1, "post_id");
 
 #define ACTION_INVALID ((fifa96_err_t)-FIFA96_ERR_INVALID)
 
@@ -1546,6 +1552,171 @@ static void test_pursuit_invalid(void) {
   assert(fifa96_action_pursuit_step(&s, mates, 2, &out) == FIFA96_OK);
 }
 
+/* C3-OL2 / FU-72 §2.4 errata: the derived FUN_00093944 goal writer.
+ * Hand-computed from the first-hand body `/FIFA96.EXE` 0x93944..0x93B7D
+ * (instruction sites quoted in the test comments). */
+static void score_init(fifa96_action_score *s, uint16_t s0, uint16_t s1, int32_t tracked,
+                       int32_t max_diff) {
+  memset(s, 0, sizeof *s);
+  s->score[0] = s0;
+  s->score[1] = s1;
+  s->tracked_side = tracked;
+  s->max_diff = max_diff;
+  s->last_side = -1;
+}
+
+/* The tracked-side -1 sentinel (0x9395E/0x93961): the writer is the plain FU-72
+ * increment plus the last-side record; no diff bookkeeping and no event posts,
+ * even at a threshold score. The word pair wraps (0x9394B INC word). */
+static void test_score_event_untracked(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+  score_init(&s, 0, 0, -1, 0);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 1 && s.score[1] == 0);
+  assert(s.last_side == 0);
+  assert(s.max_diff == 0);                  /* no 0x93967..0x93992 bookkeeping */
+  assert(out.posted == 0 && out.post_id == 0);
+
+  score_init(&s, 8, 0, -1, 0);              /* 9-0 would post 0xA0 when tracked */
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(s.score[0] == 9 && s.max_diff == 0 && out.posted == 0);
+
+  score_init(&s, 0xFFFF, 0, -1, 0);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 0);                  /* 16-bit wrap */
+  assert(s.last_side == 0);
+}
+
+/* The tracked arm (0x93997 JZ 0x93AA6): side == tracked_side. 0x9A fires on
+ * `(int16)diff + 3 == max_diff && max_diff > 3` (0x93AA6..0x93AC0). */
+static void test_score_event_tracked_9a(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+  /* tracked 0, other = score[1] = 4; after the increment diff = 4 - 3 = 1,
+   * max_diff stays 4 (1 < 4), 1 + 3 == 4 > 3 -> post 0x9A. */
+  score_init(&s, 2, 4, 0, 4);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 3 && s.score[1] == 4);
+  assert(s.max_diff == 4 && s.last_side == 0);
+  assert(out.posted == 1 && out.post_id == 0x9A);
+
+  /* The 0x93AB6 `CMP EBP,3 / JLE` guard: the same equality with max_diff 3
+   * must NOT fire. */
+  score_init(&s, 2, 3, 0, 3);               /* diff = 3 - 3 = 0; 0 + 3 == 3 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 3 && out.posted == 0);
+}
+
+/* Tracked arm thresholds 0x9B (3-0), 0x9C (5 with other < 3), 0x9D (9 with
+ * other < 5), and the miss arm (0x93B02..0x93B78). */
+static void test_score_event_tracked_thresholds(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+
+  score_init(&s, 2, 0, 0, 0);               /* -> 3-0 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 3 && out.posted == 1 && out.post_id == 0x9B);
+
+  score_init(&s, 4, 2, 0, 0);               /* -> 5-2, other 2 < 3 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 5 && out.posted == 1 && out.post_id == 0x9C);
+
+  score_init(&s, 4, 3, 0, 0);               /* -> 5-3, other 3 not < 3 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 5 && out.posted == 0);
+
+  score_init(&s, 8, 4, 0, 0);               /* -> 9-4, other 4 < 5 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 9 && out.posted == 1 && out.post_id == 0x9D);
+
+  score_init(&s, 8, 5, 0, 0);               /* -> 9-5, other 5 not < 5 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 9 && out.posted == 0);
+
+  /* 3-0 with tracked 1 mirrors onto side 1 (other = score[0]). */
+  score_init(&s, 0, 2, 1, 0);
+  assert(fifa96_action_score_event(&s, 1, 0, &out) == FIFA96_OK);
+  assert(s.score[1] == 3 && s.last_side == 1 && out.posted == 1 && out.post_id == 0x9B);
+
+  /* The signed max-diff update (0x9398B MOVSX): diff -3 raises max_diff -5. */
+  score_init(&s, 2, 0, 0, -5);              /* -> 3-0, diff = 0 - 3 = -3 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.max_diff == -3 && out.post_id == 0x9B);
+}
+
+/* The non-tracked arm (side != tracked): the 0xD3 probe arm (0x939B0..0x939DF)
+ * and the 0x9E/0x9F/0xA0 thresholds (0x939E4..0x93AA0). Every posting arm
+ * returns (the native epilogue jump); the 0xCBC4C probe is consumed only on
+ * the score == 1 && other < 3 path (native short-circuit). */
+static void test_score_event_untracked_thresholds(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+
+  /* 0xD3: score[side] 0 -> 1, other 0 < 3, probe & 3 != 0. */
+  score_init(&s, 0, 0, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(s.score[0] == 1 && s.last_side == 0);
+  assert(out.posted == 1 && out.post_id == 0xD3);
+
+  /* TEST AL,3 (0x939D6): probe bits 0-1 clear falls through the 4/7/9 checks
+   * with score[0] == 1 (probe 4 has bit 2 set, low two clear). */
+  score_init(&s, 0, 0, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 4, &out) == FIFA96_OK);
+  assert(s.score[0] == 1 && out.posted == 0);
+
+  /* The probe is not consumed when other >= 3: probe 3 still posts nothing. */
+  score_init(&s, 0, 3, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(s.score[0] == 1 && out.posted == 0);
+
+  /* 0x9E: 3 -> 4 with other < 2. */
+  score_init(&s, 3, 1, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 4 && s.max_diff == 3);
+  assert(out.posted == 1 && out.post_id == 0x9E);
+
+  score_init(&s, 3, 2, 1, 0);               /* -> 4-2: other not < 2 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 4 && out.posted == 0);
+
+  /* 0x9F: 6 -> 7 with other < 3. */
+  score_init(&s, 6, 2, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 7 && out.posted == 1 && out.post_id == 0x9F);
+
+  score_init(&s, 6, 3, 1, 0);               /* -> 7-3: other not < 3 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 7 && out.posted == 0);
+
+  /* 0xA0: 8 -> 9 with other < 4. */
+  score_init(&s, 8, 3, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 9 && out.posted == 1 && out.post_id == 0xA0);
+
+  score_init(&s, 8, 4, 1, 0);               /* -> 9-4: other not < 4 */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(s.score[0] == 9 && out.posted == 0);
+
+  /* Non-tracked side 1 mirror of 0x9E (other = score[0]). */
+  score_init(&s, 1, 3, 0, 0);
+  assert(fifa96_action_score_event(&s, 1, 0, &out) == FIFA96_OK);
+  assert(s.score[1] == 4 && out.posted == 1 && out.post_id == 0x9E);
+}
+
+static void test_score_event_invalid(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+  score_init(&s, 0, 0, -1, 0);
+  assert(fifa96_action_score_event(NULL, 0, 0, &out) == ACTION_INVALID);
+  assert(fifa96_action_score_event(&s, 0, 0, NULL) == ACTION_INVALID);
+  assert(fifa96_action_score_event(&s, 2, 0, &out) == ACTION_INVALID);
+  s.tracked_side = 2;                       /* native reads garbage; hardened */
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == ACTION_INVALID);
+  assert(s.score[0] == 0 && s.score[1] == 0);
+  assert(s.last_side == -1);
+}
+
 int main(void) {
   test_move_target();
   test_move_step();
@@ -1586,6 +1757,11 @@ int main(void) {
   test_pursuit_score_second_subtraction();
   test_pursuit_adjust_gate_signed();
   test_pursuit_invalid();
+  test_score_event_untracked();
+  test_score_event_tracked_9a();
+  test_score_event_tracked_thresholds();
+  test_score_event_untracked_thresholds();
+  test_score_event_invalid();
   puts("test_action_handlers: all assertions passed");
   return 0;
 }

@@ -2981,3 +2981,226 @@ stage-2 snap) and `action_expect[0x08]` is `FIFA96_OK`.
 * `0x79C50`'s row-08 call passes `DX = word[+0x6B]`, `BX = word[+0x6D]` (not
   a pos->target difference); `fifa96_arm_face` models the row-27 caller-side
   difference, so row 08 folds inline through `fifa96_entity_angle`.
+
+## Appendix L (M2 playability Task 4 / C3-OL2) — score-event writer first-hand window
+
+Task 4 closes the carried leg C3-OL2. The native score writer `FUN_00093944`
+(`0x93944..0x93B7D`) is derived instruction-by-instruction; the eleven call
+sites censused in I.10 are re-verified first-hand and all resolve to the six
+period-indexed goal-screen handlers, so the writer is ported as the derived
+score-event source and wired into the run's match state
+(`fifa96_action_score_event` / `fifa96_match_run_score_event`).
+`fifa96_match_run_add_goal` stays the FU-72 plain increment for the gameplay
+paths whose native invokers remain unported (OL-77/OL-87/OL-88).
+
+### L.1 Tool calls (Ghidra read-only, explicit `/FIFA96.EXE`)
+
+* `get_xrefs_to`: `0x93944` (11 `UNCONDITIONAL_CALL`), `0x15B6A8` (25),
+  `0x15B6C0` (32), `0x15B6D4` (7), `0x948AC` (2), `0x92E2C` (1), `0x92D8C` (2),
+  `0x88940` (1), `0x93BBC`/`0x93E20`/`0x940A4`/`0x94270`/`0x944FC`/`0x946C4`
+  (each one `DATA` ref, from the `0x110F78` table);
+* `search_instructions` operand patterns `15b6b4` (16 hits), `15b6a4` (4),
+  `15b670` (3);
+* `disassemble_function 0x93944` (168 instructions);
+* `decompile_function`: `0x93944`, `0x92D8C`, `0x92E2C`;
+* `disassemble_bytes`: `0x93B40` (200 B), `0x93C00` (768 B), `0x93F00`
+  (848 B), `0x94230` (210 B), `0x94300` (1000 B), `0x946E7` (600 B),
+  `0x4B180` (64 B), `0x8B5E0` (120 B), `0x9252C` (32 B), `0x92D8C` (156 B),
+  `0x92E2C` (212 B);
+* `read_memory`: `0x110F78` (24 B), `0x93B80` (72 B), `0x93DE4` (24 B),
+  `0x93DFC` (36 B), `0x94074` (116 B), `0x94234` (88 B), `0x944D4` (56 B),
+  `0x946B4` (24 B), `0x1106E0` (180 B), `0x110794` (140 B);
+* no renames, comments, labels, functions, scripts or project saves.
+
+### L.2 The writer `FUN_00093944` (`0x93944..0x93B7D`)
+
+Register argument EAX = side (0/1). Exact body (sites first-hand; the
+decompiler confirms the disassembly walk):
+
+```
+0x9394B  INC word [EAX*2 + 0x157AC5]        ; score[side]++ (16-bit wrap)
+0x93953  EDX = [0x15B6B4]                   ; tracked side
+0x93959  [0x15B670] = EAX                   ; last scoring side
+0x9395E  if (EDX == -1) return              ; 0x93961 JZ epilogue
+0x93967  other = (EDX == 0) ? 1 : 0         ; 0x93969 SETZ / AND EAX,0xFF
+0x93971  AX = score[other]; BX = score[EDX]
+0x93983  EDX = AX - BX                      ; 32-bit, then truncated:
+0x9398B  EAX = MOVSX DX                     ; (int16) difference
+0x9398E  if (EAX > [0x15B6A4]) [0x15B6A4] = EAX    ; max_diff
+0x93997  if (side == [0x15B6B4]) goto 0x93AA6
+```
+
+Non-tracked arm (`side != tracked`, `0x9399D..0x93AA5`):
+
+```
+0x939B0  if (score[side] == 1 && score[side^1] < 3):
+0x939D1    CALL 0xCBC4C; if (AL & 3) POST 0xD3 and return   ; 0x939DA/0x93B73
+0x939E4  if (score[side] == 4 && score[side^1] < 2) POST 0x9E and return
+0x93A22  if (score[side] == 7 && score[side^1] < 3) POST 0x9F and return
+0x93A60  if (score[side] == 9 && score[side^1] < 4) POST 0xA0 and return
+         return
+```
+
+Tracked arm (`side == tracked`, `0x93AA6..0x93B77`):
+
+```
+0x93AA6  EAX = MOVSX DX + 3; EBP = [0x15B6A4]
+0x93AB2  if (EAX == EBP && EBP > 3) POST 0x9A and return
+0x93ACB  if (score[side] == 3 && score[side^1] == 0) POST 0x9B and return
+0x93B02  if (score[side] == 5 && score[side^1] < 3) POST 0x9C and return
+0x93B40  if (score[side] == 9 && score[side^1] < 5) POST 0x9D and return
+         return
+```
+
+Both `other` reads are `side^1` on the arms that can fire (the first arm's
+checks use `(side == 0)`, the same value). Every POST arm returns through the
+shared epilogue (`0x93B78`), so at most one id is posted per call. The id goes
+to `FUN_0009252C` (`0x9252C..0x92544`, first-hand: `EBX=id; if
+(FUN_00066E70()==0) FUN_00066724(id, 0)`), which FU-63 §5 listed as an
+uncalled gap helper — **corrected**: it has the writer's call sites (the goal
+cluster is unanalyzed, so Ghidra's xref list is empty).
+
+Erratum to FU-72 §2.4: the summary omits the **0xD3** post (the
+`FUN_000CBC4C`-gated arm above) and the `-1` early return's exact position
+(the increment and `[0x5B670]` write happen first). The threshold pair
+"3/4/5/7/9" is the tracked arm's 0x9A/0x9B/0x9C/0x9D; 0x9E/0x9F/0xA0/0xD3 are
+the non-tracked arm.
+
+### L.3 The writer's state cells and their producers
+
+| cell | role | writer | first-hand sites |
+|---|---|---|---|
+| `0x157AC5`/`0x157AC7` | per-side goal words | `FUN_00092E2C` | zeroed `0x92E7B`/`0x92E82` |
+| `0x15B670` | last scoring side | `FUN_00093944` | `0x93959` |
+| `0x15B6B4` | tracked goal-difference side (-1 sentinel) | `FUN_00092D8C` | `0x92DDF` (param when `[0x15B684]!=0`), `0x92DEF` (=1 when `[0x1590CC]==0`), `0x92E00` (=0 when `[0x159901]==0`), `0x92E08` (=-1) |
+| `0x15B6A4` | max tracked-side goal difference | `FUN_00092E2C` / `FUN_00093944` | `0x92E5B` (=0), `0x93992` |
+
+`FUN_00092D8C` is called only from `FUN_0003BB1C`/`FUN_00038630` (the
+replay/screen setup cluster), not from the match init; the team flags
+`0x1590CC`/`0x159901` are the FU-72 §2.4 `team+0x828` pair whose producers stay
+unported. `FUN_00092E2C` additionally zeroes `[0x157AB4/AB6/AC9/AAF/AAE/AB1]`,
+`[0x15B68C/690/698/69C]`, calls `FUN_000700F4` and installs the goal-screen
+handler from the period-indexed table (L.4).
+
+### L.4 The eleven call sites
+
+`get_xrefs_to 0x93944` returns exactly eleven `UNCONDITIONAL_CALL` references:
+`0x93D98`, `0x93DA1`, `0x94026`, `0x9402F`, `0x941E5`, `0x941EE`, `0x94489`,
+`0x94492`, `0x94667`, `0x94670`, `0x9486E` — all inside the goal-screen
+handler family, **not** the action cluster (I.10's census confirmed; the action
+table `0x1106E0[45]` and phase table `0x110794[35]` re-read this slice contain
+no `0x93xxx` slot).
+
+The six handlers are selected by the **game leg** dword `[0x15B680]`:
+`FUN_00092E2C` `0x92EC4..0x92EF7` reads `(int16)[0x15B680]`, indexes the table
+at flat `0x110F78` and installs the result into `[0x15B6D4]`. `[0x15B680]`'s
+only writers are `FUN_00092D8C 0x92DC5` (its argument) and `FUN_0001B7B8
+0x1B7DB`; its identity with the FU-62 period byte `[0x157AC2]` is not asserted
+here (the consumers compare it to 2/4/5 and index it by period-shaped values):
+
+| table slot | handler | period |
+|---|---|---|
+| `0x110F78` | `0x93BBC` | 0 |
+| `0x110F7C` | `0x93E20` | 1 |
+| `0x110F80` | `0x940A4` | 2 |
+| `0x110F84` | `0x94270` | 3 |
+| `0x110F88` | `0x944FC` | 4 |
+| `0x110F8C` | `0x946C4` | 5 |
+
+Each handler runs a `[0x15B6B0]`-indexed state sequence and dispatches the
+pending situation id `[0x15B6A8] - 1` (range 0..8) through an inline table; the
+matching arm sets EAX and calls the writer. Side sources and id tables
+(first-hand bytes):
+
+| site | handler | state jump table | id table | id -> side |
+|---|---|---|---|---|
+| `0x93D98` | `0x93BBC` | `0x93B80` (6) | `0x93B98` (9) | 1/3/9 -> 1 (`0x93D93 MOV EAX,1`) |
+| `0x93DA1` | `0x93BBC` | — | `0x93B98` | 2/5 -> 0 (`0x93D9F XOR EAX,EAX`) |
+| `0x94026` | `0x93E20` | `0x93DE4` (6) | `0x93DFC` (9) | 1/3/9 -> 1 (`0x94021`) |
+| `0x9402F` | `0x93E20` | — | `0x93DFC` | 2/5 -> 0 (`0x9402D`) |
+| `0x941E5` | `0x940A4` | `0x94074` (5) | `0x94088` (7) | 1/3/6 -> 1 (`0x941E0`) |
+| `0x941EE` | `0x940A4` | — | `0x94088` | 2/4/5/7 -> 0 (`0x941EC`) |
+| `0x94489` | `0x94270` | `0x94234` (6) | `0x9424C` (9) | 1/3/6/9 -> 1 (`0x94484`) |
+| `0x94492` | `0x94270` | — | `0x9424C` | 2/5 -> 0 (`0x94490`) |
+| `0x94667` | `0x944FC` | `0x944D4` (4) | `0x944E4` (6) | 1/3/6 -> 1 (`0x94662`) |
+| `0x94670` | `0x944FC` | — | `0x944E4` | 2/5 -> 0 (`0x9466E`) |
+| `0x9486E` | `0x946C4` | `0x946B4` (4) | none | `[0x15B6A8]==5` -> 0 (`0x94853..58`); else `1` iff `[0x15B6B4]==1` (`0x9485C..69`) |
+
+Ids outside a table's range (including the queued 0/0xA) jump to the
+`INC [0x15B6A0]` no-score counter (`0x93DA8`/`0x94036`/`0x941F5`/`0x94499`/
+`0x94677`). Every handler also checks `[0x157A4A]>>24 == 2` (the in-play
+phase) before its state machine proceeds, and after the score sequence runs
+`FUN_000740A0(0,0)` (phase 0) at `0x93DB2`/`0x94040`/`0x941FF`/`0x944A3`/
+`0x94681`/`0x94877` (FU-143 §3.1's six sites).
+
+### L.5 The invoker path (all unported)
+
+The writer is reached only from this screen cluster:
+
+* **Goal scan** — the clock `FUN_0008AF38` (`0x8AF38`) calls `FUN_00088940`
+  at `0x8B63E` when the phase byte is 2/0x10 (`0x8B623..0x8B633`) and
+  `[0x15781D] != 0` (`0x8B635`). `FUN_00088940` scans the ball/goal state and
+  calls `FUN_0008A938(6, ball side)` etc. (FU-143 §3.2 callers).
+* **Situation queue** — `FUN_0008A938` queues `[0x15B6A8]` (ids 0..0xA) with
+  `[0x15B6C0]=1` (FU-143 table 1); the frame body `FUN_0004B100`
+  (`0x4B198 CMP byte[0x14C32A],0` / `0x4B1A1 CALL 0x948AC`) calls the
+  scheduler `FUN_000948AC` only when the `[0x14C32A]` gate is open.
+* **Scheduler** — `FUN_000948AC` (`0x948AC..0x949F7`) queues ids 3/4/7/8/9 by
+  period/controlled-side/timer (`0x948BF` (period!=5 ? 8 : 7), `0x948EE..0x94919`
+  id 3, `0x9492a..0x94978` id 4, `0x94996..0x949b5` id 9, `0x949ca..0x949da`
+  id 7) and calls the installed handler `CALL dword [0x15B6D4]` (`0x949E9`).
+* **State advance** — each handler's tail (`CALL 0x935A0` when the `[0x15B688]`
+  timer passes 0xB4, e.g. `0x93DD6`) advances/reinstalls the sequence.
+
+Gate defaults in the engine: `[0x14C32A]` and `[0x15781D]` have no derived
+producer (zero), so the native frame body skips both the scheduler and the
+scanner; the engine keeps that behavior (no scheduler call wired).
+
+### L.6 Wiring decision and port (M2 Task 4)
+
+* **Derived writer** — `fifa96_action_score_event` (`fifa96_action_handlers.c`)
+  carries the four cells, the `probe` input (the `FUN_000CBC4C` byte) and the
+  post id; every branch is fixtured in `tests/test_action_handlers.c`
+  (`test_score_event_untracked`, `_tracked_9a`, `_tracked_thresholds`,
+  `_untracked_thresholds`, `_invalid`).
+* **Engine source** — `fifa96_match_run_score_event` runs the writer over
+  `mr->score[2]` + `score_last_side`/`score_tracked_side`/`score_max_diff` and
+  records the post in `score_last_event` (0 = none). The carried defaults are
+  `last_side = tracked_side = -1`, `max_diff = 0` (init/begin/teardown); the
+  `-1` tracked default reduces the source to the FU-72 increment + last-side
+  record. Tests: `test_engine_match_frame::test_score_event_wired_run_path`.
+* **Tape** — the M2-B goal step now calls `fifa96_match_run_score_event(mr, 0,
+  0)` (was `add_goal`). With the carried default the transcript is
+  **byte-identical** (`tests/golden/engine/m2-frames.txt` unchanged, no frame
+  moved); `add_goal` stays for the unported gameplay paths.
+* **No wired dispatch reaches a site** — I.10's conclusion is re-confirmed
+  first-hand (L.4): the action/phase tables hold no `0x93xxx` slot; every
+  site's invoker chain is unported. The plan's "goal reached through a wired
+  dispatch" is therefore carried as the leg below, and the score source is
+  wired at the run API.
+
+### L.7 Open legs (extend FU-143 §8 / FU-142 K.6.7)
+
+* **OL-87 — goal-screen handler cluster (the writer's invokers).** The six
+  period-indexed handlers (`0x110F78`), their `[0x15B6B0]` state machines,
+  timers and pending-id consumption; the tracked-side producer `FUN_00092D8C`
+  (`[0x1590CC]`/`[0x159901]` team flags); the scheduler `FUN_000948AC` and the
+  `[0x14C32A]` frame gate. Consequence: the engine carries tracked side -1
+  (`add_goal`-equivalent) until this lands.
+* **OL-88 — goal detection.** `FUN_0008AF38 0x8B623..0x8B63E` (phase 2/0x10 +
+  `[0x15781D]`) -> `FUN_00088940` -> `FUN_0008A938(6, side)`: the gameplay goal
+  producer is unported, so no gameplay goal reaches the derived source yet.
+* **OL-89 — writer side effects.** The posted ids are captured
+  (`score_last_event`) but not dispatched: `FUN_0009252C` ->
+  `FUN_00066E70`/`FUN_00066724` and the `FUN_000CBC4C` probe result are
+  unported; the loader takes the probe as an input and the engine passes 0.
+
+### L.8 Tests and gate
+
+`tests/test_action_handlers.c` writer fixtures (every arm: -1 sentinel, word
+wrap, 0x9A with the `max_diff > 3` guard, 0x9B/0x9C/0x9D, 0xD3 with the probe
+short-circuit, 0x9E/0x9F/0xA0, signed max-diff, side-1 mirrors, invalid
+args); `tests/test_engine_match_frame.c::test_score_event_wired_run_path`
+(live run, defaults, tracked-side bookkeeping, posts, live frame, errors);
+`tests/test_engine_m2.c` goal step upgraded, golden byte-identical. `make
+check` **104/104** (no new test executables).

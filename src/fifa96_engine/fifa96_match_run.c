@@ -495,6 +495,11 @@ static int fifa96_match_run_teardown(void *ctx) {
   fifa96_match_state_init(&mr->state);
   mr->score[0] = 0;
   mr->score[1] = 0;
+  /* C3-OL2: the carried writer state defaults (native producers OL-87). */
+  mr->score_last_side = -1;
+  mr->score_tracked_side = -1;
+  mr->score_max_diff = 0;
+  mr->score_last_event = 0;
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
 }
@@ -569,6 +574,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   fifa96_match_state_init(&mr->state);
   mr->score[0] = 0;
   mr->score[1] = 0;
+  mr->score_last_side = -1;       /* C3-OL2 writer state (OL-87 defaults) */
+  mr->score_tracked_side = -1;
+  mr->score_max_diff = 0;
+  mr->score_last_event = 0;
   mr->engine = NULL;
   mr->backend.register_callback = NULL;
   mr->backend.cancel_callback = NULL;
@@ -611,6 +620,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_state_init(&mr->state); /* fresh match clock */
   mr->score[0] = 0;                    /* fresh match score pair */
   mr->score[1] = 0;
+  mr->score_last_side = -1;            /* C3-OL2 fresh writer state (OL-87) */
+  mr->score_tracked_side = -1;
+  mr->score_max_diff = 0;
+  mr->score_last_event = 0;
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
@@ -664,10 +677,36 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
   return 0;
 }
 
+/* The FU-72 §2.4 increment only. Kept for the paths whose native writers stay
+ * unported (the period-indexed goal-screen handler cluster and its situation
+ * queue, OL-77/OL-87): gameplay paths have no derived writer invocation yet.
+ * The derived full writer is fifa96_match_run_score_event below. */
 int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side) {
   if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->score[side]++;
+  return 0;
+}
+
+int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uint8_t probe) {
+  fifa96_action_score state;
+  fifa96_action_score_out out;
+  fifa96_err_t rc;
+  if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  state.score[0] = mr->score[0];
+  state.score[1] = mr->score[1];
+  state.last_side = mr->score_last_side;
+  state.tracked_side = mr->score_tracked_side;
+  state.max_diff = mr->score_max_diff;
+  rc = fifa96_action_score_event(&state, side, probe, &out);
+  if (rc != FIFA96_OK) return (int)rc;   /* run untouched on a writer failure */
+  mr->score[0] = state.score[0];
+  mr->score[1] = state.score[1];
+  mr->score_last_side = state.last_side;
+  mr->score_tracked_side = state.tracked_side;
+  mr->score_max_diff = state.max_diff;
+  mr->score_last_event = out.posted ? out.post_id : 0u;
   return 0;
 }
 

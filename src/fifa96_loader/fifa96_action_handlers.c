@@ -2124,3 +2124,77 @@ after_fold:
   }
   return FIFA96_OK;
 }
+
+fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side,
+                                       uint8_t probe, fifa96_action_score_out *out) {
+  int32_t tracked;
+  int16_t diff = 0;
+  uint16_t own;
+  uint16_t opp;
+  if (!state || !out || side > 1u) return -FIFA96_ERR_INVALID;
+  tracked = state->tracked_side;
+  if (tracked != -1 && tracked != 0 && tracked != 1) return -FIFA96_ERR_INVALID;
+
+  state->score[side]++;                        /* 0x9394B INC word [side*2+0x157AC5] */
+  state->last_side = (int32_t)side;            /* 0x93959 MOV [0x15B670],EAX */
+  out->posted = 0;
+  out->post_id = 0;
+  if (tracked == -1) return FIFA96_OK;         /* 0x93961 JZ 0x93B78 (epilogue) */
+
+  {                                            /* 0x93967..0x93992 */
+    uint32_t other = tracked == 0 ? 1u : 0u;   /* 0x93969 SETZ / AND EAX,0xFF */
+    diff = (int16_t)(uint16_t)(state->score[other] - state->score[(uint32_t)tracked]);
+    if ((int32_t)diff > state->max_diff)       /* 0x9398B MOVSX EAX,DX; CMP; JLE */
+      state->max_diff = (int32_t)diff;         /* 0x93992 */
+  }
+
+  if ((int32_t)side != tracked) {              /* 0x93997 CMP ESI,[0x15B6B4]; JZ */
+    own = state->score[side];
+    opp = state->score[side ^ 1u];
+    if (own == 1u && opp < 3u && (probe & 3u) != 0u) {  /* 0x939B0..0x939D8 */
+      out->posted = 1;
+      out->post_id = 0xD3;                     /* 0x939DA MOV EAX,0xD3 -> 0x93B73 */
+      return FIFA96_OK;
+    }
+    if (own == 4u && opp < 2u) {               /* 0x939E4..0x93A1C */
+      out->posted = 1;
+      out->post_id = 0x9E;
+      return FIFA96_OK;
+    }
+    if (own == 7u && opp < 3u) {               /* 0x93A22..0x93A5A */
+      out->posted = 1;
+      out->post_id = 0x9F;
+      return FIFA96_OK;
+    }
+    if (own == 9u && opp < 4u) {               /* 0x93A60..0x93AA0 */
+      out->posted = 1;
+      out->post_id = 0xA0;
+      return FIFA96_OK;
+    }
+    return FIFA96_OK;
+  }
+
+  own = state->score[side];                    /* 0x93AA6 tracked arm */
+  opp = state->score[side ^ 1u];
+  if ((int32_t)diff + 3 == state->max_diff && state->max_diff > 3) {
+    out->posted = 1;                           /* 0x93AB2..0x93ACC */
+    out->post_id = 0x9A;
+    return FIFA96_OK;
+  }
+  if (own == 3u && opp == 0u) {                /* 0x93ACB..0x93B01 */
+    out->posted = 1;
+    out->post_id = 0x9B;
+    return FIFA96_OK;
+  }
+  if (own == 5u && opp < 3u) {                 /* 0x93B02..0x93B3F */
+    out->posted = 1;
+    out->post_id = 0x9C;
+    return FIFA96_OK;
+  }
+  if (own == 9u && opp < 5u) {                 /* 0x93B40..0x93B73 */
+    out->posted = 1;
+    out->post_id = 0x9D;
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;
+}
