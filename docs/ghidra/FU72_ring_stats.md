@@ -375,6 +375,13 @@ after**.
   `FUN_000741B4(a) = (a ^ [0x57ABE]) & 1` (`0x741B4..C3`).
 * FU-67 §3.6 "stride `0xA`, block offset `xor*0xA0`" — **confirmed and
   extended** with the `+4` word counter and its accessors/increment path.
+* §2.4 "Nine call sites (`0x93D98/0x93DA1/0x94026/0x9402F/0x94489/0x94492/
+  0x94667/0x94670/0x9486E`)" — **corrected to eleven**: the Task 15 first-hand
+  census (`get_xrefs_to 0x93944` and `search_instructions` mnemonic `CALL`
+  operand `93944`; FU-142 Appendix I.10) returns 11 `UNCONDITIONAL_CALL` sites;
+  the §2.4 list omits the `0x941E5`/`0x941EE` pair (the same two-call block
+  shape as `0x94026/0x9402F`). `FUN_00093944`'s semantics and the "no wired
+  writer" T15 conclusion are unaffected.
 
 ## 7. Open legs
 

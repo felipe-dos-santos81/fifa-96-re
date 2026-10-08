@@ -275,10 +275,11 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
 
 /* Derived score plumbing: increment one side's goal word, the FU-72 §2.4
  * `FUN_00093944` write (`INC word [side*2 + 0x57AC5]`). side 0/1; begin and
- * teardown reset the pair. The original's trigger is the nine FUN_00093944
- * call sites in the not-yet-ported action/phase handler cluster, so only the
- * derived increment is exposed here — wiring an event source is an open leg
- * for the G2/G3 handler tasks. Returns 0, -FIFA96_ERR_INVALID (NULL or
+ * teardown reset the pair. The original's trigger is the eleven FUN_00093944
+ * call sites in the not-yet-ported action/phase handler cluster (FU-72 §2.4
+ * errata / FU-142 Appendix I.10 census), so only the derived increment is
+ * exposed here — wiring an event source is an open leg for the G2/G3 handler
+ * tasks. Returns 0, -FIFA96_ERR_INVALID (NULL or
  * side > 1), or -FIFA96_ERR_STATE (run not live). */
 int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
 
