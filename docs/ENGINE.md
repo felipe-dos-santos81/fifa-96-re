@@ -4,21 +4,23 @@ The native engine layer sits on top of the 56 clean-room `fifa96_*` libraries an
 turns them into a running game: platform ABI → SDL3/null backends → engine core
 (boot, asset table, clock, intro, front-end, match).
 
-Status: **M1 complete headless; M2 match lifecycle complete headless with the
-render chain complete at the derived level — palette install, HUD/overlays and
-the resource-driven kickoff formation remain open (`OL-T11-6..8`), live anim
-inputs (`OL-80`) are wired (13/80 action rows
-wired), and the derived FU-143 phase driver is now wired into the run loop (the
-live period end 2 → 0x0C is derived) — the M2-B acceptance tape green and
-byte-identical, and the interactive `make game` smoke reaching match start and
-control input on this host.** Kick → score remain blocked interactively on the
-unported rows (see "Interactive smoke" and "Known gaps"); the derived kickoff
-entry into phase 2 is still `OL-79`/`OL-84`. See
+Status: **M1 complete headless; M2 match playable headless — 13/80 action rows
+wired, the derived FU-143 phase driver wired into the run loop (live period
+end 2 → 0x0C), the derived C3-OL2 score source, live OL-80 animation inputs
+and the derived kickoff ball placement; the M2-B acceptance tape **v2** is
+green with the golden byte-identical, and the interactive `make game` smoke
+re-run on this host (2026-10-08, G4) reaches match start, control input and
+the live ball/anim placement.** Kick → score and a live in-play phase entry
+remain blocked interactively on the unported possession/selection rows and the
+unported kickoff entry (see "Interactive smoke" and "Known gaps"). The M2
+playability-legs plan's gates G1/G2 closed, G3 carried with the listed legs
+(kickoff formation OL-T11-8 open) and G4 accepted here; see
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child),
 `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md` (split
-follow-up) and the SDD workspaces under `.superpowers/sdd/` for the full record
-(scratch; may be deleted).
+follow-up), `docs/superpowers/plans/2026-10-07-fifa96-m2-playability-legs.md`
+(this follow-up) and the SDD workspaces under `.superpowers/sdd/` for the full
+record (scratch; may be deleted).
 
 ## Layout
 
@@ -73,26 +75,25 @@ the build also produces the windowed `fifa96` target (`make game`).
 - Action dispatch (FU-137): **13/80 rows wired** — `00`, `04`, `06`, `07`,
   `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring G3) and
   `26`, `28`, `2A` (cluster G); dispatch results 66 UNSUP / 13 OK / 1 NOTF.
-- **Interactive smoke (Task 13, verified on this host 2026-10-08):** `make game`
-  window opens (960×720 integer-scaled SDL3; ESC quits, exit 0). The
+- **Interactive smoke (Task 6 re-run, this host 2026-10-08; first verified
+  Task 13):** `make game` window opens (960×720 integer-scaled SDL3; ESC quits,
+  exit 0; the intro and the procedural front-end draw — screenshots). The
   walkthrough reaches **match start** — intro RETURN skip → front-end BACKSPACE
   (DECLINE/panel) → RETURN (panel confirm → FU-66 STATE16 bridge) — and the
-  match canvas replaces the front-end (screenshots; the canvas is the match
-  clear colour: kickoff formation is OL-T11-8 and HUD/overlays OL-T11-7).
-  Arrow/Z/C presses reach the run: an in-process gdb probe read
+  match canvas replaces the front-end (black clear colour; palette install is
+  OL-T11-6, formation draw OL-T11-8 and HUD/overlays OL-T11-7). Arrow/Z/C
+  presses reach the run: an in-process gdb probe (debug build) read
   `input_state[0]` = 0x04 (RIGHT), 0x01 (UP), 0x10 (KICK), 0x20 (PASS), while
-  `dispatched_ok` stayed `0x1` (row `00` only). **Kick and score are not
-  interactively reachable:** the zeroed FU-141 pool dispatches row `00`
-  only (kick rows `07`/`0F` need the unported possession/selection legs) and
-  the derived FU-72 score writer has no wired gameplay invoker yet (the
-  goal-screen handler cluster and the clock's goal scanner stay unported,
-  OL-87/OL-88). The class-1 phase-2 period
-  end is now derived (the FU-143 phase driver is wired), but the interactive
-  match cannot reach phase 2 without the unported kickoff entry (`OL-79`/
-  `OL-84`). The M2-B tape covers the sequence headlessly by declaring/forcing
-  its kickoff/mechanics phases and calling the derived
-  `fifa96_match_run_score_event` for the goal step (C3-OL2; the carried
-  tracked-side default keeps it byte-identical to the old increment).
+  `dispatched_ok` stayed `0x1` (row `00` only) and `state.phase` stayed 0. The
+  T5 kickoff placement is live in the running game: the probe read the ball at
+  (480, 0, 0) = the derived 0x1E0 spawn and record 0's OL-80 `anim_id` at 0x26,
+  with the score 0-0. **Kick, score and a live phase entry are still not
+  interactively reachable:** the kick press dispatches no gameplay row (the
+  possession/selection invokers are unported), gameplay goals have no wired
+  invoker (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller),
+  and the match cannot enter the class-1 in-play phase without the unported
+  kickoff entry (OL-79/OL-84). The M2-B tape v2 covers the sequence headlessly
+  with its declared/forced phases and the live driver's period end.
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -100,10 +101,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. The FU-143 phase driver is wired underneath and the
-  transcript is **byte-identical** (the `state=` sample precedes each step, so
-  the derived 2 → 0x0C write inside the exit step is not a transcript line);
-  the golden is not re-pinned. Regenerate with
+  set, and the score step. Tape **v2** (G4) stages all **13 wired rows**
+  (including the G1 rows 04/08) and asserts the natural path: the KICK press
+  reaches the run but dispatches no gameplay row, the T5 kickoff placement is
+  pinned at match start (ball 0x1E0/0/0, `anim_id` 0x26), and the live FU-143
+  driver's derived 0x0C write is read back after the exit step (where the
+  teardown has reset the match state but not the FU-142a mirror). The
+  transcript is **byte-identical** to the pre-v2 golden (no frame moved;
+  `cmp` clean), so the golden is not re-pinned. Regenerate with
   `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
   non-zero while rewriting the file; re-run `make check` to verify).
 

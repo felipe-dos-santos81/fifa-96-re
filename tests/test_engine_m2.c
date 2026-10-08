@@ -1,4 +1,4 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape (spec §5).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v2 (spec §5, G4).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -14,11 +14,13 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > tests/golden/engine/m2-frames.txt
  *
- * --- The golden's provenance and what it pins (the M2-B baseline) -----------
+ * --- v2 provenance: natural path and remaining forcing (G4) -----------------
  *
  * The transcript is the deterministic null-backend replay of the engine-owned
  * run started by the real front-end -> match bridge (selector 0, FU-64 §1.1).
- * It pins, in order:
+ * The playability tasks (M2 legs T1-T5) upgraded the natural path underneath
+ * the same spec §5 sequence, so v2 asserts where the natural path now runs and
+ * where it still stops. It pins, in order:
  *   1. the boot/intro-skip frame, the front-end frames of the panel-open and
  *      panel-confirm navigation, and the match-start frame (frame 5);
  *   2. the forced kickoff segments: phase 0x13 (first half, frame 6 onward,
@@ -34,45 +36,77 @@
  *      `fifa96_match_run_score_event(mr, 0, 0)` (C3-OL2, playability Task 4;
  *      no wired body contains a native writer site — see the report / FU-142
  *      App. I.10), pinned by `state=2/1-0` lines;
- *   5. the forced 1 s period end (`state=2/1-0` on the resolving frame), the
+ *   5. the live period end (`state=2/1-0` on the resolving frame), the
  *      OVER -> POST -> EXIT -> run_end compression returning the engine to
  *      FRONTEND, and 20 post-exit front-end frames.
  *
- * Forced-phase declaration (parent G1 carry-forward): the selector-0/phase-0
- * default never reaches a live period end, so the tape declares its phase
- * assumption explicitly: at match-relative step 1 it forces
- * `mr.state.phase = 0x13` and `mr.phase_machine.state = 0x13` (kickoff), at
- * step 21 `0x14` (second-half arms), and at step 41 phase 2 (class 1: the
- * clock runs, so the shortened 1 s period completes) — mirroring the G1 fix
- * wave's `test_live_period_end_exits_to_frontend` convention.
+ * Natural path (asserted by v2):
+ *   - the T5 kickoff placement runs at begin (OL-T11-8): the pool ball spawn is
+ *     pinned at match start (0x1E0, 0, 0) with the inactive records' animation
+ *     id at 0x26 (`fifa96_match_entities_kickoff_place`; the per-record
+ *     formation *targets* stay resource-loaded, so the committed positions are
+ *     the native phase-0 identity placement and no player entity draws);
+ *   - the KICK press reaches the run's input model (`input_state[0] == 0x10`)
+ *     but dispatches no gameplay row: at that step only the reset-installed
+ *     row 00 (plus any arm-installed kickoff codes) has dispatched, so the
+ *     natural kick dispatch is still blocked (the possession/selection
+ *     invokers are unported legs);
+ *   - the T3 FU-143 phase driver runs each granted frame; the shortened
+ *     class-1 phase-2 period completes on the derived FU-62 clock test
+ *     (`sec == limit + aux`), the driver consumes `clock_period_ended` and
+ *     writes the derived selector-0 chooser phase 0x0C — asserted after the
+ *     exit step, where `run_end`'s teardown has reset the match state but not
+ *     the FU-142a machine mirror;
+ *   - the T4 goal step runs the derived C3-OL2 score source.
  *
- * FU-143 phase-driver wiring (playability Task 3): the run frame body now
- * steps the derived `fifa96_match_run_phase_drive` each granted frame, so the
- * phase-2 period end writes the derived post-period phase 0x0C (the selector-0
- * no-extra-time chooser) instead of leaving phase 2 until the teardown reset.
- * The transcript stays BYTE-IDENTICAL: the driver runs inside the exit step
- * (after the state tick), while the `state=` sample is taken before each step,
- * so frame 145 still records the pre-step `state=2/1-0`; no re-pin is needed.
- * The 0x13/0x14/2 forcing stays declared because the derived kickoff entry
- * (`FUN_0008A938` situation 0xB -> phase 2, OL-79) and the extra-time flag
- * `[0x157AC0]` producer are unported, so the tape cannot drop the forcing.
- * This test's golden byte-comparison is the tape-mode record the task asks
- * for: byte-identical = forcing kept, no re-pin.
+ * Forced, each with its owning leg:
+ *   - kickoff phases 0x13/0x14 (m 1 / m 21): the selector-0 begin default is
+ *     phase 0 and no derived path enters the kickoff situation — `OL-84`
+ *     (live-phase kickoff entry; the `FUN_0008A938` situation producers are
+ *     `OL-79`) and the extra-time flag producer `OL-85`;
+ *   - phase 2 mechanics entry (m 41): the same `OL-84`/`OL-79` gap; the
+ *     class-1 clock then completes the shortened 1 s period naturally (the
+ *     1 s period is the G1 live-end test convention, native periods last
+ *     minutes);
+ *   - the mechanics row staging (m 41): the wired rows 04/06/07/08/0F/18/21/
+ *     23/1E are exercised by installing their codes into pool records because
+ *     the natural AI/possession invokers are unported;
+ *   - the direct score call: no wired body contains a native writer site
+ *     (FU-142 App. I.10 census), so gameplay goals stay blocked on the
+ *     `OL-87`/`OL-88`/`OL-89` invoker legs;
+ *   - HUD/overlays stay `OL-T11-7` and palette install `OL-T11-6`.
+ *
+ * Golden decision (v2): the transcript is BYTE-IDENTICAL to the v1 golden
+ * (frames 1..165). The T3/T4/T5 upgrades land inside the exit step (the
+ * `state=` sample precedes each step) or change no rendered input (ball
+ * z = 0 culled, no formation targets), so no frame moved and the golden is
+ * NOT re-pinned; the test's byte-comparison is the tape-mode record.
+ *
+ * FU-143 phase-driver wiring (playability Task 3): the run frame body steps the
+ * derived `fifa96_match_run_phase_drive` each granted frame, so the phase-2
+ * period end writes the derived post-period phase 0x0C (the selector-0
+ * no-extra-time chooser). The transcript stays byte-identical because the
+ * driver runs inside the exit step, after the state tick, while the `state=`
+ * sample is taken before each step; the v2 assertion reads the FU-142a mirror
+ * after the step to pin the derived write. The 0x13/0x14/2 forcing stays
+ * declared because the kickoff entry (OL-79/OL-84) and the extra-time flag
+ * producer (OL-85) are unported.
  *
  * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
  * direct `fifa96_match_run_add_goal`. Its tracked-side default is the carried
  * -1 (the native FUN_00092D8C producer reads the unported team+0x828 flags,
  * OL-87), so the writer reduces to the FU-72 increment + last-side record and
- * the transcript stays BYTE-IDENTICAL: no frame moves and the golden is not
- * re-pinned. `add_goal` stays for paths whose native writers remain unported
- * (the period-indexed goal-screen handler cluster, OL-77/OL-87).
+ * the transcript stays byte-identical. `add_goal` stays for paths whose native
+ * writers remain unported (the period-indexed goal-screen handler cluster,
+ * OL-77/OL-87).
  *
- * Wired-row dispatch set: the tape stages the Gate-G3 rows (06/07/0F/18/21/23)
- * and keeper row 1E into pool record 1..7 of team 0 at the mechanics step; row
- * 00 dispatches from the pool's reset-installed code before the arms, and the
- * arms stage 26/28/2A organically. The observed set is read from
- * `mr.dispatched_ok` (bit c set when action code c dispatched FIFA96_OK), the
- * Task 15 observability seam, and must equal M2_WIRED_MASK.
+ * Wired-row dispatch set: the tape stages the M2 wired rows
+ * (04/06/07/08/0F/18/21/23) and keeper row 1E into pool records 1..9 of team 0
+ * at the mechanics step; row 00 dispatches from the pool's reset-installed code
+ * before the arms, and the arms stage 26/28/2A organically. The observed set is
+ * read from `mr.dispatched_ok` (bit c set when action code c dispatched
+ * FIFA96_OK), the Task 15 observability seam, and must equal M2_WIRED_MASK
+ * (13 rows).
  *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
@@ -111,7 +145,8 @@
  *   m 1  first-half kickoff forcing (phase 0x13 on run + machine);
  *   m 21 second-half kickoff forcing (phase 0x14);
  *   m 41 mechanics: assert the arms' record codes, force phase 2, shorten the
- *        period to 1 s (class-1 phase: the clock runs) and stage the G3 rows;
+ *        period to 1 s (class-1 phase: the clock runs) and stage the wired
+ *        rows 04/06/07/08/0F/18/21/23/1E;
  *   m 62 score: assert the full wired-row dispatch set, add the goal. */
 #define M2_M_KICKOFF 1
 #define M2_M_HALF 21
@@ -121,14 +156,23 @@
 /* Post-exit front-end frames recorded before the tape stops. */
 #define M2_POST_EXIT_FRAMES 20
 
-/* The wired action rows at the Task 15 baseline (FU-137 §7: 11/80): the rows
- * whose installer arm + body + pool binding are all bounded. 00 and 1E wire
- * first; cluster B/D rows 06/07/0F/18/21/23 close Gate G3; the FU-142a arms
- * stage 26/28/2A. */
+/* The wired action rows at the playability-legs close (FU-137 §7: 13/80):
+ * the rows whose installer arm + body + pool binding are all bounded. 00 and
+ * 1E wire first; cluster B/D rows 06/07/0F/18/21/23 close Gate G3; the FU-142a
+ * arms stage 26/28/2A; Gate G1 adds the outfield rows 04/08 (OL-70/OL-70a). */
 #define M2_WIRED_MASK                                                        \
-  ((1ull << 0x00) | (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x0F) |       \
-   (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) |       \
-   (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
+  ((1ull << 0x00) | (1ull << 0x04) | (1ull << 0x06) | (1ull << 0x07) |       \
+   (1ull << 0x08) | (1ull << 0x0F) | (1ull << 0x18) | (1ull << 0x1E) |       \
+   (1ull << 0x21) | (1ull << 0x23) | (1ull << 0x26) | (1ull << 0x28) |       \
+   (1ull << 0x2A))
+
+/* The rows the mechanics step stages (m 41) plus the arm-installed codes that
+ * only the forced 0x13/0x14 kickoff phases produce. None may dispatch from the
+ * scripted KICK press alone (v2 natural-path assertion). */
+#define M2_STAGED_ROWS_MASK                                                  \
+  ((1ull << 0x04) | (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x08) |       \
+   (1ull << 0x0F) | (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) |       \
+   (1ull << 0x23) | (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 
 /* The scripted key tape: intro skip (with the ISO), panel DECLINE/CONFIRM
  * navigation, then the match input: move (RIGHT, UP) and kick. One entry is
@@ -146,8 +190,11 @@ static const fifa96_platform_key M2_KEYS[] = {
 };
 #define M2_KEYS_LEN (sizeof M2_KEYS / sizeof M2_KEYS[0])
 
-/* Rows staged into team-0 records 1..7 at the mechanics step. */
-static const uint8_t M2_STAGE_ROWS[] = {0x06, 0x07, 0x0F, 0x18, 0x21, 0x23, 0x1E};
+/* Rows staged into team-0 records 1..9 at the mechanics step: the complete
+ * M2 wired set after G1 (04/08/06/07/0F/18/21/23/1E) minus the arm-installed
+ * 26/28/2A that arrive organically in the forced kickoff phases. */
+static const uint8_t M2_STAGE_ROWS[] = {0x04, 0x06, 0x07, 0x08, 0x0F,
+                                        0x18, 0x21, 0x23, 0x1E};
 
 struct m2_result {
   int steps;                 /* total engine steps */
@@ -161,8 +208,13 @@ struct m2_result {
   int armed_2a;              /* team 0 record 1 held code 0x2A */
   uint64_t mask_mech;        /* dispatched_ok observed at the mechanics step */
   uint64_t mask_final;       /* dispatched_ok at the exit step */
+  uint64_t mask_kick;        /* dispatched_ok after the KICK press (step 11) */
   uint8_t phase_before_exit; /* sampled on the resolving frame */
+  uint8_t phase_after_exit;  /* FU-142a mirror after the exit step (derived 0x0C) */
+  uint8_t clock_pending;     /* clock_period_ended after the exit step (consumed) */
   uint16_t score_before_exit[2];
+  int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
+  uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
 };
 
 static int file_exists(const char *path) {
@@ -312,6 +364,11 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
        * stays disabled (the M1 soft-failure path). */
       assert(e->match_run.lc.selector == 0);
       assert(e->match_run.render.enabled == (with_iso ? 1 : 0));
+      /* v2: the T5 kickoff placement ran at begin (OL-T11-8). */
+      res->ball_x = e->match_run.entities.ball.x;
+      res->ball_y = e->match_run.entities.ball.y;
+      res->ball_z = e->match_run.entities.ball.z;
+      res->start_anim_id = e->match_run.entities.team[0].records[0].anim_id;
     }
     if (steps == 7 || steps == 9 || steps == 11) {
       /* The scripted move (RIGHT 0x04 / UP 0x01) and kick (0x10) presses
@@ -321,6 +378,9 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       if (steps == 7 && in == 0x04) res->move_step_seen = steps;
       if (steps == 9 && in == 0x01) res->up_step_seen = steps;
       if (steps == 11 && in == 0x10) res->kick_step_seen = steps;
+      /* v2: the KICK press dispatched no gameplay row; only the
+       * reset-installed code 0 has run at this point. */
+      if (steps == 11) res->mask_kick = e->match_run.dispatched_ok;
     }
     if (res->match_start_step > 0 && res->exit_step < 0 &&
         e->mode != FIFA96_ENGINE_MODE_MATCH) {
@@ -329,6 +389,11 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       res->score_before_exit[0] = s_home;
       res->score_before_exit[1] = s_away;
       res->mask_final = e->match_run.dispatched_ok;
+      /* v2: the live FU-143 driver consumed the clock completion and wrote
+       * the derived selector-0 chooser phase; run_end's teardown resets the
+       * match state but leaves the FU-142a machine mirror at 0x0C. */
+      res->phase_after_exit = e->match_run.phase_machine.state;
+      res->clock_pending = e->match_run.clock_period_ended;
     }
     if (res->exit_step > 0 && steps - res->exit_step >= M2_POST_EXIT_FRAMES) break;
   }
@@ -378,7 +443,20 @@ int main(void) {
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.up_step_seen == 9);
   assert(res.kick_step_seen == 11);                      /* kick input reached the run */
+  /* v2 natural-path evidence: the kick input alone dispatched no gameplay
+   * row (the possession/selection invokers are unported; only the reset-
+   * installed row 00 ran before the mechanics staging). */
+  assert((res.mask_kick & 1u) != 0u);
+  assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
+  /* v2: the T5 kickoff placement is live at begin. */
+  assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
+  assert(res.ball_y == 0 && res.ball_z == 0);
+  assert(res.start_anim_id == 0x26u);
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
+  /* v2: the live FU-143 driver consumed the clock completion and wrote the
+   * derived selector-0 chooser phase 0x0C on the exit step. */
+  assert(res.phase_after_exit == 0x0Cu);
+  assert(res.clock_pending == 0u);
   assert(res.phase_before_exit == 2);                    /* forced class-1 period end */
   assert(res.score_before_exit[0] == 1 && res.score_before_exit[1] == 0);
   assert(st.presents == (uint64_t)res.steps);

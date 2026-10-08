@@ -94,11 +94,15 @@ layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape is green), and the windowed
-`make game` build runs on SDL3. The interactive smoke verified on the
-development host reaches match start and control input; kick → score → period
-end stays blocked on the unported action rows (11/80 wired) and the
-not-yet-wired phase drivers. Not ported: physical VGA/CRTC timing and device
+chain run headless (the M2-B acceptance tape **v2** is green — all 13 wired
+action rows staged, the golden byte-identical), and the windowed `make game`
+build runs on SDL3. The interactive smoke re-run on the development host
+(2026-10-08) reaches match start, control input, and the live kickoff ball
+placement and animation inputs (13/80 rows wired, the FU-143 phase driver and
+the derived score source included). Kick → score stays blocked interactively
+on the unported possession/selection invokers and goal-screen handlers, and
+the live in-play phase entry on the unported kickoff row (OL-79/OL-84). Not
+ported: physical VGA/CRTC timing and device
 audio output (both modelled as pure data), and the remaining match
 action-handler bodies behind the derived dispatch tables. Match flow on the
 competition screens remains keyboard/mouse-runtime-gated (FU-65). Record
