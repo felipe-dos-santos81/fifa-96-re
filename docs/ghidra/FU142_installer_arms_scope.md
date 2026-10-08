@@ -2975,6 +2975,12 @@ staging writes the derived FU-84 advance back into it, and
 row-08 `+0x3D == 1` projection-scan gate is live from the staged pool value
 and the K.6.7 "inert until the OL-80 producer lands" caveat applies only to
 the *values* being zero until the caller/arm bodies set the pool field.
+**Task-5 fix round 1:** the kickoff `FUN_00079B6C` tail (`0x79C13`,
+first-hand `get_function_by_address 0x79BB5` -> `body_end 0x79C1C`) is a
+second `+0x28`/`+0x3D` producer: `FUN_0006E598(rec, active ? 0 : 0x26, 0)`
+gives inactive records row id 0x26 and resets the frame; it is ported in
+`fifa96_match_entities_kickoff_place`, so the pool's `anim_id`/`frame` are
+non-zero from match begin.
 
 ### K.6.8 Errata to prior maps
 

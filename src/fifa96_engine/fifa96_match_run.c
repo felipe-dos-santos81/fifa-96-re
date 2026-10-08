@@ -639,9 +639,6 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->score_last_event = 0;
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
-  /* FU-89 §kickoff placement / OL-T11-9: the derived kickoff pass (the act-1
-   * ball spawn 0x1E0/0 plus the `FUN_0008CF60` per-record commit). */
-  (void)fifa96_match_entities_kickoff_place(&mr->entities);
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
   /* FU-142d: a fresh match seeds the RNG (the native FUN_000493A0 match-init
    * seed call 0x493F2) with the derived seed 0 and clears the row-28 process
@@ -658,6 +655,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
+  /* FU-89 §kickoff placement / OL-T11-8: the derived kickoff pass after the
+   * camera reset (native `FUN_00088DC8` stage 0 order: `FUN_000700F4` camera
+   * -> `FUN_00073E08` placement). The act-1 ball spawn (0x1E0/0), the
+   * `FUN_00079B6C` per-record commit, the camera-vs-target face and the
+   * `0x79C13` selector run over the fresh pool; the kickoff camera is the
+   * `[0x10F328/2C/30]` reset triple the engine's fresh camera models. */
+  (void)fifa96_match_entities_kickoff_place(&mr->entities, mr->render.camera.pos_x,
+                                            mr->render.camera.pos_y,
+                                            mr->render.camera.pos_z);
   if (eng->surface) {
     /* FU-92: the derived window setter clamps to the surface; the live match's
      * 160x100 sequence / zoom window selection is an open leg, so the fresh

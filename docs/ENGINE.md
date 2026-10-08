@@ -149,17 +149,24 @@ the build also produces the windowed `fifa96` target (`make game`).
   stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`;
   marker/name/score passes), kickoff formation/record placement (`-8`),
   direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80` above.
-  `OL-T11-8` is now **partial (M2 playability Task 5)**: the native
-  setup/restart commit `FUN_00079B6C` (position := target) and the kickoff
-  act-1 ball spawn (`[0x158830] = 0x1E0`, z = 0) are ported
-  (`fifa96_match_entities_place`/`_kickoff_place`, called at match begin), so
-  at least the kickoff ball position is non-zero at match start; the
-  per-record formation *targets* come from the resource-loaded `0x14BFC0`
+  `OL-T11-8` is now **partial (M2 playability Task 5)**:
+  `FUN_00079B6C` (`0x79B6C..0x79C1C`) is ported in full commit + tail form —
+  position := target, y = 0, target := position, both velocity pairs and the
+  lane low word cleared, the camera-vs-target face, and the unconditional
+  `0x79C13` `FUN_0006E598(rec, active ? 0 : 0x26, 0)` selector that gives
+  inactive records row id 0x26 and resets the frame; the kickoff act-1 ball
+  spawn (`[0x158830] = 0x1E0`, z = 0, ball.y = 0 via `FUN_0008C24C` `0x8C299`)
+  is ported too (`fifa96_match_entities_place`/`_kickoff_place`, called at
+  match begin after the camera reset), so the kickoff ball position is
+  non-zero and the pool animation ids/frames are non-zero at match start. The
+  tail's conditional `FUN_0006E48C` `+0x3E` write stays a leg (no pool field);
+  the per-record formation *targets* come from the resource-loaded `0x14BFC0`
   table (`FUN_0004A6BC` reads `t%s.dat`/`lay%s.fmt`), so real formation
-  coordinates stay an open leg (FU-89 §11 erratum). Note the plan's
-  "kickoff placement (OL-T11-9)" label is a numbering erratum: the register's
-  `-8` is the placement item and `-9` is the direction addend. `OL-T11-10`
-  (FU-89 key-seeding consumers) closed with the FU-89 §11 errata.
+  coordinates stay an open leg (FU-89 §11 erratum). `[0x157AB1] = 0` is a
+  process global with no derived home. Note the plan's "kickoff placement
+  (OL-T11-9)" label is a numbering erratum: the register's `-8` is the
+  placement item and `-9` is the direction addend. `OL-T11-10` (FU-89
+  key-seeding consumers) closed with the FU-89 §11 errata.
 - **Phase table (FU-143):** the 35 FU-83 phase rows (handlers `0x110794`,
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level

@@ -475,9 +475,21 @@ and their request fields are consumed rather than left write-only.
   record's `anim_sel` (rows 28/2A write it back through
   `fifa96_arm_anim_select`), and rows 04/06/18 stage `byte[[rec+0x28]]` from
   the same field instead of zero. The FU-84 row+8 bank selection therefore
-  follows the live id (`0x6E598`'s RNG-reroll arm stays OL-52; the *producer*
-  of non-zero identifiers is still the unported installer animation arm, so
-  ids only become live through the wired arm bodies / caller fixtures).
+  follows the live id (`0x6E598`'s RNG-reroll arm stays OL-52). The installer
+  animation arm (`FUN_0006E598` on install) remains unported, but the kickoff
+  `FUN_00079B6C` tail (`0x79C13`, first-hand fix round 1) is ported and
+  produces ids from match begin: inactive records take row 0x26, active
+  records re-resolve id 0 (keep/fallback), and the frame resets to 0; the
+  wired arm bodies (28/2A) and caller fixtures supply the remaining ids.
+* **§8 OL-80 fix round 1 (span/contract erratum).** `FUN_00079B6C` ends at
+  `0x79C1C` (single RET; `get_function_by_address 0x79BB5` -> `body_end
+  0x79C1C`), not `..0x79BAD`: the commit block's velocity zeroes are
+  `0x79BA9/0x79BAD/0x79BB1` (`word +0x75` and `word +0x73` after `word
+  +0x71`), and the tail `0x79BB5..0x79C13` runs `FUN_00079C50` (face),
+  `FUN_0006E48C` (conditional `+0x3E` write, leg) and `FUN_0006E598` (the
+  `0x79C13` selector). `fifa96_match_entities_place` now clears both pool
+  velocities; the `0x6E48C` `+0x3E` write has no pool field and stays a
+  numbered leg.
 
 ## 9. Concerns
 

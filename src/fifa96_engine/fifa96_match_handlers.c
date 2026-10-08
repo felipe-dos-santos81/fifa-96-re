@@ -1210,7 +1210,7 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   s.active = r->active;
   s.has_slot = r->has_slot;
   s.byte44 = 0;                     /* native +0x44 producer unported (OL-82) */
-  s.byte3d = r->frame;              /* native +0x3D (producer OL-80/OL-82) */
+  s.byte3d = r->frame;              /* native +0x3D, staged live (OL-80) */
   s.byte_15877d = 0;                /* [0x15877D] producer unported (OL-82) */
   s.byte_15872f = 0;                /* [0x15872F] producer unported (OL-82) */
   s.is_team_target = id == mr->entities.team[team].target ? 1u : 0u;

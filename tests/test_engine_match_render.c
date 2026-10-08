@@ -565,6 +565,25 @@ static void test_live_anim_inputs_drive_bank_row(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* OL-80 staging round-trip: the pool record's `anim_id` is staged into
+ * `mr->record` on every dispatch and written back; a row-00 dispatch never
+ * touches it, so the pool value must survive. This is the input half the
+ * constant-kind arm assertions cannot discriminate (deleting
+ * `r->anim_id = e->anim_id` clobbers the pool value to the zeroed staging
+ * record); the handler tests pin the write-back half. The staged bank row
+ * follows the survived id. */
+static void test_anim_id_staging_round_trip(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_z = 0x200;
+  f.mr.entities.team[0].records[0].anim_id = 0x28;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.entities.team[0].records[0].anim_id == 0x28);
+  assert(f.mr.render.entities[0].stage.anim_id == 0x28);
+  assert(f.mr.render.entities[0].bank_index == 0x4C);   /* row 0x28 +8 */
+  fifa96_surface_destroy(f.s);
+}
+
 /* FUN_000589E0/FUN_00036C70 gates (the ratio is set explicitly per phase: the
  * reset default 0x1500 computes 121 and is not exercised here):
  *  - camera y = 0x140, ratio 0x15 -> threshold `(0x14<<16)/(2*0x15) = 0x79E7`,
@@ -685,6 +704,13 @@ static void test_engine_match_step_renders(void) {
   struct fifa96_match_run mr_on;
   fifa96_match_run_init(&mr_on);
   assert(fifa96_match_run_begin(&mr_on, on.engine, 0) == 0);
+  /* begin ran the derived kickoff pass: the act-1 ball spawn (0x1E0, 0, 0)
+   * and the `0x79C13` selector (inactive records -> row 0x26). */
+  assert(mr_on.entities.ball.x == 0x1E0);
+  assert(mr_on.entities.ball.y == 0);
+  assert(mr_on.entities.ball.z == 0);
+  assert(mr_on.entities.team[0].records[0].anim_id == 0x26);
+  assert(mr_on.entities.team[1].records[10].anim_id == 0x26);
   uint8_t blob[BLOB_LEN];
   int32_t offsets[2];
   struct fifa96_render_bank bank;
@@ -714,6 +740,7 @@ int main(void) {
   test_scene_stages_pool_entities();
   test_entity_animates_over_frames();
   test_live_anim_inputs_drive_bank_row();
+  test_anim_id_staging_round_trip();
   test_near_depth_threshold_gate();
   test_lateral_cull_at_8e0();
   test_remap_identity_and_color_key();

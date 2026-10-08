@@ -468,6 +468,18 @@ tests/test_animation.c src/fifa96_loader/fifa96_animation.c` runs clean.
   derived advance writes its result back into the pool `frame`. The row
   successor/terminal machine and the `+0x8` animator-record semantics
   (leg 1) are unchanged.
+* **Selector producer on the kickoff path (M2 playability-legs Task 5 fix
+  round 1).** The native setup/restart commit `FUN_00079B6C` ends at `0x79C1C`
+  (first-hand `get_function_by_address 0x79BB5` -> `body_end 0x79C1C`) and its
+  tail calls `FUN_0006E598` unconditionally at `0x79C13` with
+  `EDX = (byte[rec+0x8D] ? 0 : 0x26)` and `EBX = 0`: inactive records select
+  row id 0x26, active records re-resolve id 0 (the keep/reroll arm, §1), and
+  the frame resolver writes `[rec+0x3D] = 0` and resets the `+0x32`
+  accumulator. The engine ports this in
+  `fifa96_match_entities_kickoff_place` (`fifa96_arm_anim_select` +
+  `frame = 0`), so pool ids/frames are non-zero from match begin; the
+  `0x79C13` frame-resolver accumulator reset has no pool field (render-slot
+  `anim_timer` is zero at begin).
 
 ## 11. Open legs
 

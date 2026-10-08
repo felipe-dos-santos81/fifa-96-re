@@ -593,7 +593,9 @@ replay gates are folded into one `replay_gate` argument; the original's
   `[0,count)` with no preserved slot, and `tests/test_scene.c` pins the
   corrected form.
 * **Kickoff record placement source audit (M2 playability-legs Task 5 /
-  OL-T11-9; first-hand `/FIFA96.EXE` this slice).** The scene staging
+  OL-T11-8 placement item; the plan's "OL-T11-9" label is a numbering slip,
+  register `-9` is the direction addend `0xA2A10`; first-hand `/FIFA96.EXE`
+  this slice).** The scene staging
   `FUN_00036C70` (§4) reads `rec+0x59/5D/61`; their match-start values come
   from the setup/restart chain, not from the staging body:
   * the kickoff act-1 body (`FUN_0008A938` jump table flat `0x1107EC` entry 1
@@ -610,9 +612,18 @@ replay gates are folded into one `replay_gate` argument; the original's
   * `FUN_0008CF60` loops the 11 records, resolves the phase handler
     (`FUN_0006D920`), calls it with `EDX=&rec+0x4D`, then `FUN_00079F3C`
     (other-team camera placement) and finally `FUN_00079B6C`
-    (`0x79B6C..0x79BAD`): **position +0x59/5D/61 := target +0x4D/51/55,
-    position.y := 0, target := position**, word `+0x69` (dz), word `+0x71`
-    (speed), word `+0x67` (dx), word `+0x65` (distance) and byte `+0x9C` := 0.
+    (`0x79B6C..0x79C1C`, single RET at `0x79C1C`; first-hand
+    `get_function_by_address 0x79BB5` -> `body_end 0x79C1C`): **position
+    +0x59/5D/61 := target +0x4D/51/55, position.y := 0, target := position**,
+    word `+0x69` (dz), words `+0x71/+0x73/+0x75` (both velocity halves), word
+    `+0x67` (dx), word `+0x65` (distance) and byte `+0x9C` := 0. The same body
+    then runs the tail: the `FUN_00079C50` camera-vs-target face
+    (`0x79BB5..0x79BCF`, camera = `[0x15774C]`, the reset `[0x10F328/2C/30]`
+    triple), the conditional `FUN_0006E48C` `byte[rec+0x3E] = byte[rec+0x8E]`
+    write (`0x79BD4..0x79BEC`, gated on the row pointer and row `+0x44` bit 0),
+    and the **unconditional `FUN_0006E598(rec, active ? 0 : 0x26, 0)` at
+    `0x79C13`** — an animation-id producer on this very path (inactive records
+    take row id 0x26; active records re-resolve id 0 and reset `[rec+0x3D]`).
   The per-record formation bytes come from the resolver pointer `[rec+8]`
   (`FUN_0006D920` -> `FUN_0004AFB8(6*formation_id+1)+subtype*4`); the pointer
   table at flat `0x14BFC0` is populated by `FUN_0004A6BC` from the external
@@ -622,17 +633,18 @@ replay gates are folded into one `replay_gate` argument; the original's
   "`FUN_0008D824`-adjacent" source is **not** a placement writer: `0x8D824`
   binds the controlled actor into the nearest record's *target* triple
   (FU-142 K.2), and the per-frame `FUN_0008D098` call at `0x8D11E` is
-  `FUN_0008DCD4(dest=&rec+0x59, src=&rec+0x4D, aux=&rec+0x65)`, which only
-  computes the `+0x65/+0x67/+0x69` lane words (first-hand
-  `disassemble_function 0x8DCD4`) and never commits a position.
+  `FUN_0008DCD4(EAX=&rec+0x59, EDX=&rec+0x4D, EBX=&rec+0x65)`, whose only
+  output is the `+0x65` lane/distance triple (first-hand
+  `disassemble_function 0x8DCD4`: the two input triples are read, the three
+  `+0x65/+0x67/+0x69` words are written) and which never commits a position.
   **Engine status:** the placement commit `fifa96_match_entities_place`
-  (`FUN_00079B6C`) and the kickoff pass
-  `fifa96_match_entities_kickoff_place` (ball spawn 0x1E0/0 + per-record
-  commit) are ported and fixtured; the per-record formation targets remain
-  the resource table's open leg (OL-T11-9 partial), so records are placed
-  from caller-seeded targets. The register's `-8` is the kickoff
-  formation/record placement item; the plan's "OL-T11-9" label is the
-  register's `-9` (direction addend `0xA2A10`), a numbering erratum.
+  (`FUN_00079B6C`'s commit block, span corrected) and the kickoff pass
+  `fifa96_match_entities_kickoff_place` (ball spawn 0x1E0/0 with ball.y = 0,
+  per-record commit, camera face, and the `0x79C13` selector) are ported and
+  fixtured; the per-record formation targets remain the resource table's open
+  leg (OL-T11-8 partial), so records are placed from caller-seeded targets,
+  and the tail's `0x6E48C` `+0x3E` write stays a leg (no pool field). Note
+  `[0x157AB1] = 0` is a process global with no derived home.
 
 ## 12. Open legs
 

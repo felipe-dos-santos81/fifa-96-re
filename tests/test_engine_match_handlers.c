@@ -371,7 +371,9 @@ static void test_action_28_runs_body(void) {
   assert(f.mr.record.stage92 == 1);    /* arm 0 latch + arm 1 wait */
   assert(f.mr.record.timer89 == 0);
   assert(f.mr.record.scratch_a2 == 0x20); /* seed-0 draw 512 & 0x7F + 0x20 */
-  assert(f.mr.record.anim_id == 0x15);   /* OL-80: arm-0 0x15 select output */
+  /* OL-80: pins the anim_id write-back; the constant kind cannot
+   * discriminate the input staging (render round-trip fixture does). */
+  assert(f.mr.record.anim_id == 0x15);
 
   /* stage 1 with the gate fired and flag830 clear: target = pos, id 1, the
    * +0xA2 re-arm (seed-0 second draw 1829 -> 0x45) */
