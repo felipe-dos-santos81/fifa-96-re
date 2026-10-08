@@ -1010,6 +1010,105 @@ static void test_row04_row13_event(void) {
   row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
 }
 
+/* 0x7E9C2..0x7E9EC: the slot bit-0x20 + word[0x1577F0] > 0x70 direct
+ * 0x157770 copy, clamped at 0x7EC13 (no arm selection). */
+static void test_row04_slot_camera_copy(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0x20;
+  s.track_577f0 = 0x80;
+  s.vec5770_x = 0x900;         /* clamps to 0x720 */
+  s.vec5770_y = 5;
+  s.vec5770_z = -0x1000;       /* clamps to -0xB10 */
+  s.lane = 0x20;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x720 && out.target_y == 5 && out.target_z == -0xB10);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+
+  /* the same slot bit without the > 0x70 band falls through to the normal
+   * ECX/user gates (0x7E9D3 JLE) */
+  s.track_577f0 = 0x70;
+  s.vec5770_x = 0x900;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_x != 0x900);
+}
+
+/* 0x7EC40..0x7EC80: the team+0x828 slot-merge request; 0x7ED79: the slot +6
+ * backup request. */
+static void test_row04_merge_and_backup(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 1;              /* byte[team+0x828] */
+  s.team_7e7 = 0;
+  s.team_7bf = 0;
+  s.merge_gate_1586d7 = 0;
+  s.active = 1;
+  s.lane = 0x20;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_merge == 1);
+
+  /* byte[team+0x7E7] blocks the merge (0x7EC49) */
+  s.team_7e7 = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_merge == 0);
+
+  /* slot +6 nonzero -> FUN_00078A84 backup request (0x7ED79) */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0;
+  s.slot_word6 = 1;
+  s.lane = 0x20;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_backup == 1);
+  s.slot_word6 = 0;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_backup == 0);
+}
+
+/* 0x7E89F..0x7E8AD: [opp+0x7C7] short-circuits the ranked pick. With the
+ * pointer at index 1 (lane 0x30 > self 0x20) the body takes the main path;
+ * the rank would have chosen index 2 (lane 0x10) and installed 0x19. */
+static void test_row04_opp_7c7_pick(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  static const fifa96_outfield_row04_mate mates[1] = {
+      {0, 0, 0, 0, 0x20, 4, 0, 0},
+  };
+  static const fifa96_outfield_row04_mate opps[3] = {
+      {0, 0, 0, 0, 0x10, 0, 0, 0},
+      {0, 0, 0, 0, 0x30, 0, 0, 0},
+      {0, 0, 0, 0, 0x10, 0, 0, 0},
+  };
+  s.active = 0;
+  s.mates = mates;
+  s.mate_count = 1;
+  s.opps = opps;
+  s.opp_count = 3;
+  s.opp_7c7_index = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+
+  /* the [opp+0x7C7] record at index 2 wins the 0x19 install */
+  s.opp_7c7_index = 2;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x19, 0, 1);
+}
+
 int main(void) {
   test_table_accessors();
   test_rule_match();
@@ -1033,6 +1132,9 @@ int main(void) {
   test_row04_tail_six_five();
   test_row04_corner();
   test_row04_row13_event();
+  test_row04_slot_camera_copy();
+  test_row04_merge_and_backup();
+  test_row04_opp_7c7_pick();
   puts("test_outfield: all assertions passed");
   return 0;
 }
