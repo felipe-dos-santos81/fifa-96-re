@@ -547,14 +547,15 @@ FU-60 §3.1).
 **Completion staging.** The plan fixes the driver signature to `(mr)` alone,
 and the FU-62 library owns the derived `sec == limit + aux` test
 (`src/fifa96_loader/fifa96_match_state.c` completion block; first-hand case
-body `0x8B1DD`: `0x8B1EA MOV BX,[0x5881A]` / `CMP AX,BX` / `0x8B21D CMP
+body `0x8B1DD`: `0x8B1E3 MOV BX,[0x5881A]` / `0x8B1EA CMP AX,BX` / `0x8B21D CMP
 EAX,EDX` with `EDX = aux + limit` / `0x8B225 ECX=1`). The frame body stages the
 library's `period_ended` output in
-`struct fifa96_match_run.clock_period_ended`; the driver consumes it one-shot
-after applying the class gate. Class-2 phases pass the gate (the native
-`[0x14C302]` halt is clear in the engine: `fifa96_match_state_tick` is called
-with `clock_halt = 0`), but the §4.1 aux invariant still prevents a class-2
-completion, matching the native.
+`struct fifa96_match_run.clock_period_ended`; the driver consumes the staging
+one-shot first (the `ended` latch and the `clock_period_ended = 0` clear precede
+the row lookup) and only then applies the class gate. Class-2 phases pass the
+gate (the native `[0x14C302]` halt is clear in the engine:
+`fifa96_match_state_tick` is called with `clock_halt = 0`), but the §4.1 aux
+invariant still prevents a class-2 completion, matching the native.
 
 **First-hand re-verification this slice** (all `/FIFA96.EXE`, read-only,
 explicit program argument; the derived entry points diff clean against the
@@ -593,8 +594,12 @@ unchanged, the fixtures extend `test_engine_match_frame`):
   samples `state=` before each step, while the 0x0C write happens inside the
   exit step, so no transcript line changes and the golden is not re-pinned;
 * the tape keeps its declared 0x13/0x14/2 forcing; no frame is re-pinned to
-  hide a mismatch (the driver reproduces frame-for-frame, but the forcing
-  cannot be dropped because the live-phase entry stays unported).
+  hide a mismatch. Byte-identity is a replay-level check, not a proof that the
+  driver reproduces forced behavior frame-for-frame: the completion
+  consumption and the 2 -> 0x0C write are pinned by the
+  `test_engine_match_frame` fixtures and by the v2 tape's post-exit mirror
+  read; the forcing cannot be dropped because the live-phase entry stays
+  unported (OL-84).
 
 **New open legs** (extend §8):
 

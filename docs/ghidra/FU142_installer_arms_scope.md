@@ -2257,8 +2257,8 @@ expectations unchanged; `make check` **100/100**; M1 golden and pinned render
 hashes unchanged.
 
 This statement records the classification at the original Task-9 split gate;
-the later M2 tasks moved the counts (current totals in FU-137 §7: 11
-`FIFA96_OK` / 68 `-UNSUPPORTED` / 1 `-NOT_FOUND`; `make check` 104/104).
+the later M2 tasks moved the counts (current totals in FU-137 §7: 13
+`FIFA96_OK` / 66 `-UNSUPPORTED` / 1 `-NOT_FOUND`; `make check` 104/104).
 
 ## Provenance
 

@@ -130,6 +130,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0x81068..0x814AF` is ported and wired (FU-142 Appendix K.6 Task 2,
   `fifa96_outfield_row08_step` / `fifa96_match_action_08`; no installer arm,
   unmodeled inputs/sinks OL-82). Both OL-70/OL-70a are closed.
+- **OL-81 / OL-83 (playability-legs review legs).** OL-81: the FU-142a
+  decision compares `[0x157AC5]`/`[0x157AC7]` byte-wide (the
+  `fifa96_match_phase_machine` `ac5`/`ac7` fields are `uint8_t`) while the
+  native words are 16-bit; no producer binds either word yet, so the
+  divergence is unobservable until one lands (FU-142 §6). OL-83: rows
+  04/06/07/18 read `record.actor_type` for the native `+0x8E` byte while rows
+  08/28/2A write `record.type`, so a row-08 face write is invisible to the
+  rows that natively share the byte — a latent wired-row divergence to
+  reconcile in a follow-up (FU-142 §6/K.6.7).
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
 - **OL-80 render anim inputs — closed (M2 playability Task 5; links FU-141

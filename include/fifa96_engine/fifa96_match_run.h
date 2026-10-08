@@ -409,9 +409,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * legs), so the engine lifecycle owns the exit and the 0x0C -> 0 reset is the
  * run_end teardown (`fifa96_match_state_init`).
  *
- * No phase write happens for a class-0 phase or without a staged completion.
- * Returns 1 when the derived chooser ran and wrote a phase, 0 otherwise,
- * -FIFA96_ERR_INVALID (NULL), or a -fifa96_err_t from the drivers. */
+ * No phase write happens for a class-0 phase, without a staged completion, or
+ * when the chooser derives `FIFA96_ACTION_PHASE_NONE`. Returns 1 when the
+ * derived chooser ran (a phase is written only when its output is not
+ * `FIFA96_ACTION_PHASE_NONE`), 0 otherwise, -FIFA96_ERR_INVALID (NULL), or a
+ * -fifa96_err_t from the drivers. */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
 
 /* One match presentation pass into the engine's indexed surface (Task 15):
