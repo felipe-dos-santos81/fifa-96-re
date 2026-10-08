@@ -364,12 +364,14 @@ static void test_action_28_runs_body(void) {
   f.mr.record.timer89 = 5;
   f.mr.record.delta = 0;
   f.mr.record.scratch_a2 = 0;
+  f.mr.record.anim_id = 0;               /* OL-80 selector input */
   assert(fifa96_match_dispatch_action(&f.mr, 0x28) == FIFA96_OK);
   assert(f.mr.record.target_x == 0x100 + 133);
   assert(f.mr.record.target_z == 0x200 + 55);
   assert(f.mr.record.stage92 == 1);    /* arm 0 latch + arm 1 wait */
   assert(f.mr.record.timer89 == 0);
   assert(f.mr.record.scratch_a2 == 0x20); /* seed-0 draw 512 & 0x7F + 0x20 */
+  assert(f.mr.record.anim_id == 0x15);   /* OL-80: arm-0 0x15 select output */
 
   /* stage 1 with the gate fired and flag830 clear: target = pos, id 1, the
    * +0xA2 re-arm (seed-0 second draw 1829 -> 0x45) */
@@ -411,9 +413,11 @@ static void test_action_2A_runs_body(void) {
   f.mr.record.flag830 = 7;
   f.mr.record.global_10f358 = 9;
   f.mr.record.global_10f35c = 9;
+  f.mr.record.anim_id = 0x99;            /* OL-80 selector input */
   assert(fifa96_match_dispatch_action(&f.mr, 0x2A) == FIFA96_OK);
   assert(f.mr.record.target_x == -0x720);
   assert(f.mr.record.target_z == 0);
+  assert(f.mr.record.anim_id == 0x60);   /* OL-80: arm-0 0x60 select output */
   assert(f.mr.record.flag830 == 0);
   assert(f.mr.record.global_10f358 == 0);
   assert(f.mr.record.global_10f35c == 0);

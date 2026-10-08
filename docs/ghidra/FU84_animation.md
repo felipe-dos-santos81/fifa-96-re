@@ -454,6 +454,20 @@ tests/test_animation.c src/fifa96_loader/fifa96_animation.c` runs clean.
 * FU-83 §3.2 height tables `0x105xx` — **extended**: the four bases
   `0x1052A/0x1058A/0x105AA/0x105CA` and their selector `FUN_0006E330` are
   cited in §2; selection semantics remain open (leg 6).
+* **Row+8 bank chain live inputs (M2 playability-legs Task 5 / OL-80).** The
+  engine record pool now carries the two staging fields `FUN_00036C70` reads
+  at flat `0x36D44`/`0x36D4F` — first-hand `/FIFA96.EXE` this slice:
+  `0x36D44 MOV ECX,[EDX+0x28]; MOV CL,[ECX]; MOV [EAX+0x155C20],CL` (the
+  record's current row id = row byte 0 of the pointer the selector
+  `FUN_0006E598` stores at `[rec+0x28]`, `0x6E6B1`) and
+  `0x36D4F MOV CL,[EDX+0x3D]; MOV [EAX+0x155C37],CL` (the frame resolver
+  `FUN_0006E490`'s `+0x3D` index). The engine stages both into the FU-84
+  row+8 bank selection and the frame advance, and the arm bodies'
+  `fifa96_arm_anim_select` now receives the live id (FU-141 §8 errata).
+  The native per-frame advance stays `FUN_0008E008` (§5); the engine's
+  derived advance writes its result back into the pool `frame`. The row
+  successor/terminal machine and the `+0x8` animator-record semantics
+  (leg 1) are unchanged.
 
 ## 11. Open legs
 

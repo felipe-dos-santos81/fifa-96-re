@@ -175,6 +175,46 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
   return 1;
 }
 
+/* FU-89 §kickoff placement / OL-T11-9: the native setup/restart record commit
+ * `FUN_00079B6C` (first-hand disassemble_function 0x79B6C): the position
+ * triple takes the target triple (`MOVSD x3` 0x79B77..0x79B79), position.y is
+ * zeroed (0x79B7A), the target is then the committed position (`MOVSD x3`
+ * 0x79B87..0x79B89), and the words +0x69/+0x67/+0x65/+0x71 and the byte +0x9C
+ * are zeroed (0x79B8A..0x79BA9). The pool's `lane`/`vel_x` are dwords over
+ * those words, so only their low words follow. */
+int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
+  if (!entity) return -FIFA96_ERR_INVALID;
+  entity->pos_x = entity->target_x;
+  entity->pos_y = entity->target_y;
+  entity->pos_z = entity->target_z;
+  entity->pos_y = 0;
+  entity->target_x = entity->pos_x;
+  entity->target_y = entity->pos_y;
+  entity->target_z = entity->pos_z;
+  entity->lane = (int32_t)((uint32_t)entity->lane & 0xFFFF0000u);
+  entity->vel_x = (int32_t)((uint32_t)entity->vel_x & 0xFFFF0000u);
+  return FIFA96_OK;
+}
+
+/* The derived kickoff pass: the kickoff act-1 body `0x8ABAB` stores the ball
+ * spawn x = 0x1E0 (z = 0; y is not written by the act) and `FUN_0008C24C`
+ * copies the spawn triple into the ball record when `FUN_00073E08` runs; the
+ * per-record `FUN_0008CF60` loop commits each target via
+ * `fifa96_match_entities_place`. The per-record formation targets come from
+ * the resource-loaded 0x14BFC0 table (OL-T11-9), so the engine seeds the
+ * provable ball spawn and commits the caller's staged targets. */
+int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  pool->ball.x = FIFA96_MATCH_ENTITY_KICKOFF_BALL_X;
+  pool->ball.z = 0;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      (void)fifa96_match_entities_place(&pool->team[t].records[i]);
+    }
+  }
+  return FIFA96_OK;
+}
+
 static void entity_timer_decay(struct fifa96_match_entity *e, uint16_t delta) {
   /* The native compares the signed high word of the limit against the
    * zero-extended delta word (0x7CA74, 0x7CAA0). */

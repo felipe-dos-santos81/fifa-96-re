@@ -462,6 +462,22 @@ and their request fields are consumed rather than left write-only.
   engine records the consumer side as **OL-80** (ENGINE.md): staged slots
   keep the caller-owned row 0 / frame 0 until OL-42's animation arm and the
   +0x28/+0x3D pool fields land.
+* **§7/OL-80 status — closed (M2 playability-legs Task 5).** The pool records
+  now carry `anim_id` (the value of `byte[[rec+0x28]]`; the native row pointer
+  stays unmodeled) and `frame` (native `+0x3D`), first-hand re-measured this
+  slice on `/FIFA96.EXE`: `disassemble_bytes 0x36C70` gives the exact staging
+  reads `0x36D44 MOV ECX,[EDX+0x28]; 0x36D47 MOV CL,[ECX];
+  0x36D49 MOV [EAX+0x155C20],CL` and `0x36D4F MOV CL,[EDX+0x3D];
+  0x36D52 MOV [EAX+0x155C37],CL` (EDX = the 0xB2-strided record, EAX = the
+  slot ordinal). The engine stages both live: `fifa96_match_run`'s scene
+  staging seeds each slot from the pool record and writes the FU-84 advance
+  back to `frame`; the dispatch staging carries `anim_id` into the staged
+  record's `anim_sel` (rows 28/2A write it back through
+  `fifa96_arm_anim_select`), and rows 04/06/18 stage `byte[[rec+0x28]]` from
+  the same field instead of zero. The FU-84 row+8 bank selection therefore
+  follows the live id (`0x6E598`'s RNG-reroll arm stays OL-52; the *producer*
+  of non-zero identifiers is still the unported installer animation arm, so
+  ids only become live through the wired arm bodies / caller fixtures).
 
 ## 9. Concerns
 

@@ -255,6 +255,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->type = e->type;
   r->actor_type = e->actor_type;
   r->code = e->code;   /* native +0x91: the kick/row-04 gates index this byte */
+  r->anim_id = e->anim_id;   /* OL-80: byte[[rec+0x28]] live row id */
+  r->frame = e->frame;       /* OL-80: native +0x3D live frame index */
   r->entity_id = id;
   r->vel_x = e->vel_x;
   r->vel_z = e->vel_z;
@@ -320,6 +322,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->timer7b = r->timer7b;
   e->lane = r->lane;
   e->type = r->type;
+  e->anim_id = r->anim_id;   /* OL-80: the arm bodies' `anim_sel` write-back */
+  e->frame = r->frame;
   e->vel_x = r->vel_x;
   e->vel_z = r->vel_z;
   e->scratch_a2 = r->scratch_a2;
@@ -396,12 +400,11 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * modeled FU-120 heading is staged.
  *
  * OL-80 (links FU-141 OL-42): the same staging passes `anim_id` from
- * `byte[[rec+0x28]]` (0x36D44) and `frame` from `byte[rec+0x3D]` (0x36D4F),
- * but the FU-141 pool models neither record field, so the port preserves the
- * slot's caller-owned `stage.anim_id`/`stage.frame` (row 0 / frame 0 after
- * reset) and only the row+8 bank derivation and the accumulator advance are
- * wired; live animation selection awaits the OL-42 installer animation arm
- * and the +0x28/+0x3D pool fields.
+ * `byte[[rec+0x28]]` (0x36D44) and `frame` from `byte[rec+0x3D]` (0x36D4F).
+ * The pool now models both (the FU-84 selector's row id and the frame index),
+ * so the staging seeds the slot from the live pool record, runs the derived
+ * FU-84 advance and writes the advanced index back into the record for the
+ * next frame's dispatch (the arm bodies' `fifa96_arm_anim_select` reads).
  *
  * FU-84 `FUN_0008E008` (first-hand FU-84 §5): each slot's row id (`stage.
  * anim_id`) selects the 0x10EF00 row; the row's +8 byte is the FU-85 resolver
@@ -415,11 +418,13 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
   uint32_t slot = 0;
   for (uint32_t team = 0; team < FIFA96_MATCH_ENTITY_TEAMS; team++) {
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++, slot++) {
-      const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+      struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
       struct fifa96_match_run_entity *re = &r->entities[slot];
       re->stage.pos.x = e->pos_x;
       re->stage.pos.y = e->pos_y;
       re->stage.pos.z = e->pos_z;
+      re->stage.anim_id = (int32_t)e->anim_id;   /* 0x36D44 byte[[rec+0x28]] */
+      re->stage.frame = (int32_t)e->frame;       /* 0x36D4F byte[rec+0x3D] */
       re->stage.hidden = e->skip_9a ? 1 : 0;
     }
   }
@@ -435,6 +440,13 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
   if (!r->frames) return;
   for (uint32_t i = 0; i < r->entity_count; i++) {
     struct fifa96_match_run_entity *e = &r->entities[i];
+    /* Slots 0..21 are the two teams' records; slot 22 is the ball (no +0x3D
+     * frame field), so the frame write-back targets the pool record. */
+    struct fifa96_match_entity *rec = NULL;
+    if (i < FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) {
+      rec = &mr->entities.team[i / FIFA96_MATCH_ENTITY_RECORDS]
+                 .records[i % FIFA96_MATCH_ENTITY_RECORDS];
+    }
     if (e->stage.anim_id >= 0x6F) continue;   /* the resolver's signed id gate */
     fifa96_anim_row row;
     if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
@@ -456,6 +468,7 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
       continue;
     e->anim_timer = state.timer;
     e->stage.frame = out.frame_index;
+    if (rec) rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
   }
 }
 
@@ -626,6 +639,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->score_last_event = 0;
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
+  /* FU-89 §kickoff placement / OL-T11-9: the derived kickoff pass (the act-1
+   * ball spawn 0x1E0/0 plus the `FUN_0008CF60` per-record commit). */
+  (void)fifa96_match_entities_kickoff_place(&mr->entities);
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
   /* FU-142d: a fresh match seeds the RNG (the native FUN_000493A0 match-init
    * seed call 0x493F2) with the derived seed 0 and clears the row-28 process

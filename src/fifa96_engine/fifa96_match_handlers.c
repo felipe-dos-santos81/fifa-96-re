@@ -241,9 +241,11 @@ static int fifa96_match_action_28(struct fifa96_match_run *mr) {
   rec.chosen_pos.y = mr->record.chosen_y;
   rec.chosen_pos.z = mr->record.chosen_z;
   rec.chosen_ok = mr->record.chosen_ok;
+  rec.anim_sel = mr->record.anim_id;   /* OL-80: byte[[rec+0x28]] live id */
   rec.rng = &mr->rng;
   rc = fifa96_arm_28_step(&rec, mr->record.stage92);
   if (rc != FIFA96_OK) return rc;
+  mr->record.anim_id = rec.anim_sel;   /* OL-80: selector write-back */
   mr->record.target_x = rec.target.x;
   mr->record.target_y = rec.target.y;
   mr->record.target_z = rec.target.z;
@@ -296,9 +298,11 @@ static int fifa96_match_action_2A(struct fifa96_match_run *mr) {
   rec.vel_z = mr->record.vel_z;
   rec.global_10f358 = mr->record.global_10f358;
   rec.global_10f35c = mr->record.global_10f35c;
+  rec.anim_sel = mr->record.anim_id;   /* OL-80: byte[[rec+0x28]] live id */
   rec.rng = &mr->rng;
   rc = fifa96_arm_2a_step(&rec, mr->record.stage92);
   if (rc != FIFA96_OK) return rc;
+  mr->record.anim_id = rec.anim_sel;   /* OL-80: selector write-back */
   mr->record.target_x = rec.target.x;
   mr->record.target_y = rec.target.y;
   mr->record.target_z = rec.target.z;
@@ -727,9 +731,9 @@ static void match_row_reset(struct fifa96_match_run *mr, struct fifa96_match_ent
 /* Row 18 `0x849B0..0x84AE1` (FU-78 §7/FU-139 §2). The duel record is staged
  * into `fifa96_action_duel_step`; the resolution arms run over the pool: the
  * `FUN_0004C324` bind, the `+0x9A` latch, the NSEARCH/SWAP slot hand-off and
- * the shared reset. The native `[[rec+0x28]][0]` abort byte is staged zero
- * (OL-68), and the native 0x158897 search origin (written by FUN_0008A3FC from
- * the record) is the duel record's own position. */
+ * the shared reset. The native `[[rec+0x28]][0]` abort byte is the live OL-80
+ * row id (staged from the pool); the native 0x158897 search origin (written by
+ * FUN_0008A3FC from the record) is the duel record's own position. */
 static int fifa96_match_action_18(struct fifa96_match_run *mr) {
   fifa96_action_duel d;
   fifa96_action_duel_out out;
@@ -740,7 +744,7 @@ static int fifa96_match_action_18(struct fifa96_match_run *mr) {
   d.pos_x = mr->record.pos_x;
   d.pos_z = mr->record.pos_z;
   d.stage = mr->record.stage92;
-  d.animation = 0;
+  d.animation = mr->record.anim_id;   /* OL-80: byte[[rec+0x28]] live id */
   d.has_slot = mr->record.has_slot;
   /* The record's persisted +0x65 metric (written by the stage-1 0x8DCD4 arm;
    * the frame staging reproduces it from the persisted (0x900,0) target, the
@@ -1036,7 +1040,7 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.byte9d = 0;                     /* +0x9D producer unported (OL-72) */
   s.type8 = r->actor_type;          /* native byte +0x8E */
   s.code = r->code;                 /* native byte +0x91 (the dispatched code) */
-  s.row_byte = 0;                   /* byte[[rec+0x28]] (OL-52/OL-72) */
+  s.row_byte = r->anim_id;          /* byte[[rec+0x28]] live row id (OL-80) */
   s.desc_e = 0;                     /* rec[+4][+0xE] (roster descriptor, OL-72) */
   s.timer81 = r->timer81;
   s.timer89 = r->timer89;
@@ -1305,7 +1309,7 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
   s.slot_dir_z = mr->record.dir_z;
   s.side = mr->entities.team[team].side;
   s.type8 = mr->record.actor_type;
-  s.row_byte = 0;                         /* [[rec+0x28]] (OL-52/OL-69) */
+  s.row_byte = mr->record.anim_id;        /* [[rec+0x28]] live id (OL-80) */
   s.byte99 = 0;                           /* +0x99 (OL-69) */
   s.byte9d = 0;                           /* +0x9D (OL-69) */
   s.desc_c = 0;                           /* rec[+4][+0xC] (OL-69) */

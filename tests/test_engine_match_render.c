@@ -449,7 +449,9 @@ static uint32_t drawn_count(const struct fifa96_surface *s, uint8_t background) 
 
 /* FUN_00036C70/FUN_00056CF4: the pool stages 23 render slots (11 + 11 + ball)
  * with positions, hidden from +0x9A and the FU-84 row+8 bank index derived
- * from the entity's animation id. */
+ * from the entity's animation id (OL-80: the staged `anim_id` is the pool
+ * record's `byte[[rec+0x28]]` stand-in, so it is set on the pool, not the
+ * render slot). */
 static void test_scene_stages_pool_entities(void) {
   struct scene_fixture f;
   scene_fixture_init(&f);
@@ -465,7 +467,7 @@ static void test_scene_stages_pool_entities(void) {
   f.mr.entities.ball.y = 0x30;
   f.mr.entities.ball.z = 0x400;
   f.mr.entities.ball.heading = (int16_t)0x123;
-  f.mr.render.entities[0].stage.anim_id = 1;   /* FU-84 row 1 (bank 1) */
+  f.mr.entities.team[0].records[0].anim_id = 1;   /* FU-84 row 1 (bank 1) */
 
   assert(f.mr.render.entity_count == 0);
   drive_granted(&f.mr, 1);
@@ -497,12 +499,15 @@ static void test_scene_stages_pool_entities(void) {
  * accumulator: duration 0x50, delta 2 -> delta<<4 = 0x20 per granted frame,
  * so the fourth grant advances frame 0 -> 1. The canvas follows through the
  * row-1 bank (frame 0 = 32x32 0x22 at (142,102); frame 1 = 16x16 0x33 at
- * (151,111), the existing fixture's scale derivation). */
+ * (151,111), the existing fixture's scale derivation). The frame is the pool
+ * record's native +0x3D byte (OL-80): the staging seeds from the pool and
+ * writes the advanced index back. */
 static void test_entity_animates_over_frames(void) {
   struct scene_fixture f;
   scene_fixture_init(&f);
   f.mr.entities.team[0].records[0].pos_z = 0x200;
-  f.mr.render.entities[0].stage.anim_id = 1;
+  f.mr.entities.team[0].records[0].anim_id = 1;
+  assert(f.mr.entities.team[0].records[0].frame == 0);
 
   drive_granted(&f.mr, 1);
   assert(f.mr.render.entities[0].bank_index == 1);
@@ -517,6 +522,7 @@ static void test_entity_animates_over_frames(void) {
 
   drive_granted(&f.mr, 3);   /* grants 2..4: 0x20,0x40 accumulate, then 0x60 */
   assert(f.mr.render.entities[0].stage.frame == 1);
+  assert(f.mr.entities.team[0].records[0].frame == 1);   /* +0x3D live write */
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
   assert(f.s->indexed[111 * 320 + 151] == 0x33);
   assert(f.s->indexed[128 * 320 + 168] == 0x33);
@@ -528,6 +534,34 @@ static void test_entity_animates_over_frames(void) {
   assert(frame1 != frame0);
   assert(frame0 == SCENE_FRAME0_HASH);
   assert(frame1 == SCENE_FRAME1_HASH);
+  fifa96_surface_destroy(f.s);
+}
+
+/* OL-80 live-animation fixture: the pool record's `anim_id` (native
+ * byte[[rec+0x28]], staged at 0x36D44) and `frame` (native byte[rec+0x3D],
+ * 0x36D4F) drive the FU-84 row+8 bank selection live, and a pool-side frame
+ * change is what the staging consumes. Row 0x28's +8 byte is 0x4C (first-hand
+ * table at flat 0x10EF00), so switching the pool `anim_id` 1 -> 0x28 moves the
+ * staged bank index 1 -> 0x4C on the next granted frame; a pool `frame` of 1
+ * is staged as-is (the accumulator only advances past the 0x50 duration after
+ * two more 0x20 grants). */
+static void test_live_anim_inputs_drive_bank_row(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_z = 0x200;
+  f.mr.entities.team[0].records[0].anim_id = 1;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].stage.anim_id == 1);
+  assert(f.mr.render.entities[0].bank_index == 1);
+  assert(f.mr.render.entities[0].stage.frame == 0);
+
+  f.mr.entities.team[0].records[0].anim_id = 0x28;
+  f.mr.entities.team[0].records[0].frame = 1;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].stage.anim_id == 0x28);
+  assert(f.mr.render.entities[0].bank_index == 0x4C);   /* row 0x28 +8 */
+  assert(f.mr.render.entities[0].stage.frame == 1);
+  assert(f.mr.entities.team[0].records[0].frame == 1);
   fifa96_surface_destroy(f.s);
 }
 
@@ -679,6 +713,7 @@ int main(void) {
   test_clip_clamped_to_smaller_surface();
   test_scene_stages_pool_entities();
   test_entity_animates_over_frames();
+  test_live_anim_inputs_drive_bank_row();
   test_near_depth_threshold_gate();
   test_lateral_cull_at_8e0();
   test_remap_identity_and_color_key();

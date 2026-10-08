@@ -2967,6 +2967,15 @@ stage-2 snap) and `action_expect[0x08]` is `FIFA96_OK`.
 * **OL-67 (carried) — the event/audio sinks** remain requests.
 * Invoke-now modeling: n/a (row 08 installs no code).
 
+**Task-5 erratum (M2 playability-legs, OL-80):** the `+0x3D` producer is no
+longer missing. The FU-141 pool record carries `frame` (native `+0x3D`,
+staged by `FUN_00036C70` at `0x36D4F`; first-hand this slice), the frame
+staging writes the derived FU-84 advance back into it, and
+`fifa96_match_action_08` stages it into `record.frame` as before — so the
+row-08 `+0x3D == 1` projection-scan gate is live from the staged pool value
+and the K.6.7 "inert until the OL-80 producer lands" caveat applies only to
+the *values* being zero until the caller/arm bodies set the pool field.
+
 ### K.6.8 Errata to prior maps
 
 * FU-137 §6.1/FU-142 K.4's "213 defined-code insns" for the row-08 span is

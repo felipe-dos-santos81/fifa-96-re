@@ -177,9 +177,13 @@ struct fifa96_match_run_record {
                         * 0x110680/0x7E600/0x7C990 gates index; staged from the
                         * pool entity so handlers never use the face octant) */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
+  uint8_t anim_id;     /* OL-80 live animation row id: native byte[[rec+0x28]],
+                        * the value the FU-84 selector stores and the arm bodies
+                        * pass as `anim_sel` to `fifa96_arm_anim_select`; staged
+                        * from the pool and written back after the dispatch. */
   uint8_t frame;       /* native +0x3D animation frame index (row-08 scan gate;
-                        * producer unported, OL-80/OL-82 — the frame body keeps
-                        * it 0 until Task 5 stages the live animation frame) */
+                        * OL-80: staged live from the pool record, whose scene
+                        * staging advances it through the FU-84 driver model) */
   /* FU-142d (row 28, Appendix G) staging: the native record +0x8E facing byte
    * and +0x71/+0x73 velocity pair the body writes, the derived scratch gates
    * (native +0xA0..+0xAE, carried by the pool), the team +0x830 flag, the

@@ -5,8 +5,9 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match lifecycle complete headless with the
-render chain complete at the derived level — palette install, HUD/overlays,
-kickoff placement and live anim inputs (`OL-80`) remain open (13/80 action rows
+render chain complete at the derived level — palette install, HUD/overlays and
+the resource-driven kickoff formation remain open (`OL-T11-6..8`), live anim
+inputs (`OL-80`) are wired (13/80 action rows
 wired), and the derived FU-143 phase driver is now wired into the run loop (the
 live period end 2 → 0x0C is derived) — the M2-B acceptance tape green and
 byte-identical, and the interactive `make game` smoke reaching match start and
@@ -61,8 +62,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   0), with the derived `/ART/PLAYART.PVI` + `/ART/GAMEART0.PVI` staging pair
   (soft failure without the ISO).
 - Match: FU-64 lifecycle, FU-60 30 Hz pace, FU-61 input → FU-70 control slot
-  per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain,
-  FU-142a installer arms in phases 0x13/0x14, the FU-143 phase driver
+  per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain
+  (including the OL-80 live `anim_id`/`frame` staging into the FU-84 bank
+  chain and the derived kickoff ball placement at begin), FU-142a installer
+  arms in phases 0x13/0x14, the FU-143 phase driver
   (`fifa96_match_run_phase_drive`: the derived class gate + `FUN_0008B9CC`
   period-end chooser, so a live class-1 period end writes phase 0x0C on the
   selector-0 default), deterministic FU-85/88/89 render chain, period end
@@ -124,14 +127,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   unmodeled inputs/sinks OL-82). Both OL-70/OL-70a are closed.
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
-- **OL-80 render anim inputs (links FU-141 OL-42):** `FUN_00036C70` stages each
-  slot's `anim_id` (`byte[[rec+0x28]]`, 0x36D44) and `frame` (`byte[rec+0x3D]`,
-  0x36D4F); the FU-141 pool models neither field, so staged slots keep the
-  caller-owned row 0 / frame 0 and only the FU-84 row+8 bank derivation and
-  the accumulator advance are live. The row-08 staging record now carries a
-  zero `frame` field for the native +0x3D scan gate (FU-142 K.6), still
-  producer-less. The anim inputs land when the OL-42 installer animation arm
-  and the +0x28/+0x3D pool fields are ported.
+- **OL-80 render anim inputs — closed (M2 playability Task 5; links FU-141
+  OL-42):** `FUN_00036C70` stages each slot's `anim_id`
+  (`byte[[rec+0x28]]`, 0x36D44) and `frame` (`byte[rec+0x3D]`, 0x36D4F). The
+  FU-141 pool now carries both fields (`fifa96_match_entity.anim_id`/`.frame`,
+  first-hand re-measured on `/FIFA96.EXE`: `0x36D44 MOV ECX,[EDX+0x28]; MOV
+  CL,[ECX]`, `0x36D4F MOV CL,[EDX+0x3D]`), the scene staging seeds each slot
+  from the live pool record and writes the FU-84 advance back into `frame`,
+  the run dispatch stages `anim_id` into the arm record's `anim_sel` (rows
+  28/2A write it back through `fifa96_arm_anim_select`) and rows 04/06/18
+  stage `byte[[rec+0x28]]` from it, so the FU-84 row+8 bank selection and the
+  row-08 `+0x3D` gate follow live values. The `0x6E598` RNG-reroll arm stays
+  OL-52 and the installer animation arm that produces non-zero ids outside
+  the wired bodies stays FU-141 OL-42.
 - **Render legs `OL-T11-1`…`OL-T11-9` (Task 11 close-out register).** Task 11
   left the render chain's remaining legs under these IDs: FU-84 frame tables
   not staged (`-1`; advance uses identity durations, `sprite = frame`), row
@@ -139,10 +147,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   camera-type ratio setup `FUN_0004D7E8` (`-4`; static `0x1500` default),
   sentinel key scratch producer (`-5`), palette install/kit remap identity
   stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`;
-  marker/name/score passes), kickoff formation/record placement (`-8`; zeroed
-  FU-141 pool), direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80`
-  above. `OL-T11-10` (FU-89 key-seeding consumers) closed with the FU-89 §11
-  errata.
+  marker/name/score passes), kickoff formation/record placement (`-8`),
+  direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80` above.
+  `OL-T11-8` is now **partial (M2 playability Task 5)**: the native
+  setup/restart commit `FUN_00079B6C` (position := target) and the kickoff
+  act-1 ball spawn (`[0x158830] = 0x1E0`, z = 0) are ported
+  (`fifa96_match_entities_place`/`_kickoff_place`, called at match begin), so
+  at least the kickoff ball position is non-zero at match start; the
+  per-record formation *targets* come from the resource-loaded `0x14BFC0`
+  table (`FUN_0004A6BC` reads `t%s.dat`/`lay%s.fmt`), so real formation
+  coordinates stay an open leg (FU-89 §11 erratum). Note the plan's
+  "kickoff placement (OL-T11-9)" label is a numbering erratum: the register's
+  `-8` is the placement item and `-9` is the direction addend. `OL-T11-10`
+  (FU-89 key-seeding consumers) closed with the FU-89 §11 errata.
 - **Phase table (FU-143):** the 35 FU-83 phase rows (handlers `0x110794`,
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level

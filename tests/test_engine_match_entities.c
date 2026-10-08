@@ -64,6 +64,7 @@ static void test_init_resets_pool(void) {
       assert(e->timer89 == 0 && e->timer81 == 0 && e->timer93 == 0);
       assert(e->active == 0 && e->ran == 0 && e->carrier == 0);
       assert(e->skip_98 == 0 && e->skip_9a == 0 && e->has_slot == 0);
+      assert(e->anim_id == 0 && e->frame == 0);
       assert(e->pos_x == 0 && e->pos_z == 0 && e->target_x == 0);
       assert(e->install == 0 && e->helper_request == 0 && e->controlled == 0);
       assert(e->place_valid == 0);
@@ -90,7 +91,9 @@ static void test_release_clears(void) {
 
 /* Record field round-trips pin the derived record map: position triple
  * +0x59/+0x5D/+0x61, output triple +0x4D/+0x51/+0x55, velocity pair
- * +0x71/+0x73, lane +0x69 and the timer cluster +0x7F/+0x81/+0x89/+0x93. */
+ * +0x71/+0x73, lane +0x69, the timer cluster +0x7F/+0x81/+0x89/+0x93 and the
+ * OL-80 animation inputs `anim_id` (native byte[[rec+0x28]], 0x36D44) and
+ * `frame` (native byte[rec+0x3D], 0x36D4F). */
 static void test_record_fields_roundtrip(void) {
   struct fifa96_match_entities pool;
   assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
@@ -104,6 +107,8 @@ static void test_record_fields_roundtrip(void) {
   e->vel_x = 0x18000;
   e->vel_z = -0x10000;
   e->lane = 0x40;
+  e->anim_id = 0x28;
+  e->frame = 0x0D;
   e->timer7f = 0x003C0000u;
   e->timer81 = 0x0B;
   e->timer89 = -9;
@@ -122,6 +127,7 @@ static void test_record_fields_roundtrip(void) {
   e->lane_z = 9;
   assert(e->pos_x == 0x1234 && e->pos_y == -0x20 && e->pos_z == 0x5678);
   assert(e->target_z == 3 && e->vel_x == 0x18000 && e->lane == 0x40);
+  assert(e->anim_id == 0x28 && e->frame == 0x0D);
   assert(e->timer81 == 0x0B && e->timer89 == -9 && e->timer93 == 0x10);
   assert(e->timer7b == 4 && e->timer79 == 6 && e->type == 5 && e->stage92 == 0x12);
   assert(e->lane_x == -3 && e->lane_z == 9);
@@ -666,6 +672,67 @@ static void test_ball_state_roundtrip(void) {
   assert(pool.ball.pair.flags == 0 && pool.ball.pair.code == 0);
 }
 
+/* FU-89 §kickoff placement / OL-T11-9: the native setup/restart commit
+ * `FUN_00079B6C` (`0x79B6C..0x79BAD`, first-hand: disassemble_function) writes
+ * position +0x59/+0x5D/+0x61 from the target triple +0x4D/+0x51/+0x55, zeroes
+ * position.y, copies the position back into the target triple, then zeroes the
+ * word fields +0x69 (dz), +0x71 (speed), +0x67 (dx), +0x65 (distance) and the
+ * byte +0x9C. The pool maps `lane` (dword +0x69) and `vel_x` (dword +0x71) so
+ * their low words follow; the +0x65/+0x67 words have no pool field (the
+ * dispatch staging recomputes `distance` from pos/target per FU-142e). */
+static void test_place_commits_target(void) {
+  struct fifa96_match_entity e;
+  memset(&e, 0, sizeof e);
+  e.pos_x = 0x111;
+  e.pos_y = 0x222;
+  e.pos_z = 0x333;
+  e.target_x = -0x720;
+  e.target_y = 0x55;
+  e.target_z = 0x840;
+  e.lane = (int32_t)0xAAAA0040u;   /* low word +0x69 = dz, high word kept */
+  e.vel_x = (int32_t)0xBBBB0012u;  /* low word +0x71 = speed, high word kept */
+  e.vel_z = 0x0CCCC;
+  assert(fifa96_match_entities_place(&e) == FIFA96_OK);
+  assert(e.pos_x == -0x720 && e.pos_y == 0 && e.pos_z == 0x840);
+  assert(e.target_x == -0x720 && e.target_y == 0 && e.target_z == 0x840);
+  assert((uint32_t)e.lane == 0xAAAA0000u);
+  assert((uint32_t)e.vel_x == 0xBBBB0000u);
+  assert(e.vel_z == 0x0CCCC);   /* native word +0x75 untouched by 0x79B6C */
+  assert(fifa96_match_entities_place(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* The kickoff act-1 body (first-hand `FUN_0008A938` table entry 1 ->
+ * `0x8ABAB..0x8ABD9`): `[0x158830] = 0x1E0`, `[0x158838] = 0` (the ball spawn
+ * triple read by `FUN_0008C24C` at `FUN_00073E08`) and `[0x157AB1] = 0`; the
+ * per-record setup commit then places every record from its target. The
+ * derived kickoff pass therefore places the ball at (0x1E0, 0, 0) and commits
+ * each non-zero record target into the position (the formation target source
+ * is the resource-loaded `0x14BFC0` table, OL-T11-9). */
+static void test_kickoff_place_commits_records_and_ball(void) {
+  struct fifa96_match_entities pool;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  pool.ball.x = 0x999;   /* pre-existing spawn word is overwritten (x/z) */
+  pool.ball.y = 0x777;   /* untouched y: act 1 writes x/z only */
+  pool.ball.z = 0x888;
+  pool.team[TEAM0].records[3].target_x = 0x780;
+  pool.team[TEAM0].records[3].target_z = -0x21;
+  pool.team[TEAM0].records[3].pos_x = 0x7FFFFFFF;   /* committed over */
+  pool.team[TEAM1].records[1].target_x = -0x720;
+  pool.team[TEAM1].records[1].target_z = 0x840;
+  assert(fifa96_match_entities_kickoff_place(&pool) == FIFA96_OK);
+  assert(pool.ball.x == 0x1E0 && pool.ball.y == 0x777 && pool.ball.z == 0);
+  assert(pool.team[TEAM0].records[3].pos_x == 0x780);
+  assert(pool.team[TEAM0].records[3].pos_z == -0x21);
+  assert(pool.team[TEAM0].records[3].pos_y == 0);
+  assert(pool.team[TEAM0].records[3].target_x == 0x780);
+  assert(pool.team[TEAM1].records[1].pos_x == -0x720);
+  assert(pool.team[TEAM1].records[1].pos_z == 0x840);
+  /* records with zero targets are the native phase-0 identity placement */
+  assert(pool.team[TEAM0].records[0].pos_x == 0);
+  assert(pool.team[TEAM1].records[10].pos_z == 0);
+  assert(fifa96_match_entities_kickoff_place(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* An unported row is an explicit skip: the callback's
  * -FIFA96_ERR_UNSUPPORTED is tolerated and the chain continues; any other
  * error propagates. */
@@ -719,6 +786,8 @@ int main(void) {
   test_merge_slot_ranked();
   test_ball_pair();
   test_ball_state_roundtrip();
+  test_place_commits_target();
+  test_kickoff_place_commits_records_and_ball();
   test_update_tolerates_unsupported();
   test_null_take_guards();
   puts("test_engine_match_entities OK");

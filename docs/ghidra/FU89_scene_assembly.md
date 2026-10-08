@@ -592,6 +592,47 @@ replay gates are folded into one `replay_gate` argument; the original's
   preserved"): the corrected contract is `keys[i] = z(list[i])` over
   `[0,count)` with no preserved slot, and `tests/test_scene.c` pins the
   corrected form.
+* **Kickoff record placement source audit (M2 playability-legs Task 5 /
+  OL-T11-9; first-hand `/FIFA96.EXE` this slice).** The scene staging
+  `FUN_00036C70` (§4) reads `rec+0x59/5D/61`; their match-start values come
+  from the setup/restart chain, not from the staging body:
+  * the kickoff act-1 body (`FUN_0008A938` jump table flat `0x1107EC` entry 1
+    -> `0x8ABAB..0x8ABDA`, `disassemble_function 0x8A938`) stores the ball
+    spawn `[0x158830] = 0x1E0`, `[0x158838] = 0` and `[0x157AB1] = 0`, then
+    invokes the act-1 handler `FUN_00088DC8`;
+  * `FUN_00088DC8` stage 0 resets the camera (`FUN_000700F4`), calls
+    `FUN_00073E28` (phase 0), then `FUN_000740A0(1, side)` — the native
+    phase-1 entry, which runs `FUN_0008D098` per team and so the per-record
+    phase handler `0x6E1D0` that writes each *target* triple from the
+    formation bytes — and then `FUN_00073E08`;
+  * `FUN_00073E08` calls `FUN_0008C24C(0x158830)` (the ball record
+    0x15880C/10/14 := the spawn triple) and `FUN_0008CF60` per team;
+  * `FUN_0008CF60` loops the 11 records, resolves the phase handler
+    (`FUN_0006D920`), calls it with `EDX=&rec+0x4D`, then `FUN_00079F3C`
+    (other-team camera placement) and finally `FUN_00079B6C`
+    (`0x79B6C..0x79BAD`): **position +0x59/5D/61 := target +0x4D/51/55,
+    position.y := 0, target := position**, word `+0x69` (dz), word `+0x71`
+    (speed), word `+0x67` (dx), word `+0x65` (distance) and byte `+0x9C` := 0.
+  The per-record formation bytes come from the resolver pointer `[rec+8]`
+  (`FUN_0006D920` -> `FUN_0004AFB8(6*formation_id+1)+subtype*4`); the pointer
+  table at flat `0x14BFC0` is populated by `FUN_0004A6BC` from the external
+  `t%s.dat`/`lay%s.fmt` resources (name templates at `0x101C6C`/`0x101C74`,
+  `disassemble_function 0x4A6BC`), so the actual kickoff coordinates are
+  resource data, not derivable from the EXE. The plan's cited
+  "`FUN_0008D824`-adjacent" source is **not** a placement writer: `0x8D824`
+  binds the controlled actor into the nearest record's *target* triple
+  (FU-142 K.2), and the per-frame `FUN_0008D098` call at `0x8D11E` is
+  `FUN_0008DCD4(dest=&rec+0x59, src=&rec+0x4D, aux=&rec+0x65)`, which only
+  computes the `+0x65/+0x67/+0x69` lane words (first-hand
+  `disassemble_function 0x8DCD4`) and never commits a position.
+  **Engine status:** the placement commit `fifa96_match_entities_place`
+  (`FUN_00079B6C`) and the kickoff pass
+  `fifa96_match_entities_kickoff_place` (ball spawn 0x1E0/0 + per-record
+  commit) are ported and fixtured; the per-record formation targets remain
+  the resource table's open leg (OL-T11-9 partial), so records are placed
+  from caller-seeded targets. The register's `-8` is the kickoff
+  formation/record placement item; the plan's "OL-T11-9" label is the
+  register's `-9` (direction addend `0xA2A10`), a numbering erratum.
 
 ## 12. Open legs
 

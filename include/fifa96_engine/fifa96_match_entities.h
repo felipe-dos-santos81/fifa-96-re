@@ -10,8 +10,10 @@
  *     +0x7F/+0x81/+0x89/+0x93, flags +0x8D (active) / +0x8E (type) / +0x8B
  *     (actor type) / +0x8F (stage) / +0x91 (code) / +0x92 (stage latch) /
  *     +0x98, +0x9A (exclusions) / +0x9B (has ball) / +0x9E (ran) / +0x9F
- *     (carrier bit), control-slot pointer +0x20, timer pair +0x79/+0x7B
- *     (FU-67 §3.2, FU-74 §2, FU-137 §2, FU-138/FU-140 row maps);
+ *     (carrier bit), control-slot pointer +0x20, timer pair +0x79/+0x7B,
+ *     animation id `byte[[rec+0x28]]` (row 0 of the selector's row pointer)
+ *     and frame +0x3D (OL-80; staged by `FUN_00036C70` at
+ *     0x36D44/0x36D4F);
  *   - team fields: side +0x826, slot-pool byte +0x828, search gate +0x829,
  *     mode +0x82A, update counter +0x82C, timer cluster +0x7CB/+0x81E/+0x820,
  *     target pointer +0x7B2 (the `[0x157A83]` controlled actor is a separate
@@ -55,6 +57,14 @@ struct fifa96_match_entity {
   uint8_t index;            /* 0..10, the record's block position */
   uint8_t active;           /* +0x8D */
   uint8_t code;             /* +0x91 current action code */
+  uint8_t anim_id;          /* native byte[[rec+0x28]]: the current animation
+                             * row id the FU-84 selector stores (`FUN_0006E598`
+                             * 0x6E6B1) and `FUN_00036C70` stages at 0x36D44
+                             * (OL-80). The pool models the byte value, not the
+                             * native row pointer. */
+  uint8_t frame;            /* native +0x3D animation frame index, staged by
+                             * `FUN_00036C70` at 0x36D4F; the FU-84 per-frame
+                             * driver `FUN_0008E008` advances it (OL-80). */
   uint8_t stage;            /* +0x8F >> 24 */
   uint8_t stage92;          /* +0x92 stage latch (reset 0xFF, FU-137 §4.3) */
   uint8_t type;             /* +0x8E >> 24 */
@@ -221,6 +231,35 @@ int32_t fifa96_match_entities_take_slot_merge(struct fifa96_match_entities *pool
  * the request cleared. NULL pointers -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t *x,
                                      int32_t *y, int32_t *z);
+
+/* The derived kickoff ball spawn x (native `[0x158830]`, the value the kickoff
+ * act-1 body `0x8ABBA` stores; `FUN_0008C24C` at `FUN_00073E08` copies the
+ * `0x158830/34/38` triple into the ball record 0x15880C/10/14). First-hand
+ * /FIFA96.EXE `disassemble_function 0x8A938` / `0x73E08` / `0x8C24C`. */
+#define FIFA96_MATCH_ENTITY_KICKOFF_BALL_X 0x1E0
+
+/* The native setup/restart record placement `FUN_00079B6C`
+ * (`0x79B6C..0x79BAD`, first-hand disassemble_function): position
+ * +0x59/+0x5D/+0x61 := the target triple +0x4D/+0x51/+0x55, position.y := 0,
+ * the target triple := the committed position, then the word +0x69 (dz), word
+ * +0x71 (speed), word +0x67 (dx), word +0x65 (distance) and byte +0x9C := 0.
+ * The pool carries `lane` (dword +0x69) and `vel_x` (dword +0x71), so their
+ * low words are zeroed and the high words follow the native's untouched bytes;
+ * the +0x65/+0x67 words have no pool field (the FU-141 dispatch staging
+ * recomputes `distance`). NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_place(struct fifa96_match_entity *entity);
+
+/* The derived kickoff placement pass: reproduce the kickoff act-1 body
+ * (`FUN_0008A938` jump-table entry 1 -> `0x8ABAB..0x8ABDA`: ball spawn x =
+ * 0x1E0, z = 0, `[0x157AB1] = 0`) plus the `FUN_0008CF60` per-record commit
+ * `FUN_00079B6C` over both teams (called from `FUN_00073E08` after
+ * `FUN_000740A0(phase 1)`). Every record's target is committed into its
+ * position; records with a zero target stay at zero (the native phase-0
+ * identity handler `0x6DE34`). The per-record formation target source is the
+ * resource-loaded `0x14BFC0` table (`FUN_0004A6BC`, `t%s.dat` resources), so
+ * the derived engine pass places the provable ball spawn and commits whatever
+ * targets the caller seeded (OL-T11-9). NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool);
 
 /* The FU-67 §4.4 / FUN_0007D430 pairing at the chain tail: phase 2 only, both
  * team targets present, the FU-139-tested fifa96_ball_pair_decide writes the
