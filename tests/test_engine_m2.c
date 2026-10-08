@@ -46,11 +46,14 @@
  *     id at 0x26 (`fifa96_match_entities_kickoff_place`; the per-record
  *     formation *targets* stay resource-loaded, so the committed positions are
  *     the native phase-0 identity placement and no player entity draws);
- *   - the KICK press reaches the run's input model (`input_state[0] == 0x10`)
- *     but dispatches no gameplay row: at that step only the reset-installed
- *     row 00 (plus any arm-installed kickoff codes) has dispatched, so the
- *     natural kick dispatch is still blocked (the possession/selection
- *     invokers are unported legs);
+ *   - the KICK press (step 11) reaches the run's input model
+ *     (`input_state[0] == 0x10`) and is consumed by the next granted frame
+ *     body (step 12: the engine advances the clock before polling input, so a
+ *     frame body sees the previous step's sample); a wired kick install would
+ *     then dispatch by the following grant (step 15). Neither granted step
+ *     shows a staged gameplay row — only the reset-installed row 00 and the
+ *     arm-installed kickoff codes — so the natural kick dispatch is still
+ *     blocked (the possession/selection invokers are unported legs);
  *   - the T3 FU-143 phase driver runs each granted frame; the shortened
  *     class-1 phase-2 period completes on the derived FU-62 clock test
  *     (`sec == limit + aux`), the driver consumes `clock_period_ended` and
@@ -166,13 +169,17 @@
    (1ull << 0x21) | (1ull << 0x23) | (1ull << 0x26) | (1ull << 0x28) |       \
    (1ull << 0x2A))
 
-/* The rows the mechanics step stages (m 41) plus the arm-installed codes that
- * only the forced 0x13/0x14 kickoff phases produce. None may dispatch from the
+/* The arm-installed codes that only the forced 0x13/0x14 kickoff phases
+ * produce (FU-142a stage 26/28/2A). */
+#define M2_ARM_ROWS_MASK \
+  ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
+
+/* The rows the mechanics step stages (m 41): none may dispatch from the
  * scripted KICK press alone (v2 natural-path assertion). */
 #define M2_STAGED_ROWS_MASK                                                  \
   ((1ull << 0x04) | (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x08) |       \
    (1ull << 0x0F) | (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) |       \
-   (1ull << 0x23) | (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
+   (1ull << 0x23))
 
 /* The scripted key tape: intro skip (with the ISO), panel DECLINE/CONFIRM
  * navigation, then the match input: move (RIGHT, UP) and kick. One entry is
@@ -208,7 +215,8 @@ struct m2_result {
   int armed_2a;              /* team 0 record 1 held code 0x2A */
   uint64_t mask_mech;        /* dispatched_ok observed at the mechanics step */
   uint64_t mask_final;       /* dispatched_ok at the exit step */
-  uint64_t mask_kick;        /* dispatched_ok after the KICK press (step 11) */
+  uint64_t mask_kick;        /* dispatched_ok after the KICK-consuming grant (step 12) */
+  uint64_t mask_kick_next;   /* after the following grant (step 15), covering install->dispatch */
   uint8_t phase_before_exit; /* sampled on the resolving frame */
   uint8_t phase_after_exit;  /* FU-142a mirror after the exit step (derived 0x0C) */
   uint8_t clock_pending;     /* clock_period_ended after the exit step (consumed) */
@@ -378,9 +386,17 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       if (steps == 7 && in == 0x04) res->move_step_seen = steps;
       if (steps == 9 && in == 0x01) res->up_step_seen = steps;
       if (steps == 11 && in == 0x10) res->kick_step_seen = steps;
-      /* v2: the KICK press dispatched no gameplay row; only the
-       * reset-installed code 0 has run at this point. */
-      if (steps == 11) res->mask_kick = e->match_run.dispatched_ok;
+    }
+    if (steps == 12 || steps == 15) {
+      /* v2: the KICK press (step 11) is consumed by the step-12 granted frame
+       * (the clock advance runs before the input poll, so the frame body sees
+       * the step-11 sample), and a wired kick install would dispatch by the
+       * following grant (step 15). Neither sample may show a staged gameplay
+       * row: only the reset-installed row 00 and arm-installed kickoff codes
+       * do. Grant cadence verified first-hand (grants at steps 9/12/15). */
+      assert(live);
+      if (steps == 12) res->mask_kick = e->match_run.dispatched_ok;
+      if (steps == 15) res->mask_kick_next = e->match_run.dispatched_ok;
     }
     if (res->match_start_step > 0 && res->exit_step < 0 &&
         e->mode != FIFA96_ENGINE_MODE_MATCH) {
@@ -443,11 +459,19 @@ int main(void) {
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.up_step_seen == 9);
   assert(res.kick_step_seen == 11);                      /* kick input reached the run */
-  /* v2 natural-path evidence: the kick input alone dispatched no gameplay
-   * row (the possession/selection invokers are unported; only the reset-
-   * installed row 00 ran before the mechanics staging). */
+  /* v2 natural-path evidence: the KICK press is consumed by the next granted
+   * frame (step 12) and the following grant (step 15) covers a wired
+   * install->dispatch; neither sample shows a staged gameplay row. Only the
+   * reset-installed row 00 and the arm-installed kickoff codes may appear
+   * (`M2_ARM_ROWS_MASK`), so the natural kick dispatch is blocked on the
+   * unported possession/selection invokers. */
   assert((res.mask_kick & 1u) != 0u);
   assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
+  assert((res.mask_kick_next & M2_STAGED_ROWS_MASK) == 0u);
+  /* Nothing outside row 00 and the arm-installed kickoff codes dispatched on
+   * those grants either. */
+  assert((res.mask_kick & ~(1ull | M2_ARM_ROWS_MASK)) == 0u);
+  assert((res.mask_kick_next & ~(1ull | M2_ARM_ROWS_MASK)) == 0u);
   /* v2: the T5 kickoff placement is live at begin. */
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);

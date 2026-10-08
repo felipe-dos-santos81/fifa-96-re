@@ -437,9 +437,12 @@ static void test_phase_drive_reaches_period_end(void) {
 
 /* The driver's class-1/class-2 gate and the one-shot staging contract, without
  * the clock: a class-0 phase (0x01) must not consume a staged completion into a
- * period-end write (the native 0x8AF41 gate stops the clock), while the live
- * class-1 phase (0x02) runs the derived chooser on the completed period
- * (`mr.state.period - 1`). NULL -> -FIFA96_ERR_INVALID. */
+ * period-end write (the native 0x8AF41 gate stops the clock), the explicit
+ * class-2 accept path (phase 0x00, the begin default; the FU-143 table's flat
+ * 0x1106AD[0] class byte and the engine's clear `[0x14C302]` halt) runs the
+ * chooser like class 1, and the live class-1 phase (0x02) runs the derived
+ * chooser on the completed period (`mr.state.period - 1`). NULL ->
+ * -FIFA96_ERR_INVALID. */
 static void test_phase_drive_class_gate(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -455,6 +458,17 @@ static void test_phase_drive_class_gate(void) {
   assert(fifa96_match_run_phase_drive(&mr) == 1);
   assert(mr.state.phase == 0x0Cu);
   assert(mr.state.prev_phase == 2u);
+  assert(mr.phase_machine.state == 0x0Cu);
+  assert(mr.phase_machine.phase == 0x0Cu);
+  assert(mr.clock_period_ended == 0u);
+
+  /* class 2 accepts a staged completion (the halt gate is clear in the
+   * engine: `fifa96_match_state_tick` runs with `clock_halt = 0`). */
+  mr.state.phase = 0;               /* class 2 (the begin default) */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x0Cu);
+  assert(mr.state.prev_phase == 0u);
   assert(mr.phase_machine.state == 0x0Cu);
   assert(mr.phase_machine.phase == 0x0Cu);
   assert(mr.clock_period_ended == 0u);
