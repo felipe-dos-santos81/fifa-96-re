@@ -998,3 +998,16 @@ change.
   position stand-in and the opaque `0x6DA64` swap) and the `[0x157A4F]`
   parity producer (the run's `pass_parity`, first-hand `FUN_0004B100`
   `0x4B11A`/`0x4B129`); registered in FU-142 §6.
+
+## Errata (M2 child Task 10 / FU-143)
+
+* **§6.2 Table B / §7 phase-row pointer.** The Table B classification and the
+  §7 phase totals above are the pre-Task-10 state. FU-143
+  (`docs/ghidra/FU143_phase_rows.md`) derives the 35 FU-83 phase rows (handler
+  table `0x110794`, class table `0x1106AD`) and the transitions
+  `FUN_000740A0`/`FUN_000888FC`/`FUN_0008A938`/`FUN_0008B9CC`, porting the row
+  metadata and drivers (`fifa96_action_phase_row/_act/_situation/_period_end`)
+  at the loader level with open legs OL-72…OL-79; the engine phase dispatch and
+  run-loop wiring are still pending, so the engine dispatch counts stay as
+  recorded and Table B's "not ported / OL-13" cells are superseded by FU-143
+  for the loader-level derivations.
