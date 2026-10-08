@@ -177,19 +177,21 @@ observed in calls: 1 (`0x8ABAB`), 2 (`0x8AEC6`/`0x8AEDE`), 7 (`0x8AEAE`),
 
 ### 3.1 `FUN_000740A0` call-site census (`get_xrefs_to 0x740A0` = 27)
 
-27 unconditional call sites: 9 in `FUN_0008A938`'s arms, 9 in table-referenced
-phase-act bodies, 6 in the goal-screen bodies (`0x93xxx`), and 3 in named
-functions (`0x8AA89`/`0x8AB9F`/… are FUN_0008A938; `0x8BAC1` FUN_0008B9CC;
-`0x8BCCF` FUN_0008BAF0; `0x87C71`, `0x88C82`). The constant-argument sites:
+27 unconditional call sites: 9 in `FUN_0008A938`'s table-2 arms, 10 in
+table-referenced phase/act bodies (`0x87C71`, `0x88C82`, `0x88E82`, `0x88FB8`,
+`0x8915B`, `0x89372`, `0x895AC`, `0x8972F`, `0x898DD`, `0x8A091`), 6 in the
+goal-screen bodies (`0x93xxx`) and 2 in named functions (`0x8BAC1`
+`FUN_0008B9CC`, `0x8BCCF` `FUN_0008BAF0`). The constant-argument sites:
 
 | site | phase | side source | context (first-hand window) |
 |---|---|---|---|
 | `0x87C71` | 1 | `[0x157AAC]>>24` | arm before `FUN_00073E08` install + `0x8CFAC(rec,0x26)`; sets side `[0x157AAF] = team[+0x826]^1` (`0x87C50` window) |
 | `0x88C82` | 0x0C | controlled | pre-17 act body: `0xF0` sound, camera copy `0x14C110->0x14C114`, phase 0x0C, `[0x158829]++` (`0x88C60` window) |
 | `0x88E82` | 1 | controlled | phase-17 period-end arm: camera reset, `FUN_00073E28`, phase 1, `FUN_00073E08` (`0x88E60`) |
+| `0x88FB8` | 0x15 | controlled | phase-1F body: camera `FUN_000700F4`, `FUN_00073E28`, phase 0x15, `FUN_00073E08` (`0x88F90` window) |
 | `0x8915B` | 0x0A | 0 | phase-1C stage 0: `FUN_0004C374` (`[0x57A68]=0`), phase 0x0A, sounds `0x1E`/`0x190` (`0x89138`) |
 | `0x89372` | 0x0A | ball team `^1` | phase-18: `FUN_000651F0(4)`, phase 0x0A, `[0x58818]=0`, `[0x158829]++` (`0x89350`) |
-| `0x895AC` | caller stack word | ball team `^1` | phase-18 arm: `EAX = [ESP-2] SAR 16` (variable), `[0x58818]=0`, stage++ — **OL-1** |
+| `0x895AC` | caller stack word | ball team `^1` | phase-18 arm: `EAX = [ESP-2] SAR 16` (variable), `[0x58818]=0`, stage++ — **OL-72** |
 | `0x8972F` | 0x0B | record team (zero-ext) | phase-1A: phase 0x0B, `FUN_0007D9A4(rec,0x17)`, `[0x58818]=0`, stage++ (`0x89710`) |
 | `0x898DD` | 0x10 | controlled | phase-1D: if `[0x157A4A]>>24 != 0x10` -> phase 0x10 (`0x898C0`) |
 | `0x8A091` | 0x0F | ball team `^1` | phase-19: phase 0x0F, install 0x16, `[0x57A68]=0`, stage++ (`0x8A070`) |
@@ -331,25 +333,54 @@ else `[0x58822]=1` (match over) (`0x8BCD9`); **phases 0x13/0x14**
 `0x8AF41..0x8AF80`: `class = [0x1106AD+phase]`; run iff `class==1`, or
 `class==2 && [0x14C302]==0`; else the tail at `0x8B590`. `0x8AFAC`:
 `[0x57AC1] += delta`. `0x8AFD0..0x8AFF2`: `limit = period<=1 ? [0x5881A] :
-(period<=3 ? [0x5881C] : stale)`. `0x8AFF2..0x8B04A`: **if class==2**, both
-arms of the `[0x57ABA]` update increment it (the `[0x57ABC]==0x1E` arm goes
-through the tick, the other arm directly) — see §4.
+(period<=3 ? [0x5881C] : stale)`. `0x8AFF2..0x8B04A`: the class-2 aux update —
+`sec + 0x14` vs `aux + limit` selects one of two arms; see §4.1 for the exact
+byte-level arithmetic and the true invariant.
 
 ## 4. G1 carry-forward: which phase ends periods under the selector-0 default
 
-### 4.1 The class-2 aux lockstep (first-hand)
+### 4.1 The class-2 aux arithmetic and the invariant (first-hand)
 
-`FUN_0008AF38`'s per-second rollover increments **both** `[0x57ABA]` (aux) and
-`[0x57AB6]` (period seconds) on every class-2 tick (`0x8AFF2..0x8B04A` aux,
-`0x8B04A..` seconds). The period-end conditions read by the cases ("sec ==
-len+aux") are `sec == limit + aux` (`0x8B27B..0x8B28F`) and, for period 1,
-`sec == len && aux != 0` (sets `[0x5882D]`, `0x8B241..0x8B26F`). Starting from
-the reset `sec == aux == 0` (`FUN_00073EE0`, FU-62 §4.6) the difference
-`sec - aux` stays 0 for every class-2 phase, so **no class-2 phase can ever
-complete a period through the clock machine**. Class-1 phases do not touch aux,
-so `sec == limit` completes. The only class-1 phase in the live range
-`0x00..0x16` is **phase 2** (`0x1106AD` read, §2); phases 0x17/0x1A/0x1C/0x1D/
-0x1E are class 1 but are timeline acts already inside the post-period sequence.
+`FUN_0008AF38`'s per-second rollover (`0x8AFF2..0x8B04A`) updates `[0x57ABA]`
+(aux) as follows, with `sec = [0x57AB6]`, `limit` as above and
+`tick = [0x57ABC]`:
+
+```
+0x8AFF2  class != 2 -> tick = 0 (0x8B042), goto seconds
+0x8AFFC  EAX = aux + limit            ; EDX = aux, EAX = limit (MOVSX)
+0x8B008  EAX = sec + 0x14
+0x8B013  CMP EAX, EDX                 ; (sec + 0x14) vs (aux + limit)
+0x8B015  JL  0x8B020                  ; path B: sec + 0x14 <  aux + limit
+0x8B017  INC word [0x57ABA]           ; path A: sec + 0x14 >= aux + limit -> aux++
+0x8B020  MOV AX,[0x57ABC]             ; path B:
+0x8B028  CMP EAX, 0x1E
+0x8B02B  JNZ 0x8B036                  ; tick != 0x1E -> tick++ only (0x8B038/0x8B039)
+0x8B02D  INC word [0x57ABA]           ; tick == 0x1E -> aux++
+0x8B04A  [0x57AC1] -= 0x3C; [0x57AB4]++; [0x57AB6]++    ; the second rollover
+```
+
+The invariant: with `d = sec - aux`, path A advances both `sec` and `aux`
+(each +1) so `d` is unchanged; path B with `tick != 0x1E` advances only `sec`
+so `d` increases by 1; path B with `tick == 0x1E` advances both so `d` is
+unchanged. Hence `d` is **nondecreasing**, and path B fires only while
+`d < limit - 0x14` (the strict `JL`); once `d == limit - 0x14` the comparison
+falls through to path A, which preserves `d`. Starting from the reset
+`sec == aux == 0` (`FUN_00073EE0 0x73EFA..0x73F0E` writes sec/acc/aux/tick
+zero) the bound `d <= limit - 0x14` holds for every class-2 phase, so the
+completion equality `sec == limit + aux` (`d == limit`) is **unreachable for
+every class-2 phase, assuming `limit > 0`**. The weaker flag condition
+`sec == limit && aux != 0` (period 1, sets `[0x5882D]`, `0x8B241..0x8B26F`)
+can be reached (e.g. at `d == limit - 0x14`, `sec == limit` gives
+`aux == 0x14`), but it does not complete the period. aux has three zeroers:
+`FUN_00073EE0 0x73F07` (match reset), the `0x88D2E..0x88D42` reset block
+(also zeroes `[0x57AB6]`, `[0x5882D]`, `[0x58822]`), and `FUN_0008AF38`'s own
+`0x8B645..0x8B64E` tail (zeroes aux when the phase is 0x0C).
+
+Class-1 phases never touch aux (the whole `0x8AFF2..0x8B04A` block is behind
+the `class==2` test), so their completion is `sec == limit`. The only class-1
+phase in the live range `0x00..0x16` is **phase 2** (`0x1106AD` read, §2);
+phases 0x17/0x1A/0x1C/0x1D/0x1E are class 1 but are timeline acts already
+inside the post-period sequence.
 
 So: **a period ends while the phase byte is 2 (in play)**. The engine tests'
 forced `state.phase = 2` is the native in-play phase; the reset/selector-0
@@ -484,20 +515,24 @@ Added to `include/fifa96_loader/fifa96_action_handlers.h` +
 
 Ghidra MCP on `/FIFA96.EXE`: `get_current_program_info`;
 `search_instructions` operands `157a4a`, `157a4d`, `157a4c`, `157a49`,
-`15b6a8`, `15b6c0`, `00157a4a],`; `read_memory` `0x110794` (140 B),
+`15b6a8`, `15b6c0`, `00157a4a],`, `157aba` (fix round 1); `read_memory`
+`0x110794` (140 B),
 `0x1106AD` (48 B), `0x8A8E0` (36 B), `0x8A904` (56 B), `0x93B98` (40 B),
-`0x9A8E0` (48 B); `get_xrefs_to` `0x740A0` (27), `0x8A938` (39);
+`0x9A8E0` (48 B), `0x8AA98` (12 B, fix round 1); `get_xrefs_to` `0x740A0`
+(27), `0x8A938` (39);
 `get_function_by_address` `0x740A0`-callers `0x8A938`, `0x88C82` (none),
 `0x895AC` (none); `disassemble_function` `0x740A0`, `0x73E28`, `0x8BAF0`,
 `0x8A938`, `0x88940`, `0x88860`, `0x888FC`, `0x948AC`; `disassemble_bytes`
-`0x8B9CC`(292 B), `0x8B22F`(193 B), `0x4B02C`(137 B), `0x4B0B5`(112 B),
-`0x4B1A6`(258 B), `0x8AF38`(296 B), `0x8AA60`(272 B), `0x8ABAB`(49 B),
+`0x8B9CC`(292 B), `0x8B22F`(193 B), `0x8B55C`(57 B), `0x4B02C`(137 B),
+`0x4B0B5`(112 B), `0x4B1A6`(258 B), `0x8AF38`(296 B), `0x8AA60`(272 B),
+`0x8ABAB`(49 B),
 `0x8AC28`(360 B), `0x8AE08`(166 B), `0x8AEE0`(64 B), `0x8AE90`(85 B),
 `0x87C50`(64 B), `0x88C60`(48 B), `0x88E60`(53 B), `0x88F90`(53 B),
 `0x89138`(56 B), `0x89350`(64 B), `0x89590`(60 B), `0x89710`(64 B),
 `0x898C0`(64 B), `0x8A070`(64 B), `0x93D00`(183 B), `0x93D90`(64 B),
 `0x94020`(64 B), `0x941E0`(64 B), `0x94480`(64 B), `0x94660`(64 B),
-`0x94860`(64 B), `0x8AAA0`(272 B), `0x8A938`(296 B).
+`0x94860`(64 B), `0x8AAA0`(272 B), `0x8A938`(296 B), `0x73EE0`(26 B),
+`0x73EF8`(29 B), `0x8B640`(21 B), `0x88D28`(29 B) (all fix round 1).
 
 Analysis-only: no tool, capture-rig, ISO or Ghidra-project change. Port write
 set: `include/fifa96_loader/fifa96_action_handlers.h`,
