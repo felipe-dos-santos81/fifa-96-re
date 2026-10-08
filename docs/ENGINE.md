@@ -6,7 +6,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 
 Status: **M1 complete headless; M2 match lifecycle complete headless with the
 render chain complete at the derived level — palette install, HUD/overlays,
-kickoff placement and live anim inputs (`OL-80`) remain open (11/80 action rows
+kickoff placement and live anim inputs (`OL-80`) remain open (13/80 action rows
 wired) — the M2-B acceptance tape green, and the interactive `make game` smoke
 reaching match start and control input on this host.** Kick → score → period
 end remains blocked interactively on the unported rows (see "Interactive smoke"
@@ -62,9 +62,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain,
   FU-142a installer arms in phases 0x13/0x14, deterministic FU-85/88/89 render
   chain, period end (`resolve` OVER→POST→EXIT) back to the front-end.
-- Action dispatch (FU-137): **11/80 rows wired** — `00`, `1E`, `06`, `07`,
-  `0F`, `18`, `21`, `23` (arms-and-wiring G3) and `26`, `28`, `2A` (cluster G);
-  dispatch results 68 UNSUP / 11 OK / 1 NOTF.
+- Action dispatch (FU-137): **13/80 rows wired** — `00`, `04`, `06`, `07`,
+  `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring G3) and
+  `26`, `28`, `2A` (cluster G); dispatch results 66 UNSUP / 13 OK / 1 NOTF.
 - **Interactive smoke (Task 13, verified on this host 2026-10-08):** `make game`
   window opens (960×720 integer-scaled SDL3; ESC quits, exit 0). The
   walkthrough reaches **match start** — intro RETURN skip → front-end BACKSPACE
@@ -93,7 +93,7 @@ the build also produces the windowed `fifa96` target (`make game`).
 
 ## Known gaps
 
-- **Unwired rows (69/80).** 68 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 30
+- **Unwired rows (67/80).** 66 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 30
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
   `27`/`29`/`2C` (ported bodies, no installer entry) and the dead entry `2B`;
@@ -105,16 +105,20 @@ the build also produces the windowed `fifa96` target (`make game`).
 - **OL-70/OL-70a rows 04/08:** the outfield decide/chase machine subset and the
   interception tail are ported; row `04`'s full body is ported and wired
   (FU-142 Appendix K.5 Task 1, `fifa96_outfield_row04_step` /
-  `fifa96_match_action_04`; unmodeled inputs OL-72), row `08`'s body (213
-  defined-code instructions) remains to be ported and wired (OL-70a).
+  `fifa96_match_action_04`; unmodeled inputs OL-72) and row `08`'s body
+  `0x81068..0x814AF` is ported and wired (FU-142 Appendix K.6 Task 2,
+  `fifa96_outfield_row08_step` / `fifa96_match_action_08`; no installer arm,
+  unmodeled inputs/sinks OL-82). Both OL-70/OL-70a are closed.
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
 - **OL-80 render anim inputs (links FU-141 OL-42):** `FUN_00036C70` stages each
   slot's `anim_id` (`byte[[rec+0x28]]`, 0x36D44) and `frame` (`byte[rec+0x3D]`,
   0x36D4F); the FU-141 pool models neither field, so staged slots keep the
   caller-owned row 0 / frame 0 and only the FU-84 row+8 bank derivation and
-  the accumulator advance are live. The anim inputs land when the OL-42
-  installer animation arm and the +0x28/+0x3D pool fields are ported.
+  the accumulator advance are live. The row-08 staging record now carries a
+  zero `frame` field for the native +0x3D scan gate (FU-142 K.6), still
+  producer-less. The anim inputs land when the OL-42 installer animation arm
+  and the +0x28/+0x3D pool fields are ported.
 - **Render legs `OL-T11-1`…`OL-T11-9` (Task 11 close-out register).** Task 11
   left the render chain's remaining legs under these IDs: FU-84 frame tables
   not staged (`-1`; advance uses identity durations, `sprite = frame`), row

@@ -1109,6 +1109,381 @@ static void test_row04_opp_7c7_pick(void) {
   row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x19, 0, 1);
 }
 
+/* ===== M2 playability-legs Task 2 / OL-70a: the row-08 record-visible body ==
+ *
+ * Fixture expectations are computed by hand from the first-hand native
+ * instructions cited in the FU-142 Appendix K.6 (disassemble_bytes
+ * 0x81068..0x814AF on /FIFA96.EXE), never from the port. */
+
+#define ROW08_INVALID ((fifa96_err_t)-FIFA96_ERR_INVALID)
+
+static struct fifa96_rng row08_rng;
+
+/* Defaults: phase 2, stage 0, active, slotted, lane 0x20 (the face
+ * entity_angle(0x20, 0) = 0x100 -> octant 2), all gates zero. */
+static fifa96_outfield_row08_state row08_state(void) {
+  fifa96_outfield_row08_state s;
+  memset(&s, 0, sizeof s);
+  s.phase = 2;
+  s.stage = 0;
+  s.active = 1;
+  s.has_slot = 1;
+  s.lane = 0x20;
+  s.word6d = 0;
+  s.type8 = 0;
+  s.type_off_x = row04_type_x;
+  s.type_off_z = row04_type_z;
+  s.rng = &row08_rng;
+  return s;
+}
+
+/* 0x81073..0x810C3: the prologue and the stage dispatch. */
+static void test_row08_prologue(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.phase = 1;
+  s.timer89 = 7;
+  s.delta = 5;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.ran == 0 && out.stage92 == 0);
+  assert(out.timer89 == 7);   /* the phase gate precedes the += delta */
+  assert(out.target_set == 0 && out.face == 0);
+
+  /* phase 2, stage >= 3: the prologue adds delta then returns. */
+  s = row08_state();
+  s.stage = 3;
+  s.timer89 = 7;
+  s.delta = 5;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 0 && out.stage92 == 3 && out.timer89 == 12);
+  assert(out.face == 0 && out.scan == 0 && out.target_set == 0);
+
+  assert(fifa96_outfield_row08_step(NULL, &out) == ROW08_INVALID);
+  assert(fifa96_outfield_row08_step(&s, NULL) == ROW08_INVALID);
+}
+
+/* 0x810CC..0x81113: the stage-0 inactive arm (reset + the team pointer
+ * clears when the actor is that pointer). */
+static void test_row08_inactive_arm(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.active = 0;
+  s.is_team_target = 1;
+  s.is_team_second = 1;
+  s.timer89 = 7;
+  s.delta = 5;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.ran == 0 && out.stage92 == 0);
+  assert(out.clear_team_target == 1 && out.clear_team_second == 1);
+  assert(out.timer89 == 12);   /* the prologue write; the reset zero is the binder's */
+
+  s.is_team_target = 0;
+  s.is_team_second = 1;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.clear_team_target == 0 && out.clear_team_second == 1);
+
+  s.is_team_target = 1;
+  s.is_team_second = 0;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.clear_team_target == 1 && out.clear_team_second == 0);
+
+  s.is_team_target = 0;
+  s.is_team_second = 0;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.clear_team_target == 0 && out.clear_team_second == 0);
+}
+
+/* 0x81114..0x811DC: the stage-0 active camera+lead copy, the 0x79C50 face,
+ * the 0x6E598 request, the +0x9E latch and the single stage increment. */
+static void test_row08_stage0_camera_face(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.camera_x = 7;
+  s.camera_y = 8;
+  s.camera_z = 9;
+  s.lead_x = 2;    /* +0x4D += 2 << 3 */
+  s.lead_z = 3;    /* +0x55 += 3 << 3 */
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 23 && out.target_y == 8 && out.target_z == 33);
+  assert(out.face == 1 && out.face_angle == 0x100 && out.face_octant == 2);
+  assert(out.anim == 1 && out.ran == 1);
+  assert(out.stage92 == 1 && out.timer89 == 0);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 0);
+  assert(out.scan == 0 && out.reset == 0 && out.receiver_timer == 0);
+
+  /* the zero direction guard (0x79C59): both words zero leaves +0x7D/+0x8E
+   * untouched (no face write). */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.face == 0 && out.face_angle == 0 && out.face_octant == 0);
+  assert(out.stage92 == 1);
+}
+
+/* 0x8114C..0x8117A: the no-slot receiver gate (lane > 0x50 or ball height >
+ * 0x38), the 0x79B58 request and the timer89 > 0x3C reset. */
+static void test_row08_receiver_gate(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.has_slot = 0;
+  s.lane = 0x51;              /* > 0x50 */
+  s.timer89 = 0x10;
+  s.delta = 0x20;             /* updated timer 0x30 <= 0x3C -> plain return */
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 1 && out.reset == 0 && out.face == 0);
+  assert(out.stage92 == 0 && out.timer89 == 0x30);
+  assert(out.target_set == 1);   /* the camera copy precedes the slot test */
+
+  s.timer89 = 0x20;
+  s.delta = 0x20;             /* updated timer 0x40 > 0x3C -> reset */
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 1 && out.reset == 1 && out.face == 0);
+
+  /* lane == 0x50 and height == 0x38: the gate is skipped (JLE/JG) */
+  s = row08_state();
+  s.has_slot = 0;
+  s.lane = 0x50;
+  s.ball_height = 0x38;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 0 && out.face == 1 && out.stage92 == 1);
+
+  /* height 0x39 crosses the signed dword gate */
+  s.ball_height = 0x39;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 1 && out.face == 0 && out.stage92 == 0);
+}
+
+/* 0x811D6..0x81210: the stage-1 gate and the +0x44/+0x3D continuation. */
+static void test_row08_stage1_gates(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  /* the stage-0 completion reaches the gate with [0x15877D] = 0: byte +0x44
+   * set increments the stage a second time. */
+  s.byte44 = 1;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.stage92 == 2 && out.timer89 == 0 && out.scan == 0);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 0);
+
+  /* byte +0x3D != 1: plain return at stage 1 */
+  s = row08_state();
+  s.byte3d = 0;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.stage92 == 1 && out.scan == 0);
+  assert(out.face == 1 && out.ran == 1);
+
+  /* stage-1 entry: the input [0x15877D] advances the stage */
+  s = row08_state();
+  s.stage = 1;
+  s.byte_15877d = 1;
+  s.timer89 = 5;
+  s.delta = 3;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.stage92 == 2 && out.timer89 == 0 && out.face == 0 && out.ran == 0);
+
+  /* stage-1 entry: byte +0x44 advances the stage */
+  s.byte_15877d = 0;
+  s.byte44 = 1;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.stage92 == 2 && out.timer89 == 0);
+}
+
+/* 0x81216..0x81472: the projection scan. The 0x114E04 fold stores the low
+ * word of the table value and the 0x795A4 callers sign-extend it, so word7d
+ * 0x40 gives sine1 = +25079 (0x61F7) and sine2 = +60547 (0xEC83) -> int16
+ * -4989; the folds are +6/-1 at offset 0x10. With camera x 0x20, pos 0 and
+ * q 0x20 the first offset distance is 0x20 (miss) and the second 0x1A
+ * (0x20 > 0x1A -> hit, metric 0x1A). */
+static void test_row08_scan_rec_arm(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  s.lane = 0;          /* the 0x79C59 zero guard: no face write */
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.camera_x = 0x20;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan == 1 && out.scan_hit == 1 && out.scan_dist == 0x1A);
+  assert(out.face == 0);
+  assert(out.user_row_4a == 0);
+  assert(out.event_code == 0x16 && out.events == 1);
+  assert(out.ball_stage == 1 && out.ball_stage_dist == 0x1A);
+  assert(out.ball_stage_x == 0 && out.ball_stage_z == 0xA0);   /* type 0 */
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 1);
+  assert(out.stage92 == 2 && out.timer89 == 0 && out.ran == 1);
+  assert(out.event_sound == 0x190);   /* seed-0 first draw 512 & 0x7F = 0 */
+
+  /* a scan with no hit keeps the stage-0 completion writes and returns with
+   * the stage at 1 (timer89 0 from 0x811B6). */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.camera_x = 0x100;   /* every distance >= 0xE6 > q = 0x20 */
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan == 1 && out.scan_hit == 0 && out.scan_dist == 0);
+  assert(out.stage92 == 1 && out.timer89 == 0 && out.ran == 1);
+  assert(out.ball_stage == 0 && out.event_code == 0);
+
+  /* stage-1 entry: no face/anim/ran writes, the record arm still fires; the
+   * miss keeps the prologue's timer89. */
+  s = row08_state();
+  s.stage = 1;
+  s.byte3d = 1;
+  s.word7d = 0x40;
+  s.camera_x = 0x20;
+  s.timer89 = 5;
+  s.delta = 3;
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan_hit == 1 && out.face == 0 && out.ran == 0);
+  assert(out.stage92 == 2 && out.timer89 == 0);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 1);
+
+  s = row08_state();
+  s.stage = 1;
+  s.byte3d = 1;
+  s.word7d = 0x40;
+  s.camera_x = 0x100;
+  s.timer89 = 5;
+  s.delta = 3;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan_hit == 0 && out.stage92 == 1 && out.timer89 == 8);
+
+  /* a hit on a NULL rng is invalid (the 0x92AC8 draw cannot run) */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.camera_x = 0x20;
+  s.rng = NULL;
+  assert(fifa96_outfield_row08_step(&s, &out) == ROW08_INVALID);
+}
+
+/* 0x813A2..0x81423: the [0x157A83] user arm (user present, its row byte 0x4A)
+ * skips the 0x92820/0x7A490 staging and the [0x15877D] write. */
+static void test_row08_scan_user_arm(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.camera_x = 0x20;
+  s.user_present = 1;
+  s.user_is_opp_target = 1;
+  s.user_row_byte = 0x4A;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan_hit == 1 && out.user_row_4a == 1);
+  assert(out.event_code == 0 && out.ball_stage == 0);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 0);   /* 0x811CA only */
+  assert(out.events == 1 && out.event_sound == 0x190);
+  assert(out.stage92 == 2 && out.timer89 == 0);
+
+  /* the user arm also needs the row byte 0x4A: 0x49 takes the record arm. */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.camera_x = 0x20;
+  s.user_present = 1;
+  s.user_is_opp_target = 1;
+  s.user_row_byte = 0x49;
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.user_row_4a == 0 && out.event_code == 0x16 && out.ball_stage == 1);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 1);
+}
+
+/* 0x81233..0x81279: the descriptor delta and the q clamp. The self
+ * descriptor bytes +0xC/+0x16 give 6*delta + 0x20; desc_c = 0x10,
+ * desc_16 = 0 -> delta 0x10 -> q = 6*0x10 + 0x20 = 0x80 -> clamped 0x40. */
+static void test_row08_scan_radius(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.desc_c = 0x10;
+  s.desc_16 = 0;
+  s.camera_x = 0x30;   /* offset 0 distance 0x30 < 0x40 -> hit at offset 0 */
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan_hit == 1 && out.scan_dist == 0x30);
+
+  /* the +0x15872F process byte shifts the radius: 6*0 + 1*8 + 0x20 = 0x28
+   * with camera x 0x30 makes offset 0 (0x30) and offset 0x10 (0x2A) miss
+   * (0x28 <= d) and offset 0x20 (0x24) hit. */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.byte_15872f = 1;
+  s.camera_x = 0x30;
+  assert(fifa96_rng_seed(&row08_rng, 0) == FIFA96_OK);
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan_hit == 1 && out.scan_dist == 0x24);
+
+  /* the user/opp-descriptor delta subtracts; with self 0 and opp 0x10 the
+   * q word goes negative and clamps to 8, so every loop distance misses. */
+  s = row08_state();
+  s.lane = 0;
+  s.word6d = 0;
+  s.word7d = 0x40;
+  s.byte3d = 1;
+  s.user_present = 1;
+  s.user_is_opp_target = 1;
+  s.desc_opp_c = 0x10;
+  s.camera_x = 0x30;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.scan == 1 && out.scan_hit == 0);   /* q = 8; all d >= 0x1A -> miss */
+}
+
+/* 0x8147C..0x814AF: the stage-2 snap and the +0x44 / [0x15872F] tail. */
+static void test_row08_stage2(void) {
+  fifa96_outfield_row08_state s = row08_state();
+  fifa96_outfield_row08_out out;
+  s.stage = 2;
+  s.byte_15877d = 1;
+  s.pos_x = 1;
+  s.pos_y = 2;
+  s.pos_z = 3;
+  s.timer89 = 4;
+  s.delta = 2;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.snap == 1 && out.target_set == 1);
+  assert(out.target_x == 1 && out.target_y == 2 && out.target_z == 3);
+  assert(out.byte_15877d_set == 1 && out.byte_15877d == 0);
+  assert(out.reset == 0 && out.timer89 == 6 && out.stage92 == 2);
+
+  /* byte +0x44 set: reset and the [0x15872F] increment when the actor is not
+   * [0x1577CA]. */
+  s.byte44 = 1;
+  s.byte_15872f = 5;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.byte_15872f_set == 1 && out.byte_15872f == 6);
+
+  /* the [0x1577CA] actor skips the increment but still resets. */
+  s.is_ball_track = 1;
+  s.byte_15872f = 5;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.byte_15872f_set == 0 && out.byte_15872f == 5);
+
+  /* byte +0x44 clear: no reset/increment */
+  s.byte44 = 0;
+  s.is_ball_track = 0;
+  assert(fifa96_outfield_row08_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 0 && out.byte_15872f_set == 0);
+}
+
 int main(void) {
   test_table_accessors();
   test_rule_match();
@@ -1135,6 +1510,15 @@ int main(void) {
   test_row04_slot_camera_copy();
   test_row04_merge_and_backup();
   test_row04_opp_7c7_pick();
+  test_row08_prologue();
+  test_row08_inactive_arm();
+  test_row08_stage0_camera_face();
+  test_row08_receiver_gate();
+  test_row08_stage1_gates();
+  test_row08_scan_rec_arm();
+  test_row08_scan_user_arm();
+  test_row08_scan_radius();
+  test_row08_stage2();
   puts("test_outfield: all assertions passed");
   return 0;
 }

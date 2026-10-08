@@ -330,3 +330,137 @@ typedef struct fifa96_outfield_row04_out {
 
 fifa96_err_t fifa96_outfield_row04_step(const fifa96_outfield_row04_state *state,
                                         fifa96_outfield_row04_out *out);
+
+/* ===== M2 playability-legs Task 2 / OL-70a: row 08 record-visible body =====
+ *
+ * The native row-08 handler `FUN_00081068` (`0x81068..0x814AF`, RET at
+ * `0x814AF`; FU-142 Appendix K.4 splits it from OL-38, the FU-141 §7
+ * `..0x81188` head is a prefix) is the stage-0/1/2 approach/scan action,
+ * ported here as `fifa96_outfield_row08_step` from the first-hand window
+ * (disassemble_bytes 0x81068..0x8127F + 0x81280..0x814AF on /FIFA96.EXE;
+ * helpers 0x79C50/0x6E598/0x79B58/0x79B1C/0x795A4/0x8DCD4/0x8DC68/0x114E04;
+ * everything cited in FU-142 Appendix K.6).
+ *
+ * The body in native order (byte/word widths as read):
+ *   - `0x81073` phase `[0x157A4A]>>24 != 2` -> `reset` (FUN_0007DAB4);
+ *   - `0x8108E..0x810A2` `dword[+0x89] += (uint16)[0x157A64]` (unconditional,
+ *     before the stage dispatch);
+ *   - stage `byte[+0x92]`: 0 -> 0x810CC, 1 -> 0x811D6, 2 -> 0x8147C, >= 3 ->
+ *     plain return;
+ *   - stage 0, `byte[+0x8D] == 0` (inactive): `reset`; then `[team+0x7B2] = 0`
+ *     when the actor is that pointer and `[team+0x7B6] = 0` when the actor is
+ *     that pointer; return;
+ *   - stage 0, active: copy the `0x15774C` camera triple into `+0x4D..+0x55`,
+ *     add `word[0x1577C0]<<3` to `+0x4D` and `word[0x1577C2]<<3` to `+0x55`
+ *     (`0x1577BE`/`0x1577C0` dword reads >>16); when there is no slot and
+ *     (`word[+0x6B] > 0x50` or `dword[0x157750] > 0x38`), call `0x79B58`
+ *     (`receiver_timer` request) and return (`reset` when the updated
+ *     timer89 > 0x3C); else `0x79C50(rec, DX = word[+0x6B], BX = word[+0x6D])`
+ *     writes `word[+0x7D] = angle` and `byte[+0x8E] = ((angle+0x40)&0x3FF)>>7`
+ *     (zero direction leaves both untouched), `0x6E598(rec, 0xB,
+ *     byte[+0x8E], 0)` (`anim` request, OL-52), `byte[+0x9E] = 1` (`ran`),
+ *     `dword[+0x89] = 0`, `byte[+0x92]++` and `[0x15877D] = 0`; then the
+ *     stage-1 gate at `0x811D6`;
+ *   - stage 1 / the stage-0 continuation (`0x811D6`): `[0x15877D] != 0` or
+ *     `byte[+0x44] != 0` -> `byte[+0x92]++`, `dword[+0x89] = 0`, return; else
+ *     `byte[+0x3D] != 1` returns; else the projection scan;
+ *   - scan `0x81216..0x81472`: the descriptor delta
+ *     `(int8)rec[+4][+0xC] + (int8)rec[+4][+0x16]` minus, when
+ *     `[0x157A83] != 0` and the opponent team's `[+0x7B2]` is that record,
+ *     `(int8)opp[+4][+0xC] + (int8)opp[+4][+0xF]`; a radius word
+ *     `q = clamp((int16)(6*delta + (int8)[0x15872F]*8 + 0x20), 8, 0x40)`; two
+ *     `0x114E04` sine folds of `word[+0x7D]` and `word[+0x7D]+0x100`; for the
+ *     offsets `0, 0x10, 0x20, 0x30` project `(pos_x, pos_z)` by
+ *     `FUN_000795A4(offset, sine)` (`(a*b+0x8000)>>16`) and stop at the first
+ *     `0x8DCD4` camera distance `< q`; on a hit the `0x10F334`/`0x10F33C`
+ *     per-type bytes (index `byte[+0x8E]`) `*0xA0` give X/Z, the `0x8DC68`
+ *     octagonal distance of the hit distance and X is the final metric; the
+ *     `[0x157A83]`-and-`byte[[user+0x28]] == 0x4A` arm calls
+ *     `0x8ED40(user,2,4)`/`0x8F188(0x67,user)`/`0x651F0(1)`, else the record
+ *     arm calls `0x8ED40(rec,2,0)`/`0x92820(rec,0x16)` and stages the
+ *     `{dist,X,Z}` 6-byte vector through `0x7A490(rec,&vec,0,9,-1,0)` and sets
+ *     `[0x15877D] = 1`; both arms then draw `0x92AC8` and call
+ *     `0x974F0(0x190 + (draw & 0x7F))`/`0x651F0(1)`, `byte[+0x92]++`,
+ *     `dword[+0x89] = 0`; a miss returns with `timer89` as the body left it
+ *     (the prologue add, or the `0x811B6` zero on the stage-0 path);
+ *   - stage 2 `0x8147C`: `[0x15877D] = 0`, `0x79B1C` snap (`snap`: target =
+ *     position, the lane/velocity words zero), then `byte[+0x44] != 0` ->
+ *     `reset` and, when the actor is not `[0x1577CA]`, `byte[0x15872F]++`.
+ *
+ * Record-visible writes are functions of the state inputs; the `0x7D9A4`
+ * installer never runs (row 08 installs no code). The out `installs`-style
+ * requests map 1:1: `reset` -> `match_row_reset`, `receiver_timer` -> the
+ * `0x79B58` `+0x93 = 0x10` effect (the callee's `+0x99` gate is the binder's,
+ * as row 04), `face_angle`/`face_octant` -> `+0x7D`/`+0x8E`, `snap` ->
+ * `0x79B1C`, `byte_15877d`/`byte_15872f` -> the process bytes, `events` ->
+ * the unported 0x8ED40/0x8F188/0x92820/0x7A490/0x974F0/0x651F0 sinks (OL-82),
+ * `anim` -> `0x6E598` (OL-52). NULL `state`/`out` or a NULL `rng` on a
+ * drawing path -> -FIFA96_ERR_INVALID. */
+typedef struct fifa96_outfield_row08_state {
+  uint8_t phase;             /* [0x157A4A]>>24 */
+  uint8_t stage;             /* +0x92 */
+  uint8_t active;            /* +0x8D */
+  uint8_t has_slot;          /* +0x20 != 0 */
+  uint8_t byte44;            /* +0x44 anim-row terminal (producer OL-82) */
+  uint8_t byte3d;            /* +0x3D anim frame index (scan gate == 1) */
+  uint8_t byte_15877d;       /* [0x15877D] process byte (in) */
+  int8_t byte_15872f;        /* [0x15872F] process byte (signed, in) */
+  uint8_t is_team_target;    /* actor == [team+0x7B2] */
+  uint8_t is_team_second;    /* actor == [team+0x7B6] */
+  uint8_t user_present;      /* [0x157A83] != 0 */
+  uint8_t user_is_opp_target;/* [0x157A83] == [[team+0x7A6]+0x7B2] */
+  uint8_t user_row_byte;     /* byte[[user+0x28]] (the 0x4A gate, OL-82) */
+  int8_t desc_c, desc_16;    /* rec[+4][+0xC] / rec[+4][+0x16] */
+  int8_t desc_opp_c, desc_opp_f; /* opp target rec[+4][+0xC] / [+0xF] */
+  uint8_t type8;             /* +0x8E byte (tables / face octant in/out) */
+  int32_t timer89;           /* +0x89 (in; the prologue adds `delta`) */
+  uint16_t delta;            /* word [0x157A64] */
+  int32_t pos_x, pos_y, pos_z; /* +0x59/+0x5D/+0x61 */
+  int16_t lane;              /* +0x6B word (face dir X / gate) */
+  int16_t word6d;            /* +0x6D word (face dir Z) */
+  int16_t word7d;            /* +0x7D word (face angle, in) */
+  int32_t ball_height;       /* dword [0x157750] */
+  uint8_t is_ball_track;     /* actor == [0x1577CA] */
+  int32_t camera_x, camera_y, camera_z; /* 0x15774C/50/54 */
+  int16_t lead_x, lead_z;    /* word[0x1577C0], word[0x1577C2] */
+  const int8_t *type_off_x;  /* 0x10F334 table (8-bit entries) */
+  const int8_t *type_off_z;  /* 0x10F33C table */
+  struct fifa96_rng *rng;
+} fifa96_outfield_row08_state;
+
+typedef struct fifa96_outfield_row08_out {
+  uint8_t ran;               /* +0x9E latch (0x811AF, stage-0 active only) */
+  uint8_t reset;             /* FUN_0007DAB4 request (its +0x89 zero write is
+                              * the binder's, as row 04) */
+  int32_t timer89;           /* +0x89 after the body's own adds/zero writes */
+  uint8_t stage92;           /* +0x92 after the body's own increments (a reset
+                              * request's 0xFF is the binder's, as row 04) */
+  uint8_t target_set;        /* the +0x4D triple was written */
+  int32_t target_x, target_y, target_z;
+  uint8_t receiver_timer;    /* 0x79B58 call request (+0x99 gate is the binder's) */
+  uint8_t face;              /* 0x79C50 wrote +0x7D/+0x8E */
+  int16_t face_angle;        /* +0x7D result */
+  uint8_t face_octant;       /* +0x8E result */
+  uint8_t anim;              /* 0x6E598(kind 0xB) request (OL-52) */
+  uint8_t clear_team_target; /* [team+0x7B2] = 0 */
+  uint8_t clear_team_second; /* [team+0x7B6] = 0 */
+  uint8_t scan;              /* the 0x81216 projection scan ran */
+  uint8_t scan_hit;          /* a loop offset hit */
+  int16_t scan_dist;         /* the post-0x8DC68 metric word */
+  uint8_t user_row_4a;       /* the byte[[user+0x28]] == 0x4A arm */
+  uint8_t event_code;        /* 0x92820 code 0x16 (record arm) */
+  uint8_t ball_stage;        /* 0x7A490 staging request (OL-62) */
+  int16_t ball_stage_dist;   /* the staged 6-byte vector {dist, X, Z} */
+  int16_t ball_stage_x;
+  int16_t ball_stage_z;
+  uint8_t events;            /* 0x8ED40 + the sound sinks ran (OL-82) */
+  int16_t event_sound;       /* 0x974F0 argument 0x190 + (draw & 0x7F) */
+  uint8_t byte_15877d;       /* [0x15877D] after the body */
+  uint8_t byte_15877d_set;   /* the body wrote [0x15877D] */
+  uint8_t byte_15872f;       /* [0x15872F] after the body */
+  uint8_t byte_15872f_set;   /* the body incremented [0x15872F] */
+  uint8_t snap;              /* 0x79B1C request */
+} fifa96_outfield_row08_out;
+
+fifa96_err_t fifa96_outfield_row08_step(const fifa96_outfield_row08_state *state,
+                                        fifa96_outfield_row08_out *out);

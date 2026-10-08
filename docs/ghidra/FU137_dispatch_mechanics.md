@@ -359,7 +359,7 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 05 | 0x07F194 | not ported (partial) | carrier machine stages 0-3 + staging tail ported (FU-139 §8 Task 10: `fifa96_action_carrier_arm` `0x7F194..0x7F665`, `fifa96_ball_pair_stage_tail` `0x7A8D1..0x7AA2F`, plus FU-78 possession helpers); stage-0 target algebra `0x7F3A1..0x7F57B` + `FUN_0007F7E0` fallback unported, row unwired | FU-139 OL-63 (residual); OL-8 |
 | 06 | 0x0801B4 | ported (M2 arms-and-wiring Task 13 / FU-139 §11) | `fifa96_match_action_06` binds `fifa96_action_pursuit_step` (`0x801B4..0x809EF`: the `0x8DCD4`/`0x8DD70` camera metric, the `0x114E04` folds, the carrier-gate install 4 and the RNG installs 8/9, the `0x79C20` slot target, the `0x8DE8C`/`0x79CCC` mate selections and the `0x6DA64` swap request) to `mr->record`/the pool; the plan span end `0x81067` is the row-09 body `0x80A00` (slot `0x1106E0[9]`, unwired OL-9); `test_engine_match_handlers::test_action_06_runs_body` | OL-69 (record bytes, lead, callback position, swap); OL-52 remark |
 | 07 | 0x0814B0 | ported (M2 arms-and-wiring Task 11 / FU-139 §9) | `fifa96_match_action_07` binds `fifa96_action_kick_machine` (`0x814B0..0x81737`) and `fifa96_ball_kick_target` (`FUN_0007B9C4`, `0x7B9C4..0x7BF16` incl. the `FUN_0007B878` dir arm and both mode arms) to `mr->record`/the pool ball block; defender 0x0E / opponent 0x22 / ball 4 requests; `test_engine_match_handlers::test_action_07_runs_body` | OL-65 (record/presentation auxiliaries) / OL-66 (external block inputs) / OL-62 remark |
-| 08 | 0x081068 | not ported (partial) | FU-142 App. K (Task 14): the code-8 gate is ported (`fifa96_outfield_chase_gate` + flat `0x110680`), but the row body `0x81068..0x814AF` (213 Ghidra defined-code insns; ~231 across the span; FU-77 §2.7 boundary, FU-141 §7's `..0x81188` head is not the RET) is unported — split to OL-70a | OL-70a |
+| 08 | 0x081068 | ported (M2 playability-legs Task 2 / FU-142 Appendix K.6) | `fifa96_match_action_08` binds `fifa96_outfield_row08_step` (`0x81068..0x814AF`, 329 linearly decoded insns incl. the RET; FU-77 §2.7/FU-141 §7's `..0x81188` head is a prefix, first-hand): the stage 0/1/2 machine (phase gate + timer add, the stage-0 camera/lead copy, the `0x79C50` face, the `0x79B58` receiver gate, the +0x3D-gated `0x795A4`/`0x8DCD4`/`0x8DC68` projection scan, the user/record event arms, the `0x79B1C` stage-2 snap) over `mr->record`/the pool; row 08 installs no code; `test_engine_match_handlers::test_action_04_and_08_wired` | unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82 (K.6.7) |
 | 09 | 0x080A00 | not ported (partial) | FU-81 arm table 0x809F0; stage helpers | OL-9 |
 | 0A | 0x081738 | not ported | FU-76 §2; installer 0x7CDD8 has no xrefs | OL-14 |
 | 0B | 0x081908 | not ported (partial) | sequence_duel_event; FU-82 §3.3 | OL-9 |
@@ -504,6 +504,17 @@ the `0x71B9C` predictor and the event/audio sinks are OL-72 (K.5.8). A
 first-hand erratum for K.3/FU-77: the `0x110680` gates are indexed by the
 action-code byte `+0x91` (the installer's target), not `+0x8E`; the pool
 wrapper's naming is unaffected.
+
+M2 playability-legs Task 2 (FU-142 Appendix K.6) closes OL-70a: the row-08
+record-visible body `0x81068..0x814AF` is ported as
+`fifa96_outfield_row08_step` and wired as `fifa96_match_action_08` over the
+FU-141 pool (row 08 installs no code, so there is no install arm), so row `08`
+flips to `ported` and the counts move 12 -> 13 OK / 67 -> 66 UNSUP. The
+first-hand linear sweep corrects the span's defined-code count to 329
+instructions including the RET; the unmodeled record/process bytes, the
+`0x7A490` staging call and the event/audio sinks are OL-82 (K.6.7), and the
++0x3D frame gate keeps the projection scan inert live until the OL-80
+producer lands.
 
 ## 8. Open legs
 

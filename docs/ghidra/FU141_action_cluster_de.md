@@ -390,6 +390,10 @@ and their request fields are consumed rather than left write-only.
   until then. **Task 1 erratum (M2 playability-legs): the row-04 body is
   ported and wired (FU-142 Appendix K.5, `fifa96_outfield_row04_step` /
   `fifa96_match_action_04`, `FIFA96_OK`); row 08 keeps OL-70a.**
+  **Task 2 erratum (M2 playability-legs): the row-08 body is ported and wired
+  (FU-142 Appendix K.6, `fifa96_outfield_row08_step` /
+  `fifa96_match_action_08`, `FIFA96_OK`); both OL-70/OL-70a are closed and
+  the machine subset stays a separate unwired seam.**
 * **OL-39 — FU-61-adjacent input-handler support item.** The per-frame slot
   update (`FUN_00078950` via `FUN_00078A54`), the direction getter
   `FUN_0004511D`, and the handler-output packaging (FU-61 §5) are not all

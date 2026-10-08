@@ -125,7 +125,7 @@ FU-138/FU-139/FU-141 where already bounded there.
 | OL-30 row 06 pursuit | row 06 `0x801B4..0x809EF` (~597 insns, FU-139 §2; the `..0x81067` span end is the row-09 body `0x80A00`, slot `0x1106E0[9]`) | target construction, `0x114E04` folds, RNG gates, installs 8/9/4 | **closed (Task 13, Appendix J; FU-139 §11); remainder OL-69** |
 | OL-31 rows 07/0F kick machines | `FUN_0007E600` `0x7E600..0x7E7C4` (452 B); row 07 `0x814B0`, row 0F `0x82AD0..0x82DD0` (FU-139 §2) | decision, opponent 0x22 invoke, ball-actor install 4, fun-0F predictor/RNG/timer reload, `FUN_0007DAB4` tail | 2 |
 | OL-32 reception/tackle/duel arms | `FUN_0007A084` `0x7A084..0x7A456` (978 B); NSEARCH `FUN_0008DB6C` `0x8DB6C..0x8DC49` (221 B); SWAP `FUN_000786A0` `0x786A0..0x786EB` (75 B); `FUN_0004C324` `0x4C324..0x4C372` (78 B); row 18/21/23 arms (FU-139 §6) | special-class/RNG arms, sound arms, NSEARCH/SWAP, row-21 claim, row-23 target, row-18 resolution | 1–2 |
-| OL-38 outfield decide/chase wiring | rows 04 `0x7E7C8` / 08 `0x81068..0x814AF` (FU-138/FU-141 §7; the FU-141 `..0x81188` head is extended to row 08's RET at `0x814AF` by first-hand bytes here); `FUN_0007DAB4` `0x7DAB4..0x7DB0C` (88 B); `FUN_00079B58` (16 B); `FUN_00079C50` `0x79C50..0x79C98` (72 B); per-type gate `0x110680`; input tables `0x1109D0`/`0x1109E4` (FU-137 §4.1, FU-141 §7) | input-row dispatch, no-edge arm, forced decision, chase gate; then rows 04/08 wire | **machine subset closed (Task 14, Appendix K); row bodies split → OL-70 (04) / OL-70a (08)** |
+| OL-38 outfield decide/chase wiring | rows 04 `0x7E7C8` / 08 `0x81068..0x814AF` (FU-138/FU-141 §7; the FU-141 `..0x81188` head is extended to row 08's RET at `0x814AF` by first-hand bytes here); `FUN_0007DAB4` `0x7DAB4..0x7DB0C` (88 B); `FUN_00079B58` (16 B); `FUN_00079C50` `0x79C50..0x79C98` (72 B); per-type gate `0x110680`; input tables `0x1109D0`/`0x1109E4` (FU-137 §4.1, FU-141 §7) | input-row dispatch, no-edge arm, forced decision, chase gate; then rows 04/08 wire | **machine subset closed (Task 14, Appendix K); row bodies split → OL-70 (04) / OL-70a (08), both closed and wired (Tasks 1/K.5, 2/K.6)** |
 | OL-41 interception tail | `FUN_0008D824` `0x8D824..0x8D8EB` (199 B) + `FUN_000795B4` `0x795B4..0x795F0` (60 B) | bind call; distance band feeding `team+0x7BE` | **closed (Task 14, Appendix K); NULL-record band read OL-71** |
 
 ## 4. Derivability count and task estimate
@@ -501,7 +501,9 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   rows 04/08 full record-visible bodies are **not** ported; per the plan's
   split rule (a row window exceeding one task) they are registered below as
   OL-70 (row 04) / OL-70a (row 08), so rows 04/08 stay `fn == NULL`
-  (`-FIFA96_ERR_UNSUPPORTED`).
+  (`-FIFA96_ERR_UNSUPPORTED`). Both split rows are now closed: row 04 by
+  Task 1 (K.5) and row 08 by Task 2 (K.6), both wired over the FU-141 pool;
+  the machine subset stays a separate unwired seam.
 * **OL-41 status (Task 14, Appendix K).** Closed: `FUN_0008D824` is
   `fifa96_entity_intercept_bind` and `FUN_000795B4` is
   `fifa96_entity_intercept_band` (`fifa96_entity_update.{h,c}`), sharing the
@@ -540,6 +542,15 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   evidence names the row's leg.
   **Status (Task 1): row 04 is ported and wired (K.5); OL-70 closed, row 08
   still OL-70a.**
+  **Status (M2 playability-legs Task 2, Appendix K.6): the full record-visible
+  body is ported as `fifa96_outfield_row08_step` and wired as
+  `fifa96_match_action_08` over the FU-141 pool; row 08 flips to `ported`
+  (`FIFA96_OK`). Row 08 installs no code (no `FUN_0007D9A4` call), so the
+  wiring gate's install-arm clause is vacuous and the body is standalone — the
+  `0x7CA54` machine subset stays the record machine's separate unwired seam.
+  The unmodeled record/process bytes, the `0x7A490` staging and the
+  event/audio sinks are OL-82 (K.6.7); the +0x3D frame gate keeps the
+  projection scan inert live until the OL-80 producer lands.**
 * **OL-72 — row-04 unmodeled inputs/sinks (Task 1, from Appendix K.5).** The
   row-04 body reads record bytes the FU-141 pool does not model (`+0x99`,
   `+0x9D`, `+0x44`, `[[rec+0x28]]`, the `rec[+4]` descriptor byte `+0xE`), the
@@ -2413,6 +2424,11 @@ them.
 `fifa96_outfield_row04_step` + `fifa96_match_action_04`, row 04 wired. Row 08
 still keeps `fn == NULL` (OL-70a).
 
+**Erratum (M2 playability-legs Task 2).** The row-08 half landed in K.6:
+`fifa96_outfield_row08_step` + `fifa96_match_action_08`, row 08 wired; the
+span's defined-code count is corrected to 329 linearly decoded instructions
+including the terminal RET (`0x814AF`).
+
 ## Appendix K.5 (M2 playability-legs Task 1 / OL-70) — row-04 body first-hand window
 
 Task 1 ports and wires the row-04 handler. /FIFA96.EXE, read-only:
@@ -2703,3 +2719,237 @@ Row `04` is `ported`: `fifa96_match_action_04` binds
 unchanged (OL-70a). FU-75 §6's machine-subset row and §9 leg 10 gain the same
 pointer; FU-141
 §7's OL-38 status gains a Task-1 note.
+
+## Appendix K.6 (M2 playability-legs Task 2 / OL-70a) — row-08 body first-hand window
+
+Task 2 ports and wires the row-08 handler. /FIFA96.EXE, read-only:
+`disassemble_bytes` `0x81068..0x8127F` and `0x81280..0x814AF` (one full-span
+call reports `instructions_total` 329 including the terminal RET), helpers
+`0x79C50..0x79C97` (face), `0x79B58..0x79B68` (receiver timer),
+`0x79B1C..0x79B56` (snap), `0x795A4..0x795B2` (fold), `0xCD474..0xCD4C2`
+(angle), `0x8ED40..0x8EE03` (event selector), `0x8F188..0x8F1BF` (event sink
+head), `0x7A490..0x7A4EF` (staging head), `0x92AC8` (RNG);
+`get_function_by_address` `0x8ED40` (body end `0x8EE03`); `get_xrefs_to`
+`0x15877D`/`0x15872F`; no writes.
+
+### K.6.1 Tool calls
+
+* `disassemble_bytes`: the two row windows and the helper windows above; the
+  body is reachable only through the action-table slot (no Ghidra function at
+  `0x81068`), so the whole body was decoded linearly and every branch target
+  and operand was read from the raw bytes;
+* helpers already first-hand elsewhere were re-checked at their entry bytes:
+  `0x114E04`/`0x8DC68`/`0x8DCD4` (entity_update), `0x79C50`/`0x79B58`/
+  `0x79B1C`, `0x92AC8` (`fifa96_rng_step`);
+* no renames, comments, labels, functions, scripts or project saves.
+
+### K.6.2 Register contract (first-hand)
+
+| register | meaning at the row-08 entry |
+|---|---|
+| EBP | the record pointer |
+| `[ESP+0x18]` | the q radius word (written `0x81279`, read via `[ESP+0x16]>>16`) |
+| `[ESP+0x1C]`/`[ESP+0x14]` | sine(word[+0x7D]) / sine(word[+0x7D]+0x100) words |
+| `[ESP]`/`+4`/`+8` | the scan's local position triple |
+| `[ESP+0xC..+0x10]` | the `0x8DCD4` out triple, then the final metric and X/Z |
+| EBX/ECX/EDX | per-call scratch |
+
+Record bytes read (all first-hand): `+0x92` (stage), `+0x89` (dword timer),
+`+0x8D` (active), `+0x20` (slot), `+0x6B` (word, `[+0x69]>>16` and the face
+DX), `+0x6D` (word, face BX), `+0x7D` (word, the face angle), `+0x3D`
+(`[+0x3A]>>24`), `+0x44`, `+0x9E`, `+0x8E` (`[+0x8B]>>24`, the type-table
+index and face octant), `+0x59/+0x5D/+0x61` (position triple),
+`+0x4D/+0x51/+0x55` (target triple), `rec[+4][+0xC]`/`[+0x16]`, the opponent
+target's `rec[+4][+0xC]`/`[+0xF]`, `byte[[user+0x28]]`, the `[0x157A83]` user
+pointer, `[opp+0x7B2]`, `[team+0x7B2]`/`[team+0x7B6]`. Globals: `[0x157A4A]>>24`
+(phase), `[0x157A64]` (delta word), `[0x157750]` (dword), `[0x1577C0]`/
+`[0x1577C2]` (lead words via `[0x1577BE]>>16`/`[0x1577C0]>>16`), `0x15774C`
+camera triple, `[0x15877D]`, `[0x15872F]`, `[0x1577CA]`. The `0x110680` gate
+is not used by this body.
+
+Word-pair guard: `[0x1577BE]>>16` = word `0x1577C0`, `[0x1577C0]>>16` = word
+`0x1577C2`, `[ESP+0x16]>>16` = the word stored at `[ESP+0x18]` (the q radius).
+The type tables are indexed by `MOV EAX,[EBP+0x8B]; SAR EAX,0x18` = the byte
+at `+0x8E`, and `0x79C50` writes that byte.
+
+### K.6.3 Decision logic (site-annotated)
+
+Prologue / stage dispatch:
+
+```
+0x81073  if ([0x157A4A]>>24 != 2) { FUN_0007DAB4(rec); return }
+0x8108E  timer89 += (uint16)[0x157A64]                 ; store 0x810A2
+0x810A8  if (stage < 1) goto 0x810C4                   ; stage 0
+0x810AC  if (stage <= 1) goto 0x811D6                  ; stage 1
+0x810B2  if (stage == 2) goto 0x8147C                  ; stage 2
+         return                                        ; stage >= 3
+```
+
+Stage 0 (`0x810C4..0x811D4`):
+
+```
+0x810CC  if (byte[+0x8D] == 0) {                       ; inactive
+0x810D5    FUN_0007DAB4(rec)
+0x810DF    if (rec == [team+0x7B2]) [team+0x7B2] = 0
+0x810F4    if (rec == [team+0x7B6]) [team+0x7B6] = 0
+           return }
+0x81114  +0x4D..+0x55 = 0x15774C camera triple
+0x8112A  +0x4D += word[0x1577C0] << 3
+0x81140  +0x55 += word[0x1577C2] << 3
+0x81148  if (slot != 0) goto 0x81185
+0x8114C  if ((int16)word[+0x6B] <= 0x50 && dword[0x157750] <= 0x38) goto 0x81185
+0x81160  FUN_00079B58(rec)                             ; +0x93 = 0x10 when +0x99 == 0
+0x81167  if ((int32)[+0x89] <= 0x3C) return
+0x81174  FUN_0007DAB4(rec); return                     ; timer > 0x3C reset
+0x81185  FUN_00079C50(rec, DX=word[+0x6B], BX=word[+0x6D])  ; +0x7D angle, +0x8E octant
+0x81198  FUN_0006E598(rec, 0xB, byte[+0x8E], 0)
+0x811AF  byte[+0x9E] = 1
+0x811B6  dword[+0x89] = 0
+0x811C0  byte[+0x92]++ ; [0x15877D] = 0
+```
+
+Stage-1 gate / stage-0 continuation (`0x811D6..0x81214`):
+
+```
+0x811D6  if ([0x15877D] != 0 || byte[+0x44] != 0) { byte[+0x92]++; [+0x89] = 0; return }
+0x81207  if (byte[+0x3D] != 1) return
+```
+
+Projection scan (`0x81216..0x81472`):
+
+```
+0x81216  opp = [[rec]+0x7A6]; user = [0x157A83]; opp_target = [opp+0x7B2]
+0x8122B  if (user != 0 && opp_target == user)
+           delta = ((int8)rec[+4][+0xC] + (int8)rec[+4][+0x16])
+                 - ((int8)opp_target[+4][+0xC] + (int8)opp_target[+4][+0xF])
+         else delta = (int8)rec[+4][+0xC] + (int8)rec[+4][+0x16]
+0x81266  q = (int16)(6*delta + (int8)[0x15872F]*8 + 0x20)
+0x81285  if (q > 0x40) q = 0x40 else if (q < 8) q = 8
+0x8129F  sine1 = sine(word[+0x7D])            ; low word, sign-extended by the caller
+0x812C7  sine2 = sine(word[+0x7D] + 0x100)
+0x812F5  for (cx = 0; cx < 0x40; cx += 0x10) {
+0x812FC    local = [rec+0x59..0x61]
+0x8130D    local.x += FUN_000795A4(cx, sine1)
+0x81326    local.z += FUN_000795A4(cx, sine2)
+0x81347    d = FUN_0008DCD4(0x15774C, &local).distance
+0x8134C    if ((int16)q <= (int16)d) continue
+0x81357    X = (int8)0x10F334[byte +0x8E] * 0xA0
+0x81373    Z = (int8)0x10F33C[byte +0x8E] * 0xA0
+0x8139D    dist = FUN_0008DC68((int16)d, X)
+0x813A2    if ([0x157A83] != 0 && byte[[[0x157A83]+0x28]] == 0x4A) {
+0x813C3      0x8ED40(user, 2, 4); 0x8F188(0x67, user); 0x651F0(1)
+           } else {
+0x813EE      0x8ED40(rec, 2, 0); 0x92820(rec, 0x16)
+0x81406      0x7A490(rec, &{dist,X,Z}, 0, 9, -1, 0); [0x15877D] = 1 }
+0x81423    r = FUN_00092AC8(); 0x974F0(0x190 + (r & 0x7F)); 0x651F0(1)
+0x81441    byte[+0x92]++ ; dword[+0x89] = 0; return }
+0x81472  return                                        ; loop miss
+```
+
+Stage 2 (`0x8147C..0x814AF`):
+
+```
+0x8147E  [0x15877D] = 0
+0x81484  FUN_00079B1C(rec)                     ; snap: target = pos, lane/velocity zero
+0x8148B  if (byte[+0x44] != 0) {
+0x81493    FUN_0007DAB4(rec)
+0x81498    if (rec != [0x1577CA]) byte[0x15872F]++ }
+```
+
+### K.6.4 Helper signatures (first-hand, for the port)
+
+* `0x79C50(EAX=rec, DX=(int16)word[+0x6B], BX=(int16)word[+0x6D])`: `DX|BX ==
+  0` returns `byte[+0x8E]` untouched (`0x79C59..0x79C68`); otherwise
+  `word[+0x7D] = FUN_000CD474(DX,BX)` and
+  `byte[+0x8E] = ((angle+0x40)&0x3FF)>>7`, returning the sign-extended byte.
+* `0x79B58(EAX=rec)`: `if (byte[+0x99] == 0) byte[+0x93] = 0x10`.
+* `0x79B1C(EAX=rec)`: `+0x4D..+0x55 = +0x59..+0x61`; `word[+0x69] = 0`,
+  `word[+0x71] = 0`, `byte[+0x9C] = 0`, `word[+0x67] = word[+0x69]`,
+  `word[+0x65] = word[+0x69]`, `word[+0x75] = word[+0x73] = word[+0x71]`.
+* `0x795A4(EAX=a, EDX=b)`: `IMUL EDX`, `ADD/ADC 0x8000`, `SHRD 0x10`; the
+  callers `MOVSX` the low word.
+* `0x114E04(angle)`: the 257-entry sine fold (ported as `fifa96_entity_sine`);
+  the row stores the low word and the folds sign-extend it.
+* `0x8DCD4(from,to)`: the {distance,dx,dz} triple (the derived row metric uses
+  the distance); `0x8DC68(x,z)`: the octagonal distance.
+* `0x7DAB4(rec)`: the reset (FU-137 §2; `fifa96_arm_reset`/`match_row_reset`).
+* `0x8ED40` (`0x8ED40..0x8EE03`): a 16-slot `0x15A998`-family event/stat
+  selector; no record writes (unported sink).
+* `0x6E598(rec, 0xB, byte[+0x8E], 0)`: the animation id resolution request
+  (OL-52).
+* `0x7A490(rec, EDX=&{dist,X,Z}, EBX=0, ECX=9, stack -1/0)`: the FU-73 §1 ball
+  staging core (actor/6-byte vector/traj/code 9); the derived
+  `fifa96_ball_pair_stage` core plus the unported tail (OL-62).
+
+### K.6.5 Port mapping (native -> derived)
+
+| native | derived |
+|---|---|
+| EBP record | `mr->record` staging + the resolved pool record `e` |
+| `[ESP+8]` team / `[team+0x7A6]` opp | `mr->entities.team[team]` / `.team[1-team]` |
+| `[0x157A83]` user | `mr->entities.controlled` (stand-in) |
+| `[0x1577CA]` | `id == mr->entities.controlled` (stand-in) |
+| `[team+0x7B2]`/`[team+0x7B6]` | pool target/second ids |
+| `[[team+0x7A6]+0x7B2]` | opponent team target id |
+| `0x79C50` | `out.face`/`face_angle`/`face_octant` -> `record.type` (+0x8E) |
+| `0x79B58` | `out.receiver_timer` -> `timer93 = 0x10` (the +0x99 gate is the binder's) |
+| `0x79B1C` | `out.snap` -> target = pos (the lane/velocity zeroes OL-82) |
+| `0x795A4` | `row08_fold` |
+| `0x114E04` | `fifa96_entity_sine` |
+| `0x8DCD4`/`0x8DC68` | the row-04 metric / `fifa96_entity_distance` |
+| `0x7DAB4` | `out.reset` -> `match_row_reset` |
+| `0x6E598` | `out.anim` (OL-52) |
+| `0x8ED40`/`0x8F188`/`0x92820`/`0x7A490`/`0x974F0`/`0x651F0` | `out.events`/`event_code`/`event_sound`/`ball_stage*` requests (OL-62/OL-82) |
+| stage/timer/process writes | `out.stage92`/`timer89`/`byte_15877d*`/`byte_15872f*` |
+
+### K.6.6 Tests
+
+`tests/test_outfield.c` fixtures (hand-computed from K.6.3): the prologue
+phase reset and the stage >= 3 prologue add; the inactive-arm team clears (all
+four combinations); the stage-0 camera+lead copy, the face octant, the zero
+direction guard, the +0x9E latch and the single stage advance; the no-slot
+receiver gate (lane/height boundaries, the timer 0x3C/0x3D split); the
+stage-1 gates ([0x15877D], +0x44, +0x3D); the projection scan record arm
+(offset-0 miss then offset-0x10 hit, metric and 6-byte staging vector, seed-0
+sound 0x190), the scan miss (stage-0 vs stage-1 timer89), the user arm (row
+byte 0x4A and the 0x49 counter-case); the descriptor/radius clamp and the
+[0x15872F] shift; the stage-2 snap and the +0x44 reset/[0x15872F] increment.
+`tests/test_engine_match_handlers.c::test_action_04_and_08_wired` runs the
+wired row over the pool (reset, stage-0 camera/face, the +0x3D scan, the
+stage-2 snap) and `action_expect[0x08]` is `FIFA96_OK`.
+
+### K.6.7 Open legs (numbered)
+
+* **OL-82 — row-08 unmodeled inputs/sinks.** The pool models neither the
+  record bytes `+0x3D` (staged as `record.frame`, producer OL-80), `+0x44`,
+  `+0x99` nor `+0x7D` (the 0x79C50 face write has no pool field), the
+  `rec[+4]` descriptor bytes `+0xC`/`+0x16` and the opponent target's
+  `+0xC`/`+0xF`, the `byte[[user+0x28]]` row byte, the process bytes
+  `[0x15877D]`/`[0x15872F]` (their writes have no derived home), the
+  `0x1577C0/C2` lead words nor the `0x10F334`/`0x10F33C` type tables beyond
+  their 32 bytes. The engine stages zero / camera stand-ins (K.6.5) and the
+  affected branches (`+0x44` reset, the user-0x4A arm, the descriptor radius,
+  the [0x15872F]/[0x15877D] carry, the lead add) stay inert until the
+  producers land; the +0x3D gate keeps the projection scan inert live until
+  the OL-80 animation frame is staged (Task 5). The loader fixtures pin the
+  ported behavior. `[0x1577CA]`/`[0x157A83]` are pool stand-ins.
+* **OL-52 (carried) — the `0x6E598` anim request** stays unconsumed.
+* **OL-62 (carried) — the `0x7A490` staging tail** (`0x7A4F0..0x7AE2F`) stays
+  unported; the row-08 call is the core request.
+* **OL-67 (carried) — the event/audio sinks** remain requests.
+* Invoke-now modeling: n/a (row 08 installs no code).
+
+### K.6.8 Errata to prior maps
+
+* FU-137 §6.1/FU-142 K.4's "213 defined-code insns" for the row-08 span is
+  corrected by the first-hand linear sweep: `0x81068..0x814AF` decodes **329**
+  instructions including the terminal RET (one `disassemble_bytes` call,
+  `instructions_total` 329).
+* The `0x114E04` sine fold result is stored as a **16-bit word** and the
+  `0x795A4` callers `MOVSX` it; in particular `sine(0x100)` is `65536` and
+  truncates to `0`, and `sine(0x80)=46340` sign-extends to `-19196`. The K.4
+  "facing-projection" description is right; the port's fixtures pin the word
+  semantics.
+* `0x79C50`'s row-08 call passes `DX = word[+0x6B]`, `BX = word[+0x6D]` (not
+  a pos->target difference); `fifa96_arm_face` models the row-27 caller-side
+  difference, so row 08 folds inline through `fifa96_entity_angle`.

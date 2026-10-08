@@ -1165,6 +1165,106 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== M2 playability-legs Task 2 / OL-70a: row 08 approach/scan =====
+ *
+ * `fifa96_match_action_08` binds `fifa96_outfield_row08_step` (the ported
+ * `0x81068..0x814AF` body, FU-142 Appendix K.6) to `mr->record` and the
+ * FU-141 pool. The record staging carries the body's own fields (stage +0x92,
+ * the +0x89 timer, position, active/slot, the +0x8E face octant the 0x79C50
+ * call rewrites and the native +0x3D frame gate). The pool supplies the lane
+ * words +0x6B/+0x6D, the ball height (0x157750), the [0x157A83] controlled
+ * actor and the two team blocks for the inactive-arm clears. Row 08 installs
+ * no code, so there is no install arm. The native pointers the pool does not
+ * model are staged as documented stand-ins: [0x1577CA] is the pool controlled
+ * entity, `[team+0x7B2]`/`[team+0x7B6]` are the pool target/second ids,
+ * `[[team+0x7A6]+0x7B2]` the opponent team target, and the +0x44/+0x99
+ * record bytes, the rec[+4] descriptor bytes, the +0x7D word, the
+ * [0x15877D]/[0x15872F] process bytes and the 0x1577C0/C2 lead words stay
+ * zero with their producers unported (OL-82); [0x15877D]/[0x15872F] writes
+ * have no derived home (OL-82). The step's reset request runs
+ * `match_row_reset` and the receiver-timer request applies the tested
+ * `0x79B58` effect (the +0x99 callee gate is staged 0, as row 04). */
+static int fifa96_match_action_08(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  fifa96_outfield_row08_state s;
+  fifa96_outfield_row08_out out;
+  int32_t id = r->entity_id;
+  uint32_t team = 0;
+  uint32_t opp = 1;
+  struct fifa96_match_entity *e = NULL;
+  int32_t controlled = mr->entities.controlled;
+  int rc;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  team = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  opp = 1u - team;
+  e = &mr->entities.team[team].records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  memset(&s, 0, sizeof s);
+  s.phase = (uint8_t)mr->state.phase;
+  s.stage = r->stage92;
+  s.active = r->active;
+  s.has_slot = r->has_slot;
+  s.byte44 = 0;                     /* native +0x44 producer unported (OL-82) */
+  s.byte3d = r->frame;              /* native +0x3D (producer OL-80/OL-82) */
+  s.byte_15877d = 0;                /* [0x15877D] producer unported (OL-82) */
+  s.byte_15872f = 0;                /* [0x15872F] producer unported (OL-82) */
+  s.is_team_target = id == mr->entities.team[team].target ? 1u : 0u;
+  s.is_team_second = id == mr->entities.team[team].second ? 1u : 0u;
+  s.user_present = controlled >= 0 ? 1u : 0u;
+  s.user_is_opp_target =
+      (controlled >= 0 && mr->entities.team[opp].target == controlled) ? 1u : 0u;
+  s.user_row_byte = 0;              /* byte[[user+0x28]] unported (OL-82) */
+  s.desc_c = 0;                     /* rec[+4] descriptor bytes (OL-82) */
+  s.desc_16 = 0;
+  s.desc_opp_c = 0;
+  s.desc_opp_f = 0;
+  s.type8 = r->type;                /* native +0x8E (the face octant) */
+  s.timer89 = r->timer89;
+  s.delta = r->delta;
+  s.pos_x = r->pos_x;
+  s.pos_y = r->pos_y;
+  s.pos_z = r->pos_z;
+  s.lane = e->lane_x;               /* native word +0x6B */
+  s.word6d = e->lane_z;             /* native word +0x6D */
+  s.word7d = 0;                     /* native +0x7D (the face write is not
+                                     * persisted; producer unported, OL-82) */
+  s.ball_height = mr->entities.ball.y;   /* dword 0x157750 (OL-65) */
+  s.is_ball_track = id == controlled ? 1u : 0u;   /* [0x1577CA] stand-in */
+  s.camera_x = mr->render.camera.pos_x;
+  s.camera_y = mr->render.camera.pos_y;
+  s.camera_z = mr->render.camera.pos_z;
+  s.lead_x = 0;                     /* word[0x1577C0] (OL-82) */
+  s.lead_z = 0;                     /* word[0x1577C2] (OL-82) */
+  s.type_off_x = match_kick_dir_x;
+  s.type_off_z = match_kick_dir_z;
+  s.rng = &mr->rng;
+  rc = fifa96_outfield_row08_step(&s, &out);
+  if (rc != FIFA96_OK) return rc;
+  if (out.ran != 0) r->ran = 1;
+  r->timer89 = out.timer89;
+  r->stage92 = out.stage92;
+  if (out.target_set != 0) {
+    r->target_x = out.target_x;
+    r->target_y = out.target_y;
+    r->target_z = out.target_z;
+  }
+  if (out.face != 0) r->type = out.face_octant;                 /* native +0x8E */
+  if (out.clear_team_target != 0 && mr->entities.team[team].target == id)
+    mr->entities.team[team].target = FIFA96_MATCH_ENTITY_NONE;
+  if (out.clear_team_second != 0 && mr->entities.team[team].second == id)
+    mr->entities.team[team].second = FIFA96_MATCH_ENTITY_NONE;
+  if (out.reset != 0) match_row_reset(mr, e);
+  if (out.receiver_timer != 0) e->timer93 = 0x10;   /* 0x79B58 (0x99 staged 0) */
+  /* out.anim (0x6E598, OL-52), out.ball_stage (the 0x7A490 staging call,
+   * OL-62), out.events/event_code/event_sound (the 0x8ED40/0x8F188/0x92820/
+   * 0x974F0/0x651F0 sinks, OL-82), out.face_angle (+0x7D has no pool field,
+   * OL-82), the out.byte_15877d/byte_15872f process-byte writes (OL-82) and
+   * out.snap beyond the target copy (0x79B1C's lane/velocity zeroes, OL-82)
+   * have no derived consumer. */
+  return FIFA96_OK;
+}
+
 static int fifa96_match_action_06(struct fifa96_match_run *mr) {
   fifa96_action_pursuit s;
   fifa96_action_pursuit_out out;
@@ -1296,8 +1396,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-139 §11 (Task 13/OL-30): row 06 ported (0x801B4..0x809EF pursuit machine; 0x8DCD4 metric + 0x8DD70 angle + 0x114E04 folds, RNG installs 8/9, carrier-gate install 4, 0x8DE8C/0x79CCC selections) over the pool; row-09 0x80A00 boundary; record bytes/lead/swap OL-69"},
     {0x07, fifa96_match_action_07,
      "FU-139 §9/FU-137 §5.2: row 07 ported (0x814B0..0x81737 machine; 0x7B9C4 kick path) over the pool; defender 0x0E/opponent 0x22/ball 4 requests; descriptor bytes and predictor OL-65/OL-66"},
-    {0x08, NULL,
-     "FU-137 §6/FU-142 App. K (Task 14/OL-38): the code-8 gate is ported (fifa96_outfield_chase_gate + flat 0x110680), but the full row-08 body 0x81068..0x814AF (213 defined-code insns, stage machine) is unported -> OL-70a split; -UNSUPPORTED"},
+    {0x08, fifa96_match_action_08,
+     "FU-142 App. K.6/FU-137 §6.1 (Task 2/OL-70a): row 08 ported (fifa96_outfield_row08_step, 0x81068..0x814AF) over the pool; the stage-0 camera/face, the +0x3D-gated projection scan, the 0x79B1C snap and the process-byte writes are bound; row 08 installs no code; unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82"},
     {0x09, NULL, "FU-137 §6: FU-136 row 09: not ported (partial); FU-81 arm table 0x809F0; OL-9"},
     {0x0A, NULL, "FU-137 §6: FU-136 row 0A: not ported; installer 0x7CDD8 has no xrefs; OL-14"},
     {0x0B, NULL, "FU-137 §6: FU-136 row 0B: not ported (partial); sequence_duel_event; OL-9"},

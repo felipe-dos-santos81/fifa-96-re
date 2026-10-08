@@ -88,7 +88,7 @@
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP,
+    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
@@ -585,24 +585,26 @@ static void test_action_05_unwired_carrier(void) {
 }
 
 
-/* FU-142 Appendix K.3/FU-137 §6.1 (M2 playability-legs Task 1 / OL-70): row
- * 04 is wired — `fifa96_match_action_04` binds `fifa96_outfield_row04_step`
- * over `mr->record`/the FU-141 pool (the install arm `0x7E85C`/0x7F133, the
- * full record-visible body and the pool binding). Row 08's full body is still
- * unported (OL-70a), so it keeps `fn == NULL` and the UNSUP dispatch. The run
- * assertions exercise the prologue reset and the no-slot camera target arm. */
-static void test_action_04_wired_and_08_unwired(void) {
+/* FU-142 Appendix K.5/K.6 (M2 playability-legs Tasks 1/2 / OL-70/OL-70a):
+ * rows 04 and 08 are wired — `fifa96_match_action_04`/`_08` bind
+ * `fifa96_outfield_row04_step`/`_row08_step` over `mr->record`/the FU-141
+ * pool (the full record-visible bodies and the pool binding; row 08 installs
+ * no code, it is the stage-0/1/2 approach/scan). The run assertions exercise
+ * the row-04 prologue reset + no-slot camera target and the row-08 reset,
+ * stage-0 camera/face, the +0x3D-gated projection scan and the stage-2
+ * snap. */
+static void test_action_04_and_08_wired(void) {
   struct fixture f;
   const struct fifa96_match_handler *r8 = &fifa96_match_action_table[0x08];
   make_fixture(&f);
   assert(fifa96_match_action_table[0x04].fn != NULL);
   assert(strstr(fifa96_match_action_table[0x04].evidence, "OL-70") != NULL);
-  assert(r8->fn == NULL);
+  assert(r8->fn != NULL);
   assert(strstr(r8->evidence, "OL-70a") != NULL);
-  assert(strstr(r8->evidence, "UNSUPPORTED") != NULL);
+  assert(strstr(r8->evidence, "K.6") != NULL);
   assert(action_expect[0x04] == FIFA96_OK);
-  assert(action_expect[0x08] == UNSUP);
-  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == UNSUP);
+  assert(action_expect[0x08] == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
 
   /* phase != 2: the row's FUN_0007DAB4 request resets the pool record. */
   f.mr.state.phase = 1;
@@ -627,6 +629,71 @@ static void test_action_04_wired_and_08_unwired(void) {
   assert(f.mr.record.target_x == 7 && f.mr.record.target_y == 8 &&
          f.mr.record.target_z == 0x600);
   assert(f.mr.entities.team[0].records[0].timer93 == 0x10);
+
+  /* Row 08, phase != 2: the 0x81080 reset request lands on the pool record. */
+  drop_fixture(&f);
+  make_fixture(&f);
+  f.mr.state.phase = 1;
+  f.mr.record.entity_id = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].stage92 == 0xFF);
+  assert(f.mr.entities.team[0].records[0].timer89 == 0);
+
+  /* Row 08 stage 0, slotted: the 0x15774C camera copy into the target, the
+   * 0x79C50 face (lane 0x20, word +0x6D 0 -> angle 0x100 -> octant 2), the
+   * +0x9E latch and the stage advance to 1. */
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.timer89 = 0;
+  f.mr.record.type = 0;
+  f.mr.entities.team[0].records[0].lane_x = 0x20;   /* face dir X */
+  f.mr.entities.team[0].records[0].lane_z = 0;      /* face dir Z */
+  f.mr.render.camera.pos_x = 7;
+  f.mr.render.camera.pos_y = 8;
+  f.mr.render.camera.pos_z = 9;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.record.target_x == 7 && f.mr.record.target_y == 8 &&
+         f.mr.record.target_z == 9);
+  assert(f.mr.record.stage92 == 1 && f.mr.record.timer89 == 0);
+  assert(f.mr.record.type == 2);   /* native +0x8E octant */
+  assert(f.mr.record.ran == 1);
+
+  /* Row 08 stage 0 with the native +0x3D frame gate open: the 0x79C50 face
+   * (lane 1/1 -> angle 0x80 -> octant 1), the projection scan (both sine
+   * words 0xB504, offset 0 distance 0 -> hit) and the record arm advance the
+   * stage, latch +0x9E and zero timer89. */
+  drop_fixture(&f);
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.frame = 1;            /* native +0x3D (producer OL-80/OL-82) */
+  f.mr.record.type = 0;
+  f.mr.entities.team[0].records[0].lane_x = 1;   /* face dir X */
+  f.mr.entities.team[0].records[0].lane_z = 1;   /* face dir Z */
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.type == 1);    /* native +0x8E octant */
+  assert(f.mr.record.ran == 1);
+
+  /* Row 08 stage 2: the 0x79B1C snap copies the position into the target. */
+  f.mr.record.stage92 = 2;
+  f.mr.record.pos_x = 0x11;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x33;
+  f.mr.record.timer89 = 4;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x11 && f.mr.record.target_y == 0x22 &&
+         f.mr.record.target_z == 0x33);
   drop_fixture(&f);
 }
 
@@ -1085,7 +1152,7 @@ int main(void) {
   test_action_29_unwired_entry();
   test_dead_2b_evidence();
   test_action_05_unwired_carrier();
-  test_action_04_wired_and_08_unwired();
+  test_action_04_and_08_wired();
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
   test_action_0F_runs_body();

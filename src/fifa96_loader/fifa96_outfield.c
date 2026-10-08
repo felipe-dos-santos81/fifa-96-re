@@ -707,3 +707,171 @@ half_line:                                             /* 0x7EE4B */
   row04_add_install(out, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);       /* 0x7F133 */
   return FIFA96_OK;
 }
+
+/* `FUN_000795A4` (`0x795A4..0x795B2`, first-hand): EAX = a, EDX = b, the
+ * signed 32x32 product + 0x8000 shifted right 16, the low word returned (the
+ * row-08 scan passes the loop offset and the folded sine value). */
+static int16_t row08_fold(int32_t a, int32_t b) {
+  int64_t v = ((int64_t)a * (int64_t)b + 0x8000) >> 16;
+  return (int16_t)(uint16_t)(uint32_t)(int32_t)v;
+}
+
+/* ===== M2 playability-legs Task 2 / OL-70a: row 08 record-visible body =====
+ *
+ * The port cites FU-142 Appendix K.6 (first-hand disassemble_bytes
+ * 0x81068..0x8127F + 0x81280..0x814AF on /FIFA96.EXE); every branch and
+ * operand is read from those bytes. `row04_metric` is the same native
+ * `0x8DCD4` distance the scan uses. The native `0x7D9A4` installer never runs
+ * (row 08 installs no code). */
+fifa96_err_t fifa96_outfield_row08_step(const fifa96_outfield_row08_state *state,
+                                        fifa96_outfield_row08_out *out) {
+  uint8_t stage;
+  uint8_t type8;
+  int16_t word7d;
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  type8 = state->type8;
+  word7d = state->word7d;
+  out->byte_15877d = state->byte_15877d;
+  out->byte_15872f = (uint8_t)state->byte_15872f;
+  out->timer89 = state->timer89;
+  out->stage92 = state->stage;
+  if (state->phase != 2u) {                            /* 0x81073 */
+    out->reset = 1;                                    /* 0x81080 */
+    return FIFA96_OK;
+  }
+  out->timer89 = state->timer89 + (int32_t)state->delta;   /* 0x8108E..0x810A2 */
+  stage = state->stage;
+
+  if (stage == 0u) {                                   /* 0x810A8 JC */
+    if (state->active == 0u) {                         /* 0x810CC */
+      out->reset = 1;                                  /* 0x810D5 */
+      out->clear_team_target = state->is_team_target;  /* 0x810DF */
+      out->clear_team_second = state->is_team_second;  /* 0x810F4 */
+      return FIFA96_OK;
+    }
+    /* 0x81114: the 0x15774C camera triple + word[0x1577C0/C2] << 3. */
+    out->target_set = 1;
+    out->target_x = state->camera_x + ((int32_t)state->lead_x << 3);
+    out->target_y = state->camera_y;
+    out->target_z = state->camera_z + ((int32_t)state->lead_z << 3);
+    if (state->has_slot == 0u) {                       /* 0x8114C */
+      if ((int16_t)state->lane > 0x50 || state->ball_height > 0x38) {
+        out->receiver_timer = 1;                       /* 0x79B58 call */
+        if (out->timer89 > 0x3c) out->reset = 1;       /* 0x81167/0x81174 */
+        return FIFA96_OK;
+      }
+    }
+    if (state->lane != 0 || state->word6d != 0) {      /* 0x79C59 guard */
+      int32_t angle = 0;
+      if (fifa96_entity_angle((int32_t)state->lane, (int32_t)state->word6d, &angle) !=
+          FIFA96_OK)
+        return -FIFA96_ERR_INVALID;
+      word7d = (int16_t)angle;
+      type8 = (uint8_t)(((uint32_t)(angle + 0x40) & 0x3FFu) >> 7u);  /* 0x79C8E */
+      out->face = 1;
+      out->face_angle = word7d;
+      out->face_octant = type8;
+    }
+    out->anim = 1;                                     /* 0x6E598(rec,0xB,type8,0) */
+    out->ran = 1;                                      /* 0x811AF */
+    out->timer89 = 0;                                  /* 0x811B6 */
+    stage = (uint8_t)(stage + 1u);                     /* 0x811C0..0x811D0 */
+    out->byte_15877d = 0;                              /* 0x811CA */
+    out->byte_15877d_set = 1;
+  } else if (stage == 2u) {                            /* 0x8147C */
+    out->byte_15877d = 0;                              /* 0x8147E */
+    out->byte_15877d_set = 1;
+    out->snap = 1;                                     /* 0x79B1C */
+    out->target_set = 1;
+    out->target_x = state->pos_x;
+    out->target_y = state->pos_y;
+    out->target_z = state->pos_z;
+    if (state->byte44 != 0u) {                         /* 0x8148B */
+      out->reset = 1;                                  /* 0x81493 */
+      if (state->is_ball_track == 0u) {                /* 0x81498 */
+        out->byte_15872f = (uint8_t)(state->byte_15872f + 1);   /* 0x814A0 */
+        out->byte_15872f_set = 1;
+      }
+    }
+    return FIFA96_OK;
+  } else if (stage != 1u) {                            /* stage >= 3 */
+    return FIFA96_OK;                                  /* 0x810BA plain return */
+  }
+
+  /* 0x811D6: the stage-1 gate. */
+  if (out->byte_15877d != 0u || state->byte44 != 0u) { /* 0x811E5 */
+    out->stage92 = (uint8_t)(stage + 1u);
+    out->timer89 = 0;
+    return FIFA96_OK;
+  }
+  if (state->byte3d != 1u) {                           /* 0x81207 */
+    out->stage92 = stage;
+    return FIFA96_OK;
+  }
+
+  /* 0x81216..0x81472: the projection scan. */
+  {
+    int32_t delta_desc;
+    int32_t q_raw;
+    int16_t q;
+    int16_t sine1;
+    int16_t sine2;
+    int32_t ecx;
+    int hit = 0;
+    int16_t dist = 0;
+    int16_t x_off = 0;
+    int16_t z_off = 0;
+    if (state->user_present != 0u && state->user_is_opp_target != 0u) {
+      delta_desc = (int16_t)((int16_t)state->desc_c + (int16_t)state->desc_16) -
+                   (int16_t)((int16_t)state->desc_opp_c + (int16_t)state->desc_opp_f);
+    } else {
+      delta_desc = (int16_t)((int16_t)state->desc_c + (int16_t)state->desc_16);
+    }
+    q_raw = delta_desc * 6 + ((int32_t)state->byte_15872f << 3) + 0x20;  /* 0x81266 */
+    q = (int16_t)(uint16_t)q_raw;
+    if (q > 0x40) q = 0x40;                            /* 0x8128A */
+    else if (q < 8) q = 8;                             /* 0x81298 */
+    sine1 = (int16_t)fifa96_entity_sine((int32_t)word7d);          /* 0x812A5 */
+    sine2 = (int16_t)fifa96_entity_sine((int32_t)word7d + 0x100);  /* 0x812D3 */
+    for (ecx = 0; ecx < 0x40; ecx += 0x10) {           /* 0x81466 */
+      int32_t lx = state->pos_x + (int32_t)row08_fold(ecx, sine1);
+      int32_t lz = state->pos_z + (int32_t)row08_fold(ecx, sine2);
+      int16_t d = (int16_t)row04_metric(state->camera_x, state->camera_z, lx, lz);
+      if (q <= d) continue;                            /* 0x81351 JLE */
+      hit = 1;
+      x_off = (int16_t)((int32_t)(int8_t)state->type_off_x[type8] * 0xA0);  /* 0x81357 */
+      z_off = (int16_t)((int32_t)(int8_t)state->type_off_z[type8] * 0xA0);  /* 0x81373 */
+      dist = (int16_t)fifa96_entity_distance((int32_t)d, (int32_t)x_off);   /* 0x8DC68 */
+      break;
+    }
+    out->scan = 1;
+    out->scan_hit = (uint8_t)hit;
+    out->scan_dist = dist;
+    if (hit) {
+      if (state->user_present != 0u && state->user_row_byte == 0x4Au) {     /* 0x813A2 */
+        out->user_row_4a = 1;
+      } else {
+        out->event_code = 0x16;                        /* 0x92820 */
+        out->ball_stage = 1;                           /* 0x7A490 */
+        out->ball_stage_dist = dist;
+        out->ball_stage_x = x_off;
+        out->ball_stage_z = z_off;
+        out->byte_15877d = 1;                          /* 0x8141C */
+        out->byte_15877d_set = 1;
+      }
+      out->events = 1;                                 /* 0x8ED40 + the sinks */
+      {
+        uint16_t r = 0;
+        if (fifa96_rng_step(state->rng, &r) != FIFA96_OK)
+          return -FIFA96_ERR_INVALID;
+        out->event_sound = (int16_t)((int32_t)(r & 0x7Fu) + 0x190);   /* 0x974F0 */
+      }
+      out->stage92 = (uint8_t)(stage + 1u);            /* 0x81453 */
+      out->timer89 = 0;                                /* 0x81447 */
+      return FIFA96_OK;
+    }
+    out->stage92 = stage;
+    return FIFA96_OK;
+  }
+}
