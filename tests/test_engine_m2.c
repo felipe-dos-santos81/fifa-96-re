@@ -131,7 +131,9 @@ struct m2_result {
   int steps;                 /* total engine steps */
   int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
   int exit_step;             /* engine step whose resolve returned to FRONTEND */
-  int kick_step_seen;        /* KICK press observed in input_state[0] */
+  int move_step_seen;        /* RIGHT press observed in input_state[0] (step 7) */
+  int up_step_seen;          /* UP press observed in input_state[0] (step 9) */
+  int kick_step_seen;        /* KICK press observed in input_state[0] (step 11) */
   int armed_26;              /* team 1 held code 0x26 at the mechanics step */
   int armed_28;              /* team 0 held code 0x28 */
   int armed_2a;              /* team 0 record 1 held code 0x2A */
@@ -286,10 +288,14 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       assert(e->match_run.lc.selector == 0);
       assert(e->match_run.render.enabled == (with_iso ? 1 : 0));
     }
-    if (steps == 11) {
-      /* The KICK press reached the match input model (raw 0x10). */
+    if (steps == 7 || steps == 9 || steps == 11) {
+      /* The scripted move (RIGHT 0x04 / UP 0x01) and kick (0x10) presses
+       * reached the match input model. */
       assert(live);
-      if (e->match_run.input_state[0] == 0x10) res->kick_step_seen = steps;
+      uint8_t in = e->match_run.input_state[0];
+      if (steps == 7 && in == 0x04) res->move_step_seen = steps;
+      if (steps == 9 && in == 0x01) res->up_step_seen = steps;
+      if (steps == 11 && in == 0x10) res->kick_step_seen = steps;
     }
     if (res->match_start_step > 0 && res->exit_step < 0 &&
         e->mode != FIFA96_ENGINE_MODE_MATCH) {
@@ -340,10 +346,12 @@ int main(void) {
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
-  assert(res.exit_step > res.match_start_step);
-  assert(res.exit_step - res.match_start_step >= 120);   /* mechanics window + 1 s clock */
-  assert(res.exit_step - res.match_start_step <= 200);
+  /* The golden pins frames 6..145 as the match (exit at frame 145), i.e. the
+   * forced mechanics window (m 41) plus the 1 s phase-2 clock (100 ticks). */
+  assert(res.exit_step - res.match_start_step == 140);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
+  assert(res.move_step_seen == 7);                       /* move input reached the run */
+  assert(res.up_step_seen == 9);
   assert(res.kick_step_seen == 11);                      /* kick input reached the run */
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
   assert(res.phase_before_exit == 2);                    /* forced class-1 period end */
