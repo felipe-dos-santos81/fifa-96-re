@@ -2155,6 +2155,20 @@ fifa96_match_run.h` and `src/fifa96_engine/fifa96_match_run.c` are untouched
 pins + `test_dead_2b_evidence`), the FU-137 §5.3/§6.1/§7 errata and this
 appendix.
 
+### I.10 Carried leg — the score event source (child C3-OL2, Task 15)
+
+The M2-B acceptance tape's score step needs the native goal writer. First-hand
+check on `/FIFA96.EXE` (Task 15, read-only): `get_xrefs_to 0x93944` returns 11
+`UNCONDITIONAL_CALL` references, all in the `0x93D98..0x9486E` goal-handler
+cluster, and `search_instructions` (mnemonic `CALL`, operand pattern `93944`)
+matches the same 11 sites. No wired row body lies in that cluster (all wired bodies end below
+`0x88000`: row 00 `0x7DB10..0x7DBAC`, row 1E `0x7550C..0x755D3`, rows
+26/28/2A `0x866F4..0x874E3`, rows 06/07/0F `0x801B4..0x82DCF`, rows 18/21/23
+`0x82F84..0x8539B`), and no Gate-G2/G3 appendix records a `FUN_00093944` call
+among the wired bodies. The tape therefore drives the derived
+`fifa96_match_run_add_goal(mr, side)` directly (its `state=2/1-0` lines pin the
+replay) and the native event source stays **carried as child C3-OL2**.
+
 ## 8. No-write statement
 
 No C source, header, test, CMake, asset, ISO or Ghidra state was changed:

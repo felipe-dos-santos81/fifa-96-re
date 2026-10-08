@@ -370,6 +370,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->pass_parity = 0;
+  mr->dispatched_ok = 0;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -403,6 +404,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
+  mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */

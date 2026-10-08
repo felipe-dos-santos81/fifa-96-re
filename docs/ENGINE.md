@@ -2,12 +2,14 @@
 
 The native engine layer sits on top of the 56 clean-room `fifa96_*` libraries and
 turns them into a running game: platform ABI → SDL3/null backends → engine core
-(boot, asset table, clock, intro, front-end, match foundation).
+(boot, asset table, clock, intro, front-end, match).
 
-Status: **M1 complete headless; M2 foundation complete; playable match split to a
-child plan.** See `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md`
-and `.superpowers/sdd/2026-10-06-fifa96-native-engine-port/progress.md` for the
-full record (the SDD workspace is scratch and may be deleted).
+Status: **M1 complete headless; M2 match playable headless (11/80 action rows
+wired) with the M2-B acceptance tape green.** See
+`docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
+`docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child) and the SDD
+workspaces under `.superpowers/sdd/` for the full record (scratch; may be
+deleted).
 
 ## Layout
 
@@ -21,23 +23,24 @@ full record (the SDD workspace is scratch and may be deleted).
 | `include/fifa96_engine/fifa96_clock.h` | 100 Hz PIT model driver (`fifa96_pacing_clock` + `fifa96_tick`) |
 | `include/fifa96_engine/fifa96_intro.h` | TGV intro playback into the surface |
 | `include/fifa96_engine/fifa96_frontend_run.h` / `fifa96_menu_art.h` | Front-end state machine, key mapping, menu rendering |
-| `include/fifa96_engine/fifa96_match_run.h` | Match lifecycle, 30 Hz frame body, input/control slot, render chain |
+| `include/fifa96_engine/fifa96_match_bridge.h` | Front-end start classification → `fifa96_match_run_begin` + default art staging |
+| `include/fifa96_engine/fifa96_match_run.h` | Match lifecycle, 30 Hz frame body, input/control slot, render chain, dispatch observation |
+| `include/fifa96_engine/fifa96_match_handlers.h` | FU-137 action/phase dispatch tables (45 + 35 rows) and the wired-row seam |
+| `include/fifa96_engine/fifa96_match_entities.h` | FU-141 entity/ball pool and FU-67 update chain |
+| `include/fifa96_engine/fifa96_match_phase_machine.h` | FU-142a `FUN_0008CEB8`/`FUN_0008D098` installer arms (0x26/0x28/0x2A) |
+| `include/fifa96_loader/fifa96_arm_helpers.h` / `fifa96_arm_bodies.h` | Cluster-G record machines (rows 26/27/28/29/2A/2C bodies) |
 | `include/fifa96_engine/fifa96_keys.h` | Shared engine key codes (1–9) |
 
 ## Building and testing
 
-`make check` configures, builds `-Wall -Wextra -Werror`, and runs all 93 CTest
-cases — including 13 `test_engine_*` cases built under ASan/UBSan. No external
+`make check` configures, builds `-Wall -Wextra -Werror`, and runs all 104 CTest
+cases — including the `test_engine_*` cases built under ASan/UBSan. No external
 dependency is required for this: the `null` backend is the deterministic
 regression source of truth (it hashes Mode-X planes + palette and PCM, replays
-input tapes, and advances a virtual 10 ms clock).
+input tapes, and advances a virtual 10 ms clock). With SDL3 ≥ 3.x installed,
+the build also produces the windowed `fifa96` target (`make game`).
 
-The `fifa96` executable and the SDL3 backend are **not built yet**: SDL3 is not
-installed on the development host. `find_package(SDL3 QUIET)` degrades cleanly to
-a headless-only build. To build the windowed game, install SDL3 (≥3.x) and
-re-run `make build`; the target and `make game` arrive with the deferred Task 2.
-
-## What runs today (headless)
+## What runs today
 
 - Boot from the real CD image (`game/FIFAPCCD96.iso`): ISO mount, asset table,
   loader-spine resource scan.
@@ -46,17 +49,49 @@ re-run `make build`; the target and `make game` arrive with the deferred Task 2.
   the intro.
 - Front-end state machine with key mapping, menu rendering (procedural fallback —
   the retail front-end art asset is unresolved; FU135 erratum) and quit.
-- Match foundation: lifecycle begin/step/end, 30 Hz frame body and period clock,
-  input → `fifa96_control_slot` per granted frame, deterministic camera/scene/
-  sprite render chain (hash-pinned).
-- `test_engine_m1` pins a 691-frame deterministic transcript
+- Front-end → match bridge for the panel-confirm start classification (selector
+  0), with the derived `/ART/PLAYART.PVI` + `/ART/GAMEART0.PVI` staging pair
+  (soft failure without the ISO).
+- Match: FU-64 lifecycle, FU-60 30 Hz pace, FU-61 input → FU-70 control slot
+  per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain,
+  FU-142a installer arms in phases 0x13/0x14, deterministic FU-85/88/89 render
+  chain, period end (`resolve` OVER→POST→EXIT) back to the front-end.
+- Action dispatch (FU-137): **11/80 rows wired** — `00`, `1E`, `06`, `07`,
+  `0F`, `18`, `21`, `23` (Gate G3) and `26`, `28`, `2A` (cluster G); dispatch
+  results 68 UNSUP / 11 OK / 1 NOTF.
+- `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
+- `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
+  → kickoff → move → kick → score → period end → exit to front-end) and pins
+  the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
+  `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
+  live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
+  set, and the score step. Regenerate with
+  `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
+  non-zero while rewriting the file; re-run `make check` to verify).
 
 ## Known gaps
 
-- SDL3 backend + `make game` + human-visible M1 acceptance (deferred Task 2;
-  must also baseline the engine clock at boot).
+- **Unwired rows (69/80).** 68 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 4 are
+  `unwired` (ported body/arm, no binding — action 27/29/2C and one phase row)
+  and 64 remain not ported (30 action + 34 phase); row `2B` is a dead entry
+  and phase `0x16` is the native INT3 slot (`-FIFA96_ERR_NOT_FOUND`).
+- **OL-48 rows 27/29/2C:** bodies ported and tested (FU-142b/c), but the
+  FU-142f census finds no installer invocation for their codes anywhere in the
+  image, so they stay unwired; row `2B` is a dead entry (shared row-29 RET).
+- **OL-70/OL-70a rows 04/08:** the outfield decide/chase machine subset and the
+  interception tail are ported; the full row bodies (574 + 213 defined-code
+  instructions) remain to be ported and wired.
+- **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
+  ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
+- **Phase table:** all 35 FU-83 phase rows are unported (`OL-13`); the
+  selector-0/phase-0 default never reaches a live period end, so the M2-B tape
+  declares its forced phases explicitly.
+- **Score event source (child `C3-OL2`):** the FU-72 `FUN_00093944` writers live
+  in the unported action/phase clusters; `fifa96_match_run_add_goal` exposes the
+  derived increment only, and the tape drives it directly (recorded in FU-142
+  Appendix I).
 - Retail front-end art asset (no OPTIONS-like path exists in the ISO).
-- Playable match: the entity/ball/action-handler port (~13 tasks per
-  `docs/ghidra/FU136_action_handler_port_scope.md`) is the child plan; it will
-  also wire the front-end→match bridge, period length, and OVER→POST→EXIT.
+- Per-row cluster legs carried in FU-139/FU-141/FU-142 (`OL-56`…`OL-71`:
+  unmodeled record bytes, process globals, camera/track inputs, roster
+  descriptors, animation selectors).

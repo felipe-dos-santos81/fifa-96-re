@@ -1192,9 +1192,15 @@ int fifa96_match_dispatch_row(struct fifa96_match_run *mr,
 }
 
 int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code) {
+  int rc;
   if (mr == NULL) return -FIFA96_ERR_INVALID;
   if (code >= FIFA96_MATCH_ACTION_ROWS) return -FIFA96_ERR_NOT_FOUND;
-  return fifa96_match_dispatch_row(mr, &fifa96_match_action_table[code]);
+  rc = fifa96_match_dispatch_row(mr, &fifa96_match_action_table[code]);
+  /* Task 15 / M2-B: record which wired rows actually dispatched OK during a
+   * replay (the acceptance tape's wired-row assertion set). Bookkeeping only;
+   * all 45 codes fit in the 64-bit mask. */
+  if (rc == FIFA96_OK && code < 64u) mr->dispatched_ok |= 1ull << code;
+  return rc;
 }
 
 int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase) {

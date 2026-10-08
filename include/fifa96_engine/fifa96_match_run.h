@@ -217,6 +217,12 @@ struct fifa96_match_run {
    * searches run only on the odd frames; the derived frame body toggles it
    * once per granted 30 Hz frame before the entity chain. */
   uint8_t pass_parity;
+  /* Task 15 / M2-B observability: bit `c` is set when action code `c`
+   * dispatched FIFA96_OK through fifa96_match_dispatch_action during this run
+   * (the acceptance tape reads the wired-row dispatch set from it). Pure
+   * bookkeeping — no handler behavior reads or depends on it. Reset by
+   * init/begin like the other per-match counters. */
+  uint64_t dispatched_ok;
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
 };

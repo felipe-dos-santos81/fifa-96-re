@@ -62,7 +62,9 @@ int fifa96_match_dispatch_row(struct fifa96_match_run *mr,
 
 /* Dispatch action code 0x00..0x2C. NULL `mr` -> -FIFA96_ERR_INVALID; a code
  * past the table -> -FIFA96_ERR_NOT_FOUND; otherwise the row's classification
- * as in fifa96_match_dispatch_row. */
+ * as in fifa96_match_dispatch_row. A FIFA96_OK result also sets the run's
+ * `dispatched_ok` observation bit for the code (Task 15 / M2-B; bookkeeping
+ * only). */
 int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code);
 
 /* Dispatch phase 0x00..0x22. NULL `mr` -> -FIFA96_ERR_INVALID; a phase past
