@@ -7,7 +7,7 @@ fifa96_err_t fifa96_scene_build_keys(uint32_t count, const uint32_t *list,
   for (uint32_t i = 0; i < count; i++) {
     uint32_t value = list[i];
     if (value >= position_count) return (fifa96_err_t)-FIFA96_ERR_INVALID;
-    keys[i + 1] = positions[(uint64_t)value * FIFA96_SCENE_POSITION_DWORDS + 2];
+    keys[i] = positions[(uint64_t)value * FIFA96_SCENE_POSITION_DWORDS + 2];
   }
   return FIFA96_OK;
 }

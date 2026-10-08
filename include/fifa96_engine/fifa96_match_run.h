@@ -56,10 +56,17 @@ struct fifa96_surface;
 #define FIFA96_MATCH_RUN_EXTRA_SECONDS_RESET 30u
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
- * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes. */
+ * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes.
+ * `anim_timer`/`anim_turn` are the FU-84 `FUN_0008E008` per-frame driver state
+ * (native record +0x32 accumulator and +0x46 turn sign, default +1 from the
+ * selector); `stage.anim_id` holds the row id (`[rec+0x28]` byte 0) and
+ * `stage.frame` the frame index (`rec+0x3D`). The scene staging advances both
+ * once per granted frame and derives `bank_index` from the row's +8 byte. */
 struct fifa96_match_run_entity {
   fifa96_render_entity stage;
   uint8_t bank_index;
+  uint16_t anim_timer;
+  int8_t anim_turn;
 };
 
 /* Task 15 presentation state, all caller-owned and reset by init/begin:
@@ -84,6 +91,11 @@ struct fifa96_match_run_render {
   fifa96_match_display display;
   int32_t window_scale_x, window_scale_y;   /* FU-93 16.16 zoom scale */
   int window_zoomed;
+  /* FU-89 §6: the near-depth threshold `[0x54350]` divides by the camera
+   * record's +0x4C ratio angle (FU-97: static loader default 0x15, set per
+   * camera type by FUN_0004D7E8 at runtime). The type setup is unported, so
+   * the engine carries the static default (open leg). */
+  int32_t view_ratio;
   uint8_t background;
   struct fifa96_match_run_entity entities[FIFA96_MATCH_RUN_RENDER_SLOTS];
   uint32_t entity_count;

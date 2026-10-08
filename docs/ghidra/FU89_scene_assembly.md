@@ -568,6 +568,21 @@ replay gates are folded into one `replay_gate` argument; the original's
   the list is sorted **descending** by the jittered rotated z
   (`FUN_000A1860` swaps while lower < upper) and the walk stops when the
   caller's threshold is greater than the current key.
+* **§2 "the store lands at `[eax+0x4E7AC]` after `ADD EAX,4`, so the loop
+  writes `keys[1..count]` from `list[0..count-1]` and leaves `key[0]`
+  untouched" — corrected (M2 Task 11; first-hand `disassemble_bytes
+  0x57779` on `/FIFA96.EXE`)**: the store `0x577AC MOV [EAX+0x14E7AC],EDX`
+  runs with `EAX = 4(k+1)` after `0x577A5 ADD EAX,4`, so it lands at
+  `0x4E7B0 + 4k` = `keys[k]`; the 24-iteration loop
+  (`ECX = ([0x8FE8]+1)*4 = 0x60`, `0x577B2 CMP EAX,ECX`) fills
+  `keys[0..23]` from `list[0..23]`, i.e. keys pair with the **same-index**
+  1-based values, and the prologue triple copy to `[0x54370]` exists so the
+  value-0 sentinel's key reads the copied triple's z (there is no untouched
+  key[0]). The value-0 entry is then skipped by the walk (`0x57CD2 JZ`), and
+  the fixed 0x18-entry list is the sentinel + the 23 staged slots. The port
+  `fifa96_scene_build_keys` was corrected to `keys[i] = z(list[i])` and the
+  engine render list now builds the native-shaped 24 entries; the earlier
+  "index-0 gate is inert" divergence note is superseded.
 
 ## 12. Open legs
 

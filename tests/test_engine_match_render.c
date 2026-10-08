@@ -143,6 +143,9 @@ static void test_init_resets_render_state(void) {
   assert(mr.render.display.duration == FIFA96_MATCH_DISPLAY_DURATION);
   assert(mr.render.window_scale_x == 0 && mr.render.window_scale_y == 0);
   assert(mr.render.window_zoomed == 0);
+  assert(mr.render.view_ratio == 21);   /* FU-97 static +0x4C default */
+  assert(mr.render.entities[0].anim_turn == 1);   /* FU-84 selector default */
+  assert(mr.render.entities[0].anim_timer == 0);
   assert(mr.render.entity_count == 0);
   assert(mr.render.frames == NULL && mr.render.banks == NULL);
   assert(mr.render.bank_count == 0 && mr.render.fixed60 == NULL);
@@ -322,6 +325,279 @@ static void test_clip_clamped_to_smaller_surface(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* ---- Task 11: scene staging, animation banks, depth/lateral gates --------
+ *
+ * Native chain (first-hand on /FIFA96.EXE):
+ *  - FUN_00036C70 stages 23 slots from the FU-141 pool: team 0 records 0..10
+ *    (base 0x1588A4), team 1 records 0..10 (base 0x1590D9), then slot 22 =
+ *    the ball (0x15880C); position from rec+0x59/5D/61, hidden from rec+0x9A
+ *    (staged y = -10000, 0x36D61), ball heading from 0x15885A;
+ *  - the FU-84 row table at flat 0x10EF00 (111 rows x 9 B, first-hand
+ *    read_memory) gives row+8 = the sprite bank the resolver consumes;
+ *  - FUN_000589E0 computes the near-depth threshold `[0x54350] =
+ *    max((0x14<<16)/(2*obj[5]), 0x78)`, or `[0x9088] = 0x78` when
+ *    `obj[1] < [0x908C] = 0x140` (obj[5] = camera record +0x4C ratio angle,
+ *    static loader default 0x15; obj[1] = camera y);
+ *  - the 0x57CF6 walk culls a slot when its staged x (`[0x9A74] = 0x155AB0`,
+ *    first-hand) is > 0x8E0;
+ *  - FUN_00056CF4 (first-hand) makes the draw list a fixed 0x18-entry array
+ *    with the 0-sentinel entry: the staged world is 23 slots, 24 - sentinel. */
+
+#define SCENE_BLOB0_LEN (16u + 32u * 32u)
+#define SCENE_BLOB_LEN (SCENE_BLOB0_LEN + 16u + 16u * 16u)
+
+/* Pinned from the first verified run: the staged frame-0 32x32 solid-0x22
+ * sprite covers the derived (142,102) 37x37 rect (the existing fixture's
+ * derivation), and frame 1 the 16x16 solid-0x33 at (151,111); the geometry
+ * asserts above are independent of the pins. */
+#define SCENE_FRAME0_HASH 0x3ea0f266a78482a7ull
+#define SCENE_FRAME1_HASH 0x6c75ec5c4595e961ull
+
+struct scene_fixture {
+  struct fifa96_match_run mr;
+  struct fifa96_surface *s;
+  uint8_t blob[SCENE_BLOB_LEN];
+  int32_t off0[2];
+  int32_t off1[4];
+  struct fifa96_render_bank banks[2];
+  uint8_t frames[16 * 5];
+};
+
+/* Two derived banks over one blob: bank 0 entry 0 is a 32x32 solid 0x22,
+ * bank 1 entry 0 the same, entry 1 a 16x16 solid 0x33 (FU-84 row 1's frame
+ * table stores sprite = frame index, so frame 0/1 select entry 0/1). Frames
+ * are the Task 2 identity records {duration 0x50, aux 0, sprite = index}. */
+static void scene_fixture_init(struct scene_fixture *f) {
+  memset(f, 0, sizeof *f);
+  fifa96_match_run_init(&f->mr);
+  f->s = fifa96_surface_create(320, 240);
+  assert(f->s != NULL);
+  fifa96_surface_clear(f->s, 0);
+
+  uint8_t *e0 = f->blob;
+  uint8_t *e1 = f->blob + SCENE_BLOB0_LEN;
+  memset(e0, 0x22, SCENE_BLOB0_LEN);
+  memset(e0, 0x00, 16);
+  e0[4] = 32;
+  e0[6] = 32;
+  e0[8] = 16;
+  e0[10] = 16;
+  memset(e1, 0x33, 16u + 16u * 16u);
+  memset(e1, 0x00, 16);
+  e1[4] = 16;
+  e1[6] = 16;
+  e1[8] = 8;
+  e1[10] = 8;
+
+  f->off0[0] = 0;
+  f->off0[1] = 0;
+  f->off1[0] = 0;
+  f->off1[1] = 0;
+  f->off1[2] = (int32_t)SCENE_BLOB0_LEN;
+  f->off1[3] = 0;
+  f->banks[0].base = f->blob;
+  f->banks[0].offsets = f->off0;
+  f->banks[0].count = 1;
+  f->banks[0].step = 1;
+  f->banks[1].base = f->blob;
+  f->banks[1].offsets = f->off1;
+  f->banks[1].count = 2;
+  f->banks[1].step = 1;
+
+  for (unsigned i = 0; i < 16; i++) {
+    f->frames[i * 5 + 0] = 0x50;
+    f->frames[i * 5 + 1] = 0;
+    f->frames[i * 5 + 2] = 0;
+    f->frames[i * 5 + 3] = 0;
+    f->frames[i * 5 + 4] = (uint8_t)i;
+  }
+
+  struct fifa96_match_run_render *r = &f->mr.render;
+  r->frames = f->frames;
+  r->banks = f->banks;
+  r->bank_count = 2;
+  r->sprite_data = f->blob;
+  r->sprite_data_len = (uint32_t)sizeof f->blob;
+  r->enabled = 1;
+  (void)fifa96_window_init(&r->window, 320, 240);
+  (void)fifa96_window_define_full(&r->window, 320, 240);
+  /* phase 0 is class 0 (the clock never ends a period, FU-143 §3); the
+   * explicit length keeps direct frame-body drives clear of the state-init
+   * zero-length period end. */
+  f->mr.state.period_length = 90;
+}
+
+/* One 100 Hz frame-body tick needs ~3.33 pace ticks to grant a frame. */
+static void drive_granted(struct fifa96_match_run *mr, int grants) {
+  int got = 0;
+  for (int i = 0; i < grants * 110 + 10 && got < grants; i++) {
+    int rc = fifa96_match_run_frame(mr);
+    assert(rc >= 0);
+    if (rc == 1) got++;
+  }
+  assert(got == grants);
+}
+
+static uint32_t drawn_count(const struct fifa96_surface *s, uint8_t background) {
+  uint32_t drawn = 0;
+  for (int i = 0; i < s->width * s->height; i++)
+    if (s->indexed[i] != background) drawn++;
+  return drawn;
+}
+
+/* FUN_00036C70/FUN_00056CF4: the pool stages 23 render slots (11 + 11 + ball)
+ * with positions, hidden from +0x9A and the FU-84 row+8 bank index derived
+ * from the entity's animation id. */
+static void test_scene_stages_pool_entities(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_x = 0;
+  f.mr.entities.team[0].records[0].pos_y = 0;
+  f.mr.entities.team[0].records[0].pos_z = 0x200;
+  f.mr.entities.team[0].records[3].pos_x = 0x30;
+  f.mr.entities.team[1].records[0].pos_x = 0x40;
+  f.mr.entities.team[1].records[0].pos_y = 0x10;
+  f.mr.entities.team[1].records[0].pos_z = 0x280;
+  f.mr.entities.team[1].records[0].skip_9a = 1;
+  f.mr.entities.ball.x = 0x20;
+  f.mr.entities.ball.y = 0x30;
+  f.mr.entities.ball.z = 0x400;
+  f.mr.entities.ball.heading = (int16_t)0x123;
+  f.mr.render.entities[0].stage.anim_id = 1;   /* FU-84 row 1 (bank 1) */
+
+  assert(f.mr.render.entity_count == 0);
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entity_count == FIFA96_MATCH_RUN_RENDER_SLOTS);
+  assert(FIFA96_MATCH_RUN_RENDER_SLOTS == 23);
+  assert(f.mr.render.entities[0].stage.pos.x == 0);
+  assert(f.mr.render.entities[0].stage.pos.y == 0);
+  assert(f.mr.render.entities[0].stage.pos.z == 0x200);
+  assert(f.mr.render.entities[3].stage.pos.x == 0x30);
+  assert(f.mr.render.entities[11].stage.pos.x == 0x40);
+  assert(f.mr.render.entities[11].stage.pos.y == 0x10);
+  assert(f.mr.render.entities[11].stage.pos.z == 0x280);
+  assert(f.mr.render.entities[11].stage.hidden == 1);
+  assert(f.mr.render.entities[22].stage.pos.x == 0x20);
+  assert(f.mr.render.entities[22].stage.pos.y == 0x30);
+  assert(f.mr.render.entities[22].stage.pos.z == 0x400);
+  assert(f.mr.render.entities[22].stage.heading == ((int32_t)0x123 << 16));
+  /* The 0x15885A heading is a signed word: the staging sign-extends the high
+   * half so fifa96_render_slot_stage's `>> 16` recovers it. */
+  f.mr.entities.ball.heading = (int16_t)-2;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[22].stage.heading == -131072);   /* 0xFFFE << 16 */
+  /* FU-84 §3.1 row 1 = `01 0b 07 01 06 e2 00 00 01`: +8 sprite bank 1. */
+  assert(f.mr.render.entities[0].bank_index == 1);
+  fifa96_surface_destroy(f.s);
+}
+
+/* The fixture entity's frame index advances on the FU-84 `FUN_0008E008`
+ * accumulator: duration 0x50, delta 2 -> delta<<4 = 0x20 per granted frame,
+ * so the fourth grant advances frame 0 -> 1. The canvas follows through the
+ * row-1 bank (frame 0 = 32x32 0x22 at (142,102); frame 1 = 16x16 0x33 at
+ * (151,111), the existing fixture's scale derivation). */
+static void test_entity_animates_over_frames(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_z = 0x200;
+  f.mr.render.entities[0].stage.anim_id = 1;
+
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].bank_index == 1);
+  assert(f.mr.render.entities[0].stage.frame == 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[102 * 320 + 142] == 0x22);
+  assert(f.s->indexed[138 * 320 + 178] == 0x22);
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);
+  uint64_t frame0 = fifa96_surface_hash(f.s);
+  printf("test_engine_match_render scene frame0 hash = 0x%016llx\n",
+         (unsigned long long)frame0);
+
+  drive_granted(&f.mr, 3);   /* grants 2..4: 0x20,0x40 accumulate, then 0x60 */
+  assert(f.mr.render.entities[0].stage.frame == 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[111 * 320 + 151] == 0x33);
+  assert(f.s->indexed[128 * 320 + 168] == 0x33);
+  assert(f.s->indexed[102 * 320 + 142] == 0x00);   /* frame-0 rect gone */
+  assert(f.s->indexed[138 * 320 + 178] == 0x00);
+  uint64_t frame1 = fifa96_surface_hash(f.s);
+  printf("test_engine_match_render scene frame1 hash = 0x%016llx\n",
+         (unsigned long long)frame1);
+  assert(frame1 != frame0);
+  assert(frame0 == SCENE_FRAME0_HASH);
+  assert(frame1 == SCENE_FRAME1_HASH);
+  fifa96_surface_destroy(f.s);
+}
+
+/* FUN_000589E0/FUN_00036C70 gates: with the camera at y = 0x140 and the
+ * static ratio 0x15 the computed threshold is `(0x14<<16)/(2*0x15) = 0x79E7`,
+ * so a key (jitter z) of 0x1000 is culled; at ratio 0x800 the same depth
+ * computes 0x140 and draws. At y = 0x13F the `[0x908C]` limit is not reached,
+ * so `[0x9088] = 0x78` is the threshold and 0x1000 draws. */
+static void test_near_depth_threshold_gate(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_y = 0x140;
+  f.mr.entities.team[0].records[0].pos_z = 0x1000;
+
+  assert(fifa96_camera_init(&f.mr.render.camera, 0, 0x140, 0) == 0);
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].stage.pos.z == 0x1000);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) == 0);   /* 0x79E7 > 0x1000: culled */
+
+  f.mr.render.view_ratio = 0x800;
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) > 0);    /* 0x140 <= 0x1000: drawn */
+
+  f.mr.render.view_ratio = 0x15;
+  assert(fifa96_camera_init(&f.mr.render.camera, 0, 0x13F, 0) == 0);
+  f.mr.entities.team[0].records[0].pos_y = 0x13F;
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) > 0);    /* y < 0x140: [0x9088] = 0x78 */
+  fifa96_surface_destroy(f.s);
+}
+
+/* The 0x57CF6/FUN_00056FA4 lateral gate culls a staged x > 0x8E0 (signed):
+ * the same relative position (camera tracks the record) draws at 0x8E0 and
+ * is culled at 0x8E1. */
+static void test_lateral_cull_at_8e0(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  f.mr.entities.team[0].records[0].pos_x = 0x8E0;
+  f.mr.entities.team[0].records[0].pos_z = 0x200;
+  assert(fifa96_camera_init(&f.mr.render.camera, 0x8E0, 0, 0) == 0);
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].stage.pos.x == 0x8E0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) > 0);    /* lateral == 0x8E0: visible */
+
+  f.mr.entities.team[0].records[0].pos_x = 0x8E1;
+  assert(fifa96_camera_init(&f.mr.render.camera, 0x8E1, 0, 0) == 0);
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[0].stage.pos.x == 0x8E1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) == 0);   /* lateral 0x8E1 > 0x8E0: culled */
+  fifa96_surface_destroy(f.s);
+}
+
+/* FU-85 §5 `0x14720`/`fifa96_sprite_span`: the staged remap is the identity
+ * translation with index 0 as the transparent key -- source pixel 0 writes
+ * nothing, 0x80 passes through unchanged. */
+static void test_remap_identity_and_color_key(void) {
+  struct render_fixture f;
+  fixture_init(&f);
+  f.blob[16 + 0 * 32 + 0] = 0x00;
+  f.blob[16 + 0 * 32 + 1] = 0x80;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[102 * 320 + 142] == 0x00);   /* source x=0: transparent */
+  assert(f.s->indexed[102 * 320 + 143] == 0x80);   /* identity pass-through */
+  assert(f.s->indexed[102 * 320 + 144] == 0x11);
+  fifa96_surface_destroy(f.s);
+}
+
 struct engine_fixture {
   fifa96_platform *plat;
   struct fifa96_engine *engine;
@@ -376,6 +652,10 @@ static void test_engine_match_step_renders(void) {
   uint8_t frames[5];
   setup_render(&mr_on.render, blob, offsets, &bank, frames);   /* begin reset it */
   for (int i = 0; i < 4; i++) assert(fifa96_engine_step(on.engine) == 0);
+  /* The MATCH dispatch's granted frames ran the FU-85 §4 scene staging over
+   * the FU-141 pool (the live/tape path); the pool's zero positions leave the
+   * canvas at the background, but the 23 slots are staged. */
+  assert(mr_on.render.entity_count == FIFA96_MATCH_RUN_RENDER_SLOTS);
   struct fifa96_platform_null_stats stats_on;
   fifa96_platform_null_stats(on.plat, &stats_on);
   assert(stats_on.presents == 4);
@@ -392,6 +672,11 @@ int main(void) {
   test_composite_overlay_is_blitted();
   test_mirrored_frame_uses_signed_size();
   test_clip_clamped_to_smaller_surface();
+  test_scene_stages_pool_entities();
+  test_entity_animates_over_frames();
+  test_near_depth_threshold_gate();
+  test_lateral_cull_at_8e0();
+  test_remap_identity_and_color_key();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");
   return 0;

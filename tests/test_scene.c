@@ -23,16 +23,19 @@ _Static_assert(FIFA96_SCENE_LATERAL_MAX == 0x8E0, "lateral gate");
 static int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
 static int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
 
+/* First-hand 0x57798..0x577AC: the store is `[EAX+0x14E7AC]` after
+ * `ADD EAX,4`, i.e. keys[k] = z(position[list[k]]) for k = 0..count-1; the
+ * values are 1-based slot ids and 0 is the empty sentinel. */
 static void test_build_keys(void) {
   const int32_t positions[12] = {1, 2, 10, 3, 4, 20, 5, 6, 30, 7, 8, 40};
   const uint32_t list[4] = {0, 3, 1, 2};
   int32_t keys[5];
-  keys[0] = 0x7F;
+  keys[4] = 0x7F;
   assert(fifa96_scene_build_keys(4, list, positions, 4, keys) == FIFA96_OK);
-  assert(keys[0] == 0x7F);
-  assert(keys[1] == 10 && keys[2] == 40 && keys[3] == 20 && keys[4] == 30);
+  assert(keys[4] == 0x7F);   /* the output domain is [0, count) */
+  assert(keys[0] == 10 && keys[1] == 40 && keys[2] == 20 && keys[3] == 30);
   assert(fifa96_scene_build_keys(0, list, positions, 4, keys) == FIFA96_OK);
-  assert(keys[0] == 0x7F && keys[1] == 10);
+  assert(keys[0] == 10);     /* zero count writes nothing */
   const uint32_t bad[1] = {4};
   assert(fifa96_scene_build_keys(1, bad, positions, 4, keys) == P_INVALID);
   assert(fifa96_scene_build_keys(4, NULL, positions, 4, keys) == P_INVALID);

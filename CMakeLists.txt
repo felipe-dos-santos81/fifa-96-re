@@ -416,7 +416,8 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
-                                          fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies)
+                                          fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies
+                                          fifa96_animation)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
