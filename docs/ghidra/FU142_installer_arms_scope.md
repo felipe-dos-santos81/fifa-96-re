@@ -3124,7 +3124,16 @@ matching arm sets EAX and calls the writer. Side sources and id tables
 | `0x94492` | `0x94270` | — | `0x9424C` | 2/5 -> 0 (`0x94490`) |
 | `0x94667` | `0x944FC` | `0x944D4` (4) | `0x944E4` (6) | 1/3/6 -> 1 (`0x94662`) |
 | `0x94670` | `0x944FC` | — | `0x944E4` | 2/5 -> 0 (`0x9466E`) |
-| `0x9486E` | `0x946C4` | `0x946B4` (4) | none | `[0x15B6A8]==5` -> 0 (`0x94853..58`); else `1` iff `[0x15B6B4]==1` (`0x9485C..69`) |
+| `0x9486E` | `0x946C4` | `0x946B4` (4) | none | `[0x15B6A8]==5` -> 0 (`0x9484A..58`; the `[0x15B6B4]==0` test at `0x9484A` gates only the `0x94853` `[0x15B68C]` store); else -> 1 (`0x94869 MOV EAX,1`; the `[0x15B6B4]` test at `0x9485C..64` gates only the `[0x15B68C]` store) |
+
+**L.4 erratum (fix round 1).** The period-4 row above is wrong for id 3.
+First-hand bytes: the inline table `0x944E4` =
+`[0x94662, 0x9466E, 0x94677, 0x94677, 0x9466E, 0x94662]`; the dispatcher is
+`0x94606 MOV ESI,1` / `0x94648 EAX=[0x15B6A8]` / `0x9464D SUB EAX,ESI` /
+`0x94655 CMP EAX,5` / `0x94658 JA 0x94677`, so the table indexes `id-1` and
+`0x94677` is `INC dword [0x15B6A0]`. The handler `0x944FC` map is therefore
+**1/6 -> 1, 2/5 -> 0, 3/4 -> no-score counter** (not 1/3/6). The other five
+id tables were re-read this round and stand.
 
 Ids outside a table's range (including the queued 0/0xA) jump to the
 `INC [0x15B6A0]` no-score counter (`0x93DA8`/`0x94036`/`0x941F5`/`0x94499`/
