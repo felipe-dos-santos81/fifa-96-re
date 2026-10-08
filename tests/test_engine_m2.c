@@ -22,7 +22,10 @@
  * the natural path underneath the same spec §5 sequence, so v3 asserts where
  * the natural path now runs and where it still stops. It pins, in order:
  *   1. the boot/intro-skip frame, the front-end frames of the panel-open and
- *      panel-confirm navigation, and the match-start frame (frame 5);
+ *      panel-confirm navigation, the match-start frame (frame 5), and the
+ *      derived kickoff entry: begin leaves the run at phase 1
+ *      (`FIFA96_MATCH_RUN_KICKOFF_PHASE`, prev_phase 0) with the formation
+ *      targets already committed (see the drawing paragraph below);
  *   2. the forced kickoff segments: phase 0x13 (first half, frame 6 onward,
  *      `state=19/...`) and phase 0x14 (second half, frame 26 onward,
  *      `state=20/...`), during which the FU-142a installer arms fire and stage
@@ -70,7 +73,18 @@
  *     (native 0x8AF41), so the derived entry changes nothing before the first
  *     granted frame and the transcript stays byte-identical.
  *
- * Forced, each with its owning leg:
+ * v3 drawing assertion (M2 visible-match Task 1 / OL-T11-8): the acceptance is
+ * not only the hash transcript. The tape counts the non-background pixels of
+ * the presented indexed canvas after each early match frame and pins the empty
+ * pre-grant render list (frames 6..8: 0 pixels — the scene staging has not run)
+ * against the first granted frame (frame 9: pixels > 0, `render.entity_count`
+ * 23, team 1 record 0 staged at z = +2508 with the kickoff selector row 0x26),
+ * so "the placed records draw" is asserted, not inferred from the golden hash
+ * chain. ISO mode only: without the ISO rendering is disabled and the surface
+ * keeps the front-end frame.
+ *
+ * Forced, each with its owning leg (complete inventory — nothing else is
+ * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
  *     (the kickoff placement) and the phase-1 -> 2 transition runs through the
  *     setter's own state machine (the 0x88E82 FUN_000740A0(1, side) call runs
@@ -97,6 +111,9 @@
  *     (FU-142 App. I.10 census), so gameplay goals stay blocked on the
  *     `OL-87`/`OL-88`/`OL-89` invoker legs;
  *   - HUD/overlays stay `OL-T11-7` and palette install `OL-T11-6`.
+ * The complete forcing inventory is m 1 and m 21 (kickoff phases 0x13/0x14),
+ * the m 41 pair (phase 2 and the 1 s period length) with its row staging, and
+ * the m 62 direct score call. No other phase, period, row or input is forced.
  *
  * Golden decision (v3, M2 visible-match Task 1 / OL-T11-8): the transcript
  * CHANGED and the golden is re-pinned for the intended drawing upgrade — the
@@ -109,7 +126,10 @@
  * repainted identically (menu_art_draw overwrites the full surface and the
  * palette) and only carry the chained earlier change. 157 golden lines differ
  * (9..165); the pre-T1 golden pinned the zero-target placement where nothing
- * drew. M1 is untouched.
+ * drew. M1 is untouched. T2 (derived kickoff entry) and T3 (drawing/entry
+ * assertions) changed no presented frame: the entry is render-invisible before
+ * the first grant and the assertions never write engine state, so the golden
+ * stays byte-identical after both (no T2/T3 re-pin).
  *
  * FU-143 phase-driver wiring (playability Task 3): the run frame body steps the
  * derived `fifa96_match_run_phase_drive` each granted frame, so the phase-2
@@ -252,6 +272,17 @@ struct m2_result {
   uint16_t score_before_exit[2];
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
+  /* v3 drawing evidence (M2 visible-match Task 1 / OL-T11-8): non-background
+   * pixels in the engine's indexed match canvas at the last pre-grant frame
+   * (8, empty render list) and the first granted frame (9, staged scene), plus
+   * the staged scene state at frame 9. ISO mode only: without the ISO the
+   * render chain is disabled and the surface keeps the front-end frame. */
+  int draw_px_pre;           /* canvas pixels != background at frame 8 */
+  int draw_px_first;         /* canvas pixels != background at frame 9 */
+  int draw_entity_count;     /* render.entity_count at frame 9 (23 slots) */
+  int32_t staged_rec0_z;     /* render.entities[0].stage.pos.z at frame 9 */
+  int32_t staged_rec11_z;    /* render.entities[11].stage.pos.z at frame 9 */
+  uint8_t staged_anim_id;    /* render.entities[11].stage.anim_id at frame 9 */
 };
 
 static int file_exists(const char *path) {
@@ -425,6 +456,35 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         assert(e->match_run.entities.team[0].records[0].pos_z == 0);
         assert(e->match_run.entities.team[1].records[0].pos_z == 0);
       }
+      /* v3 (M2 visible-match Task 2 / OL-84): begin lands the derived kickoff
+       * phase-1 entry (the native FUN_00088DC8 stage-0 FUN_000740A0(1, side)
+       * write at 0x88E82) with prev_phase 0, before any forced phase. */
+      assert(e->match_run.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+      assert(e->match_run.state.prev_phase == 0);
+      assert(e->match_run.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+    }
+    /* v3 drawing evidence (M2 visible-match Task 1 / OL-T11-8): count the
+     * non-background pixels of the presented indexed match canvas. The first
+     * grant is step 9 (the tape's pinned cadence), so frames 6..8 render the
+     * empty render list (uniform clear index) and frame 9 is the first
+     * render-list staging: the formation-seeded records must be on the canvas
+     * there, not just in the pool. ISO mode only (see m2_result). */
+    if (with_iso && live) {
+      size_t nz = 0;
+      size_t npix = (size_t)e->surface->width * (size_t)e->surface->height;
+      for (size_t i = 0; i < npix; i++)
+        if (e->surface->indexed[i] != e->match_run.render.background) nz++;
+      if (steps >= 6 && steps <= 8) {
+        assert(nz == 0);                    /* pre-grant: empty render list */
+        res->draw_px_pre = (int)nz;
+      }
+      if (steps == 9) {
+        res->draw_px_first = (int)nz;
+        res->draw_entity_count = (int)e->match_run.render.entity_count;
+        res->staged_rec0_z = e->match_run.render.entities[0].stage.pos.z;
+        res->staged_rec11_z = e->match_run.render.entities[11].stage.pos.z;
+        res->staged_anim_id = (uint8_t)e->match_run.render.entities[11].stage.anim_id;
+      }
     }
     if (steps == 7 || steps == 9 || steps == 11) {
       /* The scripted move (RIGHT 0x04 / UP 0x01) and kick (0x10) presses
@@ -524,6 +584,20 @@ int main(void) {
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);
   assert(res.start_anim_id == 0x26u);
+  /* v3 drawing acceptance (M2 visible-match Task 1 / OL-T11-8, ISO mode): the
+   * first granted frame stages all 23 render slots from the placed pool
+   * records and the sprite chain reaches the indexed canvas; the pre-grant
+   * frames render the empty scene. Without the ISO the render chain is
+   * disabled (the surface stays the front-end frame), so these hold only in
+   * ISO mode. */
+  if (with_iso) {
+    assert(res.draw_px_pre == 0);          /* frames 6..8: empty render list */
+    assert(res.draw_px_first > 0);         /* frame 9: placed records draw */
+    assert(res.draw_entity_count == (int)FIFA96_MATCH_RUN_RENDER_SLOTS);
+    assert(res.staged_rec0_z == -2376);    /* team 0 record 0 staged as placed */
+    assert(res.staged_rec11_z == 2508);    /* team 1 record 0 staged as placed */
+    assert(res.staged_anim_id == 0x26u);   /* kickoff selector row staged */
+  }
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
   /* v2: the live FU-143 driver consumed the clock completion and wrote the
    * derived selector-0 chooser phase 0x0C on the exit step. */

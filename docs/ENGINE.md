@@ -7,22 +7,31 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 Status: **M1 complete headless; M2 match playable and visible headless —
 13/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
-animation inputs, the derived kickoff ball placement and the resource-loaded
+animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
 `/ART/GAMEART0.PVI` at begin, so player records receive real positions and
-draw); the M2-B acceptance tape **v3** is green with the golden re-pinned for
-the drawing upgrade, and the interactive `make game` smoke re-run on this host
-(2026-10-08, G4) reaches match start, control input and the live ball/anim
-placement.** Kick → score and a live in-play phase entry remain blocked
-interactively on the unported possession/selection rows and the unported
-kickoff entry (see "Interactive smoke" and "Known gaps"). The M2
-playability-legs plan's gates G1/G2 closed, G3 carried with the listed legs
-(now formation-landed) and G4 accepted here; see
+draw) and the derived kickoff phase-1 entry (OL-84: begin lands
+`FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`).** The M2-B acceptance tape **v3** is
+green: it asserts the drawing directly (the formation-placed records reach the
+indexed canvas from the first granted frame; the golden was re-pinned for that
+upgrade, T1) and the kickoff entry at begin (T2; the transcript stays
+byte-identical), and the interactive `make game` smoke re-run on this host
+(2026-10-08, G3) reaches match start (the match canvas replaces the front-end;
+RGB stays black pending the palette leg OL-T11-6). Kick → score and a live
+in-play phase entry remain blocked interactively on the unported
+possession/selection rows and the unported record-action machinery (see
+"Interactive smoke" and "Known gaps"). The M2 visible-match plan's G1/G2
+closed **carried-with-legs** (indexed draw and phase-1 entry landed; RGB
+palette `OL-T11-6` and the `OL-84` record-action residual open) and G3 is
+accepted here; the earlier playability-legs plan's G1/G2 closed, G3 carried
+and G4 accepted. See
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child),
 `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md` (split
 follow-up), `docs/superpowers/plans/2026-10-07-fifa96-m2-playability-legs.md`
-(this follow-up) and the SDD workspaces under `.superpowers/sdd/` for the full
+(playability close-out),
+`docs/superpowers/plans/2026-10-07-fifa96-m2-visible-match.md` (visible-match
+close-out) and the SDD workspaces under `.superpowers/sdd/` for the full
 record (scratch; may be deleted).
 
 ## Layout
@@ -80,30 +89,31 @@ the build also produces the windowed `fifa96` target (`make game`).
 - Action dispatch (FU-137): **13/80 rows wired** — `00`, `04`, `06`, `07`,
   `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring G3) and
   `26`, `28`, `2A` (cluster G); dispatch results 66 UNSUP / 13 OK / 1 NOTF.
-- **Interactive smoke (Task 6 re-run, this host 2026-10-08; first verified
-  Task 13):** `make game` window opens (960×720 integer-scaled SDL3; ESC quits,
-  exit 0; the intro and the procedural front-end draw — screenshots). The
-  walkthrough reaches **match start** — intro RETURN skip → front-end BACKSPACE
-  (DECLINE/panel) → RETURN (panel confirm → FU-66 STATE16 bridge) — and the
-  match canvas replaces the front-end (black clear colour; the OL-T11-8
-  formation draw landed — records carry the resource positions and the
-  sprites are staged into the indexed canvas/tape — while RGB visibility
-  still waits on the palette install OL-T11-6; HUD/overlays wait on
-  OL-T11-7). Arrow/Z/C
-  presses reach the run: an in-process gdb probe (debug build) read
-  `input_state[0]` = 0x04 (RIGHT), 0x01 (UP), 0x10 (KICK), 0x20 (PASS), while
-  `dispatched_ok` stayed `0x1` (row `00` only) and `state.phase` read 0 at
-  probe time (before the T2 kickoff entry landed; a begun run now enters the
-  derived kickoff phase 1 — below). The
-  T5 kickoff placement is live in the running game: the probe read the ball at
-  (480, 0, 0) = the derived 0x1E0 spawn and record 0's OL-80 `anim_id` at 0x26,
-  with the score 0-0. **Kick, score and a live phase entry are still not
-  interactively reachable:** the kick press dispatches no gameplay row (the
+- **Interactive smoke (visible-match Task 3 re-run, this host 2026-10-08;
+  first verified Task 13):** `make game` window opens (960×720 integer-scaled
+  SDL3; ESC quits, exit 0; the intro and the procedural front-end draw —
+  screenshots). The walkthrough reaches **match start** — intro RETURN skip →
+  front-end BACKSPACE (DECLINE/panel) → RETURN (panel confirm → FU-66 STATE16
+  bridge) — and the match canvas replaces the front-end (screenshots: uniform
+  black, grayscale mean 0). The OL-T11-8 formation draw is live in the indexed
+  canvas and pinned by the tape; RGB visibility still waits on the palette
+  install OL-T11-6 (HUD/overlays wait on OL-T11-7). Arrow/Z/C presses were sent
+  in the same session; the RGB canvas is uniformly black, so they produce no
+  observable pixels there — input delivery is evidenced by the visible
+  Return/BackSpace state transitions plus the tape, and was probed in-process
+  in the earlier Task 13 smoke (debug build gdb: `input_state[0]` = 0x04
+  RIGHT / 0x01 UP / 0x10 KICK / 0x20 PASS, `dispatched_ok` = 0x1 = row 00
+  only). The T5 kickoff placement was probed live there too: ball at
+  (480, 0, 0) = the derived 0x1E0 spawn, record 0's OL-80 `anim_id` at 0x26,
+  score 0-0; a begun run now enters the derived kickoff phase 1 (OL-84, below).
+  **Kick, score and a live in-play phase entry are still not interactively
+  reachable:** the kick press dispatches no gameplay row (the
   possession/selection invokers are unported), gameplay goals have no wired
   invoker (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller),
-  and the match cannot enter the class-1 in-play phase without the unported
-  kickoff entry (OL-79/OL-84). The M2-B tape v3 covers the sequence headlessly
-  with its declared/forced phases and the live driver's period end.
+  and the phase-1 → phase-2 transition needs the unported record-action
+  machinery (OL-84 residual: the `FUN_0008D098` state-1 arm and the rows
+  01/02/0x10..0x13). The M2-B tape v3 covers the sequence headlessly with its
+  declared/forced phases and the live driver's period end.
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -118,7 +128,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   **formation seed** loaded `352ko.fmt` so records carry real positions
   (record 0: team 0 z = -2376, team 1 z = +2508), and the live FU-143 driver's
   derived 0x0C write is read back after the exit step (where the teardown has
-  reset the match state but not the FU-142a mirror). Task 2 adds the **derived
+  reset the match state but not the FU-142a mirror). The Task 3 acceptance
+  asserts the **drawing directly**: the pre-grant match frames render the empty
+  list (0 non-background pixels) and the first granted frame (step 9) stages
+  all 23 render slots and puts the placed records on the indexed canvas
+  (pixels > 0; team 1 record 0 staged at z = +2508 with the kickoff selector
+  row 0x26) — the golden hash chain is corroborated, not trusted alone. Task 2
+  adds the **derived
   kickoff phase entry (OL-84)**: `fifa96_match_run_begin` installs
   `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1` (the native `FUN_00088DC8` stage-0
   `FUN_000740A0(1, side)` write at `0x88E82`), so a begun run waits at the
@@ -144,6 +160,19 @@ the build also produces the windowed `fifa96` target (`make game`).
 
 ## Known gaps
 
+- **Visible-match leg register (M2 visible-match plan close-out, 2026-10-08).**
+  Landed: `OL-T11-8` (formation/record placement — indexed draw live, golden
+  re-pinned) and `OL-84`'s phase-1 entry (begin installs
+  `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`; transcript byte-identical). Carried
+  open: `OL-T11-6` palette install (RGB black in `make game`) / `OL-T11-7`
+  HUD; `OL-84` residual record-action machinery (the `FUN_0008D098` state-1
+  arm and rows 01/02/0x10..0x13) plus the FU-73 keeper/restart producers
+  `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
+  `OL-88`/`OL-89` goal invokers; `OL-81`/`OL-83` row-field wrinkles; `OL-82`
+  row-08 scan producer; the T1 formation-id producer
+  (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the per-record camera
+  place `FUN_00079F3C` (FU-96 leg 5); `OL-62`..`OL-71` residuals. The items
+  have their detailed entries below / in the FU docs.
 - **Unwired rows (67/80).** 66 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 28
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
