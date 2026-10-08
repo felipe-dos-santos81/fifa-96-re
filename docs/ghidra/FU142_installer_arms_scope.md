@@ -582,6 +582,29 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   binding lands the fields/compare must be forced to 16-bit, or the
   divergence must be accepted explicitly and recorded then. Referenced from
   the `ac5`/`ac7` field comment in `fifa96_match_phase_machine.h`.
+* **OL-83 — `record.type`/`record.actor_type` split for the native `+0x8E`
+  byte (T2 review).** Both engine fields model the native byte at `+0x8E`
+  (`0x79C50` writes it at `0x79C8E`; row 08's type tables and its 0x6E598
+  argument read `[rec+0x8B]>>24`), but
+  `struct fifa96_match_run_record.actor_type` is only *read* from the pool
+  (`fifa96_match_run.c` `r->actor_type = e->actor_type`) and nothing ever
+  writes `e->actor_type`, while rows 28/2A (their `rec.type` staging), the
+  0x79C50 face repacks (row 07/0F) and the row-08 face persist the byte
+  through `record.type` (`fifa96_match_handlers.c`; `fifa96_match_run.c`
+  `e->type = r->type`). Rows 04/06/07/18 read `r->actor_type` /
+  `mr->record.actor_type` as their `type8` (`handlers.c` `match_kick_from_record`,
+  rows 18/04/06). So a row-08 face write is invisible to the rows that
+  natively share the byte, and those `type8` reads are always 0 in production.
+  Options for the reconciliation task: (a) unify on one field
+  (`record.type`/`e->type`) and repoint the four readers; (b) make the
+  producers write both fields; (c) declare the divergence verified and keep
+  it if every reader's staged byte is proven unused on the reachable paths.
+  The divergence is **currently unobservable on the tape**: `make check`
+  104/104 at `9f63258` is byte-identical on the M2 tape (`test_engine_m2`,
+  `mask_final == M2_WIRED_MASK`), no golden moved, and the zeroed pool leaves
+  `actor_type` 0 for every dispatch. Referenced from the row-08/row-04
+  FU-137 §6.1 evidence and the K.6.5/K.6.7 notes (the byte/field split also
+  carries the row-28/0F `record.type` writes).
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -2891,7 +2914,7 @@ Stage 2 (`0x8147C..0x814AF`):
 | `[0x1577CA]` | `id == mr->entities.controlled` (stand-in) |
 | `[team+0x7B2]`/`[team+0x7B6]` | pool target/second ids |
 | `[[team+0x7A6]+0x7B2]` | opponent team target id |
-| `0x79C50` | `out.face`/`face_angle`/`face_octant` -> `record.type` (+0x8E) |
+| `0x79C50` | `out.face`/`face_angle`/`face_octant` -> `record.type` (+0x8E; the row-04/06/07/18 readers still use the never-written `record.actor_type` — OL-83) |
 | `0x79B58` | `out.receiver_timer` -> `timer93 = 0x10` (the +0x99 gate is the binder's) |
 | `0x79B1C` | `out.snap` -> target = pos (the lane/velocity zeroes OL-82) |
 | `0x795A4` | `row08_fold` |
@@ -2932,7 +2955,12 @@ stage-2 snap) and `action_expect[0x08]` is `FIFA96_OK`.
   the [0x15872F]/[0x15877D] carry, the lead add) stay inert until the
   producers land; the +0x3D gate keeps the projection scan inert live until
   the OL-80 animation frame is staged (Task 5). The loader fixtures pin the
-  ported behavior. `[0x1577CA]`/`[0x157A83]` are pool stand-ins.
+  ported behavior. `[0x1577CA]`/`[0x157A83]` are pool stand-ins. The
+  `0x79B58` `+0x99` gate is asymmetric between the two outfield binders —
+  row 08's binder applies `timer93 = 0x10` unconditionally while row 04's
+  checks its staged `s.byte99` — but both are equivalent against the
+  zero-staged native byte until a `+0x99` producer lands. The `+0x8E`
+  `record.type`/`record.actor_type` field split is **OL-83** (§6).
 * **OL-52 (carried) — the `0x6E598` anim request** stays unconsumed.
 * **OL-62 (carried) — the `0x7A490` staging tail** (`0x7A4F0..0x7AE2F`) stays
   unported; the row-08 call is the core request.

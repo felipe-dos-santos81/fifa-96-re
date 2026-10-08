@@ -170,7 +170,9 @@ struct fifa96_match_run_record {
    * actor-type byte, staged so rows 07/0F can resolve the team candidates and
    * the kick direction table. */
   int32_t entity_id;   /* team*11 + index, or NONE */
-  uint8_t actor_type;  /* native +0x8B>>24 */
+  uint8_t actor_type;  /* native +0x8B>>24 = the +0x8E byte; staged from the
+                        * pool, which never writes it (OL-83: rows 04/06/07/18
+                        * read it while rows 28/2A/0F/07/08 persist `type`) */
   uint8_t code;        /* native +0x91 (the byte the installer writes and the
                         * 0x110680/0x7E600/0x7C990 gates index; staged from the
                         * pool entity so handlers never use the face octant) */
@@ -184,7 +186,9 @@ struct fifa96_match_run_record {
    * resolved [team+0x831] chosen-record position and the five process globals
    * the body reads (their native producers are unported, OL-56). */
   int32_t vel_x, vel_z;     /* native +0x71/+0x73 (arm-2 zero writes) */
-  uint8_t type;             /* native +0x8E>>24 facing octant (prologue face) */
+  uint8_t type;             /* native +0x8E byte = `[rec+0x8B] >> 24` (the
+                             * 0x79C50 face octant rows 28/0F/08 write; the
+                             * row-04/06/07/18 readers use `actor_type`, OL-83) */
   uint8_t side;             /* team +0x826 side (arm-0 negation gate) */
   uint8_t flag830;          /* team +0x830 (arm-1 gate) */
   uint8_t chosen_ok;        /* derived: team+0x831 resolved to a pool record */

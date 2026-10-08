@@ -93,7 +93,7 @@ the build also produces the windowed `fifa96` target (`make game`).
 
 ## Known gaps
 
-- **Unwired rows (67/80).** 66 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 30
+- **Unwired rows (67/80).** 66 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 28
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
   `27`/`29`/`2C` (ported bodies, no installer entry) and the dead entry `2B`;

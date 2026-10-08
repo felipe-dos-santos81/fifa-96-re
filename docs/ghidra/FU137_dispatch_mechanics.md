@@ -355,11 +355,11 @@ Rubric (refines FU-136 §1.3 by splitting the unresolved entry paths):
 | 01 | 0x07DBC0 | not ported (partial) | sequence_select/stage helpers; FU-76 §2, FU-82 §3.1; FU-138 marker_target/stage_wait | OL-9; FU-138 OL-17 |
 | 02 | 0x07DFCC | not ported (partial) | locomotion_restart_target; FU-77 §2.2; FU-138 restart_wait | OL-9; FU-138 OL-18 |
 | 03 | 0x07E1A4 | not ported (partial) | locomotion_hold/clamp_placement; FU-77 §2.3; FU-138 counter/phase1_clamp | OL-8; FU-138 OL-19 |
-| 04 | 0x07E7C8 | ported (M2 playability-legs Task 1 / FU-142 Appendix K.5) | `fifa96_match_action_04` binds `fifa96_outfield_row04_step` (`0x7E7C8..0x7F141`: carrier/ranked-pick arms, the target arms + `0x7D3E4` clamp, the no-slot `0x7E600` decision, the score/RNG install `0xB`, the bound/angle tail and the installs 4/0x19/0xF/0xE/0xB/7/6/5) to `mr->record`/the pool; the `0x7CA54` input-row machine stays a separate unwired seam; `test_engine_match_handlers::test_action_04_wired_and_08_unwired` | unmodeled record/team bytes, track words, predictor and sinks OL-65/OL-67/OL-72 (K.5.8) |
+| 04 | 0x07E7C8 | ported (M2 playability-legs Task 1 / FU-142 Appendix K.5) | `fifa96_match_action_04` binds `fifa96_outfield_row04_step` (`0x7E7C8..0x7F141`: carrier/ranked-pick arms, the target arms + `0x7D3E4` clamp, the no-slot `0x7E600` decision, the score/RNG install `0xB`, the bound/angle tail and the installs 4/0x19/0xF/0xE/0xB/7/6/5) to `mr->record`/the pool; the `0x7CA54` input-row machine stays a separate unwired seam; `test_engine_match_handlers::test_action_04_and_08_wired` | unmodeled record/team bytes, track words, predictor and sinks OL-65/OL-67/OL-72 (K.5.8); the `+0x8E` `record.type`/`actor_type` field split OL-83 |
 | 05 | 0x07F194 | not ported (partial) | carrier machine stages 0-3 + staging tail ported (FU-139 §8 Task 10: `fifa96_action_carrier_arm` `0x7F194..0x7F665`, `fifa96_ball_pair_stage_tail` `0x7A8D1..0x7AA2F`, plus FU-78 possession helpers); stage-0 target algebra `0x7F3A1..0x7F57B` + `FUN_0007F7E0` fallback unported, row unwired | FU-139 OL-63 (residual); OL-8 |
 | 06 | 0x0801B4 | ported (M2 arms-and-wiring Task 13 / FU-139 §11) | `fifa96_match_action_06` binds `fifa96_action_pursuit_step` (`0x801B4..0x809EF`: the `0x8DCD4`/`0x8DD70` camera metric, the `0x114E04` folds, the carrier-gate install 4 and the RNG installs 8/9, the `0x79C20` slot target, the `0x8DE8C`/`0x79CCC` mate selections and the `0x6DA64` swap request) to `mr->record`/the pool; the plan span end `0x81067` is the row-09 body `0x80A00` (slot `0x1106E0[9]`, unwired OL-9); `test_engine_match_handlers::test_action_06_runs_body` | OL-69 (record bytes, lead, callback position, swap); OL-52 remark |
 | 07 | 0x0814B0 | ported (M2 arms-and-wiring Task 11 / FU-139 §9) | `fifa96_match_action_07` binds `fifa96_action_kick_machine` (`0x814B0..0x81737`) and `fifa96_ball_kick_target` (`FUN_0007B9C4`, `0x7B9C4..0x7BF16` incl. the `FUN_0007B878` dir arm and both mode arms) to `mr->record`/the pool ball block; defender 0x0E / opponent 0x22 / ball 4 requests; `test_engine_match_handlers::test_action_07_runs_body` | OL-65 (record/presentation auxiliaries) / OL-66 (external block inputs) / OL-62 remark |
-| 08 | 0x081068 | ported (M2 playability-legs Task 2 / FU-142 Appendix K.6) | `fifa96_match_action_08` binds `fifa96_outfield_row08_step` (`0x81068..0x814AF`, 329 linearly decoded insns incl. the RET; FU-77 §2.7/FU-141 §7's `..0x81188` head is a prefix, first-hand): the stage 0/1/2 machine (phase gate + timer add, the stage-0 camera/lead copy, the `0x79C50` face, the `0x79B58` receiver gate, the +0x3D-gated `0x795A4`/`0x8DCD4`/`0x8DC68` projection scan, the user/record event arms, the `0x79B1C` stage-2 snap) over `mr->record`/the pool; row 08 installs no code; `test_engine_match_handlers::test_action_04_and_08_wired` | unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82 (K.6.7) |
+| 08 | 0x081068 | ported (M2 playability-legs Task 2 / FU-142 Appendix K.6) | `fifa96_match_action_08` binds `fifa96_outfield_row08_step` (`0x81068..0x814AF`, 329 linearly decoded insns incl. the RET; FU-77 §2.7/FU-141 §7's `..0x81188` head is a prefix, first-hand): the stage 0/1/2 machine (phase gate + timer add, the stage-0 camera/lead copy, the `0x79C50` face, the `0x79B58` receiver gate, the +0x3D-gated `0x795A4`/`0x8DCD4`/`0x8DC68` projection scan, the user/record event arms, the `0x79B1C` stage-2 snap) over `mr->record`/the pool; row 08 installs no code; `test_engine_match_handlers::test_action_04_and_08_wired` | unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82 (K.6.7); the `+0x8E` `record.type`/`actor_type` field split OL-83 |
 | 09 | 0x080A00 | not ported (partial) | FU-81 arm table 0x809F0; stage helpers | OL-9 |
 | 0A | 0x081738 | not ported | FU-76 §2; installer 0x7CDD8 has no xrefs | OL-14 |
 | 0B | 0x081908 | not ported (partial) | sequence_duel_event; FU-82 §3.3 | OL-9 |
@@ -447,18 +447,20 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg | dead |
 |---|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 12 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12; `06` FU-139 §11 Task 13; `04` FU-142 K.5 Task 1) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 29 | 0 | 1 (`2B` FU-142f) |
+| action `0x1106E0` | 45 | 13 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12; `06` FU-139 §11 Task 13; `04` FU-142 K.5 Task 1; `08` FU-142 K.6 Task 2) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 28 | 0 | 1 (`2B` FU-142f) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
-| **dispatch total** | **80** | **12** | **4** | **63** | **0** | **1** |
+| **dispatch total** | **80** | **13** | **4** | **62** | **0** | **1** |
 
-Dispatch results at this commit (Task 1 update): **67 ×
-`-FIFA96_ERR_UNSUPPORTED`** (the 63 not ported rows + the unwired actions
+Dispatch results at this commit (Task 2 update): **66 ×
+`-FIFA96_ERR_UNSUPPORTED`** (the 62 not ported rows + the unwired actions
 `27`/`29`/`2C` + the dead entry `2B`), **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **12 × `FIFA96_OK`** (actions
-`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`, `06`, `04`);
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **13 × `FIFA96_OK`** (actions
+`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`, `06`, `04`, `08`);
 out-of-range ->
 `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are negated, matching
-the engine family convention (`fifa96_match_run_*`).
+the engine family convention (`fifa96_match_run_*`). (Historical: the Task-1
+state was 12 ported / 29 action-not-ported / 63 not ported / 67 UNSUP / 12 OK
+at FU-142 K.5.)
 
 FU-139 §8 (Task 10) advances action row `05`'s bounded parts (the carrier
 machine stages 0-3 and the staging tail are ported and tested) but adds no
