@@ -99,9 +99,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   canvas and pinned by the tape; RGB visibility still waits on the palette
   install OL-T11-6 (HUD/overlays wait on OL-T11-7). Arrow/Z/C presses were sent
   in the same session; the RGB canvas is uniformly black, so they produce no
-  observable pixels there — input delivery is evidenced by the visible
-  Return/BackSpace state transitions plus the tape, and was probed in-process
-  in the earlier Task 13 smoke (debug build gdb: `input_state[0]` = 0x04
+  observable pixels there. The screenshots only establish the Return advance:
+  the panel-open BackSpace frame is byte-identical to the preceding one, and
+  the match-canvas change (grayscale mean 0) is the panel-confirm shot. The
+  real input/entry evidence is the tape v3 assertions, corroborated by the
+  earlier Task 13 in-process probe (debug build gdb: `input_state[0]` = 0x04
   RIGHT / 0x01 UP / 0x10 KICK / 0x20 PASS, `dispatched_ok` = 0x1 = row 00
   only). The T5 kickoff placement was probed live there too: ball at
   (480, 0, 0) = the derived 0x1E0 spawn, record 0's OL-80 `anim_id` at 0x26,

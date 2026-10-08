@@ -14,7 +14,9 @@ record in EAX (code in EDX, no stack arguments); the two record machines
 `0x8D7CF`, 0x2A at `0x8D807`; 0x27/0x29/0x2B/0x2C have no static install arm);
 of the 80 dispatch rows **1 is ported (action `00`, wired by M2 Task 5 /
 FU-138), 2 are unwired (action `1E` and the phase zero slot), 73 are not
-ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** — every still-unwired or
+ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** — this is the slice-time
+snapshot; the current totals are in §7 (**13 ported / 66 UNSUP / 1 NOTF**, the
+playability-legs Task 2 update) — every still-unwired or
 unported row returns `-FIFA96_ERR_UNSUPPORTED`, the phase zero slot returns
 `-FIFA96_ERR_NOT_FOUND`, and never a silent no-op (all error results are
 negated per the engine family convention). The Task-5 update is recorded in the

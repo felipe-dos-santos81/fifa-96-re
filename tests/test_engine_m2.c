@@ -1,4 +1,5 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v3 (spec §5, G4).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v3 (spec §5; G4 of
+ * the playability plan, G3 of the visible-match plan).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -14,7 +15,8 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > tests/golden/engine/m2-frames.txt
  *
- * --- v3 provenance: natural path and remaining forcing (G4) -----------------
+ * --- v3 provenance: natural path and remaining forcing (G4 playability, G3
+ * visible-match) -----------------------------------------------------------
  *
  * The transcript is the deterministic null-backend replay of the engine-owned
  * run started by the real front-end -> match bridge (selector 0, FU-64 §1.1).
