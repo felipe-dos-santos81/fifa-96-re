@@ -641,22 +641,37 @@ replay gates are folded into one `replay_gate` argument; the original's
   (`FUN_00079B6C`'s commit block, span corrected) and the kickoff pass
   `fifa96_match_entities_kickoff_place` (ball spawn 0x1E0/0 with ball.y = 0,
   per-record commit, camera face, and the `0x79C13` selector) are ported and
-   fixtured; the per-record formation targets remain the resource table's open
-   leg (OL-T11-8 partial), so records are placed from caller-seeded targets,
-   and the tail's `0x6E48C` `+0x3E` write stays a leg (no pool field). Note
+   fixtured (the per-record formation targets were the resource table's open
+   leg at the time — OL-T11-8 partial — so records were then placed from
+   caller-seeded targets; superseded by the erratum below), and the tail's
+   `0x6E48C` `+0x3E` write stays a leg (no pool field). Note
    `[0x157AB1] = 0` is a process global with no derived home.
 * **Formation source correction + first-hand placement derivation, and engine
   landing (M2 visible-match Task 1 / OL-T11-8; `/FIFA96.EXE`, read-only).**
   The audit bullet above is corrected in two places; the resource half is now
   first-hand:
-  * the record pointer is `FUN_0006D920` `0x6D928/0x6D935/0x6D93B/0x6D94E/
-    0x6D951/0x6D956` -> `[rec+8] = FUN_0004AFB8((6*formation_id) & 0xFFFF) +
-    (byte[rec+0x8D] << 2)` — **no `+1`**, and the index is the record's
-    `+0x8D` byte, initialized to the record block position by `FUN_0008C2E0`
-    (`0x8C324..0x8C336`: `[EAX-0x25] = DL` for `EAX = team+0xB2*(i+1)`, so
-    record i's `+0x8D` = i; same byte read at `0x6D93B`); `formation_id` is
-    `byte[[team+0x7AE]]`, the `0x11033A + id*0x1D` roster row's first byte
-    (`FUN_0006D9C4` `0x6D9E4`/`0x6DA25`);
+  * the record pointer is set by `FUN_0006D920` (`0x6D94B MOV AX,BX` of `6*id`,
+    `0x6D94E SHL ESI,2` of `byte[rec+0x8D]`, `0x6D951 CALL 0x4C384`,
+    `0x6D956 ADD EAX,ESI`, `0x6D95E MOV [EDX+8]`) -> `[rec+8] =
+    FUN_0004C384((6*formation_id) & 0xFFFF) + (byte[rec+0x8D] << 2)` — **no
+    `+1`**; the getter is the thunk `FUN_0004C384` (`0x4C384..0x4C389`:
+    `AND EAX,0xFFFF; JMP 0x4AFB8`, the `0x14BFC0` handle table), also called
+    for the record's other pointers at `0x6D969`/`0x6D98C`/`0x6D99E` and for
+    the team pointers at `0x6DA3E`/`0x6DA51` (`FUN_0006D9C4`). The index is
+    the record's `+0x8D` byte, initialized to the record block position by
+    `FUN_0008C2E0` (`0x8C324..0x8C336`: `[EAX-0x25] = DL` for
+    `EAX = team+0xB2*(i+1)`, so record i's `+0x8D` = i; same byte read at
+    `0x6D93B`); `formation_id` is `byte[[team+0x7AE]]`, the
+    `0x11033A + id*0x1D` roster row's first byte (`FUN_0006D9C4`
+    `0x6D9E4`/`0x6DA25`);
+  * the kickoff handler selection is closed first-hand: `0x110794[0x17]` =
+    `0x00088DC8` (the phase-0x17 handler), whose stage-0 body calls
+    `FUN_000700F4` (camera reset), `FUN_00073E28` (phase 0), then
+    `MOV EAX,1` at `0x88E7A` and `CALL FUN_000740A0` at `0x88E82` (with
+    `EDX = [0x157AAC]>>24`); `FUN_000740A0 0x740AC` writes `[0x157A4D]=AL`,
+    the phase dword's high byte (`[0x157A4A]>>24`), i.e. phase := 1; `0x88E87`
+    then calls `FUN_00073E08` -> `FUN_0008CF60`, so the kickoff path really
+    runs the derived `FUN_0006E1D0` arithmetic (the cell resolved for phase 1);
   * `FUN_0004A6BC`'s four name formats are `0x101C80 "%s.fmt"` (table slots
     0..29), `0x101C88 "%s.dat"` (30..38), `0x101C94 "%s.%s"` with
     `0x101C90 "lfsh"` (39..55) and `0x101C9C "%s.qfs"` (56..62), resolved

@@ -85,8 +85,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   exit 0; the intro and the procedural front-end draw — screenshots). The
   walkthrough reaches **match start** — intro RETURN skip → front-end BACKSPACE
   (DECLINE/panel) → RETURN (panel confirm → FU-66 STATE16 bridge) — and the
-  match canvas replaces the front-end (black clear colour; palette install is
-  OL-T11-6, formation draw OL-T11-8 and HUD/overlays OL-T11-7). Arrow/Z/C
+  match canvas replaces the front-end (black clear colour; the OL-T11-8
+  formation draw landed — records carry the resource positions and the
+  sprites are staged into the indexed canvas/tape — while RGB visibility
+  still waits on the palette install OL-T11-6; HUD/overlays wait on
+  OL-T11-7). Arrow/Z/C
   presses reach the run: an in-process gdb probe (debug build) read
   `input_state[0]` = 0x04 (RIGHT), 0x01 (UP), 0x10 (KICK), 0x20 (PASS), while
   `dispatched_ok` stayed `0x1` (row `00` only) and `state.phase` stayed 0. The
@@ -97,7 +100,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   possession/selection invokers are unported), gameplay goals have no wired
   invoker (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller),
   and the match cannot enter the class-1 in-play phase without the unported
-  kickoff entry (OL-79/OL-84). The M2-B tape v2 covers the sequence headlessly
+  kickoff entry (OL-79/OL-84). The M2-B tape v3 covers the sequence headlessly
   with its declared/forced phases and the live driver's period end.
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
