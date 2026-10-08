@@ -116,3 +116,22 @@ Analysis-only otherwise.
 3. **Chunk `+6/+8/+0xA`** (FU-91 §9) still unread by the derived consumers.
 4. **Bits per channel `BL`**: who calls the install path with which `BL`
    (`FUN_000A129C`'s caller chain).
+
+## 7. Erratum (FU-144)
+
+**§1 / §3 — the remap direction is inverted.** A first-hand re-read of both
+native loops (`FUN_00048B60 0x48BA9`/`0x48BBB`, `FUN_00048ED8 0x48F57`/`0x48F69`)
+plus the copy helper's argument semantics (`FUN_000CD390 0xCD390`: `ESI=[EBP+8]`,
+`EDI=[EBP+0xC]`, `MOVSB.REP ES:EDI,ESI` copies arg1 -> arg2) shows the native
+transform is
+
+```
+pal[0x70F2[i]] = snapshot[0x70E8[i]]      ; dest table 0x70F2, source 0x70E8
+```
+
+not `pal[0x70E8[i]] = snapshot[0x70F2[i]]`. Because the destination run
+156..165 overlaps the sources 158/161/164, the native needs the pre-write
+snapshot; an in-place sequential loop is not equivalent in this direction.
+`fifa96_sprite_palette_kit_remap` and `test_palette_kit_remap` are corrected
+accordingly (`tests/test_sprite_palette.c`); the function had no production
+caller before FU-144.

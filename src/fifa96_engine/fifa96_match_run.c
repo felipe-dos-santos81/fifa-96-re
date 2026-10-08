@@ -579,6 +579,22 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
 #define MATCH_RUN_FORMATION_BANK "/ART/GAMEART0.PVI"
 #define MATCH_RUN_FORMATION_NAME "352ko.fmt"
 
+/* FU-144 / OL-T11-6: the native match palette source. `FUN_00048B60`
+ * (0x48B6E..0x48B83) reads resource slot 0x32 -- the 0x107370 loader table's
+ * slot 50 = 0x101BA4 `"PALsys"`, formatted with `"%s.fsh"` (0x101C90; the
+ * `"lfsh"` string starts one byte earlier) -- loads its frame 2
+ * (`FUN_000A1920(handle, 2)`) and takes the type-0x22 chunk through
+ * `FUN_00047814`. `FUN_00048ED8` then appends the chunk's [0xF0,+0x54) and
+ * [0x186,+0x4E) byte ranges over the built palette and `FUN_00048C8C`
+ * installs it with the `FUN_000479A0` 8-bit copy (`v << 2`). */
+#define MATCH_RUN_PALETTE_BANK "PALsys.fsh"
+#define MATCH_RUN_PALETTE_FRAME 2u
+#define MATCH_RUN_PALETTE_APPEND_A_OFF 0xF0u
+#define MATCH_RUN_PALETTE_APPEND_A_LEN 0x54u
+#define MATCH_RUN_PALETTE_APPEND_B_OFF 0x186u
+#define MATCH_RUN_PALETTE_APPEND_B_LEN 0x4Eu
+#define MATCH_RUN_PALETTE_COUNT 256u
+
 static void match_run_formation_seed(struct fifa96_match_run *mr) {
   struct fifa96_scene_formation formation;
   uint8_t *bytes = NULL;
@@ -609,6 +625,7 @@ static void match_run_release_stage(struct fifa96_match_run *mr) {
   mr->render.sprite_data = NULL;
   mr->render.sprite_data_len = 0;
   mr->render.enabled = 0;
+  mr->render.palette_ready = 0;
 }
 
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
@@ -1012,6 +1029,11 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       r->sprite_data_len < 16u)
     return -FIFA96_ERR_STATE;
 
+  /* OL-T11-6: install the staged native match palette on the presented target
+   * before the plane conversion (the native match-data load installs the
+   * palette before any match frame draws). */
+  if (r->palette_ready) (void)fifa96_match_run_palette_install(mr, s);
+
   /* A zero window box means "not defined": fall back to the full surface (the
    * live match's window A/B selection is an open leg). */
   const int have_window = r->window.box.w > 0 && r->window.box.h > 0;
@@ -1218,6 +1240,58 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
   return 0;
 }
 
+/* OL-T11-6 (M2 playable-match Task 1): the native match palette. See the
+ * header contract; the first-hand chain is in FU-144 and the constants above.
+ * `FUN_00048B60`/`FUN_00048ED8` read the pre-remap snapshot and write
+ * `pal[0x70F2[i]] = snapshot[0x70E8[i]]` (0x48BA9/0x48BBB, 0x48F57/0x48F69),
+ * then copy the PALsys chunk's appended ranges over the result, and
+ * `FUN_000479A0` converts 6->8 bit with `v << 2`. */
+int fifa96_match_palette_from_bank(const uint8_t *bank_data, size_t bank_len,
+                                   const uint8_t *base6, uint8_t rgb8[768]) {
+  fifa96_sprite_bank bank;
+  fifa96_sprite_entry entry;
+  fifa96_sprite_chunk chunk;
+  const uint8_t *rgb6 = NULL;
+  uint16_t count = 0;
+  uint8_t pal6[768];
+  fifa96_err_t err;
+  if (!bank_data || !rgb8) return -FIFA96_ERR_INVALID;
+  err = fifa96_sprite_bank_parse(bank_data, bank_len, &bank);
+  if (err != FIFA96_OK) return (int)err;
+  err = fifa96_sprite_bank_entry(&bank, MATCH_RUN_PALETTE_FRAME, &entry);
+  if (err != FIFA96_OK) return (int)err;
+  err = fifa96_sprite_chunk_parse(&bank, entry.offset, &chunk);
+  if (err != FIFA96_OK) return (int)err;
+  err = fifa96_sprite_chunk_palette(&chunk, &rgb6, &count);
+  if (err != FIFA96_OK) return (int)err;
+  /* The native copies 0x300 bytes from the chunk unconditionally; the port
+   * requires the full 256-entry form the retail PALsys.fsh frame 2 carries. */
+  if (count != MATCH_RUN_PALETTE_COUNT) return -FIFA96_ERR_UNSUPPORTED;
+  if (base6) {
+    memcpy(pal6, base6, sizeof pal6);
+  } else {
+    /* Derived default: the native base buffer 0x4B200 is the previously
+     * installed front-end palette and is not statically derivable; using the
+     * chunk itself makes the native appends identity (recorded leg). */
+    memcpy(pal6, rgb6, sizeof pal6);
+  }
+  (void)fifa96_sprite_palette_kit_remap(pal6, count);
+  memcpy(pal6 + MATCH_RUN_PALETTE_APPEND_A_OFF,
+         rgb6 + MATCH_RUN_PALETTE_APPEND_A_OFF, MATCH_RUN_PALETTE_APPEND_A_LEN);
+  memcpy(pal6 + MATCH_RUN_PALETTE_APPEND_B_OFF,
+         rgb6 + MATCH_RUN_PALETTE_APPEND_B_OFF, MATCH_RUN_PALETTE_APPEND_B_LEN);
+  for (size_t i = 0; i < sizeof pal6; i++) rgb8[i] = (uint8_t)(pal6[i] << 2);
+  return FIFA96_OK;
+}
+
+int fifa96_match_run_palette_install(struct fifa96_match_run *mr,
+                                     struct fifa96_surface *s) {
+  if (!mr || !s) return -FIFA96_ERR_INVALID;
+  if (!mr->render.palette_ready) return -FIFA96_ERR_STATE;
+  fifa96_surface_set_palette8(s, mr->render.palette);
+  return 0;
+}
+
 /* Task 2 asset staging (FU-84/85/86). The decode chain mirrors the game's
  * resource path: a container record (`[selector 0xFB BE24 size payload]`) is
  * decoded once, then the payload is a BIGF v2 directory (FU-41/FU-86 §2) whose
@@ -1246,7 +1320,23 @@ struct match_stage_set {
   struct match_stage_item *items;
   uint32_t count;       /* slots = BIGF entry count (indices stay stable) */
   uint32_t loaded;      /* slots with a decoded SHPI bank */
+  int32_t palette_index; /* BIGF entry named PALsys.fsh, -1 when absent */
 };
+
+/* The native by-name lookup (FUN_000A81A5) lowercases ASCII, so the palette
+ * bank match is case-insensitive like the original's. */
+static int match_run_palette_name_eq(const char *a, const char *b) {
+  while (*a && *b) {
+    unsigned char ca = (unsigned char)*a;
+    unsigned char cb = (unsigned char)*b;
+    if (ca >= 'A' && ca <= 'Z') ca = (unsigned char)(ca + 0x20);
+    if (cb >= 'A' && cb <= 'Z') cb = (unsigned char)(cb + 0x20);
+    if (ca != cb) return 0;
+    a++;
+    b++;
+  }
+  return *a == '\0' && *b == '\0';
+}
 
 static void match_stage_set_free(struct match_stage_set *set) {
   if (set->items) {
@@ -1369,6 +1459,7 @@ static int match_stage_entry(const uint8_t *raw, size_t entry_len, size_t raw_le
 static int match_stage_set_build(struct match_stage_set *set, const uint8_t *file,
                                  size_t file_len) {
   memset(set, 0, sizeof *set);
+  set->palette_index = -1;
   uint8_t *container = NULL;
   size_t container_len = 0;
   if (match_stage_container(file, file_len, &container, &container_len) != 0) return -1;
@@ -1381,7 +1472,10 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
   for (size_t i = 0; i < info.count; i++) {
     uint32_t off = 0;
     uint32_t size = 0;
-    if (fifa96_bigf_record(&info, i, &off, &size, NULL) != FIFA96_OK) goto fail;
+    const char *name = NULL;
+    if (fifa96_bigf_record(&info, i, &off, &size, &name) != FIFA96_OK) goto fail;
+    if (name && match_run_palette_name_eq(name, MATCH_RUN_PALETTE_BANK))
+      set->palette_index = (int32_t)i;
     uint8_t *bank = NULL;
     uint32_t bank_len = 0;
     uint32_t bank_count = 0;
@@ -1429,6 +1523,8 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   struct fifa96_render_bank *banks;
   uint8_t *frames;
   uint32_t total;
+  uint8_t palette[768];
+  int palette_ready = 0;
   int rc;
 
   if (!mr || !s || !player_bank || !pitch_bank) return -FIFA96_ERR_INVALID;
@@ -1515,6 +1611,12 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
       if (!set->items[i].data) continue;   /* unloaded slot stays zeroed */
       uint8_t *copy = arena + cursor;
       memcpy(copy, set->items[i].data, set->items[i].len);
+      /* OL-T11-6: extract the derived match palette from the pitch container's
+       * PALsys.fsh bank while the arena copy is at hand. */
+      if (which == 1 && (int32_t)i == pitch.palette_index &&
+          fifa96_match_palette_from_bank(copy, set->items[i].len, NULL, palette) ==
+              FIFA96_OK)
+        palette_ready = 1;
       b->base = copy;
       b->offsets = (const int32_t *)(const void *)(copy + 0x14);
       b->count = set->items[i].count;
@@ -1541,6 +1643,8 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->mirror = NULL;    /* 0x10F2E7 is executable data, not on the ISO (FU-85 §1.3) */
   r->sprite_data = arena;
   r->sprite_data_len = (uint32_t)arena_len;
+  r->palette_ready = palette_ready;
+  if (palette_ready) memcpy(r->palette, palette, sizeof r->palette);
   (void)fifa96_window_init(&r->window, s->width, s->height);
   (void)fifa96_window_define_full(&r->window, s->width, s->height);
   r->enabled = 1;

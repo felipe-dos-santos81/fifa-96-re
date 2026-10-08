@@ -242,6 +242,27 @@ static void test_stage_derived_pair_with_iso(void) {
   assert(r->banks[91u + 35u].count == 4u);
   assert(r->banks[91u + 35u].step == 2);
 
+  /* OL-T11-6: the derived match palette is staged from the pitch container's
+   * PALsys.fsh entry (GAMEART0 entry 46; native resource slot 0x32, frame 2)
+   * and must equal the pure extraction over the staged bank. */
+  assert(r->palette_ready == 1);
+  {
+    size_t pal_off = (size_t)(r->banks[91u + 46u].base - r->sprite_data);
+    fifa96_sprite_bank pal_bank;
+    assert(fifa96_sprite_bank_parse(r->banks[91u + 46u].base,
+                                    r->sprite_data_len - pal_off,
+                                    &pal_bank) == FIFA96_OK);
+    assert(pal_bank.count == 3u);
+    uint8_t ref[768];
+    assert(fifa96_match_palette_from_bank(r->banks[91u + 46u].base,
+                                          r->sprite_data_len - pal_off, NULL,
+                                          ref) == FIFA96_OK);
+    assert(memcmp(ref, r->palette, sizeof ref) == 0);
+  }
+  /* Retail frame-2 chunk entry 1 = 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0)
+   * (the native `v << 2`). */
+  assert(r->palette[3] == 0xE0 && r->palette[4] == 0x44 && r->palette[5] == 0xA0);
+
   /* FU-84 §4/§5: frame_index is a signed byte, so the resolver accepts
    * 0..0x7F; the staged table covers all 128 records and every accepted index
    * resolves inside the arena. */
@@ -297,6 +318,8 @@ static void test_stage_derived_pair_with_iso(void) {
   assert(f.mr.render.enabled == 1);
   assert(f.mr.render.bank_count > 91u && f.mr.render.bank_count < gameart_slots);
   assert(f.mr.render.banks[0].base != NULL);
+  /* A pitch container without PALsys.fsh clears the staged palette. */
+  assert(f.mr.render.palette_ready == 0);
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
 
   fixture_drop(&f);

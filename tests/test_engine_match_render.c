@@ -696,6 +696,158 @@ static void test_remap_identity_and_color_key(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* ------------------------------------------------------------------------ *
+ * OL-T11-6 (M2 playable-match Task 1): the derived native match palette.
+ *
+ * Synthetic PALsys.fsh-shaped bank (FU-91 §2 / FU-144): SHPI, 3 frames; frame
+ * 2 is 1x1 with its type-0x22 256-entry chunk at second_offset 17 (16-byte
+ * frame header + the 1 pixel), mirroring the retail PALsys.fsh frame 2 layout.
+ * ------------------------------------------------------------------------ */
+#define PAL_BANK_FRAME2 72u
+#define PAL_BANK_CHUNK (PAL_BANK_FRAME2 + 17u)
+#define PAL_BANK_RGB6 (PAL_BANK_CHUNK + 16u)
+#define PAL_BANK_LEN (PAL_BANK_RGB6 + 768u)
+
+static void pal_bank_put32(uint8_t *p, uint32_t v) {
+  p[0] = (uint8_t)v;
+  p[1] = (uint8_t)(v >> 8);
+  p[2] = (uint8_t)(v >> 16);
+  p[3] = (uint8_t)(v >> 24);
+}
+
+static void pal_bank_init(uint8_t *bank) {
+  memset(bank, 0, PAL_BANK_LEN);
+  memcpy(bank, "SHPI", 4);
+  pal_bank_put32(bank + 4, PAL_BANK_LEN);
+  pal_bank_put32(bank + 8, 3);
+  memcpy(bank + 12, "GIMX", 4);
+  pal_bank_put32(bank + 16 + 0 * 8 + 4, 40);
+  pal_bank_put32(bank + 16 + 1 * 8 + 4, 56);
+  pal_bank_put32(bank + 16 + 2 * 8 + 4, PAL_BANK_FRAME2);
+  bank[40 + 4] = 1;   /* frame 0: w = h = 1, second_offset 0 */
+  bank[40 + 6] = 1;
+  bank[56 + 4] = 1;   /* frame 1 */
+  bank[56 + 6] = 1;
+  bank[PAL_BANK_FRAME2 + 1] = 17;   /* second_offset (LE24 at +1..+3) */
+  bank[PAL_BANK_FRAME2 + 4] = 1;
+  bank[PAL_BANK_FRAME2 + 6] = 1;
+  bank[PAL_BANK_CHUNK] = 0x22;
+  bank[PAL_BANK_CHUNK + 4] = 0x00;  /* entry count 256 (LE16) */
+  bank[PAL_BANK_CHUNK + 5] = 0x01;
+}
+
+static void pal_bank_set6(uint8_t *bank, unsigned index, uint8_t r, uint8_t g, uint8_t b) {
+  bank[PAL_BANK_RGB6 + index * 3 + 0] = r;
+  bank[PAL_BANK_RGB6 + index * 3 + 1] = g;
+  bank[PAL_BANK_RGB6 + index * 3 + 2] = b;
+}
+
+static void test_match_palette_from_bank(void) {
+  uint8_t bank[PAL_BANK_LEN];
+  pal_bank_init(bank);
+  pal_bank_set6(bank, 0, 1, 2, 3);
+  pal_bank_set6(bank, 63, 63, 63, 63);
+  static const uint8_t src[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
+  static const uint8_t dst[10] = {156, 157, 158, 159, 160, 161, 162, 163, 164, 165};
+  for (unsigned i = 0; i < 10; i++) {
+    pal_bank_set6(bank, src[i], (uint8_t)(1 + i), 0, 0);
+    pal_bank_set6(bank, dst[i], (uint8_t)(20 + i), 0, 0);
+  }
+  for (unsigned e = 80; e <= 107; e++) pal_bank_set6(bank, e, 0x38, 0x11, 0x28);
+  for (unsigned e = 130; e <= 155; e++) pal_bank_set6(bank, e, 0x38, 0x11, 0x28);
+
+  uint8_t base[768];
+  memset(base, 0, sizeof base);
+  for (unsigned i = 0; i < 10; i++) base[dst[i] * 3] = (uint8_t)(20 + i);
+  for (unsigned i = 0; i < 10; i++) base[src[i] * 3] = (uint8_t)(1 + i);
+  base[80 * 3] = 20;
+  base[130 * 3] = 30;
+  base[200 * 3] = 50;
+
+  uint8_t rgb8[768];
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, base, rgb8) == FIFA96_OK);
+  /* FU-144 erratum (FU-98 §1): the kit remap reads the base snapshot through
+   * the 0x70E8 table and writes the 0x70F2 table. */
+  assert(rgb8[156 * 3] == 4 && rgb8[157 * 3] == 8 && rgb8[158 * 3] == 12 &&
+         rgb8[159 * 3] == 16 && rgb8[160 * 3] == 20 && rgb8[161 * 3] == 24 &&
+         rgb8[162 * 3] == 28 && rgb8[163 * 3] == 32 && rgb8[164 * 3] == 36 &&
+         rgb8[165 * 3] == 40);
+  assert(rgb8[163 * 3] == 32);  /* snapshot: base[158] read before i=2 write */
+  assert(rgb8[164 * 3] == 36);  /* snapshot: base[161] read before i=5 write */
+  /* Native appends (FUN_00048ED8 0x48F86/0x48F9F): the PALsys chunk's
+   * 0xF0/0x54 and 0x186/0x4E ranges overwrite the base (the 130..155 range
+   * covers the low remap sources 132..153). */
+  assert(rgb8[80 * 3] == 0xE0 && rgb8[80 * 3 + 1] == 0x44 && rgb8[80 * 3 + 2] == 0xA0);
+  assert(rgb8[130 * 3] == 0xE0);
+  assert(rgb8[132 * 3] == 0xE0);  /* source inside the appended range B */
+  assert(rgb8[200 * 3] == 200);   /* untouched base entry */
+  assert(rgb8[0] == 0);           /* base entry 0, not the chunk's */
+
+  /* NULL base: the derived engine default is base := the chunk itself. */
+  uint8_t rgb8b[768];
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, NULL, rgb8b) == FIFA96_OK);
+  assert(memcmp(rgb8b, rgb8, sizeof rgb8) != 0);
+  /* The native 6->8 conversion is `v << 2` (FUN_000479A0 0x479A8..0x479B9),
+   * not the sprite-palette v*255/63 scaling. */
+  assert(rgb8b[0] == 4 && rgb8b[1] == 8 && rgb8b[2] == 12);
+  assert(rgb8b[63 * 3] == 0xFC && rgb8b[63 * 3 + 1] == 0xFC && rgb8b[63 * 3 + 2] == 0xFC);
+  assert(rgb8b[80 * 3] == 0xE0);
+  assert(rgb8b[156 * 3] == 0xE0);   /* self-remap from the appended chunk[132] */
+  assert(rgb8b[163 * 3] == 32);     /* self-remap snapshot: chunk[158] = 8 */
+  assert(rgb8b[200 * 3] == 0);
+
+  /* Contract errors. */
+  assert(fifa96_match_palette_from_bank(NULL, PAL_BANK_LEN, NULL, rgb8) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, NULL, NULL) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_palette_from_bank(bank, 8, NULL, rgb8) == -FIFA96_ERR_TRUNCATED);
+  bank[8] = 2;   /* frame 2 absent */
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, NULL, rgb8) ==
+         -FIFA96_ERR_INVALID);
+  bank[8] = 3;
+  bank[PAL_BANK_CHUNK] = 0x23;
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, NULL, rgb8) ==
+         -FIFA96_ERR_BAD_MAGIC);
+  bank[PAL_BANK_CHUNK] = 0x22;
+  bank[PAL_BANK_CHUNK + 4] = 0x10;   /* entry count 16, not 256 */
+  bank[PAL_BANK_CHUNK + 5] = 0x00;
+  assert(fifa96_match_palette_from_bank(bank, PAL_BANK_LEN, NULL, rgb8) ==
+         -FIFA96_ERR_UNSUPPORTED);
+}
+
+static void test_match_palette_install(void) {
+  struct render_fixture f;
+  fixture_init(&f);
+
+  uint64_t before = fifa96_surface_hash(f.s);
+  assert(fifa96_match_run_palette_install(&f.mr, f.s) == -FIFA96_ERR_STATE);
+  assert(fifa96_surface_hash(f.s) == before);
+  assert(fifa96_match_run_palette_install(NULL, f.s) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_palette_install(&f.mr, NULL) == -FIFA96_ERR_INVALID);
+
+  for (int i = 0; i < 768; i++) f.mr.render.palette[i] = (uint8_t)(0x20 + (i % 0x20));
+  f.mr.render.palette_ready = 1;
+  assert(fifa96_match_run_palette_install(&f.mr, f.s) == 0);
+  assert(memcmp(f.s->palette, f.mr.render.palette, sizeof f.s->palette) == 0);
+  assert(f.s->palette[0] == 0x20 && f.s->palette[31] == 0x3F && f.s->palette[32] == 0x20);
+
+  /* The render pass installs the staged palette and stays deterministic. */
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(memcmp(f.s->palette, f.mr.render.palette, sizeof f.s->palette) == 0);
+  uint64_t staged = fifa96_surface_hash(f.s);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(fifa96_surface_hash(f.s) == staged);
+
+  /* Without a staged palette the render leaves the surface palette alone. */
+  f.mr.render.palette_ready = 0;
+  fifa96_surface_clear(f.s, 0);
+  memset(f.s->palette, 0xAB, sizeof f.s->palette);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->palette[0] == 0xAB && f.s->palette[767] == 0xAB);
+  fifa96_surface_destroy(f.s);
+}
+
 struct engine_fixture {
   fifa96_platform *plat;
   struct fifa96_engine *engine;
@@ -785,6 +937,8 @@ int main(void) {
   test_lateral_cull_at_8e0();
   test_formation_seeded_entities_draw();
   test_remap_identity_and_color_key();
+  test_match_palette_from_bank();
+  test_match_palette_install();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");
   return 0;

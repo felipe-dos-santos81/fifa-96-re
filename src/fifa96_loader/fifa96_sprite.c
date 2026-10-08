@@ -93,11 +93,19 @@ fifa96_err_t fifa96_sprite_palette_to_rgb(const uint8_t *rgb6, uint16_t count, u
 
 fifa96_err_t fifa96_sprite_palette_kit_remap(uint8_t *rgb6, uint16_t count) {
   if (!rgb6 || count < 166) return (fifa96_err_t)-FIFA96_ERR_INVALID;
-  static const uint8_t dst[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
-  static const uint8_t src[10] = {156, 157, 158, 159, 160, 161, 162, 163, 164, 165};
+  /* FU-144 erratum (FU-98 §1): the native loop (FUN_00048B60 0x48BA9/0x48BBB,
+   * FUN_00048ED8 0x48F57/0x48F69) reads the pre-write snapshot through the
+   * 0x70E8 table and writes the 0x70F2 table -- FUN_000CD390 copies its first
+   * argument (source) to its second (destination). */
+  static const uint8_t src[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
+  static const uint8_t dst[10] = {156, 157, 158, 159, 160, 161, 162, 163, 164, 165};
+  uint8_t snapshot[10 * 3];
   for (int i = 0; i < 10; i++)
     for (int c = 0; c < 3; c++)
-      rgb6[dst[i] * 3 + c] = rgb6[src[i] * 3 + c];
+      snapshot[i * 3 + c] = rgb6[src[i] * 3 + c];
+  for (int i = 0; i < 10; i++)
+    for (int c = 0; c < 3; c++)
+      rgb6[dst[i] * 3 + c] = snapshot[i * 3 + c];
   return FIFA96_OK;
 }
 

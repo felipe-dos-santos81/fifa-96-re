@@ -439,6 +439,10 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
        * stays disabled (the M1 soft-failure path). */
       assert(e->match_run.lc.selector == 0);
       assert(e->match_run.render.enabled == (with_iso ? 1 : 0));
+      /* OL-T11-6: the derived native match palette is staged with the art pair
+       * (PALsys.fsh frame 2; the surface install runs on the first match
+       * render at the next step). */
+      assert(e->match_run.render.palette_ready == (with_iso ? 1 : 0));
       /* v2: the T5 kickoff placement ran at begin (OL-T11-8). */
       res->ball_x = e->match_run.entities.ball.x;
       res->ball_y = e->match_run.entities.ball.y;
@@ -479,6 +483,18 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       if (steps >= 6 && steps <= 8) {
         assert(nz == 0);                    /* pre-grant: empty render list */
         res->draw_px_pre = (int)nz;
+      }
+      if (steps == 6) {
+        /* OL-T11-6 RGB visibility: the first match render installed the derived
+         * native palette (PALsys.fsh frame 2, 6->8-bit `v << 2`). The retail
+         * frame-2 chunk entry 1 is 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0),
+         * and only the all-zero entry 0 stays black. */
+        assert(e->surface->palette[3] == 0xE0 && e->surface->palette[4] == 0x44 &&
+               e->surface->palette[5] == 0xA0);
+        uint32_t nonzero = 0;
+        for (size_t i = 0; i < 768; i++)
+          if (e->surface->palette[i] != 0) nonzero++;
+        assert(nonzero > 700);
       }
       if (steps == 9) {
         res->draw_px_first = (int)nz;

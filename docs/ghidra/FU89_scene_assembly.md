@@ -708,6 +708,12 @@ replay gates are folded into one `replay_gate` argument; the original's
     engine derives id 0), the unused `.dat`/`.lfsh`/`.qfs` slots and the
     `[team+0x7DB]`/`[team+0x7DF]` (`6*id+3`/`6*id+5`) pointers, the roster
     `+0x90` line code and the `+0x9A` marks (not consumed by placement).
+  * **FU-144 erratum (loader name formats).** The `.lfsh` range's second
+    format argument is the pointer `0x101C90` = `"fsh"` (the packed string
+    `"lfsh"` starts at `0x101C8F`; read `0x101C8F` = `6c 66 73 68 00`), so
+    slots 39..55 resolve `%s.fsh` (`PALsys.fsh`, `PALteam.fsh`, ...). The
+    match palette source is slot 0x32 = `0x101BA4 "PALsys"` -> `PALsys.fsh`
+    (BIGF entry 46 of `/ART/GAMEART0.PVI`); FU-144 holds the full chain.
 
 ## 12. Open legs
 

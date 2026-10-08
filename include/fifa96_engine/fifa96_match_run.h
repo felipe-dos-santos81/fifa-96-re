@@ -135,6 +135,13 @@ struct fifa96_match_run_render {
   const uint8_t *sprite_data;               /* backing blob for frame parse */
   uint32_t sprite_data_len;
   uint8_t remap[256];                       /* indexed translation + 0xFF key */
+  /* OL-T11-6 (M2 playable-match Task 1): the derived native match palette in
+   * the engine's 8-bit RGB form. Staged from the pitch container's PALsys.fsh
+   * entry (frame 2 type-0x22 chunk, kit remap + appends, native `v << 2`);
+   * installed onto the target surface by fifa96_match_run_palette_install,
+   * which fifa96_match_run_render runs before the plane conversion. */
+  uint8_t palette[768];
+  int palette_ready;                        /* a match palette is staged */
 };
 
 /* Minimal derived match record (M2 Task 5 / FU-138 §4, extended by M2 Task 7 /
@@ -505,6 +512,44 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
  * sprite banks in it). */
 int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surface *s,
                            const char *player_bank, const char *pitch_bank);
+
+/* OL-T11-6 (M2 playable-match Task 1): the derived native match palette.
+ *
+ * The native match-data load FUN_00048ED8 (single caller FUN_0003BB1C 0x3BB45)
+ * sources resource slot 0x32 = "PALsys.fsh" frame 2 (FUN_00048B60 0x48B6E..
+ * 0x48B83 loads `FUN_0004AFB8(0x32)`, `FUN_000A1920(handle, 2)` and
+ * `FUN_00047814`; slot 50 of the 0x107370 loader table is 0x101BA4 "PALsys"
+ * with the 0x101C90 "%s.fsh" format) and builds the palette from the current
+ * palette buffer 0x4B200 plus that chunk: the FU-98 kit remap
+ * `pal[0x70F2[i]] = snapshot[0x70E8[i]]` over the 10 static table pairs, then
+ * the chunk's [0xF0,+0x54) and [0x186,+0x4E) byte ranges copied over the base
+ * (0x48F86/0x48F9F). FUN_00048C8C installs the result into 0x4B200 and
+ * rebuilds the 8-bit copy at 0x4B800 through FUN_000479A0, whose conversion is
+ * `v << 2` (0x479A8..0x479B9) -- not the v*255/63 sprite-palette scaling.
+ *
+ * `fifa96_match_palette_from_bank` extracts the frame-2 chunk from a
+ * PALsys.fsh-shaped SHPI bank, applies the native transforms to `base6` (a
+ * 768-byte 6-bit base palette; NULL selects the derived engine default
+ * `base := the chunk`, which makes the native appends identity) and writes the
+ * 8-bit RGB `v << 2` result to `rgb8`. The native base buffer 0x4B200 is the
+ * previously installed front-end palette and is not statically derivable;
+ * that substitution is the recorded derivation leg. The type-0x22 chunk must
+ * hold exactly 256 entries (the native copies 0x300 bytes unconditionally; the
+ * port hardens). Returns FIFA96_OK, -FIFA96_ERR_INVALID (NULL arguments or a
+ * bank without frame 2), a negative fifa96_err_t from the SHPI/frame/chunk
+ * parse, or -FIFA96_ERR_UNSUPPORTED when the chunk count is not 256.
+ *
+ * `fifa96_match_run_palette_install` applies the staged `render.palette` to
+ * `s` (the native install target is the current palette buffer + DAC). Returns
+ * FIFA96_OK, -FIFA96_ERR_INVALID (NULL), or -FIFA96_ERR_STATE when
+ * `render.palette_ready` is 0. `fifa96_match_run_render` calls it before the
+ * plane conversion whenever a palette is staged, so a presented match frame
+ * carries the RGB palette; the pre-palette behavior (unstaged run) is
+ * unchanged. */
+int fifa96_match_palette_from_bank(const uint8_t *bank_data, size_t bank_len,
+                                   const uint8_t *base6, uint8_t rgb8[768]);
+int fifa96_match_run_palette_install(struct fifa96_match_run *mr,
+                                     struct fifa96_surface *s);
 
 /* Resolve the post-period screen chain (FU-64 §6): OVER -> POST
  * (`resolve_over`, the `[0x5FFC]=3` period resolution), POST -> EXIT (the

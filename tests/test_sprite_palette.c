@@ -219,19 +219,26 @@ static void test_palette_kit_remap(void) {
     pal[i * 3 + 2] = 0x20;
   }
   assert(fifa96_sprite_palette_kit_remap(pal, 256) == FIFA96_OK);
-  static const uint8_t dst[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
+  /* FU-144 erratum (FU-98 §1): the native loop reads the pre-write snapshot
+   * through the 0x70E8 table and writes the 0x70F2 table -- first-hand
+   * FUN_00048B60 0x48BA9 `[ESI+0x70F2]` -> dest, 0x48BBB `[ESI+0x70E8]` ->
+   * source, with FUN_000CD390 copying arg1(src) -> arg2(dst); the identical
+   * 0x48ED8 loop (0x48F57/0x48F69) writes local[0x70F2[i]] from
+   * 0x4B500[0x70E8[i]]. So pal[0x70F2[i]] = snapshot[0x70E8[i]]. */
+  static const uint8_t src[10] = {132, 135, 140, 143, 146, 150, 153, 158, 161, 164};
+  static const uint8_t dst[10] = {156, 157, 158, 159, 160, 161, 162, 163, 164, 165};
   for (int i = 0; i < 10; i++) {
-    assert(pal[dst[i] * 3] == 156 + i);
-    assert(pal[dst[i] * 3 + 1] == ((156 + i) ^ 0xFF));
+    assert(pal[dst[i] * 3] == src[i]);
+    assert(pal[dst[i] * 3 + 1] == (src[i] ^ 0xFF));
     assert(pal[dst[i] * 3 + 2] == 0x20);
   }
-  assert(pal[132 * 3] == 156);
-  assert(pal[140 * 3] == 158);
-  assert(pal[158 * 3] == 163);
-  assert(pal[161 * 3] == 164);
-  assert(pal[163 * 3] == 163);
-  assert(pal[164 * 3] == 165);
-  assert(pal[165 * 3] == 165);
+  assert(pal[132 * 3] == 132);   /* the 0x70E8 sources stay untouched */
+  assert(pal[140 * 3] == 140);
+  assert(pal[158 * 3] == 140);   /* written from snapshot[140] at i=2 */
+  assert(pal[161 * 3] == 150);
+  assert(pal[163 * 3] == 158);   /* snapshot: 158 was overwritten at i=2 */
+  assert(pal[164 * 3] == 161);   /* snapshot: 161 was overwritten at i=5 */
+  assert(pal[165 * 3] == 164);
   assert(pal[131 * 3] == 131 && pal[166 * 3] == 166);
   assert(fifa96_sprite_palette_kit_remap(NULL, 256) == R_INVALID);
   assert(fifa96_sprite_palette_kit_remap(pal, 165) == R_INVALID);
