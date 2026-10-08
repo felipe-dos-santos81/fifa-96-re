@@ -4,11 +4,13 @@ The native engine layer sits on top of the 56 clean-room `fifa96_*` libraries an
 turns them into a running game: platform ABI → SDL3/null backends → engine core
 (boot, asset table, clock, intro, front-end, match).
 
-Status: **M1 complete headless; M2 match lifecycle + render chain complete
-headless (11/80 action rows wired) with the M2-B acceptance tape green and the
-interactive `make game` smoke reaching match start and control input on this
-host.** Kick → score → period end remains blocked interactively on the
-unported rows (see "Interactive smoke" and "Known gaps"). See
+Status: **M1 complete headless; M2 match lifecycle complete headless with the
+render chain complete at the derived level — palette install, HUD/overlays,
+kickoff placement and live anim inputs (`OL-80`) remain open (11/80 action rows
+wired) — the M2-B acceptance tape green, and the interactive `make game` smoke
+reaching match start and control input on this host.** Kick → score → period
+end remains blocked interactively on the unported rows (see "Interactive smoke"
+and "Known gaps"). See
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child),
 `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md` (split
@@ -61,8 +63,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU-142a installer arms in phases 0x13/0x14, deterministic FU-85/88/89 render
   chain, period end (`resolve` OVER→POST→EXIT) back to the front-end.
 - Action dispatch (FU-137): **11/80 rows wired** — `00`, `1E`, `06`, `07`,
-  `0F`, `18`, `21`, `23` (Gate G3) and `26`, `28`, `2A` (cluster G); dispatch
-  results 68 UNSUP / 11 OK / 1 NOTF.
+  `0F`, `18`, `21`, `23` (arms-and-wiring G3) and `26`, `28`, `2A` (cluster G);
+  dispatch results 68 UNSUP / 11 OK / 1 NOTF.
 - **Interactive smoke (Task 13, verified on this host 2026-10-08):** `make game`
   window opens (960×720 integer-scaled SDL3; ESC quits, exit 0). The
   walkthrough reaches **match start** — intro RETURN skip → front-end BACKSPACE
@@ -111,6 +113,17 @@ the build also produces the windowed `fifa96` target (`make game`).
   caller-owned row 0 / frame 0 and only the FU-84 row+8 bank derivation and
   the accumulator advance are live. The anim inputs land when the OL-42
   installer animation arm and the +0x28/+0x3D pool fields are ported.
+- **Render legs `OL-T11-1`…`OL-T11-9` (Task 11 close-out register).** Task 11
+  left the render chain's remaining legs under these IDs: FU-84 frame tables
+  not staged (`-1`; advance uses identity durations, `sprite = frame`), row
+  successor/terminal/height machine (`-2`), record facing `+0x7D` (`-3`),
+  camera-type ratio setup `FUN_0004D7E8` (`-4`; static `0x1500` default),
+  sentinel key scratch producer (`-5`), palette install/kit remap identity
+  stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`;
+  marker/name/score passes), kickoff formation/record placement (`-8`; zeroed
+  FU-141 pool), direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80`
+  above. `OL-T11-10` (FU-89 key-seeding consumers) closed with the FU-89 §11
+  errata.
 - **Phase table (FU-143):** the 35 FU-83 phase rows (handlers `0x110794`,
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level
