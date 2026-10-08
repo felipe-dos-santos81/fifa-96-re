@@ -280,8 +280,9 @@ static void test_anim_select_invalid(void) {
  * the `[rec+0x20]` slot callback, the phase-2 forced-decision arm and the
  * installer's accepted-install tail stay the OL-54/open-pool surfaces. */
 
-/* The reset writes exactly its three fields; every other record field is
- * untouched. */
+/* The reset overwrites its three fields and leaves the asserted neighbour
+ * fields untouched (the fixture checks these six; `rec` is not
+ * zero-initialized, so the other fields are not asserted). */
 static void test_arm_reset_fields(void) {
   struct fifa96_arm_record rec;
   rec.stage92 = 0x77;

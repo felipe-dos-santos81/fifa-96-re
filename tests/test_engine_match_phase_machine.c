@@ -79,12 +79,18 @@ static void test_install_multi_stages(void) {
   assert(pool.team[TEAM0].records[0].code == 0);
   for (uint32_t i = 4; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
     assert(pool.team[TEAM0].records[i].code == 0);
-  /* pool->phase reaches the installer's +0x98 arm: phase 3 clears skip_98. */
-  pool.phase = 3;
+  /* pool->phase reaches the installer's +0x98 arm: phase 2 is one of the
+   * clear-exempt phases, so skip_98 must stay set (a hardcoded phase 0 would
+   * clear it); phase 3 then does clear it. */
+  pool.phase = 2;
   pool.team[TEAM0].records[1].skip_98 = 1;
   assert(fifa96_match_arm_install_multi(&pool, TEAM0, 1, 1, 9, -1) == 1);
-  assert(pool.team[TEAM0].records[1].skip_98 == 0);
+  assert(pool.team[TEAM0].records[1].skip_98 == 1);
   assert(pool.team[TEAM0].records[1].code == 9);
+  pool.phase = 3;
+  assert(fifa96_match_arm_install_multi(&pool, TEAM0, 1, 1, 8, -1) == 1);
+  assert(pool.team[TEAM0].records[1].skip_98 == 0);
+  assert(pool.team[TEAM0].records[1].code == 8);
   /* team 1 stages inside its own block */
   assert(fifa96_match_arm_install_multi(&pool, TEAM1, 1, 2, 0x28, -1) == 2);
   assert(pool.team[TEAM1].records[1].code == 0x28);
@@ -116,6 +122,12 @@ static void test_install_multi_skips(void) {
   pool.team[TEAM0].records[0].code = 0x19;
   assert(fifa96_match_arm_install_multi(&pool, TEAM0, 0, 0, 3, -1) == 0);
   assert(pool.team[TEAM0].records[0].code == 0x19);
+  /* record 0 holding code 3 with skip_code 3: the helper must filter on the
+   * record's original code (3 == 3 -> skip, before the 3 -> 0x19 coercion);
+   * a coercion-first implementation would stage 0x19 and return 1. */
+  pool.team[TEAM0].records[0].code = 3;
+  assert(fifa96_match_arm_install_multi(&pool, TEAM0, 0, 0, 3, 3) == 0);
+  assert(pool.team[TEAM0].records[0].code == 3);
 }
 
 /* `i == 0 && code == 3` pre-coerces to 0x19 regardless of the record's active
