@@ -2536,8 +2536,10 @@ lead latch):
 0x7EB3F    if (0x8DC68(0x157788.x-rec.x, 0x157788.z-rec.z) >= 0x60) goto 0x7EBF8
 0x7EB5C    FUN_0007D9A4(rec, 0xF, invoke, 0); RETURN }   ; before the clamp/timer
 0x7EB6B  else if (word[0x1577F0] > 0x50) {
-0x7EB70    if (word[0x1577FA] < word[0x157806] && ECX) +0x4D..55 = 0x157794 triple
-0x7EB86    else goto 0x7EB95 ; goto 0x7EBF8 } else 0x7EB95
+0x7EB70    if (word[0x1577FA] >= word[0x157806]) goto 0x7EBF8
+0x7EB86    if (!ECX) goto 0x7EB95
+0x7EB88    +0x4D..55 = 0x157794 triple; goto 0x7EBF8
+         } else goto 0x7EB95
 0x7EB95  if (!ECX) goto 0x7EBF8
 0x7EB9A  +0x4D..55 = 0x15774C camera triple
 0x7EBA4  x += word[0x1577C0] << 2 ; z += word[0x1577C2] << 2
@@ -2659,11 +2661,13 @@ and wraps it to 0 when it exceeds 2, and returns 1.
 `tests/test_outfield.c` fixtures (hand-computed from K.5.4): prologue
 reset/`+0x81`; carrier arm (nearest skip, the `0x110680` code gate, installs
 4 + 3/0x19); inactive ranked pick; active second/target reset; the camera+lead,
-`0x157788` jitter, `0x157794`, slot-direction and clamp target arms;
-install-0xF; install-0xB (seed-0 draws 512/1829); the no-slot `0x7E600`
-install-0x0E; the bound/angle tail and the 6/5 installs (both the self-6
-return and the other-6 + 5 fall-through); the `0x7E528` corner codes; the
-row-byte `0x13` event 0x15 and the `0x1577FA` reload.
+`0x157788` jitter, `0x157794`, slot-direction and clamp target arms; the
+slot bit-0x20 direct `0x157770` copy; install-0xF; install-0xB (seed-0 draws
+512/1829); the no-slot `0x7E600` install-0x0E; the bound/angle tail and the
+6/5 installs (both the self-6 return and the other-6 + 5 fall-through); the
+`0x7E528` corner codes; the row-byte `0x13` event 0x15 and the `0x1577FA`
+reload; the `team+0x828` merge and slot `+6` backup requests; the
+`[opp+0x7C7]` pick short-circuit.
 `tests/test_engine_match_handlers.c::test_action_04_wired_and_08_unwired` runs
 the wired row over the pool (reset, camera target, receiver timer), and
 `action_expect[0x04]` is `FIFA96_OK`.
@@ -2696,5 +2700,6 @@ Row `04` is `ported`: `fifa96_match_action_04` binds
 `fifa96_outfield_row04_step` (`0x7E7C8..0x7F141`) to `mr->record`/the pool
 (K.5). The `0x7CA54` machine subset stays its own unwired seam. The FU-137
 §6.1 `04` cell and §7 counts become 12 OK / 67 UNSUP / 1 NOTF. Row `08` is
-unchanged (OL-70a). FU-75 §1.1's row-04 entry gains the same pointer; FU-141
+unchanged (OL-70a). FU-75 §6's machine-subset row and §9 leg 10 gain the same
+pointer; FU-141
 §7's OL-38 status gains a Task-1 note.

@@ -138,7 +138,7 @@ int fifa96_outfield_chase_gate(const fifa96_outfield_chase_state *state, uint8_t
  * action, ported here as `fifa96_outfield_row04_step` from the first-hand
  * window (disassemble_bytes 0x7E7C8..0x7F141; helpers 0x8DE8C/0x8DDE0/
  * 0x8DCD4/0x8DC68/0x8DD70/0x7D3E4/0x79C20/0x79B58/0x7E528/0x7E600; installer
- * 0x7D9A4; everything cited in FU-142 Appendix K.3 errata).
+ * 0x7D9A4; everything cited in FU-142 Appendix K.5).
  *
  * The body in native order (byte/word widths as read):
  *   - `0x7E7D3` `byte[+0x9E] = 1`;
@@ -213,7 +213,9 @@ typedef struct fifa96_outfield_row04_install {
   uint8_t target;   /* SELF or OTHER (the opponent team's target record) */
   uint8_t code;     /* native EDX code */
   uint8_t staged;   /* native BL stage byte (`+0x92` after install) */
-  uint8_t invoke;   /* native ECX != 0 (invoke-now) */
+  uint8_t invoke;   /* native ECX != 0 (invoke-now). Carried as evidence; the
+                     * binder applies the whole sequence synchronously, so it
+                     * is not consumed (the standing invoke-now convention) */
 } fifa96_outfield_row04_install;
 
 typedef struct fifa96_outfield_row04_mate {
