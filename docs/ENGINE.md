@@ -72,10 +72,10 @@ the build also produces the windowed `fifa96` target (`make game`).
 
 ## Known gaps
 
-- **Unwired rows (69/80).** 68 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 4 are
-  `unwired` (ported body/arm, no binding — action 27/29/2C and one phase row)
-  and 64 remain not ported (30 action + 34 phase); row `2B` is a dead entry
-  and phase `0x16` is the native INT3 slot (`-FIFA96_ERR_NOT_FOUND`).
+- **Unwired rows (69/80).** 68 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: the 64
+  not ported rows (30 action + 34 phase), the unwired actions `27`/`29`/`2C`
+  (ported bodies, no installer entry) and the dead entry `2B`; phase `0x16` is
+  the native zero/INT3 slot and the single `-FIFA96_ERR_NOT_FOUND`.
 - **OL-48 rows 27/29/2C:** bodies ported and tested (FU-142b/c), but the
   FU-142f census finds no installer invocation for their codes anywhere in the
   image, so they stay unwired; row `2B` is a dead entry (shared row-29 RET).
