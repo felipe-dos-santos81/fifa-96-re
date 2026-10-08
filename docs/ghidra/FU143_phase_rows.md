@@ -608,12 +608,14 @@ unchanged, the fixtures extend `test_engine_match_frame`):
    the `FUN_0008A938` situation producers/act bodies are unported (§3.2,
    OL-79 consequence). The engine fixture enters at the native in-play phase 2
    and the tape keeps its forced phase-2 window; the driver's period-end write
-   itself is derived.
+   itself is derived. **Status: derived kickoff entry landed (§10); phase 2
+   stays forced.**
 2. **OL-85 — extra-time flag `[0x157AC0]` producer.** The driver passes
    `extra_time = 0` (the selector-0/no-extra-time default, §4.2); the period-1
    completion side effect that sets the flag (`0x8B2AC` window) and the
    `0x12230`/`0x12250` upgrade probes (OL-74) are unported, so the derived
-   0x0C -> 0x13 -> 0x14 branch is not reachable from the engine.
+   0x0C -> 0x13 -> 0x14 branch is not reachable from the engine. **Status:
+   producer re-verified first-hand (§10); stays unported.**
 3. **OL-86 — post-period 0x0C hold/reset timing.** `FUN_0008BAF0`'s selector-0
    arm sets `[0x58822]=1` behind the `[0x58816]` timer gates (`0x8BC57`/
    `0x8BC71`, §3.4), and `FUN_0004B02C(0)` -> `FUN_00088860` resets to phase 0
@@ -622,6 +624,111 @@ unchanged, the fixtures extend `test_engine_match_frame`):
    (`fifa96_match_run_step`'s documented one-step compression), so the 0x0C
    phase is not held for its native duration; OL-76's unported tail inputs are
    the producer gap.
+
+## 10. M2 visible-match Task 2: the derived kickoff entry (OL-84/OL-85)
+
+First-hand `/FIFA96.EXE`, read-only (tool windows in the addendum below). The
+selector-0 default kickoff chain, byte-level:
+
+1. **Setup queues the pre-kickoff act.** `FUN_0004B02C(1)`
+   (`0x4B095..0x4B0A5`, called once by `FUN_000493A0` at `0x49415`) runs
+   `FUN_0007417C` and calls `FUN_0008A938(0, side=0, BX=0)` (`0x4B0A5`). The
+   head (`0x8A938..0x8A98B`) routes situation 0 to `0x8AA7B`; `BX == 0` ->
+   `0x8AAA8`; `CX = 0 < 1` -> `0x8AB63`; table 2 (`0x8A904`) entry 0 ->
+   `0x8AB82`: `EAX=0xA`/`BX=1` `CALL 0x888FC` (invokes act 0xA = the phase-0x20
+   handler `0x8B688`) and then `EAX=0x11` `CALL 0x740A0` at `0x8AB9F` ->
+   **phase := 0x11**.
+2. **Act 0xA drives the pre-match cadence.** `0x8B688`: stage 0
+   (`0x8B6CB..0x8B7B4`) runs `FUN_00073E28` (phase reset), the camera reset
+   `FUN_000700F4([0x10F328/2C/30])` and installs action `0x24` into all 22
+   records (`FUN_0007D9A4`, `0x8B750`/`0x8B78B`); stage 1 waits
+   (`FUN_000974D8(0x3E8)`); stage 2 (`0x8B7F6..0x8B864`) waits for
+   `[0x58816]>>16` in `(0x3C, 0x168)` with `FUN_00045001`, then clears the
+   act/handler/stage and calls `FUN_0008A938(1, side=[0x157AAB]>>24, BX=0)` at
+   `0x8B85D` -> **situation 1**.
+3. **Situation 1 invokes act 1.** `0x8AABF..0x8AAF6`: `FUN_0008C974` scans
+   both teams (the changed-formation counts land in `[0x157B8E]`/`[0x157B8F]`
+   at `0x8CB5E`), stores `[0x5881E] = situation`, `[0x58820] = side`, then
+   table 2 entry 1 -> `0x8ABAB`: camera lead `[0x158830]=0x1E0`, `EAX=1`/`BX=1`
+   `CALL 0x888FC` -> invokes act 1 = the phase-0x17 handler `FUN_00088DC8`
+   directly (`0x110794[0x17]`).
+4. **The phase-0x17 handler writes the kickoff phase.** `FUN_00088DC8` stage 0
+   (`0x88E4B`): `FUN_000700F4` camera reset, `FUN_00073E28` (phase := 0), then
+   `0x88E74 MOV EDX,[0x157AAC]` / `0x88E7A MOV EAX,1` / `0x88E7F SAR EDX,0x18`
+   / `0x88E82 CALL 0x740A0` -> `0x740AC MOV [0x157A4D],AL` = **phase := 1** on
+   the controlled side, then `0x88E87 CALL 0x73E08` -> `0x8C24C` + `0x8CF60`
+   for both team blocks = **the per-record placement commit** (the T5/T1
+   `fifa96_match_entities_kickoff_place` surface), `[0x58818] = 0`, stage := 1
+   (`0x88EAA..0x88EB7`).
+5. **Stage 1 hands to act 4.** `0x88EBC`: if `[0x157A49]>>24 != 1` and
+   (`[0x157B8E] != 0 || [0x157B8F] != 0`) -> `FUN_000888FC(EAX=4, BX=1)` ->
+   act 4 = the phase-0x1A handler `0x89620`; otherwise it waits
+   `[0x58816]>>16 > 0x78` and clears the act (`0x88F01`, `[0x15882A]=1`).
+
+**Phase 2 is not on this chain.** `FUN_000740A0` has exactly one phase-2 call
+site: `0x8AF02` (inside `FUN_0008A938`'s table-2 situation-0xB arm `0x8AEF6`:
+`MOV EDX,[ESP-2]` / `MOV EAX,2` / `SAR EDX,0x10` / `CALL 0x740A0`). The
+`FUN_0008A938` situation-0xB call sites (all 39 xrefs inspected; argument
+windows re-read) are exactly three: `0x7546E` (action 0x1D keeper close-down
+stage-3 tail: `CALL 0x8DE8C` nearest + `CALL 0x786A0`, then `EAX=0xB`,
+`EDX=[[rec]+0x826]`, `EBX=0`, then `CALL 0x4C380` and `[0x157AB2]=0`), `0x75B58`
+and `0x76072` (keeper/carrier-region bodies: `CALL 0x7DAB4` RESET, then
+situation 0xB, then `INSTALL 5` at `0x75B5D..0x75B67` / `[0x157AB2]=0` at
+`0x76077`). All three are possession/keeper restart transitions; the kickoff
+act machinery (acts 0xA/1/4/8) never calls situation 0xB. The possession
+transition is the unported FU-73 invoker, so the opening kickoff's static path
+ends at phase 1 and phase 2 stays a runtime (possession-driven) entry — the
+OL-79 negative persists (now bounded to the possession invoker).
+
+**Engine landing (M2 visible-match T2).** `fifa96_match_run_begin`
+(`src/fifa96_engine/fifa96_match_run.c`) installs the derived entry between
+the formation seed and the placement commit:
+`FIFA96_MATCH_RUN_KICKOFF_PHASE = 1` is written through
+`fifa96_match_state_set_phase` (prev_phase 0) and mirrored into
+`phase_machine.state`/`phase` (the native `[0x157A4D]` switch byte), exactly
+the `FUN_000740A0(1, side)` write the native handler performs before
+`FUN_00073E08`. The begun run waits at the native kickoff-placement phase
+(class 0: the FU-62 clock stops; the `fifa96_match_state.c` class gate matches
+`0x8AF41`), so the phase-2 play transition stays unwired.
+
+**Kept forcing (M2 tape).** The tape's 0x13/0x14 forced window drives the
+FU-142a state 0x13/0x14 arms (codes 26/28/2A), which the derived entry cannot
+reproduce (those arms are not on the opening-kickoff chain: the kickoff
+commits placement via `0x8CF60`, and act 4 installs action 0x17 into the
+kickoff record), so the forcing stays and
+`tests/golden/engine/m2-frames.txt` is **byte-identical** (`cmp` clean after
+the wiring: the derived entry is forced over by m 1 before the first granted
+frame, so no transcript line moves). No re-pin.
+
+**OL-85 producer (re-verified).** `FUN_0008AF38`'s period-1 case
+(`0x8B22F..0x8B2CD`): when `[0x57AB6] == [0x5881A]` and `[0x57ABA] != 0`, the
+score pair `[0x157AC5]`/`[0x157AC7]` is compared at `0x8B2A7`; unequal ->
+`0x8B2AC MOV byte [0x157AC0],1`; equal -> `[0x14C2EE] != 0` -> `0x8B2C1` same
+write (else `0x8B2CD CMP byte [0x14C1D0],0`). The producer is derived but
+stays unported in the engine (the driver passes `extra_time = 0`), so the
+0x0C -> 0x13 -> 0x14 branch remains unreachable; the leg narrows to
+"producer derived (0x8B2AC/0x8B2C1); period-1 completion wiring absent".
+
+**Tests.** `tests/test_engine_match_frame.c`
+`test_kickoff_entry_enters_phase1_not_phase2`: begin leaves `phase == 1`
+(`prev_phase == 0`, machine mirror 1) and 100 PIT ticks (30 granted frames)
+change nothing (class 0 clock stop; no phase-2 writer); the pre-existing
+`test_engine_step_drives_frame_body` now pins `second_acc == 0` for the same
+reason. `tests/test_engine_m2.c` asserts the derived entry in the m 1
+directive and keeps the 0x13/0x14/2 forcing; the golden is byte-identical
+(157-line T1 diff unchanged, no re-pin).
+
+**§10 provenance.** Ghidra MCP read-only `/FIFA96.EXE`:
+`disassemble_function` `0x4B02C`, `0x88860`, `0x493A0`, `0x886D4`, `0x76130`,
+`0x7412C`, `0x7417C`, `0x8C974`, `0x73E08`, `0x740A0`, `0x8A43C`;
+`disassemble_bytes` `0x88DC8`(320 B), `0x88F07`(96 B), `0x8A938`(240 B),
+`0x8AA23`(380 B), `0x8AEF6`(64 B), `0x8AB9C`(32 B), `0x8ABAB`(96 B),
+`0x8B688`(496 B), `0x8B640`(80 B), `0x89620`(600 B), `0x89620`+`0x749AE`
+(768 B), `0x8A798`(420 B), `0x87C20`(160 B), `0x753A0`(224 B), `0x75AC0`(168 B),
+`0x75FD0`(168 B), `0x8B22F`(160 B), `0x891F0`(48 B), `0x742C0`(96 B),
+`0x4C31C`(80 B); `get_xrefs_to` `0x8A938`(39), `0x888FC`(11), `0x4B02C`(2),
+`0x8D098`(2); `search_instructions` operands `157b8e`(11), `157b8f`(5),
+`15882a`(24), `110794`(1); `read_memory` `0x1106AD`(48 B).
 
 ## Provenance
 

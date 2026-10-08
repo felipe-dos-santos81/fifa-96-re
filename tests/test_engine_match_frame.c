@@ -141,7 +141,9 @@ static void test_engine_step_drives_frame_body(void) {
 
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(mr.state.total_seconds == 0);   /* fresh match clock */
-  assert(mr.phase_machine.state == 0);   /* fresh installer-arms machine */
+  /* The stale pre-begin mirror (0x13) is reset by begin and then carries the
+   * derived kickoff entry (T2/OL-84): phase_machine.state == phase 1. */
+  assert(mr.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   assert(mr.phase_machine.arm2a_overflow == 0);
   assert(mr.pace.pending == 0);
 
@@ -153,7 +155,11 @@ static void test_engine_step_drives_frame_body(void) {
   assert(mr.pace.pending == 15);         /* 50 pace ticks * 258/860 */
   assert(mr.pace.acc == 0);
   assert(mr.state.tick_total == 30);
-  assert(mr.state.second_acc == 30);
+  /* The derived kickoff entry is phase 1 (class 0): the FU-62 clock's seconds
+   * stop at kickoff (native 0x8AF41 gate), so the granted frames advance the
+   * tick counter but not the second accumulator. */
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.state.second_acc == 0);
   assert(mr.state.total_seconds == 0);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 
@@ -509,6 +515,50 @@ static void test_phase_drive_begun_end_resets_phase(void) {
   drop_fixture(f);
 }
 
+/* FU-143 §8/OL-84 (M2 visible-match Task 2): the derived kickoff phase entry.
+ * First-hand native chain (/FIFA96.EXE): the setup's situation 0
+ * (FUN_0004B02C mode 1 -> FUN_0008A938(0,0,0)) dispatches act 0xA + phase 0x11
+ * (0x8AB82: EAX=0xA CALL 0x888FC, then EAX=0x11 CALL 0x740A0 at 0x8AB9F); act
+ * 0xA (phase-0x20 handler 0x8B688) stage 2 calls FUN_0008A938(1, side) at
+ * 0x8B85D; situation 1's table-2 arm 0x8ABAB invokes act 1 (0x888FC) = the
+ * phase-0x17 handler FUN_00088DC8, whose stage 0 (0x88E4B..0x88E87) runs
+ * FUN_000700F4 + FUN_00073E28 (phase 0), then FUN_000740A0(AL=1,
+ * side=[0x157AAC]>>24) at 0x88E82 -> [0x157A4D]=1, then FUN_00073E08 ->
+ * FUN_0008CF60 (the placement commit begin models through
+ * fifa96_match_entities_kickoff_place). The begun selector-0 match therefore
+ * enters phase 1 (the kickoff-placement phase, class 0: the FU-62 clock
+ * stops), NOT phase 2. Phase 2's only writer is FUN_0008A938 situation 0xB
+ * (table-2 arm 0x8AEF6 -> 0x8AF02 FUN_000740A0(EAX=2, side)); its only
+ * producers are the possession/keeper restart bodies (action-0x1D tail
+ * 0x7546E, carrier bodies 0x75B58/0x76072), i.e. the unported FU-73 possession
+ * transition -- so no begun run leaves phase 1 without the tape's forcing (the
+ * OL-84 negative). */
+static void test_kickoff_entry_enters_phase1_not_phase2(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.state.phase == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE); /* derived entry */
+  assert(mr.state.prev_phase == 0u);
+  assert(mr.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.phase_machine.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+
+  /* Class 0 stops the clock (the native 0x8AF41 gate): 100 PIT ticks
+   * (30 granted frames) leave the run waiting at the derived kickoff state;
+   * no wired writer reaches phase 2. */
+  for (int i = 0; i < 100; i++) {
+    assert(fifa96_engine_step(f.engine) == 0);
+  }
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.state.total_seconds == 0);
+  assert(mr.state.period == 0);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* C3-OL2 (M2 playability Task 4): the derived FUN_00093944 score-event writer
  * wired as the live run's score source. The native callers are the unported
  * period-indexed goal-screen handlers (first-hand census, FU-142 App. I.10:
@@ -656,6 +706,7 @@ int main(void) {
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
   test_phase_drive_begun_end_resets_phase();
+  test_kickoff_entry_enters_phase1_not_phase2();
   test_score_event_wired_run_path();
   puts("test_engine_match_frame OK");
   return 0;

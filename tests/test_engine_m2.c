@@ -62,14 +62,25 @@
  *     writes the derived selector-0 chooser phase 0x0C — asserted after the
  *     exit step, where `run_end`'s teardown has reset the match state but not
  *     the FU-142a machine mirror;
- *   - the T4 goal step runs the derived C3-OL2 score source.
+ *   - the T4 goal step runs the derived C3-OL2 score source;
+ *   - the T2 kickoff entry (OL-84): begin leaves the run at the derived
+ *     kickoff-placement phase 1 (the native phase-0x17 handler stage-0
+ *     FUN_000740A0(1, side) write at 0x88E82) and the tape's m 1 directive
+ *     forces the live phase over it; the run's class-0 clock stops at kickoff
+ *     (native 0x8AF41), so the derived entry changes nothing before the first
+ *     granted frame and the transcript stays byte-identical.
  *
  * Forced, each with its owning leg:
- *   - kickoff phases 0x13/0x14 (m 1 / m 21): the selector-0 begin default is
- *     phase 0 and no derived path enters the kickoff situation — `OL-84`
- *     (live-phase kickoff entry; the `FUN_0008A938` situation producers are
- *     `OL-79`) and the extra-time flag producer `OL-85`;
- *   - phase 2 mechanics entry (m 41): the same `OL-84`/`OL-79` gap; the
+ *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
+ *     (the kickoff placement), not phase 2 — phase 2's only writer is
+ *     FUN_0008A938 situation 0xB (0x8AEF6 -> 0x8AF02 FUN_000740A0(2, side)),
+ *     whose only producers are the possession/keeper restart bodies
+ *     (0x7546E/0x75B58/0x76072, the unported FU-73 possession transition), so
+ *     the derived entry cannot reproduce the FU-142a arm staging (26/28/2A)
+ *     that the forced 0x13/0x14 window drives — `OL-84` (kept forcing, no
+ *     re-pin: the golden is byte-identical) and the extra-time flag producer
+ *     `OL-85`;
+ *   - phase 2 mechanics entry (m 41): the same `OL-84` gap; the
  *     class-1 clock then completes the shortened 1 s period naturally (the
  *     1 s period is the G1 live-end test convention, native periods last
  *     minutes);
@@ -101,8 +112,9 @@
  * driver runs inside the exit step, after the state tick, while the `state=`
  * sample is taken before each step; the v3 assertion reads the FU-142a mirror
  * after the step to pin the derived write. The 0x13/0x14/2 forcing stays
- * declared because the kickoff entry (OL-79/OL-84) and the extra-time flag
- * producer (OL-85) are unported.
+ * declared because the derived kickoff entry (OL-84, phase 1) cannot reach
+ * phase 2 without the unported possession transition, and the extra-time flag
+ * producer (OL-85) is unported.
  *
  * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
  * direct `fifa96_match_run_add_goal`. Its tracked-side default is the carried
@@ -154,7 +166,8 @@
 #define M2_TRANSCRIPT_CAP (1u << 20)
 
 /* Match-relative directive steps (1 = the first match frame, engine step 6):
- *   m 1  first-half kickoff forcing (phase 0x13 on run + machine);
+ *   m 1  first-half kickoff forcing: phase 0x13 over the derived phase-1
+ *        kickoff entry (T2/OL-84);
  *   m 21 second-half kickoff forcing (phase 0x14);
  *   m 41 mechanics: assert the arms' record codes, force phase 2, shorten the
  *        period to 1 s (class-1 phase: the clock runs) and stage the wired
@@ -283,7 +296,12 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
   struct fifa96_match_run *mr = &e->match_run;
   int m = next - match_start_step;
   if (m == M2_M_KICKOFF) {
-    assert(mr->state.phase == 0);                       /* pre-kickoff default */
+    /* T2 (OL-84): the derived kickoff entry left the begun run at phase 1
+     * (the native FUN_00088DC8 stage-0 FUN_000740A0(1, side) write); the live
+     * phases stay forced because the derived entry cannot reproduce the
+     * FU-142a arm staging (the phase-2 writer's only producers are the
+     * unported possession/keeper restarts). */
+    assert(mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
     assert(fifa96_match_state_set_phase(&mr->state, 0x13) == 0);
     mr->phase_machine.state = 0x13;                     /* kickoff: forced live phase */
   } else if (m == M2_M_HALF) {

@@ -55,6 +55,23 @@ struct fifa96_surface;
 #define FIFA96_MATCH_RUN_PERIOD_SECONDS_RESET 60u
 #define FIFA96_MATCH_RUN_EXTRA_SECONDS_RESET 30u
 
+/* FU-143 §8/OL-84 (M2 visible-match Task 2): the derived kickoff phase entry.
+ * The native selector-0 match starts at the reset phase 0 and enters the
+ * kickoff-placement phase through act 1 = the phase-0x17 handler FUN_00088DC8
+ * (invoked by the FUN_0008A938 situation-1 table-2 arm 0x8ABAB): its stage 0
+ * (0x88E4B..0x88E87) runs FUN_000700F4 and FUN_00073E28 (phase reset) and then
+ * FUN_000740A0(AL=1, side=[0x157AAC]>>24) at 0x88E82 -> [0x157A4D]=1,
+ * followed by FUN_00073E08 -> FUN_0008CF60 (the placement commit that begin
+ * models through fifa96_match_entities_kickoff_place). begin installs this
+ * entry from the reset default: the run's phase becomes 1 (the kickoff
+ * placement phase, class 0, so the FU-62 clock stops) with prev_phase 0. The
+ * live in-play phase 2 is reached natively only through the FUN_0008A938
+ * situation-0xB arm (0x8AEF6 -> 0x8AF02 FUN_000740A0(EAX=2, side)); its only
+ * producers are the possession/keeper restart bodies (0x7546E/0x75B58/0x76072,
+ * the unported FU-73 possession transition), so a begun run waits at phase 1
+ * until that transition is wired (OL-84 negative). */
+#define FIFA96_MATCH_RUN_KICKOFF_PHASE 1u
+
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
  * the FU-84 row +8 sprite-bank (animator) index the FU-85 resolver consumes.
  * `anim_timer`/`anim_turn` are the FU-84 `FUN_0008E008` per-frame driver state
@@ -307,7 +324,11 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
  * presentation state for a fresh match (rendering disabled; the full-surface
  * FU-92 window is sized from the engine surface), install the derived FU-62
  * period lengths for the selector (see the FIFA96_MATCH_RUN_*_SECONDS_*
- * constants), and start the lifecycle. Returns 0,
+ * constants), run the derived FU-89 kickoff placement (formation seed +
+ * record commit) and install the derived FU-143 §8/OL-84 kickoff phase entry
+ * (`FIFA96_MATCH_RUN_KICKOFF_PHASE`: phase 1, class 0, so a fresh begun run
+ * waits at the kickoff until its play transition is wired), and start the
+ * lifecycle. Returns 0,
  * -FIFA96_ERR_INVALID (NULL arguments), -FIFA96_ERR_STATE (unbooted/QUIT
  * engine, run already live, or another run live on the engine), or the
  * lifecycle's register failure. */

@@ -92,7 +92,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   OL-T11-7). Arrow/Z/C
   presses reach the run: an in-process gdb probe (debug build) read
   `input_state[0]` = 0x04 (RIGHT), 0x01 (UP), 0x10 (KICK), 0x20 (PASS), while
-  `dispatched_ok` stayed `0x1` (row `00` only) and `state.phase` stayed 0. The
+  `dispatched_ok` stayed `0x1` (row `00` only) and `state.phase` read 0 at
+  probe time (before the T2 kickoff entry landed; a begun run now enters the
+  derived kickoff phase 1 — below). The
   T5 kickoff placement is live in the running game: the probe read the ball at
   (480, 0, 0) = the derived 0x1E0 spawn and record 0's OL-80 `anim_id` at 0x26,
   with the score 0-0. **Kick, score and a live phase entry are still not
@@ -116,8 +118,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   **formation seed** loaded `352ko.fmt` so records carry real positions
   (record 0: team 0 z = -2376, team 1 z = +2508), and the live FU-143 driver's
   derived 0x0C write is read back after the exit step (where the teardown has
-  reset the match state but not the FU-142a mirror). The transcript **changed
-  and the golden was re-pinned** for the drawing upgrade: the first differing
+  reset the match state but not the FU-142a mirror). Task 2 adds the **derived
+  kickoff phase entry (OL-84)**: `fifa96_match_run_begin` installs
+  `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1` (the native `FUN_00088DC8` stage-0
+  `FUN_000740A0(1, side)` write at `0x88E82`), so a begun run waits at the
+  kickoff-placement phase (class 0) and the tape's m 1 directive forces the
+  live phase over it. The 0x13/0x14 forced window **stays**: the derived entry
+  cannot reach phase 2 (whose only writer is the `FUN_0008A938` situation-0xB
+  arm `0x8AEF6` -> `0x8AF02`, produced only by the unported possession/keeper
+  restarts `0x7546E`/`0x75B58`/`0x76072`) and therefore cannot reproduce the
+  FU-142a arm staging the forced window drives. The T2 transcript is
+  **byte-identical** after the wiring (no re-pin; `OL-84` stays open with the
+  possession invoker as the remaining gap). The **T1** transcript changed
+  and the golden was re-pinned for the drawing upgrade: the first differing
   line is frame 9 (the first granted render staging), 157 lines differ (the
   null backend chains its present hash across all presented frames, so the
   post-exit front-end lines carry the earlier change while their canvases are
@@ -212,12 +225,22 @@ the build also produces the windowed `fifa96` target (`make game`).
   the class-1/class-2 gate and consumes the FU-62 clock's `sec == limit + aux`
   completion (`mr.clock_period_ended`), running the derived `FUN_0008B9CC`
   chooser — a live class-1 period end writes phase 0x0C (2 → 0x0C) on the
-  selector-0/no-extra-time default, and the run-end teardown resets to 0. The
-  engine still cannot enter live phase 2 without the unported kickoff path
-  (`OL-79`, carried as `OL-84`), the extra-time flag producer (`OL-85`) and the
-  post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B tape
-  keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics) and
-  stays byte-identical. See FU-143 §9 (integration errata).
+  selector-0/no-extra-time default, and the run-end teardown resets to 0.
+  `fifa96_match_run_begin` now installs the **derived kickoff phase entry**
+  (M2 visible-match Task 2 / `OL-84`): the native phase-0x17 handler stage-0
+  write `FUN_000740A0(1, side)` (`0x88E82`, after `FUN_00073E28` and before the
+  `FUN_00073E08` placement commit the begin path models) lands as
+  `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`, mirroring the `phase_machine` switch
+  byte; the begun run waits at the kickoff-placement state (class 0, clock
+  stopped). `OL-84` stays open: the derived entry cannot reach live phase 2
+  because the only phase-2 writer is the `FUN_0008A938` situation-0xB arm
+  (`0x8AEF6` -> `0x8AF02`), whose only producers are the possession/keeper
+  restart bodies (`0x7546E`/`0x75B58`/`0x76072`) of the unported FU-73
+  possession transition — so the kickoff acts (0xA/1/4/8) end at phase 1.
+  The extra-time flag producer (`OL-85`, re-verified at `0x8B2AC`/`0x8B2C1`)
+  and the post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B
+  tape keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics)
+  and stays byte-identical. See FU-143 §9/§10 (integration errata).
 - **Score event source (child `C3-OL2`, closed; invokers open).** The FU-72
   `FUN_00093944` writer is derived and ported
   (`fifa96_action_score_event`, FU-142 Appendix L): score increment, last-side
