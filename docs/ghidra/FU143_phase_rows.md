@@ -608,8 +608,10 @@ unchanged, the fixtures extend `test_engine_match_frame`):
    the `FUN_0008A938` situation producers/act bodies are unported (§3.2,
    OL-79 consequence). The engine fixture enters at the native in-play phase 2
    and the tape keeps its forced phase-2 window; the driver's period-end write
-   itself is derived. **Status: derived kickoff entry landed (§10); phase 2
-   stays forced.**
+   itself is derived. **Status: derived kickoff entry landed (§10); the
+   state-1 arm + row 01 landed (§11) and a begun run reaches phase 2
+   naturally; the residual producers/sinks and the M2 forcing are recorded in
+   §11.5.**
 2. **OL-85 — extra-time flag `[0x157AC0]` producer.** The driver passes
    `extra_time = 0` (the selector-0/no-extra-time default, §4.2); the period-1
    completion side effect that sets the flag (`0x8B2AC` window) and the
@@ -709,7 +711,10 @@ the formation seed and the placement commit:
 the `FUN_000740A0(1, side)` write the native handler performs before
 `FUN_00073E08`. The begun run waits at the native kickoff-placement phase
 (class 0: the FU-62 clock stops; the `fifa96_match_state.c` class gate matches
-`0x8AF41`), so the phase-2 play transition stays unwired.
+`0x8AF41`), so the phase-2 play transition stays unwired. **Erratum (§11, M2
+playable-match Task 2):** the state-1 arm (`fifa96_match_phase_machine_kickoff`)
+and the wired row 01 now carry the run to phase 2 naturally; the entry and the
+placement commit stay as described here.
 
 **Kept forcing (M2 tape).** The tape's 0x13/0x14 forced window drives the
 FU-142a state 0x13/0x14 arms (codes 26/28/2A), which the derived entry cannot
@@ -719,7 +724,10 @@ record (`0x89736`/`0x89740`, the phase-0x1A handler), none of which stages
 26/28/2A. The forcing therefore stays and
 `tests/golden/engine/m2-frames.txt` is **byte-identical** (`cmp` clean after
 the wiring: the derived entry is forced over by m 1 before the first granted
-frame, so no transcript line moves). No re-pin.
+frame, so no transcript line moves). No re-pin. **Erratum (§11, M2
+playable-match Task 2):** the state-1 arm and action row 01 are now ported and
+the begun run reaches phase 2 naturally; the forcing still stays because the
+natural chain is not frame-for-frame identical to the forced window (§11.5).
 
 **OL-85 producer (re-verified).** `FUN_0008AF38`'s period-1 case
 (`0x8B22F..0x8B2CD`): when `[0x57AB6] == [0x5881A]` and `[0x57ABA] != 0`, the
@@ -757,6 +765,234 @@ head), `0x7DF70`(40 B row 01 situation call), `0x84480`(32 B row 0x12),
 `15882a`(24), `110794`(1); `read_memory` `0x1106AD`(48 B). Cross-reference:
 FU-137 §4 already records code `1` at `0x8D200` / code `2` at `0x8D238`
 (`docs/ghidra/FU137_dispatch_mechanics.md`, `FUN_0008D098` arms).
+
+## 11. M2 playable-match Task 2: the state-1 arm and action row 01 — natural kickoff to phase 2
+
+First-hand `/FIFA96.EXE`, read-only. This slice lands the OL-84 residual for the
+native kickoff chain: the `FUN_0008D098` state-1 arm (`0x8D1B1..0x8D243`) and
+action row 01 (`0x7DBC0..0x7DFC8`) are derived and ported, the act-1 producer
+`[0x5882A]` is modelled, and a begun run reaches the live phase 2 on its own.
+The M2 tape keeps its 0x13/0x14/2 forcing because the natural chain is **not
+frame-for-frame identical** to the forced window (§11.5, measured).
+
+### 11.1 The state-1 arm (`0x8D1B1..0x8D243`)
+
+Byte-level (first-hand `disassemble_bytes 0x8D188`, 200 B, this slice):
+
+```
+0x8D1B1 PUSH -0x1                 ; skip code (none)
+0x8D1B3 MOV ECX,0x3               ; install code 3
+0x8D1B8 MOV EBX,0xA               ; last record index 10
+0x8D1BD MOV EAX,EBP               ; team base
+0x8D1BF XOR EDX,EDX               ; first record 0
+0x8D1C1 CALL 0x8CEB8              ; FUN_0008CEB8(code 3, records 0..10, skip -1)
+0x8D1C6 MOV EAX,0x15774C          ; the kickoff point triple
+0x8D1CB MOV EDX,EBP               ; team base
+0x8D1CD XOR ECX,ECX               ; no out triple
+0x8D1CF XOR EBX,EBX               ; skip index 0
+0x8D1D1 CALL 0x79CCC              ; nearest record (FUN_00079CCC)
+0x8D1D6 MOV EDX,[0x157AAC]        ; controlled side dword
+0x8D1DC MOV [EBP+0x7B2],EAX       ; team+0x7B2 := nearest
+0x8D1E2 XOR EAX,EAX
+0x8D1E4 SAR EDX,0x18
+0x8D1E7 MOV AL,[EBP+0x826]        ; team side
+0x8D1ED CMP EAX,EDX
+0x8D1EF JNZ 0x8D23D               ; not controlled -> slot merge only
+0x8D1F1 MOV EDX,0x1
+0x8D1F6 MOV EAX,[EBP+0x7B2]       ; the nearest record
+0x8D1FC XOR ECX,ECX
+0x8D1FE XOR EBX,EBX
+0x8D200 CALL 0x7D9A4              ; install action 1
+0x8D205 MOV EDX,EBP
+0x8D207 MOV EAX,[EBP+0x7B2]
+0x8D20D XOR ECX,ECX
+0x8D20F XOR EBX,EBX
+0x8D211 MOV byte [EAX+0x9A],1     ; occupy the taker
+0x8D218 MOV EAX,0x15774C
+0x8D21D CALL 0x79CCC              ; next nearest (skips the taker)
+0x8D222 MOV EDX,[EBP+0x7B2]       ; first record (not the second)
+0x8D228 XOR ECX,ECX
+0x8D22A XOR EBX,EBX
+0x8D22C MOV byte [EDX+0x9A],0     ; release the taker
+0x8D233 MOV EDX,0x2
+0x8D238 CALL 0x7D9A4              ; install action 2 into the second
+0x8D23D MOV EAX,[EBP+0x7B2]       ; the taker again
+0x8D243 CALL 0x7876C              ; FUN_0007876C slot merge
+```
+
+`FUN_00079CCC` (`0x79CCC..0x79D59`, 49 instructions, first-hand
+`disassemble_function`) walks records 0..10 at 0xB2 stride, skipping `+0x9A`,
+`+0x98` and the `EBX` skip index, calls each record's phase handler
+`[rec+0x1C]` with a stack output triple, and keeps the strict-minimum
+`0x8DC68` distance from the point in EAX (0x15774C); no candidate returns the
+initial result pointer (`0x79CE4` seeds `[ESP+0xC] = EDX` = the team base,
+`0x79D4F` returns it), i.e. record 0. `team+0x7B2` is stored from the first
+pick only (`0x8D1DC`); the second pick's return stays in EAX at `0x8D238`.
+The engine substitutions: the per-record handler output -> the
+formation-seeded target triple (the phase handlers are unported); the native
+best seed `0x7FBC` (a cutoff) -> the shared `fifa96_entity_find_nearest` seed
+`0xFFFF` (no formation-coordinate distance reaches 0x7FBC; leg); the slot
+block unmodeled (`slot_pool` 0, so the `0x8D243` merge is a no-op).
+
+### 11.2 Action row 01 (`0x7DBC0..0x7DFC8`)
+
+Gate and stage walk (first-hand `disassemble_bytes 0x7DBC0` 560 B,
+`0x7DDF0` 264 B, `0x7DEF0` 224 B, this slice):
+
+* `0x7DBCB..0x7DBD6`: `EAX=[0x157A4A]>>24; CMP EAX,1; JNZ 0x7DFB8` — only
+  phase 1 runs; the mismatch jump lands at `0x7DFB8` = `MOV EAX,EBP;
+  CALL 0x7DAB4` (the **unconditional** reset; the stage-bound tail at
+  `0x7DFB2`, reached for `+0x92 > 3`, is the one that checks `+0x44` first).
+* `0x7DBDC..0x7DC39`: `[EBP+0x8F]>>24 < 2` -> `FUN_000700F4([0x10F328],
+  [0x10F32C],[0x10F330],0)` (the constant triple; first-hand `read_memory
+  0x10F328` = `00 00 00 00 00 00 00 00 00 00 00 00`, i.e. (0,0,0)), then
+  `[0x157A83] = rec` (`0x7DC18`), `[EBP+0x4D] = (old < 0) ? -0x30 : 0x30`
+  (`0x7DC06..0x7DC1E`), `[EBP+0x55] = 0` (`0x7DC23`), `CALL 0x7876C`
+  (`0x7DC2A`); otherwise the position triple is copied to the target
+  (`0x7DC31..0x7DC39`).
+* `0x7DC3A..0x7DC50`: `[EBP+0x89] += [0x157A64]`.
+* `0x7DC56..0x7DC63`: stage bound `+0x92 > 3 -> 0x7DFBF`; table `0x7DBB0` =
+  `{0x6DC6B,0x6DCAF,0x6DD29,0x6DFB2}` -> `{0x7DC6B,0x7DCAF,0x7DD29,0x7DFB2}`.
+* stage 0 (`0x7DC6B`): `AH=[0x5882A]`, `+0x9E=1`; `[0x5882A]==0 -> tail`;
+  `+0x89 < 0x3C -> tail`; else `EAX=0x1E; CALL 0x974DC` (sound),
+  `+0x89=0`, `+0x92++` and **falls into 0x7DCAF**.
+* stage 1 (`0x7DCAF`): `0x8DE8C(0x15774C, skip=[EBP+0x8A]>>24, team)` ->
+  nearest; the flag `[ESP]` is set only when `[EBP+0x69]>>16 <= 0x40` and the
+  nearest's `[+0x69]>>16 <= 0x40` and (`+0x20` slot with
+  `word[slot+6] & 0x70 != 0`, or no slot with `+0x89 > 0x78`); a clear flag
+  jumps to the tail; else `+0x89=0`, `+0x92++` and **falls into 0x7DD29**.
+* stage 2 (`0x7DD29..0x7DF95`): the score/event selection arms all converge on
+  `0x7DEFA` -> `0x8DE8C` nearest from `&rec+0x59` (skip `+0x8A>>24`), the
+  `0x8DCD4` metric into `0x158738`, `[0x15873A] >>= 1`, `0x92820`, the
+  `0x7A490` ball staging, `[[rec]+0x7B2] = nearest` (`0x7DF5B`), the
+  conditional `0x7876C` (`0x7DF61..0x7DF75`), then `EDX = team+0x826` side,
+  `EAX=0xB`, `EBX=0`, `CALL 0x8A938` (`0x7DF90`), `CALL 0x4C380` (RET), and
+  `+0x89=0`, `+0x92++` (`0x7DF9A..0x7DFAC`).
+* `FUN_0008A938` situation 0xB routes head -> `0x8AA7B` (BX=0) -> `0x8AAA8`
+  -> `0x8AB7A` table `0x8A904[0xB] = 0x8AEF6` -> `MOV EDX,[ESP-2]; MOV EAX,2;
+  SAR EDX,0x10; CALL 0x740A0` (first-hand `0x8AEE0`, 80 B) = **phase 2 on the
+  record's team side**. The setter's own phase-2 arm (`0x740ED..0x74107`:
+  `[0x15781D]=0`, `[0x157AB2]=1`, `[0x157A73]=0x15774C`) stays unmodelled (no
+  engine field; noted).
+
+### 11.3 The derived act-1 producer `[0x5882A]`
+
+Row 01 stage 0 gates on `[0x5882A]`, whose kickoff-chain producer is the
+phase-0x17 handler `FUN_00088DC8` stage 1 (`0x88EF3..0x88F07`, re-read this
+slice): `EDX = dword[0x158816] SAR 0x10` = **word `[0x158818]`** (the dword at
+`0x158816` is the high half of the ball-z dword plus the 16-bit timeline timer
+at `0x158818`; FU-81 §1.5), `CMP EDX,0x78; JL` -> when `[0x158818] >= 0x78`
+it sets `[0x5882A]=1` and clears `[0x58818]`/`[0x58828]`/`[0x58808]`/
+`[0x58829]`. `[0x5882A]` writers census (first-hand `search_instructions`
+`5882a`, 24 matches): the act bodies `0x84C2A`/`0x84D29` (row 13),
+`0x886F4` (reset), `0x88E56` (act-1 stage 0, writes 0), `0x88F07` (act-1
+stage 1, writes 1), `0x88F9A`, `0x890C4`, `0x8955F`, `0x895EC`, `0x898BB`,
+`0x899F0`, `0x89A39` and the goal screens `0x93C30`..`0x9434C`. The engine
+models the producer as `state.tick_total >= 0x78` while the phase is 1
+(`mr->global_5882a`; `tick_total` is the same per-frame whole-delta
+accumulation as `[0x58818] += [0x57A64]`, and begin zeroes it). The act's
+stage-0 phase entry and placement commit are the `fifa96_match_run_begin`
+surface (FU-143 §10); the remaining act-1 side effects (the `0x4C31C` camera
+key, the act-state clears) stay unmodelled.
+
+### 11.4 Engine landing
+
+* `fifa96_match_phase_machine_kickoff` (`include/fifa96_engine/
+  fifa96_match_phase_machine.h`, `src/fifa96_engine/
+  fifa96_match_phase_machine.c`): the state-1 arm over the FU-141 pool. The
+  `FUN_00079CCC` per-record phase-handler output is substituted by the
+  formation-seeded target triple (the phase handlers are unported), the
+  no-candidate path keeps the native record-0 fallback, and the slot merge is
+  a no-op while the pool's `+0x828` stays 0. `fifa96_match_run_begin` calls it
+  between the phase-1 entry and `fifa96_match_entities_kickoff_place` (the
+  native order: `0x88E82` setter before `0x88E87` commit).
+* `fifa96_match_action_01` (`src/fifa96_engine/fifa96_match_handlers.c`): the
+  row-01 body (gate, marker branch, timer, stage walk) wired into the FU-137
+  action table. The camera reset uses the zero constant triple through the
+  derived place request; the stage-2 nearest uses `FUN_0008DE8C` over the
+  pool positions; the situation call runs `fifa96_match_run_situation`
+  (`src/fifa96_engine/fifa96_match_run.c`), the derived `FUN_0008A938` table-2
+  phase writer. The unported sinks (stage-0 sound `0x974DC(0x1E)`, stage-2
+  `0x8F188`/`0x92820`/`0x8DCD4`/`0x7A490`, `0x4C380`) are recorded legs.
+* `fifa96_match_run_frame` arms `mr->global_5882a` at `tick_total >= 0x78`
+  while the phase is 1 (§11.3).
+
+Tests: `test_engine_match_phase_machine::test_kickoff_arm_installs_rows`
+(installs/targets/side/occupied/fallback/NULL);
+`test_engine_match_handlers::test_action_01_runs_kickoff_body` (gate, marker,
+timer, stage walk, situation 0xB -> phase 2);
+`test_engine_match_frame::test_kickoff_enters_phase2_naturally` (begun run:
+phase 1 for 30 granted frames, `global_5882a` at 60, live phase 2 at granted
+frame ~121, prev_phase 1, the taker bound as the controlled actor, stage
+latch 3). Full suite 104/104 (ASan/UBSan; ISO present).
+
+### 11.5 The kept M2 forcing and the mismatch evidence
+
+The M2 tape (`tests/test_engine_m2.c`) still forces phases 0x13/0x14 (m 1/m 21)
+and the phase-2 mechanics entry (m 41). Measured with a temporary replay of the
+same tape/run/config with all match directives disabled (director evidence,
+reverted):
+
+| | forced golden | natural replay |
+|---|---|---|
+| lines 1..5 | identical | identical |
+| line 6 state | `19/0-0` | `1/0-0` |
+| lines 6..48 hashes | identical | identical |
+| line 49 | `state=2/0-0`, hash `521ee3c3…` | `state=1/0-0`, hash `a3d49501…` |
+| first phase 2 | frame 6 (forced) | presented frame 410 = granted frame ~121 |
+
+So the derived chain reaches phase 2 naturally, but the forced extra-time
+window (its `state=19`/`state=20` lines, the FU-142a 26/28/2A arm staging and
+the hash chain from the m 41 mechanics entry) cannot be reproduced
+frame-for-frame; the forcing is kept with this evidence and the **M2 golden is
+byte-identical** (`cmp` clean, no re-pin). M1 is untouched.
+
+Leg updates: **OL-84** narrows to "the derived state-1 arm + row 01 chain
+lands phase 2 naturally; the remaining situation-0xB producers (rows
+02/0x10..0x13, the keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072`, the
+computed act-8 call `0x8A8CE`) and row 01's event/camera/ball-stage sinks stay
+unported". **OL-85** unchanged. The M2 tape's wired-row mask grows to 14 rows
+(row 01 added; row 00 still dispatches through a wired row's reset install).
+
+New/narrowed legs this slice:
+
+1. **OL-84a — row 01 event sinks.** The stage-0 sound `0x974DC(0x1E)` and the
+   stage-2 `0x8F188`/`0x92820` event/ring calls are derived requests with no
+   engine consumer (the OL-67 event-ring seam).
+2. **OL-84b — row 01 stage-2 staging.** The `0x8DCD4` metric write into
+   `0x158738`, the `[0x15873A] >> 1` halve and the `0x7A490` ball staging stay
+   unported (the FU-139 staging block is the eventual home).
+3. **OL-84c — `FUN_00079CCC` substitution.** The per-record phase-handler
+   output is replaced by the formation-seeded target triple and the native
+   `0x7FBC` best seed by the shared `0xFFFF` (both unreachable differences for
+   formation coordinates; §11.1).
+4. **OL-84d — other situation-0xB producers.** Rows 02/0x10..0x13, the
+   keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072` and the computed act-8
+   call `0x8A8CE` remain unported (the kickoff chain uses row 01 only).
+5. **OL-84e — phase-2 setter arm globals.** `FUN_000740A0`'s phase-2 arm
+   (`[0x15781D]=0`, `[0x157AB2]=1`, `[0x157A73]=0x15774C`, §1.2) has no engine
+   field; only phase/prev are applied.
+6. **OL-84f — row 01 stage-1 slot arm.** `word[slot+6] & 0x70` cannot fire
+   while the slot block is unmodeled (staged zero), so a slotted taker waits at
+   stage 1 (native behavior for a zero slot word).
+7. **OL-84g — act-1 residual side effects.** The `0x4C31C` camera key and the
+   act-state clears (`[0x58818]`/`[0x58828]`/`[0x58808]`/`[0x58829]`) are not
+   modeled; only `[0x5882A]` is derived, from `state.tick_total`.
+8. **OL-84h — re-kickoff producer reset.** `state.tick_total` is not zeroed at
+   phase transitions (the native `[0x58818]` is zeroed by `FUN_00073E28` and
+   the act bodies), so a future phase-1 re-entry after the opening kickoff
+   would fire the derived producer immediately. Unreachable today (the engine
+   never returns to phase 1 within a run; the 0x0C -> 0 reset is the run-end
+   teardown).
+
+### 11.6 §11 provenance
+
+Ghidra MCP read-only `/FIFA96.EXE`: `disassemble_bytes` `0x8D188`(200 B),
+`0x7DBC0`(560 B), `0x7DDF0`(264 B), `0x7DEF0`(224 B), `0x8AEE0`(80 B),
+`0x88E40`(160 B), `0x88EE0`(128 B); `disassemble_function` `0x79CCC`(49
+insns), `0x8DE8C`(42 insns), `0x8C24C`, `0x886D4`; `read_memory` `0x10F328`
+(16 B); `search_instructions` operand `5882a`(24), `58816`(19), `58814`(8).
+No Ghidra/project/ISO change; analysis only.
 
 ## Provenance
 

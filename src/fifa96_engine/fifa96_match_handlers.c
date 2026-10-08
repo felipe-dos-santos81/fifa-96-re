@@ -11,7 +11,11 @@
  * pool: the frame body walks the pool records, stages each into `mr->record`,
  * dispatches its action code here, and drains the requests (install/ran,
  * helper_request, controlled, place_valid) back into the pool — so row 00's and
- * row 1E's record-visible bodies are now consumed end to end (FU-141 §4). Every
+ * row 1E's record-visible bodies are now consumed end to end (FU-141 §4).
+ * M2 playable-match Task 2 wires the kickoff taker row 01
+ * (`fifa96_match_action_01`: the native `0x7DBC0..0x7DFC8` phase-1 stage walk;
+ * its situation-0xB call runs `fifa96_match_run_situation` and writes the live
+ * phase 2 — FU-143 §11). Every
  * other row is either `not ported` (fn NULL, -FIFA96_ERR_UNSUPPORTED with its
  * port group) or the six remaining keeper rows 19/1A/1B/1C/1D/1F (fn NULL,
  * tested pure parts but unported arms — FU-140 OL-33..OL-37); the
@@ -81,6 +85,7 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_arm_bodies.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_keeper.h"
 #include "fifa96_loader/fifa96_outfield.h"
 
@@ -117,6 +122,142 @@ static int fifa96_match_action_00(struct fifa96_match_run *mr) {
     mr->record.target_z = target.z;
   }
   mr->record.install = out.install != 0 ? out.code : 0;
+  return FIFA96_OK;
+}
+
+/* ===== FU-143 §11 (M2 playable-match Task 2 / OL-84 residual): row 01 =====
+ *
+ * `fifa96_match_action_01` ports the kickoff taker row (native
+ * `0x7DBC0..0x7DFC8`, FU-81 §2.1; the `phase == 1` gate at `0x7DBD3`). Per
+ * call:
+ *  - `phase != 1` -> `0x7DFB8` = the unconditional `FUN_0007DAB4` reset
+ *    (`MOV EAX,EBP; CALL 0x7DAB4`; the jump lands past the stage-3 `+0x44`
+ *    test), modelled by `match_row_reset`;
+ *  - marker `(int8)stage < 2` (`0x7DBDC..0x7DC2F`): the `FUN_000700F4` camera
+ *    reset with the constant kickoff triple `[0x10F328/2C/30]` = `(0,0,0)`
+ *    (first-hand `read_memory 0x10F328`; derived as the `place_*` camera
+ *    request), `[0x157A83] = rec` (`controlled`), the ±0x30 kickoff x from the
+ *    current target's sign, target z = 0, and the `FUN_0007876C` merge
+ *    request; otherwise the position triple is copied to the target
+ *    (`0x7DC31..0x7DC39`);
+ *  - `timer89 += delta` (`0x7DC3A..0x7DC50`);
+ *  - the `+0x92` stage walk (table `0x7DBB0`; `> 3` -> tail):
+ *    stage 0 (`0x7DC6B`): `ran = 1`; `[0x5882A] == 0` or `timer89 < 0x3C` ->
+ *    tail; else `timer89 = 0`, stage 1 and fall into stage 1;
+ *    stage 1 (`0x7DCAF`): the `FUN_0008DE8C` nearest of the record's team from
+ *    the camera triple with skip = the record's `+0x8D` (active); the lane
+ *    word `[+0x69]>>16 <= 0x40` gates for both the record and the nearest; the
+ *    slot arm (`+0x20` with `word[slot+6] & 0x70`) cannot fire on the pool
+ *    (the slot block is unmodeled, staged zero), so the no-slot
+ *    `timer89 > 0x78` arm decides; when it fires `timer89 = 0`, stage 2 and
+ *    fall into stage 2;
+ *    stage 2 (`0x7DD29..0x7DF95`): the nearest from the record position
+ *    (`0x7DEFA`), `team+0x7B2 = nearest` (`0x7DF5B`), the conditional merge
+ *    (`0x7DF61..0x7DF75`; `+0x828` staged 0), the `FUN_0008A938` situation 0xB
+ *    call with the record's team side (`0x7DF7A..0x7DF90`) -> the derived
+ *    live phase 2, then `timer89 = 0`, stage 3 (`0x7DF9A..0x7DFAC`).
+ * The unported sinks on this path are the camera-place call body, the stage-0
+ * sound event `0x974DC(0x1E)`, the stage-2 events `0x8F188`/`0x92820`, the
+ * `0x8DCD4` metric, the `0x7A490` ball staging and the `0x4C380` no-op
+ * (OL-84 legs). */
+static void match_row_reset(struct fifa96_match_run *mr, struct fifa96_match_entity *e);
+
+static int32_t match_row01_nearest(struct fifa96_match_run *mr, uint32_t team,
+                                   int16_t from_x, int16_t from_z,
+                                   uint8_t skip_index) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  return fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS,
+                                    skip_index, from_x, from_z, &best);
+}
+
+static int fifa96_match_action_01(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_team *team;
+  int32_t id = r->entity_id;
+  uint8_t stage;
+  uint32_t t;
+  uint32_t idx;
+  int rc;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  if (mr->state.phase != 1u) {                   /* 0x7DBD3 JNZ 0x7DFB8 */
+    match_row_reset(mr, &team->records[idx]);
+    return FIFA96_OK;
+  }
+  if ((int8_t)r->stage < 2) {                    /* 0x7DBDC */
+    /* 0x7DBEA..0x7DC01: FUN_000700F4([0x10F328],[0x10F32C],[0x10F330], 0);
+     * the constant kickoff triple is (0,0,0), so the derived FUN_000700F4
+     * reset is the zero place request. */
+    r->place_x = 0;
+    r->place_y = 0;
+    r->place_z = 0;
+    r->place_valid = 1;
+    r->controlled = 1;                           /* 0x7DC18 [0x157A83] = rec */
+    r->target_x = r->target_x < 0 ? -0x30 : 0x30; /* 0x7DC06..0x7DC1E */
+    r->target_z = 0;                             /* 0x7DC23 */
+    r->helper_request = 1;                       /* 0x7DC2A CALL 0x7876C */
+  } else {                                       /* 0x7DC31..0x7DC39 */
+    r->target_x = r->pos_x;
+    r->target_y = r->pos_y;
+    r->target_z = r->pos_z;
+  }
+  r->timer89 += r->delta;                        /* 0x7DC3A..0x7DC50 */
+  stage = r->stage92;
+  if (stage == 0u) {
+    r->ran = 1;                                  /* 0x7DC71 */
+    if (mr->global_5882a == 0) return FIFA96_OK;              /* 0x7DC7A */
+    if (r->timer89 < 0x3C) return FIFA96_OK;                  /* 0x7DC87 */
+    r->timer89 = 0;                              /* 0x7DC9D */
+    r->stage92 = 1u;                             /* 0x7DCA9 */
+    stage = 1u;                                  /* falls into 0x7DCAF */
+  }
+  if (stage == 1u) {
+    int16_t lane = (int16_t)(r->lane >> 16);     /* 0x7DCCC [+0x69]>>16 */
+    int16_t near_lane = 0;
+    int32_t near = match_row01_nearest(mr, t, (int16_t)mr->render.camera.pos_x,
+                                       (int16_t)mr->render.camera.pos_z,
+                                       r->active);      /* 0x7DCC7 */
+    uint8_t ready = 0;
+    if (near >= 0) near_lane = (int16_t)(team->records[near].lane >> 16);
+    if (near >= 0 && lane <= 0x40 && near_lane <= 0x40) {   /* 0x7DCD5/0x7DCE0 */
+      if (r->has_slot != 0) {
+        /* 0x7DCE9..0x7DCF6: word[slot+6] & 0x70; the slot block is unmodeled
+         * (staged zero), so the native slot arm cannot fire. */
+      } else if (r->timer89 > 0x78) {            /* 0x7DCFA..0x7DD03 */
+        ready = 1;
+      }
+    }
+    if (!ready) return FIFA96_OK;                /* 0x7DD0B */
+    r->timer89 = 0;
+    r->stage92 = 2u;
+    stage = 2u;                                  /* falls into 0x7DD29 */
+  }
+  if (stage == 2u) {
+    int32_t near = match_row01_nearest(mr, t, (int16_t)r->pos_x,
+                                       (int16_t)r->pos_z, r->active); /* 0x7DF0B */
+    if (near >= 0)
+      team->target = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)near);
+    /* 0x7DF61..0x7DF75: merge when the nearest holds no slot and `+0x828` is
+     * set (the pool stages `slot_pool` 0, so the native arm cannot fire). */
+    if (near >= 0 && team->slot_pool != 0 && team->records[near].has_slot == 0)
+      (void)fifa96_match_entities_merge_slot(&mr->entities, t, (uint32_t)near);
+    rc = fifa96_match_run_situation(mr, 0x0Bu);  /* 0x7DF90 */
+    if (rc != 0) return rc;
+    r->timer89 = 0;                              /* 0x7DFA0 */
+    r->stage92 = 3u;                             /* 0x7DFAC */
+  }
   return FIFA96_OK;
 }
 
@@ -1386,8 +1527,8 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
-    {0x01, NULL,
-     "FU-137 §6: FU-136 row 01: not ported (partial); sequence_select/stage + FU-138 marker_target/stage_wait; OL-17"},
+    {0x01, fifa96_match_action_01,
+     "FU-143 §11 (M2 playable-match Task 2/OL-84): row 01 ported (0x7DBC0..0x7DFC8, phase==1 gate, stage 0/1/2 walk) — situation 0xB -> phase 2; camera/event/ball-stage sinks + rows 02/0x10..0x13 legs OL-84"},
     {0x02, NULL,
      "FU-137 §6: FU-136 row 02: not ported (partial); locomotion_restart_target + FU-138 restart_wait; OL-18"},
     {0x03, NULL,

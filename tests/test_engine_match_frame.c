@@ -515,49 +515,75 @@ static void test_phase_drive_begun_end_resets_phase(void) {
   drop_fixture(f);
 }
 
-/* FU-143 §8/OL-84 (M2 visible-match Task 2): the derived kickoff phase entry.
- * First-hand native chain (/FIFA96.EXE): the setup's situation 0
- * (FUN_0004B02C mode 1 -> FUN_0008A938(0,0,0)) dispatches act 0xA + phase 0x11
- * (0x8AB82: EAX=0xA CALL 0x888FC, then EAX=0x11 CALL 0x740A0 at 0x8AB9F); act
- * 0xA (phase-0x20 handler 0x8B688) stage 2 calls FUN_0008A938(1, side) at
- * 0x8B85D; situation 1's table-2 arm 0x8ABAB invokes act 1 (0x888FC) = the
- * phase-0x17 handler FUN_00088DC8, whose stage 0 (0x88E4B..0x88E87) runs
- * FUN_000700F4 + FUN_00073E28 (phase 0), then FUN_000740A0(AL=1,
- * side=[0x157AAC]>>24) at 0x88E82 -> [0x157A4D]=1, then FUN_00073E08 ->
- * FUN_0008CF60 (the placement commit begin models through
- * fifa96_match_entities_kickoff_place). The begun selector-0 match enters
- * phase 1 (the kickoff-placement phase, class 0: the FU-62 clock stops).
- * Phase 2's only writer is FUN_0008A938 situation 0xB (table-2 arm 0x8AEF6 ->
- * 0x8AF02 FUN_000740A0(EAX=2, side)); `get_xrefs_to 0x8A938` = 39 and the
- * EBX=0 situation-0xB producers are the phase-1/action bodies 0x7DF90 (row
- * 01), 0x85D38 (row 0x10), 0x863F9 (row 0x11), 0x84495 (row 0x12), 0x84E8F
- * (row 0x13), the keeper/restart bodies 0x7546E/0x75B58/0x76072 and the
- * unresolved computed-situation act-8 call 0x8A8CE. The transition is real on
- * the kickoff chain -- the same 0x88E82 setter call runs FUN_0008D098 per team,
- * whose state-1 arm (0x8D1B1) installs action 1 (0x8D1F1/0x8D200) / action 2
- * (0x8D238) and action row 01 (phase==1 gate) calls situation 0xB at 0x7DF90 --
- * but the record-action machinery (rows 01/02, 0x10..0x13) is unported, so no
- * begun run leaves phase 1 without the tape's forcing (OL-84 residual). */
-static void test_kickoff_entry_enters_phase1_not_phase2(void) {
+/* Run ticks until exactly one granted 30 Hz frame body ran (the pace grants
+ * 3 frames per 10 ticks; the loop bound is generous but deterministic). */
+static void one_granted_frame(struct fifa96_match_run *mr);
+
+/* FU-143 §10/§11 (M2 playable-match Task 2 / OL-84 residual): the natural
+ * kickoff chain from the derived phase-1 entry to the live phase 2.
+ *
+ * First-hand native chain (/FIFA96.EXE): begin models the phase-0x17 handler
+ * stage-0 `FUN_000740A0(1, side)` write (0x88E82); the same setter call runs
+ * `FUN_0008D098` per team, whose state-1 arm (0x8D1B1..0x8D243) stages code 3
+ * over both team blocks, resolves the record nearest the kickoff point
+ * (0x8D1C6 FUN_00079CCC) and, on the controlled side, installs action 1
+ * (0x8D200) on it and action 2 (0x8D238) on the next nearest. Action row 01
+ * (0x7DBC0) runs each frame with the `phase == 1` gate; its stage 0 is armed by
+ * `[0x5882A]`, which the act-1 handler stage 1 sets at the shared timeline
+ * timer `[0x58818] >= 0x78` (0x88EF3..0x88F07) — the engine's `tick_total`
+ * is the same whole-delta accumulation, so the derived producer fires at 60
+ * granted frames. Stage 2 then calls `FUN_0008A938` situation 0xB (0x7DF90),
+ * whose table-2 arm 0x8AEF6 -> 0x8AF02 FUN_000740A0(2, side) writes the live
+ * phase 2. This test drives the begun run without any forcing: the state-1
+ * arm's action 1 lands on record 1 (zero-target fixture: the 0x79CCC derived
+ * pick skips index 0, ties keep the first candidate), so row 01 runs on it and
+ * the run leaves phase 1 on its own. */
+static void test_kickoff_enters_phase2_naturally(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(mr.state.phase == 0);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE); /* derived entry */
   assert(mr.state.prev_phase == 0u);
   assert(mr.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   assert(mr.phase_machine.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.global_5882a == 0u);
 
-  /* Class 0 stops the clock (the native 0x8AF41 gate): 100 PIT ticks
-   * (30 granted frames) leave the run waiting at the derived kickoff state;
-   * no wired writer reaches phase 2. */
-  for (int i = 0; i < 100; i++) {
-    assert(fifa96_engine_step(f.engine) == 0);
-  }
+  /* The state-1 arm landed at begin: record 1 carries action 1, record 2
+   * action 2, the rest the 3 -> 0x19 inactive coercion; both team targets are
+   * the first pick. */
+  assert(mr.entities.team[0].records[0].code == 0x19u);
+  assert(mr.entities.team[0].records[1].code == 1u);
+  assert(mr.entities.team[0].records[2].code == 2u);
+  assert(mr.entities.team[0].records[10].code == 0x19u);
+  assert(mr.entities.team[1].records[1].code == 0x19u);
+  assert(mr.entities.team[0].target == 1);
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.phase == 1u);
+
+  /* 30 granted frames (tick_total 60 < 0x78): the derived act-1 producer has
+   * not fired, so row 01 waits at its [0x5882A] gate and the run stays at the
+   * kickoff-placement phase (class 0: the FU-62 clock seconds stop). */
+  for (int i = 0; i < 30; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.global_5882a == 0u);
+  assert(mr.state.tick_total == 60u);
   assert(mr.state.total_seconds == 0);
-  assert(mr.state.period == 0);
+
+  /* The producer fires at tick_total >= 0x78 (60 granted frames); row 01 then
+   * runs stage 0/1/2 and the derived situation 0xB writes the live phase 2.
+   * Native cadence: stage 0 waits 0x3C of its own timer89 (30 frames) and
+   * stage 1's no-slot arm waits another 0x78 (60 frames), so phase 2 lands
+   * around granted frame 121. */
+  for (int i = 0; i < 170 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  assert(mr.state.prev_phase == 1u);
+  assert(mr.phase_machine.state == 2u);
+  assert(mr.phase_machine.phase == 2u);
+  assert(mr.global_5882a == 1u);
+  assert(mr.entities.controlled == 1);   /* row 01 stage 0 [0x157A83] = rec */
+  assert(mr.entities.team[0].records[1].stage92 == 3u);
+  assert(mr.entities.team[0].records[1].timer89 == 0);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 
   assert(fifa96_match_run_end(&mr) == 0);
@@ -711,7 +737,7 @@ int main(void) {
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
   test_phase_drive_begun_end_resets_phase();
-  test_kickoff_entry_enters_phase1_not_phase2();
+  test_kickoff_enters_phase2_naturally();
   test_score_event_wired_run_path();
   puts("test_engine_match_frame OK");
   return 0;

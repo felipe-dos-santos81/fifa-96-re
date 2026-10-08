@@ -94,19 +94,22 @@ layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v3** is green — all 13 wired
-action rows staged, the resource-loaded formation/record placement drawing on
-the indexed match canvas from the first granted frame, and the derived
-kickoff phase-1 entry asserted; the golden was re-pinned once for the drawing
-upgrade and is byte-identical since), and the windowed `make game` build runs
-on SDL3. The interactive smoke re-run on the development host (2026-10-08,
-visible-match G3) reaches match start (the match canvas replaces the
-front-end; RGB is still black pending the palette leg `OL-T11-6`) with the
+chain run headless (the M2-B acceptance tape **v4** is green — the 14 wired
+action rows exercised, the resource-loaded formation/record placement drawing
+on
+the indexed match canvas from the first granted frame, the derived
+kickoff phase-1 entry and the derived state-1 arm + row 01 chain reaching the
+live phase 2 asserted; the golden was re-pinned for the drawing and palette
+upgrades and is byte-identical since the kickoff-chain landing), and the
+windowed `make game` build runs on SDL3. The interactive smoke re-run on the
+development host (2026-10-08, visible-match G3) reaches match start (the match
+canvas replaces the front-end; the derived palette `OL-T11-6` landed in
+follow-up 4, so RGB is visible — FU-144) with the
 live kickoff ball/anim placement and the derived phase-1 entry
-(13/80 rows wired, the FU-143 phase driver and the derived score source
+(14/80 rows wired, the FU-143 phase driver and the derived score source
 included). Kick → score stays blocked interactively on the unported
-possession/selection invokers and goal-screen handlers, and the in-play
-phase entry on the unported record-action machinery (`OL-84` residual). Not
+possession/selection invokers and goal-screen handlers; the phase-1 → phase-2
+transition is now derived (follow-up-4 T2, FU-143 §11). Not
 ported: physical VGA/CRTC timing and device
 audio output (both modelled as pure data), and the remaining match
 action-handler bodies behind the derived dispatch tables. Match flow on the

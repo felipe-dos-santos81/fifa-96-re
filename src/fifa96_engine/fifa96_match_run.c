@@ -514,6 +514,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->score_tracked_side = -1;
   mr->score_max_diff = 0;
   mr->score_last_event = 0;
+  mr->global_5882a = 0;                /* drop the kickoff gate with the match */
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
 }
@@ -658,6 +659,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->global_5882a = 0;
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
@@ -697,6 +699,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
@@ -711,14 +714,21 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * entry, between the native `FUN_000740A0(1, side)` write (0x88E82, act 1 =
    * phase-0x17 handler FUN_00088DC8 stage 0) and the `FUN_00073E08` placement
    * commit begin models below. The run leaves the reset default phase 0 and
-   * enters the kickoff-placement phase 1 (class 0: the clock stops); the live
-   * phase 2 follows on that chain (the same setter call drives FUN_0008D098
-   * state 1, installing actions 1/2, and action row 01 calls FUN_0008A938
-   * situation 0xB at 0x7DF90), but that record-action machinery is unported
-   * (OL-84 residual). */
+   * enters the kickoff-placement phase 1 (class 0: the clock stops). The live
+   * phase 2 follows on that chain: the state-1 arm above installs actions 1/2,
+   * and action row 01 calls FUN_0008A938 situation 0xB at 0x7DF90 once the
+   * derived act-1 producer arms `mr->global_5882a` (M2 playable-match Task 2 /
+   * FU-143 §11). */
   (void)fifa96_match_state_set_phase(&mr->state, FIFA96_MATCH_RUN_KICKOFF_PHASE);
   mr->phase_machine.state = FIFA96_MATCH_RUN_KICKOFF_PHASE;
   mr->phase_machine.phase = FIFA96_MATCH_RUN_KICKOFF_PHASE;
+  /* M2 playable-match Task 2 / OL-84 residual: the same setter call runs the
+   * FUN_0008D098 state-1 arm per team (native 0x740C8/0x740DB; state 1 arm
+   * 0x8D1B1..0x8D243), staging the kickoff actions 1/2 and the team targets.
+   * It runs before the placement commit below, matching the native order
+   * (0x88E82 FUN_000740A0 precedes 0x88E87 FUN_00073E08; the 0x8D1D1
+   * FUN_00079CCC pick reads the placement outputs the formation seed set). */
+  (void)fifa96_match_phase_machine_kickoff(mr);
   /* FU-89 §kickoff placement / OL-T11-8: the derived kickoff pass after the
    * camera reset (native `FUN_00088DC8` stage 0 order: `FUN_000700F4` camera
    * -> `FUN_00073E08` placement). The act-1 ball spawn (0x1E0/0), the
@@ -855,6 +865,24 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
   return 1;
 }
 
+int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation) {
+  fifa96_action_phase_situation_out out;
+  fifa96_err_t rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  rc = fifa96_action_phase_situation(situation, &out);
+  if (rc != FIFA96_OK) return (int)rc;
+  /* The native table-2 arm runs FUN_000740A0 at the phase-writing rows; the
+   * act-handler invocation (FUN_000888FC, the unported phase-row bodies,
+   * OL-13/OL-78) and the table-1 pending queue (OL-73) stay unported. */
+  if (out.phase != FIFA96_ACTION_PHASE_NONE) {
+    rc = (fifa96_err_t)fifa96_match_state_set_phase(&mr->state, out.phase);
+    if (rc != 0) return (int)rc;
+    mr->phase_machine.state = out.phase;
+    mr->phase_machine.phase = out.phase;
+  }
+  return 0;
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -882,6 +910,17 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * most one frame today; the loop keeps one update per grant if that ever
    * changes. */
   for (uint32_t i = 0; i < granted; i++) {
+    /* FU-143 §10/§11 (M2 playable-match Task 2 / OL-84 residual): the act-1
+     * (phase-0x17 handler FUN_00088DC8) stage-1 derived remainder. The native
+     * body ticks the shared timeline timer [0x58818] by the frame delta and at
+     * `[0x58818] >= 0x78` sets [0x5882A]=1 (0x88EF3..0x88F07), the gate action
+     * row 01 stage 0 reads (0x7DC6B). begin models the act's stage 0 (phase
+     * entry + placement), so only the timer completion is derived here; the
+     * engine's `state.tick_total` is the same whole-delta accumulation
+     * ([0x58818] += [0x57A64], first-hand FU-81 §1.5) and begin zeroes it. */
+    if (mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE &&
+        mr->state.tick_total >= 0x78u)
+      mr->global_5882a = 1u;
     /* FU-139 §11: the native FUN_0004B100 toggles [0x157A4F] at frame entry
      * (0x4B11A/0x4B129), before the entity chain; row 06's claim arm reads it. */
     mr->pass_parity ^= 1u;

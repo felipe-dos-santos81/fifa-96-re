@@ -75,9 +75,14 @@ struct fifa96_surface;
  * per team (0x740C8/0x740DB), whose state-1 arm (0x8D1B1, table 0x8D040[1])
  * installs action 1 (0x8D1F1/0x8D200 CALL 0x7D9A4) / action 2 (0x8D238), and
  * action row 01 (0x7DBC0, the `phase == 1` gate at 0x7DBCB..0x7DBD6) calls
- * situation 0xB at 0x7DF90. The begun run waits at phase 1 because that
- * record-action machinery (rows 01/02, 0x10..0x13) is unported (OL-84
- * residual). */
+ * situation 0xB at 0x7DF90.
+ *
+ * M2 playable-match Task 2 landed the residual: begin runs the state-1 arm via
+ * `fifa96_match_phase_machine_kickoff` (between this entry and the placement
+ * commit, the native order), the wired action row 01 supplies the situation
+ * 0xB call, and the derived act-1 stage-1 producer sets `mr->global_5882a` at
+ * `state.tick_total >= 0x78` so a begun run reaches the live phase 2 on its
+ * own (see fifa96_match_run_frame and FU-143 §11). */
 #define FIFA96_MATCH_RUN_KICKOFF_PHASE 1u
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
@@ -293,6 +298,14 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* M2 playable-match Task 2 / OL-84 residual: the native `[0x5882A]` kickoff
+   * gate, the flag the act-1 (phase-0x17 handler FUN_00088DC8) stage 1 sets at
+   * the shared timeline timer `[0x58818] >= 0x78` (`0x88EF3..0x88F07`) and
+   * action row 01 stage 0 gates on (`0x7DC6B`). `fifa96_match_run_frame`
+   * derives the producer from `state.tick_total` (the same whole-delta
+   * accumulation, `[0x58818] += [0x57A64]`) while the phase is 1; init/begin
+   * clear it. */
+  uint8_t global_5882a;
   /* FU-139 §11 (Task 13): the native [0x157A4F] frame toggle
    * (FUN_0004B100 0x4B11A `XOR AH,1` / 0x4B129 store; cleared by the match
    * reset FUN_0004B02C 0x4B038). Row 06's claim arm and the second-half
@@ -341,9 +354,13 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
  * period lengths for the selector (see the FIFA96_MATCH_RUN_*_SECONDS_*
  * constants), run the derived FU-89 kickoff placement (formation seed +
  * record commit) and install the derived FU-143 §8/OL-84 kickoff phase entry
- * (`FIFA96_MATCH_RUN_KICKOFF_PHASE`: phase 1, class 0, so a fresh begun run
- * waits at the kickoff until its play transition is wired), and start the
- * lifecycle. Returns 0,
+ * (`FIFA96_MATCH_RUN_KICKOFF_PHASE`: phase 1, class 0) together with the
+ * derived `FUN_0008D098` state-1 arm (`fifa96_match_phase_machine_kickoff`,
+ * installed between the phase entry and the placement commit, the native
+ * order), and start the
+ * lifecycle. The derived act-1 producer (`global_5882a`) and the wired action
+ * row 01 then carry the run from phase 1 to the live phase 2 on its own
+ * (M2 playable-match Task 2 / FU-143 §11). Returns 0,
  * -FIFA96_ERR_INVALID (NULL arguments), -FIFA96_ERR_STATE (unbooted/QUIT
  * engine, run already live, or another run live on the engine), or the
  * lifecycle's register failure. */
@@ -401,7 +418,9 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
  * FU-71 camera/display blocks advanced with the same delta (FU-71's
  * FUN_000736AC runs from the frame body FUN_0004B100, not the render driver),
  * and the FU-141 entity/ball pool ran the FU-67 chain (team 0, team 1, the
- * ball pairing) with the FU-137 action dispatch bound to the pool records;
+ * ball pairing) with the FU-137 action dispatch bound to the pool records,
+ * after the derived act-1 kickoff producer armed `global_5882a` while the
+ * phase is 1 (FU-143 §11; the wired row 01 gates on it);
  * then, when the phase is 0x13/0x14, the FU-142a
  * `fifa96_match_phase_machine_step` ran the FUN_0008D098 installer arms once
  * (the FUN_000740A0 order);
@@ -451,6 +470,21 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * `FIFA96_ACTION_PHASE_NONE`), 0 otherwise, -FIFA96_ERR_INVALID (NULL), or a
  * -fifa96_err_t from the drivers. */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
+
+/* The derived `FUN_0008A938` situation dispatcher (M2 playable-match Task 2 /
+ * OL-84 residual; FU-143 §3.2/§5). Runs the derived table-2 row for the
+ * pending situation codes 0x00..0x0C (`fifa96_action_phase_situation`) and
+ * applies its phase outcome through `fifa96_match_state_set_phase`, mirroring
+ * `phase_machine.state`/`phase` (the native `FUN_000740A0` write inside the
+ * table-2 arms, e.g. situation 0xB -> 0x8AEF6 -> 0x8AF02 phase 2). The
+ * table-1 queue (`[0x15B6A8]`/`[0x15B6C0]`), the dispatcher head gates
+ * (`[0x14C32A]`, `[0x15B6C0]`) and the act-handler invocation
+ * (`FUN_000888FC`, the unported phase-row bodies) stay unported (OL-73/OL-78),
+ * so only the phase write is applied; situations whose row carries no phase
+ * (the act-only rows 1/8/9/0xA/0xC) are a no-op on the run. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL `mr` or situation >= 0x0D), or a -fifa96_err_t
+ * from the phase setter. */
+int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation);
 
 /* One match presentation pass into the engine's indexed surface (Task 15):
  * clears the canvas to `render.background`, then recomposes the scene per the

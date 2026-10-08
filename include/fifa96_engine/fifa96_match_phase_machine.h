@@ -33,7 +33,15 @@
  * `0x26`/3/0x25/0x28 arms and the `0x2A` record scan over one team block per
  * call; the native caller `FUN_000740A0` (`0x740C8`/`0x740DB`) invokes it once
  * per team right after writing `[0x157A4D]`, so the derived step loops both
- * teams. */
+ * teams.
+ *
+ * `fifa96_match_phase_machine_kickoff` is the state-1 subset of the same
+ * switch (M2 playable-match Task 2 / OL-84 residual): the kickoff
+ * record-action installer the phase-1 setter runs. It is called by
+ * `fifa96_match_run_begin` between the derived kickoff-phase entry and the
+ * `fifa96_match_entities_kickoff_place` commit (the native order: the
+ * `FUN_000740A0(1, side)` write at `0x88E82` precedes the `FUN_00073E08`
+ * placement at `0x88E87`). */
 #pragma once
 #include <stdint.h>
 #include "fifa96_engine/fifa96_match_entities.h"
@@ -94,3 +102,30 @@ int fifa96_match_arm_install_multi(struct fifa96_match_entities *pool, uint32_t 
  * scan). The installer phase argument is the pool's latched `phase`. Returns
  * FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_phase_machine_step(struct fifa96_match_run *mr);
+
+/* The `FUN_0008D098` state-1 arm — the kickoff record-action installer
+ * (M2 playable-match Task 2 / OL-84 residual; first-hand
+ * `0x8D1B1..0x8D243`, FU-143 §11). The native `FUN_000740A0` setter runs the
+ * per-team machine right after writing the new phase byte (`0x740C8`/
+ * `0x740DB`); when the new phase is 1 the arm runs:
+ *  - stage code 3 across records 0..10 of both team blocks
+ *    (`FUN_0008CEB8`, `0x8D1B1..0x8D1C1`); the index-0 pre-coercion and the
+ *    installer's inactive `3 -> 0x19` rule leave 0x19 everywhere on the
+ *    engine's all-inactive kickoff pool;
+ *  - `team+0x7B2 := the record nearest the kickoff point 0x15774C`
+ *    (`FUN_00079CCC`, `0x8D1C6..0x8D1DC`): the native calls each record's
+ *    phase handler `[rec+0x1C]` for its placement output, skips `+0x9A`/`+0x98`
+ *    and index 0, and keeps the strict-minimum distance; the derived model
+ *    reads the formation-seeded target triple instead (the phase handlers are
+ *    unported) and follows the native no-candidate fallback to the team base
+ *    (record 0, `0x79CE4`/`0x79D4F`);
+ *  - on the controlled team (`+0x826 == [0x157AAC]>>24`, `0x8D1E7..0x8D1EF`)
+ *    action 1 is installed into the chosen record (`0x8D200`), the record is
+ *    marked `+0x9A`, the next nearest is re-picked (`0x8D21D`), `+0x9A` is
+ *    restored and action 2 installed into the second (`0x8D238`); the chosen
+ *    record keeps `team+0x7B2`;
+ *  - the `FUN_0007876C` slot merge runs on the chosen record for both teams
+ *    (`0x8D23D`/`0x8D243`; a no-op on the pool while `+0x828` stays 0).
+ * The pool's latched phase is set to 1 (the native `[0x157A4D]` switch
+ * context). NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_phase_machine_kickoff(struct fifa96_match_run *mr);

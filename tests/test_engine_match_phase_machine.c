@@ -315,6 +315,64 @@ static void test_step_side_hi_bit(void) {
   assert(mr.phase_machine.arm2a_overflow == 0);
 }
 
+/* FU-143 §11 (M2 playable-match Task 2 / OL-84 residual): the `FUN_0008D098`
+ * state-1 arm at the kickoff phase entry (0x8D1B1..0x8D243, first-hand).
+ * With fresh zero targets and the camera at (0,0,0), the derived nearest pick
+ * (the native FUN_00079CCC substitution: the formation-seeded target triples)
+ * skips index 0 and strict-< ties keep the first candidate, so the controlled
+ * team takes record 1 (action 1) and record 2 (action 2); every other record
+ * holds the 3 -> 0x19 inactive coercion of the multi-install; team+0x7B2 is
+ * the first pick for both teams; the slot merge is a no-op (the pool's
+ * `slot_pool` is unmodeled 0). NULL -> -FIFA96_ERR_INVALID. */
+static void test_kickoff_arm_installs_rows(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.phase_machine.side_controlled = TEAM0;
+  assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
+  assert(mr.entities.phase == 1u);            /* the native [0x157A4D] context */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    uint8_t want0 = (i == 1u) ? 1u : (i == 2u) ? 2u : 0x19u;
+    assert(mr.entities.team[TEAM0].records[i].code == want0);
+    assert(mr.entities.team[TEAM1].records[i].code == 0x19u);
+  }
+  assert(mr.entities.team[TEAM0].target == 1);   /* 11*0 + record 1 */
+  assert(mr.entities.team[TEAM1].target == 12);  /* 11*1 + record 1 */
+  assert(mr.entities.team[TEAM0].records[1].skip_9a == 0); /* restored */
+  assert(mr.entities.slot_merge == FIFA96_MATCH_ENTITY_NONE);
+
+  /* the other side controlled swaps the action 1/2 installs */
+  fifa96_match_run_init(&mr);
+  mr.phase_machine.side_controlled = TEAM1;
+  assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
+  assert(mr.entities.team[TEAM0].records[1].code == 0x19u);
+  assert(mr.entities.team[TEAM1].records[1].code == 1u);
+  assert(mr.entities.team[TEAM1].records[2].code == 2u);
+
+  /* an occupied record 1 is skipped by both picks */
+  fifa96_match_run_init(&mr);
+  mr.phase_machine.side_controlled = TEAM0;
+  mr.entities.team[TEAM0].records[1].skip_9a = 1;
+  assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
+  assert(mr.entities.team[TEAM0].target == 2);
+  assert(mr.entities.team[TEAM0].records[1].code == 0u);  /* multi-install skip */
+  assert(mr.entities.team[TEAM0].records[2].code == 1u);
+  assert(mr.entities.team[TEAM0].records[3].code == 2u);
+  assert(mr.entities.team[TEAM0].records[1].skip_9a == 1); /* untouched */
+
+  /* no candidate: the native 0x79CCC fallback is the team base (record 0),
+   * so the second pick overwrites the first action 1 with action 2 there */
+  fifa96_match_run_init(&mr);
+  mr.phase_machine.side_controlled = TEAM0;
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    mr.entities.team[TEAM0].records[i].skip_9a = 1;
+  assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
+  assert(mr.entities.team[TEAM0].target == 0);
+  assert(mr.entities.team[TEAM0].records[0].code == 2u);
+  assert(mr.entities.team[TEAM0].records[0].skip_9a == 0);
+
+  assert(fifa96_match_phase_machine_kickoff(NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init_defaults();
   test_install_multi_stages();
@@ -327,6 +385,7 @@ int main(void) {
   test_step_arm28_2a_phase14();
   test_step_2a_overflow();
   test_step_side_hi_bit();
+  test_kickoff_arm_installs_rows();
   puts("test_engine_match_phase_machine OK");
   return 0;
 }

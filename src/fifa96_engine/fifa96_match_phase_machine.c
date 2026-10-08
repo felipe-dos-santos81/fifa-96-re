@@ -1,16 +1,21 @@
 /* src/fifa96_engine/fifa96_match_phase_machine.c — M2 arms-and-wiring Task 1 /
  * FU-142a: the `FUN_0008CEB8` multi-record arm helper. Task 2 adds the
- * `FUN_0008D098` state 0x13/0x14 arm block (`fifa96_match_phase_machine_step`).
+ * `FUN_0008D098` state 0x13/0x14 arm block (`fifa96_match_phase_machine_step`);
+ * M2 playable-match Task 2 adds the state-1 kickoff arm
+ * (`fifa96_match_phase_machine_kickoff`, FU-143 §11).
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix A
  * (read-only /FIFA96.EXE: disassemble_function/decompile_function 0x8CEB8,
  * read_memory 0x8CEE2, get_xrefs_to 0x8CEB8, the 15 call-site windows) and
  * Appendix B (state switch 0x8D178/table 0x8D040, arm block 0x8D693..0x8D820,
- * caller FUN_000740A0 0x740C8/0x740DB). */
+ * caller FUN_000740A0 0x740C8/0x740DB); docs/ghidra/FU143_phase_rows.md §11 for
+ * the state-1 arm (0x8D1B1..0x8D243), FUN_00079CCC and the kickoff phase-2
+ * write. */
 #include <string.h>
 
 #include "fifa96_engine/fifa96_match_phase_machine.h"
 #include "fifa96_engine/fifa96_match_run.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 
 int fifa96_match_phase_machine_init(struct fifa96_match_phase_machine *pm) {
   if (!pm) return -FIFA96_ERR_INVALID;
@@ -91,6 +96,61 @@ int fifa96_match_phase_machine_step(struct fifa96_match_run *mr) {
      * this write of the arm Task 2 ported, because row 2A's arm 10 sets the
      * flag and the derived frame reads it back (FU-142 Appendix H; OL-56). */
     mr->global_10f35c = 0;
+  }
+  return FIFA96_OK;
+}
+
+/* The derived `FUN_00079CCC` kickoff pick (state-1 arm `0x8D1C6`): the record
+ * of `team` nearest the kickoff point 0x15774C, skipping index 0 (EBX=0),
+ * `+0x9A` and `+0x98`, with the native strict-minimum (ties keep the first
+ * candidate) and the native no-candidate fallback to the team base (record 0;
+ * `0x79CE4` seeds the result with EDX = the team base and `0x79D4F` returns
+ * it). The native per-record distance source is the record's phase handler
+ * `[rec+0x1C]` placement output; the phase handlers are unported, so the
+ * derived model substitutes the formation-seeded target triple (the same
+ * placement before the commit). The probe point is the live camera triple
+ * (0x15774C), (0,0,0) at the kickoff. The native best seed `0x7FBC` (a cutoff
+ * no formation-coordinate distance reaches) is not reproduced: the shared
+ * `fifa96_entity_find_nearest` seeds 0xFFFF (FU-143 §11.1 leg). */
+static int32_t match_kickoff_pick(const struct fifa96_match_run *mr, uint32_t team) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  int index;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+    candidates[i].x = (int16_t)e->target_x;
+    candidates[i].y = (int16_t)e->target_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  index = fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
+                                     (int16_t)mr->render.camera.pos_x,
+                                     (int16_t)mr->render.camera.pos_z, &best);
+  return index >= 0 ? (int32_t)index : 0;
+}
+
+int fifa96_match_phase_machine_kickoff(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  /* The native FUN_000740A0 write already happened; the installer arms read
+   * [0x157A4D] == 1. */
+  mr->entities.phase = 1u;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    struct fifa96_match_team *team = &mr->entities.team[t];
+    int32_t first;
+    (void)fifa96_match_arm_install_multi(&mr->entities, t, 0, 10, 3, -1); /* 0x8D1C1 */
+    first = match_kickoff_pick(mr, t);                                    /* 0x8D1D1 */
+    team->target = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)first);
+    if (mr->phase_machine.side_controlled == team->side) {                /* 0x8D1EF */
+      int32_t second;
+      (void)fifa96_match_entities_install(&team->records[first],
+                                          mr->entities.phase, 1, 0);      /* 0x8D200 */
+      team->records[first].skip_9a = 1;                                   /* 0x8D211 */
+      second = match_kickoff_pick(mr, t);                                 /* 0x8D21D */
+      team->records[first].skip_9a = 0;                                   /* 0x8D22C */
+      (void)fifa96_match_entities_install(&team->records[second],
+                                          mr->entities.phase, 2, 0);      /* 0x8D238 */
+    }
+    (void)fifa96_match_entities_merge_slot(&mr->entities, t, (uint32_t)first); /* 0x8D243 */
   }
   return FIFA96_OK;
 }

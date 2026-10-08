@@ -5,28 +5,35 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-13/80 action rows wired, the derived FU-143 phase driver wired into the run
+14/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
 `/ART/GAMEART0.PVI` at begin, so player records receive real positions and
 draw), the derived kickoff phase-1 entry (OL-84: begin lands
-`FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`) and the derived native match palette
+`FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`), the derived `FUN_0008D098` state-1
+kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
+reaches the live phase 2 naturally via situation 0xB) and the derived native
+match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
 indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v4** is
 green: it asserts the drawing directly (the formation-placed records reach the
 indexed canvas from the first granted frame; the golden was re-pinned for that
-upgrade, T1), the kickoff entry at begin (T2; transcript byte-identical) and
-the RGB palette at the first match present (T1 of follow-up 4; the golden was
+upgrade, T1), the kickoff entry at begin (T2; transcript byte-identical), the
+RGB palette at the first match present (T1 of follow-up 4; the golden was
 re-pinned again for the palette — first differing line frame 6, 160 of 165
-lines, state suffixes unchanged), and the interactive `make game` smoke re-run
+lines, state suffixes unchanged) and the natural phase-1 → 2 chain (follow-up-4
+T2: the golden stays byte-identical with the kept 0x13/0x14/2 forcing, whose
+mismatch evidence is in FU-143 §11.5), and the interactive `make game` smoke
+re-run
 on this host (2026-10-08, follow-up-4 G1) reaches match start with a non-black
 RGB canvas (player sprites in the derived palette's magenta/olive). Kick →
-score and a live in-play phase entry remain blocked interactively on the
-unported possession/selection rows and the unported record-action machinery
+score and the live goal invokers remain blocked interactively on the
+unported possession/selection rows and goal invoker machinery
 (see "Interactive smoke" and "Known gaps"). The M2 visible-match plan's G1/G2
 closed **carried-with-legs** (indexed draw and phase-1 entry landed; RGB
-palette `OL-T11-6` was carried and is now landed by follow-up 4) and G3 is
+palette `OL-T11-6` was carried and is now landed by follow-up 4, and the OL-84
+residual is landed by T2) and G3 is
 accepted here; the earlier playability-legs plan's G1/G2 closed, G3 carried
 and G4 accepted. See
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
@@ -94,9 +101,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   kit-remapped/appended chunk as the surface palette before the plane
   conversion — FU-144), period end
   (`resolve` OVER→POST→EXIT) back to the front-end.
-- Action dispatch (FU-137): **13/80 rows wired** — `00`, `04`, `06`, `07`,
-  `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring G3) and
-  `26`, `28`, `2A` (cluster G); dispatch results 66 UNSUP / 13 OK / 1 NOTF.
+- Action dispatch (FU-137): **14/80 rows wired** — `00`, `01`, `04`, `06`,
+  `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
+  G3; `01` is the M2 playable-match Task 2 kickoff taker) and
+  `26`, `28`, `2A` (cluster G); dispatch results 65 UNSUP / 14 OK / 1 NOTF.
 - **Interactive smoke (playable-match follow-up 4 G1 re-run, this host
   2026-10-08; first verified Task 13):** `make game` window opens (960×720
   integer-scaled SDL3; ESC quits, exit 0; the intro and the procedural
@@ -119,13 +127,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   only). The T5 kickoff placement was probed live there too: ball at
   (480, 0, 0) = the derived 0x1E0 spawn, record 0's OL-80 `anim_id` at 0x26,
   score 0-0; a begun run now enters the derived kickoff phase 1 (OL-84, below).
-  **Kick, score and a live in-play phase entry are still not interactively
-  reachable:** the kick press dispatches no gameplay row (the
-  possession/selection invokers are unported), gameplay goals have no wired
-  invoker (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller),
-  and the phase-1 → phase-2 transition needs the unported record-action
-  machinery (OL-84 residual: the `FUN_0008D098` state-1 arm and the rows
-  01/02/0x10..0x13). The M2-B tape v3 covers the sequence headlessly with its
+  **Kick and score are still not interactively reachable:** the kick press
+  dispatches no gameplay row (the possession/selection invokers are unported)
+  and gameplay goals have no wired invoker (OL-87/OL-88/OL-89; the derived
+  score writer has no gameplay caller). The phase-1 → phase-2 transition is
+  now derived (follow-up-4 T2 lands the `FUN_0008D098` state-1 arm and action
+  row 01; the frame-body fixture pins the natural phase 2 — FU-143 §11); the
+  smoke walkthrough predates that landing, so its on-screen phase was not
+  re-probed. The M2-B tape v4 covers the sequence headlessly with its
   declared/forced phases and the live driver's period end.
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
@@ -134,8 +143,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. Tape **v3** (M2 visible-match Task 1) stages all
-  **13 wired rows** (including the G1 rows 04/08), asserts the natural path:
+  set, and the score step. Tape **v3** (M2 visible-match Task 1) stages the
+  wired rows (including the G1 rows 04/08), asserts the natural path:
   the KICK press reaches the run but dispatches no gameplay row, the kickoff
   placement is pinned at match start (ball 0x1E0/0/0, `anim_id` 0x26), the
   **formation seed** loaded `352ko.fmt` so records carry real positions
@@ -150,19 +159,23 @@ the build also produces the windowed `fifa96` target (`make game`).
   adds the **derived
   kickoff phase entry (OL-84)**: `fifa96_match_run_begin` installs
   `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1` (the native `FUN_00088DC8` stage-0
-  `FUN_000740A0(1, side)` write at `0x88E82`), so a begun run waits at the
+  `FUN_000740A0(1, side)` write at `0x88E82`), so a begun run starts at the
   kickoff-placement phase (class 0) and the tape's m 1 directive forces the
-  live phase over it. The 0x13/0x14 forced window **stays**: the phase-1 ->
-  phase-2 transition runs through the setter's own state machine (the
-  `0x88E82` `FUN_000740A0(1, side)` call runs `FUN_0008D098` per team; its
-  state-1 arm `0x8D1B1` installs actions 1/2, and action row 01
-  `0x7DBC0`/`0x7DF90` calls `FUN_0008A938` situation 0xB -> `0x8AEF6` ->
-  `0x8AF02`; the producer set also includes rows 0x10..0x13 and the
-  keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072`), but that record-action
-  machinery is unported, so the derived entry cannot reproduce the FU-142a
-  arm staging the forced window drives. The T2 transcript is
-  **byte-identical** after the wiring (no re-pin; `OL-84` stays open with the
-  record-action machinery as the remaining gap). The **T1** transcript changed
+  live phase over it. Follow-up-4 T2 lands the **residual**: begin also runs
+  the derived `FUN_0008D098` state-1 arm
+  (`fifa96_match_phase_machine_kickoff`), the wired action row 01 turns the
+  derived act-1 producer (`global_5882a` at `tick_total >= 0x78`) into the
+  situation-0xB -> `0x8AEF6` -> `0x8AF02` phase-2 write, and
+  `test_engine_match_frame::test_kickoff_enters_phase2_naturally` pins a begun
+  run reaching the live phase 2 with no forcing (FU-143 §11). The 0x13/0x14
+  forced window **stays** because the natural chain is not frame-for-frame
+  identical to it (the forced window drives the FU-142a 26/28/2A arm staging
+  and its `state=19/20` lines; measured mismatch: hashes identical through
+  golden line 48, first divergence at line 49, natural phase 2 at presented
+  frame 410 = granted frame ~121 — FU-143 §11.5). The T2 tape transcript is
+  **byte-identical** after the wiring (no re-pin; the wired-row observation set
+  grows to 14 rows: row 01 joins and row 00 still dispatches through a wired
+  row's reset install). The **T1** transcript changed
   and the golden was re-pinned for the drawing upgrade: the first differing
   line is frame 9 (the first granted render staging), 157 lines differ (the
   null backend chains its present hash across all presented frames, so the
@@ -187,19 +200,24 @@ the build also produces the windowed `fifa96` target (`make game`).
   follow-up-4 update 2026-10-08).**
   Landed: `OL-T11-8` (formation/record placement — indexed draw live, golden
   re-pinned), `OL-84`'s phase-1 entry (begin installs
-  `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`; transcript byte-identical) and
+  `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`; transcript byte-identical), the
+  `OL-84` residual kickoff chain (follow-up-4 T2: the `FUN_0008D098` state-1
+  arm + action row 01 + the derived act-1 producer; the begun run reaches the
+  live phase 2, transcript byte-identical with the forcing kept per FU-143
+  §11.5) and
   `OL-T11-6` (the derived native match palette — FU-144; golden re-pinned for
   the RGB upgrade). Carried
   open: `OL-T11-7`
-  HUD; `OL-84` residual record-action machinery (the `FUN_0008D098` state-1
-  arm and rows 01/02/0x10..0x13) plus the FU-73 keeper/restart producers
+  HUD; the remaining `OL-84` situation-0xB producers (rows 02/0x10..0x13) and
+  row 01's event/camera/ball-stage sinks, plus the FU-73 keeper/restart
+  producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
   `OL-88`/`OL-89` goal invokers; `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
   (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the per-record camera
   place `FUN_00079F3C` (FU-96 leg 5); `OL-62`..`OL-71` residuals. The items
   have their detailed entries below / in the FU docs.
-- **Unwired rows (67/80).** 66 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 28
+- **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
   `27`/`29`/`2C` (ported bodies, no installer entry) and the dead entry `2B`;
@@ -301,19 +319,26 @@ the build also produces the windowed `fifa96` target (`make game`).
   write `FUN_000740A0(1, side)` (`0x88E82`, after `FUN_00073E28` and before the
   `FUN_00073E08` placement commit the begin path models) lands as
   `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`, mirroring the `phase_machine` switch
-  byte; the begun run waits at the kickoff-placement state (class 0, clock
-  stopped). `OL-84` stays open: the only phase-2 writer is the
-  `FUN_0008A938` situation-0xB arm (`0x8AEF6` -> `0x8AF02`), and while the
-  phase-1 -> 2 transition is real on the kickoff chain (the `0x88E82` setter
-  call drives `FUN_0008D098` state 1, installing actions 1/2; action row 01
-  calls situation 0xB at `0x7DF90`; other producers are the rows
-  0x10..0x13 and the keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072`),
-  the record-action machinery is unported — so the kickoff acts (0xA/1/4/8)
-  end at phase 1 in the engine.
+  byte. Follow-up-4 Task 2 lands the **OL-84 residual**: begin also runs the
+  derived `FUN_0008D098` state-1 arm
+  (`fifa96_match_phase_machine_kickoff`: code-3 multi-install, the
+  `FUN_00079CCC` nearest pick — formation-target substitution — the action 1/2
+  taker installs and the team targets), the wired action row 01
+  (`fifa96_match_action_01`) walks the native stage machine and its
+  situation-0xB call runs `fifa96_match_run_situation` (`0x8AEF6` ->
+  `0x8AF02` = phase 2), and `fifa96_match_run_frame` arms the derived act-1
+  producer `mr.global_5882a` at `state.tick_total >= 0x78`. A begun run
+  therefore reaches the live phase 2 naturally (pinned by
+  `test_engine_match_frame::test_kickoff_enters_phase2_naturally`; FU-143
+  §11). The remaining situation-0xB producers (rows 02/0x10..0x13, the
+  keeper/restart bodies, the computed act-8 call) and row 01's
+  camera/event/ball-stage sinks stay open legs (`OL-84` narrowed).
   The extra-time flag producer (`OL-85`, re-verified at `0x8B2AC`/`0x8B2C1`)
-  and the post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B
+  and the post-period 0x0C hold/reset timing (`OL-86`) stay open, and the
+  natural chain is not frame-for-frame identical to the forced window
+  (FU-143 §11.5), so the M2-B
   tape keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics)
-  and stays byte-identical. See FU-143 §9/§10 (integration errata).
+  and stays byte-identical. See FU-143 §9/§10/§11 (integration errata).
 - **Score event source (child `C3-OL2`, closed; invokers open).** The FU-72
   `FUN_00093944` writer is derived and ported
   (`fifa96_action_score_event`, FU-142 Appendix L): score increment, last-side
