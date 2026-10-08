@@ -237,11 +237,14 @@ static void test_action_00_runs_move_step(void) {
  * (+0x9B) and the actor binding ([0x157A83] = rec). The slot-merge body
  * (FUN_0007876C), the camera-place call (FUN_000700F4) and the actor pointer
  * stay modelled as record requests/flags until the C8/C11 pool and arm ports
- * land (FU-140 OL-37, carrying OL-16). */
+ * land (FU-140 OL-37, carrying OL-16). T2-review erratum: the native `< 6`
+ * (`0x7551A`) and `< 3` (`0x7553E`) tests read `MOV EAX,[EAX+0x8F]; SAR
+ * EAX,0x18` = byte `+0x92`, so the fixture stages `record.stage92`, not the
+ * never-written `record.stage`. */
 static void test_action_1E_runs_claim_place(void) {
   struct fixture f;
   make_fixture(&f);
-  f.mr.record.stage = 1;
+  f.mr.record.stage92 = 1;
   f.mr.record.pos_x = 100;
   f.mr.record.pos_y = 20;
   f.mr.record.pos_z = 200;
@@ -259,7 +262,7 @@ static void test_action_1E_runs_claim_place(void) {
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
 
   /* stage >= 3 blocks the claim but still emits the pre-gate helper request */
-  f.mr.record.stage = 3;
+  f.mr.record.stage92 = 3;
   f.mr.record.has_ball = 0;
   f.mr.record.controlled = 0;
   f.mr.record.place_x = -1;
@@ -269,7 +272,7 @@ static void test_action_1E_runs_claim_place(void) {
   assert(f.mr.record.place_valid == 0 && f.mr.record.place_x == -1);
 
   /* already holding the ball -> no placement, no actor rebind */
-  f.mr.record.stage = 1;
+  f.mr.record.stage92 = 1;
   f.mr.record.has_ball = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
@@ -277,11 +280,11 @@ static void test_action_1E_runs_claim_place(void) {
   assert(f.mr.record.place_valid == 0);
 
   /* stage 6 clears the helper request; a slot suppresses it */
-  f.mr.record.stage = 6;
+  f.mr.record.stage92 = 6;
   f.mr.record.has_ball = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 0);
-  f.mr.record.stage = 1;
+  f.mr.record.stage92 = 1;
   f.mr.record.has_slot = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 0);
@@ -1237,6 +1240,35 @@ static void test_action_01_runs_kickoff_body(void) {
   assert(f.mr.entities.team[0].target == 1);   /* nearest to pos (0,0) */
   assert(f.mr.record.stage92 == 3u);
   assert(f.mr.record.timer89 == 0);
+
+  /* Discriminating marker case (T2 review): the 0x7DBDC source is byte +0x92
+   * (`[EBP+0x8F]>>24`), i.e. `stage92`, not the never-written `record.stage`.
+   * `stage92 = 3` with `stage = 0` takes the position-copy branch; a read of
+   * `record.stage` would take the marker branch instead and leave the wrong
+   * target/requests behind. */
+  f.mr.state.phase = 1;
+  f.mr.record.stage = 0;
+  f.mr.record.stage92 = 3;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 2;
+  f.mr.record.pos_x = 0x777;
+  f.mr.record.pos_y = 0x123;
+  f.mr.record.pos_z = -0x555;
+  f.mr.record.target_x = 0x111;
+  f.mr.record.target_y = 0x222;
+  f.mr.record.target_z = 0x333;
+  f.mr.record.place_valid = 0;
+  f.mr.record.controlled = 0;
+  f.mr.record.helper_request = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x01) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x777);
+  assert(f.mr.record.target_y == 0x123);
+  assert(f.mr.record.target_z == -0x555);
+  assert(f.mr.record.place_valid == 0);
+  assert(f.mr.record.controlled == 0);
+  assert(f.mr.record.helper_request == 0);
+  assert(f.mr.record.timer89 == 2);
+  assert(f.mr.state.phase == 1u);
   drop_fixture(&f);
 }
 

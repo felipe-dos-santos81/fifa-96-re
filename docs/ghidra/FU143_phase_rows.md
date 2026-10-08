@@ -849,7 +849,14 @@ Gate and stage walk (first-hand `disassemble_bytes 0x7DBC0` 560 B,
   `[0x157A83] = rec` (`0x7DC18`), `[EBP+0x4D] = (old < 0) ? -0x30 : 0x30`
   (`0x7DC06..0x7DC1E`), `[EBP+0x55] = 0` (`0x7DC23`), `CALL 0x7876C`
   (`0x7DC2A`); otherwise the position triple is copied to the target
-  (`0x7DC31..0x7DC39`).
+  (`0x7DC31..0x7DC39`). **Marker byte erratum (T2 review):** the source
+  expression `[EBP+0x8F]>>24` is the top byte of the dword at `+0x8F`, i.e.
+  **byte `+0x92`** (`MOV EAX,[EBP+0x8F]; SAR EAX,0x18`), which the engine
+  maintains as `record.stage92`; the port reads `stage92` (the earlier
+  `record.stage` read modelled the wrong, never-written byte). The same
+  equivalence governs `FUN_0007550C` row 1E's `< 6` (`0x7551A`) / `< 3`
+  (`0x7553E`) tests — `fifa96_match_action_1E` now passes `record.stage92`
+  (FU-140 erratum recorded in `fifa96_match_handlers.c`).
 * `0x7DC3A..0x7DC50`: `[EBP+0x89] += [0x157A64]`.
 * `0x7DC56..0x7DC63`: stage bound `+0x92 > 3 -> 0x7DFBF`; table `0x7DBB0` =
   `{0x6DC6B,0x6DCAF,0x6DD29,0x6DFB2}` -> `{0x7DC6B,0x7DCAF,0x7DD29,0x7DFB2}`.
@@ -907,13 +914,16 @@ key, the act-state clears) stay unmodelled.
   between the phase-1 entry and `fifa96_match_entities_kickoff_place` (the
   native order: `0x88E82` setter before `0x88E87` commit).
 * `fifa96_match_action_01` (`src/fifa96_engine/fifa96_match_handlers.c`): the
-  row-01 body (gate, marker branch, timer, stage walk) wired into the FU-137
+  row-01 body (gate, marker branch on `stage92` = native `[+0x8F]>>24` = byte
+  `+0x92`, timer, stage walk) wired into the FU-137
   action table. The camera reset uses the zero constant triple through the
   derived place request; the stage-2 nearest uses `FUN_0008DE8C` over the
   pool positions; the situation call runs `fifa96_match_run_situation`
   (`src/fifa96_engine/fifa96_match_run.c`), the derived `FUN_0008A938` table-2
   phase writer. The unported sinks (stage-0 sound `0x974DC(0x1E)`, stage-2
   `0x8F188`/`0x92820`/`0x8DCD4`/`0x7A490`, `0x4C380`) are recorded legs.
+  T2-review fix: the marker read was `record.stage` (a never-written byte);
+  row 1E's same-source `< 6`/`< 3` tests were fixed alongside (§11.2).
 * `fifa96_match_run_frame` arms `mr->global_5882a` at `tick_total >= 0x78`
   while the phase is 1 (§11.3).
 

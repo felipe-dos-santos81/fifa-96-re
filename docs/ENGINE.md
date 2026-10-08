@@ -16,7 +16,8 @@ kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
 reaches the live phase 2 naturally via situation 0xB) and the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
-indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v4** is
+indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v3**
+(follow-up-4 updates; the v4 acceptance is Task 4) is
 green: it asserts the drawing directly (the formation-placed records reach the
 indexed canvas from the first granted frame; the golden was re-pinned for that
 upgrade, T1), the kickoff entry at begin (T2; transcript byte-identical), the
@@ -121,7 +122,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   (HUD/overlays still wait on OL-T11-7). The screenshots establish the Return
   advance: the panel-open BackSpace frame is byte-identical to the preceding
   one, and the match-canvas change is the panel-confirm shot. The
-  real input/entry evidence is the tape v4 assertions, corroborated by the
+  real input/entry evidence is the tape v3 assertions, corroborated by the
   earlier Task 13 in-process probe (debug build gdb: `input_state[0]` = 0x04
   RIGHT / 0x01 UP / 0x10 KICK / 0x20 PASS, `dispatched_ok` = 0x1 = row 00
   only). The T5 kickoff placement was probed live there too: ball at
@@ -134,7 +135,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now derived (follow-up-4 T2 lands the `FUN_0008D098` state-1 arm and action
   row 01; the frame-body fixture pins the natural phase 2 — FU-143 §11); the
   smoke walkthrough predates that landing, so its on-screen phase was not
-  re-probed. The M2-B tape v4 covers the sequence headlessly with its
+  re-probed. The M2-B tape v3 covers the sequence headlessly with its
   declared/forced phases and the live driver's period end.
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).

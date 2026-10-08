@@ -94,7 +94,8 @@ layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v4** is green — the 14 wired
+chain run headless (the M2-B acceptance tape **v3** with the follow-up-4
+updates is green — the 14 wired
 action rows exercised, the resource-loaded formation/record placement drawing
 on
 the indexed match canvas from the first granted frame, the derived

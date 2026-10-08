@@ -133,7 +133,10 @@ static int fifa96_match_action_00(struct fifa96_match_run *mr) {
  *  - `phase != 1` -> `0x7DFB8` = the unconditional `FUN_0007DAB4` reset
  *    (`MOV EAX,EBP; CALL 0x7DAB4`; the jump lands past the stage-3 `+0x44`
  *    test), modelled by `match_row_reset`;
- *  - marker `(int8)stage < 2` (`0x7DBDC..0x7DC2F`): the `FUN_000700F4` camera
+ *  - marker `(int8)stage92 < 2` (`0x7DBDC`: `MOV EAX,[EBP+0x8F]; SAR
+ *    EAX,0x18` — the top byte of the dword at `+0x8F` **is byte `+0x92`**,
+ *    the engine's `stage92`; the never-written `record.stage` is not the
+ *    native source, T2-review erratum): the `FUN_000700F4` camera
  *    reset with the constant kickoff triple `[0x10F328/2C/30]` = `(0,0,0)`
  *    (first-hand `read_memory 0x10F328`; derived as the `place_*` camera
  *    request), `[0x157A83] = rec` (`controlled`), the ±0x30 kickoff x from the
@@ -196,7 +199,7 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
     match_row_reset(mr, &team->records[idx]);
     return FIFA96_OK;
   }
-  if ((int8_t)r->stage < 2) {                    /* 0x7DBDC */
+  if ((int8_t)r->stage92 < 2) {                  /* 0x7DBDC: [EBP+0x8F]>>24 = byte +0x92 */
     /* 0x7DBEA..0x7DC01: FUN_000700F4([0x10F328],[0x10F32C],[0x10F330], 0);
      * the constant kickoff triple is (0,0,0), so the derived FUN_000700F4
      * reset is the zero place request. */
@@ -274,7 +277,11 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
  * consumes the `helper_request` (slot merge `FUN_0007876C`), the `controlled`
  * actor binding and the placement triple (`place_valid`), leaving the
  * merge/camera call bodies and the per-type offset table as OL-37. The body
- * does not write `+0x9E`, so `ran` is untouched. */
+ * does not write `+0x9E`, so `ran` is untouched. Marker source erratum
+ * (T2 review): the native `< 6` / `< 3` tests are `MOV EAX,[EAX+0x8F];
+ * SAR EAX,0x18` (`0x7551A`/`0x7553E`) = the byte at `+0x92` (the top byte of
+ * the dword at `+0x8F`), i.e. the engine's `stage92`; this handler
+ * previously passed the never-written `record.stage` (pool `+0x8F` byte). */
 static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
   fifa96_keeper_point pos;
   fifa96_keeper_point place;
@@ -285,7 +292,7 @@ static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
   pos.y = mr->record.pos_y;
   pos.z = mr->record.pos_z;
   rc = fifa96_keeper_claim_place(&pos, mr->record.place_offset_x, mr->record.place_offset_z,
-                                 mr->record.stage, mr->record.has_ball, mr->record.has_slot,
+                                 mr->record.stage92, mr->record.has_ball, mr->record.has_slot,
                                  &place, &helper_request, &claimed);
   if (rc != FIFA96_OK) return rc;
   mr->record.helper_request = helper_request;
