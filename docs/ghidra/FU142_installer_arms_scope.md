@@ -125,7 +125,7 @@ FU-138/FU-139/FU-141 where already bounded there.
 | OL-30 row 06 pursuit | row 06 `0x801B4..0x809EF` (~597 insns, FU-139 §2; the `..0x81067` span end is the row-09 body `0x80A00`, slot `0x1106E0[9]`) | target construction, `0x114E04` folds, RNG gates, installs 8/9/4 | **closed (Task 13, Appendix J; FU-139 §11); remainder OL-69** |
 | OL-31 rows 07/0F kick machines | `FUN_0007E600` `0x7E600..0x7E7C4` (452 B); row 07 `0x814B0`, row 0F `0x82AD0..0x82DD0` (FU-139 §2) | decision, opponent 0x22 invoke, ball-actor install 4, fun-0F predictor/RNG/timer reload, `FUN_0007DAB4` tail | 2 |
 | OL-32 reception/tackle/duel arms | `FUN_0007A084` `0x7A084..0x7A456` (978 B); NSEARCH `FUN_0008DB6C` `0x8DB6C..0x8DC49` (221 B); SWAP `FUN_000786A0` `0x786A0..0x786EB` (75 B); `FUN_0004C324` `0x4C324..0x4C372` (78 B); row 18/21/23 arms (FU-139 §6) | special-class/RNG arms, sound arms, NSEARCH/SWAP, row-21 claim, row-23 target, row-18 resolution | 1–2 |
-| OL-38 outfield decide/chase wiring | rows 04 `0x7E7C8` / 08 `0x81068..0x814AF` (FU-138/FU-141 §7; the FU-141 `..0x81188` head is extended to row 08's RET at `0x814AF` by first-hand bytes here); `FUN_0007DAB4` `0x7DAB4..0x7DB0C` (88 B); `FUN_00079B58` (16 B); `FUN_00079C50` `0x79C50..0x79C98` (72 B); per-type gate `0x110680`; input tables `0x1109D0`/`0x1109E4` (FU-137 §4.1, FU-141 §7) | input-row dispatch, no-edge arm, forced decision, chase gate; then rows 04/08 wire | **machine subset closed (Task 14, Appendix K); row bodies split → OL-70** |
+| OL-38 outfield decide/chase wiring | rows 04 `0x7E7C8` / 08 `0x81068..0x814AF` (FU-138/FU-141 §7; the FU-141 `..0x81188` head is extended to row 08's RET at `0x814AF` by first-hand bytes here); `FUN_0007DAB4` `0x7DAB4..0x7DB0C` (88 B); `FUN_00079B58` (16 B); `FUN_00079C50` `0x79C50..0x79C98` (72 B); per-type gate `0x110680`; input tables `0x1109D0`/`0x1109E4` (FU-137 §4.1, FU-141 §7) | input-row dispatch, no-edge arm, forced decision, chase gate; then rows 04/08 wire | **machine subset closed (Task 14, Appendix K); row bodies split → OL-70 (04) / OL-70a (08)** |
 | OL-41 interception tail | `FUN_0008D824` `0x8D824..0x8D8EB` (199 B) + `FUN_000795B4` `0x795B4..0x795F0` (60 B) | bind call; distance band feeding `team+0x7BE` | **closed (Task 14, Appendix K); NULL-record band read OL-71** |
 
 ## 4. Derivability count and task estimate
@@ -508,21 +508,27 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (`fifa96_entity_angle`/`fifa96_entity_sine`); `team_select_intercept` now
   feeds `team+0x7BE` (`0x8DA94..0x8DAE7`). The slot-rejected NULL-record band
   read is OL-71.
-* **OL-70 — rows 04/08 full record-visible bodies (split from OL-38, Task
-  14).** Row 04's handler `0x7E7C8..0x7F141` is ~649 instructions (FU-77
-  §2.4: camera-lead arm, ranked `FUN_0008DDE0` pick, wing vectors
+* **OL-70 — row 04 full record-visible body (split from OL-38, Task 14).**
+  Row 04's handler `0x7E7C8..0x7F141` is 574 Ghidra defined-code instructions
+  (the textual span also covers inline jump-table/padding data; FU-77 §2.4
+  counts 649 across the span): camera-lead arm, ranked `FUN_0008DDE0` pick,
+  wing vectors
   `0x157794`/`0x157788`, `0x92AC8` RNG gates, `0x8DCD4`/`0x8DC68` metrics,
   `0x741B4` score fold, `0x7876C`/`0x78A84`/`0x78AA4` slot calls,
-  `0xE600` decision, installs 4/0x19/0xF/0xB/7/6/5); row 08's handler
-  `0x81068..0x814AF` is ~231 instructions (stage machine 0/1/2, camera+lead
+  `0xE600` decision, installs 4/0x19/0xF/0xB/7/6/5).
+* **OL-70a — row 08 full record-visible body (split from OL-38, Task 14).**
+  Row 08's handler
+  `0x81068..0x814AF` is 213 Ghidra defined-code instructions (about 231 across
+  the span with its inline data) (stage machine 0/1/2, camera+lead
   stage-0 target, `0x79C50` face, `0x6E598` anim, the facing-projection
   `0x795A4` scan, `0x8ED40`/`0x8F188`/`0x92820`/`0x7A490` requests,
   `0x79B1C` snap, the new record fields `+0x3D`/`+0x44`/`+0x7D` and the
   `rec[+4]` descriptor bytes `+0xC`/`+0x16`, the `[0x15877D]`/`[0x15872F]`
   process bytes). Both bodies are bounded spans but neither fits the task's
   remaining budget; porting them and wiring rows 04/08 is the follow-up
-  scheduled from this split (one task per row). Until then the rows dispatch
-  `-FIFA96_ERR_UNSUPPORTED` and the FU-137 §6.1 evidence names this leg.
+  scheduled from this split (one task per row: OL-70 row 04, OL-70a row 08).
+  Until then the rows dispatch `-FIFA96_ERR_UNSUPPORTED` and the FU-137 §6.1
+  evidence names the row's leg.
 * **OL-71 — interception NULL-record band read (Task 14).** When the nearest
   is rejected by the `+0x20` slot gate, the native clears `[team+0x7BA]`
   (`0x8DA66`) and still runs `FUN_000795B4` with the NULL record, reading
@@ -2259,8 +2265,10 @@ identity clears. All unmodeled inputs are the numbered OL-69 leg (FU-139
 
 ### K.2 `FUN_0008D824` / `FUN_000795B4` (OL-41, closed)
 
-`0x8D824..0x8D8EB` (81 insns), EAX = actor record, EDX = nearest record,
-EBX = out triple (`&nearest+0x4D` at the `0x8DA7A` call):
+`0x8D824..0x8D8EB` (81 insns), EAX = the `[0x157A83]` controlled actor
+(`0x8DA75 MOV EAX,[0x157A83]` at the call), EDX = nearest record,
+EBX = out triple (`&nearest+0x4D` at the `0x8DA7A` call). The z source is the
+**actor's** `+0x61` (`0x8D82A MOV EDI,[EAX+0x61]`), not the nearest's:
 
 ```
 0x8D82A  EDI=[actor+0x61]; ECX=[actor+0x59]; EBP=[nearest+0x59]
@@ -2272,7 +2280,8 @@ EBX = out triple (`&nearest+0x4D` at the `0x8DA7A` call):
          else                    [out] = 0x240-actor.x
 ```
 (The `0x8D8AC` `TEST EBP,EBP` arm selects on |nearest.x|, never negative, so
-the `(actor.x-0x180)/3-0xC0` branch is dead compiler output.)
+the `(actor.x-0x180)/3-0xC0` branch is dead compiler output and `nearest.x`
+feeds nothing live.)
 
 `0x795B4..0x795F0` (28 insns), EAX = position triple, EDX = target triple,
 EBX = out triple: `out+2 = (int16)(target.w0 - pos.w0)`,
@@ -2283,10 +2292,12 @@ the `0xCD474` angle by `|a|`, mirrors `a > 0x100` over `0x200`, then divides
 both fold helpers were verified equal to the `0x114E04` sine primitive
 (`sine(a)` and `sine(a+0x100)`) for every `a` in `0..0x100`.
 
-Engine (`team_select_intercept`): bind writes the nearest `+0x4D` triple,
-band overwrites its `+0x4D/+0x4F/+0x51` words with `{band, dx, dz}`, and the
-`0x8DA94..0x8DAE7` gate (`(int16)band < 0xF0` and
-(`lane word +0x6B > 0x1E0` or `|pos.z| > |[0x157754]| + 0x90`)) sets
+Engine (`team_select_intercept`): bind writes the nearest `+0x4D` triple from
+the actor's x/z; the band call passes the nearest's `+0x59` (position) and
+the freshly bound `+0x4D` (target) with a **stack scratch** output
+(`0x8DA88 LEA EBX,[ESP+0xC]`) — the record's target triple is an input only
+and is not written back. The `0x8DA94..0x8DAE7` gate (`(int16)band < 0xF0`
+and (`lane word +0x6B > 0x1E0` or `|pos.z| > |[0x157754]| + 0x90`)) sets
 `team+0x7BE`; the flag is cleared at `0x8D9C5` on every team update. The
 slot-rejected path is OL-71.
 
@@ -2327,10 +2338,12 @@ it).
 
 ### K.4 Row bodies 04/08 — split (OL-70)
 
-Row 04 `0x7E7C8..0x7F141` (~649 insns, FU-77 §2.4) and row 08
-`0x81068..0x814AF` (~231 insns; FU-141 §7's `..0x81188` head is not the row
-end — the row-08 RET is first-hand at `0x814AF`, row 07 starts `0x814B0`,
-FU-77 §2.7) are bounded spans whose full record-visible ports exceed this
-task. They are registered as OL-70 (FU-142 §6) and rows 04/08 keep
-`fn == NULL`; the FU-137 §6.1 evidence names the ported machine subset and
-OL-70. No parity claim is made over them.
+Row 04 `0x7E7C8..0x7F141` (574 Ghidra defined-code insns; FU-77 §2.4's 649
+counts the span, which covers inline data) and row 08 `0x81068..0x814AF`
+(213 defined-code; ~231 across the span; FU-141 §7's `..0x81188` head is not
+the row end — the row-08 RET is first-hand at `0x814AF`, row 07 starts
+`0x814B0`, FU-77 §2.7) are bounded spans whose full record-visible ports
+exceed this task. They are registered as OL-70 (row 04) / OL-70a (row 08)
+(FU-142 §6) and rows 04/08 keep `fn == NULL`; the FU-137 §6.1 evidence names
+the ported machine subset and the row's leg. No parity claim is made over
+them.

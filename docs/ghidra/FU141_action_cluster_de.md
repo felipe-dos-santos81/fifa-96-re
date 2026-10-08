@@ -184,8 +184,11 @@ The port implements the counter, both selections (vector choice and the
 interception conditions/skip/slot rejection), the timer and the record walk;
 the `FUN_0008D824` bind call and the `FUN_000795B4` band flag were ported by
 M2 arms-and-wiring Task 14 (OL-41 closed; `fifa96_entity_intercept_bind` /
-`_band`, FU-142 Appendix K), so `flag7be` is now fed (the slot-rejected
-NULL-record band read is OL-71). The per-record machines themselves
+`_band`, FU-142 Appendix K), so `flag7be` is now fed. The bind's z comes from
+the **actor's** `+0x61` (`0x8D82A`, EAX = `[0x157A83]`), and the band output
+is a stack scratch (`0x8DA88 LEA EBX,[ESP+0xC]`) that is not stored back to
+the record (fix round 1; the slot-rejected NULL-record band read is OL-71).
+The per-record machines themselves
 (`FUN_0007CA54` input-row dispatch/no-edge arm/forced decision,
 `FUN_000782D0`) remain FU-137 OL-3/OL-4 (OL-44); the pool update runs the
 derived machine subset: the timer pair decay and the keeper `+0x79 -> +0x7B`
