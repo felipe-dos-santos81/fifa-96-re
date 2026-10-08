@@ -588,9 +588,10 @@ static void test_action_05_unwired_carrier(void) {
 /* FU-142 Appendix K (M2 arms-and-wiring Task 14): OL-38's machine subset is
  * ported (`fifa96_outfield_input_row`/`fifa96_outfield_chase_gate` + the flat
  * 0x110680 gate, tested in `test_outfield`), but rows 04/08's full
- * record-visible bodies (`0x7E7C8..0x7F141`, ~649 insns; `0x81068..0x814AF`,
- * ~231 insns) are split to OL-70 per the plan's row-window rule. The wiring
- * gate therefore keeps both rows `fn == NULL` with the leg named. */
+ * record-visible bodies (`0x7E7C8..0x7F141`, 574 Ghidra defined-code insns;
+ * `0x81068..0x814AF`, 213) are split to OL-70 (row 04) / OL-70a (row 08) per
+ * the plan's row-window rule. The wiring gate therefore keeps both rows
+ * `fn == NULL` with the row's leg named. */
 static void test_action_04_08_unwired_machine_subset(void) {
   struct fixture f;
   const struct fifa96_match_handler *r4 = &fifa96_match_action_table[0x04];
@@ -601,7 +602,7 @@ static void test_action_04_08_unwired_machine_subset(void) {
   assert(strstr(r4->evidence, "UNSUPPORTED") != NULL);
   assert(strstr(r4->evidence, "FU-142") != NULL);
   assert(r8->fn == NULL);
-  assert(strstr(r8->evidence, "OL-70") != NULL);
+  assert(strstr(r8->evidence, "OL-70a") != NULL);
   assert(strstr(r8->evidence, "UNSUPPORTED") != NULL);
   assert(action_expect[0x04] == UNSUP);
   assert(action_expect[0x08] == UNSUP);

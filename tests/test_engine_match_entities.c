@@ -399,11 +399,14 @@ static void test_update_intercept_select(void) {
   assert(pool.team[TEAM0].intercept == NONE);
 }
 
-/* OL-41 (M2 Task 14): the interception band flag `team+0x7BE`
+/* OL-41 (M2 Task 14, fix round 1): the interception band flag `team+0x7BE`
  * (`0x8DA7F..0x8DAE7`). The nearest passes the bind `FUN_0008D824` (writes its
- * +0x4D triple), `FUN_000795B4` overwrites the +0x4D/+0x4F/+0x51 words with
- * {band, dx, dz}, and the flag sets when the band word `< 0xF0` (signed) and
- * the record's +0x6B lane word `> 0x1E0` or `|pos.z| > |cam_z| + 0x90`. */
+ * +0x4D triple from the *controlled actor's* x/z; `0x8D82A MOV
+ * EDI,[EAX+0x61]` with EAX = `[0x157A83]`), then `FUN_000795B4` runs on
+ * (nearest+0x59, nearest+0x4D) with a stack scratch output
+ * (`0x8DA88 LEA EBX,[ESP+0xC]`) — the record target is not written back. The
+ * flag sets when the band word `< 0xF0` (signed) and the record's +0x6B lane
+ * word `> 0x1E0` or `|pos.z| > |cam_z| + 0x90`. */
 static void test_update_intercept_band_flag(void) {
   struct fifa96_match_entities pool;
   struct fifa96_match_entities_frame f = zero_frame();
@@ -416,7 +419,8 @@ static void test_update_intercept_band_flag(void) {
     pool.team[TEAM0].records[i].pos_x = 0x400;
     pool.team[TEAM0].records[i].pos_z = 0x400;
   }
-  /* controlled actor at (0, 0x800): actor_x 0, out of nearest range */
+  /* controlled actor at (0, 0x800): actor_x 0, actor_z 0x800, out of nearest
+   * range */
   pool.controlled = TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 1;
   pool.team[TEAM0].records[1].pos_x = 0;
   pool.team[TEAM0].records[1].pos_z = 0x800;
@@ -428,12 +432,12 @@ static void test_update_intercept_band_flag(void) {
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(pool.team[TEAM0].intercept == 3);
   assert(pool.team[TEAM0].flag7be == 1);
-  /* bind: (actor_x 0) x=0x240, y=0, z=0xB10-((0xB10-0x50)/2+0x120)=0x490;
-   * band: dx=0, dz=0x440, band=0 -> +0x4D=0, +0x51=0x440 (the +0x55 word
-   * 0x490 is untouched by 0x795B4). */
-  assert(pool.team[TEAM0].records[3].target_x == 0);
-  assert((uint16_t)pool.team[TEAM0].records[3].target_y == 0x440);
-  assert(pool.team[TEAM0].records[3].target_z == 0x490);
+  /* bind (actor_z 0x800): x=0x240, y=0,
+   * z=0xB10-((0xB10-0x800)/2+0x120)=0x868; the band (dx=0, dz=0x818) is a
+   * stack scratch and leaves the target triple as the bind output. */
+  assert(pool.team[TEAM0].records[3].target_x == 0x240);
+  assert(pool.team[TEAM0].records[3].target_y == 0);
+  assert(pool.team[TEAM0].records[3].target_z == 0x868);
   /* lane fails and |pos.z| <= |cam_z| + 0x90 -> no flag (flag is cleared at
    * the top of each frame, 0x8D9C5) */
   pool.team[TEAM0].records[3].lane_x = 0;
@@ -446,10 +450,11 @@ static void test_update_intercept_band_flag(void) {
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(pool.team[TEAM0].intercept == 3);
   assert(pool.team[TEAM0].flag7be == 0);
-  /* the band words land on the pool record (+0x4D = 0x286 | dx<<16,
-   * +0x51 = dz = 0x468) */
-  assert((uint16_t)pool.team[TEAM0].records[3].target_x == 0x286);
-  assert((uint16_t)pool.team[TEAM0].records[3].target_y == 0x468);
+  /* the bind output survives: +0x4D = 0x240, +0x51 = 0, +0x55 = 0x868 (the
+   * band word 0x254 for this geometry is only a stack value) */
+  assert(pool.team[TEAM0].records[3].target_x == 0x240);
+  assert(pool.team[TEAM0].records[3].target_y == 0);
+  assert(pool.team[TEAM0].records[3].target_z == 0x868);
   /* a slot-rejected nearest clears the flag and skips the bind (the native
    * then computes the band over the NULL record; the derived model refuses —
    * OL-71) */

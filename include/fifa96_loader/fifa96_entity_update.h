@@ -33,26 +33,28 @@ int fifa96_entity_angle(int32_t x, int32_t z, int32_t *angle);
 int32_t fifa96_entity_sine(int32_t angle);
 
 /* `FUN_0008D824` (`0x8D824..0x8D8EB`, 81 instructions, OL-41): the
- * interception bind. EAX = the controlled actor record, EDX = the nearest
- * record, EBX = the nearest record's +0x4D output triple. Writes the triple:
+ * interception bind. EAX = the controlled actor record (`0x8DA75 MOV
+ * EAX,[0x157A83]`), EDX = the nearest record, EBX = the nearest record's
+ * +0x4D output triple. Writes the triple:
  *   out.y = 0;
- *   out.z = 0xB10 - ((0xB10 - |nearest.z|) / 2 + 0x120), negated when the
- *           actor's team side ([[actor]+0x826]) is non-zero;
+ *   out.z = 0xB10 - ((0xB10 - |actor.z|) / 2 + 0x120), negated when the
+ *           actor's team side ([[actor]+0x826]) is non-zero
+ *           (`0x8D82A MOV EDI,[EAX+0x61]` — the *actor's* z, not the
+ *           nearest's);
  *   out.x = |actor.x| >= 0x180 ? (actor.x + 0x180) / 3 + 0xC0
  *                             : (actor.x > 0 ? actor.x - 0x240 : 0x240 - actor.x)
  * (the actor.x branch is signed IDIV truncation; the +0x180/-0x180 branch pair
  * at `0x8D8AC` selects on |nearest.x|, which is never negative, so the live
- * arm is the +0x180 one — the other is dead compiler output). NULL `out` ->
- * -FIFA96_ERR_INVALID. */
+ * arm is the +0x180 one — the other is dead compiler output; `nearest_x`
+ * exists only for that dead read). NULL `out` -> -FIFA96_ERR_INVALID. */
 typedef struct fifa96_entity_intercept_target {
   int32_t x;
   int32_t y;
   int32_t z;
 } fifa96_entity_intercept_target;
 
-int fifa96_entity_intercept_bind(int32_t actor_x, uint8_t actor_side,
-                                 int32_t nearest_x, int32_t nearest_z,
-                                 fifa96_entity_intercept_target *out);
+int fifa96_entity_intercept_bind(int32_t actor_x, int32_t actor_z, uint8_t actor_side,
+                                 int32_t nearest_x, fifa96_entity_intercept_target *out);
 
 /* `FUN_000795B4` (`0x795B4..0x795F0`, 28 instructions, OL-41): the
  * interception distance band. EAX = the position triple (`from`), EDX = the
@@ -64,7 +66,10 @@ int fifa96_entity_intercept_bind(int32_t actor_x, uint8_t actor_side,
  * `fifa96_entity_sine(a + 0x100)` otherwise, with `a` the
  * `fifa96_entity_angle` result normalized to `0..0x100` by mirroring over
  * `0x100` (the `0xCE364`/`0xCE386` paths, verified equal to the sine primitive
- * for every `a` in range). NULL `out` -> -FIFA96_ERR_INVALID. */
+ * for every `a` in range). The output triple is a caller scratch: the
+ * interception caller passes `LEA EBX,[ESP+0xC]` (`0x8DA88`) and the record's
+ * +0x4D triple is only the *input* (`EDX`) — nothing is stored back to the
+ * record. NULL `out` -> -FIFA96_ERR_INVALID. */
 typedef struct fifa96_entity_intercept_band_out {
   int16_t band;
   int16_t dx;

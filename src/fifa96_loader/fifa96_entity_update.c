@@ -118,18 +118,17 @@ int fifa96_entity_angle(int32_t x, int32_t z, int32_t *angle) {
   return FIFA96_OK;
 }
 
-int fifa96_entity_intercept_bind(int32_t actor_x, uint8_t actor_side,
-                                 int32_t nearest_x, int32_t nearest_z,
-                                 fifa96_entity_intercept_target *out) {
-  int64_t nz;
+int fifa96_entity_intercept_bind(int32_t actor_x, int32_t actor_z, uint8_t actor_side,
+                                 int32_t nearest_x, fifa96_entity_intercept_target *out) {
+  int64_t az;
   int32_t half;
   int32_t edge;
   if (!out) return -FIFA96_ERR_INVALID;
   (void)nearest_x;   /* read only by the native's dead |nearest.x| test */
   out->y = 0;
-  nz = nearest_z;
-  if (nz < 0) nz = -nz;
-  half = (int32_t)((0xB10 - nz) / 2);
+  az = actor_z;      /* 0x8D82A MOV EDI,[EAX+0x61]: the *actor's* z */
+  if (az < 0) az = -az;
+  half = (int32_t)((0xB10 - az) / 2);
   edge = 0xB10 - (half + 0x120);
   out->z = actor_side != 0 ? -edge : edge;
   if (actor_x < 0 ? -(int64_t)actor_x >= 0x180 : actor_x >= 0x180) {

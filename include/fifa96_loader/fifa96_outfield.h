@@ -82,7 +82,9 @@ int fifa96_outfield_chase_action(const fifa96_outfield_chase_state *state, uint8
  *     and the code-8 chase gate (`fifa96_outfield_chase_gate`).
  * The machine's final `CALL [rec+0x18]` + `FUN_0006E8E8`/`FUN_00079B1C`/
  * `FUN_0007BF20` tail is the engine dispatch itself and is not re-modelled
- * here. */
+ * here. Returns the file's `int` error convention (`-FIFA96_ERR_INVALID`); the
+ * task brief's `fifa96_err_t` names the same negative values, and this file's
+ * whole public API is `int`-typed. */
 typedef struct fifa96_outfield_input_state {
   uint8_t has_slot;      /* record +0x20 != 0 */
   uint8_t phase;         /* [0x157A4A]>>24 */

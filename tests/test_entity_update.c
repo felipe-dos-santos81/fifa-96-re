@@ -149,13 +149,15 @@ static void test_math_primitives(void) {
   assert(fifa96_entity_sine(0x1FF) == 402);
 }
 
-/* M2 Task 14 / OL-41: `FUN_0008D824` (`0x8D824..0x8D8EB`). */
+/* M2 Task 14 / OL-41: `FUN_0008D824` (`0x8D824..0x8D8EB`). The z source is
+ * the *actor's* +0x61 (`0x8D82A MOV EDI,[EAX+0x61]` with EAX = the
+ * `[0x157A83]` actor at the `0x8DA75` call site), not the nearest's. */
 static void test_intercept_bind(void) {
   fifa96_entity_intercept_target t = {0x7, 0x7, 0x7};
   assert(fifa96_entity_intercept_bind(0, 0, 0, 0, &t) == FIFA96_OK);
   assert(t.x == 0x240 && t.y == 0 && t.z == 0x468);
   /* side 1 negates z (`0x8D87C NEG [EBX+8]`) */
-  assert(fifa96_entity_intercept_bind(0, 1, 0, 0, &t) == FIFA96_OK);
+  assert(fifa96_entity_intercept_bind(0, 0, 1, 0, &t) == FIFA96_OK);
   assert(t.x == 0x240 && t.z == -0x468);
   /* |actor.x| < 0x180, actor.x > 0: x - 0x240 (`0x8D896`) */
   assert(fifa96_entity_intercept_bind(0x100, 0, 0, 0, &t) == FIFA96_OK);
@@ -172,12 +174,15 @@ static void test_intercept_bind(void) {
   assert(t.x == 0x1C0);
   assert(fifa96_entity_intercept_bind(-0x200, 0, 0, 0, &t) == FIFA96_OK);
   assert(t.x == 0x96);
-  /* z from |nearest.z| (`0x8D836..0x8D86E`); nearest.x is not read by a live
-   * path (the 0x8D8AC arm tests |nearest.x|, which is never negative). */
-  assert(fifa96_entity_intercept_bind(0, 0, 0x1234, 0x400, &t) == FIFA96_OK);
+  /* z from |actor.z| (`0x8D82A..0x8D86E`); nearest.x is read only by the
+   * 0x8D8AC dead arm (|nearest.x| is never negative) */
+  assert(fifa96_entity_intercept_bind(0, 0x400, 0, 0x1234, &t) == FIFA96_OK);
   assert(t.z == 0x668);
-  assert(fifa96_entity_intercept_bind(0, 0, -0x1234, -0x400, &t) == FIFA96_OK);
+  assert(fifa96_entity_intercept_bind(0, -0x400, 0, -0x1234, &t) == FIFA96_OK);
   assert(t.z == 0x668);
+  /* discriminating: actor z 0x800 vs nearest z 0x50 (the old wrong source) */
+  assert(fifa96_entity_intercept_bind(0, 0x800, 0, 0x50, &t) == FIFA96_OK);
+  assert(t.x == 0x240 && t.z == 0x868);
   assert(fifa96_entity_intercept_bind(0, 0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
