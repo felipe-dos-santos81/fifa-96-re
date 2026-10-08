@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_match_run.h"
+#include "fifa96_engine/fifa96_asset.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
@@ -563,6 +564,36 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;
 }
 
+/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): the resource-loaded
+ * formation seed. `FUN_0004A6BC` resolves the `0x14BFC0` table's `.fmt` slots
+ * (0..29, one family of six per formation id) — slot `6*formation_id` is the
+ * placement file — and the BSS
+ * default for an unselected team is formation id 0 (first-hand: `[0x14C1E4]`
+ * is BSS 0 and `FUN_0006D9C4` derives `[team+0x7AE] = 0x11033A + id*0x1D`, a
+ * 0x1D-byte roster row whose `byte[0]` is the id); the front-end team-selection
+ * producer of that byte is unported. Slot 0's name is `352ko.fmt`, a BIGF
+ * entry of the match art container `/ART/GAMEART0.PVI` (first-hand directory:
+ * entry 0; the engine already stages the same file). The seed is a soft
+ * failure: no ISO/asset/entry leaves the zero targets the pre-T1 path had.
+ * The controlled side is the `[0x157AAC]>>24` mirror (BSS 0). */
+#define MATCH_RUN_FORMATION_BANK "/ART/GAMEART0.PVI"
+#define MATCH_RUN_FORMATION_NAME "352ko.fmt"
+
+static void match_run_formation_seed(struct fifa96_match_run *mr) {
+  struct fifa96_scene_formation formation;
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  if (!mr->engine || !mr->engine->assets) return;
+  if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
+      FIFA96_OK)
+    return;
+  if (fifa96_scene_formation_load(bytes, len, MATCH_RUN_FORMATION_NAME, &formation) ==
+      FIFA96_OK)
+    (void)fifa96_match_entities_seed_formation(&mr->entities, &formation,
+                                               mr->phase_machine.side_controlled);
+  fifa96_asset_free(bytes);
+}
+
 /* Release the Task 2 staging arena. Runs only on initialized runs: init must
  * accept uninitialized memory (tests memset 0xAA and re-init), so the owner
  * slot is assigned NULL there and never freed; begin/end/stage call this only
@@ -655,6 +686,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
+  /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
+   * formation before the commit (the native `FUN_0008D098` phase-cell order at
+   * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
+  match_run_formation_seed(mr);
   /* FU-89 §kickoff placement / OL-T11-8: the derived kickoff pass after the
    * camera reset (native `FUN_00088DC8` stage 0 order: `FUN_000700F4` camera
    * -> `FUN_00073E08` placement). The act-1 ball spawn (0x1E0/0), the

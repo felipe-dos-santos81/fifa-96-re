@@ -24,6 +24,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "fifa96_engine/fifa96_asset.h"
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 
@@ -744,6 +745,88 @@ static void test_kickoff_place_commits_records_and_ball(void) {
   assert(fifa96_match_entities_kickoff_place(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): the formation seed. The
+ * 44 bytes are the extracted `352ko.fmt` (GAMEART0.PVI BIGF entry 0, first
+ * hand: `00 b4 00 b8 ...`); the phase cell `FUN_0006E1D0` maps record i's
+ * own/opp byte pair to the target triple. Team 0 (side 0, controlled) uses the
+ * file's +2 pair and keeps the sign; team 1 uses +0 and is negated. */
+static const uint8_t entity_formation_352ko[FIFA96_SCENE_FORMATION_BYTES] = {
+  0x00, 0xB4, 0x00, 0xB8, 0xE8, 0xD8, 0xE8, 0xDA, 0x00, 0xD4, 0x00, 0xD8,
+  0x18, 0xD8, 0x18, 0xDA, 0xDF, 0xFB, 0xE0, 0xFE, 0xEC, 0xF0, 0xED, 0xED,
+  0xFF, 0xE6, 0xFF, 0xEB, 0x14, 0xF1, 0x13, 0xED, 0x20, 0xFC, 0x21, 0xFE,
+  0xFA, 0xF8, 0xFD, 0xFE, 0x06, 0xF8, 0x02, 0xFE,
+};
+
+static void test_seed_formation_targets(void) {
+  struct fifa96_match_entities pool;
+  fifa96_scene_formation f;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  memset(&f, 0, sizeof f);
+  assert(fifa96_match_entities_seed_formation(&pool, &f, 0) ==
+         FIFA96_ERR_NOT_FOUND);   /* not loaded: targets untouched */
+  assert(pool.team[TEAM0].records[0].target_z == 0);
+  memcpy(f.bytes, entity_formation_352ko, sizeof entity_formation_352ko);
+  f.loaded = 1;
+  assert(fifa96_match_entities_seed_formation(&pool, &f, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[0].target_x == 0);
+  assert(pool.team[TEAM0].records[0].target_y == 0);
+  assert(pool.team[TEAM0].records[0].target_z == -2376);   /* own 0xB8 */
+  assert(pool.team[TEAM1].records[0].target_x == 0);
+  assert(pool.team[TEAM1].records[0].target_z == 2508);    /* opp 0xB4 negated */
+  assert(pool.team[TEAM0].records[8].target_x == 1254);    /* own 0x21 */
+  assert(pool.team[TEAM0].records[8].target_z == -66);
+  assert(pool.team[TEAM1].records[8].target_x == -1216);   /* opp 0x20 negated */
+  assert(pool.team[TEAM1].records[8].target_z == 132);     /* opp 0xFC negated */
+  /* The kickoff commit then lands the positions (FUN_00079B6C). */
+  assert(fifa96_match_entities_kickoff_place(&pool, 0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[0].pos_x == 0);
+  assert(pool.team[TEAM0].records[0].pos_y == 0);
+  assert(pool.team[TEAM0].records[0].pos_z == -2376);
+  assert(pool.team[TEAM1].records[0].pos_x == 0);
+  assert(pool.team[TEAM1].records[0].pos_z == 2508);
+  assert(pool.team[TEAM0].records[8].pos_x == 1254);
+  /* controlled side 1: team 1 becomes the own-pair reader */
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  assert(fifa96_match_entities_seed_formation(&pool, &f, 1) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[0].target_z == -2508);   /* opp 0xB4 */
+  assert(pool.team[TEAM1].records[0].target_z == 2376);    /* own 0xB8 negated */
+  assert(fifa96_match_entities_seed_formation(NULL, &f, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_seed_formation(&pool, NULL, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* ISO fixture: the real GAMEART0.PVI contains `352ko.fmt` as its first BIGF
+ * entry; the loader must parse it and the seed must reproduce the first-hand
+ * kickoff positions. Skips without the ISO (the house convention). */
+static int entity_file_exists(const char *path) {
+  FILE *f = fopen(path, "rb");
+  if (!f) return 0;
+  fclose(f);
+  return 1;
+}
+
+static void test_formation_iso_fixture(void) {
+  if (!entity_file_exists("game/FIFAPCCD96.iso")) {
+    fprintf(stderr, "SKIP formation ISO fixture (no ISO)\n");
+    return;
+  }
+  struct fifa96_asset_table *table = NULL;
+  assert(fifa96_asset_mount_file("game/FIFAPCCD96.iso", &table) == FIFA96_OK);
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  assert(fifa96_asset_read(table, "/ART/GAMEART0.PVI", &bytes, &len) == FIFA96_OK);
+  fifa96_scene_formation f;
+  assert(fifa96_scene_formation_load(bytes, len, "352ko.fmt", &f) == FIFA96_OK);
+  assert(f.loaded == 1);
+  assert(memcmp(f.bytes, entity_formation_352ko, sizeof entity_formation_352ko) == 0);
+  struct fifa96_match_entities pool;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  assert(fifa96_match_entities_seed_formation(&pool, &f, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[0].target_z == -2376);
+  assert(pool.team[TEAM1].records[0].target_z == 2508);
+  fifa96_asset_free(bytes);
+  fifa96_asset_unmount(table);
+}
+
 /* The `FUN_0008CF60` face (`FUN_00079B6C` 0x79BB5..0x79BCF -> `FUN_00079C50`):
  * the delta is camera minus the committed target; a nonzero delta writes the
  * `+0x8E` facing octant `((angle + 0x40) & 0x3FF) >> 7`. Fixture: camera
@@ -826,6 +909,8 @@ int main(void) {
   test_ball_pair();
   test_ball_state_roundtrip();
   test_place_commits_target();
+  test_seed_formation_targets();
+  test_formation_iso_fixture();
   test_kickoff_place_commits_records_and_ball();
   test_kickoff_place_face_and_selector();
   test_update_tolerates_unsupported();

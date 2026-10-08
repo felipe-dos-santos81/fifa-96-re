@@ -1,4 +1,4 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v2 (spec §5, G4).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v3 (spec §5, G4).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -14,13 +14,13 @@
  * Regenerate the golden transcript (with the ISO present):
  *   ./build/test_engine_m2 > tests/golden/engine/m2-frames.txt
  *
- * --- v2 provenance: natural path and remaining forcing (G4) -----------------
+ * --- v3 provenance: natural path and remaining forcing (G4) -----------------
  *
  * The transcript is the deterministic null-backend replay of the engine-owned
  * run started by the real front-end -> match bridge (selector 0, FU-64 §1.1).
- * The playability tasks (M2 legs T1-T5) upgraded the natural path underneath
- * the same spec §5 sequence, so v2 asserts where the natural path now runs and
- * where it still stops. It pins, in order:
+ * The playability tasks (M2 legs T1-T5) and the visible-match Task 1 upgraded
+ * the natural path underneath the same spec §5 sequence, so v3 asserts where
+ * the natural path now runs and where it still stops. It pins, in order:
  *   1. the boot/intro-skip frame, the front-end frames of the panel-open and
  *      panel-confirm navigation, and the match-start frame (frame 5);
  *   2. the forced kickoff segments: phase 0x13 (first half, frame 6 onward,
@@ -40,12 +40,14 @@
  *      OVER -> POST -> EXIT -> run_end compression returning the engine to
  *      FRONTEND, and 20 post-exit front-end frames.
  *
- * Natural path (asserted by v2):
+ * Natural path (asserted by v3):
  *   - the T5 kickoff placement runs at begin (OL-T11-8): the pool ball spawn is
  *     pinned at match start (0x1E0, 0, 0) with the inactive records' animation
- *     id at 0x26 (`fifa96_match_entities_kickoff_place`; the per-record
- *     formation *targets* stay resource-loaded, so the committed positions are
- *     the native phase-0 identity placement and no player entity draws);
+ *     id at 0x26 (`fifa96_match_entities_kickoff_place`); T1 adds the
+ *     resource-loaded formation seed (352ko.fmt of /ART/GAMEART0.PVI), so the
+ *     records commit real non-zero formation positions and player entities
+ *     draw from the first granted frame (step 9, the first render-list
+ *     staging);
  *   - the KICK press (step 11) reaches the run's input model
  *     (`input_state[0] == 0x10`) and is consumed by the next granted frame
  *     body (step 12: the engine advances the clock before polling input, so a
@@ -79,18 +81,25 @@
  *     `OL-87`/`OL-88`/`OL-89` invoker legs;
  *   - HUD/overlays stay `OL-T11-7` and palette install `OL-T11-6`.
  *
- * Golden decision (v2): the transcript is BYTE-IDENTICAL to the v1 golden
- * (frames 1..165). The T3/T4/T5 upgrades land inside the exit step (the
- * `state=` sample precedes each step) or change no rendered input (ball
- * z = 0 culled, no formation targets), so no frame moved and the golden is
- * NOT re-pinned; the test's byte-comparison is the tape-mode record.
+ * Golden decision (v3, M2 visible-match Task 1 / OL-T11-8): the transcript
+ * CHANGED and the golden is re-pinned for the intended drawing upgrade — the
+ * match frames now draw the formation-placed records. The first differing line
+ * is frame 9 (the first granted frame, where the FU-85 §4 scene staging first
+ * fills the render list with the seeded positions); frames 6..8 render the
+ * empty list and stay identical. Every later line differs in hash because the
+ * null backend chains one FNV-1a over all presented frames (`platform_null.c`
+ * `present_hash`); canvas-wise the post-exit front-end frames (146..165) are
+ * repainted identically (menu_art_draw overwrites the full surface and the
+ * palette) and only carry the chained earlier change. 157 golden lines differ
+ * (9..165); the pre-T1 golden pinned the zero-target placement where nothing
+ * drew. M1 is untouched.
  *
  * FU-143 phase-driver wiring (playability Task 3): the run frame body steps the
  * derived `fifa96_match_run_phase_drive` each granted frame, so the phase-2
  * period end writes the derived post-period phase 0x0C (the selector-0
  * no-extra-time chooser). The transcript stays byte-identical because the
  * driver runs inside the exit step, after the state tick, while the `state=`
- * sample is taken before each step; the v2 assertion reads the FU-142a mirror
+ * sample is taken before each step; the v3 assertion reads the FU-142a mirror
  * after the step to pin the derived write. The 0x13/0x14/2 forcing stays
  * declared because the kickoff entry (OL-79/OL-84) and the extra-time flag
  * producer (OL-85) are unported.
@@ -377,6 +386,20 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       res->ball_y = e->match_run.entities.ball.y;
       res->ball_z = e->match_run.entities.ball.z;
       res->start_anim_id = e->match_run.entities.team[0].records[0].anim_id;
+      /* v3 (M2 visible-match Task 1): the formation seed loaded 352ko.fmt at
+       * begin, so the records carry real positions in ISO mode; without the
+       * ISO the seed degrades and the positions stay zero. */
+      if (with_iso) {
+        assert(e->match_run.entities.team[0].records[0].pos_x == 0);
+        assert(e->match_run.entities.team[0].records[0].pos_z == -2376);
+        assert(e->match_run.entities.team[1].records[0].pos_x == 0);
+        assert(e->match_run.entities.team[1].records[0].pos_z == 2508);
+        assert(e->match_run.entities.team[0].records[8].pos_x == 1254);
+        assert(e->match_run.entities.team[1].records[8].pos_x == -1216);
+      } else {
+        assert(e->match_run.entities.team[0].records[0].pos_z == 0);
+        assert(e->match_run.entities.team[1].records[0].pos_z == 0);
+      }
     }
     if (steps == 7 || steps == 9 || steps == 11) {
       /* The scripted move (RIGHT 0x04 / UP 0x01) and kick (0x10) presses

@@ -641,10 +641,58 @@ replay gates are folded into one `replay_gate` argument; the original's
   (`FUN_00079B6C`'s commit block, span corrected) and the kickoff pass
   `fifa96_match_entities_kickoff_place` (ball spawn 0x1E0/0 with ball.y = 0,
   per-record commit, camera face, and the `0x79C13` selector) are ported and
-  fixtured; the per-record formation targets remain the resource table's open
-  leg (OL-T11-8 partial), so records are placed from caller-seeded targets,
-  and the tail's `0x6E48C` `+0x3E` write stays a leg (no pool field). Note
-  `[0x157AB1] = 0` is a process global with no derived home.
+   fixtured; the per-record formation targets remain the resource table's open
+   leg (OL-T11-8 partial), so records are placed from caller-seeded targets,
+   and the tail's `0x6E48C` `+0x3E` write stays a leg (no pool field). Note
+   `[0x157AB1] = 0` is a process global with no derived home.
+* **Formation source correction + first-hand placement derivation, and engine
+  landing (M2 visible-match Task 1 / OL-T11-8; `/FIFA96.EXE`, read-only).**
+  The audit bullet above is corrected in two places; the resource half is now
+  first-hand:
+  * the record pointer is `FUN_0006D920` `0x6D928/0x6D935/0x6D93B/0x6D94E/
+    0x6D951/0x6D956` -> `[rec+8] = FUN_0004AFB8((6*formation_id) & 0xFFFF) +
+    (byte[rec+0x8D] << 2)` — **no `+1`**, and the index is the record's
+    `+0x8D` byte, initialized to the record block position by `FUN_0008C2E0`
+    (`0x8C324..0x8C336`: `[EAX-0x25] = DL` for `EAX = team+0xB2*(i+1)`, so
+    record i's `+0x8D` = i; same byte read at `0x6D93B`); `formation_id` is
+    `byte[[team+0x7AE]]`, the `0x11033A + id*0x1D` roster row's first byte
+    (`FUN_0006D9C4` `0x6D9E4`/`0x6DA25`);
+  * `FUN_0004A6BC`'s four name formats are `0x101C80 "%s.fmt"` (table slots
+    0..29), `0x101C88 "%s.dat"` (30..38), `0x101C94 "%s.%s"` with
+    `0x101C90 "lfsh"` (39..55) and `0x101C9C "%s.qfs"` (56..62), resolved
+    with the parameters of the `0x107370` 63-entry pointer table through the
+    archive `FUN_0004A344(0x101C64, 0x101C6C)` = `art/gameart0.pvi` (first-hand
+    `disassemble_function 0x4A6BC`; the loader fills 63 slots at
+    `0x14BFC0..0x14C0BF` plus the `0x14C0E0` `flags.qfs` handle). The
+    `lay%s.fmt`/`t%s.dat` strings at
+    `0x101C7D`/`0x101C87` belong to other callers, not this loader;
+  * the `.fmt` files are **BIGF entries of `/ART/GAMEART0.PVI`** (first-hand
+    decoded directory, 268194 B, 60 entries: entry 0 `352ko.fmt` 44 B, the
+    `ko`/`pl`/`pk`/`ps`/`sp` set per family 352/442/sw/424/433 plus the shared
+    `freekick.fmt` at entry 25);
+  * the placement is the phase cell `FUN_0006E1D0`
+    (`0x6E1D0..0x6E241`, the `0x110794[phase]` handler for phase 1 and 0x12):
+    `pair = [rec+8] + ((team_side == [0x157AAC]>>24) ? 2 : 0)` when
+    `[0x157AAC]>>24` is the controlled side (`0x6E1ED..0x6E1F1`);
+    `target.x = (int8)pair[0] * 0x26` (`0x6E1F4..0x6E233`), `target.y = 0`
+    (`0x6E22C`), `target.z = (int8)pair[1] * 0x21` (`0x6E20C..0x6E238`), and
+    a non-zero `team+0x826` side negates both (`0x6E21C..0x6E227`). Each
+    4-byte record is therefore {opponent x/z, own x/z} and the 11 records
+    cover the block positions;
+  * **Engine:** `fifa96_scene_formation_load`/`_place` parse the container
+    and evaluate the cell; `fifa96_match_run_begin` reads
+    `/ART/GAMEART0.PVI` from the ISO, loads `352ko.fmt`, seeds both teams'
+    targets (`fifa96_match_entities_seed_formation`) and commits them through
+    the existing kickoff pass, so the records receive real non-zero positions
+    and the M2 tape/in-game frames draw. The loop's `FUN_00079F3C` camera
+    place (`0x8CF7C..0x8CF86`, camera `[0x15774C]`) stays unported, so the
+    engine camera remains the `[0x10F328/2C/30]` reset triple (0,0,0) and at
+    the kickoff instant only the positive-depth side passes the near gate.
+    Remaining legs: the front-end producer
+    of the formation id (`[0x14C1E4]`/`[0x14C1E5]`, BSS 0 on this build; the
+    engine derives id 0), the unused `.dat`/`.lfsh`/`.qfs` slots and the
+    `[team+0x7DB]`/`[team+0x7DF]` (`6*id+3`/`6*id+5`) pointers, the roster
+    `+0x90` line code and the `+0x9A` marks (not consumed by placement).
 
 ## 12. Open legs
 

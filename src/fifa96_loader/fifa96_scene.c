@@ -1,3 +1,8 @@
+#include <stdlib.h>
+#include <string.h>
+
+#include "fifa96_loader/fifa96_bigf.h"
+#include "fifa96_loader/fifa96_record.h"
 #include "fifa96_loader/fifa96_scene.h"
 
 fifa96_err_t fifa96_scene_build_keys(uint32_t count, const uint32_t *list,
@@ -117,4 +122,86 @@ fifa96_err_t fifa96_scene_slot_project(const int32_t *recip_x, const int32_t *re
   if (err != FIFA96_OK) return err;
   return fifa96_projection_screen(recip_x, recip_y, center, jitter_rot, &slot->jitter,
                                   &slot->jitter_visible);
+}
+
+/* FU-89 §11 / OL-T11-8: the resource-container decode is the same chain the
+ * engine's match art staging uses (FU-86): a raw BIGF directory or a
+ * `file[1] == 0xFB` record whose decoded bytes are the BIGF. */
+fifa96_err_t fifa96_scene_formation_load(const uint8_t *file, size_t file_len,
+                                         const char *name,
+                                         fifa96_scene_formation *formation) {
+  uint8_t *decoded = NULL;
+  const uint8_t *container = file;
+  size_t container_len = file_len;
+  if (!file || !name || !formation) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  if (file_len >= 5 && file[1] == 0xFB) {
+    size_t declared = ((size_t)file[2] << 16) | ((size_t)file[3] << 8) | (size_t)file[4];
+    size_t used = 0;
+    if (declared == 0) return FIFA96_ERR_TRUNCATED;
+    decoded = malloc(declared);
+    if (!decoded) return FIFA96_ERR_UNSUPPORTED;
+    if (fifa96_record_decode(file, file_len, decoded, declared, &used) != 0) {
+      free(decoded);
+      return FIFA96_ERR_TRUNCATED;
+    }
+    container = decoded;
+    container_len = used;
+  } else if (!(file_len >= 4 && memcmp(file, "BIGF", 4) == 0)) {
+    return FIFA96_ERR_UNSUPPORTED;
+  }
+  struct fifa96_bigf_info info;
+  fifa96_err_t err = fifa96_bigf_parse(container, container_len, &info);
+  if (err != FIFA96_OK) {
+    free(decoded);
+    return err;
+  }
+  for (size_t i = 0; i < info.count; i++) {
+    uint32_t off = 0;
+    uint32_t size = 0;
+    const char *entry = NULL;
+    err = fifa96_bigf_record(&info, i, &off, &size, &entry);
+    if (err != FIFA96_OK) {
+      free(decoded);
+      return err;
+    }
+    if (strcmp(entry, name) != 0) continue;
+    if (size < FIFA96_SCENE_FORMATION_BYTES) {
+      free(decoded);
+      return FIFA96_ERR_TRUNCATED;
+    }
+    memcpy(formation->bytes, container + off, FIFA96_SCENE_FORMATION_BYTES);
+    formation->loaded = 1;
+    free(decoded);
+    return FIFA96_OK;
+  }
+  free(decoded);
+  return FIFA96_ERR_NOT_FOUND;
+}
+
+fifa96_err_t fifa96_scene_formation_place(const fifa96_scene_formation *formation,
+                                          uint32_t index, uint8_t side,
+                                          uint8_t controlled_side, int32_t *x,
+                                          int32_t *y, int32_t *z) {
+  const uint8_t *pair;
+  int32_t px;
+  int32_t pz;
+  if (!formation || !x || !y || !z || index >= FIFA96_SCENE_FORMATION_RECORDS)
+    return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  if (!formation->loaded) return FIFA96_ERR_NOT_FOUND;
+  /* 0x6E1F1: the controlled side reads the record's +2 pair, the opponent the
+   * +0 pair. 0x6E1F4..0x6E211 / 0x6E20C..0x6E21A: x = (int8)byte0 * 0x26,
+   * z = (int8)byte1 * 0x21. 0x6E21C..0x6E227: a non-zero team side negates
+   * both. */
+  pair = formation->bytes + (size_t)index * FIFA96_SCENE_FORMATION_STRIDE +
+         ((side == controlled_side) ? 2u : 0u);
+  px = (int32_t)(int8_t)pair[0] * FIFA96_SCENE_FORMATION_X_SCALE;
+  pz = (int32_t)(int8_t)pair[1] * FIFA96_SCENE_FORMATION_Z_SCALE;
+  if (side != 0) {
+    px = -px;
+    pz = -pz;
+  }
+  *x = px;
+  *y = 0;
+  *z = pz;
+  return FIFA96_OK;
 }

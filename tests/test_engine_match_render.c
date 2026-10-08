@@ -641,6 +641,46 @@ static void test_lateral_cull_at_8e0(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): a formation-seeded pool
+ * draws. The camera is at the origin, so the near-depth gate (threshold 0x78
+ * against the jittered z) admits the positive-depth team-1 records and culls
+ * the negative-depth team-0 ones. The first render with zero targets is the
+ * background (the pre-T1 state); after `fifa96_match_entities_seed_formation`
+ * (+2 own pair for the controlled side 0, +0 opp pair negated for side 1) and
+ * the `FUN_00079B6C` commit, team 1's record 0 at (0, 0, +0x18C) projects to
+ * the window centre and its 32x32 frame-0 sprite covers the centre pixel. */
+static void test_formation_seeded_entities_draw(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  fifa96_scene_formation formation;
+  memset(&formation, 0, sizeof formation);
+  formation.loaded = 1;
+  for (unsigned i = 0; i < FIFA96_SCENE_FORMATION_RECORDS; i++) {
+    int8_t depth = (int8_t)-(12 + (int)i);
+    formation.bytes[i * 4 + 0] = 0;
+    formation.bytes[i * 4 + 1] = (uint8_t)depth;
+    formation.bytes[i * 4 + 2] = 0;
+    formation.bytes[i * 4 + 3] = (uint8_t)depth;
+  }
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) == 0);   /* zero targets: nothing passes the gate */
+
+  assert(fifa96_match_entities_seed_formation(&f.mr.entities, &formation, 0) == FIFA96_OK);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      assert(fifa96_match_entities_place(&f.mr.entities.team[t].records[i]) == FIFA96_OK);
+  /* team 1 record 0: opp pair -12 -> z = +396 (side 1 negates) */
+  assert(f.mr.entities.team[1].records[0].pos_z == 396);
+  assert(f.mr.entities.team[0].records[0].pos_z == -396);
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) > 0);    /* the positive-depth records now draw */
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* record 0's frame-0 pixel */
+  assert(f.s->indexed[90 * 320 + 160] == 0x00);    /* above the sprite rect */
+  fifa96_surface_destroy(f.s);
+}
+
 /* FU-85 §5 `0x14720`/`fifa96_sprite_span`: the staged remap is the identity
  * translation with index 0 as the transparent key -- source pixel 0 writes
  * nothing, 0x80 passes through unchanged. */
@@ -743,6 +783,7 @@ int main(void) {
   test_anim_id_staging_round_trip();
   test_near_depth_threshold_gate();
   test_lateral_cull_at_8e0();
+  test_formation_seeded_entities_draw();
   test_remap_identity_and_color_key();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");

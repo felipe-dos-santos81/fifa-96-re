@@ -154,3 +154,10 @@ Ghidra-project change.
 3. **Camera selector table `(&0x8B64)[(&0x7514)[i*0x1C]]`** and the
    per-camera handlers `(&0x8B80)[i]` are cited only.
 4. **Settings index 4** option semantics (FU-95 §6 leg 3, carried).
+5. **`FUN_00079F3C` camera place** (M2 visible-match Task 1): the
+   `FUN_0008CF60` kickoff loop calls it per record with `EBX = 0x15774C` (the
+   camera record) but its body is unported, so the engine camera stays at the
+   `[0x10F328/2C/30]` reset triple (0,0,0). With the OL-T11-8 formation
+   placement landed, the near-depth gate therefore admits only the
+   positive-depth side at kickoff (FU-89 §11). The camera-mode/angle feed this
+   place would use is carried from legs 1/3.

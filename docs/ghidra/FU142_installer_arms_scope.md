@@ -298,6 +298,25 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `word[+0x85]`/`+0x99`/`+0x5D` byte gates and the `[team+0x7C7]` record
   (`is_own`/`opp_*` staged 0), the slot `+0x10` button byte and the
   `word[+0x77]` bound (shared OL-65). See FU-139 §10.8.
+* **OL-T11-8 — formation/record placement — landed (M2 visible-match Task 1).**
+  The resource half is first-hand and corrected in FU-89 §11's new erratum
+  bullet: `FUN_0006D920` resolves each record's formation pointer as
+  `FUN_0004AFB8(6*formation_id) + byte[rec+0x8D]*4` (the `+0x8D` index is the
+  record position, set by `FUN_0008C2E0` `0x8C324..0x8C336`); `FUN_0004A6BC`'s
+  formats are `%s.fmt`/`%s.dat`/`%s.lfsh`/`%s.qfs` over the `0x107370` name
+  table (not `t%s.dat`/`lay%s.fmt`), and the `.fmt` files are BIGF entries of
+  `art/gameart0.pvi`; the phase cell `FUN_0006E1D0` maps each 4-byte record
+  {opp x/z, own x/z} to `target = ((int8)x*0x26, 0, (int8)z*0x21)` with the
+  own/opp pair chosen by the controlled side (`[0x157AAC]>>24`) and both
+  components negated for team side 1. The engine now loads `352ko.fmt`
+  (formation id 0) at match begin, seeds both teams
+  (`fifa96_match_entities_seed_formation`) and commits the targets, so the
+  records receive real non-zero positions and the M2 tape/`make game` draw.
+  Still open: the front-end formation-id producer
+  (`[0x14C1E4]`/`[0x14C1E5]`, BSS 0; the engine derives id 0), the
+  `.dat`/`.lfsh`/`.qfs` slots and the `[team+0x7DB]`/`[team+0x7DF]`
+  (`6*id+3`/`6*id+5`) pointers, the roster `+0x90` line code and the `+0x9A`
+  marks (the kickoff commit `FUN_0008CF60` does not consume them).
 * **OL-49 — `FUN_0008CEB8` index-11 overflow — resolved as a bounded model
   (Task 2).** The native helper clamps `last >= 0xB` to `0xB`
   (`0x8CEE2`/`0x8CEE7`), so a caller with `last >= 0xB` also stages record

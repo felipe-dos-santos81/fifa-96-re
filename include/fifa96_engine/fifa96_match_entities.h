@@ -39,6 +39,7 @@
 #include <stdint.h>
 #include "fifa96_loader/fifa96_ball_pairing.h"
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_scene.h"
 
 #define FIFA96_MATCH_ENTITY_TEAMS 2u
 #define FIFA96_MATCH_ENTITY_RECORDS 11u
@@ -252,6 +253,18 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
  * recomputes `distance`). NULL -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_place(struct fifa96_match_entity *entity);
 
+/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): seed each of the two
+ * teams' 11 records' *target* triples from the resource-loaded formation —
+ * the `FUN_0006E1D0` phase-cell placement (`fifa96_scene_formation_place`)
+ * over the pool's records, using each team's side and `controlled_side`
+ * (`[0x157AAC]>>24`). The subsequent `fifa96_match_entities_kickoff_place`
+ * commit (`FUN_00079B6C` position := target) then gives the records their
+ * non-zero kickoff positions. A not-loaded formation returns
+ * FIFA96_ERR_NOT_FOUND with the targets untouched; NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
+                                         const fifa96_scene_formation *formation,
+                                         uint8_t controlled_side);
+
 /* The derived kickoff placement pass, reproducing `FUN_00088DC8` stage 0 ->
  * `FUN_00073E08`:
  *  - the kickoff act-1 body (`FUN_0008A938` jump-table entry 1 ->
@@ -271,10 +284,11 @@ int fifa96_match_entities_place(struct fifa96_match_entity *entity);
  *    `byte[rec+0x3E] = byte[rec+0x8E]` when the row pointer and the row's
  *    `+0x44` bit 0 are set) targets a field the pool does not model and stays
  *    a numbered leg.
- * The per-record formation *target* source is the resource-loaded `0x14BFC0`
- * table (`FUN_0004A6BC`, `t%s.dat` resources), so the engine pass places the
- * provable ball spawn and commits/faces the caller's seeded targets
- * (OL-T11-8 partial). NULL `pool` -> -FIFA96_ERR_INVALID. */
+ * The per-record target source is the resource-loaded `0x14BFC0` table
+ * (`FUN_0004A6BC`); `fifa96_match_entities_seed_formation` seeds the targets
+ * from the derived formation file first (OL-T11-8 landed), so the pass places
+ * the ball spawn and commits/faces the formation targets. NULL `pool` ->
+ * -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int32_t cam_x,
                                         int32_t cam_y, int32_t cam_z);
 

@@ -202,6 +202,27 @@ int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
   return FIFA96_OK;
 }
 
+/* FU-89 §11 / OL-T11-8: the phase-cell seed (`FUN_0006E1D0`) over both teams'
+ * records. The formation file is indexed by the record block position (the
+ * native `byte[rec+0x8D]` that `FUN_0008C2E0` initializes to the record
+ * index), so the loop passes the pool `index` directly. */
+int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
+                                         const fifa96_scene_formation *formation,
+                                         uint8_t controlled_side) {
+  if (!pool || !formation) return -FIFA96_ERR_INVALID;
+  if (!formation->loaded) return FIFA96_ERR_NOT_FOUND;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &pool->team[t].records[i];
+      fifa96_err_t err = fifa96_scene_formation_place(
+          formation, i, (uint8_t)t, controlled_side, &e->target_x, &e->target_y,
+          &e->target_z);
+      if (err != FIFA96_OK) return (int)err;
+    }
+  }
+  return FIFA96_OK;
+}
+
 /* The derived kickoff pass (see the header contract). The native tail of
  * `FUN_00079B6C` (`0x79BB5..0x79C13`) runs per record after the commit:
  *  - `FUN_00079C50(camera - target)` face (0x79BB5..0x79BCF): the ported

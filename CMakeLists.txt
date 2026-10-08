@@ -319,7 +319,7 @@ target_link_libraries(test_projection PRIVATE fifa96_projection)
 add_test(NAME test_projection COMMAND test_projection WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_scene src/fifa96_loader/fifa96_scene.c)
-target_link_libraries(fifa96_scene PRIVATE fifa96_projection)
+target_link_libraries(fifa96_scene PRIVATE fifa96_projection fifa96_bigf fifa96_record)
 add_executable(test_scene tests/test_scene.c)
 target_link_libraries(test_scene PRIVATE fifa96_scene)
 add_test(NAME test_scene COMMAND test_scene WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})

@@ -4,17 +4,20 @@ The native engine layer sits on top of the 56 clean-room `fifa96_*` libraries an
 turns them into a running game: platform ABI → SDL3/null backends → engine core
 (boot, asset table, clock, intro, front-end, match).
 
-Status: **M1 complete headless; M2 match playable headless — 13/80 action rows
-wired, the derived FU-143 phase driver wired into the run loop (live period
-end 2 → 0x0C), the derived C3-OL2 score source, live OL-80 animation inputs
-and the derived kickoff ball placement; the M2-B acceptance tape **v2** is
-green with the golden byte-identical, and the interactive `make game` smoke
-re-run on this host (2026-10-08, G4) reaches match start, control input and
-the live ball/anim placement.** Kick → score and a live in-play phase entry
-remain blocked interactively on the unported possession/selection rows and the
-unported kickoff entry (see "Interactive smoke" and "Known gaps"). The M2
+Status: **M1 complete headless; M2 match playable and visible headless —
+13/80 action rows wired, the derived FU-143 phase driver wired into the run
+loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
+animation inputs, the derived kickoff ball placement and the resource-loaded
+formation/record placement (OL-T11-8: `352ko.fmt` seated from
+`/ART/GAMEART0.PVI` at begin, so player records receive real positions and
+draw); the M2-B acceptance tape **v3** is green with the golden re-pinned for
+the drawing upgrade, and the interactive `make game` smoke re-run on this host
+(2026-10-08, G4) reaches match start, control input and the live ball/anim
+placement.** Kick → score and a live in-play phase entry remain blocked
+interactively on the unported possession/selection rows and the unported
+kickoff entry (see "Interactive smoke" and "Known gaps"). The M2
 playability-legs plan's gates G1/G2 closed, G3 carried with the listed legs
-(kickoff formation OL-T11-8 open) and G4 accepted here; see
+(now formation-landed) and G4 accepted here; see
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child),
 `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md` (split
@@ -66,8 +69,10 @@ the build also produces the windowed `fifa96` target (`make game`).
 - Match: FU-64 lifecycle, FU-60 30 Hz pace, FU-61 input → FU-70 control slot
   per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain
   (including the OL-80 live `anim_id`/`frame` staging into the FU-84 bank
-  chain and the derived kickoff ball placement at begin), FU-142a installer
-  arms in phases 0x13/0x14, the FU-143 phase driver
+  chain, the derived kickoff ball placement and the OL-T11-8
+  formation/record placement at begin: `352ko.fmt` from `/ART/GAMEART0.PVI`
+  seeds both teams' targets before the `FUN_00079B6C` commit), FU-142a
+  installer arms in phases 0x13/0x14, the FU-143 phase driver
   (`fifa96_match_run_phase_drive`: the derived class gate + `FUN_0008B9CC`
   period-end chooser, so a live class-1 period end writes phase 0x0C on the
   selector-0 default), deterministic FU-85/88/89 render chain, period end
@@ -101,14 +106,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. Tape **v2** (G4) stages all **13 wired rows**
-  (including the G1 rows 04/08) and asserts the natural path: the KICK press
-  reaches the run but dispatches no gameplay row, the T5 kickoff placement is
-  pinned at match start (ball 0x1E0/0/0, `anim_id` 0x26), and the live FU-143
-  driver's derived 0x0C write is read back after the exit step (where the
-  teardown has reset the match state but not the FU-142a mirror). The
-  transcript is **byte-identical** to the pre-v2 golden (no frame moved;
-  `cmp` clean), so the golden is not re-pinned. Regenerate with
+  set, and the score step. Tape **v3** (M2 visible-match Task 1) stages all
+  **13 wired rows** (including the G1 rows 04/08), asserts the natural path:
+  the KICK press reaches the run but dispatches no gameplay row, the kickoff
+  placement is pinned at match start (ball 0x1E0/0/0, `anim_id` 0x26), the
+  **formation seed** loaded `352ko.fmt` so records carry real positions
+  (record 0: team 0 z = -2376, team 1 z = +2508), and the live FU-143 driver's
+  derived 0x0C write is read back after the exit step (where the teardown has
+  reset the match state but not the FU-142a mirror). The transcript **changed
+  and the golden was re-pinned** for the drawing upgrade: the first differing
+  line is frame 9 (the first granted render staging), 157 lines differ (the
+  null backend chains its present hash across all presented frames, so the
+  post-exit front-end lines carry the earlier change while their canvases are
+  repainted identically). M1 stays byte-identical. Regenerate with
   `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
   non-zero while rewriting the file; re-run `make check` to verify).
 
@@ -163,7 +173,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`;
   marker/name/score passes), kickoff formation/record placement (`-8`),
   direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80` above.
-  `OL-T11-8` is now **partial (M2 playability Task 5)**:
+  `OL-T11-8` is now **landed (M2 visible-match Task 1)**:
   `FUN_00079B6C` (`0x79B6C..0x79C1C`) is ported in full commit + tail form —
   position := target, y = 0, target := position, both velocity pairs and the
   lane low word cleared, the camera-vs-target face, and the unconditional
@@ -171,16 +181,25 @@ the build also produces the windowed `fifa96` target (`make game`).
   inactive records row id 0x26 and resets the frame; the kickoff act-1 ball
   spawn (`[0x158830] = 0x1E0`, z = 0, ball.y = 0 via `FUN_0008C24C` `0x8C299`)
   is ported too (`fifa96_match_entities_place`/`_kickoff_place`, called at
-  match begin after the camera reset), so the kickoff ball position is
-  non-zero and the pool animation ids/frames are non-zero at match start. The
-  tail's conditional `FUN_0006E48C` `+0x3E` write stays a leg (no pool field);
-  the per-record formation *targets* come from the resource-loaded `0x14BFC0`
-  table (`FUN_0004A6BC` reads `t%s.dat`/`lay%s.fmt`), so real formation
-  coordinates stay an open leg (FU-89 §11 erratum). `[0x157AB1] = 0` is a
-  process global with no derived home. Note the plan's "kickoff placement
-  (OL-T11-9)" label is a numbering erratum: the register's `-8` is the
-  placement item and `-9` is the direction addend. `OL-T11-10` (FU-89
-  key-seeding consumers) closed with the FU-89 §11 errata.
+  match begin after the camera reset). The per-record formation targets are
+  now resource-landed: `fifa96_scene_formation_load`/`_place` evaluate
+  `FUN_0006E1D0` over the 44-byte `.fmt` record (`[rec+8] =
+  FUN_0004AFB8(6*id) + byte[rec+0x8D]*4`; {opp x/z, own x/z} pair;
+  `x = (int8)b0*0x26`, `z = (int8)b1*0x21`, side-1 negated), the run loads
+  `352ko.fmt` from the staged `/ART/GAMEART0.PVI` at begin
+  (`fifa96_match_entities_seed_formation`) and the commit lands the non-zero
+  positions, so player entities draw. The corrected name formats
+  (`%s.fmt`/`%s.dat`/`%s.lfsh`/`%s.qfs` over the `0x107370` table) and the
+  BIGF-entry location are recorded in the FU-89 §11 erratum; the remaining
+  legs are the front-end formation-id producer (`[0x14C1E4]`/`[0x14C1E5]`,
+  BSS 0; the engine derives id 0), the unused `.dat`/`.lfsh`/`.qfs` slots and
+  the `[team+0x7DB]`/`[team+0x7DF]` pointers, and the roster `+0x90`/`+0x9A`
+  bytes. The tail's conditional `FUN_0006E48C` `+0x3E` write stays a leg (no
+  pool field). `[0x157AB1] = 0` is a process global with no derived home.
+  Note the plan's "kickoff placement (OL-T11-9)" label is a numbering
+  erratum: the register's `-8` is the placement item and `-9` is the
+  direction addend. `OL-T11-10` (FU-89 key-seeding consumers) closed with the
+  FU-89 §11 errata.
 - **Phase table (FU-143):** the 35 FU-83 phase rows (handlers `0x110794`,
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level
