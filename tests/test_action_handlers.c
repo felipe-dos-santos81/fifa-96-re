@@ -661,6 +661,23 @@ static void test_kick_machine_07_decision_and_post(void) {
   assert(out.kick == 0);
   assert(s.stage92 == 1);
 
+  /* The gate byte is the +0x91 action code (FU-139 §9 erratum): code 7 has
+   * flat[7]&1 == 0, so the same passing state requests the kick instead. */
+  kick_state_init(&s, 0x07);
+  s.stage92 = 1;
+  s.is_team_cb = 1;
+  s.type = 7;
+  s.lane_word = 0x100;
+  s.pos_x = 0;
+  s.pos_z = 0x7B0;
+  s.predictor_x = 0x10;
+  s.predictor_y = 0x30;
+  s.predictor_z = 0x7B0;
+  s.face_word7d = 0x100;
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
+  assert(out.defender_install == 0);
+  assert(out.kick == 1);
+
   /* The 0x7E6C8 camera-x gate is one-sided: pos_x 0x200 with camera_x 0x100
    * passes (camera_x <= pos_x), camera_x 0x300 refuses. */
   kick_state_init(&s, 0x07);
@@ -759,6 +776,16 @@ static void test_kick_machine_07_reset_decision(void) {
   s.type = 5;
   assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
   assert(out.reset == 1 && out.reset_install == 0);
+
+  /* The `s.type` byte is the native +0x91 action code (FU-139 §9 erratum):
+   * code 7 takes the non-carrier code-4 install, not the code-5 keep. */
+  kick_state_init(&s, 0x07);
+  s.timer81 = 1;
+  s.active = 1;
+  s.is_team_target = 1;
+  s.type = 7;
+  assert(fifa96_action_kick_machine(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.reset_install == 1 && out.reset_code == 4);
 }
 
 static void test_kick_machine_0F_stage0(void) {

@@ -763,8 +763,12 @@ typedef struct fifa96_action_kick {
   uint8_t phase;             /* [0x157A4A]>>24 */
   uint8_t stage92;           /* +0x92 (in/out) */
   uint8_t active;            /* +0x8D */
-  uint8_t type8;             /* +0x8B>>24 */
-  uint8_t type;              /* +0x8E>>24 */
+  uint8_t type8;             /* +0x8B>>24 (the byte at +0x8E): the
+                              * 0x10F334/0x10F33C table index */
+  uint8_t type;              /* +0x8E>>24 (the byte at +0x91): the action code
+                              * the 0x110680/0x7E600/0x7C990 gates index; the
+                              * engine stages it from `record.code` (FU-139 §9
+                              * erratum, fix round 1) */
   uint8_t has_slot;          /* +0x20 != 0 */
   uint8_t byte44;            /* +0x44 */
   uint8_t byte99;            /* +0x99 */

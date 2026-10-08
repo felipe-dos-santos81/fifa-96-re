@@ -810,6 +810,33 @@ render hashes unchanged. Write set: `include/fifa96_loader/fifa96_ball_pairing.h
 section), `docs/ghidra/FU137_dispatch_mechanics.md` (Task-11 errata),
 `docs/ghidra/FU142_installer_arms_scope.md` (OL-65/OL-66, OL-28/OL-31 status).
 
+### 9.7 Erratum (M2 playability-legs Task 1 fix round 1) — the kick gate byte is +0x91
+
+First-hand re-verification on `/FIFA96.EXE`: the `0x110680` gate inside
+`FUN_0007E600` reads `MOV EAX,[ESI+0x8E]; SAR EAX,0x18` (`0x7E617..0x7E620`),
+i.e. the **byte at +0x91**, and `FUN_0007C990`'s carrier check reads the same
+byte (`0x7C9CA..0x7C9D6`; the final install compare at `0x7CA34` likewise
+`MOVSX BX,byte [EAX+0x91]`). The installer writes the action code to +0x91
+(`0x7DA67`), so both gates index the record's **action code**, not the +0x8E
+face octant. The engine's kick staging was feeding `record.type` (the octant
+written by `fifa96_arm_face`/`match_kick_repack`) into
+`fifa96_action_kick.type`; rows 07/0F are wired, so the divergence was live
+whenever the octant landed in the gate's bit-0 set {0,3,4,5,6} while the
+native code (7/0x0F) does not. The same byte is the ball path's
+`fifa96_ball_kick_actor.type`: `0x7BB8F MOV EAX,[EBP+0x8E]; SAR 0x18` compared
+to `0x12/0x10/0x11`. Fix: `struct fifa96_match_run_record` carries
+`code /* native +0x91 */`, `match_run_dispatch_entity` stages it from
+`e->code`, and `match_kick_from_record` sets `s.type = r->code` (previously
+`s.type = r->type`); `s.type8`/`s.facing` remain the +0x8E byte/octant.
+Discriminating fixtures: `test_kick_machine_07_decision_and_post` (gate code 0
+vs 7), `test_kick_machine_07_reset_decision` (code 5 vs 7) and the engine
+`test_action_07_decision_uses_code_byte` (staged-code SI arm; octant values
+inverted). Reachability note: from a kick handler the record's code is 7/0x0F,
+so the row-07/0F decision arm is refused by the native gate too; the engine's
+`is_team_cb`/slot-word SI staging is separately unmodeled (OL-65), and the
+0x7C990 type-5 branch has no engine-visible observable because the
+team-target tail's ball install 4 overwrites `record.install`.
+
 ## 10. Task 12 port — event append sinks and rows 18/21/23 (OL-27/OL-32)
 
 Reviewed read-only in `/FIFA96.EXE` (explicit; Ghidra MCP, no writes). This

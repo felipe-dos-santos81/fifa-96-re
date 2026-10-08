@@ -414,7 +414,7 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->stage92 = r->stage92;
   s->active = r->active;
   s->type8 = r->actor_type;
-  s->type = r->type;
+  s->type = r->code;   /* native +0x91: the 0x110680/0x7C990 gate byte (K.5.3) */
   s->target_x = r->target_x;   /* the machine writes only when it owns one */
   s->target_y = r->target_y;
   s->target_z = r->target_z;
@@ -965,7 +965,7 @@ static int32_t match_pursuit_id(uint32_t team, int32_t actor, int32_t index) {
 /* ===== M2 playability-legs Task 1 / OL-70: row 04 chase/pressure =====
  *
  * `fifa96_match_action_04` binds `fifa96_outfield_row04_step` (the ported
- * `0x7E7C8..0x7F141` body, FU-142 Appendix K.3) to `mr->record` and the
+ * `0x7E7C8..0x7F141` body, FU-142 Appendix K.5) to `mr->record` and the
  * FU-141 pool. The record staging carries the body's own fields (position,
  * target, timers, lane/bound, active/slot, the actor type +0x8E and the
  * +0x73/+0x75 velocity words); the pool supplies both team blocks for the
@@ -1035,7 +1035,7 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.byte99 = 0;                     /* +0x99 producer unported (OL-72) */
   s.byte9d = 0;                     /* +0x9D producer unported (OL-72) */
   s.type8 = r->actor_type;          /* native byte +0x8E */
-  s.code = e->code;                 /* native byte +0x91 (the dispatched code) */
+  s.code = r->code;                 /* native byte +0x91 (the dispatched code) */
   s.row_byte = 0;                   /* byte[[rec+0x28]] (OL-52/OL-72) */
   s.desc_e = 0;                     /* rec[+4][+0xE] (roster descriptor, OL-72) */
   s.timer81 = r->timer81;
@@ -1289,7 +1289,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x03, NULL,
      "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, fifa96_match_action_04,
-     "FU-142 App. K.3/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72"},
+     "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72"},
     {0x05, NULL,
      "FU-139 §8/§5: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 unbounded; unwired; -UNSUPPORTED; OL-63"},
     {0x06, fifa96_match_action_06,

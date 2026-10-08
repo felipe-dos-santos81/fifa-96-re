@@ -253,6 +253,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   }
   r->type = e->type;
   r->actor_type = e->actor_type;
+  r->code = e->code;   /* native +0x91: the kick/row-04 gates index this byte */
   r->entity_id = id;
   r->vel_x = e->vel_x;
   r->vel_z = e->vel_z;

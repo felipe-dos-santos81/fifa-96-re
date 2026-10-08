@@ -171,6 +171,9 @@ struct fifa96_match_run_record {
    * the kick direction table. */
   int32_t entity_id;   /* team*11 + index, or NONE */
   uint8_t actor_type;  /* native +0x8B>>24 */
+  uint8_t code;        /* native +0x91 (the byte the installer writes and the
+                        * 0x110680/0x7E600/0x7C990 gates index; staged from the
+                        * pool entity so handlers never use the face octant) */
   uint8_t install;     /* derived install request of the last dispatch, 0 = none */
   /* FU-142d (row 28, Appendix G) staging: the native record +0x8E facing byte
    * and +0x71/+0x73 velocity pair the body writes, the derived scratch gates

@@ -1398,7 +1398,10 @@ static const uint8_t kick_decision_gate[26] = {
 /* `FUN_0007DAB4` (`0x7DAB4..0x7DB0C`) plus the `FUN_0007C990` forced-decision
  * install (`0x7C990..0x7CA4C`). `plain` forces the non-0x7C990 path
  * (`FUN_0007D9A4(rec, 0, 0, 0)`). The native slot callback `FUN_00078B00` is
- * the `slot_callback` request (presentation-side, OL-65). */
+ * the `slot_callback` request (presentation-side, OL-65). The `s->type == 5`
+ * carrier check below is the native `[rec+0x8E]>>24` = the byte at +0x91
+ * (`0x7C9CA MOV EDX,[EAX+0x8E]; SAR 0x18; CMP EDX,5`), i.e. the action code,
+ * NOT the +0x8E face octant (FU-139 §9 erratum, fix round 1). */
 static fifa96_err_t kick_reset(const fifa96_action_kick *state,
                                fifa96_action_kick_out *out) {
   uint8_t code = 0;
@@ -1412,7 +1415,7 @@ static fifa96_err_t kick_reset(const fifa96_action_kick *state,
   if (state->is_team_target) {
     if (state->opp_target_present == 0 || state->opp_target_carrier == 0) {
       if (state->type == 5u) {
-        out->reset_install = 0;    /* 0x7C9C8: type 5 returns without install */
+        out->reset_install = 0;    /* 0x7C9C8: code-byte 5 returns without install */
         return FIFA96_OK;
       }
       code = 4;
@@ -1438,7 +1441,9 @@ static fifa96_err_t kick_reset(const fifa96_action_kick *state,
 
 /* `FUN_0007E600` (`0x7E600..0x7E7C5`, 176 insns): the defender decision that
  * installs action `0x0E` on the record. Bounded inputs: phase, the 0x110680
- * type gate, `[0x1577CA]`, the lane `0x180` bound, the `0x71B9C` predictor
+ * gate indexed by the byte at +0x91 (the action code; `0x7E617 MOV
+ * EAX,[ESI+0x8E]; SAR EAX,0x18`; FU-139 §9 erratum, fix round 1),
+ * `[0x1577CA]`, the lane `0x180` bound, the `0x71B9C` predictor
  * triple (caller input), the `0x8DCD4` pos/predictor distance <= 0xF0 and
  * <= lane, the camera x bounds, the side/pos_z bounds, the `0x8DD70` angle
  * inside +/-0x100 (side 0) or outside (side 1) and the `|angle - word[+0x7D]|`

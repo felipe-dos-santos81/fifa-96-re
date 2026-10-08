@@ -686,6 +686,46 @@ static void test_action_07_runs_body(void) {
   drop_fixture(&f);
 }
 
+/* FU-139 §9 erratum (fix round 1): the kick machine's 0x110680/0x7C990 gates
+ * index the native byte +0x91 (the action code), which the record staging now
+ * carries in `record.code`; `record.type` is only the +0x8E face octant. The
+ * row-07 stage-1 decision is reachable through the `staged_code == 3` SI arm
+ * (`fifa96_action_kick.staged_code` = the pool ball pair code): with
+ * `record.code = 4` the gate passes and installs 0x0E, with the native kick
+ * code 7 the gate refuses and the kick proceeds. `record.type` is left at the
+ * old divergent value (4 would pass it) to prove it is not consulted. The
+ * 0x7C990 type-5 carrier check is discriminated at the loader level
+ * (`test_action_handlers.c::test_kick_machine_07_reset_decision`): in the
+ * engine the team-target tail's ball install 4 overwrites `record.install`
+ * either way, so it has no engine-visible observable. */
+static void test_action_07_decision_uses_code_byte(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;        /* stage 1 */
+  f.mr.record.has_slot = 0;
+  f.mr.entities.ball.pair.code = 3;   /* SI = 0x40 through the staged-code arm */
+  f.mr.record.lane = 0x100;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0x7B0;
+  f.mr.render.camera.pos_x = 0x10;
+  f.mr.render.camera.pos_y = 0x30;
+  f.mr.render.camera.pos_z = 0x7B0;
+
+  f.mr.record.code = 4;           /* flat[4] & 1 == 1: decision fires */
+  f.mr.record.type = 7;           /* the +0x8E octant must not be the gate */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
+  assert(f.mr.record.install == 0x0E);
+
+  f.mr.record.code = 7;           /* flat[7] & 1 == 0: decision refuses */
+  f.mr.record.type = 4;           /* the octant 4 would have passed the gate */
+  f.mr.record.install = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
+  assert(f.mr.record.install == 0);
+  drop_fixture(&f);
+}
+
 /* FU-139 §9 (Task 11): the wired row-0F machine stage 0 (the 0x8DCD4 nudge,
  * the 0x79B6C re-anchor and the anim request) and the stage-1 reload. */
 static void test_action_0F_runs_body(void) {
@@ -1047,6 +1087,7 @@ int main(void) {
   test_action_05_unwired_carrier();
   test_action_04_wired_and_08_unwired();
   test_action_07_runs_body();
+  test_action_07_decision_uses_code_byte();
   test_action_0F_runs_body();
   test_action_18_runs_body();
   test_action_21_runs_body();
