@@ -42,16 +42,25 @@
 struct fifa96_match_run;   /* step argument; defined in fifa96_match_run.h */
 
 struct fifa96_match_phase_machine {
-  uint8_t state;           /* [0x157A4D] switch value (0x8D178) */
-  uint8_t phase;           /* latched [0x157A4A]>>24 */
+  uint8_t state;           /* [0x157A4D] switch value (0x8D178); the step gate */
+  uint8_t phase;           /* latched [0x157A4A]>>24; SUPERSEDED by
+                              mr->state.phase, which the step gates/reads (the
+                              two are the same native byte); kept as a carried
+                              mirror for the frame/reset surface */
   uint8_t side_controlled; /* [0x157AAC]>>24 (0x8D728) */
-  uint8_t ac5, ac7;        /* low bytes of [0x157AC5]/[0x157AC7] (0x8D76C) */
+  uint8_t ac5, ac7;        /* low bytes of [0x157AC5]/[0x157AC7] (0x8D76C);
+                              the native compare is a full 16-bit word compare,
+                              the high-byte loss is FU-142 OL-81 */
   uint8_t arm2a_overflow;  /* 0x2A scan past record 10 (FU-142 §2 hazard) */
-  int32_t chosen831[FIFA96_MATCH_ENTITY_TEAMS]; /* per-team +0x831 chosen record */
+  int32_t chosen831[FIFA96_MATCH_ENTITY_TEAMS]; /* per-team +0x831 chosen
+                              record; carried Task-1 mirror: the step writes
+                              fifa96_match_team.chosen831 (0x8D801) instead, so
+                              this array is only seeded by init */
 };
 
-/* Zero the machine and seed chosen831[0..1] = FIFA96_MATCH_ENTITY_NONE.
- * NULL -> -FIFA96_ERR_INVALID. */
+/* Zero the machine and seed the carried `chosen831[0..1]` mirror to
+ * FIFA96_MATCH_ENTITY_NONE (the step writes the pool team field, not this
+ * mirror). NULL -> -FIFA96_ERR_INVALID. */
 int fifa96_match_phase_machine_init(struct fifa96_match_phase_machine *pm);
 
 /* `FUN_0008CEB8` over the derived pool: for `i = first` while

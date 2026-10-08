@@ -493,7 +493,7 @@ the forced decision of §1.5 and the chase gate of §1.6.
 | `FUN_0007C990` | `fifa96_outfield_forced_action(state, current, &next)`; returns 1 = install, 0 = keep/none, `-INVALID` |
 | chase gate `0x7CC93..0x7CD24` | `fifa96_outfield_chase_action(state, current, &next)` |
 | `FUN_0007D9A4` install, handler bodies, `FUN_0007E600`, selection switch, no-edge arm, tracker/ring | not ported (globals/objects/pointer tables) |
-| machine subset `0x7CABA..0x7CC82` + no-edge `0x7CC13..0x7CC7D` + type gate `0x110680` | **ported (M2 arms-and-wiring Task 14 / FU-142 Appendix K):** `fifa96_outfield_input_row` (input-row dispatch, the either-or pressed/released scan, the `[0x157AB0]` pre-gate, the no-edge arm and the forced-decision/chase tail) and `fifa96_outfield_chase_gate` (the 26-byte `0x110680` `&1` gate composed with `chase_action`); `test_outfield` fixtures. The handler bodies and rows 04/08 bodies stay OL-70 |
+| machine subset `0x7CABA..0x7CC82` + no-edge `0x7CC13..0x7CC7D` + type gate `0x110680` | **ported (M2 arms-and-wiring Task 14 / FU-142 Appendix K):** `fifa96_outfield_input_row` (input-row dispatch, the either-or pressed/released scan, the `[0x157AB0]` pre-gate, the no-edge arm and the forced-decision/chase tail) and `fifa96_outfield_chase_gate` (the 26-byte `0x110680` `&1` gate composed with `chase_action`); `test_outfield` fixtures. The handler bodies and rows 04/08 bodies stay OL-70 (row 04) / OL-70a (row 08) |
 
 ## 7. Tests (`tests/test_outfield.c`, suite 63 → 64)
 
@@ -581,7 +581,8 @@ tests/test_outfield.c src/fifa96_loader/fifa96_outfield.c` runs clean.
     the chase gate and the flat `0x110680` type gate are now ported and tested
     (`fifa96_outfield_input_row`, `fifa96_outfield_chase_gate`, `test_outfield`).
     Still open here: the 14 handler bodies and their `0x7D9A4` installs, the
-    `0x7D1D4` selection switch (leg 3), and the rows 04/08 bodies (leg 9/OL-70).
+    `0x7D1D4` selection switch (leg 3), and the rows 04/08 bodies (leg 9,
+    OL-70 row 04 / OL-70a row 08).
 
 ## Provenance
 

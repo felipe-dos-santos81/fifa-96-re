@@ -132,7 +132,8 @@ first entry).
 * **§3/§7 "the ten cameras carry the static default 21 / `+0x4C` = 21 each"
   — corrected (M2 Task 11 fix round 1, first-hand `/FIFA96.EXE`)**: the
   camera `+0x4C` field is a **dword** `0x1500` (`read_memory 0x107554` =
-  `00 15 00 00`, `0x1075C4` identical); the "21" is the **byte at `+0x4D`**.
+  `00 15 00 00`, `0x1075C4` identical); the "21" is the **byte at `+0x4D`**
+  (`0x15`, `0x107555`).
   `FUN_0004D7E8`'s `MOV [EDX+0x4C],EBX` (`0x4D836`) writes the full dword
   from the type entry `[5]`, so the runtime values (4608/3048/3464..) are
   dword-scaled.
@@ -143,7 +144,8 @@ Ghidra MCP on `/fifa96_le.bin`: `decompile_function` 0x4D7E8, 0x4D498,
 0x4CAEC, 0x505D0, 0x4C904; `get_xrefs_to` 0x7508 (11 refs), 0x7554 (single
 write `0x4D836`); `get_function_callers` 0x4D7E8 (three); `read_memory`
 0x107DC8 (offset 0x7508), 0x107508 (camera 0), 0x107554/0x1075C4/0x107634/
-0x1076A4/0x107714/0x107784/0x1077F4/0x107864 (`+0x4C` = 21 each), 0x108B64
+0x1076A4/0x107714/0x107784/0x1077F4/0x107864 (`+0x4C` dwords = `0x1500`; the
+"21" is the `+0x4D` byte = `0x15` — see §6), 0x108B64
 (type pointers), 0x10896C (type 0 descriptor), 0x107E2C/0x107F1C/0x1085AC
 (entry arrays). Analysis-only: no port, capture-rig, ISO, or Ghidra-project
 change.

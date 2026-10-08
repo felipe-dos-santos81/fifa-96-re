@@ -120,20 +120,23 @@ settings-4 fallback (`skip_second` → `ratio2 = ratio1`).
   camera object's `+0x4C`, copied to `0x4E4E0+0x14` by `FUN_0004C904` and
   read by `FUN_00049830`; the writers of `+0x4C` live in the
   `0x4Cxxx..0x51xxx` camera band (open leg).
-* **§1 `+0x4C` field row / §3 / §6 leg 1 "static default 21" — corrected
-  (M2 Task 11 fix round 1, first-hand `/FIFA96.EXE`)**: the camera record
-  `+0x4C` is a **dword** `0x1500` (`read_memory 0x107554` = `00 15 00 00`;
-  sibling `0x1075C4` identical). The "21" is the **byte at `+0x4D`**
-  (`0x107555`), and the writer `0x4D836 MOV [EDX+0x4C],EBX` stores the full
-  dword from the camera-type entry `[5]`, so the live values are
-  dword-scaled. The engine's near-depth ratio consumes the dword
-  (`(0x14<<16)/(2·0x1500) = 121`).
+* **§1 `+0x4C` field row / §3 / §5 provenance / §6 leg 1 "static default 21"
+  — corrected (M2 Task 11 fix round 1, first-hand `/FIFA96.EXE`)**: the camera
+  record `+0x4C` is a **dword** `0x1500` (`read_memory 0x107554` = `00 15 00
+  00`; sibling `0x1075C4` identical; the §5 provenance's "(all `+0x4C` = 21)"
+  reads the same bytes and is corrected the same way). The "21" is the **byte
+  at `+0x4D`** (`0x107555`, i.e. 0x15), and the writer
+  `0x4D836 MOV [EDX+0x4C],EBX` stores the full dword from the camera-type
+  entry `[5]`, so the live values are dword-scaled (FU-97 §6 carries the same
+  correction for its `+0x4C = 21 each` provenance). The engine's near-depth
+  ratio consumes the dword (`(0x14<<16)/(2·0x1500) = 121`).
 
 ## 5. Provenance
 
 Ghidra MCP on `/fifa96_le.bin`: `read_memory` 0x107DC8 (object-4 offset
 0x7508), 0x107508 (camera 0 fields), 0x107554/0x1075C4/0x107634/0x1076A4/0x107714
-(all `+0x4C` = 21); `decompile_function` 0x4CE34, 0x505D0, 0x4C3B0, 0x4C904;
+(all `+0x4C` dwords `0x1500`; the "21" is the `+0x4D` byte `0x15` — see §4
+Errata); `decompile_function` 0x4CE34, 0x505D0, 0x4C3B0, 0x4C904;
 `get_xrefs_to` 0x7DC8 (121 refs, `0x4Cxxx..0x51xxx` band); `disassemble_bytes`
 0x44240 (256 B), 0x441D8 (104 B). Port write set:
 `include/fifa96_loader/fifa96_projection.h`,
@@ -144,8 +147,8 @@ Ghidra-project change.
 ## 6. Open legs
 
 1. **Camera `+0x4C` writers**: the runtime update (the `0x4Cxxx..0x51xxx`
-   band) and the angle's live range/units (static default 21 in all five
-   cameras).
+   band) and the angle's live range/units (the static field is the dword
+   `0x1500`, with `+0x4D` byte `0x15`, in all five cameras — see §4 Errata).
 2. **`5/12` factor**: why the second ratio uses 5/6 of the first
    (`dim2/2 = 5·dim/12`).
 3. **Camera selector table `(&0x8B64)[(&0x7514)[i*0x1C]]`** and the

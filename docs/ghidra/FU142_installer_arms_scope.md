@@ -187,11 +187,11 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `FUN_0008CEB8` (165 B) and the `0x2A` record scan are bounded here but need
   the FU-142a port; the unsigned 0x2A no-free-record edge (install into
   `team+0x7A6`) is recorded as a porting hazard. **Status (Task 2): the state
-  0x13/0x14 subset (`0x8D693..0x8D820`), `FUN_0008CEB8` and the 0x2A scan are
-  ported and tested (`fifa96_match_phase_machine_step`, FU-142 Appendix B);
-  the remaining states of the 1928-B function (0..0x15 switch arms, the
-  pre-switch record walk `0x8D0A6..0x8D166`, the entry RNG block
-  `0x8D693..0x8D727`) stay unported.**
+  0x13/0x14 arm block (`0x8D728..0x8D820`), `FUN_0008CEB8` and the 0x2A scan
+  are ported and tested (`fifa96_match_phase_machine_step`, FU-142 Appendix
+  B); the remaining states of the 1928-B function (0..0x15 switch arms, the
+  pre-switch record walk `0x8D0A6..0x8D166`, and the state-entry RNG block
+  `0x8D693..0x8D727` that precedes the ported arm block) stay unported.**
 * **OL-47 — cluster-G row bodies.** Rows 26/27/28/29/2A/2C bodies are bounded
   (six bodies, ~1220 insns) but unported; each waits for its FU-142b..e task
   and for the unported helpers `0x8DCD4`, `0x79C50`, `0x6E598`, `0x513EC`,
@@ -499,8 +499,9 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `fifa96_outfield_chase_gate` plus the per-type gate flat `0x110680`
   (`fifa96_outfield.c`), with the input tables already ported by FU-75. The
   rows 04/08 full record-visible bodies are **not** ported; per the plan's
-  split rule (a row window exceeding one task) they are registered as OL-70
-  below, so rows 04/08 stay `fn == NULL` (`-FIFA96_ERR_UNSUPPORTED`).
+  split rule (a row window exceeding one task) they are registered below as
+  OL-70 (row 04) / OL-70a (row 08), so rows 04/08 stay `fn == NULL`
+  (`-FIFA96_ERR_UNSUPPORTED`).
 * **OL-41 status (Task 14, Appendix K).** Closed: `FUN_0008D824` is
   `fifa96_entity_intercept_bind` and `FUN_000795B4` is
   `fifa96_entity_intercept_band` (`fifa96_entity_update.{h,c}`), sharing the
@@ -536,6 +537,16 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `ADD EAX,0x59` with EAX=0). The derived engine stages a zero record there
   (band word 0, dx/dz 0, lane/height 0), so the gate refuses; those absolute
   words have no derived producer.
+* **OL-81 — `ac5`/`ac7` word-width carry (T2 review).** The native 3/0x25
+  decision compares the full 16-bit words `[0x157AC5]`/`[0x157AC7]`
+  (`0x8D76C MOV AX,[0x157AC5]`; `0x8D772 CMP AX,word [0x157AC7]`), but
+  `struct fifa96_match_phase_machine` stores `ac5`/`ac7` as `uint8_t` low
+  bytes (Appendix B.3), so the port compares bytes and loses the high bytes.
+  No producer binds either word yet (both fields are seeded 0), so the
+  divergence is currently unobservable; when a real `[0x157AC5]`/`[0x157AC7]`
+  binding lands the fields/compare must be forced to 16-bit, or the
+  divergence must be accepted explicitly and recorded then. Referenced from
+  the `ac5`/`ac7` field comment in `fifa96_match_phase_machine.h`.
 
 ## 7. Refinements to FU-137 (to be recorded as errata in the port slices)
 
@@ -614,7 +625,8 @@ implements.
 * `decompile_function 0x8CEB8`, `disassemble_function 0x8CEB8` — 52
   instructions, body `0x8CEB8..0x8CF5D` (the FU-142 §2 span; final `RET 0x4`
   at `0x8CF5B`), `FUN_0008D098` sole caller;
-* `read_memory 0x8CEDB` (32 B) — raw clamp/guard bytes;
+* `read_memory 0x8CEE2` (32 B) — raw clamp/guard bytes (the quoted clamp
+  slice starts at the `CMP ESI,0xB`);
 * `get_xrefs_to 0x8CEB8` — 15 refs, all `UNCONDITIONAL_CALL` from
   `FUN_0008D098`;
 * `disassemble_bytes` windows: `0x8D170..0x8D1D0` (`0x8D19F`, `0x8D1C1`),
@@ -644,8 +656,9 @@ Prologue `PUSH ESI; PUSH EDI; SUB ESP,8`; BX is parked at `[ESP+4]`, CX at
 
 * **first guard** `0x8CEC6..0x8CED5`: `first < 0` or `first >= 0xB` exits
   (`TEST DX,DX / JL`; `MOVSX ESI,DX / CMP ESI,0xB / JGE`).
-* **last clamp** `0x8CEDB..0x8CEE7`: `last >= 0xB` becomes `0xB`; raw bytes
-  `83 FE 0B 7C 07 66 C7 44 24 04 0B 00`.
+* **last clamp** `0x8CEE2..0x8CEED`: `last >= 0xB` becomes `0xB`; raw bytes
+  `83 FE 0B 7C 07 66 C7 44 24 04 0B 00` (`CMP ESI,0xB` at `0x8CEE2`,
+  `MOV word [ESP+4],0xB` at `0x8CEE7`).
 * **record walk** `0x8CEEE..0x8CF45`: record pointer `base + i*0xB2`
   (`IMUL ESI,EDI,0xB2` 0x8CEF1), advanced by `ADD ESI,0xB2` (0x8CF45);
   loop test `EDI <= SAR([ESP+2],0x10)` (`0x8CF4B..0x8CF54`).
@@ -1226,9 +1239,9 @@ are what the port implements.
 
 * `get_function_by_address 0x84598` — "No function found" (table-referenced
   body, like the other six row entries);
-* `disassemble_bytes 0x84598` (152 B) — 49 instructions to the `RET` at
-  `0x8462D` plus the `MOV EAX,EAX` pad at `0x8462E` (the next action row 0x16
-  starts at `0x84630`);
+* `disassemble_bytes 0x84598` (152 B) — 48 instructions to the `RET` at
+  `0x8462D`, plus the `MOV EAX,EAX` pad at `0x8462E` (49 total; the next
+  action row 0x16 starts at `0x84630`);
 * `read_memory 0x110790` (4 B) — action-table entry `98 45 08 00` (code 0x2C
   -> `0x00084598`);
 * `get_xrefs_to 0x84598` — **1 reference: DATA from `0x110790`** (the
@@ -2080,9 +2093,13 @@ Union across the 77 sites: **0x00..0x26 (complete) + 0x28 + 0x2A**. Codes in
 8. `0x8d62c` (`FUN_0008D098`): `0x8d607 MOV EAX,[0x157A4A]`; `SAR 0x18`;
    `AND EAX,0xFF`; `CMP EAX,9`; `SETZ AL`; `ADD EAX,0x1D`; `0x8d621 MOVSX
    EDX,AX` — code {0x1D,0x1E}.
-9. `0x782bf` (arm `0x77EAC`): linear `0x782b6 MOV EDX,0x1c`; bypass `0x78200
-   JMP 0x782bb` reached after `0x781fb MOV EDX,0x4`; the `0x77E98` table arms
-   stage 0x1A/0x1B — code {4,0x1a,0x1b,0x1c}.
+9. `0x782bf` (arm `0x77EAC`): linear `0x782b6 MOV EDX,0x1c` (the `0x77E98`
+   table's CX=4 entry `0x782b1` also falls into the call); bypass `0x78200
+   JMP 0x782bb` reached after `0x781fb MOV EDX,0x4` — **reachable code
+   {4,0x1c}** here. The `0x77E98` table's 0x1A/0x1B arms are separate
+   `FUN_0007D9A4` call sites (`0x7821d`/`0x78245`/`0x7826d` stage 0x1A,
+   `0x78294` stages 0x1B; I.3 rows), so the I.3 cell's
+   {4,0x1a,0x1b,0x1c} is a conservative superset for this site.
 10. `0x7634b` (`FUN_00076130`): `0x7632c MOV EAX,[EBP+0x63]`; `SAR 0x10`;
     `CMP EAX,0x70`; `SETGE AL`; `ADD EAX,0x1B`; `0x76346 MOVSX EDX,AX` (code
     {0x1B,0x1C}); bypasses `0x76241 JMP 0x7634b` after `0x76238 MOV EDX,0x4`
@@ -2105,8 +2122,10 @@ reference (including computed jumps) targeting any address in
 linear write — `0x782bf`, `0x8cf3f`, `0x7634b`, `0x7f133` — and each bypass
 value is one of the constants already unioned in I.4 (#9, #6, #10, #11).
 `0x766b4` has no EDX write in 60 instructions and is the callee-preservation
-case (#4). The remaining 72 calls have an immediately preceding constant write
-with no bypassing reference.
+case (#4). The remaining 72 calls (77 − 4 bypass − 1 callee-preserved) have no
+bypassing reference: 66 write a constant immediately before the call and six
+load EDX from a constant-bounded source through `MOVSX`/a stack word (I.4
+#1/#2/#3/#5/#7/#8), so the I.3 cells' code sets still cover them.
 
 ### I.6 No indirect installer entry
 
@@ -2169,7 +2188,7 @@ among the wired bodies. The tape therefore drives the derived
 `fifa96_match_run_add_goal(mr, side)` directly (its `state=2/1-0` lines pin the
 replay) and the native event source stays **carried as child C3-OL2**.
 
-## 8. No-write statement
+## 8. No-write statement (original Task-9 split-gate slice; historical)
 
 No C source, header, test, CMake, asset, ISO or Ghidra state was changed:
 Task 9 stops at the split gate. Row classification and dispatch results are
@@ -2178,6 +2197,10 @@ exactly the BASE state: **2 × `FIFA96_OK` (actions 00, 1E), 77 ×
 `-FIFA96_ERR_NOT_FOUND` (phase 0x16)**; `tests/test_engine_match_handlers.c`
 expectations unchanged; `make check` **100/100**; M1 golden and pinned render
 hashes unchanged.
+
+This statement records the classification at the original Task-9 split gate;
+the later M2 tasks moved the counts (current totals in FU-137 §7: 11
+`FIFA96_OK` / 68 `-UNSUPPORTED` / 1 `-NOT_FOUND`; `make check` 104/104).
 
 ## Provenance
 

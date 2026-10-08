@@ -247,10 +247,12 @@ The port `fifa96_match_entities_install(entity, phase, code, staged)`:
 ```
 if ([rec+0x20] != 0) return;                   0x7877D
 team = [rec]; if (byte[team+0x828]==0) return; 0x78787..0x78794
+seen = 0;                                       /* ECX; counts slot-holders */
 for i = 0..10:                                  0x7879a..0x787f2
-  if ([cand+0x20]==0) continue;
+  if ([cand+0x20]==0) continue;                 /* 0x787A7: skips INC ECX */
   d = FUN_0008DC68(rec[+0x59]-cand[+0x59], rec[+0x61]-cand[+0x61]);
-  if (i == 0 || (int16)d > (int16)best) { best = i; best_d = d; }
+  if (seen == 0 || (int16)d > (int16)best_d) { best = i; best_d = d; } /* 0x787C6 */
+  seen++;                                       /* 0x787E4 INC ECX */
 if (none) return;                               0x787f4..0x787f9
 requester[+0x20] = donor slot; donor[+0x20] = 0; slot[0] = requester;
 FUN_00078670(slot);                             0x78809..0x78814
@@ -384,7 +386,8 @@ and their request fields are consumed rather than left write-only.
   (+ the 26-byte `0x110680` gate; FU-142 Appendix K), with the first-hand
   pressed/released either-or correction; the rows 04/08 full bodies
   (`0x7E7C8..0x7F141` ~649 insns, `0x81068..0x814AF` ~231 insns) are split to
-  OL-70 and dispatch `-FIFA96_ERR_UNSUPPORTED` until then.**
+  OL-70 (row 04) / OL-70a (row 08) and dispatch `-FIFA96_ERR_UNSUPPORTED`
+  until then.**
 * **OL-39 — FU-61-adjacent input-handler support item.** The per-frame slot
   update (`FUN_00078950` via `FUN_00078A54`), the direction getter
   `FUN_0004511D`, and the handler-output packaging (FU-61 §5) are not all

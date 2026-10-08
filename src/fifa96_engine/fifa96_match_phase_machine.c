@@ -4,7 +4,7 @@
  *
  * First-hand evidence: docs/ghidra/FU142_installer_arms_scope.md Appendix A
  * (read-only /FIFA96.EXE: disassemble_function/decompile_function 0x8CEB8,
- * read_memory 0x8CEDB, get_xrefs_to 0x8CEB8, the 15 call-site windows) and
+ * read_memory 0x8CEE2, get_xrefs_to 0x8CEB8, the 15 call-site windows) and
  * Appendix B (state switch 0x8D178/table 0x8D040, arm block 0x8D693..0x8D820,
  * caller FUN_000740A0 0x740C8/0x740DB). */
 #include <string.h>
@@ -15,6 +15,9 @@
 int fifa96_match_phase_machine_init(struct fifa96_match_phase_machine *pm) {
   if (!pm) return -FIFA96_ERR_INVALID;
   memset(pm, 0, sizeof *pm);
+  /* Carried Task-1 mirror: the step writes the pool's team->chosen831
+   * (0x8D801), so this array is seeded only, and pm->phase is superseded by
+   * mr->state.phase (FU-142 Appendix B.6). */
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     pm->chosen831[t] = FIFA96_MATCH_ENTITY_NONE;
   return FIFA96_OK;

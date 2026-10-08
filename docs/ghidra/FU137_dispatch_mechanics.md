@@ -317,9 +317,11 @@ EDX=0x2A`).
 
 Consequence: `0x26`, `0x28`, `0x2A` have statically bounded install arms;
 `0x27`/`0x29`/`0x2B`/`0x2C` have **no installer arm found anywhere in the
-program** — they are open legs (OL-15), not schedulable ports. (`0x27`'s only
-match-code constant is an animation-row argument, a distinct meaning of the
-same byte, so it is **not** evidence of an action install.)
+program** — after the FU-142f census (errata below) 27/29/2C are class
+`unwired` (ported bodies, entry verdict OL-48) and 2B is a `dead entry`
+(shared row-29 epilogue RET), so none of the four is a schedulable port.
+(`0x27`'s only match-code constant is an animation-row argument, a distinct
+meaning of the same byte, so it is **not** evidence of an action install.)
 
 **Errata (M2 arms-and-wiring Task 9 / FU-142f).** The constant census above is
 refined to a whole-call-site classification (FU-142 Appendix I): all 77
@@ -731,7 +733,7 @@ change.
   FU-142 OL-54 (the reset's `[rec+0x20]` slot callback, the phase-2
   forced-decision arm and the native installer's accepted-install tail).
 * §7 totals update in place: action unwired 1 -> 2 (`27`, `2C`), open leg
-  4 -> 2 (`29`, `2B`); dispatch total unwired 2 -> 3, open leg 3 -> 2, ported
+  3 -> 2 (`29`, `2B`); dispatch total unwired 2 -> 3, open leg 3 -> 2, ported
   3, not ported 72. The dispatch-result paragraph is updated in place:
   `-UNSUPPORTED` stays 76, `FIFA96_OK` stays 3, `-NOT_FOUND` unchanged (phase
   `0x16`).
@@ -851,11 +853,12 @@ change.
 ## Errata (M2 arms-and-wiring Task 9 / FU-142f)
 
 * **Entry closure for 27/29/2C (FU-142 Appendix I).** All 77 `FUN_0007D9A4`
-  call sites are classified first-hand: 73 are immediate-code calls, six are
-  register-derived and resolve to bounded sets (e.g. `{0x19,3}`, `{4,0x19}`,
-  `{8,9}`, helper-param `{0,0x19,0x15,0x25,0x26,0x28}`), four have
-  control-flow entries bypassing the linear write and are covered by their
-  union sets, and one (`0x766b4`) is a callee-preserved EDX=4. The union is
+  call sites are classified first-hand: 66 are immediate-code calls, six load
+  EDX from a constant-bounded register/stack word (I.4 #1/#2/#3/#5/#7/#8),
+  four have control-flow entries bypassing the linear write (I.4
+  #6/#9/#10/#11, each bypass value one of the constants already unioned), and
+  one (`0x766b4`) is a callee-preserved EDX=4 (66 + 6 + 4 + 1 = 77). The
+  union is
   {0x00..0x26} ∪ {0x28,0x2A}; 0x27/0x29/0x2C are never passed. No stored
   installer pointer exists (`search_byte_patterns a4 d9 07 00` = no matches),
   the action table's sole reader is the installer itself (`0x7DA77`), and each

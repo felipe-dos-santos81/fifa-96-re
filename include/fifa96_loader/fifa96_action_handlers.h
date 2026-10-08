@@ -722,7 +722,8 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
  *     decision (ported inline; a non-zero result requests install `0x0E` and
  *     returns); the `[0x14C32A]`/`[0x15B680]==4` downgrade to `0x20`; the kick
  *     request (`fifa96_ball_kick_target` with `mode = SI`); the post-kick
- *     opponent `0x22` invoke (staged z `< 0x30`, `timer89 < 5`, the opponent
+ *     opponent `0x22` invoke (staged traj `word[0x15873E]` < 0x30,
+ *     `timer89 < 5`, the opponent
  *     `+0x8E==6`, no slot, lane `< 0xD0`, `|angle - word[+0x7D]| < 0x55`);
  *     `timer89 = 0`, `+0x92++`;
  *   - stage 2 (`0x816FC`): `byte[+0x44] != 0` -> the tail;
@@ -733,8 +734,10 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
  *   - phase != 2 -> reset; `timer89 += (uint16)delta`;
  *   - stage 0 (`0x82B21..0x82BC3`): inactive or `word[+0x85] != 0` resets;
  *     the `0x8DCD4` distance to the `0x157788` target with the `< 0x50`
- *     half-vector position nudge, the `0x79B6C` re-anchor/face (anim `0x26`
- *     when inactive), `[+0x9E]=1`, `timer89 = 0`, `+0x92++`;
+ *     half-vector position nudge, the `0x79B6C` re-anchor/face (the helper's
+ *     inactive -> anim `0x26` branch is unreachable here: the `0x82B21`
+ *     stage-0 gate resets inactive records first), `[+0x9E]=1`,
+ *     `timer89 = 0`, `+0x92++`;
  *   - stage 1 (`0x82BC9..0x82DA2`): the `0x79B1C` snap, `byte[+0x44]` reset,
  *     `word[+0x81]` wait, the `FUN_0007876C` slot-merge request
  *     (`team+0x828`, `lane < 0xF0`, `[0x1586D7]==0`), the `FUN_00078A84` slot

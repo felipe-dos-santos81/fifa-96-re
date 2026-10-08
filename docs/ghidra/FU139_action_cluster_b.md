@@ -191,7 +191,7 @@ are presentation-side and unported: **OL-27**.
 and `out.z = [0x157754] + (int8)table[0x10F33C + type8] << 4` (y untouched);
 otherwise the camera triple `0x15774C..54` is copied. The native addressing is
 a dword load at `0x10F331 + type8` followed by `SAR 24` (`0x81571`/`0x81577`,
-`0x8158E`/`0x81597`), i.e. the sign-extended byte three bytes into the record:
+`0x81591`/`0x81597`), i.e. the sign-extended byte three bytes into the record:
 the x-offset base is `0x10F334` and the z-offset base `0x10F33C` — the same
 bytes FU-138 §3 reads for the row-0D velocity tables, not the raw `0x10F331`/
 `0x10F339` load addresses. `type8 = [rec+0x8B]>>24`. Ported as
@@ -693,7 +693,7 @@ the `FUN_0008DC68` distance into `out[0]`; a NULL row zeroes the triple.
 `FUN_0007B194` (mode 0x40, 219 insns) builds a goal-line target
 `{x, 0, ±0xB40}` from 11..13 RNG draws (the no-slot phase-1/no-slot/random,
 slot/mode-state clusters), runs `0x8DCD4(camera, target, vector)`, derives the
-speed `((int8)rec[+4][0x10]<<7) + 0x390 + (rng&7)`, halves it for
+speed `((int8)rec[+4][0x10]<<7) + 0x390 + (rng&0x3F)`, halves it for
 `byte[+0x99]` or applies the `0x14C1D4` 1.5x, adds the goal-side drift
 `±(|0xB10-pos_z|>>7)` and the `[0x14C2F6]==1` signed adjust, then folds
 `FUN_000CD474(word[0x15873A], word[0x15873C])` into
@@ -742,8 +742,10 @@ timer < 5, the opponent type 6, no slot, lane `word[+0x6B]` < 0xD0, the
 Row 0F (`0x82AD0..0x82DCF`): phase != 2 -> reset; `timer89 += delta`; stage 0
 (`0x82B21..0x82BC3`): inactive or `word[+0x85] != 0` -> reset; the
 `0x8DCD4(pos, 0x157788)` distance < 0x50 advances pos by the half vector; the
-`0x79B6C` re-anchor (target = pos, y = 0, the camera face, anim 0x26 when
-inactive), `[+0x9E]=1`, `timer89=0`, `+0x92++`; stage 1
+`0x79B6C` re-anchor (target = pos, y = 0, the camera face; the helper's
+inactive -> anim 0x26 branch is unreachable from this call — the `0x82B21`
+stage-0 gate resets inactive records first), `[+0x9E]=1`, `timer89=0`,
+`+0x92++`; stage 1
 (`0x82BC9..0x82DA2`): the `0x79B1C` snap, `+0x44` reset, `+0x81` wait, the
 `0x7876C` merge request (`team+0x828`, lane < 0xF0, `[0x1586D7]==0`), the
 `0x78A84` slot backup, the lane/bound and opponent-height gates, the lane 0x30
@@ -779,6 +781,8 @@ receiver timer through the pool. Rows 07/0F flip to `ported`:
 * `tests/test_ball_pairing.c`: `test_kick_target_resolves_and_stages`
   (resolver row + staging), `test_kick_target_clamp_and_angle_fold` (the
   lower-bound clamp and the exact 0x114E04 fold values),
+  `test_kick_target_bit8_fold` (the bit-8/bit-9 index negations with the
+  fold values 1358/-1358),
   `test_kick_target_code4_rng_divisor` (the seed-0 divisor `x/3` traj and the
   inactive code-4 clear), `test_kick_target_negative_band_and_no_row` (the
   band + the row[0]==0 path), `test_kick_target_slot_dir_arm` (the `0x7B878`
@@ -1144,8 +1148,9 @@ reproduces the predicate, so the row-06 entry is bounded; the wiring gate
   `0x79CCC`/`0x6DA64` swap), `test_pursuit_carrier_mirror_equal` (the
   `0x808AD` `>=` mirror and the height-gate skip),
   `test_pursuit_carrier_no_mirror` (the `0x808B2 JL` clear direction),
-  `test_pursuit_height_gate_skip`/`test_pursuit_height_gate_research` (the
-  `0x80952` gate both ways), `test_pursuit_score_second_subtraction` (the
+  `test_pursuit_height_gate_research` (the `0x80952` gate's fail/re-search
+  side; the skip side is the `test_pursuit_carrier_mirror_equal` fixture),
+  `test_pursuit_score_second_subtraction` (the
   `0x803BE..0x803EE` own < other unsigned branch, including the 0x8000 case),
   `test_pursuit_adjust_gate_signed` (the `(int8)0x15872F < 2` gate with 0xFF)
   and `test_pursuit_invalid`.
