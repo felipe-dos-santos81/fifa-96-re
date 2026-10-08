@@ -446,6 +446,13 @@ and their request fields are consumed rather than left write-only.
 * **FU-120 §2** — confirmed at flat `0x15880C` in `/FIFA96.EXE`
   (`search_instructions 15880c`); the `-0x720`/`0x1560` reset writers are
   `FUN_000886D4 0x8873A/0x88746`.
+* **§7 OL-42 (render consumer link, M2 Task 11 fix round 1)** — the render
+  staging `FUN_00036C70` reads the same record fields the installer animation
+  arm writes: `anim_id = byte[[rec+0x28]]` (`0x36D44`) and
+  `frame = byte[rec+0x3D]` (`0x36D4F`). The pool models neither, so the
+  engine records the consumer side as **OL-80** (ENGINE.md): staged slots
+  keep the caller-owned row 0 / frame 0 until OL-42's animation arm and the
+  +0x28/+0x3D pool fields land.
 
 ## 9. Concerns
 

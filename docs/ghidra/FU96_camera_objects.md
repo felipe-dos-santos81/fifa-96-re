@@ -120,6 +120,14 @@ settings-4 fallback (`skip_second` → `ratio2 = ratio1`).
   camera object's `+0x4C`, copied to `0x4E4E0+0x14` by `FUN_0004C904` and
   read by `FUN_00049830`; the writers of `+0x4C` live in the
   `0x4Cxxx..0x51xxx` camera band (open leg).
+* **§1 `+0x4C` field row / §3 / §6 leg 1 "static default 21" — corrected
+  (M2 Task 11 fix round 1, first-hand `/FIFA96.EXE`)**: the camera record
+  `+0x4C` is a **dword** `0x1500` (`read_memory 0x107554` = `00 15 00 00`;
+  sibling `0x1075C4` identical). The "21" is the **byte at `+0x4D`**
+  (`0x107555`), and the writer `0x4D836 MOV [EDX+0x4C],EBX` stores the full
+  dword from the camera-type entry `[5]`, so the live values are
+  dword-scaled. The engine's near-depth ratio consumes the dword
+  (`(0x14<<16)/(2·0x1500) = 121`).
 
 ## 5. Provenance
 

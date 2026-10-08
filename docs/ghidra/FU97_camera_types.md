@@ -129,6 +129,13 @@ first entry).
   `(&0x8B80)[i]` remain cited only.
 * **FU-88 §3.1** — carried: `[0x146B0]` is yaw/type dependent (FU-94 §1,
   FU-96 §2), not a stored screen width.
+* **§3/§7 "the ten cameras carry the static default 21 / `+0x4C` = 21 each"
+  — corrected (M2 Task 11 fix round 1, first-hand `/FIFA96.EXE`)**: the
+  camera `+0x4C` field is a **dword** `0x1500` (`read_memory 0x107554` =
+  `00 15 00 00`, `0x1075C4` identical); the "21" is the **byte at `+0x4D`**.
+  `FUN_0004D7E8`'s `MOV [EDX+0x4C],EBX` (`0x4D836`) writes the full dword
+  from the type entry `[5]`, so the runtime values (4608/3048/3464..) are
+  dword-scaled.
 
 ## 7. Provenance
 

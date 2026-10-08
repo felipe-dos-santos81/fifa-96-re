@@ -84,6 +84,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   instructions) remain to be ported and wired.
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
+- **OL-80 render anim inputs (links FU-141 OL-42):** `FUN_00036C70` stages each
+  slot's `anim_id` (`byte[[rec+0x28]]`, 0x36D44) and `frame` (`byte[rec+0x3D]`,
+  0x36D4F); the FU-141 pool models neither field, so staged slots keep the
+  caller-owned row 0 / frame 0 and only the FU-84 row+8 bank derivation and
+  the accumulator advance are live. The anim inputs land when the OL-42
+  installer animation arm and the +0x28/+0x3D pool fields are ported.
 - **Phase table:** all 35 FU-83 phase rows are unported (`OL-13`); the
   selector-0/phase-0 default never reaches a live period end, so the M2-B tape
   declares its forced phases explicitly.

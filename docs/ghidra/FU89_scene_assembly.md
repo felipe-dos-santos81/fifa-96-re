@@ -583,6 +583,15 @@ replay gates are folded into one `replay_gate` argument; the original's
   `fifa96_scene_build_keys` was corrected to `keys[i] = z(list[i])` and the
   engine render list now builds the native-shaped 24 entries; the earlier
   "index-0 gate is inert" divergence note is superseded.
+  This correction also supersedes the §9 port-table row
+  ("`0x57779..0x577B4` key seeding (`keys[i+1] = z([0x54370]+list[i]*0xC)`)"
+  → `fifa96_scene_build_keys`), the §9 divergences sentence ("the original's
+  key-store quirk writes `keys[1..count]` and leaves `keys[0]` alone — the
+  port reproduces that (`keys` must hold `count+1` entries)") and the §10
+  `build_keys` test bullet ("`keys[1..4] = {10,40,20,30}` … with `keys[0]`
+  preserved"): the corrected contract is `keys[i] = z(list[i])` over
+  `[0,count)` with no preserved slot, and `tests/test_scene.c` pins the
+  corrected form.
 
 ## 12. Open legs
 
