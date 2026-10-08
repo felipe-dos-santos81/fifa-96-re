@@ -622,9 +622,10 @@ typedef struct fifa96_action_phase_period_end_out {
  *
  * `period` is `[0x157AC2]`; `extra_time` is `[0x157AC0]`; the score pair is
  * `[0x157AC5]`/`[0x157AC7]`; `side_controlled` is `[0x157AAC]>>24`;
- * `side_abe`/`side_abf` are `[0x157ABE]`/`[0x157ABF]`; `d8`/`d9` are
- * `[0x1587D8]`/`[0x1587D9]` (indexed by the match phase, 0 only for phases
- * 0x13/0x14).
+ * `side_abe`/`side_abf` are the two stored side bytes `[0x157ABE]`/
+ * `[0x157ABF]`; `d8`/`d9` are the two per-side counter bytes `[0x1587D8]`/
+ * `[0x1587D9]`, compared signed only when `period >= 4` (OL-75 covers their
+ * unported producers).
  *
  * `probe[4]` are the unported `FUN_00012230`/`FUN_00012250` results, in the
  * native call order: `[0]` = `0x12230(0)` (EDX=0 pick), `[1]` =

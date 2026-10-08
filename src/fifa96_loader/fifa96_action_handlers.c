@@ -1106,6 +1106,9 @@ typedef struct fifa96_action_phase_situation_row {
 } fifa96_action_phase_situation_row;
 
 static const fifa96_action_phase_situation_row fifa96_action_phase_situations[0x0D] = {
+    /* situation 0: the native arm invokes act 0xA first (0x8AB8E) and writes
+     * phase 0x11 after it (0x8AB9F); the row's field order does not encode the
+     * call order, which is observable if a caller wires the two directly. */
     {0x11u, 0x0Au, 0u, 0u},
     {FIFA96_ACTION_PHASE_NONE, 1u, 0u, 0u},
     {3u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
