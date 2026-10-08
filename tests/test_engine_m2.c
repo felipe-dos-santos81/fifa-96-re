@@ -72,14 +72,20 @@
  *
  * Forced, each with its owning leg:
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
- *     (the kickoff placement), not phase 2 — phase 2's only writer is
- *     FUN_0008A938 situation 0xB (0x8AEF6 -> 0x8AF02 FUN_000740A0(2, side)),
- *     whose only producers are the possession/keeper restart bodies
- *     (0x7546E/0x75B58/0x76072, the unported FU-73 possession transition), so
- *     the derived entry cannot reproduce the FU-142a arm staging (26/28/2A)
- *     that the forced 0x13/0x14 window drives — `OL-84` (kept forcing, no
- *     re-pin: the golden is byte-identical) and the extra-time flag producer
- *     `OL-85`;
+ *     (the kickoff placement) and the phase-1 -> 2 transition runs through the
+ *     setter's own state machine (the 0x88E82 FUN_000740A0(1, side) call runs
+ *     FUN_0008D098 per team; its state-1 arm 0x8D1B1 installs action 1
+ *     (0x8D1F1/0x8D200) / action 2 (0x8D238), and action row 01
+ *     (0x7DBC0/0x7DF90) calls FUN_0008A938 situation 0xB -> 0x8AEF6 ->
+ *     0x8AF02 FUN_000740A0(2, side)); `get_xrefs_to 0x8A938` = 39 and the
+ *     EBX=0 situation-0xB producers are the phase-1/action bodies 0x7DF90
+ *     (row 01), 0x85D38 (row 0x10), 0x863F9 (row 0x11), 0x84495 (row 0x12),
+ *     0x84E8F (row 0x13), the keeper/restart bodies
+ *     0x7546E/0x75B58/0x76072 and the unresolved computed-situation act-8 call
+ *     0x8A8CE. The engine cannot reproduce the FU-142a arm staging (26/28/2A)
+ *     the forced 0x13/0x14 window drives because its record-action machinery
+ *     is unported — `OL-84` (kept forcing, no re-pin: the golden is
+ *     byte-identical) and the extra-time flag producer `OL-85`;
  *   - phase 2 mechanics entry (m 41): the same `OL-84` gap; the
  *     class-1 clock then completes the shortened 1 s period naturally (the
  *     1 s period is the G1 live-end test convention, native periods last
@@ -113,8 +119,9 @@
  * sample is taken before each step; the v3 assertion reads the FU-142a mirror
  * after the step to pin the derived write. The 0x13/0x14/2 forcing stays
  * declared because the derived kickoff entry (OL-84, phase 1) cannot reach
- * phase 2 without the unported possession transition, and the extra-time flag
- * producer (OL-85) is unported.
+ * phase 2 without the unported record-action machinery (state-1 arm, rows
+ * 01/02 and 0x10..0x13), and the extra-time flag producer (OL-85) is
+ * unported.
  *
  * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
  * direct `fifa96_match_run_add_goal`. Its tracked-side default is the carried
@@ -299,8 +306,8 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     /* T2 (OL-84): the derived kickoff entry left the begun run at phase 1
      * (the native FUN_00088DC8 stage-0 FUN_000740A0(1, side) write); the live
      * phases stay forced because the derived entry cannot reproduce the
-     * FU-142a arm staging (the phase-2 writer's only producers are the
-     * unported possession/keeper restarts). */
+     * FU-142a arm staging (the phase-1 -> 2 record-action chain — state-1 arm
+     * 0x8D1B1, row 01 0x7DF90 -> situation 0xB — is unported). */
     assert(mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
     assert(fifa96_match_state_set_phase(&mr->state, 0x13) == 0);
     mr->phase_machine.state = 0x13;                     /* kickoff: forced live phase */

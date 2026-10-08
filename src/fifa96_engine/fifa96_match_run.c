@@ -695,8 +695,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * phase-0x17 handler FUN_00088DC8 stage 0) and the `FUN_00073E08` placement
    * commit begin models below. The run leaves the reset default phase 0 and
    * enters the kickoff-placement phase 1 (class 0: the clock stops); the live
-   * phase 2 awaits the unported possession/keeper restart producer of
-   * FUN_0008A938 situation 0xB (OL-84). */
+   * phase 2 follows on that chain (the same setter call drives FUN_0008D098
+   * state 1, installing actions 1/2, and action row 01 calls FUN_0008A938
+   * situation 0xB at 0x7DF90), but that record-action machinery is unported
+   * (OL-84 residual). */
   (void)fifa96_match_state_set_phase(&mr->state, FIFA96_MATCH_RUN_KICKOFF_PHASE);
   mr->phase_machine.state = FIFA96_MATCH_RUN_KICKOFF_PHASE;
   mr->phase_machine.phase = FIFA96_MATCH_RUN_KICKOFF_PHASE;

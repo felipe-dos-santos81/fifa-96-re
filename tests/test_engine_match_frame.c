@@ -525,14 +525,19 @@ static void test_phase_drive_begun_end_resets_phase(void) {
  * FUN_000700F4 + FUN_00073E28 (phase 0), then FUN_000740A0(AL=1,
  * side=[0x157AAC]>>24) at 0x88E82 -> [0x157A4D]=1, then FUN_00073E08 ->
  * FUN_0008CF60 (the placement commit begin models through
- * fifa96_match_entities_kickoff_place). The begun selector-0 match therefore
- * enters phase 1 (the kickoff-placement phase, class 0: the FU-62 clock
- * stops), NOT phase 2. Phase 2's only writer is FUN_0008A938 situation 0xB
- * (table-2 arm 0x8AEF6 -> 0x8AF02 FUN_000740A0(EAX=2, side)); its only
- * producers are the possession/keeper restart bodies (action-0x1D tail
- * 0x7546E, carrier bodies 0x75B58/0x76072), i.e. the unported FU-73 possession
- * transition -- so no begun run leaves phase 1 without the tape's forcing (the
- * OL-84 negative). */
+ * fifa96_match_entities_kickoff_place). The begun selector-0 match enters
+ * phase 1 (the kickoff-placement phase, class 0: the FU-62 clock stops).
+ * Phase 2's only writer is FUN_0008A938 situation 0xB (table-2 arm 0x8AEF6 ->
+ * 0x8AF02 FUN_000740A0(EAX=2, side)); `get_xrefs_to 0x8A938` = 39 and the
+ * EBX=0 situation-0xB producers are the phase-1/action bodies 0x7DF90 (row
+ * 01), 0x85D38 (row 0x10), 0x863F9 (row 0x11), 0x84495 (row 0x12), 0x84E8F
+ * (row 0x13), the keeper/restart bodies 0x7546E/0x75B58/0x76072 and the
+ * unresolved computed-situation act-8 call 0x8A8CE. The transition is real on
+ * the kickoff chain -- the same 0x88E82 setter call runs FUN_0008D098 per team,
+ * whose state-1 arm (0x8D1B1) installs action 1 (0x8D1F1/0x8D200) / action 2
+ * (0x8D238) and action row 01 (phase==1 gate) calls situation 0xB at 0x7DF90 --
+ * but the record-action machinery (rows 01/02, 0x10..0x13) is unported, so no
+ * begun run leaves phase 1 without the tape's forcing (OL-84 residual). */
 static void test_kickoff_entry_enters_phase1_not_phase2(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;

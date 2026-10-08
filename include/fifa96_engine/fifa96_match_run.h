@@ -65,11 +65,19 @@ struct fifa96_surface;
  * models through fifa96_match_entities_kickoff_place). begin installs this
  * entry from the reset default: the run's phase becomes 1 (the kickoff
  * placement phase, class 0, so the FU-62 clock stops) with prev_phase 0. The
- * live in-play phase 2 is reached natively only through the FUN_0008A938
- * situation-0xB arm (0x8AEF6 -> 0x8AF02 FUN_000740A0(EAX=2, side)); its only
- * producers are the possession/keeper restart bodies (0x7546E/0x75B58/0x76072,
- * the unported FU-73 possession transition), so a begun run waits at phase 1
- * until that transition is wired (OL-84 negative). */
+ * live in-play phase 2 is written only by the FUN_0008A938 situation-0xB arm
+ * (0x8AEF6 -> 0x8AF02 FUN_000740A0(EAX=2, side)); `get_xrefs_to 0x8A938` = 39
+ * and the EBX=0 situation-0xB producers are the phase-1/action bodies 0x7DF90
+ * (row 01), 0x85D38 (row 0x10), 0x863F9 (row 0x11), 0x84495 (row 0x12),
+ * 0x84E8F (row 0x13), the keeper/restart bodies 0x7546E/0x75B58/0x76072 and
+ * the unresolved computed-situation act-8 call 0x8A8CE. The transition is
+ * real on the kickoff chain: the same 0x88E82 setter call runs FUN_0008D098
+ * per team (0x740C8/0x740DB), whose state-1 arm (0x8D1B1, table 0x8D040[1])
+ * installs action 1 (0x8D1F1/0x8D200 CALL 0x7D9A4) / action 2 (0x8D238), and
+ * action row 01 (0x7DBC0, the `phase == 1` gate at 0x7DBCB..0x7DBD6) calls
+ * situation 0xB at 0x7DF90. The begun run waits at phase 1 because that
+ * record-action machinery (rows 01/02, 0x10..0x13) is unported (OL-84
+ * residual). */
 #define FIFA96_MATCH_RUN_KICKOFF_PHASE 1u
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus

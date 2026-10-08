@@ -665,20 +665,40 @@ selector-0 default kickoff chain, byte-level:
    act 4 = the phase-0x1A handler `0x89620`; otherwise it waits
    `[0x58816]>>16 > 0x78` and clears the act (`0x88F01`, `[0x15882A]=1`).
 
-**Phase 2 is not on this chain.** `FUN_000740A0` has exactly one phase-2 call
-site: `0x8AF02` (inside `FUN_0008A938`'s table-2 situation-0xB arm `0x8AEF6`:
-`MOV EDX,[ESP-2]` / `MOV EAX,2` / `SAR EDX,0x10` / `CALL 0x740A0`). The
-`FUN_0008A938` situation-0xB call sites (all 39 xrefs inspected; argument
-windows re-read) are exactly three: `0x7546E` (action 0x1D keeper close-down
-stage-3 tail: `CALL 0x8DE8C` nearest + `CALL 0x786A0`, then `EAX=0xB`,
-`EDX=[[rec]+0x826]`, `EBX=0`, then `CALL 0x4C380` and `[0x157AB2]=0`), `0x75B58`
-and `0x76072` (keeper/carrier-region bodies: `CALL 0x7DAB4` RESET, then
-situation 0xB, then `INSTALL 5` at `0x75B5D..0x75B67` / `[0x157AB2]=0` at
-`0x76077`). All three are possession/keeper restart transitions; the kickoff
-act machinery (acts 0xA/1/4/8) never calls situation 0xB. The possession
-transition is the unported FU-73 invoker, so the opening kickoff's static path
-ends at phase 1 and phase 2 stays a runtime (possession-driven) entry — the
-OL-79 negative persists (now bounded to the possession invoker).
+**Phase 2 is on the chain through the setter's own state machine.**
+`FUN_000740A0` has exactly one phase-2 call site: `0x8AF02` (inside
+`FUN_0008A938`'s table-2 situation-0xB arm `0x8AEF6`: `MOV EDX,[ESP-2]` /
+`MOV EAX,2` / `SAR EDX,0x10` / `CALL 0x740A0`). `get_xrefs_to 0x8A938` = 39;
+the situation-0xB/`EBX=0` producers are: the phase-1/action bodies `0x7DF90`
+(action row 01 `0x7DBC0`: `0x7DF83 MOV EAX,0xB` / `0x7DF8E XOR EBX,EBX` /
+`0x7DF90 CALL`; the body's `phase == 1` gate is `0x7DBCB MOV
+EAX,[0x157A4A]` / `0x7DBD0 SAR` / `0x7DBD3 CMP EAX,1` / `0x7DBD6 JNZ
+0x7DFB8`), `0x85D38` (row 0x10: `0x85D2B MOV EAX,0xB` / `0x85D36 XOR
+EBX,EBX` / `0x85D38 CALL`), `0x863F9` (row 0x11: `0x863EC`/`0x863F7`),
+`0x84495` (row 0x12: `0x84488`/`0x84493`), `0x84E8F` (row 0x13:
+`0x84E82`/`0x84E8D`); the keeper/restart bodies `0x7546E` (action 0x1D
+close-down stage-3 tail: `CALL 0x8DE8C` nearest + `CALL 0x786A0`, then
+`EAX=0xB`, `EDX=[[rec]+0x826]`, `EBX=0`), `0x75B58` (`CALL 0x7DAB4` RESET,
+situation 0xB, `INSTALL 5` at `0x75B5D..0x75B67`) and `0x76072`
+(`[0x157AB2]=0` at `0x76077`); and the unresolved computed-situation
+candidate `0x8A8CE` (act 8: `EAX = [0x158828]` dword `>> 24` = byte
+`[0x15882B]` (the stored situation), `EDX = [0x158829] >> 24` = the stored
+side, `EBX=0`). Routing (re-read): `0x8A94D CWDE` / `0x8A94E CMP EAX,0xB` /
+`0x8A951 JZ 0x8AA7B` -> `0x8AA7B TEST BX,BX` / `0x8AA7E JZ 0x8AAA8` (the
+`CX = situation` path) -> `0x8AB63` / `0x8AB6B CMP CX,0xC` / `0x8AB7A JMP
+CS:[EAX*4+0x8A904]`, table entry `[0xB] = 0x8AEF6`. The `0x88E82` entry
+write itself drives the transition: `FUN_000740A0` runs `FUN_0008D098` per
+team (`0x740C8`/`0x740DB`) with the new phase byte, and state 1's arm
+(`0x8D1B1`, table `0x8D040[1]`) multi-installs code 3 over the team records
+(`FUN_0008CEB8`, `0x8D1C1`), resolves `team+0x7B2` (`FUN_00079CCC`,
+`0x8D1D1`) and, on the controlled side, installs action 1 (`0x8D1F1 MOV
+EDX,1` / `0x8D200 CALL 0x7D9A4`) and action 2 (`0x8D233 MOV EDX,2` /
+`0x8D238 CALL`), then the `FUN_0007876C` slot merge (`0x8D243`); action row
+01's body then calls situation 0xB. The opening kickoff's phase-1 -> 2
+transition is therefore real on the chain; the engine waits at phase 1
+because the record-action machinery (the `FUN_0008D098` state-1 arm and the
+rows 01/02, 0x10..0x13 bodies) is unported — not because phase 2 is off the
+kickoff chain.
 
 **Engine landing (M2 visible-match T2).** `fifa96_match_run_begin`
 (`src/fifa96_engine/fifa96_match_run.c`) installs the derived entry between
@@ -693,9 +713,10 @@ the `FUN_000740A0(1, side)` write the native handler performs before
 
 **Kept forcing (M2 tape).** The tape's 0x13/0x14 forced window drives the
 FU-142a state 0x13/0x14 arms (codes 26/28/2A), which the derived entry cannot
-reproduce (those arms are not on the opening-kickoff chain: the kickoff
-commits placement via `0x8CF60`, and act 4 installs action 0x17 into the
-kickoff record), so the forcing stays and
+reproduce: the entry's own arm machinery is the `FUN_0008D098` state-1 arm
+(installing actions 1/2) plus act 4's action-0x17 install into the kickoff
+record (`0x89736`/`0x89740`, the phase-0x1A handler), none of which stages
+26/28/2A. The forcing therefore stays and
 `tests/golden/engine/m2-frames.txt` is **byte-identical** (`cmp` clean after
 the wiring: the derived entry is forced over by m 1 before the first granted
 frame, so no transcript line moves). No re-pin.
@@ -726,9 +747,16 @@ directive and keeps the 0x13/0x14/2 forcing; the golden is byte-identical
 `0x8B688`(496 B), `0x8B640`(80 B), `0x89620`(600 B), `0x89620`+`0x749AE`
 (768 B), `0x8A798`(420 B), `0x87C20`(160 B), `0x753A0`(224 B), `0x75AC0`(168 B),
 `0x75FD0`(168 B), `0x8B22F`(160 B), `0x891F0`(48 B), `0x742C0`(96 B),
-`0x4C31C`(80 B); `get_xrefs_to` `0x8A938`(39), `0x888FC`(11), `0x4B02C`(2),
-`0x8D098`(2); `search_instructions` operands `157b8e`(11), `157b8f`(5),
-`15882a`(24), `110794`(1); `read_memory` `0x1106AD`(48 B).
+`0x4C31C`(80 B); fix-round `FUN_0008D098` state-1 evidence:
+`disassemble_bytes` `0x8D188`(192 B: table `0x8D040` JMP `0x8D18A`, state-1
+arm `0x8D1B1`..`0x8D243`) and the producer windows `0x7DBB0`(48 B row 01
+head), `0x7DF70`(40 B row 01 situation call), `0x84480`(32 B row 0x12),
+`0x84E78`(32 B row 0x13), `0x85D28`(32 B row 0x10), `0x863E8`(32 B row 0x11);
+`get_xrefs_to` `0x8A938`(39), `0x888FC`(11), `0x4B02C`(2), `0x8D098`(2),
+`0x740A0`(27); `search_instructions` operands `157b8e`(11), `157b8f`(5),
+`15882a`(24), `110794`(1); `read_memory` `0x1106AD`(48 B). Cross-reference:
+FU-137 §4 already records code `1` at `0x8D200` / code `2` at `0x8D238`
+(`docs/ghidra/FU137_dispatch_mechanics.md`, `FUN_0008D098` arms).
 
 ## Provenance
 

@@ -123,13 +123,17 @@ the build also produces the windowed `fifa96` target (`make game`).
   `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1` (the native `FUN_00088DC8` stage-0
   `FUN_000740A0(1, side)` write at `0x88E82`), so a begun run waits at the
   kickoff-placement phase (class 0) and the tape's m 1 directive forces the
-  live phase over it. The 0x13/0x14 forced window **stays**: the derived entry
-  cannot reach phase 2 (whose only writer is the `FUN_0008A938` situation-0xB
-  arm `0x8AEF6` -> `0x8AF02`, produced only by the unported possession/keeper
-  restarts `0x7546E`/`0x75B58`/`0x76072`) and therefore cannot reproduce the
-  FU-142a arm staging the forced window drives. The T2 transcript is
+  live phase over it. The 0x13/0x14 forced window **stays**: the phase-1 ->
+  phase-2 transition runs through the setter's own state machine (the
+  `0x88E82` `FUN_000740A0(1, side)` call runs `FUN_0008D098` per team; its
+  state-1 arm `0x8D1B1` installs actions 1/2, and action row 01
+  `0x7DBC0`/`0x7DF90` calls `FUN_0008A938` situation 0xB -> `0x8AEF6` ->
+  `0x8AF02`; the producer set also includes rows 0x10..0x13 and the
+  keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072`), but that record-action
+  machinery is unported, so the derived entry cannot reproduce the FU-142a
+  arm staging the forced window drives. The T2 transcript is
   **byte-identical** after the wiring (no re-pin; `OL-84` stays open with the
-  possession invoker as the remaining gap). The **T1** transcript changed
+  record-action machinery as the remaining gap). The **T1** transcript changed
   and the golden was re-pinned for the drawing upgrade: the first differing
   line is frame 9 (the first granted render staging), 157 lines differ (the
   null backend chains its present hash across all presented frames, so the
@@ -232,11 +236,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   `FUN_00073E08` placement commit the begin path models) lands as
   `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`, mirroring the `phase_machine` switch
   byte; the begun run waits at the kickoff-placement state (class 0, clock
-  stopped). `OL-84` stays open: the derived entry cannot reach live phase 2
-  because the only phase-2 writer is the `FUN_0008A938` situation-0xB arm
-  (`0x8AEF6` -> `0x8AF02`), whose only producers are the possession/keeper
-  restart bodies (`0x7546E`/`0x75B58`/`0x76072`) of the unported FU-73
-  possession transition — so the kickoff acts (0xA/1/4/8) end at phase 1.
+  stopped). `OL-84` stays open: the only phase-2 writer is the
+  `FUN_0008A938` situation-0xB arm (`0x8AEF6` -> `0x8AF02`), and while the
+  phase-1 -> 2 transition is real on the kickoff chain (the `0x88E82` setter
+  call drives `FUN_0008D098` state 1, installing actions 1/2; action row 01
+  calls situation 0xB at `0x7DF90`; other producers are the rows
+  0x10..0x13 and the keeper/restart bodies `0x7546E`/`0x75B58`/`0x76072`),
+  the record-action machinery is unported — so the kickoff acts (0xA/1/4/8)
+  end at phase 1 in the engine.
   The extra-time flag producer (`OL-85`, re-verified at `0x8B2AC`/`0x8B2C1`)
   and the post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B
   tape keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics)
