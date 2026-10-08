@@ -88,7 +88,7 @@
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP,
+    /* 00 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
@@ -585,29 +585,48 @@ static void test_action_05_unwired_carrier(void) {
 }
 
 
-/* FU-142 Appendix K (M2 arms-and-wiring Task 14): OL-38's machine subset is
- * ported (`fifa96_outfield_input_row`/`fifa96_outfield_chase_gate` + the flat
- * 0x110680 gate, tested in `test_outfield`), but rows 04/08's full
- * record-visible bodies (`0x7E7C8..0x7F141`, 574 Ghidra defined-code insns;
- * `0x81068..0x814AF`, 213) are split to OL-70 (row 04) / OL-70a (row 08) per
- * the plan's row-window rule. The wiring gate therefore keeps both rows
- * `fn == NULL` with the row's leg named. */
-static void test_action_04_08_unwired_machine_subset(void) {
+/* FU-142 Appendix K.3/FU-137 §6.1 (M2 playability-legs Task 1 / OL-70): row
+ * 04 is wired — `fifa96_match_action_04` binds `fifa96_outfield_row04_step`
+ * over `mr->record`/the FU-141 pool (the install arm `0x7E85C`/0x7F133, the
+ * full record-visible body and the pool binding). Row 08's full body is still
+ * unported (OL-70a), so it keeps `fn == NULL` and the UNSUP dispatch. The run
+ * assertions exercise the prologue reset and the no-slot camera target arm. */
+static void test_action_04_wired_and_08_unwired(void) {
   struct fixture f;
-  const struct fifa96_match_handler *r4 = &fifa96_match_action_table[0x04];
   const struct fifa96_match_handler *r8 = &fifa96_match_action_table[0x08];
   make_fixture(&f);
-  assert(r4->fn == NULL);
-  assert(strstr(r4->evidence, "OL-70") != NULL);
-  assert(strstr(r4->evidence, "UNSUPPORTED") != NULL);
-  assert(strstr(r4->evidence, "FU-142") != NULL);
+  assert(fifa96_match_action_table[0x04].fn != NULL);
+  assert(strstr(fifa96_match_action_table[0x04].evidence, "OL-70") != NULL);
   assert(r8->fn == NULL);
   assert(strstr(r8->evidence, "OL-70a") != NULL);
   assert(strstr(r8->evidence, "UNSUPPORTED") != NULL);
-  assert(action_expect[0x04] == UNSUP);
+  assert(action_expect[0x04] == FIFA96_OK);
   assert(action_expect[0x08] == UNSUP);
-  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x08) == UNSUP);
+
+  /* phase != 2: the row's FUN_0007DAB4 request resets the pool record. */
+  f.mr.state.phase = 1;
+  f.mr.record.entity_id = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].stage92 == 0xFF);
+  assert(f.mr.entities.team[0].records[0].timer89 == 0);
+
+  /* phase 2, no slot, w1577F0 0: the camera+lead target arm writes the
+   * staging record; lane < 0x3C0 with |camera.z| > 0x570 requests the
+   * 0x79B58 receiver timer on the pool record. */
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.record.active = 1;
+  f.mr.record.timer81 = 0;
+  f.mr.entities.team[0].records[0].lane_x = 0x20;   /* native word +0x6B */
+  f.mr.render.camera.pos_x = 7;
+  f.mr.render.camera.pos_y = 8;
+  f.mr.render.camera.pos_z = 0x600;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.record.target_x == 7 && f.mr.record.target_y == 8 &&
+         f.mr.record.target_z == 0x600);
+  assert(f.mr.entities.team[0].records[0].timer93 == 0x10);
   drop_fixture(&f);
 }
 
@@ -1026,7 +1045,7 @@ int main(void) {
   test_action_29_unwired_entry();
   test_dead_2b_evidence();
   test_action_05_unwired_carrier();
-  test_action_04_08_unwired_machine_subset();
+  test_action_04_wired_and_08_unwired();
   test_action_07_runs_body();
   test_action_0F_runs_body();
   test_action_18_runs_body();

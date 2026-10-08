@@ -387,7 +387,9 @@ and their request fields are consumed rather than left write-only.
   pressed/released either-or correction; the rows 04/08 full bodies
   (`0x7E7C8..0x7F141` ~649 insns, `0x81068..0x814AF` ~231 insns) are split to
   OL-70 (row 04) / OL-70a (row 08) and dispatch `-FIFA96_ERR_UNSUPPORTED`
-  until then.**
+  until then. **Task 1 erratum (M2 playability-legs): the row-04 body is
+  ported and wired (FU-142 Appendix K.5, `fifa96_outfield_row04_step` /
+  `fifa96_match_action_04`, `FIFA96_OK`); row 08 keeps OL-70a.**
 * **OL-39 — FU-61-adjacent input-handler support item.** The per-frame slot
   update (`FUN_00078950` via `FUN_00078A54`), the direction getter
   `FUN_0004511D`, and the handler-output packaging (FU-61 §5) are not all

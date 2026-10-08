@@ -103,8 +103,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU-142f census finds no installer invocation for their codes anywhere in the
   image, so they stay unwired; row `2B` is a dead entry (shared row-29 RET).
 - **OL-70/OL-70a rows 04/08:** the outfield decide/chase machine subset and the
-  interception tail are ported; the full row bodies (574 + 213 defined-code
-  instructions) remain to be ported and wired.
+  interception tail are ported; row `04`'s full body is ported and wired
+  (FU-142 Appendix K.5 Task 1, `fifa96_outfield_row04_step` /
+  `fifa96_match_action_04`; unmodeled inputs OL-72), row `08`'s body (213
+  defined-code instructions) remains to be ported and wired (OL-70a).
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported; the stage-0 target algebra and the `FUN_0007F7E0` fallback remain.
 - **OL-80 render anim inputs (links FU-141 OL-42):** `FUN_00036C70` stages each

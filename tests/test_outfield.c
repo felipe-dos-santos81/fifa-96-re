@@ -6,6 +6,7 @@
 #include <string.h>
 #include "fifa96_loader/fifa96_err.h"
 #include "fifa96_loader/fifa96_outfield.h"
+#include "fifa96_loader/fifa96_rng.h"
 
 _Static_assert(offsetof(fifa96_outfield_rule, mask) == 0, "mask");
 _Static_assert(offsetof(fifa96_outfield_rule, want) == 2, "want");
@@ -33,6 +34,8 @@ _Static_assert(offsetof(fifa96_outfield_chase_state, sides_differ) == 9, "sides_
 _Static_assert(offsetof(fifa96_outfield_chase_state, unbound) == 10, "unbound");
 _Static_assert(offsetof(fifa96_outfield_chase_state, timer) == 12, "timer");
 _Static_assert(offsetof(fifa96_outfield_chase_state, third_zero) == 14, "third_zero");
+
+#define ROW04_INVALID ((fifa96_err_t)-FIFA96_ERR_INVALID)
 
 static int handler_accept(uint32_t handler, void *context) {
   (void)handler;
@@ -485,6 +488,528 @@ static void test_input_row_type_gate_matches_chase(void) {
   }
 }
 
+/* ===== M2 playability-legs Task 1 / OL-70: the row-04 record-visible body ==
+ *
+ * Fixture expectations are computed by hand from the first-hand native
+ * instructions cited in the FU-142 Appendix K.3 errata (disassemble_bytes
+ * 0x7E7C8..0x7F141 on /FIFA96.EXE), never from the port. */
+
+static struct fifa96_rng row04_rng;
+
+/* The 0x10F334/0x10F33C per-type direction bytes (first-hand: FU-139 §9 /
+ * FU-142 K.1; the same tables `match_kick_dir_x/z` embeds). */
+static const int8_t row04_type_x[32] = {
+    0, 1, 1, 1, 0, -1, -1, -1, 1, 1, 0, -1, -1, -1, 0, 1,
+    21, 3, 25, 22, 26, 21, 103, 3, 88, 91, 107, 86, 86, 80, 80, 103,
+};
+static const int8_t row04_type_z[32] = {
+    1, 1, 0, -1, -1, -1, 0, 1, 21, 3, 25, 22, 26, 21, 103, 3,
+    88, 91, 107, 86, 86, 80, 80, 103, 103, 9, 0, 120, 0, 0, 0, 0,
+};
+
+static fifa96_outfield_row04_state row04_state(void) {
+  fifa96_outfield_row04_state s;
+  memset(&s, 0, sizeof s);
+  s.phase = 2;
+  s.active = 1;
+  s.code = 4;
+  s.self_index = 0;
+  s.team_target_index = FIFA96_OUTFIELD_ROW04_NONE;
+  s.team_second_index = FIFA96_OUTFIELD_ROW04_NONE;
+  s.opp_target_index = FIFA96_OUTFIELD_ROW04_NONE;
+  s.opp_7c7_index = FIFA96_OUTFIELD_ROW04_NONE;
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.side = 0;
+  s.rng = &row04_rng;
+  return s;
+}
+
+static void row04_no_teams(fifa96_outfield_row04_state *s) {
+  s->mates = NULL;
+  s->mate_count = 0;
+  s->opps = NULL;
+  s->opp_count = 0;
+}
+
+static void row04_expect_install(const fifa96_outfield_row04_out *out, unsigned i,
+                                 uint8_t target, uint8_t code, uint8_t staged,
+                                 uint8_t invoke) {
+  assert(i < out->install_count);
+  assert(out->installs[i].target == target);
+  assert(out->installs[i].code == code);
+  assert(out->installs[i].staged == staged);
+  assert(out->installs[i].invoke == invoke);
+}
+
+static void test_row04_prologue(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.phase = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.reset == 1);
+  assert(out.target_set == 0 && out.install_count == 0 && out.team_target_set == 0);
+  s.phase = 2;
+  s.timer81 = 3;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.reset == 0 && out.target_set == 0);
+  assert(fifa96_outfield_row04_step(NULL, &out) == ROW04_INVALID);
+  assert(fifa96_outfield_row04_step(&s, NULL) == ROW04_INVALID);
+}
+
+/* 0x7E80E..0x7E8FE: the carrier arm (actor == [0x158777]). */
+static void test_row04_carrier_arm(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  static const fifa96_outfield_row04_mate mates[3] = {
+      {0, 0, 0, 0, 0x20, 4, 0, 0},
+      {0x10, 0, 0x10, 0, 0x10, 4, 0, 0},
+      {0x20, 0, 0x20, 0, 0x30, 4, 0, 0},
+  };
+  row04_no_teams(&s);
+  s.mates = mates;
+  s.mate_count = 3;
+  s.is_carrier = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.team_target_set == 1 && out.team_target_index == 0);
+  assert(out.install_count == 2);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 4, 0, 1);
+  row04_expect_install(&out, 1, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 3, 0, 1);
+  assert(out.target_set == 0);
+
+  /* inactive carrier: skip = 0 (the native EBX is the byte [+0x8D]) so index 0
+   * is skipped and the next record wins; the second install is 0x19. */
+  s.active = 0;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.team_target_index == 1);
+  assert(out.install_count == 2);
+  row04_expect_install(&out, 1, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x19, 0, 1);
+
+  /* the nearest's byte +0x91 code gate (flat 0x110680&1): code 1 gates off and
+   * no install runs (0x7E84A). */
+  {
+    static const fifa96_outfield_row04_mate gated[1] = {{0, 0, 0, 0, 0, 1, 0, 0}};
+    s = row04_state();
+    s.is_carrier = 1;
+    s.mates = gated;
+    s.mate_count = 1;
+    assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+    assert(out.team_target_set == 1 && out.team_target_index == 0);
+    assert(out.install_count == 0);
+  }
+}
+
+/* 0x7E895..0x7E92E: the inactive ranked-pick arm. */
+static void test_row04_inactive_pick(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  static const fifa96_outfield_row04_mate mates[2] = {
+      {0, 0, 0, 0, 0x20, 4, 0, 0},
+      {0x30, 0, 0x30, 0, 0x40, 4, 0, 0},
+  };
+  static const fifa96_outfield_row04_mate opps[2] = {
+      {0, 0, 0, 0, 0x10, 0, 0, 0},
+      {0, 0, 0, 0, 0x15, 0, 0, 0},
+  };
+  s.active = 0;
+  s.mates = mates;
+  s.mate_count = 2;
+  s.opps = opps;
+  s.opp_count = 2;
+  s.team_target_index = 0;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x19, 0, 1);
+  assert(out.team_target_set == 1 && out.team_target_index == 1);
+
+  /* picked lane above the actor's (0x30 > 0x20): the active target arms run */
+  s = row04_state();
+  s.active = 0;
+  s.mates = mates;
+  s.mate_count = 2;
+  {
+    static const fifa96_outfield_row04_mate high[2] = {
+        {0, 0, 0, 0, 0x10, 0, 0, 0},
+        {0, 0, 0, 0, 0x30, 0, 0, 0},
+    };
+    s.opps = high;
+  }
+  s.opp_count = 2;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 0);
+  assert(out.target_set == 1);
+  assert(out.install_count == 1);                      /* the shared 0x7F133 tail */
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+}
+
+/* 0x7E92F..0x7E983: the active actor == team+0x7B6 hand-off. */
+static void test_row04_active_second_reset(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  static const fifa96_outfield_row04_mate mates[2] = {
+      {0, 0, 0, 0, 0x20, 4, 0, 0},
+      {0, 0, 0, 0, 0x10, 4, 0, 0},
+  };
+  row04_no_teams(&s);
+  s.mates = mates;
+  s.mate_count = 2;
+  s.team_second_index = 0;
+  s.team_target_index = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1);
+  assert(out.target_set == 0 && out.install_count == 0);
+
+  /* the target's lane above the actor's skips the reset (JG 0x7E984) */
+  {
+    static const fifa96_outfield_row04_mate high[2] = {
+        {0, 0, 0, 0, 0x20, 4, 0, 0},
+        {0, 0, 0, 0, 0x30, 4, 0, 0},
+    };
+    s = row04_state();
+    row04_no_teams(&s);
+    s.mates = high;
+    s.mate_count = 2;
+    s.team_second_index = 0;
+    s.team_target_index = 1;
+    assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+    assert(out.reset == 0 && out.target_set == 1 && out.install_count == 1);
+    row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+  }
+}
+
+/* 0x7E984..0x7EC16: the target arms and the 0x7D3E4 clamp. */
+static void test_row04_target_arms(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  /* no slot, w1577F0 0: the camera triple plus word[0x1577C0/C2]<<2 */
+  s.has_slot = 0;
+  s.camera_x = 0x100;
+  s.camera_y = 5;
+  s.camera_z = 0x200;
+  s.lead_x = 1;
+  s.lead_z = 2;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x100 + 4 && out.target_y == 5 &&
+         out.target_z == 0x200 + 8);
+  assert(out.receiver_timer == 0);
+
+  /* |camera.z| > 0x570 and lane < 0x3C0 fires 0x79B58(actor) (0x7EBD1) */
+  s.camera_z = 0x600;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.receiver_timer == 1);
+
+  /* the clamp bounds x +/-0x720 and z +/-0xB10 */
+  s.camera_x = 0x1000;
+  s.camera_z = -0x2000;
+  s.lead_x = 0;
+  s.lead_z = 0;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_x == 0x720 && out.target_z == -0xB10);
+
+  /* has-slot, lane < 0x60, no user: ECX = 1; w1577F0 0x80 with
+   * word[0x1577FA] < word[0x157800] copies 0x157788 and adds the two seed-0
+   * jitters: draw 512 (bit 0x20 clear -> -0x10) and draw 1829 (bit set ->
+   * +0x10). */
+  assert(fifa96_rng_seed(&row04_rng, 0) == FIFA96_OK);
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0;
+  s.lane = 0x40;
+  s.vec5788_x = 0x100;
+  s.vec5788_y = 7;
+  s.vec5788_z = 0x200;
+  s.track_577f0 = 0x80;
+  s.track_577fa = 0;
+  s.track_57800 = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x100 - 0x10 && out.target_y == 7 &&
+         out.target_z == 0x200 + 0x10);
+
+  /* 0x50 < w1577F0 <= 0x70 with word[0x1577FA] < word[0x157806] copies
+   * 0x157794 without a jitter (0x7EB88) */
+  assert(fifa96_rng_seed(&row04_rng, 0) == FIFA96_OK);
+  s.track_577f0 = 0x60;
+  s.track_577fa = 0;
+  s.track_57806 = 1;
+  s.vec5794_x = 0x200;
+  s.vec5794_y = 9;
+  s.vec5794_z = 0x300;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_x == 0x200 && out.target_y == 9 && out.target_z == 0x300);
+
+  /* word[0x1577FA] >= word[0x157806] skips the 0x157794 copy and the camera
+   * arm (0x7EB7D JGE 0x7EBF8): the input target is clamped and kept */
+  s.track_577fa = 1;
+  s.track_57806 = 1;
+  s.target_x = 0x11;
+  s.target_y = 0x22;
+  s.target_z = 0x33;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_x == 0x11 && out.target_y == 0x22 && out.target_z == 0x33);
+
+  /* ECX == 0 (user present and not self, lane >= 0x60): the 0x79C20
+   * slot-direction target pos + byte<<7 with y = 0 */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0x40;
+  s.user_present = 1;
+  s.user_is_self = 0;
+  s.lane = 0x80;
+  s.pos_x = 0x40;
+  s.pos_y = 0x50;
+  s.pos_z = 0x50;
+  s.slot_dir_x = 2;
+  s.slot_dir_z = -1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.target_set == 1);
+  assert(out.target_x == 0x40 + (2 << 7) && out.target_y == 0 &&
+         out.target_z == 0x50 - 0x80);
+}
+
+/* 0x7EA7B..0x7EB5C: the install-0xF gate. The path returns before the clamp
+ * and the timer update (0x7EB61 RET), so target_set and timer89 stay. */
+static void test_row04_install_f(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0x40;
+  s.user_present = 0;
+  s.lane = 0x50;
+  s.bound = 0x60;
+  s.timer89 = 5;
+  s.delta = 2;
+  s.vec5788_x = 0x10;
+  s.track_577f0 = 0x80;
+  s.track_577fa = 5;
+  s.track_57800 = 1;
+  s.track_577f2 = 2;
+  s.track_57802 = 0;
+  s.is_team_7c7 = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x0F, 0, 1);
+  assert(out.target_set == 0);
+  assert(out.timer89 == 5);
+
+  /* the same gates with lane 0x120 gate the install off (0x7EAE9) */
+  s.lane = 0x120;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 0 && out.target_set == 1);
+}
+
+/* 0x7EC97..0x7ED6A: the RNG/score/team-0x7D7 install-0xB arm. */
+static void test_row04_install_b(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  static const fifa96_outfield_row04_mate opps[1] = {
+      {0, 0, 0, 0, 0x10, 4, 0, 0},
+  };
+  assert(fifa96_rng_seed(&row04_rng, 0) == FIFA96_OK);
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.opps = opps;
+  s.opp_count = 1;
+  s.opp_target_index = 0;
+  s.pos_x = 0;
+  s.pos_z = 0;
+  s.timer89 = 5;
+  s.delta = 2;
+  s.score_word[0] = 0;
+  s.score_word[1] = 5;   /* own + 2 < other (0x7ED1B) */
+  s.desc_e = 8;          /* threshold 8 > 1829 & 0x1F = 5 (0x7ED58) */
+  s.camera_x = 0;        /* the camera arm target stays in bounds */
+  s.camera_z = 0;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x0B, 0, 1);
+  assert(out.timer89 == 7);   /* 0x7EC1B before the install block */
+  assert(out.target_set == 1);
+}
+
+/* 0x7EC89: the no-slot 0x7E600 decision installs 0x0E and returns. */
+static void test_row04_defender_decision(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.lane = 0x20;
+  s.pos_x = 0;
+  s.pos_z = 0x7B0;             /* side 0: pos_z >= 0x7B0 (0x7E6BF) */
+  s.predictor_x = 0;
+  s.predictor_y = 0x30;        /* in [0x20, 0x60] (0x7E662) */
+  s.predictor_z = 0x7C0;
+  s.code = 4;                  /* flat 0x110680[4] & 1 (0x7E620) */
+  s.is_ball_track = 0;
+  s.camera_x = 0;
+  s.timer89 = 5;
+  s.delta = 3;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 0x0E, 0, 1);
+  assert(out.target_set == 1 && out.reset == 0);
+  assert(out.timer89 == 8);
+}
+
+/* 0x7EDCE..0x7F141: the bound/ball-height tail, the angle arm, the 0x7EEC0
+ * second promote/opponent clear and the install 6/5 tail. */
+static void test_row04_tail_six_five(void) {
+  static const fifa96_outfield_row04_mate opps[1] = {
+      {0x10, 0x10, 0x1000, 0x1000, 0x30, 4, 0, 0},
+  };
+  static const fifa96_outfield_row04_mate opps_near[1] = {
+      {0x10, 0x10, 0, 0, 0x10, 4, 0, 0},
+  };
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  assert(fifa96_rng_seed(&row04_rng, 0) == FIFA96_OK);
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.opps = opps;
+  s.opp_count = 1;
+  s.opp_target_index = 0;
+  s.lane = 0x20;               /* 0x40 - timer81 >= lane, and <= bound */
+  s.timer81 = 0;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6d = 0;
+  s.word6f = 0x10;             /* 0x8DD70(0, 0x10) = 0 */
+  s.vel_int_x = 3;
+  s.vel_int_z = -2;
+  s.timer89 = 1;
+  s.delta = 3;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.timer89 == 4);
+  assert(out.events == 1 && out.event_code == 0x1D);
+  assert(out.event_x == 12 && out.event_z == -8);
+  assert(out.event_dist == 0x0F);      /* 0x8DC68(12, 8) */
+  assert(out.opp_7e7_clear == 1);
+  assert(out.install_count == 2);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_OTHER, 6, 0, 0);
+  row04_expect_install(&out, 1, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+
+  /* self lane above the other's: install 6 on self and return (0x7F108) */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.opps = opps_near;
+  s.opp_count = 1;
+  s.opp_target_index = 0;
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 6, 0, 0);
+
+  /* actor == team+0x7B6 promotes the actor to the team target (0x7EECE) */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.team_second_index = 0;
+  s.lane = 0x20;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.team_second_set == 1 && out.team_second_index == FIFA96_OUTFIELD_ROW04_NONE);
+  assert(out.team_target_set == 1 && out.team_target_index == 0);
+}
+
+/* 0x7EEEF..0x7EF41 + 0x7E528: the team+0x7E7 corner arm. */
+static void test_row04_corner(void) {
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_7e7 = 1;
+  s.side = 0;
+  s.team_corner_z = 0xB10;     /* side 0: z >= 0xB10 -> code 3 (0x7E575) */
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.corner == 1 && out.corner_code == 3);
+  assert(out.team7e7_inc == 1);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 7, 0, 1);
+
+  /* side 1, z == -0xB10: not > -0xB10 -> code 3 (0x7E592) */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_7e7 = 2;
+  s.side = 1;
+  s.team_corner_z = -0xB10;
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.corner == 1 && out.corner_code == 3);
+  assert(out.team7e7_inc == 1);
+
+  /* team+0x7E7 == 0 with a slot and actor == [team+0x7CB]: slot restore and
+   * install 7 with the staged byte 1 (0x7EF25..0x7EF33) */
+  s = row04_state();
+  row04_no_teams(&s);
+  s.has_slot = 1;
+  s.slot_word10 = 0;           /* ECX = 1 via no user and lane < 0x60 */
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  s.is_team_7cb = 1;
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_restore == 1);
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 7, 1, 1);
+}
+
+/* 0x7EF42: the byte[[rec+0x28]] == 0x13 event-0x15 arm and the 0x1577FA
+ * reload (word[0x1577F2] + (word[0x1577F2] >> 2)). */
+static void test_row04_row13_event(void) {
+  static const fifa96_outfield_row04_mate opps[1] = {
+      {0x10, 0x10, 0x1000, 0x1000, 0x10, 0, 0, 0},   /* code 0: no 6 install */
+  };
+  fifa96_outfield_row04_state s = row04_state();
+  fifa96_outfield_row04_out out;
+  row04_no_teams(&s);
+  s.has_slot = 0;
+  s.team_828 = 0;
+  s.opps = opps;
+  s.opp_count = 1;
+  s.opp_target_index = 0;
+  s.lane = 0x20;
+  s.bound = 0x60;
+  s.ball_height = 0;
+  s.word6f = 0x10;
+  s.row_byte = 0x13;
+  s.type8 = 0;                 /* 0x10F334[0] = 0, 0x10F33C[0] = 1 -> <<6 */
+  s.type_off_x = row04_type_x;
+  s.type_off_z = row04_type_z;
+  s.track_577f2 = 4;           /* reload = 4 + 1 = 5 */
+  assert(fifa96_outfield_row04_step(&s, &out) == FIFA96_OK);
+  assert(out.events == 1 && out.event_code == 0x15);
+  assert(out.event_track_reload == 1);
+  assert(out.event_x == 0 && out.event_z == 0x40);
+  assert(out.event_dist == 0x40);      /* 0x8DC68(0, 0x40) */
+  assert(out.install_count == 1);
+  row04_expect_install(&out, 0, FIFA96_OUTFIELD_ROW04_INSTALL_SELF, 5, 0, 1);
+}
+
 int main(void) {
   test_table_accessors();
   test_rule_match();
@@ -497,6 +1022,17 @@ int main(void) {
   test_input_row_scan();
   test_input_row_tail();
   test_input_row_type_gate_matches_chase();
+  test_row04_prologue();
+  test_row04_carrier_arm();
+  test_row04_inactive_pick();
+  test_row04_active_second_reset();
+  test_row04_target_arms();
+  test_row04_install_f();
+  test_row04_install_b();
+  test_row04_defender_decision();
+  test_row04_tail_six_five();
+  test_row04_corner();
+  test_row04_row13_event();
   puts("test_outfield: all assertions passed");
   return 0;
 }

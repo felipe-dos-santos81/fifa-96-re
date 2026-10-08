@@ -517,6 +517,14 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   `0x157794`/`0x157788`, `0x92AC8` RNG gates, `0x8DCD4`/`0x8DC68` metrics,
   `0x741B4` score fold, `0x7876C`/`0x78A84`/`0x78AA4` slot calls,
   `0xE600` decision, installs 4/0x19/0xF/0xB/7/6/5).
+  **Status (M2 playability-legs Task 1, Appendix K.5): the full
+  record-visible body is ported as `fifa96_outfield_row04_step` and wired as
+  `fifa96_match_action_04` over the FU-141 pool; row 04 flips to `ported`
+  (`FIFA96_OK`). The body is standalone — the `0x7CA54` machine subset
+  (`fifa96_outfield_input_row`/`_chase_gate`, Appendix K.3) belongs to the
+  record machine and stays a separate unwired seam. The unmodeled
+  record/team bytes, the `0x1577F0..0x157806` track words, the `0x71B9C`
+  predictor and the event/audio sinks are OL-72 (K.5.8).**
 * **OL-70a — row 08 full record-visible body (split from OL-38, Task 14).**
   Row 08's handler
   `0x81068..0x814AF` is 213 Ghidra defined-code instructions (about 231 across
@@ -530,6 +538,22 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   scheduled from this split (one task per row: OL-70 row 04, OL-70a row 08).
   Until then the rows dispatch `-FIFA96_ERR_UNSUPPORTED` and the FU-137 §6.1
   evidence names the row's leg.
+  **Status (Task 1): row 04 is ported and wired (K.5); OL-70 closed, row 08
+  still OL-70a.**
+* **OL-72 — row-04 unmodeled inputs/sinks (Task 1, from Appendix K.5).** The
+  row-04 body reads record bytes the FU-141 pool does not model (`+0x99`,
+  `+0x9D`, `+0x44`, `[[rec+0x28]]`, the `rec[+4]` descriptor byte `+0xE`), the
+  team bytes `+0x7C7`/`+0x7CB`/`+0x7D7`/`+0x7E7` and the `+0x7E8` corner
+  triples, the `[0x1586D7]` merge gate, the `[0x157ABE]` half-flip, the
+  `0x1577F0..0x157806` track words, the `0x1577C0/C2` lead words and the
+  `0x71B9C(4)` predictor, and calls the unported event/sound sinks
+  (`0x974DC`, `0x8F188`, `0x92820`, `0x71C94`, `0x974F0`, `0x651F0`). The
+  engine stages zero / camera stand-ins and the step returns them as requests;
+  the affected branches (`0xF` unlock, the `0x1F` tilt threshold, corner,
+  `team_7e7` install 7, `3*team_7D7`, the `0x1577F0` bands, the predictor
+  gates) stay inert until the producers land. `[0x158777]` (the carrier) and
+  `[0x1577CA]` (the ball track) are pool stand-ins; the `0x6E598`/`0x78A84`/
+  `0x78AA4` requests stay OL-52/OL-65.
 * **OL-71 — interception NULL-record band read (Task 14).** When the nearest
   is rejected by the `+0x20` slot gate, the native clears `[team+0x7BA]`
   (`0x8DA66`) and still runs `FUN_000795B4` with the NULL record, reading
@@ -2384,3 +2408,293 @@ exceed this task. They are registered as OL-70 (row 04) / OL-70a (row 08)
 (FU-142 §6) and rows 04/08 keep `fn == NULL`; the FU-137 §6.1 evidence names
 the ported machine subset and the row's leg. No parity claim is made over
 them.
+
+**Erratum (M2 playability-legs Task 1).** The row-04 half landed in K.5:
+`fifa96_outfield_row04_step` + `fifa96_match_action_04`, row 04 wired. Row 08
+still keeps `fn == NULL` (OL-70a).
+
+## Appendix K.5 (M2 playability-legs Task 1 / OL-70) — row-04 body first-hand window
+
+Task 1 ports and wires the row-04 handler. /FIFA96.EXE, read-only:
+`disassemble_bytes` `0x7E7C8..0x7E9C8`, `0x7E9C8..0x7EBC8`,
+`0x7EBC5..0x7EDC0`, `0x7EDBF..0x7EFC0`, `0x7EFC0..0x7F141`, `0x8DE8C..0x8DF1F`
+(nearest), `0x8DDE0..0x8DE8B` (ranked pick), `0x8DC68..0x8DD70` (metric),
+`0x8DD70..0x8DD84` (angle), `0x7D3E4..0x7D42C` (clamp), `0x79C20..0x79C4E`
+(slot target), `0x79B58..0x79B68` (receiver timer), `0x7E528..0x7E5FD`
+(corner arm), `0x7E600..0x7E6C0` (decision head), `0x7D9A4..0x7DAD2`
+(installer), `0x92820..0x92861`/`0x71C94..0x71CDF` (sinks); no writes.
+
+### K.5.1 Tool calls
+
+* `disassemble_bytes`: the windows above; `disassemble_bytes` was not able to
+  define `0x7E7C8` as a Ghidra function (it is reachable only through the
+  action-table slot), so the whole body was decoded linearly and each branch
+  target was read from its raw bytes;
+* helpers already first-hand elsewhere were only re-checked at their entry
+  bytes: `0x7DAB4` (K/E), `0x8DCD4` (C/G), `0x79C50`/`0x6E598` (D),
+  `0x114E04` folds (J).
+* no renames, comments, labels, functions, scripts or project saves.
+
+### K.5.2 Register contract (first-hand)
+
+| register | meaning at the row-04 entry |
+|---|---|
+| EBP | the record pointer |
+| `[ESP+8]` | the record's team block (`[EBP]`), latched at `0x7E80A` |
+| `[ESP+0xC]` | the opponent team's target record `[[team+0x7A6]+0x7B2]` (`0x7E994`) |
+| EBX/ECX/EDX | per-call scratch; all `0x7D9A4` calls set them explicitly |
+
+Record bytes read (all first-hand): `+0x9E` (ran), `[0x157A4A]>>24` (phase),
+`+0x81`, `+0x8D` (active), `+0x20` (slot), `+0x28` (row pointer, byte 0),
+`+0x4D/51/55` (target triple), `+0x59/5D/61` (position), `+0x69` (dword; word
+`+0x6B` = lane), `+0x6D/6F`, `+0x73`/`+0x75` (word reads of the velocity
+halves), `+0x77` (bound), `+0x7D`, `+0x89`, `+0x8B>>24` (the byte at `+0x8E`),
+`+0x8E>>24` (the byte at `+0x91`), `+0x99`, `+0x9D`, `rec[+4][+0xB]>>24` (the
+byte at `rec[+4][+0xE]`); slot bytes `+0x10` (word), `+0x1D>>24`/`+0x1E>>24`
+(the bytes at slot `+0x20`/`+0x21`), `+0x6` (word). The
+`dword[addr]>>16`-style word-pair reads (`[0x1577EE]>>16` = word `0x1577F0`,
+`[0x1577F8]>>16` = word `0x1577FA`, `[0x157800]>>16` = word `0x157802`,
+`[0x1577FE]>>16` = word `0x157800`, `[0x1577BE]>>16` = word `0x1577C0`,
+`[0x1577C0]>>16` = word `0x1577C2`, `[0x1577F0]>>16` = word `0x1577F2`) were
+the Task-1 misread guard and are pinned here, not as `addr[0]`.
+
+### K.5.3 Word-pair/constant erratum to FU-77 §2.4
+
+* the camera lead is `word[0x1577C0]`/`word[0x1577C2]` (`0x7EBA4` reads
+  `[0x1577BE]>>16`, `0x7EBB5` reads `[0x1577C0]>>16`), each `<<2` added to
+  the camera triple copy — FU-77's "camera vx/vz lead" wording is right but
+  its `0x577C0`/`0x577C2` names were flat offsets (Ghidra `0x1577C0/C2`);
+* the `0x13`-row event reload is `word[0x1577FA] = word[0x1577F2] +
+  (word[0x1577F2] >> 2)` (`0x7EFD4` reads `[0x1577F0]>>16`), and the
+  install-0xF bucket gate sums `word[0x1577FA] + word[0x157802]` against
+  `word[0x157800]` (`0x7EB02` reads `[0x1577F8]>>16`, `0x7EB07` reads
+  `[0x157800]>>16`, `0x7EB15` reads `[0x1577FE]>>16`);
+* the byte at `+0x91` (not `+0x8E`) is the action code: the installer writes
+  `AL -> [ESI+0x91]` (`0x7DA67`) and both the `0x110680` gates (`0x7E83C`,
+  `0x7E620`, `0x7CC9C`) and the `+0x91 == 4` hand-off test (`0x7E964`) read
+  `[rec+0x8E]>>24`. The pool's `type`/`code` naming note in FU-142 K.3's
+  `fifa96_outfield_chase_gate` wrapper is unaffected (its callers pass the
+  record's `+0x91` value).
+
+### K.5.4 Decision logic (site-annotated)
+
+Prologue and carrier arm:
+
+```
+0x7E7D3  byte[+0x9E] = 1
+0x7E7E2  if ([0x157A4A]>>24 != 2) { FUN_0007DAB4(rec); return }
+0x7E7F3  if (word[+0x81] != 0) return
+0x7E80E  if (rec == [0x158777]) {                     ; carrier arm
+0x7E812    skip = byte[[0x158777]+0x8D]
+0x7E818    ECX = 0                                     ; NULL out
+0x7E824    nearest = FUN_0008DE8C(0x157770, team, skip, 0)
+0x7E82D    [team+0x7B2] = nearest
+0x7E833    code = byte[nearest+0x91]
+0x7E83C    if ((flat[0x110680+code] & 1) == 0) return
+0x7E85C    FUN_0007D9A4(rec, 4, invoke, 0)
+0x7E866/83 FUN_0007D9A4(rec, byte[+0x8D] ? 3 : 0x19, invoke, 0); return }
+0x7E888  if (byte[+0x8D] == 0) {                      ; inactive arm
+0x7E895    opp = [team+0x7A6]
+0x7E89F    picked = [opp+0x7C7] ? that pointer : FUN_0008DDE0(opp, 0)
+0x7E8B2    if (word[picked+0x6B] > word[rec+0x6B]) goto 0x7E92F
+0x7E8C8    FUN_0007D9A4(rec, 0x19, invoke, 0)
+0x7E8D3    if (rec == [team+0x7B2]) [team+0x7B2] = FUN_0008DE8C(0x157770, team, 0, 0)
+0x7E8FF    else if (rec == [team+0x7B6]) [team+0x7B6] = FUN_0008DE8C(0x157770, team, 0, 0)
+             return }
+0x7E92F  if (rec == [team+0x7B6]) {
+0x7E93D    t = [team+0x7B2]
+0x7E943    if (t == rec) [team+0x7B6] = 0
+0x7E957    else if (t != 0 && byte[t+0x91] == 4 && word[t+0x6B] <= word[rec+0x6B]) {
+0x7E973      FUN_0007DAB4(rec); return } }
+```
+
+Target arms (`AX = rec == [0x1577CA] && dword[0x157750] > 0x50`, `ECX` the
+lead latch):
+
+```
+0x7E984  other = [[team+0x7A6]+0x7B2]
+0x7E99E  AX = ([0x1577CA] == rec && dword[0x157750] > 0x50)
+0x7E9B7  if (slot != 0) {
+0x7E9C2    if ((word[slot+0x10] & 0x20) && word[0x1577F0] > 0x70) {
+0x7E9E1      +0x4D..55 = 0x157770 triple; goto clamp }
+0x7E9F1    if (!AX && ([0x157A83] == 0 || [0x157A83] == rec) && word[+0x6B] < 0x60)
+             ECX = 1 }
+         else ECX = 1
+0x7EA18  if (AX) goto 0x7EB95
+0x7EA21  if (word[0x1577F0] > 0x70) {
+0x7EA32    if (word[0x1577FA] < word[0x157800]) {
+0x7EA44      if (!ECX) goto 0x7EB95
+0x7EA4A      +0x4D..55 = 0x157788 triple
+0x7EA55/68   x += (rng & 0x20) - 0x10 ; z += (rng & 0x20) - 0x10 }
+0x7EA7B    if (slot && (word[slot+0x10] & 0x50) == 0) goto 0x7EBF8
+0x7EA9B    if (!active || byte[+0x99] || dword[+0x5D]) goto 0x7EBF8
+0x7EABF    if (word[0x1577FA] <= word[0x1577F2]) goto 0x7EBF8
+0x7EAD2    if (rec != [team+0x7C7]) goto 0x7EBF8
+0x7EAE9    if (word[+0x6B] >= 0x120) goto 0x7EBF8
+0x7EAF4    if (word[+0x6B] > word[+0x77]) goto 0x7EBF8
+0x7EB02    if (word[0x1577FA] + word[0x157802] < word[0x157800]) goto 0x7EBF8
+0x7EB3F    if (0x8DC68(0x157788.x-rec.x, 0x157788.z-rec.z) >= 0x60) goto 0x7EBF8
+0x7EB5C    FUN_0007D9A4(rec, 0xF, invoke, 0); RETURN }   ; before the clamp/timer
+0x7EB6B  else if (word[0x1577F0] > 0x50) {
+0x7EB70    if (word[0x1577FA] < word[0x157806] && ECX) +0x4D..55 = 0x157794 triple
+0x7EB86    else goto 0x7EB95 ; goto 0x7EBF8 } else 0x7EB95
+0x7EB95  if (!ECX) goto 0x7EBF8
+0x7EB9A  +0x4D..55 = 0x15774C camera triple
+0x7EBA4  x += word[0x1577C0] << 2 ; z += word[0x1577C2] << 2
+0x7EBCD  if (word[+0x6B] < 0x3C0 && |dword[0x157754]| > 0x570) FUN_00079B58(rec)
+0x7EBF8  if (!ECX) FUN_00079C20(rec, byte[slot+0x1D]>>24, byte[slot+0x1E]>>24)
+0x7EC13  FUN_0007D3E4(+0x4D)                          ; clamp ±0x720 / ±0xB10
+0x7EC1B  dword[+0x89] += (uint16)[0x157A64]
+```
+
+Slot/no-slot/install block and tail:
+
+```
+0x7EC34  if (slot) { if (word[slot+6]) FUN_00078A84(slot); goto 0x7ED89 }
+0x7EC40  else if (byte[team+0x828]) {
+0x7EC49    if (byte[team+0x7E7]==0 && word[+0x6B] < 0xF0 && dword[team+0x7BF]==0 &&
+             active && byte[0x1586D7]==0) FUN_0007876C(rec) }
+0x7EC87  else if (FUN_0007E600(rec)) { FUN_0007D9A4(rec, 0xE, invoke, 0); RETURN }
+0x7EC97  if (active && other != 0) {
+0x7ECAF    if ((rng & 0x3F) == 0 && 0x8DCD4(rec.pos, other.pos) <= 0x50) {
+0x7ECDD      own = word[0x157AC5 + 2*0x741B4(side)]
+0x7ED09      other_score = word[0x157AC5 + 2*0x741B4(side^1)]
+0x7ED19      if (own+2 < other_score || 3*dword[team+0x7D7] < dword[opp+0x7D7]) {
+0x7ED3D        thresh = (int8)rec[+4][+0xE] | byte[+0x9D]
+0x7ED50        if ((rng & 0x1F) < thresh) { FUN_0007D9A4(rec, 0xB, invoke, 0); RETURN } } } }
+0x7ED89  if ((int16)(0x40 - word[+0x81]) >= word[+0x6B]) goto 0x7EDCE
+0x7EDA0  if (rec == [0x1577CA]) return
+0x7EDB2  if ((int16)word[+0x6B] >= 0x90) return
+0x7EDBD  FUN_00079B58(rec); return
+0x7EDCE  if (word[+0x6B] > word[+0x77]) return
+0x7EDDF  if (dword[0x157750] <= 0x50) goto 0x7EE4B
+0x7EDE1  if (!active || dword[+0x5D]) return
+0x7EDF8  if (0x8DCD4(rec.pos, 0x157770) >= 0x30) return
+0x7EE17  if (byte[[rec+0x28]] == 0x13) return
+0x7EE2A  FUN_0006E598(rec, 0x13, byte[+0x8E], 0); return
+0x7EE4B  angle = FUN_0008DD70(word[+0x6D], word[+0x6F])
+0x7EE5C  angle = (angle - word[+0x7D]) & 0x3FF ; mirror over 0x200
+0x7EE78  if (angle > 0xAB) return
+0x7EE83  if ([0x1577CA] && rec != [0x1577CA] && team side == [[0x1577CA]]side)
+           0x92AC8 -> 0x974F0 / 0x651F0
+0x7EEC0  if (rec == [team+0x7B6]) { [team+0x7B6] = 0; [team+0x7B2] = rec }
+0x7EEE8  [opp+0x7E7] = 0                               ; opponent team byte
+0x7EEEF  if (byte[team+0x7E7]) {
+0x7EEFC    if (FUN_0007E528(rec)) return               ; install 7 + increment
+0x7EF0C    goto 0x7EF42 }
+0x7EF0E  else if (slot) { FUN_00078AA4(slot);
+0x7EF1A    if (rec == [team+0x7CB]) { FUN_0007D9A4(rec, 7, invoke, 1); return } }
+0x7EF42  if (byte[[rec+0x28]] == 0x13) {
+0x7EF55    0x974DC(4,4); 0x8F188(rec,0x6B)
+0x7EF70    x = (int8)0x10F334[byte[+0x8E]] << 6 ; z = (int8)0x10F33C[byte+0x8E] << 6
+0x7EFB9    0x92820(rec, 0, 0x15) ; 0x71C94(rec, &triple)
+0x7EFD4    word[0x1577FA] = word[0x1577F2] + (word[0x1577F2] >> 2) }
+0x7EFEE  else if (rec != [0x1577CA]) {
+0x7F003    if (dword[0x157750])    x = (int8)0x10F334[..] << 5 ; z = ..0x10F33C.. << 5
+0x7F035    else if (slot)        x = (int8)slot[+0x20] << 6 ; z = (int8)slot[+0x21] << 6
+0x7F056    else if (|cam.x| <= 0x630 && |cam.z| <= 0xA20)
+                                   x = word[+0x73] << 2 ; z = word[+0x75] << 2 else 0
+0x7F0A7    0x8DC68(x, z)
+0x7F0BB    0x92820(rec, 0, 0x1D) ; 0x71C94(rec, &triple) }
+0x7F0D6  if (active && other && (byte[other+0x91] == 4 || byte[other+0x91] == 5)) {
+0x7F106    if (word[+0x6B] > word[other+0x6B]) { FUN_0007D9A4(rec, 6, 0, 0); RETURN }
+0x7F113    else FUN_0007D9A4(other, 6, 0, 0) }
+0x7F125  FUN_0007D9A4(rec, 5, invoke, 0)              ; always unless an earlier RETURN
+0x7F138  epilogue RET
+```
+
+`FUN_0007E528` (`0x7E528..0x7E5FD`): returns 0 unless `byte[team+0x7E7]` is
+1 or 2; otherwise it stages `byte[0x158743] = 3` for the side-0 z >= 0xB10
+arm (or side 1 z <= -0xB10), else 2, calls `0x8DCD4(rec.pos, team triple,
+0x158738)`, `FUN_0007D9A4(rec, 7, invoke, 0)`, increments `byte[team+0x7E7]`
+and wraps it to 0 when it exceeds 2, and returns 1.
+
+### K.5.5 Helper signatures (first-hand, for the port)
+
+* `0x8DE8C(EAX=origin triple, EDX=team, BX=skip index, ECX=out dist word)`:
+  11-record loop, `+0x9A`/`+0x98` skips, `0x8DC68` word distance, strict `<`
+  (unsigned), best 0xFFFF, returns the record pointer or 0 and writes the best
+  distance through ECX (the carrier call passes ECX=0).
+* `0x8DDE0(EAX=record base, EDX=skip)`: same loop/skips on the `+0x6B` word,
+  returns the pointer with the smallest lane or 0; the row-04 call passes
+  EDX=0 (record 0 skipped).
+* `0x8DCD4(EAX=from triple, EDX=to triple, EBX=out triple)`: `out+2 = dx`,
+  `out+4 = dz`, `out+0 = 0x8DC68(dx, dz)`.
+* `0x8DC68(EAX=x, EDX=z)`: octagonal distance word.
+* `0x8DD70(EAX=x, EDX=z)`: `FUN_000CD474(x, z)` angle.
+* `0x7D3E4(EAX=target triple)`: clamp x to ±0x720 and z to ±0xB10.
+* `0x79C20(EAX=rec, DX=dir_x, BX=dir_z)`: `target = (pos_x + dx<<7, 0,
+  pos_z + dz<<7)` then `0x7D3E4`.
+* `0x79B58(EAX=rec)`: `if (byte[+0x99] == 0) byte[+0x93] = 0x10`.
+* `0x7D9A4(EAX=rec, EDX=code, ECX=invoke, BL=stage)`: the FU-137 §2 installer
+  (`0x7DA67` writes the code byte, `0x7DA95` the stage; ECX != 0 calls
+  `[rec+0x18]`).
+* `0x7E600(EAX=rec)` decision: `0x7E617` gates on
+  `flat[0x110680 + byte[rec+0x91]] & 1`, excludes `rec == [0x1577CA]`, and
+  otherwise follows the bounded gates the kick machine already ports.
+
+### K.5.6 Port mapping (native -> derived)
+
+| native | derived |
+|---|---|
+| EBP record | `mr->record` staging + the resolved pool record `e` |
+| `[ESP+8]` team / `[team+0x7A6]` opp | `mr->entities.team[team]` / `.team[1-team]` |
+| `[0x158777]` carrier | `id == mr->entities.ball.carrier` (stand-in) |
+| `[0x1577CA]` | `id == mr->entities.controlled` (stand-in) |
+| `[0x157A83]` | `mr->entities.controlled >= 0` + `id == controlled` |
+| team `+0x828` / `+0x7BF` | pool `slot_pool` / `chosen >= 0` |
+| team `+0x7B2`/`+0x7B6`/`[[+0x7A6]+0x7B2]` | pool target/second/opponent-target ids resolved to `mates`/`opps` indices |
+| `0x8DE8C`/`0x8DDE0` | `row04_nearest`/`row04_ranked_pick` over caller team views |
+| `0x8DCD4`/`0x8DC68`/`0x8DD70`/`0x7D3E4`/`0x79C20` | `row04_metric`/`fifa96_entity_distance`/`fifa96_entity_angle`/inline clamp/slot-dir compose |
+| `0x7D9A4` | `out.installs[]` applied in order by `fifa96_match_action_04` |
+| `0x7DAB4` | `out.reset` -> `match_row_reset` |
+| `0x79B58` | `out.receiver_timer` -> `timer93 = 0x10` (when `+0x99 == 0`) |
+| `0x7876C`/`0x78A84`/`0x78AA4` | `out.slot_merge` (pool merge) / backup+restore requests (no consumer, OL-65) |
+| `0x6E598` | `out.anim` (kind 0x13; no consumer, OL-52) |
+| `0x7E528` | `out.corner`/`corner_code`/`team7e7_inc` (team byte unmodeled, OL-72) |
+| `0x974DC`/`0x8F188`/`0x92820`/`0x71C94`/`0x974F0`/`0x651F0` | `out.events`/`event_code`/`event_x/z`/`event_track_reload` (sinks unported, OL-67/OL-72) |
+
+### K.5.7 Tests
+
+`tests/test_outfield.c` fixtures (hand-computed from K.5.4): prologue
+reset/`+0x81`; carrier arm (nearest skip, the `0x110680` code gate, installs
+4 + 3/0x19); inactive ranked pick; active second/target reset; the camera+lead,
+`0x157788` jitter, `0x157794`, slot-direction and clamp target arms;
+install-0xF; install-0xB (seed-0 draws 512/1829); the no-slot `0x7E600`
+install-0x0E; the bound/angle tail and the 6/5 installs (both the self-6
+return and the other-6 + 5 fall-through); the `0x7E528` corner codes; the
+row-byte `0x13` event 0x15 and the `0x1577FA` reload.
+`tests/test_engine_match_handlers.c::test_action_04_wired_and_08_unwired` runs
+the wired row over the pool (reset, camera target, receiver timer), and
+`action_expect[0x04]` is `FIFA96_OK`.
+
+### K.5.8 Open legs (numbered)
+
+* **OL-72 — row-04 unmodeled inputs/sinks.** The pool models neither the
+  record bytes `+0x99`/`+0x9D`/`+0x44`/`[[rec+0x28]]` nor the roster
+  descriptor `rec[+4][+0xE]`, the team bytes `+0x7C7`/`+0x7CB`/`+0x7D7`/
+  `+0x7E7`/the `+0x7E8` corner triples, the `[0x1586D7]` merge gate, the
+  `[0x157ABE]` half-flip, the `0x1577F0..0x157806` track words, the
+  `0x1577C0/C2` lead words or the `0x71B9C(4)` predictor; the engine stages
+  zero / camera stand-ins (K.5.6) and the corresponding branches
+  (`0xF` unlock, the `0x1F` tilt threshold, corner, `team_7e7` install 7,
+  `3*team_7D7`, the `0x1577F0` bands, the predictor gates) stay inert until
+  the producers land. `[0x158777]` and `[0x1577CA]` are pool stand-ins.
+* **OL-67 (carried) — the event/audio sinks.** The `0x92820`/`0x71C94`/
+  `0x974DC`/`0x8F188`/`0x974F0`/`0x651F0` calls remain requests.
+* **OL-52 (carried) — the `0x6E598` anim request** stays unconsumed.
+* **Invoke-now modeling.** The native installs invoke the new handler
+  synchronously (`0x7D9A4` ECX != 0); the derived binder applies the install
+  sequence to the record fields in order (the carrier arm's 4-then-3/0x19
+  net, the tail's 6-then-5 pair) without running the intermediate action
+  bodies — the same standing convention as rows 06/07/0F/18/21/23 (the
+  installed action dispatches next frame).
+
+## Appendix K.5b — FU-137 §6.1/§7 errata (Task 1)
+
+Row `04` is `ported`: `fifa96_match_action_04` binds
+`fifa96_outfield_row04_step` (`0x7E7C8..0x7F141`) to `mr->record`/the pool
+(K.5). The `0x7CA54` machine subset stays its own unwired seam. The FU-137
+§6.1 `04` cell and §7 counts become 12 OK / 67 UNSUP / 1 NOTF. Row `08` is
+unchanged (OL-70a). FU-75 §1.1's row-04 entry gains the same pointer; FU-141
+§7's OL-38 status gains a Task-1 note.

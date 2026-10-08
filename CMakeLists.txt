@@ -241,8 +241,11 @@ target_link_libraries(test_keeper_bodies PRIVATE fifa96_keeper)
 add_test(NAME test_keeper_bodies COMMAND test_keeper_bodies WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_outfield src/fifa96_loader/fifa96_outfield.c)
+target_link_libraries(fifa96_outfield PRIVATE fifa96_entity_update fifa96_action_handlers
+                                               fifa96_rng)
 add_executable(test_outfield tests/test_outfield.c)
-target_link_libraries(test_outfield PRIVATE fifa96_outfield)
+target_link_libraries(test_outfield PRIVATE fifa96_outfield fifa96_entity_update
+                                             fifa96_action_handlers fifa96_rng)
 add_test(NAME test_outfield COMMAND test_outfield WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(fifa96_play tools/fifa96_play.c tools/fifa96_detect.c)
@@ -417,7 +420,7 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_scene fifa96_render fifa96_window
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
                                           fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies
-                                          fifa96_animation)
+                                          fifa96_animation fifa96_outfield)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
