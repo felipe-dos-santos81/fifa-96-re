@@ -520,18 +520,18 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
  * 0x48B83 loads `FUN_0004AFB8(0x32)`, `FUN_000A1920(handle, 2)` and
  * `FUN_00047814`; slot 50 of the 0x107370 loader table is 0x101BA4 "PALsys"
  * with the 0x101C90 "%s.fsh" format) and builds the palette from the current
- * palette buffer 0x4B200 plus that chunk: the FU-98 kit remap
+ * palette buffer 0x14B200 plus that chunk: the FU-98 kit remap
  * `pal[0x70F2[i]] = snapshot[0x70E8[i]]` over the 10 static table pairs, then
  * the chunk's [0xF0,+0x54) and [0x186,+0x4E) byte ranges copied over the base
- * (0x48F86/0x48F9F). FUN_00048C8C installs the result into 0x4B200 and
- * rebuilds the 8-bit copy at 0x4B800 through FUN_000479A0, whose conversion is
+ * (0x48F86/0x48F9F). FUN_00048C8C installs the result into 0x14B200 and
+ * rebuilds the 8-bit copy at 0x14B800 through FUN_000479A0, whose conversion is
  * `v << 2` (0x479A8..0x479B9) -- not the v*255/63 sprite-palette scaling.
  *
  * `fifa96_match_palette_from_bank` extracts the frame-2 chunk from a
  * PALsys.fsh-shaped SHPI bank, applies the native transforms to `base6` (a
  * 768-byte 6-bit base palette; NULL selects the derived engine default
  * `base := the chunk`, which makes the native appends identity) and writes the
- * 8-bit RGB `v << 2` result to `rgb8`. The native base buffer 0x4B200 is the
+ * 8-bit RGB `v << 2` result to `rgb8`. The native base buffer 0x14B200 is the
  * previously installed front-end palette and is not statically derivable;
  * that substitution is the recorded derivation leg. The type-0x22 chunk must
  * hold exactly 256 entries (the native copies 0x300 bytes unconditionally; the

@@ -105,8 +105,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   confirm → FU-66 STATE16 bridge) — and the match canvas replaces the
   front-end **with RGB visible**: the OL-T11-6 palette install (FU-144) shows
   the drawn player sprites in the derived palette's magenta (0x38/0x11/0x28
-  range) with olive accents on the index-0 black background (960×720 window,
-  mean 0.30–0.42, per-channel means unequal — colored, not grayscale). The
+  range) with olive accents on the index-0 black background. The committed
+  960×720 window capture is **0.47% non-black** (whole-window mean 0.002); the
+  drawn sprite pixels are the derived magenta `#E044A0` (6-bit 0x38/0x11/0x28
+  `<< 2`) with olive/brown accents — colored, not grayscale. The
   OL-T11-8 formation draw is live in the indexed canvas and pinned by the tape
   (HUD/overlays still wait on OL-T11-7). The screenshots establish the Return
   advance: the panel-open BackSpace frame is byte-identical to the preceding
@@ -171,8 +173,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   present on, so the first differing line is frame 6 (match start is frame 5;
   frame 6 is the first MATCH-branch present), all 160 lines 6..165 differ, and
   every `state=` suffix is unchanged. The tape asserts the RGB directly: at
-  frame 6 `render.palette_ready == 1`, the surface palette entry 1 is the
-  retail 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0), and > 700 of the 768
+  frame 6 `render.palette_ready == 1`, the surface palette's staged **chunk
+  entry 1** is 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0), and > 700 of the 768
   palette bytes are nonzero; `render.palette` equals the pure extraction over
   the staged `PALsys.fsh` bank (`test_engine_match_staging`). M1 stays
   byte-identical. Regenerate with
@@ -254,9 +256,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   and installed on the presented surface (`fifa96_match_palette_from_bank`,
   `fifa96_match_run_palette_install`, staged by `fifa96_match_run_stage`), so
   the indexed draw is RGB in `make game`. Remaining `-6` legs: the
-  per-entity translation tables `0x4BF60[slot]` (the native `0x14720` remap
+  per-entity translation tables `0x14BF60[slot]` (the native `0x14720` remap
   `FUN_00048DC0`/`FUN_000CE980` installs; the engine keeps the identity
-  stand-in) and the untied `0x4B200` front-end base (FU-144 §6).
+  stand-in) and the untied `0x14B200` front-end base (FU-144 §6).
   `OL-T11-8` is now **landed (M2 visible-match Task 1)**:
   `FUN_00079B6C` (`0x79B6C..0x79C1C`) is ported in full commit + tail form —
   position := target, y = 0, target := position, both velocity pairs and the

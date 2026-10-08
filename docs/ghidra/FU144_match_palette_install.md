@@ -12,7 +12,7 @@ Result in one line: **`FUN_00048ED8` (single caller `FUN_0003BB1C 0x3BB45`)
 builds the match palette from resource slot 0x32 = `PALsys.fsh` frame 2
 (`FUN_0004AFB8(0x32)` -> `FUN_000A1920(handle, 2)` -> `FUN_00047814`), applies
 the FU-98 kit remap and two chunk-range appends, and `FUN_00048C8C` installs
-the 6-bit result into `0x4B200` and rebuilds the 8-bit RGB copy at `0x4B800`
+the 6-bit result into `0x14B200` and rebuilds the 8-bit RGB copy at `0x14B800`
 with `v << 2` (`FUN_000479A0`).**
 
 ## 1. The install chain (first-hand disassembly)
@@ -24,10 +24,10 @@ with `v << 2` (`FUN_000479A0`).**
 0x48EF6  PUSH 2; EAX=0x32; CALL 0x4AFB8       ; resource handle, slot 0x32
 0x48F03  CALL 0xA1920                         ; frame 2 (FUN_000A1920)
 0x48F0B  CALL 0x47814; MOV EDI,EAX            ; EDI = the frame's 0x22 chunk+16
-0x48F1B  EAX=0x4B200; CALL 0x48B60            ; [0x7104]==0: build the palette
-0x48F25  memmove(src=0x4B200 -> local, 0x300) ; current palette snapshot
-0x48F3C  memmove(local -> 0x4B500, 0x300)
-0x48F55  10x memmove(src=0x4B500+[0x1070E8+i]*3,
+0x48F1B  EAX=0x14B200; CALL 0x48B60            ; [0x7104]==0: build the palette
+0x48F25  memmove(src=0x14B200 -> local, 0x300) ; current palette snapshot
+0x48F3C  memmove(local -> 0x14B500, 0x300)
+0x48F55  10x memmove(src=0x14B500+[0x1070E8+i]*3,
                      dst=local +[0x1070F2+i]*3, 3)
 0x48F86  memmove(src=EDI+0xF0  -> local+0xF0,  0x54)
 0x48F9F  memmove(src=EDI+0x186 -> local+0x186, 0x4E)
@@ -40,7 +40,7 @@ with `v << 2` (`FUN_000479A0`).**
 ```
 0x48B6E  PUSH 2; EAX=0x32; CALL 0x4AFB8; CALL 0xA1920; CALL 0x47814
 0x48B88  MOV EBP,EAX                          ; PALsys frame-2 chunk data
-0x48B92  memmove(src=EDI(0x4B200) -> local, 0x300)
+0x48B92  memmove(src=EDI(0x14B200) -> local, 0x300)
 0x48BA7  10x memmove(src=EDI+[0x1070E8+i]*3, dst=local+[0x1070F2+i]*3, 3)
 0x48BD5  memmove(src=EBP+0xF0  -> local+0xF0,  0x54)
 0x48BEE  memmove(src=EBP+0x186 -> local+0x186, 0x4E)
@@ -63,16 +63,21 @@ with **its source/destination roles inverted** (erratum below).
 `FUN_00048C8C` (`0x48C8C..0x48D34`):
 
 ```
-0x48C91  memmove(src=arg1 -> 0x4B200, 0x300)  ; install the built palette
-0x48CA4  EAX=0x4B800; CALL 0x479A0            ; 8-bit RGB + ARGB shadow
-0x48CF1  EAX=0x4B200; CALL 0x47A70            ; near-black key table (0x4BF28)
-0x48CFB  0x5F500(0x4B200); 0x5AE64(0x4B200)
-0x48D1B  0x47184(0x4B800); [0x11471C]=0x4783C; 0x19B44; [0x11471C]=0
+0x48C91  memmove(src=arg1 -> 0x14B200, 0x300)  ; install the built palette
+0x48CA4  EAX=0x14B800; CALL 0x479A0            ; 8-bit RGB + ARGB shadow
+0x48CF1  EAX=0x14B200; CALL 0x47A70            ; near-black key table (0x14BF28)
+0x48CFB  0x5F500(0x14B200); 0x5AE64(0x14B200)
+0x48D1B  0x47184(0x14B800); [0x11471C]=0x4783C; 0x19B44; [0x11471C]=0
 ```
 
 `FUN_000479A0` (decompile `0x479A0`): per entry `out[3i+c] = pal[3i+c] << 2`
 and the ARGB dword `0xFFRRGGBB` at `0x15BBAC`. So the native 8-bit RGB form is
 `v << 2`, not FU-91's `v*255/63` sprite-palette scaling.
+
+Address note: the earlier flat-import FUs (`fifa96_le.bin`) name these same
+buffers `0x4B200`/`0x4B500`/`0x4B800`/`0x4BF60`/`0x4BF28`; on the declared
+source `/FIFA96.EXE` they live at `0x14Bxxx`/`0x14BFxx` (image = flat +
+0x100000), which is the form used here and in the engine comments.
 
 ## 2. The palette source is `PALsys.fsh` frame 2
 
@@ -104,7 +109,7 @@ second offset 0x100. Frame 2's chunk (6-bit RGB) starts
   built palette (ranges 80..107 and 130..155);
 * conversion: `v << 2` (`FUN_000479A0`), installed onto the engine surface.
 
-The native base buffer `0x4B200` is the previously installed front-end palette
+The native base buffer `0x14B200` is the previously installed front-end palette
 and is not statically derivable; the engine substitutes `base := the chunk`
 (`fifa96_match_palette_from_bank(..., base6 = NULL, ...)`), under which the
 native appends are identity. Recorded leg: the exact front-end base.
@@ -128,8 +133,9 @@ native appends are identity. Recorded leg: the exact front-end base.
 Tests: `test_engine_match_render.c` (`test_match_palette_from_bank` covers the
 direction, snapshot, appends and `v << 2`; `test_match_palette_install` covers
 the surface install and render integration), `test_engine_match_staging.c`
-(ISO: staged palette equals the pure extraction of `banks[91+46]`, retail
-entry 1 -> `E0 44 A0`, GAMEFLD1 re-stage clears it), `test_engine_m2.c` (RGB at
+(ISO: staged palette equals the pure extraction of `banks[91+46]`; the staged
+palette's **chunk entry 1** is `E0 44 A0`; GAMEFLD1 re-stage clears it),
+`test_engine_m2.c` (RGB at
 the first match present), `test_sprite_palette.c` (native remap direction).
 The M2 golden was re-pinned for the palette upgrade (see ENGINE.md).
 
@@ -155,15 +161,20 @@ The M2 golden was re-pinned for the palette upgrade (see ENGINE.md).
 
 ## 6. Open legs
 
-1. **Base palette `0x4B200`**: the front-end-installed palette the match load
+1. **Base palette `0x14B200`**: the front-end-installed palette the match load
    appends to; not statically derivable (engine uses base := the chunk).
-2. **Per-entity translation tables** `0x4BF60[slot]` (the native `0x14720`
+   **Next action:** locate the writers of the native `0x14B200` buffer
+   (the boot/front-end palette installs; the getter `FUN_0004793C` returns it
+   and `FUN_0001CFC4`/`FUN_00019628` read/blend it), or use the engine's
+   pre-existing surface palette at install time as the dynamic analog of the
+   native base and feed it as `base6`.
+2. **Per-entity translation tables** `0x14BF60[slot]` (the native `0x14720`
    remap): `FUN_00046F80` partitioning of a loaded "palettes" resource; the
    resource identity is FU-91's open leg. The engine keeps the identity remap
    (with `0` as the 0xFF key).
 3. **`FUN_00048DC0` `[0x68E0]==1` branch** (the entity 0/0xB kit-recolour byte
    translation via `0x7287`/`0x727C`).
-4. **`FUN_00047A70` near-black key table** (`0x4BF28`) and the shade cube
+4. **`FUN_00047A70` near-black key table** (`0x14BF28`) and the shade cube
    (`FUN_000A0AA0`, FU-98 §2) are built from the palette but not consumed by
    the port.
 5. **DAC/shadow upload**: `FUN_000CE70C`/`FUN_000CE754` and the `0x15BBAC`

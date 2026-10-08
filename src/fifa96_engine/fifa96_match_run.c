@@ -1270,7 +1270,7 @@ int fifa96_match_palette_from_bank(const uint8_t *bank_data, size_t bank_len,
   if (base6) {
     memcpy(pal6, base6, sizeof pal6);
   } else {
-    /* Derived default: the native base buffer 0x4B200 is the previously
+    /* Derived default: the native base buffer 0x14B200 is the previously
      * installed front-end palette and is not statically derivable; using the
      * chunk itself makes the native appends identity (recorded leg). */
     memcpy(pal6, rgb6, sizeof pal6);

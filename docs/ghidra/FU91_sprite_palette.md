@@ -79,6 +79,12 @@ The translation source per entity:
   @0x49138 (single static caller site 0x4AF0A), i.e. a loaded resource, not
   the 784-byte frame chunk.
 
+The match-data **DAC-side** palette install (the 6-bit buffer `0x14B200`, its
+`v << 2` 8-bit copy `0x14B800`, and the `FUN_00048ED8`/`FUN_00048B60` ->
+`FUN_00048C8C` chain sourced from slot 0x32 `PALsys.fsh` frame 2) is derived in
+**FU-144**; the addresses quoted here are the flat-import forms (image =
+flat + 0x100000).
+
 Direct VGA-DAC uploads (`FUN_000CE754`, FU-57) have callers only in the
 movie/art paths (`FUN_00068194`, `FUN_0006847c`, `FUN_000A1600`,
 `FUN_000A1668`, `0xB2481`) — no sprite-palette DAC site was found.
