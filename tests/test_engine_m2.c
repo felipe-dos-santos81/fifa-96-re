@@ -45,6 +45,19 @@
  * clock runs, so the shortened 1 s period completes) — mirroring the G1 fix
  * wave's `test_live_period_end_exits_to_frontend` convention.
  *
+ * FU-143 phase-driver wiring (playability Task 3): the run frame body now
+ * steps the derived `fifa96_match_run_phase_drive` each granted frame, so the
+ * phase-2 period end writes the derived post-period phase 0x0C (the selector-0
+ * no-extra-time chooser) instead of leaving phase 2 until the teardown reset.
+ * The transcript stays BYTE-IDENTICAL: the driver runs inside the exit step
+ * (after the state tick), while the `state=` sample is taken before each step,
+ * so frame 145 still records the pre-step `state=2/1-0`; no re-pin is needed.
+ * The 0x13/0x14/2 forcing stays declared because the derived kickoff entry
+ * (`FUN_0008A938` situation 0xB -> phase 2, OL-79) and the extra-time flag
+ * `[0x157AC0]` producer are unported, so the tape cannot drop the forcing.
+ * This test's golden byte-comparison is the tape-mode record the task asks
+ * for: byte-identical = forcing kept, no re-pin.
+ *
  * Wired-row dispatch set: the tape stages the Gate-G3 rows (06/07/0F/18/21/23)
  * and keeper row 1E into pool record 1..7 of team 0 at the mechanics step; row
  * 00 dispatches from the pool's reset-installed code before the arms, and the

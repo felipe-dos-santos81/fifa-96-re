@@ -406,6 +406,95 @@ static void test_action_28_repack_round_trips_fields(void) {
   assert(chase->target_y == 0x55);             /* chosen triple y */
 }
 
+/* FU-143 wiring (M2 playability Task 3): the frame body steps the derived
+ * phase driver each granted frame. A live class-1 phase (2) on a 1 s period
+ * reaches the derived selector-0 period end WITHOUT the fixture writing the
+ * post-period phase: the FU-62 match clock's `sec == limit + aux` completion
+ * (fifa96_match_state.c) is staged by the frame body, and the driver runs the
+ * derived FUN_0008B9CC chooser (extra_time clear, period < 4 -> phase 0x0C on
+ * the controlled side, act 0xB). `prev_phase` records the 2 -> 0x0C write.
+ * A further frame must not re-fire: 0x0C is class 0 (clock stopped). */
+static void test_phase_drive_reaches_period_end(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;               /* the native in-play phase (class 1) */
+  mr.state.period_length = 1;
+  mr.state.extra_length = 1;
+
+  for (int i = 0; i < 100; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  }
+  assert(mr.state.period == 1);
+  assert(mr.state.period_seconds == 0);
+  assert(mr.state.phase == 0x0Cu);          /* derived chooser, not forced */
+  assert(mr.state.prev_phase == 2u);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+
+  assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.phase == 0x0Cu);          /* class 0: no second write */
+  assert(mr.state.prev_phase == 2u);
+}
+
+/* The driver's class-1/class-2 gate and the one-shot staging contract, without
+ * the clock: a class-0 phase (0x01) must not consume a staged completion into a
+ * period-end write (the native 0x8AF41 gate stops the clock), while the live
+ * class-1 phase (0x02) runs the derived chooser on the completed period
+ * (`mr.state.period - 1`). NULL -> -FIFA96_ERR_INVALID. */
+static void test_phase_drive_class_gate(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 1;              /* a completed period for the chooser */
+  mr.state.phase = 1;               /* class 0 */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
+  assert(mr.state.phase == 1u);
+  assert(mr.clock_period_ended == 0u);      /* the staging is consumed */
+
+  mr.state.phase = 2;               /* class 1 */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x0Cu);
+  assert(mr.state.prev_phase == 2u);
+  assert(mr.phase_machine.state == 0x0Cu);
+  assert(mr.phase_machine.phase == 0x0Cu);
+  assert(mr.clock_period_ended == 0u);
+
+  /* one-shot: without a staged completion the next call is a no-op */
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
+  assert(mr.state.phase == 0x0Cu);
+  assert(fifa96_match_run_phase_drive(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* The begun-run 2 -> 0x0C -> 0 sequence: the derived write lands on the
+ * completing frame (0x0C observable before the lifecycle resolve), and the
+ * run_end teardown resets the match state to the native reset phase 0
+ * (FUN_00073E28's derived surface, fifa96_match_state_init). */
+static void test_phase_drive_begun_end_resets_phase(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 1;
+  mr.state.extra_length = 1;
+
+  for (int i = 0; i < 99; i++) {
+    assert(fifa96_engine_step(f.engine) == 0);
+  }
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+  assert(fifa96_match_run_frame(&mr) == 1);      /* 30th grant: period end */
+  assert(mr.state.phase == 0x0Cu);               /* derived 2 -> 0x0C */
+  assert(mr.state.prev_phase == 2u);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+
+  assert(fifa96_match_run_resolve(&mr) == 1);    /* OVER -> POST -> EXIT -> end */
+  assert(mr.state.phase == 0u);                  /* teardown reset -> 0 */
+  assert(mr.state.prev_phase == 0u);
+
+  drop_fixture(f);
+}
+
 /* Run ticks until exactly one granted 30 Hz frame body ran (the pace grants
  * 3 frames per 10 ticks; the loop bound is generous but deterministic). */
 static void one_granted_frame(struct fifa96_match_run *mr) {
@@ -494,6 +583,9 @@ int main(void) {
   test_action_26_repack_round_trips_fields();
   test_action_28_repack_round_trips_fields();
   test_action_2A_repack_round_trips_fields();
+  test_phase_drive_reaches_period_end();
+  test_phase_drive_class_gate();
+  test_phase_drive_begun_end_resets_phase();
   puts("test_engine_match_frame OK");
   return 0;
 }

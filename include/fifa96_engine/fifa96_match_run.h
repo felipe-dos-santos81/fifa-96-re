@@ -213,6 +213,15 @@ struct fifa96_match_run {
   struct fifa96_match_pace pace;
   struct fifa96_match_state state;               /* match clock/period block */
   uint16_t score[2];                             /* per-side goal words (FU-72 §2.4) */
+  /* FU-143 wiring (M2 playability Task 3): the FU-62 second-rollover
+   * completion (`period_seconds == limit + aux_seconds`) for the latest tick,
+   * staged by fifa96_match_run_frame from fifa96_match_state_tick's
+   * `period_ended` output and consumed by fifa96_match_run_phase_drive. The
+   * derived test itself lives in the FU-62 library
+   * (src/fifa96_loader/fifa96_match_state.c completion block); the plan's
+   * driver signature takes the run only, so the clock's result flows through
+   * this field. Reset by init/begin, cleared by the driver (one-shot). */
+  uint8_t clock_period_ended;
   struct fifa96_engine *engine;                  /* engine holding this run */
   struct fifa96_match_lifecycle_backend backend; /* engine callbacks or stub */
   uint32_t ticks;                                /* 100 Hz match callback hits */
@@ -319,6 +328,9 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
  * then, when the phase is 0x13/0x14, the FU-142a
  * `fifa96_match_phase_machine_step` ran the FUN_0008D098 installer arms once
  * (the FUN_000740A0 order);
+ * and the derived FU-143 phase driver ran (`fifa96_match_run_phase_drive`),
+ * staging the FU-62 clock's `period_ended` completion and writing the derived
+ * post-period phase (2 -> 0x0C under the selector-0 default);
  * 0 = no frame was due; or a -fifa96_err_t. A period end marks the lifecycle
  * over, except when an exit is already staged: the staged EXIT wins because
  * the frame body runs in the clock advance before the exit step consumes it.
@@ -326,6 +338,40 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */
 int fifa96_match_run_frame(struct fifa96_match_run *mr);
+
+/* Step the derived FU-143 phase drivers for one granted 30 Hz frame (M2
+ * playability Task 3). The frame body calls this once per granted frame, after
+ * the FU-141 entity chain and before the FU-85 scene staging (the native clock
+ * `FUN_0008AF38` runs after the entity chain at `0x4B1A6`, and its
+ * `FUN_0008B9CC` phase write lands inside it).
+ *
+ * Behavior (first-hand `/FIFA96.EXE`; FU-143 docs/ghidra/FU143_phase_rows.md):
+ *  - reads the live phase's row and applies the class-1/class-2 gate
+ *    (`0x8AF41..0x8AF80`: class 1 always runs, class 2 runs while
+ *    `[0x14C302]==0`, class 0 stops the clock);
+ *  - consumes the staged FU-62 clock completion (`sec == limit + aux`,
+ *    `0x8B1EA`/`0x8B21D`; see `clock_period_ended`) and runs the derived
+ *    `FUN_0008B9CC` chooser `fifa96_action_phase_period_end` for the completed
+ *    period (`state.period - 1`: the FU-62 library already incremented the
+ *    period at completion, while the native calls the chooser before
+ *    `[0x57AC2]++` at `0x8B58A`);
+ *  - writes the derived phase through `fifa96_match_state_set_phase` and
+ *    mirrors `phase_machine.state`/`phase` (the native `[0x157A4D]` switch
+ *    byte is the high byte of the `[0x157A4A]` phase dword).
+ *
+ * Under the selector-0/no-extra-time default (`extra_time` clear, period < 4)
+ * the chooser derives phase 0x0C on the controlled side and act 0xB
+ * (`0x8BAA7..0x8BABE`, `0x8BADB..0x8BAE7`); the native then invokes the act
+ * selector, but the act handler body, the phase-0xC machine `FUN_0008BAF0`,
+ * the extra-time flag `[0x157AC0]` producer and the
+ * `FUN_0004B02C(0)`/`FUN_00088860` reset path stay unported (FU-143 §4/§5
+ * legs), so the engine lifecycle owns the exit and the 0x0C -> 0 reset is the
+ * run_end teardown (`fifa96_match_state_init`).
+ *
+ * No phase write happens for a class-0 phase or without a staged completion.
+ * Returns 1 when the derived chooser ran and wrote a phase, 0 otherwise,
+ * -FIFA96_ERR_INVALID (NULL), or a -fifa96_err_t from the drivers. */
+int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
 
 /* One match presentation pass into the engine's indexed surface (Task 15):
  * clears the canvas to `render.background`, then recomposes the scene per the

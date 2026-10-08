@@ -7,10 +7,12 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 Status: **M1 complete headless; M2 match lifecycle complete headless with the
 render chain complete at the derived level — palette install, HUD/overlays,
 kickoff placement and live anim inputs (`OL-80`) remain open (13/80 action rows
-wired) — the M2-B acceptance tape green, and the interactive `make game` smoke
-reaching match start and control input on this host.** Kick → score → period
-end remains blocked interactively on the unported rows (see "Interactive smoke"
-and "Known gaps"). See
+wired), and the derived FU-143 phase driver is now wired into the run loop (the
+live period end 2 → 0x0C is derived) — the M2-B acceptance tape green and
+byte-identical, and the interactive `make game` smoke reaching match start and
+control input on this host.** Kick → score remain blocked interactively on the
+unported rows (see "Interactive smoke" and "Known gaps"); the derived kickoff
+entry into phase 2 is still `OL-79`/`OL-84`. See
 `docs/superpowers/specs/2026-10-06-fifa96-native-engine-port-design.md` (parent),
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md` (child),
 `docs/superpowers/plans/2026-10-07-fifa96-m2-arms-and-wiring.md` (split
@@ -60,8 +62,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   (soft failure without the ISO).
 - Match: FU-64 lifecycle, FU-60 30 Hz pace, FU-61 input → FU-70 control slot
   per granted frame, FU-71 camera / FU-90 display / FU-141 entity/ball chain,
-  FU-142a installer arms in phases 0x13/0x14, deterministic FU-85/88/89 render
-  chain, period end (`resolve` OVER→POST→EXIT) back to the front-end.
+  FU-142a installer arms in phases 0x13/0x14, the FU-143 phase driver
+  (`fifa96_match_run_phase_drive`: the derived class gate + `FUN_0008B9CC`
+  period-end chooser, so a live class-1 period end writes phase 0x0C on the
+  selector-0 default), deterministic FU-85/88/89 render chain, period end
+  (`resolve` OVER→POST→EXIT) back to the front-end.
 - Action dispatch (FU-137): **13/80 rows wired** — `00`, `04`, `06`, `07`,
   `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring G3) and
   `26`, `28`, `2A` (cluster G); dispatch results 66 UNSUP / 13 OK / 1 NOTF.
@@ -73,13 +78,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   clear colour: kickoff formation is OL-T11-8 and HUD/overlays OL-T11-7).
   Arrow/Z/C presses reach the run: an in-process gdb probe read
   `input_state[0]` = 0x04 (RIGHT), 0x01 (UP), 0x10 (KICK), 0x20 (PASS), while
-  `dispatched_ok` stayed `0x1` (row `00` only). **Kick, score and period end
-  are not interactively reachable:** the zeroed FU-141 pool dispatches row `00`
-  only (kick rows `07`/`0F` need the unported possession/selection legs), the
-  FU-72 score writers are unported (`C3-OL2`), and the class-1 phase-2 period
-  end needs the loader-level FU-143 phase drivers wired into the run loop. The
-  M2-B tape covers that sequence headlessly by declaring/forcing its phases and
-  calling `fifa96_match_run_add_goal` (recorded carry).
+  `dispatched_ok` stayed `0x1` (row `00` only). **Kick and score are not
+  interactively reachable:** the zeroed FU-141 pool dispatches row `00`
+  only (kick rows `07`/`0F` need the unported possession/selection legs) and
+  the FU-72 score writers are unported (`C3-OL2`). The class-1 phase-2 period
+  end is now derived (the FU-143 phase driver is wired), but the interactive
+  match cannot reach phase 2 without the unported kickoff entry (`OL-79`/
+  `OL-84`). The M2-B tape covers the sequence headlessly by declaring/forcing
+  its kickoff/mechanics phases and calling `fifa96_match_run_add_goal`
+  (recorded carry).
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -87,7 +94,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. Regenerate with
+  set, and the score step. The FU-143 phase driver is wired underneath and the
+  transcript is **byte-identical** (the `state=` sample precedes each step, so
+  the derived 2 → 0x0C write inside the exit step is not a transcript line);
+  the golden is not re-pinned. Regenerate with
   `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
   non-zero while rewriting the file; re-run `make check` to verify).
 
@@ -134,11 +144,17 @@ the build also produces the windowed `fifa96` target (`make game`).
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level
   (`fifa96_action_phase_row/_act/_situation/_period_end`), with open legs
-  `OL-72`…`OL-79`. The phase drivers are **not yet wired into the engine run
-  loop**: only class-1 phases end periods, phase `2` is the only class-1 live
-  phase, and the selector-0/phase-0 default starts class 2 — so the interactive
-  match never reaches a period end and the M2-B tape declares/forces its phases
-  (0x13/0x14 kickoff, phase 2 mechanics) as the recorded carry.
+  `OL-72`…`OL-79`. The phase driver `fifa96_match_run_phase_drive` is **wired
+  into the run loop** (M2 playability Task 3): each granted frame it applies
+  the class-1/class-2 gate and consumes the FU-62 clock's `sec == limit + aux`
+  completion (`mr.clock_period_ended`), running the derived `FUN_0008B9CC`
+  chooser — a live class-1 period end writes phase 0x0C (2 → 0x0C) on the
+  selector-0/no-extra-time default, and the run-end teardown resets to 0. The
+  engine still cannot enter live phase 2 without the unported kickoff path
+  (`OL-79`, carried as `OL-84`), the extra-time flag producer (`OL-85`) and the
+  post-period 0x0C hold/reset timing (`OL-86`) stay open, so the M2-B tape
+  keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics) and
+  stays byte-identical. See FU-143 §9 (integration errata).
 - **Score event source (child `C3-OL2`):** the FU-72 `FUN_00093944` writers live
   in the unported action/phase clusters; `fifa96_match_run_add_goal` exposes the
   derived increment only, and the tape drives it directly (recorded in FU-142

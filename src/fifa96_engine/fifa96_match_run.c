@@ -4,6 +4,7 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
+#include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_animation.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
@@ -588,6 +589,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->pass_parity = 0;
+  mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
@@ -622,6 +624,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
+  mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
@@ -668,6 +671,65 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side) {
   return 0;
 }
 
+/* FU-143 wiring (M2 playability Task 3): the engine-side phase driver. The
+ * native funnel is FUN_0008AF38's second rollover: when the phase-class gate is
+ * open (class 1 always; class 2 while [0x14C302]==0; class 0 stops the clock;
+ * first-hand 0x8AF41..0x8AF80) and the derived completion test
+ * `period_seconds == limit + aux_seconds` holds (first-hand 0x8B1EA/0x8B21D;
+ * the FU-62 library evaluates it and fifa96_match_run_frame stages the result
+ * in `clock_period_ended`), the rollover calls FUN_0008B9CC (first-hand
+ * 0x8B574) with the completed period, then zeroes [0x57AB6] and increments
+ * [0x157AC2] (0x8B583/0x8B58A). FUN_0008B9CC's derived port is
+ * fifa96_action_phase_period_end: under the selector-0/no-extra-time default
+ * (extra_time clear, period < 4) it derives phase 0x0C on the controlled side
+ * and act 0xB (first-hand 0x8BAA7..0x8BABE, 0x8BADB..0x8BAE7; the native then
+ * invokes the act selector, whose handler body is unported). The
+ * driver applies the gate to the live phase (fifa96_action_phase_row) and the
+ * chooser to the completed period `state.period - 1` (the FU-62 library
+ * already incremented the period; the native chooser sees [0x157AC2] before
+ * its 0x8B58A increment). Chooser inputs whose native producers are unported
+ * are passed as their derived defaults: extra_time 0 ([0x157AC0], the
+ * selector-0 default; its writer is a period-1 completion side effect), side
+ * 0x157ABE/0x157ABF 0 (OL-75) and the d8/d9 counters 0, plus the zeroed
+ * 0x12230/0x12250 probes (OL-74). The post-call act body, the phase-0xC
+ * machine FUN_0008BAF0 and the FUN_0004B02C(0)/FUN_00088860 kickoff reset stay
+ * unported (FU-143 §4/§5), so the engine lifecycle owns the exit; the
+ * 0x0C -> 0 reset is the run_end teardown. */
+int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
+  const fifa96_action_phase_row_desc *row;
+  fifa96_action_phase_period_end_out out;
+  uint8_t probe[4] = { 0u, 0u, 0u, 0u };
+  uint8_t side;
+  uint8_t ended;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  /* One-shot: the staged completion belongs to the latest granted frame. */
+  ended = mr->clock_period_ended;
+  mr->clock_period_ended = 0;
+  row = fifa96_action_phase_row(mr->state.phase);
+  if (!row) return 0;   /* native has no bounds check; the port hardens (FU-83) */
+  /* Class gate: only class 1 (always) and class 2 (halt gate clear) can
+   * complete a period; class 0 stops the clock. */
+  if (row->clock_class != 1u && row->clock_class != 2u) return 0;
+  if (!ended) return 0;
+  if (mr->state.period == 0u) return 0;   /* no completed period to choose */
+  side = mr->phase_machine.side_controlled;
+  rc = fifa96_action_phase_period_end((uint8_t)(mr->state.period - 1u), 0u,
+                                      mr->score[side & 1u],
+                                      mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u, 0u,
+                                      probe, &out);
+  if (rc != FIFA96_OK) return rc;
+  if (out.phase != FIFA96_ACTION_PHASE_NONE) {
+    rc = fifa96_match_state_set_phase(&mr->state, out.phase);
+    if (rc != 0) return rc;
+    /* The native [0x157A4D] switch byte is the phase dword's high byte; the
+     * FU-142a machine keeps its own view, so both mirrors follow. */
+    mr->phase_machine.state = out.phase;
+    mr->phase_machine.phase = out.phase;
+  }
+  return 1;
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -683,6 +745,10 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   rc = fifa96_match_state_tick(&mr->state, &mr->pace, 0, 0, &period_ended);
   if (rc != 0) return rc;
   granted = fifa96_match_pace_pending(&mr->pace) - pending;
+  /* FU-143 wiring (Task 3): stage the FU-62 clock's derived completion
+   * (`sec == limit + aux`, fifa96_match_state.c) for the granted frame's
+   * phase driver; a completion can only happen on a granted frame. */
+  mr->clock_period_ended = (uint8_t)period_ended;
   /* FU-70 §1.1: the slot machine runs from the frame body once per granted
    * 30 Hz frame with the FU-62 §4.3 whole-frame delta (2 at the 0x200 step,
    * i.e. 60 counter units/s). FU-71's FUN_000736AC and the FU-90 display
@@ -714,6 +780,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * state byte is set, then FUN_0008D098 runs for both teams). */
     if (mr->state.phase == 0x13u || mr->state.phase == 0x14u)
       (void)fifa96_match_phase_machine_step(mr);
+    /* FU-143 wiring (Task 3): the clock's phase funnel, after the entity chain
+     * (the native FUN_0008AF38 runs after the FU-67/entity block at 0x4B1A6
+     * and inside it calls FUN_0008B9CC at 0x8B574). A completion staged above
+     * runs the derived selector-0 chooser (2 -> 0x0C) on this frame. */
+    rc = fifa96_match_run_phase_drive(mr);
+    if (rc < 0) return rc;
     /* FU-85 §4: FUN_00036C70 stages the render slots after the FU-4B100
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
      * positions/animations reflect this frame. Rendering stays opt-in: the

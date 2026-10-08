@@ -511,6 +511,113 @@ Added to `include/fifa96_loader/fifa96_action_handlers.h` +
    phase-2 period-end answer, not a proof of the opening kickoff's first
    transition.
 
+## 9. Integration errata (M2 playability Task 3: run-loop wiring)
+
+Plan task `docs/superpowers/plans/2026-10-07-fifa96-m2-playability-legs.md`
+Task 3 wires this slice's derived drivers into the engine run loop. Added
+`fifa96_match_run_phase_drive`
+(`include/fifa96_engine/fifa96_match_run.h`,
+`src/fifa96_engine/fifa96_match_run.c`), called once per granted 30 Hz frame at
+the end of the frame body: after the FU-141 entity chain and the FU-142a
+0x13/0x14 hook, before the FU-85 scene staging. That is the native order —
+`FUN_0004B100` runs the entity block (`0x4B15E`/`0x4B181`) before the clock
+`FUN_0008AF38` (`0x4B1A6`), whose rollover calls `FUN_0008B9CC` (`0x8B574`);
+`FUN_00036C70` stages the render slots after `FUN_0004B100` returns (`0x49523`,
+FU-60 §3.1).
+
+**Call shape** (derived entry points, FU-143 §5):
+
+* `fifa96_action_phase_row(mr->state.phase)` supplies the clock class for the
+  class-1/class-2 gate; class 0 returns without a write, and a phase past the
+  table (`row == NULL`) is the FU-83 hardening path.
+* `fifa96_action_phase_period_end` runs the derived `FUN_0008B9CC` chooser for
+  the completed period `[0x157AC2] - 1`: the FU-62 library increments the
+  period at completion, while the native chooser call `0x8B574` precedes
+  `INC [0x157AC2]` at `0x8B58A`. With the selector-0/no-extra-time default
+  (extra_time clear, period < 4) it returns phase 0x0C, the controlled side and
+  act 0xB; the driver writes the phase through `fifa96_match_state_set_phase`
+  and mirrors `phase_machine.state`/`phase` (the native `[0x157A4D]` switch
+  byte is the phase dword's high byte, §1.1).
+* `fifa96_action_phase_act` and `fifa96_action_phase_situation` are **not
+  invoked**: `out.act` is already derived by the chooser (0xB), and invoking
+  the act selector would only re-derive `0x16 + act` while the selector's
+  handler invocation and the `FUN_0008A938` act/situation bodies stay unported
+  (OL-73/OL-78).
+
+**Completion staging.** The plan fixes the driver signature to `(mr)` alone,
+and the FU-62 library owns the derived `sec == limit + aux` test
+(`src/fifa96_loader/fifa96_match_state.c` completion block; first-hand case
+body `0x8B1DD`: `0x8B1EA MOV BX,[0x5881A]` / `CMP AX,BX` / `0x8B21D CMP
+EAX,EDX` with `EDX = aux + limit` / `0x8B225 ECX=1`). The frame body stages the
+library's `period_ended` output in
+`struct fifa96_match_run.clock_period_ended`; the driver consumes it one-shot
+after applying the class gate. Class-2 phases pass the gate (the native
+`[0x14C302]` halt is clear in the engine: `fifa96_match_state_tick` is called
+with `clock_halt = 0`), but the §4.1 aux invariant still prevents a class-2
+completion, matching the native.
+
+**First-hand re-verification this slice** (all `/FIFA96.EXE`, read-only,
+explicit program argument; the derived entry points diff clean against the
+bytes):
+
+* class gate `0x8AF41 MOV EAX,[0x157A4A]` / `0x8AF46 SAR EAX,0x18` /
+  `0x8AF4B MOVZX DI,byte[EAX+0x1106AD]` / `0x8AF53 MOV AL,[EAX+0x1106AD]` /
+  `0x8AF5E CMP EAX,2` / `0x8AF63 CMP dword[0x14C302],0` / `0x8AF75 MOVSX
+  EDX,DI` / `0x8AF78 CMP EDX,1` / `0x8AF80 JZ 0x8B590` — class 1 runs, class 2
+  runs while `[0x14C302]==0`, class 0 stops (`0x8B590` tail);
+* rollover `0x8B574 CALL 0x8B9CC` / `0x8B579 MOV BH,[0x157AC2]` / `0x8B581 INC
+  BH` / `0x8B583 MOV word[0x57AB6],0` / `0x8B58A MOV [0x157AC2],BH`;
+* chooser selector-0 arm `0x8BAA7 XOR EAX,EAX` / `0x8BAA9 MOV AL,[0x157AC2]` /
+  `0x8BAAE CMP EAX,4` / `0x8BAB1 JGE 0x8BAC6` / `0x8BAB3 MOV EDX,[0x157AAC]` /
+  `0x8BAB9 MOV EAX,0xC` / `0x8BABE SAR EDX,0x18` / `0x8BAC1 CALL 0x740A0`, and
+  the act pick `0x8BADB MOV EBX,1` / `0x8BAE0 MOV EAX,0xB` / `0x8BAE5 XOR
+  EDX,EDX` / `0x8BAE7 CALL 0x888FC`;
+* setter `FUN_000740A0` (25 instructions, §1.2 re-read) and act selector entry
+  `0x888FC` (`0x888FD MOVSX CX,byte[0x158828]` / `0x88913 ADD EAX,0x1107EC`);
+* period-0 completion case `0x8B1DD..0x8B22A` (the `sec == limit` /
+  `sec == limit + aux` split and the `[0x5882D]` flag arm);
+* situation dispatcher head `0x8A938` (`0x8A947 JZ 0x8AA7B` situation 0 /
+  `0x8A94E CMP EAX,0xB` / `0x8A957 CMP byte[0x14C32A],0` / `0x8A964 CMP
+  dword[0x15B6C0],0`).
+
+**Observed behavior** (engine tests under ASan/UBSan; the CTest count is
+unchanged, the fixtures extend `test_engine_match_frame`):
+
+* a live class-1 phase 2 on a 1 s period reaches the derived period end without
+  the fixture writing the post-period phase: phase 2 -> 0x0C (`prev_phase` 2,
+  `phase_machine.state/phase` 0x0C) on the completing frame, lifecycle OVER,
+  and the begun run's `run_end` teardown resets the phase to 0
+  (`fifa96_match_state_init`, the `FUN_00073EE0`/`FUN_00073E28` reset surface);
+* the M2-B forced-phase transcript is **byte-identical** with the driver wired
+  (frames 1..165, `tests/golden/engine/m2-frames.txt` unchanged): the tape
+  samples `state=` before each step, while the 0x0C write happens inside the
+  exit step, so no transcript line changes and the golden is not re-pinned;
+* the tape keeps its declared 0x13/0x14/2 forcing; no frame is re-pinned to
+  hide a mismatch (the driver reproduces frame-for-frame, but the forcing
+  cannot be dropped because the live-phase entry stays unported).
+
+**New open legs** (extend §8):
+
+1. **OL-84 — live-phase entry (kickoff) under selector 0.** The begin default
+   is phase 0 (class 2); the engine has no derived path into phase 2 because
+   the `FUN_0008A938` situation producers/act bodies are unported (§3.2,
+   OL-79 consequence). The engine fixture enters at the native in-play phase 2
+   and the tape keeps its forced phase-2 window; the driver's period-end write
+   itself is derived.
+2. **OL-85 — extra-time flag `[0x157AC0]` producer.** The driver passes
+   `extra_time = 0` (the selector-0/no-extra-time default, §4.2); the period-1
+   completion side effect that sets the flag (`0x8B2AC` window) and the
+   `0x12230`/`0x12250` upgrade probes (OL-74) are unported, so the derived
+   0x0C -> 0x13 -> 0x14 branch is not reachable from the engine.
+3. **OL-86 — post-period 0x0C hold/reset timing.** `FUN_0008BAF0`'s selector-0
+   arm sets `[0x58822]=1` behind the `[0x58816]` timer gates (`0x8BC57`/
+   `0x8BC71`, §3.4), and `FUN_0004B02C(0)` -> `FUN_00088860` resets to phase 0
+   and kicks off via `FUN_0008A938(1)` (§4.2). The engine lifecycle instead
+   marks the run over on the completion frame and exits on the next step
+   (`fifa96_match_run_step`'s documented one-step compression), so the 0x0C
+   phase is not held for its native duration; OL-76's unported tail inputs are
+   the producer gap.
+
 ## Provenance
 
 Ghidra MCP on `/FIFA96.EXE`: `get_current_program_info`;
