@@ -1,5 +1,7 @@
 # FIFA 96 (DOS, 1995) — Reverse Engineering
 
+![FIFA 96 splash screen running on the native SDL3 engine](docs/screen.png)
+
 Reverse engineering of the **FIFA 96** PC/DOS CD-ROM release: the 16-bit
 `FIFA96.EXE` loader/dispatcher, the protected-mode game image appended to the
 same file (where the codecs and audio live), and the game's data formats
