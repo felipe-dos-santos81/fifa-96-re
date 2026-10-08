@@ -154,11 +154,14 @@ static const uint8_t match_run_anim_rows[FIFA96_ANIM_ROW_COUNT * FIFA96_ANIM_ROW
  * near-depth threshold is `max((0x14<<16)/(2*obj[5]), 0x78)`, or the
  * `[0x9088]` fallback when `obj[1] < [0x908C]`; `read_memory 0x109088` gives
  * `[0x9088] = 0x78` and `[0x908C] = 0x140`. obj[1] is the camera y and obj[5]
- * the camera record +0x4C ratio angle, whose static loader default is 0x15
- * (first-hand 0x107554, FU-97 §3); the camera-type setup (FUN_0004D7E8,
- * values 4608/3048/3464..) is unported (open leg). */
+ * the camera record +0x4C ratio dword, whose static loader default is
+ * `0x1500` (first-hand `read_memory 0x107554` = `00 15 00 00`, and the
+ * sibling record 0x1075C4 likewise; the writer `0x4D836 MOV [EDX+0x4C],EBX`
+ * stores the full dword from the camera-type entry[5]. The FU-96/FU-97 "21"
+ * is the **byte at +0x4D**, not the dword.) The camera-type setup
+ * (FUN_0004D7E8, values 4608/3048/3464..) is unported (open leg). */
 #define MATCH_RUN_NEAR_LIMIT 0x140
-#define MATCH_RUN_VIEW_RATIO 0x15
+#define MATCH_RUN_VIEW_RATIO 0x1500
 
 /* FU-61 §2.3 sampler mapping rows: row 0/1 is the identity pinned by
  * tests/test_input.c (`row_identity`). The view-dependent row index [0x7DEC]
@@ -389,6 +392,14 @@ static void match_run_entity_drain(struct fifa96_match_run *mr) {
  * which the FU-141 pool does not model (FU-77 locomotion unported): the
  * record `stage.heading` stays caller-owned (open leg), while the ball's
  * modeled FU-120 heading is staged.
+ *
+ * OL-80 (links FU-141 OL-42): the same staging passes `anim_id` from
+ * `byte[[rec+0x28]]` (0x36D44) and `frame` from `byte[rec+0x3D]` (0x36D4F),
+ * but the FU-141 pool models neither record field, so the port preserves the
+ * slot's caller-owned `stage.anim_id`/`stage.frame` (row 0 / frame 0 after
+ * reset) and only the row+8 bank derivation and the accumulator advance are
+ * wired; live animation selection awaits the OL-42 installer animation arm
+ * and the +0x28/+0x3D pool fields.
  *
  * FU-84 `FUN_0008E008` (first-hand FU-84 §5): each slot's row id (`stage.
  * anim_id`) selects the 0x10EF00 row; the row's +8 byte is the FU-85 resolver

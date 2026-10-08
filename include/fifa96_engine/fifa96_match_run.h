@@ -92,9 +92,11 @@ struct fifa96_match_run_render {
   int32_t window_scale_x, window_scale_y;   /* FU-93 16.16 zoom scale */
   int window_zoomed;
   /* FU-89 §6: the near-depth threshold `[0x54350]` divides by the camera
-   * record's +0x4C ratio angle (FU-97: static loader default 0x15, set per
-   * camera type by FUN_0004D7E8 at runtime). The type setup is unported, so
-   * the engine carries the static default (open leg). */
+   * record's +0x4C ratio dword (first-hand read_memory 0x107554 = `00 15 00
+   * 00` = 0x1500; the FU-96/FU-97 "21" is the +0x4D byte; the writer 0x4D836
+   * stores the full dword from the camera-type entry[5]). The camera-type
+   * setup (FUN_0004D7E8) is unported, so the engine carries the static
+   * default (open leg). */
   int32_t view_ratio;
   uint8_t background;
   struct fifa96_match_run_entity entities[FIFA96_MATCH_RUN_RENDER_SLOTS];

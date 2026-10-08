@@ -143,7 +143,9 @@ static void test_init_resets_render_state(void) {
   assert(mr.render.display.duration == FIFA96_MATCH_DISPLAY_DURATION);
   assert(mr.render.window_scale_x == 0 && mr.render.window_scale_y == 0);
   assert(mr.render.window_zoomed == 0);
-  assert(mr.render.view_ratio == 21);   /* FU-97 static +0x4C default */
+  /* FU-96/FU-97's "21" is the +0x4D byte; the +0x4C dword is `00 15 00 00`
+   * (first-hand 0x107554/0x1075C4). */
+  assert(mr.render.view_ratio == 0x1500);
   assert(mr.render.entities[0].anim_turn == 1);   /* FU-84 selector default */
   assert(mr.render.entities[0].anim_timer == 0);
   assert(mr.render.entity_count == 0);
@@ -529,17 +531,20 @@ static void test_entity_animates_over_frames(void) {
   fifa96_surface_destroy(f.s);
 }
 
-/* FUN_000589E0/FUN_00036C70 gates: with the camera at y = 0x140 and the
- * static ratio 0x15 the computed threshold is `(0x14<<16)/(2*0x15) = 0x79E7`,
- * so a key (jitter z) of 0x1000 is culled; at ratio 0x800 the same depth
- * computes 0x140 and draws. At y = 0x13F the `[0x908C]` limit is not reached,
- * so `[0x9088] = 0x78` is the threshold and 0x1000 draws. */
+/* FUN_000589E0/FUN_00036C70 gates (the ratio is set explicitly per phase: the
+ * reset default 0x1500 computes 121 and is not exercised here):
+ *  - camera y = 0x140, ratio 0x15 -> threshold `(0x14<<16)/(2*0x15) = 0x79E7`,
+ *    so a key (jitter z) of 0x1000 is culled;
+ *  - ratio 0x800 -> the same depth computes 0x140 and draws;
+ *  - camera y = 0x13F -> the `[0x908C]` limit is not reached, so
+ *    `[0x9088] = 0x78` is the threshold and 0x1000 draws. */
 static void test_near_depth_threshold_gate(void) {
   struct scene_fixture f;
   scene_fixture_init(&f);
   f.mr.entities.team[0].records[0].pos_y = 0x140;
   f.mr.entities.team[0].records[0].pos_z = 0x1000;
 
+  f.mr.render.view_ratio = 0x15;
   assert(fifa96_camera_init(&f.mr.render.camera, 0, 0x140, 0) == 0);
   drive_granted(&f.mr, 1);
   assert(f.mr.render.entities[0].stage.pos.z == 0x1000);
