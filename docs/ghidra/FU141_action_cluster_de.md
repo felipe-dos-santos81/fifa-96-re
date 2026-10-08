@@ -182,8 +182,10 @@ a Task-13 divergence, not changed here).
 
 The port implements the counter, both selections (vector choice and the
 interception conditions/skip/slot rejection), the timer and the record walk;
-the `FUN_0008D824` call and the `FUN_000795B4` band flag are unported
-(OL-41), so `flag7be` stays 0. The per-record machines themselves
+the `FUN_0008D824` bind call and the `FUN_000795B4` band flag were ported by
+M2 arms-and-wiring Task 14 (OL-41 closed; `fifa96_entity_intercept_bind` /
+`_band`, FU-142 Appendix K), so `flag7be` is now fed (the slot-rejected
+NULL-record band read is OL-71). The per-record machines themselves
 (`FUN_0007CA54` input-row dispatch/no-edge arm/forced decision,
 `FUN_000782D0`) remain FU-137 OL-3/OL-4 (OL-44); the pool update runs the
 derived machine subset: the timer pair decay and the keeper `+0x79 -> +0x7B`
@@ -374,7 +376,12 @@ and their request fields are consumed rather than left write-only.
   per-type gate table `0x110680`, so neither is wired (row 08 head re-read
   this slice). A follow-up task should port the machine subset
   (input-row dispatch `0x1109D0`/`0x1109E4`, no-edge arm, forced decision,
-  chase gate) and then wire rows 04/08.
+  chase gate) and then wire rows 04/08. **Status (Task 14): the machine
+  subset is ported as `fifa96_outfield_input_row` + `fifa96_outfield_chase_gate`
+  (+ the 26-byte `0x110680` gate; FU-142 Appendix K), with the first-hand
+  pressed/released either-or correction; the rows 04/08 full bodies
+  (`0x7E7C8..0x7F141` ~649 insns, `0x81068..0x814AF` ~231 insns) are split to
+  OL-70 and dispatch `-FIFA96_ERR_UNSUPPORTED` until then.**
 * **OL-39 — FU-61-adjacent input-handler support item.** The per-frame slot
   update (`FUN_00078950` via `FUN_00078A54`), the direction getter
   `FUN_0004511D`, and the handler-output packaging (FU-61 §5) are not all
@@ -386,9 +393,11 @@ and their request fields are consumed rather than left write-only.
   targets (`0x10F37C/0x10F388`) are produced by `FUN_000736AC`/`FUN_00072AC4`
   and executable data; the engine passes its FU-71 camera triple and zero
   timers, so the selection always takes the third vector (FU-67 S3).
-* **OL-41 — interception tail.** `FUN_0008D824` (bind call) and
-  `FUN_000795B4` (distance band feeding `+0x7BE`) are unported; the flag
-  stays 0.
+* **OL-41 — interception tail — closed (Task 14).** `FUN_0008D824` (bind) and
+  `FUN_000795B4` (band) are ported as `fifa96_entity_intercept_bind` /
+  `fifa96_entity_intercept_band` (FU-142 Appendix K) and consumed by
+  `fifa96_match_entities_team_update`; `team+0x7BE` is fed and cleared per
+  frame. The slot-rejected NULL-record band read is OL-71.
 * **OL-42 — installer/placement side effects.** The installer's
   `FUN_0006E598` animation call and row 1E's per-type offset tables
   (`0x10F334`/`0x10F33C`, executable object-4 data) are unported;

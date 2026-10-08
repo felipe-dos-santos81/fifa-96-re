@@ -251,8 +251,43 @@ static void team_select_intercept(struct fifa96_match_entities *pool, uint32_t t
     index = FIFA96_MATCH_ENTITY_NONE;                       /* 0x8DA5D */
   team->intercept =
       index < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, t, index);
-  /* The FUN_0008D824 bind call and the FUN_000795B4 band flag (+0x7BE) are
-   * unported (FU-67 §4.2 open legs); the flag stays 0. */
+  /* OL-41 (M2 Task 14): the `FUN_0008D824` bind (`0x8DA72..0x8DA7A`) writes
+   * the nearest record's +0x4D triple, then `FUN_000795B4`
+   * (`0x8DA7F..0x8DA8F`) overwrites its +0x4D/+0x4F/+0x51 words with
+   * {band, dx, dz}. The band's `0x8DA94` gate and the `0x8DAAE..0x8DAE7`
+   * lane/height arm then feed `team+0x7BE`.
+   *
+   * The slot-rejected path (index NONE) has the native call the helpers with
+   * the NULL record (`[team+0x7BA]=0`), reading absolute low-memory words at
+   * 0x4D..0x69; those have no derived value, so the derived model stages a
+   * zero record there (band 0, dx/dz 0, lane/height 0) and the gate refuses
+   * (`0 < 0xF0` but `0 <= |cam_z| + 0x90`). Recorded as OL-71. */
+  if (index >= 0) {
+    struct fifa96_match_entity *nearest = &team->records[index];
+    fifa96_entity_intercept_target bound;
+    fifa96_entity_intercept_band_out band;
+    if (fifa96_entity_intercept_bind(controlled->pos_x,
+                                     pool->team[controlled->team].side,
+                                     nearest->pos_x, nearest->pos_z,
+                                     &bound) == FIFA96_OK) {
+      nearest->target_x = bound.x;
+      nearest->target_y = bound.y;
+      nearest->target_z = bound.z;
+    }
+    if (fifa96_entity_intercept_band(nearest->pos_x, nearest->pos_z,
+                                     nearest->target_x, nearest->target_z,
+                                     &band) == FIFA96_OK) {
+      nearest->target_x = (int32_t)((uint16_t)band.band |
+                                    ((uint32_t)(uint16_t)band.dx << 16));
+      nearest->target_y = (int32_t)((uint16_t)band.dz | (nearest->target_y & ~0xFFFFu));
+      if ((int16_t)band.band < 0xF0) {                      /* 0x8DA9B */
+        int16_t lane = nearest->lane_x;                     /* word +0x6B */
+        int32_t nz = entity_abs(nearest->pos_z);
+        if (lane > 0x1E0 || nz > entity_abs(frame->cam_z) + 0x90) /* 0x8DAAE */
+          team->flag7be = 1;                                /* 0x8DAE0 */
+      }
+    }
+  }
 }
 
 int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32_t team,
@@ -265,6 +300,7 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
   pool->phase = frame->phase;
   pool->delta = frame->delta;
   t = &pool->team[team];
+  t->flag7be = 0;                                            /* 0x8D9C5 */
   t->update_count = (uint8_t)(t->update_count + 1);          /* 0x8D8F7 */
   if (t->update_count >= 0xBu) t->update_count = 0;
   if (frame->phase == 2u) {

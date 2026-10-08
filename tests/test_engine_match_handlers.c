@@ -585,6 +585,31 @@ static void test_action_05_unwired_carrier(void) {
 }
 
 
+/* FU-142 Appendix K (M2 arms-and-wiring Task 14): OL-38's machine subset is
+ * ported (`fifa96_outfield_input_row`/`fifa96_outfield_chase_gate` + the flat
+ * 0x110680 gate, tested in `test_outfield`), but rows 04/08's full
+ * record-visible bodies (`0x7E7C8..0x7F141`, ~649 insns; `0x81068..0x814AF`,
+ * ~231 insns) are split to OL-70 per the plan's row-window rule. The wiring
+ * gate therefore keeps both rows `fn == NULL` with the leg named. */
+static void test_action_04_08_unwired_machine_subset(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *r4 = &fifa96_match_action_table[0x04];
+  const struct fifa96_match_handler *r8 = &fifa96_match_action_table[0x08];
+  make_fixture(&f);
+  assert(r4->fn == NULL);
+  assert(strstr(r4->evidence, "OL-70") != NULL);
+  assert(strstr(r4->evidence, "UNSUPPORTED") != NULL);
+  assert(strstr(r4->evidence, "FU-142") != NULL);
+  assert(r8->fn == NULL);
+  assert(strstr(r8->evidence, "OL-70") != NULL);
+  assert(strstr(r8->evidence, "UNSUPPORTED") != NULL);
+  assert(action_expect[0x04] == UNSUP);
+  assert(action_expect[0x08] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == UNSUP);
+  drop_fixture(&f);
+}
+
 /* FU-139 §9 (Task 11): the wired row-07 machine. Stage 0 gates/latches and
  * the stage-target arm run over `mr->record`; the stage-2 `+0x44` tail resets
  * and hands the ball/receiver through the pool. The kick requests run the
@@ -1000,6 +1025,7 @@ int main(void) {
   test_action_29_unwired_entry();
   test_dead_2b_evidence();
   test_action_05_unwired_carrier();
+  test_action_04_08_unwired_machine_subset();
   test_action_07_runs_body();
   test_action_0F_runs_body();
   test_action_18_runs_body();

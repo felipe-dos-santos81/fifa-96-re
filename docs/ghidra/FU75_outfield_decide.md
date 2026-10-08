@@ -493,6 +493,7 @@ the forced decision of §1.5 and the chase gate of §1.6.
 | `FUN_0007C990` | `fifa96_outfield_forced_action(state, current, &next)`; returns 1 = install, 0 = keep/none, `-INVALID` |
 | chase gate `0x7CC93..0x7CD24` | `fifa96_outfield_chase_action(state, current, &next)` |
 | `FUN_0007D9A4` install, handler bodies, `FUN_0007E600`, selection switch, no-edge arm, tracker/ring | not ported (globals/objects/pointer tables) |
+| machine subset `0x7CABA..0x7CC82` + no-edge `0x7CC13..0x7CC7D` + type gate `0x110680` | **ported (M2 arms-and-wiring Task 14 / FU-142 Appendix K):** `fifa96_outfield_input_row` (input-row dispatch, the either-or pressed/released scan, the `[0x157AB0]` pre-gate, the no-edge arm and the forced-decision/chase tail) and `fifa96_outfield_chase_gate` (the 26-byte `0x110680` `&1` gate composed with `chase_action`); `test_outfield` fixtures. The handler bodies and rows 04/08 bodies stay OL-70 |
 
 ## 7. Tests (`tests/test_outfield.c`, suite 63 → 64)
 
@@ -538,6 +539,16 @@ tests/test_outfield.c src/fifa96_loader/fifa96_outfield.c` runs clean.
 * `disassemble_bytes` at `0x7D190` desyncs (§Method); the raw bytes
   (`read_memory 0x7D187`) decode the same type gate as the neighbouring
   handlers.
+* **§1.3 pressed/released scan (first-hand, M2 arms-and-wiring Task 14).**
+  The pseudo-code's fall-through from the pressed loop into the released
+  table is wrong: the pressed terminator (`0x7CBB0 JZ 0x7CC82`) and an
+  accepting handler (`0x7CBBD JNZ 0x7CC82`) both jump to the tail, and the
+  released table is reached only from `0x7CB8A` (`pressed & 0xFF0 == 0`).
+  The real machine therefore runs **either** the pressed **or** the released
+  scan. Also unquoted by §1.3: the `0x7CAC4..0x7CB08` pre-gate (`byte
+  [0x157AB0] != 0`, `rec != [0x1587AC]`, type 3, `released & 0x20`) may call
+  `0x7D1D4(rec)` before any code selection. Both are ported exactly by
+  `fifa96_outfield_input_row` (FU-142 Appendix K.3).
 
 ## 9. Open legs
 
@@ -565,6 +576,12 @@ tests/test_outfield.c src/fifa96_loader/fifa96_outfield.c` runs clean.
 9. **Type identities**: type 5 (carrier checks), type 3 press arm, and the
    `[rec+0x28]` byte values `0xC/0x59/0x5E` are quoted only as compared values
    (FU-67/FU-74 open legs carry over).
+10. **Machine subset closed (M2 arms-and-wiring Task 14, FU-142 Appendix K):**
+    the input-row dispatch, the no-edge arm, the forced-decision integration,
+    the chase gate and the flat `0x110680` type gate are now ported and tested
+    (`fifa96_outfield_input_row`, `fifa96_outfield_chase_gate`, `test_outfield`).
+    Still open here: the 14 handler bodies and their `0x7D9A4` installs, the
+    `0x7D1D4` selection switch (leg 3), and the rows 04/08 bodies (leg 9/OL-70).
 
 ## Provenance
 

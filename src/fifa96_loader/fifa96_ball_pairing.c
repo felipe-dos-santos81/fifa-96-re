@@ -211,69 +211,15 @@ int fifa96_ball_pair_stage_tail(fifa96_ball_pair_state *state,
  * 1608, ... matching the FU-88 table) and `0x14C1D4` (all-zero per-side range
  * words in the image). Ghidra read-only. */
 
-/* 0x114E04: the 257-entry sine table (same values as the FU-88 projection
- * table; first-hand read of the first 16 dwords). The native fold indexes it
- * directly (no interpolation). */
-static const int32_t kick_sin_table[257] = {
-    0, 402, 804, 1206, 1608, 2010, 2412, 2814,
-    3215, 3617, 4018, 4420, 4821, 5222, 5622, 6023,
-    6423, 6823, 7223, 7623, 8022, 8421, 8819, 9218,
-    9616, 10013, 10410, 10807, 11204, 11600, 11995, 12390,
-    12785, 13179, 13573, 13966, 14359, 14751, 15142, 15533,
-    15923, 16313, 16702, 17091, 17479, 17866, 18253, 18638,
-    19024, 19408, 19792, 20175, 20557, 20938, 21319, 21699,
-    22078, 22456, 22833, 23210, 23586, 23960, 24334, 24707,
-    25079, 25450, 25820, 26189, 26557, 26925, 27291, 27656,
-    28020, 28383, 28745, 29105, 29465, 29824, 30181, 30538,
-    30893, 31247, 31600, 31952, 32302, 32651, 32999, 33346,
-    33692, 34036, 34379, 34721, 35061, 35400, 35738, 36074,
-    36409, 36743, 37075, 37406, 37736, 38064, 38390, 38716,
-    39039, 39361, 39682, 40002, 40319, 40636, 40950, 41263,
-    41575, 41885, 42194, 42501, 42806, 43110, 43412, 43712,
-    44011, 44308, 44603, 44897, 45189, 45480, 45768, 46055,
-    46340, 46624, 46906, 47186, 47464, 47740, 48015, 48288,
-    48558, 48828, 49095, 49360, 49624, 49886, 50145, 50403,
-    50659, 50914, 51166, 51416, 51665, 51911, 52155, 52398,
-    52639, 52877, 53114, 53348, 53581, 53811, 54040, 54266,
-    54491, 54713, 54933, 55152, 55368, 55582, 55794, 56004,
-    56212, 56417, 56621, 56822, 57022, 57219, 57414, 57606,
-    57797, 57986, 58172, 58356, 58538, 58718, 58895, 59070,
-    59243, 59414, 59583, 59749, 59913, 60075, 60235, 60392,
-    60547, 60700, 60850, 60998, 61144, 61288, 61429, 61568,
-    61705, 61839, 61971, 62100, 62228, 62353, 62475, 62596,
-    62714, 62829, 62942, 63053, 63162, 63268, 63371, 63473,
-    63571, 63668, 63762, 63854, 63943, 64030, 64114, 64197,
-    64276, 64353, 64428, 64501, 64571, 64638, 64703, 64766,
-    64826, 64884, 64939, 64992, 65043, 65091, 65136, 65179,
-    65220, 65258, 65294, 65327, 65358, 65386, 65412, 65436,
-    65457, 65475, 65491, 65505, 65516, 65524, 65531, 65534,
-    65536,
-};
-
-/* The `0x7BD97..0x7BDB6` (and `0x7B80A..0x7B827`, `0x7B4EB..0x7B508`,
- * `0x7B83B..0x7B85C`, `0x7B51A..0x7B546`) byte-shift quadrant idiom over
- * 0x114E04 decoded to the exact equivalent: bit 8 of the angle negates the
- * table index (`idx = 0x100 - (angle & 0xFF)`, giving 0x100 when the low byte
- * is 0 -- the table's 257th entry) and bit 9 negates the value. The three
- * native copies (B9C4 x2, B194 x2, B57C x2) are identical. */
-static int32_t kick_sin(int32_t angle) {
-  uint32_t u = (uint32_t)angle;
-  int32_t idx = (int32_t)(u & 0xFFu);
-  int32_t bit8 = (int32_t)((u >> 8) & 1u);
-  int32_t bit9 = (int32_t)((u >> 9) & 1u);
-  int32_t v;
-  idx = (int32_t)(((uint32_t)idx ^ (0u - (uint32_t)bit8)) & 0xFFu);
-  idx += bit8;   /* 0x7BDA9 SUB EAX,ECX with ECX = -bit8 */
-  v = kick_sin_table[idx];
-  return bit9 ? -v : v;
-}
-
+/* `0x114E04` sine-fold consumers delegate to the moved-down primitive
+ * (M2 Task 14 / OL-41): `fifa96_entity_sine` now owns the table so the
+ * interception band shares one copy without a static-library cycle. */
 /* `FUN_000795A4` (`0x795A4..0x795C2`): `(int64)a * b + 0x8000 >> 16`, the low
  * word stored. Public so the FU-139 §11 row-06 pursuit machine (and any later
  * `0x114E04` consumer) shares this exact fold instead of duplicating the
  * table and the quadrant decode. */
 int16_t fifa96_ball_fold(int32_t speed, int32_t angle) {
-  int64_t v = ((int64_t)speed * (int64_t)kick_sin(angle) + 0x8000) >> 16;
+  int64_t v = ((int64_t)speed * (int64_t)fifa96_entity_sine(angle) + 0x8000) >> 16;
   return (int16_t)(uint16_t)(uint32_t)(int32_t)v;
 }
 

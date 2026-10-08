@@ -125,6 +125,84 @@ static void test_nearest_invalid_arguments(void) {
   assert(fifa96_entity_find_nearest(c, 1, 0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* M2 Task 14 / OL-41: the moved-down `0xCD474`/`0x114E04` primitives. Values
+ * are the native algorithm's (atan table flat 0x14072C; sine fold flat
+ * 0x114E04), cross-checked against the previous in-place implementations. */
+static void test_math_primitives(void) {
+  int32_t angle = 0x7FFF;
+  assert(fifa96_entity_angle(0x100, 0, &angle) == FIFA96_OK && angle == 0x100);
+  assert(fifa96_entity_angle(0, 0x100, &angle) == FIFA96_OK && angle == 0);
+  assert(fifa96_entity_angle(0x100, 0x100, &angle) == FIFA96_OK && angle == 0x80);
+  assert(fifa96_entity_angle(-0x100, 0, &angle) == FIFA96_OK && angle == -0x100);
+  assert(fifa96_entity_angle(0, -0x100, &angle) == FIFA96_OK && angle == 0x200);
+  assert(fifa96_entity_angle(0x200, 0x100, &angle) == FIFA96_OK && angle == 180);
+  assert(fifa96_entity_angle(0, 0, &angle) == FIFA96_OK && angle == 0x80);
+  assert(fifa96_entity_angle(0x100, 0, NULL) == -FIFA96_ERR_INVALID);
+  assert(fifa96_entity_sine(0) == 0);
+  assert(fifa96_entity_sine(0x40) == 25079);
+  assert(fifa96_entity_sine(0x80) == 46340);
+  assert(fifa96_entity_sine(0x100) == 65536);
+  assert(fifa96_entity_sine(0x180) == 46340);
+  assert(fifa96_entity_sine(0x200) == 0);
+  assert(fifa96_entity_sine(0x280) == -46340);
+  assert(fifa96_entity_sine(0x300) == -65536);
+  assert(fifa96_entity_sine(0x1FF) == 402);
+}
+
+/* M2 Task 14 / OL-41: `FUN_0008D824` (`0x8D824..0x8D8EB`). */
+static void test_intercept_bind(void) {
+  fifa96_entity_intercept_target t = {0x7, 0x7, 0x7};
+  assert(fifa96_entity_intercept_bind(0, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x240 && t.y == 0 && t.z == 0x468);
+  /* side 1 negates z (`0x8D87C NEG [EBX+8]`) */
+  assert(fifa96_entity_intercept_bind(0, 1, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x240 && t.z == -0x468);
+  /* |actor.x| < 0x180, actor.x > 0: x - 0x240 (`0x8D896`) */
+  assert(fifa96_entity_intercept_bind(0x100, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == -0x140);
+  /* |actor.x| < 0x180, actor.x <= 0: 0x240 - x (`0x8D8A3`) */
+  assert(fifa96_entity_intercept_bind(-0x100, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x340);
+  assert(fifa96_entity_intercept_bind(0, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x240);
+  /* |actor.x| >= 0x180: (x + 0x180) / 3 + 0xC0, IDIV truncation (`0x8D8CE`) */
+  assert(fifa96_entity_intercept_bind(0x200, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x1EA);
+  assert(fifa96_entity_intercept_bind(0x180, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x1C0);
+  assert(fifa96_entity_intercept_bind(-0x200, 0, 0, 0, &t) == FIFA96_OK);
+  assert(t.x == 0x96);
+  /* z from |nearest.z| (`0x8D836..0x8D86E`); nearest.x is not read by a live
+   * path (the 0x8D8AC arm tests |nearest.x|, which is never negative). */
+  assert(fifa96_entity_intercept_bind(0, 0, 0x1234, 0x400, &t) == FIFA96_OK);
+  assert(t.z == 0x668);
+  assert(fifa96_entity_intercept_bind(0, 0, -0x1234, -0x400, &t) == FIFA96_OK);
+  assert(t.z == 0x668);
+  assert(fifa96_entity_intercept_bind(0, 0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* M2 Task 14 / OL-41: `FUN_000795B4` (`0x795B4..0x795F0`) + `FUN_000CD514`
+ * (`0xCD514..0xCD563`). Expectations derive from the native algorithm
+ * (atan + 0x114E04 divide; verified against the native idiom transcription). */
+static void test_intercept_band(void) {
+  fifa96_entity_intercept_band_out b = {0x7, 0x7, 0x7};
+  assert(fifa96_entity_intercept_band(0, 0, 0x100, 0, &b) == FIFA96_OK);
+  assert(b.band == 0x100 && b.dx == 0x100 && b.dz == 0);
+  assert(fifa96_entity_intercept_band(0, 0, 0, 0x100, &b) == FIFA96_OK);
+  assert(b.band == 0 && b.dx == 0 && b.dz == 0x100);
+  assert(fifa96_entity_intercept_band(0, 0, 0x100, 0x100, &b) == FIFA96_OK);
+  assert(b.band == 0x16A && b.dx == 0x100 && b.dz == 0x100);
+  assert(fifa96_entity_intercept_band(0, 0, -0x100, 0, &b) == FIFA96_OK);
+  assert(b.band == 0x100 && b.dx == -0x100 && b.dz == 0);
+  assert(fifa96_entity_intercept_band(0, 0, 0x240, 0x468, &b) == FIFA96_OK);
+  assert(b.band == 0x286 && b.dx == 0x240 && b.dz == 0x468);
+  assert(fifa96_entity_intercept_band(0x10, 0x10, 0, 0, &b) == FIFA96_OK);
+  assert(b.dx == -0x10 && b.dz == -0x10);
+  assert(fifa96_entity_intercept_band(0, 0, 0x10, 0, &b) == FIFA96_OK);
+  assert(b.band == 0x10);
+  assert(fifa96_entity_intercept_band(0, 0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_distance_zero_and_axes();
   test_distance_equal_axes();
@@ -139,6 +217,9 @@ int main(void) {
   test_nearest_empty_count();
   test_nearest_target_wraps_to_word();
   test_nearest_invalid_arguments();
+  test_math_primitives();
+  test_intercept_bind();
+  test_intercept_band();
   puts("test_entity_update: ok");
   return 0;
 }

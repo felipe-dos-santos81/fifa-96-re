@@ -284,6 +284,207 @@ static void test_chase_action(void) {
   assert(fifa96_outfield_chase_action(&s, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* ===== M2 Task 14 / OL-38: the FUN_0007CA54 machine subset ================ */
+
+typedef struct row_log {
+  uint32_t handlers[8];
+  int count;
+  int accept;
+} row_log;
+
+static int row_record(uint32_t handler, void *context) {
+  row_log *log = (row_log *)context;
+  if (log->count < 8) log->handlers[log->count] = handler;
+  log->count++;
+  return log->accept;
+}
+
+static fifa96_outfield_input_state input_state(void) {
+  fifa96_outfield_input_state s;
+  memset(&s, 0, sizeof s);
+  s.has_slot = 1;
+  s.phase = 2;
+  s.type = 0;
+  s.forced.is_team_controlled = 0;
+  s.forced.is_team_second = 0;
+  s.forced.type_5 = 0;
+  s.forced.opponent_has_ball = 0;
+  s.forced.controlled_has_ball = 0;
+  s.chase.phase = 2;
+  s.chase.type_gate = 1;
+  s.chase.not_team_controlled = 1;
+  s.chase.not_team_second = 1;
+  s.chase.distance = 0x4F;
+  s.chase.camera = 0x2F;
+  s.chase.user_present = 1;
+  s.chase.sides_differ = 1;
+  s.chase.unbound = 1;
+  s.chase.timer = 0;
+  s.chase.third_zero = 1;
+  return s;
+}
+
+static void test_chase_gate_type_table(void) {
+  fifa96_outfield_chase_state s = input_state().chase;
+  uint8_t next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 0, 0, &next) == 1 && next == 8);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 3, 0, &next) == 1 && next == 8);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 4, 0, &next) == 1 && next == 8);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 6, 0, &next) == 1 && next == 8);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 0x19, 0, &next) == 1 && next == 8);
+  /* table zero bits: types 1/2, 7..15, 16..24, 26+ */
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 1, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 2, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 7, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 8, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 0x10, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 0x14, 0, &next) == 0 && next == 0xAA);
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 26, 0, &next) == 0 && next == 0xAA);
+  /* the wrapper's table lookup overrides the state bit */
+  s.type_gate = 0;
+  next = 0xAA;
+  assert(fifa96_outfield_chase_gate(&s, 3, 0, &next) == 1 && next == 8);
+  assert(fifa96_outfield_chase_gate(NULL, 3, 0, &next) == -FIFA96_ERR_INVALID);
+  assert(fifa96_outfield_chase_gate(&s, 3, 0, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_input_row_no_edge_arm(void) {
+  fifa96_outfield_input_state s = input_state();
+  fifa96_outfield_input_out out;
+  row_log log = {{0}, 0, 0};
+  s.pressed = 0;
+  s.released = 0;
+  s.slot_word10 = 0x10;
+  s.lane = 0x40 << 16;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge == 1 && out.no_edge_arm == 1 && out.scan_ran == 0);
+  s.slot_word10 = 0x0F;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge == 1 && out.no_edge_arm == 0);
+  s.slot_word10 = 0x10;
+  s.phase = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 0);
+  s.phase = 2;
+  /* lane <= 0x30 takes the side filter: same user side refuses */
+  s.lane = 0x20 << 16;
+  s.user_present = 1;
+  s.user_side = 0;
+  s.side = 0;
+  s.slot_word10 = 0xC0;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 0);
+  s.user_side = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 1);
+  s.user_present = 0;
+  s.slot_word10 = 0x80;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 1);
+  s.slot_word10 = 0x20;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 0);
+  s.slot_word10 = 0xC0;
+  s.lane = 0x90 << 16;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge_arm == 1);
+}
+
+static void test_input_row_scan(void) {
+  fifa96_outfield_input_state s = input_state();
+  fifa96_outfield_input_out out;
+  row_log log = {{0}, 0, 0};
+  s.type = 7;
+  s.pressed = 0x40;
+  s.released = 0x40;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.scan_ran == 1 && out.scan_code == 0);
+  assert(out.scan_stopped == 0);
+  /* only the pressed table runs (the released table must not) */
+  assert(log.count == 1 && log.handlers[0] == 0x7CF20);
+  log.count = 0;
+  log.accept = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.scan_stopped == 1 && log.count == 1);
+  /* pressed word zero (raw 0x0001) falls to the released table */
+  log.count = 0;
+  log.accept = 0;
+  s.pressed = 0x0001;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.scan_code == 0 && out.scan_ran == 1);
+  assert(log.count == 2 && log.handlers[0] == 0x7D0C4 && log.handlers[1] == 0x7CD60);
+  /* the pre-gate direct arm: [0x157AB0] set, type 3, released bit 0x20 */
+  s = input_state();
+  s.pressed = 0;
+  s.released = 0x20;
+  s.flag_157ab0 = 1;
+  s.type = 3;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.direct_arm == 1 && out.scan_ran == 0 && out.no_edge == 0);
+  s.is_1578ac = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.direct_arm == 0);
+  s.is_1578ac = 0;
+  s.type = 4;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.direct_arm == 0);
+  s.type = 3;
+  s.released = 0x40;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.direct_arm == 0);
+}
+
+static void test_input_row_tail(void) {
+  fifa96_outfield_input_state s = input_state();
+  fifa96_outfield_input_out out;
+  row_log log = {{0}, 0, 0};
+  s.has_slot = 0;
+  s.type = 0;
+  s.forced.is_team_controlled = 1;
+  s.forced.opponent_has_ball = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.no_edge == 0 && out.scan_ran == 0);
+  assert(out.forced == 1 && out.forced_code == 6);
+  assert(out.chase == 1);
+  s.type = 7;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.forced == 0 && out.chase == 0);
+  s.type = 0;
+  s.phase = 1;
+  assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+  assert(out.forced == 0 && out.chase == 0);
+  s.phase = 2;
+  assert(fifa96_outfield_input_row(NULL, row_record, &log, &out) == -FIFA96_ERR_INVALID);
+  assert(fifa96_outfield_input_row(&s, NULL, &log, &out) == -FIFA96_ERR_INVALID);
+  assert(fifa96_outfield_input_row(&s, row_record, &log, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_input_row_type_gate_matches_chase(void) {
+  for (uint8_t type = 0; type < 27; type++) {
+    fifa96_outfield_input_state s = input_state();
+    fifa96_outfield_input_out out;
+    row_log log = {{0}, 0, 0};
+    uint8_t next = 0xAA;
+    fifa96_outfield_chase_state c;
+    s.has_slot = 0;
+    s.type = type;
+    assert(fifa96_outfield_input_row(&s, row_record, &log, &out) == FIFA96_OK);
+    c = s.chase;
+    assert(fifa96_outfield_chase_gate(&c, type, 0, &next) == (out.chase != 0 ? 1 : 0));
+  }
+}
+
 int main(void) {
   test_table_accessors();
   test_rule_match();
@@ -291,6 +492,11 @@ int main(void) {
   test_dispatch_code();
   test_forced_action();
   test_chase_action();
+  test_chase_gate_type_table();
+  test_input_row_no_edge_arm();
+  test_input_row_scan();
+  test_input_row_tail();
+  test_input_row_type_gate_matches_chase();
   puts("test_outfield: all assertions passed");
   return 0;
 }
