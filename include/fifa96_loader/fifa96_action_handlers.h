@@ -552,6 +552,95 @@ fifa96_err_t fifa96_action_phase_line_timer(int32_t *timer89, uint16_t delta, ui
 fifa96_err_t fifa96_action_phase_restart_line(uint8_t axis, int32_t offset, int16_t lateral,
                                               fifa96_action_vec3 *out);
 
+/* FU-143: the derived phase drivers (docs/ghidra/FU143_phase_rows.md).
+ *
+ * The native phase byte is `[0x157A4A] >> 24` = the byte at `[0x157A4D]`
+ * (writers: `FUN_000740A0` setter and the `FUN_00073E28` reset). The 35-row
+ * handler table is flat `0x110794` (phases 0x00..0x22); the clock class byte
+ * is flat `0x1106AD`; the situation -> phase/act table is the inline CS table
+ * at `0x8A904` (13 entries, situation codes 0x00..0x0C) read by
+ * `FUN_0008A938`; the period-change chooser is `FUN_0008B9CC`. */
+
+#define FIFA96_ACTION_PHASE_ROWS 0x23u
+#define FIFA96_ACTION_PHASE_NONE 0xFFu
+
+enum fifa96_action_phase_family {
+  FIFA96_ACTION_PHASE_FAMILY_PLACEMENT = 0,
+  FIFA96_ACTION_PHASE_FAMILY_NONE = 1,
+  FIFA96_ACTION_PHASE_FAMILY_TIMELINE = 2
+};
+
+/* One row of the native table at flat `0x110794` (index = phase byte). The
+ * handler is the runtime address stored in `/FIFA96.EXE` (phases 0x00..0x15
+ * `0x6Dxxx` placement, 0x16 zero, 0x17..0x22 `0x8xxxx` timeline). The clock
+ * class is the flat `0x1106AD` byte (`0` stop, `1` always run, `2` run while
+ * the class-2 halt gate is clear). */
+typedef struct fifa96_action_phase_row_desc {
+  uint32_t handler;
+  uint8_t family;
+  uint8_t clock_class;
+  uint8_t reserved[2];
+} fifa96_action_phase_row_desc;
+
+/* NULL for phase >= 0x23 (the native index has no bounds check; the derived
+ * accessor hardens it, FU-83 §1.1). */
+const fifa96_action_phase_row_desc *fifa96_action_phase_row(uint8_t phase);
+
+/* `FUN_000888FC`: the act selector stores `id` and calls
+ * `table[0x1107EC + id*4]` = `phase_table[0x16 + id]` (the act id is a phase
+ * offset from 0x16). `id > 0x0C` -> -FIFA96_ERR_INVALID (the native indexes
+ * past the table; hardening divergence). */
+fifa96_err_t fifa96_action_phase_act(uint8_t act, uint8_t *phase);
+
+typedef struct fifa96_action_phase_situation_out {
+  uint8_t phase; /* phase byte the arm writes, or FIFA96_ACTION_PHASE_NONE */
+  uint8_t act;   /* `FUN_000888FC` act id invoked, or NONE */
+  uint8_t stage; /* act stage argument (situation 0x0A -> 1, else 0) */
+  uint8_t flags;
+} fifa96_action_phase_situation_out;
+
+/* Situation 6 (`0x8AD96`) writes phase 5 only when `[0x157AC2]` is not 2/3. */
+#define FIFA96_ACTION_PHASE_SITUATION_EXTRA_HOLD 0x01u
+/* Situations 6/8 depend on unported score/stat side effects (0x8AC28 arm,
+ * 0x897F4 reset loop, 0x1587D8.. table writes); the phase/act outcome below
+ * is derived, the side effects are not ported. */
+#define FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG 0x02u
+
+/* The derived `FUN_0008A938` table-2 (`0x8A904`) rows for the pending/
+ * situation codes 0x00..0x0C. `situation >= 0x0D` -> -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_action_phase_situation(uint8_t situation,
+                                           fifa96_action_phase_situation_out *out);
+
+typedef struct fifa96_action_phase_period_end_out {
+  uint8_t phase; /* 0x0C/0x13/0x14, or NONE when the native writes no phase */
+  uint8_t side;  /* side byte passed to `FUN_000740A0` */
+  uint8_t act;   /* `FUN_000888FC` act id (0x0B no extra, 0x0C extra) */
+  uint8_t reserved;
+} fifa96_action_phase_period_end_out;
+
+/* The derived `FUN_0008B9CC` (`0x8B9CC..0x8BAEF`) period-change chooser.
+ *
+ * `period` is `[0x157AC2]`; `extra_time` is `[0x157AC0]`; the score pair is
+ * `[0x157AC5]`/`[0x157AC7]`; `side_controlled` is `[0x157AAC]>>24`;
+ * `side_abe`/`side_abf` are `[0x157ABE]`/`[0x157ABF]`; `d8`/`d9` are
+ * `[0x1587D8]`/`[0x1587D9]` (indexed by the match phase, 0 only for phases
+ * 0x13/0x14).
+ *
+ * `probe[4]` are the unported `FUN_00012230`/`FUN_00012250` results, in the
+ * native call order: `[0]` = `0x12230(0)` (EDX=0 pick), `[1]` =
+ * `0x12230(1)` (EDX=1 pick), `[2]` = `0x12250(0)`, `[3]` = `0x12250(1)`.
+ * A non-zero probe upgrades the extra-time phase from 0x13 to 0x14.
+ *
+ * Native side paths not modelled: the `FUN_00036200(3)` camera call on the
+ * equal-score/period<4/no-probe arm, the post-call `FUN_000888FC` act body,
+ * and the `FUN_0004B02C` period-4 caller's `[0x157AC2]=4` write.
+ * `probe == NULL` -> -FIFA96_ERR_INVALID (hardening: the native reads an
+ * unported helper result). */
+fifa96_err_t fifa96_action_phase_period_end(
+    uint8_t period, uint8_t extra_time, uint16_t score_own, uint16_t score_other,
+    uint8_t side_controlled, uint8_t side_abe, uint8_t side_abf, uint8_t d8, uint8_t d9,
+    const uint8_t probe[4], fifa96_action_phase_period_end_out *out);
+
 #define FIFA96_ACTION_SEQUENCE_SCATTER_POINTS 5u
 
 typedef struct fifa96_action_sequence_lane_out {

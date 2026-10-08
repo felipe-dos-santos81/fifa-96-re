@@ -1043,6 +1043,147 @@ fifa96_err_t fifa96_action_phase_restart_line(uint8_t axis, int32_t offset, int1
   return FIFA96_OK;
 }
 
+/* FU-143: the 35-row phase table (flat 0x110794, first-hand read on
+ * /FIFA96.EXE), the clock-class byte (flat 0x1106AD), the FUN_000888FC act
+ * selector (table base 0x1107EC = phase_table[0x16]), the FUN_0008A938
+ * situation table (inline CS table 0x8A904) and the FUN_0008B9CC period-end
+ * chooser. See docs/ghidra/FU143_phase_rows.md. */
+static const fifa96_action_phase_row_desc fifa96_action_phase_rows[FIFA96_ACTION_PHASE_ROWS] = {
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06E1D0u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DCC8u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 1, {0, 0}},
+    {0x06DE44u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DE44u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06E05Cu, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DD9Cu, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DE44u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DD6Cu, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DD6Cu, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DF4Cu, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 2, {0, 0}},
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DE34u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06E004u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06E1C8u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06E1D0u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06E244u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06E244u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x06DCC8u, FIFA96_ACTION_PHASE_FAMILY_PLACEMENT, 0, {0, 0}},
+    {0x000000u, FIFA96_ACTION_PHASE_FAMILY_NONE, 0, {0, 0}},
+    {0x088DC8u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 1, {0, 0}},
+    {0x08922Cu, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x089FA4u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x089620u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 1, {0, 0}},
+    {0x0890ECu, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x089110u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 1, {0, 0}},
+    {0x089868u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 1, {0, 0}},
+    {0x08A798u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 1, {0, 0}},
+    {0x088F4Cu, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x08B688u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x08B874u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+    {0x08B900u, FIFA96_ACTION_PHASE_FAMILY_TIMELINE, 0, {0, 0}},
+};
+
+const fifa96_action_phase_row_desc *fifa96_action_phase_row(uint8_t phase) {
+  if ((uint32_t)phase >= FIFA96_ACTION_PHASE_ROWS) return NULL;
+  return &fifa96_action_phase_rows[phase];
+}
+
+fifa96_err_t fifa96_action_phase_act(uint8_t act, uint8_t *phase) {
+  if (!phase) return -FIFA96_ERR_INVALID;
+  if (act > 0x0Cu) return -FIFA96_ERR_INVALID;
+  *phase = (uint8_t)(0x16u + act);
+  return FIFA96_OK;
+}
+
+typedef struct fifa96_action_phase_situation_row {
+  uint8_t phase;
+  uint8_t act;
+  uint8_t stage;
+  uint8_t flags;
+} fifa96_action_phase_situation_row;
+
+static const fifa96_action_phase_situation_row fifa96_action_phase_situations[0x0D] = {
+    {0x11u, 0x0Au, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 1u, 0u, 0u},
+    {3u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {4u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {8u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {9u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {5u, FIFA96_ACTION_PHASE_NONE, 0u,
+     FIFA96_ACTION_PHASE_SITUATION_EXTRA_HOLD | FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG},
+    {0x0Du, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 7u, 0u, FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG},
+    {FIFA96_ACTION_PHASE_NONE, 2u, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 2u, 1u, 0u},
+    {2u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 9u, 0u, 0u},
+};
+
+fifa96_err_t fifa96_action_phase_situation(uint8_t situation,
+                                           fifa96_action_phase_situation_out *out) {
+  const fifa96_action_phase_situation_row *row;
+  if (!out) return -FIFA96_ERR_INVALID;
+  if (situation >= 0x0Du) return -FIFA96_ERR_INVALID;
+  row = &fifa96_action_phase_situations[situation];
+  out->phase = row->phase;
+  out->act = row->act;
+  out->stage = row->stage;
+  out->flags = row->flags;
+  return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_action_phase_period_end(
+    uint8_t period, uint8_t extra_time, uint16_t score_own, uint16_t score_other,
+    uint8_t side_controlled, uint8_t side_abe, uint8_t side_abf, uint8_t d8, uint8_t d9,
+    const uint8_t probe[4], fifa96_action_phase_period_end_out *out) {
+  uint8_t edx;
+  uint8_t phase = 0x13u;
+  if (!probe || !out) return -FIFA96_ERR_INVALID;
+  if (extra_time == 0u) {
+    out->act = 0x0Bu;
+    out->side = 0u;
+    out->phase = FIFA96_ACTION_PHASE_NONE;
+    if (period < 4u) {
+      out->phase = 0x0Cu;
+      out->side = side_controlled;
+    }
+    return FIFA96_OK;
+  }
+  if (period < 4u) {
+    if (score_own == score_other) {
+      edx = 3u;
+    } else {
+      edx = score_own <= score_other ? 1u : 0u;
+    }
+  } else {
+    edx = (int8_t)d8 <= (int8_t)d9 ? 1u : 0u;
+  }
+  if (edx == 3u) {
+    if (probe[2] != 0u) {
+      phase = 0x14u;
+      edx = 0u;
+    } else if (probe[3] != 0u) {
+      phase = 0x14u;
+      edx = 1u;
+    }
+  } else if (probe[edx] != 0u) {
+    phase = 0x14u;
+  }
+  out->phase = phase;
+  out->act = 0x0Cu;
+  if (edx == 0u) {
+    out->side = side_abe;
+  } else if (edx == 1u) {
+    out->side = side_abf;
+  } else {
+    out->side = side_controlled;
+  }
+  return FIFA96_OK;
+}
+
 static int32_t fifa96_action_sequence_clamp_x(int32_t value) {
   if (value > 0x720) return 0x720;
   if (value < -0x720) return -0x720;
