@@ -212,7 +212,12 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
     r->controlled = 1;                           /* 0x7DC18 [0x157A83] = rec */
     r->target_x = r->target_x < 0 ? -0x30 : 0x30; /* 0x7DC06..0x7DC1E */
     r->target_z = 0;                             /* 0x7DC23 */
-    r->helper_request = 1;                       /* 0x7DC2A CALL 0x7876C */
+    /* 0x7DC2A CALL 0x7876C. The native helper no-ops while the requester
+     * already holds the slot (the `requester->has_slot != 0` early return in
+     * `fifa96_match_entities_merge_slot`); the engine defers the request to
+     * the frame drain, which runs after this dispatch's 0x7DF61 stage-2 merge
+     * (`0x7DEFA`), so the native call-site precondition is evaluated here. */
+    r->helper_request = r->has_slot == 0 ? 1u : 0u;
   } else {                                       /* 0x7DC31..0x7DC39 */
     r->target_x = r->pos_x;
     r->target_y = r->pos_y;
@@ -312,6 +317,26 @@ static int fifa96_match_action_1E(struct fifa96_match_run *mr) {
     mr->record.place_z = place.z;
     mr->record.has_ball = 1;
     mr->record.controlled = 1;
+  }
+  /* FU-147 S1: the row-1E stage-3 span tail (first-hand this slice,
+   * `0x75B29..0x75B67`): at the stage-3 span with `+0x9B == 0` the native
+   * resets the record (`0x75B36 CALL 0x7DAB4`), calls situation 0xB
+   * (`0x75B58`, phase -> 2) and installs code 5 (`0x75B67`, the carrier
+   * claim; the engine defers the install to `record.install`). With
+   * `+0x9B != 0` the native jumps to the 0x760DF arm (FU-147 leg 2) and this
+   * derived subset does nothing. The stage-3 entry gate from 0x75795 (leg 1)
+   * and the camera-focus writes 0x75A4E..0x75B10 (leg 13) stay legs. */
+  if (mr->record.stage92 == 3u && mr->record.has_ball == 0) {
+    int32_t id = mr->record.entity_id;
+    if (id < 0 ||
+        id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      return -FIFA96_ERR_INVALID;
+    match_row_reset(mr,
+                    &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+                         .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS]);
+    rc = fifa96_match_run_situation(mr, 0x0Bu);
+    if (rc != 0) return rc;
+    mr->record.install = 5;
   }
   return FIFA96_OK;
 }
@@ -1206,9 +1231,9 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.pos_y = r->pos_y;
   s.pos_z = r->pos_z;
   s.lane = e->lane_x;               /* native word +0x6B (pool `lane_x`) */
-  s.bound = 0;                      /* native word +0x77 (producer unported) */
+  s.bound = e->bound;               /* FU-147 S1: native word +0x77 */
   s.word6d = e->lane_z;             /* native word +0x6D */
-  s.word6f = 0;                     /* native word +0x6F unmodeled (OL-72) */
+  s.word6f = e->cam_dz6f;           /* FU-147 S1: native word +0x6F */
   s.vel_int_x = (int16_t)((uint32_t)r->vel_x >> 16);  /* word +0x73 */
   s.vel_int_z = (int16_t)((uint32_t)r->vel_z >> 16);  /* word +0x75 */
   s.face_word7d = 0;                /* word +0x7D unmodeled (OL-72) */
@@ -1228,7 +1253,12 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.opp_7c7_index = FIFA96_OUTFIELD_ROW04_NONE;   /* [opp+0x7C7] unported (OL-72) */
   s.is_carrier = id == mr->entities.ball.carrier ? 1u : 0u;   /* [0x158777] stand-in */
   s.is_ball_track = id == controlled ? 1u : 0u;               /* [0x1577CA] stand-in */
-  s.is_team_7c7 = 0;                /* [team+0x7C7] unported (OL-72) */
+  /* FU-147 S1: the BF20 lane block maintains `[team+0x7C7]`; the pool stores
+   * it as the team-relative index. */
+  s.is_team_7c7 = (mr->entities.team[team].camera_nearest >= 0 &&
+                   (int32_t)e->index == mr->entities.team[team].camera_nearest)
+                      ? 1u
+                      : 0u;
   s.is_team_7cb = 0;                /* [team+0x7CB] unported (OL-72) */
   s.user_present = controlled >= 0 ? 1u : 0u;
   s.user_is_self = id == controlled ? 1u : 0u;

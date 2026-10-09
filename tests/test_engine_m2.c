@@ -428,9 +428,9 @@
 /* The rows the mechanics step stages (m 41): none may dispatch from the
  * scripted KICK press alone (v2 natural-path assertion). */
 #define M2_STAGED_ROWS_MASK                                                  \
-  ((1ull << 0x04) | (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x08) |       \
-   (1ull << 0x0F) | (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) |       \
-   (1ull << 0x23))
+  ((1ull << 0x00) | (1ull << 0x04) | (1ull << 0x06) | (1ull << 0x07) |       \
+   (1ull << 0x08) | (1ull << 0x0F) | (1ull << 0x18) | (1ull << 0x1E) |       \
+   (1ull << 0x21) | (1ull << 0x23))
 
 /* The scripted key tape: intro skip (with the ISO), panel DECLINE/CONFIRM
  * navigation, then the match input. M2 interactive Task 1 (G1) holds RIGHT
@@ -599,11 +599,16 @@ static const fifa96_platform_key M2_KEYS[] = {
 };
 #define M2_KEYS_LEN (sizeof M2_KEYS / sizeof M2_KEYS[0])
 
-/* Rows staged into team-0 records 1..9 at the mechanics step: the complete
+/* Rows staged into team-0 records 1..10 at the mechanics step: the complete
  * M2 wired set after G1 (04/08/06/07/0F/18/21/23/1E) minus the arm-installed
- * 26/28/2A that arrive organically in the forced kickoff phases. */
+ * 26/28/2A that arrive organically in the forced kickoff phases, plus row 00.
+ * FU-147 S1: with the `+0x8D` record-ordinal seed the native phase-2 reset
+ * (`FUN_0007DAB4` 0x7DAE6 -> `FUN_0007C990`) installs a decision code on
+ * active records, so the reset path no longer installs code 0 (the pre-S1
+ * unseeded-active artifact); the tape stages code 0 explicitly so the wired
+ * row 00 still dispatches on the accepted replay. */
 static const uint8_t M2_STAGE_ROWS[] = {0x04, 0x06, 0x07, 0x08, 0x0F,
-                                        0x18, 0x21, 0x23, 0x1E};
+                                        0x18, 0x21, 0x23, 0x1E, 0x00};
 
 struct m2_result {
   int steps;                 /* total engine steps */

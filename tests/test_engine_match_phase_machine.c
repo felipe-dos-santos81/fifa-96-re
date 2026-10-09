@@ -320,10 +320,11 @@ static void test_step_side_hi_bit(void) {
  * With fresh zero targets and the camera at (0,0,0), the derived nearest pick
  * (the native FUN_00079CCC substitution: the formation-seeded target triples)
  * skips index 0 and strict-< ties keep the first candidate, so the controlled
- * team takes record 1 (action 1) and record 2 (action 2); every other record
- * holds the 3 -> 0x19 inactive coercion of the multi-install; team+0x7B2 is
- * the first pick for both teams; the slot merge is a no-op (the pool's
- * `slot_pool` is unmodeled 0). NULL -> -FIFA96_ERR_INVALID. */
+ * team takes record 1 (action 1) and record 2 (action 2); record 0 holds the
+ * multi-install's index-0 `3 -> 0x19` pre-coercion (FU-147 S1: the `+0x8D`
+ * seed makes every other record read active, so their code 3 survives the
+ * installer); team+0x7B2 is the first pick for both teams; the slot merge is
+ * a no-op (the pool's `slot_pool` is unmodeled 0). NULL -> -FIFA96_ERR_INVALID. */
 static void test_kickoff_arm_installs_rows(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -331,9 +332,9 @@ static void test_kickoff_arm_installs_rows(void) {
   assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
   assert(mr.entities.phase == 1u);            /* the native [0x157A4D] context */
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-    uint8_t want0 = (i == 1u) ? 1u : (i == 2u) ? 2u : 0x19u;
+    uint8_t want0 = (i == 1u) ? 1u : (i == 2u) ? 2u : (i == 0u) ? 0x19u : 3u;
     assert(mr.entities.team[TEAM0].records[i].code == want0);
-    assert(mr.entities.team[TEAM1].records[i].code == 0x19u);
+    assert(mr.entities.team[TEAM1].records[i].code == (i == 0u ? 0x19u : 3u));
   }
   assert(mr.entities.team[TEAM0].target == 1);   /* 11*0 + record 1 */
   assert(mr.entities.team[TEAM1].target == 12);  /* 11*1 + record 1 */
@@ -344,7 +345,7 @@ static void test_kickoff_arm_installs_rows(void) {
   fifa96_match_run_init(&mr);
   mr.phase_machine.side_controlled = TEAM1;
   assert(fifa96_match_phase_machine_kickoff(&mr) == FIFA96_OK);
-  assert(mr.entities.team[TEAM0].records[1].code == 0x19u);
+  assert(mr.entities.team[TEAM0].records[1].code == 3u);
   assert(mr.entities.team[TEAM1].records[1].code == 1u);
   assert(mr.entities.team[TEAM1].records[2].code == 2u);
 

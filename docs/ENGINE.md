@@ -50,9 +50,9 @@ row-01 kickoff release gate, so the live clock starts ticking (`00:03` in
 `docs/screens/task-4-v5-match-clock.png`) — the natural phase-1 → 2
 transition visible through the HUD. The scene sprites stay in the placement
 pose (movement is not observable interactively yet: the pad presses reach
-`input_state[0]` but the natural pad consumer is the unported row-04
-producer chain, and the slot-bound record resets to the inactive 0x19 code
-after the kickoff — the pad → target → velocity → position seam is
+`input_state[0]` but the natural pad consumer is the row-04 producer chain,
+whose `+0x6B` lane / `+0x8D` active-seed producers landed in M2 full-gameplay
+S1 after this smoke — the pad → target → velocity → position seam is
 fixture-proven and mover-driven on the tape, see below).
 Kick →
 score and the live goal invokers remain blocked interactively on the
@@ -180,8 +180,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   observed `in=04`). The slot-bound record carries the native 0x19 code after
   the kickoff transition (the `0x7DA26` inactive-record mapping; row 19 is
   UNSUP), so no wired row consumes the pad for it; the natural pad consumer
-  (row 04's slot-dir arm) stays carried on the +0x6B lane-word / +0x8D
-  active-seed producers (M2 interactive T1 legs). The reachable pad → target →
+  (row 04's slot-dir arm) was carried on the +0x6B lane-word / +0x8D
+  active-seed producers, which **landed in M2 full-gameplay S1** (FU-147; the
+  smoke shots above predate S1 and are not re-run here). The reachable pad →
+  target →
   velocity → position seam is exercised headlessly
   (`test_engine_match_frame::test_pad_drives_controlled_locomotion`) and is
   what drives the tape's mover-integrated motion.
@@ -267,7 +269,20 @@ the build also produces the windowed `fifa96` target (`make game`).
   differing line is frame 6 (golden `eece28cb8ebe5731`, actual
   `9c940e7b1ac18675`) and 160 lines 6..165 differ (6..145 carry the canvas
   change, 146..165 the chained present hash); every `state=` suffix is again
-  unchanged. The tape's scene-pixel evidence is counted above the derived HUD
+  unchanged. The **full-gameplay S1** transcript changed again and the golden
+  was re-pinned for the **possession/locomotion producers** (`FU-147`, phase-6
+  wave-2 S1): the `+0x8D` active seed (`FUN_0008C2E0 0x8C329`) changes the
+  kickoff `0x79C13` selector row for records other than 0 (0x26 -> 0), the
+  shared mover now runs for **every** dispatched record (`0x8DB2E..0x8DB5F`)
+  with the BF20 lane/bound track, and the row-1E `+0x9B` write-back plus the
+  stage-3 possession flip are live; the tape also stages code 0 explicitly
+  because the seeded native reset installs a decision code on active records
+  (`FUN_0007DAB4 0x7DAE6 -> 0x7C990`; see the S1 gap entry). The first
+  differing line is frame 9 (the first granted render staging; frames 1..8 —
+  boot, intro, front-end, palette- and HUD-only match frames — stay
+  byte-identical), 157 lines 9..165 differ, and every `state=` suffix is again
+  unchanged; the natural probe still lands live phase 2 at step 215. The
+  tape's scene-pixel evidence is counted above the derived HUD
   band (`bar_y = 240 - 41 - 2 = 197`; count `y < 190`), so frames 6..8 still
   assert zero SCENE pixels, and frame 6 asserts the staged bar's first-hand
   frame-13 pixel (0,0) = 0x45 at (2,197). The tape asserts the RGB directly: at
@@ -333,18 +348,44 @@ the build also produces the windowed `fifa96` target (`make game`).
   (goal invokers) **carried-with-legs — verified negative**, G4 accepted
   (tape v4 + natural probe + the G4 smoke); every forcing in the tape is
   listed with its leg in the `test_engine_m2.c` v4 provenance.
+- **M2 full-gameplay S1 (possession/locomotion producers, FU-147; 2026-10-09).**
+  Landed from the frozen FU-147 slice: `fifa96_action_locomotion_track`
+  (the BF20 lane block `0x7C776..0x7C7AF`: camera deltas +0x6D/+0x6F and
+  `lane = fifa96_entity_distance` = the `0x8DC68` call, first-hand), the pool
+  fields `bound` (+0x77) / `cam_dz6f` (+0x6F) / team `camera_nearest` (+0x7C7,
+  team-relative index, signed-word replacement at `0x7C7C4`), the `+0x8D`
+  active seed (`fifa96_match_entities_init` writes the record ordinal,
+  `FUN_0008C2E0 0x8C329`), the per-record driver mover/track
+  (`match_run_dispatch_entity` runs the shared mover for every dispatched
+  record after its handler, pool walk keeps the `+0x9A` skip), row-04 staging
+  of bound/word6f/`is_team_7c7`, the row-1E `+0x9B`/`[0x157A83]` write-back,
+  and the row-1E stage-3 possession flip (reset -> `fifa96_match_run_situation`
+  0xB -> code-5 install request; the shared table-2 entry, no `_0b`). The
+  natural phase-2 pad path is now producer-complete (row 04's slot-dir arm
+  gates can run); the reachable engine-level row-05 carrier claim (`0x7F1FF`)
+  still waits on OL-63 (row 05 unwired) — the S1 subset is the install ->
+  carrier-bit (`0x7DA42`) -> next-dispatch hand-off, fixtured. The tape is
+  re-pinned (157 hash-only lines 9..165, no `state=` moves; M1 unmoved).
+  Carried legs (FU-147 §8/§9): the row-1E stage-flow entry gates (legs 1-3),
+  the install `ECX`/invoke flag (leg 5), the reset-lane path (leg 6), the BF20
+  visibility arm (leg 7), `[0x157AB2]` (leg 8), the driver pre-pass
+  `0x8DA43..0x8DA90`/`FUN_0008D824` (leg 9), the `0x795B4` helper's `0xCD514`
+  metric (leg 10; the BF20 block uses `0x8DC68`, an FU-147 errata), the
+  E244 formation context (leg 12) and **leg 13 live**: the track's camera
+  focus is the engine render-camera stand-in for `0x15774C/0x157754`, so lane
+  values are stand-in-derived; the pool `lane` dword (+0x69) also keeps the
+  FU-142b dz-word model while the track writes `lane_x` (+0x6B) — row 04
+  reads the word, rows 01/26/28/2A read the dword (`>>16`).
 - **M2 interactive T1 (pad-driven locomotion / G1) legs.** The derived setup
   bind models the engine's single human slot: the native four `0x4C1E0` mode
   rows are unported (derived default mode 0 = the controlled side), the
   `FUN_0008DB6C` sort/tie order of the free-record pick is substituted by the
   shared `fifa96_entity_find_nearest` (`FUN_000A1860` order is the leg; the
-  no-candidate fallback `0x8DC1B` is bind leg 7), and
-  the FU-77 mover `FUN_0007BF20` is wired for the slot-bound (controlled)
-  record only — the native calls it for every record after its handler, so the
-  AI-side integration is a numbered leg. Row 04's slot-dir arm for the
-  controlled actor needs the unported `+0x6B` lane-word producer and the
-  `+0x8D` active seed, so the natural phase-2 pad path stays a leg; the
-  reachable pad consumer is row 00's slot-dir arm (wired) plus row 01's stage-1
+  no-candidate fallback `0x8DC1B` is bind leg 7). The AI-side mover
+  integration and the row-04 `+0x6B` lane / `+0x8D` active producers **landed
+  in S1** (see the FU-147 entry above), so the natural phase-2 pad path is no
+  longer producer-blocked; the reachable pad consumer is row 00's slot-dir arm
+  (wired) plus row 01's stage-1
   `word[slot+6] & 0x70` release gate (now wired to the live FU-70 release
   word) and the stage-2 conditional `FUN_0007876C` merge (live now that the
   bind increments `+0x828`; consumed by the frame drain). The mover's `+0x6F`
@@ -405,12 +446,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   carried on OL-T2-2/OL-T2-3; the HUD landed with `OL-T11-71`…`OL-T11-75`
   remaining — glyph ramp, team names, extra-time, gate writers, bar scaler)
   and G3 **accepted** by T4 (tape v5 green with the byte-identical golden and
-  the T4 smoke table above). T1's remaining legs: the AI-side mover
-  integration (the native calls `FUN_0007BF20` for every record), the four
+  the T4 smoke table above). T1's remaining legs: the four
   `0x4C1E0` mode rows, the `FUN_0008DB6C` sort/tie substitution, bind leg 7
-  (`0x8DC1B`), the row-04 `+0x6B` lane-word / `+0x8D` active-seed producers
-  and the mover's staged-zero `+0x6F`/`+0x43`/`0x57A73` inputs (FU-77 errata +
-  `test_engine_m2.c` v4.1 provenance). Carried (T4 smoke): **OL-T4-1**, the
+  (`0x8DC1B`) and the mover's staged-zero `+0x6F`/`+0x43`/`0x57A73` inputs
+  (FU-77 errata + `test_engine_m2.c` v4.1 provenance); the AI-side mover
+  integration and the row-04 `+0x6B` lane-word / `+0x8D` active-seed producers
+  **landed in M2 full-gameplay S1** (FU-147). Carried (T4 smoke): **OL-T4-1**, the
   SDL hold policy — the backend drops key auto-repeat
   (`src/fifa96_engine/platform_sdl3.c:194`), so a held key arrives as press
   pulses and live on-screen movement needs a repeat/hold policy or the gamepad

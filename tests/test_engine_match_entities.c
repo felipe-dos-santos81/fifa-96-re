@@ -41,8 +41,9 @@ static struct fifa96_match_entities_frame zero_frame(void) {
 /* init: two team blocks with sides 0/1, every selection pointer unset, the
  * native reset seed `[rec+0x92]=0xFF` (FUN_0007DAB4 0x7DABA), records stamped
  * with their owning team/index, the reset-installed action code 0
- * (FUN_0007DAB4 0x7DAFB -> FUN_0007D9A4 code 0), and the ball/actor state
- * unset. */
+ * (FUN_0007DAB4 0x7DAFB -> FUN_0007D9A4 code 0), the FU-147 S1 `+0x8D` active
+ * seed (`FUN_0008C2E0` `0x8C329`: the byte is the record ordinal) and the
+ * ball/actor state unset. */
 static void test_init_resets_pool(void) {
   struct fifa96_match_entities pool;
   memset(&pool, 0xAA, sizeof pool);
@@ -51,6 +52,8 @@ static void test_init_resets_pool(void) {
   assert(pool.team[TEAM0].target == NONE && pool.team[TEAM1].target == NONE);
   assert(pool.team[TEAM0].second == NONE && pool.team[TEAM0].intercept == NONE);
   assert(pool.team[TEAM0].chosen == NONE);
+  assert(pool.team[TEAM0].camera_nearest == NONE);
+  assert(pool.team[TEAM1].camera_nearest == NONE);
   assert(pool.team[TEAM0].update_count == 0);
   assert(pool.controlled == NONE);
   assert(pool.slot_merge == NONE);
@@ -63,10 +66,11 @@ static void test_init_resets_pool(void) {
       assert(e->code == 0);
       assert(e->stage92 == 0xFF);
       assert(e->timer89 == 0 && e->timer81 == 0 && e->timer93 == 0);
-      assert(e->active == 0 && e->ran == 0 && e->carrier == 0);
+      assert(e->active == i && e->ran == 0 && e->carrier == 0);
       assert(e->skip_98 == 0 && e->skip_9a == 0 && e->has_slot == 0);
       assert(e->anim_id == 0 && e->frame == 0);
       assert(e->pos_x == 0 && e->pos_z == 0 && e->target_x == 0);
+      assert(e->lane_x == 0 && e->lane_z == 0 && e->bound == 0 && e->cam_dz6f == 0);
       assert(e->install == 0 && e->helper_request == 0 && e->controlled == 0);
       assert(e->place_valid == 0);
     }
@@ -794,10 +798,13 @@ static void test_kickoff_place_commits_records_and_ball(void) {
   /* records with zero targets are the native phase-0 identity placement */
   assert(pool.team[TEAM0].records[0].pos_x == 0);
   assert(pool.team[TEAM1].records[10].pos_z == 0);
-  /* 0x79C13 selector: every record is inactive here, so the tail takes row
-   * id 0x26 and resets +0x3D to 0 (FU-84 §1/§2). */
-  assert(pool.team[TEAM0].records[3].anim_id == 0x26);
-  assert(pool.team[TEAM1].records[1].anim_id == 0x26);
+  /* 0x79C13 selector with the FU-147 S1 `+0x8D` active seed: an inactive
+   * record (active == 0, i.e. record 0) takes row id 0x26; every other record
+   * (active == index) takes id 0, which the keep rule resolves to the fresh 0
+   * row byte, and +0x3D resets to 0 (FU-84 §1/§2). */
+  assert(pool.team[TEAM0].records[0].anim_id == 0x26);
+  assert(pool.team[TEAM0].records[3].anim_id == 0);
+  assert(pool.team[TEAM1].records[1].anim_id == 0);
   assert(pool.team[TEAM1].records[1].frame == 0);
   assert(fifa96_match_entities_kickoff_place(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }

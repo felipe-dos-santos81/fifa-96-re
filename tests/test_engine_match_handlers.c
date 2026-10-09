@@ -577,6 +577,103 @@ static void test_dead_2b_evidence(void) {
   drop_fixture(&f);
 }
 
+/* FU-147 S1: the row-04 staging takes the lane fields from the pool
+ * (`s.bound = e->bound` native +0x77, `s.word6f = e->cam_dz6f` native +0x6F,
+ * `s.is_team_7c7` from the team camera-nearest tracker). The bound gate
+ * (`0x7EDCE` `lane > bound` -> return before half_line) and the half_line
+ * angle `fifa96_entity_angle(word6d, word6f)` (`0x7EE4B`) make the staging
+ * observable: half_line clears `team+0x7B6` when the record is the team
+ * second, so the pool `second` goes NONE only when bound admits and the
+ * word6d/word6f angle stays <= 0xAB. */
+static void test_action_04_stages_lane_fields(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.anim_id = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].second = 0;          /* the record is the team second */
+  f.mr.entities.team[0].records[0].lane_x = 0x20;   /* native word +0x6B */
+  f.mr.entities.team[0].records[0].lane_z = 0x100;  /* native word +0x6D */
+  f.mr.entities.team[0].records[0].cam_dz6f = 0x100;/* native word +0x6F */
+  f.mr.entities.ball.y = 0;
+
+  /* bound 0x30 admits the 0x20 lane; angle (0x100, 0x100) = 0x80 <= 0xAB ->
+   * half_line clears the team second. */
+  f.mr.entities.team[0].records[0].bound = 0x30;    /* native word +0x77 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.entities.team[0].second == FIFA96_MATCH_ENTITY_NONE);
+
+  /* bound 0x10 rejects the lane at 0x7EDCE: the second survives. (Case A set
+   * the team target to self through the half_line write, so clear it back to
+   * keep the early 0x7E939 arm out of the way.) */
+  f.mr.entities.team[0].second = 0;
+  f.mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].bound = 0x10;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.entities.team[0].second == 0);
+
+  /* bound admits but cam_dz6f 0 gives angle 0x100 > 0xAB: the second
+   * survives. */
+  f.mr.entities.team[0].second = 0;
+  f.mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].records[0].bound = 0x30;
+  f.mr.entities.team[0].records[0].cam_dz6f = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(f.mr.entities.team[0].second == 0);
+  drop_fixture(&f);
+}
+
+/* FU-147 S1: the row-1E stage-3 span tail (0x75A40..0x75B6F, first-hand
+ * this slice): at the stage-3 span with `+0x9B == 0` the native resets the
+ * record (`0x7DAB4`), calls situation 0xB (`0x8A938`, phase -> 2) and installs
+ * code 5 (`0x7D9A4`, the carrier claim; the install is the engine's deferred
+ * `record.install` request). With `+0x9B != 0` the native takes the 0x760DF
+ * arm (FU-147 leg 2) and this derived subset does nothing. The stage-3 entry
+ * gate from 0x75795 and the camera-focus writes stay FU-147 legs 1/13. */
+static void test_action_1E_stage3_possession_flip(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;      /* team 0 record 1 */
+  f.mr.record.stage92 = 3;        /* the stage-3 span dispatch */
+  f.mr.record.has_ball = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.state.phase = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);              /* situation 0xB */
+  assert(f.mr.phase_machine.state == 2u);
+  assert(f.mr.record.install == 5);            /* the code-5 install request */
+  /* the 0x7DAB4 reset writes +0x92 = 0xFF; its code-0 re-install is
+   * same-code rejected on the fresh record, so the byte stays 0xFF. */
+  assert(f.mr.entities.team[0].records[1].stage92 == 0xFF);
+  assert(f.mr.entities.team[0].records[1].code == 0);
+
+  /* already holding the ball: the arm must not fire (leg 2 arm). */
+  f.mr.state.phase = 1;
+  f.mr.phase_machine.state = 1;
+  f.mr.record.install = 0;
+  f.mr.record.has_ball = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.state.phase == 1u);
+  assert(f.mr.record.install == 0);
+
+  /* stage 1 (the claim span): no situation, no code-5 install. */
+  f.mr.record.stage92 = 1;
+  f.mr.record.has_ball = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.state.phase == 1u);
+  assert(f.mr.record.install == 0);
+  drop_fixture(&f);
+}
+
 /* FU-139 §8 (M2 arms-and-wiring Task 10): row 05's bounded parts are ported
  * (`fifa96_action_carrier_arm`, native `0x7F194..0x7F665` stages 0-3, and the
  * staging tail `fifa96_ball_pair_stage_tail`, native `0x7A8D1..0x7AA2F`) but
@@ -1172,8 +1269,10 @@ static void test_action_01_runs_kickoff_body(void) {
 
   /* gate: only phase 1 runs; a mismatched phase jumps to 0x7DFB8, the
    * unconditional FUN_0007DAB4 reset (the jump lands past the stage-3 +0x44
-   * test), so the pool record's +0x92 lands back at 0xFF and the same-code
-   * code-0 install leaves it there. */
+   * test). FU-147 S1: record 1's `+0x8D` seed is index 1, so the reset's
+   * phase-2 `active != 0` arm (0x7DAE6 -> 0x7C990) runs the forced decision
+   * (code 3 for a record that is neither team target nor second) and the
+   * code-3 install stages +0x92 = 0. */
   f.mr.state.phase = 2;
   f.mr.record.stage = 0;
   f.mr.record.timer89 = 7;
@@ -1182,8 +1281,9 @@ static void test_action_01_runs_kickoff_body(void) {
   f.mr.record.stage92 = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x01) == FIFA96_OK);
   assert(f.mr.record.timer89 == 0);
-  assert(f.mr.record.stage92 == 0xFF);
-  assert(f.mr.entities.team[0].records[1].stage92 == 0xFF);
+  assert(f.mr.record.stage92 == 0);
+  assert(f.mr.entities.team[0].records[1].stage92 == 0);
+  assert(f.mr.entities.team[0].records[1].code == 3);
   assert(f.mr.entities.team[0].records[1].timer89 == 0);
   assert(f.mr.record.target_x == -5);
   assert(f.mr.record.ran == 0);
@@ -1316,6 +1416,8 @@ int main(void) {
   test_dead_2b_evidence();
   test_action_05_unwired_carrier();
   test_action_04_and_08_wired();
+  test_action_04_stages_lane_fields();
+  test_action_1E_stage3_possession_flip();
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
   test_action_0F_runs_body();

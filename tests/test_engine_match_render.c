@@ -513,6 +513,12 @@ static void test_entity_animates_over_frames(void) {
   struct scene_fixture f;
   scene_fixture_init(&f);
   f.mr.entities.team[0].records[0].pos_z = 0x200;
+  /* FU-147 S1: the driver now runs the shared mover for every dispatched
+   * record, so pin the fixture record against integration (target := pos) and
+   * keep the pinned frame hashes about the FU-84 animation advance. */
+  f.mr.entities.team[0].records[0].target_x = 0;
+  f.mr.entities.team[0].records[0].target_y = 0;
+  f.mr.entities.team[0].records[0].target_z = 0x200;
   f.mr.entities.team[0].records[0].anim_id = 1;
   assert(f.mr.entities.team[0].records[0].frame == 0);
 
@@ -633,6 +639,10 @@ static void test_lateral_cull_at_8e0(void) {
   scene_fixture_init(&f);
   f.mr.entities.team[0].records[0].pos_x = 0x8E0;
   f.mr.entities.team[0].records[0].pos_z = 0x200;
+  /* FU-147 S1: pin the fixture record against the all-record mover (see
+   * test_entity_animates_over_frames). */
+  f.mr.entities.team[0].records[0].target_x = 0x8E0;
+  f.mr.entities.team[0].records[0].target_z = 0x200;
   assert(fifa96_camera_init(&f.mr.render.camera, 0x8E0, 0, 0) == 0);
   drive_granted(&f.mr, 1);
   assert(f.mr.render.entities[0].stage.pos.x == 0x8E0);
@@ -640,6 +650,7 @@ static void test_lateral_cull_at_8e0(void) {
   assert(drawn_count(f.s, 0) > 0);    /* lateral == 0x8E0: visible */
 
   f.mr.entities.team[0].records[0].pos_x = 0x8E1;
+  f.mr.entities.team[0].records[0].target_x = 0x8E1;
   assert(fifa96_camera_init(&f.mr.render.camera, 0x8E1, 0, 0) == 0);
   drive_granted(&f.mr, 1);
   assert(f.mr.render.entities[0].stage.pos.x == 0x8E1);
@@ -956,12 +967,14 @@ static void test_engine_match_step_renders(void) {
   fifa96_match_run_init(&mr_on);
   assert(fifa96_match_run_begin(&mr_on, on.engine, 0) == 0);
   /* begin ran the derived kickoff pass: the act-1 ball spawn (0x1E0, 0, 0)
-   * and the `0x79C13` selector (inactive records -> row 0x26). */
+   * and the `0x79C13` selector (FU-147 S1: with the `+0x8D` record-ordinal
+   * seed only record 0 reads inactive -> row 0x26; every other record takes
+   * row id 0). */
   assert(mr_on.entities.ball.x == 0x1E0);
   assert(mr_on.entities.ball.y == 0);
   assert(mr_on.entities.ball.z == 0);
   assert(mr_on.entities.team[0].records[0].anim_id == 0x26);
-  assert(mr_on.entities.team[1].records[10].anim_id == 0x26);
+  assert(mr_on.entities.team[1].records[10].anim_id == 0);
   uint8_t blob[BLOB_LEN];
   int32_t offsets[2];
   struct fifa96_render_bank bank;

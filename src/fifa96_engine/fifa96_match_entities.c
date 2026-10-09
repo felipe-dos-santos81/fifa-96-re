@@ -33,12 +33,18 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
     team->chosen = FIFA96_MATCH_ENTITY_NONE;
     team->intercept = FIFA96_MATCH_ENTITY_NONE;
     team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
+    team->camera_nearest = FIFA96_MATCH_ENTITY_NONE;
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
       struct fifa96_match_entity *e = &team->records[i];
       e->team = (uint8_t)t;
       e->index = (uint8_t)i;
       e->stage92 = 0xFF; /* FUN_0007DAB4 0x7DABA */
       e->code = 0;       /* FUN_0007DAB4 0x7DAFB installs action 0 */
+      /* FU-147 S1: `FUN_0008C2E0` 0x8C329 seeds `[rec+0x8D] = index` for
+       * records 0..10 (loop at 0x8C322..0x8C336); only record 0 reads back as
+       * inactive to the `0x7DA26` code-3 coercion and the `0x79C13` row
+       * selector. */
+      e->active = (uint8_t)i;
     }
   }
   pool->controlled = FIFA96_MATCH_ENTITY_NONE;

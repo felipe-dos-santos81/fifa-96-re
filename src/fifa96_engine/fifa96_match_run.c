@@ -217,20 +217,19 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
 /* M2 interactive Task 1 / FU-77 §1: the shared per-record locomotion mover
  * `FUN_0007BF20` blocks A-E (`0x8E24B..0x8E507`, twin `FUN_0008E244`). The
  * native calls it from both record-machine tails after the action handler
- * (`0x7CD48`/`0x785C5`) for every record; the engine wires it for the record
- * bound to the human control slot (the controlled record) first, so a
- * pad-driven row-00/03/04 target becomes velocity and position. The fields the
- * native reads/writes persist on the pool record (`face7d` +0x7D, `speed71`
- * +0x71, `vel73`/`vel75` +0x73/+0x75, `body_timer9c` +0x9C, `timer7b` +0x7B as
- * the stride nibble); the unported inputs are staged as their derived
- * defaults: `+0x6F` stride rate 0, `+0x43` direct-face 0 and the `0x57A73`
- * point (0,0). `move_attr` is the native `dword[rec+0x63]`, whose high word is
- * the block-A distance `+0x65` (the low word falls out of the `>>19` attr
- * extract); it is recomputed here from the post-action target so the stride
- * index sees the fresh distance, exactly as the native recomputes `+0x65`
- * before the table read (`0x8E267..0x8E278`). The AI-side integration is a
- * numbered leg. */
-static void match_run_controlled_mover(struct fifa96_match_run *mr) {
+ * (`0x7CD48`/`0x785C5`) for every record; FU-147 S1 removes the
+ * controlled-record guard so the driver loop `0x8DB2E..0x8DB5F` runs it for
+ * every dispatched record (the pool walk keeps the `+0x9A` skip). The fields
+ * the native reads/writes persist on the pool record (`face7d` +0x7D,
+ * `speed71` +0x71, `vel73`/`vel75` +0x73/+0x75, `body_timer9c` +0x9C,
+ * `timer7b` +0x7B as the stride nibble); the unported inputs are staged as
+ * their derived defaults: `+0x6F` stride rate 0, `+0x43` direct-face 0 and
+ * the `0x57A73` point (0,0). `move_attr` is the native `dword[rec+0x63]`,
+ * whose high word is the block-A distance `+0x65` (the low word falls out of
+ * the `>>19` attr extract); it is recomputed here from the post-action target
+ * so the stride index sees the fresh distance, exactly as the native
+ * recomputes `+0x65` before the table read (`0x8E267..0x8E278`). */
+static void match_run_record_mover(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   fifa96_action_locomotion s;
   fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
@@ -388,7 +387,36 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->speed71 = (int16_t)r->vel_x;
   r->vel73 = (int16_t)((uint32_t)r->vel_x >> 16);
   r->vel75 = (int16_t)((uint32_t)r->vel_z >> 16);
-  if (mr->slot.entity == id) match_run_controlled_mover(mr);
+  /* FU-147 S1: every dispatched record runs the shared mover (native
+   * FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5), then the BF20
+   * lane block refreshes the +0x6B lane / +0x6D/+0x6F camera deltas / +0x77
+   * bound and the per-team camera-nearest tracker. Native
+   * `0x7C776..0x7C7CF`, first-hand this slice; the metric call is 0x8DC68 =
+   * `fifa96_entity_distance`. The camera focus 0x15774C/0x157754 is the
+   * engine render-camera stand-in (FU-147 leg 13). */
+  match_run_record_mover(mr);
+  {
+    int16_t lane = 0;
+    int16_t cam_dx = 0;
+    int16_t cam_dz = 0;
+    if (fifa96_action_locomotion_track(r->pos_x, r->pos_z, mr->render.camera.pos_x,
+                                       mr->render.camera.pos_z, &lane, &cam_dx,
+                                       &cam_dz) == FIFA96_OK) {
+      struct fifa96_match_team *team = &mr->entities.team[e->team];
+      int32_t tracker = team->camera_nearest;
+      e->bound = e->lane_x;             /* 0x7C77E: +0x77 := old +0x6B */
+      e->lane_z = cam_dx;               /* 0x7C78E: +0x6D */
+      e->cam_dz6f = cam_dz;             /* 0x7C79A: +0x6F */
+      e->lane_x = lane;                 /* 0x7C7AF: +0x6B */
+      /* 0x7C7B3..0x7C7CF: the tracker keeps an incumbent with an equal or
+       * smaller lane (signed word JGE at 0x7C7C8); a NONE tracker or a
+       * strictly smaller fresh lane replaces it. The native `[team+0x7C7]`
+       * is a record pointer; the pool stores the team-relative index. */
+      if (tracker == FIFA96_MATCH_ENTITY_NONE ||
+          (int16_t)e->lane_x < (int16_t)team->records[tracker].lane_x)
+        team->camera_nearest = (int32_t)e->index;
+    }
+  }
   e->pos_x = r->pos_x;
   e->pos_y = r->pos_y;
   e->pos_z = r->pos_z;
@@ -411,6 +439,9 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->scratch_a0 = r->scratch_a0;
   e->scratch_a1 = r->scratch_a1;
   e->ran = r->ran;
+  e->has_ball = r->has_ball;   /* FU-147 S1: the +0x9B possession-flag
+                                * producer (row-1E claim 0x755C0) must persist
+                                * on the pool, not only on the staging record */
   e->install = r->install;
   e->helper_request = r->helper_request;
   e->controlled = r->controlled;

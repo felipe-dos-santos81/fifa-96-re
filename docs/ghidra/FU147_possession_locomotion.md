@@ -486,7 +486,62 @@ Minimal seam files: `include/fifa96_loader/fifa96_action_handlers.h`,
   is correct (`!= 0`) but code that writes it in the engine must write the
   index, not 1.
 
-## 8. Provenance
+## 8. Port landing (S1, 2026-10-09)
+
+Frozen slice ported in phase-6 wave-2 S1. Landed, with first-hand re-verification
+this slice (Ghidra MCP `/FIFA96.EXE`, read-only):
+
+| contract item | engine landing |
+|---|---|
+| BF20 lane block | `fifa96_action_locomotion_track` (`fifa96_action_handlers.h/.c`) — cam deltas at `0x7C782..0x7C79A`, metric at `0x7C7AA` |
+| pool fields | `fifa96_match_entity.bound` (+0x77), `.cam_dz6f` (+0x6F); `fifa96_match_team.camera_nearest` (+0x7C7, team-relative index) |
+| driver loop | `match_run_dispatch_entity`: the shared mover now runs for **every** dispatched record (pool walk keeps the `+0x9A` skip), then the track writes lane/deltas/bound and the team tracker |
+| `+0x8D` seed | `fifa96_match_entities_init` seeds `record.active = index` (`FUN_0008C2E0` `0x8C329`, re-verified byte-exact) |
+| row-04 staging | `s.bound = e->bound`, `s.word6f = e->cam_dz6f`, `s.is_team_7c7` from `camera_nearest` |
+| situation 0xB producers | row-1E stage-3 tail: `match_row_reset` -> `fifa96_match_run_situation(mr, 0x0B)` (the shared row-01 table-2 entry; no `_0b` mechanism per the freeze ruling) -> code-5 install request; `+0x9B` (`has_ball`) and `[0x157A83]` (`controlled`) write-back from the row-1E claim to the pool |
+| input | unchanged (`fifa96_control_slot_update` + the slot map/anim tables) |
+
+**Errata / corrections (first-hand this slice).**
+
+1. **§3.3 metric conflation.** The BF20 lane block calls **`0x8DC68`**
+   (`0x7C7AA` bytes `e8 b9 14 01 00` = CALL 0x8DC68), i.e.
+   `fifa96_entity_distance`; the `0x795B4` helper's out[0] is the
+   **`0xCD514`** divide (FU-142 Appendix K.2). The §3.3 sentence "the same
+   metric family as 0x8DC68" merges two different functions; the port uses
+   `fifa96_entity_distance` (the block's own call) and leg 10 stays open for
+   the helper path.
+2. **Tracker compare width.** `0x7C7C4 CMP DX, word[ESI+0x6B]` / `0x7C7C8
+   JGE` (first-hand) is a signed 16-bit compare; a NONE tracker (native NULL)
+   or a strictly smaller fresh lane replaces it. The pool stores the
+   team-relative index, not the native pointer.
+3. **Reset forced-decision consequence of the seed.** `FUN_0007DAB4`
+   (re-verified) calls `0x7C990` for `phase == 2 && byte[+0x8D] != 0` and
+   **returns** (`0x7DAF6..0x7DAFA`); the code-0 re-install `0x7DAFB` runs only
+   on the skip path (phase != 2 or `+0x8D == 0`). With the active seed the
+   engine's `match_row_reset` therefore installs a decision code on active
+   records at phase 2; the pre-S1 tape's "row 00 dispatches through a reset"
+   was an unseeded-active artifact (all records read inactive). The M2 tape
+   now stages code 0 explicitly; row 00's natural code-3 runs are unchanged.
+4. **Row-01 deferred-helper ordering.** `0x7DC2A CALL 0x7876C` no-ops when
+   the requester already holds the slot; the engine defers `helper_request`
+   to the frame drain, which runs after the same dispatch's `0x7DF61`
+   stage-2 merge (`0x7DEFA`). The port gates the request on `has_slot == 0`
+   at the call site so the deferred drain cannot invert the native order.
+
+**Legs status after S1.** Legs 1–5 and 9/10/12 remain open (stage-flow entry
+gates, the `0x760DF` arm, the install `ECX`/invoke flag, the reset-lane path,
+the driver pre-pass / `FUN_0008D824`, the `0xCD514` helper identity, the E244
+roster context); leg 6 unchanged; leg 7 (BF20 visibility/relocation arm) still
+not decomposed; leg 8 (`[0x157AB2]`) still unmodeled; leg 11 unchanged; **leg
+13 is live** — the track uses the engine render camera as the
+`0x15774C/0x157754` match-focus stand-in, so lane values are stand-in-derived
+until it lands. New note: the pool `lane` dword (+0x69) keeps the FU-142b
+"dz word, sign-extended" model while the S1 track writes `lane_x` (+0x6B);
+row-04 reads `lane_x`, but rows 01/26/28/2A read `r->lane >> 16` — a
+pre-existing alias divergence now more visible (row 04 staging is the contract
+scope).
+
+## 9. Provenance
 
 Ghidra MCP on `/FIFA96.EXE`, read-only:
 `get_current_program_info`; `get_function_by_address` 0x8C2E0/0x740A0/0x4C380;
@@ -505,3 +560,11 @@ stack-only, `EAX, 0xb` 155 raw / 8 relevant; full all-mnemonic scans of
 
 No write outside this draft; no tool, ISO, capture-rig, or Ghidra-project
 change. Engine files were read only.
+
+**S1 re-verification (2026-10-09, read-only).** `disassemble_bytes` on
+`/FIFA96.EXE`: `0x7C776` (`0x7C776..0x7C7C5`, the lane block + tracker
+compare), `0x7C7C5..0x7C7DC`, `0x8DC68` (the octagonal metric body),
+`0x8C2E0`, `0x75B29..0x75B68`, `0x76030..0x7605F`, `0x7F1A6..0x7F1F5`,
+`0x8DB20..0x8DB5F`, `0x7CD20..0x7CD4F`, `0x785B0..0x785CF`, `0x8CEE0..0x8CF2F`,
+`0x7D9A4..0x7D9E3`, `0x7DA20..0x7DA5F`, `0x8CF30..0x8CF57`, `0x7DAB4..0x7DB0C`,
+`0x7C990..0x7C9DF`. No writes.

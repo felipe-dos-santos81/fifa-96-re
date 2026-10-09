@@ -224,7 +224,10 @@ static void test_frame_drives_entity_chain(void) {
   assert(mr.entities.team[1].update_count == 3);
   assert(mr.entities.team[0].records[0].code == 0x19);
   assert(mr.entities.team[1].records[0].code == 0x19);
-  assert(mr.entities.team[0].records[5].code == 0x19);
+  /* FU-147 S1: the `+0x8D` active seed is the record ordinal (FUN_0008C2E0
+   * 0x8C329), so only record 0 reads inactive; every other record's row-00
+   * phase-2 install keeps code 3 (the 0x7DA26 coercion no longer hits). */
+  assert(mr.entities.team[0].records[5].code == 3);
 }
 
 /* FU-142a: the frame body runs the FUN_0008D098 state 0x13/0x14 arm block
@@ -263,10 +266,10 @@ static void test_phase_machine_hook(void) {
   for (uint32_t t = 0; t < 2; t++) {
     for (uint32_t r = 0; r < FIFA96_MATCH_ENTITY_RECORDS; r++) {
       uint8_t code = mr2.entities.team[t].records[r].code;
-      /* 0x19 is excluded from the discriminator: row 00 installs it at
-       * phase 2 for inactive records (the positive fixture above). */
-      assert(code != 0x26 && code != 3 && code != 0x25 &&
-             code != 0x28 && code != 0x2A);
+      /* 0x19/3 are excluded from the discriminator: row 00 installs them at
+       * phase 2 (record 0 inactive -> 0x19; the FU-147 S1 active seed leaves
+       * every other record on code 3). No arm code may appear. */
+      assert(code != 0x26 && code != 0x25 && code != 0x28 && code != 0x2A);
     }
   }
 }
@@ -387,6 +390,12 @@ static void test_action_28_repack_round_trips_fields(void) {
   mr.entities.team[0].records[5].pos_x = 0x140;
   mr.entities.team[0].records[5].pos_y = 0x55;
   mr.entities.team[0].records[5].pos_z = 0x1E0;
+  /* FU-147 S1: the driver now runs the shared mover for every dispatched
+   * record, so pin the reference record against integration (target := pos)
+   * to keep this fixture about the arm-2 copy. */
+  mr.entities.team[0].records[5].target_x = 0x140;
+  mr.entities.team[0].records[5].target_y = 0x55;
+  mr.entities.team[0].records[5].target_z = 0x1E0;
 
   for (int i = 0; i < 10; i++) {
     assert(fifa96_match_run_frame(&mr) >= 0);   /* 3 granted frames, delta 2 */
@@ -553,13 +562,14 @@ static void test_kickoff_enters_phase2_naturally(void) {
   assert(mr.global_5882a == 0u);
 
   /* The state-1 arm landed at begin: record 1 carries action 1, record 2
-   * action 2, the rest the 3 -> 0x19 inactive coercion; both team targets are
-   * the first pick. */
+   * action 2, record 0 the 3 -> 0x19 inactive coercion (FU-147 S1: `+0x8D` is
+   * the record ordinal, so only record 0 reads inactive); every other record
+   * keeps code 3. Both team targets are the first pick. */
   assert(mr.entities.team[0].records[0].code == 0x19u);
   assert(mr.entities.team[0].records[1].code == 1u);
   assert(mr.entities.team[0].records[2].code == 2u);
-  assert(mr.entities.team[0].records[10].code == 0x19u);
-  assert(mr.entities.team[1].records[1].code == 0x19u);
+  assert(mr.entities.team[0].records[10].code == 3u);
+  assert(mr.entities.team[1].records[1].code == 3u);
   assert(mr.entities.team[0].target == 1);
   assert(mr.entities.team[1].target == 12);
   assert(mr.entities.phase == 1u);
@@ -598,7 +608,6 @@ static void test_kickoff_enters_phase2_naturally(void) {
   assert(mr.slot.released == 0u);
   assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
   for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
-  assert(mr.slot.released == 0x10u);           /* the FU-70 release word */
   assert(mr.state.phase == 2u);
   assert(mr.state.prev_phase == 1u);
   assert(mr.phase_machine.state == 2u);
@@ -607,6 +616,16 @@ static void test_kickoff_enters_phase2_naturally(void) {
   assert(mr.entities.controlled == 1);   /* row 01 stage 0 [0x157A83] = rec */
   assert(mr.entities.team[0].records[1].stage92 == 3u);
   assert(mr.entities.team[0].records[1].timer89 == 0);
+  /* FU-147 S1: with the +0x8D active seed the native `0x8DE8C` skip is the
+   * record's ordinal (`+0x8A>>24` = byte +0x8D), so stage 2's nearest pick no
+   * longer returns the taker itself; the `0x7DF61` conditional merge moves the
+   * FU-70 slot to the nearest teammate and the drain runs FUN_00078670
+   * (0x7867A), clearing the release word. The no-ISO fixture puts every record
+   * at the origin, so the tie pick is record 0. */
+  assert(mr.slot.entity == 0);
+  assert(mr.entities.team[0].records[0].has_slot == 1);
+  assert(mr.entities.team[0].records[1].has_slot == 0);
+  assert(mr.slot.released == 0u);      /* consumed by the handoff reset */
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 
   assert(fifa96_match_run_end(&mr) == 0);
@@ -908,6 +927,121 @@ static void test_pad_drives_controlled_locomotion(void) {
   drop_fixture(f);
 }
 
+/* FU-147 S1: the per-frame driver runs the shared mover for every dispatched
+ * record (native FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5; the
+ * pool loop keeps the +0x9A skip) and the BF20 lane block
+ * (0x7C776..0x7C7AF, first-hand this slice) refreshes the +0x6B lane,
+ * +0x6D/+0x6F camera-delta words, the +0x77 bound and the team
+ * camera-nearest tracker (0x7C7C4..0x7C7CF) from the camera-focus stand-in
+ * (leg 13: the native 0x15774C/0x157754 focus, engine render camera). */
+static void test_ai_record_mover_and_lane_track(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.slot.entity != id);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+  e->pos_x = 0x100;
+  e->pos_z = 0x100;
+  e->pos_y = 0;
+  e->target_x = 0x300;   /* row 00 (slot-less, phase 1) leaves the target */
+  e->target_y = 0;
+  e->target_z = 0x100;
+  int32_t start_x = e->pos_x;
+  assert(e->lane_x == 0 && e->lane_z == 0 && e->bound == 0 && e->cam_dz6f == 0);
+  for (int i = 0; i < 3; i++) one_granted_frame(&mr);
+  int16_t prev_lane = e->lane_x;
+  one_granted_frame(&mr);
+  /* The mover integrated the AI record's target (no slot needed). */
+  assert(e->pos_x > start_x);
+  assert(e->pos_z == 0x100);
+  /* The lane block wrote the camera deltas, the metric lane and the bound
+   * (old lane) in the native order. */
+  int16_t exp_dx = (int16_t)((uint16_t)mr.render.camera.pos_x - (uint16_t)e->pos_x);
+  int16_t exp_dz = (int16_t)((uint16_t)mr.render.camera.pos_z - (uint16_t)e->pos_z);
+  assert(e->lane_z == exp_dx);
+  assert(e->cam_dz6f == exp_dz);
+  assert(e->lane_x == (int16_t)fifa96_entity_distance((int32_t)exp_dx, (int32_t)exp_dz));
+  assert(e->bound == prev_lane);
+  /* The tracker is the team record with the minimal fresh lane (the running
+   * replacement at 0x7C7C4/0x7C7CD keeps the incumbent on ties); skip-9A
+   * records are not dispatched and keep stale lanes. */
+  {
+    const struct fifa96_match_team *team = &mr.entities.team[1];
+    int32_t best = FIFA96_MATCH_ENTITY_NONE;
+    int16_t best_lane = 0;
+    assert(team->camera_nearest >= 0 && team->camera_nearest < 11);
+    for (int i = 0; i < 11; i++) {
+      const struct fifa96_match_entity *r = &team->records[i];
+      if (r->skip_9a != 0) continue;
+      if (best == FIFA96_MATCH_ENTITY_NONE || r->lane_x < best_lane) {
+        best = i;
+        best_lane = r->lane_x;
+      }
+    }
+    assert(team->camera_nearest == best);
+  }
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-147 S1: the row-1E claim's `+0x9B` possession flag and `[0x157A83]`
+ * actor bind must leave the dispatch staging for the pool (the `+0x9B`
+ * producer). The claim fires while `stage92 < 3` and the record does not hold
+ * the ball; the frame chain stages the record, dispatches row 1E and drains
+ * the requests. */
+static void test_row1e_claim_reaches_pool(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 5;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[5];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
+  assert(e->has_ball == 0);
+  assert(mr.entities.controlled != id);
+  one_granted_frame(&mr);
+  assert(e->has_ball == 1);                    /* +0x9B staged back to the pool */
+  assert(mr.entities.controlled == id);        /* [0x157A83] = rec */
+  /* the next dispatch sees the flag and does not re-claim (the native
+   * `stage < 3 && has_ball == 0` gate) */
+  one_granted_frame(&mr);
+  assert(e->has_ball == 1);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-147 S1: the keeper/restart stage-3 possession flip end to end. A record
+ * at the stage-3 span without the ball resets, runs situation 0xB (phase ->
+ * 2) and the drained code-5 install makes it the carrier (`+0x9F` bit 0,
+ * 0x7DA42). The next dispatch runs row 05 (unwired, OL-63) — the engine-level
+ * claim (0x7F1FF) stays a leg; the install -> carrier bit is the reachable
+ * subset. */
+static void test_row1e_stage3_possession_flip(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[5];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
+  e->stage92 = 3;                       /* the stage-3 span dispatch */
+  e->has_ball = 0;
+  assert(mr.state.phase == 1u);
+  one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);         /* situation 0xB */
+  assert(e->code == 5);                 /* the drained code-5 install */
+  assert(e->stage92 == 0);              /* install stages +0x92 = 0 */
+  assert((e->carrier & 1u) != 0u);      /* 0x7DA42 carrier bit */
+  assert(e->has_ball == 0);             /* the arm does not claim the flag */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -928,6 +1062,9 @@ int main(void) {
   test_goal_situation_dispatch_is_not_the_writer();
   test_natural_phase2_never_scores();
   test_pad_drives_controlled_locomotion();
+  test_ai_record_mover_and_lane_track();
+  test_row1e_claim_reaches_pool();
+  test_row1e_stage3_possession_flip();
   puts("test_engine_match_frame OK");
   return 0;
 }

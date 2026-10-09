@@ -86,6 +86,11 @@ struct fifa96_match_entity {
   int32_t target_x, target_y, target_z; /* +0x4D / +0x51 / +0x55 */
   int32_t vel_x, vel_z;                 /* +0x71 / +0x73 (16.16 pair) */
   int16_t lane_x, lane_z;               /* +0x6B / +0x6D lane words */
+  int16_t bound;                        /* +0x77 old-lane bound word (FU-147 S1:
+                                         * `FUN_0007BF20` 0x7C77E stores the old
+                                         * `+0x6B` before the lane refresh) */
+  int16_t cam_dz6f;                     /* +0x6F camera-minus-position z word
+                                         * (the FU-147 S1 track's `cam_dz`) */
   int32_t lane;                         /* +0x69, lane = >>16 */
   int8_t dir_x, dir_z;                  /* bound slot direction +0x20/+0x21 (the
                                          * T2/T3 chain `FUN_00078950` writes; row
@@ -128,6 +133,10 @@ struct fifa96_match_team {
   uint32_t timer7cb;        /* +0x7CB enable */
   uint32_t timer81e;        /* +0x81E limit = >>16 */
   uint8_t flag7be;          /* +0x7BE interception band flag */
+  int32_t camera_nearest;   /* +0x7C7 camera-nearest tracker: the team-relative
+                             * record index (native record pointer; FU-147 S1
+                             * `FUN_0007BF20` 0x7C7C4/0x7C7CD replaces it when
+                             * the fresh lane is strictly smaller) */
   int32_t target;           /* +0x7B2 encoded entity id or NONE */
   int32_t second;           /* +0x7B6 encoded entity id or NONE */
   int32_t chosen;           /* +0x7BF encoded entity id or NONE */
