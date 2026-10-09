@@ -35,3 +35,9 @@ struct fifa96_engine {
   uint64_t last_ns;      /* now_ns() at the previous step; 0 before the first */
   uint32_t step_ticks;   /* PIT ticks fired by the most recent step */
 };
+
+/* M2 interactive Task 1: the FU-77 shared-mover tables pinned first-hand from
+ * /FIFA96.EXE (see fifa96_match_locomotion_tables.c). The heading flat
+ * 0x1104D2 (32 bytes) and the 0x10F680 stride-velocity row (0x500 words). */
+extern const uint8_t fifa96_match_heading_table[32];
+extern const int16_t fifa96_match_stride_table[0x500];

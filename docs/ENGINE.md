@@ -13,10 +13,15 @@ formation/record placement (OL-T11-8: `352ko.fmt` seated from
 draw), the derived kickoff phase-1 entry (OL-84: begin lands
 `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`), the derived `FUN_0008D098` state-1
 kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
-reaches the live phase 2 naturally via situation 0xB) and the derived native
+reaches the live phase 2 naturally via situation 0xB), the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
-indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v4**
+indexed draw is RGB under SDL3 — FU-144) and **pad-driven locomotion for the
+controlled record (M2 interactive Task 1 / G1: the derived FU-70 setup slot
+bind + `FUN_0007876C` merge attach the human slot to the kickoff taker, row
+00's slot-direction target feeds the wired FU-77 shared mover
+`FUN_0007BF20` for that record, and the M2 golden is re-pinned for the
+resulting movement — first differing line frame 59, 107 hash lines).** The M2-B acceptance tape **v4**
 (M2 playable-match Task 4, the G4 acceptance) is
 green: it asserts the drawing directly (the formation-placed records reach the
 indexed canvas from the first granted frame; the golden was re-pinned for that
@@ -106,6 +111,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   kit-remapped/appended chunk as the surface palette before the plane
   conversion — FU-144), period end
   (`resolve` OVER→POST→EXIT) back to the front-end.
+  **Pad-driven locomotion (M2 interactive Task 1 / G1):** begin runs the
+  derived match-setup slot bind (`fifa96_match_entities_bind_slot`, the
+  `FUN_00078824`→`FUN_000785E0`/`FUN_0008DB6C` subset) and consumes the
+  state-1 arm's `FUN_0007876C` merge, so the FU-70 slot is attached to the
+  kickoff taker; the per-frame dispatch stages the slot's T2/T3 direction
+  bytes (`+0x20/+0x21`) into the record and runs the FU-77 shared mover
+  `fifa96_action_locomotion_step` (`FUN_0007BF20` blocks A–E, tables
+  `0x1104D2`/`0x10F680` pinned first-hand) for the slot-bound record, so a
+  held pad direction drives row 00's `FUN_00079C20` target into
+  velocity/position. Row 01 stage 1 now takes the native
+  `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
+  button press/release exactly as the native.
 - Action dispatch (FU-137): **14/80 rows wired** — `00`, `01`, `04`, `06`,
   `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
   G3; `01` is the M2 playable-match Task 2 kickoff taker) and
@@ -258,6 +275,20 @@ the build also produces the windowed `fifa96` target (`make game`).
   (goal invokers) **carried-with-legs — verified negative**, G4 accepted
   (tape v4 + natural probe + the G4 smoke); every forcing in the tape is
   listed with its leg in the `test_engine_m2.c` v4 provenance.
+- **M2 interactive T1 (pad-driven locomotion / G1) legs.** The derived setup
+  bind models the engine's single human slot: the native four `0x4C1E0` mode
+  rows are unported (derived default mode 0 = the controlled side), the
+  `FUN_0008DB6C` sort/tie order of the free-record pick is substituted by the
+  shared `fifa96_entity_find_nearest` (`FUN_000A1860` order is the leg), and
+  the FU-77 mover `FUN_0007BF20` is wired for the slot-bound (controlled)
+  record only — the native calls it for every record after its handler, so the
+  AI-side integration is a numbered leg. Row 04's slot-dir arm for the
+  controlled actor needs the unported `+0x6B` lane-word producer and the
+  `+0x8D` active seed, so the natural phase-2 pad path stays a leg; the
+  reachable pad consumer is row 00's slot-dir arm (wired) plus row 01's stage-1
+  `word[slot+6] & 0x70` release gate (now wired to the live FU-70 release
+  word). The mover's `+0x6F` stride rate, `+0x43` direct-face and `0x57A73`
+  point inputs are staged zero.
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

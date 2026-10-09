@@ -408,6 +408,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_match_entities.c
   src/fifa96_engine/fifa96_match_phase_machine.c
+  src/fifa96_engine/fifa96_match_locomotion_tables.c
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)

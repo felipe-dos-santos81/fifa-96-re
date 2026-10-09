@@ -533,3 +533,70 @@ change. Port write set: `include/fifa96_loader/fifa96_action_handlers.h`,
 `tests/test_action_locomotion.c`, `CMakeLists.txt` (one test block + the
 `fifa96_entity_update` link). `game/FIFAPCCD96.iso` untouched;
 `fifa96.rep/**` churn not staged.
+
+## Errata (M2 interactive Task 1 — pad-driven locomotion / G1)
+
+First-hand `/FIFA96.EXE`, read-only. This slice re-read the row-00 slot arm,
+the setup bind and the mover tables, and the engine now binds the FU-70 human
+slot to the kickoff taker and runs the shared mover for that record.
+
+* **Row 00's `FUN_00079C20` args are slot bytes `+0x20`/`+0x21`, not
+  `+0x1D`/`+0x1E`.** The body reads `MOV EDX,[ECX+0x1D]` / `MOV EBX,[ECX+0x1E]`
+  with `ECX = [rec+0x20]` (`0x7DB51..0x7DB56`) and shifts both `SAR ...,0x18`
+  (`0x7DB59..0x7DB5C`): the dword at `+0x1D` has `+0x20` as its top byte and
+  the dword at `+0x1E` has `+0x21`, so the arguments are the T2/T3 direction
+  bytes `FUN_00078950` writes (`0x78A39`/`0x78A46`). FU-70 §1.2's `+0x1D`
+  (bind ordinal) / `+0x1E` (map select) labels are not the row's inputs; the
+  `>>24` folds them onto `+0x20`/`+0x21`. FU-139 §10.8's `(int8)slot+0x20` /
+  `+0x21` reading is the correct one.
+* **The mover's `move_attr` high word is the block-A distance `+0x65`.** The
+  attr extract is `dword[rec+0x63] >> 19` (`0x8E3F9`): the low word `+0x63`
+  is shifted out (`word >> 19 == 0`), so the result is `word[rec+0x65] >> 3` —
+  the distance block A recomputed at `0x8E267..0x8E278` immediately before the
+  table read. The engine composes `move_attr = (uint16_t)distance << 16` from
+  the post-action target, so the stride index sees the fresh distance.
+* **Row 01 stage 1's slot arm is `word[slot+6] & 0x70` over the live FU-70
+  release word.** First-hand `0x7DCE2..0x7DCF8`: with `[rec+0x20] != 0` the
+  body tests `AX = word[slot+6]; AL &= 0x70` and readies on non-zero; the
+  no-slot arm is the `+0x89 > 0x78` timer. The engine now passes the FU-70
+  release word (`fifa96_control_slot.released`) and the natural kickoff waits
+  for a button press/release exactly as the native. The pre-T1 "staged-zero
+  slot cannot fire" stand-in (FU-143 §11.1/OL-84f) is superseded by this
+  erratum.
+* **Tables pinned first-hand.** `read_memory 0x1104D2` (32 B) = the heading
+  row; `read_memory 0x10F680` (0xA00 B) = the full 0x500-word stride table
+  (the FU-77 §4 head read was 64 B). Both are embedded in the engine
+  (`src/fifa96_engine/fifa96_match_locomotion_tables.c`); the engine re-read
+  is byte-identical for the 64-byte head.
+* **`FUN_00078824`/`FUN_000785E0` bind semantics re-read** (`0x78824..0x7891C`,
+  `0x785E0..0x7866D`): the setup clears every record `+0x20` and both teams'
+  `+0x828`, then binds up to four `0x57C64` slots from the `0x4C1E0` mode rows
+  (mode 0 -> team `[0x57ABE]`, mode 2 -> `[0x57ABF]`, else unbound) with the
+  `0x4C1DC` map select; `FUN_000785E0` picks the free record with
+  `FUN_0008DB6C(0x5774C, team, -1, 1)`, writes the record slot pointer and
+  increments `team+0x828`. The engine models the one-slot subset: the four
+  mode rows are unported (derived default mode 0 = the controlled side), the
+  pick substitutes the shared nearest search for `FUN_0008DB6C`'s
+  `FUN_000A1860` sort/tie order (leg), and the result seeds the state-1 arm's
+  `FUN_0007876C` merge.
+* **Engine landing (M2 interactive Task 1).**
+  `fifa96_match_entities_bind_slot` (entities pool) and `match_run_slot_bind`
+  (begin, after the formation seed and before the phase-1 entry) implement the
+  bind; begin then calls the FU-141 drain so the arm's merge result points the
+  FU-70 slot at the taker. `match_run_controlled_mover` (run.c) stages the
+  mover state from the pool record (`pos`/`target`/`delta`, `face7d` +0x7D,
+  `speed71` +0x71, `vel73`/`vel75` +0x73/+0x75, `body_timer9c` +0x9C,
+  `timer7b`+0x7B stride, `has_slot`, `type` as `+0x8E`) and calls
+  `fifa96_action_locomotion_step` with the embedded tables. Unported inputs
+  staged zero: `+0x6F` stride rate, `+0x43` direct-face and the `0x57A73`
+  point. AI-side integration (the native calls the mover for every record) is
+  a numbered leg.
+* **Tests.** `tests/test_engine_match_frame.c::test_pad_drives_controlled_locomotion`
+  (begun run: bind + merge, staged reset code 0, held UP, row-00 target →
+  velocity/position; a no-input control run stays still);
+  `tests/test_engine_match_entities.c::test_bind_slot`;
+  `tests/test_engine_match_handlers.c::test_action_01_runs_kickoff_body`'s slot
+  sub-case; `tests/test_engine_match_input.c` begun-run bind assertions. Full
+  suite 104/104 (ASan/UBSan; ISO present); M1 golden untouched; M2 re-pinned
+  (first differing line frame 59, 107 hash lines, `state=` suffixes unchanged)
+  with the written reason in `tests/test_engine_m2.c`'s v4.1 provenance.

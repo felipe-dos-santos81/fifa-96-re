@@ -537,7 +537,10 @@ static void one_granted_frame(struct fifa96_match_run *mr);
  * phase 2. This test drives the begun run without any forcing: the state-1
  * arm's action 1 lands on record 1 (zero-target fixture: the 0x79CCC derived
  * pick skips index 0, ties keep the first candidate), so row 01 runs on it and
- * the run leaves phase 1 on its own. */
+ * the run leaves phase 1 on its own. M2 interactive Task 1: the setup bind +
+ * `FUN_0007876C` merge put the live FU-70 slot on that taker, so row 01 stage
+ * 1 takes the native `word[slot+6] & 0x70` arm (0x7DCE9..0x7DCF6) — the test
+ * supplies the button press/release the native kickoff waits for. */
 static void test_kickoff_enters_phase2_naturally(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -571,11 +574,31 @@ static void test_kickoff_enters_phase2_naturally(void) {
   assert(mr.state.total_seconds == 0);
 
   /* The producer fires at tick_total >= 0x78 (60 granted frames); row 01 then
-   * runs stage 0/1/2 and the derived situation 0xB writes the live phase 2.
-   * Native cadence: stage 0 waits 0x3C of its own timer89 (30 frames) and
-   * stage 1's no-slot arm waits another 0x78 (60 frames), so phase 2 lands
-   * around granted frame 121. */
-  for (int i = 0; i < 170 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+   * runs stage 0 and falls into stage 1. M2 interactive Task 1 binds the live
+   * slot (setup bind + FUN_0007876C merge), so the stage-1 slot arm is the
+   * native `word[slot+6] & 0x70` gate: without a released button the run stays
+   * at the kickoff phase (the native kickoff waits for the player). */
+  for (int i = 0; i < 30; i++) one_granted_frame(&mr);   /* granted frames 31..60 */
+  assert(mr.global_5882a == 1u);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  assert(mr.slot.entity == 1);                 /* the taker owns the slot */
+  assert(mr.entities.team[0].records[1].has_slot == 1);
+  assert(mr.entities.team[0].records[1].stage92 == 1u);
+  for (int i = 0; i < 4; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);   /* still gated */
+
+  /* A button press/release supplies the FU-70 release word the slot arm reads:
+   * the slot update runs inside the frame body, so the release sample reaches
+   * the row on the next granted frame. */
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(mr.slot.released == 0u);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.slot.released == 0x10u);           /* the FU-70 release word */
   assert(mr.state.phase == 2u);
   assert(mr.state.prev_phase == 1u);
   assert(mr.phase_machine.state == 2u);
@@ -701,7 +724,18 @@ static void test_natural_phase2_never_scores(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  for (int i = 0; i < 170 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  /* M2 interactive Task 1: the bound slot makes row 01 stage 1 wait for the
+   * `word[slot+6] & 0x70` release word, so pass it with a KICK press/release
+   * after the 60-frame act-1 producer window. */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
   assert(mr.state.phase == 2u);
   for (int i = 0; i < 300; i++) {
     one_granted_frame(&mr);
@@ -789,6 +823,77 @@ static void test_action_2A_repack_round_trips_fields(void) {
   assert(mr.global_10f35c == 1);                   /* arm-10 global repacked */
 }
 
+/* Task 1 (M2 interactive match / G1): the pad drives the controlled record.
+ *
+ * First-hand /FIFA96.EXE evidence:
+ *  - `FUN_00078824` (`0x78824..0x7891C`) is the match-setup slot init: it
+ *    clears both teams' `+0x828` and every record's `+0x20`, then binds the
+ *    four `0x57C64` slots through `FUN_000785E0`; `FUN_000785E0` picks a free
+ *    record with `FUN_0008DB6C(0x5774C, team, skip=-1, flag=1)`, sets
+ *    `record+0x20 = slot`, `slot+0x1D = team+0x828`, `slot+0x22 = team+0x826`
+ *    and `team+0x828++`.
+ *  - The state-1 kickoff arm (`0x8D1B1..0x8D243`) resolves the taker through
+ *    `FUN_00079CCC` and calls `FUN_0007876C` (slot merge) on it: the donor
+ *    loses `+0x20`, the taker gains it.
+ *  - Row 00 (`0x7DB10..0x7DBAC`) gates the move on `+0x20 != 0` and calls
+ *    `FUN_00079C20(rec, (int8)[slot+0x1D]>>24, (int8)[slot+0x1E]>>24)` — the
+ *    unaligned dword reads are slot bytes `+0x20`/`+0x21` (the T2/T3 direction
+ *    chain `FUN_00078950` writes), giving `target = pos + dir<<7`.
+ *  - `FUN_0007BF20` (FU-77) then integrates target into velocity/position for
+ *    every record after its action handler.
+ *
+ * The test drives a begun run: begin binds the human slot (derived
+ * `FUN_00078824`/`FUN_000785E0` subset) and the state-1 arm merges it onto the
+ * taker; the reset code 0 is staged, UP is latched, and the granted frames run
+ * row 00 + the shared mover. The no-input control run must stay still. */
+static void test_pad_drives_controlled_locomotion(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_run mr2;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+
+  {
+    int32_t taker = mr.entities.team[0].target;
+    assert(taker >= 0 && taker < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+    assert(mr.slot.entity == taker);           /* bind + FUN_0007876C merge */
+    assert(mr.entities.team[0].records[taker].has_slot == 1);
+    assert(mr.entities.team[0].slot_pool == 1);
+    assert(mr.entities.team[1].slot_pool == 0);
+
+    assert(fifa96_match_entities_install(&mr.entities.team[0].records[taker],
+                                         (uint8_t)mr.state.phase, 0, 0) == 1);
+    {
+      fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+      assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+    }
+    int32_t start_x = mr.entities.team[0].records[taker].pos_x;
+    int32_t start_z = mr.entities.team[0].records[taker].pos_z;
+    for (int i = 0; i < 10; i++) one_granted_frame(&mr);
+    /* UP -> slot T2/T3 dir (1, 0) -> row 00 target pos+(0x80,0) -> the mover
+     * ramps vel_x and integrates pos_x; pos_z stays. */
+    assert(mr.entities.team[0].records[taker].pos_x > start_x);
+    assert(mr.entities.team[0].records[taker].pos_z == start_z);
+    assert(fifa96_match_run_end(&mr) == 0);
+  }
+
+  /* Control: the same begun run with no pad leaves the record still. */
+  fifa96_match_run_init(&mr2);
+  assert(fifa96_match_run_begin(&mr2, f.engine, 0) == 0);
+  {
+    int32_t taker = mr2.entities.team[0].target;
+    assert(mr2.slot.entity == taker);
+    assert(fifa96_match_entities_install(&mr2.entities.team[0].records[taker],
+                                         (uint8_t)mr2.state.phase, 0, 0) == 1);
+    for (int i = 0; i < 10; i++) one_granted_frame(&mr2);
+    assert(mr2.entities.team[0].records[taker].pos_x == 0);
+    assert(mr2.entities.team[0].records[taker].pos_z == 0);
+    assert(fifa96_match_run_end(&mr2) == 0);
+  }
+
+  drop_fixture(f);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -808,6 +913,7 @@ int main(void) {
   test_score_event_wired_run_path();
   test_goal_situation_dispatch_is_not_the_writer();
   test_natural_phase2_never_scores();
+  test_pad_drives_controlled_locomotion();
   puts("test_engine_match_frame OK");
   return 0;
 }

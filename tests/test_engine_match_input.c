@@ -420,6 +420,15 @@ static void test_engine_step_polls_match_input(void) {
 
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
 
+  /* M2 interactive Task 1 / FU-70 §1.3: begin runs the derived setup slot
+   * bind (`FUN_00078824` -> `FUN_000785E0`) and the state-1 arm's
+   * `FUN_0007876C` merge, so the human slot is attached to the kickoff taker
+   * before any poll; the pad's mapped direction then reaches that record. */
+  assert(mr.slot.entity >= 0);
+  assert(mr.slot.entity == mr.entities.team[0].target);
+  assert(mr.entities.team[0].slot_pool == 1);
+  assert(mr.entities.team[0].records[mr.slot.entity].has_slot == 1);
+
   /* Step 1 samples RIGHT; the step's tick does not grant, so the slot is
    * untouched (poll != frame update). */
   assert(fifa96_engine_step(f.engine) == 0);

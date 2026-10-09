@@ -123,6 +123,32 @@
  *      M2_WIRED_MASK now includes row 01 (the begin state-1 arm's taker)
  *      while row 00 still dispatches through a wired row's reset install.
  *
+ * --- v4.1 (M2 interactive Task 1 / G1): the golden re-pin ------------------
+ *
+ * The M2 golden was re-pinned again for the pad-driven locomotion upgrade
+ * (T1/G1). Reason: begin now runs the derived FU-70 setup slot bind
+ * (`FUN_00078824`->`FUN_000785E0`) and consumes the state-1 arm's
+ * `FUN_0007876C` merge, so the human slot is attached to the controlled
+ * record; the per-frame dispatch runs the FU-77 shared mover
+ * (`fifa96_action_locomotion_step`, `FUN_0007BF20`) for the slot-bound record,
+ * so targets written by the wired rows (and by the forced 0x13/0x14 arm
+ * staging) now integrate into velocity and position. Before this slice those
+ * targets never moved a record: every position stayed at the kickoff commit
+ * for the whole match. The key tape holds RIGHT across the early grants so the
+ * pad path is live; row 01 stage 1 now consumes the live FU-70 release word
+ * (`word[slot+6] & 0x70`), which the natural probe's KICK press/release at
+ * granted frame 60 supplies (live phase 2 at engine step 215).
+ *
+ * Frame diff (against the pre-T1 golden, `cmp`/diff measured): the transcript
+ * is 165 lines in both; lines 1..58 are byte-identical; the first differing
+ * line is frame 59 (golden `9602999e182bf660`, actual `e6b8fb9b15141968`) and
+ * 107 lines differ (59..165, all hash fields only — every `state=` suffix is
+ * unchanged, so no phase/score behavior moved). The divergence is the
+ * slot-bound record's integrated position entering the FU-85/89 render chain
+ * from frame 59 (the mover flushes/ramps the assigned target during the forced
+ * mechanics window; the first frames render the still-committed positions).
+ * M1 is untouched (test_engine_m1 green, same golden).
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -304,18 +330,169 @@
    (1ull << 0x23))
 
 /* The scripted key tape: intro skip (with the ISO), panel DECLINE/CONFIRM
- * navigation, then the match input: move (RIGHT, UP) and kick. One entry is
- * consumed per engine step; indices 0..4 land on the front-end steps 1..5
- * (index 4's panel confirm starts the match), index 5 is the first match poll
- * (step 6, the navigation confirm's release, ignored), the move keys land on
- * steps 7/9 and the KICK press on step 11. */
+ * navigation, then the match input. M2 interactive Task 1 (G1) holds RIGHT
+ * across the early grants so the pad-driven row-00 target reaches the FU-77
+ * mover and the controlled taker moves; a KICK press/release keeps the
+ * "kick reaches the model, no wired consumer" evidence, and a second KICK
+ * press/release at granted frame 60 supplies the natural probe's stage-1 slot
+ * release word (`word[slot+6] & 0x70`). One entry is consumed per engine step;
+ * indices 0..4 land on the front-end steps 1..5 (index 4's panel confirm
+ * starts the match), index 5 is the first match poll (step 6). */
 static const fifa96_platform_key M2_KEYS[] = {
-    {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
-    {FIFA96_ENGINE_KEY_DECLINE, 1}, {FIFA96_ENGINE_KEY_DECLINE, 0},
-    {FIFA96_ENGINE_KEY_CONFIRM, 1}, {FIFA96_ENGINE_KEY_CONFIRM, 0},
-    {FIFA96_ENGINE_KEY_RIGHT, 1},   {FIFA96_ENGINE_KEY_RIGHT, 0},
-    {FIFA96_ENGINE_KEY_UP, 1},      {FIFA96_ENGINE_KEY_UP, 0},
-    {FIFA96_ENGINE_KEY_KICK, 1},    {FIFA96_ENGINE_KEY_KICK, 0},
+    [0] = {FIFA96_ENGINE_KEY_CONFIRM, 1},
+    [1] = {FIFA96_ENGINE_KEY_CONFIRM, 0},
+    [2] = {FIFA96_ENGINE_KEY_DECLINE, 1},
+    [3] = {FIFA96_ENGINE_KEY_DECLINE, 0},
+    [4] = {FIFA96_ENGINE_KEY_CONFIRM, 1},
+    [5] = {FIFA96_ENGINE_KEY_CONFIRM, 0},
+    [6] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [7] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [8] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [9] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [10] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [11] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [12] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [13] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [14] = {FIFA96_ENGINE_KEY_KICK, 0},
+    [15] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [16] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [17] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [18] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    /* The held direction across the forced kickoff + mechanics windows (grants
+     * land every 3 steps from step 9; the phase-2 window ends at step ~145). */
+    [19] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [20] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [21] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [22] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [23] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [24] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [25] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [26] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [27] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [28] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [29] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [30] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [31] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [32] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [33] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [34] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [35] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [36] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [37] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [38] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [39] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [40] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [41] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [42] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [43] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [44] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [45] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [46] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [47] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [48] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [49] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [50] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [51] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [52] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [53] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [54] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [55] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [56] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [57] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [58] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [59] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [60] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [61] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [62] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [63] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [64] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [65] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [66] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [67] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [68] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [69] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [70] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [71] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [72] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [73] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [74] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [75] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [76] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [77] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [78] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [79] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [80] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [81] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [82] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [83] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [84] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [85] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [86] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [87] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [88] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [89] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [90] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [91] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [92] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [93] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [94] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [95] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [96] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [97] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [98] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [99] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [100] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [101] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [102] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [103] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [104] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [105] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [106] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [107] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [108] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [109] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [110] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [111] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [112] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [113] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [114] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [115] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [116] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [117] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [118] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [119] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [120] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [121] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [122] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [123] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [124] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [125] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [126] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [127] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [128] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [129] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [130] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [131] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [132] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [133] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [134] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [135] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [136] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [137] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [138] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [139] = {FIFA96_ENGINE_KEY_RIGHT, 1},
+    [140] = {FIFA96_ENGINE_KEY_RIGHT, 0},
+    /* Natural probe: the m 1 window never runs without directives, so stage 0
+     * completes at granted frame 60 (engine step 205 in the ISO cadence);
+     * press KICK just before it and release at step 213, so the release edge
+     * reaches the stage-1 slot arm on the step-215 grant. */
+    [206] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [207] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [208] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [209] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [210] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [211] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [212] = {FIFA96_ENGINE_KEY_KICK, 0},
 };
 #define M2_KEYS_LEN (sizeof M2_KEYS / sizeof M2_KEYS[0])
 
@@ -330,8 +507,12 @@ struct m2_result {
   int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
   int exit_step;             /* engine step whose resolve returned to FRONTEND */
   int move_step_seen;        /* RIGHT press observed in input_state[0] (step 7) */
-  int up_step_seen;          /* UP press observed in input_state[0] (step 9) */
-  int kick_step_seen;        /* KICK press observed in input_state[0] (step 11) */
+  int hold_step_seen;        /* RIGHT still held at step 9 (second poll) */
+  int kick_step_seen;        /* KICK press observed in input_state[0] (step 14) */
+  int32_t ctrl_kickoff_x;    /* controlled taker pos before the m 1 forcing */
+  int32_t ctrl_kickoff_z;
+  int32_t ctrl_mech_x;       /* controlled taker pos at the m 41 mechanics step */
+  int32_t ctrl_mech_z;
   int armed_26;              /* team 1 held code 0x26 at the mechanics step */
   int armed_28;              /* team 0 held code 0x28 */
   int armed_2a;              /* team 0 record 1 held code 0x2A */
@@ -426,7 +607,9 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
     /* v4: before any forcing, exactly one team carries the state-1 arm's
      * action 1 (row 01) on its formation-target taker — the natural kickoff
-     * chain is installed under the forced window. */
+     * chain is installed under the forced window. M2 interactive Task 1: the
+     * setup bind + FUN_0007876C merge put the human slot on that taker, so its
+     * pad-driven row-00 targets reach the shared mover. */
     {
       int takers = 0;
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
@@ -437,6 +620,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
           takers++;
       }
       assert(takers == 1);
+      assert(mr->slot.entity == mr->entities.team[0].target);
+      assert(mr->entities.team[0].records[mr->entities.team[0].target].has_slot == 1);
+    }
+    {
+      int32_t idx = mr->entities.team[0].target;
+      res->ctrl_kickoff_x = mr->entities.team[0].records[idx].pos_x;
+      res->ctrl_kickoff_z = mr->entities.team[0].records[idx].pos_z;
     }
     assert(fifa96_match_state_set_phase(&mr->state, 0x13) == 0);
     mr->phase_machine.state = 0x13;                     /* kickoff: forced live phase */
@@ -454,6 +644,12 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->mask_mech = mr->dispatched_ok;
     assert((res->mask_mech & ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))) ==
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
+    {
+      int32_t idx = mr->slot.entity;
+      assert(idx >= 0 && idx < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+      res->ctrl_mech_x = mr->entities.team[0].records[idx].pos_x;
+      res->ctrl_mech_z = mr->entities.team[0].records[idx].pos_z;
+    }
     assert(fifa96_match_state_set_phase(&mr->state, 2) == 0);   /* class 1: clock runs */
     assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
     for (size_t i = 0; i < sizeof M2_STAGE_ROWS / sizeof M2_STAGE_ROWS[0]; i++)
@@ -623,22 +819,24 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         }
       }
     }
-    if (steps == 7 || steps == 9 || steps == 11) {
-      /* The scripted move (RIGHT 0x04 / UP 0x01) and kick (0x10) presses
-       * reached the match input model. */
+    if (steps == 7 || steps == 9 || steps == 14) {
+      /* The scripted move (RIGHT 0x04) and kick (0x10) presses reached the
+       * match input model; M2 interactive Task 1 holds RIGHT across the early
+       * polls so the pad-driven row-00 target reaches the mover. */
       assert(live);
       uint8_t in = e->match_run.input_state[0];
       if (steps == 7 && in == 0x04) res->move_step_seen = steps;
-      if (steps == 9 && in == 0x01) res->up_step_seen = steps;
-      if (steps == 11 && in == 0x10) res->kick_step_seen = steps;
+      if (steps == 9 && in == 0x04) res->hold_step_seen = steps;
+      if (steps == 14 && (in & 0x10u) != 0u) res->kick_step_seen = steps;
     }
     if (steps == 12 || steps == 15) {
-      /* v2: the KICK press (step 11) is consumed by the step-12 granted frame
-       * (the clock advance runs before the input poll, so the frame body sees
-       * the step-11 sample), and a wired kick install would dispatch by the
-       * following grant (step 15). Neither sample may show a staged gameplay
-       * row: only the reset-installed row 00 and arm-installed kickoff codes
-       * do. Grant cadence verified first-hand (grants at steps 9/12/15). */
+      /* v2: the KICK press is consumed by a granted frame (the clock advance
+       * runs before the input poll, so the frame body sees the previous
+       * step's sample), and a wired kick install would dispatch by the
+       * following grant. Neither sample may show a staged gameplay row: only
+       * the reset-installed row 00, the kickoff row 01 and the arm-installed
+       * kickoff codes do. Grant cadence verified first-hand (grants at
+       * steps 9/12/15). */
       assert(live);
       if (steps == 12) res->mask_kick = e->match_run.dispatched_ok;
       if (steps == 15) res->mask_kick_next = e->match_run.dispatched_ok;
@@ -785,22 +983,31 @@ int main(void) {
   assert(res.exit_step - res.match_start_step == 140);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
-  assert(res.up_step_seen == 9);
-  assert(res.kick_step_seen == 11);                      /* kick input reached the run */
-  /* v2 natural-path evidence: the KICK press is consumed by the next granted
-   * frame (step 12) and the following grant (step 15) covers a wired
-   * install->dispatch; neither sample shows a staged gameplay row. The rows
-   * seen on those grants are the derived kickoff row 01 (the begin state-1
-   * arm's taker, gate-failing at the forced phase 0x13) and the arm-staged
-   * 0x26 codes; the natural kick dispatch stays blocked on the unported
-   * possession/selection invokers. */
+  assert(res.hold_step_seen == 9);                       /* RIGHT still held */
+  assert(res.kick_step_seen == 14);                      /* kick input reached the run */
+  /* M2 interactive Task 1 (G1): the pad drives the controlled record. The
+   * setup slot bind + FUN_0007876C merge put the human slot on the kickoff
+   * taker; the forced 0x13 window resets its row 01 to code 0, and the held
+   * RIGHT direction feeds row 00's FUN_00079C20 target into the FU-77 mover.
+   * The taker's position at the m 41 mechanics step must differ from its
+   * kickoff position. */
+  assert(res.ctrl_mech_x != res.ctrl_kickoff_x ||
+         res.ctrl_mech_z != res.ctrl_kickoff_z);
+  /* v2 natural-path evidence: the KICK press is consumed by a granted frame
+   * and the following grant covers a wired install->dispatch; neither sample
+   * shows a staged gameplay row. The rows seen on those grants are the reset-
+   * installed row 00 (pad-driven), the derived kickoff row 01 (the begin
+   * state-1 arm's taker, gate-failing at the forced phase 0x13) and the
+   * arm-staged 0x26 codes; the natural kick dispatch stays blocked on the
+   * unported possession/selection invokers. */
   assert((res.mask_kick & M2_KICKOFF_ROWS_MASK) != 0u);
   assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
   assert((res.mask_kick_next & M2_STAGED_ROWS_MASK) == 0u);
-  /* Nothing outside row 01 and the arm-installed kickoff codes dispatched on
-   * those grants either. */
-  assert((res.mask_kick & ~(M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
-  assert((res.mask_kick_next & ~(M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+  /* Nothing outside row 00, row 01 and the arm-installed kickoff codes
+   * dispatched on those grants either. */
+  assert((res.mask_kick & ~((1ull << 0x00) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+  assert((res.mask_kick_next &
+          ~((1ull << 0x00) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
   /* v2: the T5 kickoff placement is live at begin. */
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);

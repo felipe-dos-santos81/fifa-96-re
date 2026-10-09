@@ -213,6 +213,58 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   return 0;
 }
 
+/* M2 interactive Task 1 / FU-77 §1: the shared per-record locomotion mover
+ * `FUN_0007BF20` blocks A-E (`0x8E24B..0x8E507`, twin `FUN_0008E244`). The
+ * native calls it from both record-machine tails after the action handler
+ * (`0x7CD48`/`0x785C5`) for every record; the engine wires it for the record
+ * bound to the human control slot (the controlled record) first, so a
+ * pad-driven row-00/03/04 target becomes velocity and position. The fields the
+ * native reads/writes persist on the pool record (`face7d` +0x7D, `speed71`
+ * +0x71, `vel73`/`vel75` +0x73/+0x75, `body_timer9c` +0x9C, `timer7b` +0x7B as
+ * the stride nibble); the unported inputs are staged as their derived
+ * defaults: `+0x6F` stride rate 0, `+0x43` direct-face 0 and the `0x57A73`
+ * point (0,0). `move_attr` is the native `dword[rec+0x63]`, whose high word is
+ * the block-A distance `+0x65` (the low word falls out of the `>>19` attr
+ * extract); it is recomputed here from the post-action target so the stride
+ * index sees the fresh distance, exactly as the native recomputes `+0x65`
+ * before the table read (`0x8E267..0x8E278`). The AI-side integration is a
+ * numbered leg. */
+static void match_run_controlled_mover(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  fifa96_action_locomotion s;
+  fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
+  fifa96_arm_vec to = { r->target_x, r->target_y, r->target_z };
+  int32_t distance = 0;
+  int32_t lane_unused = 0;
+  memset(&s, 0, sizeof s);
+  s.pos_x = r->pos_x;
+  s.pos_z = r->pos_z;
+  s.target_x = r->target_x;
+  s.target_z = r->target_z;
+  s.delta = r->delta;
+  s.facing = r->face7d;
+  s.speed = r->speed71;
+  s.vel_x = r->vel73;
+  s.vel_z = r->vel75;
+  (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane_unused);
+  s.move_attr = (int32_t)((uint32_t)(uint16_t)distance << 16);
+  s.heading = r->type;
+  s.has_slot = r->has_slot;
+  s.body_timer = r->body_timer9c;
+  s.stride = (uint8_t)(r->timer7b & 0x0Fu);
+  if (fifa96_action_locomotion_step(&s, fifa96_match_heading_table,
+                                    fifa96_match_stride_table) != FIFA96_OK)
+    return;
+  r->pos_x = s.pos_x;
+  r->pos_z = s.pos_z;
+  r->face7d = s.facing;
+  r->speed71 = s.speed;
+  r->vel73 = s.vel_x;
+  r->vel75 = s.vel_z;
+  r->body_timer9c = s.body_timer;
+  r->type = s.heading;
+}
+
 /* FU-141: one pool record -> the FU-138/FU-140 staging record -> the FU-137
  * action dispatch, then the handler's requests back into the pool record. The
  * bound FU-70 slot's animation/direction bytes (native slot +0x20/+0x21, the
@@ -311,7 +363,13 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
     r->dir_x = e->dir_x;
     r->dir_z = e->dir_z;
   }
+  r->face7d = e->face7d;
+  r->speed71 = e->speed71;
+  r->vel73 = e->vel73;
+  r->vel75 = e->vel75;
+  r->body_timer9c = e->body_timer9c;
   rc = fifa96_match_dispatch_action(mr, e->code);
+  if (mr->slot.entity == id) match_run_controlled_mover(mr);
   e->pos_x = r->pos_x;
   e->pos_y = r->pos_y;
   e->pos_z = r->pos_z;
@@ -343,6 +401,11 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->place_z = r->place_z;
   e->dir_x = r->dir_x;
   e->dir_z = r->dir_z;
+  e->face7d = r->face7d;
+  e->speed71 = r->speed71;
+  e->vel73 = r->vel73;
+  e->vel75 = r->vel75;
+  e->body_timer9c = r->body_timer9c;
   /* FU-142e: row 2A writes the team `+0x830` flag (arms 0/1) and the
    * `[0x10F358]`/`[0x10F35C]` process globals (arms 0/9/10); the native writes
    * are process-wide, so the staged values land back on the pool/run for the
@@ -611,6 +674,28 @@ static void match_run_formation_seed(struct fifa96_match_run *mr) {
   fifa96_asset_free(bytes);
 }
 
+/* M2 interactive Task 1 / FU-70 §1.3/§1.4: the derived match-setup slot bind
+ * (`FUN_00078824` -> `FUN_000785E0`). The engine models the single human
+ * controller (player 0, the `0x4C1DC` map select 1); the native four `0x4C1E0`
+ * mode rows are unported, so the derived default is mode 0 = the controlled
+ * side (`0x4C1E0[0] == 0` -> `[0x57ABE]`, the `[0x57AAC]>>24` side the engine
+ * carries as `side_controlled`). The bind seeds the donor record's `+0x20` and
+ * `team+0x828` (slot_pool); the kickoff state-1 arm's `FUN_0007876C` merge
+ * then moves the slot onto the taker. */
+static void match_run_slot_bind(struct fifa96_match_run *mr) {
+  uint32_t side = (uint32_t)(mr->phase_machine.side_controlled & 1);
+  struct fifa96_match_team *team = &mr->entities.team[side];
+  int32_t id = fifa96_match_entities_bind_slot(&mr->entities, side,
+                                               (int16_t)mr->render.camera.pos_x,
+                                               (int16_t)mr->render.camera.pos_z);
+  if (id == FIFA96_MATCH_ENTITY_NONE) return;
+  mr->slot.entity = id;
+  mr->slot.player = 0;
+  mr->slot.map_select = 1;                /* 0x4C1DC default (FU-70 §1.4) */
+  mr->slot.ordinal = (uint8_t)(team->slot_pool - 1u);  /* native +0x1D */
+  mr->slot.active = (int8_t)team->side;   /* native +0x22 */
+}
+
 /* Release the Task 2 staging arena. Runs only on initialized runs: init must
  * accept uninitialized memory (tests memset 0xAA and re-init), so the owner
  * slot is assigned NULL there and never freed; begin/end/stage call this only
@@ -710,6 +795,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
   match_run_formation_seed(mr);
+  /* M2 interactive Task 1: the derived setup slot bind (`FUN_00078824` ->
+   * `FUN_000785E0`) runs before the kickoff state-1 arm, whose `FUN_0007876C`
+   * merge moves the bound slot onto the taker (the arm's own `0x8D243` call). */
+  match_run_slot_bind(mr);
   /* FU-143 §8/OL-84 (M2 visible-match Task 2): the derived kickoff phase
    * entry, between the native `FUN_000740A0(1, side)` write (0x88E82, act 1 =
    * phase-0x17 handler FUN_00088DC8 stage 0) and the `FUN_00073E08` placement
@@ -729,6 +818,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * (0x88E82 FUN_000740A0 precedes 0x88E87 FUN_00073E08; the 0x8D1D1
    * FUN_00079CCC pick reads the placement outputs the formation seed set). */
   (void)fifa96_match_phase_machine_kickoff(mr);
+  /* The state-1 arm's `FUN_0007876C` merge (`0x8D243`) recorded the taker as
+   * the slot requester; consume it now so the FU-70 slot points at the taker
+   * before the first frame body (the native rebinds `[0x57C64]` in place). */
+  match_run_entity_drain(mr);
   /* FU-89 §kickoff placement / OL-T11-8: the derived kickoff pass after the
    * camera reset (native `FUN_00088DC8` stage 0 order: `FUN_000700F4` camera
    * -> `FUN_00073E08` placement). The act-1 ball spawn (0x1E0/0), the

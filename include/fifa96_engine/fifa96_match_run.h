@@ -199,6 +199,16 @@ struct fifa96_match_run_record {
   int8_t player_e;          /* rec[+4][+0xE] stage-0 gate (FU-142b row 26) */
   int8_t dir_x;
   int8_t dir_z;
+  /* FU-77 `FUN_0007BF20` shared-mover state (M2 interactive Task 1): the
+   * native record fields the per-frame locomotion integrator reads and writes
+   * (`face7d` = +0x7D facing, `speed71` = +0x71 speed metric, `vel73`/`vel75` =
+   * +0x73/+0x75 velocity words, `body_timer9c` = +0x9C stride accumulator).
+   * The engine runs the mover for the slot-bound (controlled) record first;
+   * the AI-side integration stays a numbered leg. */
+  int16_t face7d;
+  int16_t speed71;
+  int16_t vel73, vel75;
+  uint8_t body_timer9c;
   int8_t place_offset_x;    /* caller-supplied 0x10F334[type8] (FU-140) */
   int8_t place_offset_z;    /* caller-supplied 0x10F33C[type8] (FU-140) */
   uint8_t place_valid;      /* row 1E: the placement triple is live (FU-141) */

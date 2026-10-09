@@ -624,6 +624,54 @@ static void test_merge_slot_ranked(void) {
   assert(fifa96_match_entities_merge_slot(&pool, TEAM0, 11) == -FIFA96_ERR_INVALID);
 }
 
+/* M2 interactive Task 1 / FU-70 §1.3: the derived setup slot bind
+ * (`FUN_000785E0` -> `FUN_0008DB6C` free-record pick). The native walk skips
+ * record 0 while `[team+0x829] == 0`, skips `+0x98`/`+0x9A` and already-bound
+ * holders, and picks the nearest record to the `0x5774C` point under the
+ * `0x8DC68` metric; the bind sets `+0x20` and increments `team+0x828`. */
+static void test_bind_slot(void) {
+  struct fifa96_match_entities pool;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  struct fifa96_match_team *team = &pool.team[TEAM0];
+
+  /* Record 0 is at the origin but the search gate is clear: skipped. Record 5
+   * is nearest but excluded by +0x9A; record 3 wins. */
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    team->records[i].pos_x = 100;
+    team->records[i].pos_z = 100;
+  }
+  team->records[0].pos_x = 0;
+  team->records[5].pos_x = 2;
+  team->records[5].pos_z = 2;
+  team->records[5].skip_9a = 1;
+  team->records[3].pos_x = 10;
+  team->records[3].pos_z = 10;
+  assert(fifa96_match_entities_bind_slot(&pool, TEAM0, 0, 0) ==
+         (int32_t)(TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 3));
+  assert(team->records[3].has_slot == 1);
+  assert(team->slot_pool == 1);
+
+  /* A second bind skips the holder and takes the next nearest. */
+  assert(fifa96_match_entities_bind_slot(&pool, TEAM0, 0, 0) ==
+         (int32_t)(TEAM0 * FIFA96_MATCH_ENTITY_RECORDS + 1));
+  assert(team->records[1].has_slot == 1);
+  assert(team->slot_pool == 2);
+
+  /* The record-0 gate: with the team search gate set, record 0 is eligible. */
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  pool.team[TEAM1].search_gate = 1;
+  pool.team[TEAM1].records[0].pos_x = 0;   /* nearest to the (0,0) point */
+  pool.team[TEAM1].records[3].pos_x = 9;
+  assert(fifa96_match_entities_bind_slot(&pool, TEAM1, 0, 0) ==
+         (int32_t)(TEAM1 * FIFA96_MATCH_ENTITY_RECORDS));
+  assert(pool.team[TEAM0].records[0].has_slot == 0);   /* team 0 untouched */
+  assert(pool.team[TEAM1].records[0].has_slot == 1);
+  assert(pool.team[TEAM1].slot_pool == 1);
+
+  assert(fifa96_match_entities_bind_slot(NULL, TEAM0, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_bind_slot(&pool, 2, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
 /* FUN_0007D430 pairing at the tail of the frame (FUN_0004B100 0x4B2B7..):
  * when the predicted closing distance is smaller and under 0x40, team 1's
  * nudged position lands in team 0's output triple. */
@@ -906,6 +954,7 @@ int main(void) {
   test_update_counter_and_timers();
   test_update_consumes_requests();
   test_merge_slot_ranked();
+  test_bind_slot();
   test_ball_pair();
   test_ball_state_roundtrip();
   test_place_commits_target();

@@ -119,6 +119,47 @@ int fifa96_match_entities_team_select(struct fifa96_match_entities *pool, uint32
   return index;
 }
 
+/* M2 interactive Task 1 / FU-70 §1.3: the derived `FUN_0008DB6C` free-record
+ * pick (`0x8DB6C..0x8DC49`) for the setup slot bind `FUN_000785E0`. The native
+ * walk skips bound holders, the skip index, `[team+0x7BF]`, record 0 while
+ * `[team+0x829] == 0`, and the `+0x98`/`+0x9A` exclusions, then returns the
+ * record nearest the `0x5774C` point under the `0x8DC68` metric (the sort/tie
+ * order of `FUN_000A1860` is the carried leg). The pool's chosen pointer is
+ * NONE and the holders are tracked by `has_slot`, so the derived subset is the
+ * same metric with the record-0 gate and holder skip applied in the walk. */
+int fifa96_match_entities_bind_slot(struct fifa96_match_entities *pool, uint32_t team,
+                                    int16_t from_x, int16_t from_z) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  uint16_t best_distance = 0xFFFFu;
+  int index = -1;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &pool->team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    uint16_t d;
+    /* `0x8DBA2`: record 0 is skipped while the team search gate is clear. */
+    if (i == 0u && pool->team[team].search_gate == 0) continue;
+    /* `0x8DB89`: an already-bound holder cannot take the slot again. */
+    if (pool->team[team].records[i].has_slot != 0) continue;
+    if (candidates[i].skip_98 != 0 || candidates[i].skip_9a != 0) continue;
+    d = (uint16_t)fifa96_entity_distance((int16_t)(from_x - candidates[i].x),
+                                         (int16_t)(from_z - candidates[i].y));
+    if (d < best_distance) {
+      best_distance = d;
+      index = (int)i;
+    }
+  }
+  if (index < 0) return FIFA96_MATCH_ENTITY_NONE;
+  pool->team[team].records[index].has_slot = 1;
+  pool->team[team].slot_pool++;
+  return (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+}
+
 int fifa96_match_entities_merge_slot(struct fifa96_match_entities *pool, uint32_t team,
                                      uint32_t record) {
   struct fifa96_match_team *t;

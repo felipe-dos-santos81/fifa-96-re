@@ -236,8 +236,13 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
     if (near >= 0) near_lane = (int16_t)(team->records[near].lane >> 16);
     if (near >= 0 && lane <= 0x40 && near_lane <= 0x40) {   /* 0x7DCD5/0x7DCE0 */
       if (r->has_slot != 0) {
-        /* 0x7DCE9..0x7DCF6: word[slot+6] & 0x70; the slot block is unmodeled
-         * (staged zero), so the native slot arm cannot fire. */
+        /* 0x7DCE9..0x7DCF6: `word[slot+6] & 0x70` — the FU-70 §1.2 release
+         * word. M2 interactive Task 1 binds the live slot (setup bind +
+         * `FUN_0007876C` merge), so the arm now fires on a released button
+         * exactly as the native; the pre-bind staged-zero stand-in that made
+         * this unreachable is gone. Guarded on the slot being this record's. */
+        if (mr->slot.entity == id && (mr->slot.released & 0x70u) != 0u)
+          ready = 1;
       } else if (r->timer89 > 0x78) {            /* 0x7DCFA..0x7DD03 */
         ready = 1;
       }

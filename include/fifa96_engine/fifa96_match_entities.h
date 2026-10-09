@@ -87,7 +87,19 @@ struct fifa96_match_entity {
   int32_t vel_x, vel_z;                 /* +0x71 / +0x73 (16.16 pair) */
   int16_t lane_x, lane_z;               /* +0x6B / +0x6D lane words */
   int32_t lane;                         /* +0x69, lane = >>16 */
-  int8_t dir_x, dir_z;                  /* bound slot direction +0x20/+0x21 */
+  int8_t dir_x, dir_z;                  /* bound slot direction +0x20/+0x21 (the
+                                         * T2/T3 chain `FUN_00078950` writes; row
+                                         * 00 reads them through the unaligned
+                                         * dwords `[slot+0x1D]`/`[slot+0x1E]`) */
+  /* FU-77 `FUN_0007BF20` shared mover state (M2 interactive Task 1): the
+   * record fields the per-frame integrator reads/writes and that persist
+   * across frames. `face7d` = +0x7D facing, `speed71` = +0x71 speed metric,
+   * `vel73`/`vel75` = +0x73/+0x75 velocity words, `body_timer9c` = +0x9C
+   * stride accumulator (threshold 2 with a slot). */
+  int16_t face7d;
+  int16_t speed71;
+  int16_t vel73, vel75;
+  uint8_t body_timer9c;
   /* Row-28 derived scratch cells (native record +0xA0..+0xAE; FU-142d
    * Appendix G). The native body keeps its stage gates there, so the pool
    * carries them across frames. */
@@ -212,6 +224,23 @@ int fifa96_match_entities_team_select(struct fifa96_match_entities *pool, uint32
  * +0x79 -> +0x7B. Returns 1 when a code was staged, 0 when rejected. */
 int fifa96_match_entities_install(struct fifa96_match_entity *entity, uint8_t phase,
                                   uint8_t code, uint8_t staged);
+
+/* The derived match-setup slot bind `FUN_000785E0`/`FUN_0008DB6C` (M2
+ * interactive Task 1 / FU-70 §1.3): bind the human control slot to a free
+ * record of `team` — the engine's one-slot subset of the native
+ * `FUN_00078824` four-slot loop. The native pick walks the team's 11 records
+ * skipping `+0x20 != 0` holders, the search gate `[team+0x829]`-gated record 0
+ * (`0x8DBA6`), `[team+0x7BF]` (the chosen pointer; NONE in the pool) and the
+ * `+0x98`/`+0x9A` exclusions, and returns the record nearest the point
+ * `0x5774C` (the camera reset triple). The derived pick substitutes
+ * `fifa96_entity_find_nearest` (the same 0x8DC68 metric) over the records'
+ * positions with `skip_index = team->search_gate == 0 ? 0 : -1`; the native
+ * `FUN_000A1860` sort/tie order stays the carried leg. On success the record's
+ * `has_slot` is set, `team->slot_pool` increments (the native `team+0x828`
+ * bind ordinal) and the record's entity id is returned; NONE when no record is
+ * eligible. NULL pool, team >= 2 -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_bind_slot(struct fifa96_match_entities *pool, uint32_t team,
+                                    int16_t from_x, int16_t from_z);
 
 /* The FU-138/FU-139 slot merge FUN_0007876C + FUN_00078670 over the pool:
  * requires the requester to have no slot and the team's +0x828 byte; ranks the

@@ -1276,6 +1276,27 @@ static void test_action_01_runs_kickoff_body(void) {
   assert(f.mr.record.helper_request == 0);
   assert(f.mr.record.timer89 == 2);
   assert(f.mr.state.phase == 1u);
+
+  /* M2 interactive Task 1: with the record bound to the live slot, stage 1
+   * takes the native `word[slot+6] & 0x70` arm (0x7DCE9..0x7DCF6) instead of
+   * the no-slot timer arm. */
+  f.mr.state.phase = 1;
+  f.mr.record.stage92 = 1;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 2;
+  f.mr.record.has_slot = 1;
+  f.mr.slot.entity = f.mr.record.entity_id;
+  f.mr.slot.released = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x01) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);          /* waits for the release word */
+  assert(f.mr.state.phase == 1u);
+  f.mr.slot.released = 0x40;                  /* a released button bit */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x01) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);             /* stage 2 -> situation 0xB */
+  assert(f.mr.record.stage92 == 3u);
+  f.mr.slot.released = 0;
+  f.mr.record.has_slot = 0;
+  f.mr.slot.entity = -1;
   drop_fixture(&f);
 }
 
