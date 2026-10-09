@@ -189,13 +189,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   what drives the tape's mover-integrated motion.
   **Kick (gameplay) and score stay blocked:** the KICK press that lands the
   kickoff transition dispatches no gameplay row (the possession/selection
-  invokers are unported) and gameplay goals have no wired invoker
-  (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller).
-  M2 full-gameplay S2 landed the goal arming→scan→queue producer chain
-  (`FU-145`: armer/classifier/scanner/queue, fixture-proven); it is dormant on
-  the static tape camera (pan source L1) and the S3 consumers
-  (scheduler/handlers) are still unported, so a natural run still cannot
-  score. The
+  invokers are unported) and a natural gameplay goal still has no *producer*:
+  the arming→scan→queue chain (FU-145, S2) is dormant on the static tape camera
+  (pan source L1) and the wave-7 B1 set-piece arms stay legs. The goal
+  **consumer** chain is now ported (FU-146 S3): begin installs the goal-screen
+  machine (`0x92D8C/0x92E2C`), the frame body runs the session-gated scheduler
+  (`FUN_000948AC 0x4B1A1`, before the clock body), and a queued goal id is
+  consumed by the installed period handler into `fifa96_match_run_score_event`
+  — the score increments through the native chain in a fixture
+  (`test_engine_match_frame::test_goal_consumer_chain_fixture`), while both
+  goldens stay byte-identical (the tape camera never arms, so no natural goal
+  enters the tape). `fifa96_match_run_goal_queue`'s direct fallback now honours
+  the native `[0x157AC2] in {2,3}` phase-5 skip. The
   smoke shots' measured content: 3.53% non-black window pixels, whole-window
   mean (4.15, 1.07, 1.23)/255, dominated by the HUD bar's `#900808`; the
   sprite color `#E044A0` (the OL-T11-6 6-bit `0x38/0x11/0x28 << 2`) is live.
@@ -211,7 +216,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:03` in `task-4-v5-match-clock.png`; tape v5 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
   | move the controlled player | blocked on screen | 40-press RIGHT burst: scene-band AE = 0; presses reach `input_state[0]` (`in=04`) but the kickoff reset leaves the record on the native 0x19 code and the row-04 pad arm is carried; the pad seam is fixture-proven headlessly |
   | kick the ball (gameplay) | blocked | no gameplay row dispatched (tape steps 12/15); possession/selection invokers unported |
-  | score a goal | blocked | no goal invoker reachable (OL-87/88/89 verified negative); the tape's score step is the direct derived writer |
+  | score a goal | blocked naturally; chain fixture-proven | no goal producer reachable (pan source L1 dormant; OL-87/88/89); the S3 consumer chain (installer → scheduler → handler → `score_event`) increments the score in `test_goal_consumer_chain_fixture` |
   | half/period end → exit | reached (headless) | tape: live class-1 period end → phase 0x0C → OVER→POST→EXIT; native periods last minutes, so not run to completion in the smoke |
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
@@ -421,10 +426,47 @@ the build also produces the windowed `fifa96` target (`make game`).
   camera-scoped) and the armer head counter/`FUN_00070DE0`; L2 `FUN_00092998`;
   L3 the possession-selection sinks (nearest substituted); L4 the
   `[0x1587D4]`/`[0x157A4C]` goal-side flag/record (snapshot-sign stand-in);
-  L5 the post-goal re-arm (`0x93C87`/`0x9437A`, S3); L7 `[0x157ACB]` dropped
+  L5 the post-goal re-arm (`0x93C87`/`0x9437A`, S3);   L7 `[0x157ACB]` dropped
   (sole read `0x8FCC8` unported); L8 the period-4 extra-time skip unreachable
   with the carried extra_time 0 (OL-85). The throw-in/corner situation arms
   (`0x88BBD`/`0x88C00`) stay the wave-7 B1 set-piece hand-off.
+- **M2 full-gameplay S3 (goal consumers, FU-146; 2026-10-09).** Landed from the
+  frozen FU-146 slice: `fifa96_match_run_screen_install` (the
+  `FUN_00092D8C`/`FUN_00092E2C` installer: leg/mode, step/timer clear, the
+  `[0x15B6C0]` latch `0x92DCD`, the score-pair/`[0x15B6A4]`/goal-log-total
+  resets, the `0x1110EC[mode*24+leg] × 60` duration seed, then the installed
+  handler runs once), `fifa96_match_run_screen_schedule` (the `FUN_000948AC`
+  scheduler: the `> [0x15B694]` rollover ids 8/7, the leg-2 `[0x157A97] > 0xF0`
+  ids 3/4, the `[0x157754]`/`word[0x1577C2]` id 9, the period-5 id 7, then the
+  `[0x15B6D4]` tail call), `fifa96_match_run_screen_step` (the six `0x110F78`
+  handlers, table-driven: the per-leg step-kind table and id tables — the
+  reviewer's L.4 correction: legs 0/1 map queued id 6 to `goal_no_score`,
+  legs 2..5 score it side 1 — the `[0x15882A]` gate, the phase-2 latch clear,
+  the post into `fifa96_match_run_score_event` with the lazily-computed probe
+  exactly on the native untracked `score[side]==1 && other<3` arm, and the
+  `> 0xB4` advance), `fifa96_match_run_screen_advance` (the `FUN_000935A0`
+  subset: the score-total-gated goal-log ring append at the new-total slot, the
+  totals, hint, and the same-leg re-install) and `fifa96_match_run_goal_probe`
+  (the `FUN_000CBC4C` six-limb counter over the image-seeded cells). Run state:
+  `screen_leg/mode/step/timer/period_frames/install_hint/actor_age/lead_z`,
+  `goal_no_score/last_id/minute/screen_accum`, `goal_log*` and
+  `goal_probe_limb` (native `[0x15B680/6BC/6B0/688/694/6C4/157A97/1577C2/
+  15B6A0/15B674/15B678/15B68C/15B698-15B6D8/112E68]`). begin installs the
+  derived leg 0 / mode 0 / side 0 (FU-146 legs 1/3) and the frame body runs the
+  scheduler before `phase_drive`+`goal_scan` (the native `0x4B1A1` before
+  `0x4B1A6`). **Both goldens byte-identical, no re-pin** (the static tape camera
+  never arms; the screen timer stays under the 900-unit rollover). Carried legs
+  (FU-146 §8, restated in the slice's §11): the handler presentation bodies
+  (the ±0x720 hint, the `0x10F328`/`0x15B6C8`/`0x158897` copies, the
+  `[0x15781D]` re-arm + snapshot — **not applied**: the `0x158897` snapshot
+  producer is unported and arming with a zero triple would poison the FU-145
+  armer — the situation re-queues 0xC/3/0xA/4/2/1/0, `FUN_000974DC`,
+  `FUN_0004C324`), the mode/side/leg front-end arg producers (legs 1/3), the
+  `[0x14C32A]` producer (leg 2), the tracked-side flags (leg 4), the
+  `FUN_000CBC4C` cells' live-native verification (leg 5), the `FUN_0009252C`
+  display gate (leg 6), the `FUN_000935A0` thresholds/exits (leg 7), the
+  `[0x15B684]` mode byte (leg 10). The `[0x15B6B8]` side flag is write-only
+  (fresh xrefs: its two writes) and is a leg.
 - **M2 interactive T1 (pad-driven locomotion / G1) legs.** The derived setup
   bind models the engine's single human slot: the native four `0x4C1E0` mode
   rows are unported (derived default mode 0 = the controlled side), the

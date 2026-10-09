@@ -369,6 +369,46 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
+  /* FU-146 S3 (goal consumers) run state, native cells:
+   *  - `screen_leg` = [0x15B680] the installed `0x110F78` handler index
+   *    (0..5; -1 = no handler, the image's [0x15B6D4]==0);
+   *  - `screen_mode` = [0x15B6BC] the installer's mode word (duration row);
+   *  - `screen_step` = [0x15B6B0] the handler step counter;
+   *  - `screen_timer` = [0x15B688] the handler's frame-delta accumulator
+   *    (`word[0x157A64]` per granted frame, 60 units/s);
+   *  - `screen_period_frames` = [0x15B694] the per-leg/mode duration
+   *    (`0x1110EC[mode*24+leg] * 60`, seeded by screen_install);
+   *  - `screen_install_hint` = [0x15B6C4] (1 after FUN_000935A0);
+   *  - `screen_actor_age` = [0x157A97] the camera-track actor age (producer
+   *    FUN_00072AC4 unported, staged 0);
+   *  - `screen_lead_z` = `word[0x1577C2]` the FU-71 camera lead word
+   *    (producer unported, staged 0: OL-72);
+   *  - `goal_no_score` = [0x15B6A0] the handler's no-score counter;
+   *  - `goal_last_id`/`goal_minute` = [0x15B674]/[0x15B678] the last consumed
+   *    id and its minute (the goal-log triple components);
+   *  - `goal_screen_accum` = [0x15B68C] the per-leg screen-time accumulator;
+   *  - `goal_log_prev_total`/`goal_total` = [0x15B698]/[0x15B69C] the
+   *    score-total bookkeeping (the ring append gate);
+   *  - `goal_log` = the 0x15B6D8 goal-log ring (12-byte triples, 21 slots;
+   *    the native shift-and-append ring);
+   *  - `goal_probe_limb` = the FUN_000CBC4C six 32-bit limbs
+   *    (0x112E68..0x112E7C, seeded from the image). */
+  int16_t screen_leg;
+  int16_t screen_mode;
+  uint8_t screen_step;
+  uint16_t screen_timer;
+  uint16_t screen_period_frames;
+  uint8_t screen_install_hint;
+  int32_t screen_actor_age;
+  int16_t screen_lead_z;
+  uint32_t goal_no_score;
+  uint8_t goal_last_id;
+  uint16_t goal_minute;
+  uint32_t goal_screen_accum;
+  int32_t goal_log_prev_total;
+  int32_t goal_total;
+  int32_t goal_log[21][3];
+  uint32_t goal_probe_limb[6];
   /* FU-139 §11 (Task 13): the native [0x157A4F] frame toggle
    * (FUN_0004B100 0x4B11A `XOR AH,1` / 0x4B129 store; cleared by the match
    * reset FUN_0004B02C 0x4B038). Row 06's claim arm and the second-half
@@ -440,13 +480,13 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
                                 uint16_t extra_seconds);
 
 /* FU-72 §2.4 plain increment: one side's goal word (`INC word [side*2 +
- * 0x57AC5]`). side 0/1; begin and teardown reset the pair. Kept for the
- * gameplay paths whose native writers remain unported: the eleven FUN_00093944
- * call sites are the period-indexed goal-screen handler cluster (FU-142
- * App. I.10 / Appendix L), whose invokers (OL-87/OL-88) and posted-id dispatch
- * (OL-89) are still open. The derived full writer is
- * `fifa96_match_run_score_event` below. Returns 0, -FIFA96_ERR_INVALID (NULL
- * or side > 1), or -FIFA96_ERR_STATE (run not live). */
+ * 0x57AC5]`). Since FU-146 S3 the eleven FUN_00093944 call sites (the
+ * period-indexed goal-screen handler cluster, FU-142 App. I.10) land in
+ * `fifa96_match_run_screen_step` -> `fifa96_match_run_score_event`; this plain
+ * increment stays as the `fifa96_match_run_goal_queue` direct fallback
+ * (`0x8AC88`/`0x8AC94`). begin and teardown reset the pair. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL or side > 1), or -FIFA96_ERR_STATE (run not
+ * live). */
 int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
 
 /* C3-OL2 (M2 playability Task 4): the derived `FUN_00093944` score-event
@@ -455,19 +495,18 @@ int fifa96_match_run_add_goal(struct fifa96_match_run *mr, uint32_t side);
  * goal word, records the side and, when `score_tracked_side` is not the
  * carried -1, updates the tracked-side goal difference and posts the native
  * threshold event id; the id the latest call posted lands in
- * `score_last_event` (0 = none). `probe` is the unported `FUN_000CBC4C` byte
- * (the writer reads it
- * only on the `score[side] == 1 && score[other] < 3` non-tracked arm; the
- * engine passes 0).
+ * `score_last_event` (0 = none). `probe` is the `FUN_000CBC4C` byte
+ * (`fifa96_match_run_goal_probe`); the writer reads it only on the
+ * `score[side] == 1 && score[other] < 3` non-tracked arm, and the goal-screen
+ * post step computes it exactly then (else 0).
  *
  * The native invokers are the eleven goal-screen handler sites
  * (`0x93D98..0x9486E`, FU-142 App. I.10), driven by the `FUN_0008A938`
- * situation queue and the period-indexed handler table `0x110F78`; the whole
- * screen cluster, the clock's goal scanner (`FUN_0008AF38 0x8B63E`) and the
- * `FUN_0009252C` dispatch are unported (OL-77/OL-87/OL-88/OL-89), so no wired
- * dispatch reaches this source yet — the run exposes it on the live-run API and
- * the M2 tape's goal step uses it. `fifa96_match_run_add_goal` stays the FU-72
- * plain increment for those unported paths. Returns 0,
+ * situation queue and the period-indexed handler table `0x110F78`; since FU-146
+ * S3 they are reached through `fifa96_match_run_screen_step` (installer ->
+ * frame scheduler -> post step, with the `FUN_0009252C` display gate carrying
+ * only `score_last_event`). `fifa96_match_run_add_goal` stays the FU-72 plain
+ * increment for the `fifa96_match_run_goal_queue` direct fallback. Returns 0,
  * -FIFA96_ERR_INVALID (NULL `mr` or `side > 1`), or -FIFA96_ERR_STATE (run not
  * live). A writer failure (invalid staged tracked side) leaves the run
  * untouched. */
@@ -487,6 +526,10 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
  * then, when the phase is 0x13/0x14, the FU-142a
  * `fifa96_match_phase_machine_step` ran the FUN_0008D098 installer arms once
  * (the FUN_000740A0 order);
+ * then, when `session_gate_14c32a` holds, the FU-146 S3 goal-screen scheduler
+ * ran (`fifa96_match_run_screen_schedule`, the native `0x4B1A1` before the
+ * clock body; a queued goal id is consumed here through the installed period
+ * handler into `fifa96_match_run_score_event`);
  * and the derived FU-143 phase driver ran (`fifa96_match_run_phase_drive`),
  * staging the FU-62 clock's `period_ended` completion and writing the derived
  * post-period phase (2 -> 0x0C under the selector-0 default);
@@ -608,6 +651,96 @@ int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side);
  * Returns 1 when a situation arm ran, 0 for a gate no-op or unwired leg,
  * -FIFA96_ERR_INVALID (NULL) or a propagated -fifa96_err_t. */
 int fifa96_match_run_goal_scan(struct fifa96_match_run *mr);
+
+/* FU-146 §7 item 2 (S3): the goal-screen installer `FUN_00092D8C` +
+ * `FUN_00092E2C` (`0x92D8C..0x92EFF`). Native register ABI: EAX = leg (the
+ * `0x14AF7C` word), EDX = mode (`0x14AF74`), BX = side (`0x14AF60`); the
+ * native callers are the front-end match-screen arms (FUN_00038630 0x38DCC,
+ * FUN_0003BB1C 0x3BF9E) and `begin` installs the derived defaults
+ * (leg 0 / mode 0 / side 0: FU-146 legs 1/3).
+ *
+ * Ported effects: `screen_leg`/`screen_mode` set, `screen_step` and
+ * `screen_timer` zeroed, the installer latch `situation_pending = 1`
+ * (0x92DCD), the score pair and `score_max_diff` zeroed (0x92E2C
+ * [0x157AC5]/[0x157AC7]/[0x15B6A4]), the goal-log totals zeroed
+ * ([0x15B698]/[0x15B69C]), `screen_period_frames` seeded from the per-mode
+ * duration table `0x1110EC[mode*24+leg]` dwords × 60 (modes 0..3; the values
+ * are `{15,15,30,30,60,5}` for modes 0..2 and `{5,1,5,1,3,2}` for mode 3),
+ * `screen_install_hint = 0`, then the installed handler runs once (the native
+ * `0x92EF7 CALL [0x15B6D4]`). The native tracked-side pick ([0x15B684] plus
+ * the [0x1590CC]/[0x159901] flags) is leg 4/10: the carried -1 stands
+ * untouched. The camera reset `FUN_000700F4`, the slot bind `FUN_00078824`
+ * (covered by begin's `match_run_slot_bind`) and the score/log display cells
+ * stay legs (FU-146 §8 leg 8).
+ *
+ * The native installer indexes `0x110F78` blindly; the port hardens (leg must
+ * be 0..5, mode 0..3). Returns 0, -FIFA96_ERR_INVALID (NULL or out-of-range
+ * leg/mode) or -FIFA96_ERR_STATE (run not live). */
+int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
+                                    int16_t mode, int16_t side);
+
+/* FU-146 §7 item 3 (S3): the session-gated scheduler `FUN_000948AC`
+ * (`0x948AC..0x949F7`), called once per granted frame from the frame body when
+ * `session_gate_14c32a` holds — the native `0x4B198 CMP byte [0x14C32A],0 /
+ * JZ / 0x4B1A1 CALL`, before the clock body (`0x4B1A6 CALL 0x8AF38`, the
+ * engine's phase_drive + goal_scan). Arms, in native order:
+ *  - `screen_timer > screen_period_frames` -> `situation_id = (leg != 5) ? 8 : 7`
+ *    (+ latch);
+ *  - leg 2 and the controlled record's team side != 0 and
+ *    `screen_actor_age > 0xF0` -> id 3; the complement -> id 4;
+ *  - leg not 2/4 and `camera.pos_z < 0` and `screen_lead_z < 0` -> id 9;
+ *  - leg 5 and `screen_lead_z < 0` -> id 7;
+ *  - tail: run the installed handler (`0x949E9 CALL [0x15B6D4]`).
+ * The engine hardens the slotless run; the `[0x157A83]` reader resolves the
+ * controlled id's team side (the native `byte[[[0x157A83]]+0x826]`). Returns 0,
+ * -FIFA96_ERR_INVALID (NULL), -FIFA96_ERR_STATE (run not live), or a
+ * propagated handler error. */
+int fifa96_match_run_screen_schedule(struct fifa96_match_run *mr);
+
+/* FU-146 §7 item 4 (S3): the installed period handler step machine — the six
+ * `0x110F78` handlers (`0x93BBC`, `0x93E20`, `0x940A4`, `0x94270`, `0x944FC`,
+ * `0x946C4`), table-driven per leg. The head adds the frame delta to
+ * `screen_timer` and dispatches on `screen_step`; the per-leg kind table is the
+ * native step table. Ported step kinds: the setup step (the `[0x15882A]` clear
+ * via `global_5882a` for legs 0/1/3 — the `[0x15B684]==0` staged path — and the
+ * leg-4 arm/snapshot clear), the `[0x15882A]` gate (legs 0/1/3), the phase-2
+ * latch-clear step, the post step and the `> 0xB4` advance call. The post
+ * consumes the pending situation: `goal_last_id`/`goal_minute`
+ * ([0x15B674]/[0x15B678], leg 5 forces the minute 0), the per-leg id table maps
+ * the queued id to a score side (or the no-score counter `goal_no_score`,
+ * extended with `leg 5`: id 5 -> side 0, ids 1..6 else -> side 1) and runs
+ * `fifa96_match_run_score_event` with the lazily-computed `FUN_000CBC4C` probe
+ * (called exactly on the native `score[side] == 1 && score[other] < 3`
+ * untracked arm), then the `FUN_000740A0(0,0)` equivalent (phase 0). The native
+ * setup bodies' presentation/staging writes (the ±0x720 hint, the
+ * 0x10F328/0x15B6C8/0x158897 copies, the `[0x15781D]` re-arm + snapshot, the
+ * situation re-queues 0xC/3/0xA/4/2/1/0, `FUN_000974DC`, `FUN_0004C324`) stay
+ * FU-146 §8 leg 8 (the duration is seeded by screen_install instead).
+ * Returns 1 when the post consumed an id, 0 for a gate/step no-op, a negative
+ * -fifa96_err_t. */
+int fifa96_match_run_screen_step(struct fifa96_match_run *mr);
+
+/* FU-146 §7 item 6 (S3): the `FUN_000935A0` advance/restart subset
+ * (`0x9362B..0x9370A`). Appends the `{score_last_side, goal_last_id,
+ * goal_minute}` triple to `goal_log` when `word[score0]+word[score1]` differs
+ * from `goal_log_prev_total` (the native slot index is the new total; beyond
+ * 20 the ring shifts entries 1..19 down and writes slot 19), records the
+ * totals, zeroes `screen_timer`/`screen_step`, sets `screen_install_hint = 1`
+ * and re-runs the installed handler (the native `0x93701`/`0x9370A` re-install
+ * and call). The `0x9343C`/`0x937DC` screen installs, the 10/0x14 score
+ * thresholds (`FUN_00037EC4`/`FUN_00037F0C`) and the
+ * `FUN_0004C324`/`FUN_00054104` screen exits stay legs (FU-146 §8 leg 7).
+ * Returns 0 or a negative -fifa96_err_t. */
+int fifa96_match_run_screen_advance(struct fifa96_match_run *mr);
+
+/* FU-146 §7 item 5 (S3): the deterministic six-limb probe `FUN_000CBC4C`
+ * (`0xCBC4C..0xCBCB7`) over `goal_probe_limb` (C0..C5 at 0x112E68..0x112E7C).
+ * Each call folds the limb chain into itself (`C5+C4` -> C4, then the ADC
+ * cascade through C0), increments C5 and propagates the wrap carry up through
+ * C0, returning the native EAX low byte (the writer tests `AL & 3`). Seed
+ * bytes first-hand: `56 0e 2d f2 e9 26 31 88 2f dd 24 c6 9c c4 02 07 7d 3f
+ * 35 9e 64 3b df 6f`. NULL returns 0. */
+uint8_t fifa96_match_run_goal_probe(struct fifa96_match_run *mr);
 
 /* One match presentation pass into the engine's indexed surface (Task 15):
  * clears the canvas to `render.background`, then recomposes the scene per the

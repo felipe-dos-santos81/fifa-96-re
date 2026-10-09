@@ -616,6 +616,8 @@ static int fifa96_match_run_cancel(void *ctx) {
   return fifa96_tick_cancel(&mr->engine->clock.ticks, fifa96_match_run_tick);
 }
 
+static void match_run_reset_screen_state(struct fifa96_match_run *mr);
+
 static int fifa96_match_run_teardown(void *ctx) {
   struct fifa96_match_run *mr = ctx;
   if (!mr) return -FIFA96_ERR_INVALID;
@@ -642,6 +644,7 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  match_run_reset_screen_state(mr);    /* FU-146 S3: no installed handler */
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
 }
@@ -690,6 +693,35 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   r->view_ratio = MATCH_RUN_VIEW_RATIO;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;
+}
+
+/* FU-146 S3: the fresh-match goal-consumer state. The native image seeds the
+ * `FUN_000CBC4C` probe limbs (`0x112E68..0x112E7C`: `56 0e 2d f2 e9 26 31 88
+ * 2f dd 24 c6 9c c4 02 07 7d 3f 35 9e 64 3b df 6f`); `screen_leg` restarts as
+ * -1 (no installed handler, the image's `[0x15B6D4]==0`) and `begin` installs
+ * the derived leg 0 / mode 0 / side 0 defaults. Runs on init, on the fresh
+ * match reset in begin and on teardown. */
+static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
+  static const uint32_t probe_seed[6] = {
+      0xF22D0E56u, 0x883126E9u, 0xC624DD2Fu,
+      0x0702C49Cu, 0x9E353F7Du, 0x6FDF3B64u,
+  };
+  mr->screen_leg = -1;
+  mr->screen_mode = 0;
+  mr->screen_step = 0;
+  mr->screen_timer = 0;
+  mr->screen_period_frames = 0;
+  mr->screen_install_hint = 0;
+  mr->screen_actor_age = 0;
+  mr->screen_lead_z = 0;
+  mr->goal_no_score = 0;
+  mr->goal_last_id = 0;
+  mr->goal_minute = 0;
+  mr->goal_screen_accum = 0;
+  mr->goal_log_prev_total = 0;
+  mr->goal_total = 0;
+  memset(mr->goal_log, 0, sizeof mr->goal_log);
+  memcpy(mr->goal_probe_limb, probe_seed, sizeof probe_seed);
 }
 
 /* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): the resource-loaded
@@ -825,6 +857,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -876,6 +909,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 1;
+  match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -956,6 +990,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   uint16_t extra = selector == 0 ? FIFA96_MATCH_RUN_EXTRA_SECONDS_DEFAULT
                                  : FIFA96_MATCH_RUN_EXTRA_SECONDS_RESET;
   (void)fifa96_match_run_set_period(mr, period, extra);
+  /* FU-146 S3 / the match-screen installer callers (FUN_00038630 0x38DCC,
+   * FUN_0003BB1C 0x3BF9E): the derived match-screen install. leg 0 / mode 0 /
+   * side 0 are the derived front-end defaults (the [0x14AF7C]/[0x14AF74]/
+   * [0x14AF60] producers are FU-146 legs 1/3). It arms the goal-screen step
+   * machine so the frame scheduler consumes queued goals. */
+  (void)fifa96_match_run_screen_install(mr, 0, 0, 0);
   return 0;
 }
 
@@ -1194,11 +1234,14 @@ int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side) {
   }
   /* 0x8AA7B/0x8AC28 fallback: [0x157ACB] = 0 (leg L7 dropped), the direct
    * increment (0x8AC88/0x8AC94) plus the table-2 situation-6 phase-5 write
-   * through the shared fifa96_match_run_situation entry. */
+   * through the shared fifa96_match_run_situation entry. The native direct arm
+   * skips the phase write when [0x157AC2] (the period counter) is 2 or 3
+   * (0x8AD96/0x8AD9F); the score increment still runs. */
   {
     int rc = fifa96_match_run_add_goal(mr, side);
     if (rc != 0) return rc;
   }
+  if (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u) return 0;
   return fifa96_match_run_situation(mr, 6);
 }
 
@@ -1241,6 +1284,330 @@ int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
     if (rc != 0) return rc;
   }
   return 1;
+}
+
+/* ------------------------------------------------------------------------- *
+ * FU-146 S3 — the goal-consumer chain: the FUN_000CBC4C probe, the installed
+ * 0x110F78 period handlers, FUN_000948AC scheduler, FUN_000935A0 advance and
+ * the FUN_00092D8C/FUN_00092E2C installer.
+ * ------------------------------------------------------------------------- */
+
+uint8_t fifa96_match_run_goal_probe(struct fifa96_match_run *mr) {
+  uint32_t *limb;
+  uint32_t eax;
+  uint64_t wide;
+  uint32_t carry;
+  if (!mr) return 0;
+  limb = mr->goal_probe_limb;              /* C0..C5 (0x112E68..0x112E7C) */
+  /* 0xCBC4C..0xCBC83: the fold chain EAX = C5; EAX += C4; C4 = EAX; ADC ... */
+  wide = (uint64_t)limb[5] + limb[4];
+  limb[4] = (uint32_t)wide;
+  carry = (uint32_t)(wide >> 32);
+  for (int i = 3; i >= 0; i--) {
+    wide = (uint64_t)limb[i + 1] + limb[i] + carry;
+    limb[i] = (uint32_t)wide;
+    carry = (uint32_t)(wide >> 32);
+  }
+  eax = limb[0];
+  /* 0xCBC88..0xCBCB6: C5++, then the wrap carry propagates up through C0 */
+  for (int i = 5; i >= 0; i--) {
+    limb[i]++;
+    if (limb[i] != 0u) return (uint8_t)eax;
+  }
+  eax++;                                   /* the carry out of C0 */
+  return (uint8_t)eax;
+}
+
+/* FU-146 §4: the six handler step shapes (the native step tables at 0x93B80,
+ * 0x93DE4, 0x94074, 0x94234, 0x944D4, 0x946B4). Every step advance zeroes the
+ * handler timer. */
+enum {
+  MATCH_RUN_SCREEN_SETUP0 = 0,      /* the per-leg first step (falls through) */
+  MATCH_RUN_SCREEN_SETUP0_RET,      /* leg 2's first step (native RET 0x9413E) */
+  MATCH_RUN_SCREEN_GATE,            /* the [0x15882A] gate (legs 0/1/3) */
+  MATCH_RUN_SCREEN_SETUP2,          /* the leg-0/1/3 second setup step */
+  MATCH_RUN_SCREEN_ADVANCE,         /* leg 2's bare step advance (0x9413F) */
+  MATCH_RUN_SCREEN_PHASE,           /* phase-2 latch clear */
+  MATCH_RUN_SCREEN_POST,            /* the latch-gated consume step */
+  MATCH_RUN_SCREEN_TAIL             /* timer > 0xB4 -> FUN_000935A0 */
+};
+static const uint8_t match_run_screen_kinds[6][6] = {
+    {MATCH_RUN_SCREEN_SETUP0, MATCH_RUN_SCREEN_GATE, MATCH_RUN_SCREEN_SETUP2,
+     MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST, MATCH_RUN_SCREEN_TAIL},
+    {MATCH_RUN_SCREEN_SETUP0, MATCH_RUN_SCREEN_GATE, MATCH_RUN_SCREEN_SETUP2,
+     MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST, MATCH_RUN_SCREEN_TAIL},
+    {MATCH_RUN_SCREEN_SETUP0_RET, MATCH_RUN_SCREEN_ADVANCE,
+     MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST, MATCH_RUN_SCREEN_TAIL, 0u},
+    {MATCH_RUN_SCREEN_SETUP0, MATCH_RUN_SCREEN_GATE, MATCH_RUN_SCREEN_SETUP2,
+     MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST, MATCH_RUN_SCREEN_TAIL},
+    {MATCH_RUN_SCREEN_SETUP0, MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST,
+     MATCH_RUN_SCREEN_TAIL, 0u, 0u},
+    {MATCH_RUN_SCREEN_SETUP0, MATCH_RUN_SCREEN_PHASE, MATCH_RUN_SCREEN_POST,
+     MATCH_RUN_SCREEN_TAIL, 0u, 0u},
+};
+static const uint8_t match_run_screen_step_count[6] = {6u, 6u, 5u, 6u, 4u, 4u};
+
+/* FU-146 §4: the per-leg id tables (0x93B98, 0x93DFC, 0x94088, 0x9424C,
+ * 0x944E4; leg 5 has no table: id 5 -> side 0, ids 1..6 else -> side 1,
+ * ids > 6 -> no-score, encoded as the equivalent 6-entry table). -1 = the
+ * no-score counter. */
+#define MATCH_RUN_SCREEN_NO_SCORE (-1)
+static const int8_t match_run_screen_ids_leg0[9] = {1, 0, 1, -1, 0, -1, -1, -1, 1};
+static const int8_t match_run_screen_ids_leg1[9] = {1, 0, 1, -1, 0, -1, -1, -1, 1};
+static const int8_t match_run_screen_ids_leg2[7] = {1, 0, 1, 0, 0, 1, 0};
+static const int8_t match_run_screen_ids_leg3[9] = {1, 0, 1, -1, 0, 1, -1, -1, 1};
+static const int8_t match_run_screen_ids_leg4[6] = {1, 0, -1, -1, 0, 1};
+static const int8_t match_run_screen_ids_leg5[6] = {1, 1, 1, 1, 0, 1};
+static const int8_t *const match_run_screen_ids[6] = {
+    match_run_screen_ids_leg0, match_run_screen_ids_leg1,
+    match_run_screen_ids_leg2, match_run_screen_ids_leg3,
+    match_run_screen_ids_leg4, match_run_screen_ids_leg5,
+};
+static const uint8_t match_run_screen_id_count[6] = {9u, 9u, 7u, 9u, 6u, 6u};
+
+/* FU-146 §3: the per-mode duration table `0x1110EC[mode*24 + leg]` dwords
+ * (first-hand read): modes 0..2 are `{15,15,30,30,60,5}` seconds and mode 3 is
+ * `{5,1,5,1,3,2}`; `screen_install` seeds `value * 60` frames (0x9410A..0x94111
+ * `*15 *4`). */
+static const uint16_t match_run_screen_durations[4][6] = {
+    {15u, 15u, 30u, 30u, 60u, 5u},
+    {15u, 15u, 30u, 30u, 60u, 5u},
+    {15u, 15u, 30u, 30u, 60u, 5u},
+    {5u, 1u, 5u, 1u, 3u, 2u},
+};
+
+/* The handler post step (the native 0x93D2A/0x94179/0x94219/0x9441B/0x945F9/
+ * 0x947EF bodies): consume the pending situation through the per-leg id table.
+ * Returns 1 when the step ran (the caller advances), 0 when the latch is clear
+ * (native JZ epilogue), or a negative -fifa96_err_t. */
+static int match_run_screen_post(struct fifa96_match_run *mr) {
+  const int8_t *ids = match_run_screen_ids[mr->screen_leg];
+  uint8_t count = match_run_screen_id_count[mr->screen_leg];
+  uint8_t id = mr->situation_id;
+  int32_t tracked = mr->score_tracked_side;
+  int32_t side = MATCH_RUN_SCREEN_NO_SCORE;
+  uint8_t probe = 0;
+  int rc;
+  if (!mr->situation_pending) return 0;       /* 0x93D31 JZ epilogue */
+  mr->situation_pending = 1;                  /* 0x93D46 re-latch */
+  /* The 0x974DC presentation call (EAX=0x1E, the leg-specific EBX/ECX/EDI
+   * args) stays FU-146 §8 leg 8 and is not called. */
+  mr->goal_last_id = id;                      /* 0x93D5C [0x15B674] */
+  if (mr->screen_leg == 5) {
+    /* 0x94824: leg 5 forces the minute 0 and folds 0x400/0x401 into the
+     * screen accumulator (0x94834..0x94864). */
+    uint32_t base = mr->goal_screen_accum;
+    uint32_t plus400 = base + 0x400u;
+    uint32_t plus401 = base + 0x401u;
+    mr->goal_screen_accum = plus400;
+    if ((id == 5u && tracked == 0) || (id != 5u && tracked == 1))
+      mr->goal_screen_accum = plus401;
+    mr->goal_minute = 0;
+  } else {
+    mr->goal_minute = (uint16_t)((int32_t)mr->screen_timer / 0x3C);  /* 0x93D66 */
+    mr->goal_screen_accum += mr->screen_timer;                       /* 0x93D73 */
+  }
+  /* the id table (`EAX = [0x15B6A8] - 1; CMP EAX,count-1; JA no-score`) */
+  if ((uint8_t)(id - 1u) < count) side = ids[id - 1u];
+  if (side < 0) {
+    mr->goal_no_score++;                     /* INC dword [0x15B6A0] */
+  } else {
+    /* The native writer calls FUN_000CBC4C only on the untracked
+     * `score[side] == 1 && score[other] < 3` arm (0x939D1), i.e. with the
+     * pre-increment score 0; the probe is computed exactly then. */
+    if (tracked != -1 && side != tracked &&
+        mr->score[side] == 0u && mr->score[side ^ 1] < 3u)
+      probe = fifa96_match_run_goal_probe(mr);
+    rc = fifa96_match_run_score_event(mr, (uint32_t)side, probe);
+    if (rc < 0) return rc;
+  }
+  rc = match_run_write_phase(mr, 0);          /* 0x93DB2 FUN_000740A0(0,0) */
+  if (rc < 0) return rc;
+  return 1;
+}
+
+int fifa96_match_run_screen_step(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (mr->screen_leg < 0 || mr->screen_leg > 5) return 0;   /* no handler */
+  /* The handler head (0x93BC4..0x93BD7): [0x15B688] += word[0x157A64]. */
+  mr->screen_timer = (uint16_t)(mr->screen_timer + mr->state.frame_delta);
+  for (;;) {
+    uint8_t kind;
+    if (mr->screen_step >= match_run_screen_step_count[mr->screen_leg]) return 0;
+    kind = match_run_screen_kinds[mr->screen_leg][mr->screen_step];
+    switch (kind) {
+      case MATCH_RUN_SCREEN_SETUP0:
+        /* The modelled-cell subset of the per-leg first step. Legs 0/1/3 clear
+         * the kickoff gate [0x15882A] (0x93C30; legs 1/3 take the clear under
+         * the staged [0x15B684]==0 path, FU-146 leg 10); leg 4 clears the pan
+         * arm and the snapshot (0x9453C..0x9454E). The presentation/staging
+         * remainder (the ±0x720 hint, the 0x10F328/0x15B6C8/0x158897 copies,
+         * the situation re-queue, FUN_0004C324) is FU-146 §8 leg 8. */
+        if (mr->screen_leg == 0 || mr->screen_leg == 1 || mr->screen_leg == 3) {
+          mr->global_5882a = 0;
+        } else if (mr->screen_leg == 4) {
+          mr->goal_armed = 0;
+          mr->goal_snap_x = 0;
+          mr->goal_snap_y = 0;
+          mr->goal_snap_z = 0;
+        }
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        continue;
+      case MATCH_RUN_SCREEN_SETUP0_RET:       /* leg 2 0x940D6..0x9413E */
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        return 0;
+      case MATCH_RUN_SCREEN_GATE:             /* 0x93C59/0x93EDB/0x9434C */
+        if (!mr->global_5882a) return 0;
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        continue;
+      case MATCH_RUN_SCREEN_SETUP2:
+        /* The leg-0/1/3 re-arm/setup step (0x93C7B/0x93EFB/0x9436E): its
+         * staging writes ([0x15781D]=1, the 0x158897 snapshot/camera copies,
+         * the clock display words, the situation re-queue) are FU-146 §8
+         * leg 8; `screen_install` seeds the duration instead, and the
+         * [0x15781D] re-arm is not applied because the 0x158897 snapshot
+         * producer is unported (arming with a zero triple would poison the
+         * FU-145 camera armer). */
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        continue;
+      case MATCH_RUN_SCREEN_ADVANCE:          /* leg 2 0x9413F */
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        continue;
+      case MATCH_RUN_SCREEN_PHASE:
+        /* 0x93CFE/0x9414D/0x943F1/0x945CF/0x947C3: the phase dword's high byte
+         * ([0x157A4A]>>24) is the engine phase. */
+        if (mr->state.phase != 2u) return 0;
+        mr->situation_pending = 0;            /* the latch clear */
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        continue;
+      case MATCH_RUN_SCREEN_POST: {
+        int rc = match_run_screen_post(mr);
+        if (rc < 0) return rc;
+        if (rc == 0) return 0;
+        mr->screen_step++;
+        mr->screen_timer = 0;
+        /* The native falls through into the tail step (0x93DCA); the tail's
+         * `timer > 0xB4` test is a guaranteed no-op here because the post zeroed
+         * the timer, so returning directly is observationally identical. */
+        return 1;
+      }
+      case MATCH_RUN_SCREEN_TAIL:
+        if (mr->screen_timer > 0xB4u)
+          return fifa96_match_run_screen_advance(mr);
+        return 0;
+      default:
+        return 0;
+    }
+  }
+}
+
+int fifa96_match_run_screen_advance(struct fifa96_match_run *mr) {
+  int32_t total;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  /* 0x935C8..0x935D5: word[score0] + word[score1] (zero-extended words). */
+  total = (int32_t)(uint16_t)mr->score[0] + (int32_t)(uint16_t)mr->score[1];
+  if (total != mr->goal_log_prev_total) {     /* 0x935E2 CMP; JZ 0x9362B */
+    if (total <= 20) {                        /* 0x935E9 JLE: slot = total */
+      mr->goal_log[total][0] = mr->score_last_side;
+      mr->goal_log[total][1] = (int32_t)mr->goal_last_id;
+      mr->goal_log[total][2] = (int32_t)mr->goal_minute;
+    } else {
+      /* 0x935EB..0x93613: shift slots 0..18 <- 1..19 and write slot 19 */
+      for (int32_t i = 0; i < 19; i++) {
+        mr->goal_log[i][0] = mr->goal_log[i + 1][0];
+        mr->goal_log[i][1] = mr->goal_log[i + 1][1];
+        mr->goal_log[i][2] = mr->goal_log[i + 1][2];
+      }
+      mr->goal_log[19][0] = mr->score_last_side;
+      mr->goal_log[19][1] = (int32_t)mr->goal_last_id;
+      mr->goal_log[19][2] = (int32_t)mr->goal_minute;
+    }
+  }
+  mr->goal_total = total;                     /* 0x935DC [0x15B69C] */
+  mr->goal_log_prev_total = total;            /* 0x93638 [0x15B698] := [0x15B69C] */
+  mr->screen_install_hint = 1;                /* 0x936ED [0x15B6C4] */
+  mr->screen_timer = 0;                       /* 0x936F3 */
+  mr->screen_step = 0;                        /* 0x936FB */
+  /* 0x9370A: re-install the same-leg handler and run it once. The 0x9343C /
+   * 0x937DC screen installs, the 10/0x14 thresholds and the
+   * FUN_0004C324/FUN_00054104 exits stay FU-146 §8 leg 7. */
+  return fifa96_match_run_screen_step(mr);
+}
+
+int fifa96_match_run_screen_schedule(struct fifa96_match_run *mr) {
+  int side1 = 0;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  /* 0x948B2..0x948E0: the screen-over rollover. */
+  if (mr->screen_timer > mr->screen_period_frames) {
+    mr->situation_id = (uint8_t)(mr->screen_leg != 5 ? 8 : 7);
+    mr->situation_pending = 1;
+    return fifa96_match_run_screen_step(mr);          /* JMP 0x949E0 */
+  }
+  if (mr->screen_leg == 2) {                          /* 0x948E5 / 0x9492A */
+    if (mr->entities.controlled != FIFA96_MATCH_ENTITY_NONE) {
+      uint32_t team =
+          (uint32_t)mr->entities.controlled / FIFA96_MATCH_ENTITY_RECORDS;
+      side1 = mr->entities.team[team & 1u].side != 0u;
+    }
+    if (mr->screen_actor_age > 0xF0) {                /* [0x157A97] > 0xF0 */
+      mr->situation_id = (uint8_t)(side1 ? 3 : 4);
+      mr->situation_pending = 1;
+      return fifa96_match_run_screen_step(mr);
+    }
+  }
+  if (mr->screen_leg != 4 && mr->screen_leg != 2 &&   /* 0x9497D..0x949B5 */
+      mr->render.camera.pos_z < 0 && mr->screen_lead_z < 0) {
+    mr->situation_id = 9;
+    mr->situation_pending = 1;
+    return fifa96_match_run_screen_step(mr);
+  }
+  if (mr->screen_leg == 5 && mr->screen_lead_z < 0) { /* 0x949B7..0x949DA */
+    mr->situation_id = 7;
+    mr->situation_pending = 1;
+    return fifa96_match_run_screen_step(mr);
+  }
+  return fifa96_match_run_screen_step(mr);            /* 0x949E9 CALL */
+}
+
+int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
+                                    int16_t mode, int16_t side) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (leg < 0 || leg > 5 || mode < 0 || mode > 3) return -FIFA96_ERR_INVALID;
+  (void)side;   /* the tracked-side pick is FU-146 leg 4/10: the carried -1 */
+  /* FUN_00092D8C 0x92DC5/0x92DD3: leg/mode, step/timer clear, installer latch.
+   * The tracked-side pick ([0x15B684] / [0x1590CC] / [0x159901]) and the
+   * 0x10F328 camera copy stay legs. */
+  mr->screen_leg = leg;
+  mr->screen_mode = mode;
+  mr->screen_step = 0;
+  mr->screen_timer = 0;
+  mr->situation_pending = 1;                  /* 0x92DCD */
+  /* FUN_00092E2C: the score pair / writer / goal-log-total resets, the
+   * duration seed, the hint clear, then the installed handler runs once
+   * (0x92EF7 CALL [0x15B6D4]). The [0x15B6B8] side flag (write-only: fresh
+   * xrefs = its two writes), the 0x74034/0x7417C resets (the engine's begin
+   * covers the fresh-match camera/slot reset) and the clock display cells stay
+   * legs. */
+  mr->score[0] = 0;                           /* [0x157AC5] */
+  mr->score[1] = 0;                           /* [0x157AC7] */
+  mr->score_max_diff = 0;                     /* [0x15B6A4] */
+  mr->goal_screen_accum = 0;                  /* [0x15B68C] */
+  mr->goal_log_prev_total = 0;                /* [0x15B698] */
+  mr->goal_total = 0;                         /* [0x15B69C] */
+  mr->screen_period_frames =
+      (uint16_t)(match_run_screen_durations[mode][leg] * 60u);
+  mr->screen_install_hint = 0;                /* 0x15B6C4 */
+  return fifa96_match_run_screen_step(mr);
 }
 
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
@@ -1312,6 +1679,15 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * state byte is set, then FUN_0008D098 runs for both teams). */
     if (mr->state.phase == 0x13u || mr->state.phase == 0x14u)
       (void)fifa96_match_phase_machine_step(mr);
+    /* FU-146 §7 item 7 / 0x4B198..0x4B1A6: the native session-gated scheduler
+     * runs after the camera track (0x4B193 FUN_000736AC, which carries the
+     * armer) and before the clock body FUN_0008AF38 (the engine's
+     * phase_drive + goal_scan). The native order means a goal queued by this
+     * frame's scan is consumed by the next frame's handler. */
+    if (mr->session_gate_14c32a) {
+      rc = fifa96_match_run_screen_schedule(mr);
+      if (rc < 0) return rc;
+    }
     /* FU-143 wiring (Task 3): the clock's phase funnel, after the entity chain
      * (the native FUN_0008AF38 runs after the FU-67/entity block at 0x4B1A6
      * and inside it calls FUN_0008B9CC at 0x8B574). A completion staged above

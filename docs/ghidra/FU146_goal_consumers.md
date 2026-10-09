@@ -545,3 +545,121 @@ clear, `0x32DFF`), `0x14AF5E/72/7A` 2 reads each.
 `0x0014af60` (1), `0x0014af74` (4).
 No writes: no rename/comment/label/function/script/project save. Repo: this
 draft file only.
+
+---
+
+## 11. Port landing (S3, 2026-10-09)
+
+Landed from this slice in `src/fifa96_engine/fifa96_match_run.c` (state in
+`include/fifa96_engine/fifa96_match_run.h`), with the fixture + unit coverage in
+`tests/test_engine_match_frame.c` (8 tests). Both goldens byte-identical, no
+re-pin (M1 `09b726b7…`, M2 `2e709151…`).
+
+**Landed mapping.**
+
+| contract item | function | first-hand window / tables |
+|---|---|---|
+| §7.1 | `fifa96_match_run_goal_queue` (S2) + the `[0x157AC2]∈{2,3}` phase-5 skip (`0x8AD96`/`0x8AD9F`) | `0x8A944..0x8A9E8`, `0x8AA7B`, `0x8AC28..0x8ADB4` |
+| §7.2 | `fifa96_match_run_screen_install` | `0x92D8C..0x92E28`, `0x92E2C..0x92EFF`; duration table `0x1110EC` |
+| §7.3 | `fifa96_match_run_screen_schedule` | `0x948AC..0x949F7` |
+| §7.4 | `fifa96_match_run_screen_step` | six handler windows; step tables `0x93B80/93DE4/94074/94234/944D4/946B4`; id tables `0x93B98/93DFC/94088/9424C/944E4` |
+| §7.5 | `fifa96_match_run_goal_probe` | `0xCBC4C..0xCBCB7`; cells `0x112E68..0x112E7C` |
+| §7.6 | `fifa96_match_run_screen_advance` | `0x9362B..0x9370A` |
+| §7.7 | `fifa96_match_run_frame` call order (`0x4B198` before `0x4B1A6`) | `0x4B180..0x4B1AF` |
+
+**Evidence spot-checks (first-hand `/FIFA96.EXE`, read-only, this slice).**
+
+| claim | tool call | result |
+|---|---|---|
+| installer bodies incl. the latch `0x92DCD`, the score-pair/`[0x15B6A4]`/totals zeroing, the `0x1110EC` read and the `0x92EF7` handler call | `decompile_function 0x92D8C/0x92E2C` | byte-exact |
+| duration table `0x1110EC` 24 dwords: modes 0..2 `{15,15,30,30,60,5}`, mode 3 `{5,1,5,1,3,2}` | `read_memory 0x1110EC` (96 B) | exact (the freeze's modes 0..2 claim extended with mode 3) |
+| `0x110F78` legs `{0x93BBC,0x93E20,0x940A4,0x94270,0x944FC,0x946C4}` | `read_memory 0x110F78` (64 B) | exact |
+| six step tables + id tables (incl. leg 5's hardcoded id 5→0 else 1 with the >6 no-score bound `0x94655/0x94677`) | `read_memory 0x93B80/93DE4/94074/94234/944D4/946B4`; `disassemble_bytes` all six windows | exact; L.4 correction confirmed |
+| the scheduler arms (rollover, leg-2 ids 3/4, id 9, id 7, `0x949E9` tail call) | `disassemble_function 0x948AC` | byte-exact |
+| the frame gate `0x4B198 CMP [0x14C32A] / 0x4B1A1 CALL / 0x4B1A6 CALL 0x8AF38` | `disassemble_bytes 0x4B180` | exact |
+| the fallback skip `0x8AD96 CMP EAX,2 / JZ` `0x8AD9F CMP EAX,3 / JZ` (byte read `MOV AL,[0x157AC2]` at `0x8AD8A`) | `disassemble_bytes 0x8AD80` | exact |
+| `FUN_000CBC4C` fold chain + `INC C5` cascade + `INC EAX` carry-out | `disassemble_function 0xCBC4C` | exact; seed dwords `{0xF22D0E56,0x883126E9,0xC624DD2F,0x0702C49C,0x9E353F7D,0x6FDF3B64}` |
+| `FUN_000935A0` ring append (index = new total, `>0x14` shift + slot 19), totals `0x15B698`/`0x15B69C`, hint `0x15B6C4`, re-install `0x9370A` | `disassemble_function 0x935A0` | exact |
+| writer probe call site `0x939D1` only on the untracked own==1/opp<3 arm | `disassemble_bytes 0x93944` | exact |
+| `[0x15B6B8]` fresh xrefs = 2, both writes (`0x8A982`, `0x92E3F`) | `get_xrefs_to 0x15B6B8` | **write-only**: no consumer; leg |
+| `[0x15B6A0]` fresh xrefs = 5, all handler `INC dword` RMWs | `get_xrefs_to 0x15B6A0` | never reset natively; the port resets it per match (hardening) |
+| `FUN_00074034`/`FUN_0007417C` (called by `0x92E2C`) are the camera/state reset + side flags + a `JMP 0x78824` slot bind; neither touches `[0x15B6A0]`/`[0x15B6B8]` | `disassemble_function 0x74034/0x7417C` | resets/bind stay legs (begin covers the fresh-match reset) |
+
+**Errata / decisions.**
+
+1. **Setup-step bodies are leg 8, not applied.** The step machines' setup steps
+   (leg 0 step 0/2, leg 1 step 0/2, leg 3 step 0/2, leg 4 step 0, leg 5 step 0,
+   leg 2 step 0) do their presentation/staging writes and then queue a
+   situation via `FUN_0008A938`. Every such call happens with the installer
+   latch `[0x15B6C0]==1` (nothing clears it before the phase-clear step), so
+   the dispatcher takes the *direct* arm — e.g. leg 0 step 2 (situation 3)
+   reaches `0x8ABF3` and writes phase 4. Applying them would flip the live
+   phase mid-play, so per §8 leg 8 the port advances the step counter without
+   them (the situation re-queues 0xC/3/0xA/4/2/1/0 are likewise visual).
+2. **Duration seeded by the installer.** The native computes
+   `[0x15B694] = 0x1110EC[mode*24+leg]*60` in the handler's setup step
+   (`0x93CB5`-family). Because that step is leg 8, `screen_install` seeds the
+   value (contract §7.2). Native divergence: before the setup step runs the
+   native cell is 0 (image) and the `timer > period` rollover fires
+   id 8 + latch every pre-setup frame; the seeded port suppresses that
+   pre-window. Both end at the same state (latch set, no consumer at step 1
+   until the `[0x15882A]` gate opens) — unobservable in the ported subset.
+3. **The `[0x15781D]` re-arm is not applied.** The setup steps set the pan arm
+   with a snapshot copied from `0x158897` (staged by the unported situation-3
+   direct arm); the engine carries no `0x158897` producer, and arming with a
+   zero triple would make the FU-145 camera armer permanently take the
+   already-armed branch. Leg 8.
+4. **The `[0x15882A]` clear/set is applied** for legs 0/1/3 (`global_5882a = 0`
+   under the staged `[0x15B684]==0` path; leg 10) and the leg-4 arm/snapshot
+   clear (`0x9453C..0x9454E`) because those writes hit modelled cells and are
+   unambiguous.
+5. **`[0x157A97]` and `word[0x1577C2]` are staged caller fields.**
+   `screen_actor_age` (`[0x157A97]`, producer `FUN_00072AC4` `0x73414`-family)
+   and `screen_lead_z` (`word[0x1577C2]`, the FU-71 lead word; the engine
+   conventions OL-72/82 stage 0) default 0, so the leg-2 ids 3/4 and the id
+   9/7 arms are byte-exact but dormant until their producers land.
+6. **`[0x157754]` is the engine camera z.** The id-9 arm reads the native
+   camera-focus dword; the port reads `render.camera.pos_z` (the engine's model
+   of the `0x15774C/50/54` triple) as a full dword.
+7. **The probe is called lazily at the exact native site.** The writer's only
+   `FUN_000CBC4C` call is `0x939D1` on the untracked
+   `score[side]==1 && score[other]<3` arm; the post pre-computes the probe iff
+   `tracked != -1 && side != tracked && score[side] == 0 && score[other] < 3`
+   (the pre-increment equivalent) and passes 0 otherwise. With the carried
+   tracked side -1 the probe never advances (native same).
+8. **`[0x15B6A0]` reset is engine hardening.** Xrefs are 5 handler RMWs; nothing
+   natively clears it. The port resets `goal_no_score` per fresh match
+   (init/begin/teardown) for determinism.
+9. **Ring index = new total.** `FUN_000935A0` appends at slot `total` (not a
+   count) while `total <= 20`, and shifts 1..19 down writing slot 19 beyond;
+   `goal_log[21][3]` mirrors this exactly.
+10. **Installer hardening.** The native indexes `0x110F78`/`0x1110EC` blindly;
+    the port bounds leg 0..5 and mode 0..3 (the callers gate the leg;
+    `0x38B1F CMP [0x14AF7C],5`).
+11. **`begin` runs the installer** with the derived leg 0 / mode 0 / side 0
+    (legs 1/3); the tracked-side pick stays the carried -1 (leg 4/10) and the
+    `[0x15B6B8]` side flag is not stored (write-only, errata table).
+
+**Leg status after S3** (this slice's §8 numbering):
+
+| leg | status |
+|---|---|
+| 1 front-end leg selector inputs | open (derived leg 0) |
+| 2 `[0x14C32A]` producer | open (begin seeds 1, S2) |
+| 3 installer mode/side producers | open (derived mode 0, side 0) |
+| 4 tracked-side team flags | open (carried -1) |
+| 5 probe cells vs a running native | open (port exact vs first-hand bytes; no native run comparison) |
+| 6 `FUN_0009252C` display gate | open (carried `score_last_event`) |
+| 7 `FUN_000935A0` thresholds/exits | open (ring/totals/re-install subset landed) |
+| 8 handler presentation bodies | open by design (the setup-step bodies; see errata 1-3) |
+| 9 legs 0/1 vs 2..5 id-6 divergence | **closed**: the per-leg id tables reproduce both |
+| 10 `[0x15B684]` | open (staged 0) |
+| 11 FU-145 dependency | closed (S2 landed `goal_queue`) |
+
+**Tests** (all in `tests/test_engine_match_frame.c`, ASan/UBSan,
+`-fno-sanitize-recover=all`): `test_goal_chain_pan_fixture` (S2 fixture updated:
+the queued id 5 is now consumed with phase 0), `test_goal_consumer_chain_fixture`
+(natural kickoff → settle → queue → consume; RED on BASE), plus
+`test_screen_install_state`, `test_screen_schedule_ids`, `test_goal_probe_limbs`,
+`test_screen_post_id_tables` (the L.4 correction), `test_screen_step_probe_post`
+(the 0xD3 probe arm) and `test_screen_advance_ring`.

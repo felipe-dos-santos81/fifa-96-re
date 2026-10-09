@@ -732,12 +732,14 @@ static void test_goal_situation_dispatch_is_not_the_writer(void) {
  * driven naturally into the live phase 2 (state-1 arm + wired row 01) runs the
  * ported gameplay rows with no goal invoker. The native producer chain stays
  * unported -- the camera-pan arming (`FUN_0007131C 0x713A6..0x713F7`) that
- * sets `[0x15781D]`/`[0x15781E]`, the clock scan call (`FUN_0008AF38 0x8B63E`)
- * and `FUN_00088940` (the only situation-6 producer, `0x88B44`) -- and so do
- * the consumers (scheduler `FUN_000948AC` at `0x4B1A1`, the installed
- * period-indexed handlers `[0x15B6D4]`). The score pair and the derived writer
- * cells therefore stay fresh over a natural gameplay window: the negative
- * result pinned here. */
+ * sets `[0x15781D]`/`[0x15781E]` and the clock scan call
+ * (`FUN_0008AF38 0x8B63E` -> `FUN_00088940`, the only situation-6 producer,
+ * `0x88B44`) -- so a natural run never queues a goal. The consumers are now
+ * ported (FU-146 S3: the `0x4B1A1` scheduler, the installed period handlers
+ * `[0x15B6D4]`), but with nothing queued the score pair and the derived writer
+ * cells stay fresh over a natural gameplay window: the negative result pinned
+ * here (the screen timer stays under the 900-unit rollover, so the handler's
+ * tail never fires). */
 static void test_natural_phase2_never_scores(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -1207,14 +1209,18 @@ static void test_goal_scan_queue_and_fallback(void) {
   assert(mr.situation_pending == 0);
 
   /* gate-closed fallback (begun run: the direct increment is lifecycle-gated):
-   * direct score + the shared table-2 situation-6 phase-5 write. */
+   * direct score + the shared table-2 situation-6 phase-5 write. FU-146 S3:
+   * begin also installs the goal-screen machine, whose native installer latches
+   * [0x15B6C0]=1 (FUN_00092E2C 0x92DCD); the machine clears it at the
+   * phase-clear step once play starts. The direct arm skips the phase-5 write
+   * when [0x157AC2] is 2 or 3 (0x8AD96/0x8AD9F). */
   {
     struct fixture f = make_fixture(10000000ull);
     struct fifa96_match_run fb;
     fifa96_match_run_init(&fb);
     assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
     assert(fb.session_gate_14c32a == 1);            /* begin seeds the gate */
-    assert(fb.goal_armed == 0 && fb.situation_pending == 0);
+    assert(fb.goal_armed == 0 && fb.situation_pending == 1);
     fb.state.phase = 2;
     fb.session_gate_14c32a = 0;                     /* session gate closed */
     fb.goal_armed = 1;
@@ -1223,7 +1229,7 @@ static void test_goal_scan_queue_and_fallback(void) {
     assert(fifa96_match_run_goal_scan(&fb) == 1);
     assert(fb.score[0] == 1 && fb.score[1] == 0);
     assert(fb.state.phase == 5u);                   /* table-2 row 6 */
-    assert(fb.situation_pending == 0);
+    assert(fb.situation_pending == 1);              /* the fallback leaves the latch */
     /* a pending situation routes to the same fallback */
     fb.state.phase = 2;
     fb.session_gate_14c32a = 1;
@@ -1232,6 +1238,15 @@ static void test_goal_scan_queue_and_fallback(void) {
     assert(fifa96_match_run_goal_scan(&fb) == 1);
     assert(fb.score[0] == 2);
     assert(fb.state.phase == 5u);
+    /* the [0x157AC2] in {2,3} skip: score still increments, no phase write */
+    fb.state.phase = 2;
+    fb.session_gate_14c32a = 0;
+    fb.global_157ac2 = 2;
+    assert(fifa96_match_run_goal_scan(&fb) == 1);
+    assert(fb.score[0] == 3 && fb.state.phase == 2u);
+    fb.global_157ac2 = 3;
+    assert(fifa96_match_run_goal_scan(&fb) == 1);
+    assert(fb.score[0] == 4 && fb.state.phase == 2u);
     assert(fifa96_match_run_end(&fb) == 0);
     drop_fixture(f);
   }
@@ -1254,12 +1269,16 @@ static void test_goal_phase2_write_clears_arm(void) {
   assert(mr.goal_armed == 0 && mr.goal_zone == 0);
 }
 
-/* FU-145 S2 RED core: a fixture pan drives the FU-71 camera integrator past
- * the arming bounds; the frame body arms, the snapshot freezes, and the clock
- * tail's scan queues situation 6 with the snapshot-freeze order. The native
- * pan producer (rate words 0x1577C0/C2) is leg L1/S4; the fixture uses the
- * equivalent engine seam (the camera velocity pair, as test_camera drives it).
- * Would fail on BASE: no armer, no scanner, no queue. */
+/* FU-145 S2 core / FU-146 S3 consumer: a fixture pan drives the FU-71 camera
+ * integrator past the arming bounds; the frame body arms, the snapshot freezes,
+ * and the clock tail's scan queues situation 6. FU-146 S3: the begun run's
+ * installer arms the step machine at match setup; raising the kickoff gate
+ * ([0x15882A]) settles it at the post step ([0x15B6B0]) and the next frame's
+ * scheduler consumes the queued id 5 through the leg-0 id table (side 0) into
+ * the FUN_00093944 writer — the post's FUN_000740A0(0,0) writes phase 0. The
+ * native pan producer (rate words 0x1577C0/C2) is leg L1/S4; the fixture uses
+ * the equivalent engine seam (the camera velocity pair, as test_camera drives
+ * it). */
 static void test_goal_chain_pan_fixture(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -1268,6 +1287,12 @@ static void test_goal_chain_pan_fixture(void) {
   assert(mr.session_gate_14c32a == 1);    /* begin seeds the live session */
   mr.state.phase = 2;
   mr.state.period_length = 90;
+  /* the kickoff-complete gate settles the machine (step 1 -> 4) and the
+   * phase-clear step drops the installer latch */
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(mr.situation_pending == 0);
+
   fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00);
   mr.render.camera.vel_z = 0x40;          /* 0x40 * delta 2 per granted frame */
   mr.render.camera.speed = 0x40;          /* the update's integration gate */
@@ -1278,17 +1303,290 @@ static void test_goal_chain_pan_fixture(void) {
   assert(mr.goal_snap_z == 0xB80);
   assert(mr.goal_zone == 1);
   assert(mr.situation_pending == 1 && mr.situation_id == 5);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);   /* queued, not yet consumed */
 
-  /* the snapshot is frozen; with no scheduler consumer yet (S3) the next
-   * frame's scan sees the pending latch and takes the native fallback (the
-   * direct increment + the shared table-2 phase-5 write). Pinned so the S3
-   * consumer wiring visibly replaces it. */
+  /* the snapshot is frozen; the next frame's scheduler runs the post step,
+   * which consumes the queued id through the native score writer. The
+   * no-consumer fallback pinned by S2 is replaced by this chain. */
   int32_t snap = mr.goal_snap_z;
   one_granted_frame(&mr);
   assert(mr.goal_snap_z == snap);
-  assert(mr.score[0] == 1);
-  assert(mr.state.phase == 5u);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);
+  assert(mr.score_last_side == 0);
+  assert(mr.state.phase == 0u);           /* post FUN_000740A0(0,0) */
   assert(mr.situation_pending == 1 && mr.situation_id == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-146 S3 RED core: the native goal-consumer chain end to end on the natural
+ * kickoff chain. The begun run installs the goal-screen machine; the natural
+ * kickoff (act-1 producer + wired row 01) raises [0x15882A] and writes phase 2,
+ * settling the machine at its post step and clearing the install latch. The
+ * scanner's situation-6 queue arm then latches a queued goal id, and the next
+ * frame's scheduler consumes it: the leg-0 id table maps queued id 5 to side 0
+ * and the post runs fifa96_match_run_score_event — the score increments through
+ * the native consumer path. Fails on BASE: no installer/scheduler/handler, so
+ * the queued id is never consumed. */
+static void test_goal_consumer_chain_fixture(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  /* the kickoff transition settled the machine and cleared the install latch */
+  assert(mr.situation_pending == 0);
+  one_granted_frame(&mr);                 /* steady-state scheduler frame */
+
+  assert(fifa96_match_run_goal_queue(&mr, 0) == 0);   /* the scanner's arm */
+  assert(mr.situation_id == 5 && mr.situation_pending == 1);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+
+  one_granted_frame(&mr);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);       /* RED on BASE */
+  assert(mr.score_last_side == 0);
+  assert(mr.state.phase == 0u);           /* the post's FUN_000740A0(0,0) */
+  assert(mr.situation_pending == 1);      /* the post re-latches */
+  assert(mr.situation_id == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-146 S3: the installer state (`FUN_00092D8C`/`FUN_00092E2C`). begin runs
+ * the derived leg 0 / mode 0 / side 0 install; an explicit install switches
+ * leg/mode, zeroes the score pair/writer bookkeeping, seeds the per-mode
+ * duration and runs the handler once. */
+static void test_screen_install_state(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.screen_leg == -1);            /* init: no handler installed */
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.screen_leg == 0 && mr.screen_mode == 0);
+  assert(mr.screen_period_frames == 900u);   /* mode 0 leg 0 = 15 s * 60 */
+  assert(mr.situation_pending == 1);         /* the installer latch 0x92DCD */
+  assert(mr.screen_step == 1);               /* step 0 ran; the gate is closed */
+  assert(mr.screen_install_hint == 0);
+
+  mr.score[0] = 3;
+  mr.score[1] = 2;
+  mr.score_max_diff = 5;
+  assert(fifa96_match_run_screen_install(&mr, 2, 1, 0) == 0);
+  assert(mr.score[0] == 0 && mr.score[1] == 0 && mr.score_max_diff == 0);
+  assert(mr.screen_leg == 2 && mr.screen_mode == 1);
+  assert(mr.screen_period_frames == 1800u);  /* mode 1 leg 2 = 30 s * 60 */
+  assert(mr.screen_step == 1);               /* leg 2 step 0 RETs (0x9413E) */
+  assert(mr.screen_timer == 0);
+  assert(mr.situation_pending == 1);
+
+  /* the native installer indexes the table blindly; the port hardens */
+  assert(fifa96_match_run_screen_install(&mr, 6, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_screen_install(&mr, -1, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_screen_install(&mr, 0, 4, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_screen_install(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+
+  struct fifa96_match_run dead;
+  fifa96_match_run_init(&dead);
+  assert(fifa96_match_run_screen_install(&dead, 0, 0, 0) == -FIFA96_ERR_STATE);
+  assert(fifa96_match_run_screen_schedule(&dead) == -FIFA96_ERR_STATE);
+  assert(fifa96_match_run_screen_step(&dead) == -FIFA96_ERR_STATE);
+  assert(fifa96_match_run_screen_advance(&dead) == -FIFA96_ERR_STATE);
+}
+
+/* FU-146 S3: the scheduler's queue arms (`FUN_000948AC` 0x948B2..0x949DA). */
+static void test_screen_schedule_ids(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* the screen-over rollover: leg 0 -> id 8 */
+  mr.screen_timer = (uint16_t)(mr.screen_period_frames + 1u);
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 8 && mr.situation_pending == 1);
+  /* leg 5 -> id 7 */
+  assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.screen_timer = (uint16_t)(mr.screen_period_frames + 1u);
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 7 && mr.situation_pending == 1);
+  /* leg 2, a side-1 controlled record, actor age > 0xF0 -> id 3 */
+  assert(fifa96_match_run_screen_install(&mr, 2, 0, 0) == 0);
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.entities.controlled = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 5;
+  mr.entities.team[1].side = 1;
+  mr.screen_actor_age = 0xF1;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 3 && mr.situation_pending == 1);
+  /* side 0 -> id 4 */
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.entities.controlled = 5;
+  mr.entities.team[0].side = 0;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 4 && mr.situation_pending == 1);
+  /* no controlled record -> id 4 */
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 4 && mr.situation_pending == 1);
+  /* the age bound is exclusive */
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.screen_actor_age = 0xF0;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 0 && mr.situation_pending == 0);
+  /* leg 0, camera z and lead z negative -> id 9 */
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.render.camera.pos_z = -1;
+  mr.screen_lead_z = -1;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 9 && mr.situation_pending == 1);
+  /* leg 5, lead z negative -> id 7 */
+  assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.render.camera.pos_z = 0;
+  mr.screen_lead_z = -1;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 7 && mr.situation_pending == 1);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+  assert(fifa96_match_run_screen_schedule(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-146 S3: the `FUN_000CBC4C` six-limb probe over the image-seeded cells.
+ * First call folds to 0x559A51ED (low byte 0xED); a full wrap cascade adds the
+ * carry out of C0 (0xCBCB0..0xCBCB7). */
+static void test_goal_probe_limbs(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_goal_probe(&mr) == 0xEDu);
+  assert((fifa96_match_run_goal_probe(&mr) & 3u) != 0u);
+  for (int i = 0; i < 6; i++) mr.goal_probe_limb[i] = 0;
+  assert(fifa96_match_run_goal_probe(&mr) == 0u);
+  mr.goal_probe_limb[5] = 0xFFFFFFFFu;
+  assert(fifa96_match_run_goal_probe(&mr) == 0u);
+  assert(mr.goal_probe_limb[0] == 0u && mr.goal_probe_limb[5] == 0u);
+  assert(fifa96_match_run_goal_probe(NULL) == 0u);
+}
+
+/* FU-146 S3 / the reviewer's L.4 correction: the per-leg id tables. Legs 0/1
+ * map the queued goal id 6 to the no-score counter; legs 2..5 score it side 1.
+ * The latch-clear step must consume the queued id on the following call. */
+static void test_screen_post_id_tables(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.screen_leg == 0);
+  mr.global_5882a = 1;                    /* the kickoff-complete gate */
+  mr.state.phase = 2;
+  assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle: step 1 -> 4 */
+  assert(mr.screen_step == 4);
+  assert(mr.situation_pending == 0);      /* the phase-clear dropped the latch */
+  mr.situation_id = 6;
+  mr.situation_pending = 1;
+  assert(fifa96_match_run_screen_step(&mr) == 1);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(mr.goal_no_score == 1);          /* leg 0: id 6 -> INC [0x15B6A0] */
+  assert(mr.goal_last_id == 6);
+  assert(mr.state.phase == 0u);           /* the post's phase write */
+  assert(mr.screen_step == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  /* leg 2: queued id 6 -> side 1 (0x94088 table) */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_screen_install(&mr, 2, 0, 0) == 0);
+  mr.state.phase = 2;
+  assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle: step 1 -> 3 */
+  assert(mr.screen_step == 3);
+  mr.situation_id = 6;
+  mr.situation_pending = 1;
+  assert(fifa96_match_run_screen_step(&mr) == 1);
+  assert(mr.score[0] == 0 && mr.score[1] == 1);
+  assert(mr.score_last_side == 1);
+  assert(mr.goal_no_score == 0);
+  assert(mr.state.phase == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-146 S3: the post's lazily-computed probe reaches the writer's 0xD3 arm.
+ * Leg 2, tracked side 0, a side-1 goal: the native writer hits the untracked
+ * `score[side] == 1 && score[other] < 3` arm and calls FUN_000CBC4C; the first
+ * probe byte 0xED has (0xED & 3) != 0 and posts 0xD3. */
+static void test_screen_step_probe_post(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_screen_install(&mr, 2, 0, 0) == 0);
+  mr.state.phase = 2;
+  assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle at the post step */
+  assert(mr.screen_step == 3);
+  mr.score_tracked_side = 0;
+  mr.situation_id = 6;
+  mr.situation_pending = 1;
+  assert(fifa96_match_run_screen_step(&mr) == 1);
+  assert(mr.score[1] == 1 && mr.score[0] == 0);
+  assert(mr.score_last_event == 0xD3);    /* the probe-gated post */
+  assert(mr.goal_probe_limb[5] == 0x6FDF3B65u);   /* exactly one probe call */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-146 S3: the FUN_000935A0 advance subset — `screen_timer > 0xB4` on the
+ * tail step appends the goal-log triple at the new-total slot, records the
+ * totals, sets the install hint and re-runs the handler (which clears the
+ * kickoff gate on its setup step). */
+static void test_screen_advance_ring(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.global_5882a = 1;
+  mr.state.phase = 2;
+  assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle: step 1 -> 4 */
+  assert(mr.screen_step == 4);
+  mr.situation_id = 5;
+  mr.situation_pending = 1;
+  assert(fifa96_match_run_screen_step(&mr) == 1);   /* consume queued id 5 */
+  assert(mr.score[0] == 1);
+  assert(mr.screen_step == 5);
+  assert(mr.goal_total == 0);
+
+  mr.screen_timer = 0xB5;                           /* > 0xB4 on the tail step */
+  assert(fifa96_match_run_screen_step(&mr) == 0);   /* tail -> advance */
+  assert(mr.goal_total == 1);
+  assert(mr.goal_log_prev_total == 1);
+  assert(mr.goal_log[1][0] == 0);                   /* score_last_side */
+  assert(mr.goal_log[1][1] == 5);                   /* goal_last_id */
+  assert(mr.goal_log[1][2] == (int32_t)mr.goal_minute);
+  assert(mr.screen_install_hint == 1);
+  assert(mr.screen_step == 1);                      /* re-install ran step 0 */
+  assert(mr.global_5882a == 0);                     /* the setup step cleared it */
+
+  /* a second advance with no score change does not append */
+  mr.screen_timer = 0xB5;
+  assert(fifa96_match_run_screen_step(&mr) == 0);
+  assert(mr.goal_total == 1);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -1318,6 +1616,13 @@ int main(void) {
   test_goal_scan_queue_and_fallback();
   test_goal_phase2_write_clears_arm();
   test_goal_chain_pan_fixture();
+  test_goal_consumer_chain_fixture();
+  test_screen_install_state();
+  test_screen_schedule_ids();
+  test_goal_probe_limbs();
+  test_screen_post_id_tables();
+  test_screen_step_probe_post();
+  test_screen_advance_ring();
   test_pad_drives_controlled_locomotion();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
