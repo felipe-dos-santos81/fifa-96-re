@@ -105,7 +105,7 @@ live phase 2 asserted, the match HUD (bar + score/clock) drawn from the first
 match frame, plus the natural-phase-2 probe (a directive-free
 replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
 and the canvas-level RGB assertion; the golden was re-pinned for the drawing,
-palette, pad-locomotion and HUD
+palette, pad-locomotion, camera-place v4.2 and HUD
 upgrades and is byte-identical since the HUD re-pin — T4 moved no presented
 frame), and the
 windowed `make game` build runs on SDL3. The T4 interactive smoke re-run on the

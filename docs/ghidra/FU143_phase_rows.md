@@ -958,6 +958,10 @@ and the phase-2 mechanics entry (m 41). Measured with a temporary replay of the
 same tape/run/config with all match directives disabled (director evidence,
 reverted):
 
+**v3-era numbers:** the row values below were measured before the
+pad-locomotion (v4.1), camera-place (v4.2) and HUD (v5) re-pins; refresh them
+when the forcing removal is attempted.
+
 | | forced golden | natural replay |
 |---|---|---|
 | lines 1..5 | identical | identical |

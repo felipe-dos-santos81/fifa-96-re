@@ -22,7 +22,7 @@
 
 ### P0.1: T2 review + fix (camera place `92b47cf`)
 - [ ] Review `120260a..92b47cf` (brief/report/diff already staged in `.superpowers/sdd/2026-10-07-fifa96-m2-interactive-match/`); fix rounds as needed; verify M2 v4.2 re-pin rationale (117 hash lines, first diff 49, records 9/10 targets) + M1; ledger T2 complete.
-- [ ] Note: the plan's "both sides draw" clause was corrected by first-hand geometry (only positive-depth side is native-correct) — record the correction.
+- [ ] Note: the plan's "both sides draw" clause was corrected by first-hand geometry (only positive-depth side is native-correct) — record the correction. **Correction recorded in `8f1a49d`:** the one-sided draw is the engine's stand-in view, not native; native kickoff framing is carried on FU-96 legs 1/3.
 
 ### P0.2: T3 HUD (OL-T11-7) — starts from the W4 frozen slice
 - [ ] Port the derived HUD draw (score/clock overlay) on the indexed canvas + palette; tape re-pin iff HUD pixels enter; docs; commit.

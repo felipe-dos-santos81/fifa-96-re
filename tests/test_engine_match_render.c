@@ -657,8 +657,10 @@ static void test_lateral_cull_at_8e0(void) {
  * is culled before the place; the place snaps its target to (0x2F, 0x17D) and
  * the kickoff commit lands it, after which its sprite covers (199,120). The
  * far record 1 (0, 0x400) is beyond the ring and keeps drawing at the centre.
- * The kickoff instant frames the positive-depth side in the native too
- * (`fifa96_projection_screen` requires z >= NEAR), so the fixture asserts the
+ * The place preserves the target's camera direction, so it cannot move the
+ * controlled side out from behind the camera; the one-sided kickoff draw is
+ * the engine's stand-in view (yaw/pitch 0), and native kickoff framing is
+ * carried on FU-96 legs 1/3 + the FU-71 follow writer. The fixture asserts the
  * framed side plus the native non-placement of the controlled side — no fake
  * both-sides framing. */
 static void test_camera_place_moves_near_record_into_frame(void) {

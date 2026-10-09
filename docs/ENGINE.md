@@ -410,7 +410,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0x4C1E0` mode rows, the `FUN_0008DB6C` sort/tie substitution, bind leg 7
   (`0x8DC1B`), the row-04 `+0x6B` lane-word / `+0x8D` active-seed producers
   and the mover's staged-zero `+0x6F`/`+0x43`/`0x57A73` inputs (FU-77 errata +
-  `test_engine_m2.c` v4.1 provenance). The goal chain that blocks the tape's
+  `test_engine_m2.c` v4.1 provenance). Carried (T4 smoke): **OL-T4-1**, the
+  SDL hold policy — the backend drops key auto-repeat
+  (`src/fifa96_engine/platform_sdl3.c:194`), so a held key arrives as press
+  pulses and live on-screen movement needs a repeat/hold policy or the gamepad
+  path, landing with the row-04 pad arm in the S1 possession/locomotion port
+  (FU-147/S1). The goal chain that blocks the tape's
   score step (`OL-87`/`OL-88`/`OL-89`) is owned by the next plan phase via the
   frozen FU-145 (arming) / FU-146 (consumers) slices (phase-6 S2/S3).
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
