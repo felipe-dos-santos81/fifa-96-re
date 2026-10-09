@@ -720,6 +720,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   tails are not yet executable; FU-151 owns 0x1D). First-hand erratum: the
   incident z cell is `0x15889F` (`FUN_00079CCC` reads +8), not the slice's
   `0x15889B` (the y dword).
+- **M2 phase-7 P2 (fouls / referee / offside, FU-150; 2026-10-09).** Landed
+  from the frozen FU-150 slice as the `fifa96_referee` loader module
+  (`fifa96_ref_contact_register` = `FUN_0008A3FC`; `fifa96_ref_foul_decide` =
+  the `FUN_0008A43C` normal path with the `[0x14C306]` level, the staged
+  duel/active preconditions, the severity RNG bands and the kind-0 → sit-9 /
+  kind!=0 → foul-log + act-3 fork; `fifa96_ref_offside_check` = the
+  `FUN_00079D5C` inequalities; `fifa96_ref_offside_event` = the kind-3 arm;
+  `fifa96_ref_foul_sequence_step` = the 7-stage phase-0x19 machine;
+  `fifa96_ref_offside_sequence_step` = the 3-stage phase-0x1C machine) plus
+  the engine seam: the staged `fifa96_match_config` (init zero; begin installs
+  the FU-68 default-settings handoff — foul level 2, offside off),
+  `fifa96_match_run_contact` (the registrar + row-0x0C re-call: the settings
+  gate, the 1-in-8 skip draw, the literal kind 1, the severity draw, the
+  `[0x15888E]` flag; ACT3 runs stage 0 immediately, kind 0 routes situation 9
+  BX=1 through the P1 `set_piece`), `fifa96_match_run_offside_reception` (the
+  derived pool nearest queries — own team to the ball triple as the `0x157770`
+  stand-in, opponent to `(0, ±0xB10)` — the staged metric/camera/mirror inputs,
+  the tolerance draw and the kind-3 event on the own-nearest record),
+  `fifa96_match_run_referee_step` (one step per granted frame; applies the
+  whistle/speech requests, the phase write + FU-149 arm, the rec_first
+  install and the situation dispatch, and runs the derived act-2
+  free-kick/penalty hand-off: phase 0xA on the fouled side, then phase 7
+  default / phase 6 for `contact_kind != 3`, `|incident x| < 0x420` and the
+  fouler-side z-band `[-0xB10,-0x7B0]`/`[0x7B0,0xB10]`, with speech
+  0x23/0x2A and the phase-7/6 taker arm). **Both goldens byte-identical, no
+  re-pin** (no live producer calls the staged entries and the stepper is idle
+  in the tape; `cmp` clean, M1 unmoved); `make check` 107/107 (106 + the new
+  `test_referee`), ASan/UBSan on both suites. First-hand errata in FU-150 §Port
+  landing: the offside side gate is the metric block `[+4]` (not
+  `rec+0x69>>16`), the kind-3 event record is the own-team nearest (not the
+  receiver), and the referee-object wait proceeds when the code is **not**
+  0x48. The P1-review carry-in is recorded: the sit-9/0xA hand-off runs the
+  native phase-0/0xA `FUN_0008D098` arms' code-0 installs only as far as the P1
+  phase-arm subset (3/4/6/7/8/9/0xD), so the left-behind code-0 installs stay
+  the FU-83 `0x8D192` body; the FK/penalty arms are installed. Carried legs:
+  FU-150 §Port landing legs table (settings labels, RNG identity, whistle
+  mapping, referee identity, team-count predicate, downed/sent-off, `0x15888E`
+  lifecycle, offside geometry inputs, row-0x11 writer, `FUN_0004BEC8`/`0x6E724`,
+  foul-log consumers; new: the act-2 camera-lead/`word[ESP]` gates and the
+  `[0x158882]` producer).
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

@@ -875,6 +875,15 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  /* FU-150 P2: fresh referee state, machine dispatch and request slots; the
+   * settings config is zero until begin installs the derived default handoff
+   * (fouls disabled, offside disabled). */
+  memset(&mr->referee, 0, sizeof mr->referee);
+  memset(&mr->config, 0, sizeof mr->config);
+  mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+  mr->ref_restart_stage = 0;
+  mr->ref_whistle = 0;
+  mr->ref_speech = 0;
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
@@ -943,6 +952,19 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * native FUN_00011620 team-record producer is leg). */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
+  /* FU-150 P2: a fresh referee machine and the derived FU-68 settings handoff
+   * (the menu defaults: foul level 2, offside disabled; the front-end's live
+   * settings state is unported). */
+  memset(&mr->referee, 0, sizeof mr->referee);
+  mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+  mr->ref_restart_stage = 0;
+  mr->ref_whistle = 0;
+  mr->ref_speech = 0;
+  {
+    struct fifa96_settings settings;
+    fifa96_settings_defaults(&settings);
+    (void)fifa96_settings_handoff(&settings, 0u, &mr->config);
+  }
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
@@ -1306,6 +1328,16 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     rc = (fifa96_err_t)match_run_write_phase(mr, out.phase);
     if (rc != 0) return (int)rc;
     rc = (fifa96_err_t)fifa96_match_run_phase_arm(mr, out.phase);
+    if (rc != 0) return (int)rc;
+  }
+  /* FU-150 P2: the act row's FUN_000888FC invocation (invoke-now). Only act 2
+   * (the sit-9/sit-0xA rows) has a ported body: the derived phase-0x18
+   * free-kick/penalty hand-off machine, seeded with the row's stage (0 for
+   * sit 9, 1 for sit 0xA). Other acts stay unported (OL-13). */
+  if (out.act == 2u) {
+    mr->ref_machine = FIFA96_MATCH_RUN_REF_RESTART;
+    mr->ref_restart_stage = out.stage;
+    rc = (fifa96_err_t)fifa96_match_run_referee_step(mr);
     if (rc != 0) return (int)rc;
   }
   return 0;
@@ -1963,6 +1995,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                       mr);
     if (rc != FIFA96_OK) return rc;
     match_run_entity_drain(mr);
+    /* FU-150 P2: the referee machine (the native phase-body/act invocation
+     * runs inside the entity/phase chain) once per granted frame. Idle when no
+     * machine is active, so a fresh run's tape is unchanged. */
+    rc = fifa96_match_run_referee_step(mr);
+    if (rc < 0) return rc;
     /* FU-142a: the FUN_0008D098 state 0x13/0x14 arm block runs after the
      * FU-141 chain, once per granted frame (the FUN_000740A0 order: the
      * state byte is set, then FUN_0008D098 runs for both teams). */
@@ -2972,4 +3009,326 @@ out_cache:
   free(arena);
   fifa96_cache_destroy(cache);
   return rc;
+}
+
+/* FU-150 P2 — fouls / referee / offside: the engine seam over the
+ * `fifa96_referee` module. The module owns the native cells (registrar,
+ * decision, the two sequence machines); the engine owns the machine dispatch,
+ * the staged inputs (settings config, the pool record views, the derived
+ * nearest queries), the act-2 free-kick/penalty hand-off and the frame
+ * cadence. See include/fifa96_engine/fifa96_match_run.h for the contracts and
+ * docs/ghidra/FU150_fouls_referee_offside.md for the native evidence. */
+
+/* The engine record view of one encoded entity id. `duel_ok` is staged 1: the
+ * native 0x14C360/0x157BD2 compare tables have no ported producer (FU-150 leg
+ * 4-adjacent); their producers are unported, so the derived equality holds. */
+static int match_run_ref_view(const struct fifa96_match_run *mr, int32_t id,
+                              struct fifa96_ref_record *view) {
+  const struct fifa96_match_entity *e;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  e = &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+           .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  view->id = id;
+  view->side = mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS].side;
+  view->player = e->index;
+  view->active = e->active;
+  view->duel_ok = 1;
+  return 1;
+}
+
+/* Apply one sequence step's requests: the whistle/speech observation slots,
+ * the phase write with its FU-149 arm (the native FUN_000740A0 runs the
+ * per-team FUN_0008D098 immediately), the record install on rec_first and the
+ * situation dispatch through the shared set-piece entry (BX=1, the native
+ * FUN_0008A938 argument; its direct path may start the act-2 machine). The
+ * native 0x4C374/0x651F0/0x974F0/0x92040/0x6E724/0x7D388 sink calls and the
+ * dropped 0x14C3A0 stats write stay unported (FU-150 legs 3/10). */
+static int match_run_ref_apply(struct fifa96_match_run *mr,
+                               const struct fifa96_ref_sequence_out *out) {
+  int rc;
+  if (out->whistle != 0u) mr->ref_whistle = 0x1Eu;
+  if (out->speech_code != 0u) mr->ref_speech = out->speech_code;
+  /* The native stage-0 order: the phase write runs before the record install
+   * (0x8A091 vs 0x8A0A0), and the installer's +0x98 clear reads the new phase
+   * cell. */
+  if (out->phase_write != 0xFFu) {
+    rc = match_run_write_phase(mr, out->phase_write);
+    if (rc != 0) return rc;
+    rc = fifa96_match_run_phase_arm(mr, out->phase_write);
+    if (rc != 0) return rc;
+  }
+  if (out->install_action != 0u) {
+    int32_t id = mr->referee.rec_first;
+    if (id >= 0 &&
+        id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+      struct fifa96_match_entity *e =
+          &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+      (void)fifa96_match_entities_install(e, mr->state.phase,
+                                          out->install_action, 0);
+    }
+  }
+  if (out->situation != 0xFFu) {
+    rc = fifa96_match_run_set_piece(mr, out->situation, out->situation_side, 1u);
+    if (rc != 0) return rc;
+  }
+  return 0;
+}
+
+/* The derived act-2 (phase-0x18) hand-off, started by the sit-9/sit-0xA table
+ * rows with the row's stage (0 for sit 9, 1 for sit 0xA — the native
+ * FUN_000888FC(2, stage, 1)):
+ *  - stage 0 (0x89318/0x8935A): the soft-foul whistle then phase 0xA on the
+ *    fouled side (the native then cascades through the stage 1/2 camera-lead
+ *    gates; the port derives one stage per granted frame, FU-150 erratum);
+ *  - stage 1 (0x894A2..0x895AC): the decision. The 0x894A2 gate's
+ *    [0x158882] has no direct writer in the image (census = 1 read), so the
+ *    derived condition is `foul_kind == 3 || session gate` (leg). Phase 7 by
+ *    default; phase 6 when the contact kind is not 3, |incident x| < 0x420
+ *    and z lies in the fouler-side band [-0xB10,-0x7B0] side 0 /
+ *    [0x7B0,0xB10] side 1 (0x894DB..0x89550, verified). Speech 0x23 (6) /
+ *    0x2A (7) on rec_second, [0x15882A] cleared (0x8955F) and the FU-149
+ *    phase arm installs the taker/keeper. */
+static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
+  int rc;
+  if (mr->ref_restart_stage == 0u) {
+    if (mr->referee.foul_kind == 0u) mr->ref_whistle = 0x1Eu;
+    rc = match_run_write_phase(mr, 0x0Au);
+    if (rc != 0) return rc;
+    mr->ref_restart_stage = 1u;
+    return 1;
+  }
+  if (!(mr->referee.foul_kind == 3u || mr->session_gate_14c32a != 0u)) {
+    mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;   /* 0x894BE -> 0x89615 */
+    return 1;
+  }
+  {
+    uint8_t phase = 7u;
+    if (mr->referee.foul_kind != 3u) {
+      int32_t ax = mr->incident_x;
+      if (ax < 0) ax = -ax;
+      if (ax < 0x420) {
+        int32_t z = mr->incident_z;
+        if (mr->referee.rec_first_side == 0u) {
+          if (z >= -0xB10 && z <= -0x7B0) phase = 6u;
+        } else {
+          if (z >= 0x7B0 && z <= 0xB10) phase = 6u;
+        }
+      }
+    }
+    rc = match_run_write_phase(mr, phase);
+    if (rc != 0) return rc;
+    rc = fifa96_match_run_phase_arm(mr, phase);
+    if (rc != 0) return rc;
+    mr->ref_speech = phase == 6u ? 0x23u : 0x2Au;
+    mr->global_5882a = 0;                          /* 0x8955F */
+  }
+  mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+  return 1;
+}
+
+int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
+                             int32_t rec_a, int32_t rec_b, const int32_t point[3]) {
+  struct fifa96_ref_record fouler;
+  struct fifa96_ref_record victim;
+  struct fifa96_ref_decision_out out;
+  uint16_t draw = 0;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!match_run_ref_view(mr, rec_a, &fouler)) return -FIFA96_ERR_INVALID;
+  if (!match_run_ref_view(mr, rec_b, &victim)) memset(&victim, 0, sizeof victim);
+  rc = fifa96_ref_contact_register(&mr->referee, kind, rec_a,
+                                   rec_b >= 0 ? rec_b : 0, point);
+  if (rc != 0) return rc;
+  mr->referee.phase = mr->state.phase;
+  if (mr->config.field_4c306 == 0) {          /* 0x81E8A settings gate */
+    mr->referee.recall_consumed = 0;
+    return 0;
+  }
+  (void)fifa96_rng_step(&mr->rng, &draw);     /* 0x81EA6: the 1-in-8 skip */
+  if ((draw & 7u) == 0u) {
+    mr->referee.recall_consumed = 0;          /* 0x81ECD */
+    return 0;
+  }
+  /* The row-0x0C re-call literal kind 1 (0x81EB4) and its severity draw
+   * (FUN_00092AC8; consumed only when severity can run). */
+  mr->referee.contact_kind = 1u;
+  if (mr->config.field_4c306 > 1) (void)fifa96_rng_step(&mr->rng, &draw);
+  memset(&out, 0, sizeof out);
+  rc = fifa96_ref_foul_decide(&mr->referee, &mr->config, &fouler, &victim, point,
+                              (uint8_t)draw, &out);
+  if (rc < 0) return rc;
+  mr->referee.recall_consumed = 1;            /* 0x81EC4 */
+  mr->incident_x = mr->referee.point[0];      /* [0x158897] mirror */
+  mr->incident_z = mr->referee.point[2];      /* [0x15889F] mirror */
+  if (out.sequence == FIFA96_REF_SEQ_ACT3) {
+    /* FUN_000888FC(3,0,1) invoke-now: stage 0 runs on this call. */
+    mr->referee.sequence = FIFA96_REF_SEQ_ACT3;
+    mr->referee.stage = 0;
+    mr->ref_machine = FIFA96_MATCH_RUN_REF_FOUL;
+    return fifa96_match_run_referee_step(mr);
+  }
+  if (out.restart != 0u) {
+    /* 0x8A729: FUN_0008A938(9, fouled side, BX=1) through the P1 shared entry
+     * (whose direct path may start the act-2 machine). */
+    rc = fifa96_match_run_set_piece(mr, 9u, out.restart_side, 1u);
+    if (rc != 0) return rc;
+    return 1;
+  }
+  return 0;
+}
+
+int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t receiver,
+                                       const struct fifa96_ref_metric *metric,
+                                       int32_t camera_ref, uint8_t mirror,
+                                       uint8_t *offside) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  struct fifa96_ref_receiver rec;
+  struct fifa96_ref_record event_rec;
+  struct fifa96_ref_event_out ev_out;
+  const struct fifa96_match_entity *own;
+  int32_t rec_team, other_team, own_idx = -1, own_id = -1, last_defender_z = 0;
+  int16_t best = 0;
+  uint16_t draw = 0;
+  int idx, rc;
+  uint8_t result = 0;
+  if (!mr || !metric || !offside) return -FIFA96_ERR_INVALID;
+  *offside = 0;
+  if (receiver < 0 ||
+      receiver >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  rec_team = receiver / FIFA96_MATCH_ENTITY_RECORDS;
+  other_team = rec_team ^ 1;
+  /* The native FUN_00079D5C pre-gates (0x79D68/0x79D79/0x79D87) run before
+   * the RNG draw; keep the same order so no draw is consumed on a gate. */
+  mr->referee.phase = mr->state.phase;
+  if (mr->state.phase != 2u) return 0;
+  if (mr->referee.offside_suppress != 0) return 0;
+  if (mr->config.field_4c2f2 == 0) return 0;
+  memset(&rec, 0, sizeof rec);
+  rec.z = mr->entities.team[rec_team].records[receiver % FIFA96_MATCH_ENTITY_RECORDS].pos_z;
+  rec.side = mr->entities.team[rec_team].side;
+  /* The derived FUN_0008DE8C(&0x157770, own team, 0): the own-team nearest to
+   * the ball triple (the derived stand-in for 0x157770, FU-150 leg 8), skip
+   * index 0. */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[rec_team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  idx = fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
+                                   (int16_t)mr->entities.ball.x,
+                                   (int16_t)mr->entities.ball.z, &best);
+  if (idx >= 0) {
+    own = &mr->entities.team[rec_team].records[idx];
+    own_idx = idx;
+    own_id = (int32_t)(rec_team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)idx);
+    rec.own_nearest_valid = 1;
+    rec.own_nearest_is_receiver = idx == (int)(receiver % FIFA96_MATCH_ENTITY_RECORDS);
+    rec.own_nearest_z = own->pos_z;
+    rec.own_distance = best;
+    /* the 0x79EEF..0x79F1D record-state gate (the [0x158777] identity is
+     * staged 0/unported). */
+    rec.eligible = (own->type != 0x11u && own->code != 0x10u &&
+                    own->code != 0x1Du && own->code != 0x1Eu)
+                       ? 1u
+                       : 0u;
+  }
+  /* The derived FUN_0008DE28(0xB10|-0xB10, other team, 0): the opponent
+   * nearest to (0, +0xB10) for a side-0 receiver and (0, -0xB10) for side 1. */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[other_team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  idx = fifa96_entity_find_nearest(
+      candidates, FIFA96_MATCH_ENTITY_RECORDS, 0, 0,
+      rec.side == 0u ? (int16_t)0xB10 : (int16_t)-0xB10, &best);
+  if (idx >= 0)
+    last_defender_z = mr->entities.team[other_team].records[idx].pos_z;
+  (void)fifa96_rng_step(&mr->rng, &draw);     /* the tolerance draw */
+  rc = fifa96_ref_offside_check(&mr->referee, &mr->config, &rec, metric,
+                                last_defender_z, camera_ref, mirror, (uint8_t)draw,
+                                &result);
+  if (rc != 0) return rc;
+  if (result == 0u) return 0;
+  if (own_id < 0) return 0;   /* the check requires a valid own-nearest */
+  /* The kind-3 event fires on the own-team nearest (first-hand 0x79F29
+   * `MOV EDX,ESI`, the slice's receiver reading is the recorded erratum). */
+  memset(&event_rec, 0, sizeof event_rec);
+  event_rec.id = own_id;
+  event_rec.side = mr->entities.team[rec_team].side;
+  event_rec.player = mr->entities.team[rec_team].records[own_idx].index;
+  event_rec.active = mr->entities.team[rec_team].records[own_idx].active;
+  event_rec.duel_ok = 1;
+  {
+    int32_t point[3];
+    point[0] = mr->entities.team[rec_team].records[own_idx].pos_x;
+    point[1] = mr->entities.team[rec_team].records[own_idx].pos_y;
+    point[2] = mr->entities.team[rec_team].records[own_idx].pos_z;
+    rc = fifa96_ref_offside_event(&mr->referee, &mr->config, &event_rec, point,
+                                  &ev_out);
+    if (rc < 0) return rc;
+  }
+  mr->incident_x = mr->referee.point[0];
+  mr->incident_z = mr->referee.point[2];
+  mr->ref_speech = ev_out.speech_code;        /* the 0x8F188(0x15) request */
+  mr->ref_machine = FIFA96_MATCH_RUN_REF_OFFSIDE;
+  mr->referee.sequence = FIFA96_REF_SEQ_ACT6;
+  mr->referee.stage = 0;
+  rc = fifa96_match_run_referee_step(mr);     /* FUN_000888FC(6,..,1) */
+  if (rc < 0) return rc;
+  *offside = 1;
+  return 1;
+}
+
+int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {
+  struct fifa96_ref_sequence_out out;
+  uint8_t machine;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->ref_whistle = 0;
+  mr->ref_speech = 0;
+  mr->referee.phase = mr->state.phase;
+  mr->referee.delta = mr->state.frame_delta;
+  /* The [0x157A6A] countdown (0x7438D..0x743A5, `SUB word, AX` with the frame
+   * delta; the port saturates instead of wrapping). */
+  if (mr->referee.offside_suppress != 0u) {
+    uint16_t d = mr->state.frame_delta;
+    if (d >= mr->referee.offside_suppress) mr->referee.offside_suppress = 0;
+    else mr->referee.offside_suppress =
+        (uint16_t)(mr->referee.offside_suppress - d);
+  }
+  switch (mr->ref_machine) {
+    case FIFA96_MATCH_RUN_REF_FOUL:
+      machine = mr->ref_machine;
+      rc = fifa96_ref_foul_sequence_step(&mr->referee, &out);
+      if (rc < 0) return rc;
+      rc = match_run_ref_apply(mr, &out);
+      if (rc < 0) return rc;
+      /* The apply may start the act-2 machine (stage 6's situation 0xA); do
+       * not clear it. */
+      if (out.done != 0u && mr->ref_machine == machine)
+        mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+      return 1;
+    case FIFA96_MATCH_RUN_REF_OFFSIDE:
+      machine = mr->ref_machine;
+      rc = fifa96_ref_offside_sequence_step(&mr->referee, &out);
+      if (rc < 0) return rc;
+      rc = match_run_ref_apply(mr, &out);
+      if (rc < 0) return rc;
+      if (out.done != 0u && mr->ref_machine == machine)
+        mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+      return 1;
+    case FIFA96_MATCH_RUN_REF_RESTART:
+      return match_run_ref_step_restart(mr);
+    default:
+      return 0;
+  }
 }

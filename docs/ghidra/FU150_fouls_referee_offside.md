@@ -427,3 +427,140 @@ rows 01/1D/1E/0x10..0x13.
   hand-off).
 * **Duplicate-award risk** mirrors FU-146's: the kind-0 arm and the sequential arm
   are mutually exclusive by `[0x15888D]`; wiring both double-awards a restart.
+
+---
+
+## Port landing (P2, 2026-10-09)
+
+Landed from this frozen slice during phase-7 wave-7 P2
+(`src/fifa96_loader/fifa96_referee.{c,h}`, `src/fifa96_engine/fifa96_match_run.{c,h}`;
+first-hand re-verified on `/FIFA96.EXE` this slice: `decompile_function`
+`0x8A3FC`/`0x8A43C`/`0x79D5C`/`0x7D3E4`; `disassemble_bytes`
+`0x8A43C..0x8A794` head/severity, `0x8A4B1..0x8A575` (the duel-table compare),
+`0x89FA4..0x8A3FA` (all 7 stages), `0x89110..0x89228`, `0x89214` jump table,
+`0x8922C..0x895C0` (act-2 head/stage-0/decision), `0x79D5C..0x79F38`,
+`0x81E80..0x81ED5` (the row-0x0C re-call); `search_instructions` operands
+`158882`/`157a6a`; `read_memory` `0x89214`):
+
+1. **`fifa96_referee` module** (`include/fifa96_loader/fifa96_referee.h`, caller-owned
+   `struct fifa96_referee_state`, `-fifa96_err_t`):
+   - `fifa96_ref_contact_register` = `FUN_0008A3FC` (kind/rec A/rec B/point triple;
+     NULL point is the derived zero triple);
+   - `fifa96_ref_foul_decide` = the `FUN_0008A43C` normal path: the phase-2 /
+     non-NULL-fouler / `[0x14C306]` gates, the record stores, the point with y
+     forced 0 and the `FUN_0007D3E4` clamp, the severity block (`[0x14C360]` vs
+     `[0x157BD2]` compare + `[rec+0x8D]` staged as `duel_ok`/`active`; `rng & 0x3F`
+     `< 0x12` → kind 1 when `(acc & 0x7F) == 0`, else kind 2 when the team count
+     `> 8`; `[0x12,0x16)` with contact kind 2 and count > 8 → kind 3), the kind-0 →
+     situation-9 fork and the kind!=0 foul-log append + act-3 request;
+   - `fifa96_ref_offside_check` = the `FUN_00079D5C` inequalities (phase /
+     suppression / settings / camera-mirror / metric-block side gate / own-nearest
+     depth / receiver-vs-defender direction / 6-bit tolerance / metric ×2 term /
+     own-distance ≤ 0x3C0 / record-state gates);
+   - `fifa96_ref_offside_event` = the kind-3 arm (settings 0x10, the kind-3 stores
+     with y preserved and the clamp, the 0x15 speech + act-6 request);
+   - `fifa96_ref_foul_sequence_step` = the 7-stage phase-0x19 machine (stage 0
+     whistle + foul counter `side ^ side_swap` + phase 0xF on the fouled side +
+     install 0x16; stage 2 speech 0xD/0xE/0xF/0x13; stage 4 severity sum → install
+     0x18 at `(sum & 0x7F) >= 2`, else stage += 2; stage 5 team-count decrement only
+     while held; stage 6 the referee-object gate then situation 0xA on the fouled
+     side);
+   - `fifa96_ref_offside_sequence_step` = the 3-stage phase-0x1C machine (stage 0
+     whistle + phase 0xA side 0; stage 2 situation 9 on the opponent).
+2. **Engine seam** (`fifa96_match_run`): the staged `fifa96_match_config`
+   (`field_4c306`/`field_4c2f2`; init zero, begin installs the FU-68
+   `fifa96_settings_defaults` handoff — foul level 2, offside disabled — under
+   `match_type` 0), the `struct fifa96_referee_state referee`, the machine
+   dispatcher `ref_machine`, the `ref_whistle`/`ref_speech` request slots;
+   `fifa96_match_run_contact` (registrar + the row-0x0C re-call: `[0x14C306]`, the
+   `(rng & 7) != 0` skip draw, the literal kind 1, the severity draw, the
+   `[0x15888E]` re-call flag; ACT3 starts the foul machine and runs stage 0
+   immediately, kind 0 routes situation 9 BX=1 through the P1 `set_piece`);
+   `fifa96_match_run_offside_reception` (the derived pool nearest queries — own
+   team to the ball triple as the `0x157770` stand-in, opponent to `(0, ±0xB10)` —
+   the staged metric/camera/mirror inputs, the single tolerance draw, the kind-3
+   event on the own-nearest record and the phase-0x1C start with stage 0);
+   `fifa96_match_run_referee_step` (one granted-frame step, the `[0x157A6A]`
+   countdown, output application: `ref_whistle`/`ref_speech`, the phase write +
+   FU-149 arm, the rec_first install, the situation dispatch through `set_piece`,
+   and the derived act-2 free-kick/penalty hand-off: stage 0 = whistle (kind 0) +
+   phase 0xA on the fouled side, stage 1 = the `0x894A2..0x895AC` decision — phase
+   7 default, phase 6 for `contact_kind != 3`, `|incident x| < 0x420` and z in the
+   fouler-side band `[-0xB10,-0x7B0]` (0) / `[0x7B0,0xB10]` (1), then speech
+   0x23/0x2A, `[0x15882A] = 0` and the phase-7/6 taker arm). `fifa96_match_run_frame`
+   runs the stepper once per granted frame after the entity chain.
+3. **Tests** (`tests/test_referee.c` + `tests/test_engine_match_frame.c`, both
+   ASan/UBSan): registrar/decision/severity/log-wrap/sequence/offside unit pins
+   plus the engine chains `test_engine_referee_contact_fk` (soft → sit 9 → phase
+   0xA → free kick 7 / penalty 6 with taker 0x12/0x13 + keeper 0x1F),
+   `test_engine_referee_contact_gates` (settings-0 and the 1-in-8 skip),
+   `test_engine_referee_foul_sequence` (kind-1 decision → ACT3 stage 0 → … →
+   stage 6 → situation 0xA → penalty 6 in one call; the held=0 no-cards stall) and
+   `test_engine_referee_offside_chain` (offside → phase 0x1C → sit 9 → forced FK 7;
+   settings/suppression/mirror negatives + the countdown). ISO not required.
+   `make check` 107/107; **M1 and M2 goldens byte-identical** (no live producer
+   calls the staged entries; the referee stepper is idle in the tape —
+   dormant-chain outcome, `cmp` clean).
+
+### Errata / port decisions
+
+1. **Offside side gate cell.** The slice E7 reads "`0x79DA9` (side==0 ->
+   `word[rec+0x69]>>16 > 0`)". First-hand the gate at `0x79DC5..0x79DE8` reads the
+   staged metric block `[EBP+4]` (EBP = EDX = 0x158738), **not** `rec+0x69`; the
+   port takes `metric[2]` (`struct fifa96_ref_metric.side_gate`).
+2. **Offside event record.** The slice E7 says the kind-3 event fires "on the
+   receiver record". First-hand the call at `0x79F1F..0x79F2B` passes
+   `EDX = ESI` = the own-team nearest returned by `FUN_0008DE8C` (0x79E06/0x79E81),
+   which the same function requires **!= receiver** (`0x79E08 CMP EAX,EDI / JZ`).
+   The port fires the event on the own-nearest record; the sit-9 side (opponent of
+   the event record) is the same team either way, so the restart math is unchanged.
+3. **Referee-object gate polarity.** The slice E8 says the two wait points "require
+   the object code byte 0x48". First-hand foul stage 6 at `0x8A398` does
+   `CMP EAX,0x48 / JZ 0x8A3F5`: it **waits while** the code is 0x48 and proceeds
+   when it is not. The port models that (`referee_object_code`, staged 0 → proceeds).
+4. **Severity preconditions.** The slice E4 lists the `[rec+0x8D] != 0` gate; first-
+   hand there is an earlier table compare at `0x8A543/0x8A549`
+   (`[0x14C360][side*0x7B+player] == [0x157BD2][side*0x2C+player]`). Both tables'
+   producers are outside this slice; the module stages the compare result
+   (`fifa96_ref_record.duel_ok`; the engine stages 1 for the derived equality).
+5. **Decision point source order.** `0x8A4B1`: when the caller point is NULL the
+   native falls back to `victim+0x59` if victim != NULL, else `fouler+0x59`; the
+   module's caller-point-else-stored-point path preserves the engine's call shape
+   (the engine always passes the contact triple).
+6. **Act-2 hand-off timeline (new leg).** The act-2 phase-0x18 body (jump table
+   `0x89214`, stages 0..5) cascades through the `FUN_0004BEC8` / `0x158848` /
+   `0x15883A` / `0x158816` camera-lead gates and the opaque `word[ESP]` gate
+   (`0x8948D`, which requires 6 or 0x10) within a single call; the port derives a
+   two-step machine (stage 0 = phase 0xA + soft-foul whistle, stage 1 = the
+   decision). The native order of the two phase writes (0xA, then 7/6) is kept.
+7. **`[0x158882]` decision gate (new leg).** The `0x894A2` gate reads
+   `[0x158882]` first; the fresh operand census finds one read and no direct write
+   site, so the port carries it 0 and proceeds on `kind == 3 || session gate`.
+8. **Carry-in from the P1 review (erratum-5 boundary).** Wiring sit 9/0xA routes
+   the act-2 hand-off; the native phase-0 write inside the BX!=0 fallback and the
+   act-2 stage-0 phase-0xA write each run `FUN_0008D098` (`0x8D192`: install code 0
+   over records 0..10, skip-if-current 0xC). The P1 `fifa96_match_run_phase_arm`
+   subset covers phases 3/4/6/7/8/9/0xD only, so the port does **not** mirror those
+   code-0 installs: entities keep their codes through the 0 → 0xA hand-off until
+   the phase-7/6 arm's install-3 prefix. The left-behind installs stay the
+   FU-83/`0x8D192` phase-body port; the FK/penalty arms (the P2 deliverable) are
+   installed. No live producer calls sit 9/0xA without the dispatcher, so the
+   divergence is only observable on the staged entry.
+
+### Legs status after P2
+
+| leg | status |
+|---|---|
+| 1 settings UI labels | open — both consumer gates ported (`field_4c306`/`field_4c2f2`); no label strings in the image |
+| 2 RNG `FUN_00092AC8` identity | open — the module takes `rng_bits`; the engine draws the skip/severity/tolerance values from the FU-141 RNG (the native draw order around failed geometry gates can differ, documented) |
+| 3 whistle/event → audio mapping | open — requests land in `ref_whistle`/`ref_speech` observation slots; the FU-63 sinks stay unported |
+| 4 referee object identity | open — `referee_object_code` staged; the polarity erratum above |
+| 5 `team+0x827` predicate | open — `team_count[2]` is caller-staged |
+| 6 downed-vs-sent-off | open — `rec_first_held` staged; the stage-5 stall is pinned (no card state exists, E10) |
+| 7 `[0x15888E]` lifecycle | partially landed — the re-call writes 1/0 (`0x81EC4`/`0x81ECD`); the `0x82332` reader stays unported |
+| 8 kind-3 offside geometry inputs | partially landed — the check math is ported; `0x157770` is the ball-triple stand-in and the metric/camera/mirror producers stay unported |
+| 9 row 0x11 `[0x157A6A]` value | closed (FU-149 L9) — the writer row stays FU-149 L13, so the suppression timer is staged/countable but not match-set by the port |
+| 10 `FUN_0004BEC8` / `0x6E724` gates | open — the sequence stage gates are derived ready; the sinks are dropped |
+| 11 foul-log consumers | open (menu-side reads) |
+| **new** act-2 camera-lead gates + `word[ESP]` | new — the two-step derived machine (erratum 6) |
+| **new** `[0x158882]` producer | new — carried 0 (erratum 7) |

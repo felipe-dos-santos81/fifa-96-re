@@ -1522,6 +1522,252 @@ static void test_corner_counter_side_swap(void) {
   }
 }
 
+/* ===== FU-150 P2: fouls / referee / offside ================================ */
+
+/* Advance the run RNG so the next contact's 1-in-8 skip draw passes and the
+ * severity draw lands in the kind-1 band (seed 0: draw 4 = 0x2BBB & 7 = 3,
+ * draw 5 = 0x584D & 0x3F = 0x0D). */
+static void match_frame_rng_arm_hard_foul(struct fifa96_match_run *mr) {
+  uint16_t value;
+  (void)fifa96_rng_seed(&mr->rng, 0);
+  for (int i = 0; i < 3; i++) (void)fifa96_rng_step(&mr->rng, &value);
+}
+
+/* FU-150 §Port contract: the soft-foul chain. Contact with settings 0xA == 1
+ * leaves kind 0; the decision routes situation 9 BX=1; the direct path (a
+ * pending situation forces 0x8A964) starts the derived act-2 hand-off whose
+ * stage 0 writes phase 0xA on the fouled side; the next granted step runs the
+ * FK/penalty decision. A |incident x| >= 0x420 point forces free kick 7 (and
+ * the FU-149 phase-7 taker 0x12 on the controlled team). */
+static void test_engine_referee_contact_fk(void) {
+  struct fifa96_match_run mr;
+  const int32_t point[3] = {0x500, 0x777, 0};
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;                            /* live in-play phase */
+  mr.config.field_4c306 = 1;                     /* soft: kind stays 0 */
+  mr.session_gate_14c32a = 1;                    /* live session */
+  mr.situation_pending = 1;                      /* force the direct path */
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  assert(mr.referee.contact_kind == 1u);         /* the row-0x0C re-call kind */
+  assert(mr.referee.recall_consumed == 1u);
+  assert(mr.referee.foul_kind == 0u);
+  assert(mr.referee.rec_first == 5 && mr.referee.rec_second == 6);
+  assert(mr.incident_x == 0x500 && mr.incident_z == 0);
+  assert(mr.referee.sequence == FIFA96_REF_SEQ_NONE);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.ref_restart_stage == 1u);            /* stage 0 ran immediately */
+  assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 phase write */
+  assert(mr.ref_whistle == 0x1Eu);               /* the soft-foul whistle */
+  /* the act-2 decision step: phase 7 + the FK taker on the controlled team */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.state.phase == 7u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.ref_speech == 0x2Au);
+  assert(mr.entities.team[0].target == 5);
+  assert(mr.entities.team[0].records[5].code == 0x12u);
+  assert(mr.entities.team[1].records[1].code == 3u);   /* the install-3 prefix */
+
+  /* the penalty fork: |x| < 0x420 and the fouler-side band [-0xB10,-0x7B0] */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  {
+    const int32_t spot[3] = {0x100, 0, -0x800};
+    assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
+  }
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.state.phase == 6u);
+  assert(mr.ref_speech == 0x23u);
+  assert(mr.entities.team[0].records[1].code == 0x13u);  /* penalty taker */
+  assert(mr.entities.team[1].records[0].code == 0x1Fu);  /* other keeper */
+  assert(mr.entities.team[1].target == 11);
+}
+
+/* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
+static void test_engine_referee_contact_gates(void) {
+  struct fifa96_match_run mr;
+  const int32_t point[3] = {0x500, 0, 0};
+  uint16_t value;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 0;                     /* fouls disabled */
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 0);
+  assert(mr.referee.recall_consumed == 0u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.state.phase == 2u);
+  /* settings on, draw 1 & 7 == 0 -> the 1-in-8 skip (0x8AEA6/0x81EAB) */
+  mr.config.field_4c306 = 2;
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 0);
+  assert(mr.referee.recall_consumed == 0u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(fifa96_match_run_contact(NULL, 1, 5, 6, point) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_contact(&mr, 1, -1, 6, point) == -FIFA96_ERR_INVALID);
+  (void)value;
+}
+
+/* FU-150 §Port contract: the hard-foul chain through the phase-0x19 machine.
+ * The kind-1 decision starts ACT3 and runs stage 0 immediately (whistle,
+ * foul counter, phase 0xF on the fouled side, install action 0x16); the later
+ * steps reach stage 2 speech and stage 6's situation 0xA hand-off, which (with
+ * the pending latch) starts the act-2 machine at stage 1 and the same call
+ * decides the penalty phase 6 from the staged band. */
+static void test_engine_referee_foul_sequence(void) {
+  struct fifa96_match_run mr;
+  const int32_t point[3] = {0x100, 0, -0x800};
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 2;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 2, 5, 6, point) == 1);
+  assert(mr.referee.foul_kind == 1u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_FOUL);
+  assert(mr.referee.stage == 1u);                /* stage 0 ran immediately */
+  assert(mr.state.phase == 0x0Fu);               /* phase 0xF on the fouled side */
+  assert(mr.ref_whistle == 0x1Eu);
+  assert(mr.referee.fouls_by_side[0] == 1u);
+  assert(mr.entities.team[0].records[5].code == 0x16u);  /* install 0x16 */
+  /* stage 1 gate -> stage 2 speech */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.referee.stage == 2u);
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_speech == 0x0Du && mr.referee.stage == 3u);
+  assert(fifa96_match_run_referee_step(&mr) == 1);   /* stage 3 -> 4 */
+  assert(mr.referee.stage == 4u);
+  assert(fifa96_match_run_referee_step(&mr) == 1);   /* stage 4: sum 1 -> 6 */
+  assert(mr.referee.stage == 6u);
+  assert(mr.referee.severity[0][5] == 1u);
+  /* stage 6: situation 0xA -> the act-2 hand-off decides phase 6 in one call */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.state.phase == 6u);
+  assert(mr.ref_speech == 0x23u);
+  assert(mr.entities.team[0].records[1].code == 0x13u);
+  assert(mr.entities.team[1].records[0].code == 0x1Fu);
+
+  /* the no-cards negative: the sum >= 2 path enters stage 5, which stalls
+   * while the fouler is not held and never decrements the team count (E10:
+   * no booking state exists; leg 6) */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 2;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  mr.referee.severity[0][5] = 1;                 /* sum >= 2 -> install 0x18 */
+  mr.referee.team_count[0] = 9;                  /* kind 2 (acc != 0) */
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 2, 5, 6, point) == 1);
+  assert(mr.referee.foul_kind == 2u);
+  for (int i = 0; i < 4; i++) assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.referee.stage == 5u);
+  assert(mr.entities.team[0].records[5].code == 0x18u);  /* the downed install */
+  assert(fifa96_match_run_referee_step(&mr) == 1);       /* held 0: stall */
+  assert(mr.referee.stage == 5u && mr.referee.team_count[0] == 9u);
+  mr.referee.rec_first_held = 1;
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.referee.team_count[0] == 8u && mr.referee.stage == 6u);
+}
+
+/* Stage the offside geometry: the receiver (team 0 record 3) beyond the own
+ * nearest (record 1) and the team-1 last defender (record 2), all other
+ * records parked far from the ball so the nearest queries are deterministic. */
+static void match_frame_stage_offside(struct fifa96_match_run *mr) {
+  match_frame_stage_restarts(mr);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      mr->entities.team[t].records[i].pos_x = 0x6000;
+      mr->entities.team[t].records[i].pos_z = 0x6000;
+    }
+  mr->entities.ball.x = 0;
+  mr->entities.ball.z = 0;
+  mr->entities.team[0].records[3].pos_x = 0x100;
+  mr->entities.team[0].records[3].pos_z = 0x3C0;
+  mr->entities.team[0].records[1].pos_x = 0;
+  mr->entities.team[0].records[1].pos_z = 0x3C0;
+  mr->entities.team[1].records[2].pos_x = 0;
+  mr->entities.team[1].records[2].pos_z = 0x3C0;
+}
+
+/* FU-150 §Port contract: the offside reception chain. The derived pool query
+ * resolves the own-team nearest (record 1) and the opponent last defender
+ * (team 1 record 2), the kind-3 event fires on the own-nearest record, the
+ * phase-0x1C machine writes phase 0xA side 0 and then dispatches situation 9,
+ * and the act-2 hand-off forces the free kick phase 7 (contact kind 3). */
+static void test_engine_referee_offside_chain(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_ref_metric metric;
+  uint8_t offside = 0xAA;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c2f2 = 1;                     /* offside enabled */
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;                      /* force the direct path */
+  match_frame_stage_offside(&mr);
+  (void)fifa96_rng_seed(&mr.rng, 0);             /* draw 1 = 0x200, tol 0 */
+  metric.tol2 = 0;
+  metric.side_gate = 1;
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0, 0, &offside) == 1);
+  assert(offside == 1u);
+  assert(mr.referee.contact_kind == 3u);
+  assert(mr.referee.rec_first == 1);             /* the own-nearest record */
+  assert(mr.referee.point[0] == 0 && mr.referee.point[2] == 0x3C0);
+  assert(mr.incident_x == 0 && mr.incident_z == 0x3C0);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);
+  assert(mr.state.phase == 0x0Au);               /* offside stage 0 */
+  assert(mr.ref_whistle == 0x1Eu);
+  /* stage 1 gate, then stage 2 dispatches situation 9 -> the act-2 hand-off */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.referee.stage == 2u);
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 on return */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.state.phase == 7u);                  /* kind 3 forces free kick */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.ref_speech == 0x2Au);
+  assert(mr.entities.team[0].records[1].code == 0x12u);
+
+  /* gates: settings off, suppression timer, the camera mirror gate */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  match_frame_stage_offside(&mr);
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0, 0, &offside) == 0);
+  assert(offside == 0u && mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  mr.config.field_4c2f2 = 1;
+  mr.referee.offside_suppress = 0x12C;
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0, 0, &offside) == 0);
+  assert(offside == 0u);
+  mr.referee.offside_suppress = 0;
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0x991, 1, &offside) == 0);
+  assert(offside == 0u);
+  /* re-seed: the mirror-blocked call consumed the tolerance draw */
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0x991, 0, &offside) == 1);
+  assert(offside == 1u);
+  assert(fifa96_match_run_offside_reception(NULL, 3, &metric, 0, 0, &offside) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_offside_reception(&mr, -1, &metric, 0, 0, &offside) ==
+         -FIFA96_ERR_INVALID);
+  /* the suppression countdown (0x7438D..0x743A5) drives from the frame delta */
+  mr.state.frame_delta = 2;
+  assert(mr.referee.offside_suppress == 0u);
+  mr.referee.offside_suppress = 0x20;
+  (void)fifa96_match_run_referee_step(&mr);
+  assert(mr.referee.offside_suppress == 0x1Eu);
+}
+
 /* FU-149 §1.3 (first-hand scanner arms 0x88B53..0x88C0E): the clock-tail
  * scan's throw-in (|snap z| <= 0xB20 -> sit 2, BX=1) and corner/goal-kick
  * (|snap z| > 0xB20, zone 0 -> sit 3 + ((snap z < 0) == (ball team == 1)),
@@ -2162,6 +2408,10 @@ int main(void) {
   test_set_piece_bx_fallback();
   test_set_piece_phase_arm_codes();
   test_corner_counter_side_swap();
+  test_engine_referee_contact_fk();
+  test_engine_referee_contact_gates();
+  test_engine_referee_foul_sequence();
+  test_engine_referee_offside_chain();
   test_scan_restart_arms();
   test_goal_chain_pan_fixture();
   test_goal_consumer_chain_fixture();

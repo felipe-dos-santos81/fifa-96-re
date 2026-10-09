@@ -14,8 +14,10 @@
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
 #include "fifa96_loader/fifa96_palette.h"
+#include "fifa96_loader/fifa96_referee.h"
 #include "fifa96_loader/fifa96_render.h"
 #include "fifa96_loader/fifa96_rng.h"
+#include "fifa96_loader/fifa96_settings.h"
 #include "fifa96_loader/fifa96_sprite.h"
 #include "fifa96_loader/fifa96_window.h"
 
@@ -409,6 +411,20 @@ struct fifa96_match_run {
   uint8_t store_15882c;
   int32_t incident_x;
   int32_t incident_z;
+  /* FU-150 P2 (fouls/referee/offside): the caller-owned `fifa96_referee_state`
+   * (registrar/decision/sequence cells), the staged `fifa96_match_config`
+   * (settings gates `[0x14C306]` field_4c306 / `[0x14C2F2]` field_4c2f2; init
+   * zeroes, begin installs the FU-68 default-settings handoff), the derived
+   * machine dispatcher (`ref_machine`, FIFA96_MATCH_RUN_REF_*), the derived
+   * act-2 hand-off stage (a compression of the native stage 1..3 camera-lead
+   * gates) and the whistle/speech request observation slots (the FU-63
+   * event-queue sinks stay unported, FU-150 leg 3). */
+  struct fifa96_referee_state referee;
+  struct fifa96_match_config config;
+  uint8_t ref_machine;
+  uint8_t ref_restart_stage;
+  uint8_t ref_whistle;
+  uint8_t ref_speech;
   /* FU-148 §3 (S4): the per-side formation id ([0x14C1E4]/[0x14C1E5]). The
    * native image default is 0 (BSS) and the match-init producer FUN_00011620
    * copies the team record +0x12 byte; the engine has no team record (leg), so
@@ -640,8 +656,10 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
  * head gates live only in `_set_piece`. Without a dispatcher side the sit-3
  * counter increment is not applied (the phase outcome still is). The
  * act-handler invocation (`FUN_000888FC`, the unported phase-row bodies)
- * stays unported (OL-73/OL-78); situations whose row carries no phase (the
- * act-only rows 1/8/9/0xA/0xC) are a no-op on the run. Returns 0,
+ * stays unported (OL-73/OL-78); situations whose row carries no phase run
+ * their ported act body only (sit 9/0xA start the FU-150 P2 act-2
+ * free-kick/penalty hand-off; the act-only rows 1/8/0xC with unported bodies
+ * are a no-op on the run). Returns 0,
  * -FIFA96_ERR_INVALID (NULL `mr` or situation >= 0x0D), or a -fifa96_err_t
  * from the phase setter. */
 int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation);
@@ -711,6 +729,84 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
  * `[0x157A4A]` write precedes `FUN_0008D098`). Returns 0 or
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
+
+/* ===== FU-150 P2 — fouls / referee / offside =============================== */
+
+/* The derived machine dispatcher slots (`mr->ref_machine`). NONE = idle; the
+ * module sequences map to their FIFA96_REF_SEQ_* value; RESTART is the derived
+ * act-2 (phase-0x18) free-kick/penalty hand-off machine the sit-9/0xA rows
+ * start (a compression of the native stage 1..3 camera-lead gates, FU-150
+ * erratum). */
+#define FIFA96_MATCH_RUN_REF_NONE 0u
+#define FIFA96_MATCH_RUN_REF_FOUL FIFA96_REF_SEQ_ACT3
+#define FIFA96_MATCH_RUN_REF_OFFSIDE FIFA96_REF_SEQ_ACT6
+#define FIFA96_MATCH_RUN_REF_RESTART 3u
+
+/* FU-150 §Port contract: the derived contact entry. The native contact
+ * registrar FUN_0008A3FC is called from the action-0x0C body (unported,
+ * FU-137/OL-9), so a contact is a caller-staged input (the deepest-reachable
+ * honesty rule): `rec_a`/`rec_b` are encoded entity ids and `point` the
+ * 12-byte contact triple (NULL -> the module's zero triple).
+ *
+ * Runs the registrar, then the row-0x0C re-call path (0x81E8A..0x81ED5,
+ * first-hand): behind `config.field_4c306 != 0`, a valid rec_a and a first RNG
+ * draw with `(AL & 7) != 0`, calls `fifa96_ref_foul_decide` with the row's
+ * literal entry kind 1 (the staged `referee.contact_kind`) and a second draw
+ * supplied as the severity `rng_bits` (only consumed when field_4c306 > 1),
+ * then writes the [0x15888E] re-call flag (`recall_consumed`). Outcome: an
+ * ACT3 decision starts the phase-0x19 machine and runs stage 0 immediately
+ * (the native FUN_000888FC invoke-now); a severity-0 decision routes
+ * situation 9 (fouled side, BX=1) through the shared
+ * `fifa96_match_run_set_piece` entry (which, on the direct path, starts the
+ * RESTART machine). Mirrors the clamped incident triple into
+ * `incident_x`/`incident_z`. Returns 1 when the decision ran, 0 when a gate
+ * skipped it, or -FIFA96_ERR_INVALID (NULL mr / invalid rec_a). */
+int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
+                             int32_t rec_a, int32_t rec_b, const int32_t point[3]);
+
+/* FU-150 §Port contract: the derived reception-time offside check. The native
+ * caller is the reception handler FUN_0007A084 0x7A448 (unported), so this is
+ * the staged entry: `receiver` is an encoded entity id, `metric` the staged
+ * 0x158738 block (producer unported, leg 8) and `camera_ref`/`mirror` the
+ * [0x157754]/[0x157823] staged camera inputs (FU-150 risk note). The engine
+ * resolves the own-team nearest (FUN_0008DE8C derived as the pool nearest to
+ * the ball triple, skip index 0) and the opponent last defender
+ * (FUN_0008DE28 derived as the opponent nearest to (0, ±0xB10)) and stages the
+ * record-state gate (type != 0x11, code not in {0x10,0x1D,0x1E}).
+ *
+ * Behind the phase/suppression/settings pre-gates it draws one RNG value (the
+ * native FUN_00092AC8 tolerance draw; the native draws it after its geometry
+ * gates, so the derived stream may differ in gate-failure cases, leg 2) and
+ * runs `fifa96_ref_offside_check`; on a fired check it stores the kind-3 event
+ * on the own-nearest record (first-hand 0x79F29 `EDX = ESI`; the slice's
+ * "receiver record" reading is the recorded erratum) via
+ * `fifa96_ref_offside_event`, mirrors the incident triple and starts the
+ * phase-0x1C machine with stage 0 run immediately. Sets `*offside`. Returns 1
+ * when the event fired, 0 otherwise (gates or no offside), or
+ * -FIFA96_ERR_INVALID (NULL mr/offside or invalid receiver). */
+int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t receiver,
+                                       const struct fifa96_ref_metric *metric,
+                                       int32_t camera_ref, uint8_t mirror,
+                                       uint8_t *offside);
+
+/* Run the active referee machine once (one granted 30 Hz frame; the frame body
+ * calls this after the FU-141 entity chain). NONE -> 0. FOUL/OFFSIDE run the
+ * module step and apply its requests: the whistle/speech observation slots
+ * (`ref_whistle`/`ref_speech`), the phase write through
+ * `match_run_write_phase` + the FU-149 arm, the record install on rec_first,
+ * and the situation dispatch through the shared
+ * `fifa96_match_run_set_piece(..., BX=1)` (whose direct path may start the
+ * RESTART machine and run its step, the native invoke-now order). RESTART runs
+ * the derived act-2 hand-off: stage 0 writes phase 0xA on the fouled side
+ * (whistle when the foul kind is 0), stage 1 runs the FK/penalty decision
+ * (first-hand 0x894A2..0x895AC: `contact_kind == 3` or the session gate
+ * proceeds; phase 7 default, phase 6 when |incident x| < 0x420 and z lies in
+ * the fouler-side band [-0xB10,-0x7B0] side 0 / [0x7B0,0xB10] side 1) and arms
+ * the FU-149 phase 7/6 taker. Also drives the [0x157A6A] suppression countdown
+ * (0x7438D..0x743A5, saturated at 0) and stages the live phase into the
+ * referee state. Returns 1 when a step ran, 0 when idle, or a -fifa96_err_t
+ * (including -FIFA96_ERR_INVALID for NULL). */
+int fifa96_match_run_referee_step(struct fifa96_match_run *mr);
 
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the

@@ -371,6 +371,14 @@ add_executable(test_settings tests/test_settings.c)
 target_link_libraries(test_settings PRIVATE fifa96_settings)
 add_test(NAME test_settings COMMAND test_settings WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_referee src/fifa96_loader/fifa96_referee.c)
+target_link_libraries(fifa96_referee PRIVATE fifa96_settings)
+add_executable(test_referee tests/test_referee.c)
+target_link_libraries(test_referee PRIVATE fifa96_referee)
+target_compile_options(test_referee PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_referee PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_referee COMMAND test_referee WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_executable(test_settings_handoff tests/test_settings_handoff.c)
 target_link_libraries(test_settings_handoff PRIVATE fifa96_settings)
 add_test(NAME test_settings_handoff COMMAND test_settings_handoff WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
@@ -438,7 +446,8 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_scene fifa96_render fifa96_window
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
                                           fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies
-                                          fifa96_animation fifa96_outfield fifa96_palette)
+                                          fifa96_animation fifa96_outfield fifa96_palette
+                                          fifa96_referee fifa96_settings)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
