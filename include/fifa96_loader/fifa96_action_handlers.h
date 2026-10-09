@@ -614,6 +614,12 @@ typedef struct fifa96_action_phase_situation_out {
   uint8_t act;   /* `FUN_000888FC` act id invoked, or NONE */
   uint8_t stage; /* act stage argument (situation 0x0A -> 1, else 0) */
   uint8_t flags;
+  /* FU-149 §1.1 (`0x8ABF3..0x8AC1C`, first-hand): the sit-3 corner row
+   * increments the per-side corner counter `word[0x157AD4 +
+   * (side ^ [0x157ABE])*2]` before its phase-4 write — 1 for situation 3,
+   * 0 on every other row. The dispatcher side (and the [0x157ABE] swap) are
+   * the caller's, so the row carries only the request. */
+  uint8_t corner_increment;
 } fifa96_action_phase_situation_out;
 
 /* Situation 6 (`0x8AD96`) writes phase 5 only when `[0x157AC2]` is not 2/3. */

@@ -1120,26 +1120,27 @@ typedef struct fifa96_action_phase_situation_row {
   uint8_t act;
   uint8_t stage;
   uint8_t flags;
+  uint8_t corner_increment;
 } fifa96_action_phase_situation_row;
 
 static const fifa96_action_phase_situation_row fifa96_action_phase_situations[0x0D] = {
     /* situation 0: the native arm invokes act 0xA first (0x8AB8E) and writes
      * phase 0x11 after it (0x8AB9F); the row's field order does not encode the
      * call order, which is observable if a caller wires the two directly. */
-    {0x11u, 0x0Au, 0u, 0u},
-    {FIFA96_ACTION_PHASE_NONE, 1u, 0u, 0u},
-    {3u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
-    {4u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
-    {8u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
-    {9u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
+    {0x11u, 0x0Au, 0u, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 1u, 0u, 0u, 0u},
+    {3u, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 0u},
+    {4u, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 1u},
+    {8u, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 0u},
+    {9u, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 0u},
     {5u, FIFA96_ACTION_PHASE_NONE, 0u,
-     FIFA96_ACTION_PHASE_SITUATION_EXTRA_HOLD | FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG},
-    {0x0Du, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
-    {FIFA96_ACTION_PHASE_NONE, 7u, 0u, FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG},
-    {FIFA96_ACTION_PHASE_NONE, 2u, 0u, 0u},
-    {FIFA96_ACTION_PHASE_NONE, 2u, 1u, 0u},
-    {2u, FIFA96_ACTION_PHASE_NONE, 0u, 0u},
-    {FIFA96_ACTION_PHASE_NONE, 9u, 0u, 0u},
+     FIFA96_ACTION_PHASE_SITUATION_EXTRA_HOLD | FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG, 0u},
+    {0x0Du, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 7u, 0u, FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 2u, 0u, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 2u, 1u, 0u, 0u},
+    {2u, FIFA96_ACTION_PHASE_NONE, 0u, 0u, 0u},
+    {FIFA96_ACTION_PHASE_NONE, 9u, 0u, 0u, 0u},
 };
 
 fifa96_err_t fifa96_action_phase_situation(uint8_t situation,
@@ -1152,6 +1153,7 @@ fifa96_err_t fifa96_action_phase_situation(uint8_t situation,
   out->act = row->act;
   out->stage = row->stage;
   out->flags = row->flags;
+  out->corner_increment = row->corner_increment;
   return FIFA96_OK;
 }
 

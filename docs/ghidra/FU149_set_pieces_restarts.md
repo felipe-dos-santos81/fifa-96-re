@@ -499,3 +499,123 @@ Suggested new/extended surface (names matching the existing family):
   fuzzy boundary — the word-1/2 classification tables and the foul log
   `0x157B3E..`); B1 derives only the severity==0 → sit 9 edge and the act-2
   free-kick/penalty decision. The port must not fork two foul implementations.
+
+---
+
+## 6. Port landing (P1, 2026-10-09)
+
+Landed from this frozen slice during phase-7 wave-7 P1 (`src/fifa96_engine/fifa96_match_run.c`
+/ `fifa96_match_run.h`, `src/fifa96_loader/fifa96_action_handlers.{c,h}`; first-hand
+re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x8A938`/`0x8A99E`/
+`0x8A9CD`/`0x8A9E8`/`0x8AA23`/`0x8AA60..0x8AB8F`/`0x8A8A5..0x8A8DE`/`0x8ABDB`/`0x8ABF3`/
+`0x88B40..0x88C0E`, `0x855F0` head/`0x85CB0` tail, `0x8D2A3`/`0x8D35B`/`0x8D4A2`/
+`0x8D57B`/`0x8D5D9`/`0x8D63E`/`0x8D65D`, `0x73F50..0x73FAA`; `decompile_function`
+`0x8D098`/`0x79CCC`/`0x73DC4`/`0x7D360`/`0x8C974`; `read_memory` `0x8A8E0`/`0x8D040`/
+`0x10E6E0`/`0x1106E0`; `search_instructions` operand `157ad`/`157b8`/`15889`):
+
+1. **`fifa96_action_phase_situation` row extension** — the row struct/out carries
+   `corner_increment` (1 on situation 3 only), the derived request of the native
+   `0x8ABF3..0x8AC1C` counter increment. `tests/test_phase_drivers.c` pins every row.
+2. **`fifa96_match_run_set_piece(mr, situation, side, bx)`** — the full
+   `FUN_0008A938` head: the `0x8A944..0x8A96B` gates (sit 0/0xB, closed
+   `session_gate_14c32a`, pending), the `0x8A8E0` table-1 queue ids
+   (2/3/4 → 9 side 0 / 0 side 1; 5/7 → 7; 6 → 5/6; 9/10 → 1 side 1 / 2 side 0;
+   sit 1, 8, 0xC and >10 → the `0x8AA60` id 0xA), the `[0x15B6B8]` side latch
+   (`sit_side_pending`), the BX!=0 fallback (`0x8AA80..0x8AAA3` phase
+   `FUN_000740A0(0, 0)` + the `[0x15882B]`/`[0x15882C]` act-8 replay bytes, then
+   act 8's tail `0x8A8A5..0x8A8DE` re-dispatching with BX=0 and writing
+   `[0x15882B] = 0xFF`), and the BX==0 table-2 route through the shared
+   `fifa96_match_run_situation` entry (situation 6 keeps its score fallback;
+   situation 3 counts `side ^ side_swap` before the write).
+3. **`fifa96_match_run_phase_arm(mr, phase)`** — the `FUN_0008D098` subset for
+   phases 3/4/6/7/8/9/0xD: the per-team install 3 over records 0..10
+   (`fifa96_match_arm_install_multi`, the `FUN_0008CEB8` port), the controlled
+   gate `[team+0x826] == [0x157AAC]>>24` (`phase_machine.side_controlled`) with
+   the non-controlled early return, the `FUN_00079CCC` derived pick (pool
+   nearest over record targets, skip 0, fallback record 0), the camera resets
+   (`fifa96_camera_init`: snapshot for phase 3, the `FUN_0007D360` corner probe
+   `(±0x710, 0, ±0xB00)` for 4, the `FUN_00073DC4` penalty spot `(0, 0, ±0x8D0)`
+   for 6), the taker/keeper codes 0x10/0x11/0x12/0x13/0x1D/0x1E/0x1F (phase 6's
+   non-controlled team arms 0x1F on its record 0), and the phase-0xD arm
+   (`0x8D65D`, controlled code 0 over records 1..10 / else 0..10 — **no**
+   install-3 prefix, unlike the set-piece arms, first-hand). The
+   `FUN_0008F188(0x17/0x1A)` event sinks stay dropped (L7) while the phase-4
+   `FUN_00092AC8 & 3` draw is still consumed.
+4. **Scanner extensions** (`fifa96_match_run_goal_scan`, `0x8896B..0x88C0E`):
+   `|snap z| <= 0xB20` → throw-in sit 2 (`0x88BCC`, phase-2 only, `EDX =
+   ball_team ^ 1`, BX=1); `zone == 0` → corner/goal-kick sit
+   `3 + ((snap z < 0) == (ball_team == 1))` (`0x88B53`, phase-2 only, EDX =
+   ball_team ^ 1, BX=0); else the goal arm (unchanged). `ball_team` is the
+   `[0x1577CA]` stand-in (pool controlled actor, then ball carrier — the FU-145
+   L4 identity remains unported). The `0x974DC(0x1E)` scanner sound is dropped
+   (L7).
+5. **State** (`struct fifa96_match_run`): `sit_side_pending` `[0x15B6B8]`,
+   `corner_count[2]` `[0x157AD4]/[0x157AD6]` (match-reset/begin zeroed),
+   `side_swap` `[0x157ABE]`, `store_15882b`/`store_15882c` `[0x15882B/C]`,
+   `incident_x`/`incident_z` `[0x158897]/[0x15889F]` (the FU-150 producer stays
+   P2; seeded 0).
+6. **Tests** (`tests/test_engine_match_frame.c` + `tests/test_phase_drivers.c`,
+   ASan/UBSan): `test_set_piece_queue_ids`, `test_set_piece_bx_fallback`,
+   `test_set_piece_phase_arm_codes`, `test_corner_counter_side_swap`,
+   `test_scan_restart_arms`, plus the updated `test_goal_scan_queue_and_fallback`
+   / `test_view_pose_feed_arms_camera`. The set pieces reach their phases
+   through the scanner + arm with the counter, keeper codes and BX fallback
+   pinned; resume rows are L13. ISO not required.
+   `make check` 106/106; **M1 and M2 goldens byte-identical** (the tape camera
+   never arms a set piece and the forced phases bypass the situation seam, so
+   no presented frame moved — the dormant-chain outcome, `cmp` clean).
+
+### Errata / port decisions
+
+1. **Incident z cell (slice §3 field list).** The slice's state list writes
+   "incident_x/z `[0x158897/0x15889B]`"; first-hand the incident triple is
+   12 bytes x@0x158897 / y@0x15889B / z@0x15889F and `FUN_00079CCC` reads
+   `param_1[4]` = +8 = **0x15889F** (`0x823D6`/`0x823FA`/`0x89286`/`0x8D5A8`
+   family). The port uses 0x15889F (`incident_z`); 0x15889B is the y dword.
+2. **Phase-0xD arm has no install-3.** `0x8D65D` starts at the controlled
+   check (first-hand), so the 0xD arm only runs the code-0 installs; the port
+   splits it from the common install-3 prefix the 3/4/6/7/8/9 arms share.
+3. **Pick stand-in.** `FUN_00079CCC`'s per-record distance source is the
+   record's phase handler `[rec+0x1C]` placement output (unported); the port
+   substitutes the record target triple (the FU-143 §11.1 kickoff-pick ruling,
+   L7), keeping skip 0, the `+0x98`/`+0x9A` exclusions, the strict minimum and
+   the team-base no-candidate fallback.
+4. **`[0x1577CA]` ball-side stand-in.** All four scanner/queue sides derive
+   from the native ball-track record's team byte; the record identity is
+   unported (FU-145 L4), so the port reads the pool controlled actor, then the
+   ball carrier, else side 0.
+5. **Act-8 compression (L6).** The BX!=0 fallback's phase-0x1E timeline stages
+   are unported; the port models the byte-exact re-dispatch point, so the
+   stored situation/side lands on the table-2 row on the same call. The
+   phase-0 arm (`0x8D192`) is not run: its installs are overwritten by the
+   re-dispatched row's own arm (transient).
+6. **Queue ids are the S3 consumer's (L4).** The head writes `situation_id` /
+   `situation_pending` only; the FU-146 screen machinery consumes the same
+   cell, and whether live play reaches the table-2 phases through a
+   pending-latched path stays the L4 trace.
+7. **Table-2 route always.** The `0x8AB08` sit 2..4 arm (the `FUN_0008C974`
+   formation-order counters `[0x157B8E]`/`[0x157B8F]` gate + act 4) and the
+   sit-1 arm (`0x8AABF`) are unported act-handler machinery (L12): the derived
+   BX==0 route is the table-2 row.
+8. **Keeper phase split.** Phase 9's `team->target`/record-0 writes and the
+   phase-0xD installs are derived; their producers (keeper rows 1A/1B) stay
+   FU-151/P3, so the sit 5/7 table rows are reachable but dormant in a live
+   match.
+
+### Legs status after P1
+
+| leg | status |
+|---|---|
+| L1 `[0x157AAC]` writer | open — the controlled side is carried (`phase_machine.side_controlled`, seeded 0); the arm gate is faithful |
+| L2 sit 3/sit 4 identity | **derived landed**: the scanner cond formula + the taker-code evidence are implemented; the dynamic-trace confirmation stays open |
+| L3 sit 5/sit 7 names | open (keeper rows 1A/1B are FU-151/P3) |
+| L4 queue vs phase-row reachability | open — the head writes the queue faithfully; the table-2 route is taken when the gate is closed/pending or a situation is already pending |
+| L5 session gate producer | open — begin seeds 1 (the FU-146 leg 2 seam) |
+| L6 act-8 / phase-0x1E timeline | open — the re-dispatch point is ported, the timeline stages are not |
+| L7 selection/presentation helpers | open — pick substituted, `0x8F188`/`0x974DC` sinks dropped, the phase-4 RNG draw kept |
+| L8 penalty remainder | open — the phase-6 arm is ported (spot probe, 0x13/0x1F); the row-0x13 body and `FUN_00073DC4`'s triple producer beyond the derived spot stay P2 |
+| L9 card-cutscene resume | open (B2/FU-150) |
+| L10 corner-counter consumers | open — the pair is written only (no static reader), fixtured |
+| L11 `[0x157821]`/`[0x157A6A]` | open — row 0x10/0x11 are L13, so neither the requeue loop gate nor the offside-suppress timer is written yet |
+| **L12** sit 2..4 `[0x157B8E]`/`[0x157B8F]` gate + act-4 arm, sit-1 arm | new — unported act-handler machinery; the port routes the table-2 row |
+| **L13** taker/keeper row bodies 0x10/0x11/0x1D | new — the arms install the codes, but the rows' stage machines (`0x855F0` 7-stage, `0x85DE4` 10-stage, `0x74EB0` keeper) stay unported, so the FU-149 §1.6 resume tails (sit 0xB, offside timer, requeue) are not yet executable; FU-151 owns 0x1D |

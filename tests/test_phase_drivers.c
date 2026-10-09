@@ -224,33 +224,47 @@ static void test_phase_situations(void) {
   assert(fifa96_action_phase_situation(0x0D, &out) == PHASE_INVALID);
   assert(fifa96_action_phase_situation(0, &out) == FIFA96_OK);
   assert(out.phase == 0x11u && out.act == 0x0Au && out.stage == 0u && out.flags == 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(1, &out) == FIFA96_OK);
   assert(out.phase == FIFA96_ACTION_PHASE_NONE && out.act == 1u && out.stage == 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(2, &out) == FIFA96_OK);
   assert(out.phase == 3u && out.act == FIFA96_ACTION_PHASE_NONE);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(3, &out) == FIFA96_OK);
   assert(out.phase == 4u && out.act == FIFA96_ACTION_PHASE_NONE);
+  /* FU-149 §1.1: sit 3 carries the corner-counter increment request. */
+  assert(out.corner_increment == 1u);
   assert(fifa96_action_phase_situation(4, &out) == FIFA96_OK);
   assert(out.phase == 8u && out.act == FIFA96_ACTION_PHASE_NONE);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(5, &out) == FIFA96_OK);
   assert(out.phase == 9u && out.act == FIFA96_ACTION_PHASE_NONE);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(6, &out) == FIFA96_OK);
   assert(out.phase == 5u && out.act == FIFA96_ACTION_PHASE_NONE);
   assert((out.flags & FIFA96_ACTION_PHASE_SITUATION_EXTRA_HOLD) != 0u);
   assert((out.flags & FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG) != 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(7, &out) == FIFA96_OK);
   assert(out.phase == 0x0Du && out.act == FIFA96_ACTION_PHASE_NONE);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(8, &out) == FIFA96_OK);
   assert(out.phase == FIFA96_ACTION_PHASE_NONE && out.act == 7u && out.stage == 0u);
   assert((out.flags & FIFA96_ACTION_PHASE_SITUATION_OPEN_LEG) != 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(9, &out) == FIFA96_OK);
   assert(out.phase == FIFA96_ACTION_PHASE_NONE && out.act == 2u && out.stage == 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(0xA, &out) == FIFA96_OK);
   assert(out.phase == FIFA96_ACTION_PHASE_NONE && out.act == 2u && out.stage == 1u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(0xB, &out) == FIFA96_OK);
   assert(out.phase == 2u && out.act == FIFA96_ACTION_PHASE_NONE && out.stage == 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(0xC, &out) == FIFA96_OK);
   assert(out.phase == FIFA96_ACTION_PHASE_NONE && out.act == 9u && out.stage == 0u);
+  assert(out.corner_increment == 0u);
   assert(fifa96_action_phase_situation(0, NULL) == PHASE_INVALID);
 }
 

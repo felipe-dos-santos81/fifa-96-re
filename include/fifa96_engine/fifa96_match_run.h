@@ -384,6 +384,31 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
+  /* FU-149 P1 (set pieces & restarts) dispatcher state, native cells:
+   *  - `sit_side_pending` = [0x15B6B8]: the queue head latches `(side == 0)`
+   *    of the queued situation (0x8A977/0x8A982) before the table-1 id write;
+   *  - `corner_count[2]` = the `word[0x157AD4]`/`word[0x157AD6]` corner
+   *    counters, indexed by `side ^ side_swap` (0x8ABFF/0x8AC0F); reset by
+   *    the match reset FUN_00073EE0 (0x73F6A/0x73F9C) and begin; no reader
+   *    (FU-149 L10: accumulated count is write-only statically);
+   *  - `side_swap` = byte [0x157ABE], the display/score slot swap (the
+   *    producer is unported, FU-143 OL-75 / FU-149 L1-adjacent; seeded 0);
+   *  - `store_15882b`/`store_15882c` = the act-8 replay bytes [0x15882B]
+   *    (situation) / [0x15882C] (side) written by the BX!=0 fallback
+   *    (0x8AA93/0x8AA9D) and re-read by act 8's tail (0x8A8BD..0x8ACD); the
+   *    tail leaves `store_15882b = 0xFF` (0x8A8D3);
+   *  - `incident_x`/`incident_z` = the incident position dwords [0x158897]/
+   *    [0x15889F] the phase-7 arm probes (0x8D5A8); the producer is the
+   *    FU-150 foul adjudicator (P2), seeded 0. (FU-149 §3 lists 0x15889B as
+   *    the z cell; first-hand the 12-byte triple is x@897/y@89B/z@89F and
+   *    `FUN_00079CCC` reads +8 = 0x15889F — slice erratum.) */
+  uint8_t sit_side_pending;
+  uint16_t corner_count[2];
+  uint8_t side_swap;
+  uint8_t store_15882b;
+  uint8_t store_15882c;
+  int32_t incident_x;
+  int32_t incident_z;
   /* FU-148 §3 (S4): the per-side formation id ([0x14C1E4]/[0x14C1E5]). The
    * native image default is 0 (BSS) and the match-init producer FUN_00011620
    * copies the team record +0x12 byte; the engine has no team record (leg), so
@@ -599,20 +624,93 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * -fifa96_err_t from the drivers. */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
 
-/* The derived `FUN_0008A938` situation dispatcher (M2 playable-match Task 2 /
- * OL-84 residual; FU-143 §3.2/§5). Runs the derived table-2 row for the
- * pending situation codes 0x00..0x0C (`fifa96_action_phase_situation`) and
- * applies its phase outcome through `fifa96_match_state_set_phase`, mirroring
- * `phase_machine.state`/`phase` (the native `FUN_000740A0` write inside the
- * table-2 arms, e.g. situation 0xB -> 0x8AEF6 -> 0x8AF02 phase 2). The
- * table-1 queue (`[0x15B6A8]`/`[0x15B6C0]`), the dispatcher head gates
- * (`[0x14C32A]`, `[0x15B6C0]`) and the act-handler invocation
- * (`FUN_000888FC`, the unported phase-row bodies) stay unported (OL-73/OL-78),
- * so only the phase write is applied; situations whose row carries no phase
- * (the act-only rows 1/8/9/0xA/0xC) are a no-op on the run. Returns 0,
+/* The derived `FUN_0008A938` situation dispatcher's table-2 row (M2
+ * playable-match Task 2 / OL-84 residual; FU-143 §3.2/§5; FU-149 P1 shared
+ * entry). Runs the derived row for `situation` 0x00..0x0C
+ * (`fifa96_action_phase_situation`), applies its phase outcome through
+ * `fifa96_match_state_set_phase` (the native `FUN_000740A0` write inside the
+ * table-2 arms, e.g. situation 0xB -> 0x8AEF6 -> 0x8AF02 phase 2), mirrors
+ * `phase_machine.state`/`phase`, and runs the FU-149 phase arm for the new
+ * phase (`fifa96_match_run_phase_arm`: phases 3/4/6/7/8/9/0xD install their
+ * taker/keeper codes — the native per-team `FUN_0008D098` call inside
+ * `FUN_000740A0`). This is the **side-less shared entry**: row 01's
+ * situation-0xB producer (`fifa96_match_handlers.c`), the goal fallback
+ * `fifa96_match_run_goal_queue` (situation 6) and the FU-149
+ * `fifa96_match_run_set_piece` direct path all route here; the dispatcher
+ * head gates live only in `_set_piece`. Without a dispatcher side the sit-3
+ * counter increment is not applied (the phase outcome still is). The
+ * act-handler invocation (`FUN_000888FC`, the unported phase-row bodies)
+ * stays unported (OL-73/OL-78); situations whose row carries no phase (the
+ * act-only rows 1/8/9/0xA/0xC) are a no-op on the run. Returns 0,
  * -FIFA96_ERR_INVALID (NULL `mr` or situation >= 0x0D), or a -fifa96_err_t
  * from the phase setter. */
 int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation);
+
+/* FU-149 §1.1/§3 item 2 (P1): the full `FUN_0008A938` dispatcher head
+ * (`0x8A938..0x8AC27`) for one situation/side/BX triple, native semantics
+ * first-hand this slice:
+ *  - head gates (`0x8A944..0x8A96B`): situation 0 and 0xB, a closed session
+ *    gate (`!session_gate_14c32a`) or a pending situation take the direct
+ *    path; otherwise the table-1 queue arm jumps (`0x8A8E0`) and RETs:
+ *    `sit_side_pending = (side == 0)` (0x8A982), the id from the queue table
+ *    (2/3/4 -> 9 side 0 / 0 side 1; 5/7 -> 7; 6 -> 5/6; 9/10 -> 1 side 1 /
+ *    2 side 0; 8, 1, 0xC and >10 -> 0xA via the `SUB ECX,2`/`CMP CX,8`
+ *    default) and `situation_pending = 1`;
+ *  - direct path BX != 0 (`0x8AA80..0x8AAA3` + act 8's tail
+ *    `0x8A8A5..0x8A8DE`): `store_15882c = side`, `store_15882b = situation`,
+ *    phase 0 (`FUN_000740A0(0, 0)`), then the stored situation/side are
+ *    re-dispatched with BX=0 and `store_15882b = 0xFF`. The act-8
+ *    (phase-0x1E) timeline stages around the re-dispatch stay unported
+ *    (FU-149 L6), so the port compresses them to the re-dispatch call;
+ *  - direct path BX == 0 (`0x8AAA8..0x8AB7A`): the table-2 route through the
+ *    shared `fifa96_match_run_situation` entry; situation 6 keeps its score
+ *    fallback (`fifa96_match_run_goal_queue`), situation 3 increments the
+ *    corner counter `side ^ side_swap` (0x8ABFF/0x8AC0F) before the write.
+ *    The native sit 2..4 `[0x157B8E]`/`[0x157B8F]` formation-order gate and
+ *    its act-4 arm (`0x8AB08..0x8AB62`), and the sit-1 arm
+ *    (`0x8AABF..0x8AB06`), are unported act-handler machinery (FU-149 L12);
+ *    the derived route is always the table-2 row.
+ * The dispatcher's queue ids are consumed by the FU-146 S3 screen machinery
+ * (the L4 boundary); the head only writes them. Returns 0,
+ * -FIFA96_ERR_INVALID (NULL `mr` or side > 1), or a -fifa96_err_t (the direct
+ * path for situations >= 0x0D keeps the hardened table rejection). */
+int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
+                               uint8_t side, uint8_t bx);
+
+/* FU-149 §1.5/§3 item 4 (P1): the `FUN_0008D098` phase-arm subset for the
+ * set-piece phases 3/4/6/7/8/9/0xD (first-hand arm table `0x8D040` and the
+ * decompiled switch; `0x8D2A3`/`0x8D35B`/`0x8D4A2`/`0x8D57B`/`0x8D5D9`/
+ * `0x8D65D` re-read this slice). Runs per team (`[team+0x826] ==
+ * phase_machine.side_controlled` is the controlled team):
+ *  - both teams: action 3 over records 0..10 through the `FUN_0008CEB8`
+ *    multi-install (`fifa96_match_arm_install_multi`; index-0 3 -> 0x19
+ *    pre-coercion);
+ *  - phase 3: camera reset to the goal snapshot triple (`0x15777C`), the
+ *    controlled team's nearest record to that triple (`FUN_00079CCC` derived
+ *    as the pool nearest over the records' targets with skip 0, fallback
+ *    record 0) becomes `team->target` and gets action 0x10;
+ *  - phase 4: probe = `FUN_0007D360(snapshot)` = `(±0x710, 0, ±0xB00)` from
+ *    the snapshot sign bits, camera reset to it, the nearest record gets
+ *    action 0x11; `(FUN_00092AC8 & 3) != 0` fires the dropped event sink
+ *    (L7) but the RNG draw is still consumed;
+ *  - phase 6: probe = `FUN_00073DC4(team side)` = `(0, 0, ±0x8D0)`, camera
+ *    reset to it, the controlled team's nearest gets action 0x13; the
+ *    non-controlled team installs action 0x1F on its record 0 and
+ *    `[team+0x7B2] = record 0`;
+ *  - phase 7: probe = the incident triple (`incident_x`/`incident_z`, the
+ *    FU-150 producer — P2), the nearest gets action 0x12;
+ *  - phases 8/9: `team->target = record 0` and action 0x1D (8) / 0x1E (9)
+ *    on it;
+ *  - phase 0xD: controlled team installs action 0 over records 1..10
+ *    (record 0 kept), the other team over 0..10;
+ *  - the per-event sinks `FUN_0008F188(0x17/0x1A, …)` stay dropped (FU-149
+ *    L7) and the non-controlled team early-returns for phases 3/4/7/8/9.
+ * Phases outside the subset are a no-op (the native `FUN_0008D098` cases
+ * 0/1/2/5/0xB/0xC/E/F/0x10/0x13/0x14/0x15 stay their own ports). The pool
+ * phase is latched to the arm phase before the installs (the native
+ * `[0x157A4A]` write precedes `FUN_0008D098`). Returns 0 or
+ * -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
 
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the
@@ -643,34 +741,42 @@ int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z);
 int fifa96_match_goal_arm(struct fifa96_match_run *mr);
 
 /* FU-146 §7 item 1, landed here because FU-145's scanner calls it: the
- * `FUN_0008A938` situation-6 queue arm (`0x8A9E8`, head gates
- * `0x8A944..0x8A96B`). With the session gate open (`session_gate_14c32a`)
- * and no pending situation: `situation_id` := 5 (side 0) / 6 (side 1) and
- * `situation_pending` := 1. Otherwise the native fallback at `0x8AC28`/`0x8AC88`:
- * the direct score increment (`fifa96_match_run_add_goal`) plus the table-2
- * situation-6 phase-5 write through the shared `fifa96_match_run_situation`
- * entry (no parallel table-2 mechanism). Returns 0, -FIFA96_ERR_INVALID
+ * `FUN_0008A938` situation-6 entry (`0x8A9E8` queue arm + the `0x8AC28`/
+ * `0x8AC88` fallback). Since FU-149 P1 it delegates to the generic head
+ * `fifa96_match_run_set_piece(mr, 6, side, 0)` — the single shared entry
+ * (no parallel mechanism): with the session gate open (`session_gate_14c32a`)
+ * and no pending situation the queue arm sets `situation_id` := 5 (side 0) /
+ * 6 (side 1), `sit_side_pending` and `situation_pending`. Otherwise the
+ * native fallback: the direct score increment (`fifa96_match_run_add_goal`)
+ * plus the table-2 situation-6 phase-5 write through the shared
+ * `fifa96_match_run_situation` entry. Returns 0, -FIFA96_ERR_INVALID
  * (NULL or side > 1), or a -fifa96_err_t from the fallback writers. */
 int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side);
 
-/* FU-145 §3 item 2 (S2): the clock-tail goal scan (`FUN_0008AF38`
- * `0x8B623..0x8B643` -> `FUN_00088940 0x88940..0x88C0E`). Runs after
- * `fifa96_match_run_phase_drive` in the frame loop. Gate: phase 2 or 0x10
- * and `goal_armed` (the native period-4 extra-time branch
+/* FU-145 §3 item 2 (S2) + FU-149 §1.3 (P1): the clock-tail scan
+ * (`FUN_0008AF38` `0x8B623..0x8B643` -> `FUN_00088940 0x88940..0x88C0E`).
+ * Runs after `fifa96_match_run_phase_drive` in the frame loop. Gate: phase 2
+ * or 0x10 and `goal_armed` (the native period-4 extra-time branch
  * `0x8B60D..0x8B621` skips the scan, but the engine's extra-time flag is
  * carried 0 per FU-143 OL-85, so the skip is unreachable and unmodelled —
- * leg L8). Scanner body derived:
- *  - `|goal_snap_z| <= 0xB20` -> the throw-in arm (`0x88BCC`, situation 2,
- *    phase-2 only): a w7-b1 set-piece leg, not wired;
- *  - `goal_zone == 0` -> the corner arm (`0x88B53`, situations 3|4,
- *    phase-2 only): a w7-b1 leg, not wired;
+ * leg L8). Scanner body:
+ *  - `|goal_snap_z| <= 0xB20` -> the throw-in arm (`0x88BCC`, phase-2 only,
+ *    `0x88BD4`): situation 2 with `EDX = ball_team ^ 1` and BX=1 through
+ *    `fifa96_match_run_set_piece` (queue or the phase-0 + act-8 fallback);
+ *  - `goal_zone == 0` -> the corner/goal-kick arm (`0x88B53`, phase-2 only,
+ *    `0x88B5B`): situation `3 + ((snap z < 0) == (ball_team == 1))` with
+ *    `EDX = ball_team ^ 1` and BX=0 (under the end convention `team 0 defends
+ *    −z`: cond false -> sit 3 corner, true -> sit 4 goal kick);
  *  - else the goal arm: side from the snapshot sign (`0x889B6 SETL`; the
  *    `[0x157A4C]` goal-side flag / `[0x1587D4]` record arm is leg L4), the
  *    derived possession nearest search over that side's team block from the
  *    snapshot triple (`FUN_0008DE8C` with skip 0; the selected record feeds
  *    the unported announce/outcome sinks, leg L2/L3), then
  *    `fifa96_match_run_goal_queue(mr, side)`.
- * Returns 1 when a situation arm ran, 0 for a gate no-op or unwired leg,
+ * The `ball_team` source `[0x1577CA]` is the FU-145 L4 stand-in: the pool
+ * controlled actor, then the ball carrier, else side 0 (the native record
+ * identity is unported). The scanner sound `0x974DC(0x1E)` stays dropped
+ * (FU-149 L7). Returns 1 when a situation arm ran, 0 for a gate no-op,
  * -FIFA96_ERR_INVALID (NULL) or a propagated -fifa96_err_t. */
 int fifa96_match_run_goal_scan(struct fifa96_match_run *mr);
 

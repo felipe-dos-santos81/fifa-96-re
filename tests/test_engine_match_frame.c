@@ -1200,12 +1200,18 @@ static void test_goal_scan_queue_and_fallback(void) {
   mr.goal_armed = 0;
   assert(fifa96_match_run_goal_scan(&mr) == 0);
   mr.goal_armed = 1;
-  mr.goal_snap_z = 0xB20;                           /* throw-in band: leg */
-  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  mr.goal_snap_z = 0xB20;                           /* throw-in band: sit 2 */
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 3u);                     /* BX=1 fallback: phase 0 -> phase 3 */
   assert(mr.situation_pending == 0);
-  mr.goal_snap_z = 0xB30;
-  mr.goal_zone = 0;                                 /* corner arm: leg */
-  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.goal_armed = 1;
+  mr.goal_snap_z = -0xB30;                          /* corner: cond false */
+  mr.goal_zone = 0;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 4u);
+  assert(mr.corner_count[1] == 1u);                 /* side 0 ^ 1 = 1 */
   assert(mr.situation_pending == 0);
 
   /* gate-closed fallback (begun run: the direct increment is lifecycle-gated):
@@ -1267,6 +1273,325 @@ static void test_goal_phase2_write_clears_arm(void) {
   assert(fifa96_match_run_situation(&mr, 0x0B) == 0);   /* -> phase 2 */
   assert(mr.state.phase == 2u);
   assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+}
+
+/* ===== FU-149 P1: set pieces & restarts ==================================== */
+
+/* Stage an eligible pool for the phase-arm pick: both teams' records 1..10
+ * active with distinct targets (the pick skips index 0 and the +0x98/+0x9A
+ * exclusions, `FUN_00079CCC`). */
+static void match_frame_stage_restarts(struct fifa96_match_run *mr) {
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      e->active = 1;
+      e->target_x = (int32_t)((t * FIFA96_MATCH_ENTITY_RECORDS + i) * 0x100);
+      e->target_z = 0;
+      e->pos_x = e->target_x;
+      e->pos_z = 0;
+    }
+  }
+}
+
+/* FU-149 §1.1/§3 item 2 (first-hand 0x8A938..0x8A996 + the 0x8A8E0 queue
+ * table): the dispatcher head gates and table-1 queue ids. With the session
+ * gate open and no pending situation every listed situation queues and RETs:
+ * sit 2/3/4 -> 9 (side 0) / 0 (side 1); 5/7 -> 7; 6 -> 5/6; 9/10 -> 1 (side 1)
+ * / 2 (side 0); 8, sit 1, 0xC and >10 -> 0xA (the native `SUB ECX,2`/`CMP
+ * CX,8` underflow/default path 0x8AA60). `sit_side_pending` = (side == 0) is
+ * latched first (0x8A982). The queue route writes no phase; sit 0/0xB and the
+ * closed-gate/pending cases take the direct path. */
+static void test_set_piece_queue_ids(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.session_gate_14c32a = 1;                      /* live session */
+  assert(fifa96_match_run_set_piece(&mr, 2, 0, 0) == 0);
+  assert(mr.situation_id == 9u && mr.situation_pending == 1u);
+  assert(mr.sit_side_pending == 1u);
+  assert(mr.state.phase == 0u);                    /* queue: no phase write */
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 2, 1, 0) == 0);
+  assert(mr.situation_id == 0u && mr.sit_side_pending == 0u);
+  assert(mr.situation_pending == 1u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 3, 1, 0) == 0);
+  assert(mr.situation_id == 0u && mr.situation_pending == 1u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 4, 0, 0) == 0);
+  assert(mr.situation_id == 9u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 5, 1, 0) == 0);
+  assert(mr.situation_id == 7u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 7, 0, 0) == 0);
+  assert(mr.situation_id == 7u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 6, 0, 0) == 0);
+  assert(mr.situation_id == 5u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 6, 1, 0) == 0);
+  assert(mr.situation_id == 6u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 9, 0, 0) == 0);
+  assert(mr.situation_id == 2u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 9, 1, 0) == 0);
+  assert(mr.situation_id == 1u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 10, 1, 0) == 0);
+  assert(mr.situation_id == 1u);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 8, 0, 0) == 0);
+  assert(mr.situation_id == 0x0Au);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 1, 0, 0) == 0);   /* kickoff: default */
+  assert(mr.situation_id == 0x0Au);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 0x0C, 0, 0) == 0);
+  assert(mr.situation_id == 0x0Au);
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 0x0D, 0, 0) == 0); /* >10: default id */
+  assert(mr.situation_id == 0x0Au && mr.situation_pending == 1u);
+  /* sit 0 and 0xB always take the direct path (0x8A944/0x8A94E) */
+  mr.situation_pending = 0; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 0, 0, 0) == 0);
+  assert(mr.state.phase == 0x11u && mr.situation_pending == 0u);
+  assert(fifa96_match_run_set_piece(&mr, 0x0B, 0, 0) == 0);
+  assert(mr.state.phase == 2u);
+  /* a pending situation forces the direct route (0x8A964) */
+  mr.situation_pending = 1; mr.situation_id = 0;
+  assert(fifa96_match_run_set_piece(&mr, 2, 1, 0) == 0);
+  assert(mr.state.phase == 3u);
+  /* the closed gate forces the direct route (0x8A957) */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 3, 1, 0) == 0);
+  assert(mr.state.phase == 4u);
+  /* the direct path for situations >= 0x0D keeps the hardened rejection (the
+   * queue default id 0xA is pinned above) */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 0x0D, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_piece(NULL, 2, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_piece(&mr, 2, 2, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-149 §1.1/§3 item 2: the BX!=0 fallback (0x8AA80..0x8AAA3): phase
+ * `FUN_000740A0(0, 0)`, the act-8 replay bytes `[0x15882C] = side` /
+ * `[0x15882B] = situation`, then act 8's tail (0x8A8A5..0x8A8DE, byte-exact)
+ * re-dispatches the stored situation/side with BX=0 and writes
+ * `[0x15882B] = 0xFF`. The port compresses the act-8 timeline (leg L6) to the
+ * re-dispatch point, so the table-2 row lands on the same call. */
+static void test_set_piece_bx_fallback(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 2, 1, 1) == 0);
+  assert(mr.state.phase == 3u);                    /* sit 2 -> phase 3 */
+  assert(mr.store_15882c == 1u && mr.store_15882b == 0xFFu);
+  /* the phase-0 write precedes the re-dispatch (observable via prev_phase) */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  assert(fifa96_match_run_set_piece(&mr, 3, 1, 1) == 0);
+  assert(mr.state.phase == 4u && mr.state.prev_phase == 0u);
+  assert(mr.corner_count[1] == 1u);                /* counted with the stored side */
+  assert(mr.store_15882b == 0xFFu);
+  /* keeper restart through the fallback: sit 5 -> phase 9 + keeper 0x1E */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 5, 0, 1) == 0);
+  assert(mr.state.phase == 9u);
+  assert(mr.entities.team[0].records[0].code == 0x1Eu);
+}
+
+/* FU-149 §1.5/§2 (first-hand arm table 0x8D040 + `FUN_0008D098` cases):
+ * phase 3 installs action 3 over both teams and the controlled team's
+ * nearest-to-snapshot record gets taker 0x10 and `[team+0x7B2]`; phase 4 adds
+ * the counter, the FUN_0007D360 corner probe camera reset and taker 0x11 plus
+ * one RNG draw (0x92AC8 & 3); phase 8/9 install the keeper 0x1D/0x1E on the
+ * controlled team's record 0. The non-controlled team early-returns (install
+ * 3 only). */
+static void test_set_piece_phase_arm_codes(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_rng before;
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 2, 0, 0) == 0);
+  assert(mr.state.phase == 3u);
+  assert(mr.entities.team[0].target == 1);                  /* team 0 record 1 */
+  assert(mr.entities.team[0].records[1].code == 0x10u);
+  assert(mr.entities.team[0].records[2].code == 3u);
+  assert(mr.entities.team[1].records[1].code == 3u);        /* install 3 only */
+  assert(mr.entities.team[1].target == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr.render.camera.pos_x == 0 && mr.render.camera.pos_z == 0);
+
+  /* phase 4: probe = FUN_0007D360(snapshot) = (±0x710, 0, ±0xB00). Park a
+   * record on the probe so the pick is exact. */
+  fifa96_match_run_init(&mr);
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  match_frame_stage_restarts(&mr);
+  mr.goal_snap_x = 5;                                       /* + -> +0x710 */
+  mr.goal_snap_z = -5;                                      /* - -> -0xB00 */
+  mr.entities.team[0].records[7].target_x = 0x710;
+  mr.entities.team[0].records[7].target_z = -0xB00;
+  before = mr.rng;
+  assert(fifa96_match_run_set_piece(&mr, 3, 0, 0) == 0);
+  assert(mr.state.phase == 4u);
+  assert(mr.corner_count[0] == 1u && mr.corner_count[1] == 0u);
+  assert(mr.render.camera.pos_x == 0x710);
+  assert(mr.render.camera.pos_z == -0xB00);
+  assert(mr.entities.team[0].target == 7);
+  assert(mr.entities.team[0].records[7].code == 0x11u);
+  assert(memcmp(&mr.rng, &before, sizeof before) != 0);     /* the &3 draw */
+
+  /* phase 3 consumes no RNG (the draw is phase-4 only) */
+  fifa96_match_run_init(&mr);
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  match_frame_stage_restarts(&mr);
+  before = mr.rng;
+  assert(fifa96_match_run_set_piece(&mr, 2, 0, 0) == 0);
+  assert(memcmp(&mr.rng, &before, sizeof before) == 0);
+
+  /* phase 8 (goal kick): keeper record 0 = 0x1D, `[team+0x7B2] = 0` */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  assert(fifa96_match_run_set_piece(&mr, 4, 0, 0) == 0);
+  assert(mr.state.phase == 8u);
+  assert(mr.entities.team[0].records[0].code == 0x1Du);
+  assert(mr.entities.team[0].target == 0);
+  assert(mr.entities.team[1].records[0].code == 0x19u);     /* 3 -> 0x19, record 0 */
+}
+
+/* FU-149 §1.8 (first-hand 0x8ABF3..0x8AC1C): the sit-3 counter index is
+ * `FUN_000741B4(side) = (side ^ byte[0x157ABE]) & 1` — the display/score slot
+ * swap, not the raw side. The queue route never counts (0x8A99E RETs before
+ * the table row) and begin resets the pair (`FUN_00073EE0` 0x73F6A/0x73F9C
+ * zeroes 0x157AD4/0x157AD6). Keeper restarts: sit 5 -> phase 9 arm 0x8D5D9
+ * (0x1E on record 0); sit 7 -> phase 0xD arm 0x8D65D (code 0 over the
+ * controlled team's records 1..10, record 0 kept; 0..10 on the other team). */
+static void test_corner_counter_side_swap(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.side_swap = 1;
+  assert(fifa96_match_run_set_piece(&mr, 3, 0, 0) == 0);    /* index 0^1 = 1 */
+  assert(mr.state.phase == 4u);
+  assert(mr.corner_count[1] == 1u && mr.corner_count[0] == 0u);
+  assert(fifa96_match_run_set_piece(&mr, 3, 1, 0) == 0);    /* index 1^1 = 0 */
+  assert(mr.corner_count[0] == 1u && mr.corner_count[1] == 1u);
+
+  fifa96_match_run_init(&mr);
+  mr.session_gate_14c32a = 1;
+  assert(fifa96_match_run_set_piece(&mr, 3, 0, 0) == 0);
+  assert(mr.situation_id == 9u && mr.corner_count[0] == 0u);
+  /* the side-less shared entry (row 01 0xB / the goal fallback) keeps the
+   * phase outcome only: no dispatcher side exists to index the counter */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_situation(&mr, 3) == 0);
+  assert(mr.state.phase == 4u && mr.corner_count[0] == 0u);
+
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].code = 0x22;
+  assert(fifa96_match_run_situation(&mr, 5) == 0);          /* sit 5 -> phase 9 */
+  assert(mr.state.phase == 9u);
+  assert(mr.entities.team[0].records[0].code == 0x1Eu);
+  assert(mr.entities.team[1].records[0].code == 0x19u);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].code = 0x22;
+  assert(fifa96_match_run_situation(&mr, 7) == 0);          /* sit 7 -> phase 0xD */
+  assert(mr.state.phase == 0x0Du);
+  assert(mr.entities.team[0].records[0].code == 0x22u);     /* controlled: record 0 kept */
+  assert(mr.entities.team[0].records[1].code == 0u);
+  assert(mr.entities.team[0].records[10].code == 0u);
+  assert(mr.entities.team[1].records[0].code == 0u);
+
+  /* begin resets the counter pair (native FUN_00073EE0) */
+  {
+    struct fixture f = make_fixture(10000000ull);
+    struct fifa96_match_run fb;
+    fifa96_match_run_init(&fb);
+    fb.corner_count[0] = 3;
+    fb.corner_count[1] = 4;
+    fb.side_swap = 7;
+    assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
+    assert(fb.corner_count[0] == 0u && fb.corner_count[1] == 0u);
+    assert(fb.side_swap == 0u);
+    assert(fifa96_match_run_end(&fb) == 0);
+    drop_fixture(f);
+  }
+}
+
+/* FU-149 §1.3 (first-hand scanner arms 0x88B53..0x88C0E): the clock-tail
+ * scan's throw-in (|snap z| <= 0xB20 -> sit 2, BX=1) and corner/goal-kick
+ * (|snap z| > 0xB20, zone 0 -> sit 3 + ((snap z < 0) == (ball team == 1)),
+ * BX=0) arms, both with `EDX = ball team ^ 1` from [0x1577CA]. Both are
+ * phase-2-only (0x88B5B/0x88BD4); the goal arm keeps the phase 2/0x10 gate. */
+static void test_scan_restart_arms(void) {
+  struct fifa96_match_run mr;
+  /* |snap z| <= 0xB20: throw-in to the ball team's opponent */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.state.phase = 2;
+  mr.goal_armed = 1;
+  mr.entities.controlled = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 3);  /* team 1 */
+  mr.goal_snap_x = 0;
+  mr.goal_snap_z = 0xB20;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 3u);                             /* sit 2 -> phase 3 */
+  assert(mr.entities.team[0].records[1].code == 0x10u);     /* ball 1 ^ 1 = 0 */
+  assert(mr.corner_count[0] == 0u && mr.corner_count[1] == 0u);
+
+  /* corner: cond false (snap z positive, ball team 1) -> sit 3 */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.state.phase = 2;
+  mr.goal_armed = 1;
+  mr.entities.controlled = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 3);
+  mr.goal_snap_z = 0xB30;
+  mr.goal_zone = 0;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 4u);
+  assert(mr.corner_count[0] == 1u);
+
+  /* goal kick: cond true (snap z negative, ball team 1) -> sit 4 -> phase 8
+   * + keeper 0x1D on the controlled team's record 0 */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.state.phase = 2;
+  mr.goal_armed = 1;
+  mr.entities.controlled = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 3);
+  mr.goal_snap_z = -0xB30;
+  mr.goal_zone = 0;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 8u);
+  assert(mr.entities.team[0].records[0].code == 0x1Du);
+  assert(mr.entities.team[0].target == 0);
+
+  /* both restart arms are phase-2 only: phase 0x10 returns a gate no-op */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x10;
+  mr.goal_armed = 1;
+  mr.goal_zone = 0;
+  mr.goal_snap_z = 0xB30;
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  assert(mr.state.phase == 0x10u && mr.corner_count[0] == 0u);
+  mr.goal_snap_z = 0xB20;                                   /* the throw-in band */
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  assert(mr.state.phase == 0x10u);
+
+  /* live session: the head queues the restart id instead of writing the
+   * phase (L4) */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.session_gate_14c32a = 1;
+  mr.goal_armed = 1;
+  mr.entities.controlled = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 3);
+  mr.goal_snap_z = 0xB20;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.state.phase == 2u);
+  assert(mr.situation_id == 9u && mr.situation_pending == 1u);
+  assert(mr.corner_count[0] == 0u);
 }
 
 /* FU-145 S2 core / FU-146 S3 consumer: a fixture pan drives the FU-71 camera
@@ -1643,7 +1968,10 @@ static void test_screen_advance_ring(void) {
  * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}; |z|_w > 0xB20 and the
  * camera lands out of bounds, so the frame's armer fires on the fed pose (the
  * arming gate is the native word-truncated |camZ| > 0xB20). The classifier
- * reports zone 0 (|z| >= 0xB90), so the scan takes the w7-b1 corner leg. */
+ * reports zone 0 (|z| >= 0xB90), so the scan takes the corner/goal-kick arm
+ * (FU-149 P1): snap z positive and ball side 0 (the fresh run's
+ * [0x1577CA] stand-in is unset) -> cond true -> sit 4, queued id 0 for the
+ * side-1 kick in the live session (the begun run's gate is open). */
 static void test_view_pose_feed_arms_camera(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -1666,7 +1994,10 @@ static void test_view_pose_feed_arms_camera(void) {
   assert(mr.goal_armed == 1);
   assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
   assert(mr.goal_zone == 0);
-  assert(mr.situation_pending == 0);            /* corner arm is a w7-b1 leg */
+  /* FU-149 P1: the corner/goal-kick arm fires (cond true -> sit 4, side
+   * 0 ^ 1 = 1) and the live session queues the side-1 restart id 0. */
+  assert(mr.situation_pending == 1);
+  assert(mr.situation_id == 0u);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -1827,6 +2158,11 @@ int main(void) {
   test_goal_arm_reflect_clear();
   test_goal_scan_queue_and_fallback();
   test_goal_phase2_write_clears_arm();
+  test_set_piece_queue_ids();
+  test_set_piece_bx_fallback();
+  test_set_piece_phase_arm_codes();
+  test_corner_counter_side_swap();
+  test_scan_restart_arms();
   test_goal_chain_pan_fixture();
   test_goal_consumer_chain_fixture();
   test_screen_install_state();

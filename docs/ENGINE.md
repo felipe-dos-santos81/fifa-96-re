@@ -196,7 +196,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   kickoff transition dispatches no gameplay row (the possession/selection
   invokers are unported) and a natural gameplay goal still has no *producer*:
   the arming→scan→queue chain (FU-145, S2) is dormant on the static tape camera
-  (pan origin OL-T11-79 absent) and the wave-7 B1 set-piece arms stay legs. The
+  (pan origin OL-T11-79 absent) and the set-piece scanner arms landed in
+  phase-7 P1 (FU-149: throw-in/corner/goal-kick reach their phases + taker
+  codes; the tape camera never arms one). The
   goal **consumer** chain was landed by S3 (FU-146): begin installs the
   goal-screen machine (`0x92D8C/0x92E2C`), the frame body runs the
   session-gated scheduler (`FUN_000948AC 0x4B1A1`, before the clock body), and
@@ -460,7 +462,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   L5 the post-goal re-arm (`0x93C87`/`0x9437A`, S3);   L7 `[0x157ACB]` dropped
   (sole read `0x8FCC8` unported); L8 the period-4 extra-time skip unreachable
   with the carried extra_time 0 (OL-85). The throw-in/corner situation arms
-  (`0x88BBD`/`0x88C00`) stay the wave-7 B1 set-piece hand-off.
+  (`0x88BBD`/`0x88C00`) stay the wave-7 B1 set-piece hand-off (landed in
+  phase-7 P1, FU-149 — see its entry).
 - **M2 full-gameplay S3 (goal consumers, FU-146; 2026-10-09).** Landed from the
   frozen FU-146 slice: `fifa96_match_run_screen_install` (the
   `FUN_00092D8C`/`FUN_00092E2C` installer: leg/mode, step/timer clear, the
@@ -678,6 +681,45 @@ the build also produces the windowed `fifa96` target (`make game`).
   (FU-147/S1). The goal chain that blocks the tape's
   score step (`OL-87`/`OL-88`/`OL-89`) is owned by the next plan phase via the
   frozen FU-145 (arming) / FU-146 (consumers) slices (phase-6 S2/S3).
+- **M2 phase-7 P1 (set pieces & restarts, FU-149; 2026-10-09).** Landed from
+  the frozen FU-149 slice: the `FUN_0008A938` dispatcher head as
+  `fifa96_match_run_set_piece(mr, situation, side, bx)` — the head gates
+  (sit 0/0xB, closed `session_gate_14c32a`, pending), the `0x8A8E0` table-1
+  queue ids (sit 2/3/4 → 9 side 0 / 0 side 1; 5/7 → 7; 6 → 5/6; 9/10 →
+  1 side 1 / 2 side 0; sit 1, 8, 0xC and >10 → the `0x8AA60` id 0xA), the
+  `[0x15B6B8]` side latch (`sit_side_pending`), the BX!=0 fallback (phase
+  `FUN_000740A0(0, 0)` + the `[0x15882B]`/`[0x15882C]` act-8 replay bytes +
+  act 8's byte-exact re-dispatch with BX=0 and `[0x15882B] = 0xFF`) and the
+  BX==0 table-2 route; the `FUN_0008D098` phase arm
+  (`fifa96_match_run_phase_arm`) for phases 3/4/6/7/8/9/0xD — install 3 over
+  both teams, the controlled-side gate `[0x157AAC]` with the non-controlled
+  early return, the `FUN_00079CCC` pick (pool nearest over record targets,
+  skip 0, team-base fallback), the camera resets (snapshot for 3, the
+  `FUN_0007D360` corner probe `(±0x710, 0, ±0xB00)` for 4, the
+  `FUN_00073DC4` penalty spot `(0, 0, ±0x8D0)` for 6), the taker/keeper codes
+  0x10/0x11/0x12/0x13/0x1D/0x1E/0x1F (phase 6 non-controlled 0x1F on its
+  record 0) and the phase-0xD code-0 installs (no install-3 prefix,
+  first-hand); the scanner restart arms (`0x88BCC` throw-in sit 2, BX=1;
+  `0x88B53` corner/goal-kick sit `3 + ((snap z < 0) == (ball == 1))`, BX=0;
+  both phase-2 only, `EDX = ball_team ^ 1` under the pool `[0x1577CA]`
+  stand-in = controlled actor, then ball carrier); the corner counter
+  `corner_count[side ^ side_swap]` (`[0x157AD4]/[0x157AD6]`, zeroed by
+  begin, write-only statically — FU-149 L10) and the loader row's
+  `corner_increment` request. `fifa96_match_run_situation` stays the shared
+  table-2 entry (row 01's 0xB; the goal fallback delegates through
+  `fifa96_match_run_goal_queue` = `set_piece(6, side, 0)`) and now runs the
+  phase arm after the write. No live producer calls sit 9/0xA yet (FU-150/P2),
+  so the free-kick/penalty arms are fixture-dormant but derived. **Both
+  goldens byte-identical, no re-pin** (the tape camera never arms a set piece
+  and the forced phases bypass the situation seam; `cmp` clean, M1 unmoved);
+  `make check` 106/106, ASan/UBSan on the frame suite. Carried legs (FU-149
+  §6): L1–L11 as before plus **L12** (the sit 2..4 `[0x157B8E]`/`[0x157B8F]`
+  formation-order gate + act-4 arm and the sit-1 arm; the port routes the
+  table-2 row) and **L13** (the taker/keeper rows 0x10/0x11/0x1D — the arms
+  install the codes but the stage machines are unported, so the §1.6 resume
+  tails are not yet executable; FU-151 owns 0x1D). First-hand erratum: the
+  incident z cell is `0x15889F` (`FUN_00079CCC` reads +8), not the slice's
+  `0x15889B` (the y dword).
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
