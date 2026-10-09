@@ -29,6 +29,33 @@ typedef struct fifa96_palette_pool {
   const uint8_t *fixed[9];      /* 0x14BF50,20,54,2C,28,30,5C,58,24 ascending */
 } fifa96_palette_pool;
 
+/* FU-152 §2.10/§4.4 (P4): the FUN_00049138(1) request identity. Fresh
+ * 0x49138 disasm: `MOV EDX,0x34E8; MOV EAX,0x101A20; CALL 0x4A448` whose
+ * `OR BH,0x2` makes the 0x20 alignment class 0x220; 0x101A20 = "palettes"
+ * (fresh bytes). The partition writes up to `base+0x2FFF` (floor 0x3000), so
+ * the 0x34E8 request covers it with 0x4E8 spare. */
+#define FIFA96_PALETTE_POOL_REQUEST 0x34E8u
+#define FIFA96_PALETTE_POOL_TYPE 0x220u
+#define FIFA96_PALETTE_POOL_TAG "palettes"
+#define FIFA96_PALETTE_POOL_FLOOR 0x3000u
+
+typedef struct fifa96_palette_pool_request {
+  uint32_t size;      /* 0x34E8 */
+  uint32_t type;      /* 0x220 */
+  const char *tag;    /* "palettes" */
+} fifa96_palette_pool_request;
+
+extern const fifa96_palette_pool_request fifa96_palette_pool_identity;
+
+/* Allocate the native 0x34E8 request and partition it (FUN_00049138(1) ->
+ * FUN_0004A448 -> FUN_00046F80). Returns FIFA96_OK, -FIFA96_ERR_INVALID (NULL
+ * out) or -FIFA96_ERR_IO (allocation failed). Release with fifa96_palette_pool_release. */
+fifa96_err_t fifa96_palette_pool_create(fifa96_palette_pool *out);
+
+/* Free a pool created by fifa96_palette_pool_create and zero *pool (NULL is a
+ * no-op). */
+void fifa96_palette_pool_release(fifa96_palette_pool *pool);
+
 /* FUN_00046F80 partition arithmetic over a caller-owned buffer (the native
  * writer is blind; the port requires size >= 0x3000). Returns FIFA96_OK,
  * -FIFA96_ERR_INVALID (NULL base/out or size < 0x3000). */

@@ -300,11 +300,68 @@ static void test_retail_fonts(void) {
   free(c.container);
 }
 
+/* FU-152 §4.3 (P4): the FUN_00054640 centred-draw helper and the FUN_000544B4
+ * two-pass (colour 6 outline then colour 0) text. The centre is 0xA0 on the
+ * 320-axis and 0x140 on the wide (settings-4) axis, minus the halved (or
+ * quartered when wide) measured width scaled `(v*scale + 0x8000) >> 16`.
+ * FUN_00054640 first-hand: narrow `0xA0 - ((w>>1)*scale+0x8000)>>16`, wide
+ * `0x140 - ((w>>2)*scale+0x8000)>>16`. */
+static void test_outlined_and_centered(void) {
+  uint8_t data[SYN_FONT_LEN];
+  syn_font_init(data);
+  fifa96_font font;
+  assert(fifa96_font_parse(data, SYN_FONT_LEN, &font) == FIFA96_OK);
+
+  /* Two-pass: the outline colour 6 at (+1,+1), the main colour 0 at (x,y). */
+  uint8_t canvas[16 * 8];
+  memset(canvas, 0, sizeof canvas);
+  assert(fifa96_font_blit_outlined(canvas, 16, 8, &font, "0", 2, 3) == FIFA96_OK);
+  assert(canvas[3 * 16 + 2] == 0 && canvas[3 * 16 + 3] == 0);
+  assert(canvas[4 * 16 + 2] == 0 && canvas[4 * 16 + 3] == 0);   /* main box */
+  assert(canvas[4 * 16 + 4] == 6);   /* outline of the second column */
+  assert(canvas[5 * 16 + 3] == 6 && canvas[5 * 16 + 4] == 6);   /* outline row */
+
+  /* "012" width 8. Narrow scale 1.0: four -> x = 0xA0 - 4 = 156; '0' at
+   * (156,0) main and (157,1) outline. */
+  uint8_t canvas320[320 * 8];
+  memset(canvas320, 0, sizeof canvas320);
+  assert(fifa96_font_draw_centered(canvas320, 320, 8, &font, "012", 0, 0x10000, 0) ==
+         FIFA96_OK);
+  assert(canvas320[0 * 320 + 156] == 0);
+  assert(canvas320[1 * 320 + 156] == 0);
+  assert(canvas320[2 * 320 + 157] == 6);   /* '0' outline below the main box */
+
+  /* The wide flag centres on 0x140 with the quartered width: w>>2 = 2 ->
+   * x = 0x140 - 2 = 318. */
+  memset(canvas320, 0, sizeof canvas320);
+  assert(fifa96_font_draw_centered(canvas320, 320, 8, &font, "012", 0, 0x10000, 1) ==
+         FIFA96_OK);
+  assert(canvas320[0 * 320 + 318] == 0);
+  assert(canvas320[0 * 320 + 319] == 0);
+
+  /* Zoomed scale 0x8000: (4*0x8000+0x8000)>>16 = 2 -> x = 0xA0 - 2 = 158. */
+  memset(canvas320, 0, sizeof canvas320);
+  assert(fifa96_font_draw_centered(canvas320, 320, 8, &font, "012", 0, 0x8000, 0) ==
+         FIFA96_OK);
+  assert(canvas320[0 * 320 + 158] == 0);
+  assert(canvas320[0 * 320 + 159] == 0);
+
+  assert(fifa96_font_blit_outlined(NULL, 16, 8, &font, "0", 0, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_draw_centered(NULL, 16, 8, &font, "0", 0, 0x10000, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_draw_centered(canvas, 16, 8, NULL, "0", 0, 0x10000, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_font_draw_centered(canvas, 16, 8, &font, NULL, 0, 0x10000, 0) ==
+         -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_synthetic_parse_and_metrics();
   test_synthetic_blit();
   test_defaults_when_tables_absent();
   test_parse_errors();
+  test_outlined_and_centered();
   test_retail_fonts();
   puts("test_font OK");
   return 0;

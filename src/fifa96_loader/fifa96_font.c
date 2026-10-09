@@ -154,3 +154,24 @@ int fifa96_font_blit(uint8_t *canvas, int canvas_w, int canvas_h, const fifa96_f
   }
   return FIFA96_OK;
 }
+
+int fifa96_font_blit_outlined(uint8_t *canvas, int canvas_w, int canvas_h,
+                              const fifa96_font *font, const char *str, int x, int y) {
+  if (!canvas || canvas_w <= 0 || canvas_h <= 0 || !font || !font->data || !str)
+    return -FIFA96_ERR_INVALID;
+  (void)fifa96_font_blit(canvas, canvas_w, canvas_h, font, str, x + 1, y + 1, 6);
+  return fifa96_font_blit(canvas, canvas_w, canvas_h, font, str, x, y, 0);
+}
+
+int fifa96_font_draw_centered(uint8_t *canvas, int canvas_w, int canvas_h,
+                              const fifa96_font *font, const char *str, int y,
+                              int scale, int wide) {
+  int width, half, x;
+  if (!canvas || canvas_w <= 0 || canvas_h <= 0 || !font || !font->data || !str)
+    return -FIFA96_ERR_INVALID;
+  width = fifa96_font_text_width(font, str);
+  /* FUN_00054640: narrow halves the measure, wide quarters it. */
+  half = wide ? (width >> 2) : (width >> 1);
+  x = (wide ? 0x140 : 0xA0) - (int)(((int64_t)half * scale + 0x8000) >> 16);
+  return fifa96_font_blit_outlined(canvas, canvas_w, canvas_h, font, str, x, y);
+}

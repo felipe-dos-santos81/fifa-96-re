@@ -109,12 +109,50 @@ static void test_scale(void) {
   assert(fifa96_window_zoomed(&win, NULL) == W_INVALID);
 }
 
+/* FU-152 §2.6/§4.1 (P4): the FUN_00053240 substitution-strip layout block
+ * (0x14E53C + side*0x1C): y0, row height (frame-5 height, doubled when the
+ * settings-4 "wide" flag is set), x0+4*scale / x1-4*scale-name_width*scale,
+ * y0+12*scale, all fixed-point rounded `(v*scale + 0x8000) >> 16`. */
+static void test_strip_layout(void) {
+  fifa96_window win;
+  fifa96_window_strip strip;
+  fifa96_window_init(&win, 320, 200);
+
+  fifa96_window_set(&win, 0, 0, 320, 200);   /* scale 0x10000 */
+  assert(fifa96_window_strip_layout(&win, 12, 40, 0, &strip) == FIFA96_OK);
+  assert(strip.row[0].y0 == 0 && strip.row[1].y0 == 0);
+  assert(strip.row[0].height == 12 && strip.row[1].height == 12);
+  assert(strip.row[0].x == 4);               /* x0 + 4*scale */
+  assert(strip.row[1].x == 320 - 4 - 40);    /* x1 - 4*scale - 40*scale */
+  assert(strip.row[0].y_text == 12);         /* y0 + 12*scale */
+  assert(strip.row[1].y_text == 12);
+
+  /* Zoomed window (10,20,160,100): scale 0x8000; 4*scale rounds to 2,
+   * 12*scale rounds to 6, 40*scale rounds to 20. */
+  fifa96_window_set(&win, 10, 20, 160, 100);
+  assert(fifa96_window_strip_layout(&win, 12, 40, 0, &strip) == FIFA96_OK);
+  assert(strip.row[0].y0 == 20 && strip.row[1].y0 == 20);
+  assert(strip.row[0].height == 12 && strip.row[1].height == 12);
+  assert(strip.row[0].x == 10 + 2);
+  assert(strip.row[1].x == 170 - 2 - 20);
+  assert(strip.row[0].y_text == 20 + 6);
+  assert(strip.row[1].y_text == 20 + 6);
+
+  /* The wide branch doubles the frame-5 height for both side rows. */
+  assert(fifa96_window_strip_layout(&win, 12, 40, 1, &strip) == FIFA96_OK);
+  assert(strip.row[0].height == 24 && strip.row[1].height == 24);
+
+  assert(fifa96_window_strip_layout(NULL, 12, 40, 0, &strip) == W_INVALID);
+  assert(fifa96_window_strip_layout(&win, 12, 40, 0, NULL) == W_INVALID);
+}
+
 int main(void) {
   test_init();
   test_set();
   test_define_full();
   test_expand();
   test_scale();
+  test_strip_layout();
   puts("test_window: all assertions passed");
   return 0;
 }

@@ -50,6 +50,94 @@ typedef struct fifa96_camera_pose_block {
 extern const fifa96_camera_pose_block
     fifa96_camera_pose_blocks[FIFA96_CAMERA_POSE_BLOCKS];
 
+/* FU-152 §2.8 (P4): the 0x107508 camera-type record cells the pose feed reads
+ * (native +4 handler selector, +0xC behavior index). The poser maps a +4 == 3
+ * to behavior index 5 and clamps negative selectors to 0; the image's -1
+ * behavior cells are the degenerate `[0x108B60]` read the engine clamps to 0
+ * (slice §2.8 leg 8). */
+typedef struct fifa96_camera_type_record {
+  int32_t handler;   /* +4 */
+  int32_t behavior;  /* +0xC of that record */
+} fifa96_camera_type_record;
+
+/* Resolve {handler, behavior} for the staged type records: handler =
+ * clamp(records[selector].handler, 0); the behavior record index is the
+ * handler remapped 3 -> 5, whose `.behavior` is clamped >= 0. Returns
+ * FIFA96_OK, -FIFA96_ERR_INVALID (NULL out-params or selector out of range). */
+int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
+                       uint32_t selector, int32_t *handler, int32_t *behavior);
+
+/* FU-152 §2.8 (P4): the four 0x108B80 handler bodies (0x4E834 steady, 0x4E3A8
+ * sidetrack, 0x4EC9C staged, 0x4DB38 action). The engine ports the quoted
+ * constant/clamp level; the integrator helpers FUN_0004E248/D698/DF34/C7D0/
+ * D668 and the pose targets stay leg 9. `handler_block` carries the behavior
+ * block fields the handlers read: +0x08 class_of, +0x00 target0, +0x04
+ * target1, +0x30 const30 (native dword 0xC), +0x34 const34 (dword 0xD), the
+ * byte at +3 (`field3`), and the sub-record yaw bounds (native `[block+0x50]
+ * +0x18/+0x1C`). */
+typedef struct fifa96_camera_handler_block {
+  int32_t class_of;   /* +0x08 */
+  int32_t target0;    /* +0x00 */
+  int32_t target1;    /* +0x04 */
+  int32_t const30;    /* +0x30 (dword 0xC) */
+  int32_t const34;    /* +0x34 (dword 0xD) */
+  int32_t field3;     /* the byte at +3 (staged) */
+  int32_t yaw_lo;     /* sub-record +0x18 */
+  int32_t yaw_hi;     /* sub-record +0x1C */
+} fifa96_camera_handler_block;
+
+typedef struct fifa96_camera_handler_state {
+  int32_t pos_x, pos_y, pos_z;       /* camera record +0x10/+0x14/+0x18 */
+  int32_t track_x, track_y, track_z; /* the staged replay triple +0x34/38/3C */
+  int32_t ratio;                     /* +0x4C */
+  int32_t yaw;                       /* +0x58 */
+  int32_t pitch;                     /* +0x5C */
+  int32_t brake_lo, brake_hi;        /* +0x5A/+0x5E */
+} fifa96_camera_handler_state;
+
+typedef struct fifa96_camera_handler_out {
+  int32_t horizon_a;   /* 0x14E4D8 (h0) / 0x14E4DC (h1/h2) */
+  int32_t horizon_b;   /* 0x14E4D4 (h0) / 0x14E4D0 (h1/h2) */
+  int32_t speed;       /* the action handler's param_4 (after the live bump) */
+} fifa96_camera_handler_out;
+
+/* Handler constants (fresh 0x4DB38): the yaw slew divisor 0x1E0000 and the
+ * pitch slew divisor 0x3C0000. */
+#define FIFA96_CAMERA_ACTION_YAW_DIVISOR 0x1E0000
+#define FIFA96_CAMERA_ACTION_PITCH_DIVISOR 0x3C0000
+
+int fifa96_camera_behavior_steady(fifa96_camera_handler_state *st,
+                                  const fifa96_camera_handler_block *block,
+                                  int32_t rnd, fifa96_camera_handler_out *out);
+int fifa96_camera_behavior_sidetrack(fifa96_camera_handler_state *st,
+                                     const fifa96_camera_handler_block *block,
+                                     int32_t rnd, fifa96_camera_handler_out *out);
+int fifa96_camera_behavior_staged(fifa96_camera_handler_state *st,
+                                  const fifa96_camera_handler_block *block,
+                                  int32_t rnd, fifa96_camera_handler_out *out);
+int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
+                                  int32_t speed, fifa96_camera_handler_out *out);
+
+/* FU-152 §2.8 (P4): the six 0x108B64 behavior-block fields the handlers read,
+ * first-hand `read_memory 0x10896C` (504 B): +0x00 target0, +0x04 target1,
+ * +0x08 class, +0x30 const30 (dword 0xC), +0x34 const34 (dword 0xD), and the
+ * byte at +3. Observed classes {3,1,3,3,1,3}; every +3 byte is 0, so the
+ * FUN_0004EC9C class gate (`<0x4000 || >0xC000` -> 4) always takes class 4 in
+ * the image; every +0x34 is 0 (handler 1's yaw target is the bare staged
+ * track z). */
+typedef struct fifa96_camera_behavior_table_entry {
+  int32_t target0;   /* +0x00 */
+  int32_t target1;   /* +0x04 */
+  int32_t class_of;  /* +0x08 */
+  int32_t field3;    /* the byte at +3 */
+  int32_t const30;   /* +0x30 */
+  int32_t const34;   /* +0x34 */
+} fifa96_camera_behavior_table_entry;
+
+#define FIFA96_CAMERA_BEHAVIOR_BLOCKS 6
+extern const fifa96_camera_behavior_table_entry
+    fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS];
+
 typedef struct fifa96_camera_pose_args {
   uint32_t view_mode;   /* [0x14E57C] (getter FUN_00053D50) */
   uint32_t block;       /* behavior index (native [0x107514 + selector*0x70]) */
@@ -57,6 +145,16 @@ typedef struct fifa96_camera_pose_args {
   int32_t variant_x;    /* mode 3/4 variant predicate x (native *0x109A70) */
   int32_t sub;          /* replay sub index ([0x109A70+8]) */
   int mirror;           /* FUN_0004B818: 1 - side (caller-staged) */
+  /* FU-152 §2.8 (P4): the default-arm handler call `(&0x108B80)[selector]`.
+   * A caller stages the camera-record subset + behavior block; NULL keeps the
+   * unported default (returns 0). `handler_rnd` feeds the horizon jitter,
+   * `handler_live`/`handler_speed` the action handler's `FUN_0006400C` arm. */
+  fifa96_camera_handler_state *handler_state;
+  const fifa96_camera_handler_block *handler_block;
+  fifa96_camera_handler_out *handler_out;
+  int32_t handler_rnd;
+  int32_t handler_live;
+  int32_t handler_speed;
 } fifa96_camera_pose_args;
 
 /* Write the six pose fields (FUN_000505D0's shared arm): camera
@@ -70,12 +168,14 @@ int fifa96_camera_pose_apply(fifa96_camera *cam, int32_t *yaw, int32_t *pitch,
  * 3/4 records {4|3}/{2|1} via FUN_000504E0/FUN_00050518; 6/0x10 record 7 with
  * the sub < 0 mirror; 8 records 6/5 by sub; 0x15 the fixed record 0x108714
  * with its yaw fold and z negate. The default arm (mode 0 and the unlisted
- * modes) is the handler call `(&0x108B80)[selector]` (w7-b4 §2.8 leg 9: the
- * four handler bodies are unported). Legs: the +0x48 alternate array, the
- * mode-3 replay camera copy/z clamp, the mode-4/8 mirror tails, the mode-0x15
- * camera+0x3c clamp and the `[0x107DD8]`/pad-idle/replay gates of the
- * per-frame driver FUN_0004D2D4. Returns 1 when a pose was applied, 0 for the
- * unported default arm, -FIFA96_ERR_INVALID (NULL or block out of range). */
+ * modes) dispatches `(&0x108B80)[selector]` when the caller stages the
+ * camera-record subset + behavior block (FU-152 §2.8 P4); a NULL
+ * `handler_state` keeps the unported result (0). Legs: the +0x48 alternate
+ * array, the mode-3 replay camera copy/z clamp, the mode-4/8 mirror tails,
+ * the mode-0x15 camera+0x3c clamp, the `[0x107DD8]`/pad-idle/replay gates of
+ * the per-frame driver FUN_0004D2D4, and the handler integrator math (leg 9).
+ * Returns 1 when a pose was applied, 0 for the unported default arm,
+ * -FIFA96_ERR_INVALID (NULL or block out of range). */
 int fifa96_camera_pose_feed(fifa96_camera *cam, int32_t *yaw, int32_t *pitch,
                             int32_t *view_ratio, const fifa96_camera_pose_args *args);
 
@@ -102,3 +202,38 @@ int16_t fifa96_camera_ramp(int16_t height);
  * sinks (FUN_00092820 etc.). */
 int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
                             int16_t height);
+
+/* FU-152 §2.9 (P4): FUN_00070074's boundary classifier over the staged triple
+ * {x, y, z}: |z| < 0xB10 -> 8, < 0xB90 -> 0, else 4; x < -0xD0 -> |1, x >
+ * 0xCF -> |2; the z-window 0x10 bit when y exceeds the shrinking 0xA0
+ * threshold within 0x30 past 0xB10. Returns flags == 0 (the native "inside"
+ * result), writes *flags; -FIFA96_ERR_INVALID on NULL. */
+int fifa96_camera_classify(const int32_t point[3], uint16_t *flags);
+
+/* FU-152 §2.9 (P4): FUN_000709D0's pan-height band ladder (first-hand):
+ * h < 0x29 -> (class 1, 2h+0x14); h < 0x65 -> (class 2, (h+0x50)/2);
+ * h < 0x12D -> (class 3, (h+100)/4); else (class 3, 100). */
+void fifa96_camera_pan_band(int32_t height, int32_t *class_of, int32_t *param);
+
+/* FU-152 §2.9 (P4): FUN_00071DF4's first arm — a tracked sub-object at
+ * height > 0xF0 writes the event rates `sub_object_rate * 15` clamped +-15
+ * and recomputes the bearing magnitude. Returns 1 when applied, 0 when the
+ * height gate fails, -FIFA96_ERR_INVALID on NULL. The keeper/player event
+ * tail (FUN_00092998 -> FUN_0008F188 0x1D/0x1E) and the table arm stay legs. */
+int fifa96_camera_rate_event(fifa96_camera *cam, int32_t rate_x, int32_t rate_z,
+                             int32_t height);
+
+/* FU-152 §2.3 (P4): FUN_0004D134's replay camera selector (fresh decompile):
+ * 0 -> the `0x107968 + [0x107DD0]*0x70` record with sub 0; 1/2/3/6 -> the
+ * 0x107CE8 record with sub 5/6/7/8 (FUN_0004DDA8); 4 -> 0x107B98 (the action
+ * handler, FUN_0004DB38); 5 -> 0x107B28 (FUN_0004D98C). The native default
+ * arm only records the index. Returns 1 when a camera was selected, 0 for the
+ * default; -FIFA96_ERR_INVALID on NULL out-params. The per-mode pose
+ * semantics (FUN_0004D98C/DDA8) stay leg 10. */
+enum {
+  FIFA96_CAMERA_REPLAY_POSE = 0,   /* [0x107968 + [0x107DD0]*0x70] */
+  FIFA96_CAMERA_REPLAY_VIEW = 1,   /* 0x107CE8 */
+  FIFA96_CAMERA_REPLAY_ACTION = 2, /* 0x107B98 */
+  FIFA96_CAMERA_REPLAY_BALL = 3,   /* 0x107B28 */
+};
+int fifa96_camera_replay_select(uint32_t index, int32_t *kind, int32_t *sub);

@@ -69,3 +69,18 @@ int fifa96_font_text_width(const fifa96_font *font, const char *str);
  * -FIFA96_ERR_INVALID (NULL font/canvas/str, non-positive canvas size). */
 int fifa96_font_blit(uint8_t *canvas, int canvas_w, int canvas_h, const fifa96_font *font,
                      const char *str, int x, int y, uint8_t color);
+
+/* FU-152 §4.3 (P4): FUN_000544B4's two-pass text — colour 6 at (+1,+1) then
+ * colour 0 at (x,y) (the native outline/main pair; the shade ramp stays
+ * FU-148's recorded leg). */
+int fifa96_font_blit_outlined(uint8_t *canvas, int canvas_w, int canvas_h,
+                              const fifa96_font *font, const char *str, int x, int y);
+
+/* FU-152 §4.3 (P4): FUN_00054640's centred draw. The centre is 0xA0 (narrow)
+ * or 0x140 (wide); the offset is the halved (narrow: `w>>1`) or quartered
+ * (wide: `w>>2`) measure scaled `(v*scale + 0x8000) >> 16`. Draws the
+ * outline/main pair at (centre - offset, y). Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID. */
+int fifa96_font_draw_centered(uint8_t *canvas, int canvas_w, int canvas_h,
+                              const fifa96_font *font, const char *str, int y,
+                              int scale, int wide);

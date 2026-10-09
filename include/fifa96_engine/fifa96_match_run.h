@@ -120,6 +120,165 @@ struct fifa96_match_run_entity {
  *              banks, composite mirror table), plus the indexed blit remap;
  *  - enabled   opt-in flag: the Task 12-14 engine fixtures never stage a
  *              scene, so rendering stays off until a match sets it. */
+/* FU-152 §4.1 (P4): the presentation residual state behind the presenter
+ * rows R1/R2/R3 (the HUD row R4 is FU-148, the ball row R5 is dormant). */
+
+enum {
+  FIFA96_MATCH_REPLAY_LIVE = 0x00,      /* [0x109A98] == 0 */
+  FIFA96_MATCH_REPLAY_ARMED = 0x81,     /* the armed/intro state */
+  FIFA96_MATCH_REPLAY_PLAY = 0x82,
+  FIFA96_MATCH_REPLAY_PAUSE = 0x83,
+  FIFA96_MATCH_REPLAY_STEP_BACK = 0x84,
+  FIFA96_MATCH_REPLAY_STEP_FWD = 0x85,
+  FIFA96_MATCH_REPLAY_SLOW = 0x86,
+};
+
+enum {
+  FIFA96_MATCH_REPLAY_ROW_NONE = 0,
+  FIFA96_MATCH_REPLAY_ROW_HUD,    /* FUN_00064C34 (caption/progress/buttons) */
+  FIFA96_MATCH_REPLAY_ROW_BLINK,  /* FUN_000564A0 (caption id 0x18C) */
+};
+
+/* The replay row state ([0x109A98] family). All zero at rest = live, so a
+ * fresh run draws no replay row. The caption strings and the progress bar
+ * assets are runtime-filled legs (FU-152 legs 1/2/3), so the engine stages
+ * final text and positions and derives only the gates/step machine. */
+struct fifa96_match_run_replay {
+  uint8_t state;          /* [0x109A98] */
+  uint8_t hud_armed;      /* [0x109AC4] */
+  uint8_t camera_index;   /* [0x109A8C] 0..5 */
+  uint8_t camera_kind;    /* FUN_0004D134 selected record (FIFA96_CAMERA_REPLAY_*) */
+  uint8_t camera_sub;     /* the FUN_0004DDA8 sub index 5..8 (view modes) */
+  uint32_t cursor;        /* [0x109A94] */
+  uint32_t cursor_limit;  /* [0x109AC0] */
+  int32_t phase_counter;  /* [0x14E58C] (FUN_00053D7C) */
+  int32_t blink;          /* [0x108FC4] */
+  uint32_t wait_timer;    /* [0x109A9C] */
+  uint32_t wait_reload;   /* [0x109AA0] */
+  int32_t advance;        /* [0x109AA8] */
+  int32_t caption_x;      /* staged engine caption cell (native FUN_00012FE4 leg) */
+  int32_t caption_y;
+  char captions[6][FIFA96_MATCH_HUD_NAME_MAX];  /* [0x109AD0..0x109AD8] leg 1 */
+};
+
+/* The R2 row gate (fresh 0x565BC decompile + the predicate bodies):
+ * family ([0x109A98] & 0x80), not the armed state (0x81), outside the ramp
+ * window ([0x14E58C]-0xF1 < 0x78 with [0x14E58C] != 0), HUD arm for the
+ * FUN_00064C34 row. */
+int fifa96_match_run_replay_row(const struct fifa96_match_run *mr);
+
+int fifa96_match_run_replay_family(const struct fifa96_match_run_replay *replay);
+int fifa96_match_run_replay_live(const struct fifa96_match_run_replay *replay);
+int fifa96_match_run_replay_armed(const struct fifa96_match_run_replay *replay);
+int fifa96_match_run_replay_playing(const struct fifa96_match_run_replay *replay);
+int fifa96_match_run_replay_ramp_window(const struct fifa96_match_run_replay *replay);
+
+/* FUN_000642B0: `cursor * 100 / cursor_limit` (0 when the limit is 0). */
+uint32_t fifa96_match_run_replay_progress(const struct fifa96_match_run_replay *replay);
+
+/* FUN_000564A0: advance the blink counter by `tick`; returns 1 when the
+ * caption draws (counts 0..9, or the >= 0x14 reset frame), 0 in 10..19. */
+int fifa96_match_run_replay_blink_step(struct fifa96_match_run_replay *replay,
+                                       int32_t tick);
+
+/* The reachable FUN_000642FC subset: the 0x80 -> 0x81 promotion, the 0x81 arm
+ * (reset cursor/camera + selector 0), the button mapping (1 toggles
+ * play/pause, 0x20 cycles the camera mod 6, 8/4/2 -> step modes), the
+ * single-frame step-mode reset and the exit arm (bit 0x80 -> state 0, HUD
+ * arm cleared). The replay-ring advance (FUN_00063D34/CBC/6428C), the held
+ * pad probe FUN_000451F1 and the pan keys FUN_0004CA08 stay legs. */
+int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
+                                 int32_t delta);
+
+/* The exit chain FUN_00064E8C's reachable state: [0x109A98] = 0 and the HUD
+ * arm freed. The hero/selection release and audio sinks stay legs. */
+void fifa96_match_run_replay_exit(struct fifa96_match_run *mr);
+
+/* FUN_0004D134: select replay camera `index` (0..6; the native default only
+ * records the index and the engine keeps the current selection). Returns 1 on
+ * a selected camera, 0 for the default, -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t index);
+
+/* The R1 substitution strip (FU-152 §2.6/§3.2). `record` is the byte block
+ * behind the native [0x1587D4] pointer (the field meanings stay FU-145 L4);
+ * `cursor_raw` is [0x1587E7] (k = % 5), `flags` the [0x1587DA + i*2 + side]
+ * cells, `record_side` the (*record + 0x826) byte. Marks come from
+ * FUN_0004BD38, the two displayed numbers from FUN_0004BDF8. The mark/name
+ * blit inputs and the name clamp cells are staged (legs 13/14). */
+struct fifa96_match_run_sub {
+  uint8_t active;
+  uint8_t cursor_raw;      /* [0x1587E7] */
+  uint8_t current_side;    /* [0x1587E3] >> 24 */
+  uint8_t record_side;     /* (*[0x1587D4] + 0x826) */
+  uint8_t mode;            /* [0x157A4A] >> 24 */
+  uint8_t special;         /* [0x1587D4] == 0x157A9F */
+  uint8_t wide;            /* FUN_00044BE0 (settings 4) */
+  uint8_t flags[10];       /* [0x1587DA + i*2 + side] */
+  uint8_t record[0x12];    /* the [0x1587D4..0x1587E5] bytes FUN_0004BDF8 reads */
+  uint16_t frame5_height;  /* Frames.fsh frame-5 height ([0x14E63A] family) */
+  uint16_t name_width;     /* the staged measured name width ([0x14E63A]) */
+  int32_t x_clamp_lo, x_clamp_hi;  /* [0x108DE4]/[0x108DE8] name clamp */
+  int32_t mark_pitch;      /* staged glyph pitch (leg 13) */
+  int32_t mark_step;       /* staged state glyph step (leg 13) */
+  const struct fifa96_sprite_frame *mark_sprite;  /* staged strip glyph */
+  char name[2][FIFA96_MATCH_HUD_NAME_MAX];
+};
+
+int fifa96_match_run_sub_mark(const struct fifa96_match_run_sub *sub, int side,
+                              int slot);
+int fifa96_match_run_sub_numbers(const struct fifa96_match_run_sub *sub, int *p1,
+                                 int *p2);
+
+/* The R3 overlay screen (FU-152 §2.7/§3.2). The case table maps the id to the
+ * draw path FUN_000550E4's switch takes; the line strings/positions are staged
+ * (the per-case helpers are legs). `extra_time` is the native extra-time mode
+ * gate (its producer is unported), `second` the [0x14E5C8] overlay. */
+enum {
+  FIFA96_OVERLAY_ROW_NONE = 0,
+  FIFA96_OVERLAY_ROW_PERIOD,         /* case 0 */
+  FIFA96_OVERLAY_ROW_PLAYER_LIST,    /* 1,4 */
+  FIFA96_OVERLAY_ROW_SUBSTITUTION,   /* 5,0xB,0xE */
+  FIFA96_OVERLAY_ROW_RECORD_INFO,    /* 6 */
+  FIFA96_OVERLAY_ROW_PERIOD_STRING,  /* 7,0xC */
+  FIFA96_OVERLAY_ROW_LIST,           /* 8 */
+  FIFA96_OVERLAY_ROW_MESSAGE,        /* 9 */
+  FIFA96_OVERLAY_ROW_LIST_MESSAGE,   /* 0xA */
+  FIFA96_OVERLAY_ROW_STATS,          /* 0xD */
+  FIFA96_OVERLAY_ROW_PLAYER_NAME,    /* 0xF */
+  FIFA96_OVERLAY_ROW_EXTRA_TIME,     /* 0x11 */
+};
+
+struct fifa96_match_run_overlay {
+  uint16_t id;             /* [0x14E674] & 0xFF */
+  uint8_t armed;           /* [0x14E674] & 0x8000 */
+  uint8_t second;          /* [0x14E5C8] */
+  uint8_t extra_time;      /* native extra-time mode (producer unported) */
+  int32_t timer;           /* [0x14E684] */
+  int32_t timeout;         /* [0x14E680] */
+  int32_t direction;       /* overlay +0x24 (FUN_00053E08) */
+  int32_t rate;            /* overlay +0x28 */
+  int32_t second_timer;    /* [0x14E5D8] */
+  int32_t second_timeout;  /* [0x14E5D4] */
+  int32_t second_direction;
+  int32_t second_rate;
+  int32_t line_x[4];       /* staged layout (per-case helpers are legs) */
+  int32_t line_y[4];
+  char lines[4][FIFA96_MATCH_HUD_NAME_MAX];
+};
+
+int fifa96_match_run_overlay_row(uint16_t id);
+int fifa96_match_run_overlay_arm(struct fifa96_match_run_overlay *overlay, uint16_t id);
+int fifa96_match_run_overlay_timeout_step(struct fifa96_match_run_overlay *overlay,
+                                          int32_t tick);
+/* The R3 row gate: armed, not suspended, no replay family, and the extra-time
+ * id exclusion (only 0x11 draws in extra time). */
+int fifa96_match_run_overlay_visible(const struct fifa96_match_run *mr);
+
+/* FU-152 §2.5 leg 6: the R5 ball row is dormant (the only writer FUN_00056690
+ * is always called with 0); the engine keeps `render.ball_row` NULL and the
+ * predicate reports the reachability of the staged producer. */
+int fifa96_match_run_ball_row_reachable(const struct fifa96_match_run *mr);
+
 struct fifa96_match_run_render {
   int enabled;
   struct fifa96_camera camera;
@@ -193,6 +352,13 @@ struct fifa96_match_run_render {
   uint16_t hud_bar_height;
   uint8_t hud_bar_ready;
   char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
+  /* FU-152 §4.1 (P4): the residual presenter rows. All zero at rest, so a
+   * fresh/fixtured run draws exactly the FU-148 HUD (the M2 tape is
+   * unchanged). `ball_row` is the dormant R5 seam (FU-152 §2.5). */
+  struct fifa96_match_run_replay replay;
+  struct fifa96_match_run_sub sub;
+  struct fifa96_match_run_overlay overlay;
+  const struct fifa96_sprite_frame *ball_row;
 };
 
 /* Minimal derived match record (M2 Task 5 / FU-138 §4, extended by M2 Task 7 /

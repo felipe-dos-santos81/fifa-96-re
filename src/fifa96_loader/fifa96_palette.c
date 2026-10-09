@@ -1,6 +1,13 @@
 #include "fifa96_loader/fifa96_palette.h"
 
+#include <stdlib.h>
 #include <string.h>
+
+const fifa96_palette_pool_request fifa96_palette_pool_identity = {
+    FIFA96_PALETTE_POOL_REQUEST,
+    FIFA96_PALETTE_POOL_TYPE,
+    FIFA96_PALETTE_POOL_TAG,
+};
 
 /* First-hand image tables: 0x10727C (11 bytes) and 0x107287 (7 bytes), the
  * rank maps the FUN_00048DC0 kit path adds the local bases to. */
@@ -66,4 +73,25 @@ fifa96_err_t fifa96_palette_translate_slot(uint8_t *dst, const uint8_t *slot) {
   if (!dst || !slot) return (fifa96_err_t)-FIFA96_ERR_INVALID;
   memcpy(dst, slot, 256u);
   return FIFA96_OK;
+}
+
+fifa96_err_t fifa96_palette_pool_create(fifa96_palette_pool *out) {
+  uint8_t *base;
+  if (!out) return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  base = malloc(FIFA96_PALETTE_POOL_REQUEST);
+  if (!base) return (fifa96_err_t)-FIFA96_ERR_IO;   /* allocation failed */
+  if (fifa96_palette_pool_partition(base, FIFA96_PALETTE_POOL_REQUEST, out) !=
+      FIFA96_OK) {
+    free(base);
+    memset(out, 0, sizeof *out);
+    return (fifa96_err_t)-FIFA96_ERR_INVALID;
+  }
+  return FIFA96_OK;
+}
+
+void fifa96_palette_pool_release(fifa96_palette_pool *pool) {
+  if (!pool) return;
+  free(pool->base);
+  memset(pool, 0, sizeof *pool);
 }

@@ -714,6 +714,334 @@ static void test_event_set_invalid(void) {
   assert(fifa96_camera_event_set(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* ---- FU-152 §2.8 (P4): camera type mapping and the handler bodies ---- */
+
+static void test_camera_type_mapping(void) {
+  /* The first-hand 0x107508 record fields {+4 handler, +0xC behavior index}:
+   * idx0 {0,0}, idx1 {1,1}, idx2 {2,2}, idx3 {-1,-1}, idx4 {-1,-1},
+   * idx5 {3,-1}. The native maps +4==3 -> behavior 5 and clamps a negative
+   * +4 to 0; the behavior -1 image values are the degenerate read the engine
+   * clamps to 0 (slice §2.8 leg 8). */
+  const fifa96_camera_type_record records[6] = {
+      {0, 0}, {1, 1}, {2, 2}, {-1, -1}, {-1, -1}, {3, -1},
+  };
+  int32_t handler = -9, behavior = -9;
+  assert(fifa96_camera_type(records, 6, 0, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 0 && behavior == 0);
+  assert(fifa96_camera_type(records, 6, 1, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 1 && behavior == 1);
+  assert(fifa96_camera_type(records, 6, 2, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 2 && behavior == 2);
+  /* selector 3: handler clamps -1 -> 0; the behavior record index is the
+   * remapped +4 = -1, clamped to record 0 -> behavior -1 -> 0. */
+  assert(fifa96_camera_type(records, 6, 3, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 0 && behavior == 0);
+  assert(fifa96_camera_type(records, 6, 4, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 0 && behavior == 0);
+  /* selector 5: handler 3; behavior record index 3 -> 5, whose +0xC is -1
+   * -> clamp 0. */
+  assert(fifa96_camera_type(records, 6, 5, &handler, &behavior) == FIFA96_OK);
+  assert(handler == 3 && behavior == 0);
+  assert(fifa96_camera_type(records, 6, 6, &handler, &behavior) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_type(NULL, 6, 0, &handler, &behavior) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_type(records, 6, 0, NULL, &behavior) ==
+         -FIFA96_ERR_INVALID);
+}
+
+static void test_behavior_steady(void) {
+  /* FUN_0004E834: yaw accumulator clamped into the block sub-record bounds
+   * [0x18,0x1C], pitch clamp +-0x1620, horizon jitter rnd>>3 + 0xE09/0xAA1. */
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_block block;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  memset(&out, 0, sizeof out);
+  block.yaw_lo = -100;
+  block.yaw_hi = 100;
+  st.yaw = 0;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0x40, &out) == FIFA96_OK);
+  assert(st.yaw == 0);
+  assert(st.pitch == 0x1620);
+  assert(out.horizon_a == 0xE09 + 8 && out.horizon_b == 0xAA1 + 8);
+  st.yaw = -500;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.yaw == -100 && out.horizon_a == 0xE09);
+  st.yaw = 500;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.yaw == 100);
+  st.pitch = -0x2000;
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.pitch == -0x1620);
+  assert(fifa96_camera_behavior_steady(NULL, &block, 0, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_behavior_steady(&st, NULL, 0, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_behavior_steady(&st, &block, 0, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
+static void test_behavior_sidetrack(void) {
+  /* FUN_0004E3A8: +-0x68 vertical bias by class (2 -> +, else -), yaw target
+   * track_z + block[0xD] clamped +-0xB10, pitch clamp +-0xE40, horizon
+   * rnd>>3 + 0xE3B/0xAD3. */
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_block block;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  st.track_y = 1000;
+  st.track_z = 0xB00;
+  block.const34 = 0x100;
+  block.class_of = 2;
+  st.pitch = 0x2000;
+  assert(fifa96_camera_behavior_sidetrack(&st, &block, 8, &out) == FIFA96_OK);
+  assert(st.track_y == 1000 + 0x68);
+  assert(st.yaw == 0xB10);               /* 0xC00 clamped */
+  assert(st.pitch == 0xE40);
+  assert(out.horizon_a == 1 + 0xE3B && out.horizon_b == 1 + 0xAD3);
+
+  memset(&st, 0, sizeof st);
+  block.class_of = 3;
+  st.track_y = 1000;
+  st.track_z = -0xB00;
+  block.const34 = -0x100;
+  assert(fifa96_camera_behavior_sidetrack(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_y == 1000 - 0x68);
+  assert(st.yaw == -0xB10);
+}
+
+static void test_behavior_staged(void) {
+  /* FUN_0004EC9C: class by block+3 (<0x4000 || >0xC000 -> 4 else 3), pan
+   * clamp +-0x720 inside the 0x2000..0xA000 band else +-0xB10, pitch clamp
+   * +-0x1620, horizon 0xE3B/0xAD3. */
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_block block;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  block.field3 = 0x3000;      /* inside the band -> class 3, pan +-0x720 */
+  st.track_x = 0x800;
+  st.pitch = 0x9000;
+  assert(fifa96_camera_behavior_staged(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_x == 0x720);
+  assert(st.pitch == 0x1620);
+  assert(out.horizon_a == 0xE3B && out.horizon_b == 0xAD3);
+  /* outside the band -> class 4, pan +-0xB10 */
+  block.field3 = 0x1000;
+  st.track_x = -0x900;
+  assert(fifa96_camera_behavior_staged(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_x == -0x900);
+  st.track_x = 0x2000;
+  assert(fifa96_camera_behavior_staged(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_x == 0xB10);
+}
+
+static void test_behavior_action(void) {
+  /* FUN_0004DB38: `if (FUN_0006400C() == 0) param_4 += 100;`, pos x +-0x420,
+   * pos z +-0x810, pitch clamp [0x2000,63000], the brake words zeroed. */
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&out, 0, sizeof out);
+  st.pos_x = 0x500;
+  st.pos_z = -0x900;
+  st.pitch = 0x1000;
+  st.brake_lo = 5;
+  st.brake_hi = 6;
+  assert(fifa96_camera_behavior_action(&st, 0, 500, &out) == FIFA96_OK);
+  assert(out.speed == 600);
+  assert(st.pos_x == 0x420 && st.pos_z == -0x810);
+  assert(st.pitch == 0x2000);
+  assert(st.brake_lo == 0 && st.brake_hi == 0);
+  st.pitch = 0x10000;
+  assert(fifa96_camera_behavior_action(&st, 1, 500, &out) == FIFA96_OK);
+  assert(out.speed == 500);
+  assert(st.pitch == 63000);
+  assert(fifa96_camera_behavior_action(NULL, 1, 0, &out) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_behavior_action(&st, 1, 0, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_pose_feed_default_handler_arm(void) {
+  /* The default arm now dispatches the 0x108B80 handler when the caller
+   * stages the camera-record subset + behavior block (the unported default
+   * still returns 0 with a NULL handler state). */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_block block;
+  fifa96_camera_handler_out out;
+  memset(&args, 0, sizeof args);
+  memset(&st, 0, sizeof st);
+  memset(&block, 0, sizeof block);
+  memset(&out, 0, sizeof out);
+  args.view_mode = 0;
+  args.selector = 0;            /* handler 0: steady */
+  args.handler_state = &st;
+  args.handler_block = &block;
+  args.handler_out = &out;
+  args.handler_rnd = 0x40;
+  st.pos_x = 100;
+  st.pos_z = -50;
+  st.yaw = 0;
+  st.pitch = 0x2000;
+  block.yaw_lo = -100;
+  block.yaw_hi = 100;
+  int32_t yaw = 7, pitch = 7, ratio = 7;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == 100 && cam.pos_z == -50);
+  assert(yaw == 0 && pitch == 0x1620);
+  assert(out.horizon_a == 0xE09 + 8 && out.horizon_b == 0xAA1 + 8);
+
+  /* selector 3 = the action handler (unsigned live flag + speed). */
+  memset(&st, 0, sizeof st);
+  args.selector = 3;
+  args.handler_live = 0;
+  args.handler_speed = 500;
+  st.pos_x = 0x500;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(out.speed == 600 && cam.pos_x == 0x420);
+
+  /* Without a staged handler state the default arm stays unported (0). */
+  args.handler_state = NULL;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 0);
+}
+
+/* ---- FU-152 §2.9 (P4): FUN_00070074 classifier / FUN_000709D0 band /
+ * FUN_00071DF4 rate event ---- */
+
+static void test_classifier_bits(void) {
+  /* FUN_00070074 first-hand: |z| < 0xB10 -> 8, < 0xB90 -> 0, else 4;
+   * x < -0xD0 -> |1, x > 0xCF -> |2; the z-window edge (|z| within 0x30 of
+   * 0xB10, threshold 0xA0 shrunken past it) sets 0x10 when y exceeds it. */
+  uint16_t flags = 0xFFFF;
+  const int32_t p0[3] = {0, 0, 0};
+  assert(fifa96_camera_classify(p0, &flags) == 0 && flags == 8);
+  const int32_t p1[3] = {0, 0xA1, 0};
+  assert(fifa96_camera_classify(p1, &flags) == 0 && flags == (8 | 0x10));
+  const int32_t p2[3] = {-0xD1, 0, 0};
+  assert(fifa96_camera_classify(p2, &flags) == 0 && flags == (8 | 1));
+  const int32_t p3[3] = {0xD0, 0, 0};
+  assert(fifa96_camera_classify(p3, &flags) == 0 && flags == (8 | 2));
+  /* |z| = 0xB90: base 4; edge 0x80 -> threshold 0x50; y 0x60 sets 0x10. */
+  const int32_t p4[3] = {0, 0x60, 0xB90};
+  assert(fifa96_camera_classify(p4, &flags) == 0 && flags == (4 | 0x10));
+  const int32_t p5[3] = {0, 0x40, 0xB90};
+  assert(fifa96_camera_classify(p5, &flags) == 0 && flags == 4);
+  /* The zero mask is the "inside" result (the native returns flags == 0). */
+  const int32_t p6[3] = {0, 0xA0, 0xB10};
+  assert(fifa96_camera_classify(p6, &flags) == 1 && flags == 0);
+  assert(fifa96_camera_classify(NULL, &flags) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_classify(p0, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_pan_band(void) {
+  /* FUN_000709D0 band ladder (first-hand decompile): h < 0x29 ->
+   * (class 1, 2h+0x14); h < 0x65 -> (class 2, (h+0x50)/2); h < 0x12D ->
+   * (class 3, (h+100)/4); else (class 3, 100). */
+  int32_t class_of = 0, param = 0;
+  fifa96_camera_pan_band(1, &class_of, &param);
+  assert(class_of == 1 && param == 2 + 0x14);
+  fifa96_camera_pan_band(0x28, &class_of, &param);
+  assert(class_of == 1 && param == 0x50 + 0x14);
+  fifa96_camera_pan_band(0x29, &class_of, &param);
+  assert(class_of == 2 && param == (0x29 + 0x50) / 2);
+  fifa96_camera_pan_band(0x64, &class_of, &param);
+  assert(class_of == 2 && param == (0x64 + 0x50) / 2);
+  fifa96_camera_pan_band(0x65, &class_of, &param);
+  assert(class_of == 3 && param == (0x65 + 100) / 4);
+  fifa96_camera_pan_band(0x12C, &class_of, &param);
+  assert(class_of == 3 && param == (0x12C + 100) / 4);
+  fifa96_camera_pan_band(0x12D, &class_of, &param);
+  assert(class_of == 3 && param == 100);
+}
+
+static void test_rate_event(void) {
+  /* FUN_00071DF4 first arm: ball/event height > 0xF0 -> the sub-object rate
+   * words * 15 clamped +-15; below the gate nothing is touched. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0);
+  assert(fifa96_camera_rate_event(&cam, 1, -2, 0xF1) == 1);
+  assert(cam.vel_x == 15 && cam.vel_z == -15);
+  assert(cam.speed != 0);
+  cam.vel_x = 0;
+  cam.vel_z = 0;
+  assert(fifa96_camera_rate_event(&cam, 1, 2, 0xF0) == 0);
+  assert(cam.vel_x == 0 && cam.vel_z == 0);
+  assert(fifa96_camera_rate_event(NULL, 1, 2, 0xF1) == -FIFA96_ERR_INVALID);
+}
+
+/* ---- FU-152 §2.3 (P4): the FUN_0004D134 replay camera selector ---- */
+
+static void test_replay_select(void) {
+  int32_t kind = -1, sub = -1;
+  /* 0 -> the [0x107968 + [0x107DD0]*0x70] record, pose sub 0. */
+  assert(fifa96_camera_replay_select(0, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_POSE && sub == 0);
+  /* 1/2/3/6 -> 0x107CE8 with sub 5/6/7/8. */
+  assert(fifa96_camera_replay_select(1, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_VIEW && sub == 5);
+  assert(fifa96_camera_replay_select(2, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_VIEW && sub == 6);
+  assert(fifa96_camera_replay_select(3, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_VIEW && sub == 7);
+  assert(fifa96_camera_replay_select(6, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_VIEW && sub == 8);
+  /* 4 -> 0x107B98 (the action handler record), 5 -> 0x107B28. */
+  assert(fifa96_camera_replay_select(4, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_ACTION && sub == 0);
+  assert(fifa96_camera_replay_select(5, &kind, &sub) == 1);
+  assert(kind == FIFA96_CAMERA_REPLAY_BALL && sub == 0);
+  /* The native default arm only records the index. */
+  assert(fifa96_camera_replay_select(7, &kind, &sub) == 0);
+  assert(fifa96_camera_replay_select(0, NULL, &sub) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_replay_select(0, &kind, NULL) == -FIFA96_ERR_INVALID);
+}
+
+static void test_behavior_table(void) {
+  /* First-hand 0x10896C (504 B): classes {3,1,3,3,1,3}, every +3 byte 0 (so
+   * FUN_0004EC9C always takes the class-4 arm in the image), every +0x34
+   * zero (handler 1's yaw target is the bare track z). */
+  assert(FIFA96_CAMERA_BEHAVIOR_BLOCKS == 6);
+  const int32_t classes[6] = {3, 1, 3, 3, 1, 3};
+  for (int i = 0; i < 6; i++) {
+    assert(fifa96_camera_behavior_blocks[i].class_of == classes[i]);
+    assert(fifa96_camera_behavior_blocks[i].field3 == 0);
+    assert(fifa96_camera_behavior_blocks[i].const34 == 0);
+  }
+  assert(fifa96_camera_behavior_blocks[0].target0 == 0x340);
+  assert(fifa96_camera_behavior_blocks[0].target1 == 0xFA0);
+  assert(fifa96_camera_behavior_blocks[0].const30 == 0xEA6);
+  assert(fifa96_camera_behavior_blocks[1].target0 == 0x1200);
+  assert(fifa96_camera_behavior_blocks[1].target1 == 1);
+  assert(fifa96_camera_behavior_blocks[1].const30 == 0x578);
+  assert(fifa96_camera_behavior_blocks[2].target0 == 0x364);
+  assert(fifa96_camera_behavior_blocks[2].target1 == 0xD48);
+  assert(fifa96_camera_behavior_blocks[2].const30 == 0x1130);
+
+  /* The image block 5 through the staged handler: field3 0 -> class-4 arm
+   * (pan +-0xB10); class 3 -> the sidetrack +0x68 bias is -0x68. */
+  fifa96_camera_handler_block block;
+  memset(&block, 0, sizeof block);
+  block.class_of = fifa96_camera_behavior_blocks[5].class_of;
+  block.field3 = fifa96_camera_behavior_blocks[5].field3;
+  block.const34 = fifa96_camera_behavior_blocks[5].const34;
+  fifa96_camera_handler_state st;
+  fifa96_camera_handler_out out;
+  memset(&st, 0, sizeof st);
+  memset(&out, 0, sizeof out);
+  st.track_x = 0x2000;
+  assert(fifa96_camera_behavior_staged(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_x == 0xB10);
+  st.track_y = 0;
+  assert(fifa96_camera_behavior_sidetrack(&st, &block, 0, &out) == FIFA96_OK);
+  assert(st.track_y == -0x68);
+  assert(st.yaw == 0);   /* const34 0 */
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -762,6 +1090,17 @@ int main(void) {
   test_event_set_height_clamps();
   test_event_set_anchor2_computed();
   test_event_set_invalid();
+  test_camera_type_mapping();
+  test_behavior_table();
+  test_behavior_steady();
+  test_behavior_sidetrack();
+  test_behavior_staged();
+  test_behavior_action();
+  test_pose_feed_default_handler_arm();
+  test_classifier_bits();
+  test_pan_band();
+  test_rate_event();
+  test_replay_select();
   puts("test_camera: ok");
   return 0;
 }

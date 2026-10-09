@@ -1244,6 +1244,374 @@ static void test_hud_zoomed_uses_playfnt_layout(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* ---- FU-152 §4.1 (P4): presentation residual rows --------------------- */
+
+static void test_replay_state_helpers(void) {
+  struct fifa96_match_run_replay r;
+  memset(&r, 0, sizeof r);
+  assert(fifa96_match_run_replay_live(&r));
+  assert(!fifa96_match_run_replay_family(&r));
+  r.state = 0x81;
+  assert(fifa96_match_run_replay_family(&r) && fifa96_match_run_replay_armed(&r));
+  assert(!fifa96_match_run_replay_playing(&r));
+  r.state = 0x82;
+  assert(fifa96_match_run_replay_playing(&r));
+  r.state = 0x83;
+  assert(!fifa96_match_run_replay_playing(&r));
+
+  /* The ramp window: [0x14E58C] != 0 and [0x14E58C]-0xF1 < 0x78. */
+  r.phase_counter = 0;
+  assert(!fifa96_match_run_replay_ramp_window(&r));
+  r.phase_counter = 1;
+  assert(fifa96_match_run_replay_ramp_window(&r));
+  r.phase_counter = 0xF1;
+  assert(fifa96_match_run_replay_ramp_window(&r));
+  r.phase_counter = 0x168;
+  assert(fifa96_match_run_replay_ramp_window(&r));
+  r.phase_counter = 0x169;
+  assert(!fifa96_match_run_replay_ramp_window(&r));
+
+  /* FUN_000642B0: cursor * 100 / limit (0 when the limit is 0). */
+  r.cursor = 50;
+  r.cursor_limit = 200;
+  assert(fifa96_match_run_replay_progress(&r) == 25);
+  r.cursor = 500;
+  assert(fifa96_match_run_replay_progress(&r) == 250);   /* no native clamp */
+  r.cursor_limit = 0;
+  assert(fifa96_match_run_replay_progress(&r) == 0);
+
+  /* FUN_000564A0 blink: accumulate; 10..19 suppress, >= 0x14 resets. */
+  r.blink = 0;
+  assert(fifa96_match_run_replay_blink_step(&r, 9) == 1 && r.blink == 9);
+  assert(fifa96_match_run_replay_blink_step(&r, 9) == 0 && r.blink == 18);
+  assert(fifa96_match_run_replay_blink_step(&r, 2) == 1 && r.blink == 0);
+}
+
+static void test_replay_step_machine(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  struct fifa96_match_run_replay *r = &mr.render.replay;
+
+  /* The 0x80 -> 0x81 promotion and the 0x81 arm run in one call (the native
+   * falls through): cursor/camera reset and FUN_0004D134(0). */
+  r->state = 0x80;
+  r->cursor = 9;
+  r->camera_index = 4;
+  fifa96_match_run_replay_step(&mr, 0, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  assert(r->cursor == 0 && r->camera_index == 0);
+  assert(r->camera_kind == FIFA96_CAMERA_REPLAY_POSE && r->camera_sub == 0);
+
+  /* Button 1 toggles play <-> pause. */
+  fifa96_match_run_replay_step(&mr, 1, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PAUSE);
+  fifa96_match_run_replay_step(&mr, 1, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+
+  /* Button 0x20 cycles the replay camera (mod 6) + selects it. */
+  fifa96_match_run_replay_step(&mr, 0x20, 0);
+  assert(r->camera_index == 1 && r->camera_kind == FIFA96_CAMERA_REPLAY_VIEW &&
+         r->camera_sub == 5);
+  for (int i = 0; i < 5; i++) fifa96_match_run_replay_step(&mr, 0x20, 0);
+  assert(r->camera_index == 0);
+
+  /* Buttons 8/4/2 set the step modes; the next frame resets them to play. */
+  fifa96_match_run_replay_step(&mr, 8, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_FWD);
+  fifa96_match_run_replay_step(&mr, 0, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_PLAY);
+  fifa96_match_run_replay_step(&mr, 4, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_STEP_BACK);
+  fifa96_match_run_replay_step(&mr, 0, 0);
+  fifa96_match_run_replay_step(&mr, 2, 0);
+  assert(r->state == FIFA96_MATCH_REPLAY_SLOW);
+
+  /* The exit arm (bit 0x80): state 0 and the HUD arm cleared. */
+  r->hud_armed = 1;
+  fifa96_match_run_replay_step(&mr, 0x80, 0);
+  assert(r->state == 0 && r->hud_armed == 0);
+}
+
+static void test_replay_camera_set(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  struct fifa96_match_run_replay *r = &mr.render.replay;
+  assert(fifa96_match_run_replay_camera_set(&mr, 3) == 1);
+  assert(r->camera_index == 3 && r->camera_kind == FIFA96_CAMERA_REPLAY_VIEW &&
+         r->camera_sub == 7);
+  assert(fifa96_match_run_replay_camera_set(&mr, 4) == 1);
+  assert(r->camera_kind == FIFA96_CAMERA_REPLAY_ACTION);
+  assert(fifa96_match_run_replay_camera_set(&mr, 5) == 1);
+  assert(r->camera_kind == FIFA96_CAMERA_REPLAY_BALL);
+  assert(fifa96_match_run_replay_camera_set(&mr, 7) == 0);
+  assert(fifa96_match_run_replay_camera_set(NULL, 0) == -FIFA96_ERR_INVALID);
+}
+
+static void test_sub_marks_and_numbers(void) {
+  struct fifa96_match_run_sub sub;
+  memset(&sub, 0, sizeof sub);
+  sub.active = 1;
+  sub.cursor_raw = 0;      /* k = 0 */
+  sub.record_side = 1;     /* (*P + 0x826) */
+  sub.current_side = 1;    /* [0x1587E3] >> 24 */
+  sub.mode = 0;
+  /* slot == k and the record side matches -> 3 (2 in the mode-5 special). */
+  assert(fifa96_match_run_sub_mark(&sub, 1, 0) == 3);
+  assert(fifa96_match_run_sub_mark(&sub, 0, 0) == 0);   /* side mismatch */
+  sub.current_side = 0;
+  assert(fifa96_match_run_sub_mark(&sub, 0, 0) == 1);   /* current side, no flag */
+  sub.flags[0 * 2 + 0] = 1;
+  assert(fifa96_match_run_sub_mark(&sub, 0, 0) == 2);   /* flag adds one */
+  sub.mode = 5;
+  sub.special = 1;
+  assert(fifa96_match_run_sub_mark(&sub, 1, 0) == 2);
+  sub.mode = 0;
+  assert(fifa96_match_run_sub_mark(&sub, 1, 0) == 3);
+
+  /* k = 3: slots below k mark by their flag; slots above do not. */
+  sub.cursor_raw = 3;
+  assert(fifa96_match_run_sub_mark(&sub, 0, 1) == 1);
+  sub.flags[1 * 2 + 1] = 1;
+  assert(fifa96_match_run_sub_mark(&sub, 1, 1) == 2);
+  /* slot == k with the current side: the current-side branch, not 0. */
+  assert(fifa96_match_run_sub_mark(&sub, 0, 3) == 1);
+  assert(fifa96_match_run_sub_mark(&sub, 0, 4) == 0);
+  /* Engine bound: out-of-range slots return 0 (the native indexes blindly,
+   * slice leg 13). */
+  assert(fifa96_match_run_sub_mark(&sub, 0, 5) == 0);
+  assert(fifa96_match_run_sub_mark(&sub, 0, -1) == 0);
+  assert(fifa96_match_run_sub_mark(NULL, 0, 0) == 0);
+
+  /* FUN_0004BDF8: cursor_raw < 5 -> record bytes 1/5; else 0x10/0x11. */
+  int p1 = -1, p2 = -1;
+  sub.cursor_raw = 0;
+  sub.record[1] = 7;
+  sub.record[5] = 9;
+  assert(fifa96_match_run_sub_numbers(&sub, &p1, &p2) == FIFA96_OK);
+  assert(p1 == 7 && p2 == 9);
+  sub.cursor_raw = 5;
+  sub.record[0x10] = 4;
+  sub.record[0x11] = 6;
+  assert(fifa96_match_run_sub_numbers(&sub, &p1, &p2) == FIFA96_OK);
+  assert(p1 == 4 && p2 == 6);
+  assert(fifa96_match_run_sub_numbers(NULL, &p1, &p2) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_sub_numbers(&sub, NULL, &p2) == -FIFA96_ERR_INVALID);
+}
+
+static void test_overlay_rows_and_timeout(void) {
+  assert(fifa96_match_run_overlay_row(0) == FIFA96_OVERLAY_ROW_PERIOD);
+  assert(fifa96_match_run_overlay_row(1) == FIFA96_OVERLAY_ROW_PLAYER_LIST);
+  assert(fifa96_match_run_overlay_row(4) == FIFA96_OVERLAY_ROW_PLAYER_LIST);
+  assert(fifa96_match_run_overlay_row(5) == FIFA96_OVERLAY_ROW_SUBSTITUTION);
+  assert(fifa96_match_run_overlay_row(0xB) == FIFA96_OVERLAY_ROW_SUBSTITUTION);
+  assert(fifa96_match_run_overlay_row(0xE) == FIFA96_OVERLAY_ROW_SUBSTITUTION);
+  assert(fifa96_match_run_overlay_row(6) == FIFA96_OVERLAY_ROW_RECORD_INFO);
+  assert(fifa96_match_run_overlay_row(7) == FIFA96_OVERLAY_ROW_PERIOD_STRING);
+  assert(fifa96_match_run_overlay_row(0xC) == FIFA96_OVERLAY_ROW_PERIOD_STRING);
+  assert(fifa96_match_run_overlay_row(8) == FIFA96_OVERLAY_ROW_LIST);
+  assert(fifa96_match_run_overlay_row(9) == FIFA96_OVERLAY_ROW_MESSAGE);
+  assert(fifa96_match_run_overlay_row(0xA) == FIFA96_OVERLAY_ROW_LIST_MESSAGE);
+  assert(fifa96_match_run_overlay_row(0xD) == FIFA96_OVERLAY_ROW_STATS);
+  assert(fifa96_match_run_overlay_row(0xF) == FIFA96_OVERLAY_ROW_PLAYER_NAME);
+  assert(fifa96_match_run_overlay_row(0x11) == FIFA96_OVERLAY_ROW_EXTRA_TIME);
+  assert(fifa96_match_run_overlay_row(2) == FIFA96_OVERLAY_ROW_NONE);
+  assert(fifa96_match_run_overlay_row(0x12) == FIFA96_OVERLAY_ROW_NONE);
+
+  /* FUN_000550E4 arming: id | 0x8000, timer reset, second seeded for the
+   * {5,9,0xB,0xC,0xD,0xE,0xF,0x12} set. */
+  struct fifa96_match_run_overlay o;
+  memset(&o, 0, sizeof o);
+  assert(fifa96_match_run_overlay_arm(&o, 5) == 1);
+  assert(o.id == 5 && o.armed == 1 && o.timer == 0 && o.second == 1);
+  memset(&o, 0, sizeof o);
+  assert(fifa96_match_run_overlay_arm(&o, 0x11) == 1);
+  assert(o.id == 0x11 && o.armed == 1 && o.second == 0);
+  assert(fifa96_match_run_overlay_arm(NULL, 1) == -FIFA96_ERR_INVALID);
+
+  /* FUN_000542D4: the direction*rate gate, accumulate, flip on timeout. */
+  memset(&o, 0, sizeof o);
+  o.armed = 1;
+  o.direction = 1;
+  o.rate = 1;
+  o.timeout = 10;
+  assert(fifa96_match_run_overlay_timeout_step(&o, 5) == 0);
+  assert(o.timer == 5 && o.direction == 1);
+  assert(fifa96_match_run_overlay_timeout_step(&o, 6) == 1);
+  assert(o.timer == 0 && o.direction == -1);   /* flipped */
+  /* Negative product: the native gate skips the whole step. */
+  o.timer = 3;
+  assert(fifa96_match_run_overlay_timeout_step(&o, 100) == 0);
+  assert(o.timer == 3);
+  /* direction == 0 -> -rate (FUN_00053E08's first arm). */
+  o.direction = 0;
+  o.rate = 5;
+  assert(fifa96_match_run_overlay_timeout_step(&o, 11) == 1);
+  assert(o.direction == -5);
+  assert(fifa96_match_run_overlay_timeout_step(NULL, 1) == -FIFA96_ERR_INVALID);
+}
+
+/* The sub strip draw: numbers centred via FUN_00054640 at y_text + 2*scale,
+ * the 5 marks from FUN_0004BD38 states 1..3, the name at the native
+ * x_left/x_right row column. */
+static void test_sub_strip_draw(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  assert(fifa96_window_set(&f.mr.render.window, 0, 0, 320, 200) == FIFA96_OK);
+  struct fifa96_match_run_sub *sub = &f.mr.render.sub;
+  sub->active = 1;
+  sub->cursor_raw = 0;
+  sub->record_side = 1;      /* (*P + 0x826) */
+  sub->current_side = 0;     /* [0x1587E3] >> 24 */
+  sub->flags[0 * 2 + 0] = 1; /* side 0 slot 0 flag -> state 2 */
+  sub->record[1] = 1;
+  sub->record[5] = 2;
+  sub->frame5_height = 12;
+  sub->name_width = 0;
+  sub->x_clamp_lo = 0;
+  sub->x_clamp_hi = 320;
+  sub->mark_pitch = 3;
+  sub->mark_step = 1;
+  static uint8_t mark_pixels[4] = {0x33, 0x33, 0x33, 0x33};
+  fifa96_sprite_frame mark;
+  memset(&mark, 0, sizeof mark);
+  mark.width = 2;
+  mark.height = 2;
+  mark.pixels = mark_pixels;
+  mark.pixel_len = 4;
+  sub->mark_sprite = &mark;
+  /* side 0 slot 0: record side mismatch, current side + flag -> state 2 at
+   * (4, 0 + (2-1)*1) = (4,1); side 1 slot 0: record side match -> state 3 at
+   * (316, 2). */
+  sub->name[0][0] = '0';
+  sub->name[0][1] = '\0';
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* The fixture font has 1x1 glyphs advance 2 and only '0'..':': "1 - 2"
+   * measures 4 (the ' ' and '-' chars are outside the font), centred at
+   * 0xA0 - ((4>>1)*scale) = 158, y = y_text + 2 = 14; '1' at 158 and '2' at
+   * 160, one row high. */
+  assert(f.s->indexed[14 * 320 + 158] == 0x00);
+  assert(f.s->indexed[14 * 320 + 160] == 0x00);
+  assert(f.s->indexed[15 * 320 + 159] == 0x06);
+  /* marks: side 0 state 2 -> (4,1); the name outline (+1,+1 pass) covers the
+   * mark's top-left cell at (4,1), so the surviving mark cells are (5,1),
+   * (4,2)/(5,2); side 1 state 3 -> (316,2) with no side-1 name staged. */
+  assert(f.s->indexed[1 * 320 + 5] == 0x33);
+  assert(f.s->indexed[2 * 320 + 4] == 0x33 && f.s->indexed[2 * 320 + 5] == 0x33);
+  assert(f.s->indexed[2 * 320 + 316] == 0x33);
+  /* the side-0 name: max_w 0, scaled name 2 -> x = 4 + ((0-2)>>1) = 3;
+   * main colour 0 at (3,0), outline 6 at (4,1). */
+  assert(f.s->indexed[0 * 320 + 3] == 0x00);
+  assert(f.s->indexed[1 * 320 + 4] == 0x06);
+  fifa96_surface_destroy(f.s);
+
+  /* Inactive sub strip draws nothing; a replay state suppresses R1 too. */
+  hud_fixture_init(&f);
+  assert(fifa96_window_set(&f.mr.render.window, 0, 0, 320, 200) == FIFA96_OK);
+  f.mr.render.sub.active = 1;
+  f.mr.render.sub.mark_sprite = &mark;
+  f.mr.render.replay.state = 0x82;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[2 * 320 + 4] == 0x7F);
+  fifa96_surface_destroy(f.s);
+}
+
+/* The replay row: R2 gates (state != 0x81, outside the ramp window) and the
+ * HUD arm; the blink caption step. */
+static void test_replay_row_and_draw(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  struct fifa96_match_run_replay *r = &f.mr.render.replay;
+  r->state = FIFA96_MATCH_REPLAY_PLAY;
+  r->hud_armed = 1;
+  r->phase_counter = 0;
+  r->caption_x = 100;
+  r->caption_y = 30;
+  r->captions[0][0] = '0';
+  r->captions[0][1] = '\0';
+  assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_HUD);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[30 * 320 + 100] == 0x00);
+  assert(f.s->indexed[31 * 320 + 101] == 0x06);
+
+  /* The ramp window suppresses R2 (phase 1..0xF0 shows the blink caption). */
+  r->phase_counter = 1;
+  assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
+  /* Outside it with a nonzero phase and a state != 0x81 -> blink. */
+  r->phase_counter = 0x169;
+  assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_BLINK);
+  f.s->indexed[30 * 320 + 100] = 0x7F;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[30 * 320 + 100] == 0x00);
+  assert(r->blink == 1);   /* the draw advances the FUN_000564A0 counter */
+  /* ...and the 10..19 suppression window skips the draw. */
+  r->blink = 9;
+  f.s->indexed[30 * 320 + 100] = 0x7F;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(r->blink == 10);
+  assert(f.s->indexed[30 * 320 + 100] == 0x7F);
+  /* The armed state suppresses the row; the HUD without the arm too. */
+  r->state = FIFA96_MATCH_REPLAY_ARMED;
+  assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
+  r->state = FIFA96_MATCH_REPLAY_PLAY;
+  r->hud_armed = 0;
+  r->phase_counter = 0;
+  assert(fifa96_match_run_replay_row(&f.mr) == FIFA96_MATCH_REPLAY_ROW_NONE);
+  fifa96_surface_destroy(f.s);
+}
+
+/* The overlay row: the armed gate, replay/suspend suppression, the extra-time
+ * id gate, and the staged line draw. */
+static void test_overlay_gate_and_draw(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  struct fifa96_match_run_overlay *o = &f.mr.render.overlay;
+  o->armed = 1;
+  o->id = 0;
+  o->lines[0][0] = '0';
+  o->lines[0][1] = '\0';
+  o->line_x[0] = 10;
+  o->line_y[0] = 10;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[10 * 320 + 10] == 0x00);
+  assert(f.s->indexed[11 * 320 + 11] == 0x06);
+
+  /* A no-draw case id (the list helpers stay legs) draws nothing. */
+  o->id = 2;
+  f.s->indexed[10 * 320 + 10] = 0x7F;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[10 * 320 + 10] == 0x7F);
+
+  /* Extra-time mode suppresses every id but 0x11; replay and suspend
+   * suppress the row. */
+  o->id = 0;
+  o->extra_time = 1;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 0);
+  o->id = 0x11;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 1);
+  o->extra_time = 0;
+  f.mr.render.replay.state = 0x82;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 0);
+  f.mr.render.replay.state = 0;
+  f.mr.render.display.suspend = 1;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 0);
+  o->armed = 0;
+  assert(fifa96_match_run_overlay_visible(&f.mr) == 0);
+  fifa96_surface_destroy(f.s);
+}
+
+/* FU-152 §2.5/§2.6 leg 6: the R5 ball row is dormant — the only nonzero-
+ * capable writer (FUN_00056690) is always called with 0 (verified disasm
+ * 0x56E1B..0x56E41), so the engine keeps the staged pointer NULL and the row
+ * never draws. */
+static void test_ball_row_dormant(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.render.ball_row == NULL);
+  assert(fifa96_match_run_ball_row_reachable(&mr) == 0);
+}
+
 int main(void) {
   test_init_resets_render_state();
   test_null_and_disabled();
@@ -1267,6 +1635,15 @@ int main(void) {
   test_hud_names_absent_and_wide_scores();
   test_hud_gates();
   test_hud_zoomed_uses_playfnt_layout();
+  test_replay_state_helpers();
+  test_replay_step_machine();
+  test_replay_camera_set();
+  test_sub_marks_and_numbers();
+  test_overlay_rows_and_timeout();
+  test_sub_strip_draw();
+  test_replay_row_and_draw();
+  test_overlay_gate_and_draw();
+  test_ball_row_dormant();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");
   return 0;

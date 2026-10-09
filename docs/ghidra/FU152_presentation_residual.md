@@ -842,3 +842,96 @@ retail: `build/fifa96_play sprite tests/golden/gameart0.pvi --name ball.fsh
 --print-summary` -> entry 37, 8 frames, 16x16 (build/play artifact removed).
 No Ghidra writes, no project saves, no repo edits; this draft is the only
 file written.
+
+---
+
+## 8. P4 landing (phase-7, 2026-10-09)
+
+All items first-hand spot-checked on `/FIFA96.EXE` before porting; errata
+below correct this slice where the port found the prose inexact.
+
+* **R1 substitution strip.** `fifa96_window_strip_layout` implements the
+  FUN_00053240 tail (y0; row height = Frames frame-5 height doubled under the
+  settings-4 "wide" flag; `x0 + ((4*scale_x+0x8000)>>16)` and
+  `x1 − ((4*scale_x+0x8000)>>16) − ((name_width*scale_x+0x8000)>>16)`;
+  `y0 + ((12*scale_y+0x8000)>>16)`). **Erratum:** "wide" is settings slot 4
+  (fresh `FUN_00044BE0` = `FUN_0001D940(4)`), used by FUN_00053240 and the
+  FUN_0005619C name halving. `fifa96_font_blit_outlined` (colour 6 then 0) and
+  `fifa96_font_draw_centered` implement FUN_000544B4/FUN_00054640.
+  **Erratum:** FUN_00054640's wide path quarters the measure (`0x140 −
+  ((w>>2)*scale + 0x8000)>>16`), not "half-scaled"; the narrow path halves.
+  `fifa96_match_run_sub_mark` = FUN_0004BD38 (all branches incl. the mode-5
+  special returning 2). **Erratum:** FUN_0004BDF8's else arm reads the
+  `+0x10/+0x11` bytes of the 0x1587D4 block (the decompiler's
+  `[0x1587E1]._3_1_`/`0x1587E5` pair; condition is the `[0x1587E7] < 5`
+  byte). The R1 draw centres the `"%d - %d"` pair at `y_text + 2*scale`,
+  blits the staged mark glyph for FUN_0004BD38 states 1..3, and draws the
+  names in the row column with the native clamp.
+* **R2 replay row.** Predicates as helpers; `fifa96_match_run_replay_row`
+  implements the FUN_000565BC gates; `fifa96_match_run_replay_step` the
+  reachable FUN_000642FC subset (the 0x80→0x81 promotion and the 0x81 arm run
+  in the same call, button 1 toggle + cursor wrap, 0x20 camera cycle mod 6,
+  8/4/2 step modes with the single-frame reset, the bit-0x80 exit),
+  `fifa96_match_run_replay_blink_step` = FUN_000564A0 (draw when the counter
+  is <= 9 or reset from >= 0x14), `fifa96_match_run_replay_progress` =
+  FUN_000642B0 (no clamp), and `fifa96_camera_replay_select` = FUN_0004D134
+  (0 → 0x107968+[0x107DD0]*0x70, 1/2/3/6 → 0x107CE8 sub 5..8, 4 → 0x107B98,
+  5 → 0x107B28). **Erratum:** FUN_00053D58's `[0x14E58C]−0xF1 < 0x78` is a
+  signed dword compare, so phases 1..0xF0 also take the ramp branch — the
+  engine matches the signed compare.
+* **R3 overlay.** `fifa96_match_run_overlay_row` = the FUN_000550E4 case
+  table; `fifa96_match_run_overlay_arm` = the `id|0x8000` arm + timer reset +
+  the `{5,9,0xB,0xC,0xD,0xE,0xF,0x12}` second-overlay seed;
+  `fifa96_match_run_overlay_timeout_step` = FUN_000542D4 + FUN_00053E08
+  direction flips (first call `dir = -rate`, then the `dir*rate > 0` negate);
+  the visible gate covers `[0x14E688]`, the replay family and the extra-time
+  id exclusion. Draw renders staged lines for draw-path ids; the per-case
+  helpers stay leg 7.
+* **R5 dormancy pinned.** Disasm re-verified `0x56E1B..0x56E41` (XOR EDX,EDX
+  then the MOVSD loop, no EDX writes, `CALL 0x56690`); `render.ball_row` stays
+  NULL and `fifa96_match_run_ball_row_reachable` reports the staged producer.
+* **Camera handlers.** `fifa96_camera_type` = the 0x107508 record `{+4,+0xC}`
+  cells (handler clamp >= 0; the +4==3 → behavior 5 remap; the image's −1
+  behavior cells are the degenerate `[0x108B60]` read, engine-clamped to 0 —
+  leg 8). The six-block mode table is pinned (`fifa96_camera_behavior_blocks`,
+  fresh 0x10896C read: classes {3,1,3,3,1,3}, +0x30 {0xEA6,0x578,0x1130,…},
+  every byte +3 and every +0x34 zero — so FUN_0004EC9C always takes the
+  class-4 arm and handler 1's yaw target is the bare track z). The four bodies
+  land at the quoted constant/clamp level
+  (`fifa96_camera_behavior_steady/sidetrack/staged/action`: yaw bounds,
+  ±0x1620/±0xE40 pitch clamps, ±0x68 class bias, ±0x720/±0xB10 pan, the
+  class/band gates, horizon `rnd>>3 + 0xE09/0xAA1/0xE3B/0xAD3`, the action
+  `!live -> +100` speed bump, ±0x420/±0x810 pos clamps, pitch [0x2000,63000],
+  brake zeroing) and are wired into the FUN_000505D0 default arm when the
+  caller stages the record subset + behavior block; a NULL state keeps the
+  unported result. The FUN_0004E248/D698/DF34/C7D0/D668 integrators stay
+  leg 9.
+* **FU-71 residual.** `fifa96_camera_classify` (FUN_00070074 full bits),
+  `fifa96_camera_pan_band` (FUN_000709D0's ladder) and
+  `fifa96_camera_rate_event` (FUN_00071DF4 first arm, `h > 0xF0`). The
+  FUN_00070DE0 reposition body, the FUN_00071DF4 table arm and the atan walk
+  stay legs; first-hand FUN_000CD474 is an octant-dispatch atan2 (sign/swap
+  bits select one of 16 indirect jump targets over the ratio table
+  `0x14072C + index`), not a flat table.
+* **Palette pool identity.** `fifa96_palette_pool_identity` pins
+  size 0x34E8 / type 0x220 / tag "palettes" (fresh 0x49138 disasm + 0x101A20
+  bytes) and `fifa96_palette_pool_create/release` allocate/partition the
+  native request. The content producer stays leg 11/OL-T11-80; the shade cube
+  stays out of the contract (no static consumer).
+
+**Goldens:** M1 `09b726b7…` and M2 `2e709151…` byte-identical, no re-pin (all
+new rows are zero-gated at rest). `make check` 108/108.
+
+### Leg status after P4
+
+1. Replay HUD strings — open (staged). 2. Blink id 0x18C — open (window
+derived). 3. Button glyphs — open. 4. Sub record field meanings — open.
+5. Strip states — landed; the FUN_0009B0D0 glyph/colour state stays open
+(mark glyph is staged). 6. R5 dormancy — pinned. 7. Overlay case helpers —
+open (row table landed, layouts staged). 8. Pose-array selection — default
+arm + type mapping landed; the +0x48 alternate and selector-3 preamble arrays
+open. 9. Handler math — open. 10. Replay camera set — index mapping landed;
+FUN_0004D98C/DDA8 per-mode pose open. 11. Shade cube consumer — open.
+12. Pool exact size/alignment — request pinned; the runtime-rounded size/pool
+base semantics open. 13. Mark blit inputs — staged. 14. FUN_00011BEC third
+arg — open.

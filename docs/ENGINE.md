@@ -549,6 +549,53 @@ the build also produces the windowed `fifa96` target (`make game`).
   in FU-148 §11.5: the image-default pose array is `+0x4C` (not `+0x48`/
   NULL), the pool floor is 0x3000 (not 0x3600), the pose-feed ordering choice
   and the handler-table typos.
+- **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
+  the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
+  dormancy pin, the camera handler bodies, the FU-71 residual helpers, the
+  palette pool identity):
+  - **R1 sub strip** (`fifa96_window_strip_layout`, `fifa96_font_draw_centered`
+    /`fifa96_font_blit_outlined`, `fifa96_match_run_sub_mark`/
+    `_sub_numbers`): the FUN_00053240 0x14E53C row layout (settings-4 "wide"
+    doubling, `(v*scale+0x8000)>>16`), the FUN_00054640 centre (narrow
+    `0xA0-((w>>1)*scale)`, wide `0x140-((w>>2)*scale)`), the FUN_0004BD38
+    mark states and FUN_0004BDF8 numbers; the engine draws the pair, a staged
+    mark glyph and the row-clamped names.
+  - **R2 replay row** (`fifa96_match_run_replay_row`/`_step`/`_blink_step`/
+    `_progress`/`_camera_set`): the FUN_000565BC gate chain, the reachable
+    FUN_000642FC button subset incl. the 0x80->0x81 arm, FUN_000564A0's blink
+    and FUN_000642B0's progress; FUN_0004D134's camera index map. Captions/
+    glyphs/bar assets stay runtime legs 1/2/3.
+  - **R3 overlay** (`fifa96_match_run_overlay_row`/`_arm`/`_timeout_step`/
+    `_visible`): the FUN_000550E4 case table, the `id|0x8000` arm + second
+    overlay seeds, FUN_000542D4/FUN_00053E08 timeout flips; the per-case
+    helper layouts stay leg 7 (lines staged).
+  - **R5 ball row**: dormant pinned (`render.ball_row` NULL; FUN_00056690's
+    only caller passes EDX=0, disasm 0x56E1B..0x56E41).
+  - **Camera handlers** (`fifa96_camera_type`, `fifa96_camera_behavior_
+    steady/sidetrack/staged/action`): the 0x107508 `{+4,+0xC}` mapping (3->5
+    remap, negative clamp; the image -1 cells are the degenerate 0x108B60
+    read, engine-clamped) and the quoted clamp/constant level of the four
+    0x108B80 bodies plus the pinned 0x108B64 mode table
+    (`fifa96_camera_behavior_blocks`), wired into the FUN_000505D0 default arm
+    through the staged record subset + behavior block (NULL = unported
+    default, tape unchanged). The FUN_0004E248/D698/DF34/C7D0/D668 integrators
+    stay leg 9.
+  - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
+    `fifa96_camera_pan_band` = FUN_000709D0 ladder,
+    `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0
+    stepping/sound body, the 71DF4 table arm and the octant-dispatch atan2
+    (FUN_000CD474) stay OL-T11-79 legs.
+  - **Palette pool identity** (`fifa96_palette_pool_identity` +
+    `fifa96_palette_pool_create/release`): request size 0x34E8 / type 0x220 /
+    tag "palettes" pinned; the content producer (which file fills `[0x107290]`)
+    stays OL-T11-80 and the shade cube stays OL-T11-82.
+  **Both goldens byte-identical, no re-pin** (all new rows are zero-gated at
+  rest: `replay.state` 0, `sub.active` 0, `overlay.armed` 0, `ball_row` NULL;
+  `make check` 108/108 with the new row/camera/palette assertions). FU-152 §8
+  records the first-hand errata (settings-4 "wide", the signed FUN_00053D58
+  compare, the wide centring quarter, the FUN_0004BDF8 +0x10/+0x11 bytes) and
+  the post-P4 leg ledger; 15/80 action rows unchanged (presentation rows are
+  outside the action dispatch).
 - **M2 full-gameplay phase-6 close-out (S5 acceptance; 2026-10-09).** Whole-
   range summary: Phase 0 (follow-up-5 close-out: T2 review/fix, HUD P0.2,
   acceptance v5 P0.3) + wave-1 recon (FU-145/146/147/148 frozen) + wave-2 ports

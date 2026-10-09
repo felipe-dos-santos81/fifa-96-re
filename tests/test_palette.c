@@ -89,6 +89,37 @@ static void test_slot_copy(void) {
   assert(fifa96_palette_translate_slot(dst, NULL) == R_INVALID);
 }
 
+/* FU-152 §2.10/§4.4 (P4): the FUN_00049138(1) pool request identity —
+ * size 0x34E8, type/alignment 0x220, name "palettes" (0x101A20), partition
+ * floor 0x3000 (fresh 0x46F80 disasm). The create/release helpers allocate the
+ * native request through the engine and run the FUN_00046F80 partition. */
+static void test_pool_identity(void) {
+  assert(FIFA96_PALETTE_POOL_REQUEST == 0x34E8u);
+  assert(FIFA96_PALETTE_POOL_TYPE == 0x220u);
+  assert(FIFA96_PALETTE_POOL_FLOOR == 0x3000u);
+  assert(strcmp(FIFA96_PALETTE_POOL_TAG, "palettes") == 0);
+  assert(fifa96_palette_pool_identity.size == 0x34E8u);
+  assert(fifa96_palette_pool_identity.type == 0x220u);
+  assert(strcmp(fifa96_palette_pool_identity.tag, "palettes") == 0);
+}
+
+static void test_pool_create_release(void) {
+  fifa96_palette_pool pool;
+  assert(fifa96_palette_pool_create(&pool) == FIFA96_OK);
+  assert(pool.base != NULL);
+  assert(pool.size == FIFA96_PALETTE_POOL_REQUEST);
+  assert(pool.slots23[0] == pool.base);
+  assert(pool.slots23[22] == pool.base + 22u * 0x100u);
+  assert(pool.slots7[6] == pool.base + 0x1700u + 6u * 0x100u);
+  assert(pool.slots8[7] == pool.base + 0x1E00u + 7u * 0x100u);
+  assert(pool.shared == pool.base + 0x2600u);
+  assert(pool.fixed[8] == pool.base + 0x2F00u);
+  fifa96_palette_pool_release(&pool);
+  assert(pool.base == NULL && pool.size == 0 && pool.shared == NULL);
+  assert(fifa96_palette_pool_create(NULL) == R_INVALID);
+  fifa96_palette_pool_release(NULL);   /* no-op */
+}
+
 int main(void) {
   test_pool_partition_offsets();
   test_pool_partition_invalid();
@@ -96,6 +127,8 @@ int main(void) {
   test_kit_translate_entity_b();
   test_kit_translate_invalid();
   test_slot_copy();
+  test_pool_identity();
+  test_pool_create_release();
   puts("test_palette: ok");
   return 0;
 }

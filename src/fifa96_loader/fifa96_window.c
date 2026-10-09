@@ -99,3 +99,27 @@ int fifa96_window_zoomed(const fifa96_window *win, int *zoomed) {
   *zoomed = scale_x < 0x10000;
   return FIFA96_OK;
 }
+
+/* The native fixed-point scale `(value*scale + 0x8000) >> 16` (signed
+ * 64-bit, 0x53240's CONCAT/SHRD sequence). */
+static int32_t window_strip_scale(int32_t value, int32_t scale) {
+  return (int32_t)(((int64_t)value * scale + 0x8000) >> 16);
+}
+
+int fifa96_window_strip_layout(const fifa96_window *win, int32_t frame5_height,
+                               int32_t name_width, int wide,
+                               fifa96_window_strip *out) {
+  int32_t scale_x, scale_y;
+  if (!win || !out) return -FIFA96_ERR_INVALID;
+  if (fifa96_window_scale(win, &scale_x, &scale_y) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  for (int side = 0; side < 2; side++) {
+    out->row[side].y0 = win->box.y0;                              /* 0x53E6A/0x53E71 */
+    out->row[side].height = wide ? frame5_height * 2 : frame5_height;
+    out->row[side].y_text = win->box.y0 + window_strip_scale(12, scale_y);
+  }
+  out->row[0].x = win->box.x0 + window_strip_scale(4, scale_x);
+  out->row[1].x = win->box.x1 - window_strip_scale(4, scale_x) -
+                  window_strip_scale(name_width, scale_x);
+  return FIFA96_OK;
+}
