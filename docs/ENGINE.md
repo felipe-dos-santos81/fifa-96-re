@@ -190,7 +190,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   **Kick (gameplay) and score stay blocked:** the KICK press that lands the
   kickoff transition dispatches no gameplay row (the possession/selection
   invokers are unported) and gameplay goals have no wired invoker
-  (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller). The
+  (OL-87/OL-88/OL-89; the derived score writer has no gameplay caller).
+  M2 full-gameplay S2 landed the goal arming→scan→queue producer chain
+  (`FU-145`: armer/classifier/scanner/queue, fixture-proven); it is dormant on
+  the static tape camera (pan source L1) and the S3 consumers
+  (scheduler/handlers) are still unported, so a natural run still cannot
+  score. The
   smoke shots' measured content: 3.53% non-black window pixels, whole-window
   mean (4.15, 1.07, 1.23)/255, dominated by the HUD bar's `#900808`; the
   sprite color `#E044A0` (the OL-T11-6 6-bit `0x38/0x11/0x28 << 2`) is live.
@@ -282,6 +287,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   boot, intro, front-end, palette- and HUD-only match frames — stay
   byte-identical), 157 lines 9..165 differ, and every `state=` suffix is again
   unchanged; the natural probe still lands live phase 2 at step 215. The
+  **full-gameplay S2** (goal arming, `FU-145`, phase-6 wave-2 S2) transcript is
+  **byte-identical** (no re-pin): the tape camera never leaves the reset
+  triple, so the new armer never fires and the clock-tail goal scan is a gate
+  no-op — the "dormant chain" risk materialised as predicted; the chain is
+  fixture-proven (`test_engine_match_frame::test_goal_chain_pan_fixture`, a
+  camera-velocity pan past the bounds → armed → snapshot → queued situation 6).
+  The
   tape's scene-pixel evidence is counted above the derived HUD
   band (`bar_y = 240 - 41 - 2 = 197`; count `y < 190`), so frames 6..8 still
   assert zero SCENE pixels, and frame 6 asserts the staged bar's first-hand
@@ -376,6 +388,43 @@ the build also produces the windowed `fifa96` target (`make game`).
   values are stand-in-derived; the pool `lane` dword (+0x69) also keeps the
   FU-142b dz-word model while the track writes `lane_x` (+0x6B) — row 04
   reads the word, rows 01/26/28/2A read the dword (`>>16`).
+- **M2 full-gameplay S2 (goal arming, FU-145; 2026-10-09).** Landed from the
+  frozen FU-145 slice: `fifa96_match_goal_zone` (the `FUN_00070074` goal-mouth
+  classifier, native widths incl. the z word-truncation), `fifa96_match_goal_arm`
+  (the `FUN_0007131C 0x71390..0x713F7` armer: phase 2/0x10, the
+  `|camZ|_w > 0xB20 || |camX|_w > 0x730` gate with the native
+  word-truncation trap, the frozen `0x15777C` snapshot with y zeroed, the
+  classifier — plus the already-armed reflect arm `0x718A9..0x7190E`, which
+  mirrors through `fifa96_camera_reflect` and clears the arm when the zone is
+  0 and the caller-staged `render.input_bit0` is set), the frame-body wiring
+  (armer after the camera update under the native out-of-bounds call gate
+  `0x73B70..0x73B9B`; `fifa96_match_run_goal_scan` after
+  `fifa96_match_run_phase_drive` = the `FUN_0008AF38` tail `0x8B623..0x8B643`),
+  the scanner (`FUN_00088940`: full-32-bit snapshot magnitude vs `0xB20`, zone
+  gate, side from the snapshot sign `0x889B6`, the derived
+  `FUN_0008DE8C` nearest over the side's team block, then the situation-6
+  call) and `fifa96_match_run_goal_queue` (FU-146 §7 item 1, landed here
+  because the scanner calls it: the table-1 arm `0x8A9E8` → `situation_id`
+  5/6 + `situation_pending` when the live-session gate `session_gate_14c32a`
+  is open and nothing is pending; else the `0x8AC28`/`0x8AC88` fallback =
+  direct increment + the shared table-2 situation-6 entry). Run state:
+  `goal_armed`/`goal_zone`/`goal_snap_x/y/z`/`situation_id`/`situation_pending`
+  (`[0x15781D/1E/7C/80/84/15B6A8/15B6C0]`); begin seeds the session gate 1 and
+  a phase-2 write (now the shared `match_run_write_phase`) clears the arm
+  (`0x740F6`), the init/begin/teardown paths clear it as the `0x84F90`
+  restart. **Fixture-proven only until the pan producer lands:** the engine
+  camera is static, so a natural run never arms (the S2 risk "dormant chain"
+  verified — both goldens are byte-identical, no re-pin); the pan fixture
+  drives the FU-71 velocity seam past the bounds and pins arm → snapshot →
+  scan → queued id 5, and the second frame pins the no-S3-consumer fallback.
+  Carried legs (FU-145 §6): L1 the pan source/camera director (S4 if
+  camera-scoped) and the armer head counter/`FUN_00070DE0`; L2 `FUN_00092998`;
+  L3 the possession-selection sinks (nearest substituted); L4 the
+  `[0x1587D4]`/`[0x157A4C]` goal-side flag/record (snapshot-sign stand-in);
+  L5 the post-goal re-arm (`0x93C87`/`0x9437A`, S3); L7 `[0x157ACB]` dropped
+  (sole read `0x8FCC8` unported); L8 the period-4 extra-time skip unreachable
+  with the carried extra_time 0 (OL-85). The throw-in/corner situation arms
+  (`0x88BBD`/`0x88C00`) stay the wave-7 B1 set-piece hand-off.
 - **M2 interactive T1 (pad-driven locomotion / G1) legs.** The derived setup
   bind models the engine's single human slot: the native four `0x4C1E0` mode
   rows are unported (derived default mode 0 = the controlled side), the

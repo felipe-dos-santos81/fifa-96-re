@@ -1042,6 +1042,257 @@ static void test_row1e_stage3_possession_flip(void) {
   drop_fixture(f);
 }
 
+/* FU-145 S2: the goal-mouth classifier `FUN_00070074` (first-hand
+ * /FIFA96.EXE 0x70074, 47 insns). The return is the "no outside bit"
+ * boolean: 1 iff z in [0xB10,0xB90), x in [-0xD0,0xD0) and y <= h(z), where
+ * the z comparisons use the sign-extended low word of the 32-bit magnitude
+ * (native MOVSX DX at 0x70084) while x/y read the full dwords. */
+static void test_goal_zone_classifier(void) {
+  assert(fifa96_match_goal_zone(0, 0, 0xB30) == 1);
+  assert(fifa96_match_goal_zone(0, 0, -0xB30) == 1);      /* |z| band */
+  assert(fifa96_match_goal_zone(-0xD0, 0, 0xB10) == 1);   /* inclusive edges */
+  assert(fifa96_match_goal_zone(0xCF, 0, 0xB8F) == 1);
+  /* z band edges: below 0xB10 and at 0xB90 set a bit */
+  assert(fifa96_match_goal_zone(0, 0, 0xB0F) == 0);
+  assert(fifa96_match_goal_zone(0, 0, 0xB90) == 0);
+  /* x band edges: -0xD1 outside, 0xD0 outside (x >= 0xD0 sets a bit) */
+  assert(fifa96_match_goal_zone(-0xD1, 0, 0xB30) == 0);
+  assert(fifa96_match_goal_zone(0xD0, 0, 0xB30) == 0);
+  /* y ceiling: z=0xB30 -> h=0xA0; z=0xB70 -> h=0xA0-(0x60-0x30)=0x70 */
+  assert(fifa96_match_goal_zone(0, 0xA0, 0xB30) == 1);
+  assert(fifa96_match_goal_zone(0, 0xA1, 0xB30) == 0);
+  assert(fifa96_match_goal_zone(0, 0x70, 0xB70) == 1);
+  assert(fifa96_match_goal_zone(0, 0x71, 0xB70) == 0);
+  /* z word truncation: |z|=0x10B30 reads the low word 0xB30 -> inside even
+   * though the 32-bit magnitude exceeds 0xB90; |z|=0x10020 reads
+   * 0x20 < 0xB10 -> outside (the native MOVSX DX) */
+  assert(fifa96_match_goal_zone(0, 0, 0x10B30) == 1);
+  assert(fifa96_match_goal_zone(0, 0, 0x10020) == 0);
+}
+
+/* FU-145 S2: the pan armer `FUN_0007131C 0x71390..0x713F7` (first-hand
+ * disassembly this slice). Gate phase in {2,0x10}: armed==0 and
+ * `|camZ|_w > 0xB20 || |camX|_w > 0x730` (the native word-truncated
+ * magnitudes at 0x713A6..0x713C0) arm: snapshot := camera (x,z), y := 0,
+ * zone := classifier(camera triple). */
+static void test_goal_arm_gates_and_snapshot(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  assert(fifa96_match_goal_arm(&mr) == 0);              /* rest position */
+  assert(mr.goal_armed == 0);
+
+  fifa96_camera_init(&mr.render.camera, 0x10, 0x20, 0xB21);
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_x == 0x10 && mr.goal_snap_y == 0 && mr.goal_snap_z == 0xB21);
+  assert(mr.goal_zone == 1);        /* z in band, x inside, y <= h */
+
+  /* already armed: no re-snapshot (the native jumps to the reflect gate) */
+  mr.render.camera.pos_z = 0x2000;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_snap_z == 0xB21);
+
+  /* boundary values do not arm: |z| == 0xB20 and |x| == 0x730 */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  fifa96_camera_init(&mr.render.camera, 0x730, 0, 0xB20);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  mr.render.camera.pos_x = 0x731;
+  assert(fifa96_match_goal_arm(&mr) == 1);              /* the x arm */
+  assert(mr.goal_snap_x == 0x731);
+
+  /* phase gate: 1 disarms-capable, 0x10 arms, 0x11 not */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, -0xB30);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  mr.state.phase = 0x11;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  mr.state.phase = 0x10;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_snap_z == -0xB30);
+
+  /* the native truncates the absolute value to its low word before the
+   * comparison (0x7136C/0x71384 store words): INT_MIN stores word 0 -> no
+   * arm even though the 32-bit magnitude exceeds every bound. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  fifa96_camera_init(&mr.render.camera, (int32_t)0x80000000, 0, 0);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+}
+
+/* FU-145 S2 / FU-71 §6: the already-armed reflect arm `0x718A9..0x7190E`.
+ * With the zone classifier 0 and the reflect input bit 0 set, the native
+ * clears both arm flags and mirrors the camera about X=±0xE40 / Z=±0x1620
+ * (the ported `fifa96_camera_reflect`). Zone != 0 or a clear input bit take
+ * the unported angle arm (FU-71 leg 9.6) with no clear. */
+static void test_goal_arm_reflect_clear(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 0;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  mr.render.camera.vel_z = 0x40;
+  assert(fifa96_match_goal_arm(&mr) == 1);
+  assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+  assert(mr.render.camera.pos_z == 0x1620 - 0x1300);
+  assert(mr.render.camera.vel_z == (int16_t)(uint16_t)(0u - 0x40u));
+
+  /* zone != 0: the angle arm, no clear, camera untouched */
+  fifa96_match_run_init(&mr);
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.render.input_bit0 = 1;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0x1300);
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_armed == 1 && mr.render.camera.pos_z == 0x1300);
+
+  /* input bit clear: no clear, no mirror */
+  mr.goal_zone = 0;
+  mr.render.input_bit0 = 0;
+  assert(fifa96_match_goal_arm(&mr) == 0);
+  assert(mr.goal_armed == 1 && mr.render.camera.pos_z == 0x1300);
+}
+
+/* FU-145 S2: the clock-tail gate and scanner (`FUN_0008AF38 0x8B623..0x8B643`
+ * -> `FUN_00088940`). Armed + phase 2/0x10 + `|goal_snap_z| > 0xB20` + zone
+ * != 0 queues situation 6 through `fifa96_match_run_goal_queue`; the queued id
+ * is 5 (side 0) / 6 (side 1) with the side from the snapshot sign (0x889B6
+ * SETL; the [0x157A4C]/[0x1587D4] flag arm is leg L4). The gate-closed /
+ * pending fallback takes the direct increment and the shared table-2
+ * situation-6 entry. The throw-in (|snap_z| <= 0xB20) and corner (zone == 0)
+ * arms stay the w7-b1 set-piece legs. */
+static void test_goal_scan_queue_and_fallback(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.session_gate_14c32a = 1;                       /* live session (leg 2 seam) */
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.goal_snap_z = 0xB80;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.situation_pending == 1 && mr.situation_id == 5);
+  assert(mr.state.phase == 2u);                     /* queue path: no phase write */
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+
+  /* snapshot sign selects the side: negative -> record side 1 -> id 6 */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x10;
+  mr.session_gate_14c32a = 1;
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.goal_snap_z = -0xB80;
+  assert(fifa96_match_run_goal_scan(&mr) == 1);
+  assert(mr.situation_pending == 1 && mr.situation_id == 6);
+
+  /* gates: phase, arm, throw-in band, corner zone */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 1;
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.goal_snap_z = 0xB80;
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  mr.state.phase = 2;
+  mr.goal_armed = 0;
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  mr.goal_armed = 1;
+  mr.goal_snap_z = 0xB20;                           /* throw-in band: leg */
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  assert(mr.situation_pending == 0);
+  mr.goal_snap_z = 0xB30;
+  mr.goal_zone = 0;                                 /* corner arm: leg */
+  assert(fifa96_match_run_goal_scan(&mr) == 0);
+  assert(mr.situation_pending == 0);
+
+  /* gate-closed fallback (begun run: the direct increment is lifecycle-gated):
+   * direct score + the shared table-2 situation-6 phase-5 write. */
+  {
+    struct fixture f = make_fixture(10000000ull);
+    struct fifa96_match_run fb;
+    fifa96_match_run_init(&fb);
+    assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
+    assert(fb.session_gate_14c32a == 1);            /* begin seeds the gate */
+    assert(fb.goal_armed == 0 && fb.situation_pending == 0);
+    fb.state.phase = 2;
+    fb.session_gate_14c32a = 0;                     /* session gate closed */
+    fb.goal_armed = 1;
+    fb.goal_zone = 1;
+    fb.goal_snap_z = 0xB80;
+    assert(fifa96_match_run_goal_scan(&fb) == 1);
+    assert(fb.score[0] == 1 && fb.score[1] == 0);
+    assert(fb.state.phase == 5u);                   /* table-2 row 6 */
+    assert(fb.situation_pending == 0);
+    /* a pending situation routes to the same fallback */
+    fb.state.phase = 2;
+    fb.session_gate_14c32a = 1;
+    fb.situation_pending = 1;
+    fb.situation_id = 6;
+    assert(fifa96_match_run_goal_scan(&fb) == 1);
+    assert(fb.score[0] == 2);
+    assert(fb.state.phase == 5u);
+    assert(fifa96_match_run_end(&fb) == 0);
+    drop_fixture(f);
+  }
+}
+
+/* FU-145 S2 / 0x740F6: a phase-2 write clears the pan arm
+ * (`FUN_000740A0`; the native clears [0x15781D] after the [0x157A4A] write,
+ * and the derived write path clears the zone byte alongside for an
+ * observer-clean disarm). The shared table-2 0xB row is the live phase-2
+ * writer. */
+static void test_goal_phase2_write_clears_arm(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x11;
+  mr.goal_armed = 1;
+  mr.goal_zone = 1;
+  mr.goal_snap_z = 0xB80;
+  assert(fifa96_match_run_situation(&mr, 0x0B) == 0);   /* -> phase 2 */
+  assert(mr.state.phase == 2u);
+  assert(mr.goal_armed == 0 && mr.goal_zone == 0);
+}
+
+/* FU-145 S2 RED core: a fixture pan drives the FU-71 camera integrator past
+ * the arming bounds; the frame body arms, the snapshot freezes, and the clock
+ * tail's scan queues situation 6 with the snapshot-freeze order. The native
+ * pan producer (rate words 0x1577C0/C2) is leg L1/S4; the fixture uses the
+ * equivalent engine seam (the camera velocity pair, as test_camera drives it).
+ * Would fail on BASE: no armer, no scanner, no queue. */
+static void test_goal_chain_pan_fixture(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.session_gate_14c32a == 1);    /* begin seeds the live session */
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00);
+  mr.render.camera.vel_z = 0x40;          /* 0x40 * delta 2 per granted frame */
+  mr.render.camera.speed = 0x40;          /* the update's integration gate */
+  mr.render.camera.anchor_time = 0x7FFF;
+  mr.render.camera.anchor2_time = 0x7FFF;
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_z == 0xB80);
+  assert(mr.goal_zone == 1);
+  assert(mr.situation_pending == 1 && mr.situation_id == 5);
+
+  /* the snapshot is frozen; with no scheduler consumer yet (S3) the next
+   * frame's scan sees the pending latch and takes the native fallback (the
+   * direct increment + the shared table-2 phase-5 write). Pinned so the S3
+   * consumer wiring visibly replaces it. */
+  int32_t snap = mr.goal_snap_z;
+  one_granted_frame(&mr);
+  assert(mr.goal_snap_z == snap);
+  assert(mr.score[0] == 1);
+  assert(mr.state.phase == 5u);
+  assert(mr.situation_pending == 1 && mr.situation_id == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -1061,6 +1312,12 @@ int main(void) {
   test_score_event_wired_run_path();
   test_goal_situation_dispatch_is_not_the_writer();
   test_natural_phase2_never_scores();
+  test_goal_zone_classifier();
+  test_goal_arm_gates_and_snapshot();
+  test_goal_arm_reflect_clear();
+  test_goal_scan_queue_and_fallback();
+  test_goal_phase2_write_clears_arm();
+  test_goal_chain_pan_fixture();
   test_pad_drives_controlled_locomotion();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();

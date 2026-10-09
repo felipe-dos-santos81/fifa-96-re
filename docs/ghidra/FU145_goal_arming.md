@@ -479,3 +479,124 @@ Functions and call flow (native → engine):
   (L1) for natural motion and on S3 for consumption; W2's pad/possession work
   may move the same records the scanner selects. Keep the state engine-owned in
   `fifa96_match_run` to avoid parallel writers.
+
+## 6. Port landing (S2, 2026-10-09)
+
+Landed from the frozen slice during phase-6 wave-2 S2 (`src/fifa96_engine/fifa96_match_run.c`,
+declarations in `include/fifa96_engine/fifa96_match_run.h`; first-hand
+re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`/
+`0x740D0`/`0x8B620`/`0x4B180`/`0x84F80`/`0x73B70`, `decompile_function 0x88940`,
+`disassemble_function 0x70074`, `get_xrefs_to 0x7131C` = 1 (sole caller
+`0x73B9B`), `get_xrefs_to 0x88940` = 1 (`0x8B63E`)):
+
+1. **`fifa96_match_goal_zone(x, y, z)`** — the classifier `FUN_00070074`
+   (`0x70074..0x700F1`), exact native widths: the z band reads the
+   sign-extended low word of the 32-bit magnitude (`0x70084`/`0x700C3`), x/y
+   are full dwords, and the y ceiling uses the same word-truncated
+   intermediate (`0x700BD..0x700D7`). Returns the "no outside bit" boolean.
+2. **`fifa96_match_goal_arm(mr)`** — the armer window `0x71390..0x713F7`:
+   phase in {2,0x10}, `!goal_armed`,
+   `|camera.pos_z|_w > 0xB20 || |camera.pos_x|_w > 0x730` with the native
+   **word-truncation trap** reproduced (`0x71354..0x71384` stores the absolute
+   value as a word and re-reads it sign-extended; the port's
+   `match_run_goal_abs_word`), then `goal_armed = 1`, the frozen snapshot
+   (`goal_snap_x/y/z`; y forced 0 at `0x713EC`) and the classifier over the
+   live camera triple. The already-armed reflect arm `0x718A9..0x7190E`: with
+   `goal_zone == 0` and the reflect input bit set, `fifa96_camera_reflect`
+   runs and both flags clear; `zone != 0` is the unported angle arm (FU-71
+   leg 9.6). The armer **head** (`0x71325..0x71354`: the `[0x15781C]` counter
+   age/cap and `FUN_00070DE0`) is out of the port contract window and is not
+   ported (no `goal_counter` field; leg L1).
+3. **Frame wiring** (`fifa96_match_run_frame`): the armer runs after
+   `fifa96_camera_update` when `fifa96_camera_out_of_bounds` holds — the
+   native camera-track call gate `0x73B70..0x73B9B` (sole armer caller,
+   xref re-verified) — and `fifa96_match_run_goal_scan` runs after
+   `fifa96_match_run_phase_drive` (the `FUN_0008AF38` tail; frame order
+   `0x4B193` camera → `0x4B198` session gate → `0x4B1A1` scheduler →
+   `0x4B1A6` clock re-verified).
+4. **`fifa96_match_run_goal_scan(mr)`** — the `0x8B623..0x8B643` gate
+   (phase 2/0x10 and armed; the period-4 extra-time skip is unreachable with
+   the carried extra_time 0, L8) then the derived `FUN_00088940`: the
+   full-32-bit snapshot magnitude vs `0xB20` (NEG wrap preserved), the zone
+   gate, and the goal arm — side from the snapshot sign (`0x889B6 SETL`), the
+   derived possession nearest over that side's team block from the snapshot
+   triple (`FUN_0008DE8C` skip 0 → `fifa96_entity_find_nearest`), then
+   `fifa96_match_run_goal_queue(mr, side)`.
+5. **`fifa96_match_run_goal_queue(mr, side)`** — landed here (FU-146 §7 item 1
+   names it; the FU-145 producer calls it): the table-1 arm `0x8A9E8`
+   (`situation_id` = 5 side 0 / 6 side 1, `situation_pending = 1`) when the
+   session gate is open and nothing is pending; otherwise the `0x8AC28`/
+   `0x8AC88` fallback = the direct increment (`fifa96_match_run_add_goal`) plus
+   the table-2 situation-6 phase-5 write through the shared
+   `fifa96_match_run_situation` entry (no parallel table-2 mechanism; the
+   freeze reconciliation's shared-0xB rule).
+6. **State** (`struct fifa96_match_run`): `goal_armed` = `[0x15781D]`,
+   `goal_zone` = `[0x15781E]`, `goal_snap_x/y/z` = `[0x15777C/80/84]`,
+   `situation_id` = `[0x15B6A8]`, `situation_pending` = `[0x15B6C0]`,
+   `session_gate_14c32a` = `[0x14C32A]` (init/teardown 0; **begin seeds 1**),
+   plus `render.input_bit0` (the reflect input bit 0, caller-staged default
+   0).
+7. **Clears.** Every engine phase write goes through the new
+   `match_run_write_phase` (FU-62 setter + FU-142a mirror); a phase-2 write
+   clears `goal_armed`/`goal_zone` (`0x740F6`; the native clears only
+   `[0x15781D]` — see errata 2). init/begin/teardown drop the arm/queue state
+   with the match (the `0x84F90` restart clear).
+8. **Tests** (`tests/test_engine_match_frame.c`, ASan/UBSan):
+   `test_goal_zone_classifier`, `test_goal_arm_gates_and_snapshot`,
+   `test_goal_arm_reflect_clear`, `test_goal_scan_queue_and_fallback`,
+   `test_goal_phase2_write_clears_arm`, `test_goal_chain_pan_fixture` (a
+   fixture pan drives the FU-71 velocity seam past the bounds;
+   arm → snapshot → scan → queued id 5; the second frame pins the
+   no-consumer fallback so S3 visibly replaces it). No ISO is required.
+   `make check` 105/105; **M1 and M2 goldens byte-identical** (the tape camera
+   is static, so nothing arms — the S2 risk "dormant chain" materialised
+   exactly as predicted).
+
+### Errata / port decisions
+
+1. **L7 `[0x157ACB]` dropped.** Armed at `0x713E6`, cleared at `0x8AC32`, sole
+   read `0x8FCC8` (unported); not needed for the queue path.
+2. **Zone clear on the phase-2 write.** The native `0x740F6` clears only
+   `[0x15781D]`; the port also clears `[0x15781E]`. The zone is consumed only
+   while armed and the camera reset `0x7026C` re-runs the classifier, so the
+   extra clear is observer-clean.
+3. **`input_bit0` producer.** Native `(word[0x14C1D4] | word[0x14C1D6]) & 1`
+   (the FU-139 per-side range words, image-zero; no ported runtime producer,
+   L1). The engine carries a caller-staged `render.input_bit0` (default 0),
+   mirroring `render.input_bit2` (the sibling bit 1 the FU-71 update reads);
+   with the bit 0 the reflect clear is structurally present but does not fire.
+4. **Side-selection stand-in.** The `[0x157A4C]>>24 == 1` arm reads the
+   `[0x1587D4]` goal-side record's team byte (`0x889A4..0x889AC`); both the
+   flag producers and the record identity are unported (L4), so the derived
+   side is always the snapshot sign; the scanned record's team byte equals the
+   searched block's side, so the queued side is exact.
+5. **Throw-in/corner arms are w7-b1 legs.** Per the S2 ruling, the
+   `|snap_z| <= 0xB20` throw-in arm (`0x88BCC`, situation 2) and the
+   `zone == 0` corner arm (`0x88B53`, situations 3|4) return without queueing
+   (their ball-record side source `[0x1577CA]` and queue semantics belong to
+   the wave-7 B1 set-piece slice).
+6. **L8 skip unmodelled.** The native period-4 branch joins the tail without
+   the scan only on the extra-time path (`[0x157AC0] != 0`); the engine
+   carries extra_time 0 (FU-143 OL-85), documented at the scan gate.
+7. **Scanner magnitude wrap.** The `0x88971..0x8897B` NEG of INT_MIN wraps to
+   itself (negative), so the signed `<= 0xB20` test takes the throw-in arm;
+   the port reproduces the wrap instead of negating (avoiding C UB).
+8. **Fallback lifecycle gate.** `fifa96_match_run_add_goal` returns
+   `-FIFA96_ERR_STATE` on a non-running run (engine API convention, not
+   native); the fallback is only reachable inside a live run's frame body.
+9. **No-consumer latch.** Without the S3 scheduler, `situation_pending` stays
+   latched (only the S3 handler step clears it), so the next granted frame's
+   scan takes the fallback; pinned by the pan fixture.
+
+### Legs status after S2
+
+| leg | status |
+|---|---|
+| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | open — S4 if camera-scoped; fixture uses the FU-71 velocity seam |
+| L2 `FUN_00092998(1,4,-1)` preselection | open (selection outputs stay zero) |
+| L3 possession-selection sinks (`0x795B4`/`0x79C50`/`0x6E598`/`0x741B4`/`0x651F0`/`0x974F0`) | open — nearest search substituted |
+| L4 `[0x1587D4]`/`[0x1577CA]` record identities / `[0x157A4C]` flag | open — snapshot-sign stand-in |
+| L5 post-goal re-arm (`0x93C87`/`0x9437A`) | open — S3 |
+| L6 zone-bit consumers | settled (bits dead) |
+| L7 `[0x157ACB]` | dropped (errata 1) |
+| L8 period-4 skip | unreachable/unmodelled (errata 6) |

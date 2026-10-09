@@ -123,6 +123,12 @@ struct fifa96_match_run_render {
   int32_t yaw, pitch;
   int view_class;
   int input_bit2;
+  /* FU-145 S2 (0x718FF): the boundary reflect arm's input bit 0 — the native
+   * tests `(word[0x14C1D4] | word[0x14C1D6]) & 1` (the per-side range words
+   * FU-139 reads; image-zero, runtime producer unported, leg L1). The engine
+   * carries a caller-staged bit (default 0), mirroring `input_bit2` (the
+   * sibling bit 1 the FU-71 update reads). */
+  int input_bit0;
   struct fifa96_window window;
   fifa96_match_display display;
   int32_t window_scale_x, window_scale_y;   /* FU-93 16.16 zoom scale */
@@ -339,6 +345,30 @@ struct fifa96_match_run {
    * accumulation, `[0x58818] += [0x57A64]`) while the phase is 1; init/begin
    * clear it. */
   uint8_t global_5882a;
+  /* FU-145 S2 (goal arming) run state, native cells:
+   *  - `goal_armed` = [0x15781D] the pan-arm flag (armed by the armer
+   *    0x713DB; cleared by a phase-2 write 0x740F6, the reflect arm 0x71908,
+   *    the restart body 0x84F90 and the S3 goal handler 0x9453C);
+   *  - `goal_zone` = [0x15781E] the FUN_00070074 goal-mouth classifier's
+   *    return (1 = the camera sits inside the mouth band);
+   *  - `goal_snap_x/y/z` = the frozen 0x15777C/80/84 pan-time snapshot triple
+   *    (y is forced 0 by the armer; the scanner reads z);
+   *  - `situation_id` = [0x15B6A8] the table-1 queue cell (0 = none, 5 =
+   *    side-0 goal, 6 = side-1 goal) and `situation_pending` = [0x15B6C0] its
+   *    latch; written by `fifa96_match_run_goal_queue` (S2), consumed by the
+   *    S3 scheduler/handlers;
+   *  - `session_gate_14c32a` = [0x14C32A]: begin seeds 1 (a live match
+   *    session; the native writers are front-end, FU-146 leg 2). With the
+   *    gate 0 or a pending situation the queue route falls back to the
+   *    native table-2 situation-6 arm. */
+  uint8_t goal_armed;
+  uint8_t goal_zone;
+  int32_t goal_snap_x;
+  int32_t goal_snap_y;
+  int32_t goal_snap_z;
+  uint8_t situation_id;
+  uint8_t situation_pending;
+  uint8_t session_gate_14c32a;
   /* FU-139 §11 (Task 13): the native [0x157A4F] frame toggle
    * (FUN_0004B100 0x4B11A `XOR AH,1` / 0x4B129 store; cleared by the match
    * reset FUN_0004B02C 0x4B038). Row 06's claim arm and the second-half
@@ -518,6 +548,66 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
  * -FIFA96_ERR_INVALID (NULL `mr` or situation >= 0x0D), or a -fifa96_err_t
  * from the phase setter. */
 int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation);
+
+/* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
+ * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the
+ * triple sits inside the mouth band: `0xB10 <= |z|_w < 0xB90`,
+ * `-0xD0 <= x < 0xD0` and `y <= h(z)` where `h = 0xA0` while
+ * `|z|_w - 0xB10 <= 0x30`, else `0xA0 - (|z|_w - 0xB40)`. The native reads
+ * the z comparison through the sign-extended low word of the 32-bit magnitude
+ * (`MOVSX DX` at `0x70084`/`0x700C3`) and x/y as full dwords. Pure function. */
+int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z);
+
+/* FU-145 §3 item 1 (S2): the boundary pan armer `FUN_0007131C`
+ * (`0x71390..0x713F7` arm body; the already-armed reflect arm
+ * `0x718A9..0x7190E`). Called once per granted frame by
+ * `fifa96_match_run_frame` when `fifa96_camera_out_of_bounds` holds (the
+ * native track call gate `0x73B70..0x73B9B`). When disarmed and the phase is
+ * 2/0x10 and `|camera.pos_z|_w > 0xB20 || |camera.pos_x|_w > 0x730` (the
+ * native stores the absolute values as words and compares the sign-extended
+ * low words), it sets `goal_armed`, freezes `goal_snap_*` := the camera triple
+ * with y zeroed, and stores `goal_zone` = `fifa96_match_goal_zone`.
+ * When already armed it runs the reflect arm: with `goal_zone == 0` and
+ * `render.input_bit0` set it calls `fifa96_camera_reflect` and clears
+ * `goal_armed`/`goal_zone` when the mirror fires (the native clears before
+ * the mirror; zone != 0 or a clear input takes the unported angle arm, FU-71
+ * leg 9.6, with no clear). The pan itself is the camera track (FU-71; the
+ * pan producer is leg L1/S4); the fixture seam is the camera velocity pair.
+ * Returns 1 when it armed or cleared, 0 for a no-op, -FIFA96_ERR_INVALID
+ * (NULL). */
+int fifa96_match_goal_arm(struct fifa96_match_run *mr);
+
+/* FU-146 §7 item 1, landed here because FU-145's scanner calls it: the
+ * `FUN_0008A938` situation-6 queue arm (`0x8A9E8`, head gates
+ * `0x8A944..0x8A96B`). With the session gate open (`session_gate_14c32a`)
+ * and no pending situation: `situation_id` := 5 (side 0) / 6 (side 1) and
+ * `situation_pending` := 1. Otherwise the native fallback at `0x8AC28`/`0x8AC88`:
+ * the direct score increment (`fifa96_match_run_add_goal`) plus the table-2
+ * situation-6 phase-5 write through the shared `fifa96_match_run_situation`
+ * entry (no parallel table-2 mechanism). Returns 0, -FIFA96_ERR_INVALID
+ * (NULL or side > 1), or a -fifa96_err_t from the fallback writers. */
+int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side);
+
+/* FU-145 §3 item 2 (S2): the clock-tail goal scan (`FUN_0008AF38`
+ * `0x8B623..0x8B643` -> `FUN_00088940 0x88940..0x88C0E`). Runs after
+ * `fifa96_match_run_phase_drive` in the frame loop. Gate: phase 2 or 0x10
+ * and `goal_armed` (the native period-4 extra-time branch
+ * `0x8B60D..0x8B621` skips the scan, but the engine's extra-time flag is
+ * carried 0 per FU-143 OL-85, so the skip is unreachable and unmodelled —
+ * leg L8). Scanner body derived:
+ *  - `|goal_snap_z| <= 0xB20` -> the throw-in arm (`0x88BCC`, situation 2,
+ *    phase-2 only): a w7-b1 set-piece leg, not wired;
+ *  - `goal_zone == 0` -> the corner arm (`0x88B53`, situations 3|4,
+ *    phase-2 only): a w7-b1 leg, not wired;
+ *  - else the goal arm: side from the snapshot sign (`0x889B6 SETL`; the
+ *    `[0x157A4C]` goal-side flag / `[0x1587D4]` record arm is leg L4), the
+ *    derived possession nearest search over that side's team block from the
+ *    snapshot triple (`FUN_0008DE8C` with skip 0; the selected record feeds
+ *    the unported announce/outcome sinks, leg L2/L3), then
+ *    `fifa96_match_run_goal_queue(mr, side)`.
+ * Returns 1 when a situation arm ran, 0 for a gate no-op or unwired leg,
+ * -FIFA96_ERR_INVALID (NULL) or a propagated -fifa96_err_t. */
+int fifa96_match_run_goal_scan(struct fifa96_match_run *mr);
 
 /* One match presentation pass into the engine's indexed surface (Task 15):
  * clears the canvas to `render.background`, then recomposes the scene per the

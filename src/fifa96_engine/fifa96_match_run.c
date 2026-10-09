@@ -15,6 +15,10 @@
 #include "fifa96_loader/fifa96_scene.h"
 #include "fifa96_loader/fifa96_sprite.h"
 
+/* FU-145 S2: the shared phase write (definition in the phase-driver
+ * section below; used by begin/reset paths above it). */
+static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase);
+
 /* FU-70 §1.2 slot tables (flat 0x11064E direction map and the animation chain
  * T1 0x10E1DC -> T2 0x10E1EC / T3 0x10E1F5). */
 static const uint8_t match_run_slot_map[16] = {
@@ -628,6 +632,16 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->score_max_diff = 0;
   mr->score_last_event = 0;
   mr->global_5882a = 0;                /* drop the kickoff gate with the match */
+  /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
+   * with the match; the session gate returns to 0 with the session. */
+  mr->goal_armed = 0;
+  mr->goal_zone = 0;
+  mr->goal_snap_x = 0;
+  mr->goal_snap_y = 0;
+  mr->goal_snap_z = 0;
+  mr->situation_id = 0;
+  mr->situation_pending = 0;
+  mr->session_gate_14c32a = 0;
   (void)fifa96_match_entities_release(&mr->entities);
   return 0;
 }
@@ -801,6 +815,16 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
+  /* FU-145 S2: fresh goal-arm/queue state (the session gate seeds 0 here and
+   * 1 in begin: a live match). */
+  mr->goal_armed = 0;
+  mr->goal_zone = 0;
+  mr->goal_snap_x = 0;
+  mr->goal_snap_y = 0;
+  mr->goal_snap_z = 0;
+  mr->situation_id = 0;
+  mr->situation_pending = 0;
+  mr->session_gate_14c32a = 0;
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
 }
@@ -841,6 +865,17 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
+  /* FU-145 S2: a fresh match drops the goal-arm/queue state and seeds the
+   * live-session gate 1 ([0x14C32A], FU-146 leg 2) so a fired goal queues
+   * ids 5/6 instead of taking the table-2 fallback. */
+  mr->goal_armed = 0;
+  mr->goal_zone = 0;
+  mr->goal_snap_x = 0;
+  mr->goal_snap_y = 0;
+  mr->goal_snap_z = 0;
+  mr->situation_id = 0;
+  mr->situation_pending = 0;
+  mr->session_gate_14c32a = 1;
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
@@ -861,9 +896,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * and action row 01 calls FUN_0008A938 situation 0xB at 0x7DF90 once the
    * derived act-1 producer arms `mr->global_5882a` (M2 playable-match Task 2 /
    * FU-143 §11). */
-  (void)fifa96_match_state_set_phase(&mr->state, FIFA96_MATCH_RUN_KICKOFF_PHASE);
-  mr->phase_machine.state = FIFA96_MATCH_RUN_KICKOFF_PHASE;
-  mr->phase_machine.phase = FIFA96_MATCH_RUN_KICKOFF_PHASE;
+  (void)match_run_write_phase(mr, FIFA96_MATCH_RUN_KICKOFF_PHASE);
   /* M2 playable-match Task 2 / OL-84 residual: the same setter call runs the
    * FUN_0008D098 state-1 arm per team (native 0x740C8/0x740DB; state 1 arm
    * 0x8D1B1..0x8D243), staging the kickoff actions 1/2 and the team targets.
@@ -968,6 +1001,26 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
   return 0;
 }
 
+/* FU-145 §3 item 3 / 0x740F6 (S2): the shared phase write. Every engine
+ * phase write goes through the FU-62 setter and mirrors the FU-142a machine
+ * (the native [0x157A4D] switch byte is the [0x157A4A] phase dword's high
+ * byte). When the new phase is 2, the native FUN_000740A0 (0x740E0..0x740F6)
+ * clears the pan arm [0x15781D]; the port also clears the zone byte (the
+ * native leaves [0x15781E] alone, but it is consumed only while armed and
+ * the camera reset 0x7026C refreshes it, so the extra clear is
+ * observer-clean). Returns 0 or the setter's error. */
+static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
+  int rc = fifa96_match_state_set_phase(&mr->state, phase);
+  if (rc != 0) return rc;
+  mr->phase_machine.state = phase;
+  mr->phase_machine.phase = phase;
+  if (phase == 2u) {
+    mr->goal_armed = 0;
+    mr->goal_zone = 0;
+  }
+  return 0;
+}
+
 /* FU-143 wiring (M2 playability Task 3): the engine-side phase driver. The
  * native funnel is FUN_0008AF38's second rollover: when the phase-class gate is
  * open (class 1 always; class 2 while [0x14C302]==0; class 0 stops the clock;
@@ -1017,12 +1070,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
                                       probe, &out);
   if (rc != FIFA96_OK) return rc;
   if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-    rc = fifa96_match_state_set_phase(&mr->state, out.phase);
+    rc = match_run_write_phase(mr, out.phase);
     if (rc != 0) return rc;
-    /* The native [0x157A4D] switch byte is the phase dword's high byte; the
-     * FU-142a machine keeps its own view, so both mirrors follow. */
-    mr->phase_machine.state = out.phase;
-    mr->phase_machine.phase = out.phase;
   }
   return 1;
 }
@@ -1037,12 +1086,161 @@ int fifa96_match_run_situation(struct fifa96_match_run *mr, uint8_t situation) {
    * act-handler invocation (FUN_000888FC, the unported phase-row bodies,
    * OL-13/OL-78) and the table-1 pending queue (OL-73) stay unported. */
   if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-    rc = (fifa96_err_t)fifa96_match_state_set_phase(&mr->state, out.phase);
+    rc = (fifa96_err_t)match_run_write_phase(mr, out.phase);
     if (rc != 0) return (int)rc;
-    mr->phase_machine.state = out.phase;
-    mr->phase_machine.phase = out.phase;
   }
   return 0;
+}
+
+/* FU-145 §1.3 (first-hand /FIFA96.EXE this slice): the armer's absolute value
+ * is stored as a word and re-read sign-extended for the comparison
+ * (`0x71354..0x71384`: `abs` in 32 bits, `MOV word[ESP+..],AX`, then
+ * `MOV EAX,[ESP+..]; SAR EAX,0x10`). A magnitude whose low word sign-extends
+ * negative therefore fails every positive bound — the native trap. */
+static int16_t match_run_goal_abs_word(int32_t value) {
+  uint32_t magnitude = (uint32_t)value;
+  if (value < 0) magnitude = 0u - magnitude;
+  return (int16_t)(uint16_t)magnitude;
+}
+
+int fifa96_match_goal_zone(int32_t x, int32_t y, int32_t z) {
+  uint32_t magnitude = (uint32_t)z;
+  int32_t zw;
+  int32_t bits = 0;
+  int32_t h;
+  int32_t d;
+  if (z < 0) magnitude = 0u - magnitude;
+  zw = (int16_t)(uint16_t)magnitude;       /* 0x70084 MOVSX DX */
+  if (zw < 0xB10) bits = 8;                /* 0x70087..0x70093 */
+  else if (zw >= 0xB90) bits = 4;          /* 0x70095..0x700A1 */
+  if (x < -0xD0) bits |= 1;                /* 0x700A7..0x700B1 */
+  else if (x >= 0xD0) bits |= 2;           /* 0x700B3..0x700BB */
+  d = (int16_t)(uint16_t)((uint32_t)magnitude - 0xB10u);  /* 0x700BD..0x700C3 */
+  if (d <= 0x30) h = 0xA0;                 /* 0x700C6..0x700D9 */
+  else h = 0xA0 - (d - 0x30);              /* 0x700CB..0x700D7 */
+  if (h < y) bits |= 0x10;                 /* 0x700DE..0x700E3 */
+  return bits == 0;                        /* 0x700E8..0x700EB TEST/SETZ */
+}
+
+int fifa96_match_goal_arm(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (mr->goal_armed) {
+    /* The already-armed reflect arm `0x718A9..0x7190E`: zone != 0 takes the
+     * unported angle arm (FU-71 leg 9.6) with no clear; zone == 0 and the
+     * reflect input bit set mirror the camera and clear both arm flags. The
+     * native clear happens before the mirror body; the ported
+     * fifa96_camera_reflect carries the same `0xB10`/`0x720` gate. */
+    if (mr->goal_zone == 0) {
+      if (fifa96_camera_reflect(&mr->render.camera, mr->render.input_bit0, 0) != 0) {
+        mr->goal_armed = 0;
+        mr->goal_zone = 0;
+        return 1;
+      }
+    }
+    return 0;
+  }
+  /* 0x71390..0x713A0: phase 2/0x10 only. */
+  if (mr->state.phase != 2u && mr->state.phase != 0x10u) return 0;
+  /* 0x713A6..0x713C0: |camZ|_w > 0xB20 || |camX|_w > 0x730 (the word
+   * truncation trap is reproduced by match_run_goal_abs_word). */
+  if (!(match_run_goal_abs_word(mr->render.camera.pos_z) > (int16_t)0xB20 ||
+        match_run_goal_abs_word(mr->render.camera.pos_x) > (int16_t)0x730))
+    return 0;
+  /* 0x713DB..0x713EC: arm, freeze the snapshot triple (y forced 0), then
+   * 0x713F2 the goal-mouth classifier over the live camera triple. The
+   * native also latches [0x157ACB] at 0x713E6 (leg L7: dropped, its only
+   * consumer is the unported 0x8FCC8 read). */
+  mr->goal_armed = 1u;
+  mr->goal_snap_x = mr->render.camera.pos_x;
+  mr->goal_snap_y = 0;
+  mr->goal_snap_z = mr->render.camera.pos_z;
+  mr->goal_zone = (uint8_t)fifa96_match_goal_zone(mr->render.camera.pos_x,
+                                                  mr->render.camera.pos_y,
+                                                  mr->render.camera.pos_z);
+  return 1;
+}
+
+/* FU-145 §1.6 (S2): the scanner's derived possession nearest — the native
+ * `FUN_0008DE8C(&0x15777C, team_block + side*0x835, 0, NULL)` call at
+ * `0x88ADF`-family (EBX = 0 -> record 0 skipped), over the pool records'
+ * (x,z) words with the shared `fifa96_entity_distance` metric (the FU-143
+ * §11.1 row-01 precedent). The selected record's `+0x826` team byte is the
+ * queued side; it equals the searched block's side, so the result itself
+ * only feeds the unported announce/outcome sinks (L2/L3). */
+static int32_t match_run_goal_nearest(const struct fifa96_match_run *mr, uint32_t team,
+                                      int32_t from_x, int32_t from_z) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  return fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS, 0,
+                                    (int16_t)from_x, (int16_t)from_z, &best);
+}
+
+int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side) {
+  if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
+  /* 0x8A957/0x8A964 head gates: the session gate open and no pending
+   * situation route to the table-1 queue arm 0x8A9E8 (arcade: [0x15B6A8] =
+   * 5/6, [0x15B6C0] = 1). */
+  if (mr->session_gate_14c32a && !mr->situation_pending) {
+    mr->situation_id = side ? 6u : 5u;
+    mr->situation_pending = 1u;
+    return 0;
+  }
+  /* 0x8AA7B/0x8AC28 fallback: [0x157ACB] = 0 (leg L7 dropped), the direct
+   * increment (0x8AC88/0x8AC94) plus the table-2 situation-6 phase-5 write
+   * through the shared fifa96_match_run_situation entry. */
+  {
+    int rc = fifa96_match_run_add_goal(mr, side);
+    if (rc != 0) return rc;
+  }
+  return fifa96_match_run_situation(mr, 6);
+}
+
+int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
+  int32_t abs_z;
+  int32_t side;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  /* 0x8B623..0x8B643: phase 2/0x10 and armed. The native period-4 branch
+   * (0x8B60D..0x8B621) joins the tail without the scan only on the
+   * extra-time path ([0x157AC0] != 0); the engine carries extra_time 0
+   * (FU-143 OL-85), so the skip is unreachable and unmodelled (leg L8). */
+  if (mr->state.phase != 2u && mr->state.phase != 0x10u) return 0;
+  if (!mr->goal_armed) return 0;
+  /* 0x8896B..0x88983: |snapshot z| (full 32-bit magnitude; the native NEG
+   * wraps INT_MIN to itself) <= 0xB20 signed is the throw-in arm 0x88BCC
+   * (situation 2, phase-2 only; the ball-record side source [0x1577CA] and
+   * the situation-2 queue semantics are the w7-b1 set-piece slice — leg). */
+  {
+    uint32_t mag = (uint32_t)mr->goal_snap_z;
+    if (mr->goal_snap_z < 0) mag = 0u - mag;
+    abs_z = (int32_t)mag;   /* 0x80000000 wraps to INT_MIN like the native */
+  }
+  if (abs_z <= 0xB20) return 0;
+  /* 0x88989/0x88990: zone == 0 is the corner arm 0x88B53 (situations 3|4
+   * from the zone signs, phase-2 only; w7-b1 leg). */
+  if (mr->goal_zone == 0) return 0;
+  /* 0x88996..0x889C5: side select. The native tests the goal-side flag
+   * [0x157A4C]; when it is not 1 the side is the snapshot sign (SETL at
+   * 0x889BD). The flag's writers/record identity ([0x1587D4]) are unported
+   * (leg L4), so the derived side is always the snapshot sign. */
+  side = mr->goal_snap_z < 0 ? 1 : 0;
+  /* 0x889C7..0x88B31: the possession nearest over the side's team block;
+   * the sinks (0x795B4/0x79C50/0x6E598/0x741B4/0x651F0/0x974F0) stay legs. */
+  (void)match_run_goal_nearest(mr, (uint32_t)side, mr->goal_snap_x, mr->goal_snap_z);
+  /* 0x88B37/0x88B42/0x88B44: MOV EAX,6; XOR EBX,EBX;
+   * CALL FUN_0008A938(6, record_side, 0) — the queued side is the selected
+   * record's team byte, which is the searched block's side. */
+  {
+    int rc = fifa96_match_run_goal_queue(mr, (uint8_t)side);
+    if (rc != 0) return rc;
+  }
+  return 1;
 }
 
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
@@ -1091,6 +1289,14 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                      match_run_anim_a, match_run_anim_b, match_run_anim_c);
     (void)fifa96_camera_update(&mr->render.camera, (int16_t)mr->state.frame_delta,
                                mr->render.view_class, mr->render.input_bit2);
+    /* FU-145 S2 (0x73B70..0x73B9B): the native camera track FUN_000736AC
+     * calls the boundary handler FUN_0007131C only when the camera is out of
+     * bounds (|camX| > 0x6C0 || |camZ| > 0xAB0); the armer's own
+     * phase/bound gates run inside. Runs after the camera update, before the
+     * entity chain (the FUN_000736AC position inside FUN_0004B100). */
+    if (fifa96_camera_out_of_bounds(mr->render.camera.pos_x,
+                                    mr->render.camera.pos_z))
+      (void)fifa96_match_goal_arm(mr);
     (void)fifa96_match_display_update(&mr->render.display, mr->state.frame_delta, 0);
     /* FU-141: the FU-67 entity chain (selection, record walk with the FU-137
      * action dispatch, ball pairing) after the slot/camera updates, matching
@@ -1111,6 +1317,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * and inside it calls FUN_0008B9CC at 0x8B574). A completion staged above
      * runs the derived selector-0 chooser (2 -> 0x0C) on this frame. */
     rc = fifa96_match_run_phase_drive(mr);
+    if (rc < 0) return rc;
+    /* FU-145 S2 (0x8B63E): the native clock tail FUN_0008AF38 calls the goal
+     * scanner FUN_00088940 after the period-end handling; the derived scan
+     * carries the phase/armed gate and queues situation 6 (or the wired
+     * table-2 fallback). */
+    rc = fifa96_match_run_goal_scan(mr);
     if (rc < 0) return rc;
     /* FU-85 §4: FUN_00036C70 stages the render slots after the FU-4B100
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
