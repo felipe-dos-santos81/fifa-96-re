@@ -831,11 +831,6 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
     /* v6 (S2/S3 status): the goal chain is dormant on this tape — no pan
      * origin exists (OL-T11-79), so the armer and the clock-tail scan never
-     * fire and the begin-installed consumer machine has no queued id. The
-     * chain is fixture-proven (test_goal_chain_pan_fixture /
-     * test_camera_pan_event_chain / test_goal_consumer_chain_fixture). */
-    /* v6 (S2/S3 status): the goal chain is dormant on this tape — no pan
-     * origin exists (OL-T11-79), so the armer and the clock-tail scan never
      * fire; the begin-installed consumer machine sits at the leg-0 kickoff
      * gate (step 1) with the installer latch `situation_pending` held and no
      * queued id. The chain is fixture-proven (test_goal_chain_pan_fixture /
@@ -898,10 +893,6 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->score[0] == 0 && mr->score[1] == 0);
     assert(mr->score_last_side == -1 && mr->score_tracked_side == -1);
     assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
-    /* v6 (S2/S3/S4): the chain stayed dormant through the live phase 2 and the
-     * S4 defaults never woke — the static camera never armed (no pan origin,
-     * OL-T11-79), the queue cells stayed empty, the pose feed's unported mode 0
-     * and the formation id 0 are untouched. Fixture-proven, not tape-forced. */
     /* v6 (S2/S3/S4): the chain stayed dormant through the live phase 2 and
      * the S4 defaults never woke — the static camera never armed (no pan
      * origin, OL-T11-79), no id entered the queue, the consumer machine is

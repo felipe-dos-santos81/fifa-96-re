@@ -588,15 +588,15 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
    latched (only the S3 handler step clears it), so the next granted frame's
    scan takes the fallback; pinned by the pan fixture.
 
-### Legs status after S2
+### Legs status after S2 (updated at the phase-6 S5 close)
 
 | leg | status |
 |---|---|
-| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | open — S4 if camera-scoped; fixture uses the FU-71 velocity seam |
+| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | **landed producer-level in S4** (phase-6): the pose feed `fifa96_camera_pose_feed` (`FUN_000505D0`) + the event setter `fifa96_camera_event_set` (`FUN_00071C94`/`FUN_00070544` subset) drive the real integrator, and `test_camera_pan_event_chain` runs producer → armer → queue → S3 score. The natural pan invoker remains absent — all 11 `FUN_00071C94` row callers stay unported (FU-148 §11.2) |
 | L2 `FUN_00092998(1,4,-1)` preselection | open (selection outputs stay zero) |
 | L3 possession-selection sinks (`0x795B4`/`0x79C50`/`0x6E598`/`0x741B4`/`0x651F0`/`0x974F0`) | open — nearest search substituted |
 | L4 `[0x1587D4]`/`[0x1577CA]` record identities / `[0x157A4C]` flag | open — snapshot-sign stand-in |
-| L5 post-goal re-arm (`0x93C87`/`0x9437A`) | open — S3 |
+| L5 post-goal re-arm (`0x93C87`/`0x9437A`) | **reflect clear live**: S2 landed the armer's reflect arm (`0x718A9..0x7190E`) and S3 the leg-4 setup clear (`0x9453C..0x9454E`); the `0x93C87`/`0x9437A` post-goal re-arm body remains unported (FU-146 §8) |
 | L6 zone-bit consumers | settled (bits dead) |
 | L7 `[0x157ACB]` | dropped (errata 1) |
 | L8 period-4 skip | unreachable/unmodelled (errata 6) |

@@ -555,8 +555,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   chunk-entry + canvas-level RGB assertions; smoke `#E044A0`), **G2 live
   progression + score source** (natural kickoff→phase-2 row 01, the FU-143
   phase driver's live period end 2 → 0x0C and the FU-72 `score_event` source
-  wired — tape frame 145 / the direct score step; the S2/S3 goal chain landed
-  but tape-dormant, fixture-proven), **G3 presentation carried** (HUD
+  wired — the direct score step lands at frame 67 (the first `state=2/1-0`)
+  and frame 145 is the last live frame (the class-1 period end); the S2/S3
+  goal chain landed but tape-dormant, fixture-proven), **G3 presentation
+  carried** (HUD
   `OL-T11-7`, camera place v4.2, the S4 pose/formation/palette seams landed;
   kickoff framing + the natural pan origin carried on numbered legs), **G4
   acceptance** (tape v6 green — byte-identical golden, assertion layer only —
