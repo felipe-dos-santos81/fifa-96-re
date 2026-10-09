@@ -41,7 +41,7 @@ the port's golden fixtures — captured byte excerpts committed under
 | `docs/superpowers/plans/`, `docs/superpowers/specs/` | One implementation plan/spec per slice (the process record) |
 | `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
 | `src/fifa96_engine/`, `include/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`docs/ENGINE.md`](docs/ENGINE.md) |
-| `tests/`, `tests/golden/` | CTest suite (106 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
+| `tests/`, `tests/golden/` | CTest suite (108 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
 | `tools/fifa96_play.c` | Host runner — the single `make run` tool ([docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
 | `tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `tools/fifa96_detect.c` sniff |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
@@ -89,13 +89,12 @@ into the port:
   and outfield dispatch, event pump, history ring, stats, match
   lifecycle/start/teardown, front-end state dispatch, settings hand-off.
 
-**106 CTest tests** (`make test`, `make check`) are green. The native engine
-layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
+**108 CTest tests** (`make test`, `make check`) are green. The native engine layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v6** — the full-gameplay
-phase-6 acceptance — is green: the 14 wired
+chain run headless (the M2-B acceptance tape **v7** — the phase-7
+acceptance — is green: the 14 wired
 action rows exercised, the resource-loaded formation/record placement drawing
 on
 the indexed match canvas from the first granted frame, the FU-96 leg-5
@@ -105,20 +104,22 @@ live phase 2 asserted, the match HUD (bar + score/clock) drawn from the first
 match frame, the S1 possession/locomotion state (the `+0x8D` active seed and
 the slot record's lane-track invariant) asserted, the S2/S3 goal chain pinned
 dormant-on-tape/fixture-proven (armer, queue and screen machine freshness),
-the S4 defaults pinned (`view_mode == 0`, formation id 0), plus the
+the S4 defaults pinned (`view_mode == 0`, formation id 0), the phase-7 P1–P4
+landings pinned (the row-1E keeper machine's tape-reachable claim take; the
+FU-149/FU-150/FU-152 cells asserted fresh with their dormancy gates), plus the
 natural-phase-2 probe (a directive-free
 replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
 and the canvas-level RGB assertion; the golden carries the drawing,
 palette, pad-locomotion, camera-place v4.2, HUD and S1 possession re-pins
-and is byte-identical since S1 — S2, S3, S4 and S5 moved no presented
-frame), and the
-windowed `make game` build runs on SDL3. The S5 interactive smoke re-run on the
+and is byte-identical since S1 — S2, S3, S4, S5 and the phase-7 ports P1–P5
+moved no presented frame), and the
+windowed `make game` build runs on SDL3. The P5 interactive smoke re-run on the
 development host (2026-10-09) reaches match start (the match
 canvas replaces the front-end; the derived palette `OL-T11-6` landed in
 follow-up 4, so RGB is visible — FU-144; the HUD landed in P0.2/OL-T11-7 —
-`docs/screens/s5-v6-match-hud.png`, 0-0/00:00) and a KICK burst leaves the
+`docs/screens/p5-v7-match-hud.png`, 0-0/00:00) and a KICK burst leaves the
 kickoff wait for the live phase 2, the clock ticking on screen
-(`docs/screens/s5-v6-match-clock.png`, 00:02) with the
+(`docs/screens/p5-v7-match-clock.png`, 00:03) with the
 live kickoff ball/anim placement
 (15/80 rows wired, the FU-143 phase driver and the derived score source
 included). Moving the controlled player on screen stays blocked on the native
@@ -128,8 +129,12 @@ fixture-proven headlessly). Kicking the ball and scoring stay blocked
 interactively on the unported
 possession/selection invokers, with the S2/S3 goal chain landed but
 tape-dormant (no natural pan origin; the score chain is fixture-proven); the
+phase-7 chains (set pieces/restarts, fouls/offside, keeper restarts,
+replay/overlay) are likewise not reachable live yet — their producers/gates are
+carried on numbered legs (FU-149 L1–L13, FU-150 +L4, FU-151 15 legs, FU-152 14
+legs) and fixture-proven; the
 phase-1 → phase-2
-transition is visible through the HUD clock (phase-6 S5; pinned
+transition is visible through the HUD clock (phase-7 P5; pinned
 headlessly too). Not
 ported: physical VGA/CRTC timing and device
 audio output (both modelled as pure data), and the remaining match
@@ -150,7 +155,7 @@ rewritten; corrections land as quoted errata in later sections.
 ## Build and run
 
 ```bash
-make check                     # configure + strict build + full CTest suite (106 tests)
+make check                     # configure + strict build + full CTest suite (108 tests)
 make game                      # windowed native engine (needs SDL3 + game/FIFAPCCD96.iso)
 make run FILE=game/FIFAPCCD96.iso    # flagship: sniff the ISO, bounded decode pass under build/run/
 make run FILE=tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode

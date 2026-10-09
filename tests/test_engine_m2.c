@@ -1,7 +1,7 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v6 (spec §5; the
- * M2 full-gameplay phase-6 acceptance, S5; the v5 interactive-match G3
- * close-out and the v4/v4.1/v4.2 per-task re-pins are retained as provenance
- * below).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v7 (spec §5; the
+ * M2 phase-7 acceptance, P5; the v6 phase-6 acceptance, the v5 interactive-
+ * match G3 close-out and the v4/v4.1/v4.2 per-task re-pins are retained as
+ * provenance below).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -355,6 +355,74 @@
  * (157 hash-only lines 9..165, first differing line frame 9 — the `+0x8D`
  * seed/selector and shared-mover render changes; no `state=` suffix moved;
  * M1 unmoved); S2, S3, S4 and this S5 moved no presented frame.
+ *
+ * --- v7 (M2 phase-7 acceptance, P5): the P1-P4 assertion layer --------------
+ *
+ * v7 is the phase-7 acceptance (the set-piece/restarts, fouls/referee/offside,
+ * keeper/AI and presentation-residual ports P1-P4). It adds assertions and
+ * provenance only — no engine write and no forcing changed — so the transcript
+ * and golden are byte-identical to v6 (`cmp` against the committed
+ * tests/golden/engine/m2-frames.txt clean, 165 lines; M1 unmoved; the re-pin
+ * lineage is in the golden-decision paragraphs below). What v7 pins at the
+ * spec §5 sequence points:
+ *   1. P3 row-1E reachable (FU-151): the m 41 staging installs row 0x1E on
+ *      team 0 record 9 and the per-record chain dispatches it; the first
+ *      dispatch runs the full ten-stage `fifa96_keeper_claim_step` machine —
+ *      the claim take sets the record's `+0x9B` and writes the 0x15774C focus
+ *      triple (`keeper_cam` = the claim place `pos + offset`, y = +0x38). At
+ *      m 62 the tape asserts the claimed record (code 0x1E, has_ball 1,
+ *      timer89 > 0) and the focus triple (ISO: (-118,56,-66), the
+ *      formation-seeded position; no-ISO: (-4,56,0)), with the reset/vector/
+ *      saved/gauge/latch/animation-flag cells still fresh (the machine holds
+ *      at the stage-3 `timer89 > 0x78` ladder outside the tape's dispatch
+ *      count). Before the staging (m 41) every keeper cell is fresh. This is
+ *      the only phase-7 landing the tape itself executes.
+ *   2. P1/P2/P4 tape-dormant, fixture-proven: at m 41 and m 62 the tape
+ *      asserts the FU-149 dispatcher cells (`sit_side_pending`, `corner_count`,
+ *      `side_swap`, `store_15882b/c`, `incident_x/z`), the FU-150 referee
+ *      machine (`ref_machine == REF_NONE`, no whistle/speech/decision/log
+ *      cells) and the FU-152 rows (`replay.state`/`hud_armed` 0, `sub.active`
+ *      0, `overlay.armed`/`id` 0, `ball_row` NULL) all fresh, with the
+ *      dormancy gate named: the restart scanner requires
+ *      `phase 2/0x10 && goal_armed` and the static camera never arms
+ *      (OL-T11-79); the contact/offside entries have no live producer (only
+ *      fixtures call them); the P4 rows are zero-gated at rest and the pose
+ *      feed's `view_mode` 0 keeps the unported default arm (the P4 handler
+ *      bodies need caller-staged handler args). The chains are proven in
+ *      `tests/test_engine_match_frame.c` (set-piece queue/arm/scan and the
+ *      `test_engine_referee_*` chains), `tests/test_referee.c`,
+ *      `tests/test_keeper_machines.c` and `tests/test_engine_match_render.c`.
+ *   3. Remaining forcing inventory, updated for the phase-7 state (each item
+ *      with its owning leg; nothing else is forced):
+ *      - kickoff phases 0x13/0x14 (m 1/m 21): the natural chain reaches phase
+ *        2 (row 01 -> situation 0xB) but not frame-for-frame against the
+ *        forced FU-142a 0x13/0x14 arm window (`state=19/20` lines; the v3-era
+ *        measured mismatch: hashes identical through golden line 48, first
+ *        divergence line 49, natural phase 2 at presented frame ~410 /
+ *        granted frame ~121; the T1 key tape moved the natural probe's
+ *        landing to engine step 215). Owning legs: OL-84 residual / FU-143
+ *        §11.5 / OL-85 (extra-time flag; the phase-7 ports added no producer).
+ *      - phase 2 mechanics entry + the 1 s period (m 41): same reason (the
+ *        forced window cannot be replaced frame-for-frame); the class-1 clock
+ *        then completes the shortened period naturally (the G1 live-end
+ *        convention; native periods last minutes). Owning legs: as above.
+ *      - the mechanics row staging (m 41): the natural AI/possession
+ *        invokers are unported; the staged set now includes row 1E, whose P3
+ *        machine does execute (item 1). Owning legs: OL-63/OL-70/OL-82 and
+ *        the FU-147/FU-151 selection legs.
+ *      - the direct score call (m 62): no wired body contains a native writer
+ *        site (FU-142 App. I.10) and the phase-7 ports added no goal invoker
+ *        (the FU-149 queue consumer is untraced — L4 — the FU-150 act-2 path
+ *        is staged, the FU-151 rows need the P1 arms). Owning legs:
+ *        OL-87/OL-88/OL-89.
+ *      No other phase, period, row or input is forced by v7.
+ *
+ * Golden decision (v7): **byte-identical, no re-pin** — assertions and
+ * provenance only, no presented frame moved (`cmp` clean against the committed
+ * v6 golden, 165 lines, verified with the ISO present at acceptance time); M1
+ * unmoved (`09b726b7…`; M2 `2e709151…`). The phase-7 P1-P4 landings themselves
+ * also moved no presented frame (each report's `cmp` evidence; re-verified at
+ * P5).
  *
  * Golden decision (v3, M2 visible-match Task 1 / OL-T11-8): the transcript
  * CHANGED and the golden is re-pinned for the intended drawing upgrade — the
@@ -840,6 +908,39 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->situation_id == 0);
     assert(mr->screen_step == 1u && mr->situation_pending == 1u);
     assert(mr->screen_timer < mr->screen_period_frames);
+    /* v7 (phase-7 P1-P4 dormancy, pre-staging): the set-piece dispatcher cells
+     * (FU-149 P1), the referee machine (FU-150 P2) and the presentation rows
+     * (FU-152 P4) are all fresh before the mechanics staging. They stay fresh
+     * because no live producer drives them on this tape: the restart scanner
+     * is gated by `goal_armed` (run.c: `phase 2/0x10 && goal_armed`), which
+     * the static camera never sets (OL-T11-79), the contact/offside entries
+     * have no live caller, and the P4 rows are zero-gated at rest
+     * (`replay.state` 0, `sub.active` 0, `overlay.armed` 0, `ball_row` NULL).
+     * Every chain is fixture-proven instead (see the v7 provenance). */
+    assert(mr->sit_side_pending == 0u);
+    assert(mr->corner_count[0] == 0u && mr->corner_count[1] == 0u);
+    assert(mr->side_swap == 0u);
+    assert(mr->store_15882b == 0u && mr->store_15882c == 0u);
+    assert(mr->incident_x == 0 && mr->incident_z == 0);
+    assert(mr->ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+    assert(mr->ref_whistle == 0u && mr->ref_speech == 0u);
+    assert(mr->referee.sequence == 0u && mr->referee.stage == 0u);
+    assert(mr->referee.contact_kind == 0u && mr->referee.log_count == 0u);
+    assert(mr->render.replay.state == 0u && mr->render.replay.hud_armed == 0u);
+    assert(mr->render.sub.active == 0u);
+    assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
+    assert(mr->render.ball_row == NULL);
+    /* v7 (P3 keeper pre-state): the keeper process cells are fresh before the
+     * row-1E staging and the staged record (team 0, record 9) does not carry
+     * the ball yet. */
+    assert(mr->keeper_cam_x == 0 && mr->keeper_cam_y == 0 &&
+           mr->keeper_cam_z == 0);
+    assert(mr->keeper_reset_x == 0 && mr->keeper_reset_y == 0 &&
+           mr->keeper_reset_z == 0);
+    assert(mr->keeper_saved_x == 0 && mr->keeper_saved_z == 0);
+    assert(mr->keeper_gauge == 0 && mr->keeper_latch_157ab2 == 0u);
+    assert(mr->flag_157820 == 0u && mr->flag_157822 == 0u);
+    assert(mr->entities.team[0].records[9].has_ball == 0u);
     {
       int32_t enc = mr->slot.entity;
       uint32_t team = enc >= 0 ? (uint32_t)enc / FIFA96_MATCH_ENTITY_RECORDS : 0u;
@@ -905,6 +1006,54 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->screen_timer < mr->screen_period_frames);
     assert(mr->render.camera_pose.view_mode == 0);
     assert(mr->formation[0] == 0 && mr->formation[1] == 0);
+    /* v7 (P3 row-1E reachable): the m 41 staging installed row 0x1E on team 0
+     * record 9; its dispatch runs the full FU-151 ten-stage keeper machine
+     * (`fifa96_keeper_claim_step`). The first dispatch claimed the ball —
+     * `+0x9B` set on the pool record — and wrote the 0x15774C focus triple
+     * (`keeper_cam`; the claim-take place `pos + offset`) — the tape-level
+     * proof the P3 machine executes end to end. The machine stays in the hold
+     * stage through the tape: the staged row code is still 0x1E, the record
+     * still carries the ball, and the saved/vector/gauge/latch/flag cells
+     * remain fresh (the release tail sits on the later `timer89` gates the
+     * tape's window does not reach). The focus triple is the derived
+     * camera-focus cell (FU-147 leg 13 stand-in for 0x15774C/50/54), so the
+     * exact position is the ISO formation-seeded one; y = +0x38 holds in both
+     * modes (the claim place's fixed lift). */
+    {
+      const struct fifa96_match_entity *kr = &mr->entities.team[0].records[9];
+      assert(kr->code == 0x1Eu);
+      assert(kr->has_ball == 1u);
+      assert(kr->timer89 > 0);
+      assert(mr->keeper_cam_y == 0x38);
+      if (mr->render.enabled) {
+        assert(mr->keeper_cam_x == -118 && mr->keeper_cam_z == -66);
+      } else {
+        assert(mr->keeper_cam_x == -4 && mr->keeper_cam_z == 0);
+      }
+      assert(mr->keeper_reset_x == 0 && mr->keeper_reset_y == 0 &&
+             mr->keeper_reset_z == 0);
+      assert(mr->keeper_saved_x == 0 && mr->keeper_saved_z == 0);
+      assert(mr->keeper_vec_band == 0 && mr->keeper_vec_dx == 0 &&
+             mr->keeper_vec_dz == 0);
+      assert(mr->keeper_gauge == 0);
+      assert(mr->keeper_latch_157ab2 == 0u);
+      assert(mr->flag_157820 == 0u && mr->flag_157822 == 0u);
+    }
+    /* v7 (P1/P2/P4 dormancy at the live mechanics step): the same fresh cells
+     * as m 41 — the row-1E dispatch is the only phase-7 landing that runs on
+     * the tape. */
+    assert(mr->sit_side_pending == 0u);
+    assert(mr->corner_count[0] == 0u && mr->corner_count[1] == 0u);
+    assert(mr->side_swap == 0u);
+    assert(mr->store_15882b == 0u && mr->store_15882c == 0u);
+    assert(mr->incident_x == 0 && mr->incident_z == 0);
+    assert(mr->ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+    assert(mr->ref_whistle == 0u && mr->ref_speech == 0u);
+    assert(mr->referee.sequence == 0u && mr->referee.log_count == 0u);
+    assert(mr->render.replay.state == 0u && mr->render.replay.hud_armed == 0u);
+    assert(mr->render.sub.active == 0u);
+    assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
+    assert(mr->render.ball_row == NULL);
     /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
      * carried tracked-side default -1 it is the FU-72 increment + last side. */
     assert(fifa96_match_run_score_event(mr, 0, 0) == 0);
