@@ -274,6 +274,45 @@ int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
   return FIFA96_OK;
 }
 
+/* FU-148 §3 (S4): the formation layout table 0x11033A (5 rows x 0x1D,
+ * first-hand read_memory): row byte 0 = the id, then 4 x 7-byte blocks
+ * {role, count, slots[5]} (0xFF padding). */
+static const uint8_t match_formation_layout_table[5][0x1D] = {
+    {0, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 3, 1, 2, 3, 0xFF, 0xFF,
+     2, 5, 4, 5, 6, 7, 8, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {1, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 4, 5, 6, 7, 8, 0xFF, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {2, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 4, 5, 6, 7, 8, 0xFF, 3, 2, 9, 10, 0xFF, 0xFF, 0xFF},
+    {3, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 2, 5, 6, 0xFF, 0xFF, 0xFF, 3, 4, 7, 8, 9, 10, 0xFF},
+    {4, 0, 1, 0, 0xFF, 0xFF, 0xFF, 0xFF, 1, 4, 1, 2, 3, 4, 0xFF,
+     2, 3, 5, 6, 7, 0xFF, 0xFF, 3, 3, 8, 9, 10, 0xFF, 0xFF},
+};
+
+/* The 0x14BFC0 `6*id` placement names built by FUN_0004A6BC ("%s.fmt" over the
+ * 0x107370 loader table entries 0/6/12/18/24; first-hand strings 0x101A30,
+ * 0x101A64, 0x101A8C, 0x101AB4, 0x101ADC). */
+static const char *const match_formation_fmt_names[5] = {
+    "352ko.fmt", "442ko.fmt", "swko.fmt", "424ko.fmt", "433ko.fmt",
+};
+
+int fifa96_match_formation_layout(uint8_t id, fifa96_match_formation_block out[4]) {
+  if (!out || id > 4u) return -FIFA96_ERR_INVALID;
+  for (uint32_t b = 0; b < 4u; b++) {
+    const uint8_t *row = match_formation_layout_table[id] + 1u + b * 7u;
+    out[b].role = row[0];
+    out[b].count = row[1];
+    for (uint32_t s = 0; s < 5u; s++) out[b].slots[s] = row[2 + s];
+  }
+  return 4;
+}
+
+const char *fifa96_match_formation_fmt_name(uint8_t id) {
+  if (id > 4u) return NULL;
+  return match_formation_fmt_names[id];
+}
+
 /* FU-96 leg 5 (M2 interactive T2): the `FUN_00079F3C` phase gate
  * (`byte[0x1106C3 + phase] != 0`). First-hand `read_memory 0x1106C3` (29
  * bytes, phases 0x00..0x1C): `00 01 00 00 01 00 01 01 01` then zeros and the

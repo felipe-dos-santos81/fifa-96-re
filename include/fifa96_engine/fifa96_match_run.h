@@ -13,6 +13,7 @@
 #include "fifa96_loader/fifa96_match_lifecycle.h"
 #include "fifa96_loader/fifa96_match_pace.h"
 #include "fifa96_loader/fifa96_match_state.h"
+#include "fifa96_loader/fifa96_palette.h"
 #include "fifa96_loader/fifa96_render.h"
 #include "fifa96_loader/fifa96_rng.h"
 #include "fifa96_loader/fifa96_sprite.h"
@@ -140,6 +141,20 @@ struct fifa96_match_run_render {
    * setup (FUN_0004D7E8) is unported, so the engine carries the static
    * default (open leg). */
   int32_t view_ratio;
+  /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose-feed staging. view_mode
+   * is the native [0x14E57C] (getter FUN_00053D50; the 0x51xxx view-handler
+   * writers are unported, FU-148 leg 8) and zero selects the native default
+   * arm (the handler call — leg). The other args mirror the camera-record /
+   * replay cells (FUN_0004D2D4's gate, the [0x109A70] replay record and the
+   * FUN_0004B818 side mirror). Zero-initialized: a fresh match applies no
+   * pose until a producer lands (the tape stays byte-identical). */
+  fifa96_camera_pose_args camera_pose;
+  /* FU-148 §4.2 (S4): the translation-pool seam. The native pool (FUN_00049138
+   * -> FUN_00046F80) is a distinct allocation whose content producer is leg 11;
+   * a caller may stage one by partitioning a buffer through
+   * fifa96_palette_pool_partition. Until then the render keeps the identity
+   * remap. */
+  fifa96_palette_pool palette_pool;
   uint8_t background;
   struct fifa96_match_run_entity entities[FIFA96_MATCH_RUN_RENDER_SLOTS];
   uint32_t entity_count;
@@ -369,6 +384,13 @@ struct fifa96_match_run {
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;
+  /* FU-148 §3 (S4): the per-side formation id ([0x14C1E4]/[0x14C1E5]). The
+   * native image default is 0 (BSS) and the match-init producer FUN_00011620
+   * copies the team record +0x12 byte; the engine has no team record (leg), so
+   * begin seeds 0 and `fifa96_match_run_set_formation` (the FUN_0008EA70
+   * writer) is the derived producer. The kickoff formation seed reads
+   * `formation[controlled_side]` for the 0x14BFC0 `6*id` placement name. */
+  uint8_t formation[2];
   /* FU-146 S3 (goal consumers) run state, native cells:
    *  - `screen_leg` = [0x15B680] the installed `0x110F78` handler index
    *    (0..5; -1 = no handler, the image's [0x15B6D4]==0);
@@ -840,6 +862,28 @@ int fifa96_match_palette_from_bank(const uint8_t *bank_data, size_t bank_len,
                                    const uint8_t *base6, uint8_t rgb8[768]);
 int fifa96_match_run_palette_install(struct fifa96_match_run *mr,
                                      struct fifa96_surface *s);
+
+/* FU-148 §4.2 (S4): the per-entity translation install. The native per-draw
+ * consumer FUN_00048DC0(entity) runs when `[0x1068E0]==1` (the match-data
+ * load) and entity is 0/0xB: it memmoves the entity's pool slot
+ * (`0x14BF60[entity]` = FUN_00046F80's partition) and rewrites the kit band
+ * members, then FUN_000CE980 copies the 0x100-byte result into 0x114720 (the
+ * engine's `render.remap`). Every other entity copies its pool slot verbatim.
+ * The engine's `[0x1068E0]` analog is `render.palette_ready`; the pool is the
+ * caller-staged `render.palette_pool`. Returns 0, -FIFA96_ERR_INVALID (NULL
+ * `mr` or entity > 22; the native indexes the partition blindly), or
+ * -FIFA96_ERR_STATE (run not live, or no pool staged: the pool resource
+ * identity is FU-148 leg 11, so the identity remap stays the stand-in). */
+int fifa96_match_run_translation_install(struct fifa96_match_run *mr, uint32_t entity);
+
+/* FU-148 §3 (S4): the formation-id writer `FUN_0008EA70(side, id)`:
+ * `(&0x14C1E4)[side] = id` followed by the FUN_0007412C consumer (the
+ * 0x11033A layout install; the engine models the id and exposes the layout
+ * through `fifa96_match_formation_layout`). The native writer does not clamp;
+ * the port hardens (side 0/1). Returns 0, -FIFA96_ERR_INVALID (NULL or side >
+ * 1), or -FIFA96_ERR_STATE (run not live). */
+int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
+                                   uint8_t id);
 
 /* Resolve the post-period screen chain (FU-64 §6): OVER -> POST
  * (`resolve_over`, the `[0x5FFC]=3` period resolution), POST -> EXIT (the

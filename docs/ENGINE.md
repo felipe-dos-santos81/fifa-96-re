@@ -298,6 +298,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   no-op — the "dormant chain" risk materialised as predicted; the chain is
   fixture-proven (`test_engine_match_frame::test_goal_chain_pan_fixture`, a
   camera-velocity pan past the bounds → armed → snapshot → queued situation 6).
+  The **full-gameplay S4** (presentation completion, `FU-148` §2–§4) transcript
+  is likewise **byte-identical** (no re-pin): the pose feed's `view_mode`
+  default 0 is the unported handler arm, no translation pool is staged, and the
+  formation id defaults 0 (`352ko.fmt` as before); the new pan event setter has
+  no natural invoker, so the tape camera still never moves. The S2 L1 chain is
+  now producer-proven (`test_engine_match_frame::test_camera_pan_event_chain`:
+  the real `fifa96_camera_event_set` pans the integrator into the arming band
+  → queued situation 5 → S3 consumer score).
   The
   tape's scene-pixel evidence is counted above the derived HUD
   band (`bar_y = 240 - 41 - 2 = 197`; count `y < 190`), so frames 6..8 still
@@ -467,6 +475,53 @@ the build also produces the windowed `fifa96` target (`make game`).
   display gate (leg 6), the `FUN_000935A0` thresholds/exits (leg 7), the
   `[0x15B684]` mode byte (leg 10). The `[0x15B6B8]` side flag is write-only
   (fresh xrefs: its two writes) and is a leg.
+- **M2 full-gameplay S4 (presentation completion, FU-148 §2–§4; 2026-10-09).**
+  Landed from the frozen FU-148 slice (camera/formation/palette sections):
+  - **Camera pose feed** (`fifa96_camera_pose_blocks` /
+    `fifa96_camera_pose_apply` / `fifa96_camera_pose_feed`): the three
+    image-default `+0x4C` pose arrays (0x107F1C class 3, 0x1080FC class 1,
+    0x1082DC class 3; the 0x48 alternate is a leg) plus the mode-0x15 fixed
+    record 0x108714, with the FUN_000505D0 arms 1/0x12 (full, incl. the
+    selector/class mirrors), 3/4 (FUN_000504E0/FUN_00050518 record selection),
+    6/0x10 (record 7 + sub mirror), 8 (records 6/5) and 0x15 (yaw fold/z
+    negate). Wired once per granted frame from `render.camera_pose` after the
+    FU-71 update; `view_mode == 0` is the unported handler arm, so the tape is
+    untouched. The 0x108B80 handler bodies and the 0x51xxx `[0x14E57C]`
+    writers stay legs (OL-T11-76/77).
+  - **FU-71 event setter** (`fifa96_camera_event_set`): the FUN_00071C94 +
+    FUN_00070544 reachable subset — reset, target/height clamp, the
+    FUN_000702F8 ramp over the pinned 0x10F4EE table
+    (`fifa96_camera_ramp`), the signed fast-path velocity, the
+    FUN_0008DC68 bearing (= `speed`), the step products and the anchor A/B
+    sets. This is the S2 L1 pan-source closure at the producer level: a
+    test-only seed now pans the real integrator past the arming bounds
+    (`test_camera_pan_event_chain`: seed -> vel_z 40 -> z 0xB50 -> armer ->
+    queued situation 5 -> S3 consumer scores). The natural invoker remains
+    absent: the 11 FUN_00071C94 callers are unported gameplay-row bodies and
+    the armer's own angle arm requires pre-existing event state
+    (`[0x1577EE].hi == 0 && [0x1577BE] == 0` early return). FUN_000709D0 /
+    FUN_00070DE0 / FUN_00071DF4, the >0x19 atan walk and the smoothing/
+    corner/tracked-player tails stay legs (OL-T11-79).
+  - **Formation id**: run `formation[2]` + `fifa96_match_run_set_formation`
+    (FUN_0008EA70), the 0x11033A layout accessor
+    (`fifa96_match_formation_layout`) and the 0x14BFC0 `6*id` placement names
+    (`fifa96_match_formation_fmt_name`: 352ko/442ko/swko/424ko/433ko.fmt);
+    `match_run_formation_seed` now reads the derived id instead of the
+    hard-coded 0. The FUN_00011620 team-record producer and the FUN_0007412C
+    layout install stay legs (OL-T11-81).
+  - **Palette residual** (`fifa96_palette_pool_partition` = FUN_00046F80,
+    `fifa96_palette_translate_kit` = FUN_00048DC0, kit tables 0x107287/
+    0x10727C, `fifa96_palette_translate_slot` = FUN_000CE980) plus the engine
+    seam `fifa96_match_run_translation_install(entity)` over a caller-staged
+    `render.palette_pool`. Not wired into the render path: the pool resource
+    identity (which loaded file fills `[0x107290]`) stays leg 11/OL-T11-80,
+    so the identity remap remains the stand-in. The shade cube has no static
+    consumer (re-verified) and is not part of the match contract (OL-T11-82).
+  **Both goldens byte-identical, no re-pin** (default `view_mode` 0, no pool
+  staged, formation 0 -> the same 352ko.fmt seed). First-hand errata recorded
+  in FU-148 §11.5: the image-default pose array is `+0x4C` (not `+0x48`/
+  NULL), the pool floor is 0x3000 (not 0x3600), the pose-feed ordering choice
+  and the handler-table typos.
 - **M2 interactive T1 (pad-driven locomotion / G1) legs.** The derived setup
   bind models the engine's single human slot: the native four `0x4C1E0` mode
   rows are unported (derived default mode 0 = the controlled side), the

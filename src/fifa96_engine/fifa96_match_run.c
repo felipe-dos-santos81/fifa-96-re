@@ -724,20 +724,22 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
   memcpy(mr->goal_probe_limb, probe_seed, sizeof probe_seed);
 }
 
-/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): the resource-loaded
- * formation seed. `FUN_0004A6BC` resolves the `0x14BFC0` table's `.fmt` slots
- * (0..29, one family of six per formation id) — slot `6*formation_id` is the
- * placement file — and the BSS
+/* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1) + FU-148 §3 (S4): the
+ * resource-loaded formation seed. `FUN_0004A6BC` resolves the `0x14BFC0`
+ * table's `.fmt` slots (0..29, one family of six per formation id) — slot
+ * `6*formation_id` is the placement file — and the BSS
  * default for an unselected team is formation id 0 (first-hand: `[0x14C1E4]`
  * is BSS 0 and `FUN_0006D9C4` derives `[team+0x7AE] = 0x11033A + id*0x1D`, a
- * 0x1D-byte roster row whose `byte[0]` is the id); the front-end team-selection
- * producer of that byte is unported. Slot 0's name is `352ko.fmt`, a BIGF
- * entry of the match art container `/ART/GAMEART0.PVI` (first-hand directory:
- * entry 0; the engine already stages the same file). The seed is a soft
- * failure: no ISO/asset/entry leaves the zero targets the pre-T1 path had.
- * The controlled side is the `[0x157AAC]>>24` mirror (BSS 0). */
+ * 0x1D-byte roster row whose `byte[0]` is the id). S4 replaces the hard-coded
+ * 0 with the run's derived `formation[controlled_side]` and the pinned
+ * 0x107370 placement names (id 0 `352ko.fmt`, 1 `442ko.fmt`, 2 `swko.fmt`,
+ * 3 `424ko.fmt`, 4 `433ko.fmt`; FU-148 §3 leg: the FUN_00011620 team-record
+ * producer). Slot 0's file is a BIGF entry of the match art container
+ * `/ART/GAMEART0.PVI` (first-hand directory: entry 0; the engine already
+ * stages the same file). The seed is a soft failure: no ISO/asset/entry leaves
+ * the zero targets the pre-T1 path had. The controlled side is the
+ * `[0x157AAC]>>24` mirror (BSS 0). */
 #define MATCH_RUN_FORMATION_BANK "/ART/GAMEART0.PVI"
-#define MATCH_RUN_FORMATION_NAME "352ko.fmt"
 
 /* FU-144 / OL-T11-6: the native match palette source. `FUN_00048B60`
  * (0x48B6E..0x48B83) reads resource slot 0x32 -- the 0x107370 loader table's
@@ -757,15 +759,18 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
 
 static int match_run_formation_seed(struct fifa96_match_run *mr) {
   struct fifa96_scene_formation formation;
+  const char *name;
   uint8_t *bytes = NULL;
   size_t len = 0;
   int seeded = 0;
   if (!mr->engine || !mr->engine->assets) return 0;
+  name = fifa96_match_formation_fmt_name(
+      mr->formation[mr->phase_machine.side_controlled & 1u]);
+  if (!name) return 0;
   if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
       FIFA96_OK)
     return 0;
-  if (fifa96_scene_formation_load(bytes, len, MATCH_RUN_FORMATION_NAME, &formation) ==
-      FIFA96_OK)
+  if (fifa96_scene_formation_load(bytes, len, name, &formation) == FIFA96_OK)
     seeded = fifa96_match_entities_seed_formation(&mr->entities, &formation,
                                                   mr->phase_machine.side_controlled) ==
              FIFA96_OK;
@@ -857,6 +862,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
+  /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
+  mr->formation[0] = 0;
+  mr->formation[1] = 0;
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);
   fifa96_match_run_reset_render(mr);
@@ -909,6 +917,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 1;
+  /* FU-148 S4: a fresh match restarts at the BSS formation default 0 (the
+   * native FUN_00011620 team-record producer is leg). */
+  mr->formation[0] = 0;
+  mr->formation[1] = 0;
   match_run_reset_screen_state(mr);    /* FU-146 S3: fresh consumer state */
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
@@ -1005,6 +1017,21 @@ int fifa96_match_run_set_period(struct fifa96_match_run *mr, uint16_t period_sec
   if (!mr->running) return -FIFA96_ERR_STATE;
   mr->state.period_length = period_seconds;
   mr->state.extra_length = extra_seconds;
+  return 0;
+}
+
+/* FU-148 §3 (S4): the formation-id writer `FUN_0008EA70(side, id)`:
+ * `(&0x14C1E4)[side] = id; FUN_0007412C();`. The consumer (FUN_0007412C ->
+ * FUN_0008CE78/FUN_0006D9C4) installs the 0x11033A layout into the team block
+ * (a leg: the engine has no team+0x7AE/record+0x90 role fields); the id is
+ * observable through `formation[]` and the layout through
+ * `fifa96_match_formation_layout`. The native writer does not range-check the
+ * side (an OOB write); the port hardens. */
+int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
+                                   uint8_t id) {
+  if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  mr->formation[side] = id;
   return 0;
 }
 
@@ -1665,6 +1692,17 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
                                      match_run_anim_a, match_run_anim_b, match_run_anim_c);
     (void)fifa96_camera_update(&mr->render.camera, (int16_t)mr->state.frame_delta,
                                mr->render.view_class, mr->render.input_bit2);
+    /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
+     * FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/
+     * `[0x107DD8]`/pad-idle gates (legs); the engine applies the staged pose
+     * here, after the FU-71 update and before the armer, so a fed pose is
+     * observable to the same frame's armer (the engine `pos` doubles as the
+     * native 0x15774C event target per the FU-71 port mapping). view_mode 0
+     * (the fresh-match default) is the unported handler arm: a no-op, so the
+     * static tape is unaffected. */
+    (void)fifa96_camera_pose_feed(&mr->render.camera, &mr->render.yaw,
+                                  &mr->render.pitch, &mr->render.view_ratio,
+                                  &mr->render.camera_pose);
     /* FU-145 S2 (0x73B70..0x73B9B): the native camera track FUN_000736AC
      * calls the boundary handler FUN_0007131C only when the camera is out of
      * bounds (|camX| > 0x6C0 || |camZ| > 0xAB0); the armer's own
@@ -2224,6 +2262,24 @@ int fifa96_match_run_palette_install(struct fifa96_match_run *mr,
   if (!mr->render.palette_ready) return -FIFA96_ERR_STATE;
   fifa96_surface_set_palette8(s, mr->render.palette);
   return 0;
+}
+
+/* FU-148 §4.2 (S4): the per-entity translation install
+ * (FUN_00048DC0 -> FUN_000CE980 -> 0x114720). The native kit path fires when
+ * `[0x1068E0]==1` (set by the match load FUN_00048ED8, cleared by the restore
+ * FUN_00048FF4) and the entity is 0/0xB; every other entity (or an inactive
+ * kit) installs its pool slot verbatim. The engine's analog for the load flag
+ * is `render.palette_ready`; the pool is the caller-staged partition. */
+int fifa96_match_run_translation_install(struct fifa96_match_run *mr, uint32_t entity) {
+  const uint8_t *slot;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  if (entity >= 23u) return -FIFA96_ERR_INVALID;   /* the native indexes blindly */
+  if (!mr->render.palette_pool.base) return -FIFA96_ERR_STATE;  /* pool identity leg 11 */
+  slot = mr->render.palette_pool.slots23[entity];
+  if (mr->render.palette_ready && (entity == 0u || entity == 0xBu))
+    return (int)fifa96_palette_translate_kit(slot, mr->render.remap, entity);
+  return (int)fifa96_palette_translate_slot(mr->render.remap, slot);
 }
 
 /* Task 2 asset staging (FU-84/85/86). The decode chain mirrors the game's

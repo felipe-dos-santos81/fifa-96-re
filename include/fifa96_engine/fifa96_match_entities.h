@@ -293,6 +293,28 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
  * recomputes `distance`). NULL -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_place(struct fifa96_match_entity *entity);
 
+/* FU-148 §3 (S4): the formation-id consumer contract. `FUN_0006D9C4` derives
+ * `team+0x7AE = &0x11033A + id*0x1D` and walks 4 blocks of 7 bytes
+ * {role, count, slots[5]} writing each slot record's +0x90 role. The table is
+ * the static 0x11033A image data (5 rows x 0x1D, first-hand read): id 0 =
+ * blocks {1,3,5,2} (the "352ko" family), id 1 = {1,4,4,2} ("442ko"). The
+ * placement family name comes from the 0x14BFC0 `6*id` slot
+ * (`FUN_0004A6BC` builds "%s.fmt" over the 0x107370 loader name table): id 0
+ * "352ko.fmt", 1 "442ko.fmt", 2 "swko.fmt", 3 "424ko.fmt", 4 "433ko.fmt". */
+typedef struct fifa96_match_formation_block {
+  uint8_t role;
+  uint8_t count;
+  uint8_t slots[5];
+} fifa96_match_formation_block;
+
+/* Parse the pinned 0x11033A row for `id` into 4 blocks. Returns 4,
+ * -FIFA96_ERR_INVALID (NULL out or id > 4). */
+int fifa96_match_formation_layout(uint8_t id, fifa96_match_formation_block out[4]);
+
+/* The derived 0x14BFC0 `6*id` placement name (a static string literal) or NULL
+ * for id > 4. */
+const char *fifa96_match_formation_fmt_name(uint8_t id);
+
 /* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): seed each of the two
  * teams' 11 records' *target* triples from the resource-loaded formation —
  * the `FUN_0006E1D0` phase-cell placement (`fifa96_scene_formation_place`)

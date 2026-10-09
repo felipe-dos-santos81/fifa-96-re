@@ -689,3 +689,158 @@ ISO cases) re-verified §1 first-hand. Corrections and closures:
   window and nearest-neighbour at the derived `size*0xB800>>16` size in the
   zoomed one, with source pixel 0 transparent. FU-148 leg 3's "fill colour
   source" remains the open part.
+
+---
+
+## 11. Port landing (S4 presentation completion, 2026-10-09)
+
+Phase-6 wave-2 S4 (`docs/superpowers/plans/2026-10-08-fifa96-m2-phase7-recon-ahead.md`)
+landed §2–§4 as far as reachable, with the phase-7 w7-B4 draft as a
+verify-only lead. First-hand `/FIFA96.EXE` re-derivation this slice; the
+authoritative corrections to both docs are in the errata below.
+
+### 11.1 Camera pose feed (FU-96 legs 1/3, §2.1(a)/§6.2)
+
+`src/fifa96_loader/fifa96_camera.c`:
+
+| landed | native | notes |
+|---|---|---|
+| `fifa96_camera_pose_blocks[6]` | behavior table `0x108B64`, 6 x 0x54 | class `+8`, pose array `+0x4C` (image default), 8 records x 6 dwords `{x,y,z,yaw,pitch,angle}` |
+| `fifa96_camera_pose_apply` | FUN_000505D0 shared arm | writes camera `+0x10/+0x14/+0x18/+0x58/+0x5C/+0x4C` |
+| `fifa96_camera_pose_feed` arms 1/0x12 | record 0 + the selector 1/3 and class 2/4 mirrors (`FUN_0004B818`) | full arm |
+| arms 3/4 | record `{3|4}`/`{1|2}` via FUN_000504E0/FUN_00050518 | record selection + pose writes; the mode-3 replay copy/offset/z clamp and the mode-4 sub mirror are legs |
+| arm 6/0x10 | record 7 + the `sub < 0` mirror | full arm |
+| arm 8 | record 6 when `sub < 1`, else 5 (default selector) | selector 1/3 branch + mirror tails are legs |
+| arm 0x15 | fixed record `0x108714` + yaw fold + z negate | the `camera+0x3c` / `[0x108C38]` clamp is a leg |
+| default | handler call `(&0x108B80)[selector]` | legs (w7-B4 §2.8 leg 9) |
+
+Engine wire: `render.camera_pose` staging, applied once per granted frame
+after `fifa96_camera_update` and before the armer. `view_mode` is the native
+`[0x14E57C]`; the 0x51xxx view-handler writers stay unported (FU-148 leg 8),
+so a fresh match applies no pose (default 0 = the unported handler arm) and
+the tape is unchanged. `fifa96_camera_pose_feed`/`apply` are pure
+loader-level functions (block 0..5 range-checked; the native indexes blindly).
+
+Pose tables first-hand `read_memory` (all `/FIFA96.EXE`): `0x10896C` (504 B
+behavior blocks), `0x107F1C`, `0x1080FC`, `0x1082DC` (the three `+0x4C`
+arrays), `0x108714` (mode-0x15 record), block `+8`/`+0x4C` at
+`0x108A70/0x108AB0/0x108AC4/0x108B04/0x108B18/0x108B58`.
+
+### 11.2 FU-71 event bodies (§2.1(c)/§5.2)
+
+`fifa96_camera_event_set` (the derived FUN_00071C94 + FUN_00070544 subset):
+preserves the target triple (= the engine position; the native 71C94 call
+hands FUN_000700F4 the current target), resets the event state, copies the
+seed step pair (the native 6-byte vector at `0x1577B8`:
+`{bearing, step_x, step_z}`), clamps the height to `[target y, 0x640]`, runs
+the `FUN_000702F8` ramp over the pinned 400-byte `0x10F4EE` table
+(`fifa96_camera_ramp`), computes the signed fast-path velocity
+`seed / timer` (IDIV semantics), the bearing magnitude via
+`fifa96_entity_distance` (= FUN_0008DC68; the engine's `speed` = native
+`0x1577BE`), the step products and the anchor A/B sets (`0x157770/88/94`,
+header A y forced 0 as the native zeroes `0x157774`).
+
+The chain closes the S2 L1 hand-off at the producer level: the rate words the
+FU-71 integrator consumes are now produced by the ported event machine (test
+`test_camera_pan_event_chain`: seed 2000/height 0x30 -> `vel_z = 40`,
+`timer = 50` -> one granted frame lands `z = 0xB50` -> armer -> zone 1 ->
+queued situation 5 -> S3 consumer scores). The *natural* invoker stays
+absent: the 11 `FUN_00071C94` callers are the unported gameplay-row bodies
+(`0x70DD1`, `0x7A219`, `0x6FA62`, `0x75DC4`, `0x77423`, `0x7F4E7`, `0x82A6C`,
+`0x77DC6`, `0x7EFCF`, `0x7F0D1`; `0x71B8A` is the armer's own angle arm,
+which requires pre-existing event state: its `[0x1577EE].hi == 0 &&
+[0x1577BE] == 0` early return gates a cold start). Legs: FUN_000709D0
+(pan step), FUN_00070DE0 (boundary/reposition), FUN_00071DF4 (ball sub-object
+rates), the `> 0x19` atan walk (FUN_000CD474), FUN_000703E8's corner cells,
+the height `> 0x70` `[0x157A6D]` branch, the `0x15780C/0E` smoothing words,
+the tracked-player/event-rate tail ([player+0x20], table 0x10E169) and the
+sound sinks.
+
+### 11.3 Formation id (§3)
+
+Run field `formation[2]` (`[0x14C1E4]/[0x14C1E5]`, BSS 0), writer
+`fifa96_match_run_set_formation` (FUN_0008EA70: `(&0x14C1E4)[side] = id` +
+the FUN_0007412C consumer), layout `fifa96_match_formation_layout` over the
+pinned 0x11033A rows and placement names
+`fifa96_match_formation_fmt_name` (the 0x14BFC0 `6*id` slot built by
+FUN_0004A6BC over the 0x107370 loader table: id 0 `352ko.fmt`, 1 `442ko.fmt`,
+2 `swko.fmt`, 3 `424ko.fmt`, 4 `433ko.fmt`; first-hand strings 0x101A30,
+0x101A64, 0x101A8C, 0x101AB4, 0x101ADC). `match_run_formation_seed` now
+reads the run's derived id instead of the hard-coded 0. Legs: the FUN_00011620
+team-record (+0x12) producer and the FUN_0007412C layout install (no engine
+team+0x7AE/record+0x90 fields).
+
+### 11.4 Palette residual (§4.2)
+
+`src/fifa96_loader/fifa96_palette.c`: `fifa96_palette_pool_partition`
+(FUN_00046F80: 23+7+8 slots, shared `+0x2600`, 9 fixed `+0x2700..+0x2F00`),
+`fifa96_palette_translate_kit` (FUN_00048DC0 kit bands, tables 0x107287
+`{0,0,0,0,1,1,1}` / 0x10727C `{0,0,0,1,1,1,1,2,2,2,2}`) and
+`fifa96_palette_translate_slot` (FUN_000CE980 0x100-byte copy), plus the
+engine seam `fifa96_match_run_translation_install(entity)` writing
+`render.remap` (the 0x114720 analog) through a caller-staged
+`render.palette_pool`. The install is not wired into the render path: the
+pool content producer is still leg 11, so the identity remap stays the
+stand-in. Shade cube: w7-B4 §2.10's "no static consumer" re-verified (the
+`"inversetbl"` 0x20000 allocation has no static reader), so it stays a leg
+and is not part of the match contract.
+
+### 11.5 Errata (first-hand; corrects FU-148 and/or w7-B4)
+
+1. **Pose-array selection.** The `+0x48` and `+0x4C` block fields are both
+   non-NULL pointer arrays (`0x107E2C`/`0x107F1C` etc.). The head of
+   `FUN_000505D0` uses `+0x48` only when `FUN_0004B7D0() != 0 &&
+   FUN_0004B6FC() == 0`; `FUN_0004B7D0` returns `[0x1590CC + side*0x835] == 0`,
+   which is 1 for the image's zero flags, so **the image default is `+0x4C`**.
+   FU-148 §2.1(a) ("+0x48 array ... NULL in the image") and w7-B4 §2.8
+   ("`+0x4C` when the predicates are nonzero") are both wrong; the engine
+   pins the three distinct `+0x4C` arrays.
+2. **Pose-table shape.** `0x108B64[type]` is not a 6-dword preset record: it
+   is the 0x54-byte behavior block whose `+0x4C` is the pose array pointer.
+   FU-148 §6.2's "preset table (6 dwords) selected by [0x14E57C]" is a
+   shorthand; the record selection is per-arm (1/0x12 record 0, 3/4 the
+   variant records, 6/0x10 record 7, 8 records 5/6, 0x15 fixed).
+3. **Handler table.** `0x108B80` = `{0x4E834, 0x4E3A8, 0x4EC9C, 0x4DB38}`
+   (w7-B4 already corrected FU-148 §2.1(a)'s `0x4ECA8`/`0x4DB3C`).
+4. **`FUN_000504E0`/`FUN_00050518` predicate.** The "left" record (3/1) is
+   selected iff `(class == 2 && x >= 1) || (class != 2 && x < 0)`; the
+   decompiler's conjunction collapses to that (not merely the sign of x).
+5. **Event height cell.** The height is the word at `0x1577F0` (the high
+   word of the dword `0x1577EE`, which also holds the cursor in its low
+   word) — w7-B4 §2.9's "`[0x1577EE].hi` = height" and the FU-71
+   `event_param` mapping agree once the word split is read.
+6. **FUN_00070544 param.** The ramp's EDX/EAX passthrough is the caller's
+   register in `FUN_00071C94` (a decompiler artifact; `FUN_000709D0` passes
+   0). The port fixes param 0 (the NEG F6 path: `F6 = F2 - ramp(h - ty)`).
+7. **Pool floor.** `FUN_00046F80` writes up to `base+0x2FFF` (shared table
+   `+0x2600`, 9 fixed blocks `+0x2700..+0x2F00`), floor **0x3000**; FU-148
+   §4.2's "base+0x2800..base+0x3000" is off by one slot and w7-B4 §2.10's
+   "ends at base+0x3600" is wrong.
+8. **Pose-feed ordering.** The native driver FUN_0004D2D4 runs from the draw
+   loop (FUN_000495B0), after the frame-body armer; the engine applies the
+   staged pose at the frame-body camera site so a fed pose is observable to
+   the same frame's armer (the engine `pos` doubles as the native 0x15774C
+   event target under the accepted FU-71 mapping). The `[0x107DD8]`, pad-idle
+   (FUN_00037AE4) and replay gates stay legs.
+
+### 11.6 Numbered legs (S4 additions)
+
+* **OL-T11-76 (camera handlers / FU-148 leg 8 + w7-B4 leg 9)**: the four
+  `0x108B80` handler bodies (`0x4E834`, `0x4E3A8`, `0x4EC9C`, `0x4DB38`) and
+  the default-arm invocation; the horizon/plane globals
+  `0x14E4D0/D4/D8/DC`.
+* **OL-T11-77 (view-mode writer / FU-148 leg 8)**: the 0x51xxx view handlers
+  that set `[0x14E57C]`; the engine stages `render.camera_pose.view_mode`.
+* **OL-T11-78 (+0x48 alternate pose arrays)**: the `[0x1590CC]` team-flag /
+  `FUN_0004B6FC` predicate and the second pose arrays.
+* **OL-T11-79 (event-machine bodies)**: `FUN_000709D0`, `FUN_00070DE0`,
+  `FUN_00071DF4`, the `> 0x19` atan walk (`FUN_000CD474`/table 0x114E04),
+  `FUN_000703E8`, the `> 0x70` anchor-time branch, the smoothing words and
+  the tracked-player/event-rate tail.
+* **OL-T11-80 (palette pool identity / leg 11 carried)**: the loaded file
+  that fills `[0x107290]` and the pool's rounded size (request 0x34E8,
+  partition floor 0x3000).
+* **OL-T11-81 (formation team-record producer)**: FUN_00011620's team block
+  `0x143018+side*0x49` +0x12 source and the FUN_0007412C layout install.
+* **OL-T11-82 (shade cube / leg 11)**: no static consumer of the
+  `"inversetbl"` cube (re-verified); stays out of the match contract.

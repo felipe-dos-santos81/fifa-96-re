@@ -1638,6 +1638,171 @@ static void test_screen_advance_ring(void) {
   drop_fixture(f);
 }
 
+/* FU-148 S4: the FUN_000505D0 pose feed wired into the granted frame. Mode
+ * 6/0x10 selects record 7 of the default behavior block (the +0x4C array
+ * 0x107F1C, class 3): {x,y,z} = {-83, 320, 3631}; |z|_w > 0xB20 and the
+ * camera lands out of bounds, so the frame's armer fires on the fed pose (the
+ * arming gate is the native word-truncated |camZ| > 0xB20). The classifier
+ * reports zone 0 (|z| >= 0xB90), so the scan takes the w7-b1 corner leg. */
+static void test_view_pose_feed_arms_camera(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);                       /* settle the kickoff machine */
+  assert(mr.situation_pending == 0);
+  assert(mr.render.camera_pose.view_mode == 0); /* the fresh-match default */
+
+  mr.render.camera_pose.view_mode = 0x10;
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_x == -83);
+  assert(mr.render.camera.pos_y == 320);
+  assert(mr.render.camera.pos_z == 3631);
+  assert(mr.render.yaw == 33732 && mr.render.pitch == 2203);
+  assert(mr.render.view_ratio == 3712);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
+  assert(mr.goal_zone == 0);
+  assert(mr.situation_pending == 0);            /* corner arm is a w7-b1 leg */
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-148 S4 / FU-145 S2 L1 hand-off: the real pan producer
+ * (`fifa96_camera_event_set` = FUN_00071C94 + FUN_00070544) drives the FU-71
+ * integrator past the arming bounds. The camera starts at z=0xB00; the event
+ * seed step 2000 with height 0x30 gives vel_z = 40 and timer 50, so one
+ * granted delta-2 frame lands z=0xB50 — inside the mouth band
+ * (0xB10..0xB8F), zone 1 — and the same frame's scan queues situation 5 for
+ * side 0. The next frame's scheduler consumes it through the S3 consumer
+ * chain: score 1-0. This is the S2 pan-source closure: the velocity words are
+ * produced by the ported event machine, not poked by the fixture. The natural
+ * invoker remains absent (the 11 FUN_00071C94 callers are unported gameplay
+ * rows; the armer's own angle arm requires pre-existing event state), so the
+ * chain is producer-real but test-prompted. */
+static void test_camera_pan_event_chain(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(mr.situation_pending == 0);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 2000, 0x30) == FIFA96_OK);
+  assert(mr.render.camera.vel_z == 40 && mr.render.camera.timer == 50);
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_z == 0xB50);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_z == 0xB50);
+  assert(mr.goal_zone == 1);
+  assert(mr.situation_id == 5 && mr.situation_pending == 1);
+  assert(mr.score[0] == 0);
+
+  one_granted_frame(&mr);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);
+  assert(mr.score_last_side == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-148 §3 (S4): the formation-id producer. FUN_0008EA70 writes
+ * `[0x14C1E4+side]`; the match-init copy (FUN_00011620) sources the team
+ * record +0x12 byte, and the placement family comes from the 0x14BFC0
+ * `6*id` slot (`FUN_0004A6BC` builds the names from the loader table
+ * 0x107370: id 0 "352ko.fmt", 1 "442ko.fmt", 2 "swko.fmt", 3 "424ko.fmt",
+ * 4 "433ko.fmt"). FUN_0006D9C4 indexes the layout row 0x11033A + id*0x1D. */
+static void test_formation_producer(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.formation[0] == 0 && mr.formation[1] == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.formation[0] == 0 && mr.formation[1] == 0);
+  assert(fifa96_match_run_set_formation(&mr, 0, 1) == 0);
+  assert(mr.formation[0] == 1);
+  assert(fifa96_match_run_set_formation(&mr, 1, 4) == 0);
+  assert(mr.formation[1] == 4);
+  assert(fifa96_match_run_set_formation(&mr, 2, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_formation(NULL, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_end(&mr) == 0);
+  assert(fifa96_match_run_set_formation(&mr, 0, 0) == -FIFA96_ERR_STATE);
+  drop_fixture(f);
+
+  assert(strcmp(fifa96_match_formation_fmt_name(0), "352ko.fmt") == 0);
+  assert(strcmp(fifa96_match_formation_fmt_name(1), "442ko.fmt") == 0);
+  assert(strcmp(fifa96_match_formation_fmt_name(2), "swko.fmt") == 0);
+  assert(strcmp(fifa96_match_formation_fmt_name(3), "424ko.fmt") == 0);
+  assert(strcmp(fifa96_match_formation_fmt_name(4), "433ko.fmt") == 0);
+  assert(fifa96_match_formation_fmt_name(5) == NULL);
+
+  fifa96_match_formation_block blocks[4];
+  assert(fifa96_match_formation_layout(0, blocks) == 4);
+  assert(blocks[0].role == 0 && blocks[0].count == 1 && blocks[0].slots[0] == 0);
+  assert(blocks[1].role == 1 && blocks[1].count == 3);
+  assert(blocks[1].slots[0] == 1 && blocks[1].slots[1] == 2 && blocks[1].slots[2] == 3);
+  assert(blocks[2].role == 2 && blocks[2].count == 5);
+  assert(blocks[2].slots[0] == 4 && blocks[2].slots[1] == 5 && blocks[2].slots[2] == 6 &&
+         blocks[2].slots[3] == 7 && blocks[2].slots[4] == 8);
+  assert(blocks[3].role == 3 && blocks[3].count == 2);
+  assert(blocks[3].slots[0] == 9 && blocks[3].slots[1] == 10);
+  assert(fifa96_match_formation_layout(1, blocks) == 4);
+  assert(blocks[1].count == 4 && blocks[1].slots[3] == 4);
+  assert(blocks[2].count == 4 && blocks[2].slots[0] == 5 && blocks[2].slots[3] == 8);
+  assert(fifa96_match_formation_layout(5, blocks) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_formation_layout(0, NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-148 §4.2 (S4): the per-entity translation install through the pool seam.
+ * With a staged pool (partition of a caller buffer), the non-kit path copies
+ * the entity slot verbatim (0xCE980's 0x40 dwords); the kit path
+ * ([0x1068E0]==1 analog = palette_ready, entity 0/0xB) applies the band
+ * translation. */
+static void test_translation_install(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  static uint8_t pool[0x3000];
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (size_t i = 0; i < sizeof pool; i++) pool[i] = (uint8_t)(i * 7u);
+  assert(fifa96_palette_pool_partition(pool, sizeof pool, &mr.render.palette_pool) ==
+         FIFA96_OK);
+
+  assert(fifa96_match_run_translation_install(&mr, 1) == 0);
+  assert(memcmp(mr.render.remap, pool + 0x100, 256) == 0);
+
+  mr.render.palette_ready = 1;
+  pool[0] = 0x94;
+  pool[1] = 0x9B;
+  pool[2] = 0x9A;
+  pool[3] = 0x93;
+  assert(fifa96_match_run_translation_install(&mr, 0) == 0);
+  assert(mr.render.remap[0] == 0xA1);       /* table1[0] + 0xA1 */
+  assert(mr.render.remap[1] == 0xA3);       /* table2[0] + 0xA3 */
+  assert(mr.render.remap[2] == 0xA2);       /* table1[6] + 0xA1 */
+  assert(mr.render.remap[3] == 0x93);       /* outside the bands */
+  assert(fifa96_match_run_translation_install(&mr, 23) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_translation_install(NULL, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_end(&mr) == 0);
+  assert(fifa96_match_run_translation_install(&mr, 0) == -FIFA96_ERR_STATE);
+  {
+    /* a fresh live run without a staged pool: the pool identity is leg 11 */
+    struct fifa96_match_run bare;
+    fifa96_match_run_init(&bare);
+    assert(fifa96_match_run_begin(&bare, f.engine, 0) == 0);
+    assert(fifa96_match_run_translation_install(&bare, 0) == -FIFA96_ERR_STATE);
+    assert(fifa96_match_run_end(&bare) == 0);
+  }
+  drop_fixture(f);
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -1675,6 +1840,10 @@ int main(void) {
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();
+  test_view_pose_feed_arms_camera();
+  test_camera_pan_event_chain();
+  test_formation_producer();
+  test_translation_install();
   puts("test_engine_match_frame OK");
   return 0;
 }
