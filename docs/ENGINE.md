@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-14/80 action rows wired, the derived FU-143 phase driver wired into the run
+15/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
@@ -159,10 +159,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **14/80 rows wired** — `00`, `01`, `04`, `06`,
+- Action dispatch (FU-137): **15/80 rows wired** — `00`, `01`, `04`, `06`,
   `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
-  G3; `01` is the M2 playable-match Task 2 kickoff taker) and
-  `26`, `28`, `2A` (cluster G); dispatch results 65 UNSUP / 14 OK / 1 NOTF.
+  G3; `01` is the M2 playable-match Task 2 kickoff taker), `26`, `28`, `2A`
+  (cluster G) and `1D` (FU-151 P3 close-down); dispatch results
+  64 UNSUP / 15 OK / 1 NOTF.
 - **Interactive smoke (phase-6 S5 re-run, this host 2026-10-09; the
   follow-up-5 T4 run first verified the walkthrough and the follow-up-4 G4 run
   first verified Task 13):** `make game` window opens (960×720
@@ -766,7 +767,55 @@ the build also produces the windowed `fifa96` target (`make game`).
   gates, the `[0x158882]` producer, and the **L4 carry-in**: a live session's
   sit 9/0xA dispatcher queue path (ids 1/2 / 0xA) has no traced consumer yet,
   so the reachable FK chain is the native direct/pending path).
-- **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
+- **M2 phase-7 P3 (keeper state machines + AI mover, FU-151; 2026-10-09).**
+  Landed from the frozen FU-151 slice (first-hand re-verification of the
+  0x79C50/0x8DDE0/0x8C33C/0x7997C/0x7F374/0x761F2 bodies and the whole
+  0x7550C/0x74EB0 windows during the port). Loader: the **row-1E ten-stage
+  machine** `fifa96_keeper_claim_step` (`0x7550C..0x7612F`, stage table
+  `0x754E4`; claim/hold/outlet/release/restart with the native fall-through
+  chain 0->1->2/3->4->5->6->7->8->9 and the 0x760DF common exit gauge) and the
+  **row-1D five-stage close-down** `fifa96_keeper_closedown_step`
+  (`0x74EB0..0x754E1`, table `0x74E9C`; the 0x30/0x31 clearance staging, the
+  0x3C0 sine rotation, the shared restart tail). Effects are request bits
+  (place/helper/controlled/install/reset/situation + the leg sinks); the
+  engine binder (`fifa96_match_action_1D`/`_1E`) stages the run's keeper
+  process cells (`keeper_cam_*` = the 0x15774C focus stand-in, `_reset_*` =
+  0x157A77, `keeper_vec_*` = 0x157C30, `_saved_*` = 0x157C36, `_gauge` =
+  0x157C42, `_latch_157ab2`) and applies them, with the sector (+0x8E)
+  write-back on `record.type` and the action code (+0x91) on `record.code`.
+  `+0x44` is modelled as `entity/record.row44` (producer unported, a leg).
+  AI seam: `fifa96_entity_face` (= `FUN_00079C50`, facing word + octant),
+  `fifa96_match_entities_team_pick` (= `FUN_0008DDE0` unsigned min-`+0x6B`),
+  `fifa96_match_entities_reset_lane` (= `FUN_0008C33C` + derived
+  `FUN_0007997C`; per-record reset + `0x795B4` lane refresh + forced install,
+  then `target`/`tracker7c7` = the pick and `second`/`timer7cb` cleared), the
+  0x10F37C `{(0,0,0x990),(0,0,-0xA90)}` intercept constants staged in
+  `match_run_entity_frame`, and `team.tracker7c7` (renamed from
+  `camera_nearest`, the FU-147 S1 +0x7C7 tracker). **Errata application
+  (FU-151 §3.5 erratum 1):** audited findings — the engine's action-code
+  gates read +0x91 correctly (`record.code`, pool `code`,
+  `outfield_type_gate(s->code)`, the row-07/0F kick staging per FU-139 §9.7);
+  the +0x8E byte is correctly the face octant (`entity.type`, the legacy
+  alias `actor_type`, OL-83 naming); **two wrong-field reads found in unwired
+  loader bodies and fixed**: `fifa96_action_carrier_arm`'s 0x7F374 tail gate
+  now reads a new `carrier.code` (+0x91) instead of `type8`, and
+  `fifa96_keeper_input_decide`/`fifa96_keeper_arm_step`'s 0x761D1/0x765A7
+  gates now read `input.code` / the `code` parameter (the row-1F bodies stay
+  unwired, so no tape effect; tests pin both). **Both goldens byte-identical,
+  no re-pin**: the M2 tape (ISO present) passes against the committed
+  `tests/golden/engine/m2-frames.txt` unchanged (the keeper rows are not
+  dispatched in the natural tape and the forced window bypasses them; the
+  phase-2 intercept constants did not move the pinned frames); M1 unmoved.
+  `make check` 108/108 (107 + `test_keeper_machines`; +ASan/UBSan on the
+  engine suites). Carried legs: FU-151 §5 legs 1-15, notably the code
+  0x1D/0x1E install sites (computed), the stage-3 UI/audio calls, the
+  `FUN_0006E8E8` arms, `FUN_0008D098`, the `0x8922C` body, the `0x7D6F8`
+  container, the sector consumers, phase-0xA semantics and the
+  `[0x157820]/[0x157822]` consumers; new in the port: the `[rec+0x1C]`
+  reset-target virtual (reset-lane stand-in keeps the live position), the
+  0x157C5E per-side table / `cam_off_z`, and the `0x10F334/0x10F33C` offsets
+  as caller inputs.
+- **Unwired rows (65/80).** 64 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 26
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
   `27`/`29`/`2C` (ported bodies, no installer entry) and the dead entry `2B`;

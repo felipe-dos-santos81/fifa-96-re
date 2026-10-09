@@ -169,6 +169,21 @@ static int32_t fifa96_entity_abs_word(int32_t value) {
   return value;
 }
 
+/* FU-151 §2.9 (first-hand `0x79C50` this slice): TEST DX,DX / TEST BX,BX both
+ * zero -> `MOVSX AX, byte[rec+0x8E]` (the stored sector comes back); else
+ * `CALL 0xCD474` -> `word[rec+0x7D] = AX`, then the dword re-read
+ * `[rec+0x7B]>>16` (= the just-written `+0x7D`), `+0x40`, `&0x3FF`, `>>7` ->
+ * `byte[rec+0x8E]`. */
+int fifa96_entity_face(int32_t dx, int32_t dz, int32_t *face7d, uint8_t *sector) {
+  int32_t angle = 0;
+  if (!face7d || !sector) return -FIFA96_ERR_INVALID;
+  if (dx == 0 && dz == 0) return FIFA96_OK;
+  if (fifa96_entity_angle(dx, dz, &angle) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+  *face7d = angle;
+  *sector = (uint8_t)(((uint32_t)(angle + 0x40) & 0x3FFu) >> 7u);
+  return FIFA96_OK;
+}
+
 int32_t fifa96_entity_distance(int32_t dx, int32_t dy) {
   int32_t a = fifa96_entity_abs_word(dx);
   int32_t b = fifa96_entity_abs_word(dy);

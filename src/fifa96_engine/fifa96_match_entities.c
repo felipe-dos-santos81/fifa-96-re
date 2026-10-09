@@ -33,7 +33,7 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
     team->chosen = FIFA96_MATCH_ENTITY_NONE;
     team->intercept = FIFA96_MATCH_ENTITY_NONE;
     team->chosen831 = FIFA96_MATCH_ENTITY_NONE;
-    team->camera_nearest = FIFA96_MATCH_ENTITY_NONE;
+    team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
       struct fifa96_match_entity *e = &team->records[i];
       e->team = (uint8_t)t;
@@ -123,6 +123,77 @@ int fifa96_match_entities_team_select(struct fifa96_match_entities *pool, uint32
   pool->team[team].target =
       index < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, index);
   return index;
+}
+
+/* FU-151 §2.8: `FUN_0008DDE0` — the ranked unsigned-lane pick. */
+int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t team,
+                                    int32_t skip) {
+  uint16_t best = 0xFFFFu;
+  int index = FIFA96_MATCH_ENTITY_NONE;
+  int16_t skip16 = (int16_t)skip;   /* 0x8DDEF MOVSX EBX,DI */
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &pool->team[team].records[i];
+    uint16_t lane;
+    if ((int32_t)i == (int32_t)skip16) continue;               /* 0x8DDF4 */
+    if (e->skip_9a != 0 || e->skip_98 != 0) continue;          /* 0x8DDFD/0x8DE06 */
+    lane = (uint16_t)e->lane_x;                                /* word +0x6B */
+    if (lane < best) {                                         /* 0x8DE0F JNC */
+      best = lane;
+      index = (int)i;
+    }
+  }
+  return index;
+}
+
+/* FU-151 §2.8/§3.4: `FUN_0008C33C` + the derived `FUN_0007997C` reset. */
+int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
+                                     int32_t cam_x, int32_t cam_z) {
+  struct fifa96_match_team *t;
+  int pick;
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  t = &pool->team[team];
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &t->records[i];
+    int16_t cam_dx;
+    int16_t cam_dz;
+    /* 0x7997C derived reset: the post-commit record bytes (0x799da..0x79a65)
+     * zero the velocity half-words/timers and the code/stage/ball/exclusion
+     * bytes. The native's virtual `[rec+0x1C]` target restore and the
+     * 0x79B6C commit run before those writes; the virtual body is unported,
+     * so the derived subset keeps the live position/target (numbered leg,
+     * FU-151 §3.4) and only applies the bounded resets. */
+    e->vel75 = 0;             /* word +0x75 */
+    e->timer81 = 0;           /* word +0x81 */
+    e->timer89 = 0;           /* dword +0x89 */
+    e->code = 0;              /* byte +0x91 */
+    e->vel73 = e->vel75;      /* word +0x73 = +0x75 (0x79a21) */
+    e->speed71 = e->vel75;    /* word +0x71 = +0x75 (0x79a25) */
+    e->stage92 = 0;           /* +0x92 (0x79a2c) */
+    e->timer7b = e->timer79;  /* word +0x7B := +0x79 (0x79a86) */
+    e->timer93 = 0;           /* +0x93 (0x79a51) */
+    e->skip_98 = 0;           /* +0x98 (0x79a5f) */
+    e->has_ball = 0;          /* +0x9B (0x79a6c) */
+    /* 0x799d5 0x795B4(rec+0x59, 0x15774C, &rec+0x6B): the lane refresh from
+     * the camera focus (the S1 track's word math, inlined to keep this module
+     * a leaf over entity_update). */
+    cam_dx = (int16_t)((uint16_t)cam_x - (uint16_t)e->pos_x);
+    cam_dz = (int16_t)((uint16_t)cam_z - (uint16_t)e->pos_z);
+    e->lane_z = cam_dx;
+    e->cam_dz6f = cam_dz;
+    e->lane_x = (int16_t)fifa96_entity_distance((int32_t)cam_dx, (int32_t)cam_dz);
+    e->bound = e->lane_x;                                       /* 0x79a19 */
+    /* 0x79a8e..: +0x9A not set -> install `active ? 3 : 0x19` (0x7D9A4). */
+    if (e->skip_9a == 0)
+      (void)fifa96_match_entities_install(e, pool->phase,
+                                          e->active != 0 ? 3u : 0x19u, 0);
+  }
+  t->timer7cb = 0;                                              /* 0x8C362 */
+  pick = fifa96_match_entities_team_pick(pool, team, -1);       /* 0x8C36C */
+  t->second = FIFA96_MATCH_ENTITY_NONE;                         /* 0x8C371 (+0x7B6=0) */
+  t->target = pick < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, (uint32_t)pick);
+  t->tracker7c7 = t->target;                                    /* 0x8C37B/0x8C387 */
+  return FIFA96_OK;
 }
 
 /* M2 interactive Task 1 / FU-70 §1.3: the derived `FUN_0008DB6C` free-record

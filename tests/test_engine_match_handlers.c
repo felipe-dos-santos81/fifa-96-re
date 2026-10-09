@@ -90,7 +90,7 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
@@ -671,6 +671,92 @@ static void test_action_1E_stage3_possession_flip(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.state.phase == 1u);
   assert(f.mr.record.install == 0);
+  drop_fixture(&f);
+}
+
+/* FU-151 P3: row 1E's ten-stage machine through the engine binder. Stage 5
+ * with row 0x45 / frame 3 releases the ball and falls through 6/7 (ball
+ * staging + situation 0xB)/8/9 to the common exit; the stage-7 restart writes
+ * the live phase 2. */
+static void test_action_1E_machine_release_chain(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;
+  f.mr.record.stage92 = 5;
+  f.mr.record.has_ball = 1;
+  f.mr.record.anim_id = 0x45;       /* OL-80 live row: byte[[rec+0x28]] */
+  f.mr.record.frame = 3;
+  f.mr.record.row44 = 1;
+  f.mr.record.place_offset_x = 1;
+  f.mr.record.place_offset_z = 2;
+  f.mr.state.phase = 1;
+  f.mr.phase_machine.state = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.has_ball == 0);            /* stage 5 release */
+  assert(f.mr.state.phase == 2u);               /* stage 7 situation 0xB */
+  assert(f.mr.phase_machine.state == 2u);
+  assert(f.mr.record.stage92 == 9);             /* 5->6->7->8->9 */
+  assert(f.mr.record.install == 0);             /* no install on this path */
+  assert(f.mr.keeper_latch_157ab2 == 0);        /* stage 7 clears the latch */
+  assert(f.mr.record.timer7b == 3);             /* the head write */
+
+  /* stage 4 with no slot clears the outlet vector and the band selects the
+   * 0x44 event; the chain reaches stage 8 and exits on row44. */
+  f.mr.phase_machine.state = 2;
+  f.mr.state.phase = 1;
+  f.mr.record.stage92 = 4;
+  f.mr.record.has_ball = 1;
+  f.mr.record.anim_id = 0;
+  f.mr.record.frame = 0;
+  f.mr.record.row44 = 0;
+  f.mr.keeper_reset_x = 0x300;
+  f.mr.keeper_reset_z = 0;
+  f.mr.keeper_latch_157ab2 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 8);
+  assert(f.mr.record.has_ball == 1);            /* no release at row 0 */
+  drop_fixture(&f);
+}
+
+/* FU-151 P3: row 1D's five-stage close-down through the engine binder. Stage 0
+ * (row44 + timer gate) places/commits and advances; stage 3 with no slot
+ * clears the outlet vector, runs situation 0xB and resets the record. */
+static void test_action_1D_runs_closedown(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.row44 = 1;
+  f.mr.record.timer89 = 0x1E;
+  f.mr.keeper_cam_x = 10;
+  f.mr.keeper_cam_y = 20;
+  f.mr.keeper_cam_z = 30;
+  f.mr.state.phase = 1;
+  f.mr.phase_machine.state = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1D) == FIFA96_OK);
+  assert(f.mr.record.place_valid == 1);
+  assert(f.mr.record.place_x == 10 && f.mr.record.place_y == 20 &&
+         f.mr.record.place_z == 30);
+  assert(f.mr.record.controlled == 1);         /* stage < 3 actor bind */
+  assert(f.mr.record.helper_request == 1);     /* stage < 3 slot merge */
+  assert(f.mr.record.stage92 == 1);            /* stage 0 -> stage 1 */
+  assert(f.mr.keeper_latch_157ab2 == 1);
+
+  /* stage 3 no slot: situation 0xB -> phase 2 and the 0x7DAB4 reset. */
+  f.mr.state.phase = 1;
+  f.mr.phase_machine.state = 1;
+  f.mr.record.stage92 = 3;
+  f.mr.record.has_slot = 0;
+  f.mr.record.row44 = 0;
+  f.mr.record.helper_request = 0;
+  f.mr.record.controlled = 0;
+  f.mr.record.place_valid = 0;
+  f.mr.keeper_latch_157ab2 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1D) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);
+  assert(f.mr.phase_machine.state == 2u);
+  assert(f.mr.record.install == 0);            /* 1D installs no code */
+  assert(f.mr.record.stage92 == 4);            /* stage 3 -> 4 then the tail */
   drop_fixture(&f);
 }
 
@@ -1418,6 +1504,8 @@ int main(void) {
   test_action_04_and_08_wired();
   test_action_04_stages_lane_fields();
   test_action_1E_stage3_possession_flip();
+  test_action_1E_machine_release_chain();
+  test_action_1D_runs_closedown();
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
   test_action_0F_runs_body();

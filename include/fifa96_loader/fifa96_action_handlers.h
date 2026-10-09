@@ -285,7 +285,12 @@ typedef struct fifa96_action_carrier {
   uint8_t airborne;       /* dword +0x5D != 0 */
   uint8_t has_slot;       /* +0x20 != 0 */
   uint8_t slot_live;      /* stage 2: word[slot+6] != 0 */
-  uint8_t type8;          /* +0x8B >> 24 */
+  uint8_t type8;          /* +0x8B >> 24 = byte +0x8E (the facing octant the
+                           * 0x10F334/0x10F33C dribble tables index) */
+  uint8_t code;           /* byte +0x91 action code (FU-151 erratum: the
+                           * 0x7F374 `MOV EAX,[EBP+0x8E]; SAR 0x18; CMP 5`
+                           * tail gate indexes the *action code*, not the
+                           * +0x8E octant) */
   uint8_t event_flag44;   /* +0x44 */
   uint8_t is_team_target; /* rec == [[rec]+0x7B2] */
   uint8_t facing;         /* +0x8E low byte (in/out: the stage-2 face) */

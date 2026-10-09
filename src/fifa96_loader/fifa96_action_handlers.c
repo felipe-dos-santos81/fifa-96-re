@@ -506,10 +506,12 @@ fifa96_err_t fifa96_action_carrier_arm(fifa96_action_possession *state,
         out->slot_merge = 1;
       } else {
         /* 0x7F361..0x7F36F: FUN_0007F7E0 (unported); 0x7F374..0x7F380 gates
-         * the continuation on `[rec+0x8E]>>24 == 5`, so only that case
-         * reaches the dir-byte writes/tail. */
+         * the continuation on `[rec+0x8E]>>24 == 5` = the byte at **+0x91**
+         * (FU-151 erratum 1/§2.9: the dword load at +0x8E shifted 24 reads
+         * the action code the installer writes), so only that case reaches
+         * the dir-byte writes/tail. */
         out->fallback = 1;
-        if (carrier->type8 == 5u) out->tail = 1;
+        if (carrier->code == 5u) out->tail = 1;
       }
     }
     return FIFA96_OK;

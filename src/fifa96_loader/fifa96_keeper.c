@@ -1,5 +1,7 @@
 #include "fifa96_loader/fifa96_keeper.h"
 
+#include <string.h>
+
 int fifa96_dispatch_begin(fifa96_dispatch_iter *iter, const fifa96_dispatch_team *teams,
                           uint32_t team_count) {
   uint32_t i;
@@ -181,7 +183,7 @@ fifa96_err_t fifa96_keeper_dive_target(const fifa96_keeper_point *pos, uint32_t 
 
 fifa96_err_t fifa96_keeper_arm_step(uint8_t stage, uint8_t event_flag, uint8_t ball_actor,
                                     uint8_t ball_flag, uint8_t has_slot, uint8_t slot_pressed,
-                                    uint8_t type8, uint8_t phase_latch,
+                                    uint8_t code, uint8_t phase_latch,
                                     fifa96_keeper_arm_out *out) {
   if (!out) return -FIFA96_ERR_INVALID;
   out->stage = stage;
@@ -218,7 +220,7 @@ fifa96_err_t fifa96_keeper_arm_step(uint8_t stage, uint8_t event_flag, uint8_t b
   out->stage = 3;
   out->copy_pos = 1;
   out->run_handler = (has_slot != 0 && slot_pressed != 0) ? 1 : 0;
-  out->reset = (type8 == 0x1F && phase_latch == 0) ? 1 : 0;
+  out->reset = (code == 0x1F && phase_latch == 0) ? 1 : 0;
   return FIFA96_OK;
 }
 
@@ -356,8 +358,8 @@ fifa96_err_t fifa96_keeper_input_decide(const fifa96_keeper_input *in,
     if (in->human_phase != 1 || in->event_flag == 0) return FIFA96_OK;
     inside = 1;
   }
-  if (in->type8 != 0x1F && (in->type_gate & 1u) == 0) return FIFA96_OK;
-  if (in->is_actor != 0 || in->type8 == 5) return FIFA96_OK;
+  if (in->code != 0x1F && (in->type_gate & 1u) == 0) return FIFA96_OK;
+  if (in->is_actor != 0 || in->code == 5) return FIFA96_OK;
   if (inside == 0) {
     if (in->lane > 0x60) return FIFA96_OK;
     out->install = 4;
@@ -397,5 +399,533 @@ fifa96_err_t fifa96_keeper_input_decide(const fifa96_keeper_input *in,
     out->install = (uint8_t)(0x1B + (dist >= 0x70 ? 1 : 0));
   }
   out->invoke = 1;
+  return FIFA96_OK;
+}
+
+/* ===== FU-151 §Port contract item 1 — row-1E ten-stage machine ============= */
+
+/* The `0x8DCD4`/`0x795B4` word-difference triple ({band,dx,dz}) the machine's
+ * 0x157C30/0x158738 staging blocks use. */
+static void keeper_stage_vec(const fifa96_keeper_point *from, const fifa96_keeper_point *to,
+                             int16_t *band, int16_t *dx, int16_t *dz) {
+  fifa96_keeper_vec v;
+  (void)fifa96_keeper_vec_from_delta(from, to, &v);
+  *band = v.distance;
+  *dx = v.dx;
+  *dz = v.dz;
+}
+
+/* `FUN_0008DC50` (0x8DC50..0x8DC67, first-hand): the truncating word shift
+ * (the FU-140 `keeper_trunc_shift` above — non-negative takes the sign-extended
+ * SAR, negative takes NEG/SAR/NEG, i.e. truncation toward zero). */
+
+/* The `0x760DF` common exit: the latch camera request (0x4C31C) and the gauge
+ * accumulation (`0x8DCD4(rec+0x59, 0x157C36)` -> `word[0x157C42] += dist`,
+ * saved point := rec pos). */
+static void keeper_claim_exit(fifa96_keeper_claim *s, fifa96_keeper_claim_out *out) {
+  fifa96_keeper_point from;
+  fifa96_keeper_point to;
+  int16_t band = 0;
+  int16_t dx = 0;
+  int16_t dz = 0;
+  if (s->latch_157ab2 != 0) out->ui |= 0x400u;    /* 0x760ee CALL 0x4C31C */
+  from.x = s->pos.x;
+  from.y = 0;
+  from.z = s->pos.z;
+  to.x = s->saved_x;
+  to.y = 0;
+  to.z = s->saved_z;
+  keeper_stage_vec(&from, &to, &band, &dx, &dz);
+  s->gauge = (int16_t)((uint16_t)s->gauge + (uint16_t)band);  /* 0x7611d */
+  s->saved_x = (int16_t)s->pos.x;
+  s->saved_z = (int16_t)s->pos.z;
+}
+
+fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
+                                      fifa96_keeper_claim_out *out) {
+  int stage;
+  int flag8 = 0;
+  if (!s || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  stage = (int)s->stage92;
+  /* Head 0x7551A..0x755CF: helper gate, then the claim while stage < 3 and
+   * the record has no ball. */
+  if (stage < 6 && s->has_slot == 0) out->helper = 1;              /* 0x75536 */
+  if (stage < 3 && s->has_ball == 0) {                             /* 0x75547/0x75553 */
+    s->cam_x = s->pos.x + (int32_t)s->offset_x * 0x10;             /* 0x75565..0x75579 */
+    s->cam_y = s->pos.y + 0x38;                                    /* 0x7559b */
+    s->cam_z = s->pos.z + (int32_t)s->offset_z * 0x10;             /* 0x7557f..0x75593 */
+    out->place = 1;                                                /* 0x755c7 */
+    out->place_x = s->cam_x;
+    out->place_y = s->cam_y;
+    out->place_z = s->cam_z;
+    s->has_ball = 1;                                               /* 0x755c0 */
+    out->claimed = 1;
+    out->controlled = 1;                                           /* 0x755cf */
+  }
+  s->timer7b = 3;                                                  /* 0x755d4 */
+  s->timer89 += (int32_t)s->delta;                                 /* 0x755e2..0x755f6 */
+  stage = (int)s->stage92;
+  if (stage > 9) goto claim_exit;                                  /* 0x755fe JA */
+  if (stage == 0) {                                                /* 0x75611 */
+    if (s->row44 == 0) return FIFA96_OK;                           /* 0x75615 -> 0x76127 */
+    s->saved_x = (int16_t)s->pos.x;                                /* 0x75628 */
+    s->saved_z = (int16_t)s->pos.z;
+    s->gauge = 0;                                                  /* 0x7562b */
+    s->latch_157ab2 = 1;                                           /* 0x75634 */
+    s->timer89 = 0;                                                /* 0x75648 */
+    s->stage92 = 1;                                                /* 0x75654 */
+    stage = 1;
+  }
+  if (stage == 1) {                                                /* 0x7565a */
+    if (s->timer89 > 2) out->ran = 1;                              /* 0x75666 +0x9E */
+    s->target_x = s->pos.x;                                        /* 0x75679 rec+0x4D := pos */
+    s->target_z = s->pos.z;
+    s->cam_x = s->pos.x;                                           /* 0x7568a 0x15774C := pos */
+    s->cam_y = s->pos.y;
+    s->cam_z = s->pos.z;
+    s->cam_z += (s->side == 0) ? 0x20 : -0x20;                     /* 0x7569f/0x756aa */
+    {
+      int32_t face = 0;                                            /* 0x756d0 face(-pos.x,-pos.z) */
+      (void)fifa96_entity_face(-(int32_t)(int16_t)s->pos.x,
+                               -(int32_t)(int16_t)s->pos.z, &face, &s->sector);
+    }
+    out->event = 0x27;                                             /* 0x756e8 */
+    if (s->timer89 < 0x3C) goto claim_exit;                        /* 0x756f7 */
+    s->reset_x = 0;                                                /* 0x75702 [0x10F328]=(0,0,0) */
+    s->reset_y = 0;
+    s->reset_z = 0;
+    if (s->has_slot != 0) {                                        /* 0x7570f */
+      stage = 3;
+    } else {
+      uint16_t roll = 0;                                           /* 0x75715 FUN_00092AC8 */
+      int bit = 0;
+      if (s->rng != NULL && fifa96_rng_step(s->rng, &roll) == FIFA96_OK) bit = roll & 1;
+      if (bit == 0) {                                              /* 0x7571c JZ 0x75795 */
+        stage = 3;
+      } else {
+        int32_t face = 0;                                          /* 0x7573c */
+        (void)fifa96_entity_face(-(int32_t)(int16_t)s->pos.x,
+                                 -(int32_t)(int16_t)s->pos.z, &face, &s->sector);
+        out->event = 0x32;                                         /* 0x75754 */
+        s->timer89 = 0;                                            /* 0x75762 */
+        s->stage92 = 2;                                            /* 0x7576a */
+        stage = 2;
+      }
+    }
+  }
+  if (stage == 2) {                                                /* 0x75770 */
+    if (s->row44 == 0) goto claim_exit;                            /* 0x75777 */
+    s->timer89 = 0;                                                /* 0x75783 */
+    s->stage92 = 3;                                                /* 0x7578f */
+    stage = 3;
+  }
+  if (stage == 3) {                                                /* 0x75795 */
+    s->stage92 = 3;                                                /* 0x7579a */
+    s->timer7b = 2;                                                /* 0x757a7 */
+    if (s->has_slot == 0) {
+      out->slot_fill = 1;                                          /* 0x757b1 CALL 0x744D4 */
+    } else {
+      uint8_t edge = s->slot_edge;
+      if ((edge & 0x10u) != 0u) {                                  /* 0x757d5 */
+        flag8 = 1;
+        out->ui |= 0x10u;                                          /* 0x36200/0x361a4 */
+      } else if ((edge & 0x40u) != 0u) {                           /* 0x757fc */
+        out->ui |= 0x40u;
+        flag8 = 1;
+      } else if ((edge & 0x20u) != 0u) {                           /* 0x75820 */
+        s->latch_157ab2 = (uint8_t)(s->latch_157ab2 == 0);         /* 0x7582e SETZ */
+        out->ui |= 0x20u;
+        if (s->latch_157ab2 != 0) {
+          out->ui |= 0x80u;                                        /* 0x4C380 + 0x36200/0x361a4 */
+        } else {
+          out->snap = 1;                                           /* 0x75850 0x79B1C */
+          s->reset_x = 0;                                          /* 0x75879 [0x10F328] */
+          s->reset_y = 0;
+          s->reset_z = 0;
+          out->ui |= 0x100u;                                       /* 0x4C320/0x361b0 */
+        }
+      }
+    }
+    if (s->latch_157ab2 == 0) {                                    /* 0x758d4 */
+      out->ui |= 0x200u;                                           /* 0x75980 0x4C31C(1, slot) */
+    } else {
+      s->target_x = s->pos.x;                                      /* 0x758e8 rec+0x4D := pos */
+      s->target_z = s->pos.z;
+      if ((uint16_t)s->gauge < 0x90u && s->has_slot != 0) {        /* 0x758f6 */
+        s->target_x += (int32_t)s->slot_dir_x << 4;                /* 0x75907 */
+        s->target_z += (int32_t)s->slot_dir_z << 4;                /* 0x7591b */
+      }
+      if (s->has_ball != 0) {                                      /* 0x75930 hold-follow */
+        s->cam_x = s->pos.x + ((int32_t)s->slot_dir_x << 5);       /* 0x75948 */
+        s->cam_z = s->pos.z + ((int32_t)s->slot_dir_z << 5);       /* 0x7595c */
+        out->place = 1;                                            /* 0x75976 CALL 0x700F4 */
+        out->place_x = s->cam_x;
+        out->place_y = s->cam_y;
+        out->place_z = s->cam_z;
+      } else if (s->timer89 > 0x78) {                              /* 0x75999 */
+        flag8 = 1;
+      } else if ((uint16_t)s->gauge < 0x90u) {                     /* 0x759b1 */
+        s->target_x = s->pos.x;                                    /* 0x759c2 */
+        s->target_z = s->pos.z;
+        s->target_z += (s->side == 0) ? 0x10 : -0x10;              /* 0x759d0/0x759d7 */
+      }
+    }
+    if (flag8 != 0) {                                              /* 0x759ef -> 0x75b75 */
+      s->timer89 = 0;
+      s->stage92 = 4;
+      stage = 4;                                                   /* falls into stage 4 */
+    } else {
+      s->cam_x = s->pos.x;                                         /* 0x759fd 0x15774C := pos */
+      s->cam_y = s->pos.y;
+      s->cam_z = s->pos.z;
+      s->cam_y = 0x38;                                             /* 0x75a0f */
+      if (s->vel71_nonzero == 0) {                                 /* 0x75a18 */
+        s->cam_z += (s->side == 0) ? 0x10 : -0x10;                 /* 0x75a25/0x75a2c */
+      } else {
+        s->cam_x = s->pos.x + (int32_t)s->offset_x * 0x10;         /* 0x75a39 sector tables */
+        s->cam_z = s->pos.z + (int32_t)s->offset_z * 0x10;
+      }
+      if (s->has_ball != 0) out->guard = 1;                        /* 0x75a79 CALL 0x74CDC */
+      if ((uint16_t)s->gauge > 0xF0u) {                            /* 0x75a87 */
+        s->target_x = s->pos.x;                                    /* 0x75b10 */
+        s->target_z = s->pos.z;
+        if (s->has_slot != 0) {
+          s->cam_x = s->pos.x + ((int32_t)s->offset_x << 6);
+          s->cam_z = s->pos.z + ((int32_t)s->offset_z << 6);
+        }
+      }
+      if (s->has_ball != 0) {                                      /* 0x75b29 -> 0x760df */
+        out->held_exit = 1;
+        goto claim_exit;
+      }
+      out->reset = 1;                                              /* 0x75b36 CALL 0x7DAB4 */
+      out->situation_0b = 1;                                       /* 0x75b58 */
+      out->install = 5;                                            /* 0x75b67 */
+      return FIFA96_OK;                                            /* native RET (no gauge) */
+    }
+  }
+  if (stage == 4) {                                                /* 0x75b90 */
+    s->target_x = s->pos.x;                                        /* 0x75b9c rec+0x4D := pos */
+    s->target_z = s->pos.z;
+    if (s->has_slot == 0) {
+      out->clear_vec = 1;                                          /* 0x75c36 CALL 0x74E2C */
+      if (s->rng != NULL) {
+        uint16_t a = 0;
+        uint16_t b = 0;
+        if (fifa96_rng_step(s->rng, &a) == FIFA96_OK &&
+            fifa96_rng_step(s->rng, &b) == FIFA96_OK) {
+          fifa96_keeper_vec v;
+          if (fifa96_keeper_clear_vector(a, b, s->range_attr, s->side, &v) == FIFA96_OK) {
+            s->vec_band = v.distance;
+            s->vec_dx = v.dx;
+            s->vec_dz = v.dz;
+          }
+        }
+      } else {
+        s->vec_band = 0;
+        s->vec_dx = 0;
+        s->vec_dz = 0;
+      }
+    } else if (s->latch_157ab2 != 0) {
+      out->vector_build = 1;                                       /* 0x75c0d CALL 0x7B878 */
+    } else {
+      fifa96_keeper_point to;                                      /* 0x75c2a 0x8DCD4(pos, 0x157A77) */
+      to.x = s->reset_x;
+      to.y = s->reset_y;
+      to.z = s->reset_z;
+      keeper_stage_vec(&s->pos, &to, &s->vec_band, &s->vec_dx, &s->vec_dz);
+    }
+    if ((uint16_t)s->vec_band < 0x5A0u) {                          /* 0x75c43 */
+      fifa96_keeper_point local;
+      fifa96_keeper_point near_pos;
+      int16_t best = 0;
+      int idx;
+      local.x = (int32_t)(int16_t)((uint16_t)s->pos.x + (uint16_t)s->vec_dx);
+      local.y = 0;
+      local.z = (int32_t)(int16_t)((uint16_t)s->pos.z + (uint16_t)s->vec_dz);
+      idx = fifa96_entity_find_nearest(s->mates, s->mate_count, s->skip_index,
+                                       (int16_t)local.x, (int16_t)local.z, &best);
+      if (idx >= 0 && s->mates != NULL) {                          /* 0x75c86 + 0x8DCD4 */
+        near_pos.x = (int32_t)s->mates[idx].x;
+        near_pos.y = 0;
+        near_pos.z = (int32_t)s->mates[idx].y;
+        keeper_stage_vec(&s->pos, &near_pos, &s->vec_band, &s->vec_dx, &s->vec_dz);
+      }
+    }
+    if ((uint16_t)s->vec_band < 0x5A0u) out->event = 0x44;         /* 0x75ca6 */
+    else if ((uint16_t)s->vec_band < 0x780u) out->event = 0x2F;
+    else out->event = 0x45;
+    {
+      int32_t face = 0;                                            /* 0x75cdc face(vec_dx, vec_dz) */
+      (void)fifa96_entity_face(s->vec_dx, s->vec_dz, &face, &s->sector);
+    }
+    s->timer89 = 0;                                                /* 0x75d05 */
+    s->stage92 = 5;                                                /* 0x75d11 */
+    stage = 5;
+  }
+  if (stage == 5) {                                                /* 0x75d17 */
+    if (s->anim_row == 0x45u) {                                    /* 0x75d24 */
+      if ((int8_t)s->frame < 3) goto claim_exit;                   /* 0x75d39 MOVSX */
+      s->cam_x = s->pos.x;                                         /* 0x75d52 */
+      s->cam_y = s->pos.y;
+      s->cam_z = s->pos.z;
+      s->cam_y = 0x50;                                             /* 0x75d69 */
+      s->cam_x = s->pos.x + ((int32_t)s->offset_x << 6);           /* 0x75d92 */
+      s->cam_z = s->pos.z + ((int32_t)s->offset_z << 6);
+      out->scenario = 1;                                           /* 0x92820(5)+0x71C94 */
+      out->controlled = 1;                                         /* 0x75dcc */
+      s->has_ball = 0;                                             /* 0x75dd1 RELEASE */
+      out->released = 1;
+    }
+    s->timer89 = 0;                                                /* 0x75de1 */
+    s->stage92 = 6;                                                /* 0x75ded */
+    stage = 6;
+  }
+  if (stage == 6) {                                                /* 0x75df3 */
+    int gate = 0;                                                  /* [EBP-4], zeroed at 0x75525 */
+    if (s->anim_row == 0x44u || s->anim_row == 0x2Fu) {            /* 0x75e00/0x75e1b */
+      gate = 5;
+      out->flag_write = 1;
+      out->flag_157820 = 1;
+      out->flag_157822 = 1;
+    } else if (s->anim_row == 0x45u) {                             /* 0x75e38 */
+      gate = 3;
+      out->flag_write = 1;
+      out->flag_157820 = 0;
+      out->flag_157822 = 0;
+    }
+    if ((int32_t)(int8_t)s->frame < gate) goto claim_exit;         /* 0x75e61 MOVSX JL */
+    s->timer89 = 0;                                                /* 0x75e70 */
+    s->stage92 = 7;                                                /* 0x75e7c */
+    stage = 7;
+  }
+  if (stage == 7) {                                                /* 0x75e82 */
+    uint8_t staging_event;
+    if (s->anim_row == 0x44u) {                                    /* 0x75e8f */
+      s->cam_x = s->pos.x;                                         /* 0x75ea6 */
+      s->cam_y = s->pos.y;
+      s->cam_z = s->pos.z;
+      s->cam_y = 0x10;                                             /* 0x75eea */
+      s->cam_x = s->pos.x + (int32_t)s->offset_x * 5 * 0x10;       /* 0x75ec4 (x*4+x)<<4 */
+      s->cam_z = s->pos.z + (int32_t)s->offset_z * 5 * 0x10;       /* 0x75ef4 */
+      staging_event = 0x0B;                                        /* 0x75f14 */
+      out->scenario = 1;                                           /* 0x92820(4) */
+      s->vec_dx = (int16_t)(s->vec_dx - keeper_trunc_shift(s->vec_dx, 2)); /* 0x75f2c */
+      s->vec_dz = (int16_t)(s->vec_dz - keeper_trunc_shift(s->vec_dz, 2)); /* 0x75f45 */
+    } else if (s->anim_row == 0x2Fu) {                             /* 0x75f56 */
+      s->cam_x = s->pos.x;                                         /* 0x75f66 */
+      s->cam_y = s->pos.y;
+      s->cam_z = s->pos.z;
+      s->cam_y = 0x80;                                             /* 0x75f86 */
+      s->cam_x = s->pos.x + ((int32_t)s->offset_x << 6);           /* 0x75f9e */
+      s->cam_z = s->pos.z + ((int32_t)s->offset_z << 6);
+      staging_event = 0x0C;                                        /* 0x75fca */
+      out->scenario = 1;                                           /* 0x92820(4, band>>5+0x80) */
+    } else {
+      staging_event = 0x01;                                        /* 0x75fdd */
+      out->scenario = 1;                                           /* 0x92820(5, band>>2) */
+    }
+    /* 0x76012 the staged vector's face, then the 0x7A490 staging with
+     * EBX = the sector the face returned and ECX = the event byte. */
+    {
+      int32_t face = 0;
+      (void)fifa96_entity_face(s->vec_dx, s->vec_dz, &face, &s->sector);
+    }
+    out->ball_stage = 1;                                           /* 0x76030 CALL 0x7A490 */
+    out->ball_event = staging_event;
+    if (s->has_slot != 0) out->handoff = 1;                        /* 0x76049 + 0x786a0 */
+    out->situation_0b = 1;                                         /* 0x76072 (CL=0) */
+    s->latch_157ab2 = 0;                                           /* 0x76077 */
+    s->timer89 = 0;                                                /* 0x7608b */
+    s->stage92 = 8;                                                /* 0x76097 */
+    stage = 8;
+  }
+  if (stage == 8) {                                                /* 0x7609d */
+    out->snap = 1;                                                 /* 0x79B1C */
+    if (s->row44 == 0) goto claim_exit;                            /* 0x760ac */
+    s->timer89 = 0;                                                /* 0x760b4 */
+    s->stage92 = 9;                                                /* 0x760c0 */
+    stage = 9;
+  }
+  if (stage == 9) {                                                /* 0x760c6 */
+    out->snap = 1;                                                 /* 0x79B1C */
+    if (s->timer89 > 0x3C) out->reset = 1;                         /* 0x760d8 CALL 0x7DAB4 */
+    /* falls to the common exit */
+  }
+claim_exit:
+  keeper_claim_exit(s, out);
+  return FIFA96_OK;
+}
+
+/* ===== FU-151 §Port contract item 2 — row-1D close-down machine =========== */
+
+static void keeper_closedown_tail(fifa96_keeper_closedown *s,
+                                  fifa96_keeper_closedown_out *out) {
+  if (s->latch_157ab2 != 0 && (int8_t)s->stage92 > 0) out->tail_hold = 1; /* 0x754c3 */
+}
+
+fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
+                                          fifa96_keeper_closedown_out *out) {
+  int stage;
+  int flag4 = 0;
+  if (!s || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  stage = (int)s->stage92;
+  if (stage < 3) {                                                 /* 0x74f1a..0x74f27 */
+    out->controlled = 1;
+    out->helper = 1;                                               /* CALL 0x7876C */
+  }
+  s->timer89 += (int32_t)s->delta;                                 /* 0x74f2c */
+  stage = (int)s->stage92;
+  if (stage > 4) goto closedown_tail;                              /* 0x74f4d JA */
+  if (stage == 0) {                                                /* 0x74f60 */
+    if (s->row44 == 0) return FIFA96_OK;                           /* 0x74f64 -> RET */
+    if (s->timer89 < 0x1E && s->session_gate == 0) goto closedown_tail; /* 0x74f74/0x74f7d */
+    out->place = 1;                                                /* 0x74f99 CALL 0x700F4 */
+    out->place_x = s->cam_x;
+    out->place_y = s->cam_y;
+    out->place_z = s->cam_z;
+    s->pos.x = s->cam_x;                                           /* 0x74fa9 pos := 0x15774C */
+    s->pos.y = s->cam_y;
+    s->pos.z = s->cam_z;
+    s->pos.z += (int32_t)s->cam_off_z;                             /* 0x74fc9 */
+    out->commit = 1;                                               /* 0x74fe3 CALL 0x79B6C */
+    out->event = 0x26;                                             /* 0x75000 */
+    s->latch_157ab2 = 1;                                           /* 0x7501f */
+    s->timer89 = 0;                                                /* 0x75033 */
+    s->stage92 = 1;                                                /* 0x7503f */
+    stage = 1;
+  }
+  if (stage == 1) {                                                /* 0x75045 */
+    if (s->session_gate == 0) {
+      if (s->timer89 > 2) out->ran = 1;                            /* 0x7508e +0x9E */
+    } else {
+      if (s->timer89 < 0x1E) goto closedown_tail;                  /* 0x75058 */
+      if ((s->timer89 - (int32_t)s->delta) < 0x1E)
+        out->ui |= 0x10u;                                          /* 0x974DC(0x1E) audio */
+    }
+    out->place = 1;                                                /* 0x750b5 CALL 0x700F4 */
+    out->place_x = s->cam_x;
+    out->place_y = s->cam_y;
+    out->place_z = s->cam_z;
+    s->pos.x = s->cam_x;                                           /* 0x750c0 pos := 0x15774C */
+    s->pos.y = s->cam_y;
+    s->pos.z = s->cam_z + (int32_t)s->cam_off_z;                   /* 0x750dd */
+    out->commit = 1;                                               /* 0x750ed CALL 0x79B6C */
+    if (s->has_slot == 0) {
+      out->slot_fill = 1;                                          /* 0x750fb CALL 0x744D4 */
+    } else {
+      if ((s->slot_edge & 0x50u) != 0u) {                          /* 0x75116 byte[slot+6]&0x50 */
+        out->ui |= 0x20u;                                          /* 0x36200/0x361a4 */
+        flag4 = 1;                                                 /* [EBP-4]=1 (0x7512f) */
+      } else if ((s->slot_edge & 0x20u) != 0u) {                   /* 0x7513d byte[slot+4]&0x20 */
+        s->latch_157ab2 = (uint8_t)(s->latch_157ab2 == 0);         /* 0x75152 SETZ */
+        if (s->latch_157ab2 != 0) {
+          out->ui |= 0x40u;                                        /* 0x4C380/0x36200/0x361a4 */
+        } else {
+          out->snap = 1;                                           /* 0x75174 0x79B1C */
+          s->reset_x = 0;                                          /* 0x7519e [0x10F328] */
+          s->reset_y = 0;
+          s->reset_z = 0;
+          out->ui |= 0x80u;                                        /* 0x4C320/0x361b0 */
+        }
+      }
+    }
+    if (s->timer89 > 0x4B0) {                                      /* 0x751bc */
+      if ((s->timer89 - (int32_t)s->delta) <= 0x4B0) out->sink_4b0 = 1; /* 0x8F188(0xA4,4,0) */
+    }
+    out->ui |= 0x100u;                                             /* 0x751f6 0x4C31C(0) */
+    if (s->latch_157ab2 == 0) out->ui |= 0x200u;                   /* 0x7520f 0x4C31C(1, slot) */
+    if (flag4 == 0) goto closedown_tail;                           /* 0x7522a */
+    s->timer89 = 0;                                                /* 0x75239 */
+    s->stage92 = 2;                                                /* 0x75245 */
+    stage = 2;
+  }
+  if (stage == 2) {                                                /* 0x7524b */
+    s->target_x = s->cam_x;                                        /* 0x75259 rec+0x4D := 0x15774C */
+    s->target_z = s->cam_z;
+    if (s->lane > 0x40 && s->timer89 > 0xB4) {                     /* 0x75265/0x75274 */
+      s->latch_157ab2 = 0;                                         /* 0x754ac */
+      out->reset = 1;                                              /* 0x754b7 CALL 0x7DAB4 */
+      goto closedown_tail;                                         /* 0x754bc */
+    }
+    s->timer89 = 0;                                                /* 0x75288 */
+    s->stage92 = 3;                                                /* 0x75294 */
+    stage = 3;
+  }
+  if (stage == 3) {                                                /* 0x7529a */
+    out->scenario = 1;                                             /* 0x92820(rec,6) + [0x158743]=1 */
+    if (s->has_slot != 0) {                                        /* 0x752c4 */
+      fifa96_keeper_point to;
+      to.x = s->reset_x;
+      to.y = s->reset_y;
+      to.z = s->reset_z;
+      keeper_stage_vec(&s->pos, &to, &s->vec.distance, &s->vec.dx, &s->vec.dz);
+    } else {
+      out->clear_vec = 1;                                          /* 0x752d0 CALL 0x74E2C */
+      if (s->rng != NULL) {
+        uint16_t a = 0;
+        uint16_t b = 0;
+        if (fifa96_rng_step(s->rng, &a) == FIFA96_OK &&
+            fifa96_rng_step(s->rng, &b) == FIFA96_OK) {
+          fifa96_keeper_vec v;
+          if (fifa96_keeper_clear_vector(a, b, s->range_attr, s->side, &v) == FIFA96_OK)
+            s->vec = v;
+        }
+      } else {
+        s->vec.distance = 0;
+        s->vec.dx = 0;
+        s->vec.dz = 0;
+      }
+    }
+    if ((uint16_t)s->vec.distance < 0x5A0u) {                      /* 0x752dd */
+      fifa96_keeper_point local;
+      fifa96_keeper_point near_pos;
+      int16_t best = 0;
+      int idx;
+      local.x = (int32_t)(int16_t)((uint16_t)s->pos.x + (uint16_t)s->vec.dx);
+      local.y = 0;
+      local.z = (int32_t)(int16_t)((uint16_t)s->pos.z + (uint16_t)s->vec.dz);
+      idx = fifa96_entity_find_nearest(s->mates, s->mate_count, s->skip_index,
+                                       (int16_t)local.x, (int16_t)local.z, &best);
+      if (idx >= 0 && s->mates != NULL) {                          /* 0x7532a + 0x8DCD4 */
+        near_pos.x = (int32_t)s->mates[idx].x;
+        near_pos.y = 0;
+        near_pos.z = (int32_t)s->mates[idx].y;
+        keeper_stage_vec(&s->pos, &near_pos, &s->vec.distance, &s->vec.dx, &s->vec.dz);
+      }
+    }
+    if ((uint16_t)s->vec.distance < 0x3C0u) {                      /* 0x7534a */
+      int32_t angle = 0;
+      (void)fifa96_entity_angle(s->vec.dx, s->vec.dz, &angle);     /* 0x8DD70 */
+      s->vec.distance = 0x3C0;                                     /* 0x75375 */
+      s->vec.dx = (int16_t)(((int64_t)0x3C0 * fifa96_entity_sine(angle) + 0x8000) >> 16);
+      s->vec.dz = (int16_t)(((int64_t)0x3C0 * fifa96_entity_sine(angle + 0x100) + 0x8000) >> 16);
+    }
+    if ((uint16_t)s->vec.distance < 0x5A0u) {                      /* 0x753f3 band>>3, event 0x30 */
+      out->ball_stage = 1;
+      out->clearance_event = 0x30;
+    } else {
+      out->ball_stage = 1;                                         /* 0x7541c band>>4, event 0x31 */
+      out->clearance_event = 0x31;
+      out->ring = 1;                                               /* 0x8F188(0x22, rec, 4) */
+    }
+    if (s->has_slot != 0) out->handoff = 1;                        /* 0x75447 + 0x786a0 */
+    out->situation_0b = 1;                                         /* 0x7546e */
+    s->latch_157ab2 = 0;                                           /* 0x75475 */
+    s->timer89 = 0;                                                /* 0x75489 */
+    s->stage92 = 4;                                                /* 0x75495 */
+    stage = 4;
+  }
+  if (stage == 4) {                                                /* 0x7549b */
+    out->snap = 1;                                                 /* 0x79B1C */
+    if (s->row44 == 0) goto closedown_tail;                        /* 0x754aa */
+    s->latch_157ab2 = 0;                                           /* 0x754b1 */
+    out->reset = 1;                                                /* 0x754b7 CALL 0x7DAB4 */
+    /* falls to the tail */
+  }
+closedown_tail:
+  keeper_closedown_tail(s, out);
   return FIFA96_OK;
 }

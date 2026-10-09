@@ -208,6 +208,24 @@ static void test_intercept_band(void) {
   assert(fifa96_entity_intercept_band(0, 0, 0, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-151 P3 §2.9: `FUN_00079C50` (`0x79C50..0x79C98`) — the face/sector
+ * write. A zero direction leaves both outputs alone; else the +0x7D facing
+ * word takes the 0xCD474 angle and +0x8E the ((angle+0x40)&0x3FF)>>7 octant. */
+static void test_entity_face(void) {
+  int32_t face = 0x123;
+  uint8_t sector = 9;
+  assert(fifa96_entity_face(0, 0, &face, &sector) == FIFA96_OK);
+  assert(face == 0x123 && sector == 9);       /* stored byte comes back */
+  assert(fifa96_entity_face(-100, -200, &face, &sector) == FIFA96_OK);
+  assert(face == -0x1B4);                     /* the 0xCD474 angle */
+  assert(sector == (((uint32_t)(face + 0x40) & 0x3FFu) >> 7u));
+  assert(sector == 5);
+  assert(fifa96_entity_face(0x100, 0, &face, &sector) == FIFA96_OK);
+  assert(face == 0x100 && sector == 2);       /* +x axis -> octant 2 */
+  assert(fifa96_entity_face(0, 0, NULL, &sector) == -FIFA96_ERR_INVALID);
+  assert(fifa96_entity_face(0, 0, &face, NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_distance_zero_and_axes();
   test_distance_equal_axes();
@@ -225,6 +243,7 @@ int main(void) {
   test_math_primitives();
   test_intercept_bind();
   test_intercept_band();
+  test_entity_face();
   puts("test_entity_update: ok");
   return 0;
 }

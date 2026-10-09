@@ -266,6 +266,10 @@ struct fifa96_match_run_record {
   uint8_t actor_type;  /* native +0x8B>>24 = the +0x8E byte; staged from the
                         * pool, which never writes it (OL-83: rows 04/06/07/18
                         * read it while rows 28/2A/0F/07/08 persist `type`) */
+  uint8_t row44;       /* native +0x44 animation/event ack byte (FU-151: the
+                        * row-1E stage 0/2/8 and row-1D stage 0/4 gates read
+                        * it; the producer is the unported animation/event
+                        * pipeline, a numbered leg) */
   uint8_t code;        /* native +0x91 (the byte the installer writes and the
                         * 0x110680/0x7E600/0x7C990 gates index; staged from the
                         * pool entity so handlers never use the face octant) */
@@ -354,6 +358,23 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* FU-151 P3 (keeper machines): the process cells the row-1E/1D machines
+   * carry across frames — the 0x15774C/50/54 camera focus (the FU-147 leg-13
+   * render-camera stand-in: the engine keeps its own derived cell so the
+   * machine's hold-follow writes do not move the real FU-71 camera), the
+   * 0x157A77 reset triple (the [0x10F328] constant = (0,0,0), FU-140), the
+   * 0x157C30 `{band,dx,dz}` staging vector, the 0x157C36 saved point, the
+   * 0x157C42 travelled gauge, the [0x157AB2] latch and the stage-6
+   * [0x157820]/[0x157822] animation flags (their native consumers outside
+   * row 1E stay FU-151 leg 15). Init/begin zero them. */
+  int32_t keeper_cam_x, keeper_cam_y, keeper_cam_z;
+  int32_t keeper_reset_x, keeper_reset_y, keeper_reset_z;
+  int16_t keeper_vec_band, keeper_vec_dx, keeper_vec_dz;
+  int16_t keeper_saved_x, keeper_saved_z;
+  int16_t keeper_gauge;
+  uint8_t keeper_latch_157ab2;
+  uint8_t flag_157820;
+  uint8_t flag_157822;
   /* M2 playable-match Task 2 / OL-84 residual: the native `[0x5882A]` kickoff
    * gate, the flag the act-1 (phase-0x17 handler FUN_00088DC8) stage 1 sets at
    * the shared timeline timer `[0x58818] >= 0x78` (`0x88EF3..0x88F07`) and

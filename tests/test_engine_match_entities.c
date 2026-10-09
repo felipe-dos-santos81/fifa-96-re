@@ -52,8 +52,8 @@ static void test_init_resets_pool(void) {
   assert(pool.team[TEAM0].target == NONE && pool.team[TEAM1].target == NONE);
   assert(pool.team[TEAM0].second == NONE && pool.team[TEAM0].intercept == NONE);
   assert(pool.team[TEAM0].chosen == NONE);
-  assert(pool.team[TEAM0].camera_nearest == NONE);
-  assert(pool.team[TEAM1].camera_nearest == NONE);
+  assert(pool.team[TEAM0].tracker7c7 == NONE);
+  assert(pool.team[TEAM1].tracker7c7 == NONE);
   assert(pool.team[TEAM0].update_count == 0);
   assert(pool.controlled == NONE);
   assert(pool.slot_merge == NONE);
@@ -254,6 +254,66 @@ static void test_team_select_none(void) {
     pool.team[TEAM0].records[i].skip_98 = 1;
   assert(fifa96_match_entities_team_select(&pool, TEAM0, 0, 0) == NONE);
   assert(pool.team[TEAM0].target == NONE);
+}
+
+/* FU-151 P3: `FUN_0008DDE0` (`0x8DDE0`) — the ranked unsigned `+0x6B` lane
+ * pick. Skip -1 admits record 0; skip 0 excludes it; +0x98/+0x9A exclude; the
+ * unsigned compare keeps the first record on ties; -1/2 are rejected. */
+static void test_team_pick_ranked_lane(void) {
+  struct fifa96_match_entities pool;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    pool.team[TEAM0].records[i].lane_x = (int16_t)(100 + i);
+  pool.team[TEAM0].records[9].lane_x = 1;      /* the smallest */
+  assert(fifa96_match_entities_team_pick(&pool, TEAM0, -1) == 9);
+  assert(fifa96_match_entities_team_pick(&pool, TEAM0, 9) == 0);   /* 100 smallest */
+  pool.team[TEAM0].records[0].skip_9a = 1;
+  assert(fifa96_match_entities_team_pick(&pool, TEAM0, 9) == 1);
+  pool.team[TEAM0].records[1].skip_98 = 1;
+  assert(fifa96_match_entities_team_pick(&pool, TEAM0, 9) == 2);
+  /* a negative lane word is unsigned-large, never chosen over 0x0064 */
+  pool.team[TEAM0].records[2].lane_x = -1;
+  assert(fifa96_match_entities_team_pick(&pool, TEAM0, 9) == 3);
+  assert(fifa96_match_entities_team_pick(NULL, TEAM0, -1) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_team_pick(&pool, 2, -1) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-151 P3: `FUN_0008C33C` + `FUN_0007997C` — the derived reset-lane pass:
+ * per-record reset (+0x9B/code/stage92/bound := fresh lane), the lane refresh
+ * against the camera, then the team pick into +0x7B2 and +0x7C7 and the
+ * +0x7B6/+0x7CB clears. */
+static void test_reset_lane_pass(void) {
+  struct fifa96_match_entities pool;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  /* every record starts far from the camera (origin); record 5 sits at the
+   * origin, holds the ball and a stale lane, so it becomes the pick. */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    pool.team[TEAM0].records[i].pos_x = 0x2000;
+    pool.team[TEAM0].records[i].pos_z = 0;
+    pool.team[TEAM0].records[i].lane_x = 0x700;
+  }
+  pool.team[TEAM0].records[5].has_ball = 1;
+  pool.team[TEAM0].records[5].code = 0x19;
+  pool.team[TEAM0].records[5].stage92 = 7;
+  pool.team[TEAM0].records[5].pos_x = 0;
+  pool.team[TEAM0].records[5].pos_z = 0;
+  pool.team[TEAM0].second = 4;
+  pool.team[TEAM0].timer7cb = 9;
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[5].has_ball == 0);
+  assert(pool.team[TEAM0].records[5].code == 3);       /* active -> install 3 */
+  assert(pool.team[TEAM0].records[5].stage92 == 0);
+  assert(pool.team[TEAM0].records[5].lane_x == 0);     /* refreshed vs camera */
+  assert(pool.team[TEAM0].records[5].bound == 0);
+  assert(pool.team[TEAM0].records[3].lane_x == 0x2000); /* refreshed vs camera */
+  assert(pool.team[TEAM0].timer7cb == 0);
+  assert(pool.team[TEAM0].second == NONE);
+  assert(pool.team[TEAM0].target == 5);
+  assert(pool.team[TEAM0].tracker7c7 == 5);
+  /* record 0 inactive -> the forced install is 0x19 (via the installer). */
+  assert(pool.team[TEAM0].records[0].code == 0x19);
+  assert(fifa96_match_entities_reset_lane(NULL, TEAM0, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_reset_lane(&pool, 2, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
 /* The update chain order, observed by a counter callback: team 0 records
@@ -1056,6 +1116,8 @@ int main(void) {
   test_install_skip98_clear();
   test_team_select_nearest();
   test_team_select_none();
+  test_team_pick_ranked_lane();
+  test_reset_lane_pass();
   test_update_chain_order();
   test_update_selection_buckets();
   test_update_intercept_select();

@@ -636,14 +636,19 @@ static void test_carrier_stage0_gates(void) {
   assert(out.slot_merge == 1 && out.fallback == 0 && out.tail == 0);
 
   /* Team gates fail -> the FUN_0007F7E0 fallback; 0x7F374..0x7F380 only lets
-   * type8 == 5 continue into the tail. */
+   * the action code (+0x91) == 5 continue into the tail (FU-151 erratum: the
+   * former `type8` staging was the +0x8E octant). */
   c = carrier_base();
   c.ball_height = 0x38;
   c.team_slot_pool = 0;
   c.type8 = 4;
+  c.code = 4;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
   assert(out.fallback == 1 && out.slot_merge == 0 && out.tail == 0);
-  c.type8 = 5;
+  c.type8 = 5;                        /* the octant alone must not fire it */
+  assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
+  assert(out.fallback == 1 && out.tail == 0);
+  c.code = 5;
   assert(fifa96_action_carrier_arm(&p, &c, carrier_type_x, carrier_type_z, &out) == FIFA96_OK);
   assert(out.fallback == 1 && out.tail == 1);
 

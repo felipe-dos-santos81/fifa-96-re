@@ -975,7 +975,7 @@ static void test_ai_record_mover_and_lane_track(void) {
     const struct fifa96_match_team *team = &mr.entities.team[1];
     int32_t best = FIFA96_MATCH_ENTITY_NONE;
     int16_t best_lane = 0;
-    assert(team->camera_nearest >= 0 && team->camera_nearest < 11);
+    assert(team->tracker7c7 >= 0 && team->tracker7c7 < 11);
     for (int i = 0; i < 11; i++) {
       const struct fifa96_match_entity *r = &team->records[i];
       if (r->skip_9a != 0) continue;
@@ -984,7 +984,7 @@ static void test_ai_record_mover_and_lane_track(void) {
         best_lane = r->lane_x;
       }
     }
-    assert(team->camera_nearest == best);
+    assert(team->tracker7c7 == best);
   }
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);

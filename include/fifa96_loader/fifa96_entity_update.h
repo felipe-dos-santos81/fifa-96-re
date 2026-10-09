@@ -79,3 +79,12 @@ typedef struct fifa96_entity_intercept_band_out {
 int fifa96_entity_intercept_band(int32_t pos_x, int32_t pos_z,
                                  int32_t target_x, int32_t target_z,
                                  fifa96_entity_intercept_band_out *out);
+
+/* FU-151 §Port contract item 7 / §2.9: `FUN_00079C50` (`0x79C50..0x79C98`,
+ * first-hand this slice) — the record face/sector write. `dx`/`dz` are the
+ * 16-bit direction words; a zero pair returns the existing `*sector` byte and
+ * leaves `*face7d` alone; else `*face7d = fifa96_entity_angle(dx, dz)` (the
+ * native `word[rec+0x7D]`) and `*sector = ((*face7d + 0x40) & 0x3FF) >> 7`
+ * (the native byte `+0x8E`, 0..7). NULL `face7d`/`sector` ->
+ * -FIFA96_ERR_INVALID. */
+int fifa96_entity_face(int32_t dx, int32_t dz, int32_t *face7d, uint8_t *sector);

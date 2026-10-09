@@ -585,3 +585,66 @@ files read only.
 *Format note:* "band" is used for the `0x795B4` out word (engine
 `fifa96_entity_intercept_band`); "sector" = byte `+0x8E`; "action code" =
 byte `+0x91` (the docs' "type").
+
+---
+
+## 8. Port landing (P3, 2026-10-09)
+
+Frozen slice ported in phase-7 P3 (M2 phase-7 ports Task 3). First-hand
+re-verification this landing (Ghidra MCP `/FIFA96.EXE`, read-only):
+`disassemble_bytes` 0x7550C (260 B), 0x75611 (530 B), 0x75817 (560 B),
+0x75B90 (753 B), 0x75E82 (687 B), 0x74EB0 (400 B), 0x75045 (565 B), 0x7527F
+(610 B), 0x79C50, 0x8DDE0, 0x8C33C, 0x799C0/0x7997C/0x79A5D, 0x7F374, plus
+the fresh 0x761C8/0x761F2 and 0x7659E row-1F gate windows. Every control-flow
+claim quoted in §2.3..§2.6 and the port contract §4 was reproduced before
+coding; the machines are byte-exact at the decision level.
+
+| contract item | engine landing |
+|---|---|
+| 1. keeper 0x1E | `fifa96_keeper_claim_step` (`fifa96_keeper.c`), the 10-stage fall-through machine over a caller-owned `fifa96_keeper_claim`; wired as `fifa96_match_action_1E` through the run keeper cells |
+| 2. keeper 0x1D | `fifa96_keeper_closedown_step`, stages 0..4; new `fifa96_match_action_1D` and the action-table row 0x1D flips to `ported` |
+| 3. `+0x9B` | claim/release through the machine's `has_ball` (drained by the pool as before); the action-0x1B takes and the event-0x32 arm stay legs |
+| 4. restart | the machines emit `situation_0b`; the binder calls the single shared `fifa96_match_run_situation(0x0B)` (no parallel `_0b`) |
+| 5. lane/AI fields | S1 landed `bound`/`cam_dz6f` (+0x6F) / `lane_z` (+0x6D camera dx); this landing names the tracker `team.tracker7c7` (was `camera_nearest`) and stages the 0x10F37C constants |
+| 6. team selection | `fifa96_match_entities_team_pick` (`FUN_0008DDE0`) + `fifa96_match_entities_reset_lane` (`FUN_0008C33C` + derived `FUN_0007997C`) writing `target`/`tracker7c7`; `team_select` was already landed |
+| 7. face/sector | `fifa96_entity_face` (= `FUN_00079C50`, both outputs); the pool `actor_type` comment now reads sector (erratum 1) |
+| 8. interception | the `0x10F37C` constants staged in `match_run_entity_frame`; `fifa96_entity_intercept_bind`/`_band` already landed (S1/FU-139) |
+
+**Errata application (erratum 1, `+0x8E`/`+0x91` audit).** Audited every
+engine read of the two bytes. Correct as-is: the action-code paths all read
+byte **+0x91** — the installer write (`fifa96_match_entities_install`), the
+pool `entity.code` / staging `record.code`, the 0x110680 gates
+(`outfield_type_gate(s->code)`), and the row-07/0F kick staging (`s->type =
+r->code`, FU-139 §9.7). The **+0x8E** byte is modeled as the face octant
+(`entity.type`, written by `fifa96_arm_face`/the keeper machines/row arms,
+staged as `record.type`/`record.actor_type`; the two names are the OL-83
+duplicate of one native byte). **Two wrong-field reads found and fixed**
+(both in unwired bodies, so no tape effect): `fifa96_action_carrier_arm`'s
+0x7F374 tail gate read `type8` (the +0x8E octant) where the native reads
+`[rec+0x8E]>>24` = +0x91 — fixed with a new `carrier.code` field; and
+`fifa96_keeper_input_decide` / `fifa96_keeper_arm_step`'s row-1F gates
+read `type8` where `0x761D1`/`0x7659E`/`0x761F2` read +0x91 — fixed with
+`fifa96_keeper_input.code` / the `code` parameter. Loader tests pin both
+discriminating cases (octant 5 without code 5 must not fire).
+
+**Legs status after P3.** Legs 1–15 remain open as numbered; newly explicit:
+- leg 1 (install sites) unchanged: computed, no immediates;
+- legs 3/4/12/13/15: the unported sinks are named request bits on the out
+  structs (`ui`/`slot_fill`/`guard`/`snap`/`handoff`/`ball_stage`/`ring`/
+  `sink_4b0`/scenario/`vector_build`), the `0x74E2C` clear vector now runs
+  through the ported `fifa96_keeper_clear_vector` with two RNG draws, and the
+  stage-6 `[0x157820]/[0x157822]` writes land on the run cells (consumers
+  leg 15);
+- leg 6 (`FUN_0007997C`): derived reset landed; the virtual `[rec+0x1C]`
+  target restore and the 0x79B6C commit stay the carried leg (the derived
+  reset keeps the live position);
+- leg 9 (`0x10F37C`): landed (constants staged);
+- leg 13: the keeper focus cells are the engine's derived stand-ins (not the
+  FU-71 camera), still a leg.
+
+**Post-landing audit note (module 0x1E stage-2/3).** The stage-2 gate is the
+`+0x44` byte; the engine's `row44` is default 0 (producer unported), so a
+record reaching stage 0/2/8 outside a caller-staged fixture exits at the
+stage gate exactly as an animation-inactive native record. Fixtures stage it.
+
+No write outside docs/engine sources; no ISO/Ghidra-project change.

@@ -75,6 +75,9 @@ struct fifa96_match_entity {
   uint8_t has_ball;         /* +0x9B */
   uint8_t skip_98;          /* +0x98 exclusion */
   uint8_t skip_9a;          /* +0x9A exclusion (occupied record) */
+  uint8_t row44;            /* native +0x44 (animation/event ack byte; the
+                             * keeper stage gates read it; the producer is the
+                             * unported animation/event pipeline, FU-151 legs) */
   uint8_t has_slot;         /* +0x20 control slot bound */
   uint8_t timer93;          /* +0x93 countdown byte */
   uint16_t timer81;         /* +0x81 countdown word */
@@ -85,7 +88,8 @@ struct fifa96_match_entity {
   int32_t pos_x, pos_y, pos_z;          /* +0x59 / +0x5D / +0x61 */
   int32_t target_x, target_y, target_z; /* +0x4D / +0x51 / +0x55 */
   int32_t vel_x, vel_z;                 /* +0x71 / +0x73 (16.16 pair) */
-  int16_t lane_x, lane_z;               /* +0x6B / +0x6D lane words */
+  int16_t lane_x, lane_z;               /* +0x6B lane / +0x6D cam-minus-pos x
+                                         * word (the FU-151 `cam_dx6d`) */
   int16_t bound;                        /* +0x77 old-lane bound word (FU-147 S1:
                                          * `FUN_0007BF20` 0x7C77E stores the old
                                          * `+0x6B` before the lane refresh) */
@@ -133,10 +137,12 @@ struct fifa96_match_team {
   uint32_t timer7cb;        /* +0x7CB enable */
   uint32_t timer81e;        /* +0x81E limit = >>16 */
   uint8_t flag7be;          /* +0x7BE interception band flag */
-  int32_t camera_nearest;   /* +0x7C7 camera-nearest tracker: the team-relative
+  int32_t tracker7c7;       /* +0x7C7 camera-nearest tracker: the team-relative
                              * record index (native record pointer; FU-147 S1
                              * `FUN_0007BF20` 0x7C7C4/0x7C7CD replaces it when
-                             * the fresh lane is strictly smaller) */
+                             * the fresh lane is strictly smaller, and the
+                             * FU-151 reset pass `FUN_0008C33C` copies the
+                             * `FUN_0008DDE0` pick into it) */
   int32_t target;           /* +0x7B2 encoded entity id or NONE */
   int32_t second;           /* +0x7B6 encoded entity id or NONE */
   int32_t chosen;           /* +0x7BF encoded entity id or NONE */
@@ -224,6 +230,39 @@ int fifa96_match_entities_update(struct fifa96_match_entities *pool,
  * chosen record index, NONE when none, or -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_team_select(struct fifa96_match_entities *pool, uint32_t team,
                                       int16_t target_x, int16_t target_y);
+
+/* FU-151 §Port contract item 6 / §2.8: `FUN_0008DDE0` (`0x8DDE0..0x8DE26`,
+ * first-hand this slice) — the ranked lane pick. Walks the team's 11 records
+ * (stride 0xB2) skipping the sign-extended 16-bit `skip` index, `+0x9A` and
+ * `+0x98`, keeping the **unsigned** smallest `word[+0x6B]` (lane) with the
+ * first record winning ties (`JNC` on `>=`). Returns the picked index, NONE
+ * when every record is excluded, or -FIFA96_ERR_INVALID. The reset pass
+ * (`FUN_0008C33C`) calls it with skip -1 (no skip); row 04 calls it with
+ * skip 0 (record 0 excluded). */
+int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t team,
+                                    int32_t skip);
+
+/* FU-151 §Port contract item 6 / §2.8/§3.4: the `FUN_0008C33C` +
+ * `FUN_0007997C` team reset-lane pass (`0x8C33C..0x8C38B`, first-hand this
+ * slice). Per team record: the derived `FUN_0007997C` reset — zero
+ * timer89/timer81/timer93/timer7b-velocity words, code/has_ball/skip_98,
+ * stage92 0, the `0x795B4` lane refresh against the camera focus
+ * (`lane_x`=+0x6B, `lane_z`=+0x6D, `cam_dz6f`=+0x6F), then `bound` (+0x77) :=
+ * the fresh lane and the forced `active ? 3 : 0x19` install through the
+ * derived installer (the native's virtual `[rec+0x1C]` target restore and the
+ * 0x79B6C commit are unported; the derived subset keeps the live position,
+ * FU-151 §3.4 leg). Then the team tail: `+0x7CB = 0`, the `FUN_0008DDE0`
+ * pick with skip -1, `+0x7B6 = 0` (NONE), `+0x7B2 = pick`, `+0x7C7 = pick`
+ * (`target`/`tracker7c7`). Returns FIFA96_OK or -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
+                                     int32_t cam_x, int32_t cam_z);
+
+/* FU-151 §2.8 / §Port contract item 8: the `0x10F37C` interception target
+ * table (first-hand `read_memory`: two 12-byte triples `(0,0,0x990)` side 0 /
+ * `(0,0,-0xA90)` side 1). `match_run_entity_frame` stages x/word0 into
+ * `frame->intercept_x[]` and z/word8 into `frame->intercept_y[]`. */
+#define FIFA96_MATCH_ENTITY_INTERCEPT_Z0 0x990
+#define FIFA96_MATCH_ENTITY_INTERCEPT_Z1 (-0xA90)
 
 /* The FU-137 §2 installer FUN_0007D9A4 over a derived record: `code` is the
  * requested action, `staged` the BL stage byte. Rejects an occupied record

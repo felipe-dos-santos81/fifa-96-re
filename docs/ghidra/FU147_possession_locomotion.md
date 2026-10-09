@@ -543,6 +543,16 @@ row-04 reads `lane_x`, but rows 01/26/28/2A read `r->lane >> 16` — a
 pre-existing alias divergence now more visible (row 04 staging is the contract
 scope).
 
+**P3 pointer (2026-10-09).** FU-151 P3 closes leg 6's derived subset
+(`fifa96_match_entities_reset_lane` = `FUN_0008C33C` + the derived
+`FUN_0007997C`; the virtual `[rec+0x1C]` restore stays carried), lands leg 9's
+`0x10F37C` constants (the tracking pre-pass), and renames the team +0x7C7
+tracker to `tracker7c7`. The `+0x8E`/`+0x91` erratum audit (FU-151 §3.5
+erratum 1 / §8) found no wrong-field read in the S1 landing: `lane`/`bound`/
+`cam_dz6f` reads are the +0x6B/+0x77/+0x6F words, the dispatch code reads
++0x91, and the face octant +0x8E. Legs 1-5/7/8/10/11/12/13 status unchanged
+(FU-151 §8 holds the updated ledger).
+
 ## 9. Provenance
 
 Ghidra MCP on `/FIFA96.EXE`, read-only:

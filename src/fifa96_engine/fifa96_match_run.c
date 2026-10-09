@@ -321,6 +321,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   }
   r->type = e->type;
   r->actor_type = e->actor_type;
+  r->row44 = e->row44;   /* FU-151: the row-1E/1D stage gates */
   r->code = e->code;   /* native +0x91: the kick/row-04 gates index this byte */
   r->anim_id = e->anim_id;   /* OL-80: byte[[rec+0x28]] live row id */
   r->frame = e->frame;       /* OL-80: native +0x3D live frame index */
@@ -407,7 +408,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
                                        mr->render.camera.pos_z, &lane, &cam_dx,
                                        &cam_dz) == FIFA96_OK) {
       struct fifa96_match_team *team = &mr->entities.team[e->team];
-      int32_t tracker = team->camera_nearest;
+      int32_t tracker = team->tracker7c7;
       e->bound = e->lane_x;             /* 0x7C77E: +0x77 := old +0x6B */
       e->lane_z = cam_dx;               /* 0x7C78E: +0x6D */
       e->cam_dz6f = cam_dz;             /* 0x7C79A: +0x6F */
@@ -418,7 +419,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
        * is a record pointer; the pool stores the team-relative index. */
       if (tracker == FIFA96_MATCH_ENTITY_NONE ||
           (int16_t)e->lane_x < (int16_t)team->records[tracker].lane_x)
-        team->camera_nearest = (int32_t)e->index;
+        team->tracker7c7 = (int32_t)e->index;
     }
   }
   e->pos_x = r->pos_x;
@@ -432,6 +433,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->timer7b = r->timer7b;
   e->lane = r->lane;
   e->type = r->type;
+  e->row44 = r->row44;       /* FU-151: machine gate write-back */
   e->anim_id = r->anim_id;   /* OL-80: the arm bodies' `anim_sel` write-back */
   e->frame = r->frame;
   e->vel_x = r->vel_x;
@@ -473,9 +475,10 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
 /* FU-141 frame inputs: the phase/delta plus the FU-71 camera triple used as
  * the three selection vectors (the native 0x157770/0x157788/0x157794 shadow
  * the 0x15774C camera position at init, FU-67 §4.1). The 0x1577FA/0x157800/
- * 0x157806 bucket timers and the 0x10F37C/0x10F388 intercept targets are the
- * unported camera/track block and executable data (FU-67 S3, FU-130), so they
- * stay zero and the derived bucket falls to the third vector. */
+ * 0x157806 bucket timers stay zero (the camera/track block producer is
+ * unported, FU-67 S3/FU-130); the 0x10F37C/0x10F388 intercept targets are the
+ * static table `{(0,0,0x990),(0,0,-0xA90)}` (FU-151 §2.8, first-hand
+ * `read_memory 0x10F37C`), staged live this slice. */
 static void match_run_entity_frame(const struct fifa96_match_run *mr,
                                    struct fifa96_match_entities_frame *f) {
   memset(f, 0, sizeof *f);
@@ -487,6 +490,10 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
     f->select_vector[v][2] = mr->render.camera.pos_z;
   }
   f->cam_z = (int16_t)mr->render.camera.pos_z;
+  f->intercept_x[0] = 0;
+  f->intercept_x[1] = 0;
+  f->intercept_y[0] = FIFA96_MATCH_ENTITY_INTERCEPT_Z0;
+  f->intercept_y[1] = FIFA96_MATCH_ENTITY_INTERCEPT_Z1;
 }
 
 /* FU-141 drains the pool leaves to the engine: a successful slot merge moves

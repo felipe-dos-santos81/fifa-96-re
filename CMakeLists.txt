@@ -241,13 +241,20 @@ target_link_libraries(test_ball_pairing PRIVATE fifa96_ball_pairing fifa96_entit
 add_test(NAME test_ball_pairing COMMAND test_ball_pairing WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_keeper src/fifa96_loader/fifa96_keeper.c)
+target_link_libraries(fifa96_keeper PRIVATE fifa96_entity_update fifa96_rng)
 add_executable(test_keeper tests/test_keeper.c)
-target_link_libraries(test_keeper PRIVATE fifa96_keeper)
+target_link_libraries(test_keeper PRIVATE fifa96_keeper fifa96_entity_update fifa96_rng)
 add_test(NAME test_keeper COMMAND test_keeper WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_keeper_bodies tests/test_keeper_bodies.c)
-target_link_libraries(test_keeper_bodies PRIVATE fifa96_keeper)
+target_link_libraries(test_keeper_bodies PRIVATE fifa96_keeper fifa96_entity_update fifa96_rng)
 add_test(NAME test_keeper_bodies COMMAND test_keeper_bodies WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_keeper_machines tests/test_keeper_machines.c)
+target_link_libraries(test_keeper_machines PRIVATE fifa96_keeper fifa96_entity_update fifa96_rng)
+target_compile_options(test_keeper_machines PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_keeper_machines PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_keeper_machines COMMAND test_keeper_machines WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_outfield src/fifa96_loader/fifa96_outfield.c)
 target_link_libraries(fifa96_outfield PRIVATE fifa96_entity_update fifa96_action_handlers
