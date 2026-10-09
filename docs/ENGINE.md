@@ -754,12 +754,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   0x48. The P1-review carry-in is recorded: the sit-9/0xA hand-off runs the
   native phase-0/0xA `FUN_0008D098` arms' code-0 installs only as far as the P1
   phase-arm subset (3/4/6/7/8/9/0xD), so the left-behind code-0 installs stay
-  the FU-83 `0x8D192` body; the FK/penalty arms are installed. Carried legs:
+  the FU-83 `0x8D192` body; the FK/penalty arms are installed. The
+  `FUN_000740A0` side byte (the `[0x157AAF]` high byte of `[0x157AAC]`) is
+  staged into `phase_machine.side_controlled` before each referee phase arm, so
+  the phase-7/6 taker installs on the fouled side. Carried legs:
   FU-150 §Port landing legs table (settings labels, RNG identity, whistle
   mapping, referee identity, team-count predicate, downed/sent-off, `0x15888E`
   lifecycle, offside geometry inputs, row-0x11 writer, `FUN_0004BEC8`/`0x6E724`,
-  foul-log consumers; new: the act-2 camera-lead/`word[ESP]` gates and the
-  `[0x158882]` producer).
+  foul-log consumers, the foul-log `rec[+4]` → `fouler->id` stand-in and the
+  dropped stage-4 `0x14C3A0` stats copy; new: the act-2 camera-lead/`word[ESP]`
+  gates, the `[0x158882]` producer, and the **L4 carry-in**: a live session's
+  sit 9/0xA dispatcher queue path (ids 1/2 / 0xA) has no traced consumer yet,
+  so the reachable FK chain is the native direct/pending path).
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

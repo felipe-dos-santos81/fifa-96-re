@@ -1565,9 +1565,9 @@ static void test_engine_referee_contact_fk(void) {
   assert(mr.state.phase == 7u);
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
   assert(mr.ref_speech == 0x2Au);
-  assert(mr.entities.team[0].target == 5);
-  assert(mr.entities.team[0].records[5].code == 0x12u);
-  assert(mr.entities.team[1].records[1].code == 3u);   /* the install-3 prefix */
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.team[1].records[1].code == 0x12u);  /* FK on the fouled side */
+  assert(mr.entities.team[0].records[5].code == 3u);     /* the install-3 prefix */
 
   /* the penalty fork: |x| < 0x420 and the fouler-side band [-0xB10,-0x7B0] */
   fifa96_match_run_init(&mr);
@@ -1585,9 +1585,10 @@ static void test_engine_referee_contact_fk(void) {
   assert(fifa96_match_run_referee_step(&mr) == 1);
   assert(mr.state.phase == 6u);
   assert(mr.ref_speech == 0x23u);
-  assert(mr.entities.team[0].records[1].code == 0x13u);  /* penalty taker */
-  assert(mr.entities.team[1].records[0].code == 0x1Fu);  /* other keeper */
-  assert(mr.entities.team[1].target == 11);
+  assert(mr.entities.team[1].records[1].code == 0x13u);  /* penalty taker */
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.team[0].records[0].code == 0x1Fu);  /* other keeper */
+  assert(mr.entities.team[0].target == 0);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -1652,8 +1653,9 @@ static void test_engine_referee_foul_sequence(void) {
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
   assert(mr.state.phase == 6u);
   assert(mr.ref_speech == 0x23u);
-  assert(mr.entities.team[0].records[1].code == 0x13u);
-  assert(mr.entities.team[1].records[0].code == 0x1Fu);
+  assert(mr.entities.team[1].records[1].code == 0x13u);
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.team[0].records[0].code == 0x1Fu);
 
   /* the no-cards negative: the sum >= 2 path enters stage 5, which stalls
    * while the fouler is not held and never decrements the team count (E10:
@@ -1726,6 +1728,7 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);
   assert(mr.state.phase == 0x0Au);               /* offside stage 0 */
   assert(mr.ref_whistle == 0x1Eu);
+  assert(mr.ref_speech == 0x15u);                /* the kind-3 0x8F188(0x15) */
   /* stage 1 gate, then stage 2 dispatches situation 9 -> the act-2 hand-off */
   assert(fifa96_match_run_referee_step(&mr) == 1);
   assert(mr.referee.stage == 2u);
@@ -1736,7 +1739,8 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.state.phase == 7u);                  /* kind 3 forces free kick */
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
   assert(mr.ref_speech == 0x2Au);
-  assert(mr.entities.team[0].records[1].code == 0x12u);
+  assert(mr.entities.team[1].records[1].code == 0x12u);  /* FK on the fouled side */
+  assert(mr.entities.team[1].target == 12);
 
   /* gates: settings off, suppression timer, the camera mirror gate */
   fifa96_match_run_init(&mr);

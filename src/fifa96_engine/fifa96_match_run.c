@@ -3052,8 +3052,11 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
   if (out->speech_code != 0u) mr->ref_speech = out->speech_code;
   /* The native stage-0 order: the phase write runs before the record install
    * (0x8A091 vs 0x8A0A0), and the installer's +0x98 clear reads the new phase
-   * cell. */
+   * cell. FUN_000740A0 stores the side byte at [0x157AAF] (=
+   * `[0x157AAC]>>24`, the arm's controlled-side gate 0x8D728) before the
+   * per-team FUN_0008D098 arms, so the arm installs on the request's side. */
   if (out->phase_write != 0xFFu) {
+    mr->phase_machine.side_controlled = out->phase_side;
     rc = match_run_write_phase(mr, out->phase_write);
     if (rc != 0) return rc;
     rc = fifa96_match_run_phase_arm(mr, out->phase_write);
@@ -3095,6 +3098,9 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
   int rc;
   if (mr->ref_restart_stage == 0u) {
     if (mr->referee.foul_kind == 0u) mr->ref_whistle = 0x1Eu;
+    /* 0x8935A: FUN_000740A0(0xA, fouled side) — the side lands in [0x157AAF]
+     * before the arm. */
+    mr->phase_machine.side_controlled = (uint8_t)((mr->referee.rec_first_side ^ 1u) & 1u);
     rc = match_run_write_phase(mr, 0x0Au);
     if (rc != 0) return rc;
     mr->ref_restart_stage = 1u;
@@ -3118,6 +3124,9 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
         }
       }
     }
+    /* 0x89590..0x895AC: team byte of [0x15888F] ^ 1 passed to FUN_000740A0
+     * (the fouled side) before the phase-7/6 taker arm gates on it. */
+    mr->phase_machine.side_controlled = (uint8_t)((mr->referee.rec_first_side ^ 1u) & 1u);
     rc = match_run_write_phase(mr, phase);
     if (rc != 0) return rc;
     rc = fifa96_match_run_phase_arm(mr, phase);
@@ -3278,12 +3287,15 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
   }
   mr->incident_x = mr->referee.point[0];
   mr->incident_z = mr->referee.point[2];
-  mr->ref_speech = ev_out.speech_code;        /* the 0x8F188(0x15) request */
   mr->ref_machine = FIFA96_MATCH_RUN_REF_OFFSIDE;
   mr->referee.sequence = FIFA96_REF_SEQ_ACT6;
   mr->referee.stage = 0;
   rc = fifa96_match_run_referee_step(mr);     /* FUN_000888FC(6,..,1) */
   if (rc < 0) return rc;
+  /* The native 0x8F188(0x15) request (0x8A743) precedes the act-6 invocation
+   * and the step's head clears the request slots, so re-assert it after the
+   * synchronous stage-0 call (the observation slot otherwise loses it). */
+  mr->ref_speech = ev_out.speech_code;
   *offside = 1;
   return 1;
 }

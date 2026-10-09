@@ -546,6 +546,17 @@ first-hand re-verified on `/FIFA96.EXE` this slice: `decompile_function`
    FU-83/`0x8D192` phase-body port; the FK/penalty arms (the P2 deliverable) are
    installed. No live producer calls sit 9/0xA without the dispatcher, so the
    divergence is only observable on the staged entry.
+9. **Foul-log player field (review round 1).** The native log stores `rec[+4]`
+   (the roster descriptor dword, `0x8A6ED`); the module has no descriptor surface,
+   so it stores `fouler->id` as the derived stand-in. The rendered field and the
+   `0x157B66+4i` consumer stay FU-150 leg 11.
+10. **Phase-write side (review round 1).** `FUN_000740A0` stores its side byte at
+    `[0x157AAF]` = the high byte of `[0x157AAC]`, which is the arm's
+    controlled-side gate (`0x8D728`); the port now stages the write's side into
+    `phase_machine.side_controlled` in `match_run_ref_apply` (the sequence steps'
+    `phase_side`) and in both `match_run_ref_step_restart` writes (the fouled side
+    `rec_first_side ^ 1`), matching the native `0x740A0`-before-arm order. The
+    phase-7/6 taker therefore installs on the fouled side (`0x8D590..0x8D5A2`).
 
 ### Legs status after P2
 
@@ -561,6 +572,8 @@ first-hand re-verified on `/FIFA96.EXE` this slice: `decompile_function`
 | 8 kind-3 offside geometry inputs | partially landed — the check math is ported; `0x157770` is the ball-triple stand-in and the metric/camera/mirror producers stay unported |
 | 9 row 0x11 `[0x157A6A]` value | closed (FU-149 L9) — the writer row stays FU-149 L13, so the suppression timer is staged/countable but not match-set by the port |
 | 10 `FUN_0004BEC8` / `0x6E724` gates | open — the sequence stage gates are derived ready; the sinks are dropped |
-| 11 foul-log consumers | open (menu-side reads) |
+| 11 foul-log consumers | open (menu-side reads); the log player field stores `fouler->id` in place of the native `rec[+4]` descriptor (erratum 9) |
 | **new** act-2 camera-lead gates + `word[ESP]` | new — the two-step derived machine (erratum 6) |
 | **new** `[0x158882]` producer | new — carried 0 (erratum 7) |
+| **L4 carry-in** live-session sit 9/0xA queue path | open — the dispatcher faithfully queues ids 1/2 (sit 9) / 0xA (sit 0xA) and the restart waits on the untraced consumer (FU-149 L4); the reachable FK chain is the native direct/pending path the tests stage. Settle by tracing the `[0x15B6A8]` consumer. |
+| **new** stage-4 `0x14C3A0` stats copy | open — the native stage 4 also writes `[0x14C3A0][side*0x7B + (int8)rec+0x8D] = severity` (`0x8A313`); the cell's producer/consumer are unported (stats side), so the port keeps the `[0x157B90]` add only |
