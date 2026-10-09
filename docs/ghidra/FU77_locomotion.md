@@ -75,6 +75,13 @@ before calling it). `FUN_0008E244` lacks the `+0x85` lob block and the contact
 block of `FUN_0007BF20`; the shared A–E blocks below are instruction-for-
 instruction the same (compared at `0x8E24B..0x8E507` vs `0x7BF2B..0x7C398`).
 
+**Erratum (FU-147, phase-6 wave-1):** these `FUN_0008E244` passes are
+formation-position application routines invoked from team-management code
+(callers `0x8E5B4`/`0x8E7F3`/`0x8E8F2` ← `FUN_00038004`/`FUN_00038630`), not a
+per-frame AI-positioning replacement of the action tail; the signed-byte
+tables are flat `0x1109FC`/`0x110A6A` (the `0x109F9`/`0x10A67` rendered above
+are the le.bin flat forms).
+
 ### 1.2 The integrator, blocks A–E (`FUN_0008E244`, `FUN_0007BF20`)
 
 Input `EAX = rec`. Block A, target delta and metric:

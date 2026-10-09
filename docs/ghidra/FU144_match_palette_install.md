@@ -161,7 +161,10 @@ The M2 golden was re-pinned for the palette upgrade (see ENGINE.md).
 
 ## 6. Open legs
 
-1. **Base palette `0x14B200`**: the front-end-installed palette the match load
+1. **Base palette `0x14B200` — CLOSED by FU-148 §4.1** (base = `PALsys.fsh`
+   frame `[0x14C2FA]`, settings slot 12; `FUN_00048C8C` sole `0x14B200`
+   writer; snapshot/restore `FUN_00048FF4`). Carried text: the
+   front-end-installed palette the match load
    appends to; not statically derivable (engine uses base := the chunk).
    **Next action:** locate the writers of the native `0x14B200` buffer
    (the boot/front-end palette installs; the getter `FUN_0004793C` returns it

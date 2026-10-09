@@ -3175,6 +3175,9 @@ First-hand bytes: the inline table `0x944E4` =
 **1/6 -> 1, 2/5 -> 0, 3/4 -> no-score counter** (not 1/3/6). The other five
 id tables were re-read this round and stand.
 
+The complete per-leg id→side/no-score map (including the queued id 6: legs 0/1
+map it to the no-score counter, legs 2..5 score it side 1) is FU-146 §4.
+
 Ids outside a table's range (including the queued 0/0xA) jump to the
 `INC [0x15B6A0]` no-score counter (`0x93DA8`/`0x94036`/`0x941F5`/`0x94499`/
 `0x94677`). Every handler also checks `[0x157A4A]>>24 == 2` (the in-play
