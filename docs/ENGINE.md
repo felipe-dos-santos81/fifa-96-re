@@ -16,19 +16,26 @@ kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
 reaches the live phase 2 naturally via situation 0xB), the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
-indexed draw is RGB under SDL3 — FU-144) and **pad-driven locomotion for the
+indexed draw is RGB under SDL3 — FU-144), the derived match HUD (OL-T11-7:
+the Frames.fsh bar + the FNTI-font name/score/period/clock overlay staged by
+BIGF name from GAMEART0 and drawn on the indexed canvas — FU-148; M2
+full-gameplay P0.2, golden re-pinned for the HUD) and **pad-driven locomotion
+for the
 controlled record (M2 interactive Task 1 / G1: the derived FU-70 setup slot
 bind + `FUN_0007876C` merge attach the human slot to the kickoff taker, row
 00's slot-direction target feeds the wired FU-77 shared mover
 `FUN_0007BF20` for that record, and the M2 golden is re-pinned for the
-resulting movement — first differing line frame 59, 107 hash lines).** The M2-B acceptance tape **v4**
+resulting movement — first differing line frame 59, 107 hash lines).** The M2-B acceptance tape **v5**
 (M2 playable-match Task 4, the G4 acceptance) is
 green: it asserts the drawing directly (the formation-placed records reach the
 indexed canvas from the first granted frame; the golden was re-pinned for that
 upgrade, T1), the kickoff entry at begin (T2; transcript byte-identical), the
 RGB palette at the first match present **and on the drawn canvas** (T1/T4 of
 follow-up 4; the golden was re-pinned for the palette — first differing line
-frame 6, 160 of 165 lines, state suffixes unchanged), the natural phase-1 → 2
+frame 6, 160 of 165 lines, state suffixes unchanged), the HUD overlay (P0.2:
+golden v5 re-pinned — first differing line frame 6, 160 of 165 lines, state
+suffixes unchanged; the frame-6 assertion pins the Frames.fsh bar and the
+font staging), the natural phase-1 → 2
 chain (T2: the golden stays byte-identical with the kept 0x13/0x14/2 forcing,
 whose mismatch evidence is in FU-143 §11.5) and the natural-phase-2 probe (T4:
 `run_natural_probe` replays the tape with no directives and lands live phase 2
@@ -141,7 +148,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   dominant sprite color exactly `#E044A0` (6-bit 0x38/0x11/0x28 `<< 2`) with
   olive/brown accents — colored, not grayscale, and reproducible. The
   OL-T11-8 formation draw is live in the indexed canvas and pinned by the tape
-  (HUD/overlays still wait on OL-T11-7). The screenshots establish the Return
+  (the HUD landed afterwards in M2 full-gameplay P0.2 / OL-T11-7; this G4
+  screenshot predates it, so the HUD band is empty in it). The screenshots establish the Return
   advance: the panel-open BackSpace frame is byte-identical to the preceding
   one (`docs/screens/task-4-frontend.png`), and the match-canvas change is the
   panel-confirm shot. A held RIGHT/UP liveness probe left the canvas
@@ -159,8 +167,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   score writer has no gameplay caller). The phase-1 → phase-2 transition is
   derived (follow-up-4 T2 lands the `FUN_0008D098` state-1 arm and action
   row 01; the frame-body fixture and the T4 tape-level natural probe pin the
-  natural phase 2 — FU-143 §11), but it is not visible in a screenshot: there
-  is no on-screen phase readout (HUD/overlays wait on OL-T11-7), so the
+  natural phase 2 — FU-143 §11), but it is not visible in a screenshot: the
+  HUD has no phase readout (it shows the period/clock/score, not the phase;
+  the HUD itself landed in P0.2 / OL-T11-7), so the
   on-screen claim rests on the headless evidence. The M2-B tape v4 covers the
   sequence headlessly with its
   declared/forced phases and the live driver's period end.
@@ -173,12 +182,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   | panel DECLINE/CONFIRM → match start | reached | match canvas replaces the front-end; `task-4-rgb-match.png` |
   | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
   | OL-T11-8 formation draw | reached | 0.47% non-black canvas; tape frames 8/9 pixel counts |
-  | kickoff → phase 2 naturally | reached (headless) | tape v4 `run_natural_probe`: live phase 2 at step 409, row 01 dispatched; not visible in a screenshot (no HUD) |
+  | kickoff → phase 2 naturally | reached (headless) | tape v4 `run_natural_probe`: live phase 2 at step 409, row 01 dispatched; no phase readout on screen (the HUD landed in P0.2 and shows score/clock, not the phase) |
   | move the controlled player | blocked on screen | held RIGHT/UP leaves the canvas byte-identical; presses reach `input_state[0]` but no wired row consumes them (possession/locomotion invokers unported) |
   | kick (KICK press) | blocked | no gameplay row dispatched (tape steps 12/15); possession/selection invokers unported |
   | score a goal | blocked | no goal invoker reachable (OL-87/88/89 verified negative); the tape's score step is the direct derived writer |
   | half/period end → exit | reached | headless (tape: live class-1 period end → phase 0x0C → OVER→POST→EXIT); native periods last minutes, so not run to completion in the smoke |
-  | HUD/overlays | absent | OL-T11-7 unported (no score/clock display on screen) |
+  | HUD score/clock | absent in this G4 shot | landed after this smoke (M2 full-gameplay P0.2 / OL-T11-7, FU-148): bar + names/score/clock staged and drawn on the indexed canvas, tape v5 re-pinned; the shot predates it |
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -229,7 +238,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   `fifa96_match_run_render` installs the staged palette from the first match
   present on, so the first differing line is frame 6 (match start is frame 5;
   frame 6 is the first MATCH-branch present), all 160 lines 6..165 differ, and
-  every `state=` suffix is unchanged. The tape asserts the RGB directly: at
+  every `state=` suffix is unchanged. The **full-gameplay P0.2** transcript
+  changed again and the golden was re-pinned for the **HUD upgrade**
+  (`OL-T11-7`, FU-148 §10): the bridge stages the HUD entries from GAMEART0
+  (clockfnt.fsh/playfnt.fsh/frames Frames.fsh) and the render draws the
+  derived bar + score/clock overlay from the first match frame, so the first
+  differing line is frame 6 (golden `eece28cb8ebe5731`, actual
+  `9c940e7b1ac18675`) and 160 lines 6..165 differ (6..145 carry the canvas
+  change, 146..165 the chained present hash); every `state=` suffix is again
+  unchanged. The tape's scene-pixel evidence is counted above the derived HUD
+  band (`bar_y = 240 - 41 - 2 = 197`; count `y < 190`), so frames 6..8 still
+  assert zero SCENE pixels, and frame 6 asserts the staged bar's first-hand
+  frame-13 pixel (0,0) = 0x45 at (2,197). The tape asserts the RGB directly: at
   frame 6 `render.palette_ready == 1`, the surface palette's staged **chunk
   entry 1** is 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0), and > 700 of the 768
   palette bytes are nonzero; `render.palette` equals the pure extraction over
@@ -258,9 +278,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   live phase 2, transcript byte-identical with the forcing kept per FU-143
   §11.5) and
   `OL-T11-6` (the derived native match palette — FU-144; golden re-pinned for
-  the RGB upgrade). Carried
-  open: `OL-T11-7`
-  HUD; the remaining `OL-84` situation-0xB producers (rows 02/0x10..0x13) and
+  the RGB upgrade) and `OL-T11-7` (the match score/clock HUD — FU-148 §10;
+  M2 full-gameplay P0.2, golden v5 re-pinned for the HUD upgrade; remaining
+  HUD legs `OL-T11-71`…`OL-T11-75`: the nibble colour ramp, the team-name
+  stage, extra-time strings/period offset, the settings/suppress gate writers
+  and the bar blit's exact span scaler). Carried
+  open: the remaining `OL-84` situation-0xB producers (rows 02/0x10..0x13) and
   row 01's event/camera/ball-stage sinks, plus the FU-73 keeper/restart
   producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
@@ -375,9 +398,20 @@ the build also produces the windowed `fifa96` target (`make game`).
   successor/terminal/height machine (`-2`), record facing `+0x7D` (`-3`),
   camera-type ratio setup `FUN_0004D7E8` (`-4`; static `0x1500` default),
   sentinel key scratch producer (`-5`), palette install/kit remap identity
-  stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`;
-  marker/name/score passes), kickoff formation/record placement (`-8`),
+  stand-in (`-6`; `FUN_00048DC0`/`FUN_000CE980`), HUD/overlays (`-7`), kickoff
+  formation/record placement (`-8`),
   direction addend `0xA2A10` (`-9`); live anim inputs are `OL-80` above.
+  `OL-T11-7` is now **landed (M2 full-gameplay P0.2; FU-148 §10)**: the match
+  HUD chain (`FUN_000565BC` gates -> `FUN_00055C24`) is ported — the GAMEART0
+  entries are staged by BIGF name (clockfnt.fsh slot 0x35 / playfnt.fsh 0x36,
+  the FNTI decode in `fifa96_font`; the Frames.fsh bar frame 13 with frame 4's
+  layout height, closing FU-148 §7 leg 2 via `FUN_00053930`'s `0x14E624`
+  frame table), and `fifa96_match_run_render` draws the bar + name/score/
+  period/clock overlay with the FU-148 §1.3/§1.4 layout (outline colour 6,
+  main colour 0). The remaining HUD legs are `OL-T11-71`…`OL-T11-75` (FU-148
+  §10 "Remaining numbered legs": colour ramp, name source, extra-time, gate
+  writers, bar scaler); overlay draws outside the match HUD (marker/menu) stay
+  unported.
   `OL-T11-6` is now **landed (M2 playable-match follow-up 4 T1; FU-144)**: the
   match-data load's palette chain (`FUN_00048ED8`/`FUN_00048B60` ->
   `FUN_00048C8C`/`FUN_000479A0`) is derived — `PALsys.fsh` (resource slot

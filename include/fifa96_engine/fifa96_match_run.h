@@ -7,6 +7,7 @@
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_control.h"
+#include "fifa96_loader/fifa96_font.h"
 #include "fifa96_loader/fifa96_input.h"
 #include "fifa96_loader/fifa96_match_display.h"
 #include "fifa96_loader/fifa96_match_lifecycle.h"
@@ -14,6 +15,7 @@
 #include "fifa96_loader/fifa96_match_state.h"
 #include "fifa96_loader/fifa96_render.h"
 #include "fifa96_loader/fifa96_rng.h"
+#include "fifa96_loader/fifa96_sprite.h"
 #include "fifa96_loader/fifa96_window.h"
 
 /* Engine-level match driver (M2 foundation): owns the FU-64 lifecycle and the
@@ -42,6 +44,10 @@ struct fifa96_surface;
 /* Match presentation slots: FU-85 §4 stages 23 entities (11 + 11 + ball) into
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
+
+/* OL-T11-7 HUD: the staged team-name seam's buffer (the native FUN_00017748
+ * filters into a 10-byte local; the engine keeps a little headroom). */
+#define FIFA96_MATCH_HUD_NAME_MAX 16
 
 /* Derived period lengths in whole seconds (FU-62 §4.6: the clock compares
  * `period_seconds == [0x5881A]` for periods 0/1 and `[0x5881C]` for periods
@@ -147,6 +153,23 @@ struct fifa96_match_run_render {
    * which fifa96_match_run_render runs before the plane conversion. */
   uint8_t palette[768];
   int palette_ready;                        /* a match palette is staged */
+  /* OL-T11-7 (FU-148 §1.5/§6.1): the HUD assets. `hud_font[0]` stages
+   * clockfnt.fsh (native resource slot 0x35, the full window's font) and
+   * `hud_font[1]` playfnt.fsh (slot 0x36, the zoomed one), both by BIGF name
+   * from the pitch container (the native FUN_0004AFB8(0x35/0x36) selection
+   * keyed on `[0x108DDC] < 0x10000`). `hud_bar` is Frames.fsh frame 13 (the
+   * drawn background panel: FUN_00053930 copies the bank's frames to
+   * 0x14E624 and the HUD reads frame 13) and `hud_bar_height` frame 4's
+   * height (the layout's 0x14E634 anchor). `hud_name` is the team-name stage
+   * seam: the native name source (FUN_00011BEC over the team block) is
+   * unported (leg OL-T11-72), so a begun run carries empty names and the HUD
+   * draws the name pass only when a caller stages one. */
+  struct fifa96_font hud_font[2];
+  uint8_t hud_font_ready[2];
+  struct fifa96_sprite_frame hud_bar;
+  uint16_t hud_bar_height;
+  uint8_t hud_bar_ready;
+  char hud_name[2][FIFA96_MATCH_HUD_NAME_MAX];
 };
 
 /* Minimal derived match record (M2 Task 5 / FU-138 §4, extended by M2 Task 7 /

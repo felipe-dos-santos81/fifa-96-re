@@ -263,6 +263,25 @@ static void test_stage_derived_pair_with_iso(void) {
    * (the native `v << 2`). */
   assert(r->palette[3] == 0xE0 && r->palette[4] == 0x44 && r->palette[5] == 0xA0);
 
+  /* OL-T11-7 (P0.2 HUD): the HUD assets are staged by BIGF name from the
+   * pitch container — clockfnt.fsh (native resource slot 0x35, the full
+   * window's font), playfnt.fsh (slot 0x36, zoomed) and the Frames.fsh bar
+   * (FUN_00053930 stores its frames at 0x14E624; frame 13 is drawn, frame
+   * 4's height anchors the layout). Real entry geometry pinned first-hand
+   * (FU-148 §1.5). */
+  assert(r->hud_font_ready[0] == 1 && r->hud_font_ready[1] == 1);
+  assert(r->hud_bar_ready == 1);
+  assert(r->hud_font[0].first == 0x20 && r->hud_font[0].last == 0xFF);
+  assert(r->hud_font[0].default_width == 9 && r->hud_font[0].default_height == 13);
+  assert(r->hud_font[0].bitmap_width == 682 && r->hud_font[0].bitmap_height == 13);
+  assert(r->hud_font[1].first == 0x20 && r->hud_font[1].last == 0xFF);
+  assert(r->hud_font[1].default_width == 5 && r->hud_font[1].default_height == 7);
+  assert(r->hud_font[1].bitmap_width == 368 && r->hud_font[1].bitmap_height == 7);
+  assert(r->hud_bar.width == 60 && r->hud_bar.height == 41);
+  assert(r->hud_bar.pixels != NULL && r->hud_bar.pixel_len == 60u * 41u);
+  assert(r->hud_bar_height == 41);
+  assert(r->hud_name[0][0] == '\0' && r->hud_name[1][0] == '\0');
+
   /* FU-84 §4/§5: frame_index is a signed byte, so the resolver accepts
    * 0..0x7F; the staged table covers all 128 records and every accepted index
    * resolves inside the arena. */
@@ -318,8 +337,12 @@ static void test_stage_derived_pair_with_iso(void) {
   assert(f.mr.render.enabled == 1);
   assert(f.mr.render.bank_count > 91u && f.mr.render.bank_count < gameart_slots);
   assert(f.mr.render.banks[0].base != NULL);
-  /* A pitch container without PALsys.fsh clears the staged palette. */
+  /* A pitch container without PALsys.fsh clears the staged palette, and one
+   * without the HUD entries clears the HUD staging (GAMEFLD1 carries neither
+   * PALsys.fsh nor Frames.fsh/clockfnt.fsh/playfnt.fsh). */
   assert(f.mr.render.palette_ready == 0);
+  assert(f.mr.render.hud_bar_ready == 0);
+  assert(f.mr.render.hud_font_ready[0] == 0 && f.mr.render.hud_font_ready[1] == 0);
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
 
   fixture_drop(&f);

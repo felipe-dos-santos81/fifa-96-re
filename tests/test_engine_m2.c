@@ -183,6 +183,36 @@
  * on FU-96 legs 1/3 + the FU-71 follow writer), so the tape's early canvases
  * stay unchanged.
  *
+ * --- v5 (M2 full-gameplay P0.2 / OL-T11-7): the HUD golden re-pin -----------
+ *
+ * The M2 golden is re-pinned because the native match HUD entered the tape
+ * (FU-148 §1/§6.1): the bridge's asset stage now also stages the GAMEART0 HUD
+ * entries — the FNTI fonts clockfnt.fsh (native slot 0x35, the full window's
+ * font) / playfnt.fsh (slot 0x36, zoomed) and the Frames.fsh bar (frame 13
+ * drawn, frame 4's height for the layout anchor) — and
+ * `fifa96_match_run_render` draws the derived overlay whenever render.enabled,
+ * the run is not suspended, the period is < 4 and the HUD assets are ready.
+ * In ISO mode that is every match frame (6..145): the bar panel at
+ * (bar_x, bar_y) = (2, 240-41-2 = 197) changes the canvas from the first
+ * match frame on. The no-assets smoke mode stages nothing and draws nothing
+ * (unchanged self-consistency only).
+ *
+ * Frame diff (against the v4.2 golden, `cmp`/diff measured): lines 1..5 are
+ * byte-identical; 160 lines differ (frames 6..165). The canvas change itself
+ * is frames 6..145 (every in-match frame draws the HUD); 146..165 are the
+ * post-exit front-end frames, whose canvases are repainted identically but
+ * whose transcript hashes differ because the null backend chains one FNV-1a
+ * over every presented frame (platform_null.c `present_hash`). Every `state=`
+ * suffix is unchanged (HUD drawing writes no engine state). The first
+ * differing line is frame 6 (golden `eece28cb8ebe5731`, actual
+ * `9c940e7b1ac18675`). The scene-draw evidence
+ * (`draw_px_pre`/`draw_px_first`) is now counted above the derived HUD band
+ * top (bar_y = 197; the tape counts y < 190), so frames 6..8 still assert
+ * zero SCENE pixels while their HUD-only canvases (and therefore hashes)
+ * differ. New v5 assertion: the Frames.fsh frame-13 bar's first-hand pixel
+ * (0,0) = 0x45 draws at (2,197) on the first match frame. M1 is untouched
+ * (test_engine_m1 green, same golden).
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -214,8 +244,10 @@
  *     (FU-142 App. I.10 census), so gameplay goals stay blocked on the
  *     `OL-87`/`OL-88`/`OL-89` invoker legs (T3 verdict: no invoker is
  *     reachable from the ported state — FU-142 App. L.9);
- *   - HUD/overlays stay unported (`OL-T11-7`); the palette install is no
- *     longer a leg — `OL-T11-6` landed in T1 and this tape asserts it.
+ *   - the palette install is no longer a leg — `OL-T11-6` landed in T1 and
+ *     this tape asserts it; the match HUD landed in v5 (`OL-T11-7`), while
+ *     the remaining overlays (marker/menu draws) stay unported (`OL-T11-7`
+ *     narrowed).
  * The complete forcing inventory is m 1 and m 21 (kickoff phases 0x13/0x14),
  * the m 41 pair (phase 2 and the 1 s period length) with its row staging, and
  * the m 62 direct score call. No other phase, period, row or input is forced.
@@ -324,6 +356,12 @@
 
 /* Post-exit front-end frames recorded before the tape stops. */
 #define M2_POST_EXIT_FRAMES 20
+
+/* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
+ * bar's y = y1 - Frames-frame-4-height - 2 = 240 - 41 - 2 = 197 (FU-148
+ * §1.3/§6.1). Scene-draw evidence is counted above y = 190 so the HUD pixels
+ * cannot satisfy "the placed records draw". */
+#define M2_HUD_BAND_TOP 190
 
 /* v4 natural-phase-2 probe bounds: the natural chain lands phase 2 at
  * presented frame ~410 (~121 granted frames, the 0x78 + 0x3C + 0x78 timers),
@@ -560,13 +598,14 @@ struct m2_result {
   uint16_t score_before_exit[2];
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
-  /* v3 drawing evidence (M2 visible-match Task 1 / OL-T11-8): non-background
-   * pixels in the engine's indexed match canvas at the last pre-grant frame
+  /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + full-gameplay
+   * P0.2 / OL-T11-7): non-background SCENE pixels (above the derived HUD band,
+   * y < 190) in the engine's indexed match canvas at the last pre-grant frame
    * (8, empty render list) and the first granted frame (9, staged scene), plus
    * the staged scene state at frame 9. ISO mode only: without the ISO the
    * render chain is disabled and the surface keeps the front-end frame. */
-  int draw_px_pre;           /* canvas pixels != background at frame 8 */
-  int draw_px_first;         /* canvas pixels != background at frame 9 */
+  int draw_px_pre;           /* scene pixels at frame 8 (above the HUD band) */
+  int draw_px_first;         /* scene pixels at frame 9 (above the HUD band) */
   int draw_entity_count;     /* render.entity_count at frame 9 (23 slots) */
   int32_t staged_rec0_z;     /* render.entities[0].stage.pos.z at frame 9 */
   int32_t staged_rec11_z;    /* render.entities[11].stage.pos.z at frame 9 */
@@ -815,17 +854,23 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       assert(e->match_run.state.prev_phase == 0);
       assert(e->match_run.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
     }
-    /* v3 drawing evidence (M2 visible-match Task 1 / OL-T11-8): count the
-     * non-background pixels of the presented indexed match canvas. The first
-     * grant is step 9 (the tape's pinned cadence), so frames 6..8 render the
-     * empty render list (uniform clear index) and frame 9 is the first
-     * render-list staging: the formation-seeded records must be on the canvas
-     * there, not just in the pool. ISO mode only (see m2_result). */
+    /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + M2
+     * full-gameplay P0.2 / OL-T11-7): count the non-background SCENE pixels of
+     * the presented indexed match canvas above the derived HUD band (v5: the
+     * HUD entered the tape, so the whole-canvas count would always be
+     * non-zero). The first grant is step 9 (the tape's pinned cadence), so
+     * frames 6..8 render the empty render list (HUD-only canvases) and frame 9
+     * is the first render-list staging: the formation-seeded records must be
+     * on the canvas there, not just in the pool. ISO mode only (see
+     * m2_result). */
     if (with_iso && live) {
       size_t nz = 0;
       size_t npix = (size_t)e->surface->width * (size_t)e->surface->height;
-      for (size_t i = 0; i < npix; i++)
-        if (e->surface->indexed[i] != e->match_run.render.background) nz++;
+      for (int y = 0; y < M2_HUD_BAND_TOP; y++)
+        for (int x = 0; x < e->surface->width; x++)
+          if (e->surface->indexed[(size_t)y * (size_t)e->surface->width + (size_t)x] !=
+              e->match_run.render.background)
+            nz++;
       if (steps >= 6 && steps <= 8) {
         assert(nz == 0);                    /* pre-grant: empty render list */
         res->draw_px_pre = (int)nz;
@@ -841,6 +886,13 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         for (size_t i = 0; i < 768; i++)
           if (e->surface->palette[i] != 0) nonzero++;
         assert(nonzero > 700);
+        /* v5 (OL-T11-7 acceptance): the HUD staged and drew on the first match
+         * frame — the Frames.fsh frame-13 bar's first-hand pixel (0,0) = 0x45
+         * lands at (bar_x, bar_y) = (2, 197) in the full window. */
+        assert(e->match_run.render.hud_bar_ready == 1);
+        assert(e->match_run.render.hud_font_ready[0] == 1);
+        assert(e->match_run.render.hud_font_ready[1] == 1);
+        assert(e->surface->indexed[197 * 320 + 2] == 0x45);
       }
       if (steps == 9) {
         res->draw_px_first = (int)nz;

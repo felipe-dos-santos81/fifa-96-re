@@ -608,3 +608,84 @@ Retail data: `/ART/GAMEART0.PVI` extracted from `game/FIFAPCCD96.iso` (xorriso,
 0x101BC0/0x101BCC.
 No Ghidra writes, no project saves, no repo edits; this draft is the only file
 written.
+
+---
+
+## 10. Port errata — OL-T11-7 landed (M2 full-gameplay P0.2, 2026-10-09)
+
+The HUD port (`fifa96_match_run_stage` + `fifa96_match_run_render` +
+`src/fifa96_loader/fifa96_font.c`; tests `test_font`,
+`test_engine_match_render::test_hud_*`, `test_engine_match_staging`
+ISO cases) re-verified §1 first-hand. Corrections and closures:
+
+1. **§7 leg 2 CLOSED — the `[0x14E658]`/`[0x14E634]` writer is static.**
+   `FUN_00053930` (single caller `FUN_0004AD4C`) runs
+   `FUN_0004AFB8(0x2F)`, takes the bank's frame count and stores each frame
+   pointer at `(&0x14E624)[i]` (`0x53994/0x539AA` are frame 9/10 stores; the
+   rest are the loop). Resource slot 0x2F resolves through the `0x107370`
+   name table to `0x101B8C` = "Frames" and the slots-39..55 `%s.%s` loop with
+   the constant `fsh` at `0x101C90`, i.e. **Frames.fsh** (GAMEART0 BIGF entry
+   43, 15 frames). The HUD's pointers are therefore Frames.fsh frame
+   descriptors: `[0x14E634]` = frame 4 (layout height 41), `[0x14E658]` =
+   frame 13 (the drawn bar, 60x41; pixel (0,0) = 0x45), `[0x14E638]` =
+   frame 5 (overlay scaler A), `[0x14E648]/[0x14E64C]` = frames 9/10 (then
+   conditionally zeroed by the `FUN_00011BD4` side results). The engine
+   stages the bank by name and draws frame 13 with frame 4's height.
+2. **§1.4 register names**: `ESI` (0x12/0x18, +6/+8 when wide) is the
+   **clock cell width** (`0x55E58/0x55EBA` set it just before the wide check;
+   `0x5609C MOV ECX,ESI` feeds FUN_00055BA8), not the bar height
+   (`local_28` = `[ESP+0x90]` = 0xE/0x11 is the clock cell x offset from x0,
+   `0x5608A/0x560A1`; `local_20` = 2/3 is the cells' y offset). The bar's
+   dimensions come only from the frame-13 descriptor.
+3. **§1.4 cell y**: the period/clock row is
+   `[0x14E52C]+[0x14E534] + 2*[0x14E51C] + local_20` (`0x56068..0x56085`),
+   i.e. `bar_y + 2*row_pitch + 2|3`; `y2 = bar_y + local_24(2)` feeds only
+   the name/score rows. `local_24 = 2` both modes.
+4. **`[0x14E534]/[0x14E530]` are menu-overlay outputs**: `FUN_000550E4`
+   zeroes them on entry (`0x55169/0x5516E`) and recomputes
+   `[0x14E534] = min(0, y1 - [0x14E52C] - 0x36)`, `[0x14E530] = 2*` at
+   `0x55205..0x55233`; live play without the menu leaves 0 (also the reset
+   `FUN_000537F8`). The engine keeps the live-play zero offset.
+5. **§1.5 font layout confirmed and completed**: the `[+0x1C]` block has its
+   own 16-byte header — mode byte `0x79/0x7A/0x7B` (FUN_000AFBFC → 1/4/8
+   bpp; the retail block says 0x7A), u16 pixel width at +4, u16 row count at
+   +6 — and the glyph base is block+0x10. The retail fonts are 4bpp:
+   clockfnt (BIGF entry 53, slot 0x35) 682x13, playfnt (entry 54, slot 0x36)
+   368x7. Per char, the +0x20 dword is {low16 bit column, high16 row} into
+   the shared bitmap; the row stride is `(bitmap_width*depth+7)>>3`; glyph
+   pixels are read at column `bit+gx` (high nibble first) and a zero nibble
+   is transparent. The decode is pixel-verified against the retail '0'
+   (test_font's 32-pixel raster) — §8's "only partly traced" risk is closed
+   at this level.
+6. The native font selection is `FUN_0004AFB8(0x36)` when `[0x108DDC] <
+   0x10000` else `0x35` (playfnt/clockfnt), matching §1.5 — the engine
+   stages both and selects on `render.window_zoomed`.
+
+### Remaining numbered legs (OL-T11-7x)
+
+* **OL-T11-71 (glyph colour ramp / FU-148 leg 4)**: the native 4bpp plot
+  path maps each glyph nibble through the runtime-filled `0x15BBAC` shade
+  table (`FUN_00019E9C` → `FUN_000AFCB0`/`FUN_000B2A90`); the engine draws
+  the two documented flat indices (6 outline, 0 main) for every non-zero
+  nibble, so anti-aliased edge pixels are binary. Documented divergence.
+* **OL-T11-72 (team-name stage / FU-148 leg 7)**: the native name source
+  (`FUN_00011BEC(side,0,0)` → `FUN_00017748` filter over the unported team
+  block `0x143018+side*0x49`) is not wired; the run stages empty names and
+  exposes `render.hud_name[2]` so a future producer can fill them (the name
+  pass, its placement and the wide-name shift are ported and tested).
+* **OL-T11-73 (extra-time period/clock / FU-148 legs 5/14)**: the native
+  branch `FUN_0004B454() != 0` re-labels the names with string-table ids
+  0x1EA/0x1E9 and adjusts the clock via `FUN_0004B4CC`; the mode-dependent
+  period offset `[0x14E5A0]` writer is still unlocated. The engine has no
+  extra-time mode and displays `period+1` with the unadjusted clock.
+* **OL-T11-74 (settings/suppress gate / FU-148 leg 1 + §6.1)**: the
+  `FUN_0001D940(6)` settings cell has no static writer and the
+  `[0x14E510]`/`[0x14E538]`/`[0x14E59C]` suppress writers stay unported; the
+  engine maps the gate to "HUD assets staged" (bar + the window branch's
+  font) and the existing `render.display.suspend` flag.
+* **OL-T11-75 (bar blit exactness / FU-148 leg 3)**: the native zoomed bar
+  scaler is `FUN_0009B850`'s 16.16 span stepper (including its per-pixel
+  colour path); the engine draws the frame-13 indices 1:1 in the full
+  window and nearest-neighbour at the derived `size*0xB800>>16` size in the
+  zoomed one, with source pixel 0 transparent. FU-148 leg 3's "fill colour
+  source" remains the open part.

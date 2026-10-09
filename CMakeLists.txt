@@ -313,6 +313,14 @@ target_compile_options(test_sprite_palette PRIVATE -fsanitize=address,undefined 
 target_link_options(test_sprite_palette PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_sprite_palette COMMAND test_sprite_palette WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_font src/fifa96_loader/fifa96_font.c)
+target_link_libraries(fifa96_font PRIVATE fifa96_file)
+add_executable(test_font tests/test_font.c)
+target_link_libraries(test_font PRIVATE fifa96_font fifa96_record fifa96_bigf)
+target_compile_options(test_font PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_font PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_font COMMAND test_font WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_library(fifa96_projection src/fifa96_loader/fifa96_projection.c)
 add_executable(test_projection tests/test_projection.c)
 target_link_libraries(test_projection PRIVATE fifa96_projection)
@@ -415,7 +423,7 @@ target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
-                                          fifa96_match_lifecycle
+                                          fifa96_font fifa96_match_lifecycle
                                           fifa96_match_pace fifa96_match_state fifa96_input
                                           fifa96_control fifa96_camera fifa96_projection
                                           fifa96_scene fifa96_render fifa96_window

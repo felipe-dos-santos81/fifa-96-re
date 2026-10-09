@@ -46,6 +46,7 @@
 #include "fifa96_engine/fifa96_platform_null.h"
 #include "fifa96_engine/fifa96_surface.h"
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_font.h"
 
 /* FNV-1a over the 320x240 indexed canvas + 768-byte palette (fifa96_surface_hash):
  * pinned from the first verified run (all-zero palette, background 0, the
@@ -159,6 +160,12 @@ static void test_init_resets_render_state(void) {
   assert(mr.render.remap[1] == 1);
   assert(mr.render.remap[0x80] == 0x80);
   assert(mr.render.remap[255] == 255);
+  /* OL-T11-7 HUD staging: no assets, no staged names. */
+  assert(mr.render.hud_font[0].data == NULL && mr.render.hud_font[1].data == NULL);
+  assert(mr.render.hud_font_ready[0] == 0 && mr.render.hud_font_ready[1] == 0);
+  assert(mr.render.hud_bar.pixels == NULL && mr.render.hud_bar_ready == 0);
+  assert(mr.render.hud_bar_height == 0);
+  assert(mr.render.hud_name[0][0] == '\0' && mr.render.hud_name[1][0] == '\0');
 }
 
 static void test_null_and_disabled(void) {
@@ -971,6 +978,257 @@ static void test_engine_match_step_renders(void) {
   drop_engine_fixture(on);
 }
 
+/* ------------------------------------------------------------------------ *
+ * OL-T11-7 (M2 full-gameplay P0.2): the match HUD (FU-148 §1/§6.1).
+ *
+ * First-hand native chain: FUN_000565BC's gates (period < 4 via FUN_0004B5F4,
+ * not paused via [0x14E688], settings/asset gate FUN_0001D940(6)) select
+ * FUN_00055C24, which draws with the full window's clockfnt.fsh and the
+ * zoomed playfnt.fsh: bar (Frames.fsh frame 13 via FUN_0009BB20/0x9AFD0) ->
+ * name0 -> name1 -> score0 -> score1 (right-aligned at clock_x) -> period ->
+ * clock (FUN_00055BA8 centred cells), each text run as colour-6 outline at
+ * (+1,+1) then colour-0 main. Layout (FU-148 §1.3/§1.4, full window):
+ * row_pitch 0xC, x_left x0+6, clock_x x0+0x32, bar_x x0+2,
+ * bar_y y1 - bar_h - 2, y2 bar_y+2, period cell (x0, 2*row_pitch+y2+3,
+ * row_pitch-1, row_pitch-1), clock cell (x0+0x11, same y, 0x18, ...).
+ *
+ * Fixture: a synthetic FNTI font with one 1x1 solid glyph per char '0'..':'
+ * and advance 2 (so text widths are exactly 2 per char), the Frames.fsh
+ * frame-13 stand-in {0x11, 0, 0, 0x22} with the native layout height 41, and
+ * background 0x7F so the main-pass colour 0 is distinguishable from "not
+ * drawn". State: score 2-1, total_seconds 83 -> "01:23", period 0 -> "1".
+ * ------------------------------------------------------------------------ */
+
+#define HUD_FONT_LEN 0x100
+
+static void hud_put32(uint8_t *p, uint32_t v) {
+  p[0] = (uint8_t)v;
+  p[1] = (uint8_t)(v >> 8);
+  p[2] = (uint8_t)(v >> 16);
+  p[3] = (uint8_t)(v >> 24);
+}
+
+/* Synthetic FNTI image: chars '0'..':' (11 glyphs), default 1x1, width table
+ * 1 each, height table 1 each, advance table 2 each, no offsets; the 4bpp
+ * bitmap is 32x1 and glyph i sits at bit column 2*i (high nibble of byte i). */
+static void hud_font_init(uint8_t *f) {
+  memset(f, 0, HUD_FONT_LEN);
+  memcpy(f, "FNTI", 4);
+  f[4] = 0x30;   /* '0' */
+  f[5] = 0x3A;   /* ':' */
+  f[6] = 1;
+  f[7] = 1;
+  f[8] = 0;
+  hud_put32(f + 0x10, 0x004C0000u);          /* widths at 0x4C */
+  hud_put32(f + 0x14, (0x62u << 16) | 0x57); /* heights 0x57, advances 0x62 */
+  hud_put32(f + 0x18, (0x78u << 16) | 0x6D); /* xoff 0x6D, yoff 0x78 */
+  hud_put32(f + 0x1C, 0xA0u);                /* bitmap block at 0xA0 */
+  for (unsigned i = 0; i < 11; i++) {
+    hud_put32(f + 0x20 + i * 4u, i * 2u);    /* bit column 2*i, row 0 */
+    f[0x4C + i] = 1;                         /* width */
+    f[0x57 + i] = 1;                         /* height */
+    f[0x62 + i] = 2;                         /* advance */
+    f[0x6D + i] = 0;                         /* x offset */
+    f[0x78 + i] = 0;                         /* y offset */
+    f[0xB0 + i] = 0xF0;                      /* pixel at bit 2*i: high nibble */
+  }
+  f[0xA0] = 0x7A;                            /* 4bpp block */
+  f[0xA4] = 32;                              /* bitmap width (pixels) */
+  f[0xA6] = 1;                               /* bitmap height (rows) */
+}
+
+struct hud_fixture {
+  struct fifa96_match_run mr;
+  struct fifa96_surface *s;
+  uint8_t blob[BLOB_LEN];
+  int32_t offsets[2];
+  struct fifa96_render_bank bank;
+  uint8_t frames[5];
+  uint8_t font_data[HUD_FONT_LEN];
+  uint8_t bar_pixels[4];
+};
+
+static void hud_fixture_init(struct hud_fixture *f) {
+  memset(f, 0, sizeof *f);
+  fifa96_match_run_init(&f->mr);
+  f->s = fifa96_surface_create(320, 240);
+  assert(f->s != NULL);
+  setup_render(&f->mr.render, f->blob, f->offsets, &f->bank, f->frames);
+  /* HUD-only canvas: no staged entities, background 0x7F so index-0 text is
+   * visible. */
+  f->mr.render.entity_count = 0;
+  f->mr.render.background = 0x7F;
+  fifa96_surface_clear(f->s, 0x7F);
+
+  hud_font_init(f->font_data);
+  assert(fifa96_font_parse(f->font_data, sizeof f->font_data,
+                           &f->mr.render.hud_font[0]) == FIFA96_OK);
+  f->mr.render.hud_font_ready[0] = 1;
+  f->bar_pixels[0] = 0x11;
+  f->bar_pixels[1] = 0x00;
+  f->bar_pixels[2] = 0x00;
+  f->bar_pixels[3] = 0x22;
+  f->mr.render.hud_bar.width = 2;
+  f->mr.render.hud_bar.height = 2;
+  f->mr.render.hud_bar.pixels = f->bar_pixels;
+  f->mr.render.hud_bar.pixel_len = 4;
+  f->mr.render.hud_bar_height = 41;   /* the Frames.fsh frame-4 layout height */
+  f->mr.render.hud_bar_ready = 1;
+
+  f->mr.state.period = 0;             /* displayed 1 */
+  f->mr.state.total_seconds = 83;     /* 01:23 */
+  f->mr.score[0] = 2;
+  f->mr.score[1] = 1;
+}
+
+/* Full 320x240 window: the derived layout is
+ *   row_pitch 12, x_left 6, clock_x 50, bar_x 2, bar_y 240-41-2 = 197,
+ *   y2 199, cells_y bar_y+2*12+3 = 224, period cell (0, 224, 11, 11),
+ *   clock cell (17, 224, 24, 11). */
+static void test_hud_draws_bar_text_cells(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  f.mr.render.hud_name[0][0] = '1';
+  f.mr.render.hud_name[0][1] = '2';
+  f.mr.render.hud_name[0][2] = '\0';
+  f.mr.render.hud_name[1][0] = '3';
+  f.mr.render.hud_name[1][1] = '4';
+  f.mr.render.hud_name[1][2] = '\0';
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* Bar panel at (bar_x, bar_y) = (2,197); pixel 0 transparent. */
+  assert(f.s->indexed[197 * 320 + 2] == 0x11);
+  assert(f.s->indexed[197 * 320 + 3] == 0x7F);
+  assert(f.s->indexed[198 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[198 * 320 + 3] == 0x22);
+  /* name0 "12" at (x_left, y2) = (6,199): 1x1 glyphs with advance 2, main
+   * colour 0, outline +1/+1. */
+  assert(f.s->indexed[199 * 320 + 6] == 0x00);
+  assert(f.s->indexed[199 * 320 + 7] == 0x7F);
+  assert(f.s->indexed[199 * 320 + 8] == 0x00);
+  assert(f.s->indexed[200 * 320 + 7] == 0x06);
+  assert(f.s->indexed[200 * 320 + 9] == 0x06);
+  /* name1 "34" at (6, y2+row_pitch-2) = (6,209). */
+  assert(f.s->indexed[209 * 320 + 6] == 0x00);
+  assert(f.s->indexed[210 * 320 + 7] == 0x06);
+  /* score0 "2" right-aligned at clock_x=50: x = 50-2 = 48; score1 below. */
+  assert(f.s->indexed[199 * 320 + 48] == 0x00);
+  assert(f.s->indexed[199 * 320 + 49] == 0x7F);
+  assert(f.s->indexed[200 * 320 + 49] == 0x06);
+  assert(f.s->indexed[200 * 320 + 50] == 0x7F);
+  assert(f.s->indexed[209 * 320 + 48] == 0x00);
+  assert(f.s->indexed[210 * 320 + 49] == 0x06);
+  /* period "1" centred in (0,224,11,11): px = (11-2)/2 = 4. */
+  assert(f.s->indexed[224 * 320 + 4] == 0x00);
+  assert(f.s->indexed[224 * 320 + 5] == 0x7F);
+  assert(f.s->indexed[225 * 320 + 5] == 0x06);
+  /* clock "01:23" (width 10) centred in (17,224,24,11): px = 17+7 = 24,
+   * glyphs every 2 px -> 24,26,28,30,32. */
+  assert(f.s->indexed[224 * 320 + 24] == 0x00);
+  assert(f.s->indexed[224 * 320 + 32] == 0x00);
+  assert(f.s->indexed[224 * 320 + 33] == 0x7F);
+  assert(f.s->indexed[225 * 320 + 25] == 0x06);
+  assert(f.s->indexed[225 * 320 + 33] == 0x06);
+  assert(f.s->indexed[225 * 320 + 34] == 0x7F);
+  /* Outside the HUD block the background is untouched. */
+  assert(f.s->indexed[0] == 0x7F);
+  assert(f.s->indexed[239 * 320 + 319] == 0x7F);
+  assert(f.s->indexed[196 * 320 + 2] == 0x7F);
+
+  uint64_t hud = fifa96_surface_hash(f.s);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(fifa96_surface_hash(f.s) == hud);
+  fifa96_surface_destroy(f.s);
+}
+
+/* With no staged names the name pass draws nothing (leg OL-T11-72); the
+ * scores/period/clock still draw, and a goal score >= 100 shifts the score
+ * column and widens the clock cell by the native +8 (full window). */
+static void test_hud_names_absent_and_wide_scores(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[199 * 320 + 6] == 0x7F);   /* no name0 */
+  assert(f.s->indexed[209 * 320 + 6] == 0x7F);   /* no name1 */
+  assert(f.s->indexed[199 * 320 + 48] == 0x00);  /* score0 still there */
+
+  f.mr.score[1] = 100;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  /* wide: clock_x 50+8 = 58; score1 "100" (width 6) at 58-6 = 52, glyphs
+   * every 2 px; the clock cell widens 24+8 -> px = 17 + (32-10)/2 = 28. */
+  assert(f.s->indexed[209 * 320 + 52] == 0x00);
+  assert(f.s->indexed[209 * 320 + 53] == 0x7F);
+  assert(f.s->indexed[209 * 320 + 54] == 0x00);
+  assert(f.s->indexed[210 * 320 + 53] == 0x06);
+  assert(f.s->indexed[224 * 320 + 28] == 0x00);
+  fifa96_surface_destroy(f.s);
+}
+
+/* The derived gates: suspend ([0x14E688]), period >= 4, missing bar and
+ * missing font each suppress the whole pass. */
+static void test_hud_gates(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+
+  f.mr.render.display.suspend = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[224 * 320 + 24] == 0x7F);
+  f.mr.render.display.suspend = 0;
+
+  f.mr.state.period = 4;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[224 * 320 + 24] == 0x7F);
+  f.mr.state.period = 0;
+
+  f.mr.render.hud_bar_ready = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  f.mr.render.hud_bar_ready = 1;
+
+  f.mr.render.hud_font_ready[0] = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[197 * 320 + 2] == 0x7F);
+  assert(f.s->indexed[224 * 320 + 24] == 0x7F);
+  f.mr.render.hud_font_ready[0] = 1;
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[197 * 320 + 2] == 0x11);
+  fifa96_surface_destroy(f.s);
+}
+
+/* A 160x200 window is the zoomed branch (FU-93 §1): playfnt is the font,
+ * row_pitch 9, and the Frames bar scales by 0xB800. Zoomed layout:
+ * bar_x 1, bar_y 200 - ((41*0xB800+0x8000)>>16=29) - 1 = 170, y2 172, cells_y 190,
+ * clock cell (0xE=14, 170+18+2=190, 0x12=18, 8); the 2x2 bar frame scales
+ * to 1x1. */
+static void test_hud_zoomed_uses_playfnt_layout(void) {
+  struct hud_fixture f;
+  hud_fixture_init(&f);
+  assert(fifa96_window_set(&f.mr.render.window, 0, 0, 160, 200) == 0);
+  assert(fifa96_font_parse(f.font_data, sizeof f.font_data,
+                           &f.mr.render.hud_font[1]) == FIFA96_OK);
+  f.mr.render.hud_font_ready[1] = 1;
+  /* The zoomed branch must select slot 1, not slot 0. */
+  f.mr.render.hud_font_ready[0] = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 1] == 0x11);   /* scaled bar pixel */
+  /* clock "01:23" centred in (14,192,18,8): px = 14 + 4 = 18. */
+  assert(f.s->indexed[190 * 320 + 18] == 0x00);
+  assert(f.s->indexed[191 * 320 + 19] == 0x06);
+  /* period "1" centred in (0,192,8,8): px = 3. */
+  assert(f.s->indexed[190 * 320 + 3] == 0x00);
+  /* score0 "2" at clock_x = 0x23 = 35: x = 33. */
+  assert(f.s->indexed[172 * 320 + 33] == 0x00);
+
+  /* ...and absent when the zoomed font is missing. */
+  f.mr.render.hud_font_ready[1] = 0;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[170 * 320 + 1] == 0x7F);
+  fifa96_surface_destroy(f.s);
+}
+
 int main(void) {
   test_init_resets_render_state();
   test_null_and_disabled();
@@ -990,6 +1248,10 @@ int main(void) {
   test_remap_identity_and_color_key();
   test_match_palette_from_bank();
   test_match_palette_install();
+  test_hud_draws_bar_text_cells();
+  test_hud_names_absent_and_wide_scores();
+  test_hud_gates();
+  test_hud_zoomed_uses_playfnt_layout();
   test_engine_match_step_renders();
   puts("test_engine_match_render OK");
   return 0;

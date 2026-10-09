@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include "fifa96_engine/fifa96_match_run.h"
@@ -1190,6 +1191,139 @@ static int match_run_draw_sprite(struct fifa96_surface *s, const fifa96_sprite_f
   return 0;
 }
 
+/* OL-T11-7 (P0.2 HUD; FU-148 §1.4/§6.1). The native bar blit scales the
+ * Frames.fsh frame-13 panel by `h*0xB800>>16` in the zoomed window
+ * (FUN_0009BB20/FUN_0009B850) and 1:1 in the full one (FUN_0009AFD0); the
+ * layout anchor `[0x14E634]+6` = the Frames.fsh frame-4 height (41) is
+ * rounded the same way in FUN_00053240's zoomed branch. */
+#define MATCH_HUD_BAR_ZOOM 0xB800
+
+/* The native FUN_000565BC gates (period < 4 via FUN_0004B5F4, not paused via
+ * [0x14E688]) plus the asset-readiness mapping of the FUN_0001D940(6) /
+ * [0x14E510] / [0x14E538] / [0x14E59C] gates (FU-148 §6.1 leg): the HUD needs
+ * its staged bar and the font the window branch selects. The engine has no
+ * replay sub-mode, so the [0x109A98]==0 idle gate is vacuous. */
+static int match_run_hud_ready(const struct fifa96_match_run_render *r) {
+  const struct fifa96_font *font = r->window_zoomed ? &r->hud_font[1] : &r->hud_font[0];
+  return r->hud_bar_ready && r->hud_bar.pixels != NULL &&
+         (r->window_zoomed ? r->hud_font_ready[1] : r->hud_font_ready[0]) != 0 &&
+         font->data != NULL;
+}
+
+/* The bar panel blit: zero source pixels stay transparent (the engine's
+ * indexed-sprite convention), the destination rect is the native's
+ * `size * factor >> 16` and the sampling is the derived nearest-neighbour
+ * step `dst * src_w / dst_w` (FU-148 leg: the native FUN_0009B850 span
+ * stepper is not decomposed). */
+static void match_run_hud_bar(struct fifa96_surface *s,
+                              const struct fifa96_match_run_render *r, int bar_x,
+                              int bar_y) {
+  const fifa96_sprite_frame *bar = &r->hud_bar;
+  int dst_w = bar->width;
+  int dst_h = bar->height;
+  if (r->window_zoomed) {
+    dst_w = (bar->width * MATCH_HUD_BAR_ZOOM) >> 16;
+    dst_h = (bar->height * MATCH_HUD_BAR_ZOOM) >> 16;
+  }
+  for (int dy = 0; dy < dst_h; dy++) {
+    int src_y = (int)(((int64_t)dy * bar->height) / dst_h);
+    int py = bar_y + dy;
+    if (py < 0 || py >= s->height) continue;
+    for (int dx = 0; dx < dst_w; dx++) {
+      int src_x = (int)(((int64_t)dx * bar->width) / dst_w);
+      size_t src_off = (size_t)src_y * bar->width + (size_t)src_x;
+      if (src_off >= bar->pixel_len) continue;
+      uint8_t v = bar->pixels[src_off];
+      if (v == 0) continue;
+      int px = bar_x + dx;
+      if (px < 0 || px >= s->width) continue;
+      s->indexed[(size_t)py * (size_t)s->width + (size_t)px] = v;
+    }
+  }
+}
+
+/* Colour-6 outline at (+1,+1) then colour-0 main (FUN_000A06FC's two-pass
+ * text, FU-148 §1.5; the native colour ramp is leg). */
+static void match_run_hud_text(struct fifa96_surface *s, const fifa96_font *font,
+                               const char *str, int x, int y) {
+  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x + 1, y + 1, 6);
+  (void)fifa96_font_blit(s->indexed, s->width, s->height, font, str, x, y, 0);
+}
+
+/* FUN_00055BA8: centred cell text, `x += (cell_w-width)/2` (truncating),
+ * `y += max(0,(cell_h-12)/2)`, then the outline/main pair. */
+static void match_run_hud_centered(struct fifa96_surface *s, const fifa96_font *font,
+                                   const char *str, int cell_x, int cell_y, int cell_w,
+                                   int cell_h) {
+  int w = fifa96_font_text_width(font, str);
+  int x = cell_x + (cell_w - w) / 2;
+  int y = cell_y;
+  int pad = (cell_h - 12) / 2;
+  if (pad > 0) y += pad;
+  match_run_hud_text(s, font, str, x, y);
+}
+
+/* The HUD pass: bar -> name0 -> name1 -> score0 -> score1 -> period -> clock
+ * (FU-148 §1.4). `mr->score[2]`/`state.total_seconds`/`state.period` are the
+ * engine seam for the native `0x157AC5/7`, `0x157AB4` and `0x157AC2`. */
+static void match_run_draw_hud(const struct fifa96_match_run *mr, struct fifa96_surface *s) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  if (!match_run_hud_ready(r)) return;
+  if (r->display.suspend) return;                 /* [0x14E688] */
+  if (mr->state.period >= 4) return;              /* FUN_0004B5F4() < 4 */
+
+  const int zoomed = r->window_zoomed;
+  const struct fifa96_font *font = zoomed ? &r->hud_font[1] : &r->hud_font[0];
+  const int have_window = r->window.box.w > 0 && r->window.box.h > 0;
+  int x0 = have_window ? r->window.box.x0 : 0;
+  int y1 = have_window ? r->window.box.y1 : s->height;
+  if (y1 > s->height) y1 = s->height;
+
+  const int row_pitch = zoomed ? 9 : 12;
+  const int x_left = x0 + (zoomed ? 3 : 6);
+  int clock_x = x0 + (zoomed ? 0x23 : 0x32);
+  const int bar_x = x0 + (zoomed ? 1 : 2);
+  int bar_h = r->hud_bar_height;
+  if (zoomed) bar_h = (bar_h * MATCH_HUD_BAR_ZOOM + 0x8000) >> 16;
+  const int bar_y = y1 - bar_h - (zoomed ? 1 : 2);
+  const int y2 = bar_y + 2;
+  const int cells_y = bar_y + 2 * row_pitch + (zoomed ? 2 : 3);
+
+  char clock_buf[16];
+  char score_buf[2][8];
+  char period_buf[8];
+  (void)snprintf(clock_buf, sizeof clock_buf, "%02d:%02d",
+                 (int)(mr->state.total_seconds / 60u),
+                 (int)(mr->state.total_seconds % 60u));
+  (void)snprintf(score_buf[0], sizeof score_buf[0], "%d", (int)mr->score[0]);
+  (void)snprintf(score_buf[1], sizeof score_buf[1], "%d", (int)mr->score[1]);
+  (void)snprintf(period_buf, sizeof period_buf, "%d", (int)mr->state.period + 1);
+
+  /* Wide-name/score adjustment (0x55D5A..0x55E76): either score >= 100 or a
+   * staged name wider than 0x20 shifts the score column and widens the clock
+   * cell by 6 (zoomed) / 8 (full). */
+  int wide = mr->score[0] >= 100 || mr->score[1] >= 100 ||
+             fifa96_font_text_width(font, r->hud_name[0]) > 0x20 ||
+             fifa96_font_text_width(font, r->hud_name[1]) > 0x20;
+  int clock_cell_w = zoomed ? 0x12 : 0x18;
+  if (wide) {
+    clock_x += zoomed ? 6 : 8;
+    clock_cell_w += zoomed ? 6 : 8;
+  }
+
+  match_run_hud_bar(s, r, bar_x, bar_y);
+  match_run_hud_text(s, font, r->hud_name[0], x_left, y2);
+  match_run_hud_text(s, font, r->hud_name[1], x_left, y2 + row_pitch - 2);
+  match_run_hud_text(s, font, score_buf[0],
+                     clock_x - fifa96_font_text_width(font, score_buf[0]), y2);
+  match_run_hud_text(s, font, score_buf[1],
+                     clock_x - fifa96_font_text_width(font, score_buf[1]),
+                     y2 + row_pitch - 2);
+  match_run_hud_centered(s, font, period_buf, x0, cells_y, row_pitch - 1, row_pitch - 1);
+  match_run_hud_centered(s, font, clock_buf, x0 + (zoomed ? 0xE : 0x11), cells_y,
+                         clock_cell_w, row_pitch - 1);
+}
+
 int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *s) {
   if (!mr || !s) return -FIFA96_ERR_INVALID;
   struct fifa96_match_run_render *r = &mr->render;
@@ -1406,6 +1540,9 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
       }
     }
   }
+  /* OL-T11-7: the overlay presenter runs after the scene (the native
+   * FUN_000495B0 -> FUN_00049830 -> FUN_000565BC order). */
+  match_run_draw_hud(mr, s);
   return 0;
 }
 
@@ -1485,16 +1622,29 @@ struct match_stage_item {
   uint32_t count;
 };
 
+/* OL-T11-7: the HUD entries the loader table resolves in the GAMEART0
+ * container (FU-148 §1.5): resource slot 0x35 "clockfnt.fsh" (full window),
+ * 0x36 "playfnt.fsh" (zoomed) and slot 0x2F "Frames.fsh" (the bar bank
+ * FUN_00053930 stores frames from at 0x14E624). */
+#define MATCH_RUN_HUD_FONT_BANK "clockfnt.fsh"
+#define MATCH_RUN_HUD_FONT_ZOOM_BANK "playfnt.fsh"
+#define MATCH_RUN_HUD_BAR_BANK "Frames.fsh"
+#define MATCH_RUN_HUD_BAR_FRAME 13u   /* the drawn frame ([0x14E658]) */
+#define MATCH_RUN_HUD_BAR_LAYOUT_FRAME 4u   /* the 0x14E634 height anchor */
+
 struct match_stage_set {
   struct match_stage_item *items;
   uint32_t count;       /* slots = BIGF entry count (indices stay stable) */
   uint32_t loaded;      /* slots with a decoded SHPI bank */
   int32_t palette_index; /* BIGF entry named PALsys.fsh, -1 when absent */
+  int32_t frames_index;  /* BIGF entry named Frames.fsh, -1 when absent */
+  int32_t clockfont_index; /* BIGF entry named clockfnt.fsh, -1 when absent */
+  int32_t playfont_index;  /* BIGF entry named playfnt.fsh, -1 when absent */
 };
 
-/* The native by-name lookup (FUN_000A81A5) lowercases ASCII, so the palette
- * bank match is case-insensitive like the original's. */
-static int match_run_palette_name_eq(const char *a, const char *b) {
+/* The native by-name lookup (FUN_000A81A5) lowercases ASCII, so the staged
+ * bank name matches are case-insensitive like the original's. */
+static int match_run_name_eq(const char *a, const char *b) {
   while (*a && *b) {
     unsigned char ca = (unsigned char)*a;
     unsigned char cb = (unsigned char)*b;
@@ -1629,6 +1779,9 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
                                  size_t file_len) {
   memset(set, 0, sizeof *set);
   set->palette_index = -1;
+  set->frames_index = -1;
+  set->clockfont_index = -1;
+  set->playfont_index = -1;
   uint8_t *container = NULL;
   size_t container_len = 0;
   if (match_stage_container(file, file_len, &container, &container_len) != 0) return -1;
@@ -1643,8 +1796,14 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
     uint32_t size = 0;
     const char *name = NULL;
     if (fifa96_bigf_record(&info, i, &off, &size, &name) != FIFA96_OK) goto fail;
-    if (name && match_run_palette_name_eq(name, MATCH_RUN_PALETTE_BANK))
+    if (name && match_run_name_eq(name, MATCH_RUN_PALETTE_BANK))
       set->palette_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_HUD_BAR_BANK))
+      set->frames_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_HUD_FONT_BANK))
+      set->clockfont_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_HUD_FONT_ZOOM_BANK))
+      set->playfont_index = (int32_t)i;
     uint8_t *bank = NULL;
     uint32_t bank_len = 0;
     uint32_t bank_count = 0;
@@ -1657,6 +1816,16 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
       set->loaded++;
     } else if (got < 0) {
       set->items[i].data = NULL;   /* shaped like a bank but undecodable */
+    } else if ((int32_t)i == set->clockfont_index || (int32_t)i == set->playfont_index) {
+      /* OL-T11-7: the FNTI font images are not SHPI banks, so the decode
+       * refuses them (FU-148 §1.5); keep the raw entry bytes for the HUD
+       * font parse. */
+      uint8_t *copy = malloc(size);
+      if (!copy) goto fail;
+      memcpy(copy, container + off, size);
+      set->items[i].data = copy;
+      set->items[i].len = size;
+      set->items[i].count = 0;
     }
   }
   free(container);
@@ -1694,7 +1863,17 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   uint32_t total;
   uint8_t palette[768];
   int palette_ready = 0;
+  /* OL-T11-7: built locally and committed with the arena swap only on
+   * success; the staged names persist (they are not container assets). */
+  struct fifa96_font hud_font[2];
+  uint8_t hud_font_ready[2] = {0, 0};
+  struct fifa96_sprite_frame hud_bar;
+  uint16_t hud_bar_height = 0;
+  uint8_t hud_bar_ready = 0;
   int rc;
+
+  memset(hud_font, 0, sizeof hud_font);
+  memset(&hud_bar, 0, sizeof hud_bar);
 
   if (!mr || !s || !player_bank || !pitch_bank) return -FIFA96_ERR_INVALID;
   /* A live run guarantees the engine (and its asset table) outlives the arena
@@ -1786,6 +1965,39 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
           fifa96_match_palette_from_bank(copy, set->items[i].len, NULL, palette) ==
               FIFA96_OK)
         palette_ready = 1;
+      /* OL-T11-7: parse the HUD assets from the pitch container's arena
+       * copies — the FNTI fonts (FUN_000984B4) and the Frames.fsh bar frames
+       * (frame 13 drawn, frame 4's height for the layout anchor). */
+      if (which == 1) {
+        if ((int32_t)i == pitch.clockfont_index) {
+          if (fifa96_font_parse(copy, set->items[i].len, &hud_font[0]) == FIFA96_OK)
+            hud_font_ready[0] = 1;
+        } else if ((int32_t)i == pitch.playfont_index) {
+          if (fifa96_font_parse(copy, set->items[i].len, &hud_font[1]) == FIFA96_OK)
+            hud_font_ready[1] = 1;
+        } else if ((int32_t)i == pitch.frames_index) {
+          fifa96_sprite_bank bar_bank;
+          fifa96_sprite_entry bar_entry;
+          if (fifa96_sprite_bank_parse(copy, set->items[i].len, &bar_bank) == FIFA96_OK) {
+            int bar_ok = fifa96_sprite_bank_entry(&bar_bank, MATCH_RUN_HUD_BAR_FRAME,
+                                                  &bar_entry) == FIFA96_OK &&
+                         fifa96_sprite_frame_parse(&bar_bank, bar_entry.offset, &hud_bar) ==
+                             FIFA96_OK;
+            int layout_ok =
+                fifa96_sprite_bank_entry(&bar_bank, MATCH_RUN_HUD_BAR_LAYOUT_FRAME,
+                                         &bar_entry) == FIFA96_OK;
+            if (layout_ok) {
+              fifa96_sprite_frame layout_frame;
+              layout_ok = fifa96_sprite_frame_parse(&bar_bank, bar_entry.offset,
+                                                    &layout_frame) == FIFA96_OK;
+              if (layout_ok) hud_bar_height = layout_frame.height;
+            }
+            /* Both the drawn frame and the layout anchor are required (the
+             * native pointers are always both set before the HUD can run). */
+            hud_bar_ready = (uint8_t)(bar_ok && layout_ok);
+          }
+        }
+      }
       b->base = copy;
       b->offsets = (const int32_t *)(const void *)(copy + 0x14);
       b->count = set->items[i].count;
@@ -1814,6 +2026,13 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->sprite_data_len = (uint32_t)arena_len;
   r->palette_ready = palette_ready;
   if (palette_ready) memcpy(r->palette, palette, sizeof r->palette);
+  r->hud_font[0] = hud_font[0];
+  r->hud_font[1] = hud_font[1];
+  r->hud_font_ready[0] = hud_font_ready[0];
+  r->hud_font_ready[1] = hud_font_ready[1];
+  r->hud_bar = hud_bar;
+  r->hud_bar_height = hud_bar_height;
+  r->hud_bar_ready = hud_bar_ready;
   (void)fifa96_window_init(&r->window, s->width, s->height);
   (void)fifa96_window_define_full(&r->window, s->width, s->height);
   r->enabled = 1;
