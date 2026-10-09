@@ -1240,6 +1240,13 @@ static void test_action_01_runs_kickoff_body(void) {
   assert(f.mr.entities.team[0].target == 1);   /* nearest to pos (0,0) */
   assert(f.mr.record.stage92 == 3u);
   assert(f.mr.record.timer89 == 0);
+  /* G3 (M2 playable-match Task 3 / OL-87/88/89): the row's only situation call
+   * is the ported table-2 arm 0x7DF90 (0xB), a phase write; it is not a score
+   * source. No goal invoker is reachable from the ported rows, so the derived
+   * FUN_00093944 writer cells stay fresh through the kickoff body. */
+  assert(f.mr.score[0] == 0 && f.mr.score[1] == 0);
+  assert(f.mr.score_last_side == -1 && f.mr.score_tracked_side == -1);
+  assert(f.mr.score_max_diff == 0 && f.mr.score_last_event == 0);
 
   /* Discriminating marker case (T2 review): the 0x7DBDC source is byte +0x92
    * (`[EBP+0x8F]>>24`), i.e. `stage92`, not the never-written `record.stage`.

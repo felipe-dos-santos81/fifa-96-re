@@ -747,6 +747,21 @@ reason. `tests/test_engine_m2.c` asserts the derived entry in the m 1
 directive and keeps the 0x13/0x14/2 forcing; the golden is byte-identical
 (157-line T1 diff unchanged, no re-pin).
 
+**§10 erratum (M2 playable-match Task 3).** The computed-situation candidate
+`0x8A8CE` is resolved (first-hand): it lies in `FUN_0008A798`, the phase-table
+`0x110794[0x1E]` handler (act 8) invoked via `FUN_000888FC` at `0x8AF1A` from
+the situation-dispatcher BX!=0 fallback (`0x8AAA3`), which stores
+`[0x15882C]=side` (`0x8AA93`) and `[0x15882B]=situation` (`0x8AA9D`) before
+the act runs; act 8's `0x8A8C8/0x8A8CB SAR 0x18` read those bytes back, so
+`0x8A8CE` re-dispatches the stored situation and is not a goal invoker (goals
+queue through table 1 with BX=0: `0x8A9E8` ids 5/6). §3.2's `[0x5781D]` in the
+`FUN_00088940` caller gate is a typo for `[0x15781D]` (`0x8B635`), and the
+scan position is the camera pan snapshot `[0x157784]` classified by
+`[0x15781E]` (armed by `FUN_0007131C 0x713A6..0x713F7`), not the ball; the
+situation-6 producer is `0x88B44` only. Full 39-site census and the
+reachability verdict (no writer invoker reachable from the ported state):
+FU-142 App. L.9.
+
 **§10 provenance.** Ghidra MCP read-only `/FIFA96.EXE`:
 `disassemble_function` `0x4B02C`, `0x88860`, `0x493A0`, `0x886D4`, `0x76130`,
 `0x7412C`, `0x7417C`, `0x8C974`, `0x73E08`, `0x740A0`, `0x8A43C`;

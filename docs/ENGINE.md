@@ -213,7 +213,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   row 01's event/camera/ball-stage sinks, plus the FU-73 keeper/restart
   producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
-  `OL-88`/`OL-89` goal invokers; `OL-81`/`OL-83` row-field wrinkles; `OL-82`
+  `OL-88`/`OL-89` goal invokers (Task 3 verdict: no invoker reachable from the
+  ported state — FU-142 App. L.9); `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
   (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the per-record camera
   place `FUN_00079F3C` (FU-96 leg 5); `OL-62`..`OL-71` residuals. The items
@@ -340,19 +341,31 @@ the build also produces the windowed `fifa96` target (`make game`).
   (FU-143 §11.5), so the M2-B
   tape keeps its declared phase forcing (0x13/0x14 kickoff, phase 2 mechanics)
   and stays byte-identical. See FU-143 §9/§10/§11 (integration errata).
-- **Score event source (child `C3-OL2`, closed; invokers open).** The FU-72
+- **Score event source (child `C3-OL2`, closed; invokers unreachable — M2
+  playable-match Task 3 verdict).** The FU-72
   `FUN_00093944` writer is derived and ported
   (`fifa96_action_score_event`, FU-142 Appendix L): score increment, last-side
   and tracked-side goal-difference bookkeeping, and the
   `FUN_0009252C` threshold posts (0x9A..0xA0, 0xD3). It is wired as the live
   run's source (`fifa96_match_run_score_event`, with the writer's four state
   cells and `score_last_event`), and the M2 tape's goal step uses it
-  (transcript byte-identical). The native invokers are unported, so gameplay
-  goals cannot reach it: **OL-87** (the six period-indexed goal-screen handlers
-  `0x110F78` + the `[0x15B6D4]` scheduler `FUN_000948AC` + the tracked-side
-  producer `FUN_00092D8C`), **OL-88** (goal detection: `FUN_0008AF38
-  0x8B623..0x8B63E` -> `FUN_00088940` -> `FUN_0008A938(6, side)`), **OL-89**
-  (posted-id dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe). The engine
+  (transcript byte-identical). **No writer invoker is reachable from the ported
+  rows/state** (FU-142 App. L.9, first-hand): all eleven `FUN_00093944` sites
+  lie in the six period-indexed handlers (`0x110F78`); the only situation-6
+  producer is `0x88B44` in `FUN_00088940`, reached only through the camera-pan
+  arming (`FUN_0007131C 0x713A6..0x713F7` sets `[0x15781D]`/`[0x15781E]`) and
+  the clock scan call (`FUN_0008AF38 0x8B63E`) — the engine camera never
+  leaves spawn; the goal queue (`0x8A9E8` ids 5/6), the scheduler
+  (`FUN_000948AC 0x4B1A1`, `0x949E9 CALL [0x15B6D4]`) and the handler
+  installer (`FUN_00092D8C` ← screen machine `FUN_00038630` case 0xF;
+  `FUN_00092E2C 0x92EEE`) are unported. Act 8's computed `0x8A8CE` is resolved
+  as the phase-0x1E handler re-dispatching the situation the dispatcher stored
+  (`[0x15882B]`), not a goal path. The negative is pinned by
+  `test_goal_situation_dispatch_is_not_the_writer`,
+  `test_natural_phase2_never_scores`, row 01's score-freshness assertions and
+  the tape's pre-score assertions. Open legs: **OL-87** (handlers + scheduler +
+  installer), **OL-88** (camera-pan goal detection), **OL-89** (posted-id
+  dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe). The engine
   carries tracked side -1 (`add_goal`-equivalent) until OL-87 lands;
   `fifa96_match_run_add_goal` remains for those unported paths.
 - Retail front-end art asset (no OPTIONS-like path exists in the ISO).

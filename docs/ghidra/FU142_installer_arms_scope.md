@@ -3182,8 +3182,10 @@ The writer is reached only from this screen cluster:
 
 * **Goal scan** — the clock `FUN_0008AF38` (`0x8AF38`) calls `FUN_00088940`
   at `0x8B63E` when the phase byte is 2/0x10 (`0x8B623..0x8B633`) and
-  `[0x15781D] != 0` (`0x8B635`). `FUN_00088940` scans the ball/goal state and
-  calls `FUN_0008A938(6, ball side)` etc. (FU-143 §3.2 callers).
+  `[0x15781D] != 0` (`0x8B635`). `FUN_00088940` classifies the **camera pan
+  snapshot** (not the ball) — `[0x157784]` = camera Z, `[0x15781E]` =
+  `FUN_00070074(camera pos)` — and queues the goal situation 6 for the
+  possession record's side (L.9 erratum; FU-143 §3.2 callers).
 * **Situation queue** — `FUN_0008A938` queues `[0x15B6A8]` (ids 0..0xA) with
   `[0x15B6C0]=1` (FU-143 table 1); the frame body `FUN_0004B100`
   (`0x4B198 CMP byte[0x14C32A],0` / `0x4B1A1 CALL 0x948AC`) calls the
@@ -3195,9 +3197,15 @@ The writer is reached only from this screen cluster:
 * **State advance** — each handler's tail (`CALL 0x935A0` when the `[0x15B688]`
   timer passes 0xB4, e.g. `0x93DD6`) advances/reinstalls the sequence.
 
-Gate defaults in the engine: `[0x14C32A]` and `[0x15781D]` have no derived
-producer (zero), so the native frame body skips both the scheduler and the
-scanner; the engine keeps that behavior (no scheduler call wired).
+Gate defaults in the engine: `[0x14C32A]` and `[0x15781D]` have no **engine**
+producer/field (an EXE image starts both at 0), so the ported frame body keeps
+the native skip behavior (no scheduler/scanner call wired). Natively the gate
+is live: `[0x14C32A]` is set to 1 by the session-mode entry `FUN_0001B7B8`
+(`0x1B7C8`, mode 4) and the setup entry `FUN_00032DE0` (`0x32DFF`), and
+`[0x15781D]` is armed
+by the camera-pan arm `FUN_0007131C` (`0x713DB`) and cleared by the phase
+setter on a phase-2 write (`0x740F6`) and by the restart body `0x84F90`
+(L.9).
 
 ### L.6 Wiring decision and port (M2 Task 4)
 
@@ -3247,3 +3255,111 @@ args); `tests/test_engine_match_frame.c::test_score_event_wired_run_path`
 (live run, defaults, tracked-side bookkeeping, posts, live frame, errors);
 `tests/test_engine_m2.c` goal step upgraded, golden byte-identical. `make
 check` **104/104** (no new test executables).
+
+### L.9 Reachability window (M2 playable-match Task 3 / OL-87/88/89)
+
+Task 3 asked which `FUN_00093944` invoker is reachable from the ported rows and
+run state. First-hand verdict (this slice, `/FIFA96.EXE` read-only): **none**.
+The writer stays wired only at the run API (`fifa96_match_run_score_event`,
+L.6) and no ported gameplay path reaches it. Windows:
+
+* **All eleven writer sites re-verified.** `get_xrefs_to 0x93944` = 11
+  `UNCONDITIONAL_CALL`, exactly `0x93D98`, `0x93DA1`, `0x94026`, `0x9402F`,
+  `0x941E5`, `0x941EE`, `0x94489`, `0x94492`, `0x94667`, `0x94670`, `0x9486E`,
+  all inside the six handlers of the `0x110F78` table (L.4). No action/phase
+  row body contains one.
+* **Handler installation is screen-driven.** `FUN_00092E2C` is called only
+  from `FUN_00092D8C 0x92E1F`; `FUN_00092E2C 0x92EC4..0x92EF7` reads game leg
+  word `[0x15B680]` (`0x92EC4 MOV AX,[0x15B680]` / `CWDE`), indexes
+  `0x110F78[leg]` (`0x92ED5 ADD EAX,0x110F78`) and stores `[0x15B6D4]`
+  (`0x92EEE`), then calls it (`0x92EF7`). `FUN_00092D8C` writes the game leg
+  (`0x92DC5 MOV [0x15B680],EAX`) and the tracked side
+  (`0x92DDF`/`0x92DEF`/`0x92E00`/`0x92E08`); its only callers are the
+  front-end screen machine `FUN_00038630` case 0xF (`0x38DCC`, the
+  match-screen entry: `FUN_00092D8C(short[0x14AF7C], short[0x14AF74], ...)`,
+  `[0x14B018]=0x14`) and `FUN_0003BB1C 0x3BF9E`. The tracked-side team flags
+  `[0x1590CC]`/`[0x159901]` stay unported.
+* **The only goal producer is camera-driven.** `get_xrefs_to 0x8A938` = 39;
+  the situation argument was read at every site (census below). Exactly one
+  queues situation 6: `0x88B44` in `FUN_00088940` (`0x88B37 MOV EAX,6` /
+  `0x88B42 XOR EBX,EBX` / `0x88B44 CALL`; side = the selected possession
+  record's `[+0x826]`), reached only from `FUN_0008AF38 0x8B63E` when the
+  phase is 2/0x10 (`0x8B623..0x8B633`) and `[0x15781D] != 0` (`0x8B635`).
+  `FUN_00088940` classifies the camera pan snapshot: `[0x157784]` magnitude vs
+  `0xB20` (`0x8896B MOV ECX,[0x157784]`, `0x88971..0x88983`; `JLE` to the
+  throw-in path), `[0x15781E]` (`0x88989 CMP byte[0x15781E],0` / `0x88990 JZ`
+  to the corner path), side from `[0x157A49]>>24 == 1` -> the `0x1587D4`
+  record's `[+0x826]` (`0x88996..0x889AC`) else the snapshot sign
+  (`0x889B6 CMP [0x157784],0` / `SETL`), call at `0x88B44`. **L.5 erratum**
+  (recorded in place): the scan position is the camera, not the ball.
+  `[0x15781D]`/`[0x15781E]` are armed by the camera-pan arm `FUN_0007131C`:
+  `0x713A6..0x713C6` (phase 2/0x10, `[0x15781D]==0`, `|camZ| > 0xB20 ||
+  |camX| > 0x730`), `0x713DB MOV [0x15781D],BH` (BH=1 at `0x713C6`), camera
+  snapshot copy `0x713E3..0x713E5`, `0x713F2 CALL 0x70074` (`FUN_00070074`
+  goal-mouth classifier) / `0x713F7 MOV [0x15781E],AL`; `[0x15781D]` is
+  cleared by the phase setter on every phase-2 write (`0x740F2 XOR DL,DL` /
+  `0x740F6 MOV [0x15781D],DL`) and by the restart body `0x84F90`
+  (`0x84F90 MOV [0x15781D],AH`, AH=0). The FU-71 port exposes only
+  `fifa96_camera_reflect`/`fifa96_camera_out_of_bounds`; the pan arming and
+  the clock scan call are unported and the run's camera never leaves spawn.
+* **Act 8 is not a goal path (FU-143 §10 lead resolved).** `0x8A8CE` lies in
+  `FUN_0008A798`, the phase-table `0x110794[0x1E]` handler (act 8, invoked via
+  `FUN_000888FC` at `0x8AF1A` from the situation-dispatcher fallback
+  `0x8AAA3 JMP 0x8AF1A`). The fallback stores the situation/side first:
+  `0x8AA89 CALL 0x740A0` (phase 0), `0x8AA93 MOV [0x15882C],AL` (side),
+  `0x8AA98 MOV EAX,8`, `0x8AA9D MOV byte [0x15882B],CL` (situation). Act 8's
+  `0x8A8BD/0x8A8C3` dword loads shift to exactly those bytes
+  (`0x8A8C8 SAR EDX,0x18` -> `[0x15882C]`; `0x8A8CB SAR EAX,0x18` ->
+  `[0x15882B]`), so `0x8A8CE` re-dispatches the stored situation and then
+  writes `0x8A8D3 MOV byte [0x15882B],0xFF`. Goal situations queue through
+  table 1 with `BX=0` (`0x8A9E8`: `[0x15B6A8]=5` when the side word `SI==0`,
+  else `6`; `0x8A9F7 [0x15B6C0]=1`) and never take this path.
+* **Goal consumption is the scheduler + handlers.** The frame body
+  `FUN_0004B100 0x4B198 CMP byte[0x14C32A],0 / 0x4B19F JZ 0x4B1A6 /
+  0x4B1A1 CALL 0x948AC` calls the scheduler only when the session gate is
+  open; the scheduler tail invokes the installed handler
+  (`0x949E0 CMP [0x15B6D4],0` / `0x949E7 JZ` / `0x949E9 CALL [0x15B6D4]`).
+  Neither call site nor machine is ported.
+
+Census of the 39 `FUN_0008A938` call sites (first-hand windows; situation in
+EAX, side in EDX unless noted). The only site that can request a goal is
+`0x88B44`:
+
+| situation | sites | containers |
+|---|---|---|
+| 0 | `0x4B0A5`, `0x38B2E`, `0x38C95`, `0x742DE` | `FUN_0004B02C` setup, `FUN_00038630` screen machine, match setup/reset block (`0x74281..0x74318`) |
+| 1 | `0x888F2`, `0x8B85D`, `0x945A5` | `FUN_00088860`, act 0xA stage 2, handler `0x944FC` tail |
+| 2 | `0x88C00` (BX=1), `0x85D0A` (BX=1), `0x943D7` | `FUN_00088940` throw-in, row 0x10 body, handler `0x94270` tail |
+| 3\|4 | `0x88BBD` | `FUN_00088940` corner/keeper |
+| 3 | `0x93CE4` | handler `0x93BBC` tail |
+| 4 | `0x94120` | handler `0x940A4` tail |
+| 5 | `0x76B1C`, `0x77707` | keeper bodies (row 1A/1B family) |
+| 6 | **`0x88B44`** | **`FUN_00088940` goal arm — the only goal producer** |
+| 7 | `0x76A90`, `0x77589` | keeper bodies (row 1A/1B family) |
+| 8 | `0x4B0D9`, `0x888C8`, `0x74312` | `FUN_0004B02C` bit-1 arm, `FUN_00088860`, setup/reset block |
+| 9 | `0x8A729`, `0x8920A` | `FUN_0008A43C` event body (`0x8A43C..0x8A794`, called from `FUN_00079D5C 0x79F2B` and `0x81EBF`), phase-0x18 body ending `0x89213` |
+| 0xA | `0x8A3F0`, `0x93F75`, `0x947AB` | act-2 stage body (`0x8A351..0x8A3FA`), handler `0x93E20`/`0x946C4` tails |
+| 0xB | `0x7DF90` (row 01, ported), `0x7546E` (row 1D tail), `0x75B58`, `0x76072` (keeper bodies), `0x84495` (row 0x12), `0x84E8F` (row 0x13), `0x85D38` (row 0x10), `0x863F9` (row 0x11) | kickoff/restart producers |
+| 0xC | `0x93C41`, `0x93EC1`, `0x94332` | handler tails |
+| computed | `0x897E3`, `0x8A8CE` | word `[0x15881E]` staged by the dispatcher's act-1/act-2 arms (FU-143 §10 item 3), and the act-8 stored `[0x15882B]` (above); neither is a goal path |
+
+The `0x9...` sites are the handlers re-queueing the next situation in their
+state tails (the same handler family as the writer's callers).
+
+**Verdict and engine landing (Task 3).** No invoker of `FUN_00093944` is
+reachable from the ported rows or run state: the producer (camera-pan arming +
+clock scan + `FUN_00088940`), the queue (`[0x15B6A8]`/`[0x15B6C0]`) and the
+consumer (scheduler `FUN_000948AC`, installer `FUN_00092D8C`/`FUN_00092E2C`,
+the six handlers) are all unported, and the engine's camera is static. The
+writer stays wired only as `fifa96_match_run_score_event` (L.6); the M2 tape's
+goal step stays the direct call. Task 3 added no engine behavior; the negative
+result is pinned by
+`tests/test_engine_match_frame.c::test_goal_situation_dispatch_is_not_the_writer`
+and `::test_natural_phase2_never_scores`, the row-01 score-freshness
+assertions in `tests/test_engine_match_handlers.c`, and the M2 tape's
+pre-score freshness assertions (`tests/test_engine_m2.c`). The engine's
+`fifa96_match_run_situation` intentionally models only the table-2 immediate
+arm (header contract; the table-1 queue is OL-73), so a situation-6 call
+through that seam takes the table-2 phase-5 row rather than the native queue
+(`0x8A9E8`); no ported caller passes 6. OL-87/OL-88 (L.7) stay open with the
+four machinery blocks above as their exact requirement.

@@ -399,6 +399,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     /* Every wired row dispatched FIFA96_OK during the replay. */
     res->mask_final = mr->dispatched_ok;
     assert(res->mask_final == M2_WIRED_MASK);
+    /* G3 (M2 playable-match Task 3 / OL-87/88/89): the natural replay drove the
+     * wired rows through the live phase 2 with no goal invoker, so the score
+     * pair and the FUN_00093944 writer cells are still fresh here, before the
+     * tape's direct score step. A gameplay goal would move them. */
+    assert(mr->score[0] == 0 && mr->score[1] == 0);
+    assert(mr->score_last_side == -1 && mr->score_tracked_side == -1);
+    assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
     /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
      * carried tracked-side default -1 it is the FU-72 increment + last side. */
     assert(fifa96_match_run_score_event(mr, 0, 0) == 0);

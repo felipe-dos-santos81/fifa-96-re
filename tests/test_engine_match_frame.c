@@ -646,6 +646,73 @@ static void test_score_event_wired_run_path(void) {
   assert(fifa96_match_run_score_event(&dead, 0, 0) == -FIFA96_ERR_STATE);
 }
 
+/* G3 (M2 playable-match Task 3 / OL-87/88/89): the derived FUN_0008A938
+ * situation seam is the table-2 phase dispatcher, not the score writer. The
+ * goal situation 6 natively queues through the table-1 arm (`0x8A9E8`: queued
+ * id 5 for side 0, 6 for side 1, `[0x15B6C0]=1`) and is consumed only by the
+ * unported period-indexed goal-screen handlers (0x93BBC..0x946C4); the
+ * dispatcher's table-2 row 6 (`0x8AC28`) writes phase 5 with the score/stat
+ * tables unported. The engine models the table-2 arm, so a goal-situation
+ * dispatch must leave the FUN_00093944 writer cells (score pair, last side,
+ * tracked side, max diff, last event) untouched. */
+static void test_goal_situation_dispatch_is_not_the_writer(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
+
+  /* Situation 6 (goal): phase 5, no score write. */
+  assert(fifa96_match_run_situation(&mr, 6) == 0);
+  assert(mr.state.phase == 5u);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
+
+  /* The goal-adjacent table-2 rows are phases only: 2 -> 3, 3 -> 4, 4 -> 8,
+   * 5 -> 9, 0xB -> 2 (row 01's ported path); the writer cells never move. */
+  assert(fifa96_match_run_situation(&mr, 2) == 0 && mr.state.phase == 3u);
+  assert(fifa96_match_run_situation(&mr, 3) == 0 && mr.state.phase == 4u);
+  assert(fifa96_match_run_situation(&mr, 4) == 0 && mr.state.phase == 8u);
+  assert(fifa96_match_run_situation(&mr, 5) == 0 && mr.state.phase == 9u);
+  assert(fifa96_match_run_situation(&mr, 0x0B) == 0 && mr.state.phase == 2u);
+  assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* G3 reachability probe (M2 playable-match Task 3 / OL-87/88/89): a match
+ * driven naturally into the live phase 2 (state-1 arm + wired row 01) runs the
+ * ported gameplay rows with no goal invoker. The native producer chain stays
+ * unported -- the camera-pan arming (`FUN_0007131C 0x713A6..0x713F7`) that
+ * sets `[0x15781D]`/`[0x15781E]`, the clock scan call (`FUN_0008AF38 0x8B63E`)
+ * and `FUN_00088940` (the only situation-6 producer, `0x88B44`) -- and so do
+ * the consumers (scheduler `FUN_000948AC` at `0x4B1A1`, the installed
+ * period-indexed handlers `[0x15B6D4]`). The score pair and the derived writer
+ * cells therefore stay fresh over a natural gameplay window: the negative
+ * result pinned here. */
+static void test_natural_phase2_never_scores(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 170 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  for (int i = 0; i < 300; i++) {
+    one_granted_frame(&mr);
+    assert(mr.score[0] == 0 && mr.score[1] == 0);
+    assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+    assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
+  }
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* Run ticks until exactly one granted 30 Hz frame body ran (the pace grants
  * 3 frames per 10 ticks; the loop bound is generous but deterministic). */
 static void one_granted_frame(struct fifa96_match_run *mr) {
@@ -739,6 +806,8 @@ int main(void) {
   test_phase_drive_begun_end_resets_phase();
   test_kickoff_enters_phase2_naturally();
   test_score_event_wired_run_path();
+  test_goal_situation_dispatch_is_not_the_writer();
+  test_natural_phase2_never_scores();
   puts("test_engine_match_frame OK");
   return 0;
 }
