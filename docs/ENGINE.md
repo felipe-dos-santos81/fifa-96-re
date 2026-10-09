@@ -16,19 +16,23 @@ kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
 reaches the live phase 2 naturally via situation 0xB) and the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
-indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v3**
-(follow-up-4 updates; the v4 acceptance is Task 4) is
+indexed draw is RGB under SDL3 — FU-144).** The M2-B acceptance tape **v4**
+(M2 playable-match Task 4, the G4 acceptance) is
 green: it asserts the drawing directly (the formation-placed records reach the
 indexed canvas from the first granted frame; the golden was re-pinned for that
 upgrade, T1), the kickoff entry at begin (T2; transcript byte-identical), the
-RGB palette at the first match present (T1 of follow-up 4; the golden was
-re-pinned again for the palette — first differing line frame 6, 160 of 165
-lines, state suffixes unchanged) and the natural phase-1 → 2 chain (follow-up-4
-T2: the golden stays byte-identical with the kept 0x13/0x14/2 forcing, whose
-mismatch evidence is in FU-143 §11.5), and the interactive `make game` smoke
-re-run
-on this host (2026-10-08, follow-up-4 G1) reaches match start with a non-black
-RGB canvas (player sprites in the derived palette's magenta/olive). Kick →
+RGB palette at the first match present **and on the drawn canvas** (T1/T4 of
+follow-up 4; the golden was re-pinned for the palette — first differing line
+frame 6, 160 of 165 lines, state suffixes unchanged), the natural phase-1 → 2
+chain (T2: the golden stays byte-identical with the kept 0x13/0x14/2 forcing,
+whose mismatch evidence is in FU-143 §11.5) and the natural-phase-2 probe (T4:
+`run_natural_probe` replays the tape with no directives and lands live phase 2
+at step 409 with row 01 dispatched and score 0-0). The interactive `make game`
+smoke re-run
+on this host (2026-10-08, follow-up-4 G4) reaches match start with the same
+byte-identical non-black
+RGB canvas as the G1 shot (player sprites in the derived palette's magenta/olive).
+Kick →
 score and the live goal invokers remain blocked interactively on the
 unported possession/selection rows and goal invoker machinery
 (see "Interactive smoke" and "Known gaps"). The M2 visible-match plan's G1/G2
@@ -106,7 +110,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
   G3; `01` is the M2 playable-match Task 2 kickoff taker) and
   `26`, `28`, `2A` (cluster G); dispatch results 65 UNSUP / 14 OK / 1 NOTF.
-- **Interactive smoke (playable-match follow-up 4 G1 re-run, this host
+- **Interactive smoke (playable-match follow-up 4 G4 re-run, this host
   2026-10-08; first verified Task 13):** `make game` window opens (960×720
   integer-scaled SDL3; ESC quits, exit 0; the intro and the procedural
   front-end draw — screenshots). The walkthrough reaches **match start** —
@@ -114,29 +118,50 @@ the build also produces the windowed `fifa96` target (`make game`).
   confirm → FU-66 STATE16 bridge) — and the match canvas replaces the
   front-end **with RGB visible**: the OL-T11-6 palette install (FU-144) shows
   the drawn player sprites in the derived palette's magenta (0x38/0x11/0x28
-  range) with olive accents on the index-0 black background. The committed
-  960×720 window capture is **0.47% non-black** (whole-window mean 0.002); the
-  drawn sprite pixels are the derived magenta `#E044A0` (6-bit 0x38/0x11/0x28
-  `<< 2`) with olive/brown accents — colored, not grayscale. The
+  range) with olive accents on the index-0 black background. The G4 re-run
+  shot (`docs/screens/task-4-rgb-match.png`) is **byte-identical** to the G1
+  shot (`sha256 51585387…`): **0.47% non-black**, whole-window mean 0.002, the
+  dominant sprite color exactly `#E044A0` (6-bit 0x38/0x11/0x28 `<< 2`) with
+  olive/brown accents — colored, not grayscale, and reproducible. The
   OL-T11-8 formation draw is live in the indexed canvas and pinned by the tape
   (HUD/overlays still wait on OL-T11-7). The screenshots establish the Return
   advance: the panel-open BackSpace frame is byte-identical to the preceding
-  one, and the match-canvas change is the panel-confirm shot. The
-  real input/entry evidence is the tape v3 assertions, corroborated by the
-  earlier Task 13 in-process probe (debug build gdb: `input_state[0]` = 0x04
-  RIGHT / 0x01 UP / 0x10 KICK / 0x20 PASS, `dispatched_ok` = 0x1 = row 00
-  only). The T5 kickoff placement was probed live there too: ball at
-  (480, 0, 0) = the derived 0x1E0 spawn, record 0's OL-80 `anim_id` at 0x26,
-  score 0-0; a begun run now enters the derived kickoff phase 1 (OL-84, below).
+  one (`docs/screens/task-4-frontend.png`), and the match-canvas change is the
+  panel-confirm shot. A held RIGHT/UP liveness probe left the canvas
+  byte-identical: the presses reach the run's input model (the tape v3
+  assertion at step 7/9, corroborated by the earlier Task 13 in-process probe:
+  `input_state[0]` = 0x04 RIGHT / 0x01 UP / 0x10 KICK / 0x20 PASS) but no wired
+  row consumes them, so the records do not move on screen. The T5 kickoff
+  placement was probed live there too: ball at (480, 0, 0) = the derived 0x1E0
+  spawn, record 0's OL-80 `anim_id` at 0x26, score 0-0; a begun run enters the
+  derived kickoff phase 1 (OL-84, below) and reaches phase 2 headlessly (T4
+  natural probe).
   **Kick and score are still not interactively reachable:** the kick press
   dispatches no gameplay row (the possession/selection invokers are unported)
   and gameplay goals have no wired invoker (OL-87/OL-88/OL-89; the derived
   score writer has no gameplay caller). The phase-1 → phase-2 transition is
-  now derived (follow-up-4 T2 lands the `FUN_0008D098` state-1 arm and action
-  row 01; the frame-body fixture pins the natural phase 2 — FU-143 §11); the
-  smoke walkthrough predates that landing, so its on-screen phase was not
-  re-probed. The M2-B tape v3 covers the sequence headlessly with its
+  derived (follow-up-4 T2 lands the `FUN_0008D098` state-1 arm and action
+  row 01; the frame-body fixture and the T4 tape-level natural probe pin the
+  natural phase 2 — FU-143 §11), but it is not visible in a screenshot: there
+  is no on-screen phase readout (HUD/overlays wait on OL-T11-7), so the
+  on-screen claim rests on the headless evidence. The M2-B tape v4 covers the
+  sequence headlessly with its
   declared/forced phases and the live driver's period end.
+
+  Reached vs blocked (G4 smoke, 2026-10-08):
+
+  | step | state | evidence |
+  |---|---|---|
+  | window + intro + front-end draw | reached | intro/front-end screenshots; ESC exit 0 |
+  | panel DECLINE/CONFIRM → match start | reached | match canvas replaces the front-end; `task-4-rgb-match.png` |
+  | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
+  | OL-T11-8 formation draw | reached | 0.47% non-black canvas; tape frames 8/9 pixel counts |
+  | kickoff → phase 2 naturally | reached (headless) | tape v4 `run_natural_probe`: live phase 2 at step 409, row 01 dispatched; not visible in a screenshot (no HUD) |
+  | move the controlled player | blocked on screen | held RIGHT/UP leaves the canvas byte-identical; presses reach `input_state[0]` but no wired row consumes them (possession/locomotion invokers unported) |
+  | kick (KICK press) | blocked | no gameplay row dispatched (tape steps 12/15); possession/selection invokers unported |
+  | score a goal | blocked | no goal invoker reachable (OL-87/88/89 verified negative); the tape's score step is the direct derived writer |
+  | half/period end → exit | reached | headless (tape: live class-1 period end → phase 0x0C → OVER→POST→EXIT); native periods last minutes, so not run to completion in the smoke |
+  | HUD/overlays | absent | OL-T11-7 unported (no score/clock display on screen) |
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match
@@ -144,7 +169,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. Tape **v3** (M2 visible-match Task 1) stages the
+  set, and the score step. Tape **v4** (M2 playable-match Task 4; the v3
+  provenance is retained) stages the
   wired rows (including the G1 rows 04/08), asserts the natural path:
   the KICK press reaches the run but dispatches no gameplay row, the kickoff
   placement is pinned at match start (ball 0x1E0/0/0, `anim_id` 0x26), the
@@ -190,7 +216,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   frame 6 `render.palette_ready == 1`, the surface palette's staged **chunk
   entry 1** is 6-bit (0x38,0x11,0x28) -> (0xE0,0x44,0xA0), and > 700 of the 768
   palette bytes are nonzero; `render.palette` equals the pure extraction over
-  the staged `PALsys.fsh` bank (`test_engine_match_staging`). M1 stays
+  the staged `PALsys.fsh` bank (`test_engine_match_staging`). **v4** adds the
+  canvas-level RGB assertion (some non-background frame-9 canvas pixel maps
+  through the installed surface palette to a non-black triplet), the
+  `run_natural_probe` (the same tape with no directives reaches the live phase
+  2 at step 409 with row 01 dispatched and the score/writer cells fresh) and
+  re-states the T3 negative score and the 14-row dispatch shape (row 01 joins;
+  row 00 dispatches through a wired row's reset). The transcript is
+  byte-identical in v4 (no re-pin), so T2/T3/T4 moved no presented frame. M1
+  stays
   byte-identical. Regenerate with
   `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
   non-zero while rewriting the file; re-run `make check` to verify).
@@ -218,7 +252,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   row-08 scan producer; the T1 formation-id producer
   (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the per-record camera
   place `FUN_00079F3C` (FU-96 leg 5); `OL-62`..`OL-71` residuals. The items
-  have their detailed entries below / in the FU docs.
+  have their detailed entries below / in the FU docs. Follow-up-4 G4 (M2
+  playable-match Task 4) closes the plan's whole-range review: G1
+  (RGB pitch) and G2 (natural kickoff → phase 2) **carried-with-legs**, G3
+  (goal invokers) **carried-with-legs — verified negative**, G4 accepted
+  (tape v4 + natural probe + the G4 smoke); every forcing in the tape is
+  listed with its leg in the `test_engine_m2.c` v4 provenance.
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

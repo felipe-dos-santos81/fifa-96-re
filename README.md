@@ -94,23 +94,31 @@ layer on top of the port ([`src/fifa96_engine/`](src/fifa96_engine/), see
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v3** with the follow-up-4
-updates is green — the 14 wired
+chain run headless (the M2-B acceptance tape **v4** — the M2 playable-match
+follow-up-4 G4 acceptance — is green: the 14 wired
 action rows exercised, the resource-loaded formation/record placement drawing
 on
 the indexed match canvas from the first granted frame, the derived
 kickoff phase-1 entry and the derived state-1 arm + row 01 chain reaching the
-live phase 2 asserted; the golden was re-pinned for the drawing and palette
-upgrades and is byte-identical since the kickoff-chain landing), and the
-windowed `make game` build runs on SDL3. The interactive smoke re-run on the
-development host (2026-10-08, visible-match G3) reaches match start (the match
+live phase 2 asserted, plus the v4 natural-phase-2 probe (a directive-free
+replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
+and the canvas-level RGB assertion; the golden was re-pinned for the drawing
+and palette
+upgrades and has been byte-identical since the follow-up-4 palette re-pin —
+T2/T3/T4 moved no presented frame), and the
+windowed `make game` build runs on SDL3. The G4 interactive smoke re-run on the
+development host (2026-10-08) reaches match start (the match
 canvas replaces the front-end; the derived palette `OL-T11-6` landed in
-follow-up 4, so RGB is visible — FU-144) with the
+follow-up 4, so RGB is visible — FU-144; the G4 capture is byte-identical to
+the G1 one) with the
 live kickoff ball/anim placement and the derived phase-1 entry
 (14/80 rows wired, the FU-143 phase driver and the derived score source
 included). Kick → score stays blocked interactively on the unported
-possession/selection invokers and goal-screen handlers; the phase-1 → phase-2
-transition is now derived (follow-up-4 T2, FU-143 §11). Not
+possession/selection invokers and goal-screen handlers; movement presses reach
+the input model but no wired row consumes them, so the records do not move on
+screen; the phase-1 → phase-2
+transition is derived (follow-up-4 T2, FU-143 §11; pinned headlessly, no HUD
+phase readout yet). Not
 ported: physical VGA/CRTC timing and device
 audio output (both modelled as pure data), and the remaining match
 action-handler bodies behind the derived dispatch tables. Match flow on the

@@ -1,5 +1,5 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v3 (spec §5; G4 of
- * the playability plan, G3 of the visible-match plan).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v4 (spec §5; G4 of
+ * the M2 playable-match plan — the follow-up-4 close-out).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -16,7 +16,7 @@
  *   ./build/test_engine_m2 > tests/golden/engine/m2-frames.txt
  *
  * --- v3 provenance: natural path and remaining forcing (G4 playability, G3
- * visible-match) -----------------------------------------------------------
+ * visible-match; retained in v4) --------------------------------------------
  *
  * The transcript is the deterministic null-backend replay of the engine-owned
  * run started by the real front-end -> match bridge (selector 0, FU-64 §1.1).
@@ -95,6 +95,34 @@
  * chain. ISO mode only: without the ISO rendering is disabled and the surface
  * keeps the front-end frame.
  *
+ * --- v4 provenance (M2 playable-match Task 4 / G4 acceptance) ---------------
+ *
+ * v4 makes the accepted behavior this follow-up landed explicit at the tape
+ * level; no engine behavior changed, so the transcript and golden are
+ * byte-identical (no re-pin). Four additions:
+ *   1. palette visibility (OL-T11-6, T1): the frame-6 palette assertion stays
+ *      and v4 additionally samples the first drawn canvas (frame 9): some
+ *      non-background pixel must map through the installed surface palette to
+ *      a non-black RGB triplet, so "the indexed draw is RGB-visible" is
+ *      asserted on the canvas, not only on the palette bytes;
+ *   2. natural phase 2 (OL-84 residual, T2): `run_natural_probe` replays the
+ *      same scripted tape with NO match directives and asserts the engine's
+ *      own chain reaches the live phase 2 (the begin state-1 arm -> wired row
+ *      01 -> situation 0xB -> `FUN_000740A0(2, side)`), with row 01 in the
+ *      dispatch set and the score pair/writer cells still fresh; the forced
+ *      tape keeps its m 1/m 21/m 41 phases (see the forcing inventory below)
+ *      because the natural chain is not frame-for-frame identical to the
+ *      forced extra-time window (FU-143 §11.5; first hash divergence at
+ *      golden line 49, natural phase 2 at presented frame 410);
+ *   3. negative score state (OL-87/88/89, T3): at m 62, before the direct
+ *      score step, the score pair and the FUN_00093944 writer cells are
+ *      asserted fresh, and the natural probe asserts the same through the
+ *      natural phase-2 transition — no gameplay goal exists from the ported
+ *      state (the only native producer is the unported camera-pan scan);
+ *   4. wired-row shape (T2): the observed dispatch set is 14 rows —
+ *      M2_WIRED_MASK now includes row 01 (the begin state-1 arm's taker)
+ *      while row 00 still dispatches through a wired row's reset install.
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -124,8 +152,10 @@
  *     the natural AI/possession invokers are unported;
  *   - the direct score call: no wired body contains a native writer site
  *     (FU-142 App. I.10 census), so gameplay goals stay blocked on the
- *     `OL-87`/`OL-88`/`OL-89` invoker legs;
- *   - HUD/overlays stay `OL-T11-7` and palette install `OL-T11-6`.
+ *     `OL-87`/`OL-88`/`OL-89` invoker legs (T3 verdict: no invoker is
+ *     reachable from the ported state — FU-142 App. L.9);
+ *   - HUD/overlays stay unported (`OL-T11-7`); the palette install is no
+ *     longer a leg — `OL-T11-6` landed in T1 and this tape asserts it.
  * The complete forcing inventory is m 1 and m 21 (kickoff phases 0x13/0x14),
  * the m 41 pair (phase 2 and the 1 s period length) with its row staging, and
  * the m 62 direct score call. No other phase, period, row or input is forced.
@@ -150,7 +180,10 @@
  * the mechanics window, row 01 gate-fails at the forced phase, and its taker
  * edits never reach the presented canvas. The `cmp` against the golden is the
  * recorded check (no re-pin); the natural-chain mismatch evidence is in the
- * forcing inventory above.
+ * forcing inventory above. M2 playable-match Task 3 (the goal-invoker
+ * negative) and Task 4 (v4 assertions + the natural probe) are test-only: no
+ * presented frame moved, so the golden stays byte-identical (the `cmp` re-run
+ * is the check).
  *
  * FU-143 phase-driver wiring (playability Task 3): the run frame body steps the
  * derived `fifa96_match_run_phase_drive` each granted frame, so the phase-2
@@ -179,7 +212,9 @@
  * through the reset path a wired row requests, while the arms stage 26/28/2A
  * organically. The observed set is read from `mr.dispatched_ok` (bit c set when
  * action code c dispatched FIFA96_OK), the Task 15 observability seam, and must
- * equal M2_WIRED_MASK (14 rows).
+ * equal M2_WIRED_MASK (14 rows). v4 re-states this shape (row 01 joins; row 00
+ * is not installed by a stage but dispatches through a wired row's reset) and
+ * pins the m 1 taker in the forcing directives.
  *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
@@ -229,6 +264,13 @@
 
 /* Post-exit front-end frames recorded before the tape stops. */
 #define M2_POST_EXIT_FRAMES 20
+
+/* v4 natural-phase-2 probe bounds: the natural chain lands phase 2 at
+ * presented frame ~410 (~121 granted frames, the 0x78 + 0x3C + 0x78 timers),
+ * so 600 engine steps from the match start is ample, and 60 sampled steps
+ * after the transition pin the negative score state inside phase 2. */
+#define M2_NATURAL_PHASE2_CAP 600
+#define M2_NATURAL_POST_STEPS 60
 
 /* The wired action rows at the playability-legs close (FU-137 §7: 13/80):
  * the rows whose installer arm + body + pool binding are all bounded. 00 and
@@ -316,6 +358,14 @@ struct m2_result {
   uint8_t staged_anim_id;    /* render.entities[11].stage.anim_id at frame 9 */
 };
 
+/* v4 natural-phase-2 probe observations (no match directives). */
+struct m2_natural {
+  int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
+  int phase2_step;           /* first engine step sampled at live phase 2 */
+  uint64_t dispatched_at_phase2; /* dispatch mask when phase 2 was observed */
+  uint8_t phase_machine_at_phase2; /* FU-142a mirror at the transition (2) */
+};
+
 static int file_exists(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) return 0;
@@ -374,6 +424,20 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * frame-for-frame transcript (the state lines would read 1/2 instead of
      * 19/20). */
     assert(mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+    /* v4: before any forcing, exactly one team carries the state-1 arm's
+     * action 1 (row 01) on its formation-target taker — the natural kickoff
+     * chain is installed under the forced window. */
+    {
+      int takers = 0;
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+        int32_t enc = mr->entities.team[t].target;
+        int32_t idx = enc - (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS);
+        if (idx >= 0 && idx < (int32_t)FIFA96_MATCH_ENTITY_RECORDS &&
+            mr->entities.team[t].records[idx].code == 1u)
+          takers++;
+      }
+      assert(takers == 1);
+    }
     assert(fifa96_match_state_set_phase(&mr->state, 0x13) == 0);
     mr->phase_machine.state = 0x13;                     /* kickoff: forced live phase */
   } else if (m == M2_M_HALF) {
@@ -541,6 +605,22 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         res->staged_rec0_z = e->match_run.render.entities[0].stage.pos.z;
         res->staged_rec11_z = e->match_run.render.entities[11].stage.pos.z;
         res->staged_anim_id = (uint8_t)e->match_run.render.entities[11].stage.anim_id;
+        /* v4 (OL-T11-6 acceptance): the indexed canvas is RGB-visible — at
+         * least one non-background pixel maps through the installed surface
+         * palette to a non-black RGB triplet, so the palette is applied to
+         * the drawn scene itself, not only present in palette[]/plane data. */
+        {
+          int colored = 0;
+          for (size_t i = 0; i < npix && !colored; i++) {
+            if (e->surface->indexed[i] != e->match_run.render.background) {
+              uint8_t idx = e->surface->indexed[i];
+              colored = (e->surface->palette[3u * idx] |
+                         e->surface->palette[3u * idx + 1u] |
+                         e->surface->palette[3u * idx + 2u]) != 0;
+            }
+          }
+          assert(colored);
+        }
       }
     }
     if (steps == 7 || steps == 9 || steps == 11) {
@@ -586,6 +666,79 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   fifa96_platform_destroy(plat);
 }
 
+/* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance): the
+ * same scripted key tape and platform cadence as run_tape, but with NO match
+ * directives. The engine's derived kickoff chain must reach the live phase 2
+ * by itself: the begin state-1 arm stages action 1 (row 01) on the controlled
+ * taker, the producer fires `global_5882a` at tick_total >= 0x78, row 01 walks
+ * its stage machine and the situation-0xB call writes phase 2. Every live
+ * sample must keep the score pair and the FUN_00093944 writer cells fresh (the
+ * T3 negative: no goal invoker is reachable from the ported state), and row 01
+ * must be in the dispatch set at the transition. This is the tape-level
+ * counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_naturally`
+ * and the permanent form of the FU-143 §11.5 mismatch-evidence replay. */
+static void run_natural_probe(int with_iso, struct m2_natural *nat) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.tape = M2_KEYS;
+  pcfg.tape_len = M2_KEYS_LEN;
+  pcfg.step_ns = 10000000ull;
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = with_iso ? M2_ISO_PATH : NULL;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  memset(nat, 0, sizeof *nat);
+  nat->match_start_step = -1;
+  nat->phase2_step = -1;
+  int steps = 0;
+  int post = 0;
+  while (steps < M2_STEP_CAP) {
+    assert(fifa96_engine_step(e) == 0);
+    steps++;
+    struct fifa96_platform_null_stats st;
+    fifa96_platform_null_stats(plat, &st);
+    assert(st.presents == (uint64_t)steps);
+    if (nat->match_start_step < 0 && e->mode == FIFA96_ENGINE_MODE_MATCH) {
+      nat->match_start_step = steps;
+      assert(e->match_run.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+      assert(e->match_run.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+    }
+    int live = (e->mode == FIFA96_ENGINE_MODE_MATCH && e->match != NULL);
+    if (live) {
+      /* The T3 negative holds at every live sample: no natural goal. */
+      assert(e->match_run.score[0] == 0 && e->match_run.score[1] == 0);
+      assert(e->match_run.score_last_side == -1 &&
+             e->match_run.score_tracked_side == -1);
+      assert(e->match_run.score_max_diff == 0 &&
+             e->match_run.score_last_event == 0);
+      if (e->match_run.state.phase == 2u) {
+        if (nat->phase2_step < 0) {
+          nat->phase2_step = steps;
+          nat->dispatched_at_phase2 = e->match_run.dispatched_ok;
+          nat->phase_machine_at_phase2 = e->match_run.phase_machine.state;
+        }
+        if (++post >= M2_NATURAL_POST_STEPS) break;
+      }
+    }
+  }
+  assert(nat->match_start_step == 5);
+  assert(nat->phase2_step > nat->match_start_step);
+  assert(nat->phase2_step - nat->match_start_step <= M2_NATURAL_PHASE2_CAP);
+  assert((nat->dispatched_at_phase2 & M2_KICKOFF_ROWS_MASK) != 0u);
+  assert(nat->phase_machine_at_phase2 == 2u);
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -614,6 +767,16 @@ int main(void) {
   struct fifa96_platform_null_stats st;
   struct m2_result res;
   run_tape(with_iso, transcript, M2_TRANSCRIPT_CAP, &tlen, &st, &res);
+
+  /* v4 acceptance (both modes): the natural kickoff chain reaches phase 2 with
+   * no directives and no goal (see run_natural_probe). Status to stderr keeps
+   * stdout the byte-exact transcript. */
+  struct m2_natural nat;
+  run_natural_probe(with_iso, &nat);
+  fprintf(stderr,
+          "test_engine_m2 natural probe: live phase 2 at step %d (match start "
+          "%d), row 01 dispatched, score 0-0\n",
+          nat.phase2_step, nat.match_start_step);
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
