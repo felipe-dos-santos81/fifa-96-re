@@ -94,7 +94,7 @@ into the port:
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
 chain run headless (the M2-B acceptance tape **v7** — the phase-7
-acceptance — is green: the 14 wired
+acceptance — is green: the 15 wired
 action rows exercised, the resource-loaded formation/record placement drawing
 on
 the indexed match canvas from the first granted frame, the FU-96 leg-5

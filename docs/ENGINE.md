@@ -918,9 +918,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   `cmp` against the committed golden is the recorded check, M1 `cmp` clean.
   Leg register carried out of phase 7 (each slice's section holds the detail):
   **FU-149** L1–L13 (L2 derived-landed, dynamic-trace confirmation open; L12
-  the `[0x157B8E]`/`[0x157B8F]` gate + act-4/sit-1 arms; L13 the taker/keeper
-  row bodies 0x10/0x11/0x1D — the arms install the codes, the stage machines
-  stay unported); **FU-150** the 11 §Port-contract legs plus the L4 carry-in
+  the `[0x157B8E]`/`[0x157B8F]` gate + act-4/sit-1 arms; L13 the taker row
+  bodies 0x10/0x11 — the arms install the codes, the stage machines stay
+  unported; 0x1D closed in P3 / FU-151); **FU-150** the 11 §Port-contract legs plus the L4 carry-in
   (the live-session sit 9/0xA queue consumer untraced — the reachable FK chain
   is the native direct/pending path) and the new legs (act-2 camera-lead
   gates, `[0x158882]` producer, foul-log `rec[+4]` stand-in, dropped
