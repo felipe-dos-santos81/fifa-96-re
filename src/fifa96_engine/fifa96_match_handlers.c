@@ -461,6 +461,10 @@ static void match_keeper_closedown_stage(struct fifa96_match_run *mr,
                                    mr->slot.entity == mr->record.entity_id
                                ? mr->slot.released
                                : 0);
+  s->slot_pressed = (uint8_t)(mr->record.has_slot != 0 &&
+                                      mr->slot.entity == mr->record.entity_id
+                                  ? mr->slot.pressed
+                                  : 0);
   s->sector = mr->record.type;
   s->row44 = mr->record.row44;
   s->session_gate = mr->session_gate_14c32a;

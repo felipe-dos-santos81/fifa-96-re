@@ -155,8 +155,6 @@ int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_
   t = &pool->team[team];
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     struct fifa96_match_entity *e = &t->records[i];
-    int16_t cam_dx;
-    int16_t cam_dz;
     /* 0x7997C derived reset: the post-commit record bytes (0x799da..0x79a65)
      * zero the velocity half-words/timers and the code/stage/ball/exclusion
      * bytes. The native's virtual `[rec+0x1C]` target restore and the
@@ -175,13 +173,19 @@ int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_
     e->skip_98 = 0;           /* +0x98 (0x79a5f) */
     e->has_ball = 0;          /* +0x9B (0x79a6c) */
     /* 0x799d5 0x795B4(rec+0x59, 0x15774C, &rec+0x6B): the lane refresh from
-     * the camera focus (the S1 track's word math, inlined to keep this module
-     * a leaf over entity_update). */
-    cam_dx = (int16_t)((uint16_t)cam_x - (uint16_t)e->pos_x);
-    cam_dz = (int16_t)((uint16_t)cam_z - (uint16_t)e->pos_z);
-    e->lane_z = cam_dx;
-    e->cam_dz6f = cam_dz;
-    e->lane_x = (int16_t)fifa96_entity_distance((int32_t)cam_dx, (int32_t)cam_dz);
+     * the camera focus. The helper's out[0] is the `FUN_000CD514` folded-angle
+     * hypot (FU-147 S1 errata 1 / OL-41, ported as
+     * `fifa96_entity_intercept_band`), NOT the `0x8DC68` octagonal metric
+     * (that is the BF20 lane block's own call). Writes +0x6B/+0x6D/+0x6F. */
+    {
+      fifa96_entity_intercept_band_out band;
+      if (fifa96_entity_intercept_band(e->pos_x, e->pos_z, cam_x, cam_z,
+                                       &band) == FIFA96_OK) {
+        e->lane_z = band.dx;         /* +0x6D = cam.x - pos.x */
+        e->cam_dz6f = band.dz;       /* +0x6F = cam.z - pos.z */
+        e->lane_x = band.band;       /* +0x6B = the folded-angle hypot */
+      }
+    }
     e->bound = e->lane_x;                                       /* 0x79a19 */
     /* 0x79a8e..: +0x9A not set -> install `active ? 3 : 0x19` (0x7D9A4). */
     if (e->skip_9a == 0)

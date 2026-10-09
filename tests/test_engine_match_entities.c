@@ -312,6 +312,21 @@ static void test_reset_lane_pass(void) {
   assert(pool.team[TEAM0].tracker7c7 == 5);
   /* record 0 inactive -> the forced install is 0x19 (via the installer). */
   assert(pool.team[TEAM0].records[0].code == 0x19);
+  /* Off-axis discriminating case: the 0x795B4 band is the `FUN_000CD514`
+   * folded-angle hypot (0x286 for dx=0x240, dz=0x468), NOT the 0x8DC68
+   * octagonal metric (0x540). */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    pool.team[TEAM0].records[i].pos_x = 0x2000;
+    pool.team[TEAM0].records[i].pos_z = 0;
+  }
+  pool.team[TEAM0].records[6].pos_x = -0x240;
+  pool.team[TEAM0].records[6].pos_z = -0x468;
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[6].lane_x == 0x286);
+  assert(pool.team[TEAM0].records[6].lane_z == 0x240);   /* cam.x - pos.x */
+  assert(pool.team[TEAM0].records[6].cam_dz6f == 0x468); /* cam.z - pos.z */
+  assert(pool.team[TEAM0].target == 6);
+  assert(pool.team[TEAM0].tracker7c7 == 6);
   assert(fifa96_match_entities_reset_lane(NULL, TEAM0, 0, 0) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_entities_reset_lane(&pool, 2, 0, 0) == -FIFA96_ERR_INVALID);
 }

@@ -524,7 +524,17 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
     s->stage92 = 3;                                                /* 0x7579a */
     s->timer7b = 2;                                                /* 0x757a7 */
     if (s->has_slot == 0) {
+      /* 0x757be JZ 0x75992: with no slot the native skips the whole 0x758cd
+       * block (and the slot-edge arms) and enters the out-of-line ladder,
+       * regardless of `+0x9B`. */
       out->slot_fill = 1;                                          /* 0x757b1 CALL 0x744D4 */
+      if (s->timer89 > 0x78) {                                     /* 0x75999 */
+        flag8 = 1;                                                 /* 0x7599b [EBP-8]=1 -> 0x75b75 */
+      } else if ((uint16_t)s->gauge < 0x90u) {                     /* 0x759b1 */
+        s->target_x = s->pos.x;                                    /* 0x759c2 */
+        s->target_z = s->pos.z;
+        s->target_z += (s->side == 0) ? 0x10 : -0x10;              /* 0x759d0/0x759d7 */
+      }
     } else {
       uint8_t edge = s->slot_edge;
       if ((edge & 0x10u) != 0u) {                                  /* 0x757d5 */
@@ -546,29 +556,26 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
           out->ui |= 0x100u;                                       /* 0x4C320/0x361b0 */
         }
       }
-    }
-    if (s->latch_157ab2 == 0) {                                    /* 0x758d4 */
-      out->ui |= 0x200u;                                           /* 0x75980 0x4C31C(1, slot) */
-    } else {
-      s->target_x = s->pos.x;                                      /* 0x758e8 rec+0x4D := pos */
-      s->target_z = s->pos.z;
-      if ((uint16_t)s->gauge < 0x90u && s->has_slot != 0) {        /* 0x758f6 */
-        s->target_x += (int32_t)s->slot_dir_x << 4;                /* 0x75907 */
-        s->target_z += (int32_t)s->slot_dir_z << 4;                /* 0x7591b */
-      }
-      if (s->has_ball != 0) {                                      /* 0x75930 hold-follow */
-        s->cam_x = s->pos.x + ((int32_t)s->slot_dir_x << 5);       /* 0x75948 */
-        s->cam_z = s->pos.z + ((int32_t)s->slot_dir_z << 5);       /* 0x7595c */
-        out->place = 1;                                            /* 0x75976 CALL 0x700F4 */
-        out->place_x = s->cam_x;
-        out->place_y = s->cam_y;
-        out->place_z = s->cam_z;
-      } else if (s->timer89 > 0x78) {                              /* 0x75999 */
-        flag8 = 1;
-      } else if ((uint16_t)s->gauge < 0x90u) {                     /* 0x759b1 */
-        s->target_x = s->pos.x;                                    /* 0x759c2 */
+      /* 0x758cd (slot path only): the latch ladder. */
+      if (s->latch_157ab2 == 0) {                                  /* 0x758d4 */
+        out->ui |= 0x200u;                                         /* 0x75980 0x4C31C(1, slot) */
+      } else {
+        s->target_x = s->pos.x;                                    /* 0x758e8 rec+0x4D := pos */
         s->target_z = s->pos.z;
-        s->target_z += (s->side == 0) ? 0x10 : -0x10;              /* 0x759d0/0x759d7 */
+        if ((uint16_t)s->gauge < 0x90u) {                          /* 0x758f6 */
+          s->target_x += (int32_t)s->slot_dir_x << 4;              /* 0x75907 */
+          s->target_z += (int32_t)s->slot_dir_z << 4;              /* 0x7591b */
+        }
+        if (s->has_ball != 0) {                                    /* 0x75930 hold-follow */
+          s->cam_x = s->pos.x + ((int32_t)s->slot_dir_x << 5);     /* 0x75948 */
+          s->cam_z = s->pos.z + ((int32_t)s->slot_dir_z << 5);     /* 0x7595c */
+          out->place = 1;                                          /* 0x75976 CALL 0x700F4 */
+          out->place_x = s->cam_x;
+          out->place_y = s->cam_y;
+          out->place_z = s->cam_z;
+        }
+        /* `+0x9B == 0` jumps straight to 0x759ea (0x75930 JZ): no timer/gauge
+         * ladder on the slot path. */
       }
     }
     if (flag8 != 0) {                                              /* 0x759ef -> 0x75b75 */
@@ -815,11 +822,13 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
     out->commit = 1;                                               /* 0x750ed CALL 0x79B6C */
     if (s->has_slot == 0) {
       out->slot_fill = 1;                                          /* 0x750fb CALL 0x744D4 */
+      if (s->timer89 > 0xB4) flag4 = 1;                            /* 0x75216 -> 0x75222 */
     } else {
       if ((s->slot_edge & 0x50u) != 0u) {                          /* 0x75116 byte[slot+6]&0x50 */
         out->ui |= 0x20u;                                          /* 0x36200/0x361a4 */
         flag4 = 1;                                                 /* [EBP-4]=1 (0x7512f) */
-      } else if ((s->slot_edge & 0x20u) != 0u) {                   /* 0x7513d byte[slot+4]&0x20 */
+        /* JMP 0x751fb */
+      } else if ((s->slot_pressed & 0x20u) != 0u) {                /* 0x75137 byte[slot+4]&0x20 */
         s->latch_157ab2 = (uint8_t)(s->latch_157ab2 == 0);         /* 0x75152 SETZ */
         if (s->latch_157ab2 != 0) {
           out->ui |= 0x40u;                                        /* 0x4C380/0x36200/0x361a4 */
@@ -830,13 +839,15 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
           s->reset_z = 0;
           out->ui |= 0x80u;                                        /* 0x4C320/0x361b0 */
         }
+        /* 0x751b9: the latched-edge block runs only after a 0x20 edge. */
+        if (s->timer89 > 0x4B0) {                                  /* 0x751bc */
+          if ((s->timer89 - (int32_t)s->delta) <= 0x4B0) out->sink_4b0 = 1; /* 0x8F188(0xA4,4,0) */
+        }
+        out->ui |= 0x100u;                                         /* 0x751f6 0x4C31C(0) */
       }
+      /* 0x751fb (all slot sub-paths): the latch gate. */
+      if (s->latch_157ab2 == 0) out->ui |= 0x200u;                 /* 0x7520f 0x4C31C(1, slot) */
     }
-    if (s->timer89 > 0x4B0) {                                      /* 0x751bc */
-      if ((s->timer89 - (int32_t)s->delta) <= 0x4B0) out->sink_4b0 = 1; /* 0x8F188(0xA4,4,0) */
-    }
-    out->ui |= 0x100u;                                             /* 0x751f6 0x4C31C(0) */
-    if (s->latch_157ab2 == 0) out->ui |= 0x200u;                   /* 0x7520f 0x4C31C(1, slot) */
     if (flag4 == 0) goto closedown_tail;                           /* 0x7522a */
     s->timer89 = 0;                                                /* 0x75239 */
     s->stage92 = 2;                                                /* 0x75245 */

@@ -1053,3 +1053,25 @@ change.
   `{0x01, fifa96_match_action_01, ...}`) and `docs/ENGINE.md` (14/80 wired,
   65 UNSUP / 14 OK / 1 NOTF). The §8 OL-9 group-C list (`01`, `02`, ...) is
   superseded for `01`; the other group-C rows stay open.
+
+## Errata (M2 phase-7 P3 / FU-151)
+
+* **§6.1 action row `1D` is `ported`, and row `1E` is the full machine.**
+  Row `0x1D` (`fifa96_match_action_1D`, FU-151 §Port contract item 2 /
+  `fifa96_keeper_closedown_step`, stages 0..4) and row `0x1E`
+  (`fifa96_match_action_1E` extended from the FU-140 linear claim to the
+  full ten-stage `fifa96_keeper_claim_step`, FU-151 item 1). Table A's
+  `1D` cell ("not ported (partial); keeper_clear_vector; FU-79 §6; FU-140
+  §2") is superseded; the FU-140 OL-35 legs for the stage bodies are carried
+  by FU-151 §5 (legs 3/4/12/13/15). The §7 totals were updated in place by
+  the engine landing: action ported 14 -> 15 (`1D`), not ported 27 -> 26;
+  dispatch 64 `-UNSUP` (26 not ported action rows + 34 phase rows + the
+  unwired `27`/`29`/`2C` + the dead `2B`), 15 `FIFA96_OK`, 1 `NOTF`; `docs/ENGINE.md` / `README.md` show
+  `15/80` and `64 UNSUP / 15 OK / 1 NOTF`. Cross-checked against
+  `src/fifa96_engine/fifa96_match_handlers.c` (`{0x1D, fifa96_match_action_1D,
+  ...}`).
+* **`+0x8E`/`+0x91` audit (FU-151 §3.5 erratum 1).** The dispatch code
+  selected by the record machines is byte `+0x91` (the installer's write);
+  byte `+0x8E` is the face octant. No wrong-field read in the dispatch
+  landing; two unwired loader bodies were fixed by FU-151 P3
+  (`fifa96_action_carrier_arm` 0x7F374 and the keeper-1F input gates).

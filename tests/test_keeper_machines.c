@@ -88,32 +88,44 @@ static void test_claim_stage1_slot_to_stage3(void) {
 }
 
 /* Stage 1 with no slot draws exactly one RNG word; the derived branch matches
- * the drawn bit (0 -> straight to stage 3, 1 -> the 0x32 face + stage 2). */
+ * the native bit (0 -> straight to stage 3 with event 0x27, 1 -> the 0x32
+ * face + stage 2). Both arms are pinned: fifa96_rng_seed(0) yields first
+ * draw 0x200 (bit 0); seed 32 yields 0x4201 (bit 1). */
 static void test_claim_stage1_rng_branch(void) {
-  fifa96_keeper_claim s = claim_state();
+  fifa96_keeper_claim s;
   fifa96_keeper_claim_out out;
   struct fifa96_rng rng;
-  struct fifa96_rng probe;
   uint16_t value = 0;
-  int bit;
+
+  /* bit 0 arm (seed 0). */
+  s = claim_state();
   s.stage92 = 1;
   s.timer89 = 0x40;
   s.has_ball = 0;
   s.has_slot = 0;
-  s.row44 = 0;                        /* stage 2 exits if reached */
+  s.row44 = 0;
   s.rng = &rng;
   assert(fifa96_rng_seed(&rng, 0) == FIFA96_OK);
-  assert(fifa96_rng_seed(&probe, 0) == FIFA96_OK);
-  assert(fifa96_rng_step(&probe, &value) == FIFA96_OK);
-  bit = value & 1;
   assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
   assert(s.has_ball == 1);            /* the head claim ran (stage < 3) */
-  if (bit == 0) {
-    assert(out.event == 0x27);
-  } else {
-    assert(out.event == 0x32);
-    assert(s.stage92 == 3);           /* stage 2 advanced before the exit */
-  }
+  assert(out.event == 0x27);          /* no reroll */
+  assert(s.stage92 == 3);             /* straight to stage 3, then the hold exit */
+
+  /* bit 1 arm (seed 32): the 0x32 reroll face + stage 2 (row44 1 advances). */
+  s = claim_state();
+  s.stage92 = 1;
+  s.timer89 = 0x40;
+  s.has_ball = 0;
+  s.has_slot = 0;
+  s.row44 = 1;
+  s.rng = &rng;
+  assert(fifa96_rng_seed(&rng, 32) == FIFA96_OK);
+  assert(fifa96_rng_step(&rng, &value) == FIFA96_OK);
+  assert((value & 1) == 1);           /* the pinned seed's first bit */
+  assert(fifa96_rng_seed(&rng, 32) == FIFA96_OK);
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(out.event == 0x32);
+  assert(s.stage92 == 3);             /* 2 -> 3 through the row44 gate */
 }
 
 /* Stage 3 no-ball tail (`0x75B26..0x75B74`): reset + situation 0xB + install
@@ -139,6 +151,58 @@ static void test_claim_stage3_restart(void) {
   assert(s.target_x == 100 && s.target_z == 200 + 0x10);   /* gauge<0x90 nudge */
   assert(s.cam_x == 100 && s.cam_y == 0x38 && s.cam_z == 200 + 0x10);
   assert(s.gauge == 0x80);            /* the restart RET skips the exit gauge */
+}
+
+/* Stage 3 branch topology (`0x757BE`): slot == 0 skips the whole 0x758CD
+ * block (no hold-follow, no latch ladder) and enters the 0x75992 ladder
+ * regardless of +0x9B; slot != 0 runs the latch ladder and, with +0x9B == 0,
+ * jumps straight to 0x759EA with no timer/gauge ladder. */
+static void test_claim_stage3_slot_paths(void) {
+  fifa96_keeper_claim s;
+  fifa96_keeper_claim_out out;
+
+  /* slotless, timer89 > 0x78: [EBP-8]=1 -> stage 4 (no place, no +0x200). */
+  s = claim_state();
+  s.stage92 = 3;
+  s.timer89 = 0x79;
+  s.has_ball = 1;
+  s.has_slot = 0;
+  s.latch_157ab2 = 1;
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(out.clear_vec == 1);         /* stage 4 ran */
+  assert(out.place == 0);             /* the hold-follow is slot-only */
+  assert((out.ui & 0x200u) == 0u);    /* 0x4C31C belongs to the slot path */
+  assert(out.held_exit == 0);
+  assert(s.stage92 == 8);             /* 3 -> 4 -> ... -> 8 (row44 0 exit) */
+
+  /* slotless, timer89 <= 0x78 and gauge < 0x90: the target.z nudge, no place. */
+  s = claim_state();
+  s.stage92 = 3;
+  s.timer89 = 0x10;
+  s.gauge = 0x80;
+  s.has_ball = 1;
+  s.has_slot = 0;
+  s.latch_157ab2 = 1;
+  s.side = 0;
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(s.target_x == 100 && s.target_z == 200 + 0x10);
+  assert(out.place == 0);
+  assert(out.held_exit == 1);         /* still holding at 0x75B29 */
+  assert(s.cam_x == 100 && s.cam_y == 0x38 && s.cam_z == 200 + 0x10);
+
+  /* slot, latch set, no ball: straight to 0x759EA (no timer/gauge ladder);
+   * timer89 0x79 > 0x78 must NOT advance to stage 4. */
+  s = claim_state();
+  s.stage92 = 3;
+  s.timer89 = 0x79;
+  s.gauge = 0x80;
+  s.has_ball = 0;
+  s.has_slot = 1;
+  s.latch_157ab2 = 1;
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(out.reset == 1 && out.situation_0b == 1 && out.install == 5);
+  assert(s.stage92 == 3);             /* the restart tail RETs */
+  assert(s.target_x == 100 && s.target_z == 200);   /* no gauge nudge at all */
 }
 
 /* Stage 5 release (`0x75D17`): row 0x45 frame >= 3 clears +0x9B and falls
@@ -303,6 +367,65 @@ static void test_closedown_stage0_1(void) {
   assert(out.place == 1 && s.stage92 == 1);
 }
 
+/* Stage 1 branch topology: the slotless arm advances on timer89 > 0xB4
+ * (`0x75216`) and never runs the slot-only 0x4B0/0x4C31C block; the latch
+ * toggle (`0x75137`) reads byte[slot+4] (pressed), not byte[slot+6]. */
+static void test_closedown_stage1_slot_paths(void) {
+  fifa96_keeper_closedown s;
+  fifa96_keeper_closedown_out out;
+
+  /* slotless, timer89 > 0xB4 -> flag4 -> stage 2 (native 0x75216). */
+  s = closedown_state();
+  s.stage92 = 1;
+  s.timer89 = 0xC0;
+  s.row44 = 0;
+  assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
+  assert(out.slot_fill == 1);
+  assert(s.stage92 == 4);             /* 1 -> 2 -> 3 -> 4 then the tail */
+  assert(out.sink_4b0 == 0);          /* slot-only block */
+  assert((out.ui & 0x100u) == 0u);    /* slot-only 0x4C31C(0) */
+  assert((out.ui & 0x200u) == 0u);    /* slot-only 0x4C31C(1) */
+
+  /* slotless, the 0x4B0 boundary must not produce the slot-only sink. */
+  s = closedown_state();
+  s.stage92 = 1;
+  s.timer89 = 0x4B1;
+  s.delta = 2;
+  s.row44 = 0;
+  assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
+  assert(out.sink_4b0 == 0);
+  assert((out.ui & 0x100u) == 0u);
+
+  /* slot + pressed byte[slot+4] bit 0x20: the latch toggles (0 -> 1). */
+  s = closedown_state();
+  s.stage92 = 1;
+  s.timer89 = 0x10;
+  s.has_slot = 1;
+  s.slot_pressed = 0x20;
+  s.slot_edge = 0;
+  s.latch_157ab2 = 0;
+  assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
+  assert(s.latch_157ab2 == 1);
+  assert((out.ui & 0x40u) != 0u);     /* the latch-set call block */
+  assert((out.ui & 0x100u) != 0u);    /* 0x4B9..0x4C31C(0) after the edge */
+  assert((out.ui & 0x200u) == 0u);    /* latch 1 -> no 0x4C31C(1) */
+  assert(s.stage92 == 1);             /* flag4 stays clear */
+
+  /* slot + released byte[slot+6] bit 0x20 alone must NOT toggle the latch
+   * (the pre-fix read); the latch-0 slot path requests 0x4C31C(1). */
+  s = closedown_state();
+  s.stage92 = 1;
+  s.timer89 = 0x10;
+  s.has_slot = 1;
+  s.slot_pressed = 0;
+  s.slot_edge = 0x20;
+  s.latch_157ab2 = 0;
+  assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
+  assert(s.latch_157ab2 == 0);
+  assert((out.ui & 0x200u) != 0u);
+  assert((out.ui & 0x100u) == 0u);
+}
+
 /* Stage 2: lane > 0x40 with timer89 > 0xB4 resets; else it advances. */
 static void test_closedown_stage2_reset_and_advance(void) {
   fifa96_keeper_closedown s = closedown_state();
@@ -400,10 +523,12 @@ int main(void) {
   test_claim_stage1_slot_to_stage3();
   test_claim_stage1_rng_branch();
   test_claim_stage3_restart();
+  test_claim_stage3_slot_paths();
   test_claim_release_chain();
   test_claim_stage4_outlet();
   test_claim_errors();
   test_closedown_stage0_1();
+  test_closedown_stage1_slot_paths();
   test_closedown_stage2_reset_and_advance();
   test_closedown_stage3_clearance();
   test_closedown_errors();

@@ -169,7 +169,14 @@ slot≠0 and `[0x157AB2]==0` → `0x8DCD4(rec+0x59, 0x157A77, 0x157C30)`. Then:
 **Stage 7 (`0x75E82..0x7609C`) — the outlet.** Row 0x44: camera := pos
 (y=0x10, sector offsets ×5<<4), `[0x158743]=0xB`, `0x92820(rec,4)`; then
 `word[0x157C32] -= trunc(word[0x157C30]>>2)`, `word[0x157C34] -= trunc(...>>2)`
-(0x8DC50 trunc-shift). Row 0x2F: camera := pos (y=0x80, sector<<6),
+(0x8DC50 trunc-shift). **Erratum (P3 review):** the `>>2` operands above are
+the wrong shorthand — first-hand `0x75F1F..0x75F4A` reads
+`EAX=[0x157C30]>>16` (= `word[0x157C32]`) → `0x8DC50(AX, 2)` → `SUB
+word[0x157C32], AX`, then the same for `word[0x157C34]`: each **component**
+(dx and dz) is trunc-quartered itself, not the band. The port implements the
+component form (and the `0x8DC50` truncation toward zero, not an arithmetic
+shift).
+Row 0x2F: camera := pos (y=0x80, sector<<6),
 `[0x158743]=0xC`, `0x92820(rec,4,(word[0x157C30]>>5)+0x80)`. Else
 `[0x158743]=1`, `0x92820(rec,5,word[0x157C30]>>2)`. All arms fall into:
 
@@ -624,8 +631,11 @@ duplicate of one native byte). **Two wrong-field reads found and fixed**
 `[rec+0x8E]>>24` = +0x91 — fixed with a new `carrier.code` field; and
 `fifa96_keeper_input_decide` / `fifa96_keeper_arm_step`'s row-1F gates
 read `type8` where `0x761D1`/`0x7659E`/`0x761F2` read +0x91 — fixed with
-`fifa96_keeper_input.code` / the `code` parameter. Loader tests pin both
-discriminating cases (octant 5 without code 5 must not fire).
+`fifa96_keeper_input.code` / the `code` parameter. The carrier fix is pinned
+by a discriminating octant-vs-code test (`test_action_possession.c`: octant 5
+with code 4 must not fire); the keeper-1F fix is pinned symptomatically by the
+renamed-field tests (`test_keeper_bodies.c`, `in.code` staging), since that
+body's gates are unwired.
 
 **Legs status after P3.** Legs 1–15 remain open as numbered; newly explicit:
 - leg 1 (install sites) unchanged: computed, no immediates;
@@ -634,10 +644,15 @@ discriminating cases (octant 5 without code 5 must not fire).
   `sink_4b0`/scenario/`vector_build`), the `0x74E2C` clear vector now runs
   through the ported `fifa96_keeper_clear_vector` with two RNG draws, and the
   stage-6 `[0x157820]/[0x157822]` writes land on the run cells (consumers
-  leg 15);
+  leg 15). Dropped call sites named as legs for the ledger: `0x918CC` (row-1E
+  stage-0 ring reset), `0x73E08` + `0x4C324` (row-1D stage-0 placement tail),
+  and `0x4C380` (row-1E stage-7 latch clear) — all present as `ui`/scenario
+  request bits only;
 - leg 6 (`FUN_0007997C`): derived reset landed; the virtual `[rec+0x1C]`
   target restore and the 0x79B6C commit stay the carried leg (the derived
-  reset keeps the live position);
+  reset keeps the live position); the `0x795B4` lane band uses the
+  `FUN_000CD514` folded-angle hypot (`fifa96_entity_intercept_band`, OL-41),
+  not the `0x8DC68` octagon;
 - leg 9 (`0x10F37C`): landed (constants staged);
 - leg 13: the keeper focus cells are the engine's derived stand-ins (not the
   FU-71 camera), still a leg.

@@ -249,7 +249,10 @@ typedef struct fifa96_keeper_closedown {
   uint8_t side;
   uint8_t has_ball;               /* +0x9B */
   uint8_t has_slot;               /* +0x20 */
-  uint8_t slot_edge;              /* byte[slot+6] */
+  uint8_t slot_edge;              /* byte[slot+6] (the release edge bits) */
+  uint8_t slot_pressed;           /* byte[slot+4] (the 0x75137 latch-edge
+                                   * `& 0x20` test; the +4 pressed word's low
+                                   * byte, not the +6 released word) */
   uint8_t sector;
   uint8_t row44;
   uint8_t session_gate;           /* [0x14C32A] */
