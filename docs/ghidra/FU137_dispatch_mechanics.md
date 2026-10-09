@@ -15,8 +15,8 @@ record in EAX (code in EDX, no stack arguments); the two record machines
 of the 80 dispatch rows **1 is ported (action `00`, wired by M2 Task 5 /
 FU-138), 2 are unwired (action `1E` and the phase zero slot), 73 are not
 ported, and 4 (0x27/0x29/0x2B/0x2C) are open legs** — this is the slice-time
-snapshot; the current totals are in §7 (**13 ported / 66 UNSUP / 1 NOTF**, the
-playability-legs Task 2 update) — every still-unwired or
+snapshot; the current totals are in §7 (**14 ported / 65 UNSUP / 1 NOTF**, the
+M2 playable-match Task 2 update) — every still-unwired or
 unported row returns `-FIFA96_ERR_UNSUPPORTED`, the phase zero slot returns
 `-FIFA96_ERR_NOT_FOUND`, and never a silent no-op (all error results are
 negated per the engine family convention). The Task-5 update is recorded in the
@@ -449,15 +449,16 @@ tested helper named where FU-136 credited one. The dispatch layer itself
 
 | surface | rows | ported | unwired | not ported | open leg | dead |
 |---|---|---|---|---|---|---|
-| action `0x1106E0` | 45 | 13 (`00` FU-138; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12; `06` FU-139 §11 Task 13; `04` FU-142 K.5 Task 1; `08` FU-142 K.6 Task 2) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 28 | 0 | 1 (`2B` FU-142f) |
+| action `0x1106E0` | 45 | 14 (`00` FU-138; `01` FU-143 §11 / M2 playable-match Task 2; `1E` FU-140; `26` FU-142b; `28` FU-142d; `2A` FU-142e; `07`/`0F` FU-139 §9 Task 11; `18`/`21`/`23` FU-139 §10 Task 12; `06` FU-139 §11 Task 13; `04` FU-142 K.5 Task 1; `08` FU-142 K.6 Task 2) | 3 (`27` FU-142b, `2C` FU-142b, `29` FU-142c bodies ported, entries OL-48 negative per FU-142f) | 27 | 0 | 1 (`2B` FU-142f) |
 | phase `0x110794` | 35 | 0 | 1 (`16`, zero slot -> `-NOT_FOUND`) | 34 | 0 | 0 |
-| **dispatch total** | **80** | **13** | **4** | **62** | **0** | **1** |
+| **dispatch total** | **80** | **14** | **4** | **61** | **0** | **1** |
 
-Dispatch results at this commit (Task 2 update): **66 ×
-`-FIFA96_ERR_UNSUPPORTED`** (the 62 not ported rows + the unwired actions
+Dispatch results at this commit (M2 playable-match Task 2 update): **65 ×
+`-FIFA96_ERR_UNSUPPORTED`** (the 61 not ported rows + the unwired actions
 `27`/`29`/`2C` + the dead entry `2B`), **1 ×
-`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **13 × `FIFA96_OK`** (actions
-`00`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`, `06`, `04`, `08`);
+`-FIFA96_ERR_NOT_FOUND`** (phase `0x16`) and **14 × `FIFA96_OK`** (actions
+`00`, `01`, `1E`, `26`, `28`, `2A`, `07`, `0F`, `18`, `21`, `23`, `06`, `04`,
+`08`);
 out-of-range ->
 `-NOT_FOUND`; NULL `mr` -> `-INVALID`. All error results are negated, matching
 the engine family convention (`fifa96_match_run_*`). (Historical: the Task-1
@@ -1039,3 +1040,16 @@ change.
   run-loop wiring are still pending, so the engine dispatch counts stay as
   recorded and Table B's "not ported / OL-13" cells are superseded by FU-143
   for the loader-level derivations.
+
+## Errata (M2 playable-match Task 2 / FU-143 §11)
+
+* **§6.1 action row `01` is `ported`** (row `0x7DBC0`;
+  `fifa96_match_action_01`, FU-143 §11 / engine commit `e89e985`); §7 above was
+  stale at the previous 13-row snapshot and is now updated in place: action
+  ported 13 -> 14 (`01`), not ported 28 -> 27; dispatch 66 -> 65
+  `-UNSUP` (61 not ported + the unwired `27`/`29`/`2C` + the dead `2B`),
+  13 -> 14 `FIFA96_OK` (the list now includes `01`). Cross-checked against the
+  engine handler table (`src/fifa96_engine/fifa96_match_handlers.c`:
+  `{0x01, fifa96_match_action_01, ...}`) and `docs/ENGINE.md` (14/80 wired,
+  65 UNSUP / 14 OK / 1 NOTF). The §8 OL-9 group-C list (`01`, `02`, ...) is
+  superseded for `01`; the other group-C rows stay open.
