@@ -574,7 +574,7 @@ re-pin (M1 `09b726b7…`, M2 `2e709151…`).
 | installer bodies incl. the latch `0x92DCD`, the score-pair/`[0x15B6A4]`/totals zeroing, the `0x1110EC` read and the `0x92EF7` handler call | `decompile_function 0x92D8C/0x92E2C` | byte-exact |
 | duration table `0x1110EC` 24 dwords: modes 0..2 `{15,15,30,30,60,5}`, mode 3 `{5,1,5,1,3,2}` | `read_memory 0x1110EC` (96 B) | exact (the freeze's modes 0..2 claim extended with mode 3) |
 | `0x110F78` legs `{0x93BBC,0x93E20,0x940A4,0x94270,0x944FC,0x946C4}` | `read_memory 0x110F78` (64 B) | exact |
-| six step tables + id tables (incl. leg 5's hardcoded id 5→0 else 1 with the >6 no-score bound `0x94655/0x94677`) | `read_memory 0x93B80/93DE4/94074/94234/944D4/946B4`; `disassemble_bytes` all six windows | exact; L.4 correction confirmed |
+| six step tables + id tables (incl. leg 5's **unbounded** id 5→0 else side 1 at `0x94845`/`0x94869`; the `id - 1 > count - 1` no-score bound is each table's own dispatch — the `0x94655/0x94677` bound belongs to **leg 4**) | `read_memory 0x93B80/93DE4/94074/94234/944D4/946B4`; `disassemble_bytes` all six windows | exact; L.4 correction confirmed |
 | the scheduler arms (rollover, leg-2 ids 3/4, id 9, id 7, `0x949E9` tail call) | `disassemble_function 0x948AC` | byte-exact |
 | the frame gate `0x4B198 CMP [0x14C32A] / 0x4B1A1 CALL / 0x4B1A6 CALL 0x8AF38` | `disassemble_bytes 0x4B180` | exact |
 | the fallback skip `0x8AD96 CMP EAX,2 / JZ` `0x8AD9F CMP EAX,3 / JZ` (byte read `MOV AL,[0x157AC2]` at `0x8AD8A`) | `disassemble_bytes 0x8AD80` | exact |
@@ -639,6 +639,16 @@ re-pin (M1 `09b726b7…`, M2 `2e709151…`).
 11. **`begin` runs the installer** with the derived leg 0 / mode 0 / side 0
     (legs 1/3); the tracked-side pick stays the carried -1 (leg 4/10) and the
     `[0x15B6B8]` side flag is not stored (write-only, errata table).
+12. **Review fix (round 1): leg 5's post is unbounded.** The first port encoded
+    leg 5 as a 6-entry `{1,1,1,1,0,1}` table with the legs-0..4
+    `id - 1 > count - 1` bound, which mis-routed ids >= 7 (and 0) to the
+    no-score counter. First-hand re-read of `0x94845 CMP EDX,5 / JNZ 0x9485C`
+    -> `0x94869 MOV EAX,1`: leg 5 has **no table and no bound** — id 5 -> side 0,
+    every other id -> side 1, no no-score path (the `0x94655/0x94677` bound is
+    leg 4's dispatch). The port now branches on `screen_leg == 5` directly
+    (`match_run_screen_ids[5] = NULL`, count 0) and the regression test
+    `test_screen_leg5_unbounded_id_map` pins id 5 -> side 0 and id 7 -> side 1
+    with `goal_no_score == 0` (RED on the pre-fix bounded code).
 
 **Leg status after S3** (this slice's §8 numbering):
 

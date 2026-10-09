@@ -1528,6 +1528,53 @@ static void test_screen_post_id_tables(void) {
   drop_fixture(f);
 }
 
+/* FU-146 S3 review fix: leg 5's post has no id bound and no no-score path —
+ * `0x94845 CMP EDX,5 / JNZ 0x9485C` -> `0x94869 MOV EAX,1`: id 5 -> side 0 and
+ * every other id -> side 1 (the `0x94655/0x94677` bound is leg 4's dispatch).
+ * Pins both halves; the bounded-table reading fails the id-7 half. */
+static void test_screen_leg5_unbounded_id_map(void) {
+  struct fixture f = make_fixture(10000000ull);
+
+  /* id 5 -> side 0 */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+    assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
+    mr.state.phase = 2;
+    assert(fifa96_match_run_screen_step(&mr) == 0); /* settle at the post step */
+    assert(mr.screen_step == 2);
+    assert(mr.situation_pending == 0);
+    mr.situation_id = 5;
+    mr.situation_pending = 1;
+    assert(fifa96_match_run_screen_step(&mr) == 1);
+    assert(mr.score[0] == 1 && mr.score[1] == 0);
+    assert(mr.goal_no_score == 0);
+    assert(mr.state.phase == 0u);
+    assert(fifa96_match_run_end(&mr) == 0);
+  }
+
+  /* id 7 -> side 1 (no bound on leg 5) */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+    assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
+    mr.state.phase = 2;
+    assert(fifa96_match_run_screen_step(&mr) == 0); /* settle again */
+    assert(mr.screen_step == 2);
+    assert(mr.situation_pending == 0);
+    mr.situation_id = 7;
+    mr.situation_pending = 1;
+    assert(fifa96_match_run_screen_step(&mr) == 1);
+    assert(mr.score[0] == 0 && mr.score[1] == 1);
+    assert(mr.goal_no_score == 0);
+    assert(mr.state.phase == 0u);
+    assert(fifa96_match_run_end(&mr) == 0);
+  }
+  drop_fixture(f);
+}
+
 /* FU-146 S3: the post's lazily-computed probe reaches the writer's 0xD3 arm.
  * Leg 2, tracked side 0, a side-1 goal: the native writer hits the untracked
  * `score[side] == 1 && score[other] < 3` arm and calls FUN_000CBC4C; the first
@@ -1621,6 +1668,7 @@ int main(void) {
   test_screen_schedule_ids();
   test_goal_probe_limbs();
   test_screen_post_id_tables();
+  test_screen_leg5_unbounded_id_map();
   test_screen_step_probe_post();
   test_screen_advance_ring();
   test_pad_drives_controlled_locomotion();

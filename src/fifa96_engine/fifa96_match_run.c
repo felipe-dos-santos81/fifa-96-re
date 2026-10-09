@@ -1348,22 +1348,24 @@ static const uint8_t match_run_screen_kinds[6][6] = {
 static const uint8_t match_run_screen_step_count[6] = {6u, 6u, 5u, 6u, 4u, 4u};
 
 /* FU-146 §4: the per-leg id tables (0x93B98, 0x93DFC, 0x94088, 0x9424C,
- * 0x944E4; leg 5 has no table: id 5 -> side 0, ids 1..6 else -> side 1,
- * ids > 6 -> no-score, encoded as the equivalent 6-entry table). -1 = the
- * no-score counter. */
+ * 0x944E4). Leg 5 has no table and no bound: `0x94845 CMP EDX,5 / JNZ
+ * 0x9485C` -> `0x94869 MOV EAX,1`, so id 5 -> side 0 and every other id
+ * (including 0 and >= 7) -> side 1, with no no-score path; the post handles
+ * leg 5 directly. -1 = the no-score counter (legs 0-4 only). The
+ * `id - 1 > count - 1 -> no-score` bound is each table's own dispatch; the
+ * `0x94655/0x94677` bound belongs to leg 4's table, not leg 5. */
 #define MATCH_RUN_SCREEN_NO_SCORE (-1)
 static const int8_t match_run_screen_ids_leg0[9] = {1, 0, 1, -1, 0, -1, -1, -1, 1};
 static const int8_t match_run_screen_ids_leg1[9] = {1, 0, 1, -1, 0, -1, -1, -1, 1};
 static const int8_t match_run_screen_ids_leg2[7] = {1, 0, 1, 0, 0, 1, 0};
 static const int8_t match_run_screen_ids_leg3[9] = {1, 0, 1, -1, 0, 1, -1, -1, 1};
 static const int8_t match_run_screen_ids_leg4[6] = {1, 0, -1, -1, 0, 1};
-static const int8_t match_run_screen_ids_leg5[6] = {1, 1, 1, 1, 0, 1};
 static const int8_t *const match_run_screen_ids[6] = {
     match_run_screen_ids_leg0, match_run_screen_ids_leg1,
     match_run_screen_ids_leg2, match_run_screen_ids_leg3,
-    match_run_screen_ids_leg4, match_run_screen_ids_leg5,
+    match_run_screen_ids_leg4, NULL,   /* leg 5: no table (see above) */
 };
-static const uint8_t match_run_screen_id_count[6] = {9u, 9u, 7u, 9u, 6u, 6u};
+static const uint8_t match_run_screen_id_count[6] = {9u, 9u, 7u, 9u, 6u, 0u};
 
 /* FU-146 §3: the per-mode duration table `0x1110EC[mode*24 + leg]` dwords
  * (first-hand read): modes 0..2 are `{15,15,30,30,60,5}` seconds and mode 3 is
@@ -1407,8 +1409,15 @@ static int match_run_screen_post(struct fifa96_match_run *mr) {
     mr->goal_minute = (uint16_t)((int32_t)mr->screen_timer / 0x3C);  /* 0x93D66 */
     mr->goal_screen_accum += mr->screen_timer;                       /* 0x93D73 */
   }
-  /* the id table (`EAX = [0x15B6A8] - 1; CMP EAX,count-1; JA no-score`) */
-  if ((uint8_t)(id - 1u) < count) side = ids[id - 1u];
+  /* The id dispatch. Leg 5 has no table and no bound (0x94845 `CMP EDX,5 /
+   * JNZ 0x9485C` -> 0x94869 `MOV EAX,1`): id 5 -> side 0, every other id
+   * (including 0 and >= 7) -> side 1. Legs 0-4 use their table with the
+   * native `EAX = [0x15B6A8] - 1; CMP EAX,count-1; JA no-score` bound. */
+  if (mr->screen_leg == 5) {
+    side = (id == 5u) ? 0 : 1;
+  } else if ((uint8_t)(id - 1u) < count) {
+    side = ids[id - 1u];
+  }
   if (side < 0) {
     mr->goal_no_score++;                     /* INC dword [0x15B6A0] */
   } else {
