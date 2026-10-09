@@ -73,15 +73,15 @@ int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
  * D668 and the pose targets stay leg 9. `handler_block` carries the behavior
  * block fields the handlers read: +0x08 class_of, +0x00 target0, +0x04
  * target1, +0x30 const30 (native dword 0xC), +0x34 const34 (dword 0xD), the
- * byte at +3 (`field3`), and the sub-record yaw bounds (native `[block+0x50]
- * +0x18/+0x1C`). */
+ * +0xC dword (`field3` = native `param_2[3]`, the FUN_0004EC9C class-gate
+ * cell), and the sub-record yaw bounds (native `[block+0x50]+0x18/+0x1C`). */
 typedef struct fifa96_camera_handler_block {
   int32_t class_of;   /* +0x08 */
   int32_t target0;    /* +0x00 */
   int32_t target1;    /* +0x04 */
   int32_t const30;    /* +0x30 (dword 0xC) */
   int32_t const34;    /* +0x34 (dword 0xD) */
-  int32_t field3;     /* the byte at +3 (staged) */
+  int32_t field3;     /* the dword at +0xC (block[3], class-gate cell) */
   int32_t yaw_lo;     /* sub-record +0x18 */
   int32_t yaw_hi;     /* sub-record +0x1C */
 } fifa96_camera_handler_block;
@@ -99,6 +99,7 @@ typedef struct fifa96_camera_handler_out {
   int32_t horizon_a;   /* 0x14E4D8 (h0) / 0x14E4DC (h1/h2) */
   int32_t horizon_b;   /* 0x14E4D4 (h0) / 0x14E4D0 (h1/h2) */
   int32_t speed;       /* the action handler's param_4 (after the live bump) */
+  int32_t class_of;    /* the staged handler's native param_2[2] (3 or 4) */
 } fifa96_camera_handler_out;
 
 /* Handler constants (fresh 0x4DB38): the yaw slew divisor 0x1E0000 and the
@@ -121,15 +122,16 @@ int fifa96_camera_behavior_action(fifa96_camera_handler_state *st, int live,
 /* FU-152 §2.8 (P4): the six 0x108B64 behavior-block fields the handlers read,
  * first-hand `read_memory 0x10896C` (504 B): +0x00 target0, +0x04 target1,
  * +0x08 class, +0x30 const30 (dword 0xC), +0x34 const34 (dword 0xD), and the
- * byte at +3. Observed classes {3,1,3,3,1,3}; every +3 byte is 0, so the
- * FUN_0004EC9C class gate (`<0x4000 || >0xC000` -> 4) always takes class 4 in
- * the image; every +0x34 is 0 (handler 1's yaw target is the bare staged
- * track z). */
+ * +0xC dword (`field3` = native `param_2[3]`, the FUN_0004EC9C class-gate
+ * cell). Observed classes {3,1,3,3,1,3}; the +0xC cells are
+ * {0,0,0xA7F8,0,0,0xA21C}, so blocks 2/5 take FUN_0004EC9C's class-3 arm
+ * (0x4000..0xC000) and blocks 0/1/3/4 the class-4 arm; every +0x34 is 0
+ * (handler 1's yaw target is the bare staged track z). */
 typedef struct fifa96_camera_behavior_table_entry {
   int32_t target0;   /* +0x00 */
   int32_t target1;   /* +0x04 */
   int32_t class_of;  /* +0x08 */
-  int32_t field3;    /* the byte at +3 */
+  int32_t field3;    /* the dword at +0xC (block[3]) */
   int32_t const30;   /* +0x30 */
   int32_t const34;   /* +0x34 */
 } fifa96_camera_behavior_table_entry;

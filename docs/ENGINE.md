@@ -576,10 +576,12 @@ the build also produces the windowed `fifa96` target (`make game`).
     remap, negative clamp; the image -1 cells are the degenerate 0x108B60
     read, engine-clamped) and the quoted clamp/constant level of the four
     0x108B80 bodies plus the pinned 0x108B64 mode table
-    (`fifa96_camera_behavior_blocks`), wired into the FUN_000505D0 default arm
-    through the staged record subset + behavior block (NULL = unported
-    default, tape unchanged). The FUN_0004E248/D698/DF34/C7D0/D668 integrators
-    stay leg 9.
+    (`fifa96_camera_behavior_blocks`: classes {3,1,3,3,1,3}, class-gate cells
+    the dword +0xC {0,0,0xA7F8,0,0,0xA21C} — blocks 2/5 take FUN_0004EC9C's
+    class-3 arm), wired into the FUN_000505D0 default arm through the staged
+    record subset + behavior block (NULL = unported default, tape unchanged).
+    The FUN_0004E248/D698/DF34/C7D0/D668 integrators and the yaw-band
+    snap-target math stay leg 9.
   - **FU-71 residual** (`fifa96_camera_classify` = FUN_00070074 full bits,
     `fifa96_camera_pan_band` = FUN_000709D0 ladder,
     `fifa96_camera_rate_event` = FUN_00071DF4 first arm): the FUN_00070DE0

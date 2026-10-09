@@ -895,8 +895,14 @@ below correct this slice where the port found the prose inexact.
   behavior cells are the degenerate `[0x108B60]` read, engine-clamped to 0 —
   leg 8). The six-block mode table is pinned (`fifa96_camera_behavior_blocks`,
   fresh 0x10896C read: classes {3,1,3,3,1,3}, +0x30 {0xEA6,0x578,0x1130,…},
-  every byte +3 and every +0x34 zero — so FUN_0004EC9C always takes the
-  class-4 arm and handler 1's yaw target is the bare track z). The four bodies
+  every +0x34 zero — handler 1's yaw target is the bare track z).
+  **Erratum:** FUN_0004EC9C's class gate reads `block[3]`, the **dword at
+  +0xC** (`param_2[3]`), not a byte at +3; the image cells are
+  {0,0,0xA7F8,0,0,0xA21C}, so blocks 2/5 take the **class-3** arm and
+  0/1/3/4 the class-4 arm. **Erratum:** the handler's 0x2000/0xA000 band test
+  is on the accumulated yaw (`camera+0x58 + roll`), and 0x720/0xB10 are
+  FUN_0004C7D0 snap-**target** offsets, not pan clamps (the pan clamp was a
+  port artifact and is removed; the snap stays leg 9). The four bodies
   land at the quoted constant/clamp level
   (`fifa96_camera_behavior_steady/sidetrack/staged/action`: yaw bounds,
   ±0x1620/±0xE40 pitch clamps, ±0x68 class bias, ±0x720/±0xB10 pan, the

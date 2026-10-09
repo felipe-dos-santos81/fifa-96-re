@@ -314,16 +314,16 @@ static int32_t camera_clamp_i32(int32_t value, int32_t lo, int32_t hi) {
 }
 
 /* FU-152 §2.8: the 0x10896C behavior-block fields (first-hand read_memory;
- * layout per 84-byte block: +0x00/+0x04 targets, +0x08 class, +0x30/+0x34
- * constants, +3 byte). */
+ * layout per 84-byte block: +0x00/+0x04 targets, +0x08 class, +0xC the
+ * class-gate dword, +0x30/+0x34 constants). */
 const fifa96_camera_behavior_table_entry
     fifa96_camera_behavior_blocks[FIFA96_CAMERA_BEHAVIOR_BLOCKS] = {
-        {0x340, 0xFA0, 3, 0, 0xEA6, 0},   /* 0x10896C */
-        {0x1200, 1, 1, 0, 0x578, 0},      /* 0x1089C0 */
-        {0x364, 0xD48, 3, 0, 0x1130, 0},  /* 0x108A14 */
-        {0x340, 0xFA0, 3, 0, 0xEA6, 0},   /* 0x108A68 */
-        {0x1200, 1, 1, 0, 0x578, 0},      /* 0x108ABC */
-        {0x364, 0xD48, 3, 0, 0x1130, 0},  /* 0x108B10 */
+        {0x340, 0xFA0, 3, 0, 0xEA6, 0},        /* 0x10896C */
+        {0x340, 0x1200, 1, 0, 0x578, 0},       /* 0x1089C0 */
+        {0x340, 0xD48, 3, 0xA7F8, 0x1130, 0},  /* 0x108A14 */
+        {0x340, 0xFA0, 3, 0, 0xEA6, 0},        /* 0x108A68 */
+        {0x340, 0x1200, 1, 0, 0x578, 0},       /* 0x108ABC */
+        {0x340, 0xD48, 3, 0xA21C, 0x1130, 0},  /* 0x108B10 */
 };
 
 int fifa96_camera_type(const fifa96_camera_type_record *records, uint32_t count,
@@ -383,18 +383,23 @@ int fifa96_camera_behavior_sidetrack(fifa96_camera_handler_state *st,
 int fifa96_camera_behavior_staged(fifa96_camera_handler_state *st,
                                   const fifa96_camera_handler_block *block,
                                   int32_t rnd, fifa96_camera_handler_out *out) {
-  int32_t pan_limit;
-  (void)rnd;   /* the staged handler writes no rnd-driven cell */
+  int32_t class_of, pitch_target;
   if (!st || !block || !out) return -FIFA96_ERR_INVALID;
-  /* 0x4EC9C: block+3 < 0x4000 || > 0xC000 -> class 4 else 3; the pan clamps
-   * +-0x720 inside the 0x2000..0xA000 band and +-0xB10 outside it; the pitch
-   * clamps +-0x1620; horizon 0xE3B/0xAD3. The FUN_000A1A60 scale and the
-   * integrator writes stay leg 9. */
-  pan_limit = (block->field3 >= 0x2000 && block->field3 <= 0xA000) ? 0x720 : 0xB10;
-  st->track_x = camera_clamp_i32(st->track_x, -pan_limit, pan_limit);
-  st->pitch = camera_clamp_i32(st->pitch, -0x1620, 0x1620);
-  out->horizon_a = 0xE3B;
-  out->horizon_b = 0xAD3;
+  /* 0x4EC9C: the class gate reads block[3] (the dword at +0xC): outside
+   * 0x4000..0xC000 -> class 4, else class 3. The pitch target is the active
+   * camera record's +0x18 (the engine's staged pos_z) plus block[0xC] in the
+   * class-4 arm, minus it in the class-3 arm, clamped +-0x1620; the horizon
+   * jitter is rnd>>3 + 0xE3B/0xAD3. Leg 9: the FUN_0004A1A60 sub-record
+   * scale, the FUN_0004D698/FUN_0004DF34/FUN_0004E05C integrators and the
+   * yaw-band snap (the native tests the accumulated `camera+0x58 + roll`
+   * against 0x2000/0xA000 and uses 0x720/0xB10 as FUN_0004C7D0 snap-target
+   * offsets — not a pan clamp). */
+  class_of = (block->field3 < 0x4000 || block->field3 > 0xC000) ? 4 : 3;
+  pitch_target = st->pos_z + (class_of == 4 ? block->const30 : -block->const30);
+  st->pitch = camera_clamp_i32(pitch_target, -0x1620, 0x1620);
+  out->horizon_a = (rnd >> 3) + 0xE3B;
+  out->horizon_b = (rnd >> 3) + 0xAD3;
+  out->class_of = class_of;
   return FIFA96_OK;
 }
 

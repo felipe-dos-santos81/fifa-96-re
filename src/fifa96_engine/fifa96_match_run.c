@@ -2325,7 +2325,10 @@ int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t ind
   int32_t kind, sub;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
-  if (index > 6u) return 0;   /* FUN_0004D134's default arm records the index */
+  /* FUN_0004D134 stores [0x107DDC] = param_1 on every path (including the
+   * default); only a mapped index also re-selects the camera record. */
+  mr->render.replay.record_index = index;
+  if (index > 6u) return 0;
   rc = fifa96_camera_replay_select(index, &kind, &sub);
   if (rc != 1) return rc;
   mr->render.replay.camera_index = (uint8_t)index;
@@ -2575,8 +2578,10 @@ static void match_run_draw_sub_strip(const struct fifa96_match_run *mr,
   char buf[24];
   int y;
   if (!sub->active) return;
+  /* R1 sits outside the [0x14E688] suspend block: the native gates are
+   * [0x14E538] (asset readiness, covered by the font check), the menu probe,
+   * FUN_0006400C (live) and the {0xC,0x13,0x14} mode exclusion. */
   if (!fifa96_match_run_replay_live(&r->replay)) return;   /* FUN_0006400C */
-  if (r->display.suspend) return;                          /* [0x14E688] */
   if (sub->mode == 0xC || sub->mode == 0x13 || sub->mode == 0x14) return;
   if (!match_run_row_font_ready(r)) return;
   if (fifa96_window_strip_layout(&r->window, sub->frame5_height, sub->name_width,

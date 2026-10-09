@@ -149,6 +149,7 @@ struct fifa96_match_run_replay {
   uint8_t camera_index;   /* [0x109A8C] 0..5 */
   uint8_t camera_kind;    /* FUN_0004D134 selected record (FIFA96_CAMERA_REPLAY_*) */
   uint8_t camera_sub;     /* the FUN_0004DDA8 sub index 5..8 (view modes) */
+  uint32_t record_index;  /* [0x107DDC]: the last FUN_0004D134 index (any value) */
   uint32_t cursor;        /* [0x109A94] */
   uint32_t cursor_limit;  /* [0x109AC0] */
   int32_t phase_counter;  /* [0x14E58C] (FUN_00053D7C) */
@@ -195,8 +196,10 @@ int fifa96_match_run_replay_step(struct fifa96_match_run *mr, uint32_t buttons,
 void fifa96_match_run_replay_exit(struct fifa96_match_run *mr);
 
 /* FUN_0004D134: select replay camera `index` (0..6; the native default only
- * records the index and the engine keeps the current selection). Returns 1 on
- * a selected camera, 0 for the default, -FIFA96_ERR_INVALID (NULL). */
+ * records the index). The engine always stores the `[0x107DDC]` cell
+ * (`record_index`) and keeps the current `{kind, sub}` selection on the
+ * default. Returns 1 on a selected camera, 0 for the default,
+ * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_replay_camera_set(struct fifa96_match_run *mr, uint32_t index);
 
 /* The R1 substitution strip (FU-152 §2.6/§3.2). `record` is the byte block

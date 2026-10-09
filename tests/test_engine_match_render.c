@@ -1339,11 +1339,16 @@ static void test_replay_camera_set(void) {
   assert(fifa96_match_run_replay_camera_set(&mr, 3) == 1);
   assert(r->camera_index == 3 && r->camera_kind == FIFA96_CAMERA_REPLAY_VIEW &&
          r->camera_sub == 7);
+  assert(r->record_index == 3);          /* [0x107DDC] */
   assert(fifa96_match_run_replay_camera_set(&mr, 4) == 1);
   assert(r->camera_kind == FIFA96_CAMERA_REPLAY_ACTION);
+  assert(r->record_index == 4);
   assert(fifa96_match_run_replay_camera_set(&mr, 5) == 1);
   assert(r->camera_kind == FIFA96_CAMERA_REPLAY_BALL);
+  /* The default arm stores [0x107DDC] = index and keeps the selection. */
   assert(fifa96_match_run_replay_camera_set(&mr, 7) == 0);
+  assert(r->record_index == 7);
+  assert(r->camera_kind == FIFA96_CAMERA_REPLAY_BALL && r->camera_index == 5);
   assert(fifa96_match_run_replay_camera_set(NULL, 0) == -FIFA96_ERR_INVALID);
 }
 
@@ -1505,14 +1510,31 @@ static void test_sub_strip_draw(void) {
   assert(f.s->indexed[1 * 320 + 4] == 0x06);
   fifa96_surface_destroy(f.s);
 
-  /* Inactive sub strip draws nothing; a replay state suppresses R1 too. */
+  /* R1 sits outside the [0x14E688] suspend block: a suspended frame still
+   * draws the strip (only R3/R4/R5 are suppressed). */
   hud_fixture_init(&f);
   assert(fifa96_window_set(&f.mr.render.window, 0, 0, 320, 200) == FIFA96_OK);
   f.mr.render.sub.active = 1;
   f.mr.render.sub.mark_sprite = &mark;
+  f.mr.render.sub.record[1] = 1;
+  f.mr.render.sub.record[5] = 2;
+  f.mr.render.sub.frame5_height = 12;
+  f.mr.render.display.suspend = 1;
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[14 * 320 + 158] == 0x00);
+  fifa96_surface_destroy(f.s);
+
+  /* ...but a replay state suppresses R1. */
+  hud_fixture_init(&f);
+  assert(fifa96_window_set(&f.mr.render.window, 0, 0, 320, 200) == FIFA96_OK);
+  f.mr.render.sub.active = 1;
+  f.mr.render.sub.mark_sprite = &mark;
+  f.mr.render.sub.record[1] = 1;
+  f.mr.render.sub.record[5] = 2;
+  f.mr.render.sub.frame5_height = 12;
   f.mr.render.replay.state = 0x82;
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
-  assert(f.s->indexed[2 * 320 + 4] == 0x7F);
+  assert(f.s->indexed[14 * 320 + 158] == 0x7F);
   fifa96_surface_destroy(f.s);
 }
 
