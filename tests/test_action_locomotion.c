@@ -315,6 +315,36 @@ static void test_camera_lead(void) {
   assert(fifa96_action_locomotion_camera_lead(0, 0, 0, 0, 0, NULL) == ACTION_INVALID);
 }
 
+/* FU-147 S1 / first-hand /FIFA96.EXE 0x7C776..0x7C7AF (FUN_0007BF20 lane
+ * block, re-verified this slice): `+0x77` keeps the old lane, `+0x6D/+0x6F`
+ * are the camera-minus-position words and `+0x6B` = 0x8DC68(dx, dz) =
+ * fifa96_entity_distance. The companion helper 0x795B4 fill shape (same
+ * dx/dz store order, first-hand FU-142 Appendix K.2). */
+static void test_track_lane_producer(void) {
+  int16_t lane = 0x1111, dx = 0x2222, dz = 0x3333;
+  assert(fifa96_action_locomotion_track(0x100, 0x200, 0x180, 0x280, &lane, &dx, &dz) ==
+         FIFA96_OK);
+  assert(dx == 0x80 && dz == 0x80);
+  assert(lane == (int16_t)fifa96_entity_distance(0x80, 0x80));
+  /* Native reads the camera/position dwords' low words; the deltas truncate
+   * to 16 bits and are sign-extended only for the metric call. */
+  assert(fifa96_action_locomotion_track(0, 0, -0x40, 0x100, &lane, &dx, &dz) ==
+         FIFA96_OK);
+  assert(dx == -0x40 && dz == 0x100);
+  assert(lane == (int16_t)fifa96_entity_distance(-0x40, 0x100));
+  /* Equal points -> zero lane; the metric stays a signed-word result. */
+  assert(fifa96_action_locomotion_track(0x1234, -0x2222, 0x1234, -0x2222, &lane, &dx,
+                                        &dz) == FIFA96_OK);
+  assert(dx == 0 && dz == 0 && lane == 0);
+  /* 16-bit wrap: the native SUB is on zero-extended low words, truncated. */
+  assert(fifa96_action_locomotion_track(0x10000, 0, 0x10, 0x10000, &lane, &dx, &dz) ==
+         FIFA96_OK);
+  assert(dx == 0x10 && dz == 0);
+  assert(fifa96_action_locomotion_track(0, 0, 0, 0, NULL, &dx, &dz) == ACTION_INVALID);
+  assert(fifa96_action_locomotion_track(0, 0, 0, 0, &lane, NULL, &dz) == ACTION_INVALID);
+  assert(fifa96_action_locomotion_track(0, 0, 0, 0, &lane, &dx, NULL) == ACTION_INVALID);
+}
+
 static void test_clamp_placement(void) {
   int32_t z = 100;
   assert(fifa96_action_locomotion_clamp_placement(&z, 200, 150, 300, 0, 0, 1) == FIFA96_OK);
@@ -358,6 +388,7 @@ int main(void) {
   test_restart_target();
   test_hold();
   test_camera_lead();
+  test_track_lane_producer();
   test_clamp_placement();
   puts("test_action_locomotion: all assertions passed");
   return 0;

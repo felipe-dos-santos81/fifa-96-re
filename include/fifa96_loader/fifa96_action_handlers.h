@@ -165,6 +165,23 @@ fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, 
                                                   int16_t cam_vel_x, int16_t cam_vel_z,
                                                   fifa96_action_vec3 *out);
 
+/* FU-147 S1 / first-hand /FIFA96.EXE `FUN_0007BF20` lane block
+ * (`0x7C776..0x7C7AF`, re-verified this slice) and its `0x795B4` helper fill
+ * shape (first-hand FU-142 Appendix K.2):
+ *   cam_dx = (int16)(cam.x - pos.x)          ; native word +0x6D
+ *   cam_dz = (int16)(cam.z - pos.z)          ; native word +0x6F
+ *   lane   = (int16)fifa96_entity_distance((int32)sx(cam_dx), (int32)sx(cam_dz))
+ *                                            ; native CALL 0x8DC68 -> word +0x6B
+ * The native reads the camera/position dwords' low words (`MOV AX,[0x15774C]`
+ * and `MOV DI,word[EBP+0x59]`, both zero-extended, then SUB and a word store),
+ * so the deltas wrap at 16 bits; the metric call sign-extends them
+ * (`SAR EAX,0x10`). The caller keeps the bound (`word[+0x77] := old lane`) and
+ * the per-team camera-nearest tracker (`0x7C7B3..0x7C7CF`). NULL `lane`/
+ * `cam_dx`/`cam_dz` -> -FIFA96_ERR_INVALID. */
+fifa96_err_t fifa96_action_locomotion_track(int32_t pos_x, int32_t pos_z, int32_t cam_x,
+                                            int32_t cam_z, int16_t *lane, int16_t *cam_dx,
+                                            int16_t *cam_dz);
+
 /* FU-138 §3: row 02 stage-0 wait (native `0x7E0B0..0x7E0F0`). `lane` is the
  * native dword `[rec+0x69]>>16` (FU-75 lane word); `ready` fires at timer `0x78`
  * when `lane > 0x40`, else at timer `0xA`; the `lane > 0x40` ready path is the

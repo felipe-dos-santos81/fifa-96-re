@@ -331,6 +331,23 @@ fifa96_err_t fifa96_action_locomotion_camera_lead(int32_t cam_x, int32_t cam_y, 
   return FIFA96_OK;
 }
 
+fifa96_err_t fifa96_action_locomotion_track(int32_t pos_x, int32_t pos_z, int32_t cam_x,
+                                            int32_t cam_z, int16_t *lane, int16_t *cam_dx,
+                                            int16_t *cam_dz) {
+  int16_t dx;
+  int16_t dz;
+  if (!lane || !cam_dx || !cam_dz) return -FIFA96_ERR_INVALID;
+  /* 0x7C782..0x7C79A: word loads on both sides, 32-bit SUB, word stores. */
+  dx = (int16_t)((uint16_t)cam_x - (uint16_t)pos_x);
+  dz = (int16_t)((uint16_t)cam_z - (uint16_t)pos_z);
+  *cam_dx = dx;
+  *cam_dz = dz;
+  /* 0x7C79E..0x7C7AF: the SAR-sign-extended words feed 0x8DC68 and the word
+   * result is the lane. */
+  *lane = (int16_t)fifa96_entity_distance((int32_t)dx, (int32_t)dz);
+  return FIFA96_OK;
+}
+
 fifa96_err_t fifa96_action_locomotion_restart_wait(int16_t lane, int32_t timer89, uint8_t *ready,
                                                    uint8_t *reset) {
   int32_t threshold;
