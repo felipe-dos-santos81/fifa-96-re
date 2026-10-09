@@ -677,19 +677,22 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
 #define MATCH_RUN_PALETTE_APPEND_B_LEN 0x4Eu
 #define MATCH_RUN_PALETTE_COUNT 256u
 
-static void match_run_formation_seed(struct fifa96_match_run *mr) {
+static int match_run_formation_seed(struct fifa96_match_run *mr) {
   struct fifa96_scene_formation formation;
   uint8_t *bytes = NULL;
   size_t len = 0;
-  if (!mr->engine || !mr->engine->assets) return;
+  int seeded = 0;
+  if (!mr->engine || !mr->engine->assets) return 0;
   if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
       FIFA96_OK)
-    return;
+    return 0;
   if (fifa96_scene_formation_load(bytes, len, MATCH_RUN_FORMATION_NAME, &formation) ==
       FIFA96_OK)
-    (void)fifa96_match_entities_seed_formation(&mr->entities, &formation,
-                                               mr->phase_machine.side_controlled);
+    seeded = fifa96_match_entities_seed_formation(&mr->entities, &formation,
+                                                  mr->phase_machine.side_controlled) ==
+             FIFA96_OK;
   fifa96_asset_free(bytes);
+  return seeded;
 }
 
 /* M2 interactive Task 1 / FU-70 §1.3/§1.4: the derived match-setup slot bind
@@ -812,7 +815,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
-  match_run_formation_seed(mr);
+  int formation_seeded = match_run_formation_seed(mr);
   /* M2 interactive Task 1: the derived setup slot bind (`FUN_00078824` ->
    * `FUN_000785E0`) runs before the kickoff state-1 arm, whose `FUN_0007876C`
    * merge moves the bound slot onto the taker (the arm's own `0x8D243` call). */
@@ -840,6 +843,22 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * the slot requester; consume it now so the FU-70 slot points at the taker
    * before the first frame body (the native rebinds `[0x57C64]` in place). */
   match_run_entity_drain(mr);
+  /* FU-96 leg 5 (M2 interactive T2): the per-record camera place
+   * `FUN_00079F3C` runs inside the native `FUN_0008CF60` loop between the
+   * phase handler and the `FUN_00079B6C` commit, on the non-controlled team's
+   * records only, snapping targets within 0x180 of the camera onto the
+   * 0x180 ring. The commit leaves targets untouched, so this whole-pool pass
+   * before the commit pass is observationally identical. The kickoff camera is
+   * the reset triple (0,0,0) and the live phase is 1 (both gates pass). The
+   * resource-less degradation (no formation seed) keeps the documented zero
+   * targets: the native phase handler always precedes the place, so a zero
+   * target is an engine-only state and must not fabricate a ring position. */
+  if (formation_seeded)
+    (void)fifa96_match_entities_camera_place(&mr->entities,
+                                             mr->phase_machine.side_controlled,
+                                             (uint8_t)mr->state.phase,
+                                             mr->render.camera.pos_x,
+                                             mr->render.camera.pos_z);
   /* FU-89 §kickoff placement / OL-T11-8: the derived kickoff pass after the
    * camera reset (native `FUN_00088DC8` stage 0 order: `FUN_000700F4` camera
    * -> `FUN_00073E08` placement). The act-1 ball spawn (0x1E0/0), the

@@ -267,8 +267,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   `OL-88`/`OL-89` goal invokers (Task 3 verdict: no invoker reachable from the
   ported state — FU-142 App. L.9); `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
-  (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the per-record camera
-  place `FUN_00079F3C` (FU-96 leg 5); `OL-62`..`OL-71` residuals. The items
+  (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the camera-mode/angle
+  feed the live per-record framing would use (FU-96 legs 1/3; the place itself
+  landed in T2); `OL-62`..`OL-71` residuals. The items
   have their detailed entries below / in the FU docs. Follow-up-4 G4 (M2
   playable-match Task 4) closes the plan's whole-range review: G1
   (RGB pitch) and G2 (natural kickoff → phase 2) **carried-with-legs**, G3
@@ -296,6 +297,35 @@ the build also produces the windowed `fifa96` target (`make game`).
   the words, the dispatch decomposes arm-dword writes back onto the words, and
   the `FUN_00079B6C` commit zeroes the three words (T1 review fix; M2 golden
   unmoved by it).
+- **M2 interactive T2 (per-record camera place `FUN_00079F3C` / G2).** The
+  derived place runs at begin after the formation seed and before the
+  `FUN_00079B6C` commit
+  (`fifa96_match_entities_camera_place(pool, controlled_side, phase, cam_x,
+  cam_z)`): per record of the non-controlled team (`byte[team+0x826] !=
+  [0x157AAC]>>24`) with the live phase gate `byte[0x1106C3 + phase] != 0`, the
+  `FUN_0008DCD4` octagonal camera distance is compared to `0x180` and a record
+  at or inside the ring has its target snapped onto the `0x180` ring along its
+  existing direction through the native `FUN_000CD474` angle, the `0x114E04`
+  sine fold and the `FUN_000795A4` `(a*b + 0x8000) >> 16` multiply. The
+  primitive ports are shared with FU-141 (`fifa96_arm_dist_stage`,
+  `fifa96_entity_angle`, `fifa96_entity_sine`). The M2 golden is re-pinned
+  (v4.2): the non-controlled side's in-ring records 9/10 move
+  `(228,264) -> (251,291)` / `(-228,264) -> (-251,291)` before the commit,
+  lines 1..48 stay byte-identical (those records project off-canvas at both
+  radii — the place preserves the screen direction), the mechanics entry at
+  frame 49 is the first differing line and 117 hash lines differ with no
+  `state=` suffix moved. The kickoff instant frames only the positive-depth
+  side in the native as well (`fifa96_projection_screen` requires `z >= NEAR`;
+  the `(0,0,0)` kickoff camera sits between the halves), so T2 corrects the
+  earlier "both sides draw at kickoff" expectation to "both teams placed where
+  the native places them" — the visible place effect is fixtured where it is
+  on-canvas (`test_camera_place_moves_near_record_into_frame`: an in-ring record
+  below the `0x78` near gate moves onto the ring and draws). Without the
+  formation resource the place is skipped so the documented zero-target
+  degradation is preserved. Carried: the phase gate's `>= 0x1D` range (the
+  native reads the adjacent action-pointer table), the camera-mode/angle feed
+  (FU-96 legs 1/3) and the FU-71 follow writer that moves the camera during
+  live play.
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

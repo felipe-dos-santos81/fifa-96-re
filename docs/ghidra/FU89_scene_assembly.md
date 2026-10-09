@@ -715,6 +715,30 @@ replay gates are folded into one `replay_gate` argument; the original's
     match palette source is slot 0x32 = `0x101BA4 "PALsys"` -> `PALsys.fsh`
     (BIGF entry 46 of `/ART/GAMEART0.PVI`); FU-144 holds the full chain.
 
+* **`FUN_00079F3C` camera place landed (M2 interactive Task 2 / G2, T2;
+  first-hand `/FIFA96.EXE` this slice).** The bullet above ("the loop's
+  `FUN_00079F3C` camera place ... stays unported, so ... at the kickoff
+  instant only the positive-depth side passes the near gate") is corrected in
+  two places: (a) the function places *record targets*, not the camera — it
+  reads the `[0x15774C]/[0x157754]` camera dwords and, for each record of the
+  non-controlled team (`byte[[rec]+0x826] != [0x157AAC]>>24`) with the phase
+  gate `byte[0x1106C3 + phase] != 0` set, snaps a target whose octagonal
+  camera distance (`FUN_0008DCD4`) is `<= 0x180` onto the `0x180` ring along
+  its existing direction (`FUN_0008DD70`/`FUN_000CD474` angle, the `0x114E04`
+  sine fold, `FUN_000795A4` `(a*b+0x8000)>>16`); the full derivation is FU-96
+  §7; (b) the kickoff instant frames only the positive-depth side in the
+  native as well (`fifa96_projection_screen` requires `z >= NEAR`; the
+  `FUN_000700F4((0,0,0))` camera sits between the halves — first-hand
+  0x88E4B..0x88E6A), so the missing place was not the cause of that
+  observation. The engine landing `fifa96_match_entities_camera_place`
+  (`src/fifa96_engine/fifa96_match_entities.c`) runs at begin between the
+  formation seed and the `FUN_00079B6C` commit; the M2 tape is re-pinned
+  (v4.2: records 9/10 `(228,264) -> (251,291)` / `(-228,264) -> (-251,291)`;
+  first diff frame 49, 117 hash-only lines, no `state=` suffix moved), and the
+  in-frame place effect is fixtured (an in-ring record below the `0x78` near
+  gate moves onto the ring and draws). Carried: the camera-mode/angle feed
+  (FU-96 legs 1/3) and the FU-71 follow writer.
+
 ## 12. Open legs
 
 1. **Two sprite passes per frame**: `0x57754` draws the 4-point warped

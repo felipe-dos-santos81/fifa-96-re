@@ -154,10 +154,94 @@ Ghidra-project change.
 3. **Camera selector table `(&0x8B64)[(&0x7514)[i*0x1C]]`** and the
    per-camera handlers `(&0x8B80)[i]` are cited only.
 4. **Settings index 4** option semantics (FU-95 §6 leg 3, carried).
-5. **`FUN_00079F3C` camera place** (M2 visible-match Task 1): the
-   `FUN_0008CF60` kickoff loop calls it per record with `EBX = 0x15774C` (the
-   camera record) but its body is unported, so the engine camera stays at the
-   `[0x10F328/2C/30]` reset triple (0,0,0). With the OL-T11-8 formation
-   placement landed, the near-depth gate therefore admits only the
-   positive-depth side at kickoff (FU-89 §11). The camera-mode/angle feed this
-   place would use is carried from legs 1/3.
+5. **`FUN_00079F3C` camera place** — **closed (M2 interactive Task 2 / T2);
+   derivation in §7.** The function moves record *targets*, not the camera (the
+   caller's `EBX = 0x15774C` is dead; the body loads the camera triple itself),
+   so the engine camera staying at the `[0x10F328/2C/30]` reset triple at
+   kickoff (`FUN_000700F4((0,0,0))`; first-hand 0x88E4B..0x88E6A) is correct.
+   The kickoff instant frames only the positive-depth side in the native too
+   (the `fifa96_projection_screen` gate requires `z >= NEAR`); T2 corrects the
+   earlier "both sides draw at kickoff" reading — the place re-frames the
+   non-controlled side's in-ring records around the camera, it does not create
+   visibility behind it. The camera-mode/angle feed remains carried from legs
+   1/3, and the FU-71 follow writer that moves the camera during live play
+   stays unported.
+
+## 7. Leg 5 derivation — `FUN_00079F3C` (M2 interactive Task 2 / T2)
+
+First-hand `/FIFA96.EXE` (read-only): `get_function_by_address 0x79F3C` ->
+body `0x79F3C..0x7A027` (74 instructions); `disassemble_function 0x79F3C`;
+`read_memory 0x1106C3` (29 B), `0x15774C` (16 B), `0x10F328` (16 B);
+`read_memory 0x79F5F`/`0x79FA7` (raw displacement/encoding checks);
+`disassemble_function 0x8CF60` (the calling loop), `0x8DCD4`, `0x8DD70`,
+`0x795A4`, `0xCD474`; `disassemble_bytes 0x88DC8` (the act-1 stage-0 camera
+reset); `get_xrefs_to 0x8CF60`/`0x73E08`.
+
+### 7.1 Call site and record
+
+`FUN_0008CF60` (`0x8CF60..0x8CFAB`) loops the 11 records of one team:
+`0x8CF6C MOV EAX,ECX; MOV EBX,-1; CALL 0x6D920` (resolver), `0x8CF7C CALL
+[ECX+0x1C]` (the phase handler, `EDX=&rec+0x4D`), `0x8CF81 MOV EBX,0x15774C;
+0x8CF86 CALL 0x79F3C` (this function), `0x8CF90 CALL 0x79B6C` (the commit).
+The `EBX` value is dead: `0x79F43 MOV ESI,EAX` takes the record (EAX) and
+`0x79F76 MOV EAX,0x15774C` loads the *address* of the FU-71 camera triple
+(`0x15774C` x / `0x157750` y / `0x157754` z dwords).
+
+### 7.2 Body
+
+```
+0x79F45 MOV EAX,[EAX]            ; [rec] = the team pointer
+0x79F49 MOV DL,[EAX+0x826]       ; team side byte
+0x79F4F MOV EAX,[0x157AAC]; SAR EAX,0x18   ; controlled side
+0x79F57 CMP EDX,EAX; JZ 0x7A020  ; gate 1: skip the controlled team
+0x79F5F MOV EAX,[0x157A4A]; SAR EAX,0x18   ; live phase
+0x79F67 CMP byte [EAX+0x1106C3],0; JZ 0x7A020   ; gate 2
+0x79F74 MOV EBX,ESP; MOV EAX,0x15774C; LEA EDX,[ESI+0x4D]; CALL 0x8DCD4
+0x79F83 MOV EAX,[ESP-2]; SAR EAX,0x10      ; the distance word
+0x79F8A CMP EAX,0x180; JG 0x7A020          ; out-of-ring records keep the target
+0x79FA2 CALL 0x8DD70                       ; angle = FUN_000CD474(dx,dz)
+0x79FA7..0x79FD5  the 0x114E04 sine fold + FUN_000795A4(0x180, sin)
+0x79FD8 MOV EAX,[0x15774C]; ADD EAX,EDX; MOV [ESI+0x4D],EAX   ; target.x
+0x79FE2..0x7A013  the same fold for angle+0x100 (cosine)
+0x7A016 MOV EAX,[0x157754]; ADD EAX,EDX; MOV [ESI+0x55],EAX   ; target.z
+```
+
+* `FUN_0008DCD4` (`0x8DCD4`) is the shared metric port (`fifa96_arm_dist_stage`):
+  word `dx = target.x - camera.x`, `dz = target.z - camera.z`, output
+  `out[0]` = octagonal length `max + f(min)`, `out[1] = dx`, `out[2] = dz`
+  (the `0x79F95`/`0x79F99` dword loads plus `SAR 0x10` recover the words the
+  trap table warns about).
+* `FUN_0008DD70(dx,dz)` is the `FUN_000CD474` atan table port
+  (`fifa96_entity_angle`), 0x400-per-turn.
+* The `0x79FA7..0x79FD5` fold (`SHL AH,7` / `ADD AH,AH` capture bits 9/8 then
+  complement-and-negate) is exactly `fifa96_entity_sine` (the `0x114E04`
+  257-entry table; the `angle + 0x100` second call is the cosine); the table's
+  first-hand values (`0,402,804,...`) match the existing port.
+* `FUN_000795A4` is `(a*b + 0x8000) >> 16`; the result's low word only is
+  stored (`MOVSX` of AX, `0x79FD5`/`0x7A013`).
+
+**Derived semantics:** each non-controlled-team record whose octagonal camera
+distance is `<= 0x180` has its target moved to `camera + 0x180·(sin,cos)(angle
+of target-camera)`, i.e. snapped onto the `0x180` ring around the camera along
+its existing direction; farther records are untouched, the controlled team is
+never touched. The second gate is the first-hand phase table
+`0x1106C3 + phase` = `00 01 00 00 01 00 01 01 01` then zeros and the
+`0x1A..0x1C` tail `03 01 78` (active at phases 1/4/6/7/8/0x1A..0x1C; kickoff
+phase 1 passes).
+
+### 7.3 Engine landing (T2)
+
+`fifa96_match_entities_camera_place(pool, controlled_side, phase, cam_x,
+cam_z)` is the pool pass; begin calls it after the formation seed and before
+`fifa96_match_entities_kickoff_place` (the native order handler -> place ->
+commit; the commit leaves targets untouched, so the pass ordering is
+equivalent). The place is skipped when the formation resource is absent (the
+engine's zero-target degradation; a zero target would otherwise fabricate a
+`(272,272)` ring position that no native state reaches, because the native
+phase handler always precedes the place). Fixtures:
+`tests/test_engine_match_entities.c` (anchors, both gates, camera offset, the
+octagonal-metric discriminator) and
+`tests/test_engine_match_render.c::test_camera_place_moves_near_record_into_frame`
+(an in-ring record below the `0x78` near gate moves onto the ring and draws).
+The M2 tape re-pin (frames 49..165, hash-only) and the framing correction are
+recorded in the test provenance and ENGINE.md.

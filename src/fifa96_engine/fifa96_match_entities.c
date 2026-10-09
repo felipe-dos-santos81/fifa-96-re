@@ -268,6 +268,70 @@ int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
   return FIFA96_OK;
 }
 
+/* FU-96 leg 5 (M2 interactive T2): the `FUN_00079F3C` phase gate
+ * (`byte[0x1106C3 + phase] != 0`). First-hand `read_memory 0x1106C3` (29
+ * bytes, phases 0x00..0x1C): `00 01 00 00 01 00 01 01 01` then zeros and the
+ * 0x1A..0x1C tail `03 01 78`; non-zero admits the place. Phases >= 0x1D read
+ * the adjacent action-pointer table at 0x1106E0 in the native, so this path
+ * (kickoff, phase 1) only models the byte table (numbered leg). */
+static const uint8_t match_camera_place_phase_gate[29] = {
+  0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 3, 1, 0x78,
+};
+
+static int match_camera_place_active(uint8_t phase) {
+  return phase < 29u && match_camera_place_phase_gate[phase] != 0;
+}
+
+/* One `FUN_00079F3C` record body (`0x79F45..0x7A01D`): side gate, phase gate
+ * (checked by the caller), the `FUN_0008DCD4` metric, then the angle/sine
+ * place onto the 0x180 ring. Returns 1 when the target moved. */
+static int match_camera_place_record(struct fifa96_match_entity *e, uint8_t team_side,
+                                     uint8_t controlled_side, int32_t cam_x, int32_t cam_z) {
+  fifa96_arm_vec from;
+  fifa96_arm_vec to;
+  int32_t length = 0;
+  int32_t lane = 0;
+  int32_t angle = 0;
+  int16_t dx;
+  int16_t dz;
+  int16_t off_x;
+  int16_t off_z;
+  if (team_side == controlled_side) return 0;                 /* 0x79F45..0x79F59 */
+  from.x = cam_x;
+  from.y = 0;
+  from.z = cam_z;
+  to.x = e->target_x;
+  to.y = e->target_y;
+  to.z = e->target_z;
+  if (fifa96_arm_dist_stage(&from, &to, &length, &lane) != FIFA96_OK) return 0;
+  /* 0x79F83..0x79F8F: `MOV EAX,[ESP-2]; SAR EAX,0x10` sign-extends the
+   * distance word; only <= 0x180 is placed. */
+  if ((int32_t)(int16_t)length > 0x180) return 0;
+  dx = (int16_t)((uint16_t)e->target_x - (uint16_t)cam_x);
+  dz = (int16_t)lane;                                         /* 0x79F95..0x79F9F */
+  if (fifa96_entity_angle(dx, dz, &angle) != FIFA96_OK) return 0;   /* 0x79FA2 */
+  /* 0x79FA7..0x79FD5: the 0x114E04 sine fold; off = round16(0x180 * sin). */
+  off_x = (int16_t)(((int64_t)0x180 * fifa96_entity_sine(angle) + 0x8000) >> 16);
+  off_z = (int16_t)(((int64_t)0x180 * fifa96_entity_sine(angle + 0x100) + 0x8000) >> 16);
+  e->target_x = cam_x + off_x;                                /* 0x79FD8..0x79FDF */
+  e->target_z = cam_z + off_z;                                /* 0x7A016..0x7A01D */
+  return 1;
+}
+
+int fifa96_match_entities_camera_place(struct fifa96_match_entities *pool,
+                                       uint8_t controlled_side, uint8_t phase,
+                                       int32_t cam_x, int32_t cam_z) {
+  if (!pool) return -FIFA96_ERR_INVALID;
+  if (!match_camera_place_active(phase)) return FIFA96_OK;    /* 0x79F5F..0x79F6E */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      (void)match_camera_place_record(&pool->team[t].records[i],
+                                      pool->team[t].side, controlled_side, cam_x, cam_z);
+  }
+  return FIFA96_OK;
+}
+
 /* The derived kickoff pass (see the header contract). The native tail of
  * `FUN_00079B6C` (`0x79BB5..0x79C13`) runs per record after the commit:
  *  - `FUN_00079C50(camera - target)` face (0x79BB5..0x79BCF): the ported

@@ -641,6 +641,56 @@ static void test_lateral_cull_at_8e0(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* FU-96 leg 5 / FUN_00079F3C (M2 interactive T2): the per-record camera place
+ * moves a non-controlled record inside 0x180 of the camera out to the ring.
+ * Fixture: camera (0,0,0); the controlled side (0) record 0 sits at
+ * (0, -0x60) and is NOT placed (the native side gate), so it stays behind the
+ * camera and never draws; the non-controlled side (1) record 0 sits at
+ * (8, 0x40) (fast length 0x42) at depth 0x40 < the 0x78 near threshold, so it
+ * is culled before the place; the place snaps its target to (0x2F, 0x17D) and
+ * the kickoff commit lands it, after which its sprite covers (199,120). The
+ * far record 1 (0, 0x400) is beyond the ring and keeps drawing at the centre.
+ * The kickoff instant frames the positive-depth side in the native too
+ * (`fifa96_projection_screen` requires z >= NEAR), so the fixture asserts the
+ * framed side plus the native non-placement of the controlled side — no fake
+ * both-sides framing. */
+static void test_camera_place_moves_near_record_into_frame(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  struct fifa96_match_entities *pool = &f.mr.entities;
+  pool->team[0].records[0].target_z = -0x60;
+  pool->team[1].records[0].target_x = 8;
+  pool->team[1].records[0].target_z = 0x40;
+  pool->team[1].records[1].target_z = 0x400;
+
+  /* Pre-place: the near record is below the near gate (0x78) and culled. The
+   * fixture commits with `FUN_00079B6C`'s commit block (the selector's row
+   * 0x26 needs the full retail bank set, not this 2-bank fixture). */
+  assert(fifa96_match_entities_place(&pool->team[0].records[0]) == FIFA96_OK);
+  assert(fifa96_match_entities_place(&pool->team[1].records[0]) == FIFA96_OK);
+  assert(fifa96_match_entities_place(&pool->team[1].records[1]) == FIFA96_OK);
+  assert(pool->team[1].records[0].pos_x == 8);
+  assert(pool->team[1].records[0].pos_z == 0x40);
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 199] == 0x00);   /* near record culled */
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* far record draws */
+  assert(f.s->indexed[120 * 320 + 80] == 0x00);    /* controlled record: behind */
+
+  /* Place + commit: the near record lands on the 0x180 ring and draws. */
+  assert(fifa96_match_entities_camera_place(pool, 0, 1, 0, 0) == FIFA96_OK);
+  assert(pool->team[1].records[0].target_x == 0x2F);
+  assert(pool->team[1].records[0].target_z == 0x17D);
+  assert(pool->team[0].records[0].target_z == -0x60);   /* controlled untouched */
+  assert(fifa96_match_entities_place(&pool->team[1].records[0]) == FIFA96_OK);
+  assert(pool->team[1].records[0].pos_z == 0x17D);
+  drive_granted(&f.mr, 1);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 199] == 0x22);   /* moved into frame */
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* far record still draws */
+  fifa96_surface_destroy(f.s);
+}
+
 /* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1): a formation-seeded pool
  * draws. The camera is at the origin, so the near-depth gate (threshold 0x78
  * against the jittered z) admits the positive-depth team-1 records and culls
@@ -936,6 +986,7 @@ int main(void) {
   test_near_depth_threshold_gate();
   test_lateral_cull_at_8e0();
   test_formation_seeded_entities_draw();
+  test_camera_place_moves_near_record_into_frame();
   test_remap_identity_and_color_key();
   test_match_palette_from_bank();
   test_match_palette_install();

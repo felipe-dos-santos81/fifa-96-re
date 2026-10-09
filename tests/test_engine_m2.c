@@ -156,6 +156,31 @@
  * the composed dwords feed only unported sinks / gate-neutral readers on this
  * tape. M1 stays byte-identical.
  *
+ * --- v4.2 (M2 interactive Task 2 / G2): the golden re-pin -------------------
+ *
+ * The M2 golden is re-pinned for the per-record camera place upgrade
+ * (`FUN_00079F3C`, FU-96 leg 5). Reason: begin now runs the derived place
+ * after the formation seed and before the `FUN_00079B6C` commit, snapping the
+ * non-controlled side's in-ring records (9/10, octagonal camera length 349)
+ * onto the 0x180 ring — (228,264) -> (251,291) and (-228,264) -> (-251,291) —
+ * so those two staged positions move from the first granted frame.
+ *
+ * Frame diff (against the pre-T2 golden, `cmp`/diff measured): the transcript
+ * is 165 lines in both; lines 1..48 are byte-identical (the moved records
+ * project off-canvas laterally at both radii — the place preserves the
+ * direction, so the kickoff canvases 9..48 stay pixel-identical); the first
+ * differing line is frame 49 (golden `521ee3c3d3f7935c`, actual
+ * `f86a0dc5bbdbe052`, the mechanics entry) and 117 lines differ (49..165, all
+ * hash fields only — every `state=` suffix is unchanged, so no phase/score
+ * behavior moved). The divergence is the moved pool positions entering the
+ * forced-mechanics gameplay/draw chain. M1 is untouched (test_engine_m1 green,
+ * same golden). The place's visible effect is fixtured where it is on-canvas
+ * (`test_engine_match_render::test_camera_place_moves_near_record_into_frame`:
+ * an in-ring record below the 0x78 near gate moves onto the ring and draws);
+ * the kickoff instant itself frames the positive-depth side in the native too
+ * (the projection requires z >= NEAR and the kickoff camera (0,0,0) sits
+ * between the halves), so the tape's early canvases are unchanged.
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -767,6 +792,16 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         assert(e->match_run.entities.team[1].records[0].pos_z == 2508);
         assert(e->match_run.entities.team[0].records[8].pos_x == 1254);
         assert(e->match_run.entities.team[1].records[8].pos_x == -1216);
+        /* v5 (M2 interactive Task 2 / FU-96 leg 5): the FUN_00079F3C camera
+         * place snapped the non-controlled side's in-ring records 9/10 onto
+         * the 0x180 ring before the commit — (228,264) -> (251,291) and
+         * (-228,264) -> (-251,291) through the native angle/sine primitives.
+         * The controlled side and the out-of-ring records are untouched. */
+        assert(e->match_run.entities.team[1].records[9].pos_x == 251);
+        assert(e->match_run.entities.team[1].records[9].pos_z == 291);
+        assert(e->match_run.entities.team[1].records[10].pos_x == -251);
+        assert(e->match_run.entities.team[1].records[10].pos_z == 291);
+        assert(e->match_run.entities.team[0].records[9].pos_z == -66);
       } else {
         assert(e->match_run.entities.team[0].records[0].pos_z == 0);
         assert(e->match_run.entities.team[1].records[0].pos_z == 0);

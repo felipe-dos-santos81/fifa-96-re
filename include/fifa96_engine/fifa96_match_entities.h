@@ -323,6 +323,41 @@ int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
 int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int32_t cam_x,
                                         int32_t cam_y, int32_t cam_z);
 
+/* FU-96 leg 5 (M2 interactive T2): the per-record camera place
+ * `FUN_00079F3C` (`0x79F3C..0x7A027`, 74 instructions; first-hand
+ * `disassemble_function 0x79F3C` on `/FIFA96.EXE`). `FUN_0008CF60` calls it
+ * per record between the phase handler and the `FUN_00079B6C` commit, with the
+ * camera triple the function reads itself at `0x15774C`/`0x157750`/`0x157754`
+ * (the FU-71 camera; the caller's `EBX=0x15774C` is dead). Derived semantics:
+ *  - gate 1 (`0x79F45..0x79F59`): the record's team side (`byte[[rec]+0x826]`)
+ *    must differ from the controlled side (`[0x157AAC]>>24`), so only the
+ *    non-controlled team's records are placed;
+ *  - gate 2 (`0x79F5F..0x79F6E`): `byte[0x1106C3 + phase] != 0` (first-hand
+ *    table at `0x1106C3`, 29 bytes `00 01 00 00 01 00 01 01 01 00 ... 03 01
+ *    78`; the function reads the live phase `[0x157A4A]>>24`);
+ *  - metric (`0x79F74..0x79F8F`): `FUN_0008DCD4(camera, &rec+0x4D)` gives the
+ *    `dx`/`dz` target-minus-camera words and the octagonal fast length; a
+ *    length `> 0x180` returns (records beyond the near ring are untouched);
+ *  - place (`0x79F95..0x7A01D`): `angle = FUN_0008DD70(dx,dz)` =
+ *    `FUN_000CD474`; `target.x := dword[0x15774C] + (int16)round16(0x180 *
+ *    sine(angle))` and `target.z := dword[0x157754] + (int16)round16(0x180 *
+ *    sine(angle + 0x100))` (`FUN_000795A4` = the `(a*b + 0x8000) >> 16`
+ *    multiply), i.e. the record target snaps onto the 0x180-radius ring around
+ *    the camera along its existing direction.
+ * The engine primitives `fifa96_arm_dist_stage` (`FUN_0008DCD4`),
+ * `fifa96_entity_angle` (`FUN_000CD474`) and `fifa96_entity_sine` (the
+ * `0x114E04` fold) are the exact ports, so this pass is the derived native
+ * sequence. The native interleaves the place per record before each commit;
+ * the commit leaves every target untouched (position := target, then target :=
+ * position), so the whole-pool pass before `fifa96_match_entities_kickoff_place`
+ * is observationally identical. Phases outside the 29-byte table read the
+ * adjacent action-pointer table in the native and stay a numbered leg (this
+ * pass only runs on the kickoff path, phase 1). NULL `pool` ->
+ * -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_camera_place(struct fifa96_match_entities *pool,
+                                       uint8_t controlled_side, uint8_t phase,
+                                       int32_t cam_x, int32_t cam_z);
+
 /* The FU-67 §4.4 / FUN_0007D430 pairing at the chain tail: phase 2 only, both
  * team targets present, the FU-139-tested fifa96_ball_pair_decide writes the
  * team-0 target's output triple on the found condition. Returns FIFA96_OK or a

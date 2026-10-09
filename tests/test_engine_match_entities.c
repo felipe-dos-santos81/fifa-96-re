@@ -912,6 +912,99 @@ static void test_kickoff_place_face_and_selector(void) {
   assert(pool.team[TEAM1].records[0].type == 0);   /* zero delta: untouched */
 }
 
+/* FU-96 leg 5 (M2 interactive T2): the per-record camera place
+ * `FUN_00079F3C`. The derived sequence snaps a *non-controlled* record whose
+ * octagonal camera distance is <= 0x180 onto the 0x180 ring along its current
+ * direction, through the native primitives (`FUN_0008DCD4` metric,
+ * `FUN_000CD474` angle, the `0x114E04` sine fold, the `(a*b+0x8000)>>16`
+ * multiply). Hand-derived anchors: (0,0x60) -> (0,0x180); (0x60,0) ->
+ * (0x180,0); the two 45-degree rays -> (+/-272,272); (0,-0x60) -> (0,-0x180)
+ * (direction preserved, the record stays behind the camera). */
+static void test_camera_place_snaps_near_non_controlled_records(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entity *c0;
+  struct fifa96_match_entity *o0;
+  struct fifa96_match_entity *o1;
+  struct fifa96_match_entity *o2;
+  struct fifa96_match_entity *o3;
+  struct fifa96_match_entity *o4;
+  struct fifa96_match_entity *o5;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  c0 = &pool.team[TEAM0].records[0];
+  o0 = &pool.team[TEAM1].records[0];
+  o1 = &pool.team[TEAM1].records[1];
+  o2 = &pool.team[TEAM1].records[2];
+  o3 = &pool.team[TEAM1].records[3];
+  o4 = &pool.team[TEAM1].records[4];
+  o5 = &pool.team[TEAM1].records[5];
+  /* The controlled team is skipped even inside the radius (0x79F57). */
+  c0->target_x = 0;
+  c0->target_z = 0x60;
+  /* Straight ahead: the +z ray at the ring radius. */
+  o0->target_z = 0x60;
+  /* Lateral: the +x ray. */
+  o1->target_x = 0x60;
+  /* The 45-degree rays (the 0x114E04 sine fold anchors). */
+  o2->target_x = 0x60;
+  o2->target_z = 0x60;
+  o3->target_x = -0x60;
+  o3->target_z = 0x60;
+  /* Behind the camera: the direction is preserved, not flipped. */
+  o4->target_z = -0x60;
+  /* Beyond the octagonal 0x180 gate: fast length 0x183 (320 + 3/8*180) > 0x180
+   * while the euclidean length is 0x16F, so this pins the native metric. */
+  o5->target_x = 320;
+  o5->target_z = 180;
+
+  assert(fifa96_match_entities_camera_place(&pool, 0, 1, 0, 0) == FIFA96_OK);
+  assert(c0->target_x == 0 && c0->target_z == 0x60);
+  assert(o0->target_x == 0 && o0->target_z == 0x180);
+  assert(o1->target_x == 0x180 && o1->target_z == 0);
+  assert(o2->target_x == 272 && o2->target_z == 272);
+  assert(o3->target_x == -272 && o3->target_z == 272);
+  assert(o4->target_x == 0 && o4->target_z == -0x180);
+  assert(o5->target_x == 320 && o5->target_z == 180);
+
+  assert(fifa96_match_entities_camera_place(NULL, 0, 1, 0, 0) == -FIFA96_ERR_INVALID);
+
+  /* The camera is the dword triple: the ring is centred on it, not on the
+   * origin (0x79FD8/0x7A016 add to the `[0x15774C]`/`[0x157754]` dwords). */
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  o0 = &pool.team[TEAM1].records[0];
+  o0->target_x = 1000;
+  o0->target_z = -2000 + 0x60;
+  assert(fifa96_match_entities_camera_place(&pool, 0, 1, 1000, -2000) == FIFA96_OK);
+  assert(o0->target_x == 1000 && o0->target_z == -2000 + 0x180);
+}
+
+/* FU-96 leg 5: the two native gates. The phase gate is the first-hand
+ * `0x1106C3` byte table (active phases 1/4/6/7/8 and the 0x1A..0x1C tail); the
+ * side gate is `[0x157AAC]>>24`: with controlled side 1 it is team 1 that is
+ * skipped and team 0 that is placed. */
+static void test_camera_place_phase_and_side_gates(void) {
+  static const uint8_t active[29] = {
+    0, 1, 0, 0, 1, 0, 1, 1, 1, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1,
+  };
+  struct fifa96_match_entities pool;
+  for (unsigned phase = 0; phase < 29u; phase++) {
+    assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+    pool.team[TEAM1].records[0].target_z = 0x60;
+    assert(fifa96_match_entities_camera_place(&pool, 0, (uint8_t)phase, 0, 0) == FIFA96_OK);
+    if (active[phase])
+      assert(pool.team[TEAM1].records[0].target_z == 0x180);
+    else
+      assert(pool.team[TEAM1].records[0].target_z == 0x60);
+  }
+  /* Controlled side 1: team 1 is the controlled team, team 0 is placed. */
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  pool.team[TEAM0].records[0].target_z = 0x60;
+  pool.team[TEAM1].records[0].target_z = 0x60;
+  assert(fifa96_match_entities_camera_place(&pool, 1, 1, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[0].target_z == 0x180);
+  assert(pool.team[TEAM1].records[0].target_z == 0x60);
+}
+
 /* An unported row is an explicit skip: the callback's
  * -FIFA96_ERR_UNSUPPORTED is tolerated and the chain continues; any other
  * error propagates. */
@@ -971,6 +1064,8 @@ int main(void) {
   test_formation_iso_fixture();
   test_kickoff_place_commits_records_and_ball();
   test_kickoff_place_face_and_selector();
+  test_camera_place_snaps_near_non_controlled_records();
+  test_camera_place_phase_and_side_gates();
   test_update_tolerates_unsupported();
   test_null_take_guards();
   puts("test_engine_match_entities OK");
