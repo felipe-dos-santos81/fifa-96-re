@@ -225,9 +225,10 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
  * (`MOVSD x3` 0x79B87..0x79B89), and the words +0x69/+0x67/+0x65/+0x71/
  * +0x73/+0x75 and the byte +0x9C are zeroed (0x79B8A..0x79BB1). The pool's
  * `lane`/`vel_x`/`vel_z` are dwords over those words: `lane` (+0x69/+0x6B)
- * keeps its high word (the native only clears +0x69), while `vel_x` (+0x71/
- * +0x73) and `vel_z` (+0x73/+0x75) are fully cleared by the three velocity
- * word stores. */
+ * keeps its high word (the native only clears +0x69), while the three
+ * velocity words +0x71/+0x73/+0x75 are cleared — the port zeroes the word
+ * views (`speed71`/`vel73`/`vel75`) and the recomposed dword views so no stale
+ * word survives a commit. */
 int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
   if (!entity) return -FIFA96_ERR_INVALID;
   entity->pos_x = entity->target_x;
@@ -238,8 +239,11 @@ int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
   entity->target_y = entity->pos_y;
   entity->target_z = entity->pos_z;
   entity->lane = (int32_t)((uint32_t)entity->lane & 0xFFFF0000u);
-  entity->vel_x = 0;
-  entity->vel_z = 0;
+  entity->speed71 = 0;   /* native word +0x71 */
+  entity->vel73 = 0;     /* native word +0x73 */
+  entity->vel75 = 0;     /* native word +0x75 */
+  entity->vel_x = 0;     /* dword +0x71 view */
+  entity->vel_z = 0;     /* dword +0x73 view */
   return FIFA96_OK;
 }
 

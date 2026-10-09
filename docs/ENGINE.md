@@ -279,7 +279,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   bind models the engine's single human slot: the native four `0x4C1E0` mode
   rows are unported (derived default mode 0 = the controlled side), the
   `FUN_0008DB6C` sort/tie order of the free-record pick is substituted by the
-  shared `fifa96_entity_find_nearest` (`FUN_000A1860` order is the leg), and
+  shared `fifa96_entity_find_nearest` (`FUN_000A1860` order is the leg; the
+  no-candidate fallback `0x8DC1B` is bind leg 7), and
   the FU-77 mover `FUN_0007BF20` is wired for the slot-bound (controlled)
   record only — the native calls it for every record after its handler, so the
   AI-side integration is a numbered leg. Row 04's slot-dir arm for the
@@ -287,8 +288,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   `+0x8D` active seed, so the natural phase-2 pad path stays a leg; the
   reachable pad consumer is row 00's slot-dir arm (wired) plus row 01's stage-1
   `word[slot+6] & 0x70` release gate (now wired to the live FU-70 release
-  word). The mover's `+0x6F` stride rate, `+0x43` direct-face and `0x57A73`
-  point inputs are staged zero.
+  word) and the stage-2 conditional `FUN_0007876C` merge (live now that the
+  bind increments `+0x828`; consumed by the frame drain). The mover's `+0x6F`
+  stride rate, `+0x43` direct-face and `0x57A73` point inputs are staged zero.
+  The word views `speed71`/`vel73`/`vel75` and the dword aliases
+  `vel_x`/`vel_z` are kept in lockstep: the mover recomposes the dwords from
+  the words, the dispatch decomposes arm-dword writes back onto the words, and
+  the `FUN_00079B6C` commit zeroes the three words (T1 review fix; M2 golden
+  unmoved by it).
 - **Unwired rows (66/80).** 65 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 27
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions

@@ -600,3 +600,52 @@ slot to the kickoff taker and runs the shared mover for that record.
   suite 104/104 (ASan/UBSan; ISO present); M1 golden untouched; M2 re-pinned
   (first differing line frame 59, 107 hash lines, `state=` suffixes unchanged)
   with the written reason in `tests/test_engine_m2.c`'s v4.1 provenance.
+
+### Fix round (T1 review): velocity word/dword alias sync
+
+The FU-77 mover writes the native **words** `+0x71` (speed), `+0x73` and
+`+0x75` (velocity); the engine's pool also carried the pre-T1 dword views
+`vel_x` (+0x71) / `vel_z` (+0x73), and the generic write-back copied both, so
+the dwords stopped mirroring the bytes they overlap after a mover step. Live
+consumers read the words through the dwords: ball pairing
+`(int16_t)vel_x` = word +0x71 and `(int16_t)vel_z` = word +0x73
+(`fifa96_match_entities.c` `_ball_pair`), row 04 `r->vel_x >> 16` = word +0x73
+and `r->vel_z >> 16` = word +0x75 (`fifa96_match_handlers.c`
+`fifa96_match_action_04`), the row-2A carrier speed `(int16_t)vel_x` = word
++0x71. Fixes:
+
+* `match_run_controlled_mover` recomposes both dwords from the three words on
+  write-back: `vel_x = speed71 | vel73<<16`, `vel_z = vel73 | vel75<<16`.
+* After the action dispatch (before the mover) the dwords are decomposed back
+  onto the words (`speed71 = (int16_t)vel_x`, `vel73 = vel_x>>16`,
+  `vel75 = vel_z>>16`): the arm handlers (rows 26/28/2A) write only the dword
+  views and only ever zero them, so an arm zero now clears the words too and a
+  pass-through is identity under the staging invariant.
+* `fifa96_match_entities_place` zeroes the three word fields (native
+  `0x79B8A..0x79BB1` clears words, not dwords) plus the recomposed dwords, so
+  no stale word survives a `FUN_00079B6C` commit.
+* Tests: `test_pad_drives_controlled_locomotion` asserts the dual views stay in
+  lockstep after movement; `test_place_commits_target` stages the words and
+  both dwords and asserts all five are zero after the commit.
+
+M2 golden unmoved by this fix (transcript byte-identical, `cmp` clean): the
+composed dwords feed ball pairing and the row-04/2A word readers, whose
+outputs are unported sinks or gate-neutral on the tape's forced window. M1
+byte-identical.
+
+### Fix round (T1 review): the second activation — row 01 stage-2 merge
+
+The stage-2 conditional merge (`0x7DF61..0x7DF75`) was previously unreachable
+because the pool staged `+0x828` (slot-pool ordinal) at zero. The setup bind
+now increments it, so the arm fires when the nearest record holds no slot; the
+recorded `FUN_0007876C` request is consumed by the frame drain
+(`match_run_entity_drain`) and rebinds the FU-70 slot onto the nearest. Both
+row-01 comments in `fifa96_match_handlers.c` are refreshed accordingly.
+
+### Bind leg 7 (T1 review, carried)
+
+`FUN_0008DB6C`'s no-candidate fallback with `ECX != 0` (`0x8DC1B..0x8DC41`):
+when the distance scan finds no eligible record, the native falls back to the
+first record with `[rec+0x20] == 0 && [rec+0x9A] == 0` (ignoring `+0x98`). The
+derived `fifa96_match_entities_bind_slot` returns NONE instead (soft no-bind);
+recorded as leg 7 of the bind.

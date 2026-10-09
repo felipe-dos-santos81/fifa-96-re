@@ -263,6 +263,16 @@ static void match_run_controlled_mover(struct fifa96_match_run *mr) {
   r->vel75 = s.vel_z;
   r->body_timer9c = s.body_timer;
   r->type = s.heading;
+  /* The pool keeps both views of the native velocity bytes: the dword at
+   * +0x71 = {word +0x71 speed, word +0x73 vel_x} and the dword at +0x73 =
+   * {word +0x73 vel_x, word +0x75 vel_z}. Recompose them from the mover's
+   * word writes so the live dword consumers (ball pairing `(int16_t)vel_x`
+   * = +0x71, row 04/2A `vel_x >> 16` = +0x73, carrier `+0x71`) read the
+   * native bytes, not stale copies. */
+  r->vel_x = (int32_t)((uint32_t)(uint16_t)r->speed71 |
+                       ((uint32_t)(uint16_t)r->vel73 << 16));
+  r->vel_z = (int32_t)((uint32_t)(uint16_t)r->vel73 |
+                       ((uint32_t)(uint16_t)r->vel75 << 16));
 }
 
 /* FU-141: one pool record -> the FU-138/FU-140 staging record -> the FU-137
@@ -369,6 +379,14 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->vel75 = e->vel75;
   r->body_timer9c = e->body_timer9c;
   rc = fifa96_match_dispatch_action(mr, e->code);
+  /* The arm handlers (rows 26/28/2A) write the dword views of the velocity
+   * bytes; decompose them back onto the word views the mover reads so the
+   * native `+0x71/+0x73/+0x75` bytes stay in lockstep (an arm's `vel_x=0`
+   * therefore clears the words too, and a pass-through is identity because the
+   * staging invariant holds). */
+  r->speed71 = (int16_t)r->vel_x;
+  r->vel73 = (int16_t)((uint32_t)r->vel_x >> 16);
+  r->vel75 = (int16_t)((uint32_t)r->vel_z >> 16);
   if (mr->slot.entity == id) match_run_controlled_mover(mr);
   e->pos_x = r->pos_x;
   e->pos_y = r->pos_y;

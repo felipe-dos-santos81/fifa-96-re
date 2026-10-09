@@ -874,6 +874,17 @@ static void test_pad_drives_controlled_locomotion(void) {
      * ramps vel_x and integrates pos_x; pos_z stays. */
     assert(mr.entities.team[0].records[taker].pos_x > start_x);
     assert(mr.entities.team[0].records[taker].pos_z == start_z);
+    {
+      /* M2 interactive T1 alias sync: the mover writes the word views, and
+       * the dword views the live consumers read must mirror the native bytes
+       * (+0x71/+0x73 over dword +0x71, +0x73/+0x75 over dword +0x73). */
+      const struct fifa96_match_entity *r = &mr.entities.team[0].records[taker];
+      assert(r->vel73 != 0);                     /* velocity ramped (word) */
+      assert(r->speed71 == (int16_t)r->vel_x);   /* word +0x71 view */
+      assert(r->vel73 == (int16_t)((uint32_t)r->vel_x >> 16));  /* word +0x73 */
+      assert(r->vel73 == (int16_t)r->vel_z);     /* same word via dword +0x73 */
+      assert(r->vel75 == (int16_t)((uint32_t)r->vel_z >> 16));  /* word +0x75 */
+    }
     assert(fifa96_match_run_end(&mr) == 0);
   }
 
@@ -888,6 +899,9 @@ static void test_pad_drives_controlled_locomotion(void) {
     for (int i = 0; i < 10; i++) one_granted_frame(&mr2);
     assert(mr2.entities.team[0].records[taker].pos_x == 0);
     assert(mr2.entities.team[0].records[taker].pos_z == 0);
+    assert(mr2.entities.team[0].records[taker].speed71 == 0);
+    assert(mr2.entities.team[0].records[taker].vel_x == 0);
+    assert(mr2.entities.team[0].records[taker].vel_z == 0);
     assert(fifa96_match_run_end(&mr2) == 0);
   }
 

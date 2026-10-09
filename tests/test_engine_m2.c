@@ -149,6 +149,13 @@
  * mechanics window; the first frames render the still-committed positions).
  * M1 is untouched (test_engine_m1 green, same golden).
  *
+ * T1 review fix (velocity word/dword alias sync): the pool's dword views
+ * `vel_x`/`vel_z` are now recomposed from the mover's word writes and the
+ * `FUN_00079B6C` commit zeroes the three words; the transcript is
+ * **byte-identical** (`cmp` clean against the re-pinned golden above) because
+ * the composed dwords feed only unported sinks / gate-neutral readers on this
+ * tape. M1 stays byte-identical.
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -645,10 +652,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert((res->mask_mech & ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))) ==
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
     {
-      int32_t idx = mr->slot.entity;
-      assert(idx >= 0 && idx < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
-      res->ctrl_mech_x = mr->entities.team[0].records[idx].pos_x;
-      res->ctrl_mech_z = mr->entities.team[0].records[idx].pos_z;
+      int32_t enc = mr->slot.entity;
+      uint32_t team = enc >= 0 ? (uint32_t)enc / FIFA96_MATCH_ENTITY_RECORDS : 0u;
+      uint32_t idx = enc >= 0 ? (uint32_t)enc % FIFA96_MATCH_ENTITY_RECORDS : 0u;
+      assert(enc >= 0 && team < FIFA96_MATCH_ENTITY_TEAMS &&
+             idx < FIFA96_MATCH_ENTITY_RECORDS);
+      res->ctrl_mech_x = mr->entities.team[team].records[idx].pos_x;
+      res->ctrl_mech_z = mr->entities.team[team].records[idx].pos_z;
     }
     assert(fifa96_match_state_set_phase(&mr->state, 2) == 0);   /* class 1: clock runs */
     assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
@@ -985,12 +995,16 @@ int main(void) {
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */
   assert(res.kick_step_seen == 14);                      /* kick input reached the run */
-  /* M2 interactive Task 1 (G1): the pad drives the controlled record. The
+  /* M2 interactive Task 1 (G1): the pad reaches the controlled record. The
    * setup slot bind + FUN_0007876C merge put the human slot on the kickoff
-   * taker; the forced 0x13 window resets its row 01 to code 0, and the held
-   * RIGHT direction feeds row 00's FUN_00079C20 target into the FU-77 mover.
-   * The taker's position at the m 41 mechanics step must differ from its
-   * kickoff position. */
+   * taker, so the held RIGHT direction is staged into its record each frame.
+   * During this forced 0x13/0x14 tape the FU-142a arms overwrite the record's
+   * code, so the visible motion is the FU-77 mover integrating the
+   * arm/staged-row targets (the pre-T1 engine never integrated targets at
+   * all); the discriminating pad -> target -> velocity -> position path is
+   * pinned by test_engine_match_frame::test_pad_drives_controlled_locomotion.
+   * The slot-bound record's position at the m 41 mechanics step must differ
+   * from its kickoff position. */
   assert(res.ctrl_mech_x != res.ctrl_kickoff_x ||
          res.ctrl_mech_z != res.ctrl_kickoff_z);
   /* v2 natural-path evidence: the KICK press is consumed by a granted frame

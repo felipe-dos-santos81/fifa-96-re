@@ -742,14 +742,23 @@ static void test_place_commits_target(void) {
   e.target_y = 0x55;
   e.target_z = 0x840;
   e.lane = (int32_t)0xAAAA0040u;   /* low word +0x69 = dz, high word kept */
-  e.vel_x = (int32_t)0xBBBB0012u;  /* +0x71/+0x73 pair: fully cleared */
-  e.vel_z = 0x0CCCC;               /* +0x73/+0x75 pair: fully cleared */
+  /* The three velocity word views and their dword aliases are all staged so
+   * the commit's word zeroing is discriminating (a dword-only zero would leave
+   * the words stale and the mover would resurrect them). */
+  e.speed71 = 0x0012;
+  e.vel73 = (int16_t)0xBBBB;
+  e.vel75 = 0x0CCC;
+  e.vel_x = (int32_t)((uint32_t)(uint16_t)e.speed71 |
+                      ((uint32_t)(uint16_t)e.vel73 << 16));
+  e.vel_z = (int32_t)((uint32_t)(uint16_t)e.vel73 |
+                      ((uint32_t)(uint16_t)e.vel75 << 16));
   assert(fifa96_match_entities_place(&e) == FIFA96_OK);
   assert(e.pos_x == -0x720 && e.pos_y == 0 && e.pos_z == 0x840);
   assert(e.target_x == -0x720 && e.target_y == 0 && e.target_z == 0x840);
   assert((uint32_t)e.lane == 0xAAAA0000u);
+  assert(e.speed71 == 0 && e.vel73 == 0 && e.vel75 == 0);   /* words cleared */
   assert(e.vel_x == 0);
-  assert(e.vel_z == 0);
+  assert(e.vel_z == 0);                                  /* alias lockstep */
   assert(fifa96_match_entities_place(NULL) == -FIFA96_ERR_INVALID);
 }
 

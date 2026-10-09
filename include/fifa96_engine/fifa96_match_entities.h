@@ -275,9 +275,11 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
  * the target triple := the committed position, then the word +0x69 (dz), word
  * +0x71/+0x73 (the velocity x pair) and +0x75 (velocity z high word), word
  * +0x67 (dx), word +0x65 (distance) and byte +0x9C := 0. The pool carries
- * `lane` (dword +0x69) and `vel_x`/`vel_z` (dwords +0x71/+0x73), so `lane`'s
- * low word only is zeroed (native word +0x69) while `vel_x` and `vel_z` are
- * fully zeroed (native words +0x71/+0x73/+0x75 cover both dwords); the
+ * `lane` (dword +0x69), the three velocity word views
+ * (`speed71`/`vel73`/`vel75` = +0x71/+0x73/+0x75) and the dword views
+ * `vel_x`/`vel_z` (+0x71/+0x73), so `lane`'s low word only is zeroed (native
+ * word +0x69) while the three velocity words and both recomposed dwords are
+ * zeroed (M2 interactive T1 alias sync: no stale word survives a commit); the
  * +0x65/+0x67 words have no pool field (the FU-141 dispatch staging
  * recomputes `distance`). NULL -> -FIFA96_ERR_INVALID. */
 int fifa96_match_entities_place(struct fifa96_match_entity *entity);

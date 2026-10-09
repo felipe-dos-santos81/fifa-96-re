@@ -150,13 +150,15 @@ static int fifa96_match_action_00(struct fifa96_match_run *mr) {
  *    stage 1 (`0x7DCAF`): the `FUN_0008DE8C` nearest of the record's team from
  *    the camera triple with skip = the record's `+0x8D` (active); the lane
  *    word `[+0x69]>>16 <= 0x40` gates for both the record and the nearest; the
- *    slot arm (`+0x20` with `word[slot+6] & 0x70`) cannot fire on the pool
- *    (the slot block is unmodeled, staged zero), so the no-slot
+ *    slot arm (`+0x20` with `word[slot+6] & 0x70`) reads the live FU-70 slot
+ *    release word when this record owns the slot (the setup bind + merge now
+ *    attach it, M2 interactive Task 1), otherwise the no-slot
  *    `timer89 > 0x78` arm decides; when it fires `timer89 = 0`, stage 2 and
  *    fall into stage 2;
  *    stage 2 (`0x7DD29..0x7DF95`): the nearest from the record position
  *    (`0x7DEFA`), `team+0x7B2 = nearest` (`0x7DF5B`), the conditional merge
- *    (`0x7DF61..0x7DF75`; `+0x828` staged 0), the `FUN_0008A938` situation 0xB
+ *    (`0x7DF61..0x7DF75`; live now that the setup bind increments `+0x828`,
+ *    consumed by the frame drain), the `FUN_0008A938` situation 0xB
  *    call with the record's team side (`0x7DF7A..0x7DF90`) -> the derived
  *    live phase 2, then `timer89 = 0`, stage 3 (`0x7DF9A..0x7DFAC`).
  * The unported sinks on this path are the camera-place call body, the stage-0
@@ -258,7 +260,9 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
     if (near >= 0)
       team->target = (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)near);
     /* 0x7DF61..0x7DF75: merge when the nearest holds no slot and `+0x828` is
-     * set (the pool stages `slot_pool` 0, so the native arm cannot fire). */
+     * set. M2 interactive Task 1: the setup bind increments `+0x828`, so this
+     * arm is live; the recorded merge is consumed by the frame drain
+     * (`match_run_entity_drain`) and rebinds the FU-70 slot to the nearest. */
     if (near >= 0 && team->slot_pool != 0 && team->records[near].has_slot == 0)
       (void)fifa96_match_entities_merge_slot(&mr->entities, t, (uint32_t)near);
     rc = fifa96_match_run_situation(mr, 0x0Bu);  /* 0x7DF90 */
