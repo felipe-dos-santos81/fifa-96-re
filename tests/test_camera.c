@@ -478,6 +478,241 @@ static void test_reflect_invalid(void) {
   assert(fifa96_camera_reflect(NULL, 1, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* ---- FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed ---- */
+
+static void test_pose_apply_fields(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 1, 2, 3);
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  const fifa96_camera_pose pose = {10, 20, 30, 40, 50, 60};
+  assert(fifa96_camera_pose_apply(&cam, &yaw, &pitch, &ratio, &pose) == FIFA96_OK);
+  assert(cam.pos_x == 10 && cam.pos_y == 20 && cam.pos_z == 30);
+  assert(yaw == 40 && pitch == 50 && ratio == 60);
+}
+
+static void test_pose_feed_mode1(void) {
+  /* Mode 1/0x12 record 0 of behavior block 0: the image default is the +0x4C
+   * array 0x107F1C (the [0x1590CC] team flags are zero -> FUN_0004B7D0 falls
+   * to +0x4C), first-hand record 0 = 0x107F1C. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 7, 8, 9);
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 1;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -100 && cam.pos_y == 488 && cam.pos_z == 1100);
+  assert(yaw == 33900 && pitch == 3900 && ratio == 4608);
+}
+
+static void test_pose_feed_mode1_selector1_mirror(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0);
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 0x12;
+  args.selector = 1;
+  args.mirror = 1;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -100 && cam.pos_z == -1100);
+  assert(yaw == (0x18000 - 33900) && pitch == 3900 && ratio == 4608);
+  /* without the mirror bit the pose is untouched */
+  fifa96_camera_init(&cam, 0, 0, 0);
+  args.mirror = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_z == 1100 && yaw == 33900);
+}
+
+static void test_pose_feed_mode3_variant(void) {
+  /* mode 3 record = 4 | 3 from FUN_000504E0(x, class): 3 iff
+   * (class == 2 && x >= 1) || (class != 2 && x < 0). Block 2 class 3. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 3;
+  args.block = 2;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  args.variant_x = -1;                 /* class 3, x < 0 -> record 3 */
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -2710 && cam.pos_y == 640 && cam.pos_z == -118);
+  assert(yaw == 49340 && pitch == 3931 && ratio == 4608);
+  args.variant_x = 0;                  /* -> record 4 */
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -959 && cam.pos_y == 668 && cam.pos_z == -77);
+  assert(yaw == 49404 && pitch == 4251 && ratio == 4608);
+}
+
+static void test_pose_feed_mode4_variant(void) {
+  /* mode 4 record = 2 | 1 from FUN_00050518. Block 1 class 1. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 4;
+  args.block = 1;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  args.variant_x = 3;                  /* class 1, x >= 0 -> record 2 */
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -1873 && cam.pos_y == 712 && cam.pos_z == 2013);
+  assert(yaw == 51827 && pitch == 4512 && ratio == 4608);
+  args.variant_x = -3;                 /* -> record 1 */
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -2727 && cam.pos_y == 740 && cam.pos_z == 2693);
+  assert(yaw == 46675 && pitch == 4749 && ratio == 4608);
+}
+
+static void test_pose_feed_mode6_record7(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 0x10;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -83 && cam.pos_y == 320 && cam.pos_z == 3631);
+  assert(yaw == 33732 && pitch == 2203 && ratio == 3712);
+  /* the replay sub < 0 mirror: z negated, yaw folded */
+  fifa96_camera_init(&cam, 0, 0, 0);
+  args.sub = -1;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_z == -3631 && yaw == (0x18000 - 33732));
+}
+
+static void test_pose_feed_mode8_sub(void) {
+  /* mode 8, default selector: record 6 when sub < 1, else record 5. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 8;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -4 && cam.pos_y == 276 && cam.pos_z == 1502);
+  assert(yaw == 32800 && pitch == 1742 && ratio == 3545);
+  args.sub = 1;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -171 && cam.pos_y == 920 && cam.pos_z == 3829);
+  assert(yaw == 32320 && pitch == 4550 && ratio == 4608);
+}
+
+static void test_pose_feed_mode15(void) {
+  /* mode 0x15 fixed record 0x108714 with the native yaw fold and z negate
+   * (the camera+0x3c clamp is a leg). */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 0x15;
+  int32_t yaw = 0, pitch = 0, ratio = 0;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 1);
+  assert(cam.pos_x == -66 && cam.pos_y == 4300 && cam.pos_z == -6700);
+  assert(yaw == 0 && pitch == 5900 && ratio == 1696);   /* 0x18000-32768 = 0x10000 -> 0 */
+}
+
+static void test_pose_feed_default_and_off(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 1, 2, 3);
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  int32_t yaw = 4, pitch = 5, ratio = 6;
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 0);
+  assert(cam.pos_x == 1 && yaw == 4 && ratio == 6);
+  args.view_mode = 0x20;               /* out of the switch band */
+  assert(fifa96_camera_pose_feed(&cam, &yaw, &pitch, &ratio, &args) == 0);
+  assert(cam.pos_x == 1 && yaw == 4 && ratio == 6);
+}
+
+static void test_pose_feed_invalid(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_pose_args args;
+  memset(&args, 0, sizeof args);
+  args.view_mode = 1;
+  int32_t v = 0;
+  assert(fifa96_camera_pose_feed(NULL, &v, &v, &v, &args) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_pose_feed(&cam, NULL, &v, &v, &args) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_pose_feed(&cam, &v, NULL, &v, &args) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_pose_feed(&cam, &v, &v, NULL, &args) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_pose_feed(&cam, &v, &v, &v, NULL) == -FIFA96_ERR_INVALID);
+  args.block = 6;
+  assert(fifa96_camera_pose_feed(&cam, &v, &v, &v, &args) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_pose_apply(NULL, &v, &v, &v, NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* ---- FU-148 §2.1(c)/§5.2 (S4): FUN_00071C94 + FUN_00070544 event setter ---- */
+
+static void test_ramp_values(void) {
+  assert(fifa96_camera_ramp(0x640) == 0x94);
+  assert(fifa96_camera_ramp(0x700) == 0x94);
+  assert(fifa96_camera_ramp(0) == 3);
+  assert(fifa96_camera_ramp(1) == 8);
+  assert(fifa96_camera_ramp(0x30) == 25);
+  assert(fifa96_camera_ramp(0x40) == 29);
+  assert(fifa96_camera_ramp(0x50) == 33);
+  assert(fifa96_camera_ramp(0x70) == 39);
+  assert(fifa96_camera_ramp(-5) == 3);
+}
+
+static void test_event_set_window_pan(void) {
+  /* pos (0,0,0xB00), seed step (0, 2000), height 0x30:
+   * F2 = ramp(0x30) = 25, timer_limit = 50, F6 = 25 - ramp(0x30) = 0,
+   * timer = 50, vel_z = 2000/50 = 40, speed = 40,
+   * anchor_z = 0xB00 + 40*50 = 0x12D0, anchor_time = anchor2_time = 50. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0xB00);
+  assert(fifa96_camera_event_set(&cam, 0, 2000, 0x30) == FIFA96_OK);
+  assert(cam.event_param == 0x30);
+  assert(cam.timer == 50 && cam.timer_limit == 50);
+  assert(cam.vel_x == 0 && cam.vel_z == 40);
+  assert(cam.speed == 40);
+  assert(cam.anchor_x == 0 && cam.anchor_z == 0x12D0);
+  assert(cam.anchor_time == 50 && cam.anchor2_time == 50);
+  assert(cam.anchor2_x == 0 && cam.anchor2_z == 0x12D0);
+  assert(cam.rate_x == 0 && cam.rate_z == 0 && cam.event_cursor == 0);
+  /* the accepted integrator then moves the camera: one delta-2 frame */
+  assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+  assert(cam.pos_z == 0xB50);
+  assert(cam.timer == 52);
+  assert(fifa96_camera_out_of_bounds(cam.pos_x, cam.pos_z) == 1);
+}
+
+static void test_event_set_idle_height(void) {
+  /* height < 1 takes the F2=6 / timer 0xC branch. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0);
+  assert(fifa96_camera_event_set(&cam, 0x30, 0, 0) == FIFA96_OK);
+  assert(cam.event_param == 0);
+  assert(cam.timer == 0xC && cam.timer_limit == 0xC);
+  assert(cam.vel_x == 4 && cam.vel_z == 0);
+  assert(cam.speed == 4);
+}
+
+static void test_event_set_height_clamps(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, -10, 0);
+  assert(fifa96_camera_event_set(&cam, 0, 0, -20) == FIFA96_OK);
+  assert(cam.event_param == (uint16_t)-10);      /* clamped to the target y */
+  assert(cam.timer == 0xC);
+  fifa96_camera_init(&cam, 0, 0, 0);
+  assert(fifa96_camera_event_set(&cam, 0, 0, 0x700) == FIFA96_OK);
+  assert(cam.event_param == 0x640);
+  assert(cam.timer_limit == 0x94 * 2 && cam.timer == 0x94 * 2);
+}
+
+static void test_event_set_anchor2_computed(void) {
+  /* height 0x60 > 0x4F: a2_time = F2 + ramp(0x10) = 36 + 15 = 51; with ty = 0,
+   * F6 = F2 - F2 = 0 and span = 51 >= 1, so anchor2 = origin + vel * 51.
+   * F2 = ramp(0x60) = 36, timer = 72; seed 2160 / 72 = vel 30. */
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 100, 0, 0);
+  assert(fifa96_camera_event_set(&cam, 0, 2160, 0x60) == FIFA96_OK);
+  assert(cam.timer == 72 && cam.timer_limit == 72);
+  assert(cam.vel_z == 30);
+  assert(cam.anchor2_time == 51);
+  assert(cam.anchor2_x == 100 && cam.anchor2_z == 30 * 51);
+  assert(cam.anchor_time == 72 && cam.anchor_z == 30 * 72);
+}
+
+static void test_event_set_invalid(void) {
+  assert(fifa96_camera_event_set(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init_fields();
   test_init_invalid();
@@ -510,6 +745,22 @@ int main(void) {
   test_reflect_boundaries();
   test_reflect_gates();
   test_reflect_invalid();
+  test_pose_apply_fields();
+  test_pose_feed_mode1();
+  test_pose_feed_mode1_selector1_mirror();
+  test_pose_feed_mode3_variant();
+  test_pose_feed_mode4_variant();
+  test_pose_feed_mode6_record7();
+  test_pose_feed_mode8_sub();
+  test_pose_feed_mode15();
+  test_pose_feed_default_and_off();
+  test_pose_feed_invalid();
+  test_ramp_values();
+  test_event_set_window_pan();
+  test_event_set_idle_height();
+  test_event_set_height_clamps();
+  test_event_set_anchor2_computed();
+  test_event_set_invalid();
   puts("test_camera: ok");
   return 0;
 }

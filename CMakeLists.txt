@@ -218,9 +218,18 @@ target_link_libraries(test_control PRIVATE fifa96_control fifa96_entity_update)
 add_test(NAME test_control COMMAND test_control WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_camera src/fifa96_loader/fifa96_camera.c)
+add_library(fifa96_palette src/fifa96_loader/fifa96_palette.c)
+
+add_executable(test_palette tests/test_palette.c)
+target_link_libraries(test_palette PRIVATE fifa96_palette)
+target_compile_options(test_palette PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_palette PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_palette COMMAND test_palette WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 target_link_libraries(fifa96_camera PRIVATE fifa96_entity_update)
 add_executable(test_camera tests/test_camera.c)
 target_link_libraries(test_camera PRIVATE fifa96_camera fifa96_entity_update)
+target_compile_options(test_camera PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_camera PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_camera COMMAND test_camera WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_library(fifa96_ball_pairing src/fifa96_loader/fifa96_ball_pairing.c)
@@ -429,7 +438,7 @@ target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pa
                                           fifa96_scene fifa96_render fifa96_window
                                           fifa96_match_display fifa96_action_handlers fifa96_keeper
                                           fifa96_ball_pairing fifa96_arm_helpers fifa96_arm_bodies
-                                          fifa96_animation fifa96_outfield)
+                                          fifa96_animation fifa96_outfield fifa96_palette)
 
 add_executable(test_engine_platform tests/test_engine_platform.c)
 target_link_libraries(test_engine_platform PRIVATE fifa96_engine)
