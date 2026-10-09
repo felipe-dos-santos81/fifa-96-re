@@ -650,7 +650,7 @@ selector-0 default kickoff chain, byte-level:
    `0x8B85D` -> **situation 1**.
 3. **Situation 1 invokes act 1.** `0x8AABF..0x8AAF6`: `FUN_0008C974` scans
    both teams (the changed-formation counts land in `[0x157B8E]`/`[0x157B8F]`
-   at `0x8CB5E`), stores `[0x5881E] = situation`, `[0x58820] = side`, then
+   at `0x8CB5E`), stores `[0x15881E] = situation`, `[0x158820] = side`, then
    table 2 entry 1 -> `0x8ABAB`: camera lead `[0x158830]=0x1E0`, `EAX=1`/`BX=1`
    `CALL 0x888FC` -> invokes act 1 = the phase-0x17 handler `FUN_00088DC8`
    directly (`0x110794[0x17]`).

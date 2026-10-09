@@ -2265,6 +2265,12 @@ among the wired bodies. The tape therefore drives the derived
 `fifa96_match_run_add_goal(mr, side)` directly (its `state=2/1-0` lines pin the
 replay) and the native event source stays **carried as child C3-OL2**.
 
+**Erratum (M2 playable-match Task 3).** The tape no longer drives
+`add_goal`: since `19c7bc1` its score step calls the derived
+`fifa96_match_run_score_event` (L.6), and Task 3 established that no native
+writer invoker is reachable from the ported rows/state (census and verdict:
+L.9).
+
 ## 8. No-write statement (original Task-9 split-gate slice; historical)
 
 No C source, header, test, CMake, asset, ISO or Ghidra state was changed:
