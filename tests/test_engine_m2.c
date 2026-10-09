@@ -1,6 +1,7 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v5 (spec §5; G3 of
- * the M2 interactive-match plan — the follow-up-5 close-out; the v4 G4 and
- * v4.1/v4.2 per-task re-pins are retained as provenance below).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v6 (spec §5; the
+ * M2 full-gameplay phase-6 acceptance, S5; the v5 interactive-match G3
+ * close-out and the v4/v4.1/v4.2 per-task re-pins are retained as provenance
+ * below).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -283,6 +284,78 @@
  * the m 41 pair (phase 2 and the 1 s period length) with its row staging, and
  * the m 62 direct score call. No other phase, period, row or input is forced.
  *
+ * --- v6 (M2 full-gameplay S5 acceptance): the phase-6 assertion layer -------
+ *
+ * v6 is the full-gameplay phase-6 acceptance (phase-7 recon-ahead plan Track A
+ * S5). It adds assertions only — no engine write and no forcing changed — so
+ * the transcript and golden are byte-identical to v5.1 (`cmp` against
+ * tests/golden/engine/m2-frames.txt clean, 165 lines; M1 unmoved; the re-pin
+ * lineage is in the golden-decision paragraphs below). What v6 pins at the
+ * spec §5 sequence points:
+ *   1. HUD (P0.2/OL-T11-7): retained — frame 6 asserts the staged Frames.fsh
+ *      bar pixel and the font readiness (the phase-6 acceptance entry point);
+ *   2. S1 possession/locomotion (FU-147): the `+0x8D` active seed at match
+ *      start (`records[i].active == i`; record 0 seeds 0, which is why the
+ *      commit's `active ? 0 : 0x26` selector stages 0x26 on it) and, at the
+ *      mechanics step, the slot-bound record's BF20 lane-track fields — the
+ *      `+0x6B` `0x8DC68` metric lane, the `+0x6D`/`+0x6F` camera-minus-
+ *      position deltas and the `+0x77` bound — satisfy the derived
+ *      camera-relative invariant. It is current because the mover runs the
+ *      track after every dispatch (the record moved, above) and the tape
+ *      camera never moves (S2/S4 dormant), plus the existing word/dword
+ *      velocity lockstep;
+ *   3. S2/S3 goal-chain status — **fixture-proven, tape-dormant**: the
+ *      arming/scan/queue chain (S2/FU-145) and the consumer machine (S3/
+ *      FU-146, begin installs leg 0/mode 0) are landed, but the static camera
+ *      never arms (no pan origin, OL-T11-79), so `goal_armed`/`goal_zone`/
+ *      snapshot, the queue cells and the screen machine stay fresh through the
+ *      mechanics and score steps; the direct score call remains the only score
+ *      producer (v4's pre-score freshness assert stands). The chain is proven
+ *      in `test_goal_chain_pan_fixture`, `test_camera_pan_event_chain` and
+ *      `test_goal_consumer_chain_fixture`;
+ *   4. S4 presentation defaults: the pose feed is dormant
+ *      (`render.camera_pose.view_mode == 0`, the unported handler arm), the
+ *      formation id stays 0 (`352ko.fmt`) and no translation pool is staged;
+ *   5. the begin-installed consumer machine is idle at the derived leg 0/
+ *      mode 0 with the live-session gate seeded 1 (`session_gate_14c32a`).
+ *
+ * Remaining forcing inventory, updated for the phase-6 state (the v5 list
+ * above still governs the transcript shape; each item carries its leg):
+ *   - natural pan origin absent: all eleven `FUN_00071C94` callers are
+ *     unported gameplay-row bodies and the armer's `0x71B8A` angle arm needs
+ *     pre-existing event state (`[0x1577EE].hi == 0 && [0x1577BE] == 0` early
+ *     return) — OL-T11-79 / FU-148 §11.2; `FUN_000709D0` (pan step),
+ *     `FUN_00070DE0` (boundary/reposition) and `FUN_00071DF4` (ball
+ *     sub-object rate) stay legs;
+ *   - hold policy / row-04 pad arm: the SDL backend drops key auto-repeat
+ *     (`src/fifa96_engine/platform_sdl3.c:194`), so a held key arrives as
+ *     press pulses (OL-T4-1), and the natural row-04 slot-dir arm's producers
+ *     (S1) still meet the inactive live kickoff record (0x19 code, row 19
+ *     UNSUP), so on-screen movement stays gated — the pad → target → velocity
+ *     → position seam is fixture-proven;
+ *   - 15 s goal-screen rollover: with the seeded duration a natural run past
+ *     `screen_period_frames` at the post step fires the scheduler ids 8/7
+ *     (S3 report §8.2); the tape's forced window stays under 900 units, so
+ *     those ids are dormant;
+ *   - goal-handler presentation bodies: the FU-146 §8 legs (setup-step
+ *     staging, the `[0x15781D]` re-arm, the `0x10F328`/`0x15B6C8`/`0x158897`
+ *     copies) stay unported — the S3 port deliberately omits the re-arm so a
+ *     zero snapshot cannot poison the FU-145 armer — plus the tracked-side
+ *     flags (leg 4) and the `FUN_0009252C` display gate (leg 6);
+ *   - wave-7 phase-7 clusters (Track B of the recon-ahead plan): B1 set-piece/
+ *     restart dispatch rows, B2 fouls/referee/offside, B3 keeper+AI stage
+ *     flows, B4 presentation residual (replay/overlay rows, camera-handler
+ *     bodies, palette pool identity) — unported, to be planned from the frozen
+ *     drafts in a later cycle.
+ * No other phase, period, row or input is forced by v6.
+ *
+ * Golden decision (v6): **byte-identical, no re-pin** — v6 adds only test
+ * assertions and provenance; no presented frame moved (`cmp` clean, 165
+ * lines), M1 unmoved. Current-golden provenance: it is the S1 v5.1 re-pin
+ * (157 hash-only lines 9..165, first differing line frame 9 — the `+0x8D`
+ * seed/selector and shared-mover render changes; no `state=` suffix moved;
+ * M1 unmoved); S2, S3, S4 and this S5 moved no presented frame.
+ *
  * Golden decision (v3, M2 visible-match Task 1 / OL-T11-8): the transcript
  * CHANGED and the golden is re-pinned for the intended drawing upgrade — the
  * match frames now draw the formation-placed records. The first differing line
@@ -331,13 +404,15 @@
  * Wired-row dispatch set: the tape stages the M2 wired rows
  * (04/06/07/08/0F/18/21/23) and keeper row 1E into pool records 1..9 of team 0
  * at the mechanics step; the derived kickoff row 01 dispatches from the begin
- * state-1 arm's taker (gate-failing at the forced phase) and row 00 returns
- * through the reset path a wired row requests, while the arms stage 26/28/2A
- * organically. The observed set is read from `mr.dispatched_ok` (bit c set when
- * action code c dispatched FIFA96_OK), the Task 15 observability seam, and must
- * equal M2_WIRED_MASK (14 rows). v4 re-states this shape (row 01 joins; row 00
- * is not installed by a stage but dispatches through a wired row's reset) and
- * pins the m 1 taker in the forcing directives.
+ * state-1 arm's taker (gate-failing at the forced phase) and row 00 dispatches
+ * from the explicit code-0 staging the tape installs with the wired rows
+ * (S1 update: the seeded native phase-2 reset installs a decision code on
+ * active records, so the pre-S1 reset artifact no longer produces row 00 —
+ * see the M2_STAGE_ROWS comment), while the arms stage 26/28/2A organically.
+ * The observed set is read from `mr.dispatched_ok` (bit c set when action code
+ * c dispatched FIFA96_OK), the Task 15 observability seam, and must equal
+ * M2_WIRED_MASK (14 rows). v4 re-states this shape (row 01 joins; row 00 is
+ * staged explicitly) and pins the m 1 taker in the forcing directives.
  *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
@@ -408,9 +483,10 @@
  * M2 playable-match Task 2 adds row 01 (the kickoff taker, FU-143 §11): the
  * derived state-1 arm at begin stages action 1 and the row's situation-0xB
  * call carries the natural phase-1 -> 2 transition, so the tape dispatches
- * row 01 during its forced kickoff window. Row 00 still dispatches through the
- * reset path some wired rows request (a reset installs action 0 into their
- * record), so the tape's exercise set grows to 14 rows. */
+ * row 01 during its forced kickoff window. Row 00 dispatches from the explicit
+ * code-0 staging (S1: the seeded native reset installs a decision code on
+ * active records, so the pre-S1 reset artifact no longer installs row 00), so
+ * the tape's exercise set grows to 14 rows. */
 #define M2_WIRED_MASK                                                        \
   ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x04) | (1ull << 0x06) |       \
    (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) | (1ull << 0x18) |       \
@@ -753,6 +829,22 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->mask_mech = mr->dispatched_ok;
     assert((res->mask_mech & ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))) ==
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
+    /* v6 (S2/S3 status): the goal chain is dormant on this tape — no pan
+     * origin exists (OL-T11-79), so the armer and the clock-tail scan never
+     * fire and the begin-installed consumer machine has no queued id. The
+     * chain is fixture-proven (test_goal_chain_pan_fixture /
+     * test_camera_pan_event_chain / test_goal_consumer_chain_fixture). */
+    /* v6 (S2/S3 status): the goal chain is dormant on this tape — no pan
+     * origin exists (OL-T11-79), so the armer and the clock-tail scan never
+     * fire; the begin-installed consumer machine sits at the leg-0 kickoff
+     * gate (step 1) with the installer latch `situation_pending` held and no
+     * queued id. The chain is fixture-proven (test_goal_chain_pan_fixture /
+     * test_camera_pan_event_chain / test_goal_consumer_chain_fixture). */
+    assert(mr->goal_armed == 0 && mr->goal_zone == 0);
+    assert(mr->goal_snap_x == 0 && mr->goal_snap_y == 0 && mr->goal_snap_z == 0);
+    assert(mr->situation_id == 0);
+    assert(mr->screen_step == 1u && mr->situation_pending == 1u);
+    assert(mr->screen_timer < mr->screen_period_frames);
     {
       int32_t enc = mr->slot.entity;
       uint32_t team = enc >= 0 ? (uint32_t)enc / FIFA96_MATCH_ENTITY_RECORDS : 0u;
@@ -771,6 +863,23 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
         assert(cr->vel73 == (int16_t)((uint32_t)cr->vel_x >> 16));
         assert(cr->vel73 == (int16_t)cr->vel_z);
         assert(cr->vel75 == (int16_t)((uint32_t)cr->vel_z >> 16));
+        /* v6 (S1/FU-147): the BF20 lane track on the accepted replay. The
+         * record moved through the shared mover (above), which runs the track
+         * after the integration, and the tape camera never moves (S2/S4
+         * dormant), so the last refresh is current: `+0x6D`/`+0x6F` are the
+         * camera-minus-position deltas, `+0x6B` is the `0x8DC68` metric lane
+         * and the `+0x8D` seed still equals the record ordinal. */
+        {
+          int16_t exp_dx =
+              (int16_t)((uint16_t)mr->render.camera.pos_x - (uint16_t)cr->pos_x);
+          int16_t exp_dz =
+              (int16_t)((uint16_t)mr->render.camera.pos_z - (uint16_t)cr->pos_z);
+          assert(cr->lane_z == exp_dx);
+          assert(cr->cam_dz6f == exp_dz);
+          assert(cr->lane_x == (int16_t)fifa96_entity_distance((int32_t)exp_dx,
+                                                               (int32_t)exp_dz));
+          assert(cr->active == cr->index);
+        }
       }
     }
     assert(fifa96_match_state_set_phase(&mr->state, 2) == 0);   /* class 1: clock runs */
@@ -789,6 +898,22 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->score[0] == 0 && mr->score[1] == 0);
     assert(mr->score_last_side == -1 && mr->score_tracked_side == -1);
     assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
+    /* v6 (S2/S3/S4): the chain stayed dormant through the live phase 2 and the
+     * S4 defaults never woke — the static camera never armed (no pan origin,
+     * OL-T11-79), the queue cells stayed empty, the pose feed's unported mode 0
+     * and the formation id 0 are untouched. Fixture-proven, not tape-forced. */
+    /* v6 (S2/S3/S4): the chain stayed dormant through the live phase 2 and
+     * the S4 defaults never woke — the static camera never armed (no pan
+     * origin, OL-T11-79), no id entered the queue, the consumer machine is
+     * still at the leg-0 gate inside its 15 s duration, and the pose feed's
+     * unported mode 0 / the formation id 0 are untouched. Fixture-proven, not
+     * tape-forced. */
+    assert(mr->goal_armed == 0 && mr->goal_zone == 0);
+    assert(mr->situation_id == 0);
+    assert(mr->screen_step == 1u && mr->situation_pending == 1u);
+    assert(mr->screen_timer < mr->screen_period_frames);
+    assert(mr->render.camera_pose.view_mode == 0);
+    assert(mr->formation[0] == 0 && mr->formation[1] == 0);
     /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
      * carried tracked-side default -1 it is the FU-72 increment + last side. */
     assert(fifa96_match_run_score_event(mr, 0, 0) == 0);
@@ -900,6 +1025,21 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       assert(e->match_run.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
       assert(e->match_run.state.prev_phase == 0);
       assert(e->match_run.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+      /* v6 (S1/FU-147): the `+0x8D` active seed — `fifa96_match_entities_init`
+       * writes the record ordinal (`FUN_0008C2E0 0x8C329`). Record 0 seeds 0,
+       * which is why the commit's `active ? 0 : 0x26` selector stages 0x26 on
+       * it (pinned above as start_anim_id). */
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          assert(e->match_run.entities.team[t].records[i].active == (uint8_t)i);
+      /* v6 (S3/FU-146): begin installed the goal-screen consumer machine at
+       * the derived leg 0/mode 0 with the live-session gate seeded 1. */
+      assert(e->match_run.screen_leg == 0 && e->match_run.screen_mode == 0);
+      assert(e->match_run.session_gate_14c32a == 1);
+      /* v6 (S4/FU-148): the dormant presentation defaults — the pose feed's
+       * unported mode 0 and the formation id 0 (`352ko.fmt`). */
+      assert(e->match_run.render.camera_pose.view_mode == 0);
+      assert(e->match_run.formation[0] == 0 && e->match_run.formation[1] == 0);
     }
     /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + M2
      * full-gameplay P0.2 / OL-T11-7): count the non-background SCENE pixels of
@@ -980,9 +1120,10 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
        * runs before the input poll, so the frame body sees the previous
        * step's sample), and a wired kick install would dispatch by the
        * following grant. Neither sample may show a staged gameplay row: only
-       * the reset-installed row 00, the kickoff row 01 and the arm-installed
-       * kickoff codes do. Grant cadence verified first-hand (grants at
-       * steps 9/12/15). */
+       * the derived kickoff row 01 and the arm-staged 0x26 do (S1 update: the
+       * seeded native reset no longer installs code 0, so row 00 does not
+       * dispatch here; its dispatch comes later, from the explicit m 41
+       * staging). Grant cadence verified first-hand (grants at steps 9/12/15). */
       assert(live);
       if (steps == 12) res->mask_kick = e->match_run.dispatched_ok;
       if (steps == 15) res->mask_kick_next = e->match_run.dispatched_ok;
@@ -1145,10 +1286,11 @@ int main(void) {
          res.ctrl_mech_z != res.ctrl_kickoff_z);
   /* v2 natural-path evidence: the KICK press is consumed by a granted frame
    * and the following grant covers a wired install->dispatch; neither sample
-   * shows a staged gameplay row. The rows seen on those grants are the reset-
-   * installed row 00 (pad-driven), the derived kickoff row 01 (the begin
-   * state-1 arm's taker, gate-failing at the forced phase 0x13) and the
-   * arm-staged 0x26 codes; the natural kick dispatch stays blocked on the
+   * shows a staged gameplay row. The rows seen on those grants are the derived
+   * kickoff row 01 (the begin state-1 arm's taker, gate-failing at the forced
+   * phase 0x13) and the arm-staged 0x26 code (S1 update: the seeded native
+   * reset no longer installs code 0, so row 00 dispatches only later, from the
+   * explicit m 41 staging); the natural kick dispatch stays blocked on the
    * unported possession/selection invokers. */
   assert((res.mask_kick & M2_KICKOFF_ROWS_MASK) != 0u);
   assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
