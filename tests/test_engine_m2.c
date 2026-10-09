@@ -177,9 +177,11 @@
  * same golden). The place's visible effect is fixtured where it is on-canvas
  * (`test_engine_match_render::test_camera_place_moves_near_record_into_frame`:
  * an in-ring record below the 0x78 near gate moves onto the ring and draws);
- * the kickoff instant itself frames the positive-depth side in the native too
- * (the projection requires z >= NEAR and the kickoff camera (0,0,0) sits
- * between the halves), so the tape's early canvases are unchanged.
+ * the place preserves the target's camera direction, so it cannot move the
+ * controlled side out from behind the camera. The one-sided kickoff draw is
+ * the engine's stand-in view (yaw/pitch 0; native kickoff framing is carried
+ * on FU-96 legs 1/3 + the FU-71 follow writer), so the tape's early canvases
+ * stay unchanged.
  *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
@@ -792,7 +794,7 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         assert(e->match_run.entities.team[1].records[0].pos_z == 2508);
         assert(e->match_run.entities.team[0].records[8].pos_x == 1254);
         assert(e->match_run.entities.team[1].records[8].pos_x == -1216);
-        /* v5 (M2 interactive Task 2 / FU-96 leg 5): the FUN_00079F3C camera
+        /* v4.2 (M2 interactive Task 2 / FU-96 leg 5): the FUN_00079F3C camera
          * place snapped the non-controlled side's in-ring records 9/10 onto
          * the 0x180 ring before the commit — (228,264) -> (251,291) and
          * (-228,264) -> (-251,291) through the native angle/sine primitives.

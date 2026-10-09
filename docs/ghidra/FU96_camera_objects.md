@@ -159,13 +159,14 @@ Ghidra-project change.
    caller's `EBX = 0x15774C` is dead; the body loads the camera triple itself),
    so the engine camera staying at the `[0x10F328/2C/30]` reset triple at
    kickoff (`FUN_000700F4((0,0,0))`; first-hand 0x88E4B..0x88E6A) is correct.
-   The kickoff instant frames only the positive-depth side in the native too
-   (the `fifa96_projection_screen` gate requires `z >= NEAR`); T2 corrects the
-   earlier "both sides draw at kickoff" reading — the place re-frames the
-   non-controlled side's in-ring records around the camera, it does not create
-   visibility behind it. The camera-mode/angle feed remains carried from legs
-   1/3, and the FU-71 follow writer that moves the camera during live play
-   stays unported.
+   The place preserves the target's camera direction, so it cannot move the
+   controlled side out from behind the camera; the one-sided kickoff draw is
+   the **engine's stand-in view** (yaw/pitch 0), and native kickoff framing is
+   carried on legs 1/3 (the camera-mode/angle feed `[0x14E57C]`/`FUN_000505D0`
+   presets `0x108B64` handlers `0x108B80`) plus the FU-71 follow writer
+   `FUN_00071C94`. T2 corrects the earlier "both sides draw at kickoff"
+   reading — the place re-frames the non-controlled side's in-ring records
+   around the camera, it does not create visibility behind it.
 
 ## 7. Leg 5 derivation — `FUN_00079F3C` (M2 interactive Task 2 / T2)
 

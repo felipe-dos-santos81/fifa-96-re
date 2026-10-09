@@ -314,9 +314,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   lines 1..48 stay byte-identical (those records project off-canvas at both
   radii — the place preserves the screen direction), the mechanics entry at
   frame 49 is the first differing line and 117 hash lines differ with no
-  `state=` suffix moved. The kickoff instant frames only the positive-depth
-  side in the native as well (`fifa96_projection_screen` requires `z >= NEAR`;
-  the `(0,0,0)` kickoff camera sits between the halves), so T2 corrects the
+  `state=` suffix moved. The place preserves the target's camera direction, so
+  it cannot move the controlled side out from behind the camera; the one-sided
+  kickoff draw is the **engine's stand-in view** (yaw/pitch 0), and native
+  kickoff framing is carried on FU-96 legs 1/3 (the camera-mode/angle feed
+  `[0x14E57C]`/`FUN_000505D0` presets `0x108B64` handlers `0x108B80`) plus the
+  FU-71 follow writer `FUN_00071C94`, so T2 corrects the
   earlier "both sides draw at kickoff" expectation to "both teams placed where
   the native places them" — the visible place effect is fixtured where it is
   on-canvas (`test_camera_place_moves_near_record_into_frame`: an in-ring record
