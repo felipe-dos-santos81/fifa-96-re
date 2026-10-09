@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v4 (spec §5; G4 of
- * the M2 playable-match plan — the follow-up-4 close-out).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v5 (spec §5; G3 of
+ * the M2 interactive-match plan — the follow-up-5 close-out; the v4 G4 and
+ * v4.1/v4.2 per-task re-pins are retained as provenance below).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -213,6 +214,34 @@
  * (0,0) = 0x45 draws at (2,197) on the first match frame. M1 is untouched
  * (test_engine_m1 green, same golden).
  *
+ * --- v5 acceptance (M2 interactive Task 4 / G3): the follow-up-5 close-out ---
+ *
+ * T4 adopts the v5 transcript as the interactive-match acceptance. It adds no
+ * forcing and no engine behavior: the transcript is byte-identical to the
+ * phase-6 P0.2 re-pin (the `cmp` against the committed golden is the check;
+ * no further re-pin). The tape pins the follow-up-5 trio at the spec §5
+ * sequence points:
+ *   1. pad locomotion (T1/G1, FU-77): the m 1 witness asserts the begin setup
+ *      bind attached the FU-70 slot to the kickoff taker
+ *      (`slot.entity == team[0].target`, `has_slot == 1`) and the m 41 witness
+ *      asserts the slot-bound record's position moved from its kickoff commit
+ *      with the mover's word/dword velocity views in lockstep (the T1 review
+ *      fix pinned at acceptance level). The pad -> target -> velocity ->
+ *      position discriminator remains the headless fixture
+ *      (`test_engine_match_frame::test_pad_drives_controlled_locomotion`: UP
+ *      moves pos_x only, the no-pad control stays still); on this forced tape
+ *      the observed motion is the FU-77 mover integrating the arm/staged-row
+ *      targets — the honest framing the v4.1 provenance records.
+ *   2. camera place (T2/G2, FU-96 leg 5): at match start the non-controlled
+ *      side's in-ring records 9/10 hold the 0x180-ring targets
+ *      (251,291)/(-251,291) and the controlled side is untouched; the place
+ *      preserves the target's camera direction, so the one-sided kickoff draw
+ *      stays the engine stand-in view (v4.2 provenance; native kickoff framing
+ *      is carried on FU-96 legs 1/3 + the FU-71 follow writer).
+ *   3. HUD (P0.2/OL-T11-7, FU-148): at the first match frame the bar/font
+ *      staging is ready and the Frames.fsh frame-13 pixel (0,0) = 0x45 lands
+ *      at (2,197) (v5 provenance above).
+ *
  * Forced, each with its owning leg (complete inventory — nothing else is
  * forced; the rest of the sequence is the natural engine path):
  *   - kickoff phases 0x13/0x14 (m 1 / m 21): the derived entry reaches phase 1
@@ -243,7 +272,9 @@
  *   - the direct score call: no wired body contains a native writer site
  *     (FU-142 App. I.10 census), so gameplay goals stay blocked on the
  *     `OL-87`/`OL-88`/`OL-89` invoker legs (T3 verdict: no invoker is
- *     reachable from the ported state — FU-142 App. L.9);
+ *     reachable from the ported state — FU-142 App. L.9); the frozen FU-145
+ *     (goal arming) / FU-146 (goal consumers) slices and the phase-6 S2/S3
+ *     ports own that work (the NEXT plan phase — not this acceptance);
  *   - the palette install is no longer a leg — `OL-T11-6` landed in T1 and
  *     this tape asserts it; the match HUD landed in v5 (`OL-T11-7`), while
  *     the remaining overlays (marker/menu draws) stay unported (`OL-T11-7`
@@ -725,6 +756,17 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
              idx < FIFA96_MATCH_ENTITY_RECORDS);
       res->ctrl_mech_x = mr->entities.team[team].records[idx].pos_x;
       res->ctrl_mech_z = mr->entities.team[team].records[idx].pos_z;
+      /* T4 acceptance (G3): the T1 review fix — the FU-77 mover's word views
+       * and the dword aliases the live consumers read stay in lockstep on the
+       * accepted tape (the pool recomposition invariant). */
+      {
+        const struct fifa96_match_entity *cr =
+            &mr->entities.team[team].records[idx];
+        assert(cr->speed71 == (int16_t)cr->vel_x);
+        assert(cr->vel73 == (int16_t)((uint32_t)cr->vel_x >> 16));
+        assert(cr->vel73 == (int16_t)cr->vel_z);
+        assert(cr->vel75 == (int16_t)((uint32_t)cr->vel_z >> 16));
+      }
     }
     assert(fifa96_match_state_set_phase(&mr->state, 2) == 0);   /* class 1: clock runs */
     assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
