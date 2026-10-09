@@ -24,7 +24,7 @@ typedef struct fifa96_palette_pool {
   uint32_t size;
   const uint8_t *slots23[23];   /* 0x14BF60[i] = base + i*0x100 */
   const uint8_t *slots7[7];     /* 0x14BF34[i] = base + 0x1700 + i*0x100 */
-  const uint8_t *slots8[8];     /* 0x14BB00[i] = base + 0x2400 + i*0x100 */
+  const uint8_t *slots8[8];     /* 0x14BB00[i] = base + 0x1E00 + i*0x100 */
   const uint8_t *shared;        /* 0x14BB20 / 0x14BFBC = base + 0x2600 */
   const uint8_t *fixed[9];      /* 0x14BF50,20,54,2C,28,30,5C,58,24 ascending */
 } fifa96_palette_pool;

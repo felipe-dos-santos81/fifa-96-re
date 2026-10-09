@@ -732,7 +732,9 @@ arrays), `0x108714` (mode-0x15 record), block `+8`/`+0x4C` at
 preserves the target triple (= the engine position; the native 71C94 call
 hands FUN_000700F4 the current target), resets the event state, copies the
 seed step pair (the native 6-byte vector at `0x1577B8`:
-`{bearing, step_x, step_z}`), clamps the height to `[target y, 0x640]`, runs
+`{bearing, step_x, step_z}`), clamps the height to `[target y, 0x640]`
+(zeroed again when the clamped value is < 1, the native
+`FUN_00070544` `0x705f1`/`0x705fe` cell clear), runs
 the `FUN_000702F8` ramp over the pinned 400-byte `0x10F4EE` table
 (`fifa96_camera_ramp`), computes the signed fast-path velocity
 `seed / timer` (IDIV semantics), the bearing magnitude via
@@ -773,9 +775,10 @@ team+0x7AE/record+0x90 fields).
 ### 11.4 Palette residual (§4.2)
 
 `src/fifa96_loader/fifa96_palette.c`: `fifa96_palette_pool_partition`
-(FUN_00046F80: 23+7+8 slots, shared `+0x2600`, 9 fixed `+0x2700..+0x2F00`),
+(FUN_00046F80: 23+7+8 slots at `+0x0000`/`+0x1700`/`+0x1E00`, shared
+`+0x2600`, 9 fixed `+0x2700..+0x2F00`; floor 0x3000),
 `fifa96_palette_translate_kit` (FUN_00048DC0 kit bands, tables 0x107287
-`{0,0,0,0,1,1,1}` / 0x10727C `{0,0,0,1,1,1,1,2,2,2,2}`) and
+`{0,0,0,1,1,1,1}` / 0x10727C `{0,0,0,1,1,1,1,2,2,2,2}`) and
 `fifa96_palette_translate_slot` (FUN_000CE980 0x100-byte copy), plus the
 engine seam `fifa96_match_run_translation_install(entity)` writing
 `render.remap` (the 0x114720 analog) through a caller-staged
@@ -789,7 +792,7 @@ and is not part of the match contract.
 
 1. **Pose-array selection.** The `+0x48` and `+0x4C` block fields are both
    non-NULL pointer arrays (`0x107E2C`/`0x107F1C` etc.). The head of
-   `FUN_000505D0` uses `+0x48` only when `FUN_0004B7D0() != 0 &&
+   `FUN_000505D0` uses `+0x48` only when `FUN_0004B7D0() == 0 &&
    FUN_0004B6FC() == 0`; `FUN_0004B7D0` returns `[0x1590CC + side*0x835] == 0`,
    which is 1 for the image's zero flags, so **the image default is `+0x4C`**.
    FU-148 §2.1(a) ("+0x48 array ... NULL in the image") and w7-B4 §2.8
@@ -832,11 +835,14 @@ and is not part of the match contract.
 * **OL-T11-77 (view-mode writer / FU-148 leg 8)**: the 0x51xxx view handlers
   that set `[0x14E57C]`; the engine stages `render.camera_pose.view_mode`.
 * **OL-T11-78 (+0x48 alternate pose arrays)**: the `[0x1590CC]` team-flag /
-  `FUN_0004B6FC` predicate and the second pose arrays.
+  `FUN_0004B6FC` predicate and the second pose arrays; the selector-3 preamble
+  pose arrays `0x1083CC`/`0x1084BC` (reached by arms 3/4/6/8 when
+  `[camera+4] == 3`; the degenerate behavior-index read at `[0x108B60]`).
 * **OL-T11-79 (event-machine bodies)**: `FUN_000709D0`, `FUN_00070DE0`,
   `FUN_00071DF4`, the `> 0x19` atan walk (`FUN_000CD474`/table 0x114E04),
   `FUN_000703E8`, the `> 0x70` anchor-time branch, the smoothing words and
-  the tracked-player/event-rate tail.
+  the tracked-player/event-rate tail; `FUN_00071C94`'s `[0x157A6C] != 0`
+  bail gate (the pan suspended with the match state).
 * **OL-T11-80 (palette pool identity / leg 11 carried)**: the loaded file
   that fills `[0x107290]` and the pool's rounded size (request 0x34E8,
   partition floor 0x3000).

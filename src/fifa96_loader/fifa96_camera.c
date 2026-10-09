@@ -369,9 +369,11 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   cam->anchor2_time = 0;
   cam->rate_x = 0;
   cam->rate_z = 0;
-  /* 71C94 0x71cdb..0x71cf8: clamp the height to [target y, 0x640]. */
+  /* 71C94 0x71cdb..0x71cf8: clamp the height to [target y, 0x640]; FUN_00070544
+   * 0x705f1/0x705fe zeroes the cell again when the clamped value is < 1. */
   if (height < target_y) height = target_y;
   if (height > 0x640) height = 0x640;
+  if (height < 1) height = 0;
   cam->event_param = (uint16_t)height;
   /* FUN_00070544 0x70558..0x705ee: the height ramp. */
   if (height < 1) {

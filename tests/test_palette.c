@@ -21,7 +21,7 @@ static void test_pool_partition_offsets(void) {
   for (uint32_t i = 0; i < 7u; i++)
     assert(pool.slots7[i] == base + 0x1700u + i * 0x100u);
   for (uint32_t i = 0; i < 8u; i++)
-    assert(pool.slots8[i] == base + 0x2400u + i * 0x100u);
+    assert(pool.slots8[i] == base + 0x1E00u + i * 0x100u);
   assert(pool.shared == base + 0x2600u);
   assert(pool.fixed[0] == base + 0x2700u);   /* 0x14BF50 */
   assert(pool.fixed[1] == base + 0x2800u);   /* 0x14BF20 */
@@ -48,7 +48,7 @@ static void test_kit_translate_entity0(void) {
   assert(fifa96_palette_translate_kit(src, dst, 0) == FIFA96_OK);
   assert(dst[0x93] == 0x93);
   assert(dst[0x94] == 0xA1);   /* table1[0] + 0xA1 */
-  assert(dst[0x97] == 0xA1);   /* table1[3] + 0xA1 */
+  assert(dst[0x97] == 0xA2);   /* table1[3] + 0xA1 */
   assert(dst[0x9A] == 0xA2);   /* table1[6] + 0xA1 */
   assert(dst[0x9B] == 0xA3);   /* table2[0] + 0xA3 */
   assert(dst[0x9E] == 0xA4);   /* table2[3] + 0xA3 */
@@ -62,7 +62,7 @@ static void test_kit_translate_entity_b(void) {
   assert(fifa96_palette_translate_kit(src, dst, 0xB) == FIFA96_OK);
   assert(dst[0x81] == 0x81);
   assert(dst[0x82] == 0x9C);   /* table1[0] + 0x9C */
-  assert(dst[0x85] == 0x9C);   /* table1[3] + 0x9C */
+  assert(dst[0x85] == 0x9D);   /* table1[3] + 0x9C */
   assert(dst[0x88] == 0x9D);   /* table1[6] + 0x9C */
   assert(dst[0x89] == 0x9E);   /* table2[0] + 0x9E */
   assert(dst[0x8C] == 0x9F);   /* table2[3] + 0x9E */

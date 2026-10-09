@@ -687,7 +687,8 @@ static void test_event_set_height_clamps(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 0, -10, 0);
   assert(fifa96_camera_event_set(&cam, 0, 0, -20) == FIFA96_OK);
-  assert(cam.event_param == (uint16_t)-10);      /* clamped to the target y */
+  /* clamped to the target y, then zeroed by the native F2<1 branch */
+  assert(cam.event_param == 0);
   assert(cam.timer == 0xC);
   fifa96_camera_init(&cam, 0, 0, 0);
   assert(fifa96_camera_event_set(&cam, 0, 0, 0x700) == FIFA96_OK);

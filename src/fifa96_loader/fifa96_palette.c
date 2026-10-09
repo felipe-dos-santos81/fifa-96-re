@@ -5,7 +5,7 @@
 /* First-hand image tables: 0x10727C (11 bytes) and 0x107287 (7 bytes), the
  * rank maps the FUN_00048DC0 kit path adds the local bases to. */
 static const uint8_t palette_band_wide[11] = {0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2};
-static const uint8_t palette_band_narrow[7] = {0, 0, 0, 0, 1, 1, 1};
+static const uint8_t palette_band_narrow[7] = {0, 0, 0, 1, 1, 1, 1};
 
 fifa96_err_t fifa96_palette_pool_partition(uint8_t *base, uint32_t size,
                                            fifa96_palette_pool *out) {
@@ -16,8 +16,9 @@ fifa96_err_t fifa96_palette_pool_partition(uint8_t *base, uint32_t size,
   for (uint32_t i = 0; i < 23u; i++) out->slots23[i] = base + i * 0x100u;
   /* 0x46F99: 7 x 0x100 at 0x14BF34, base+0x1700. */
   for (uint32_t i = 0; i < 7u; i++) out->slots7[i] = base + 0x1700u + i * 0x100u;
-  /* 0x46FAE: 8 x 0x100 at 0x14BB00, base+0x2400. */
-  for (uint32_t i = 0; i < 8u; i++) out->slots8[i] = base + 0x2400u + i * 0x100u;
+  /* 0x46FAE: 8 x 0x100 at 0x14BB00, base+0x1E00 (23+7 slots end at +0x1DFF;
+   * the shared table follows at +0x2600). */
+  for (uint32_t i = 0; i < 8u; i++) out->slots8[i] = base + 0x1E00u + i * 0x100u;
   /* 0x46FC1/0x47045: the shared table (0x14BB20[0..255] and 0x14BFBC). */
   out->shared = base + 0x2600u;
   /* 0x46FC8..0x47018: the nine fixed blocks in native assignment order. */
