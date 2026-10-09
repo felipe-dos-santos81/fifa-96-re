@@ -373,6 +373,8 @@ So the per-entity translation install is: pool partition
 The resource identity of the pool buffer (`FUN_0004A448` -> `FUN_00098C38`/
 `FUN_00098BF8` allocators; pool size needed >= base+0x3100) remains a leg.
 
+**FU-152 pointer (2026-10-09):** FU-152 confirms the partition as corrected in §11.4/§11.5-7 — 23+7+8 slots at `+0x0000`/`+0x1700`/`+0x1E00`, shared `+0x2600`, 9 fixed `+0x2700..+0x2F00`, floor `0x3000`; the w7-b4 draft's contradicting values (`+0x2400`/`+0x2C00`, floor `0x3600`) were corrected in FU-152 §2.10/§4.4.
+
 ### 4.3 Shade cube
 
 FU-98 §2 (`FUN_000A0AA0` RGB->index quantisation cube, `2^B` per channel; built

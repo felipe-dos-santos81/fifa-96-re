@@ -359,6 +359,8 @@ Row-01 producer (`disassemble_bytes 0x7DF70`, 72 B): `0x7DF7A` side,
 `0x7DF95 CALL 0x4C380`, stage++. Row-0x10 (`disassemble_bytes 0x85D20`,
 48 B) is the same shape at `0x85D2B/0x85D36/0x85D38`.
 
+**FU-151 pointer (2026-10-09):** w7-B3 errata 3 is refuted (FU-151 corrects its own errata) — id 0xB keeps `CX=0xB` (the `0x8A94E JZ` precedes `0x8A97F SUB ECX,2`) and takes normal table[0xB] = `0x8AEF6` → `FUN_000740A0(2, side)` = phase 2 as written here; the `0x8AEC6`/`0x8922C`/`0x89372` chain is the situation-9 (foul) act-2 path, not 0xB (FU-151 §2.10/errata 3).
+
 ## 4. Derived semantics
 
 ### 4.1 Pad -> target -> velocity (controlled record)

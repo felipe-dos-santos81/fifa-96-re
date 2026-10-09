@@ -575,6 +575,8 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
    `zone == 0` corner arm (`0x88B53`, situations 3|4) return without queueing
    (their ball-record side source `[0x1577CA]` and queue semantics belong to
    the wave-7 B1 set-piece slice).
+
+**FU-149/FU-150 pointer (2026-10-09):** the throw-in/corner/free-kick/penalty chains (situations 2/3/4/7/9 → phases 3/4/6/7; arms `0x8D2A3`/`0x8D35B`/`0x8D57B`/`0x8D4A2`) are frozen in FU-149 (set pieces/restarts) and FU-150 (fouls/referee/offside).
 6. **L8 skip unmodelled.** The native period-4 branch joins the tail without
    the scan only on the extra-time path (`[0x157AC0] != 0`); the engine
    carries extra_time 0 (FU-143 OL-85), documented at the scan gate.
