@@ -613,10 +613,10 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x8A938`/`0x8A99E`
 | L5 session gate producer | open — begin seeds 1 (the FU-146 leg 2 seam) |
 | L6 act-8 / phase-0x1E timeline | open — the re-dispatch point is ported, the timeline stages are not |
 | L7 selection/presentation helpers | open — pick substituted, `0x8F188`/`0x974DC` sinks dropped, the phase-4 RNG draw kept |
-| L8 penalty remainder | open — the phase-6 arm is ported (spot probe, 0x13/0x1F); the row-0x13 body and `FUN_00073DC4`'s triple producer beyond the derived spot stay P2 |
+| L8 penalty remainder | **narrowed (T1)** — the phase-6 arm is ported (spot probe, 0x13/0x1F) and the row-0x13 body is ported (§7.2, stages 0..6); the residue is the `0x84D5B` free-record hand-off / `0x14C114` input words / slot gate (L13.7) and `FUN_00073DC4`'s triple producer beyond the derived spot (P2) |
 | L9 card-cutscene resume | open (B2/FU-150) |
 | L10 corner-counter consumers | open — the pair is written only (no static reader), fixtured |
-| L11 `[0x157821]`/`[0x157A6A]` | open — row 0x10/0x11 are L13, so neither the requeue loop gate nor the offside-suppress timer is written yet |
+| L11 `[0x157821]`/`[0x157A6A]` | **narrowed (T1)** — rows 0x10/0x11 now write `[0x157A6A] = 0x12C` and row 0x10 reads the `[0x157821]` requeue gate (§7.2); rows 0x12/0x13 resolve without the timer (T1 review fix); the `[0x157821]`/`[0x157A6A]` producers stay unported (L13.6) |
 | **L12** sit 2..4 `[0x157B8E]`/`[0x157B8F]` gate + act-4 arm, sit-1 arm | new — unported act-handler machinery; the port routes the table-2 row |
 | **L13** taker/keeper row bodies 0x10/0x11/0x1D | **narrowed (T1)**: rows 0x10/0x11/0x12/0x13 ported (windows/tables/stage semantics in §7; the resolve tails, offside timer and row-0x10 re-queue are executable); the residue is the L13.1..L13.7 leg list in §7.3. Row 0x1D stays FU-151/P3 |
 
@@ -718,9 +718,12 @@ word diffs), `0xCD474`/`0x114E04`/`0x795A4` = `fifa96_action_kick_angle` +
    `0x855D4`/`0x85DC8`/`0x83D4C` and the per-team `0x1587E8` block
    (`[team+0x7E7]`); the native passes the `0x158738` staging vector, the
    `0x15879C` staging triple, the `0x1587AC` record position, the slot words
-   or the RNG-built triple. The port emits one derived delivery per kick stage
-   (`mode 0x10`, rows 0x11/0x12; NULL input + `mode 0x40`, row 0x13) through
-   the ported `fifa96_ball_kick_target`, consuming the `0x86388` draw.
+   or the RNG-built triple, and row 0x12 additionally splits on
+   `FUN_0006DBCC == 3` (`0x84425..0x84443`) into a `mode 0x40` strike versus
+   the `0x8DE8C`+`0x7F668` hand-off. The port collapses all of it to one
+   derived delivery per kick stage (`mode 0x10`, rows 0x11/0x12; NULL input +
+   `mode 0x40`, row 0x13) through the ported `fifa96_ball_kick_target`,
+   consuming the `0x86388` draw.
 4. **L13.4 presentation sinks** — `0x974DC(0x1E)`, `0x8F188` ids
    `0x17/0x18/0x19/0x1A/0x1C/0xA4/0xA5`, `0x6E598`, `0x92820`, `0x4C324`/
    `0x4C31C`/`0x4C320`/`0x4C374`/`0x4C380`, `0x918CC`, `0x8CFAC`, `0x585A0`,

@@ -1163,11 +1163,12 @@ static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
   return 1;
 }
 
-/* The shared resolution: the native `[0x157A6A] = 0x12C` offside-suppression
- * write (rows 0x10 `0x85D19`, 0x11 `0x863D8`, 0x12 `0x84480`) and the
- * `FUN_0008A938(0xB, rec_team, 0)` hand-back to phase 2 through the engine's
- * single shared situation entry; row 0x13's stage 5 (`0x84E79`) calls the same
- * entry without the timer write. */
+/* The shared resolution: `FUN_0008A938(0xB, rec_team, 0)` hands the taker back
+ * to phase 2 through the engine's single shared situation entry. Rows 0x10
+ * (`0x85D19`) and 0x11 (`0x863D8..0x863DF`) additionally write
+ * `[0x157A6A] = 0x12C` (the offside suppression timer) before the call; rows
+ * 0x12 (`0x84480..0x84495`) and 0x13 (`0x84E79..0x84E8F`) resolve without
+ * touching the cell. */
 static int match_sp_resolve(struct fifa96_match_run *mr, uint8_t set_offside_timer) {
   int rc;
   if (set_offside_timer != 0) mr->referee.offside_suppress = 0x12C;
@@ -1600,18 +1601,21 @@ static int fifa96_match_action_12(struct fifa96_match_run *mr) {
   if (stage == 4u) {                                      /* 0x841AD */
     /* 0x841AD..0x84425: the kick block. The native selects the seven-arm event
      * sub-table 0x83D4C by `[0x1587B4]-1` (or the per-team 0x1587E8 table when
-     * `[team+0x7E7] != 0`) and passes each arm's own vector; the derived
-     * subset emits one delivery from the engine ball-staging vector with mode
-     * 0x10 (L13 legs: the arm/vector selection). */
+     * `[team+0x7E7] != 0`) and passes each arm's own vector; the
+     * `FUN_0006DBCC==3` -> mode-0x40 conditional (`0x84425..0x84443`) selects a
+     * separate delivery. The derived subset collapses all of it to one
+     * delivery from the engine ball-staging vector with mode 0x10 (L13.3). */
     (void)match_sp_kick(mr, &mr->entities.ball.pair.vector, 0x10u,
                         mr->record.has_slot);
     /* 0x84471..0x84478: the 0x4C380/0x4C374 no-ops (legs). */
-    rc = match_sp_resolve(mr, 1);                         /* 0x84480..0x84495 */
+    rc = match_sp_resolve(mr, 0);                         /* 0x84480..0x84495 */
     if (rc != 0) return rc;
     /* 0x8449A..0x844E7: the relay install 4 unless the staging code byte
-     * 0x158743 (the top byte of the 0x158740 dword) is 3. */
+     * 0x158743 (the top byte of the 0x158740 dword) is 3. The `FUN_0008DE8C`
+     * call passes EBX=0 (skip record 0) with the record's transient `+0x9A`
+     * self stamp set (`0x844B4`). */
     if (mr->entities.ball.pair.code != 3u)
-      match_sp_pick_install(mr, team, idx, (uint8_t)r->active,
+      match_sp_pick_install(mr, team, idx, 0u,
                             (int16_t)mr->render.camera.pos_x,
                             (int16_t)mr->render.camera.pos_z);
     r->timer89 = 0;                                       /* 0x844FC */

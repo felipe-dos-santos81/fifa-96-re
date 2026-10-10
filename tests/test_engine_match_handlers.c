@@ -461,11 +461,19 @@ static void test_action_12_runs_free_kick_body(void) {
   assert(f.mr.record.pos_x != 0x500 || f.mr.record.pos_z != 0);  /* folded */
   assert(f.mr.record.target_x == f.mr.record.pos_x);
 
-  /* dispatch 2: probe fires (span 3 -> delivery row 3), kick + resolution */
+  /* dispatch 2: probe fires (span 3 -> delivery row 3), kick + resolution.
+   * The native tail 0x84480..0x84495 never writes [0x157A6A] (unlike rows
+   * 0x10/0x11), so the offside timer stays clear. The relay 0x8DE8C pick
+   * skips index 0 and the record's +0x9A self stamp: record 0 is parked on
+   * the camera focus and record 5 wins the tie. */
+  f.mr.entities.team[0].records[0].pos_x = 0x500;
+  f.mr.entities.team[0].records[0].pos_z = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x12) == FIFA96_OK);
   assert(f.mr.state.phase == 2u);
-  assert(f.mr.referee.offside_suppress == 0x12C);
+  assert(f.mr.referee.offside_suppress == 0);
   assert(f.mr.record.stage92 == 5u);
+  assert(f.mr.entities.team[0].target == 5);           /* keeper 0 skipped */
+  assert(f.mr.entities.team[0].records[5].code == 4u);
 
   /* dispatch 3: the +0x44 ack walks to the stage-7 reset */
   f.mr.record.row44 = 1;

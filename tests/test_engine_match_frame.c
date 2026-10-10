@@ -1678,7 +1678,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
   assert(mr.record.stage92 == 2u);      /* the incident placement + probe */
   assert(fifa96_match_dispatch_action(&mr, 0x12) == FIFA96_OK);
   assert(mr.state.phase == 2u);
-  assert(mr.referee.offside_suppress == 0x12C);
+  assert(mr.referee.offside_suppress == 0);   /* the FK row sets no timer */
   assert(mr.record.stage92 == 5u);
 
   /* penalty fork: the spot band selects phase 6 + taker 0x13 */

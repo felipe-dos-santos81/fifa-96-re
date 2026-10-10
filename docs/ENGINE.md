@@ -411,9 +411,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   HUD legs `OL-T11-71`…`OL-T11-75`: the nibble colour ramp, the team-name
   stage, extra-time strings/period offset, the settings/suppress gate writers
   and the bar blit's exact span scaler). Carried
-  open: the remaining `OL-84` situation-0xB producers (rows 02/0x10..0x13) and
-  row 01's event/camera/ball-stage sinks, plus the FU-73 keeper/restart
-  producers
+  open: the remaining `OL-84` situation-0xB producer (row 02; rows 0x10..0x13
+  landed with FU-149 §7 / T1) and row 01's event/camera/ball-stage sinks, plus
+  the FU-73 keeper/restart producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
   `OL-88`/`OL-89` goal invokers (Task 3 verdict: no invoker reachable from the
   ported state — FU-142 App. L.9); `OL-81`/`OL-83` row-field wrinkles; `OL-82`
@@ -954,12 +954,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   review minors closed in fix round 1 (staged band predicate remap + leg-9
   note, `replay_camera_set` default store, the report quote). No open
   phase-7 minor blocks any gate; the triage list is the final-review input.
-- **Unwired rows (65/80).** 64 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 26
+- **Unwired rows (61/80).** 60 rows dispatch `-FIFA96_ERR_UNSUPPORTED`: 22
   unported action rows, 34 phase rows (derived and ported at the loader level by
   FU-143 but not wired into the engine dispatch), the unwired actions
   `27`/`29`/`2C` (ported bodies, no installer entry) and the dead entry `2B`;
   phase `0x16` is the native zero/INT3 slot and the single
-  `-FIFA96_ERR_NOT_FOUND`.
+  `-FIFA96_ERR_NOT_FOUND` (19 action rows wired OK, FU-149 §7 / T1).
 - **OL-48 rows 27/29/2C:** bodies ported and tested (FU-142b/c), but the
   FU-142f census finds no installer invocation for their codes anywhere in the
   image, so they stay unwired; row `2B` is a dead entry (shared row-29 RET).
