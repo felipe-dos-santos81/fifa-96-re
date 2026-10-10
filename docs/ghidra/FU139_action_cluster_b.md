@@ -1219,10 +1219,12 @@ contract, `CMakeLists.txt` (`fifa96_action_handlers` now links
 * **OL-69 — row 06 unmodeled record/presentation inputs.** The record bytes
   `+0x90` (the install-9 shift), `+0x99` (the gate block), `+0x9D` (the
   install-9 OR term), the roster-descriptor bytes `rec[+4][+0xC]` (the
-  x-adjust gate) and `rec[+4][+0xE]` (the install-9 base), the row byte
-  `[[rec+0x28]][0]` (the `0x6E598` id gate, shares OL-52), the camera-track
+  x-adjust gate) and `rec[+4][+0xE]` (the install-9 base), the camera-track
   lead words `0x1577C0`/`0x1577C2` and the `+0x6F` word are staged zero in
-  the engine; the row-05 `0x15872A`/`0x15872F` bytes (its carrier claim
+  the engine (the row byte `[[rec+0x28]][0]` is the exception: OL-80 stages it
+  live from the pool record — `s.row_byte = mr->record.anim_id`, T4 doc
+  correction — while its `0x6E598` id-gate consumer stays OL-52); the row-05
+  `0x15872A`/`0x15872F` bytes (its carrier claim
   producers, OL-63) are **live producers since M2 phase-9 T2** (row 05 is
   wired and writes them; §8.6 / FU-137 §7) — the remaining row-06 input bytes
   above stay staged zero; the `[0x157ABE]` side-mirror byte behind

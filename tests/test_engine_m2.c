@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v8 (spec §5; the
- * M2 phase-8 live-loop acceptance, T5; the v7 phase-7 acceptance, P5, the v6
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v9 (spec §5; the
+ * M2 phase-9 live-pad-loop acceptance, T4; the v8 phase-8 live-loop
+ * acceptance, T5, the v7 phase-7 acceptance, P5, the v6
  * phase-6 acceptance, the v5 interactive-match G3 close-out and the
  * v4/v4.1/v4.2 per-task re-pins are retained as provenance below).
  *
@@ -648,6 +649,110 @@
  * `test_auto_camera_follows_tracked_slot`, `test_tracked_side_pick`, the
  * natural goal's 0xD3 post and the T3 smoke).
  *
+ * --- v9 (M2 phase-9 acceptance, T4): the live-pad-loop assertion layer -------
+ *
+ * v9 is the phase-9 acceptance (the live pad loop: T1 on-screen movement —
+ * FU-75 L4.1/L4.2/L4.6, row 02 + the forced-decision/no-edge applications;
+ * T2 live carrier producers — FU-142 OL-63, row 05; T3 pan origin /
+ * auto-camera / tracked-side — FU-148 §13, OL-T11-79/OL-87). It adds
+ * assertions and provenance only — no engine write and no forcing changed —
+ * so the transcript and golden are byte-identical to v8.3 (`cmp` against the
+ * committed tests/golden/engine/m2-frames.txt clean, 165 lines; M1 unmoved;
+ * the re-pin lineage is in the golden-decision paragraphs below). What v9
+ * pins at the spec §5 sequence points:
+ *   1. T1 live movement (FU-75 L4.6 / FU-138 OL-18, row 02 wired): the begin
+ *      state-1 arm's second kickoff pick (team 0 record 9 ISO / record 1
+ *      no-ISO) carries code 2 into the first granted 0x13 frame, and its
+ *      `phase != 2` `match_row_reset` path dispatches FIFA96_OK — the new
+ *      step-12/15 assertion pins `dispatched_ok` bit 2 inside the forced
+ *      kickoff window (the row-02 wire is live on the tape; BASE dispatched
+ *      no such bit) and the m 41 block re-pins it before the mechanics
+ *      staging. The live machine path itself is fixture-proven, not
+ *      tape-driven: `test_engine_match_frame::
+ *      test_held_key_moves_live_controlled_record` (ISO: held RIGHT -> row
+ *      02 phase-2 install-4 invoke -> row 04 slot-dir target -> the shared
+ *      mover integrates code 4; position/velocity delta, the no-input
+ *      control stays still), `test_machine_forced_decision_installs_on_slot_record`
+ *      (L4.1), `test_machine_no_edge_arm_copies_camera_target` (L4.2) and
+ *      the T1-review `test_machine_second_forced_reads_team_target_ball_bit`.
+ *      The tape's held RIGHT selects no pressed/released row for the staged
+ *      codes, and its recorded motion stays the FU-77 mover integrating the
+ *      arm/staged-row targets (the v5/v6 position + velocity-lockstep + lane
+ *      assertions): the forced/chase application needs phase-2 slot states
+ *      the tape does not expose (the seam installs `out.forced` only for
+ *      phase-2 type-gated slot records).
+ *   2. T2 live carrier (FU-142 OL-63, row 05 wired): the tape never claims —
+ *      no record carries code 5, `dispatched_ok` bit 5 stays clear at m 41
+ *      and m 62, `ball.carrier` is NONE and the derived
+ *      `0x158728..0x15872F` possession block (`pos_index`/`pos_rotation`/
+ *      `pos_dir_x`/`pos_dir_z`/`pos_counter_c`/`pos_release`/`pos_counter_e`/
+ *      `pos_counter_f`) is all-zero at both points: the claim reset and the
+ *      stage-0 dir writes never run. The positive is
+ *      `test_live_carrier_claim_and_kick`: movement -> row-04 half-line coda
+ *      code 5 -> row 05 claim (`ball.carrier`/`controlled` = the slot
+ *      record, dirs (1,0)) -> KICK release -> row 07 -> the staged ball pair
+ *      (`pair.actor` = the carrier, `pair.traj != 0`), with the release
+ *      decay pinned by `test_possession_release_decay`.
+ *   3. T3 pan producers / tracked side (FU-148 §13, OL-T11-79/OL-87): the
+ *      tape is pan-dormant with T3's no-re-pin reason at the assertion
+ *      level — the FUN-0001C9BC range words stay zero (`input_range[0]`/
+ *      `[1]`, so the `(w0|w1) & 4` walk gate is 0; the config cells are BSS
+ *      with no writer), the camera's `tracked` cell stays
+ *      `FIFA96_CAMERA_TRACKED_NONE` (no event fired: the m 41-staged code-4
+ *      rows carry lane ~1460+ ISO, so the `0x7EDB2 lane >= 0x90` exit skips
+ *      the half-line event arm and the `0x71D27` tracked bind),
+ *      `follow_speed` stays 0 (the FUN-000736AC 0x739CE gate reads a zero
+ *      bearing; the auto-camera never enters), no row-1E record reaches
+ *      stage 5 (the stage-5 `0x75DC4` FUN-00071C94 call would post
+ *      `event_param` 0x50 — it stays 0, and the machine timer too) and the
+ *      direct score step passes probe 0 with the T3 tracked default 1 (the
+ *      flags-zero FUN-00092D8C pick), so the untracked arm's 0xD3 gate
+ *      (probe bits 0/1) fails and no id posts (`score_last_event` 0); the
+ *      transcript is unchanged. The positives:
+ *      `test_row04_live_pan_arms_camera` (+ the row-04 tracked bind),
+ *      `test_auto_camera_follows_tracked_slot`, `test_tracked_side_pick`,
+ *      `test_natural_goal_end_to_end` (post 0xD3) and the T3 smoke.
+ *
+ * Remaining forcing inventory, updated for the phase-9 state (the v7/v8 lists
+ * still govern the transcript shape; each item carries its leg; nothing else
+ * is forced):
+ *   - kickoff phases 0x13/0x14 (m 1/m 21), the phase-2 mechanics entry and
+ *     the 1 s period (m 41): as v8 (OL-84 residual / FU-143 §11.5 / OL-85).
+ *   - the mechanics row staging (m 41): the natural AI/possession invokers are
+ *     unported; the phase-9 T1 row 02 and T2 row 05 are wired but not staged
+ *     (row 05 never dispatches; row 02 dispatches from the arm-installed
+ *     second pick, not from the staging). Legs: OL-63 residual (the stage-0
+ *     target algebra `0x7F3A1..0x7F57B` + the `FUN_0007F7E0` fallback),
+ *     OL-70/OL-82 and the FU-147/FU-151 selection legs.
+ *   - the T1 taker rows 10..13 (L13) and the set-piece arms: as v8 (they gate
+ *     on `goal_armed`, which the never-panning camera never sets).
+ *   - the pan callers: the eight remaining `FUN_00071C94` callers (row 04 and
+ *     row 1E wired — FU-148 §13.4), the `FUN_00070DE0` reposition bit-8
+ *     boundary arm, the tracked-player tail and the `FUN_00071DF4`
+ *     table/keeper second arm; the auto-camera's high-ball trigger needs the
+ *     ball-staging producers (`FUN_0007A490`/`FUN_0007A084`), so the visible
+ *     follow-cam stays a leg.
+ *   - the live pad loop (FU-75 §1.5-§1.7/§2): L4.1 residual (the native
+ *     machine walks the forced/chase tail for every outfield record while
+ *     the seam keeps the slot-record scope — the unbound-record walk), L4.2
+ *     applied, L4.3 `0x7E600`, L4.4 `0x7CD60`, L4.5 `0x7D1D4` and the L4.6
+ *     residual (row-02 stage-1/2 arms + the keeper input tables); the
+ *     front-end repeat cadence under the hold policy.
+ *   - the direct score call (m 62): as v8 — no tape record reaches the
+ *     half-line pan band; the tracked-side pick is closed (T3) and the
+ *     residual producers stay legs (`FUN_000A7FD4` gate cells,
+ *     `FUN_00071DF4`'s table/keeper arm, the `FUN_00066724` sink and the
+ *     handler presentation/display sinks, FU-146 §8).
+ *
+ * Golden decision (v9): **byte-identical, no re-pin** — assertions and
+ * provenance only; no presented frame moved (`cmp` clean against the
+ * committed v8.3 golden, 165 lines, verified with the ISO present at
+ * acceptance); M1 unmoved (`09b726b7…`; M2 `2e709151…`). The phase-9 T1/T2/T3
+ * landings themselves also moved no presented frame (each task's `cmp`
+ * evidence, re-verified at T4); the plan's expected first re-pin since S1 did
+ * not land — no intended upgrade reached the tape (T3's no-re-pin reason
+ * above).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -710,8 +815,8 @@
 #define M2_NATURAL_PHASE2_CAP 600
 #define M2_NATURAL_POST_STEPS 60
 
-/* The wired action rows the accepted tape exercises (15 of the 20 wired at
- * the phase-9 T1 step, FU-137 §7): the rows whose installer arm + body + pool
+/* The wired action rows the accepted tape exercises (15 of the 21 wired at
+ * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
  * binding are all bounded. 00 and 1E wire first; cluster B/D rows
  * 06/07/0F/18/21/23 close Gate G3; the FU-142a arms stage 26/28/2A; Gate G1
  * adds the outfield rows 04/08 (OL-70/OL-70a). M2 playable-match Task 2 adds
@@ -1077,6 +1182,10 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->mask_mech = mr->dispatched_ok;
     assert((res->mask_mech & ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))) ==
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
+    /* v9/T1: the row-02 reset of the second kickoff pick dispatched in the
+     * forced 0x13 window (before this mechanics entry); the live phase-2
+     * machine path stays fixture-proven (v9 provenance). */
+    assert((res->mask_mech & (1ull << 0x02)) != 0u);
     /* v6 (S2/S3 status; T2/T4 refresh): the goal chain is dormant on this tape
      * — the live row-04 pan origin is landed (T2/OL-T11-79) but no tape record
      * reaches the half-line band, so the armer and the clock-tail scan never
@@ -1154,6 +1263,35 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
            mr->entities.ball.pair.code == 0u &&
            mr->entities.ball.pair.traj == 0);
     assert(mr->entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
+    /* v9 (T2/T3 landings at the mechanics entry; both stay tape-dormant):
+     *  - T2/OL-63 row 05: no record carries code 5 and the row never
+     *    dispatched, so the derived `0x158728..0x15872F` possession block is
+     *    all-zero (the claim reset and the stage-0 dir writes never ran; the
+     *    live claim/kick path is the ISO fixture).
+     *  - T3/FU-148 §13: the FUN-0001C9BC range words are zero (the config
+     *    cells are BSS with no writer, so the `(w0|w1) & 4` walk gate is 0);
+     *    no pan/event set `camera.tracked` and the every-frame auto-camera's
+     *    `follow_speed` bearing stays 0 — the row-04 half-line event arm has
+     *    not run (lane ~1460+ ISO, the T3 no-re-pin reason). */
+    {
+      int code5 = 0;
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          if (mr->entities.team[t].records[i].code == 5u) code5++;
+      assert(code5 == 0);
+    }
+    assert((res->mask_mech & (1ull << 0x05)) == 0u);
+    assert(mr->entities.ball.pos_index == 0u &&
+           mr->entities.ball.pos_rotation == 0u &&
+           mr->entities.ball.pos_dir_x == 0 &&
+           mr->entities.ball.pos_dir_z == 0 &&
+           mr->entities.ball.pos_counter_c == 0u &&
+           mr->entities.ball.pos_release == 0u &&
+           mr->entities.ball.pos_counter_e == 0u &&
+           mr->entities.ball.pos_counter_f == 0u);
+    assert(mr->input_range[0] == 0u && mr->input_range[1] == 0u);
+    assert(mr->render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+    assert(mr->render.camera.follow_speed == 0);
     {
       int32_t enc = mr->slot.entity;
       uint32_t team = enc >= 0 ? (uint32_t)enc / FIFA96_MATCH_ENTITY_RECORDS : 0u;
@@ -1304,6 +1442,34 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
            mr->entities.ball.pair.code == 0u &&
            mr->entities.ball.pair.traj == 0);
     assert(mr->entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
+    /* v9 (T2/T3 at the live score step; the phase-9 landings stay dormant):
+     *  - T2/OL-63: still no code-5 record and no row-05 dispatch through the
+     *    live phase-2 window, so the possession block stays fresh (no claim,
+     *    no stage-0 dir write; the carrier producers are live only on the
+     *    fixture's possession path).
+     *  - T3/FU-148 §13: no pan/event set `camera.tracked` and the auto-camera
+     *    never entered (`follow_speed` 0); the row-1E stage-5 event pair is
+     *    fresh (asserted above) — the stage-5 `0x75DC4` call would post
+     *    `event_param` 0x50. The direct score step below passes probe 0 with
+     *    the T3 tracked default 1, keeping the 0xD3 gate closed. */
+    {
+      int code5 = 0;
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          if (mr->entities.team[t].records[i].code == 5u) code5++;
+      assert(code5 == 0);
+    }
+    assert((mr->dispatched_ok & (1ull << 0x05)) == 0u);
+    assert(mr->entities.ball.pos_index == 0u &&
+           mr->entities.ball.pos_rotation == 0u &&
+           mr->entities.ball.pos_dir_x == 0 &&
+           mr->entities.ball.pos_dir_z == 0 &&
+           mr->entities.ball.pos_counter_c == 0u &&
+           mr->entities.ball.pos_release == 0u &&
+           mr->entities.ball.pos_counter_e == 0u &&
+           mr->entities.ball.pos_counter_f == 0u);
+    assert(mr->render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+    assert(mr->render.camera.follow_speed == 0);
     /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
      * T3 tracked-side default 1 the side-0 goal takes the untracked arm, whose
      * probe is the staged 0, so no id posts (score_last_event 0) and the
@@ -1524,6 +1690,11 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
        * refuses — the tape-level reason the pad kick is dormant (the seam
        * itself runs; its installs gate out). */
       assert(e->match_run.state.phase != 2u);
+      /* v9/T1 (FU-75 L4.6): the begin state-1 arm's second kickoff pick
+       * carries code 2 into the first granted 0x13 frame, so its `phase != 2`
+       * `match_row_reset` path dispatched FIFA96_OK on step 9 — the row-02
+       * wire is observable inside the forced window (bit 2 set). */
+      assert((e->match_run.dispatched_ok & (1ull << 0x02)) != 0u);
       if (steps == 12) res->mask_kick = e->match_run.dispatched_ok;
       if (steps == 15) res->mask_kick_next = e->match_run.dispatched_ok;
     }
