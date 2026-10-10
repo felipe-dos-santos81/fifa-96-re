@@ -870,6 +870,71 @@ static void test_pan_step_invalid(void) {
          -FIFA96_ERR_INVALID);
 }
 
+/* ---- M2 phase-9 T3: the walk gate, the tracked record, the follow ---------- */
+
+/* FU-148 §12.2 / FU-145 §1.8: FUN_000709D0's random walk only runs when
+ * `(word[0x14C1D4] | word[0x14C1D6]) & 4` is set. `fifa96_camera_update_walk`
+ * is the native FUN_000736AC in-line call (0x737b9..0x737da) with the gate and
+ * the match RNG threaded in; the plain `fifa96_camera_update` is the gate-0
+ * frame path. */
+static void test_update_walk_gate(void) {
+  fifa96_camera a = fresh_camera();
+  fifa96_camera b = fresh_camera();
+  struct fifa96_rng rng;
+  fifa96_camera_init(&a, 0, 0, 0);
+  fifa96_camera_init(&b, 0, 0, 0);
+  a.event_param = 0x30;
+  b.event_param = 0x30;
+  a.pan_decay = 10;
+  b.pan_decay = 10;
+  a.pan_rate_hi = 16;
+  b.pan_rate_hi = 16;
+  a.vel_x = 3;
+  a.vel_z = 4;
+  b.vel_x = 3;
+  b.vel_z = 4;
+  a.ramp_divisor = 1;
+  b.ramp_divisor = 1;
+  a.event_step_x = 3;
+  a.event_step_z = 4;
+  b.event_step_x = 3;
+  b.event_step_z = 4;
+  a.timer = 0x100;
+  b.timer = 0x100;
+  a.timer_limit = 0;
+  b.timer_limit = 0;
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  /* gate 4: the pan step runs the walk (the same seed/steps as
+   * test_pan_step_walk -> the rebuilt pair lands (0, 2) after the re-arm). */
+  assert(fifa96_camera_update_walk(&a, &rng, 2, 0, 0, 4) == FIFA96_OK);
+  assert(a.pan_counter == 1);
+  assert(a.vel_x == 0 && a.vel_z == 2);
+  /* gate 0: the identical camera keeps the slow-path scale only. */
+  assert(fifa96_camera_update_walk(&b, &rng, 2, 0, 0, 0) == FIFA96_OK);
+  assert(b.pan_counter == 1);
+  assert(b.vel_x == 1 && b.vel_z == 2);
+  assert(fifa96_camera_update_walk(NULL, &rng, 1, 0, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-152 §2.9 / FU-71 (T3): the tracked record ([0x1577CA]) is reset by the
+ * event reset FUN_000700F4 0x70258 (inside fifa96_camera_event_set) and set by
+ * FUN_00071C94 0x71D27. The engine binds the event record through
+ * fifa96_camera_set_tracked. */
+static void test_tracked_record(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0);
+  assert(cam.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(fifa96_camera_set_tracked(&cam, 9) == FIFA96_OK);
+  assert(cam.tracked == 9);
+  assert(fifa96_camera_set_tracked(&cam, FIFA96_CAMERA_TRACKED_NONE) == FIFA96_OK);
+  assert(cam.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(fifa96_camera_set_tracked(&cam, -2) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_set_tracked(NULL, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_set_tracked(&cam, 9) == FIFA96_OK);
+  assert(fifa96_camera_event_set(&cam, 0, 2000, 0x30, 0) == FIFA96_OK);
+  assert(cam.tracked == FIFA96_CAMERA_TRACKED_NONE);   /* the reset clears it */
+}
+
 /* ---- FU-152 §2.9 (T2): FUN_00070DE0 boundary reposition (derived core) ---- */
 
 static void test_reposition_flag_overlap_noop(void) {
@@ -1348,6 +1413,8 @@ int main(void) {
   test_pan_step_idle_height_band_skipped();
   test_pan_step_walk();
   test_pan_step_invalid();
+  test_update_walk_gate();
+  test_tracked_record();
   test_reposition_flag_overlap_noop();
   test_reposition_steps_back();
   test_reposition_invalid();

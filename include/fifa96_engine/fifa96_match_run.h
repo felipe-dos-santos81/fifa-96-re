@@ -496,6 +496,21 @@ struct fifa96_match_run {
   int32_t score_tracked_side;
   int32_t score_max_diff;
   uint8_t score_last_event;
+  /* M2 phase-9 T3 (FU-146 §3 / FU-148 §12.2): the tracked-side pick and the
+   * input/range words. FUN_00092D8C's head FUN_00078824 zeroes the team flags
+   * [0x1590CC]/[0x159901] (the sole writers; no other exists) before the pick
+   * reads them, and the [0x15B684] game-mode dword switches the pick to the
+   * installer's side argument (its producers are the unported front-end
+   * FUN_00038630 arms; the engine seeds 0). With the flags zero the pick is 1
+   * (image default), so the natural goal's untracked arm posts the probe id
+   * (0xD3). FUN_0001C9BC (match init FUN_00011B7C 0x11BA6) builds the
+   * per-side range words [0x14C1D4]/[0x14C1D6] from the eight config dwords
+   * 0x105278/7C/88/8C/90/9C/A0/A4; the engine stages those cells (BSS 0, no
+   * static writer) and derives `(w0|w1) & 4` as the pan-step walk gate. */
+  uint8_t tracked_flag[2];
+  uint8_t screen_record_mode;
+  int32_t input_cfg[8];
+  uint16_t input_range[2];
   /* T4 (OL-89): the FUN_0009252C display boundary. `score_sound_device` and
    * `score_sound_midi` are the native gate cells [0x115FCC]/[0x114A98]
    * (image 0/0; their FUN_000A7FD4/FUN_000A8172 and FUN_000A8103/A810B
@@ -819,6 +834,22 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */
 int fifa96_match_run_frame(struct fifa96_match_run *mr);
+
+/* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
+ * call site (FUN_000736AC 0x739C6..0x73B6B). Runs the ported first arm when
+ * the call-site gates hold — `pan_counter == 0`, the bearing word
+ * `[0x1577BE] != 0`, `[0x1577EE].hi > 0x10`, both rate bytes
+ * `[0x157816]/[0x157817] == 0` — and `render.camera.tracked` ([0x1577CA], set
+ * by the row-event wiring through `fifa96_camera_set_tracked`) names a pool
+ * record with a slot ([rec+0x20]): `fifa96_camera_rate_event` follows the
+ * slot dir bytes into the camera velocity when the event height
+ * `[0x1577EE].hi` exceeds 0xF0 and clamps the pair to +-15. Returns 1 when the
+ * arm ran, 0 when a gate refused, or -FIFA96_ERR_INVALID on NULL. The
+ * record-class gate `[[rec]+4][0] == 0x18D8` reduces to the pool-record
+ * identity (both [0x1577CA] writers store pool records or 0; the +4
+ * descriptor is built at runtime). The table/keeper second arm stays the
+ * OL-T11-79 leg. */
+int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);
 
 /* Step the derived FU-143 phase drivers for one granted 30 Hz frame (M2
  * playability Task 3). The frame body calls this once per granted frame, after

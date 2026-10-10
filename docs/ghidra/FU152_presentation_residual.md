@@ -477,6 +477,11 @@ subobj[0x21]*15` clamped, recompute `[0x1577BE].lo`; else when
 [0x157815]*8) * 2`, then the keeper/player event
 `FUN_00092998(1,2,-1)` result byte `2` with `[0x1577EE].hi >= 0xC1` and
 `|[0x157770]| <= 0x23F` triggers `FUN_0008F188(0x1D or 0x1E, record, 4)`.
+**T3 landing (`docs/ghidra/FU148_presentation_hud_camera.md` §13.2):** the
+every-frame call site (FUN_000736AC 0x739C6..0x73B6B; pan counter 0, bearing
+nonzero, `[0x1577EE].hi > 0x10`, both rate bytes zero) and the first arm are
+wired live (`fifa96_match_run_camera_follow` -> `fifa96_camera_rate_event`);
+the table/keeper second arm stays the OL-T11-79 leg.
 
 **`FUN_00070074(point, out)` classifier (fresh decompile):** `|z| < 0xB10 ->
 8`; `< 0xB90 -> 0`; else `4`; `x < -0xD0 -> |1`; `x > 0xCF -> |2`;
@@ -928,7 +933,9 @@ below correct this slice where the port found the prose inexact.
   FUN_00070DE0 reposition body, the FUN_00071DF4 table arm and the atan walk
   stay legs; first-hand FUN_000CD474 is an octant-dispatch atan2 (sign/swap
   bits select one of 16 indirect jump targets over the ratio table
-  `0x14072C + index`), not a flat table.
+  `0x14072C + index`), not a flat table. **T3** wired the first arm's
+  every-frame call site and the FUN_0001C9BC range-word/walk-gate producer
+  (FU-148 §13).
 * **Palette pool identity.** `fifa96_palette_pool_identity` pins
   size 0x34E8 / type 0x220 / tag "palettes" (fresh 0x49138 disasm + 0x101A20
   bytes) and `fifa96_palette_pool_create/release` allocate/partition the

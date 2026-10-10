@@ -1046,6 +1046,14 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
   mr->goal_total = 0;
   memset(mr->goal_log, 0, sizeof mr->goal_log);
   memcpy(mr->goal_probe_limb, probe_seed, sizeof probe_seed);
+  /* M2 phase-9 T3: the tracked-side flags ([0x1590CC]/[0x159901], zeroed by
+   * FUN_00078824 0x7882a/0x78830) and the [0x15B684] game-mode default. The
+   * range words are rebuilt by begin from the config cells (FUN_0001C9BC). */
+  mr->tracked_flag[0] = 0;
+  mr->tracked_flag[1] = 0;
+  mr->screen_record_mode = 0;
+  mr->input_range[0] = 0;
+  mr->input_range[1] = 0;
 }
 
 /* FU-89 §11 / OL-T11-8 (M2 visible-match Task 1) + FU-148 §3 (S4): the
@@ -1156,6 +1164,14 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->score_sound_device = 0;     /* T4/OL-89 gate cells (image [0x115FCC]) */
   mr->score_sound_midi = 0;       /* T4/OL-89 ([0x114A98]) */
   mr->score_display_event = 0;    /* T4/OL-89: nothing dispatched */
+  /* M2 phase-9 T3: the tracked-side flags/mode and the input/range words (the
+   * native BSS defaults; FUN_00078824/FUN_0001C9BC rebuild them per match). */
+  mr->tracked_flag[0] = 0;
+  mr->tracked_flag[1] = 0;
+  mr->screen_record_mode = 0;
+  memset(mr->input_cfg, 0, sizeof mr->input_cfg);
+  mr->input_range[0] = 0;
+  mr->input_range[1] = 0;
   mr->engine = NULL;
   mr->backend.register_callback = NULL;
   mr->backend.cancel_callback = NULL;
@@ -1307,6 +1323,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   fifa96_match_run_reset_input(mr);    /* fresh input edges/held and slot */
   match_run_release_stage(mr);         /* drop the previous match's staged arena */
   fifa96_match_run_reset_render(mr);   /* fresh camera/window/display/scene */
+  /* M2 phase-9 T3 (FU-148 §12.2): the native match-init FUN_00011B7C calls
+   * FUN_0001C9BC (0x11BA6) to rebuild the per-side input/range words
+   * [0x14C1D4]/[0x14C1D6] from the 0x105278-family config cells. The entry
+   * gate `FUN_0006D1B2() == 1` is `[0x15753C] == 0` (the image/BSS default;
+   * its FUN_0006D5D5/FUN_0006D7AE producers are unported), so the engine
+   * passes the open gate. The config cells are staged zero (no static writer
+   * exists), so the derived words are zero until a front-end producer lands
+   * (leg). */
+  (void)fifa96_input_range_words(mr->input_cfg, 0, mr->input_range);
   /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
@@ -2234,10 +2259,24 @@ int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
   if (leg < 0 || leg > 5 || mode < 0 || mode > 3) return -FIFA96_ERR_INVALID;
-  (void)side;   /* the tracked-side pick is FU-146 leg 4/10: the carried -1 */
   /* FUN_00092D8C 0x92DC5/0x92DD3: leg/mode, step/timer clear, installer latch.
-   * The tracked-side pick ([0x15B684] / [0x1590CC] / [0x159901]) and the
-   * 0x10F328 camera copy stay legs. */
+   * M2 phase-9 T3: the head FUN_00078824 (0x92D92 -> 0x78824 0x7882a/0x78830)
+   * zeroes the team flags [0x1590CC]/[0x159901] (the sole writers: fresh
+   * get_xrefs_to = one WRITE each), then the tracked-side pick 0x92DDF..:
+   * `[0x15B684] != 0` -> the side argument; else `[0x1590CC] == 0` -> 1;
+   * else `[0x159901] == 0` -> 0; else -1. With the flags just zeroed the
+   * image-default mode-0 pick is 1. The 0x10F328 camera copy stays a leg. */
+  mr->tracked_flag[0] = 0;
+  mr->tracked_flag[1] = 0;
+  if (mr->screen_record_mode != 0) {
+    mr->score_tracked_side = side;
+  } else if (mr->tracked_flag[0] == 0) {
+    mr->score_tracked_side = 1;
+  } else if (mr->tracked_flag[1] == 0) {
+    mr->score_tracked_side = 0;
+  } else {
+    mr->score_tracked_side = -1;
+  }
   mr->screen_leg = leg;
   mr->screen_mode = mode;
   mr->screen_step = 0;
@@ -2259,6 +2298,40 @@ int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
       (uint16_t)(match_run_screen_durations[mode][leg] * 60u);
   mr->screen_install_hint = 0;                /* 0x15B6C4 */
   return fifa96_match_run_screen_step(mr);
+}
+
+/* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
+ * call site. FUN_000736AC 0x739C6..0x739FD gates the call: `[0x157821] == 0`
+ * (the pan counter), the bearing word `[0x1577BE] != 0`, `[0x1577EE].hi >
+ * 0x10`, and both rate bytes `[0x157816]/[0x157817] == 0` (the nonzero path
+ * takes the interpolation arm and jumps over 0x73B5B); the call itself then
+ * requires `[0x1577CA] != 0` and `[[rec]+0x20] != 0`. The first arm inside
+ * FUN_00071DF4 (0x71E1C..0x71EE5) additionally gates on the record class
+ * (`[[rec]+4][0] == 0x18D8`) and the event height `[0x1577EE].hi > 0xF0`,
+ * then sets the velocity words from the slot dir bytes
+ * `subobj[+0x20]/[+0x21] * 0xF` clamped to +-15 and recomputes the bearing.
+ * `fifa96_camera_rate_event` is that arm (the height gate included); the
+ * table/keeper second arm stays the OL-T11-79 leg. Returns 1 when the arm ran,
+ * 0 when a gate refused. */
+int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
+  struct fifa96_camera *cam;
+  int32_t tracked;
+  struct fifa96_match_entity *e;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  cam = &mr->render.camera;
+  if (cam->pan_counter != 0) return 0;              /* 0x739C6 */
+  if (cam->follow_speed == 0) return 0;             /* 0x739CE [0x1577BE] */
+  if ((int16_t)cam->event_param <= 0x10) return 0;  /* 0x739DC */
+  if (cam->rate_x != 0 || cam->rate_z != 0) return 0;  /* 0x739ED..0x739FD */
+  tracked = cam->tracked;
+  if (tracked < 0 ||
+      tracked >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return 0;
+  e = &mr->entities.team[(uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS]
+           .records[(uint32_t)tracked % FIFA96_MATCH_ENTITY_RECORDS];
+  if (!e->has_slot) return 0;               /* [[rec]+0x20] != 0, 0x73B65 */
+  return fifa96_camera_rate_event(cam, e->dir_x, e->dir_z,
+                                  (int16_t)cam->event_param);
 }
 
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
@@ -2305,8 +2378,26 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     (void)fifa96_control_slot_update(&mr->slot, mr->input_state[0],
                                      (uint8_t)mr->state.frame_delta, match_run_slot_map,
                                      match_run_anim_a, match_run_anim_b, match_run_anim_c);
-    (void)fifa96_camera_update(&mr->render.camera, (int16_t)mr->state.frame_delta,
-                               mr->render.view_class, mr->render.input_bit2);
+    /* M2 phase-9 T3 (FU-148 §12.2 / FU-145 §1.8): the native FUN_000736AC
+     * reads `([0x14C1D4]|[0x14C1D6]) & 4` at 0x70ab1..0x70ac2 for the pan-step
+     * walk gate; the engine derives it from the range words FUN_0001C9BC
+     * built. The image default is 0 (the config cells are BSS), so the tape's
+     * frame path is unchanged. */
+    {
+      uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
+      (void)fifa96_camera_update_walk(&mr->render.camera, &mr->rng,
+                                      (int16_t)mr->state.frame_delta,
+                                      mr->render.view_class, mr->render.input_bit2,
+                                      (int)(range & 4u));
+    }
+    /* FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): the every-frame FUN_00071DF4
+     * call site (FUN_000736AC 0x73B5B..0x73B6B) runs after the integrator and
+     * before the armer. The first arm follows the tracked record's slot dir
+     * bytes (`[[rec]+0x20] != 0`, event height > 0xF0) into the camera
+     * velocity; the record class gate `[[rec]+4][0] == 0x18D8` reduces to the
+     * pool-record identity (both writers of [0x1577CA] store pool records or
+     * 0; the +4 descriptor is built at runtime, statically unresolvable). */
+    (void)fifa96_match_run_camera_follow(mr);
     /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
      * FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/
      * `[0x107DD8]`/pad-idle gates (legs); the engine applies the staged pose

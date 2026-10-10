@@ -437,7 +437,10 @@ New functions:
    table-2 arm). FU-145's producer calls this with the side from `FUN_00088940`.
 2. `fifa96_match_run_screen_install(mr, leg, mode, side)` — port of
    `FUN_00092D8C` + `FUN_00092E2C`: set `screen_leg`/mode/tracked side
-   (`0x1590CC`/`0x159901` staged), zero `screen_step`/`screen_timer`, zero the
+   (`FUN_00078824` zeroes the `0x1590CC`/`0x159901` team flags first and the
+   pick reads them — landed in T3, FU-148 §13.3: image flags-zero ->
+   tracked 1, `[0x15B684] != 0` -> the side argument), zero
+   `screen_step`/`screen_timer`, zero the
    score pair, seed the period frames from the per-mode duration table
    `0x1110EC[mode*24 + leg]` (dwords; byte offset `mode*0x60 + leg*4`; values
    `{15,15,30,30,60,5}` seconds for legs 0..5 at modes 0..2, verified),
@@ -483,9 +486,12 @@ native scheduler is in the frame body, not the render driver).
    (side) writers are the two front-end callers only
    (`0x38BC7/0x38C71/0x38C78`, `0x3BF4C`); no match-code producer found.
    Derived default: mode 0, side 0.
-4. **Tracked-side team flags.** `[0x1590CC]`/`[0x159901]` producers unported;
-   the derived default keeps `score_tracked_side = -1` (App. L.6) until they
-   land.
+4. **Tracked-side team flags.** `[0x1590CC]`/`[0x159901]` producers: the sole
+   writers are FUN_00078824's zeroing stores (`0x7882A/0x78830`, fresh
+   `get_xrefs_to` = one WRITE each); **T3 landed the pick** (FU-148 §13.3) —
+   the image-default flags path yields `score_tracked_side = 1`, so the natural
+   goal's untracked arm posts the probe id (0xD3). The flag/mode front-end
+   producers stay legs.
 5. **`FUN_000CBC4C` probe cells.** The exact image seed is recorded above; the
    S3 port landed the 6-limb counter as `fifa96_match_run_goal_probe` (the
    `0x112E68..0x112E7C` limbs seeded from the image bytes, one increment +
@@ -518,8 +524,9 @@ native scheduler is in the frame body, not the render driver).
    any real session runs the goal queue under leg 0/1 (gate open) is not
    statically decided. The port reproduces the tables either way.
 10. **`[0x15B684]`.** The "screen mode" byte that switches tracked-side source
-    and `FUN_000935A0`'s exit path has no located writer this slice (fresh
-    operand search `0x0014af`-family only); staged 0.
+    and `FUN_000935A0`'s exit path: its producers are the FUN_00038630 arms
+    (`0x38BBD`/`0x38BE5`); the engine exposes `screen_record_mode` (BSS 0) and
+    the pick reads it (T3). The front-end producer stays a leg.
 11. **FU-145 dependency.** The producer (`FUN_00088940` side selection, pan
     arming) is FU-145's slice; §7 assumes its `goal_queue(side)` call.
 
@@ -662,8 +669,9 @@ re-pin (M1 `09b726b7…`, M2 `2e709151…`).
     the port bounds leg 0..5 and mode 0..3 (the callers gate the leg;
     `0x38B1F CMP [0x14AF7C],5`).
 11. **`begin` runs the installer** with the derived leg 0 / mode 0 / side 0
-    (legs 1/3); the tracked-side pick stays the carried -1 (leg 4/10) and the
-    `[0x15B6B8]` side flag is not stored (write-only, errata table).
+    (legs 1/3) and the T3 tracked-side pick (leg 4: the flags-zero image
+    default is 1); the `[0x15B6B8]` side flag is not stored (write-only,
+    errata table).
 12. **Review fix (round 1): leg 5's post is unbounded.** The first port encoded
     leg 5 as a 6-entry `{1,1,1,1,0,1}` table with the legs-0..4
     `id - 1 > count - 1` bound, which mis-routed ids >= 7 (and 0) to the
@@ -682,13 +690,13 @@ re-pin (M1 `09b726b7…`, M2 `2e709151…`).
 | 1 front-end leg selector inputs | open (derived leg 0) |
 | 2 `[0x14C32A]` producer | open (begin seeds 1, S2) |
 | 3 installer mode/side producers | open (derived mode 0, side 0) |
-| 4 tracked-side team flags | open (carried -1) |
+| 4 tracked-side team flags | **closed (T3)**: FUN_00078824's zeroing + the FUN_00092D8C pick ported (FU-148 §13.3; flags-zero -> tracked 1, the post/pick fixtures green) |
 | 5 probe cells vs a running native | **closed** (ported as `fifa96_match_run_goal_probe` over the image-seeded limbs; T4 re-verified) |
 | 6 `FUN_0009252C` display gate | **closed (boundary)**: `fifa96_score_display_gate` + `score_display_event` (T4); the `FUN_00066724` text/audio sink stays a leg |
 | 7 `FUN_000935A0` thresholds/exits | open (ring/totals/re-install subset landed) |
 | 8 handler presentation bodies | open by design (the setup-step bodies; see errata 1-3) |
 | 9 legs 0/1 vs 2..5 id-6 divergence | **closed**: the per-leg id tables reproduce both |
-| 10 `[0x15B684]` | open (staged 0) |
+| 10 `[0x15B684]` | engine field `screen_record_mode` (BSS 0); the FUN_00038630 front-end producer is the leg |
 | 11 FU-145 dependency | closed (S2 landed `goal_queue`) |
 
 **Tests** (all in `tests/test_engine_match_frame.c`, ASan/UBSan,

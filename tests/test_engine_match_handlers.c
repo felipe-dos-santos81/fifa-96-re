@@ -941,6 +941,16 @@ static void test_action_1E_machine_release_chain(void) {
   assert(f.mr.record.install == 0);             /* no install on this path */
   assert(f.mr.keeper_latch_157ab2 == 0);        /* stage 7 clears the latch */
   assert(f.mr.record.timer7b == 3);             /* the head write */
+  /* M2 phase-9 T3 (FU-148 §2.1(c) 0x75DC4): the stage-5 release cuts the FU-71
+   * camera to the staged release triple (0x15774C/50/54 = pos + offset<<6,
+   * y 0x50), posts the FUN_00071C94 event (vec 0, EBX = word[0x157750] = 0x50,
+   * ECX 0) and binds the tracked record ([0x1577CA] = rec, 0x71D27). */
+  assert(f.mr.render.camera.pos_x == f.mr.record.pos_x + (1 << 6));
+  assert(f.mr.render.camera.pos_y == 0x50);
+  assert(f.mr.render.camera.pos_z == f.mr.record.pos_z + (2 << 6));
+  assert(f.mr.render.camera.event_param == 0x50);
+  assert(f.mr.render.camera.vel_x == 0 && f.mr.render.camera.vel_z == 0);
+  assert(f.mr.render.camera.tracked == f.mr.record.entity_id);
 
   /* stage 4 with no slot clears the outlet vector and the band selects the
    * 0x44 event; the chain reaches stage 8 and exits on row44. */
@@ -1787,7 +1797,7 @@ static void test_action_01_runs_kickoff_body(void) {
    * source. No goal invoker is reachable from the ported rows, so the derived
    * FUN_00093944 writer cells stay fresh through the kickoff body. */
   assert(f.mr.score[0] == 0 && f.mr.score[1] == 0);
-  assert(f.mr.score_last_side == -1 && f.mr.score_tracked_side == -1);
+  assert(f.mr.score_last_side == -1 && f.mr.score_tracked_side == 1);
   assert(f.mr.score_max_diff == 0 && f.mr.score_last_event == 0);
 
   /* Discriminating marker case (T2 review): the 0x7DBDC source is byte +0x92

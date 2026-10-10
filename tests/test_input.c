@@ -259,6 +259,101 @@ static void test_lockout(void) {
   assert(fifa96_input_lockout(&state, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* M2 phase-9 T3 (FU-148 §12.2 / FU-145 §1.8): the FUN_0001C9BC match-init
+ * builder for the per-side input/range words [0x14C1D4]/[0x14C1D6]. The
+ * eight config dwords are the cells 0x105278/0x10527C/0x105288/0x10528C/
+ * 0x105290/0x10529C/0x1052A0/0x1052A4 (image BSS-zero; their only reader is
+ * FUN_0001C9BC, no static writer exists). Bit map (first-hand 0x1C9BC):
+ *   word0: 0x105278==1 -> 2; ==2 -> |4; 0x10527C!=0 -> |1;
+ *          0x105288==1 -> high byte := 2 (|= 0x200);
+ *          0x10528C 1/2/3/4 -> |0x20/0x80/0x40/0x8; 0x105290==1 -> |0x10
+ *   word1: 0x10529C==1 -> =0x200;
+ *          0x1052A0 1/2/3/4 -> low byte |0x20/0x80, |=0x40/0x8; 0x1052A4==1
+ *          -> |0x10
+ * The consumers derive `input_bit0 = (w0|w1)&1`, the camera interpolation bit
+ * `&2` and the pan-step walk gate `&4`. */
+static void test_range_words_builder(void) {
+  int32_t cells[8];
+  uint16_t words[2];
+  for (int i = 0; i < 8; i++) cells[i] = 0;
+  words[0] = 0xffff;
+  words[1] = 0xffff;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0 && words[1] == 0);          /* the image default */
+
+  cells[0] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 2);                            /* [0x105278]==1 -> bit 1 */
+  cells[0] = 2;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 4);                            /* ==2 -> bit 2 (the walk) */
+  cells[0] = 0;
+  cells[1] = 7;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 1);                            /* button != 0 -> bit 0 */
+  cells[1] = 0;
+  cells[2] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0x200);                        /* high byte := 2 */
+  cells[2] = 0;
+  cells[3] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0x20);
+  cells[3] = 2;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0x80);
+  cells[3] = 3;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0x40);
+  cells[3] = 4;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 8);
+  cells[3] = 0;
+  cells[4] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == 0x10);
+  cells[4] = 0;
+
+  cells[0] = 2;                                     /* the combined arm */
+  cells[1] = 1;
+  cells[2] = 1;
+  cells[3] = 1;
+  cells[4] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[0] == (uint16_t)(0x200 | 0x20 | 0x10 | 4 | 1));
+  cells[0] = cells[1] = cells[2] = cells[3] = cells[4] = 0;
+
+  cells[5] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 0x200);
+  cells[5] = 0;
+  cells[6] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 0x20);
+  cells[6] = 2;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 0x80);
+  cells[6] = 3;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 0x40);
+  cells[6] = 4;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 8);
+  cells[6] = 0;
+  cells[7] = 1;
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert(words[1] == 0x10);
+
+  /* null/untouched contracts */
+  words[0] = 0x1234;
+  words[1] = 0x5678;
+  assert(fifa96_input_range_words(NULL, 0, words) == -FIFA96_ERR_INVALID);
+  assert(words[0] == 0x1234 && words[1] == 0x5678);
+  assert(fifa96_input_range_words(cells, 0, NULL) == -FIFA96_ERR_INVALID);
+  assert(fifa96_input_range_words(cells, 1, words) == 0);   /* the gate refuses */
+  assert(words[0] == 0x1234 && words[1] == 0x5678);
+}
+
 int main(void) {
   test_init_zeroes();
   test_map_preserves_high_nibble();
@@ -277,6 +372,7 @@ int main(void) {
   test_event_bounds_and_null();
   test_code_player();
   test_lockout();
+  test_range_words_builder();
   puts("test_input: ok");
   return 0;
 }

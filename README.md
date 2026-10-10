@@ -137,7 +137,14 @@ shared mover — the same 3 s direction-hold smoke moved the record with LEFT
 (`docs/screens/p9-t1-hold-left.png`, scene-band AE 45710) and UP (AE 28535),
 while RIGHT walks it away from the stand-in camera (AE 0; follow-cam is T3);
 the held-key movement is pinned headlessly by
-`test_held_key_moves_live_controlled_record`. Kicking the ball and
+`test_held_key_moves_live_controlled_record`. **T3 wired the pan
+producers** (FU-148 §13: the FUN-0001C9BC range words + walk gate, the
+every-frame FUN-00071DF4 call site + first arm, the row-1E stage-5 pan and
+the FUN-00092D8C tracked-side pick that now makes the natural goal post
+0xD3); the T3 smoke reproduces LEFT 45902 / UP 28535
+(`docs/screens/p9-t3-hold-left.png`, `p9-t3-hold-up.png`) — the auto-camera's
+high-ball trigger is not live-reachable, so the visible follow-cam stays a
+ball-staging leg. Kicking the ball and
 scoring stay blocked
 interactively: the pad kick is wired (T3) and its carrier producers are now
 landed headlessly (T2/OL-63: movement -> row-05 claim -> code 5 -> row 07 ->

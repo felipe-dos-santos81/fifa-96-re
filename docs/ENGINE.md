@@ -116,7 +116,11 @@ close-out), `docs/superpowers/plans/2026-10-07-fifa96-m2-interactive-match.md`
 acceptance) and `docs/superpowers/plans/2026-10-08-fifa96-m2-full-gameplay.md`
 (phase-6 wave: T2 review = P0.1, T3 HUD = P0.2, T4 acceptance = P0.3),
 `docs/superpowers/plans/2026-10-08-fifa96-m2-phase7-recon-ahead.md` (Track A
-S1–S5 execution + Track B read-only recon-ahead) and the SDD workspaces under
+S1–S5 execution + Track B read-only recon-ahead), the phase-9 live-pad-loop
+plan `docs/superpowers/plans/2026-10-09-fifa96-m2-phase9-live-pad-loop.md`
+(T1 on-screen movement, T2 live carrier, T3 pan origin/auto-camera/tracked
+side — all landed, tape-dormant, screenshots under `docs/screens/p9-*`) and
+the SDD workspaces under
 `.superpowers/sdd/` for the full record (scratch; may be deleted).
 
 ## Layout
@@ -238,7 +242,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   **28535**. Holding **RIGHT** instead moves the record away from the
   stand-in camera (`(-58,-2) -> (-58,-190)`; `p9-t1-hold-right.png`, scene AE
   0): the engine's yaw/pitch-0 kickoff view does not draw the negative-z walk
-  — the follow/pan camera that would is phase-9 T3. The headless gates are
+  — the follow/pan camera that would is phase-9 T3. **T3 (2026-10-10) wired
+  the pan producers and re-ran the smoke:** the UP hold still gives scene AE
+  **28535** (`docs/screens/p9-t3-hold-up.png`) and LEFT **45902**
+  (`p9-t3-hold-left.png`), so movement is unchanged; the every-frame
+  auto-camera (FU-00071DF4 first arm) is ported but its live trigger (a
+  high-ball event height > 0xF0 with a zero-rate camera) is not reachable from
+  the ported rows yet, so the visible follow-cam stays the ball-staging leg
+  (FU-148 §13). The headless gates are
   `test_engine_match_frame::test_held_key_moves_live_controlled_record` (held
   RIGHT -> position/velocity delta on the real frame path, ISO-gated) and the
   L4.1/L4.2 fixtures
@@ -279,7 +290,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
   | match HUD (bar/score/clock) | reached (on screen) | `p8-v8-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
   | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:02` in `p8-v8-match-clock.png`; tape v8 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
-  | move the controlled player | **reached (M2 phase-9 T1)** | the ported row 02 (FU-75 L4.6) turns the post-kickoff slot record (team 0 record 9, code 02) into code 4 on its first live phase-2 frame and row 04 writes the slot-dir target; the live smoke held **LEFT** for 3 s (`p9-t1-hold-left.png`): record `(-58,-2) -> (-58,+178)`, scene-band AE 45710; **UP** (`p9-t1-hold-up.png`): `(-58,-2) -> (+122,-2)`, AE 28535; **RIGHT** (`p9-t1-hold-right.png`): `(-58,-2) -> (-58,-190)`, scene AE 0 (the yaw/pitch-0 stand-in camera does not draw the negative-z walk; follow-cam is phase-9 T3). Headless gates: `test_held_key_moves_live_controlled_record` (ISO), `test_machine_forced_decision_installs_on_slot_record`, `test_machine_no_edge_arm_copies_camera_target` |
+  | move the controlled player | **reached (M2 phase-9 T1; T3 re-run)** | the ported row 02 (FU-75 L4.6) turns the post-kickoff slot record (team 0 record 9, code 02) into code 4 on its first live phase-2 frame and row 04 writes the slot-dir target; the live smoke held **LEFT** for 3 s (`p9-t1-hold-left.png`): record `(-58,-2) -> (-58,+178)`, scene-band AE 45710 (T3 re-run 45902, `p9-t3-hold-left.png`); **UP** (`p9-t1-hold-up.png`): `(-58,-2) -> (+122,-2)`, AE 28535 (T3 re-run identical, `p9-t3-hold-up.png`); **RIGHT** (`p9-t1-hold-right.png`): `(-58,-2) -> (-58,-190)`, scene AE 0 (the yaw/pitch-0 stand-in camera does not draw the negative-z walk; the T3 auto-camera is ported but its high-ball trigger is not live-reachable, FU-148 §13). Headless gates: `test_held_key_moves_live_controlled_record` (ISO), `test_machine_forced_decision_installs_on_slot_record`, `test_machine_no_edge_arm_copies_camera_target` |
   | kick the ball (gameplay) | blocked live; T3 pad kick fixture-proven, T2 carrier live in the headless fixture | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); the possession/carrier producers are now landed (T2: `test_live_carrier_claim_and_kick` drives movement → claim → code 5 → kick → the staged ball pair on the real path), while a live Z-burst still leaves the scene AE 0 (the on-screen ball view is T4's smoke) — `test_pad_kick_release_runs_kick_row` |
   | score a goal | blocked naturally; chain producer-real in a fixture | the row-04 pan origin is wired (T2) but the acceptance tape's code-4 records stay far from the camera (lane ~1460+), so the tape camera never pans; the S2/S3 chain increments the score in `test_camera_pan_event_chain` (producer seed), `test_row04_live_pan_arms_camera` (live row -> armer -> situation 5 -> score) and `test_natural_goal_end_to_end` (natural kickoff -> pan -> situation 6 -> id 5 -> handler -> score 1-0) |
   | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the never-panning camera never arms (the live row-04 origin is wired but tape-dormant, T2); FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v8 asserts the fresh dispatcher cells (`sp_*`) and the absent taker mask at m 41/m 62 |
@@ -480,7 +491,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
   `OL-88`/`OL-89` goal invokers (**closed by phase-6 S2/S3 + phase-8 T2/T4** —
   FU-142
-  §L.10; the tracked-side pick / `FUN_00071DF4` / display sink stay legs);
+  §L.10; the tracked-side pick landed in T3 and `FUN_00071DF4`'s first arm +
+  call site are wired in T3 (FU-148 §13), leaving the display sink and the
+  FUN-00071DF4 table/keeper arm as legs);
   `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
   (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the camera-mode/angle
@@ -596,11 +609,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   producer is unported and arming with a zero triple would poison the FU-145
   armer — the situation re-queues 0xC/3/0xA/4/2/1/0, `FUN_000974DC`,
   `FUN_0004C324`), the mode/side/leg front-end arg producers (legs 1/3), the
-  `[0x14C32A]` producer (leg 2), the tracked-side flags (leg 4), the
+  `[0x14C32A]` producer (leg 2), the tracked-side flags (**T3 update: the pick
+  is ported — FUN_00078824's zeroing + the FUN_00092D8C pick; the flag/mode
+  producers stay legs**), the
   `FUN_000CBC4C` cells' live-native verification (leg 5), the `FUN_0009252C`
   display gate (leg 6), the `FUN_000935A0` thresholds/exits (leg 7), the
-  `[0x15B684]` mode byte (leg 10). The `[0x15B6B8]` side flag is write-only
-  (fresh xrefs: its two writes) and is a leg.
+  `[0x15B684]` mode byte (**T3 update: engine field `screen_record_mode`, BSS
+  0; the FUN_00038630 producer is the leg**). The `[0x15B6B8]` side flag is
+  write-only (fresh xrefs: its two writes) and is a leg.
 - **M2 full-gameplay S4 (presentation completion, FU-148 §2–§4; 2026-10-09).**
   Landed from the frozen FU-148 slice (camera/formation/palette sections):
   - **Camera pose feed** (`fifa96_camera_pose_blocks` /
@@ -627,7 +643,11 @@ the build also produces the windowed `fifa96` target (`make game`).
     the armer's own angle arm requires pre-existing event state
     (`[0x1577EE].hi == 0 && [0x1577BE] == 0` early return). FUN_000709D0 /
     FUN_00070DE0 / FUN_00071DF4, the >0x19 atan walk and the smoothing/
-    corner/tracked-player tails stay legs (OL-T11-79).
+    corner/tracked-player tails stay legs (OL-T11-79). (**M2 phase-9 T3
+    update, 2026-10-10:** FUN_000709D0's walk gate producer (FUN_0001C9BC),
+    the every-frame FUN_00071DF4 call site + first arm, the row-1E stage-5
+    caller and the row-04 tracked bind are now wired — FU-148 §13.1/§13.2;
+    the seven remaining callers + the table/keeper arm stay legs.)
   - **Formation id**: run `formation[2]` + `fifa96_match_run_set_formation`
     (FUN_0008EA70), the 0x11033A layout accessor
     (`fifa96_match_formation_layout`) and the 0x14BFC0 `6*id` placement names
@@ -785,14 +805,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   - **Tape dormant, no re-pin**: M1 `09b726b7…` / M2 `2e709151…` byte-identical
     (no tape record reaches the half-line band and no pan producer fires); the
     m62 freshness block now also pins the fresh display cells.
-  - **Carried legs** (FU-142 §L.10): the tracked-side pick
-    (`FUN_00092D8C`'s `[0x1590CC]`/`[0x159901]` flags, FU-146 leg 4 — the
-    writer's post block stays dormant with the carried -1), the
+  - **Carried legs** (FU-142 §L.10): the
     `FUN_000A7FD4` display-gate cell producers (the gate reads
     `[0x115FCC]`/`[0x114A98]`, image 0/0; the `FUN_000A8172` clear is the
-    other writer), `FUN_00071DF4`
-    (the every-frame tracked-record auto-camera; its ball sub-object/velocity
-    producers are unported), the `FUN_00066724` sink and the handler
+    other writer), `FUN_00071DF4`'s table/keeper second arm
+    (T3 update: the tracked-side pick, the call site + first arm are now
+    wired — FU-148 §13.2/§13.3), the `FUN_00066724` sink and the handler
     presentation bodies.
 - **M2 phase-8 close-out (T5 acceptance; 2026-10-10).** Whole-range summary:
   the phase-8 plan `2026-10-09-fifa96-m2-phase8-live-loop.md` closed the live
@@ -834,12 +852,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   pick origins; state producers; penalty remainder); **T2/OL-T11-79 residue**
   the nine carried `FUN_00071C94` callers, the `FUN_00070DE0` reposition
   bit-8 boundary arm, the `walk_gate` frame path, the sound sinks, the
-  `FUN_00071DF4` 0x11042B/C lookup and the tracked-player tail; **T3/FU-75**
+  `FUN_00071DF4` 0x11042B/C lookup and the tracked-player tail (**T3 update:
+  the row-1E caller, the walk gate + FUN-0001C9BC words, the FUN-00071DF4
+  call site + first arm and the row-04 tracked bind landed — FU-148 §13; the
+  seven body remainder callers, the reposition bit-8 arm, the sound sinks and
+  the 0x11042B/C lookup stay**); **T3/FU-75**
   L4.1 the forced-decision/chase application, L4.2 the no-edge arm, L4.3
   `0x7E600`, L4.4 `0x7CD60`, L4.5 the `0x7D1D4` switch, L4.6 row 02 +
   keeper input tables, plus the front-end repeat cadence; **T4/OL-87/88/89
-  residual** the tracked-side pick, the `FUN_000A7FD4` producers,
-  `FUN_00071DF4` and the `FUN_00066724` sink. Deferred minors rolled up for
+  residual** the tracked-side pick (**T3 update: landed**), the
+  `FUN_000A7FD4` producers,
+  `FUN_00071DF4` (**T3 update: call site + first arm landed; the
+  table/keeper arm stays**) and the `FUN_00066724` sink. Deferred minors rolled up for
   the final review: T1's FU-137 §7 errata parenthetical arithmetic (fixed at
   T5); T2's review minors (all fixed in the fix round; the census is nine
   carried callers); T3's three comment minors (L4.5 stub wording, L4.2
@@ -944,6 +968,56 @@ the build also produces the windowed `fifa96` target (`make game`).
   - **Legs:** OL-63 residual = the stage-0 target algebra + the
     `FUN_0007F7E0` fallback; the FU-147 §9 legs are unchanged; the OL-69
     record-byte/lead/callback/swap residue stays.
+- **M2 phase-9 T3 (pan origin, auto-camera, tracked-side — OL-T11-79/OL-87;
+  2026-10-10).** Landed from the phase-9 plan's Task 3 (first-hand
+  `/FIFA96.EXE`; full derivation in FU-148 §13):
+  - **Range words + walk gate (FU-148 §13.1).** `fifa96_input_range_words`
+    ports FUN_0001C9BC (the `[0x105278]`-family config cells + the
+    `[0x15753C]` entry gate) and the run builds the power-on-zero
+    `[0x14C1D4]`/`[0x14C1D6]` words in `begin` (the native FUN_00011B7C call);
+    the frame path derives `(w0|w1) & 4` as the FUN-000709D0 pan-step walk
+    gate, threaded through the new `fifa96_camera_update_walk`.
+  - **Every-frame auto-camera (FU-148 §13.2).** The FUN_000736AC
+    `0x739C6..0x73B6B` call site is ported as
+    `fifa96_match_run_camera_follow` (pan counter 0, the `[0x1577BE]` bearing
+    nonzero at the gate point (`follow_speed`), `[0x1577EE].hi > 0x10`, both
+    rate bytes zero, `[0x1577CA]` + slot) and runs the existing
+    `fifa96_camera_rate_event` first arm (slot dirs x0xF clamped ±15 when the
+    event height exceeds 0xF0). The camera carries `tracked` ([0x1577CA];
+    `fifa96_camera_set_tracked` = the 0x71D27 write, cleared by the 0x700F4
+    reset) and row 04 binds its event record. The class gate
+    (`[[rec]+4][0] == 0x18D8`) reduces to the pool-record identity (the only
+    two `[0x1577CA]` writers store pool records or clear). The table/keeper
+    second arm stays an OL-T11-79 leg.
+  - **Row 1E stage-5 pan (0x75DC4).** `match_keeper_claim_apply` consumes the
+    stage-5 `released`/`scenario` pair: the camera cuts to the machine-staged
+    release triple, `fifa96_camera_event_set(camera, 0, 0, 0x50, 0)` posts the
+    event and the releasing keeper becomes the tracked record
+    (`test_action_1E_machine_release_chain`).
+  - **Tracked-side pick (OL-87 residual, FU-148 §13.3).**
+    `fifa96_match_run_screen_install` now ports FUN_00078824's flag zeroing +
+    the FUN_00092D8C pick: the flags-zero image default yields
+    `score_tracked_side = 1`, so the natural goal's untracked arm posts the
+    probe id. `test_natural_goal_end_to_end` now asserts `score_last_event ==
+    0xD3` (the probe's first fold low byte 0xED, bits 0/1 set; the display
+    gate stays closed at the image sound cells).
+  - **Remaining callers (§13.4).** Row 1E wired; the row-05 tail (0x7F4E7,
+    the OL-63 tail algebra), the armer angle arm (0x71B8A), the reposition
+    sub-body (0x70DD1), the ball staging (0x7A219), `FUN_0006E8E8` (0x6FA62)
+    and rows 1B/1C/0D (0x77423/0x77DC6/0x82A6C) stay numbered legs.
+  - **Tests:** `test_input::test_range_words_builder`, `test_camera::
+    test_update_walk_gate`/`test_tracked_record`, `test_engine_match_frame::
+    test_tracked_side_pick`/`test_auto_camera_follows_tracked_slot` (+ the
+    natural-goal post id and the row-04 tracked bind). `make check` 108/108.
+  - **Goldens: no re-pin.** M1 `cmp` clean (immovable); M2 byte-identical
+    (165 lines) — the tape's code-4 rows still carry lane ~1460+ (the
+    half-line band gate fails), no row-1E record reaches stage 5, the range
+    words are zero and no event sets `camera.tracked`, so no frame moved. Not
+    the expected first re-pin: no intended upgrade reached the tape.
+  - **Smoke:** the T1 UP hold reproduces scene AE 28535 (`p9-t3-hold-up.png`;
+    LEFT 45902, `p9-t3-hold-left.png`); the auto-camera's high-ball producer
+    (height > 0xF0 with a zero-rate camera) is not reachable from the ported
+    rows, so the visible follow-cam stays the ball-staging leg.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

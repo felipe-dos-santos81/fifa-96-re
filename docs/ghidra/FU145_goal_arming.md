@@ -561,10 +561,14 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
    while armed and the camera reset `0x7026C` re-runs the classifier, so the
    extra clear is observer-clean.
 3. **`input_bit0` producer.** Native `(word[0x14C1D4] | word[0x14C1D6]) & 1`
-   (the FU-139 per-side range words, image-zero; no ported runtime producer,
-   L1). The engine carries a caller-staged `render.input_bit0` (default 0),
-   mirroring `render.input_bit2` (the sibling bit 1 the FU-71 update reads);
-   with the bit 0 the reflect clear is structurally present but does not fire.
+   (the FU-139 per-side range words, image-zero). **T3 ported the producer**
+   (FU-148 §13.1: `fifa96_input_range_words` = FUN_0001C9BC, staged by begin;
+   the same words' bit 2 is the FUN-000709D0 walk gate now threaded through
+   `fifa96_camera_update_walk`). The engine still carries a caller-staged
+   `render.input_bit0` (default 0) for the reflect arm — the range words are
+   zero at the image defaults, so the two agree until a front-end config
+   producer lands; wiring the bit directly off `input_range` remains a
+   follow-up.
 4. **Side-selection stand-in.** The `[0x157A4C]>>24 == 1` arm reads the
    `[0x1587D4]` goal-side record's team byte (`0x889A4..0x889AC`); both the
    flag producers and the record identity are unported (L4), so the derived
@@ -594,7 +598,7 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
 
 | leg | status |
 |---|---|
-| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | **landed producer-level, row caller wired (phase-8 T2)**: the event setter `fifa96_camera_event_set` is complete (bail gate, ramp sign param, corrected `[0x1577FA] = F6` timer cell, slow path, `> 0x19` atan walk), `fifa96_camera_pan_step`/`reposition`/`rate_table` are derived ports and `fifa96_camera_update` calls the pan step at the native `0x737da` site; `fifa96_match_action_04` consumes the row-04 `out.events` (native `0x7EFCF`/`0x7F0D1`), so a live gameplay row now pans the camera (`test_row04_live_pan_arms_camera`: row → armer → situation 5 → S3 score; FU-148 §12). Carried: the other 9 `FUN_00071C94` callers, the `> 0x70` anchor branch and the sound/table sinks (OL-T11-79) |
+| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | **landed producer-level, row callers wired (phase-8 T2 / phase-9 T3)**: the event setter `fifa96_camera_event_set` is complete (bail gate, ramp sign param, corrected `[0x1577FA] = F6` timer cell, slow path, `> 0x19` atan walk), `fifa96_camera_pan_step`/`reposition`/`rate_table` are derived ports and `fifa96_camera_update` calls the pan step at the native `0x737da` site; `fifa96_match_action_04` consumes the row-04 `out.events` (native `0x7EFCF`/`0x7F0D1`) and row 1E's stage-5 release is wired (T3, `0x75DC4`), so live gameplay rows now pan the camera (`test_row04_live_pan_arms_camera`: row → armer → situation 5 → S3 score; FU-148 §12/§13). T3 added the FUN-0001C9BC range words / walk gate and the every-frame FUN-00071DF4 call site + first arm (FU-148 §13.1/§13.2). Carried: the seven body remainder callers, the `> 0x70` anchor branch and the sound/table sinks (OL-T11-79) |
 | L2 `FUN_00092998(1,4,-1)` preselection | open (selection outputs stay zero) |
 | L3 possession-selection sinks (`0x795B4`/`0x79C50`/`0x6E598`/`0x741B4`/`0x651F0`/`0x974F0`) | open — nearest search substituted |
 | L4 `[0x1587D4]`/`[0x1577CA]` record identities / `[0x157A4C]` flag | open — snapshot-sign stand-in |

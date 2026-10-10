@@ -82,3 +82,39 @@ int fifa96_input_lockout(uint8_t *state, int *frames) {
   }
   return 0;
 }
+
+int fifa96_input_range_words(const int32_t cells[8], int gate, uint16_t words[2]) {
+  uint16_t w0, w1;
+  if (!cells || !words) return -FIFA96_ERR_INVALID;
+  if (gate != 0) return 0;                      /* 0x1C9C2 CMP EAX,1 / JNZ RET */
+  /* First-hand 0x1C9BC (the match-init FUN_00011B7C -> FUN_0001C9BC call):
+   * both words zeroed first, then the per-side config arms (byte ORs). */
+  w0 = 0;
+  w1 = 0;
+  if (cells[0] == 1) w0 = 2;                    /* 0x105278 == 1 */
+  if (cells[0] == 2) w0 = (uint16_t)(w0 | 4);   /* == 2 (the walk-gate bit) */
+  if (cells[1] != 0) w0 = (uint16_t)(w0 | 1);   /* 0x10527C != 0 */
+  if (cells[2] == 1) w0 = (uint16_t)(w0 | 0x200);  /* 0x14C1D5 |= 2 */
+  if (cells[5] == 1) w1 = (uint16_t)(w1 | 0x200);  /* 0x14C1D7 |= 2 */
+  /* 0x10528C 1/2/3/4 -> byte [0x14C1D4] |= 0x20/0x80/0x40/0x8 */
+  switch (cells[3]) {
+    case 1: w0 = (uint16_t)(w0 | 0x20); break;
+    case 2: w0 = (uint16_t)(w0 | 0x80); break;
+    case 3: w0 = (uint16_t)(w0 | 0x40); break;
+    case 4: w0 = (uint16_t)(w0 | 0x8); break;
+    default: break;
+  }
+  /* 0x1052A0 1/2/3/4 -> byte [0x14C1D6] |= 0x20/0x80/0x40/0x8 */
+  switch (cells[6]) {
+    case 1: w1 = (uint16_t)(w1 | 0x20); break;
+    case 2: w1 = (uint16_t)(w1 | 0x80); break;
+    case 3: w1 = (uint16_t)(w1 | 0x40); break;
+    case 4: w1 = (uint16_t)(w1 | 0x8); break;
+    default: break;
+  }
+  if (cells[4] == 1) w0 = (uint16_t)(w0 | 0x10);   /* 0x105290 == 1 */
+  if (cells[7] == 1) w1 = (uint16_t)(w1 | 0x10);   /* 0x1052A4 == 1 */
+  words[0] = w0;
+  words[1] = w1;
+  return 1;
+}

@@ -509,6 +509,23 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
     mr->flag_157820 = out->flag_157820;
     mr->flag_157822 = out->flag_157822;
   }
+  /* M2 phase-9 T3 (FU-148 §2.1(c) 0x75DC4): the stage-5 release
+   * (0x75D17..0x75DD1) cuts the FU-71 camera to the staged release triple
+   * (0x15774C/50/54 = pos + 0x10F331/39[type8]<<6, y 0x50), calls
+   * FUN_00092820(rec, 5) then FUN_00071C94(rec, zero-vec, EBX = word[0x157750]
+   * = 0x50, ECX 0) and writes `[0x157A83] = rec` + `rec+0x9B = 0`. The
+   * `released`/`scenario` pair is the stage-5-only arm (stage 7's `scenario`
+   * carries the 0x92820(4) staging without a FUN_00071C94 call). */
+  if (out->scenario != 0 && out->released != 0) {
+    mr->render.camera.pos_x = s->cam_x;
+    mr->render.camera.pos_y = s->cam_y;
+    mr->render.camera.pos_z = s->cam_z;
+    {
+      int rc = fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
+      if (rc < 0) return rc;
+    }
+    (void)fifa96_camera_set_tracked(&mr->render.camera, mr->record.entity_id);
+  }
   if (out->reset != 0 && e != NULL) match_row_reset(mr, e);
   if (out->situation_0b != 0) return fifa96_match_run_situation(mr, 0x0Bu);
   return FIFA96_OK;
@@ -2377,6 +2394,9 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
     int rc2 = fifa96_camera_event_set(&mr->render.camera, out.event_x, out.event_z,
                                       0, out.event_track_reload);
     if (rc2 < 0) return rc2;
+    /* M2 phase-9 T3 (0x71D27): FUN_00071C94 stores the event's actor record as
+     * the camera-tracked entity `[0x1577CA] = rec`. */
+    (void)fifa96_camera_set_tracked(&mr->render.camera, mr->record.entity_id);
     if (out.event_track_reload != 0) {
       /* 0x7EFD4: [0x1577FA] = F2 + (F2 >> 2); F2 = ramp(event height), or 6
        * on the FUN_00070544 idle arm. */

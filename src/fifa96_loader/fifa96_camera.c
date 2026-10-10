@@ -47,6 +47,14 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->pan_rate_lo = 0;
   cam->event_step_x = 0;
   cam->event_step_z = 0;
+  cam->tracked = FIFA96_CAMERA_TRACKED_NONE;   /* 0x700F4 0x70258 */
+  cam->follow_speed = 0;
+  return FIFA96_OK;
+}
+
+int fifa96_camera_set_tracked(fifa96_camera *cam, int32_t id) {
+  if (!cam || id < FIFA96_CAMERA_TRACKED_NONE) return -FIFA96_ERR_INVALID;
+  cam->tracked = id;                            /* 0x71D27 [0x1577CA] = rec */
   return FIFA96_OK;
 }
 
@@ -57,14 +65,30 @@ static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
                                     int32_t *param);
 
 int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int input_bit2) {
+  return fifa96_camera_update_walk(cam, NULL, delta, view_class, input_bit2, 0);
+}
+
+int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
+                              int16_t delta, int view_class, int input_bit2,
+                              int walk_gate) {
+  int16_t gate_speed;
   if (!cam) return -FIFA96_ERR_INVALID;
-  if (cam->paused) return FIFA96_OK;
+  if (cam->paused) {
+    cam->follow_speed = (int16_t)cam->speed;
+    return FIFA96_OK;
+  }
+  /* The 0x739CE follow gate reads [0x1577BE] before the tail recompute; the
+   * pan step may overwrite it first. */
+  gate_speed = (int16_t)cam->speed;
   if ((int16_t)cam->speed != 0 || (int16_t)cam->event_param != 0) {
     cam->timer = (uint16_t)(cam->timer + (uint16_t)delta);
     /* FU-152 §2.9 (T2) / FUN_000736AC 0x737b9..0x737da: the timer-driven pan
-     * step runs before the same frame's integration. */
-    if ((int16_t)cam->timer > (int16_t)cam->timer_limit)
-      (void)camera_pan_step_internal(cam, NULL, 0, NULL, NULL);
+     * step runs before the same frame's integration; the walk gate is the
+     * native ([0x14C1D4]|[0x14C1D6]) & 4 read at 0x70ab1..0x70ac2 (T3). */
+    if ((int16_t)cam->timer > (int16_t)cam->timer_limit) {
+      (void)camera_pan_step_internal(cam, rng, walk_gate, NULL, NULL);
+      gate_speed = (int16_t)cam->speed;
+    }
     if ((int16_t)cam->speed != 0) {
       if (delta > 0) {
         cam->acc_x = (uint16_t)((uint16_t)cam->vel_x * (uint16_t)delta);
@@ -113,6 +137,7 @@ int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int 
     }
   }
   cam->speed = (uint16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
+  cam->follow_speed = gate_speed;              /* the 0x739CE pre-tail value */
   return FIFA96_OK;
 }
 
@@ -757,6 +782,7 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   cam->event_step_x = 0;
   cam->event_step_z = 0;
   cam->pan_counter = 0;                          /* 0x700f4 clears 0x157821 */
+  cam->tracked = FIFA96_CAMERA_TRACKED_NONE;     /* 0x700f4 0x70258 clears 0x1577CA */
   /* 0x700f4 reads the 0x1104AB table at [0x14C2FE]*8 + [0x14C2FA]*2; the
    * image defaults are both zero -> [0x157819] = 10, [0x15781A] = 16, and
    * [0x15781B] = [0x15781A] + (0x20 - [0x15781A]) / 2 = 24 (0x70137 SUB,

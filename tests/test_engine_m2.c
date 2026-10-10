@@ -344,8 +344,9 @@
  *   - goal-handler presentation bodies: the FU-146 §8 legs (setup-step
  *     staging, the `[0x15781D]` re-arm, the `0x10F328`/`0x15B6C8`/`0x158897`
  *     copies) stay unported — the S3 port deliberately omits the re-arm so a
- *     zero snapshot cannot poison the FU-145 armer — plus the tracked-side
- *     flags (leg 4) and the `FUN_0009252C` display gate (leg 6);
+ *     zero snapshot cannot poison the FU-145 armer — plus the `FUN_0009252C`
+ *     display gate (leg 6); the tracked-side pick landed in phase-9 T3
+ *     (FU-148 §13.3, the flags-zero default is tracked 1);
  *   - wave-7 phase-7 clusters (Track B of the recon-ahead plan): B1 set-piece/
  *     restart dispatch rows, B2 fouls/referee/offside, B3 keeper+AI stage
  *     flows, B4 presentation residual (replay/overlay rows, camera-handler
@@ -525,9 +526,9 @@
  *   - the direct score call (m 62): no tape record reaches the half-line pan
  *     band (T2 probe), so the goal producer never fires; the OL-87/88/89
  *     invoker legs are closed (S2/S3/T2/T4) and the residual producers stay
- *     legs: the tracked-side pick (`[0x1590CC]`/`[0x159901]`, FU-146 leg 4),
- *     the `FUN_000A7FD4` gate-cell producers, `FUN_00071DF4` (the every-frame
- *     tracked-record auto-camera) and the `FUN_00066724` sink. The goal step
+ *     legs: the `FUN_000A7FD4` gate-cell producers, `FUN_00071DF4`'s
+ *     table/keeper second arm (the call site + first arm landed in T3) and the
+ *     `FUN_00066724` sink; the tracked-side pick landed in T3. The goal step
  *     therefore stays the direct writer call — a natural tape goal would need
  *     a new forcing (a record parked in the band), which the acceptance
  *     declines to stage: the tape's job is the honest negative, the fixtures
@@ -578,10 +579,12 @@
  * extra-time flag producer (OL-85) is unported.
  *
  * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
- * direct `fifa96_match_run_add_goal`. Its tracked-side default is the carried
- * -1 (the native FUN_00092D8C producer reads the unported team+0x828 flags,
- * OL-87), so the writer reduces to the FU-72 increment + last-side record and
- * the transcript stays byte-identical. `add_goal` stays for paths whose native
+ * direct `fifa96_match_run_add_goal`. Phase-9 T3 landed the native
+ * FUN_00092D8C tracked-side pick (FU-148 §13.3), so the begin-installed
+ * default is now tracked 1 (the [0x1590CC]/[0x159901] flags are zero in the
+ * image and FUN_00078824 zeroes them at install); the tape's direct score step
+ * passes the staged probe 0, so the untracked arm's 0xD3 gate fails and the
+ * transcript stays byte-identical. `add_goal` stays for paths whose native
  * writers remain unported (the period-indexed goal-screen handler cluster,
  * OL-77/OL-87).
  *
@@ -626,6 +629,24 @@
  * 15 rows and the transcript is byte-identical (`cmp` clean, 165 lines; M1
  * unmoved). The live carrier path the row unlocks is pinned outside this
  * tape (`test_engine_match_frame::test_live_carrier_claim_and_kick`).
+ *
+ * --- v8.3 (M2 phase-9 T3): pan origin/auto-camera/tracked-side, tape dormant --
+ *
+ * M2 phase-9 T3 ports the remaining pan producers (FU-148 §13): the
+ * FUN-0001C9BC per-side range words + the `(w0|w1) & 4` walk gate, the
+ * every-frame FUN-00071DF4 call site + first arm, the row-1E stage-5
+ * FUN-00071C94 event, the row-04 tracked-record bind and the FUN-00092D8C
+ * tracked-side pick. The tape is unaffected: the m 41-staged code-4 rows still
+ * carry lane ~1460+ (the half-line band gate fails so no event fires and no
+ * `camera.tracked` is set), no row-1E record reaches stage 5, the range words
+ * are zero (the config cells are BSS with no writer) and the direct score step
+ * passes probe 0 (the T3 tracked default 1 takes the untracked arm, whose 0xD3
+ * gate needs probe bits 0/1). The transcript stays byte-identical (`cmp`
+ * clean, 165 lines; M1 unmoved) — not the plan's expected first re-pin: no
+ * intended upgrade reached the tape. The live/fixture positives are pinned
+ * outside this tape (`test_row04_live_pan_arms_camera` + the T3 tracked bind,
+ * `test_auto_camera_follows_tracked_slot`, `test_tracked_side_pick`, the
+ * natural goal's 0xD3 post and the T3 smoke).
  *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
@@ -1184,7 +1205,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * pair and the FUN_00093944 writer cells are still fresh here, before the
      * tape's direct score step. A gameplay goal would move them. */
     assert(mr->score[0] == 0 && mr->score[1] == 0);
-    assert(mr->score_last_side == -1 && mr->score_tracked_side == -1);
+    assert(mr->score_last_side == -1 && mr->score_tracked_side == 1);
     assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
     /* T4 (OL-89): the FUN_0009252C display boundary is fresh too — the gate
      * cells carry the image defaults and nothing dispatched. */
@@ -1284,10 +1305,11 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
            mr->entities.ball.pair.traj == 0);
     assert(mr->entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
     /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
-     * carried tracked-side default -1 it is the FU-72 increment + last side.
-     * v8/T4: the step stays the direct writer call — no tape record reaches
-     * the half-line pan band, so the natural chain cannot fire here (the
-     * FU-142 §L.10 residual producers stay legs). */
+     * T3 tracked-side default 1 the side-0 goal takes the untracked arm, whose
+     * probe is the staged 0, so no id posts (score_last_event 0) and the
+     * transcript is unchanged. v8/T4: the step stays the direct writer call —
+     * no tape record reaches the half-line pan band, so the natural chain
+     * cannot fire here (the FU-142 §L.10 residual producers stay legs). */
     assert(fifa96_match_run_score_event(mr, 0, 0) == 0);
     assert(mr->score_last_side == 0 && mr->score_last_event == 0);
   }
@@ -1579,7 +1601,7 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
       /* The T3 negative holds at every live sample: no natural goal. */
       assert(e->match_run.score[0] == 0 && e->match_run.score[1] == 0);
       assert(e->match_run.score_last_side == -1 &&
-             e->match_run.score_tracked_side == -1);
+             e->match_run.score_tracked_side == 1);
       assert(e->match_run.score_max_diff == 0 &&
              e->match_run.score_last_event == 0);
       if (e->match_run.state.phase == 2u) {

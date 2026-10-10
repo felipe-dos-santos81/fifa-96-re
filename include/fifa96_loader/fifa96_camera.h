@@ -40,10 +40,43 @@ typedef struct fifa96_camera {
   uint8_t pan_rate_hi;
   uint8_t pan_rate_lo;
   int16_t event_step_x, event_step_z;   /* [0x1577BA]/[0x1577BC] */
+  /* FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): [0x1577CA], the camera/stats
+   * tracked entity (a pool record). Sole writers (fresh get_xrefs_to = 88, two
+   * WRITE): FUN_00071C94 0x71D27 stores the event's actor record and the reset
+   * FUN_000700F4 0x70258 clears it; every reader dereferences it as a record
+   * (`[[rec]+4]` class, `[[rec]+0x20]` slot). The every-frame FUN_00071DF4
+   * call site (FUN_000736AC 0x73B5B..0x73B6B) requires `tracked != 0` and
+   * `[[rec]+0x20] != 0`; the first arm follows the tracked record's slot dir
+   * bytes when the event height exceeds 0xF0. FUN-camera_init (the 0x700F4
+   * port) clears it. `FIFA96_CAMERA_TRACKED_NONE` is the native NULL. */
+  int32_t tracked;
+  /* FU-152 §2.9 (T3): the derived `[0x1577BE]` value at the FUN_000736AC
+   * 0x739CE follow gate point. The native gate sits after the pan step and
+   * before the tail's `[0x577BE] = metric(vel)` recompute (0x73C38), so it
+   * reads the pan step's speed when the step ran this frame, else the speed
+   * the previous frame's tail left. `fifa96_camera_update_walk` captures it;
+   * `fifa96_match_run_camera_follow` gates on it. */
+  int16_t follow_speed;
 } fifa96_camera;
+
+#define FIFA96_CAMERA_TRACKED_NONE (-1)
 
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z);
 int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int input_bit2);
+
+/* FU-148 §12.2 / FU-145 §1.8 (M2 phase-9 T3): the native FUN_000736AC in-line
+ * update with the ([0x14C1D4]|[0x14C1D6]) & 4 walk gate and the match RNG
+ * threaded to the pan step. `fifa96_camera_update` is the gate-0 wrapper (the
+ * pre-T3 frame path); the engine computes the gate from its range words. */
+int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
+                              int16_t delta, int view_class, int input_bit2,
+                              int walk_gate);
+
+/* FU-152 §2.9 (T3): FUN_00071C94 0x71D27's `[0x1577CA] = rec` write. The id
+ * is the engine pool id (team*11 + index) or FIFA96_CAMERA_TRACKED_NONE.
+ * Returns FIFA96_OK, -FIFA96_ERR_INVALID on NULL or an id < -1. */
+int fifa96_camera_set_tracked(fifa96_camera *cam, int32_t id);
+
 int fifa96_camera_target(const fifa96_camera *cam, int16_t *x, int16_t *z);
 int fifa96_camera_reflect(fifa96_camera *cam, int input_bit0, int transition_active);
 int fifa96_camera_out_of_bounds(int32_t x, int32_t z);

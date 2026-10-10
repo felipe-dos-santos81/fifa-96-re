@@ -699,11 +699,14 @@ static void test_score_event_wired_run_path(void) {
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(mr.score_sound_device == 0 && mr.score_display_event == 0);
 
-  /* Goal 1: the carried -1 default is the plain increment + last side. */
+  /* Goal 1: the begin-installed tracked-side pick is 1 (the [0x15B684]==0
+   * flags-zero image default), so side 0's goal takes the untracked arm: the
+   * max-diff bookkeeping runs (score[other 0]-score[tracked 1] = 1) and the
+   * probe arm reads the staged probe 0 (no 0xD3). */
   assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
   assert(mr.score[0] == 1 && mr.score[1] == 0);
   assert(mr.score_last_side == 0 && mr.score_last_event == 0);
-  assert(mr.score_max_diff == 0);
+  assert(mr.score_max_diff == 1);
   assert(mr.score_display_event == 0);
 
   /* Goals 2-3 with the tracked side staged: 3-0 posts the native 0x9B. The
@@ -770,14 +773,14 @@ static void test_goal_situation_dispatch_is_not_the_writer(void) {
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
-  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == 1);
   assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
 
   /* Situation 6 (goal): phase 5, no score write. */
   assert(fifa96_match_run_situation(&mr, 6) == 0);
   assert(mr.state.phase == 5u);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
-  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == 1);
   assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
 
   /* The goal-adjacent table-2 rows are phases only: 2 -> 3, 3 -> 4, 4 -> 8,
@@ -788,7 +791,7 @@ static void test_goal_situation_dispatch_is_not_the_writer(void) {
   assert(fifa96_match_run_situation(&mr, 5) == 0 && mr.state.phase == 9u);
   assert(fifa96_match_run_situation(&mr, 0x0B) == 0 && mr.state.phase == 2u);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
-  assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+  assert(mr.score_last_side == -1 && mr.score_tracked_side == 1);
   assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
 
   assert(fifa96_match_run_end(&mr) == 0);
@@ -828,7 +831,7 @@ static void test_natural_phase2_never_scores(void) {
   for (int i = 0; i < 300; i++) {
     one_granted_frame(&mr);
     assert(mr.score[0] == 0 && mr.score[1] == 0);
-    assert(mr.score_last_side == -1 && mr.score_tracked_side == -1);
+    assert(mr.score_last_side == -1 && mr.score_tracked_side == 1);
     assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
   }
   assert(fifa96_match_run_end(&mr) == 0);
@@ -2904,8 +2907,10 @@ static void test_row04_live_pan_arms_camera(void) {
 
   one_granted_frame(&mr);
   /* the row body fired the event: the camera velocity is the row's, not a
-   * fixture poke (vel_z 2816/12 = 234 -> atan-capped to 25). */
+   * fixture poke (vel_z 2816/12 = 234 -> atan-capped to 25), and the event
+   * bound the row's record as the camera-tracked entity (0x71D27). */
   assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
+  assert(mr.render.camera.tracked == id);
   assert(e->code == 5);                /* the row coda installed code 5 */
 
   one_granted_frame(&mr);
@@ -3043,14 +3048,19 @@ static void test_natural_goal_end_to_end(void) {
   assert(mr.score[0] == 0u && mr.score[1] == 0u);
 
   /* link 4: the next frame's scheduler consumed the id through the leg-0
-   * handler's post and the writer incremented the score. `tracked_side` is
-   * still the carried -1 (the installer pick is the OL-87 leg), so no id is
-   * posted. The post re-latches the pending flag (0x93D46) and its phase-0
-   * write (0x93DB2) ends the scripted screen. */
+   * handler's post and the writer incremented the score. The tracked-side
+   * pick is live (T3): the flags-zero image default is tracked 1, so side 0's
+   * goal takes the untracked arm and the FUN_000CBC4C probe fires on the
+   * `score[0] == 1 && score[1] < 3` gate; the probe's first result low byte
+   * (0xED, the 0x112E68 limb fold) has bits 0/1 set -> the native posts 0xD3.
+   * The display gate stays closed at the image sound cells (0/0), so the post
+   * is captured but not dispatched. The post re-latches the pending flag
+   * (0x93D46) and its phase-0 write (0x93DB2) ends the scripted screen. */
   one_granted_frame(&mr);
   assert(mr.score[0] == 1u && mr.score[1] == 0u);
   assert(mr.score_last_side == 0);
-  assert(mr.score_last_event == 0u);
+  assert(mr.score_last_event == 0xD3);
+  assert(mr.score_display_event == 0u);
   assert(mr.situation_pending == 1u);
   assert(mr.state.phase == 0u);
   assert(fifa96_match_run_end(&mr) == 0);
@@ -3114,6 +3124,141 @@ static void test_natural_goal_fallback_arm(void) {
   assert(mr.state.phase == 5u);                     /* table-2 row 6 */
   assert(mr.situation_id == 0u);
   assert(mr.situation_pending == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* M2 phase-9 T3 (FU-146 §3): FUN_00092D8C's tracked-side pick. The installer
+ * head FUN_00078824 (0x92D92 -> 0x78824) zeroes [0x1590CC]/[0x159901] before
+ * the pick, and no other writer exists (fresh get_xrefs_to 0x1590CC = 12:
+ * 0x7882a the sole WRITE), so the image-default flags path always reads 0 ->
+ * tracked 1. The [0x15B684] game-mode dword switches the source to the side
+ * argument (its producers are the front-end FUN_00038630 arms, engine BSS 0).
+ * With the pick landed the natural goal's untracked arm calls the probe post
+ * (0xD3 at probe bits 0/1) instead of the carried -1's early return. */
+static void test_tracked_side_pick(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.score_tracked_side == -1);          /* init: no handler installed */
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* begin installs leg 0 / mode 0 / side 0 -> the flags-zero image default 1 */
+  assert(mr.score_tracked_side == 1);
+  assert(mr.tracked_flag[0] == 0 && mr.tracked_flag[1] == 0);
+  assert(mr.screen_record_mode == 0);
+
+  /* the [0x15B684] != 0 arm: tracked = the side argument */
+  mr.screen_record_mode = 1;
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 1) == 0);
+  assert(mr.score_tracked_side == 1);
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+  assert(mr.score_tracked_side == 0);
+
+  /* the flags arm re-zeroes staged flags (the FUN_00078824 head) and picks 1 */
+  mr.screen_record_mode = 0;
+  mr.tracked_flag[0] = 1;
+  mr.tracked_flag[1] = 1;
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 1) == 0);
+  assert(mr.tracked_flag[0] == 0 && mr.tracked_flag[1] == 0);
+  assert(mr.score_tracked_side == 1);
+  assert(fifa96_match_run_end(&mr) == 0);
+  /* a staged config cell reaches the range words at begin (FUN_00011B7C ->
+   * FUN_0001C9BC): cells[0] == 2 sets bit 2, the pan-step walk gate */
+  {
+    struct fifa96_match_run mr2;
+    fifa96_match_run_init(&mr2);
+    mr2.input_cfg[0] = 2;
+    assert(fifa96_match_run_begin(&mr2, f.engine, 0) == 0);
+    assert(mr2.input_range[0] == 4 && mr2.input_range[1] == 0);
+    assert(((mr2.input_range[0] | mr2.input_range[1]) & 4u) != 0u);
+    assert(fifa96_match_run_end(&mr2) == 0);
+  }
+  drop_fixture(f);
+}
+
+/* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
+ * call site (FUN_000736AC 0x73B5B..0x73B6B: `[0x1577CA] != 0` and
+ * `[[rec]+0x20] != 0` -> FUN_00071DF4). The engine binds the tracked record
+ * through `render.camera.tracked` (row-event wiring; FUN_00071C94 0x71D27)
+ * and runs the ported first arm (`fifa96_camera_rate_event`) after the FU-71
+ * integrator: with the event height > 0xF0 and a slot the velocity is the
+ * slot dir bytes x15 clamped to +-15. Without a slot (or no tracked record)
+ * the follow does not run, and with the height <= 0xF0 the first arm is
+ * skipped (the unported table arm stays the OL-T11-79 leg). */
+static void test_auto_camera_follows_tracked_slot(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+  e->has_slot = 1;
+  e->dir_x = 1;
+  e->dir_z = 0;
+  assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  /* the FUN_000736AC call-site state: pan counter 0, a nonzero bearing word,
+   * event_param > 0x10 and both rate bytes zero */
+  mr.render.camera.pan_counter = 0;
+  mr.render.camera.follow_speed = 0x19;   /* the 0x739CE [0x1577BE] value */
+  mr.render.camera.event_param = 0x640;
+  mr.render.camera.rate_x = 0;
+  mr.render.camera.rate_z = 0;
+
+  /* no tracked record: the 0x73B5B arm never runs */
+  assert(fifa96_match_run_camera_follow(&mr) == 0);
+  assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+
+  /* the call-site gates (0x739C6..0x739FD) */
+  assert(fifa96_camera_set_tracked(&mr.render.camera, id) == FIFA96_OK);
+  mr.render.camera.pan_counter = 1;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);      /* 0x739C6 */
+  mr.render.camera.pan_counter = 0;
+  mr.render.camera.follow_speed = 0;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);      /* 0x739CE */
+  mr.render.camera.follow_speed = 0x19;
+  mr.render.camera.event_param = 0x10;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);      /* 0x739DC */
+  mr.render.camera.event_param = 0x640;
+  mr.render.camera.rate_x = 1;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);      /* 0x739ED */
+  mr.render.camera.rate_x = 0;
+
+  /* tracked + no slot: the 0x73B65 `[[rec]+0x20] != 0` gate refuses */
+  e->has_slot = 0;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);
+  assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+
+  /* tracked + slot + height > 0xF0: the velocity is the sub-object dirs x15
+   * clamped to +-15 and the bearing is recomputed */
+  e->has_slot = 1;
+  assert(fifa96_match_run_camera_follow(&mr) == 1);
+  assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.speed == 15);
+
+  /* the clamp: dir (4, -4) -> (60, -60) -> (15, -15) */
+  e->dir_x = 4;
+  e->dir_z = -4;
+  assert(fifa96_match_run_camera_follow(&mr) == 1);
+  assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == -15);
+
+  /* the height gate at the boundary: 0xF0 is refused (native JLE 0xF0) and
+   * leaves the velocity untouched, 0xF1 follows */
+  e->dir_x = 1;
+  e->dir_z = 0;
+  mr.render.camera.event_param = 0xF0;
+  assert(fifa96_match_run_camera_follow(&mr) == 0);
+  assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == -15);
+  mr.render.camera.event_param = 0xF1;
+  assert(fifa96_match_run_camera_follow(&mr) == 1);
+  assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
+
+  /* an out-of-range tracked id is a no-op */
+  assert(fifa96_camera_set_tracked(&mr.render.camera, 9999) == FIFA96_OK);
+  assert(fifa96_match_run_camera_follow(&mr) == 0);
+  assert(fifa96_match_run_camera_follow(NULL) == -FIFA96_ERR_INVALID);
+
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -3268,6 +3413,8 @@ int main(void) {
   test_row04_arm_a_track_reload();
   test_natural_goal_end_to_end();
   test_natural_goal_fallback_arm();
+  test_tracked_side_pick();
+  test_auto_camera_follows_tracked_slot();
   test_formation_producer();
   test_translation_install();
   puts("test_engine_match_frame OK");

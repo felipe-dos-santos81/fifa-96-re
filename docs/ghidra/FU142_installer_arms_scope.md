@@ -3257,13 +3257,16 @@ setter on a phase-2 write (`0x740F6`) and by the restart body `0x84F90`
   (`[0x1590CC]`/`[0x159901]` team flags); the scheduler `FUN_000948AC` and the
   `[0x14C32A]` frame gate. Consequence: the engine carries tracked side -1
   (`add_goal`-equivalent) until this lands.
-  *Status (T4, §L.10): **closed** (S3); the tracked-side pick and the handler
-  presentation bodies stay legs.*
+  *Status (T4, §L.10): **closed** (S3); the tracked-side pick landed in **T3**
+  (FU-148 §13.3: FUN_00078824's flag zeroing + the FUN_00092D8C pick; the
+  flags-zero image default is tracked 1 and the natural goal posts its probe
+  id) and the handler presentation bodies stay legs.*
 * **OL-88 — goal detection.** `FUN_0008AF38 0x8B623..0x8B63E` (phase 2/0x10 +
   `[0x15781D]`) -> `FUN_00088940` -> `FUN_0008A938(6, side)`: the gameplay goal
   producer is unported, so no gameplay goal reaches the derived source yet.
-  *Status (T4, §L.10): **closed** (S2/T2); `FUN_00071DF4`'s tracked-record
-  auto-camera stays the leg.*
+  *Status (T4, §L.10): **closed** (S2/T2); **T3** wired `FUN_00071DF4`'s
+  every-frame call site and first arm (FU-148 §13.2); its table/keeper second
+  arm stays the leg.*
 * **OL-89 — writer side effects.** The posted ids are captured
   (`score_last_event`) but not dispatched: `FUN_0009252C` ->
   `FUN_00066E70`/`FUN_00066724` and the `FUN_000CBC4C` probe result are
@@ -3430,20 +3433,23 @@ site).
 
 **OL status updates (superseding L.7 / L.9).**
 * **OL-87 — goal-screen handler cluster: closed.** The six period handlers,
-their step machines, the pending-id consumption through the writer and the
-scheduler order are ported (S3). Remaining legs: the tracked-side pick
-(`FUN_00092D8C`'s `[0x1590CC]`/`[0x159901]` team flags, FU-146 legs 4/10; the
-carried -1 keeps the writer's post block dormant) and the handler presentation
-bodies (FU-146 §8 items 7/8).
+  their step machines, the pending-id consumption through the writer and the
+  scheduler order are ported (S3). Remaining legs: the handler presentation
+  bodies (FU-146 §8 items 7/8). The tracked-side pick landed in **T3**
+  (`FUN_00078824` head zeroing + the `FUN_00092D8C` pick; FU-148 §13.3): the
+  image-default flags path yields tracked 1, so the natural goal's untracked
+  arm now posts the probe id (0xD3, the 0x112E68 first fold low byte 0xED) —
+  fixtured in `test_engine_match_frame::test_natural_goal_end_to_end`.
 * **OL-88 — goal detection: closed.** The camera-pan arm (`FUN_0007131C`),
-the clock-tail scan call and `FUN_00088940` are ported (S2/T2), with the live
-row-04 event as the reachable pan origin. Remaining leg: `FUN_00071DF4`
-(`0x73B6B` in `FUN_000736AC`), the every-frame tracked-record auto-camera —
-it reads the tracked record's `[rec+4]` type `0x18D8`, the height
-`[0x1577EE].hi > 0xF0`, the sub-object `[rec+0x20]` bytes `+0x20/+0x21` ×0xF
-into `[0x1577BE].hi`/`[0x1577C2]`, the `0x10E169`/`0x11042B/C` rate lookup and
-the keeper 0x1D/0x1E arm; the ball sub-object/velocity producers are unported,
-so the engine camera only moves on row events (the T2 port).
+  the clock-tail scan call and `FUN_00088940` are ported (S2/T2), with the live
+  row-04 event as the reachable pan origin. Remaining leg: the `FUN_00071DF4`
+  second arm (the `0x10E169`/`0x11042B/C` rate lookup and the keeper 0x1D/0x1E
+  ring); the **every-frame call site and the first arm are now wired (T3)** —
+  the call-site gates (pan counter 0, bearing nonzero, height > 0x10, both
+  rates zero), the tracked-record bind and the slot-dir follow are live
+  (FU-148 §13.2). The high-ball producer (height > 0xF0 with a zero-rate
+  camera) is not reachable from the ported rows yet, so the camera still only
+  moves on row events in live play (the T2/T3 ports).
 * **OL-89 — writer side effects: closed except the sink.** The probe was
 already ported (S3); T4 ports the `FUN_0009252C`/`FUN_000A80E2` gate and the
 dispatch observation. The `FUN_00066724(id, 0)` HUD/commentary chain
@@ -3457,8 +3463,10 @@ natural kickoff (the 0x13 countdown + the T3 KICK press, no forced phase or
 ground-ball sub-object arm (the `0x7F035` slot-dir arm, ball height 0) and
 asserts each link: the row event (`vel_z != 0`, coda code 5) -> the pan past
 `0xB20` + armer zone 1 -> the scan's queue (id 5, `pending` 1, score still
-0-0) -> the next frame's scheduler/handler post -> score 1-0 (`last_side` 0,
-no post id with the carried tracked -1). `test_natural_goal_fallback_arm`
+0-0) -> the next frame's scheduler/handler post -> score 1-0 (`last_side` 0;
+**T3 update:** the tracked-side pick is live, so the post is now the probe id
+0xD3 — `score_last_event == 0xD3`, captured but not dispatched at the image
+sound cells). `test_natural_goal_fallback_arm`
 covers the queue-condition closed arm (gate 0 at scan time -> the direct
 fallback increments the score and writes phase 5, no id queued). The T4 RED
 was the new display-boundary API (the loader `dispatched` field + the
