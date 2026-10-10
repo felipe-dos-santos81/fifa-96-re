@@ -247,8 +247,8 @@ path touched). Port write set: `include/fifa96_loader/fifa96_action_handlers.h`,
   `lane > 0x40` ready path resets first); any other phase resets. §5's table
   row `01`/`02`/`03`/`0D` is a slice-time snapshot: `02` is now `FIFA96_OK`
   through `fifa96_match_dispatch_action` (row 01 landed earlier in
-  M2 playable-match Task 2; the live FU-137 §7 totals are 20 ported / 59
-  UNSUP / 1 NOTF). OL-18 narrows to the stage-1/2 arms. Tests:
+  M2 playable-match Task 2; the live FU-137 §7 totals are 21 ported / 58
+  UNSUP / 1 NOTF, the phase-9 T1/T2 updates). OL-18 narrows to the stage-1/2 arms. Tests:
   `test_engine_match_handlers::test_action_02_restart_and_phase2_arms`; the
   live movement gate is
   `test_engine_match_frame::test_held_key_moves_live_controlled_record`.

@@ -1223,7 +1223,9 @@ contract, `CMakeLists.txt` (`fifa96_action_handlers` now links
   `[[rec+0x28]][0]` (the `0x6E598` id gate, shares OL-52), the camera-track
   lead words `0x1577C0`/`0x1577C2` and the `+0x6F` word are staged zero in
   the engine; the row-05 `0x15872A`/`0x15872F` bytes (its carrier claim
-  producers, OL-63) are staged zero; the `[0x157ABE]` side-mirror byte behind
+  producers, OL-63) are **live producers since M2 phase-9 T2** (row 05 is
+  wired and writes them; §8.6 / FU-137 §7) — the remaining row-06 input bytes
+  above stay staged zero; the `[0x157ABE]` side-mirror byte behind
   the score index is staged 0; the `[0x158724]` carrier is the pool ball
   carrier stand-in; the `0x79CCC` callback position is the record's own
   position (the `[rec+0x1C]` phase handler is unported); the `0x6DA64` swap

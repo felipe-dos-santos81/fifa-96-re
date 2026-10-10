@@ -2467,7 +2467,9 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
                  mr->slot.released != 0)
                     ? 1u
                     : 0u;  /* native word[slot+6]: the FU-70 released word */
-  c.type8 = r->actor_type;             /* byte +0x8E */
+  c.type8 = r->actor_type;             /* native byte +0x8E; the pool
+                                        * actor_type writer is unported
+                                        * (always 0, OL-83) */
   c.code = r->code;
   c.event_flag44 = r->row44;           /* native +0x44 */
   c.is_team_target = id == team->target ? 1u : 0u;
@@ -2527,7 +2529,10 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
     r->target_y = r->pos_y;
     r->target_z = r->pos_z;
   }
-  if (out.face != 0) r->type = out.face; /* 0x7F607 (0x79C50) */
+  if (out.face != 0) r->type = out.face; /* 0x7F607 (0x79C50); the loader's
+                                          * face == 0 also means "no face
+                                          * arm" (shared with rows 08/0F/28),
+                                          * so a genuine octant 0 is dropped */
   if (out.handoff != 0) {                /* 0x7F637..0x7F657 */
     int32_t actor = mr->entities.ball.pair.actor;       /* [0x158730] */
     int32_t receiver = mr->entities.ball.pair.receiver; /* [0x158734] */
