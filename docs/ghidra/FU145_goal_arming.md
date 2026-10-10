@@ -594,7 +594,7 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
 
 | leg | status |
 |---|---|
-| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | **landed producer-level in S4** (phase-6): the pose feed `fifa96_camera_pose_feed` (`FUN_000505D0`) + the event setter `fifa96_camera_event_set` (`FUN_00071C94`/`FUN_00070544` subset) drive the real integrator, and `test_camera_pan_event_chain` runs producer → armer → queue → S3 score. The natural pan invoker remains absent — all 11 `FUN_00071C94` row callers stay unported (FU-148 §11.2) |
+| L1 pan source (rate words / camera director, `FUN_00071C94` lead) | **landed producer-level, row caller wired (phase-8 T2)**: the event setter `fifa96_camera_event_set` is complete (bail gate, ramp sign param, corrected `[0x1577FA] = F6` timer cell, slow path, `> 0x19` atan walk), `fifa96_camera_pan_step`/`reposition`/`rate_table` are derived ports and `fifa96_camera_update` calls the pan step at the native `0x737da` site; `fifa96_match_action_04` consumes the row-04 `out.events` (native `0x7EFCF`/`0x7F0D1`), so a live gameplay row now pans the camera (`test_row04_live_pan_arms_camera`: row → armer → situation 5 → S3 score; FU-148 §12). Carried: the other 10 `FUN_00071C94` row callers, the `> 0x70` anchor branch and the sound/table sinks (OL-T11-79) |
 | L2 `FUN_00092998(1,4,-1)` preselection | open (selection outputs stay zero) |
 | L3 possession-selection sinks (`0x795B4`/`0x79C50`/`0x6E598`/`0x741B4`/`0x651F0`/`0x974F0`) | open — nearest search substituted |
 | L4 `[0x1587D4]`/`[0x1577CA]` record identities / `[0x157A4C]` flag | open — snapshot-sign stand-in |

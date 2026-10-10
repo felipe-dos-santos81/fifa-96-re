@@ -2,6 +2,8 @@
 #include <stdint.h>
 #include "fifa96_loader/fifa96_err.h"
 
+struct fifa96_rng;
+
 typedef struct fifa96_camera {
   int32_t pos_x, pos_y, pos_z;
   int32_t target_x, target_y, target_z;
@@ -18,6 +20,25 @@ typedef struct fifa96_camera {
   uint16_t anchor_time, anchor2_time;
   int8_t rate_x, rate_z;
   uint8_t paused;
+  /* FU-148 §2.1(c)/§5.2 + FU-152 §2.9 (T2): the FUN_000719C4/FUN_000700F4
+   * event cells the pan bodies read (first-hand):
+   * - event_suspended: [0x157A6C] != 0 -> FUN_00071C94 returns at 0x71C99;
+   * - ramp_divisor: [0x1577F8].lo = F8, the fast-path velocity divisor, and
+   *   the stored step pair [0x1577BA/BC] = vel * F8;
+   * - pan_counter: [0x157821], advanced by FUN_000709D0 (cap 100) and the
+   *   fast/slow path selector (fast only while 0);
+   * - pan_decay: [0x157819], FUN_000709D0's height decay rate (/0x20);
+   * - pan_rate_hi/lo: [0x15781A]/[0x15781B], the slow-path velocity scale
+   *   k (/0x20) for the height > 0 / height <= 0 arms. The three rate bytes
+   *   are the FUN_000700F4 table (0x1104AB + [0x14C2FE]*8 + [0x14C2FA]*2)
+   *   image defaults 10/16/8. */
+  uint8_t event_suspended;
+  int16_t ramp_divisor;
+  uint8_t pan_counter;
+  uint8_t pan_decay;
+  uint8_t pan_rate_hi;
+  uint8_t pan_rate_lo;
+  int16_t event_step_x, event_step_z;   /* [0x1577BA]/[0x1577BC] */
 } fifa96_camera;
 
 int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z);
@@ -187,23 +208,75 @@ int fifa96_camera_pose_feed(fifa96_camera *cam, int32_t *yaw, int32_t *pitch,
  * FUN_0006FFC0 installs at [0x157748]. */
 int16_t fifa96_camera_ramp(int16_t height);
 
-/* FU-148 §2.1(c)/§5.2 (S4): the derived FUN_00071C94 + FUN_00070544 subset —
- * the camera cut/event setter that feeds the FU-71 rate words. Preserves the
- * target (= the engine position; the native reset 0x700F4 is handed the
- * current target triple), resets the event state, copies the caller seed step
- * pair (the native 6-byte vec seed at 0x1577B8: {bearing, step_x, step_z}),
- * clamps the height to [target y, 0x640], runs the ramp (F2/F4/F6/F8), and
- * computes the signed fast-path velocity `seed / timer` plus the bearing
- * magnitude (`fifa96_entity_distance` = FUN_0008DC68), the step products and
- * the anchor A/B sets (0x157770/88/94). Returns 0 or -FIFA96_ERR_INVALID
- * (NULL). Legs: the > 0x19 bearing walk (FUN_000CD474 atan table 0x114E04),
- * FUN_000703E8's corner cells, the height > 0x70 anchor-time branch
- * ([0x157A6D]), the visual smoothing words 0x15780C/0E/10/12/14, the tracked
- * player cells 0x1577CA/CE and the event-rate bytes 0x157815/20/22 (the
- * FUN_00071C94 tail: player+0x20 sub-object, table 0x10E169), and the sound
- * sinks (FUN_00092820 etc.). */
+/* FU-148 §2.1(c)/§5.2 (S4) + FU-152 §2.9 (T2): the FUN_00071C94 +
+ * FUN_00070544 event setter — the camera cut/event setter that feeds the
+ * FU-71 rate words. Preserves the target (= the engine position; the native
+ * reset 0x700F4 is handed the current target triple), resets the event state,
+ * copies the caller seed step pair (the native 6-byte vec seed at 0x1577B8:
+ * {bearing, step_x, step_z}), clamps the height to [target y, 0x640], runs
+ * the ramp (F2/F4/F6/F8) with the caller's FUN_00070544 sign param
+ * (`ramp_param != 0` -> F6 = F2 + ramp(h - ty), the row-04 arm-A register;
+ * 0 -> F6 = F2 - ramp(h - ty)), computes the velocity (fast path
+ * `seed / F8` when F8 != 0 and pan_counter == 0, else the FUN_00070544 slow
+ * path scaling each nonzero velocity by k/0x20), recomputes the bearing, then
+ * runs the > 0x19 atan walk (FUN_000CD474 + the 0x114E04 sine fold + the
+ * FUN_000795A4 product) which caps the velocity magnitude to 0x19 in the
+ * current direction, and builds the anchor A/B sets (0x157770/88/94).
+ * Returns FIFA96_OK on the applied path, 1 when the [0x157A6C] bail gate is
+ * set (the native early return, 0x71C99), -FIFA96_ERR_INVALID on NULL.
+ * Legs (OL-T11-79): the height > 0x70 [0x157A6D] anchor-B branch,
+ * FUN_000703E8's corner cells, the FUN_00065CF8/FUN_00092820 sound sinks,
+ * the tracked-player/event-rate tail ([player+0x20], table 0x10E169) and the
+ * visual smoothing words 0x15780C/0E/10/12/14. */
 int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
-                            int16_t height);
+                            int16_t height, int ramp_param);
+
+/* FU-152 §2.9 (T2): FUN_000709D0, the timer-driven pan step FUN_000736AC
+ * calls when `timer > timer_limit`. Bands the event height into the
+ * FUN_00065CF8 sink arguments (returned through `class_of`/`param`, left
+ * untouched at height 0), advances [0x157821] (cap 100), decays the height by
+ * pan_decay/0x20, runs the ([0x14C1D4]|[0x14C1D6]) & 4 random walk when
+ * `walk_gate & 4` (the atan direction + the rng low byte jitter, velocity
+ * magnitude kept; an absent `rng` skips the jitter and is a leg), then re-runs
+ * FUN_00070544(0) over the stored step pair. Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID (NULL cam). */
+int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
+                           int walk_gate, int32_t *class_of, int32_t *param);
+
+/* FU-152 §2.9 (T2): FUN_00070DE0's derived core — the boundary/reposition
+ * handler the armer FUN_0007131C calls at 0x7134F. Classifies the previous
+ * (0x157758/5C/60) and current triples; on a nonzero flag overlap it is a
+ * no-op (returns 0). Otherwise, when the XOR has bit 0x8 clear, it walks from
+ * the previous point toward the current one (FUN_0008DC50(delta, 1) per axis)
+ * while the candidate keeps the previous flags (the adopted point is the
+ * farthest one whose classification still equals the previous triple's), then
+ * applies the mask effects: current-flag bits 3 negate-quarter vel_x, bit 4
+ * zeroes vel_z, bit 0x10 jitters y (the FUN_00070B94 elevation loop is a leg),
+ * and recomputes the bearing. Returns 1 when the walk/reposition ran, 0 for
+ * the overlap no-op, -FIFA96_ERR_INVALID on NULL. `type_off_x`/`type_off_z`
+ * are the caller-staged 0x10F334/3C tables (unused by the derived core).
+ * Legs (OL-T11-79): the bit-0x8 boundary arm (target z +-0xB11/+-0xB0F, the
+ * 0x8ED40/0x8F188 corner events -> `events`/`event_code`, the target-y clamp),
+ * the FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks, the elevation loop
+ * and the corner record classification. */
+int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
+                             int32_t prev_z, const int8_t *type_off_x,
+                             const int8_t *type_off_z, uint8_t *events,
+                             uint8_t *event_code);
+
+/* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). Gates:
+ * signed rate_byte >= 0, timer <= 0x1E, then when `subobj_present` the
+ * caller-resolved rate pair (the 0x10E169 + 0x11042B/0x11042C lookup is a
+ * leg) is written to rate_x/rate_z. The keeper gate (event_byte == 2, event
+ * height >= 0xC1, |anchor_x| <= 0x23F, rate_z != 0) emits 0x1D for the
+ * approaching cases and 0x1E otherwise through `keeper_code` (0 = none).
+ * Returns 1 when the rates were applied or a keeper code emitted, 0 when
+ * nothing applied, -FIFA96_ERR_INVALID (NULL cam/keeper_code). */
+int fifa96_camera_rate_table(fifa96_camera *cam, int32_t event_height,
+                             int32_t rate_byte, int32_t timer,
+                             int32_t subobj_present, int8_t rate_x, int8_t rate_z,
+                             int32_t event_byte, int32_t anchor_x, int32_t pos_z,
+                             int32_t vel_z, uint8_t *keeper_code);
 
 /* FU-152 §2.9 (P4): FUN_00070074's boundary classifier over the staged triple
  * {x, y, z}: |z| < 0xB10 -> 8, < 0xB90 -> 0, else 4; x < -0xD0 -> |1, x >

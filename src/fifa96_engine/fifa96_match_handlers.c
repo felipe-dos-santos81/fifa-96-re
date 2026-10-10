@@ -2261,6 +2261,22 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
                         (uint32_t)out.team_second_index);
   }
   if (out.reset != 0) match_row_reset(mr, e);
+  /* FU-148 §2.1(c)/§6.2 + FU-152 §2.9 (T2): the row-04 half-line camera
+   * event. The native call sites 0x7EFCF/0x7F0D1 pass FUN_00071C94 the
+   * type-table step seed (<<6 / <<5) and height EBX = 0; arm A
+   * (row byte 0x13, `event_track_reload`) also sets ECX = 1, the
+   * FUN_00070544 ramp param, and its tail writes
+   * `[0x1577FA] = [0x1577F0] + ([0x1577F0] >> 2)` (the pan timer). This is
+   * the natural gameplay-row pan origin the FU-145 armer consumes. */
+  if (out.events != 0) {
+    int rc2 = fifa96_camera_event_set(&mr->render.camera, out.event_x, out.event_z,
+                                      0, out.event_track_reload);
+    if (rc2 < 0) return rc2;
+    if (out.event_track_reload != 0 && (int16_t)mr->render.camera.event_param != 0) {
+      int16_t h = (int16_t)mr->render.camera.event_param;
+      mr->render.camera.timer = (uint16_t)(int16_t)(h + (h >> 2));  /* 0x7EFD4 */
+    }
+  }
   for (i = 0; i < out.install_count; i++) {
     if (out.installs[i].target == FIFA96_OUTFIELD_ROW04_INSTALL_OTHER) {
       int32_t oid = mr->entities.team[opp].target;
@@ -2279,8 +2295,8 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   if (out.slot_merge != 0) r->helper_request = 1;                    /* 0x7876C */
   /* out.anim (0x6E598, OL-52), out.slot_backup/slot_restore (0x78A84/
    * 0x78AA4, OL-65), out.corner/team7e7_inc/opp_7e7_clear (team block bytes,
-   * OL-72) and out.events (the 0x974DC/0x8F188/0x92820/0x71C94/0x974F0/
-   * 0x651F0 sinks, OL-67/OL-72) have no derived consumer. */
+   * OL-72) and out.events' remaining sinks (the 0x974DC/0x8F188 sound arms —
+   * the 0x71C94 event itself is wired above) have no derived consumer. */
   return FIFA96_OK;
 }
 

@@ -421,6 +421,11 @@ Follow integrator FUN_000736AC (ported as fifa96_camera_update) consumes
     vel_x/vel_z/event_param/timer; producers are the event machine
     FUN_00071C94 (+ FUN_00070544/0x709D0/0x70DE0/0x71DF4) called from 11
     gameplay sites; the ball staging FUN_0007A490 zeroes velocity in its arm.
+    T2 landed the producer chain: event_set is complete (bail gate, ramp sign
+    param, the corrected timer cell, the fast/slow paths, the > 0x19 atan
+    walk), pan_step/reposition/rate_table are derived ports, the update calls
+    pan_step at the native site, and row 04's event outputs are wired live
+    (§12).
 ```
 
 ### 5.3 Palette install graph
@@ -840,11 +845,16 @@ and is not part of the match contract.
   `FUN_0004B6FC` predicate and the second pose arrays; the selector-3 preamble
   pose arrays `0x1083CC`/`0x1084BC` (reached by arms 3/4/6/8 when
   `[camera+4] == 3`; the degenerate behavior-index read at `[0x108B60]`).
-* **OL-T11-79 (event-machine bodies)**: `FUN_000709D0`, `FUN_00070DE0`,
-  `FUN_00071DF4`, the `> 0x19` atan walk (`FUN_000CD474`/table 0x114E04),
-  `FUN_000703E8`, the `> 0x70` anchor-time branch, the smoothing words and
-  the tracked-player/event-rate tail; `FUN_00071C94`'s `[0x157A6C] != 0`
-  bail gate (the pan suspended with the match state).
+* **OL-T11-79 (event-machine bodies)**: **narrowed (T2, §11.7)** — the
+  FUN_00071C94/FUN_00070544 event setter is complete (bail gate, ramp sign
+  param, corrected timer cell, slow path, > 0x19 atan walk, tails),
+  FUN_000709D0/FUN_00070DE0/FUN_00071DF4 have derived ports and the row-04
+  gameplay caller is wired live. Carried: the `> 0x70` anchor branch, the
+  FUN_00065CF8/FUN_000974DC/FUN_000651F0/FUN_000974F0 sound sinks,
+  FUN_000703E8, the 0x15780C/0E smoothing words, the tracked-player tail
+  (0x1577CA/CE + table 0x10E169) and FUN_00071DF4's 0x11042B/0x11042C table
+  lookup; the other 10 row callers (0x70DD1, 0x7A219, 0x6FA62, 0x75DC4,
+  0x77423, 0x7F4E7, 0x82A6C, 0x77DC6, 0x7EFCF, 0x7F0D1) stay row legs.
 * **OL-T11-80 (palette pool identity / leg 11 carried)**: the loaded file
   that fills `[0x107290]` and the pool's rounded size (request 0x34E8,
   partition floor 0x3000).
@@ -852,3 +862,73 @@ and is not part of the match contract.
   `0x143018+side*0x49` +0x12 source and the FUN_0007412C layout install.
 * **OL-T11-82 (shade cube / leg 11)**: no static consumer of the
   `"inversetbl"` cube (re-verified); stays out of the match contract.
+
+---
+
+## 12. Port landing (T2 camera live feed / pan origin, 2026-10-09)
+
+Phase-8 T2 (`docs/superpowers/plans/2026-10-09-fifa96-m2-phase8-live-loop.md`),
+first-hand `/FIFA96.EXE` re-derivation of the §2.1(c)/§5.2 producer chain.
+
+### 12.1 `fifa96_camera_event_set` completion (FUN_00071C94 + FUN_00070544)
+
+| landed | native | notes |
+|---|---|---|
+| `[0x157A6C] != 0` bail gate | `0x71c99` | `fifa96_camera.event_suspended`; returns 1 with no reset |
+| ramp sign param | FUN_00070544 EAX arg | `ramp_param != 0` -> `F6 = F2 + ramp(h - ty)` (row-04 arm A's ECX=1), else the NEG path |
+| timer cell | `[0x1577FA]` = **F6** | S4 stored `timer = F8`; the first-hand disasm stores F8 at `[0x1577F8].lo` (the fast-path divisor) and F6 at `[0x1577FA]` (the timer). Corrected; `ramp_divisor`/`event_step_x/z` now carry the divisor and the stored 0x1577BA/BC step pair |
+| fast/slow path | `0x70630..0x706d9` | fast (`F8 != 0 && [0x157821] == 0`) = `seed / F8`; slow = each nonzero velocity `* k / 0x20` (k = `[0x15781A]` height arm / `[0x15781B]` idle arm; FUN_000700F4 table 0x1104AB image defaults 10/16/8 staged on the reset) |
+| > 0x19 atan walk | `0x70704..0x70798` | `fifa96_entity_angle` + `fifa96_entity_sine` folds + `FUN_000795A4` products cap the velocity magnitude to 0x19 in the current direction |
+| tails | `0x70996..0x709c1` | event cursor/acc cleared; rate bytes 0x157816/17 zeroed (rate-819/81A/81B staged by the reset) |
+
+### 12.2 Pan producers (FUN_000709D0 / FUN_00070DE0 / FUN_00071DF4)
+
+* `fifa96_camera_pan_step` = FUN_000709D0: the height band (returned for the
+  FUN_00065CF8 sink), the `[0x157821]` counter (cap 100), the
+  `event_param * [0x157819] / 0x20` decay, the `([0x14C1D4]|[0x14C1D6]) & 4`
+  random walk (atan direction + rng low-byte jitter; an absent rng is the
+  staged default), then FUN_00070544(0) over the stored step pair.
+  `fifa96_camera_update` now calls it in-line when `timer > timer_limit`
+  (`0x737b9..0x737da`, signed word compare; the native call site).
+* `fifa96_camera_reposition` = FUN_00070DE0 derived core: the
+  FUN_00070074 flag compare (AND != 0 -> no-op), the FUN_0008DC50(delta, 1)
+  walk from the previous triple toward the current one while the previous
+  class holds, the mask bit effects (3 -> vel_x negate-quarter, 4 -> vel_z = 0,
+  0x10 -> y jitter) and the bearing recompute. The bit-0x8 boundary arm
+  (target z ±0xB11/±0xB0F, 0x8ED40/0x8F188 corner events) and the sound sinks
+  are legs.
+* `fifa96_camera_rate_table` = FUN_00071DF4 table/keeper arm (derived): the
+  signed rate-byte and timer <= 0x1E gates, the caller-resolved rate write,
+  and the keeper 0x1D/0x1E gate (event byte 2, height >= 0xC1, |anchor_x| <=
+  0x23F, rate_z non-zero with the pos_z/vel_z sign cases). The 0x10E169 +
+  0x11042B/0x11042C lookup is a leg (the caller stages the pair).
+
+### 12.3 Live wire (first reachable row caller)
+
+Row 04's ported body (`fifa96_outfield_row04_step`) already produced the
+native 0x7EFCF/0x7F0D1 event outputs; `fifa96_match_action_04` now consumes
+them: `out.events` -> `fifa96_camera_event_set(camera, event_x, event_z, 0,
+event_track_reload)` (+ the arm-A `[0x1577FA] = h + h/4` tail). This is the
+first *reachable gameplay-row* pan origin (the other ten FUN_00071C94 callers
+are body legs). The armer chain then fires from the real row:
+`test_engine_match_frame::test_row04_live_pan_arms_camera` installs a live
+action-04 record, lets the frame dispatch produce the event (no fixture poke),
+parks the camera at z 0xB00 and observes armed -> zone 1 -> queued situation 5
+-> S3 score 1-0.
+
+### 12.4 Errata (T2, first-hand)
+
+1. **Timer cell (S4 §11.2).** FUN_00070544 stores the fast-path divisor at
+   `[0x1577F8].lo` (=F8 = F4-F6) and the timer at `[0x1577FA]` (=F6); S4's
+   "timer = F8" read the wrong word. The FU-152 §2.9 cell map's
+   "`0x1577F8.hi` = timer" was right; the code was not.
+2. **Slow path constants.** `[0x15781A]`/`[0x15781B]` are the slow-path
+   velocity scale bytes (image 16/8), not event-rate words; they come from
+   FUN_000700F4's 0x1104AB table. `[0x157819]` = 10 is the height decay rate.
+3. **Pan-step call site.** FUN_000736AC calls FUN_000709D0 when
+   `(short)[0x1577FA] > (short)[0x1577F4]` (`0x737b9..0x737da`, JG) before the
+   same frame's integration; the engine port follows that order.
+4. **`FUN_00070544` C6/F6 base.** `F6 = [0x1577F2] ± ramp([0x1577F0] -
+   [0x157768])` — the decompiled `EDX = [0x1577F0] >> 16` is the high word
+   = F2 (the dword alias at 0x1577F0/0x1577F2), not event_param. S4's
+   `F6 = F2 - ramp(h - ty)` was already correct.

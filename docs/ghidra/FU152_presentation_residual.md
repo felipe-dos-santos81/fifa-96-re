@@ -493,6 +493,16 @@ at `0x73B0C` compares `[0x1577EE].lo` with `[0x14C2F6]`-selected 0x70/0x90);
 `0x1577FE.hi` = `anchor_time`; `0x158006` = `anchor2_time`;
 `0x1577BA.lo` = `step`; `0x157816/17` = `rate_x/rate_z`.
 
+**T2 corrections (first-hand, 2026-10-09; FU-148 §12.4):** the map above is
+right on the two timer cells but FUN_00070544 stores the fast-path divisor
+**F8 = F4 - F6** at `[0x1577F8].lo` (= `ramp_divisor`) and the timer **F6** at
+`[0x1577FA]`; the 6-byte seed is `{bearing, step_x, step_z}` at
+`0x1577B8/BA/BC` (`event_step_x/z`), re-read/re-written by FUN_00070544. The
+slow path scales each nonzero velocity by `k/0x20` with k = `[0x15781A]`
+(height arm, image 16) / `[0x15781B]` (idle arm, image 8); `[0x157819]`
+(image 10) is FUN_000709D0's height decay rate; `[0x157821]` is the pan
+counter and the fast/slow selector.
+
 ### 2.10 Palette residual
 
 **`FUN_00046F80(base)` fresh disasm (54 insns, exact):**

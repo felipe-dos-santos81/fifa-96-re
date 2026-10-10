@@ -1,5 +1,6 @@
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_entity_update.h"
+#include "fifa96_loader/fifa96_rng.h"
 
 #include <string.h>
 
@@ -38,14 +39,32 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->rate_x = 0;
   cam->rate_z = 0;
   cam->paused = 0;
+  cam->event_suspended = 0;
+  cam->ramp_divisor = 0;
+  cam->pan_counter = 0;
+  cam->pan_decay = 0;
+  cam->pan_rate_hi = 0;
+  cam->pan_rate_lo = 0;
+  cam->event_step_x = 0;
+  cam->event_step_z = 0;
   return FIFA96_OK;
 }
+
+/* FU-152 §2.9 (T2): FUN_000709D0 is defined below the integrator; the native
+ * FUN_000736AC calls it in-line (0x737da) when `timer > timer_limit`. */
+static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
+                                    int walk_gate, int32_t *class_of,
+                                    int32_t *param);
 
 int fifa96_camera_update(fifa96_camera *cam, int16_t delta, int view_class, int input_bit2) {
   if (!cam) return -FIFA96_ERR_INVALID;
   if (cam->paused) return FIFA96_OK;
   if ((int16_t)cam->speed != 0 || (int16_t)cam->event_param != 0) {
     cam->timer = (uint16_t)(cam->timer + (uint16_t)delta);
+    /* FU-152 §2.9 (T2) / FUN_000736AC 0x737b9..0x737da: the timer-driven pan
+     * step runs before the same frame's integration. */
+    if ((int16_t)cam->timer > (int16_t)cam->timer_limit)
+      (void)camera_pan_step_internal(cam, NULL, 0, NULL, NULL);
     if ((int16_t)cam->speed != 0) {
       if (delta > 0) {
         cam->acc_x = (uint16_t)((uint16_t)cam->vel_x * (uint16_t)delta);
@@ -593,12 +612,120 @@ int16_t fifa96_camera_ramp(int16_t height) {
   return (int16_t)value;
 }
 
-int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
-                            int16_t height) {
-  int16_t target_y;
+/* FUN_000795A4 (0x795A4..0x795B2): (a*b + 0x8000) >> 16, the low word. */
+static int16_t camera_mul16(int32_t a, int32_t b) {
+  int64_t v = ((int64_t)a * (int64_t)b + 0x8000) >> 16;
+  return (int16_t)(uint16_t)(uint32_t)(int32_t)v;
+}
+
+/* FU-152 §2.9 (T2): FUN_00070544 — the ramp/velocity/anchor setup, split out
+ * of FUN_00071C94 so FUN_000709D0 can re-run it. `seed_x`/`seed_z` are the
+ * native stored step pair 0x1577BA/BC (the fast-path dividend); `ramp_param`
+ * is the caller's FUN_00070544 EAX argument (0 -> the NEG F6 path). */
+static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
+                             int ramp_param) {
   int16_t f2, f4, f6, f8;
-  int16_t vel_x, vel_z, step_x, step_z;
+  int16_t ty = (int16_t)cam->pos_y;              /* native 0x157768 = 0x157750 */
+  int has_height = (int16_t)cam->event_param > 0;
+  /* 0x7054b..0x70557: origin := the current camera triple (0x157764/68/6C). */
+  cam->target_x = cam->pos_x;
+  cam->target_y = cam->pos_y;
+  cam->target_z = cam->pos_z;
+  if (has_height) {
+    int16_t r;
+    if ((int16_t)cam->event_param > 0x640) cam->event_param = 0x640;
+    f2 = fifa96_camera_ramp((int16_t)cam->event_param);
+    f4 = (int16_t)(f2 * 2);
+    /* F6 = F2 +/- ramp(event_param - target y); the sign is the caller's
+     * FUN_00070544 param (0 -> subtract, the FUN_000709D0 path). */
+    r = fifa96_camera_ramp((int16_t)((int16_t)cam->event_param - ty));
+    f6 = ramp_param != 0 ? (int16_t)(f2 + r) : (int16_t)(f2 - r);
+    f8 = (int16_t)(f4 - f6);
+    cam->timer_limit = (uint16_t)f4;
+    cam->timer = (uint16_t)f6;
+  } else {
+    /* 0x705f0: the idle-height arm (F2=6, F4=0xC, F6=0, F8=0xC). */
+    f2 = 6;
+    f4 = 0xC;
+    f6 = 0;
+    f8 = 0xC;
+    cam->event_param = 0;                        /* 0x705fe */
+    cam->timer_limit = (uint16_t)f4;
+    cam->timer = (uint16_t)f6;
+  }
+  cam->ramp_divisor = f8;
+  /* 0x70630..0x706d9: the fast path (F8 != 0 and [0x157821] == 0) divides the
+   * stored step pair; the slow path scales each nonzero velocity by
+   * k/0x20 (k = [0x15781A] for the height arm, [0x15781B] for the idle arm).
+   * The FUN_00092820(0, 0x26) sound sink is a leg. */
+  if (f8 != 0 && cam->pan_counter == 0) {
+    cam->vel_x = (int16_t)(seed_x / f8);
+    cam->vel_z = (int16_t)(seed_z / f8);
+  } else {
+    int32_t k = has_height ? cam->pan_rate_hi : cam->pan_rate_lo;
+    if (cam->vel_x != 0) cam->vel_x = (int16_t)((k * (int32_t)cam->vel_x) / 0x20);
+    if (cam->vel_z != 0) cam->vel_z = (int16_t)((k * (int32_t)cam->vel_z) / 0x20);
+  }
+  /* 0x706f9: the bearing the integrator gates on. */
+  cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
+  /* 0x70704..0x70798: the > 0x19 atan walk — rebuild the velocity from the
+   * atan direction and cap the magnitude to 0x19. FUN_0008DC68's distance is
+   * the bearing; FUN_000CD474 the direction; the 0x114E04 sine fold and the
+   * FUN_000795A4 products (0x19 * sin, 0x19 * cos) rebuild the pair. */
+  if ((int16_t)cam->speed > 0x19) {
+    int32_t angle = 0;
+    if (fifa96_entity_angle(cam->vel_x, cam->vel_z, &angle) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    cam->vel_x = camera_mul16(0x19, fifa96_entity_sine(angle));
+    cam->vel_z = camera_mul16(0x19, fifa96_entity_sine(angle + 0x100));
+    cam->speed = 0x19;
+  }
+  /* 0x707c4..0x707eb: the step products against the divisor. */
+  cam->event_step_x = (int16_t)(cam->vel_x * f8);
+  cam->event_step_z = (int16_t)(cam->vel_z * f8);
+  /* 0x707f1..0x7081d: anchor path A (origin + step, y forced 0). */
+  cam->anchor_x = cam->target_x + cam->event_step_x;
+  cam->anchor_y = 0;
+  cam->anchor_z = cam->target_z + cam->event_step_z;
+  cam->anchor_time = (uint16_t)f4;
+  /* 0x7090c..0x70996: anchor path B at height >= 0x50 (a2_time = F2 + ramp(
+   * event_param - 0x50); span = a2_time - F6). The 0x70828..0x708e3 > 0x70
+   * [0x157A6D] branch is a leg (OL-T11-79). */
+  if (has_height && (int16_t)cam->event_param >= 0x50) {
+    int16_t a2_time = (int16_t)(f2 + fifa96_camera_ramp((int16_t)((int16_t)cam->event_param - 0x50)));
+    int16_t span = (int16_t)(a2_time - f6);
+    if (span >= 1) {
+      cam->anchor2_x = cam->target_x + (int16_t)(cam->vel_x * span);
+      cam->anchor2_z = cam->target_z + (int16_t)(cam->vel_z * span);
+      cam->anchor2_time = (uint16_t)a2_time;
+    } else {
+      cam->anchor2_x = cam->anchor_x;
+      cam->anchor2_y = cam->anchor_y;
+      cam->anchor2_z = cam->anchor_z;
+      cam->anchor2_time = (uint16_t)f4;
+    }
+  } else {
+    cam->anchor2_x = cam->anchor_x;
+    cam->anchor2_y = cam->anchor_y;
+    cam->anchor2_z = cam->anchor_z;
+    cam->anchor2_time = (uint16_t)f4;
+  }
+  /* 0x70996..0x709c1: the tail clears the event cursor, the accelerator words
+   * and the rate bytes 0x157816/17/18. */
+  cam->event_cursor = 0;
+  cam->acc_x = 0;
+  cam->acc_z = 0;
+  cam->rate_x = 0;
+  cam->rate_z = 0;
+  return FIFA96_OK;
+}
+
+int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
+                            int16_t height, int ramp_param) {
+  int16_t target_y;
   if (!cam) return -FIFA96_ERR_INVALID;
+  /* 0x71c99: the pan suspended with the match state bails before the reset. */
+  if (cam->event_suspended) return 1;
   /* FUN_000700F4 subset (the native 71C94 call hands it the current target
    * triple and a zero flag): the target is preserved and the event state is
    * cleared; the origin/anchors all restart at the triple. */
@@ -626,67 +753,172 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   cam->anchor2_time = 0;
   cam->rate_x = 0;
   cam->rate_z = 0;
-  /* 71C94 0x71cdb..0x71cf8: clamp the height to [target y, 0x640]; FUN_00070544
-   * 0x705f1/0x705fe zeroes the cell again when the clamped value is < 1. */
+  cam->ramp_divisor = 0;
+  cam->event_step_x = 0;
+  cam->event_step_z = 0;
+  cam->pan_counter = 0;                          /* 0x700f4 clears 0x157821 */
+  /* 0x700f4 reads the 0x1104AB table at [0x14C2FE]*8 + [0x14C2FA]*2; the
+   * image defaults are both zero -> 0x157819/1A/1B = 10/16/8. */
+  cam->pan_decay = 10;
+  cam->pan_rate_hi = 16;
+  cam->pan_rate_lo = 8;
+  /* 71C94 0x71cdb..0x71cf8: clamp the height to [target y, 0x640];
+   * FUN_00070544 0x705f1/0x705fe zeroes the cell again when the clamped
+   * value is < 1 (the idle arm). */
   if (height < target_y) height = target_y;
   if (height > 0x640) height = 0x640;
   if (height < 1) height = 0;
   cam->event_param = (uint16_t)height;
-  /* FUN_00070544 0x70558..0x705ee: the height ramp. */
-  if (height < 1) {
-    f2 = 6;
-    f4 = 0xC;
-    f6 = 0;
-    f8 = 0xC;
-  } else {
-    f2 = fifa96_camera_ramp(height);
-    f4 = (int16_t)(f2 * 2);
-    /* param 0 -> the native NEG path: F6 = F2 - ramp(height - origin y). */
-    f6 = (int16_t)(f2 - fifa96_camera_ramp((int16_t)(height - target_y)));
-    f8 = (int16_t)(f4 - f6);
+  return camera_event_ramp(cam, seed_x, seed_z, ramp_param);
+}
+
+/* FU-152 §2.9 (T2): FUN_000709D0 (0x709d0..0x70b90) — the pan step. */
+int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
+                           int walk_gate, int32_t *class_of, int32_t *param) {
+  if (!cam) return -FIFA96_ERR_INVALID;
+  if ((int16_t)cam->event_param != 0) {
+    int32_t c = 0, p = 0;
+    fifa96_camera_pan_band((int32_t)(int16_t)cam->event_param, &c, &p);
+    if (class_of) *class_of = c;                 /* FUN_00065CF8 sink (leg) */
+    if (param) *param = p;
   }
-  cam->timer_limit = (uint16_t)f4;
-  cam->timer = (uint16_t)f8;
-  /* 0x70630..0x706d9: the fast path (timer != 0 and the reset [0x157821]==0):
-   * vel = the 0x1577BA/0x1577BC seed products / timer, signed. */
-  vel_x = f8 != 0 ? (int16_t)((int)seed_x / (int)f8) : 0;
-  vel_z = f8 != 0 ? (int16_t)((int)seed_z / (int)f8) : 0;
-  cam->vel_x = vel_x;
-  cam->vel_z = vel_z;
-  /* 0x706f9: bearing = FUN_0008DC68(vel_x, vel_z), stored at 0x1577BE (the
-   * engine's `speed`; the integrator's integration gate). Leg: the > 0x19
-   * FUN_000CD474 atan walk. */
-  cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(vel_x, vel_z);
-  /* 0x707c4..0x707eb: the step products against the new timer. */
-  step_x = (int16_t)(vel_x * f8);
-  step_z = (int16_t)(vel_z * f8);
-  /* 0x707f1..0x7081d: anchor path A (0x157770 = origin + step, y = 0). */
-  cam->anchor_x = cam->target_x + step_x;
-  cam->anchor_y = 0;
-  cam->anchor_z = cam->target_z + step_z;
-  /* Anchor times: the native height <= 0x70 path stores F4 into [0x158000];
-   * the > 0x70 [0x157A6D] branch is a leg (the timer is carried instead). */
-  cam->anchor_time = (uint16_t)f4;
-  /* 0x7090c..0x70996: anchor path B. */
-  if (height >= 0x50) {
-    int16_t a2_time = (int16_t)(f2 + fifa96_camera_ramp((int16_t)(height - 0x50)));
-    int16_t span = (int16_t)(a2_time - f6);
-    if (span >= 1) {
-      /* 0x157794/0x15779C = origin + vel * span; [0x157798] keeps the reset y. */
-      cam->anchor2_x = cam->target_x + (int16_t)(vel_x * span);
-      cam->anchor2_z = cam->target_z + (int16_t)(vel_z * span);
-      cam->anchor2_time = (uint16_t)a2_time;
+  /* 0x70a3f..0x70a65: the [0x157821] counter, capped at 100. */
+  if (cam->pan_counter < 100) cam->pan_counter++;
+  /* 0x70a6b..0x70a90: event_param = event_height * [0x157819] / 0x20. */
+  cam->event_param =
+      (uint16_t)(int16_t)(((int32_t)(int16_t)cam->event_param *
+                           (int32_t)cam->pan_decay) / 0x20);
+  /* 0x70a96..0x70b80: the ([0x14C1D4]|[0x14C1D6]) & 4 random walk. */
+  if (cam->vel_x != 0 && cam->vel_z != 0 && (walk_gate & 4) != 0) {
+    int32_t angle = 0;
+    int32_t speed = fifa96_entity_distance(cam->vel_x, cam->vel_z);
+    if (fifa96_entity_angle(cam->vel_x, cam->vel_z, &angle) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    if (rng) {
+      uint16_t value = 0;
+      if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+      angle += (int8_t)(value & 0xFF);           /* 0x92ac8 low byte - 0x80 */
+    }
+    cam->vel_x = camera_mul16(speed, fifa96_entity_sine(angle));
+    cam->vel_z = camera_mul16(speed, fifa96_entity_sine(angle + 0x100));
+  }
+  /* 0x70b86: FUN_00070544(0) over the stored step pair. */
+  return camera_event_ramp(cam, cam->event_step_x, cam->event_step_z, 0);
+}
+
+/* The update's in-line call site (no rng/band staging on the frame path). */
+static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
+                                    int walk_gate, int32_t *class_of,
+                                    int32_t *param) {
+  return fifa96_camera_pan_step(cam, rng, walk_gate, class_of, param);
+}
+
+/* FU-152 §2.9 (T2): FUN_0008DC50 (0x8dc50..0x8dc62) — |v| >> n, signed. */
+static int32_t camera_shift_step(int32_t v, int n) {
+  if (v >= 0) return v >> n;
+  return -((-v) >> n);
+}
+
+/* FU-152 §2.9 (T2): FUN_00070DE0 (0x70de0..0x71310) — the derived core. */
+int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
+                             int32_t prev_z, const int8_t *type_off_x,
+                             const int8_t *type_off_z, uint8_t *events,
+                             uint8_t *event_code) {
+  uint16_t flags_prev = 0, flags_cur = 0;
+  uint16_t overlap;
+  int32_t cur[3];
+  int32_t prev[3] = {prev_x, prev_y, prev_z};
+  (void)type_off_x;
+  (void)type_off_z;
+  if (!cam || !events || !event_code) return -FIFA96_ERR_INVALID;
+  cur[0] = cam->pos_x;
+  cur[1] = cam->pos_y;
+  cur[2] = cam->pos_z;
+  *events = 0;
+  *event_code = 0;
+  (void)fifa96_camera_classify(prev, &flags_prev);
+  (void)fifa96_camera_classify(cur, &flags_cur);
+  overlap = (uint16_t)(flags_prev & flags_cur);
+  if (overlap != 0) return 0;                    /* 0x70e2x: the AND return */
+  if (((flags_prev ^ flags_cur) & 0x8u) == 0) {
+    /* 0x70e56..0x710fd LAB: step the current triple back toward the previous
+     * one (FUN_0008DC50(delta, 1) per axis) while the candidate keeps the
+     * previous flags; adopt each adopted candidate. */
+    int32_t adopted[3] = {prev_x, prev_y, prev_z};
+    int32_t delta[3] = {cur[0] - prev[0], cur[1] - prev[1], cur[2] - prev[2]};
+    for (;;) {
+      int32_t candidate[3];
+      delta[0] = camera_shift_step(delta[0], 1);
+      delta[1] = camera_shift_step(delta[1], 1);
+      delta[2] = camera_shift_step(delta[2], 1);
+      if (delta[0] == 0 && delta[1] == 0 && delta[2] == 0) break;
+      candidate[0] = adopted[0] + delta[0];
+      candidate[1] = adopted[1] + delta[1];
+      candidate[2] = adopted[2] + delta[2];
+      {
+        uint16_t candidate_flags = 0;
+        (void)fifa96_camera_classify(candidate, &candidate_flags);
+        if (candidate_flags == flags_prev) {
+          adopted[0] = candidate[0];
+          adopted[1] = candidate[1];
+          adopted[2] = candidate[2];
+        }
+      }
+    }
+    cam->pos_x = adopted[0];
+    cam->pos_y = adopted[1];
+    cam->pos_z = adopted[2];
+  }
+  /* The mask effects (bit 8 is the boundary arm, leg). */
+  if ((flags_cur & 3u) != 0) cam->vel_x = (int16_t)camera_shift_step(-cam->vel_x, 2);
+  if ((flags_cur & 0x4u) != 0) cam->vel_z = 0;
+  if ((flags_cur & 0x10u) != 0) {
+    /* The elevation jitter: +-2*delta on the y target; the FUN_00070B94
+     * elevation loop is a leg (OL-T11-79). */
+    cam->pos_y += (cam->pos_y < 0 ? -4 : 4);
+  }
+  cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
+  return 1;
+}
+
+/* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). */
+int fifa96_camera_rate_table(fifa96_camera *cam, int32_t event_height,
+                             int32_t rate_byte, int32_t timer,
+                             int32_t subobj_present, int8_t rate_x, int8_t rate_z,
+                             int32_t event_byte, int32_t anchor_x, int32_t pos_z,
+                             int32_t vel_z, uint8_t *keeper_code) {
+  int applied = 0;
+  if (!cam || !keeper_code) return -FIFA96_ERR_INVALID;
+  *keeper_code = 0;
+  if (rate_byte < 0) return 0;                   /* [0x157815] signed gate */
+  if (timer > 0x1E) return 0;                    /* [0x1577FA] gate */
+  if (subobj_present) {
+    /* The caller resolves the 0x10E169 table + the 0x11042B/0x11042C rate
+     * pair (leg OL-T11-79); a NULL pair is the native negative-byte return. */
+    if (rate_x == 0 && rate_z == 0) return 0;
+    cam->rate_x = rate_x;
+    cam->rate_z = rate_z;
+    applied = 1;
+  }
+  if (event_byte != 2) return applied;
+  if (event_height < 0xC1) return applied;
+  if (anchor_x > 0x23F || anchor_x < -0x23F) return applied;
+  if (rate_z < 0) {
+    if (pos_z < 0) {
+      if (vel_z < 1) return applied;
+      *keeper_code = 0x1D;
     } else {
-      cam->anchor2_x = cam->anchor_x;
-      cam->anchor2_y = cam->anchor_y;
-      cam->anchor2_z = cam->anchor_z;
-      cam->anchor2_time = (uint16_t)f4;
+      *keeper_code = 0x1E;
+    }
+  } else if (rate_z > 0) {
+    if (pos_z > 0) {
+      if (vel_z >= 0) return applied;
+      *keeper_code = 0x1D;
+    } else {
+      *keeper_code = 0x1E;
     }
   } else {
-    cam->anchor2_x = cam->anchor_x;
-    cam->anchor2_y = cam->anchor_y;
-    cam->anchor2_z = cam->anchor_z;
-    cam->anchor2_time = (uint16_t)f4;
+    return applied;
   }
-  return FIFA96_OK;
+  return 1;
 }

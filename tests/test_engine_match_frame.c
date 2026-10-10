@@ -1998,6 +1998,7 @@ static void test_goal_chain_pan_fixture(void) {
   fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00);
   mr.render.camera.vel_z = 0x40;          /* 0x40 * delta 2 per granted frame */
   mr.render.camera.speed = 0x40;          /* the update's integration gate */
+  mr.render.camera.timer_limit = 0x7FFF;  /* T2: keep the pan-step re-arm out */
   mr.render.camera.anchor_time = 0x7FFF;
   mr.render.camera.anchor2_time = 0x7FFF;
   one_granted_frame(&mr);
@@ -2383,15 +2384,15 @@ static void test_view_pose_feed_arms_camera(void) {
 /* FU-148 S4 / FU-145 S2 L1 hand-off: the real pan producer
  * (`fifa96_camera_event_set` = FUN_00071C94 + FUN_00070544) drives the FU-71
  * integrator past the arming bounds. The camera starts at z=0xB00; the event
- * seed step 2000 with height 0x30 gives vel_z = 40 and timer 50, so one
- * granted delta-2 frame lands z=0xB50 — inside the mouth band
- * (0xB10..0xB8F), zone 1 — and the same frame's scan queues situation 5 for
- * side 0. The next frame's scheduler consumes it through the S3 consumer
- * chain: score 1-0. This is the S2 pan-source closure: the velocity words are
- * produced by the ported event machine, not poked by the fixture. The natural
- * invoker remains absent (the 11 FUN_00071C94 callers are unported gameplay
- * rows; the armer's own angle arm requires pre-existing event state), so the
- * chain is producer-real but test-prompted. */
+ * seed step 2000 with height 0x30 gives F2=25/F4=50/F6=0: divisor 50, timer 0
+ * (the native [0x1577FA] = F6 cell), vel_z = 40 -> the > 0x19 atan walk caps
+ * the bearing to 25, so one granted delta-2 frame lands z=0xB32 — inside the
+ * mouth band (0xB10..0xB8F), zone 1 — and the same frame's scan queues
+ * situation 5 for side 0. The next frame's scheduler consumes it through the
+ * S3 consumer chain: score 1-0. This is the S2 pan-source closure: the
+ * velocity words are produced by the ported event machine, not poked by the
+ * fixture. The natural row-04 invoker is covered by
+ * `test_row04_live_pan_arms_camera`; the remaining 71C94 callers stay legs. */
 static void test_camera_pan_event_chain(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -2404,12 +2405,12 @@ static void test_camera_pan_event_chain(void) {
   assert(mr.situation_pending == 0);
 
   assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
-  assert(fifa96_camera_event_set(&mr.render.camera, 0, 2000, 0x30) == FIFA96_OK);
-  assert(mr.render.camera.vel_z == 40 && mr.render.camera.timer == 50);
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 2000, 0x30, 0) == FIFA96_OK);
+  assert(mr.render.camera.vel_z == 25 && mr.render.camera.timer == 0);
   one_granted_frame(&mr);
-  assert(mr.render.camera.pos_z == 0xB50);
+  assert(mr.render.camera.pos_z == 0xB32);
   assert(mr.goal_armed == 1);
-  assert(mr.goal_snap_z == 0xB50);
+  assert(mr.goal_snap_z == 0xB32);
   assert(mr.goal_zone == 1);
   assert(mr.situation_id == 5 && mr.situation_pending == 1);
   assert(mr.score[0] == 0);
@@ -2417,6 +2418,60 @@ static void test_camera_pan_event_chain(void) {
   one_granted_frame(&mr);
   assert(mr.score[0] == 1 && mr.score[1] == 0);
   assert(mr.score_last_side == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-148 §2.1(c)/§6.2 + FU-152 §2.9 (T2): the natural gameplay-row pan
+ * origin. A live action-04 record (the ported `fifa96_outfield_row04_step`
+ * half-line arm) produces `out.events` and the engine wires it to the real
+ * `fifa96_camera_event_set`; no fixture pokes the camera velocity. The camera
+ * starts at z=0xB00 so the row's first event lands it past the 0xB20 arming
+ * bound; the frame's armer then fires (zone 1) and the scan queues situation
+ * 5, consumed by the next frame (score 1-0). The row's own coda installs
+ * code 5 on the record, so exactly one row event drives the burst. */
+static void test_row04_live_pan_arms_camera(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(mr.situation_pending == 0);
+  assert(mr.slot.entity != id);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  e->active = 1;
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;                    /* at the camera: lane/angle gates pass */
+  e->target_x = 0;
+  e->target_z = 0xB00;
+  e->actor_type = 16;                  /* 0x10F334/3C offsets (21,88)<<5 seed */
+  e->anim_id = 0;                      /* row byte != 0x13 -> the event arm */
+  e->timer81 = 0;
+  mr.entities.ball.y = 0x20;           /* <= 0x50, != 0 -> the type-table seed */
+
+  one_granted_frame(&mr);
+  /* the row body fired the event: the camera velocity is the row's, not a
+   * fixture poke (vel_z 2816/12 = 234 -> atan-capped to 25). */
+  assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
+  assert(e->code == 5);                /* the row coda installed code 5 */
+
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1);
+  assert(mr.goal_snap_z > 0xB20);
+  assert(mr.goal_zone == 1);
+  assert(mr.situation_id == 5 && mr.situation_pending == 1);
+
+  one_granted_frame(&mr);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -2561,6 +2616,7 @@ int main(void) {
   test_row1e_stage3_possession_flip();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
+  test_row04_live_pan_arms_camera();
   test_formation_producer();
   test_translation_install();
   puts("test_engine_match_frame OK");

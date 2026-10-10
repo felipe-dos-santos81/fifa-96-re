@@ -149,6 +149,10 @@ Ghidra-project change.
 1. **Camera `+0x4C` writers**: the runtime update (the `0x4Cxxx..0x51xxx`
    band) and the angle's live range/units (the static field is the dword
    `0x1500`, with `+0x4D` byte `0x15`, in all five cameras — see §4 Errata).
+   **Narrowed (T2, 2026-10-09)**: the FU-71 event producers now write the
+   live pose/target (`fifa96_camera_event_set`/`pan_step`, FU-148 §12) and
+   the row-04 gameplay caller is wired; the 0x4Cxxx..0x51xxx view-mode/angle
+   writers and the `+0x4C` ratio's live clamp stay unported.
 2. **`5/12` factor**: why the second ratio uses 5/6 of the first
    (`dim2/2 = 5·dim/12`).
 3. **Camera selector table `(&0x8B64)[(&0x7514)[i*0x1C]]`** and the
