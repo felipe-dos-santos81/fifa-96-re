@@ -219,6 +219,38 @@ int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_ke
   return 0;
 }
 
+/* M2 phase-10 T2 (FU-148 §13.1): the FUN_0001C9BC range-word consumers derive
+ * three bits from `(word[0x14C1D4] | word[0x14C1D6])`: bit 0 = the boundary
+ * reflect input (`fifa96_match_goal_arm` -> `fifa96_camera_reflect`, FU-145
+ * §3), bit 1 = the FUN_000736AC interpolation arm (0x73A07..0x73A18 `TEST
+ * AL,2`, threaded as `render.input_bit2` into `fifa96_camera_update_walk`),
+ * and bit 2 = the FUN_000709D0 pan-step random walk gate (0x70ab1..0x70ac2,
+ * the frame's local `range & 4`). The native reads the words at each consumer
+ * site; the engine derives the two render bits whenever the words are rebuilt
+ * (match init FUN_00011B7C, and the config producer path below). */
+static void match_run_input_bits_update(struct fifa96_match_run *mr) {
+  uint16_t range = (uint16_t)(mr->input_range[0] | mr->input_range[1]);
+  mr->render.input_bit0 = (range & 1u) ? 1 : 0;
+  mr->render.input_bit2 = (range & 2u) ? 1 : 0;
+}
+
+/* M2 phase-10 T2 (FU-148 §12/§13): the `0x105278`-family config-cell producer
+ * path. The front-end options block (13 dwords 0x105274..0x1052A4, edited by
+ * FUN_0001C728 and queried by FUN_0001CAEC) feeds FUN_0001C9BC at match init.
+ * This setter stages the eight consumed cells from the block and rebuilds the
+ * range words + the two derived render bits, so a front-end/config caller can
+ * set the walk gate / reflect / interpolation bits from real settings. */
+int fifa96_match_run_set_input_options(
+    struct fifa96_match_run *mr,
+    const int32_t options[FIFA96_INPUT_OPTION_COUNT]) {
+  if (!mr || !options) return -FIFA96_ERR_INVALID;
+  if (fifa96_input_options_to_cells(options, mr->input_cfg) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  (void)fifa96_input_range_words(mr->input_cfg, 0, mr->input_range);
+  match_run_input_bits_update(mr);
+  return FIFA96_OK;
+}
+
 /* M2 interactive Task 1 / FU-77 §1: the shared per-record locomotion mover
  * `FUN_0007BF20` blocks A-E (`0x8E24B..0x8E507`, twin `FUN_0008E244`). The
  * native calls it from both record-machine tails after the action handler
@@ -280,6 +312,74 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
                        ((uint32_t)(uint16_t)r->vel75 << 16));
 }
 
+/* M2 phase-10 T2 (FU-147 §3.3 leg 7): the FUN_0007BF20 tail
+ * `0x7C7D3..0x7C8FC` — the per-record camera event the native runs for every
+ * record after the BF20 lane block, immediately before the record's own tail
+ * exits. First-hand gate bytes (`disassemble_bytes 0x7C7D3..0x7C907`):
+ *
+ *   0x7C7D3  (int16)(lane) > 0x10                        -> skip
+ *   0x7C7E2  word[+0x6B] >= word[+0x77] (fresh lane/bound) -> skip
+ *   0x7C7F0  [0x157820] != 0                             -> skip
+ *   0x7C7FD  [0x157822] != 0                             -> skip
+ *   0x7C80A  word[0x1577BE] (bearing) <= 4               -> skip
+ *   0x7C81B  dword[0x157750] == 0 (ball height)           -> skip
+ *   0x7C828  tracked != 0: tracked[+0x8D]==0 || rec==tracked ||
+ *            tracked[+0x91] in {8,9}                      -> skip
+ *   0x7C861  dword[rec+0x5D] > dword[0x157750]            -> skip
+ *   0x7C871  dword[rec+0x5D] + 0x70 < dword[0x157750]     -> skip
+ *   then (after the 0x8F188 command-ring post, an OL-27 leg)
+ *   0x7C8FC  CALL 0x70C08(rec)   (the camera event port)
+ *
+ * The dword/word aliases are the pool's low-word staging (the same derivation
+ * convention the chase gate's `[0x157750] < 0x30` and `+0x5D == 0` use;
+ * FU-75 §1.6): `ball.y` is the 0x157750 word, `pos_y` the +0x5D word,
+ * `lane_x` the +0x6B word, `bound` the +0x77 word, `camera.speed` the
+ * 0x1577BE bearing and `camera.tracked` the [0x1577CA] pool id. */
+static void match_run_record_camera_event(struct fifa96_match_run *mr,
+                                          struct fifa96_match_entity *e) {
+  fifa96_camera *cam = &mr->render.camera;
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  int32_t id = (int32_t)((uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS +
+                         e->index);
+  int16_t ball = (int16_t)mr->entities.ball.y;
+  int16_t height_5d = (int16_t)e->pos_y;
+  if ((int16_t)e->lane_x > 0x10) return;                    /* 0x7C7D3 */
+  if ((int16_t)e->lane_x >= (int16_t)e->bound) return;      /* 0x7C7E2 */
+  if (mr->flag_157820 != 0 || mr->flag_157822 != 0) return; /* 0x7C7F0/FD */
+  if ((int16_t)cam->speed <= 4) return;                     /* 0x7C80A */
+  if (ball == 0) return;                                    /* 0x7C81B */
+  if (cam->tracked != FIFA96_CAMERA_TRACKED_NONE) {         /* 0x7C828 */
+    if (cam->tracked >= 0 &&
+        cam->tracked <
+            (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+      const struct fifa96_match_entity *t =
+          &mr->entities
+               .team[(uint32_t)cam->tracked / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)cam->tracked % FIFA96_MATCH_ENTITY_RECORDS];
+      if (t->active == 0) return;             /* tracked[+0x8D] == 0 */
+      if (id == cam->tracked) return;         /* rec == tracked */
+      if (t->code == 8u || t->code == 9u) return;   /* tracked[+0x91] in {8,9} */
+    }
+  }
+  if (height_5d > ball) return;                   /* 0x7C861 */
+  if ((int32_t)height_5d + 0x70 < (int32_t)ball) return;    /* 0x7C871 */
+  in.skip_9a = e->skip_9a;
+  in.action_91 = e->code;
+  in.height_5d = height_5d;
+  in.ball_height = ball;
+  /* The FUN_0008F188 command-ring post (`0x7C8A2..0x7C8F8`) is the OL-27 leg;
+   * the camera event runs unconditionally after it. The 0x92820 sink request
+   * the port reports has no engine consumer yet (OL-27). FUN_00071C94 stores
+   * its player argument into [0x1577CA] (0x71D27) after the 0x71C99 bail, so
+   * an applied event rebinds the tracked record. */
+  {
+    int rc = fifa96_camera_record_event(cam, &mr->rng, &in, &out);
+    if (rc == 1 && out.applied != 0)
+      (void)fifa96_camera_set_tracked(cam, id);
+  }
+}
+
 /* ===== T3 (OL-T4-1/FU-75): the FUN_0007CA54 input-row dispatch ============
  *
  * The native outfield record machine (records 1..10; record 0 runs the keeper
@@ -325,9 +425,10 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
  * FUN_0007D9A4(rec, code, EBX=0, ECX=0)`) and `out.chase` (the code-8 gate
  * `0x7CD24`) install their codes through the pool installer, no invoke. The
  * native machine runs the forced/chase tail for every record (input dispatch
- * only for the slot-bearing ones); this seam keeps the slot-only scope, so the
- * chase arm stays gated by its own `[rec+0x20] == 0` gate on the reachable
- * path (the unbound-record walk is the L4.1 residual leg). */
+ * only for the slot-bearing ones); M2 phase-10 T2 widens the seam to every
+ * outfield record (the unbound-record walk), so the chase arm's
+ * `[rec+0x20] == 0` gate now fires for unbound records exactly as the native
+ * `FUN_0008D8EC` walk calls `FUN_0007CA54` for records 1..10. */
 struct match_input_ctx {
   struct fifa96_match_run *mr;
   struct fifa96_match_entity *e;
@@ -673,13 +774,18 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->vel73 = e->vel73;
   r->vel75 = e->vel75;
   r->body_timer9c = e->body_timer9c;
-  /* T3: the outfield record machine's input-row dispatch (native records 1..10
-   * via FUN_0007CA54 step 3; record 0 is the keeper machine's own tables)
-   * before the current-handler tail. An ECX=1 install invoked the new row
-   * during the scan; re-stage the fields the install changed and run it, so the
-   * tail dispatch below runs it a second time in the same frame (the native
-   * installer invoke + `0x7CD29 CALL [rec+0x18]` pair). */
-  if (e->has_slot != 0 && e->index != 0u) {
+  /* T3/L4.1 (M2 phase-10 T2): the outfield record machine's per-frame step for
+   * every outfield record (native records 1..10 via FUN_0007CA54; record 0 is
+   * the keeper machine's own tables). The slot-edge dispatch (step 3) runs only
+   * for the slot-bearing record inside `fifa96_outfield_input_row`; the
+   * forced-decision/chase tail (step 5) runs for every record, so unbound
+   * records now install codes 3/4/6 and chase 8 exactly as the native
+   * `0x8DB2E..0x8DB5F` walk does (`e->skip_9a` records are already skipped by
+   * the pool walk). An ECX=1 install invoked the new row during the scan;
+   * re-stage the fields the install changed and run it, so the tail dispatch
+   * below runs it a second time in the same frame (the native installer invoke
+   * + `0x7CD29 CALL [rec+0x18]` pair). */
+  if (e->index != 0u) {
     int invoke = match_run_outfield_input(mr, e, r);
     if (invoke < 0) return invoke;
     /* The machine tail's installs (the input-row handlers' invoke installs and
@@ -734,6 +840,9 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
         team->tracker7c7 = (int32_t)e->index;
     }
   }
+  /* The BF20 tail's per-record camera event (native 0x7C8FC, after the lane
+   * block): FU-147 §3.3 leg 7, first-hand gate bytes at the helper above. */
+  match_run_record_camera_event(mr, e);
   e->pos_x = r->pos_x;
   e->pos_y = r->pos_y;
   e->pos_z = r->pos_z;
@@ -1328,10 +1437,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * [0x14C1D4]/[0x14C1D6] from the 0x105278-family config cells. The entry
    * gate `FUN_0006D1B2() == 1` is `[0x15753C] == 0` (the image/BSS default;
    * its FUN_0006D5D5/FUN_0006D7AE producers are unported), so the engine
-   * passes the open gate. The config cells are staged zero (no static writer
-   * exists), so the derived words are zero until a front-end producer lands
-   * (leg). */
+   * passes the open gate. The config cells are staged zero by init (the image
+   * default) and the producer path `fifa96_match_run_set_input_options` can
+   * stage the front-end block (FU-148 §13.1) before/after begin; the derived
+   * words and bits are rebuilt here and in that setter. */
   (void)fifa96_input_range_words(mr->input_cfg, 0, mr->input_range);
+  match_run_input_bits_update(mr);
   /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */

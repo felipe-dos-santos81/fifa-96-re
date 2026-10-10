@@ -1021,6 +1021,13 @@ static void test_pad_kick_release_runs_kick_row(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* M2 phase-10 T2: with the L4.1 unbound walk live, every outfield record
+   * runs the forced/chase tail, so the team-target/control roles can move on
+   * their own (an AI record's row 04 legitimately claims control/ball).
+   * Isolate this pad fixture the way the native walk does: stage the `+0x9A`
+   * skip byte on the opponent team's outfield records for the whole run. */
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    mr.entities.team[1].records[i].skip_9a = 1;
   /* M2 phase-9 T1: the natural kickoff reaches live phase 2 (the same path as
    * test_natural_phase2_never_scores); there the ported row 02 (the second
    * kickoff pick, code 02) takes the FU-70 slot and its invoked row 04 stages
@@ -1043,6 +1050,23 @@ static void test_pad_kick_release_runs_kick_row(void) {
     assert(taker == 2);
     rec = &mr.entities.team[0].records[taker];
     assert(rec->has_slot == 1u);
+    /* M2 phase-10 T2: with the L4.1 unbound walk live, every outfield record
+     * runs the forced/chase tail, so the team-target/control roles can move on
+     * their own (an AI record's row 04 legitimately claims control). Isolate
+     * this pad fixture the way the native walk does: stage the `+0x9A` skip
+     * byte on every outfield record except the taker. */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+      for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+        if (t == 0u && (int32_t)i == taker) continue;
+        mr.entities.team[t].records[i].skip_9a = 1;
+      }
+    }
+    /* A carrier is the controlled actor natively; pinning it as the fixture
+     * precondition keeps FUN_0007C990's type-5 keep arm (the code-5 carrier
+     * state below) and the team_select_target skip stable. */
+    mr.entities.controlled = taker;
+    mr.entities.team[0].target = taker;
+    mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
     /* Stage the carrier state through the real installer (the row-04 coda
      * reaches code 5 only once the record is moving; the pad path itself is
      * what this test pins). */
@@ -1151,6 +1175,11 @@ static void test_machine_second_forced_reads_team_target_ball_bit(void) {
   /* target ball bit clear, controlled record's bit set -> native code 4. */
   target_rec->carrier = 0;
   other_rec->carrier = 1;
+  /* M2 phase-10 T2: with the L4.1 unbound walk live every outfield record runs
+   * the machine; isolate this fixture to the slot record (native `+0x9A`). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
   one_granted_frame(&mr);
   assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);   /* row 04 via the forced 4 */
   assert(slot_rec->code != 3u);      /* 4 / the row-04 coda 5 */
@@ -1174,6 +1203,9 @@ static void test_machine_second_forced_reads_team_target_ball_bit(void) {
   mr.entities.controlled = 3;
   target_rec->carrier = 1;
   other_rec->carrier = 0;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
   one_granted_frame(&mr);
   assert(slot_rec->code == 3u);      /* forced 3 == current: no install */
   assert((mr.dispatched_ok & (1ull << 0x04u)) == 0u);
@@ -1213,6 +1245,150 @@ static void test_machine_no_edge_arm_copies_camera_target(void) {
   assert(e->target_y == 0x222);
   assert(e->target_z == 0x333);
   assert(e->timer93 == 0x10u);       /* 0x79B58 (+0x99 staged 0) */
+}
+
+/* M2 phase-10 T2 / FU-75 L4.1: the unbound-record walk. The native
+ * FUN_0008D8EC walk (`0x8DB2E..0x8DB5F`, first-hand disassemble_bytes this
+ * task) calls FUN_0007CA54 for every outfield record 1..10; the forced
+ * decision FUN_0007C990 and the code-8 chase gate `0x7CC93..0x7CD24` run for
+ * records with no control slot too. On BASE the engine seam only ran the
+ * machine for the slot-bearing record, so an unbound team target kept its
+ * entry code and no row dispatched. */
+static void test_unbound_team_target_forced_installs_row04(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;                   /* the walk's new scope */
+  e->active = 1;
+  e->code = 3;                       /* flat[0x110680+3] & 1 != 0 */
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 1;    /* [team+0x7B2] = rec -> forced 4 */
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 1;        /* keeps team_select_target off */
+  one_granted_frame(&mr);
+  assert(e->code != 3u);             /* the forced 4 install (or row-04 coda) */
+  assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);
+}
+
+/* The code-8 chase gate (`0x7CC93..0x7CD24`) requires `[rec+0x20] == 0` (the
+ * unbound arm), phase 2, the type bit, not team target/second, lane < 0x50,
+ * ball height < 0x30, a present user on the other side, `word[+0x81] == 0`
+ * and `[rec+0x5D] == 0`. The same record with a bound slot must NOT chase. */
+static void test_unbound_chase_installs_and_runs_row08(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane = 0;                       /* distance 0 < 0x50 */
+  e->timer81 = 0;
+  e->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* not rec */
+  mr.entities.team[0].second = 3;    /* not rec */
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;       /* team 1: user present, side differs */
+  mr.entities.ball.y = 0x10;         /* camera < 0x30 */
+  one_granted_frame(&mr);
+  assert(e->code == 8u);             /* the chase install */
+  assert((mr.dispatched_ok & (1ull << 0x08u)) != 0u);
+  /* the bound twin: the chase's `[rec+0x20] == 0` gate refuses. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 1;
+  e->active = 1;
+  e->code = 3;
+  e->lane = 0;
+  e->timer81 = 0;
+  e->pos_y = 0;
+  mr.slot.entity = 1;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;
+  mr.entities.team[0].second = 3;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  mr.entities.ball.y = 0x10;
+  /* isolate the fixture to record 1 (the other unbound records would chase). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  assert(e->code != 8u);
+  assert((mr.dispatched_ok & (1ull << 0x08u)) == 0u);
+}
+
+/* M2 phase-10 T2 (FU-148 §12/§13): the config-cell producer path. The
+ * front-end options block (FUN_0001C728 / FUN_0001CAEC) stages the eight
+ * cells FUN_0001C9BC consumes, so the reflect / interpolation / walk-gate bits
+ * now fire from real settings. */
+static void test_input_options_producer_sets_range_bits(void) {
+  struct fifa96_match_run mr;
+  int32_t options[FIFA96_INPUT_OPTION_COUNT];
+  fifa96_match_run_init(&mr);
+  for (uint32_t i = 0; i < FIFA96_INPUT_OPTION_COUNT; i++) options[i] = 0;
+  options[1] = 2;                    /* 0x105278 == 2 -> the walk gate bit */
+  options[2] = 1;                    /* 0x10527C != 0 -> the reflect bit */
+  assert(fifa96_match_run_set_input_options(&mr, options) == FIFA96_OK);
+  assert((mr.input_range[0] | mr.input_range[1]) & 4u);
+  assert(mr.render.input_bit0 == 1);
+  assert(mr.render.input_bit2 == 0);
+  options[1] = 1;                    /* 0x105278 == 1 -> the interpolation bit */
+  options[2] = 0;
+  assert(fifa96_match_run_set_input_options(&mr, options) == FIFA96_OK);
+  assert((mr.input_range[0] | mr.input_range[1]) & 2u);
+  assert(mr.render.input_bit2 == 1);
+  assert(mr.render.input_bit0 == 0);
+  assert(fifa96_match_run_set_input_options(&mr, NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* M2 phase-10 T2 (FU-147 §3.3 leg 7): the FUN_0007BF20 tail's per-record
+ * camera event (`0x7C7D3..0x7C8FC`, CALL 0x70C08) now runs in the frame. The
+ * fixture satisfies every outer gate (lane 0 <= 0x10 and < bound, both
+ * 0x157820/22 flags clear, bearing 5 > 4, ball height 0x10, no tracked record,
+ * the +0x5D band) on a paused camera so the lane refresh keeps lane 0; the
+ * record event's reflect arm re-seeds the event height to the ball height. */
+static void test_record_event_tail_gate_fires_in_frame(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane_x = 0x20;                  /* old lane: the fresh 0 < 0x20 */
+  e->bound = 0x20;
+  e->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* not rec: no forced/target churn */
+  mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;       /* team 1: the chase/user gates */
+  mr.entities.ball.y = 0x10;
+  mr.render.camera.paused = 1;       /* no integration: lane stays 0 */
+  mr.render.camera.speed = 5;        /* [0x1577BE] bearing > 4 */
+  mr.render.camera.event_param = 0;
+  /* isolate the fixture to record 1 (other records' rows would move the
+   * camera event state the gate reads). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  assert(mr.render.camera.event_param == 0x10);
 }
 
 /* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): the live held-key movement on the
@@ -2975,6 +3151,12 @@ static void test_row04_live_pan_arms_camera(void) {
   e->anim_id = 0;                      /* row byte != 0x13 -> the event arm */
   e->timer81 = 0;
   mr.entities.ball.y = 0x20;           /* <= 0x50, != 0 -> the type-table seed */
+  /* M2 phase-10 T2: with the L4.1 walk + the BF20 camera-event tail live, a
+   * later record's tail event could rebind the camera-tracked cell; isolate
+   * the fixture to the row-04 record (native `+0x9A`). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 1u && i == 4u)) mr.entities.team[t].records[i].skip_9a = 1;
 
   one_granted_frame(&mr);
   /* the row body fired the event: the camera velocity is the row's, not a
@@ -3028,6 +3210,11 @@ static void test_row04_arm_a_track_reload(void) {
   e->anim_id = 0x13;                   /* arm A: event_track_reload */
   e->timer81 = 0;
   mr.entities.ball.y = 0x20;
+  /* M2 phase-10 T2: isolate to the row-04 record (the walk/BF20-tail events
+   * of other records would reset the camera under the fixture). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 1u && i == 4u)) mr.entities.team[t].records[i].skip_9a = 1;
 
   one_granted_frame(&mr);
   assert(mr.render.camera.vel_z != 0);           /* the row's event fired */
@@ -3686,6 +3873,10 @@ int main(void) {
   test_machine_forced_decision_installs_on_slot_record();
   test_machine_second_forced_reads_team_target_ball_bit();
   test_machine_no_edge_arm_copies_camera_target();
+  test_unbound_team_target_forced_installs_row04();
+  test_unbound_chase_installs_and_runs_row08();
+  test_input_options_producer_sets_range_bits();
+  test_record_event_tail_gate_fires_in_frame();
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();
   test_live_pass_kick_runs_receive_arm();

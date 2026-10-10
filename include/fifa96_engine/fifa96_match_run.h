@@ -505,8 +505,11 @@ struct fifa96_match_run {
    * (image default), so the natural goal's untracked arm posts the probe id
    * (0xD3). FUN_0001C9BC (match init FUN_00011B7C 0x11BA6) builds the
    * per-side range words [0x14C1D4]/[0x14C1D6] from the eight config dwords
-   * 0x105278/7C/88/8C/90/9C/A0/A4; the engine stages those cells (BSS 0, no
-   * static writer) and derives `(w0|w1) & 4` as the pan-step walk gate. */
+   * 0x105278/7C/88/8C/90/9C/A0/A4; the engine stages those cells (BSS 0 by
+   * default) and derives `(w0|w1) & 4` as the pan-step walk gate. M2 phase-10
+   * T2: the producer path `fifa96_match_run_set_input_options` stages the
+   * eight cells from the native 13-entry front-end options block
+   * (FUN_0001C728 / FUN_0001CAEC) and rebuilds the words. */
   uint8_t tracked_flag[2];
   uint8_t screen_record_mode;
   int32_t input_cfg[8];
@@ -743,6 +746,18 @@ void fifa96_match_run_init(struct fifa96_match_run *mr);
  * `count == 0` are tolerated as a no-input poll. */
 int fifa96_match_run_input(struct fifa96_match_run *mr, const fifa96_platform_key *keys,
                            size_t count);
+
+/* M2 phase-10 T2 (FU-148 §12/§13): stage the native front-end options block
+ * (13 dwords 0x105274..0x1052A4, edited by FUN_0001C728 / queried by
+ * FUN_0001CAEC) and rebuild the run's eight consumed config cells
+ * (0x105278/7C/88/8C/90/9C/A0/A4), the per-side range words [0x14C1D4]/D6
+ * (FUN_0001C9BC) and the derived `render.input_bit0` (reflect) /
+ * `render.input_bit2` (camera interpolation) bits. The pan-step walk gate
+ * `(w0|w1) & 4` is read by the frame body. Returns FIFA96_OK,
+ * -FIFA96_ERR_INVALID on NULL. */
+int fifa96_match_run_set_input_options(
+    struct fifa96_match_run *mr,
+    const int32_t options[FIFA96_INPUT_OPTION_COUNT]);
 
 /* Wire the run to a booted, non-quitting engine (MATCH mode), reset the match
  * clock (including the score pair), counters, input model, control slot and

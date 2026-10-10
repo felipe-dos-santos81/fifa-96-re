@@ -713,6 +713,37 @@
  *      `test_auto_camera_follows_tracked_slot`, `test_tracked_side_pick`,
  *      `test_natural_goal_end_to_end` (post 0xD3) and the T3 smoke.
  *
+ * --- v9.1 (M2 phase-10 T2): the L4.1 unbound walk, dispatch-set shrink ------
+ *
+ * M2 phase-10 T2 widens the record machine to every outfield record (the
+ * L4.1 unbound walk: `FUN_0008D8EC 0x8DB2E..0x8DB5F` calls `FUN_0007CA54` for
+ * records 1..10, so the phase-2 forced/chase tail runs for records without a
+ * control slot too) and adds the `FUN_00070C08` BF20-tail camera event
+ * (`0x7C8FC`). The tape's **transcript is byte-identical** (`cmp` clean, 165
+ * lines; M1 unmoved) but the observed dispatch set shrinks to 13 rows:
+ * `M2_WIRED_MASK` loses bit 0 (**row 00**, the m 41 stage-0 record 10) and bit
+ * 6 (**row 06**, the staged record 2).
+ *
+ * Why, first-hand: the native machine (re-disassembled this task) runs
+ * `FUN_0007CA54` step 3 (input dispatch) then step 5 (the type-gated
+ * `FUN_0007C990` forced decision + the code-8 chase gate) and only then step 6
+ * `CALL [rec+0x18]` — the current handler. A staged code on a phase-2 record
+ * that is neither the team target nor the second is re-forced to code 3 by
+ * step 5 before step 6 can dispatch it, so the tape's explicit code-0 and
+ * code-6 staging no longer survives to dispatch. Rows 00/06 stay wired and
+ * their native entries include the **non-phase-2 reset** path (`FUN_0007DAB4`
+ * / the row-06 `phase != 2` arm), which is exercised by their own loader
+ * fixtures; on this tape they are now forcing-limited like rows 10..13 (wired,
+ * no tape dispatch). The frames do not move because the re-forced code-3 rows
+ * have no observable body on the tape's staged records (rows 00/06 were
+ * render-invisible there, proven by the byte-identical transcript). Verified:
+ * staging 00/06 in the forced phase-0x14 window instead perturbs the
+ * team-target state and *moves* the transcript (measured and rejected), so the
+ * forcing change is deferred to the T4 tape-v10 rework. The live positives are
+ * fixture-pinned (`test_unbound_team_target_forced_installs_row04`,
+ * `test_unbound_chase_installs_and_runs_row08`,
+ * `test_record_event_tail_gate_fires_in_frame`).
+ *
  * Remaining forcing inventory, updated for the phase-9 state (the v7/v8 lists
  * still govern the transcript shape; each item carries its leg; nothing else
  * is forced):
@@ -732,11 +763,11 @@
  *     table/keeper second arm; the auto-camera's high-ball trigger needs the
  *     ball-staging producers (`FUN_0007A490`/`FUN_0007A084`), so the visible
  *     follow-cam stays a leg.
- *   - the live pad loop (FU-75 §1.5-§1.7/§2): L4.1 residual (the native
- *     machine walks the forced/chase tail for every outfield record while
- *     the seam keeps the slot-record scope — the unbound-record walk), L4.2
- *     applied, L4.3 `0x7E600`, L4.4 `0x7CD60`, L4.5 `0x7D1D4` and the L4.6
- *     residual (row-02 stage-1/2 arms + the keeper input tables); the
+ *   - the live pad loop (FU-75 §1.5-§1.7/§2): **L4.1 landed (M2 phase-10
+ *     T2)** — the native machine's forced/chase tail now runs for every
+ *     outfield record (the unbound-record walk); L4.2 applied, L4.3
+ *     `0x7E600`, L4.4 `0x7CD60`, L4.5 `0x7D1D4` and the L4.6 residual
+ *     (row-02 stage-1/2 arms + the keeper input tables) stay legs; the
  *     front-end repeat cadence under the hold policy.
  *   - the direct score call (m 62): as v8 — no tape record reaches the
  *     half-line pan band; the tracked-side pick is closed (T3) and the
@@ -829,12 +860,16 @@
  * set grows to 14 rows. M2 phase-9 T1 wires row 02 (FU-75 L4.6/FU-138 OL-18):
  * the begin state-1 arm's second kickoff pick carries code 2 into the tape's
  * first granted 0x13 frame and dispatches the row's `phase != 2` reset path,
- * so the set grows to 15 rows. The phase-8 T1 rows 10..13 are wired but not
- * exercised here (the taker mask below); 1D (FU-151 P3) dispatches only in
- * the keeper fixtures. */
+ * so the set grows to 15 rows. **v9.1 (M2 phase-10 T2): the L4.1 unbound walk
+ * makes the phase-2 forced tail re-force staged codes on non-target records
+ * before the same frame's dispatch, so the explicit code-0 (row 00) and code-6
+ * (row 06) staging no longer reaches the dispatch; the observed set is 13
+ * rows and both rows join the forcing-limited group (v9.1 block above).** The
+ * phase-8 T1 rows 10..13 are wired but not exercised here (the taker mask
+ * below); 1D (FU-151 P3) dispatches only in the keeper fixtures. */
 #define M2_WIRED_MASK                                                        \
-  ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |       \
-   (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |       \
+  ((1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |                       \
+   (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |                       \
    (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) |       \
    (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 

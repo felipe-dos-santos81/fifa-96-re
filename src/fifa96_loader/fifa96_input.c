@@ -118,3 +118,38 @@ int fifa96_input_range_words(const int32_t cells[8], int gate, uint16_t words[2]
   words[1] = w1;
   return 1;
 }
+
+/* M2 phase-10 T2 (FU-148 §13.1 / FU-1C728): the 0x105274 option-block
+ * producers. The max table is the image table `0x105108` (13 entries, stride
+ * 0x1C), first-hand `read_memory 0x105108` this task. */
+static const int32_t option_max[FIFA96_INPUT_OPTION_COUNT] = {
+    4, 3, 2, 3, 5, 2, 5, 2, 3, 5, 2, 5, 2,
+};
+
+/* The eight cells FUN_0001C9BC reads, in the fifa96_input_range_words order:
+ * 0x105278/7C/88/8C/90/9C/A0/A4 = option indices 1/2/5/6/7/10/11/12. */
+static const uint8_t option_cell_index[8] = {1, 2, 5, 6, 7, 10, 11, 12};
+
+int fifa96_input_option_max(uint32_t index) {
+  if (index >= FIFA96_INPUT_OPTION_COUNT) return 0;
+  return option_max[index];
+}
+
+int fifa96_input_option_step(int32_t options[FIFA96_INPUT_OPTION_COUNT],
+                             uint32_t index) {
+  int32_t next;
+  if (!options || index >= FIFA96_INPUT_OPTION_COUNT) return -FIFA96_ERR_INVALID;
+  /* 0x1C93B..0x1C951: next = value + 1; wrap to 0 when next >= max. */
+  next = options[index] + 1;
+  if (option_max[index] <= next) next = 0;
+  options[index] = next;
+  return FIFA96_OK;
+}
+
+int fifa96_input_options_to_cells(const int32_t options[FIFA96_INPUT_OPTION_COUNT],
+                                  int32_t cells[8]) {
+  uint32_t i;
+  if (!options || !cells) return -FIFA96_ERR_INVALID;
+  for (i = 0; i < 8u; i++) cells[i] = options[option_cell_index[i]];
+  return FIFA96_OK;
+}

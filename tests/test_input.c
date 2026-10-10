@@ -354,6 +354,80 @@ static void test_range_words_builder(void) {
   assert(words[0] == 0x1234 && words[1] == 0x5678);
 }
 
+/* M2 phase-10 T2 (FU-148 §13.1): the 0x105274 config-block producers. The
+ * image block is BSS 0 and the sole static writer is the front-end options
+ * editor FUN_0001C728 (`0x1C728..0x1C965`): the selected row i increments
+ * `(&0x105274)[i]` and wraps to 0 when the new value reaches the row max
+ * `*(int*)(&0x105108 + i*0x1C)`. The 13-entry max table is first-hand
+ * `read_memory 0x105108` (364 B): {4,3,2,3,5,2,5,2,3,5,2,5,2}.
+ * FUN_0001CAEC (`0x1CAEC..0x1CBBD`) is the read-side query of the same block
+ * (used by the team/kit screens). */
+static void test_option_producer_max_table(void) {
+  static const int32_t maxes[FIFA96_INPUT_OPTION_COUNT] = {
+    4, 3, 2, 3, 5, 2, 5, 2, 3, 5, 2, 5, 2
+  };
+  for (uint32_t i = 0; i < FIFA96_INPUT_OPTION_COUNT; i++)
+    assert(fifa96_input_option_max(i) == maxes[i]);
+  assert(fifa96_input_option_max(FIFA96_INPUT_OPTION_COUNT) == 0);
+}
+
+static void test_option_producer_step_wrap(void) {
+  int32_t options[FIFA96_INPUT_OPTION_COUNT];
+  for (uint32_t i = 0; i < FIFA96_INPUT_OPTION_COUNT; i++) options[i] = 0;
+  /* max 3: 0 -> 1 -> 2 -> wrap 0 (0x1C93A..0x1C94B: INC then max <= next). */
+  assert(fifa96_input_option_step(options, 1) == FIFA96_OK);
+  assert(options[1] == 1);
+  assert(fifa96_input_option_step(options, 1) == FIFA96_OK);
+  assert(options[1] == 2);
+  assert(fifa96_input_option_step(options, 1) == FIFA96_OK);
+  assert(options[1] == 0);
+  /* max 2 (index 12): 0 -> 1 -> 0. */
+  assert(fifa96_input_option_step(options, 12) == FIFA96_OK);
+  assert(options[12] == 1);
+  assert(fifa96_input_option_step(options, 12) == FIFA96_OK);
+  assert(options[12] == 0);
+  /* bounds/NULL. */
+  assert(fifa96_input_option_step(options, FIFA96_INPUT_OPTION_COUNT) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_input_option_step(NULL, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* The eight cells FUN_0001C9BC consumes are option indices 1/2/5/6/7/10/11/12
+ * (0x105278/7C/88/8C/90/9C/A0/A4), in the range-builder's argument order. */
+static void test_option_producer_cells_map(void) {
+  int32_t options[FIFA96_INPUT_OPTION_COUNT];
+  int32_t cells[8];
+  uint16_t words[2];
+  for (uint32_t i = 0; i < FIFA96_INPUT_OPTION_COUNT; i++) options[i] = 0;
+  assert(fifa96_input_options_to_cells(options, cells) == FIFA96_OK);
+  for (int i = 0; i < 8; i++) assert(cells[i] == 0);
+  options[1] = 2;    /* walk gate (0x105278 == 2 -> word bit 2) */
+  options[2] = 1;    /* reflect (0x10527C != 0 -> word bit 0) */
+  options[5] = 1;    /* side-0 0x200 (0x105288) */
+  options[6] = 4;    /* side-0 nibble 0x8 (0x10528C) */
+  options[7] = 1;    /* side-0 0x10 (0x105290) */
+  options[10] = 1;   /* side-1 0x200 (0x10529C) */
+  options[11] = 3;   /* side-1 nibble 0x40 (0x1052A0) */
+  options[12] = 1;   /* side-1 0x10 (0x1052A4) */
+  assert(fifa96_input_options_to_cells(options, cells) == FIFA96_OK);
+  assert(cells[0] == 2 && cells[1] == 1 && cells[2] == 1 && cells[3] == 4);
+  assert(cells[4] == 1 && cells[5] == 1 && cells[6] == 3 && cells[7] == 1);
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert((words[0] & 7u) == 5u);                    /* reflect + walk bits */
+  assert((words[0] & 0x200u) != 0 && (words[0] & 8u) != 0 &&
+         (words[0] & 0x10u) != 0);
+  assert((words[1] & 0x200u) != 0 && (words[1] & 0x40u) != 0 &&
+         (words[1] & 0x10u) != 0);
+  /* the walk-gate arm alone: option 1 == 1 -> word bit 1 (interpolation). */
+  options[1] = 1;
+  options[2] = 0;
+  assert(fifa96_input_options_to_cells(options, cells) == FIFA96_OK);
+  assert(fifa96_input_range_words(cells, 0, words) == 1);
+  assert((words[0] & 6u) == 2u);
+  assert(fifa96_input_options_to_cells(NULL, cells) == -FIFA96_ERR_INVALID);
+  assert(fifa96_input_options_to_cells(options, NULL) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init_zeroes();
   test_map_preserves_high_nibble();
@@ -373,6 +447,9 @@ int main(void) {
   test_code_player();
   test_lockout();
   test_range_words_builder();
+  test_option_producer_max_table();
+  test_option_producer_step_wrap();
+  test_option_producer_cells_map();
   puts("test_input: ok");
   return 0;
 }

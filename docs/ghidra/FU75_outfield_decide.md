@@ -681,6 +681,40 @@ program.
   `phase != 2` reset in the forced 0x13 window; `cmp` clean, 165 lines); the
   tape's observed dispatch set gains row 02 (`M2_WIRED_MASK`).
 
+## 12. T2 port landing — the L4.1 unbound-record walk (2026-10-10)
+
+M2 phase-10 T2, first-hand `/FIFA96.EXE` re-derivation of the walk the §11
+landing named as the L4.1 residual. Fresh
+`disassemble_bytes 0x8DB28..0x8DB67` + `0x7CC80..0x7CD33` this task:
+
+* **The walk.** `FUN_0008D8EC`'s records loop (`0x8DB35` keeper record 0
+  `CALL 0x782D0`; then EBX 1..10, skip `[EDX+0x9A] != 0`, `CALL 0x7CA54` at
+  `0x8DB4D` for **every** outfield record). The machine's step 5 tail
+  (`0x7CC82`: `[0x157A4A]>>24 == 2`; `0x7CC93`: `flat[0x110680 + byte[+0x91]]
+  & 1`; `0x7CCB1` `CALL 0x7C990`; `0x7CCB6..0x7CD24` the code-8 gate) runs for
+  unbound records too, then step 6 `CALL [rec+0x18]` dispatches the installed
+  row in the same frame. The `+0x20` slot gate lives only in step 3
+  (`0x7CB0D`), exactly as §1 states.
+* **Engine port.** `match_run_dispatch_entity` now calls
+  `match_run_outfield_input` for every outfield record (`e->index != 0u`), so
+  `fifa96_outfield_input_row`'s step 5 (the ported `fifa96_outfield_forced_action`
+  + `fifa96_outfield_chase_gate`) applies to unbound records: codes 3/4/6
+  install through the pool installer, chase installs 8, and the same-frame
+  re-dispatch runs the row. `e->skip_9a` records are skipped by the pool walk
+  (the native `0x8DB42` skip).
+* **Reachability.** The unbound subset that lands on ported bodies: forced 4
+  (row 04) for the team target, chase 8 (row 08) for far/loose records,
+  forced 6 (row 06) for target/second with the opponent ball bit. Codes 3
+  (`0x19` coercion for inactive) still land on the unported row 03 (OL-19).
+* **Tests.** `test_engine_match_frame::test_unbound_team_target_forced_installs_row04`,
+  `test_unbound_chase_installs_and_runs_row08` (both discriminating vs BASE:
+  the pre-T2 seam never ran the machine for unbound records).
+* **Tape.** The M2 transcript is byte-identical (165 lines; M1 unmoved) but
+  the observed dispatch set shrinks to 13 rows: the stage-0 code-0 and staged
+  code-6 records are re-forced to 3 by step 5 before step 6, so rows 00/06 no
+  longer dispatch from the tape's forcing (documented in `test_engine_m2.c`
+  v9.1; their non-phase-2 reset entries stay fixture-covered).
+
 ## Provenance
 
 Ghidra MCP on `/fifa96_le.bin`: `get_current_program_info`;

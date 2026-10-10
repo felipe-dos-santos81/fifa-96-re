@@ -1155,6 +1155,48 @@ the build also produces the windowed `fifa96` target (`make game`).
   timer81 loop, the `+0x7E7` cell, the `FUN_00079D5C` foul body, the `0x40`
   long-ball key, the `0x157750` ball-height producer, and the code-`16`
   ball-record machine). `make check` 108/108; ASan/UBSan clean.
+- **M2 phase-10 T2 (live-path carry-ons — unbound walk, config producers,
+  pan caller; FU-75 §12, FU-148 §13.1/§13.4, FU-147 §3.3 leg 7;
+  2026-10-10).** Three carry-ons from the phase-9/10 ledgers:
+  - **L4.1 unbound-record walk (FU-75 §12).** Fresh
+    `0x8DB28..0x8DB67`/`0x7CC80..0x7CD33`: `FUN_0008D8EC` calls `FUN_0007CA54`
+    for every outfield record 1..10, and the phase-2 forced/chase tail (step
+    5, `FUN_0007C990` + the code-8 gate) runs before the same frame's
+    handler dispatch (step 6). `match_run_dispatch_entity` now runs the ported
+    machine for every outfield record, so unbound records install codes
+    3/4/6 and chase 8 through the pool installer and the same-frame
+    re-dispatch runs rows 04/06/08. Tests:
+    `test_unbound_team_target_forced_installs_row04`,
+    `test_unbound_chase_installs_and_runs_row08` (discriminating vs the
+    pre-T2 slot-only scope).
+  - **`0x105278` config-cell producers (FU-148 §13.1).** The "no static
+    writer" census resolved to the 13-dword front-end options block
+    `0x105274..0x1052A4`: editor FUN_0001C728 (increment + wrap at the
+    `0x105108` stride-`0x1C` max table `{4,3,2,3,5,2,5,2,3,5,2,5,2}`),
+    query FUN_0001CAEC. Ported `fifa96_input_option_max`/`_step`/
+    `fifa96_input_options_to_cells` and the engine producer
+    `fifa96_match_run_set_input_options` (eight cells -> range words). The
+    derived consumers are now real: `render.input_bit0` (reflect, the FU-145
+    follow-up) and `render.input_bit2` (the `0x73A07..0x73A18` interpolation
+    bit), with the `range & 4` pan walk gate already threaded. Tests:
+    `test_input::test_option_producer_*`,
+    `test_input_options_producer_sets_range_bits`.
+  - **Remaining `FUN_00071C94` callers (FU-148 §13.4/§13.2).** Fresh
+    `get_xrefs_to 0x71C94` = 11 (same set). One wired: `0x70DD1`
+    (`FUN_00070C08`) with its previously undecomposed caller gate
+    (`FUN_0007BF20` tail `0x7C7D3..0x7C8FC`, FU-147 §3.3 leg 7): ported as
+    `fifa96_camera_record_event` + `match_run_record_camera_event`, run after
+    the BF20 lane block; it rebinds `[0x1577CA]` like FUN_00071C94 (`0x71D27`)
+    and reports the `0x92820(rec,0x1C)` sink (OL-27 leg). Dormant until the
+    `0x157750` ball-height producer (L14.7); fixture-pinned
+    (`test_record_event_tail_gate_fires_in_frame`, `test_camera::
+    test_record_event_*`). The other five (`0x7F4E7`, `0x71B8A`, `0x6FA62`,
+    `0x77423`, `0x77DC6`, `0x82A6C`) stay ledgered with their containing
+    bodies.
+  - **Goldens: no re-pin** (M1/M2 byte-identical, 165 lines). The M2
+    observed dispatch set shrinks to 13 rows (the staged code-0/6 records are
+    natively re-forced to 3 before dispatch; v9.1 provenance in
+    `tests/test_engine_m2.c`). `make check` 108/108; ASan/UBSan clean.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

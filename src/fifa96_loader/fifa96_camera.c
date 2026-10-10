@@ -914,6 +914,86 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
   return 1;
 }
 
+/* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
+ * per-record camera event FUN_0007BF20's tail calls for every record
+ * (0x7C8FC). Every gate and operand is read first-hand from
+ * `0x70C08..0x70DDD` this task. */
+int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
+                               const fifa96_camera_record_event_in *in,
+                               fifa96_camera_record_event_out *out) {
+  int16_t v1;
+  int16_t v2;
+  if (!cam || !in || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+  /* 0x70C12/0x70C1F: the record gates. */
+  if (in->skip_9a != 0) return 0;
+  if (in->action_91 == 0x22u && in->ball_height < 0x20) return 0;
+  /* 0x70C3A..0x70CA1: the two shift-stepped seed corrections (the native
+   * `[0x1577BA/BC] - ([0x15774C/54] - [0x157764/6C])`, 16-bit subtracts then
+   * the word store/re-read, >> 2 via 0x8DC50). */
+  {
+    int16_t dx =
+        (int16_t)((uint16_t)cam->pos_x - (uint16_t)cam->target_x);
+    int16_t dz =
+        (int16_t)((uint16_t)cam->pos_z - (uint16_t)cam->target_z);
+    v1 = (int16_t)camera_shift_step((int32_t)cam->event_step_x - (int32_t)dx, 2);
+    v2 = (int16_t)camera_shift_step((int32_t)cam->event_step_z - (int32_t)dz, 2);
+  }
+  if (v1 == 0 && v2 == 0) {
+    /* 0x70CB9..0x70CF7: three draws: t = (draw1 & 0x3F) + 0x30, then the
+     * draw2/draw3 low bits pick each seed's sign. */
+    uint16_t d1 = 0, d2 = 0, d3 = 0;
+    int32_t t;
+    if (!rng) return -FIFA96_ERR_INVALID;
+    if (fifa96_rng_step(rng, &d1) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (fifa96_rng_step(rng, &d2) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    if (fifa96_rng_step(rng, &d3) != FIFA96_OK) return -FIFA96_ERR_INVALID;
+    t = (int32_t)(d1 & 0x3Fu) + 0x30;
+    v1 = (int16_t)((d2 & 1u) ? t : -t);
+    v2 = (int16_t)((d3 & 1u) ? t : -t);
+  }
+  if ((int32_t)in->height_5d > (int32_t)in->ball_height) {
+    /* 0x70CFA..0x70D41: the event height ramps toward rec+0x5D (two halving
+     * steps when the first lands below it). */
+    int32_t f0 = (int32_t)(int16_t)cam->event_param;
+    f0 = f0 + ((f0 - (int32_t)in->height_5d) >> 1);
+    cam->event_param = (uint16_t)f0;
+    if ((int32_t)in->height_5d < f0) {
+      int32_t f0b = (int32_t)(int16_t)cam->event_param;
+      cam->event_param =
+          (uint16_t)(f0b + ((f0b - (int32_t)in->height_5d) >> 1));
+    }
+  } else {
+    /* 0x70D43..0x70D91: reflect one seed by the `[0x1577C0]/[0x1577C2]` sign
+     * compare against the `[0x1577BE]` bearing, then re-seed the height. */
+    int32_t e1 = (cam->vel_x >= 0) ? (int32_t)(int16_t)cam->speed
+                                   : -(int32_t)(int16_t)cam->speed;
+    int32_t e2 = (cam->vel_z >= 0) ? (int32_t)cam->vel_x
+                                   : -(int32_t)cam->vel_x;
+    if (e1 > e2) v2 = (int16_t)(0 - (uint16_t)v2);
+    else v1 = (int16_t)(0 - (uint16_t)v1);
+    cam->event_param = (uint16_t)in->ball_height;
+  }
+  /* 0x70D9D..0x70DCE: the 0x8DC68 distance into the vector's first word, the
+   * 0x92820(rec, 0x1C) sink request, then FUN_00071C94(rec, {dist, v1, v2},
+   * EBX = [0x1577F0], ECX = 0). */
+  out->distance = (int16_t)fifa96_entity_distance(v1, v2);
+  out->sink = 1;
+  out->sink_code = 0x1C;
+  out->vec_1 = v1;
+  out->vec_2 = v2;
+  {
+    int ev = fifa96_camera_event_set(cam, v1, v2, (int16_t)cam->event_param, 0);
+    if (ev < 0) return -FIFA96_ERR_INVALID;
+    /* FUN_00071C94 0x71D27 stores its player argument into [0x1577CA] after
+     * the 0x71C99 bail gate; the camera port leaves the bind to the caller
+     * (which owns the record identity), so report whether the setter applied
+     * (`applied == 0` on the bail, exactly like the T1 receive arm). */
+    out->applied = ev == FIFA96_OK ? 1 : 0;
+  }
+  return 1;
+}
+
 /* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). */
 int fifa96_camera_rate_table(fifa96_camera *cam, int32_t event_height,
                              int32_t rate_byte, int32_t timer,

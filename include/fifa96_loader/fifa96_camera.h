@@ -304,6 +304,46 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
                              const int8_t *type_off_z, uint8_t *events,
                              uint8_t *event_code);
 
+/* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08
+ * (`0x70C08..0x70DDD`) — the per-record camera event FUN_0007BF20's tail
+ * (0x7C8FC) runs for every record. First-hand body: skip when `rec+0x9A != 0`
+ * or (`rec+0x91 == 0x22` and ball height < 0x20); two shift-stepped seeds
+ * `v1 = shift2(event_step_x - (pos_x - target_x))`, `v2 = shift2(event_step_z
+ * - (pos_z - target_z))` (the native 0x1577BA/BC step pair minus the
+ * `[0x15774C] - [0x157764]` origin correction); when both are zero, three RNG
+ * draws give `t = (draw1 & 0x3F) + 0x30` and the two signs (draw2/draw3);
+ * then either the two-step event-height ramp toward `rec+0x5D` (when
+ * `rec+0x5D > ball_height`) or the re-seed `event_param := ball_height` with
+ * one seed reflected by the `[0x1577C0]/[0x1577C2]` sign compare against the
+ * `[0x1577BE]` bearing; then the `0x8DC68` distance and
+ * `fifa96_camera_event_set(cam, v1, v2, event_param, 0)` (the native
+ * FUN_00071C94 with the vector `{distance, v1, v2}` and ECX 0). `cam` supplies
+ * the `[0x1577BA]/[0x1577BC]` step pair (`event_step_x/z`), the target/origin
+ * correction (`target_*`), the `[0x1577C0]/[0x1577C2]` velocities, the
+ * `[0x1577BE]` bearing (`speed`) and the `[0x1577F0]` event height
+ * (`event_param`). The `FUN_00092820(rec, 0x1C)` sink is reported
+ * (`out->sink`, OL-27). Returns 1 when the event ran, 0 on a record gate,
+ * -FIFA96_ERR_INVALID (NULL cam/in/out or a NULL rng on the jitter path). */
+typedef struct fifa96_camera_record_event_in {
+  uint8_t skip_9a;      /* rec +0x9A */
+  uint8_t action_91;    /* rec +0x91 (the dword +0x8E >> 24 byte) */
+  int16_t height_5d;    /* rec +0x5D word */
+  int16_t ball_height;  /* [0x157750] word */
+} fifa96_camera_record_event_in;
+
+typedef struct fifa96_camera_record_event_out {
+  uint8_t applied;      /* the setter applied (0 when the 0x71C99 bail fired) */
+  uint8_t sink;         /* FUN_00092820(rec, 0x1C) request (OL-27) */
+  uint8_t sink_code;    /* 0x1C */
+  int16_t distance;     /* the 0x8DC68 word stored to the vector's first word */
+  int16_t vec_1;        /* vector word 1 (the event seed pair) */
+  int16_t vec_2;        /* vector word 2 */
+} fifa96_camera_record_event_out;
+
+int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
+                               const fifa96_camera_record_event_in *in,
+                               fifa96_camera_record_event_out *out);
+
 /* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). Gates:
  * signed rate_byte >= 0, timer <= 0x1E, then when `subobj_present` the
  * caller-resolved rate pair (the 0x10E169 + 0x11042B/0x11042C lookup is a

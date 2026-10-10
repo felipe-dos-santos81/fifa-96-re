@@ -458,6 +458,22 @@ Minimal seam files: `include/fifa96_loader/fifa96_action_handlers.h`,
    refresh at team reset) not fully decomposed.
 7. BF20 lane-block tail `0x7C7D3..0x7C901` (visibility/relocation arm,
    `[0x157820]/[0x157822]/[0x1577BC]/[0x157750]`) not decomposed.
+   **T2 update (2026-10-10):** decomposed and ported. The gate is
+   `0x7C7D3 (int16)lane <= 0x10; 0x7C7E2 fresh lane < bound; 0x7C7F0/0x7C7FD
+   [0x157820]/[0x157822] == 0; 0x7C80A word[0x1577BE] (bearing) > 4; 0x7C81B
+   dword[0x157750] != 0; 0x7C828 tracked != 0 -> tracked[+0x8D] != 0 &&
+   rec != tracked && tracked[+0x91] not in {8,9}; 0x7C861/0x7C871 the
+   rec+0x5D..+0xCD height band`; then the `0x8F188` command-ring post (leg)
+   and `0x7C8FC CALL 0x70C08` (the camera event, ported as
+   `fifa96_camera_record_event`: the `0x1577BA/BC` step seeds corrected by the
+   origin delta, the RNG jitter triple, the `+0x5D`/ball height ramp or the
+   `[0x1577C0]/[0x1577C2]`-sign seed reflect, the `0x8DC68` distance word and
+   the FUN_00071C94 event). Wired after the lane block in
+   `match_run_dispatch_entity` (`match_run_record_camera_event`), with the
+   per-record `[0x157820]/[0x157822]` run cells (FU-151 row-1E stage 6). Dormant
+   until the `0x157750` producer is live (L14.7); fixtures
+   `test_record_event_tail_gate_fires_in_frame` + `test_camera::
+   test_record_event_*`.
 8. `[0x157AB2]` semantics unnamed (set at phase-2 entry `0x74101`, cleared at
    `0x75475`/`0x76077`; also touched by row 1D per FU-140).
 9. Driver pre-pass `0x8DA43..0x8DA90`: `0x10F37C` tracked-point table and the

@@ -564,11 +564,12 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
    (the FU-139 per-side range words, image-zero). **T3 ported the producer**
    (FU-148 §13.1: `fifa96_input_range_words` = FUN_0001C9BC, staged by begin;
    the same words' bit 2 is the FUN-000709D0 walk gate now threaded through
-   `fifa96_camera_update_walk`). The engine still carries a caller-staged
-   `render.input_bit0` (default 0) for the reflect arm — the range words are
-   zero at the image defaults, so the two agree until a front-end config
-   producer lands; wiring the bit directly off `input_range` remains a
-   follow-up.
+   `fifa96_camera_update_walk`). **T2 (M2 phase-10) closed the follow-up:**
+   `match_run_input_bits_update` derives `render.input_bit0` off `input_range`
+   at begin and at the new `fifa96_match_run_set_input_options` producer, so
+   the reflect arm fires from real settings (the same update derives
+   `render.input_bit2` from bit 1, the `0x73A07` interpolation gate; the
+   image default stays zero so the goldens are unchanged).
 4. **Side-selection stand-in.** The `[0x157A4C]>>24 == 1` arm reads the
    `[0x1587D4]` goal-side record's team byte (`0x889A4..0x889AC`); both the
    flag producers and the record identity are unported (L4), so the derived

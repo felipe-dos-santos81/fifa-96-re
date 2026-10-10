@@ -985,6 +985,27 @@ stages the eight config cells (`input_cfg`, BSS 0) and builds the words in
 `[0x15753C]` gate is the builder's `gate` argument (engine 0 = the image
 default).
 
+**Phase-10 T2 producer landing (2026-10-10).** The census's "no static writer"
+resolved first-hand: the block at `0x105274..0x1052A4` is the **13-dword
+front-end options block**, written by the options editor FUN_0001C728
+(`0x1C728..0x1C965`; `0x1C934..0x1C94B`: `value = (&0x105274)[i] + 1`, wrap to
+0 when the new value reaches the row max `*(int*)(&0x105108 + i*0x1C)`; fresh
+`read_memory 0x105108` (364 B) = a 13-entry descriptor table, stride `0x1C`,
+maxes `{4,3,2,3,5,2,5,2,3,5,2,5,2}`) and read back by FUN_0001CAEC
+(`0x1CAEC..0x1CBBD`, the team/kit screens' input-mode/option queries). The
+eight cells FUN_0001C9BC consumes are option indices 1/2/5/6/7/10/11/12.
+Ported: `fifa96_input_option_max` / `fifa96_input_option_step` /
+`fifa96_input_options_to_cells` (`tests/test_input.c::test_option_producer_*`)
+and the engine producer `fifa96_match_run_set_input_options` (stages the eight
+cells, rebuilds `input_range`). The two derived consumer bits are wired in
+`match_run_input_bits_update`: `render.input_bit0 = range & 1` (the FU-145 §3
+boundary-reflect producer, closing that follow-up) and `render.input_bit2 =
+range & 2` (the FUN_000736AC interpolation arm, first-hand
+`0x73A03..0x73A18`: `MOV DX,[0x14C1D4]; MOV AX,[0x14C1D6]; OR EAX,EDX; TEST
+AL,2; JNZ`); the frame's walk gate stays `range & 4`. Fixture:
+`test_engine_match_frame::test_input_options_producer_sets_range_bits` (the
+image default remains all-zero, so the tape is unchanged).
+
 ### 13.2 `FUN_00071DF4` — the every-frame auto-camera call site
 
 Fresh `disassemble_bytes 0x739C0..0x73A0F` + `0x73B50..0x73B9F` pins the
@@ -1050,6 +1071,24 @@ The nine callers outside row 04 are therefore: one wired (row 1E, `0x75DC4`)
 and eight ledgered with their containing bodies named first-hand (the row-05
 tail algebra, the armer angle arm, the reposition sub-body, the ball staging,
 `FUN_0006E8E8`, and rows 1B/1C/0D).
+
+**Phase-10 T2 update (2026-10-10).** Fresh `get_xrefs_to 0x71C94` = **11**,
+the same set (no new/removed sites). Disposition refresh:
+
+* `0x7A219` (ball staging) is **wired** (T1, FU-148 §14: the receive arm).
+* `0x70DD1` (`FUN_00070C08`, the per-record camera event) is **ported and
+  wired** (T2): the body is derived first-hand (`0x70C08..0x70DDD`,
+  `fifa96_camera_record_event`) and its caller `FUN_0007BF20`'s tail gate
+  (`0x7C7D3..0x7C8FC`, previously FU-147 §3.3 leg 7 "not decomposed") is
+  derived and run after the BF20 lane block in `match_run_dispatch_entity`
+  (`match_run_record_camera_event`). The gate is live but dormant while the
+  `0x157750` ball-height producer is 0/unreachable (L14.7), so it is
+  fixture-pinned (`test_engine_match_frame::test_record_event_tail_gate_fires_in_frame`,
+  `tests/test_camera.c::test_record_event_*`).
+* The remaining five stay legs with their containing bodies unchanged:
+  `0x7F4E7` (row 05 stage-0 tail, OL-63 algebra), `0x71B8A` (the armer angle
+  arm, FU-71 leg 9.6 / the 0x10E169 table), `0x6FA62` (`FUN_0006E8E8`
+  `0x6E8E8..0x6FE83`), `0x77423`/`0x77DC6`/`0x82A6C` (rows 1B/1C/0D).
 
 ### 13.5 Tape / goldens
 

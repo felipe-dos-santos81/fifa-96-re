@@ -38,3 +38,24 @@ int fifa96_input_lockout(uint8_t *state, int *frames);
  * words were built, 0 for the refused gate, -FIFA96_ERR_INVALID with both
  * words untouched on NULL. */
 int fifa96_input_range_words(const int32_t cells[8], int gate, uint16_t words[2]);
+
+/* M2 phase-10 T2 (FU-148 §13.1): the 0x105274 config-block producers. The
+ * image block is BSS 0; the sole static writer is the front-end options editor
+ * FUN_0001C728 (`0x1C728..0x1C965`, fresh `search_instructions`/`read_memory`
+ * this task): the selected row i increments `(&0x105274)[i]` and wraps to 0
+ * when the new value reaches the row max `*(int*)(&0x105108 + i*0x1C)`. The
+ * 13-entry max table (first-hand `read_memory 0x105108`, 364 B) is
+ * {4,3,2,3,5,2,5,2,3,5,2,5,2}. FUN_0001CAEC (`0x1CAEC..0x1CBBD`) is the
+ * read-side query of the same block (used by the team/kit screens); the match
+ * init FUN_0001C9BC consumes eight of the 13 cells (0x105278/7C/88/8C/90/9C/
+ * A0/A4 = option indices 1/2/5/6/7/10/11/12, the fifa96_input_range_words
+ * argument order). `fifa96_input_options_to_cells` is that derived index map
+ * so a config/front-end path reaches the builder. NULL options/cells ->
+ * -FIFA96_ERR_INVALID. */
+#define FIFA96_INPUT_OPTION_COUNT 13u
+
+int fifa96_input_option_max(uint32_t index);
+int fifa96_input_option_step(int32_t options[FIFA96_INPUT_OPTION_COUNT],
+                             uint32_t index);
+int fifa96_input_options_to_cells(const int32_t options[FIFA96_INPUT_OPTION_COUNT],
+                                  int32_t cells[8]);

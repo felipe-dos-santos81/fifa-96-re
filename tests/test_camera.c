@@ -916,6 +916,117 @@ static void test_update_walk_gate(void) {
   assert(fifa96_camera_update_walk(NULL, &rng, 1, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* M2 phase-10 T2 (FU-147 §3.3 leg 7 / FU-152 §2.9): FUN_00070C08 — the
+ * per-record camera event FUN_0007BF20's tail (0x7C8FC) runs for every
+ * record. First-hand body 0x70C08..0x70DDD (disassemble_bytes this task). */
+static void test_record_event_reflect_and_event(void) {
+  fifa96_camera cam = fresh_camera();
+  struct fifa96_rng rng;
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;                       /* origin == target (delta 0) */
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;                      /* [0x1577BA] step pair */
+  cam.event_step_z = 40;                      /* [0x1577BC] */
+  cam.vel_x = 3;                              /* [0x1577C0] */
+  cam.vel_z = 4;                              /* [0x1577C2] */
+  cam.speed = 5;                              /* [0x1577BE] bearing */
+  cam.event_param = 0x20;                     /* [0x1577F0] */
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  in.skip_9a = 0;
+  in.action_91 = 3;
+  in.height_5d = 0;
+  in.ball_height = 0x10;
+  /* v1 = 30>>2 = 7, v2 = 40>>2 = 10; h5d <= ball -> reflect: bearing 5 > vx 3
+   * negates v2. */
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
+  assert(out.applied == 1);
+  assert(out.sink == 1 && out.sink_code == 0x1C);
+  assert(out.vec_1 == 7 && out.vec_2 == -10);
+  assert(out.distance == fifa96_entity_distance(7, -10));
+  assert(cam.event_param == 0x10);            /* event_param := ball height */
+  assert(cam.timer_limit != 0);               /* the FUN_00070544 ramp ran */
+}
+
+static void test_record_event_height_ramp(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;
+  cam.event_step_z = 40;
+  cam.vel_x = 3;
+  cam.vel_z = 4;
+  cam.speed = 5;
+  cam.event_param = 0x20;
+  in.skip_9a = 0;
+  in.action_91 = 3;
+  in.height_5d = 0x40;                        /* > ball: the ramp arm */
+  in.ball_height = 0x10;
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  /* f0 = 0x20 + ((0x20 - 0x40) >> 1) = 0x10; the second step is skipped
+   * (0x40 < 0x10 false) and the seeds are NOT reflected. */
+  assert(out.vec_1 == 7 && out.vec_2 == 10);
+  assert(cam.event_param == 0x10);
+  assert(out.applied == 1);
+}
+
+static void test_record_event_jitter_and_gates(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  struct fifa96_rng rng;
+  struct fifa96_rng expect;
+  uint16_t d1 = 0, d2 = 0, d3 = 0;
+  int16_t t;
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  cam.target_x = 0;
+  cam.target_z = 0;
+  cam.event_step_x = 0;                       /* v1 == v2 == 0 -> the jitter */
+  cam.event_step_z = 0;
+  cam.speed = 5;
+  in.skip_9a = 0;
+  in.action_91 = 3;
+  in.height_5d = 0;
+  in.ball_height = 0x10;
+  assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
+  assert(fifa96_rng_seed(&expect, 0x1234u) == FIFA96_OK);
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
+  assert(fifa96_rng_step(&expect, &d1) == FIFA96_OK);
+  assert(fifa96_rng_step(&expect, &d2) == FIFA96_OK);
+  assert(fifa96_rng_step(&expect, &d3) == FIFA96_OK);
+  t = (int16_t)((int32_t)(d1 & 0x3Fu) + 0x30);
+  /* t = (draw1 & 0x3F) + 0x30 with the draw2/draw3 signs; then the reflect
+   * arm (vel_x 0 >= 0 -> e1 = bearing 5, e2 = vel_z 0 -> 5 > 0 negates v2). */
+  assert(out.vec_1 == ((d2 & 1u) ? t : (int16_t)-t));
+  assert(out.vec_2 == -((d3 & 1u) ? t : (int16_t)-t));
+  assert(out.vec_1 != 0 || out.vec_2 != 0);
+  /* a NULL rng on the jitter path is an error. */
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) ==
+         -FIFA96_ERR_INVALID);
+  /* the record gates. */
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  in.skip_9a = 1;
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 0);
+  assert(out.applied == 0);
+  in.skip_9a = 0;
+  in.action_91 = 0x22;
+  in.ball_height = 0x1F;
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 0);
+  in.ball_height = 0x20;                      /* the boundary passes */
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
+  assert(fifa96_camera_record_event(NULL, &rng, &in, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_record_event(&cam, &rng, NULL, &out) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_camera_record_event(&cam, &rng, &in, NULL) ==
+         -FIFA96_ERR_INVALID);
+}
+
 /* FU-152 §2.9 / FU-71 (T3): the tracked record ([0x1577CA]) is reset by the
  * event reset FUN_000700F4 0x70258 (inside fifa96_camera_event_set) and set by
  * FUN_00071C94 0x71D27. The engine binds the event record through
@@ -1414,6 +1525,9 @@ int main(void) {
   test_pan_step_walk();
   test_pan_step_invalid();
   test_update_walk_gate();
+  test_record_event_reflect_and_event();
+  test_record_event_height_ramp();
+  test_record_event_jitter_and_gates();
   test_tracked_record();
   test_reposition_flag_overlap_noop();
   test_reposition_steps_back();
