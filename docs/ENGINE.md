@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-15/80 action rows wired, the derived FU-143 phase driver wired into the run
+19/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
@@ -169,11 +169,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **15/80 rows wired** — `00`, `01`, `04`, `06`,
+- Action dispatch (FU-137): **19/80 rows wired** — `00`, `01`, `04`, `06`,
   `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
   G3; `01` is the M2 playable-match Task 2 kickoff taker), `26`, `28`, `2A`
-  (cluster G) and `1D` (FU-151 P3 close-down); dispatch results
-  64 UNSUP / 15 OK / 1 NOTF.
+  (cluster G), `1D` (FU-151 P3 close-down) and `10`, `11`, `12`, `13`
+  (FU-149 L13/T1: the throw-in/corner/free-kick/penalty taker machines —
+  placement/probe/kick/resolution; the taker codes the P1 arms install now
+  execute and hand back to phase 2 through the shared situation-0xB entry);
+  dispatch results 60 UNSUP / 19 OK / 1 NOTF.
 - **Interactive smoke (phase-7 P5 re-run, this host 2026-10-09; the phase-6 S5
   run first verified the phase-6 reach and the follow-up-5 T4 run the
   walkthrough):** `make game` window opens (960×720
@@ -238,9 +241,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   | move the controlled player | blocked on screen | 40-press RIGHT burst: scene-band 0 differing pixels; presses reach `input_state[0]` (`in=04`) but the kickoff reset leaves the record on the native 0x19 code (row 19 UNSUP) and the SDL hold policy drops auto-repeat (OL-T4-1); the S1 pad seam is fixture-proven headlessly |
   | kick the ball (gameplay) | blocked | no gameplay row dispatched (tape steps 12/15); possession/selection invokers unported |
   | score a goal | blocked naturally; chain fixture-proven | no goal producer reachable (pan origin OL-T11-79 dormant); the S2/S3 chain (armer → scan → queue → installer → scheduler → handler → `score_event`) increments the score in `test_camera_pan_event_chain` / `test_goal_consumer_chain_fixture` |
-  | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the static camera never arms (OL-T11-79); FU-149 P1 queue/arm/scan and the counter are fixture-proven, and tape v7 asserts the fresh dispatcher cells at m 41/m 62 |
+  | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the static camera never arms (OL-T11-79); FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v7 asserts the fresh dispatcher cells at m 41/m 62 |
   | fouls / offside (live) | blocked; chains fixture-proven | the FU-150 entries have no live producer; `test_referee` + the `test_engine_referee_*` chains prove them, and tape v7 pins `ref_machine == REF_NONE` with no whistle/speech/decision cells |
-  | keeper restart rows 1D/1E (live) | blocked; row 1E machine tape-reachable | the taker/keeper codes arrive only from the dormant set-piece arms (FU-149 L13); the row-1E claim machine executes on the tape's m 41 staging (v7 pins the claim take + the 0x15774C focus triple) and row 1D is fixture-proven (`test_keeper_machines`) |
+  | keeper restart rows 1D/1E (live) | blocked; row 1E machine tape-reachable | the taker rows 0x10..0x13 are ported but dormant on the tape (the set-piece arms never fire; FU-149 L13/T1) and row 1E executes on the tape's m 41 staging (v7 pins the claim take + the 0x15774C focus triple); row 1D is fixture-proven (`test_keeper_machines`) |
   | replay / overlay / sub strip (live) | blocked | zero-gated rows with no producers yet (FU-152 legs 1/2/3/7); tape v7 pins `replay.state`/`sub.active`/`overlay.armed` 0 and `ball_row` NULL |
   | half/period end → exit | reached (headless) | tape: live class-1 period end → phase 0x0C → OVER→POST→EXIT; native periods last minutes, so not run to completion in the smoke |
 - `test_engine_m1` pins the 691-frame M1 transcript

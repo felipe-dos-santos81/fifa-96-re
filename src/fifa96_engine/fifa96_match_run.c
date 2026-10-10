@@ -879,6 +879,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->store_15882c = 0;
   mr->incident_x = 0;
   mr->incident_z = 0;
+  /* FU-149 L13 (T1): the throw/corner staging cells (the native BSS defaults). */
+  mr->sp_flag_158784 = 0;
+  mr->sp_delivery = 0;
+  mr->sp_157821 = 0;
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
@@ -955,6 +959,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->store_15882c = 0;
   mr->incident_x = 0;
   mr->incident_z = 0;
+  /* FU-149 L13 (T1): a fresh match drops the throw/corner staging cells. */
+  mr->sp_flag_158784 = 0;
+  mr->sp_delivery = 0;
+  mr->sp_157821 = 0;
   /* FU-148 S4: a fresh match restarts at the BSS formation default 0 (the
    * native FUN_00011620 team-record producer is leg). */
   mr->formation[0] = 0;

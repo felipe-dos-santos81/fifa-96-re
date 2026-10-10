@@ -89,7 +89,7 @@
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
-    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
@@ -290,6 +290,239 @@ static void test_action_1E_runs_claim_place(void) {
   assert(f.mr.record.helper_request == 0);
   assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
+  drop_fixture(&f);
+}
+
+/* FU-149 L13 (T1): the throw-in taker row 0x10. Stage 0 places the record at
+ * the 0x15777C snapshot ±0x10 (the goal_snap stand-in) and advances to stage 1
+ * (FUN_000832A8 stand-in); stage 2's FUN_00085498 probe waits on the 0x78
+ * timer and then latches the delivery row; stage 3's animation-frame gate then
+ * picks the relay record and installs code 4; stage 4 resolves through the
+ * shared situation-0xB entry (phase 2) and writes the 0x12C offside timer. */
+static void test_action_10_runs_throw_in_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[0].records[i];
+    e->active = 1;
+    e->pos_x = (int32_t)(i * 0x100);
+    e->pos_z = 0;
+    e->target_x = e->pos_x;
+  }
+  f.mr.record.entity_id = 1;               /* team 0, index 1 */
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.frame = 4;                   /* the +0x3D animation-frame gate */
+  f.mr.record.delta = 0x80;                /* the whole-frame [0x157A64] */
+  f.mr.record.stage92 = 0;
+  f.mr.state.phase = 3u;                   /* the throw-in phase gate */
+  f.mr.session_gate_14c32a = 1;            /* live session */
+  f.mr.goal_snap_x = 0x100;
+  f.mr.goal_snap_y = 0;
+  f.mr.goal_snap_z = 0x400;
+
+  /* first dispatch: stage 0 placement -> stage 1 setup -> stage 2 probe wait */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.record.controlled == 1);
+  assert(f.mr.record.helper_request == 1);        /* FUN_0007876C request */
+  assert(f.mr.record.place_valid == 1);
+  assert(f.mr.record.place_x == 0x100 && f.mr.record.place_z == 0x400);
+  assert(f.mr.record.pos_x == 0x110);              /* snapshot x ± 0x10 */
+  assert(f.mr.record.pos_z == 0x400);
+  assert(f.mr.record.target_x == 0x110 && f.mr.record.target_z == 0x400);
+  assert(f.mr.referee.offside_suppress == 0 && f.mr.state.phase == 3u);
+
+  /* second dispatch: probe fires, the pick installs code 4 and stage 4
+   * resolves through the shared situation-0xB -> phase 2 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);
+  assert(f.mr.referee.offside_suppress == 0x12C);
+  assert(f.mr.record.stage92 == 5u);               /* past the resolution */
+  assert(f.mr.entities.team[0].target == 2);       /* self skipped by the +0x9A stamp */
+  assert(f.mr.entities.team[0].records[2].code == 4u);
+
+  /* the |x| >= 0x720 re-queue: with the [0x157821] gate set, stage 4 loops
+   * through situation 2 (phase 0 -> the table-2 phase 3 + a fresh arm) */
+  f.mr.state.phase = 3;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.frame = 4;
+  f.mr.goal_snap_x = 0x800;                /* |camera x| >= 0x720 at stage 4 */
+  f.mr.sp_157821 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);  /* stage 2 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.state.phase == 3u);          /* situation 2 -> phase 3 */
+  assert(f.mr.entities.team[0].records[8].code == 0x10u);  /* the fresh arm */
+  f.mr.sp_157821 = 0;
+
+  /* phase gate: a forced phase resets the row */
+  f.mr.state.phase = 5;
+  f.mr.record.stage92 = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  /* the FUN_0007DAB4 reset installs code 0 (the record held 3 after the fresh
+   * arm), so the staged stage byte lands on 0 */
+  assert(f.mr.record.stage92 == 0u);
+  assert(f.mr.entities.team[0].records[1].code == 0u);
+  drop_fixture(&f);
+}
+
+/* FU-149 L13 (T1): the corner taker row 0x11. Stage 0 waits the 0x3C timer,
+ * stage 1 runs the FUN_0007D360 corner probe (±0x710,0,±0xB00) ±0x50 and
+ * anchors the record there, stages 2..4 advance/setup, stage 5's probe waits
+ * on the 0x78 timer, stage 6 gates the lane, stage 7 kicks, resolves (phase 2
+ * + the 0x12C offside timer) and installs the relay, stage 8 waits the +0x44
+ * animation ack. */
+static void test_action_11_runs_corner_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[0].records[i];
+    e->active = 1;
+    e->pos_x = (int32_t)(i * 0x100);
+    e->pos_z = 0;
+    e->target_x = e->pos_x;
+  }
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x11;
+  f.mr.record.delta = 0x40;
+  f.mr.record.stage92 = 0;
+  f.mr.state.phase = 4u;                   /* the corner phase gate */
+  f.mr.session_gate_14c32a = 1;
+  f.mr.goal_snap_x = 5;                    /* + -> +0x710 */
+  f.mr.goal_snap_z = -5;                   /* - -> -0xB00 */
+
+  /* dispatch 1: the 0x3C wait passes, the probe places the record and the
+   * cascade stops at the stage-5 probe */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x11) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 5u);
+  assert(f.mr.record.controlled == 1);
+  assert(f.mr.record.pos_x == 0x760 && f.mr.record.pos_z == -0xB50);
+  assert(f.mr.record.place_x == 0x710 && f.mr.record.place_z == -0xB00);
+
+  /* dispatch 2: timer 0x40 < 0x78 -> the probe still waits */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x11) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 5u);
+
+  /* dispatch 3: timer 0x80 fires the probe; the kick, the resolution and the
+   * relay install run and the row stops at the stage-8 +0x44 wait */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x11) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);
+  assert(f.mr.referee.offside_suppress == 0x12C);
+  assert(f.mr.record.stage92 == 8u);
+  assert(f.mr.entities.team[0].target == 7);
+  assert(f.mr.entities.team[0].records[7].code == 4u);
+
+  /* dispatch 4: the +0x44 ack advances to stage 9 and the target clamp runs;
+   * the row then waits on the timer/distance gate (distance 0 here -> reset) */
+  f.mr.record.row44 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x11) == FIFA96_OK);
+  /* the stage-9 reset at phase 2 runs the FUN_0007DAB4 forced-decision
+   * install (0x7C990), so the staged stage byte lands on the installed 0 */
+  assert(f.mr.record.stage92 == 0u);
+  assert(f.mr.entities.team[0].records[1].code == 3u);
+  drop_fixture(&f);
+}
+
+/* FU-149 L13 (T1): the free-kick taker row 0x12. Stage 0 places the record at
+ * the 0x158897 incident triple + the derived wall-point fold (the angle from
+ * the incident to the own (0,0,±0xB10) probe, the 0xA0 step), stage 1 setup,
+ * stage 2 the span-3 delivery probe, stage 3 the lane gate, stage 4 the kick +
+ * resolution + relay. */
+static void test_action_12_runs_free_kick_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[0].records[i];
+    e->active = 1;
+    e->pos_x = (int32_t)(i * 0x100);
+    e->pos_z = 0;
+    e->target_x = e->pos_x;
+  }
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x12;
+  f.mr.record.frame = 4;
+  f.mr.record.delta = 0x80;
+  f.mr.record.stage92 = 0;
+  f.mr.state.phase = 7u;                   /* the free-kick phase gate */
+  f.mr.session_gate_14c32a = 1;
+  f.mr.incident_x = 0x500;
+  f.mr.incident_z = 0;
+
+  /* dispatch 1: incident placement + wall fold, then the stage-2 probe wait */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x12) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.record.controlled == 1);
+  assert(f.mr.record.place_x == 0x500 && f.mr.record.place_z == 0);
+  assert(f.mr.record.pos_x != 0x500 || f.mr.record.pos_z != 0);  /* folded */
+  assert(f.mr.record.target_x == f.mr.record.pos_x);
+
+  /* dispatch 2: probe fires (span 3 -> delivery row 3), kick + resolution */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x12) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);
+  assert(f.mr.referee.offside_suppress == 0x12C);
+  assert(f.mr.record.stage92 == 5u);
+
+  /* dispatch 3: the +0x44 ack walks to the stage-7 reset */
+  f.mr.record.row44 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x12) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u);   /* the forced-decision reset install */
+  drop_fixture(&f);
+}
+
+/* FU-149 L13 (T1): the penalty taker row 0x13. Stage 0 commits the placement
+ * and clears the ball staging block, stage 1 aims at the spot ±0xF0 and gates
+ * the 0x30 distance, stage 2 waits on the opponent/slot/timer gate, stage 3
+ * the lane gate, stage 4 the mode-0x40 penalty strike, stage 5 resolves
+ * through situation 0xB once the ball ack clears (no offside timer), stage 6
+ * the +0x44 reset. */
+static void test_action_13_runs_penalty_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x13;
+  f.mr.record.delta = 0x100;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0x7E0;               /* the stage-1 spot -0xF0 (side 0) */
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = 0x7E0;
+  f.mr.state.phase = 6u;                   /* the penalty phase gate */
+  f.mr.session_gate_14c32a = 1;
+
+  /* dispatch 1: the stage-1 distance gate passes, the stage-2 no-slot timer
+   * (0xF0) waits */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x13) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.record.controlled == 1);
+  assert(f.mr.record.ran == 1);            /* the +0x9E latch */
+  assert(f.mr.record.place_x == 0 && f.mr.record.place_z == 0x8D0);
+  assert(f.mr.render.camera.pos_z == 0x8D0);
+
+  /* dispatch 2: the 0x100 timer crosses 0xF0, the strike runs and the row
+   * waits at stage 5 on the ball actor/ack gate */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x13) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 5u);
+  assert(f.mr.state.phase == 6u);          /* still phase 6 (unresolved) */
+
+  /* dispatch 3 is the delivered record's ack path: the resolution writes
+   * phase 2 without the row-10/11/12 offside timer */
+  f.mr.entities.ball.pair.ack = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x13) == FIFA96_OK);
+  assert(f.mr.state.phase == 2u);
+  assert(f.mr.referee.offside_suppress == 0);
+  assert(f.mr.record.stage92 == 6u);
+
+  /* dispatch 4: the +0x44 ack resets */
+  f.mr.record.row44 = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x13) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u);   /* the forced-decision reset install */
   drop_fixture(&f);
 }
 
@@ -1492,6 +1725,10 @@ int main(void) {
   test_action_00_runs_move_step();
   test_action_01_runs_kickoff_body();
   test_action_1E_runs_claim_place();
+  test_action_10_runs_throw_in_body();
+  test_action_11_runs_corner_body();
+  test_action_12_runs_free_kick_body();
+  test_action_13_runs_penalty_body();
   test_action_26_runs_body();
   test_action_28_runs_body();
   test_action_2A_runs_body();

@@ -618,4 +618,137 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x8A938`/`0x8A99E`
 | L10 corner-counter consumers | open — the pair is written only (no static reader), fixtured |
 | L11 `[0x157821]`/`[0x157A6A]` | open — row 0x10/0x11 are L13, so neither the requeue loop gate nor the offside-suppress timer is written yet |
 | **L12** sit 2..4 `[0x157B8E]`/`[0x157B8F]` gate + act-4 arm, sit-1 arm | new — unported act-handler machinery; the port routes the table-2 row |
-| **L13** taker/keeper row bodies 0x10/0x11/0x1D | new — the arms install the codes, but the rows' stage machines (`0x855F0` 7-stage, `0x85DE4` 10-stage, `0x74EB0` keeper) stay unported, so the FU-149 §1.6 resume tails (sit 0xB, offside timer, requeue) are not yet executable; FU-151 owns 0x1D |
+| **L13** taker/keeper row bodies 0x10/0x11/0x1D | **narrowed (T1)**: rows 0x10/0x11/0x12/0x13 ported (windows/tables/stage semantics in §7; the resolve tails, offside timer and row-0x10 re-queue are executable); the residue is the L13.1..L13.7 leg list in §7.3. Row 0x1D stays FU-151/P3 |
+
+---
+
+## 7. Taker row derivation and port (T1, 2026-10-09, phase-8)
+
+First-hand this task on **`/FIFA96.EXE`** (read-only): `disassemble_bytes` the
+four taker bodies and the phase-3 arm (`0x8D2A3..0x8D35A`), the camera reset
+(`0x700F4..0x701FF`), the throw setup (`0x832A8..0x832EF`), the probe
+(`0x85498` decompile), the corner probe caller and the penalty body; `read_memory`
+the action table `0x1106E0+0x40` (slots 0x10..0x13 = `0x855F0`/`0x85DE4`/
+`0x83D68`/`0x84B00`) and the stage tables below.
+
+### 7.1 Windows (first-hand)
+
+| row | body window | phase gate | stage table | event table | arms |
+|---|---|---|---|---|---|
+| 0x10 throw-in | `0x855F0..0x85DE3` | {2,3} (`0x85603/0x8560B`) | `0x855B8` 7 dwords = `{0x8566D,0x857D6,0x8580D,0x858E4,0x85CC4,0x85D5A,0x85D8D}` | `0x855D4` 7 = `{0x85A3F,0x85AA5,0x85A30,0x85A3F,0x85AA5,0x85A30,0x85AF0}` | 7 |
+| 0x11 corner | `0x85DE4..0x864FF` | {2,4} (`0x85DF2/0x85E02`) | `0x85DA0` 10 = `{0x85E3C,0x85E7D,0x85FA2,0x85FBD,0x85FD8,0x86013,0x860CB,0x8610E,0x8645B,0x86496}` | `0x85DC8` 7 = `{0x861F9,0x86235,0x862BD,0x86272,0x862AA,0x862BD,0x862F4}` | 10 |
+| 0x12 free kick | `0x83D68..0x84597` | {2,7} (`0x83D7E/0x83D86`) | `0x83D2C` 8 = `{0x83E26,0x83E72,0x84077,0x840B2,0x8416A,0x841AD,0x8450C,0x84543}` + `0x83D4C` 7 = `{0x842AB,0x8432F,0x842E7,0x84368,0x843A0,0x842E7,0x843AE}` | both | 8+7 |
+| 0x13 penalty | `0x84B00..0x84EEB` | {2,6} (`0x84B13/0x84B1B`) | `0x84AE4` 7 = `{0x84BAD,0x84C48,0x84CBA,0x84DF4,0x84E26,0x84E61,0x84EB1}` | — | 7 |
+
+**Corrections to §1.6 (erratum).** The row windows are the full bodies above
+(§1.6 cited only the resume tails). 0x12's table is 8 arms with a second
+7-arm event sub-table (`0x83D4C`); 0x11 is 10 arms (not "10-stage" only in the
+FU-81 sense). Row 0x11's resume tail is `0x863E6..0x863F9` (SIT 0xB,
+`[0x157A6A] = 0x12C`); row 0x10's is `0x85D19..0x85D8F`; row 0x12's
+`0x84480..0x84506`; row 0x13's `0x84E79..0x84EAB` (no offside timer).
+
+### 7.2 Stage semantics ported
+
+The four bodies cascade: each arm's tail resets `timer89`, increments `+0x92`
+and falls into the next arm, so one dispatch can walk several stages. Ported
+per row (engine `fifa96_match_action_10..13` in
+`src/fifa96_engine/fifa96_match_handlers.c`):
+
+* **0x10** — head marker (`+0x8F>>24 <3` -> `[0x157A83]=rec`, `<5` -> target =
+  position, `0x85630..0x85651`); stage 0 snapshot placement (`0x8566D`:
+  `FUN_0007876C` merge request, target = `0x15777C`, `FUN_000700F4` reset,
+  `FUN_00073E08` commit, position = snapshot ± 0x10, `FUN_00079B6C` anchor);
+  stage 1 `FUN_000832A8` stand-in (`0x857D6`); stage 2 the `FUN_00085498`
+  probe (`0x8580D`: the `0x15774C := 0x157764` focus copy, the `0x78` timer,
+  the `FUN_00092AC8 % 4` draw and the `[0x1587B4]` 3/7 latch); stage 3 the
+  animation-frame gate (`[+0x3D] >= 4`), the `0x10F334`/`0x10F33C` type-offset
+  ball line and the derived pick + relay `install 4`; stage 4 the resolution
+  (`0x85D19`: `[0x157A6A]=0x12C` + situation 0xB) or the `|x| >= 0x720`
+  re-queue (`0x85CE4` gate on `[0x157821]`, situation 2 BX=1); stage 5 the
+  `+0x44` wait; stage 6 reset.
+* **0x11** — stage 0 (`0x85E3C`: controlled latch, merge request, the `0x3C`
+  timer wait); stage 1 (`0x85E7D`: `FUN_0007D360` corner probe
+  `(±0x710, 0, ±0xB00)` from the snapshot signs, `FUN_000700F4` reset,
+  `FUN_00073E08` commit, probe ±0x50 and the anchor); stages 2/3 pure advance
+  (`0x85FA2`/`0x85FBD`); stage 4 the `0x832A8` stand-in; stage 5 the probe
+  (span 4) with the `0x4B0` timer event; stage 6 the target = camera focus and
+  the `lane <= 0x40` gate; stage 7 the derived delivery (kick) + the
+  `0x92AC8` draw + the resolution + the relay install; stage 8 the `+0x44`
+  wait; stage 9 the target clamp (`±0x630`/`±0x840`) and the distance/timer
+  reset gate.
+* **0x12** — stage 0 (`0x83E26`: the incident triple `0x158897` into the
+  `0x15774C` focus with z clamped to ±0x9F0, `FUN_000700F4`, commit, then the
+  wall-point fold: the `(0,0,±0xB10-by-side)` probe, the `0x8DCD4` triple, the
+  `0xCD474` angle normalized to [-0x1FF,0x200], the `0xA0`-step folds of
+  `0x114E04`/`0x795A4` and the `FUN_00079B6C` anchor); stage 1 the `0x832A8`
+  stand-in; stage 2 the probe (span 3); stage 3 the focus target + lane gate;
+  stage 4 the derived delivery + `0x4C380`/`0x4C374` + the resolution + the
+  relay install gated on the staging code byte `0x158743 != 3`; stage 5 the
+  `+0x44` wait; stages 6/7 reset.
+* **0x13** — head spot aim (`+0x8F>>24 <5`: controlled latch, merge request,
+  `FUN_00073DC4` spot triple `(0, 0, ±0x8D0)` into the focus,
+  `FUN_000700F4`); stage 0 commit + the `FUN_0007A028` staging clear + the
+  `+0x9E` latch; stage 1 the spot ±0xF0 target and the `0x8DCD4` distance
+  `<= 0x30` gate; stage 2 the opponent `word[+0x71]`/slot/`0xF0`-timer gate;
+  stage 3 the focus target + lane gate; stage 4 the mode-0x40 strike; stage 5
+  the ball-actor/`[0x158746]` ack gate and the resolution (no offside timer);
+  stage 6 the `+0x44` reset.
+
+Stand-ins (documented in the handler comment): `0x15777C` = `goal_snap_*`,
+`0x15774C`/`0x157764` = the engine camera pos/target, `0x157770` = the camera
+triple, `0x8DE8C` = `fifa96_entity_find_nearest` over pool positions with the
+transient `+0x9A` self stamp, `0x8DCD4` = `fifa96_arm_dist_stage` (+ the same
+word diffs), `0xCD474`/`0x114E04`/`0x795A4` = `fifa96_action_kick_angle` +
+`fifa96_ball_fold`, `0x73E08` = the `fifa96_match_entities_place` subset and
+`0x79B6C` = target = position with lane/velocity cleared.
+
+### 7.3 L13 legs after T1 (numbered, extended from the P1 set)
+
+1. **L13.1 `FUN_000832A8`/`FUN_00083164`/`FUN_0008DB6C` throw setup** — the
+   native clears `[0x158784]`, builds the `0x158790..0x158798`/`0x15879C`/
+   `0x1587A0` staging triples, latches `0x1587B0/0x1587B2/0x1587B6/0x1587B7`,
+   picks the `0x1587AC` receiver record and runs the `0x361A4/0x361B0/0x36200`
+   presentation calls. The port keeps the two cells the row stages observe
+   (`sp_flag_158784`, `timer89`).
+2. **L13.2 `FUN_00083428` input-driven throw/claim machine** — the
+   `FUN_00085498` slot arm (the `FUN_0006DAB4` animation install and the
+   `0x1587B3/0x1587B4/0x1587B5/0x1587B6` delivery machine, returns 0..6).
+   Derived completion: the same `0x78` timer gate + one `% span` draw.
+3. **L13.3 kick event sub-table arms and their vector sources** —
+   `0x855D4`/`0x85DC8`/`0x83D4C` and the per-team `0x1587E8` block
+   (`[team+0x7E7]`); the native passes the `0x158738` staging vector, the
+   `0x15879C` staging triple, the `0x1587AC` record position, the slot words
+   or the RNG-built triple. The port emits one derived delivery per kick stage
+   (`mode 0x10`, rows 0x11/0x12; NULL input + `mode 0x40`, row 0x13) through
+   the ported `fifa96_ball_kick_target`, consuming the `0x86388` draw.
+4. **L13.4 presentation sinks** — `0x974DC(0x1E)`, `0x8F188` ids
+   `0x17/0x18/0x19/0x1A/0x1C/0xA4/0xA5`, `0x6E598`, `0x92820`, `0x4C324`/
+   `0x4C31C`/`0x4C320`/`0x4C374`/`0x4C380`, `0x918CC`, `0x8CFAC`, `0x585A0`,
+   `0x361xx`, `0x83B80`/`0x158747` wall vector, `0x78A84`/`0x78AA4`/`0x78B00`
+   slot bodies, `0x7A490` staging tails, `0x73E08` remainder.
+5. **L13.5 `0x8DE8C` pick origins** — the `0x157770` camera-led reception
+   triple and the `0x1587AC` staged-receiver position remain stand-ins.
+6. **L13.6 state producers** — `[0x157821]` (the row-0x10 re-queue gate;
+   engine field `sp_157821` seeded 0), `[0x157A6A]`'s readers/writers beyond
+   the row writes (the FU-150 suppression timer consumes it), `[0x158777]`,
+   `[0x157AAD]`/`[0x157AB0]`, `[0x157AAF]`, `[0x15882A]`, the record `+0x7E7`
+   throw-anim byte and `[team+0x7E4..0x7E7]` tail block.
+7. **L13.7 penalty remainder** — the `0x84D5B` free-record hand-off (reset
+   self + install 0x13 on the next `+0x9A`-clear record; the native walk is
+   unbounded and a future port must harden it to records 1..10), the
+   `0x14C114/0x14C118/0x14C11C` input words, the slot `word[+6]` gate/0x20-edge
+   split and the `[team+0x7A6]` opponent record pointer (the port uses the
+   opponent keeper's `word[+0x71]`).
+
+### 7.4 Landing (T1)
+
+`fifa96_match_action_10/11/12/13` wired in the FU-137 action table
+(evidence strings updated); run state `sp_flag_158784`/`sp_delivery`/
+`sp_157821` added to `struct fifa96_match_run` (init/begin zeroed); tests
+`test_action_10..13_runs_*_body` (`tests/test_engine_match_handlers.c`) and
+`test_taker_armed_rows_resolve` / `test_taker_armed_referee_rows_resolve`
+(`tests/test_engine_match_frame.c`, the P1 set-piece and FU-150 referee arm
+paths). `make check` 108/108; **M1 and M2 goldens byte-identical** (`cmp`
+clean): the tape never dispatches a taker code, so the rows are dormant on the
+tape and no re-pin is due. L13 now narrows to the legs above; FU-151's row 0x1D
+remains owned by P3 (unchanged).

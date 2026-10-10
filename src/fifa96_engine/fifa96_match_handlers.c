@@ -1037,6 +1037,742 @@ static int fifa96_match_action_0F(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== FU-149 L13 (M2 phase-8 T1): the set-piece taker row machines =======
+ *
+ * The four rows the P1 set-piece arms install (FU-149 §6 codes): 0x10 throw-in
+ * taker (`0x855F0..0x85DE3`, gate {2,3}, stage table 0x855B8, 7 arms), 0x11
+ * corner taker (`0x85DE4..0x864FF`, gate {2,4}, table 0x85DA0, 10 arms), 0x12
+ * free-kick taker (`0x83D68..0x84597`, gate {2,7}, tables 0x83D2C/0x83D4C,
+ * 8/7 arms) and 0x13 penalty taker (`0x84B00..0x84EEB`, gate {2,6}, table
+ * 0x84AE4, 7 arms). Each arm is cited by its first-hand window in the body
+ * comments. The ported subset carries every gate, the record/camera-visible
+ * writes, the RNG draws and both resolution exits (the shared situation-0xB
+ * phase-2 hand-back and row 0x10's situation-2 re-queue); the presentation and
+ * staging bodies (`FUN_000832A8`, the 0x158730/0x15879C/0x1587AC throw block,
+ * `FUN_00083428`'s input-driven slot arm, the 0x8F188/0x974DC/0x6E598/0x4C3xx/
+ * 0x918CC sinks, the kick event sub-tables and the 0x10F331/0x10F339 ball-line
+ * block) are numbered L13 legs.
+ *
+ * Documented stand-ins: the `0x15777C` snapshot triple = `mr->goal_snap_*`
+ * (the FU-145 armer's frozen pan triple), the `0x15774C` focus = the engine
+ * camera pos (`0x157764` = its target, FU-147 leg 13), the `0x157770`
+ * camera-led reception triple = the camera triple (FU-67 §4.1), the `0x8DE8C`
+ * picks = `fifa96_entity_find_nearest` over the pool record positions, the
+ * `0x8DCD4` triple = the FU-142 helper layout {distance, dx, dz}, and the
+ * `0xCD474`/`0x114E04`/`0x795A4` angle idiom = `fifa96_action_kick_angle` +
+ * `fifa96_ball_fold`. */
+static struct fifa96_match_entity *match_sp_entity(struct fifa96_match_run *mr,
+                                                   uint32_t *team_out,
+                                                   uint32_t *idx_out) {
+  int32_t id = mr->record.entity_id;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return NULL;
+  if (team_out != NULL) *team_out = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  if (idx_out != NULL) *idx_out = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  return &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+}
+
+/* The `FUN_0008DE8C` pick over the pool (positions, skip index, the record's
+ * transient `+0x9A` self stamp the natives set around the call). */
+static int32_t match_sp_nearest(struct fifa96_match_run *mr, uint32_t team,
+                                uint8_t skip_self, uint32_t idx, uint8_t skip_index,
+                                int16_t from_x, int16_t from_z) {
+  fifa96_entity_candidate candidates[FIFA96_MATCH_ENTITY_RECORDS];
+  int16_t best = 0;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+    candidates[i].x = (int16_t)e->pos_x;
+    candidates[i].y = (int16_t)e->pos_z;
+    candidates[i].skip_98 = e->skip_98;
+    candidates[i].skip_9a = e->skip_9a;
+  }
+  if (skip_self != 0 && idx < FIFA96_MATCH_ENTITY_RECORDS)
+    candidates[idx].skip_9a = 1;   /* 0x85C79 / 0x844B4 / 0x86401 stamp */
+  return fifa96_entity_find_nearest(candidates, FIFA96_MATCH_ENTITY_RECORDS,
+                                    skip_index, from_x, from_z, &best);
+}
+
+/* `FUN_00079B6C` re-anchor subset: the argument triple becomes the record's
+ * position and target (y forced 0), lane/velocity cleared (FU-139 §11.1). */
+static void match_sp_anchor(struct fifa96_match_run_record *r, int32_t x, int32_t y,
+                            int32_t z) {
+  r->pos_x = x;
+  r->pos_y = y;
+  r->pos_z = z;
+  r->target_x = x;
+  r->target_y = y;
+  r->target_z = z;
+  r->lane = 0;
+  r->vel_x = 0;
+  r->vel_z = 0;
+  r->speed71 = 0;
+  r->vel73 = 0;
+  r->vel75 = 0;
+}
+
+/* `FUN_00073E08` placement commit subset (the engine's
+ * `fifa96_match_entities_place` on the staged record). */
+static void match_sp_commit(struct fifa96_match_run_record *r) {
+  r->pos_x = r->target_x;
+  r->pos_y = 0;
+  r->pos_z = r->target_z;
+  r->target_x = r->pos_x;
+  r->target_y = 0;
+  r->target_z = r->pos_z;
+  r->lane = (int32_t)((uint32_t)r->lane & 0xFFFF0000u);
+  r->vel_x = 0;
+  r->vel_z = 0;
+  r->speed71 = 0;
+  r->vel73 = 0;
+  r->vel75 = 0;
+}
+
+/* `FUN_00079B1C` snap subset: target = position (the keeper row-1E mapping). */
+static void match_sp_snap(struct fifa96_match_run_record *r) {
+  r->target_x = r->pos_x;
+  r->target_y = r->pos_y;
+  r->target_z = r->pos_z;
+}
+
+/* `FUN_000832A8` derived stand-in (L13 leg): the native clears the 0x158784
+ * throw gate (`0x832BC`), latches the 0x1587B0/0x1587B2 staging words and the
+ * 0x15879C triple, runs the `FUN_00083164`/`FUN_0008DB6C` slot block and the
+ * 0x361xx presentation calls, and clears the record timer (`0x833xx`). Only the
+ * two cells the row stages observe are modelled. */
+static void match_sp_setup_832a8(struct fifa96_match_run *mr,
+                                 struct fifa96_match_run_record *r) {
+  mr->sp_flag_158784 = 0;
+  r->timer89 = 0;
+}
+
+/* `FUN_00085498` probe, derived completion (L13 leg for the slot arm). The
+ * native no-slot arm (record slot empty and the staged 0x1587B0 latch set by
+ * `FUN_000832A8`) fires once when the 0x78 timer is crossed, draws
+ * `FUN_00092AC8() % span` into the record's `+0x7E7` and latches the delivery
+ * row `[0x1587B4]` 3 (| >= 3) or 7; the slot arm runs the input-driven
+ * `FUN_00083428` machine. The derived completion applies the same timer gate
+ * plus draw so an armed row still resolves; the RNG width is the engine's
+ * 16-bit draw (native 32-bit, cadence leg). */
+static int match_sp_probe_85498(struct fifa96_match_run *mr, uint16_t span) {
+  uint16_t draw = 0;
+  if (mr->record.timer89 <= 0x78) return 0;
+  if (fifa96_rng_step(&mr->rng, &draw) != 0) return 0;
+  mr->sp_delivery = (uint8_t)((draw % span) < 3u ? 3u : 7u);
+  return 1;
+}
+
+/* The shared resolution: the native `[0x157A6A] = 0x12C` offside-suppression
+ * write (rows 0x10 `0x85D19`, 0x11 `0x863D8`, 0x12 `0x84480`) and the
+ * `FUN_0008A938(0xB, rec_team, 0)` hand-back to phase 2 through the engine's
+ * single shared situation entry; row 0x13's stage 5 (`0x84E79`) calls the same
+ * entry without the timer write. */
+static int match_sp_resolve(struct fifa96_match_run *mr, uint8_t set_offside_timer) {
+  int rc;
+  if (set_offside_timer != 0) mr->referee.offside_suppress = 0x12C;
+  rc = fifa96_match_run_situation(mr, 0x0Bu);
+  return rc;
+}
+
+/* One `FUN_0007B9C4` delivery through the ported kick path. The action-kick
+ * staging record supplies the actor/ctx inputs (the row-07/0F binding). */
+static int match_sp_kick(struct fifa96_match_run *mr,
+                         const fifa96_ball_pair_vector *input, uint8_t mode,
+                         uint8_t slot_present) {
+  fifa96_action_kick s;
+  fifa96_ball_kick_out out;
+  match_kick_from_record(mr, mr->record.code, &s);
+  return match_kick_run(mr, &s, input, mode, slot_present, &out);
+}
+
+/* The `FUN_0008DCD4` distance word of (record position -> target) for the
+ * row-0x13 word-at-+0x65 gates. */
+static int32_t match_sp_target_distance(const struct fifa96_match_run_record *r,
+                                        int32_t to_x, int32_t to_z) {
+  fifa96_arm_vec from;
+  fifa96_arm_vec to;
+  int32_t distance = 0;
+  int32_t dz = 0;
+  from.x = r->pos_x;
+  from.y = r->pos_y;
+  from.z = r->pos_z;
+  to.x = to_x;
+  to.y = 0;
+  to.z = to_z;
+  (void)fifa96_arm_dist_stage(&from, &to, &distance, &dz);
+  return distance;
+}
+
+/* The shared taker pick + `install 4` (`0x85C6D`, `0x86403`, `0x844AF`,
+ * `0x84E26`): the derived `0x8DE8C` nearest over the camera-led triple, the
+ * team-target latch and the relay-record code 4 install. */
+static void match_sp_pick_install(struct fifa96_match_run *mr, uint32_t team,
+                                  uint32_t idx, uint8_t skip_index, int16_t from_x,
+                                  int16_t from_z) {
+  int32_t pick = match_sp_nearest(mr, team, 1u, idx, skip_index, from_x, from_z);
+  if (pick < 0) return;
+  mr->entities.team[team].target =
+      (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)pick);
+  (void)fifa96_match_entities_install(&mr->entities.team[team].records[pick],
+                                      (uint8_t)mr->state.phase, 4u, 0);
+}
+
+/* Row 0x10 `0x855F0..0x85DE3` (FU-149 §1.6, FU-81 §2.1): the throw-in taker.
+ * Stages: 0 placement at the 0x15777C snapshot (`0x8566D`), 1 the
+ * `FUN_000832A8` setup (`0x857D6`), 2 the `FUN_00085498` delivery probe
+ * (`0x8580D`), 3 the ball-line/pick/install-4 block (`0x858E4`), 4 the
+ * resolution/requeue (`0x85CC4`/`0x85D19`), 5 the `+0x44` wait (`0x85D5A`)
+ * and 6 the reset (`0x85D8D`). */
+static int fifa96_match_action_10(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  uint32_t team = 0;
+  uint32_t idx = 0;
+  struct fifa96_match_entity *e = match_sp_entity(mr, &team, &idx);
+  uint8_t stage;
+  int rc;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 2u && mr->state.phase != 3u) {   /* 0x85603/0x8560B */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  r->timer89 += (int16_t)r->delta;                        /* 0x85613..0x8562A */
+  if ((int8_t)r->stage92 < 3) r->controlled = 1;          /* 0x85630..0x85639 */
+  if ((int8_t)r->stage92 < 5) {                           /* 0x8563B..0x85651 */
+    r->target_x = r->pos_x;
+    r->target_y = r->pos_y;
+    r->target_z = r->pos_z;
+  }
+  stage = r->stage92;
+  if (stage > 6u) return FIFA96_OK;                       /* 0x8565A JA */
+  if (stage == 0u) {                                      /* 0x8566D */
+    /* 0x8566D..0x8567B: [0x157AAF] = team side (unmodeled, leg). */
+    r->helper_request = r->has_slot == 0 ? 1u : 0u;       /* 0x85682 FUN_0007876C */
+    r->target_x = mr->goal_snap_x;                        /* 0x8568A..0x85692 */
+    r->target_y = mr->goal_snap_y;
+    r->target_z = mr->goal_snap_z;
+    if (mr->session_gate_14c32a == 0u && r->timer89 < 0x3C &&
+        (int16_t)(r->lane >> 16) > 0x20)
+      return FIFA96_OK;                                   /* 0x85693..0x856A9 */
+    /* 0x856AF..0x857D0: the FUN_000700F4 snapshot reset, the FUN_00073E08
+     * commit and the record-position write at the snapshot ±0x10. The
+     * 0x8570A..0x857BE dropped bodies (0x79B6C re-anchor, 0x8DCD4/0x79C50
+     * face, 0x6E598, the 0x157A77/0x15879C halves, 0x8CFAC, 0x4C324,
+     * 0x918CC) are L13 legs; the record-visible outcome is kept. */
+    (void)fifa96_camera_init(&mr->render.camera, mr->goal_snap_x, mr->goal_snap_y,
+                             mr->goal_snap_z);            /* 0x856CB */
+    r->place_x = mr->goal_snap_x;
+    r->place_y = mr->goal_snap_y;
+    r->place_z = mr->goal_snap_z;
+    r->place_valid = 1;
+    r->pos_x = mr->goal_snap_x;                           /* 0x856D8 */
+    r->pos_y = mr->goal_snap_y;
+    r->pos_z = mr->goal_snap_z;
+    r->pos_x += (mr->goal_snap_x > 0 ? 0x10 : -0x10);     /* 0x856DB..0x856FC */
+    match_sp_anchor(r, r->pos_x, 0, r->pos_z);            /* 0x85705 FUN_00079B6C */
+    r->timer89 = 0;                                       /* 0x857C4 */
+    r->stage92 = 1u;                                      /* 0x857D0 */
+    stage = 1u;
+  }
+  if (stage == 1u) {                                      /* 0x857D6 */
+    /* 0x857DF: the 0x974DC(0x1E) sound when the session gate is 0 (leg). */
+    match_sp_setup_832a8(mr, r);                          /* 0x857F0 FUN_000832A8 */
+    r->timer89 = 0;                                       /* 0x857FB */
+    r->stage92 = 2u;                                      /* 0x85807 */
+    stage = 2u;
+  }
+  if (stage == 2u) {                                      /* 0x8580D */
+    /* 0x8582E..0x85837: the 0x15774C focus := the 0x157764 camera target. */
+    mr->render.camera.pos_x = mr->render.camera.target_x;
+    mr->render.camera.pos_y = mr->render.camera.target_y;
+    mr->render.camera.pos_z = mr->render.camera.target_z;
+    if (mr->sp_flag_158784 != 0u) {                       /* 0x8583B..0x85875 */
+      match_sp_setup_832a8(mr, r);
+      return FIFA96_OK;
+    }
+    /* 0x8587A: the 0xA5 timer event (leg). */
+    if (match_sp_probe_85498(mr, 4u) == 0) return FIFA96_OK;  /* 0x858B7 */
+    r->timer89 = 0;                                       /* 0x858C4 */
+    r->stage92 = 3u;                                      /* 0x858DE */
+    stage = 3u;
+  }
+  if (stage == 3u) {                                      /* 0x858E4 */
+    /* 0x858E4: the 0x4C380 no-op (leg); 0x858E9..0x858F2 the animation-frame
+     * gate on the record's byte +0x3D. */
+    if (r->frame < 4u) return FIFA96_OK;
+    /* 0x858F8..0x85966: the 0x18 event and the 0x10F334/0x10F33C actor-type
+     * ball-line build, then the FUN_000700F4 reset at the line (the derived
+     * subset applies the type offsets to the record position, the tables are
+     * the ported `match_kick_dir_x/z`). */
+    {
+      /* The native indexes the 0x10F334/0x10F33C byte tables with the raw
+       * actor type (unbounded image read); the port masks to the 32-entry
+       * derived tables (hardening divergence). */
+      uint32_t dir_idx = (uint32_t)r->actor_type & 0x1Fu;
+      int32_t dx = (int32_t)match_kick_dir_x[dir_idx] << 6;
+      int32_t dz = (int32_t)match_kick_dir_z[dir_idx] << 6;
+      (void)fifa96_camera_init(&mr->render.camera, r->pos_x + dx, 0,
+                               r->pos_z + dz);
+    }
+    /* 0x85966..0x85CA1: the dropped 0x8DCD4 clamp/folds/0x79C50/0x92820/
+     * 0x7A490 staging (L13 legs) and the derived pick + relay install 4. */
+    match_sp_pick_install(mr, team, idx, 0u,
+                          (int16_t)mr->render.camera.pos_x,
+                          (int16_t)mr->render.camera.pos_z);
+    r->timer89 = 0;                                       /* 0x85CA6 */
+    r->stage92 = 4u;                                      /* 0x85CC4 */
+    stage = 4u;
+  }
+  if (stage == 4u) {                                      /* 0x85CC4 */
+    int32_t bx;
+    match_sp_snap(r);                                     /* 0x85CC6 FUN_00079B1C */
+    bx = mr->render.camera.pos_x;                         /* 0x85CCB [0x15774C] */
+    if (bx < 0) bx = -bx;
+    if (bx >= 0x720) {                                    /* 0x85CDD..0x85CE2 */
+      if ((int8_t)mr->sp_157821 <= 0) return FIFA96_OK;   /* 0x85CE4..0x85CEB */
+      /* 0x85CF1..0x85D0A: re-queue situation 2 with the record's team side. */
+      return fifa96_match_run_set_piece(mr, 2u,
+                                        (uint8_t)mr->entities.team[team].side, 1u);
+    }
+    /* 0x85D19..0x85D54: the resolution tail (offside timer + phase 2). */
+    rc = match_sp_resolve(mr, 1);
+    if (rc != 0) return rc;
+    r->timer89 = 0;                                       /* 0x85D48 */
+    r->stage92 = 5u;                                      /* 0x85D54 */
+    stage = 5u;
+  }
+  if (stage == 5u) {                                      /* 0x85D5A */
+    match_sp_snap(r);                                     /* 0x85D5C */
+    if (r->row44 == 0u) return FIFA96_OK;                 /* 0x85D61..0x85D65 */
+    r->timer89 = 0;                                       /* 0x85D67 */
+    r->stage92 = 6u;                                      /* 0x85D87 */
+    stage = 6u;
+  }
+  if (stage == 6u) {                                      /* 0x85D8D */
+    match_row_reset(mr, e);
+  }
+  return FIFA96_OK;
+}
+
+/* Row 0x11 `0x85DE4..0x864FF` (FU-149 §1.6, FU-81 §2.1): the corner taker.
+ * Stages: 0 the controlled/marker + 0x3C wait (`0x85E3C`), 1 the
+ * `FUN_0007D360` corner probe/placement (`0x85E7D`), 2/3 pure advances
+ * (`0x85FA2`/`0x85FBD`), 4 the setup (`0x85FD8`), 5 the delivery probe
+ * (`0x86013`), 6 the target/lane gate (`0x860CB`), 7 the kick + resolution +
+ * relay (`0x8610E`), 8 the `+0x44` wait (`0x8645B`) and 9 the target clamp
+ * (`0x86496`). */
+static int fifa96_match_action_11(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  uint32_t team = 0;
+  uint32_t idx = 0;
+  struct fifa96_match_entity *e = match_sp_entity(mr, &team, &idx);
+  uint8_t stage;
+  int rc;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 2u && mr->state.phase != 4u) {   /* 0x85DF2..0x85E02 */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  r->timer89 += (int16_t)r->delta;                        /* 0x85E19 */
+  stage = r->stage92;
+  if (stage > 9u) return FIFA96_OK;                       /* 0x85E29 JA */
+  if (stage == 0u) {                                      /* 0x85E3C */
+    r->controlled = 1;                                    /* 0x85E4B */
+    r->helper_request = r->has_slot == 0 ? 1u : 0u;       /* 0x85E51 */
+    if (r->timer89 < 0x3C) return FIFA96_OK;              /* 0x85E56..0x85E5D */
+    r->timer89 = 0;                                       /* 0x85E63 */
+    r->stage92 = 1u;                                      /* 0x85E77 */
+    stage = 1u;
+  }
+  if (stage == 1u) {                                      /* 0x85E7D */
+    /* 0x85E7D..0x85E85: the FUN_0007D360 corner probe (±0x710,0,±0xB00 from
+     * the snapshot signs), the FUN_000700F4 reset and the commit; the probe
+     * ±0x50 by sign; the FUN_00079B6C re-anchor (the record position = the
+     * probe point). The 0x8DCD4/0x79C50/0x6E598/0x8CFAC/0x4C324/0x918CC
+     * bodies are L13 legs. */
+    int32_t px = mr->goal_snap_x < 0 ? -0x710 : 0x710;
+    int32_t pz = mr->goal_snap_z < 0 ? -0xB00 : 0xB00;
+    (void)fifa96_camera_init(&mr->render.camera, px, 0, pz);   /* 0x85E98 */
+    r->place_x = px;
+    r->place_y = 0;
+    r->place_z = pz;
+    r->place_valid = 1;
+    px += px > 0 ? 0x50 : -0x50;                          /* 0x85EA2..0x85EBD */
+    pz += pz > 0 ? 0x50 : -0x50;                          /* 0x85EBF..0x85ED2 */
+    match_sp_anchor(r, px, 0, pz);                        /* 0x85EE2 */
+    r->timer89 = 0;                                       /* 0x85F90 */
+    r->stage92 = 2u;                                      /* 0x85F9C */
+    stage = 2u;
+  }
+  if (stage == 2u) {                                      /* 0x85FA2 */
+    r->timer89 = 0;                                       /* 0x85FAB */
+    r->stage92 = 3u;                                      /* 0x85FB7 */
+    stage = 3u;
+  }
+  if (stage == 3u) {                                      /* 0x85FBD */
+    r->timer89 = 0;                                       /* 0x85FC6 */
+    r->stage92 = 4u;                                      /* 0x85FD2 */
+    stage = 4u;
+  }
+  if (stage == 4u) {                                      /* 0x85FD8 */
+    /* 0x85FD8: the 0x974DC(0x1E) sound when the session gate is 0 (leg). */
+    match_sp_setup_832a8(mr, r);                          /* 0x85FF3 */
+    r->timer89 = 0;                                       /* 0x85FFB */
+    r->stage92 = 5u;                                      /* 0x8600D */
+    stage = 5u;
+  }
+  if (stage == 5u) {                                      /* 0x86013 */
+    /* 0x8601B..0x8602D: the 0x15774C focus := the 0x157764 camera target; the
+     * record re-anchor at its own position (0x79B6C). */
+    mr->render.camera.pos_x = mr->render.camera.target_x;
+    mr->render.camera.pos_y = mr->render.camera.target_y;
+    mr->render.camera.pos_z = mr->render.camera.target_z;
+    match_sp_anchor(r, r->pos_x, 0, r->pos_z);            /* 0x8602E */
+    if (mr->sp_flag_158784 != 0u) {                       /* 0x86033..0x86052 */
+      match_sp_setup_832a8(mr, r);
+      return FIFA96_OK;
+    }
+    /* 0x86057: the 0x4B0 timer event (leg). */
+    if (match_sp_probe_85498(mr, 4u) == 0) return FIFA96_OK;  /* 0x8609F */
+    r->timer89 = 0;                                       /* 0x860B7 */
+    r->stage92 = 6u;                                      /* 0x860C5 */
+    stage = 6u;
+  }
+  if (stage == 6u) {                                      /* 0x860CB */
+    r->target_x = mr->render.camera.pos_x;                /* 0x860CB..0x860DB */
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x860E4..0x860ED */
+    r->timer89 = 0;                                       /* 0x860FC */
+    r->stage92 = 7u;                                      /* 0x86108 */
+    stage = 7u;
+  }
+  if (stage == 7u) {                                      /* 0x8610E */
+    /* 0x8610E..0x86382: the kick block. The native selects one of the seven
+     * event sub-table 0x85DC8 arms by `[0x1587B4]-1` (or the per-team 0x1587E8
+     * table when `[team+0x7E7] != 0`) and passes each arm's own vector to
+     * FUN_0007B9C4; the ported subset emits one derived delivery from the
+     * engine ball-staging vector with mode 0x10 (L13 legs: the arm/vector
+     * selection). */
+    (void)match_sp_kick(mr, &mr->entities.ball.pair.vector, 0x10u,
+                        mr->record.has_slot);
+    /* 0x86388..0x863D0: the FUN_00092AC8 draw and the 0x19/0x1C events
+     * (legs); the draw is consumed for RNG cadence. */
+    {
+      uint16_t draw = 0;
+      (void)fifa96_rng_step(&mr->rng, &draw);
+    }
+    rc = match_sp_resolve(mr, 1);                         /* 0x863D8..0x863F9 */
+    if (rc != 0) return rc;
+    match_sp_pick_install(mr, team, idx, 0u,              /* 0x86403..0x86437 */
+                          (int16_t)mr->render.camera.pos_x,
+                          (int16_t)mr->render.camera.pos_z);
+    r->timer89 = 0;                                       /* 0x8644B */
+    r->stage92 = 8u;                                      /* 0x86455 */
+    stage = 8u;
+  }
+  if (stage == 8u) {                                      /* 0x8645B */
+    match_sp_snap(r);                                     /* 0x8645E */
+    if (r->row44 == 0u) return FIFA96_OK;                 /* 0x86466..0x8646A */
+    r->timer89 = 0;                                       /* 0x86470 */
+    r->stage92 = 9u;                                      /* 0x86490 */
+    stage = 9u;
+  }
+  if (stage == 9u) {                                      /* 0x86496 */
+    /* 0x86496..0x864E5: the target clamp (x to ±0x630, z to ±0x840 by side). */
+    if (r->pos_x > 0x630) r->target_x = 0x630;
+    else if (r->pos_x < -0x630) r->target_x = -0x630;
+    else r->target_x = r->pos_x;
+    r->target_z = mr->entities.team[team].side != 0u ? -0x840 : 0x840;
+    if (r->distance < 0x30) {                             /* 0x864E8..0x864F1 */
+      match_row_reset(mr, e);
+      return FIFA96_OK;
+    }
+    if (r->timer89 > 0x78) {                              /* 0x864F3..0x864FD */
+      match_row_reset(mr, e);
+      return FIFA96_OK;
+    }
+    return FIFA96_OK;                                     /* 0x86507 wait */
+  }
+  return FIFA96_OK;
+}
+
+/* Row 0x12 `0x83D68..0x84597` (FU-149 §1.6, FU-81 §2.1): the free-kick taker.
+ * Stages: 0 the incident-triple placement + wall point (`0x83E26`), 1 the
+ * setup (`0x84077`), 2 the delivery probe (`0x840B2`), 3 the target/lane gate
+ * (`0x8416A`), 4 the kick + resolution + relay (`0x841AD`), 5 the `+0x44`
+ * wait (`0x8450C`), 6 the snap (`0x84543`) and 7 the reset (`0x84556`). */
+static int fifa96_match_action_12(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  uint32_t team = 0;
+  uint32_t idx = 0;
+  struct fifa96_match_entity *e = match_sp_entity(mr, &team, &idx);
+  uint8_t stage;
+  int rc;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 2u && mr->state.phase != 7u) {   /* 0x83D7E..0x83D98 */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  /* 0x83DA0..0x83DF2: the `+0x8F < 3` wall block (the per-side 0x1577D8 gate,
+   * the FUN_00083B80 wall setup) and the 0x158747 five-dword clear are
+   * unported staging (L13 leg). */
+  r->timer89 += (int16_t)r->delta;                        /* 0x83E03 */
+  stage = r->stage92;
+  if (stage > 7u) {                                       /* 0x83E13 JA */
+    /* 0x8455B..0x8458C: the phase-7 `+0x8F < 5` 0x157A77 refresh (leg). */
+    return FIFA96_OK;
+  }
+  if (stage == 0u) {                                      /* 0x83E26 */
+    /* 0x83E26..0x83E2E: [0x157AAF] = team side (unmodeled, leg). */
+    r->helper_request = r->has_slot == 0 ? 1u : 0u;       /* 0x83E35 */
+    r->controlled = 1;                                    /* 0x83E40 */
+    if (mr->session_gate_14c32a == 0u && r->timer89 < 0x3C)
+      return FIFA96_OK;                                   /* 0x83E3A..0x83E51 */
+    r->timer89 = 0;                                       /* 0x83E60 */
+    r->stage92 = 1u;                                      /* 0x83E6C */
+    stage = 1u;
+    /* 0x83E72..0x83EAB: the 0x15774C focus := the 0x158897 incident triple
+     * with z clamped to ±0x9F0; the FUN_000700F4 reset. */
+    {
+      int32_t iz = mr->incident_z;
+      if (iz > 0x9F0) iz = 0x9F0;
+      else if (iz < -0x9F0) iz = -0x9F0;
+      (void)fifa96_camera_init(&mr->render.camera, mr->incident_x, 0, iz);
+      r->place_x = mr->incident_x;
+      r->place_y = 0;
+      r->place_z = iz;
+      r->place_valid = 1;
+    }
+    match_sp_commit(r);                                   /* 0x83EC7 FUN_00073E08 */
+    /* 0x83ECC..0x84065: the wall-point build: the (0,0,±0xB10 by side) probe,
+     * the 0x8DCD4 triple, the 0xCD474 angle and the 0x114E04/0x795A4 folds
+     * with the 0xA0 step, then the FUN_00079B6C re-anchor at the wall point.
+     * The 0x7D388/0x4C31C/0x4C320/0x4C324 bodies are L13 legs. */
+    {
+      int32_t pz = mr->entities.team[team].side == 0u ? 0xB10 : -0xB10;
+      int16_t dx = (int16_t)((uint16_t)0u - (uint16_t)mr->incident_x);
+      int16_t dz = (int16_t)((uint16_t)pz - (uint16_t)r->place_z);
+      int32_t angle = 0;
+      if (fifa96_action_kick_angle(dx, dz, &angle) == FIFA96_OK) {
+        int32_t a = (angle + 0x200) & 0x3FF;
+        if (a > 0x200) a -= 0x400;
+        match_sp_anchor(r, mr->incident_x + fifa96_ball_fold(0xA0, a), 0,
+                        mr->incident_z + fifa96_ball_fold(0xA0, a + 0x100));
+      }
+    }
+    if (mr->session_gate_14c32a == 0u) return FIFA96_OK;  /* 0x8406A..0x84071 */
+    /* falls into stage 1 */
+  }
+  if (stage == 1u) {                                      /* 0x84077 */
+    /* 0x84080: the 0x974DC(0x1E) sound when the session gate is 0 (leg). */
+    match_sp_setup_832a8(mr, r);                          /* 0x84092 */
+    r->timer89 = 0;                                       /* 0x840A0 */
+    r->stage92 = 2u;                                      /* 0x840AC */
+    stage = 2u;
+  }
+  if (stage == 2u) {                                      /* 0x840B2 */
+    /* 0x840BF..0x840CD: the focus := the camera target; the record re-anchor
+     * at its own position. */
+    mr->render.camera.pos_x = mr->render.camera.target_x;
+    mr->render.camera.pos_y = mr->render.camera.target_y;
+    mr->render.camera.pos_z = mr->render.camera.target_z;
+    match_sp_anchor(r, r->pos_x, 0, r->pos_z);            /* 0x840CD */
+    if (mr->sp_flag_158784 != 0u) {                       /* 0x840D2..0x840F1 */
+      match_sp_setup_832a8(mr, r);
+      return FIFA96_OK;
+    }
+    /* 0x840F6: the 0x4B0 timer event (leg). */
+    if (match_sp_probe_85498(mr, 3u) == 0) return FIFA96_OK;  /* 0x8413B */
+    r->timer89 = 0;                                       /* 0x8415E */
+    r->stage92 = 3u;                                      /* 0x84164 */
+    stage = 3u;
+  }
+  if (stage == 3u) {                                      /* 0x8416A */
+    r->target_x = mr->render.camera.pos_x;                /* 0x8416A..0x84182 */
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x84189..0x8418C */
+    r->timer89 = 0;                                       /* 0x8419B */
+    r->stage92 = 4u;                                      /* 0x841A7 */
+    stage = 4u;
+  }
+  if (stage == 4u) {                                      /* 0x841AD */
+    /* 0x841AD..0x84425: the kick block. The native selects the seven-arm event
+     * sub-table 0x83D4C by `[0x1587B4]-1` (or the per-team 0x1587E8 table when
+     * `[team+0x7E7] != 0`) and passes each arm's own vector; the derived
+     * subset emits one delivery from the engine ball-staging vector with mode
+     * 0x10 (L13 legs: the arm/vector selection). */
+    (void)match_sp_kick(mr, &mr->entities.ball.pair.vector, 0x10u,
+                        mr->record.has_slot);
+    /* 0x84471..0x84478: the 0x4C380/0x4C374 no-ops (legs). */
+    rc = match_sp_resolve(mr, 1);                         /* 0x84480..0x84495 */
+    if (rc != 0) return rc;
+    /* 0x8449A..0x844E7: the relay install 4 unless the staging code byte
+     * 0x158743 (the top byte of the 0x158740 dword) is 3. */
+    if (mr->entities.ball.pair.code != 3u)
+      match_sp_pick_install(mr, team, idx, (uint8_t)r->active,
+                            (int16_t)mr->render.camera.pos_x,
+                            (int16_t)mr->render.camera.pos_z);
+    r->timer89 = 0;                                       /* 0x844FC */
+    r->stage92 = 5u;                                      /* 0x84506 */
+    stage = 5u;
+  }
+  if (stage == 5u) {                                      /* 0x8450C */
+    match_sp_snap(r);                                     /* 0x8450F */
+    if (r->row44 == 0u) return FIFA96_OK;                 /* 0x84517..0x8451B */
+    r->timer89 = 0;                                       /* 0x84533 */
+    r->stage92 = 6u;                                      /* 0x8453D */
+    stage = 6u;
+  }
+  if (stage == 6u) {                                      /* 0x84543 */
+    match_sp_snap(r);                                     /* 0x84546 */
+    stage = 7u;                                           /* 0x84550 falls into 7 */
+  }
+  if (stage == 7u) {                                      /* 0x84556 */
+    match_row_reset(mr, e);
+  }
+  return FIFA96_OK;
+}
+
+/* Row 0x13 `0x84B00..0x84EEB` (FU-149 §1.6, FU-81 §2.1): the penalty taker.
+ * Stages: 0 the commit + ball line (`0x84BAD`), 1 the spot aim + distance gate
+ * (`0x84C48`), 2 the input/keeper/slot gate (`0x84CBA`), 3 the target/lane gate
+ * (`0x84DF4`), 4 the kick (`0x84E26`), 5 the ball-ack gate + resolution
+ * (`0x84E61`) and 6 the `+0x44` reset (`0x84EB1`). */
+static int fifa96_match_action_13(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  uint32_t team = 0;
+  uint32_t idx = 0;
+  struct fifa96_match_entity *e = match_sp_entity(mr, &team, &idx);
+  uint8_t stage;
+  int rc;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 2u && mr->state.phase != 6u) {   /* 0x84B0B..0x84B1B */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  if ((int8_t)r->stage92 < 5) {                           /* 0x84B21..0x84B6B */
+    /* The FUN_0007876C merge request, the FUN_00073DC4 penalty-spot triple
+     * into the 0x15774C focus and the FUN_000700F4 reset. */
+    r->controlled = 1;                                    /* 0x84B31 */
+    r->helper_request = r->has_slot == 0 ? 1u : 0u;       /* 0x84B37 */
+    {
+      int32_t pz = mr->entities.team[team].side == 1u ? -0x8D0 : 0x8D0;
+      (void)fifa96_camera_init(&mr->render.camera, 0, 0, pz);  /* 0x84B6B */
+      r->place_x = 0;
+      r->place_y = 0;
+      r->place_z = pz;
+      r->place_valid = 1;
+    }
+  }
+  /* 0x84B70..0x84B7C: [ESP] = [team+0x7A6] (the opponent team block the stage-2
+   * word[+0x71] gate reads); the derived stand-in is the opponent keeper's
+   * speed word. */
+  r->timer89 += (int16_t)r->delta;                        /* 0x84B8A */
+  stage = r->stage92;
+  if (stage > 6u) return FIFA96_OK;                       /* 0x84B9A JA */
+  if (stage == 0u) {                                      /* 0x84BAD */
+    match_sp_commit(r);                                   /* 0x84BAD FUN_00073E08 */
+    if (mr->session_gate_14c32a == 0u) {                  /* 0x84BB2..0x84BDF */
+      /* 0x84BBB..0x84BDD: the FU-120 ball record 0x15880C := the spot, x
+       * ±0x180 by the spot z sign. */
+      mr->entities.ball.x =
+          mr->render.camera.pos_x +
+          (mr->render.camera.pos_z < 0 ? 0x180 : -0x180);
+      mr->entities.ball.z = mr->render.camera.pos_z;
+    }
+    /* 0x84BE3..0x84C1C: the 0x8CFAC pair, the 0x4C324 bind, FUN_0007A028
+     * (the 0x158730 block clear) and the 0x15882A/[+0x9E] latches. The derived
+     * subset clears the ported staging block and sets `ran`. */
+    (void)fifa96_ball_pair_clear(&mr->entities.ball.pair);
+    r->ran = 1;                                           /* 0x84C23 */
+    r->timer89 = 0;                                       /* 0x84C36 */
+    r->stage92 = 1u;                                      /* 0x84C42 */
+    stage = 1u;
+  }
+  if (stage == 1u) {                                      /* 0x84C48 */
+    int32_t dist;
+    r->target_x = mr->render.camera.pos_x;                /* 0x84C48..0x84C52 */
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+    r->target_z += mr->entities.team[team].side == 0u ? -0xF0 : 0xF0; /* 0x84C5C..0x84C6F */
+    dist = match_sp_target_distance(r, r->target_x, r->target_z);
+    if (dist > 0x30) {                                    /* 0x84C87..0x84C8A */
+      /* 0x84C8C: the 0x4C31C snap-request body (leg). */
+      return FIFA96_OK;
+    }
+    /* 0x84C98: the 0x974DC(0x1E) sound (leg). */
+    r->timer89 = 0;                                       /* 0x84CA8 */
+    r->stage92 = 2u;                                      /* 0x84CB4 */
+    stage = 2u;
+  }
+  if (stage == 2u) {                                      /* 0x84CBA */
+    int32_t dist = match_sp_target_distance(r, r->target_x, r->target_z);
+    /* 0x84CBC..0x84D11: the word-at-+0x65 gate selects the 0x4C31C input bind
+     * (the 0x4C114/0x4C118/0x4C11C input words, L13 legs) and calls it. */
+    (void)dist;
+    /* 0x84D16..0x84D1E: the opponent tracked-record word[+0x71] gate; the
+     * native record pointer [team+0x7A6] is unported, the derived stand-in is
+     * the opponent keeper's speed word. */
+    if (mr->entities.team[1u - team].records[0].speed71 > 0) return FIFA96_OK;
+    /* 0x84D29: [0x15882A] = 1 (the staging latch, leg). */
+    if (r->has_slot != 0) {
+      /* 0x84D37..0x84DD2: the slot gate. The native reads word[slot+6]: 0
+       * waits, an 0x20 edge with a closed session hands the kick off (reset
+       * self + install 0x13 on the next +0x9A-clear record), otherwise the
+       * 0x78A84 restore then advance. The engine slot word[+6] is unported;
+       * the derived stand-in advances the restore path when the slot is bound
+       * (L13.7). */
+    } else if (r->timer89 <= 0xF0) {                      /* 0x84DC6..0x84DD2 */
+      return FIFA96_OK;
+    }
+    r->timer89 = 0;                                       /* 0x84DE2 */
+    r->stage92 = 3u;                                      /* 0x84DEE */
+    stage = 3u;
+  }
+  if (stage == 3u) {                                      /* 0x84DF4 */
+    r->target_x = mr->render.camera.pos_x;                /* 0x84DF4..0x84DFE */
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x84E05..0x84E08 */
+    r->timer89 = 0;                                       /* 0x84E14 */
+    r->stage92 = 4u;                                      /* 0x84E20 */
+    stage = 4u;
+  }
+  if (stage == 4u) {                                      /* 0x84E26 */
+    /* 0x84E2D..0x84E36: the FUN_00078AA4 slot restore when word[slot+6] == 0
+     * (leg); 0x84E3B..0x84E44 the FUN_0007B9C4 penalty strike with a NULL
+     * input vector and mode 0x40. */
+    rc = match_sp_kick(mr, NULL, 0x40u, 0u);
+    if (rc != 0) return rc;
+    r->timer89 = 0;                                       /* 0x84E4F */
+    r->stage92 = 5u;                                      /* 0x84E5B */
+    stage = 5u;
+  }
+  if (stage == 5u) {                                      /* 0x84E61 */
+    match_sp_snap(r);                                     /* 0x84E63 */
+    /* 0x84E68..0x84E77: resolve unless the staged ball actor is this record
+     * with a clear 0x158746 ack. */
+    if (mr->entities.ball.pair.actor != r->entity_id ||
+        mr->entities.ball.pair.ack != 0u) {
+      rc = match_sp_resolve(mr, 0);                       /* 0x84E79..0x84E8F */
+      if (rc != 0) return rc;
+      r->timer89 = 0;                                     /* 0x84E9F */
+      r->stage92 = 6u;                                    /* 0x84EAB */
+      stage = 6u;
+    } else {
+      return FIFA96_OK;                                   /* 0x84E77 wait */
+    }
+  }
+  if (stage == 6u) {                                      /* 0x84EB1 */
+    match_sp_snap(r);                                     /* 0x84EB3 */
+    if (r->row44 == 0u) return FIFA96_OK;                 /* 0x84EB8..0x84EBC */
+    match_row_reset(mr, e);                               /* 0x84EC0 */
+  }
+  return FIFA96_OK;
+}
+
 /* ===== FU-142 OL-32 / M2 arms-and-wiring Task 12: rows 18/21/23 over the pool
  *
  * The three machines share the native `FUN_0007DAB4` reset (0x7DABA
@@ -1786,10 +2522,14 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x0E, NULL, "FU-137 §6: FU-136 row 0E: not ported; FU-81 gate/head, no body port; OL-9"},
     {0x0F, fifa96_match_action_0F,
      "FU-139 §9/FU-137 §5.2: row 0F ported (0x82AD0..0x82DCF machine; 0x7B9C4 kick path + 0x79B1C snap/0x79B6C face) over the pool; corner/predictor table inputs OL-66"},
-    {0x10, NULL, "FU-137 §6: FU-136 row 10: not ported (partial); FU-81 7-arm table 0x855B8; OL-9"},
-    {0x11, NULL, "FU-137 §6: FU-136 row 11: not ported (partial); FU-81 10-arm table 0x85DA0; OL-9"},
-    {0x12, NULL, "FU-137 §6: FU-136 row 12: not ported (partial); FU-81 tables 0x83D2C/0x83D4C; OL-9"},
-    {0x13, NULL, "FU-137 §6: FU-136 row 13: not ported (partial); FU-81 7-arm table 0x84AE4; OL-9"},
+    {0x10, fifa96_match_action_10,
+     "FU-149 L13/T1: row 10 ported (throw-in taker, 0x855F0..0x85DE3, gate {2,3}, table 0x855B8 7 arms): snapshot placement (0x8566D), FUN_000832A8 stand-in (0x857D6), FUN_00085498 delivery probe (0x8580D), ball-line/pick/install-4 (0x858E4), resolution/requeue (0x85CC4/0x85D19), +0x44 wait and reset; staging bodies, event sinks and the [0x157821] producer are FU-149 L13 legs"},
+    {0x11, fifa96_match_action_11,
+     "FU-149 L13/T1: row 11 ported (corner taker, 0x85DE4..0x864FF, gate {2,4}, table 0x85DA0 10 arms): 0x3C wait (0x85E3C), FUN_0007D360 corner probe ±0x50 placement (0x85E7D), advances, FUN_000832A8 (0x85FD8), delivery probe (0x86013), lane gate (0x860CB), kick + resolution + relay (0x8610E), +0x44 wait, target clamp (0x86496); the seven-arm kick vectors and sinks are FU-149 L13 legs"},
+    {0x12, fifa96_match_action_12,
+     "FU-149 L13/T1: row 12 ported (free-kick taker, 0x83D68..0x84597, gate {2,7}, tables 0x83D2C/0x83D4C): incident placement + wall-point fold (0x83E26), FUN_000832A8 (0x84077), delivery probe span 3 (0x840B2), lane gate (0x8416A), kick + resolution + relay (0x841AD), +0x44 wait, reset; the wall block 0x158747/0x83B80 and kick vectors are FU-149 L13 legs"},
+    {0x13, fifa96_match_action_13,
+     "FU-149 L13/T1: row 13 ported (penalty taker, 0x84B00..0x84EEB, gate {2,6}, table 0x84AE4 7 arms): spot focus + commit (0x84BAD), spot aim distance gate (0x84C48), opponent/slot gate (0x84CBA), lane gate (0x84DF4), penalty strike mode 0x40 (0x84E26), ball-ack gate + resolution (0x84E61), +0x44 reset; the 0x4C114 input words, 0x78A84/0x78AA4 slot bodies and the 0x20-edge hand-off are FU-149 L13 legs"},
     {0x14, NULL, "FU-137 §6: FU-136 row 14: not ported (partial); scatter_celebration helpers; OL-9"},
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},

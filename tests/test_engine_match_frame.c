@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
+#include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 
@@ -1459,6 +1460,64 @@ static void test_set_piece_phase_arm_codes(void) {
   assert(mr.entities.team[1].records[0].code == 0x19u);     /* 3 -> 0x19, record 0 */
 }
 
+
+/* FU-149 L13/T1: the P1-armed taker rows execute and resolve. The dispatcher
+ * arms the throw-in (sit 2 BX=1 -> phase 3 + taker 0x10) and the corner
+ * (sit 3 -> phase 4 + taker 0x11); the armed record is driven through the
+ * dispatch seam with the whole-frame delta staged and the rows hand back to
+ * phase 2 through the shared situation-0xB entry with the 0x12C
+ * offside-suppression timer. */
+static void test_taker_armed_rows_resolve(void) {
+  struct fifa96_match_run mr;
+  /* throw-in: sit 2 through the BX=1 fallback (the direct path with a pending
+   * situation); the phase-3 arm picks team 0 record 1 */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.state.phase = 2;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  assert(fifa96_match_run_set_piece(&mr, 2, 0, 1) == 0);
+  assert(mr.state.phase == 3u);
+  assert(mr.entities.team[0].target == 1);
+  assert(mr.entities.team[0].records[1].code == 0x10u);
+  mr.record.entity_id = 1;
+  mr.record.code = 0x10u;
+  mr.record.active = 1;
+  mr.record.frame = 4;                  /* the +0x3D animation-frame gate */
+  mr.record.delta = 0x80;
+  mr.record.stage92 = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x10) == FIFA96_OK);
+  assert(mr.record.stage92 == 2u);      /* the stage-2 delivery probe */
+  assert(fifa96_match_dispatch_action(&mr, 0x10) == FIFA96_OK);
+  assert(mr.state.phase == 2u);         /* the situation-0xB hand-back */
+  assert(mr.referee.offside_suppress == 0x12C);
+  assert(mr.record.stage92 == 5u);
+
+  /* corner: sit 3 through the table-2 row (closed session gate); the phase-4
+   * arm probes (0x710, 0xB00) and picks team 0 record 7 */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.state.phase = 2;
+  assert(fifa96_match_run_set_piece(&mr, 3, 0, 0) == 0);
+  assert(mr.state.phase == 4u);
+  assert(mr.corner_count[0] == 1u);
+  assert(mr.entities.team[0].target == 7);
+  assert(mr.entities.team[0].records[7].code == 0x11u);
+  mr.record.entity_id = 7;
+  mr.record.code = 0x11u;
+  mr.record.active = 1;
+  mr.record.delta = 0x40;
+  mr.record.stage92 = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x11) == FIFA96_OK);
+  assert(mr.record.stage92 == 5u);      /* 0x3C wait + probe placement */
+  assert(fifa96_match_dispatch_action(&mr, 0x11) == FIFA96_OK);
+  assert(mr.record.stage92 == 5u);      /* timer 0x40 < 0x78 */
+  assert(fifa96_match_dispatch_action(&mr, 0x11) == FIFA96_OK);
+  assert(mr.state.phase == 2u);
+  assert(mr.referee.offside_suppress == 0x12C);
+  assert(mr.record.stage92 == 8u);      /* the +0x44 wait after the kick */
+}
+
 /* FU-149 §1.8 (first-hand 0x8ABF3..0x8AC1C): the sit-3 counter index is
  * `FUN_000741B4(side) = (side ^ byte[0x157ABE]) & 1` — the display/score slot
  * swap, not the raw side. The queue route never counts (0x8A99E RETs before
@@ -1589,6 +1648,74 @@ static void test_engine_referee_contact_fk(void) {
   assert(mr.entities.team[1].target == 12);
   assert(mr.entities.team[0].records[0].code == 0x1Fu);  /* other keeper */
   assert(mr.entities.team[0].target == 0);
+}
+
+
+/* FU-149 L13/T1: the referee-armed free-kick and penalty takers resolve. The
+ * FU-150 contact chain arms phase 7 (FK, taker 0x12) / phase 6 (penalty, taker
+ * 0x13) on the fouled side; the armed record is driven to the shared
+ * situation-0xB hand-back (no offside timer on the penalty row). */
+static void test_taker_armed_referee_rows_resolve(void) {
+  struct fifa96_match_run mr;
+  const int32_t point[3] = {0x500, 0x777, 0};
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.state.phase == 7u);
+  assert(mr.entities.team[1].records[1].code == 0x12u);
+  mr.record.entity_id = 12;             /* team 1 record 1 */
+  mr.record.code = 0x12u;
+  mr.record.active = 1;
+  mr.record.delta = 0x80;
+  mr.record.stage92 = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x12) == FIFA96_OK);
+  assert(mr.record.stage92 == 2u);      /* the incident placement + probe */
+  assert(fifa96_match_dispatch_action(&mr, 0x12) == FIFA96_OK);
+  assert(mr.state.phase == 2u);
+  assert(mr.referee.offside_suppress == 0x12C);
+  assert(mr.record.stage92 == 5u);
+
+  /* penalty fork: the spot band selects phase 6 + taker 0x13 */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  {
+    const int32_t spot[3] = {0x100, 0, -0x800};
+    assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
+  }
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.state.phase == 6u);
+  assert(mr.entities.team[1].records[1].code == 0x13u);
+  mr.record.entity_id = 12;
+  mr.record.code = 0x13u;
+  mr.record.active = 1;
+  mr.record.delta = 0x100;
+  mr.record.stage92 = 0;
+  mr.record.pos_x = 0;
+  mr.record.pos_y = 0;
+  mr.record.pos_z = -0x7E0;             /* the side-1 spot -0xF0 */
+  mr.record.target_x = 0;
+  mr.record.target_y = 0;
+  mr.record.target_z = -0x7E0;          /* the stage-0 commit keeps the spot */
+  assert(fifa96_match_dispatch_action(&mr, 0x13) == FIFA96_OK);
+  assert(mr.record.stage92 == 2u);      /* the spot aim distance passes */
+  assert(fifa96_match_dispatch_action(&mr, 0x13) == FIFA96_OK);
+  assert(mr.record.stage92 == 5u);      /* waiting on the ball actor/ack gate */
+  mr.entities.ball.pair.ack = 1;
+  assert(fifa96_match_dispatch_action(&mr, 0x13) == FIFA96_OK);
+  assert(mr.state.phase == 2u);
+  assert(mr.referee.offside_suppress == 0);   /* the penalty row sets no timer */
+  assert(mr.record.stage92 == 6u);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -2411,8 +2538,10 @@ int main(void) {
   test_set_piece_queue_ids();
   test_set_piece_bx_fallback();
   test_set_piece_phase_arm_codes();
+  test_taker_armed_rows_resolve();
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
+  test_taker_armed_referee_rows_resolve();
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();
   test_engine_referee_offside_chain();

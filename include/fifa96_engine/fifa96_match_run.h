@@ -601,6 +601,23 @@ struct fifa96_match_run {
   uint8_t store_15882c;
   int32_t incident_x;
   int32_t incident_z;
+  /* FU-149 L13 (T1 taker rows): the throw/corner staging cells the 0x10/0x11/
+   * 0x12/0x13 stage machines read and write across frames:
+   *  - `sp_flag_158784` = `word[0x158784]`, the throw-staging gate the derived
+   *    `FUN_000832A8` stand-in clears (`0x832BC`) and the row stages test
+   *    (`0x85838`/`0x86033`/`0x840D2`); the other writer (`FUN_00078824`
+   *    0x78911, the slot machinery) is unported (L13 leg);
+   *  - `sp_delivery` = `byte[0x1587B4]`, the throw/corner delivery/event row
+   *    index (1..7) `FUN_00085498` writes (`0x8549x`) and the kick stages index
+   *    their event sub-tables with (`0x861DD`/`0x84289`, `[x]-1`); the image
+   *    default is 0 and the input-driven `FUN_00083428` rows 1..6 stay legs. */
+  uint8_t sp_flag_158784;
+  uint8_t sp_delivery;
+  /* `sp_157821` = `byte[0x157821]`, row 0x10's far-ball re-queue gate
+   * (`0x85CE4`); the native writer is the camera/presentation block (FU-149
+   * L11, unported), so begin/init seed the BSS default 0 and the requeue arm
+   * is dormant unless a caller stages it. */
+  uint8_t sp_157821;
   /* FU-150 P2 (fouls/referee/offside): the caller-owned `fifa96_referee_state`
    * (registrar/decision/sequence cells), the staged `fifa96_match_config`
    * (settings gates `[0x14C306]` field_4c306 / `[0x14C2F2]` field_4c2f2; init

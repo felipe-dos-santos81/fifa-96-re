@@ -121,7 +121,7 @@ follow-up 4, so RGB is visible — FU-144; the HUD landed in P0.2/OL-T11-7 —
 kickoff wait for the live phase 2, the clock ticking on screen
 (`docs/screens/p5-v7-match-clock.png`, 00:03) with the
 live kickoff ball/anim placement
-(15/80 rows wired, the FU-143 phase driver and the derived score source
+(19/80 rows wired, the FU-143 phase driver and the derived score source
 included). Moving the controlled player on screen stays blocked on the native
 inactive 0x19 record and the SDL hold policy (the pad presses reach
 `input_state[0]` and the S1 pad → target → velocity → position seam is
