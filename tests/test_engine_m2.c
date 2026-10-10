@@ -615,6 +615,18 @@
  * (`test_engine_match_frame::test_held_key_moves_live_controlled_record` and
  * the phase-9 T1 smoke).
  *
+ * --- v8.2 (M2 phase-9 T2): row 05 wired, tape dormant ----------------------
+ *
+ * M2 phase-9 T2 ports and wires action row 05 (FU-142 OL-63): the carrier
+ * machine's claim/team-target/control/camera/dirs/stages/hand-off over the
+ * pool (the `0x7F1FF` `ball.carrier` claim + the `0x158728..0x15872F` block).
+ * The tape is unaffected: its records never carry code 5 (the m 41 staging
+ * set is unchanged and the natural/forced windows leave the records on the
+ * staged/arm codes), so row 05 never dispatches, `M2_WIRED_MASK` stays
+ * 15 rows and the transcript is byte-identical (`cmp` clean, 165 lines; M1
+ * unmoved). The live carrier path the row unlocks is pinned outside this
+ * tape (`test_engine_match_frame::test_live_carrier_claim_and_kick`).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -700,7 +712,7 @@
    (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) |       \
    (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 
-/* The phase-8 T1 taker rows (FU-149 §7, L13): wired (20/80) but dormant on
+/* The phase-8 T1 taker rows (FU-149 §7, L13): wired (21/80) but dormant on
  * this tape — the set-piece arms that install 0x10..0x13 gate on `goal_armed`,
  * which the never-panning camera never sets (v8 provenance). The armed path
  * is fixture-proven (test_taker_armed_rows_resolve /

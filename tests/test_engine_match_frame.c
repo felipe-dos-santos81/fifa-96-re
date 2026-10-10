@@ -1288,6 +1288,92 @@ static void test_held_key_moves_live_controlled_record(void) {
   drop_fixture(f);
 }
 
+/* M2 phase-9 T2 (FU-142 OL-63): the live carrier producers. The natural ISO
+ * kickoff + held UP movement walks the slot record through row 02's install 4
+ * into row 04's half-line coda (`0x7F133` install 5, invoke-now) on the real
+ * dispatch path; the now-wired row 05 then claims the possession block
+ * (`0x7F1FF`, `[0x158724]` = the pool ball carrier), binds the team target,
+ * requests the controlled actor and writes the dribble dir bytes, and the pad
+ * KICK release runs row 07's kick machine off the live record (row 07 ->
+ * `fifa96_ball_kick_target` -> the staged ball pair).
+ *
+ * Discriminating vs BASE: with row 05 unwired the whole sequence still runs
+ * (the kick is install-driven), but the possession producers never fire —
+ * `ball.carrier` stays NONE and `[0x157A83]` is never re-bound, so the claim
+ * assertions below fail at BASE. */
+static void test_live_carrier_claim_and_kick(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int32_t id;
+  int saw5 = 0;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  id = mr.slot.entity;
+  assert(id == 9);                   /* the formation-seeded second pick */
+  rec = &mr.entities.team[0].records[9];
+  assert(rec->has_slot == 1u);
+  assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
+
+  /* Held UP walks the record into row 04's half-line coda; the coda installs
+   * code 5 (invoke-now) on the real dispatch path. */
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 60 && saw5 == 0; i++) {
+    one_granted_frame(&mr);
+    if (rec->code == 5u) saw5 = 1;
+  }
+  assert(saw5 == 1);
+  assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);   /* not yet */
+
+  /* The next granted frame dispatches row 05: the claim, the team-target
+   * bind, the controlled actor and the slot-dir bytes (lane 2 <= 0x40 and
+   * lane <= bound on the install frame). */
+  one_granted_frame(&mr);
+  assert(rec->code == 5u);
+  assert(mr.entities.ball.carrier == id);            /* 0x7F1FF claim */
+  assert(mr.entities.controlled == id);              /* 0x7F291 set_control */
+  assert((int8_t)mr.entities.ball.pos_dir_x == rec->dir_x);
+  assert((int8_t)mr.entities.ball.pos_dir_z == rec->dir_z);
+  assert(mr.entities.ball.pos_dir_x == 1 && mr.entities.ball.pos_dir_z == 0);
+  assert(rec->ran == 1u);                            /* 0x7F19F latch */
+
+  /* The pad kick: release UP, press KICK (no install), release KICK -> the
+   * code-1 released row installs 7 (invoke-now) and the same frame runs the
+   * ported kick machine off the live carrier record. */
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(rec->code == 5u);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  assert(rec->code == 7u);
+  assert((mr.dispatched_ok & (1ull << 0x07u)) != 0u);
+  assert(mr.entities.ball.pair.actor == id);         /* the live carrier */
+  assert(mr.entities.ball.pair.traj != 0);           /* the ball impulse */
+  assert(mr.entities.ball.carrier == id);            /* possession persists */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-147 S1: the per-frame driver runs the shared mover for every dispatched
  * record (native FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5; the
  * pool loop keeps the +0x9A skip) and the BF20 lane block
@@ -3172,6 +3258,7 @@ int main(void) {
   test_machine_second_forced_reads_team_target_ball_bit();
   test_machine_no_edge_arm_copies_camera_target();
   test_held_key_moves_live_controlled_record();
+  test_live_carrier_claim_and_kick();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();

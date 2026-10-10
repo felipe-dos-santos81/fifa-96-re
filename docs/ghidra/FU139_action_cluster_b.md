@@ -544,19 +544,33 @@ mapping.
   + table NULLs), `test_carrier_stage1` (sink/camera/anim 6 vs 0x30, latch),
   `test_carrier_stage2_and_stage3` (snap, slot face, `word[slot+6]`, `+0x44`,
   hand-off, stage > 3) + NULLs.
-* `tests/test_engine_match_handlers.c`: `test_action_05_unwired_carrier` pins
-  `fn == NULL`, the FU-139/OL-63/UNSUPPORTED evidence and `UNSUP` dispatch.
+* `tests/test_engine_match_handlers.c`: `test_action_05_unwired_carrier` pinned
+  `fn == NULL`, the FU-139/OL-63/UNSUPPORTED evidence and `UNSUP` dispatch
+  (superseded by M2 phase-9 T2: `test_action_05_wired_carrier` +
+  `test_action_05_claim_dirs_and_stages` pin the wired row).
 
-### 8.6 Wiring decision (evidence-gated)
+### 8.6 Wiring decision (evidence-gated; superseded by M2 phase-9 T2)
 
-Row `05` is **not wired**. The plan's wiring gate requires install arm + full
-record-visible body + pool binding; the stage-0 target algebra
-(`0x7F3A1..0x7F57B`) writes the record target triple and swaps a 20-byte block
-via `FUN_0006DA64`, and the `FUN_0007F7E0` fallback installs a code — all
-outside this slice. Per the T6/T9 reviewed precedent (conditional gate;
-honest negative over an unsupported claim), `fifa96_match_action_table[0x05].fn`
+Row `05` is **not wired** in this slice. The plan's wiring gate requires
+install arm + full record-visible body + pool binding; the stage-0 target
+algebra (`0x7F3A1..0x7F57B`) writes the record target triple and swaps a
+20-byte block via `FUN_0006DA64`, and the `FUN_0007F7E0` fallback installs a
+code — all outside this slice. Per the T6/T9 reviewed precedent (conditional
+gate; honest negative over an unsupported claim), `fifa96_match_action_table[0x05].fn`
 stays NULL and the evidence names **OL-63**. The ported functions are
 loader-level, tested symbols consumed by the future T11/T12 arms.
+
+**M2 phase-9 T2 update (2026-10-10).** The reachable carrier producers are
+now landed and the row is **wired**: `fifa96_match_action_05`
+(`src/fifa96_engine/fifa96_match_handlers.c`) applies the claim
+(`0x7F1FF`, the pool `ball.carrier` + the `0x158728..0x15872F` block), the
+team-target bind, the capped timer, the camera triple, the stage-0
+control/dir gates, the `0x7876C` merge request, the `0x79B1C` snap, the
+`0x79C50` face and the stage-3 hand-off. The stage-0 target algebra and the
+`FUN_0007F7E0` fallback remain the OL-63 residual (named requests
+`out.tail`/`out.fallback`); the possession release countdown gets its
+`0x4B163` decay and the row-06 staging reads the live `0x15872A/0x15872F`
+bytes. See FU-142 OL-63 (narrowed) and ENGINE.md phase-9 T2.
 
 ### 8.7 Open legs (numbered; registered in FU-142 §6)
 
@@ -576,7 +590,9 @@ loader-level, tested symbols consumed by the future T11/T12 arms.
   write, the `0x157A4F` gate, `FUN_00079CCC` with `+0x9A`, `FUN_0006DA64`)
   and the `FUN_0007F7E0` fallback (`0x7F7E0..0x801B2`; installs code 7/0x11,
   rotates `0x158729`, calls `0x7E528`/`0x8DCD4`/`0x92AC8`/`0x6DBCC`/`0x741B4`/
-  `0x8DD70`/`0x92820`/`0x7D9A4`) are unported; row 05 stays unwired with this
+  `0x8DD70`/`0x92820`/`0x7D9A4`) are unported; **narrowed by M2 phase-9 T2**:
+  the claim/team-target/control/camera/dirs/stages/hand-off are wired in
+  `fifa96_match_action_05`, and only the target algebra + fallback remain this
   leg. The `0x7F19F` `+0x9E` latch is tracked through `out.ran_set` (the engine
   `ran` field) so a future wiring cannot drop it silently.
 * **OL-64 — stage-0 → stage-1 edge.** Row 05's body never writes `+0x92` on

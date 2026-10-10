@@ -403,6 +403,13 @@ transition:
   i.e. the record installed as code 5 — by the keeper arm `0x75B67`, by the
   row-1E claim (row 1E never writes the block itself), or by the code-4
   duel split `0x7F133` (FU-78 §8) — becomes the carrier on its next dispatch.
+  **T2 landing (2026-10-10):** the claim is live — `fifa96_match_action_05`
+  runs the ported carrier machine's `0x7F1C7`/`0x7F1FF` head and writes the
+  pool `ball.carrier` (`[0x158724]`), resetting the derived
+  `0x158728..0x15872F` block (`ball.pos_*`); the `0x15872A/B` stage-0 dir
+  writes and the `0x4B163` release-countdown decay also land (FU-142 OL-63
+  narrowed to the stage-0 target algebra + `FUN_0007F7E0` fallback). The
+  live fixture is `test_engine_match_frame::test_live_carrier_claim_and_kick`.
 * **Restart transition**: situation 0xB -> `FUN_000740A0(2, side)` ->
   phase := 2, `[0x15781D]=0`, `[0x157AB2]=1`, `[0x157A73]=&0x15774C`, and the
   per-team `FUN_0008D098` phase arm (which installs codes). The producers
@@ -421,7 +428,7 @@ transition:
 | `FUN_0008C2E0 0x8C329` (`+0x8D = index`) | `fifa96_match_entities` setup/reset seeds `record.active = index`; the engine's `fifa96_match_entities_install`'s `active==0 && code==3 -> 0x19` then matches row 00's `0x7DB84` window |
 | row-04 staging | `fifa96_match_action_04` (`fifa96_match_handlers.c:1208-1211`): replace `s.bound = 0`, `s.word6f = 0` with the pool fields; keep `s.lane = e->lane_x`; the pad arm (`s.lane >= 0x60` or `AX`) becomes reachable with no change to `fifa96_outfield_row04_step` |
 | situation 0xB | `fifa96_match_run_situation_0b(mr, side)`: `fifa96_match_state_set_phase(mr, 2)` + phase-2 fields (`0x740F3..0x74107`); keeper arm = `match_row_reset(rec)` + `fifa96_match_entities_install(e, 5, invoke)`; restart tail = nearest teammate + slot move (`fifa96_match_entities_bind_slot` nearest search + slot transfer) |
-| carrier flip | already ported: `fifa96_action_possession_claim` (`0x7F1C7`), `fifa96_ball_pair_possess/release` (`+0x9B`); wire the install -> next-dispatch -> claim in the fixture |
+| carrier flip | ported + wired (T2): `fifa96_action_possession_claim` (`0x7F1C7`), `fifa96_ball_pair_possess/release` (`+0x9B`), `fifa96_match_action_05` writes the pool `ball.carrier` (`0x7F1FF`) and the `ball.pos_*` block |
 | input | unchanged: `fifa96_control_slot_update` + `match_run_slot_map`/`match_run_anim_a/b/c` |
 
 **API reconciliation (freeze pass):** `fifa96_match_run_situation_0b`

@@ -597,6 +597,30 @@ static void test_update_counter_and_timers(void) {
   assert(e->timer93 == 0);
 }
 
+/* M2 phase-9 T2 (FU-142 OL-63): the possession-block release countdown
+ * `[0x15872D]` decay, native `FUN_0004B100 0x4B163..0x4B17B` — a signed
+ * positive byte decays by the zero-extended frame delta and can wrap to
+ * 0xFF (which the signed `TEST CL,CL; JLE` then stops decaying). Runs on
+ * every frame body, not only phase 2. */
+static void test_possession_release_decay(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f = zero_frame();
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  assert(pool.ball.pos_release == 0);
+  pool.ball.pos_release = 5;
+  f.delta = 3;
+  assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
+  assert(pool.ball.pos_release == 2);
+  assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
+  assert(pool.ball.pos_release == 0xFF);   /* 2 - 3 unsigned-byte wrap */
+  assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
+  assert(pool.ball.pos_release == 0xFF);   /* signed byte now <= 0: frozen */
+  pool.ball.pos_release = 1;
+  f.delta = 1;
+  assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
+  assert(pool.ball.pos_release == 0);
+}
+
 /* The pool consumes each dispatched record's requests: install runs the FU-137
  * §2 installer, helper_request runs the slot merge, controlled binds the pool
  * actor, place_valid becomes a take-once camera-place request. */
@@ -1138,6 +1162,7 @@ int main(void) {
   test_update_intercept_select();
   test_update_intercept_band_flag();
   test_update_counter_and_timers();
+  test_possession_release_decay();
   test_update_consumes_requests();
   test_merge_slot_ranked();
   test_bind_slot();

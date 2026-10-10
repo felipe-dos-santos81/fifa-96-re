@@ -34,10 +34,11 @@
  * FU-139 §8 (Task 10) adds the ball staging tail
  * (`fifa96_ball_pair_stage_tail`, native 0x7A8D1..0x7AA2F) and the bounded
  * row-05 carrier machine (`fifa96_action_carrier_arm`, native
- * 0x7F194..0x7F665) with tests; row 05 stays unwired because its stage-0
- * target algebra (0x7F3A1..0x7F57B) and the `FUN_0007F7E0` fallback are
- * unported (OL-63), so the binding gate keeps `fn == NULL` and the evidence
- * names the leg. FU-142b (cluster G) wires row 26: the FU-142a arm 0x8D74D, the ported
+ * 0x7F194..0x7F665) with tests; M2 phase-9 T2 then wires row 05
+ * (`fifa96_match_action_05`): the claim/team-target/control/camera/dirs/
+ * stages/hand-off are applied over the pool, while the stage-0 target
+ * algebra (0x7F3A1..0x7F57B) and the `FUN_0007F7E0` fallback stay unported
+ * OL-63 residual legs (named requests). FU-142b (cluster G) wires row 26: the FU-142a arm 0x8D74D, the ported
  * `0x866F4..0x8681C` body (`fifa96_arm_26_step`, FU-142 Appendix C) and the
  * FU-141 pool binding are all bounded, so the row flips to `ported` and its
  * stage92/timer7b/lane results are repacked into the pool record by the frame
@@ -2408,6 +2409,143 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== M2 phase-9 T2 / FU-142 OL-63: the row-05 carrier machine =====
+ *
+ * `fifa96_match_action_05` binds the ported `fifa96_action_carrier_arm`
+ * (native `0x7F194..0x7F665` stages 0-3, FU-139 §8) to `mr->record` and the
+ * FU-141 pool. The claim (`0x7F1BF..0x7F205`) is the `[0x158724]` possession
+ * carrier producer — the pool `ball.carrier` is the carrier identity and the
+ * derived `0x158728..0x15872F` block (`ball.pos_*`) is reset on a new claim —
+ * and the stage-0 dir arm writes the `0x15872A/B` dir bytes (`0x7F386`/
+ * `0x7F397`); the `0x7F356` `FUN_0007876C` merge request is the slot-merge
+ * drain. The head also binds the team target (`[team+0x7B2] = rec`,
+ * `+0x7B6 = 0`), adds the capped `+0x89` timer and copies the camera triple
+ * into `+0x4D/+0x51/+0x55`; the controlled actor (`[0x157A83]`) is the
+ * drained `controlled` request (set) or a direct clear (`0x7F274`). The
+ * stage 1-3 surfaces are applied as in the loader contract: the `0x79B1C`
+ * snap, the `0x79C50` face (+0x8E) and the stage-3 team-target hand-off
+ * (install code 4 on the staged ball actor `[0x158730]` + the `0x79B58`
+ * receiver timer on `[0x158734]`).
+ *
+ * Residual OL-63 legs (no derived consumer): the stage-0 target algebra
+ * `0x7F3A1..0x7F57B` (reported as `out.tail`) and the `FUN_0007F7E0`
+ * fallback (`out.fallback`); the `0x92820` sink (`out.sink`, OL-27), the
+ * unported `0x1577BE/C0/C2` camera-velocity zero (`out.camera_zero`) and the
+ * `0x6E598` animation resolution (`out.anim`, OL-52) are presentation-side
+ * requests. */
+static int fifa96_match_action_05(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_team *team;
+  fifa96_action_carrier c;
+  fifa96_action_carrier_out out;
+  fifa96_action_possession p;
+  int32_t id = r->entity_id;
+  uint32_t team_index;
+  int rc;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  team_index = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[team_index];
+  e = &team->records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  memset(&c, 0, sizeof c);
+  c.actor = id;
+  c.timer89 = r->timer89;
+  c.lane = e->lane_x;                    /* native dword[+0x69]>>16 = +0x6B */
+  c.ball_height = mr->entities.ball.y;   /* dword [0x157750] (OL-65) */
+  c.timer81 = (int16_t)r->timer81;
+  c.close_word = e->lane_x;              /* native word +0x6B */
+  c.bound_word = e->bound;               /* native word +0x77 */
+  c.delta = r->delta;
+  c.phase = (uint8_t)mr->state.phase;
+  c.stage92 = r->stage92;
+  c.active = r->active;
+  c.airborne = r->pos_y != 0 ? 1u : 0u;  /* dword +0x5D != 0 */
+  c.has_slot = r->has_slot;
+  c.slot_live = (r->has_slot != 0 && mr->slot.entity == id &&
+                 mr->slot.released != 0)
+                    ? 1u
+                    : 0u;  /* native word[slot+6]: the FU-70 released word */
+  c.type8 = r->actor_type;             /* byte +0x8E */
+  c.code = r->code;
+  c.event_flag44 = r->row44;           /* native +0x44 */
+  c.is_team_target = id == team->target ? 1u : 0u;
+  c.facing = r->type;                  /* native +0x8E low byte */
+  c.team_slot_pool = team->slot_pool;  /* byte [team+0x828] */
+  c.team_chosen = team->chosen >= 0 ? 1u : 0u;   /* [team+0x7BF] != 0 */
+  c.team_search_gate = team->search_gate;        /* byte [team+0x829] */
+  c.slot_dir_x = r->dir_x;             /* slot[+0x1D]>>24 = slot+0x20 */
+  c.slot_dir_z = r->dir_z;             /* slot[+0x1E]>>24 = slot+0x21 */
+  p.carrier = mr->entities.ball.carrier;
+  p.index = mr->entities.ball.pos_index;
+  p.rotation = mr->entities.ball.pos_rotation;
+  p.dir_x = mr->entities.ball.pos_dir_x;
+  p.dir_z = mr->entities.ball.pos_dir_z;
+  p.counter_c = mr->entities.ball.pos_counter_c;
+  p.release_timer = (int8_t)mr->entities.ball.pos_release;
+  p.counter_e = mr->entities.ball.pos_counter_e;
+  p.counter_f = mr->entities.ball.pos_counter_f;
+  rc = fifa96_action_carrier_arm(&p, &c, match_kick_dir_x, match_kick_dir_z, &out);
+  if (rc != FIFA96_OK) return rc;
+  if (out.ran_set != 0) r->ran = 1;      /* 0x7F19F */
+  r->timer89 = c.timer89;                /* 0x7F221..0x7F23A */
+  r->stage92 = out.stage;
+  if (out.reset != 0) match_row_reset(mr, e);
+  if (out.claim != 0) {                  /* 0x7F1C7/0x7F1FF */
+    mr->entities.ball.carrier = p.carrier;
+    mr->entities.ball.pos_index = p.index;
+    mr->entities.ball.pos_rotation = p.rotation;
+    mr->entities.ball.pos_dir_x = p.dir_x;
+    mr->entities.ball.pos_dir_z = p.dir_z;
+    mr->entities.ball.pos_counter_c = p.counter_c;
+    mr->entities.ball.pos_release = (uint8_t)p.release_timer;
+    mr->entities.ball.pos_counter_e = p.counter_e;
+    mr->entities.ball.pos_counter_f = p.counter_f;
+  }
+  if (out.team_target != 0) {            /* 0x7F20B..0x7F217 */
+    team->target = id;
+    team->second = FIFA96_MATCH_ENTITY_NONE;
+  }
+  if (out.set_control != 0) r->controlled = 1;   /* 0x7F291 [0x157A83] = rec */
+  if (out.clear_control != 0) {                  /* 0x7F274 [0x157A83] = 0 */
+    mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+    r->controlled = 0;
+  }
+  if (out.target_camera != 0) {          /* 0x7F24E..0x7F258 */
+    r->target_x = mr->render.camera.pos_x;
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+  }
+  if (out.dirs != 0) {                   /* 0x7F386/0x7F397 */
+    mr->entities.ball.pos_dir_x = (int8_t)out.dir_x;
+    mr->entities.ball.pos_dir_z = (int8_t)out.dir_z;
+  }
+  if (out.slot_merge != 0) r->helper_request = 1;   /* 0x7F356 */
+  if (out.snap != 0) {                   /* 0x7F5F1 (0x79B1C) */
+    r->target_x = r->pos_x;
+    r->target_y = r->pos_y;
+    r->target_z = r->pos_z;
+  }
+  if (out.face != 0) r->type = out.face; /* 0x7F607 (0x79C50) */
+  if (out.handoff != 0) {                /* 0x7F637..0x7F657 */
+    int32_t actor = mr->entities.ball.pair.actor;       /* [0x158730] */
+    int32_t receiver = mr->entities.ball.pair.receiver; /* [0x158734] */
+    if (actor >= 0 &&
+        actor < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      (void)fifa96_match_entities_install(
+          &mr->entities.team[(uint32_t)actor / FIFA96_MATCH_ENTITY_RECORDS]
+               .records[(uint32_t)actor % FIFA96_MATCH_ENTITY_RECORDS],
+          (uint8_t)mr->state.phase, 4, 0);
+    if (receiver >= 0 &&
+        receiver < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      mr->entities.team[(uint32_t)receiver / FIFA96_MATCH_ENTITY_RECORDS]
+          .records[(uint32_t)receiver % FIFA96_MATCH_ENTITY_RECORDS]
+          .timer93 = 0x10;
+  }
+  return FIFA96_OK;
+}
+
 /* ===== M2 playability-legs Task 2 / OL-70a: row 08 approach/scan =====
  *
  * `fifa96_match_action_08` binds `fifa96_outfield_row08_step` (the ported
@@ -2555,8 +2693,8 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
   s.desc_e = 0;                           /* rec[+4][+0xE] (OL-69) */
   s.byte90 = 0;                           /* +0x90 (OL-69) */
   s.parity = mr->pass_parity;             /* [0x157A4F] (0x4B11A) */
-  s.byte_15872f = 0;                      /* row-05 producer (OL-63/OL-69) */
-  s.adjust_x = 0;                         /* byte[0x15872A] (OL-63/OL-69) */
+  s.byte_15872f = (int8_t)mr->entities.ball.pos_counter_f;  /* row-05 block */
+  s.adjust_x = mr->entities.ball.pos_dir_x;                 /* 0x15872A (T2) */
   s.score_own = mr->score[team];          /* word[0x157AC5 + 2*side] */
   s.score_other = mr->score[1u - team];
   s.carrier = mr->entities.ball.carrier;  /* [0x158724] stand-in (OL-69) */
@@ -2633,8 +2771,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, fifa96_match_action_04,
      "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72; the +0x8E record.type/actor_type split OL-83"},
-    {0x05, NULL,
-     "FU-139 §8/§5: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 unbounded; unwired; -UNSUPPORTED; OL-63"},
+    {0x05, fifa96_match_action_05,
+     "FU-139 §8/§5 + M2 phase-9 T2/OL-63: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; wired: the 0x7F1FF [0x158724] claim + the 0x158728..0x15872F block, team-target bind, capped timer, camera target, stage-0 control/dir gates, the 0x7876C merge and stages 1-3 (snap/face/hand-off) over the pool; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 fallback stay OL-63 legs (named requests); sinks 0x92820/0x6E598 OL-27/OL-52"},
     {0x06, fifa96_match_action_06,
      "FU-139 §11 (Task 13/OL-30): row 06 ported (0x801B4..0x809EF pursuit machine; 0x8DCD4 metric + 0x8DD70 angle + 0x114E04 folds, RNG installs 8/9, carrier-gate install 4, 0x8DE8C/0x79CCC selections) over the pool; row-09 0x80A00 boundary; record bytes/lead/swap OL-69"},
     {0x07, fifa96_match_action_07,

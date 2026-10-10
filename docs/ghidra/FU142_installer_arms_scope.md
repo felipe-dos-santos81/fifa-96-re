@@ -462,15 +462,25 @@ OL-26..OL-32/OL-38/OL-41 = 10–14 tasks separately)`.
   (FU-139 §8.2/§8.7); its `0x6E598` `reserved45` (EBX) input feeds only the
   unmodeled `FUN_0006E490` frame resolve, so it is not the derived `row`
   stand-in and is not bound.
-* **OL-63 — row-05 residual and non-wiring (Task 10).** Stage 0's target
-  algebra `0x7F3A1..0x7F57B` (camera/local target copies, the `0x8DC68`
-  accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`,
+* **OL-63 — row-05 residual and non-wiring (Task 10; narrowed by M2 phase-9
+  T2).** Stage 0's target algebra `0x7F3A1..0x7F57B` (camera/local target
+  copies, the `0x8DC68` accumulator, `FUN_00092820(rec,0x26)`, `FUN_00071C94`,
   `FUN_00079CCC`+`FUN_0006DA64`, the `0x15872D` write and the `0x157A4F` gate)
   and the `FUN_0007F7E0` fallback `0x7F7E0..0x801B2` (installs code 7/0x11,
-  rotates `0x158729`) are unported; the plan's wiring gate therefore keeps
-  `fifa96_match_action_table[0x05].fn` NULL (evidence names this leg; FU-137
-  §6.1/§7 Task-10 errata, FU-139 §8.6). The `0x7F19F` `+0x9E` latch is tracked
-  through `out.ran_set` so a future wiring cannot drop it silently.
+  rotates `0x158729`) remain unported. **M2 phase-9 T2 landed the reachable
+  carrier-claim part and wired the row:** `fifa96_match_action_05` binds
+  `fifa96_action_carrier_arm` over the pool — the `0x7F1FF` `[0x158724]`
+  claim (the pool `ball.carrier`) + the `0x158728..0x15872F` block reset
+  (`ball.pos_*`), the team-target bind, the capped `+0x89`, the camera triple
+  copy, the stage-0 `lane > 0x40` clear-control / `[0x157A83] = rec` set
+  control, the `0x15872A/B` dir writes, the `0x7876C` merge request, the
+  `0x79B1C` snap, the `0x79C50` face and the stage-3 team-target hand-off —
+  with the possession release countdown gaining its `0x4B163` decay and the
+  row-06 staging reading the live `0x15872A/0x15872F` bytes. The tail and
+  fallback stay this leg, reported as the machine's `out.tail`/`out.fallback`
+  requests with no derived consumer; the `0x7F19F` `+0x9E` latch rides
+  `out.ran_set` as before. FU-137 §6.1/§7 carry the `ported` status (21/80
+  wired).
 * **OL-64 — row-05 stage 0 → 1 edge (Task 10).** The row-05 body writes `+0x92`
   only at `0x7F5D9`/`0x7F616`/`0x7F630`; the stage-0 path never advances the
   latch, so the native 0→1 transition is an external re-install of code 5 whose

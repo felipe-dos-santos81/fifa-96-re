@@ -690,6 +690,16 @@ int fifa96_match_entities_update(struct fifa96_match_entities *pool,
   if (!pool || !frame) return -FIFA96_ERR_INVALID;
   pool->phase = frame->phase;
   pool->delta = frame->delta;
+  /* FU-142 OL-63 (M2 phase-9 T2): the possession-block release countdown
+   * decay, native `FUN_0004B100 0x4B163..0x4B17B` — a signed-positive byte
+   * decays by the zero-extended frame delta (unsigned byte subtract, so it
+   * can wrap past zero; the signed `TEST CL,CL; JLE` then stops). Runs every
+   * frame body regardless of phase, before the team walks. */
+  if (pool->ball.pos_release != 0) {
+    if ((int8_t)pool->ball.pos_release > 0)
+      pool->ball.pos_release =
+          (uint8_t)(pool->ball.pos_release - (uint8_t)frame->delta);
+  }
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
     rc = fifa96_match_entities_team_update(pool, t, frame, action, ctx);
     if (rc != FIFA96_OK) return rc;

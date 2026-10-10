@@ -161,6 +161,20 @@ struct fifa96_match_ball {
   uint8_t appearance;   /* 0x158866 */
   int32_t carrier;      /* derived holder entity id or NONE */
   struct fifa96_ball_pair_state pair; /* 0x158730 staging block */
+  /* FU-142 OL-63 (M2 phase-9 T2): the derived possession block
+   * `0x158728..0x15872F`; `carrier` above is `[0x158724]`. The row-05 claim
+   * resets the block and the stage-0 dir arm writes `pos_dir_x`/`pos_dir_z`;
+   * `pos_release` is the `0x4B163` per-frame release countdown and
+   * `pos_counter_f`/`pos_dir_x` feed the row-06 pursuit gates (FU-139 §11.7
+   * OL-69). */
+  uint8_t pos_index;     /* 0x158728 */
+  uint8_t pos_rotation;  /* 0x158729 */
+  int8_t pos_dir_x;      /* 0x15872A */
+  int8_t pos_dir_z;      /* 0x15872B */
+  uint8_t pos_counter_c; /* 0x15872C */
+  uint8_t pos_release;   /* 0x15872D */
+  uint8_t pos_counter_e; /* 0x15872E */
+  uint8_t pos_counter_f; /* 0x15872F */
 };
 
 struct fifa96_match_entities {
