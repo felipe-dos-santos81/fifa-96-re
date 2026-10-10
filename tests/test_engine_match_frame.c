@@ -1114,6 +1114,68 @@ static void test_machine_forced_decision_installs_on_slot_record(void) {
   assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);   /* the same tail ran row 04 */
 }
 
+/* M2 phase-9 T1 review: the team-second forced arm reads the ball bit of
+ * `[team+0x7B2]` (native `FUN_0007C990 0x7CA13`: `ctrl = [team+0x7B2]`,
+ * `byte[ctrl+0x9F] & 1`), NOT `[0x157A83]` (`mr->entities.controlled`). The
+ * slot-bearing record is the team's `second` (never the target) and
+ * `controlled` points at a third record with the opposite carrier bit, so the
+ * two mappings disagree: target ball bit clear -> forced code 4 (install, row
+ * 04 dispatches) vs target ball bit set -> forced code 3 == current (no
+ * install, no row 04). The pre-fix source (controlled = `[0x157A83]`) inverts
+ * both cases. */
+static void test_machine_second_forced_reads_team_target_ball_bit(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *slot_rec;
+  struct fifa96_match_entity *target_rec;
+  struct fifa96_match_entity *other_rec;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  slot_rec = &mr.entities.team[0].records[1];
+  target_rec = &mr.entities.team[0].records[2];
+  other_rec = &mr.entities.team[0].records[3];
+  slot_rec->has_slot = 1;
+  slot_rec->active = 1;
+  slot_rec->code = 3;                /* flat[0x110680+3] & 1 != 0 */
+  mr.slot.entity = 1;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* [team+0x7B2]: the native ball-bit source */
+  mr.entities.team[0].second = 1;    /* [team+0x7B6]: the slot record */
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 3;        /* [0x157A83]: the pre-fix wrong source */
+
+  /* target ball bit clear, controlled record's bit set -> native code 4. */
+  target_rec->carrier = 0;
+  other_rec->carrier = 1;
+  one_granted_frame(&mr);
+  assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);   /* row 04 via the forced 4 */
+  assert(slot_rec->code != 3u);      /* 4 / the row-04 coda 5 */
+
+  /* target ball bit set, controlled record's bit clear -> native code 3. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  slot_rec = &mr.entities.team[0].records[1];
+  target_rec = &mr.entities.team[0].records[2];
+  other_rec = &mr.entities.team[0].records[3];
+  slot_rec->has_slot = 1;
+  slot_rec->active = 1;
+  slot_rec->code = 3;
+  mr.slot.entity = 1;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;
+  mr.entities.team[0].second = 1;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 3;
+  target_rec->carrier = 1;
+  other_rec->carrier = 0;
+  one_granted_frame(&mr);
+  assert(slot_rec->code == 3u);      /* forced 3 == current: no install */
+  assert((mr.dispatched_ok & (1ull << 0x04u)) == 0u);
+}
+
 /* M2 phase-9 T1 / FU-75 L4.2: the no-edge arm. With a bound slot, both raw
  * edge words zero, `slot[+0x10] & 0xF0 != 0`, phase 2 and
  * `0x30 < (int16)(lane>>16) < 0x90`, the native `0x7CC70` copies the camera
@@ -3107,6 +3169,7 @@ int main(void) {
   test_pad_drives_controlled_locomotion();
   test_pad_kick_release_runs_kick_row();
   test_machine_forced_decision_installs_on_slot_record();
+  test_machine_second_forced_reads_team_target_ball_bit();
   test_machine_no_edge_arm_copies_camera_target();
   test_held_key_moves_live_controlled_record();
   test_ai_record_mover_and_lane_track();

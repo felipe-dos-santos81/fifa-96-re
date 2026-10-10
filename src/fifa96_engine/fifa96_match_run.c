@@ -485,17 +485,22 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   s.forced.type_5 = e->code == 5u ? 1u : 0u;
   {
     int32_t oid = mr->entities.team[1u - team].target;
+    int32_t tid = mr->entities.team[team].target;   /* native `ctrl` */
     if (oid >= 0 &&
         oid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       s.forced.opponent_has_ball =
           mr->entities.team[(uint32_t)oid / FIFA96_MATCH_ENTITY_RECORDS]
               .records[(uint32_t)oid % FIFA96_MATCH_ENTITY_RECORDS]
               .carrier & 1u;
-    if (controlled >= 0 &&
-        controlled < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    /* FUN_0007C990 `0x7CA13`: `ctrl = [team+0x7B2]` (the team target), not
+     * `[0x157A83]` (`mr->entities.controlled`); the same block's
+     * `is_team_controlled` gate reads `[team+0x7B2]` too, so both ball-bit
+     * sources derive from the team target. */
+    if (tid >= 0 &&
+        tid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
       s.forced.controlled_has_ball =
-          mr->entities.team[(uint32_t)controlled / FIFA96_MATCH_ENTITY_RECORDS]
-              .records[(uint32_t)controlled % FIFA96_MATCH_ENTITY_RECORDS]
+          mr->entities.team[(uint32_t)tid / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)tid % FIFA96_MATCH_ENTITY_RECORDS]
               .carrier & 1u;
   }
   s.current_code = e->code;
@@ -523,7 +528,14 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
    * gates on the post-install `byte[+0x91]`; the loader state is the entry
    * snapshot, so when a scan handler installed a code, recompute the
    * forced/chase outputs against the live code (the type gate and the
-   * type-5 keep both read `+0x91`). */
+   * type-5 keep both read `+0x91`). The role fields stay the entry snapshot
+   * (`is_team_controlled`/`is_team_second`, and the chase
+   * `not_team_controlled`/`not_team_second`): the native tail re-reads the
+   * live `[team+0x7B2]`/`[team+0x7B6]`, which can differ only if a scan
+   * handler writes them in the same frame — the reachable handler subset
+   * writes neither (the `0x7CFD0` chosen arm writes `team->chosen`, the
+   * team `+0x7BF`), so the snapshot is exact today; revisit when a
+   * role-writing scan handler lands. */
   if (e->code != s.current_code) {
     uint8_t next = 0;
     out.forced = 0;
