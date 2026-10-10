@@ -846,7 +846,8 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * `[0x1577EE].hi` exceeds 0xF0 and clamps the pair to +-15. Returns 1 when the
  * arm ran, 0 when a gate refused, or -FIFA96_ERR_INVALID on NULL. The
  * record-class gate `[[rec]+4][0] == 0x18D8` reduces to the pool-record
- * identity (both [0x1577CA] writers store pool records or 0; the +4
+ * identity (all three [0x1577CA] writers store pool records or 0 — 0x71D27
+ * the store, 0x70258/0x70054 the clears; the +4
  * descriptor is built at runtime). The table/keeper second arm stays the
  * OL-T11-79 leg. */
 int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);

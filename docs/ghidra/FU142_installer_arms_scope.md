@@ -3255,8 +3255,8 @@ setter on a phase-2 write (`0x740F6`) and by the restart body `0x84F90`
   period-indexed handlers (`0x110F78`), their `[0x15B6B0]` state machines,
   timers and pending-id consumption; the tracked-side producer `FUN_00092D8C`
   (`[0x1590CC]`/`[0x159901]` team flags); the scheduler `FUN_000948AC` and the
-  `[0x14C32A]` frame gate. Consequence: the engine carries tracked side -1
-  (`add_goal`-equivalent) until this lands.
+  `[0x14C32A]` frame gate. **Historic consequence (until T3):** the engine
+  carried tracked side -1 (`add_goal`-equivalent) while the pick was unported.
   *Status (T4, §L.10): **closed** (S3); the tracked-side pick landed in **T3**
   (FU-148 §13.3: FUN_00078824's flag zeroing + the FUN_00092D8C pick; the
   flags-zero image default is tracked 1 and the natural goal posts its probe

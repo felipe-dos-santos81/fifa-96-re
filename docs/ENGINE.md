@@ -647,7 +647,7 @@ the build also produces the windowed `fifa96` target (`make game`).
     update, 2026-10-10:** FUN_000709D0's walk gate producer (FUN_0001C9BC),
     the every-frame FUN_00071DF4 call site + first arm, the row-1E stage-5
     caller and the row-04 tracked bind are now wired — FU-148 §13.1/§13.2;
-    the seven remaining callers + the table/keeper arm stay legs.)
+    the eight remaining callers + the table/keeper arm stay legs.)
   - **Formation id**: run `formation[2]` + `fifa96_match_run_set_formation`
     (FUN_0008EA70), the 0x11033A layout accessor
     (`fifa96_match_formation_layout`) and the 0x14BFC0 `6*id` placement names
@@ -855,7 +855,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   `FUN_00071DF4` 0x11042B/C lookup and the tracked-player tail (**T3 update:
   the row-1E caller, the walk gate + FUN-0001C9BC words, the FUN-00071DF4
   call site + first arm and the row-04 tracked bind landed — FU-148 §13; the
-  seven body remainder callers, the reposition bit-8 arm, the sound sinks and
+  eight body remainder callers, the reposition bit-8 arm, the sound sinks and
   the 0x11042B/C lookup stay**); **T3/FU-75**
   L4.1 the forced-decision/chase application, L4.2 the no-edge arm, L4.3
   `0x7E600`, L4.4 `0x7CD60`, L4.5 the `0x7D1D4` switch, L4.6 row 02 +

@@ -2395,8 +2395,9 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * before the armer. The first arm follows the tracked record's slot dir
      * bytes (`[[rec]+0x20] != 0`, event height > 0xF0) into the camera
      * velocity; the record class gate `[[rec]+4][0] == 0x18D8` reduces to the
-     * pool-record identity (both writers of [0x1577CA] store pool records or
-     * 0; the +4 descriptor is built at runtime, statically unresolvable). */
+     * pool-record identity (all three writers of [0x1577CA] store pool records
+     * or 0 — 0x71D27 the store, 0x70258/0x70054 the clears; the +4 descriptor
+     * is built at runtime, statically unresolvable). */
     (void)fifa96_match_run_camera_follow(mr);
     /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
      * FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/

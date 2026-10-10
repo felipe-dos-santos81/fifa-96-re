@@ -2978,9 +2978,11 @@ static void test_row04_arm_a_track_reload(void) {
  * table-1 queue (id 5, the `[0x14C32A] != 0 && [0x15B6C0] == 0` condition) ->
  * the scheduler -> the leg-0 handler's post -> `fifa96_match_run_score_event`
  * (1-0). The staged inputs are the scenario's record install, the camera park
- * at the goal-mouth edge and the record's slot dir; the tracked-side installer
- * pick stays the carried -1 leg, so the writer posts no id (score_last_event
- * 0). */
+ * at the goal-mouth edge and the record's slot dir. The tracked-side pick
+ * landed in phase-9 T3 (the flags-zero image default is tracked 1), so the
+ * side-0 goal takes the untracked arm and the FUN_000CBC4C probe posts the
+ * native 0xD3 (captured; the display gate stays closed at the image sound
+ * cells, so `score_display_event` stays 0). */
 static void test_natural_goal_end_to_end(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;

@@ -41,9 +41,11 @@ typedef struct fifa96_camera {
   uint8_t pan_rate_lo;
   int16_t event_step_x, event_step_z;   /* [0x1577BA]/[0x1577BC] */
   /* FU-152 §2.9 / FU-145 §1.2 (M2 phase-9 T3): [0x1577CA], the camera/stats
-   * tracked entity (a pool record). Sole writers (fresh get_xrefs_to = 88, two
-   * WRITE): FUN_00071C94 0x71D27 stores the event's actor record and the reset
-   * FUN_000700F4 0x70258 clears it; every reader dereferences it as a record
+   * tracked entity (a pool record). Writers (fresh get_xrefs_to = 88, three
+   * WRITE): FUN_00071C94 0x71D27 stores the event's actor record, and the two
+   * resets clear it — FUN_000700F4 0x70258 and FUN_0006FFC0 0x70054 (the
+   * `XOR EAX,EAX` store at 0x4C, reachable from FUN_00073D90 0x73D9B and
+   * FUN_00088860 0x88883); every reader dereferences it as a record
    * (`[[rec]+4]` class, `[[rec]+0x20]` slot). The every-frame FUN_00071DF4
    * call site (FUN_000736AC 0x73B5B..0x73B6B) requires `tracked != 0` and
    * `[[rec]+0x20] != 0`; the first arm follows the tracked record's slot dir

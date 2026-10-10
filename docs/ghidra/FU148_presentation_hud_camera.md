@@ -1004,11 +1004,16 @@ So FUN-71's "step 25 call" is exactly the zero-rate path. Ported as
 `fifa96_match_run_camera_follow` (gates + the pool-record slot lookup) calling
 the existing `fifa96_camera_rate_event` (FUN_00071DF4's first arm:
 `[[rec+4]][0] == 0x18D8`, height > 0xF0, slot dirs x0xF clamped +-15). The
-camera struct carries `tracked` ([0x1577CA], writers `0x71D27` /
-`FUN_000700F4 0x70258` only) and `follow_speed` (the `[0x1577BE]` value at the
+camera struct carries `tracked` ([0x1577CA], freshly re-censused: 88 refs,
+**three writes** — `0x71D27` (`FUN_00071C94`, the event actor store),
+`FUN_000700F4 0x70258` (clear) and `FUN_0006FFC0 0x70054` (the `XOR EAX,EAX`
+store; FUN_0006FFC0 is called from `FUN_00073D90 0x73D9B` and
+`FUN_00088860 0x88883`, both clears)) and `follow_speed` (the `[0x1577BE]`
+value at the
 0x739CE gate point: the pan-step speed when the step ran, else the frame-entry
 speed). Fixtures: `test_engine_match_frame::test_auto_camera_follows_tracked_slot`.
-The record-class gate reduces to the pool-record identity: both `[0x1577CA]`
+The record-class gate reduces to the pool-record identity: all three
+`[0x1577CA]`
 writers store pool records (or clear), and the `+4` descriptor is built at
 runtime (no static bytes match outside code), so the engine cannot model it
 separately. The second arm (the `0x10E169`/`0x11042B/C` rate lookup and the
