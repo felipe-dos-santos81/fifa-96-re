@@ -314,8 +314,12 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
  * draws give `t = (draw1 & 0x3F) + 0x30` and the two signs (draw2/draw3);
  * then either the re-seed `event_param := ball_height` with one seed
  * reflected (when `sext(height_5d + 0x68) > ball_height`, 0x70CFA..0x70D03:
- * `e1 = ±speed` by the `vel_x` sign and `e2 = ±vel_x` by the `vel_z` sign;
- * `e1 > e2` negates `v1`, else `v2` — 0x70D81..0x70D8C) or the two-step
+ * `e1 = |vel_x|` (the `dword[0x1577BE]>>16` extract = word[0x1577C0],
+ * NEG-gated by its own sign, 0x70D43..0x70D61) and `e2 = |vel_z|` (the
+ * `dword[0x1577C0]>>16` extract = word[0x1577C2], 0x70D63..0x70D7F);
+ * `|vel_x| > |vel_z|` negates `v1`, else `v2` — 0x70D81..0x70D8C; fix round 2
+ * errata-on-erratum: round 1's `e1 = ±speed`/`e2 = ±vel_x` mis-read the
+ * dword>>16 extracts) or the two-step
  * event-height ramp toward `height_5d + 0x70` (`new = target + ((event -
  * target) >> 1)`, then `new += (new - target) >> 1` while `target < new`,
  * 0x70D05..0x70D41; T2-review erratum, fix round 1 — the pre-fix comment

@@ -964,14 +964,20 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
     int32_t cx =
         (int32_t)(int16_t)(uint16_t)((uint32_t)(uint16_t)in->height_5d + 0x68u);
     if (cx > (int32_t)(int16_t)in->ball_height) {
-      /* 0x70D43..0x70D91: reflect one seed by the `[0x1577C0]/[0x1577C2]` sign
-       * compare against the `[0x1577BE]` bearing, then re-seed the height.
+      /* 0x70D43..0x70D91: reflect one seed by the |vel_x| vs |vel_z| compare,
+       * then re-seed the height. e1 = |word[0x1577C0]| (0x70D43 CMP
+       * word[0x1577C0],0; JL -> NEG; the 0x70D4D/0x70D58
+       * `dword[0x1577BE]>>16` extract = word[0x1577C0], the same >>16 idiom
+       * as the [0x1577EE]>>16 = [0x1577F0] read below), e2 = |word[0x1577C2]|
+       * (0x70D63; 0x70D6D/0x70D77 `dword[0x1577C0]>>16` = word[0x1577C2]);
        * 0x70D81 CMP e1,e2; JLE -> NEG word[ESP+4] (v2), so the fall-through
-       * (e1 > e2) negates v1. */
-      int32_t e1 = (cam->vel_x >= 0) ? (int32_t)(int16_t)cam->speed
-                                    : -(int32_t)(int16_t)cam->speed;
-      int32_t e2 = (cam->vel_z >= 0) ? (int32_t)(int16_t)cam->vel_x
-                                    : -(int32_t)(int16_t)cam->vel_x;
+       * (|vel_x| > |vel_z|) negates v1. (Fix round 2 errata-on-erratum:
+       * round 1's e1 = ±[0x1577BE] speed / e2 = ±[0x1577C0] vel_x mis-read
+       * the dword>>16 extracts; no word[0x1577BE] load exists in this arm.) */
+      int32_t e1 = (cam->vel_x >= 0) ? (int32_t)cam->vel_x
+                                    : -(int32_t)cam->vel_x;
+      int32_t e2 = (cam->vel_z >= 0) ? (int32_t)cam->vel_z
+                                    : -(int32_t)cam->vel_z;
       if (e1 > e2) v1 = (int16_t)(0 - (uint16_t)v1);
       else v2 = (int16_t)(0 - (uint16_t)v2);
       cam->event_param = (uint16_t)in->ball_height;

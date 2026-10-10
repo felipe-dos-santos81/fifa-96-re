@@ -939,15 +939,31 @@ static void test_record_event_reflect_and_event(void) {
   in.height_5d = 0;
   in.ball_height = 0x10;
   /* v1 = 30>>2 = 7, v2 = 40>>2 = 10; sext(0 + 0x68) = 0x68 > ball 0x10 ->
-   * reflect (0x70CFA..0x70D03): e1 = +bearing 5 (vel_x 3 >= 0) > e2 = +vel_x 3
-   * (vel_z 4 >= 0) negates v1 (0x70D81 CMP; JLE -> v2). */
+   * reflect (0x70CFA..0x70D03): e1 = |vel_x| 3 (0x70D4D dword[0x1577BE]>>16 =
+   * word[0x1577C0]) <= e2 = |vel_z| 4 (0x70D6D dword[0x1577C0]>>16 =
+   * word[0x1577C2]) -> negate v2 (0x70D81 CMP; JLE). The speed 5 staging
+   * pins that [0x1577BE] is not the e1 magnitude. */
   assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
   assert(out.applied == 1);
   assert(out.sink == 1 && out.sink_code == 0x1C);
-  assert(out.vec_1 == -7 && out.vec_2 == 10);
-  assert(out.distance == fifa96_entity_distance(-7, 10));
+  assert(out.vec_1 == 7 && out.vec_2 == -10);
+  assert(out.distance == fifa96_entity_distance(7, -10));
   assert(cam.event_param == 0x10);            /* event_param := ball height */
   assert(cam.timer_limit != 0);               /* the FUN_00070544 ramp ran */
+  /* the |vel_x| > |vel_z| case (a negative vel_x pins the sign-gate
+   * absolute value: 0x70D43 CMP word[0x1577C0],0; JL -> NEG) negates v1. */
+  assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;
+  cam.event_step_z = 40;
+  cam.vel_x = -5;
+  cam.vel_z = 3;
+  cam.speed = 5;
+  cam.event_param = 0x20;
+  assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
+  assert(out.vec_1 == -7 && out.vec_2 == 10);
+  assert(cam.event_param == 0x10);
 }
 
 static void test_record_event_height_ramp(void) {
@@ -1003,8 +1019,8 @@ static void test_record_event_height_ramp(void) {
   cam.event_param = 0x20;
   in.height_5d = 0x99;
   assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
-  /* e1 = +bearing 5 > e2 = +vel_x 3 negates v1; event_param := ball. */
-  assert(out.vec_1 == -7 && out.vec_2 == 10);
+  /* e1 = |vel_x| 3 <= e2 = |vel_z| 4 negates v2; event_param := ball. */
+  assert(out.vec_1 == 7 && out.vec_2 == -10);
   assert(cam.event_param == 0x100);
 }
 
@@ -1034,10 +1050,10 @@ static void test_record_event_jitter_and_gates(void) {
   assert(fifa96_rng_step(&expect, &d3) == FIFA96_OK);
   t = (int16_t)((int32_t)(d1 & 0x3Fu) + 0x30);
   /* t = (draw1 & 0x3F) + 0x30 with the draw2/draw3 signs; then the reflect
-   * arm (vel_x 0 >= 0 -> e1 = +bearing 5; vel_z 0 >= 0 -> e2 = +vel_x 0;
-   * 5 > 0 negates v1). */
-  assert(out.vec_1 == -((d2 & 1u) ? t : (int16_t)-t));
-  assert(out.vec_2 == ((d3 & 1u) ? t : (int16_t)-t));
+   * arm (the 0/0 corner: e1 = |vel_x| 0, e2 = |vel_z| 0; 0 > 0 false ->
+   * negate v2). */
+  assert(out.vec_1 == ((d2 & 1u) ? t : (int16_t)-t));
+  assert(out.vec_2 == -((d3 & 1u) ? t : (int16_t)-t));
   assert(out.vec_1 != 0 || out.vec_2 != 0);
   /* a NULL rng on the jitter path is an error. */
   assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);

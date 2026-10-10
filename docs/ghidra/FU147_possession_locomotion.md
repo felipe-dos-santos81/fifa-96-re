@@ -488,6 +488,18 @@ Minimal seam files: `include/fifa96_loader/fifa96_action_handlers.h`,
     while `target < new`). Under the caller band `0x7C861/0x7C871` (admits
     `[ball-0x70, ball]`) the ramp covers `[ball-0x70, ball-0x68]`. The port
     and its tests are corrected this round (t2-report "Fix round 1").
+    **Fix round 2 errata-on-erratum (2026-10-10):** the erratum's "e1 =
+    ±`[0x1577BE]` by the `[0x1577C0]` sign, e2 = ±`[0x1577C0]` by the
+    `[0x1577C2]` sign" sentence mis-read the two dword>>16 extracts (the
+    AGENTS.md misread class): `0x70D4D/0x70D58 MOV EDX,dword[0x1577BE];
+    SAR EDX,0x10` = **word[0x1577C0]** and `0x70D6D/0x70D77
+    MOV EAX,dword[0x1577C0]; SAR EAX,0x10` = **word[0x1577C2]** (the same
+    idiom as the caller gate `0x7C80A MOV EAX,[0x1577BC]; SAR 16` =
+    word[0x1577BE] > 4). So e1 = |word[0x1577C0]| (NEG-gated by its own
+    sign at `0x70D43`), e2 = |word[0x1577C2]| (`0x70D63`) — the compare is
+    **`|vel_x| > |vel_z|` → negate v1, else v2** (the JLE/v1 branch above is
+    correct); no word[0x1577BE] load exists in the reflect arm. The port and
+    its tests are corrected this round (t2-report "Fix round 2").
 8. `[0x157AB2]` semantics unnamed (set at phase-2 entry `0x74101`, cleared at
    `0x75475`/`0x76077`; also touched by row 1D per FU-140).
 9. Driver pre-pass `0x8DA43..0x8DA90`: `0x10F37C` tracked-point table and the
