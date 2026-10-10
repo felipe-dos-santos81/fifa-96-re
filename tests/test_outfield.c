@@ -362,6 +362,20 @@ static void test_chase_gate_type_table(void) {
   assert(fifa96_outfield_chase_gate(&s, 3, 0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* T3: the raw `0x110680` table byte, the gate base of every input-row
+ * handler (`&1` arms and the `&3` selection writes). */
+static void test_type_bits_table(void) {
+  assert(fifa96_outfield_type_bits(0) == 3);
+  assert(fifa96_outfield_type_bits(3) == 3);
+  assert(fifa96_outfield_type_bits(5) == 3);   /* carrier: code-1 dispatch */
+  assert(fifa96_outfield_type_bits(7) == 2);   /* kick row 07: &1 == 0 */
+  assert(fifa96_outfield_type_bits(0x10) == 2);
+  assert(fifa96_outfield_type_bits(0x13) == 2);
+  assert(fifa96_outfield_type_bits(0x19) == 3); /* keeper hold */
+  assert(fifa96_outfield_type_bits(1) == 0);
+  assert(fifa96_outfield_type_bits(0x1A) == 0); /* past the 26-byte table */
+}
+
 static void test_input_row_no_edge_arm(void) {
   fifa96_outfield_input_state s = input_state();
   fifa96_outfield_input_out out;
@@ -1492,6 +1506,7 @@ int main(void) {
   test_forced_action();
   test_chase_action();
   test_chase_gate_type_table();
+  test_type_bits_table();
   test_input_row_no_edge_arm();
   test_input_row_scan();
   test_input_row_tail();

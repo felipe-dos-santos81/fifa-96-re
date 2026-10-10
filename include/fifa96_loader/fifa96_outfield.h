@@ -131,6 +131,12 @@ int fifa96_outfield_input_row(const fifa96_outfield_input_state *state,
 int fifa96_outfield_chase_gate(const fifa96_outfield_chase_state *state, uint8_t type,
                                uint8_t current, uint8_t *next);
 
+/* The raw per-type decision byte flat `0x110680[type]` (first-hand: 26 bytes
+ * {3,0,0,3,3,3,3,2,0,...,2,2,2,2,0,0,0,0,0,3}); `type` >= 0x1A returns 0.
+ * The input-row handler gates test it with `& 1` (the install/decision arms)
+ * or `& 3` (the `0x7CFD0`/`0x7D054`/`0x7D08C` selection writes). */
+uint8_t fifa96_outfield_type_bits(uint8_t type);
+
 /* ===== M2 playability-legs Task 1 / OL-70: row 04 record-visible body =====
  *
  * The native row-04 handler `FUN_0007E7C8` (`0x7E7C8..0x7F141`, RET at

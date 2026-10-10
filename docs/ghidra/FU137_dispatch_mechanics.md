@@ -465,6 +465,18 @@ the engine family convention (`fifa96_match_run_*`). (Historical: the Task-1
 state was 12 ported / 29 action-not-ported / 63 not ported / 67 UNSUP / 12 OK
 at FU-142 K.5.)
 
+**M2 phase-8 T3 note (2026-10-09; no row count change).** The `FUN_0007CA54`
+input-row dispatch (FU-75 §1.2/§1.3) is now wired over the pool for the
+slot-bearing outfield record (`match_run_outfield_input` in
+`fifa96_match_run.c`), executing the reachable handler subset first-hand this
+task. The pad kick derivation: carrier (`byte[rec+0x91] == 5`, `0x7CB36`)
+selects dispatch code 1 and the released `0x7D110` row installs action `07`
+(invoke-now) — the ported kick machine — so the FU-137 §6.1 `07` cell gains a
+live pad seam. Row `19` stays `not ported (partial)`: the live post-kickoff
+slot record's code in the ISO probe is `02`, and the keeper machine's own
+input tables (`FUN_000782D0`, FU-74 §2) remain unported. Details and the
+numbered legs are in FU-75 §10 and the ENGINE.md phase-8 T3 entry.
+
 FU-139 §8 (Task 10) advances action row `05`'s bounded parts (the carrier
 machine stages 0-3 and the staging tail are ported and tested) but adds no
 dispatch: the stage-0 target algebra and the `FUN_0007F7E0` fallback stay

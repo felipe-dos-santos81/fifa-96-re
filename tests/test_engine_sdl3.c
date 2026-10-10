@@ -10,6 +10,11 @@
  * Also pins the pure scancode mapping and proves the M2 interactive match
  * start is keyboard-reachable: BACKSPACE (DECLINE) opens the front-end panel,
  * RETURN (CONFIRM) accepts it, and the bridge leaves the engine in MATCH.
+ *
+ * T3 (OL-T4-1): a physically held key is presented as a per-poll state sample
+ * (the engine's `input_state` model), so a single KEY_DOWN with no repeats
+ * keeps the held code latched and moves the controlled record across frames;
+ * the KEY_UP ends the sample.
  */
 #include <assert.h>
 #include <stdio.h>
@@ -18,6 +23,7 @@
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_keys.h"
+#include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_platform.h"
 
 /* Pure scancode mapping from the backend source (no SDL video/audio needed). */
@@ -44,6 +50,15 @@ static void push_key_down(SDL_Scancode sc) {
   ev.type = SDL_EVENT_KEY_DOWN;
   ev.key.scancode = sc;
   ev.key.down = true;
+  assert(SDL_PushEvent(&ev));
+}
+
+static void push_key_up(SDL_Scancode sc) {
+  SDL_Event ev;
+  SDL_zero(ev);
+  ev.type = SDL_EVENT_KEY_UP;
+  ev.key.scancode = sc;
+  ev.key.down = false;
   assert(SDL_PushEvent(&ev));
 }
 
@@ -75,6 +90,69 @@ static void test_keyboard_reaches_match(void) {
   fifa96_platform_destroy(p);
 }
 
+/* T3 (OL-T4-1): one SDL KEY_DOWN (auto-repeat filtered as before) is a held
+ * state sample, not a single pulse. The backend re-presents every held key on
+ * every poll, matching the engine's per-poll `input_state` model (and the
+ * native make/break flag array), so the controlled record keeps moving for as
+ * long as the key is down. At BASE the second poll returned an empty batch,
+ * `fifa96_input_update` derived the release and `input_state[0]` fell to 0. */
+static void test_held_key_is_a_state_sample(void) {
+  fifa96_platform *p = fifa96_platform_sdl3_create();
+  assert(p != NULL);
+  struct fifa96_engine_config cfg = {.iso_path = NULL, .width = 320,
+                                     .height = 240, .headless = 1};
+  struct fifa96_engine *e = fifa96_engine_create(&cfg, p);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  push_key_down(SDL_SCANCODE_BACKSPACE);
+  assert(fifa96_engine_step(e) == 0);
+  push_key_down(SDL_SCANCODE_RETURN);
+  assert(fifa96_engine_step(e) == 0);
+  assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
+
+  {
+    struct fifa96_match_run *mr = &e->match_run;
+    int32_t id = mr->slot.entity;
+    int32_t start_z;
+    assert(id >= 0 && id < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+    assert(fifa96_match_entities_install(&mr->entities.team[0].records[id],
+                                         (uint8_t)mr->state.phase, 0, 0) == 1);
+    start_z = mr->entities.team[0].records[id].pos_z;
+
+    push_key_down(SDL_SCANCODE_RIGHT);   /* one press; no repeat events */
+    for (int i = 0; i < 10; i++) {
+      /* Real SDL clock: space the steps by a PIT tick so the match frame body
+       * grants and runs the mover. */
+      SDL_DelayNS(12000000);
+      assert(fifa96_engine_step(e) == 0);
+      assert(mr->input_state[0] == 0x04);   /* held across every poll */
+    }
+    assert(mr->input.held == 0x04);
+    {
+      /* RIGHT maps to slot dir (0, -1) -> the row-00 target pos_z - 0x80. */
+      int32_t mid_z = mr->entities.team[0].records[id].pos_z;
+      assert(mid_z < start_z);
+      for (int i = 0; i < 10; i++) {
+        SDL_DelayNS(12000000);
+        assert(fifa96_engine_step(e) == 0);
+        assert(mr->input_state[0] == 0x04);
+      }
+      /* Still moving while held; a single pulse would have decayed to rest. */
+      assert(mr->entities.team[0].records[id].pos_z < mid_z);
+    }
+
+    push_key_up(SDL_SCANCODE_RIGHT);
+    SDL_DelayNS(12000000);
+    assert(fifa96_engine_step(e) == 0);
+    assert(mr->input_state[0] == 0);
+    assert(mr->input.prev[0] == 0);
+  }
+
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(p);
+}
+
 int main(void) {
   /* SDL2 and SDL3 spellings; the backend honours SDL3's hint name too. */
   setenv("SDL_VIDEO_DRIVER", "dummy", 1);
@@ -84,6 +162,7 @@ int main(void) {
 
   test_scancode_map();
   test_keyboard_reaches_match();
+  test_held_key_is_a_state_sample();
 
   fifa96_platform *p = fifa96_platform_sdl3_create();
   assert(p != NULL);

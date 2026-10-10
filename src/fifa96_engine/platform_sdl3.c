@@ -4,7 +4,10 @@
  * into a streaming ARGB8888 texture with integer-scaled logical presentation,
  * and feeds the engine's 16-bit stereo PCM into an SDL audio stream bound to
  * the default playback device. Input maps keyboard scancodes and gamepad
- * buttons onto the backend-neutral FIFA96_ENGINE_KEY_* codes.
+ * buttons onto the backend-neutral FIFA96_ENGINE_KEY_* codes and presents the
+ * pad as a per-poll held-state sample (a key that is physically down is
+ * re-reported with state 1 on every poll — the engine's input model samples
+ * once per poll; see `sdl3_poll`), not as an OS-auto-repeat event stream.
  *
  * The generic fifa96_platform_destroy (fifa96_engine.c) frees the platform
  * and calls `destroy`; this backend must therefore not define that symbol.
@@ -16,6 +19,15 @@
 #include "fifa96_engine/fifa96_keys.h"
 
 #define SDL3_MAX_GAMEPADS 4
+
+/* Held-key state sample (OL-T4-1). The engine's input model
+ * (`fifa96_match_run_input` -> `fifa96_input_update`) samples the pad once per
+ * poll and derives a release from an absent press, and the native make/break
+ * keyboard handler leaves the key's flag set while the key is physically down.
+ * The backend therefore keeps the pressed set and re-presents every held
+ * engine key on each poll (a state sample), instead of relying on the OS
+ * auto-repeat cadence, whose initial delay would pulse the hold. */
+#define SDL3_HELD_CODES (FIFA96_ENGINE_KEY_PASS + 1)
 
 struct sdl_state {
   SDL_Window *win;
@@ -29,6 +41,7 @@ struct sdl_state {
   uint64_t audio_frames;
   SDL_Gamepad *pads[SDL3_MAX_GAMEPADS];
   int npads;
+  uint8_t key_held[SDL3_HELD_CODES];   /* index = engine key code */
 };
 
 static void sdl3_release(struct sdl_state *s) {
@@ -162,6 +175,12 @@ static void sdl3_push_key(fifa96_platform_key *out, size_t cap, int *count,
   (*count)++;
 }
 
+/* Track a mapped key's physical state (unknown/out-of-range codes are
+ * ignored; QUIT rides the same set and is idempotent for its consumers). */
+static void sdl3_key_hold(struct sdl_state *s, int32_t code, int down) {
+  if (code > 0 && code < SDL3_HELD_CODES) s->key_held[code] = down ? 1u : 0u;
+}
+
 static void sdl3_pad_added(struct sdl_state *s, SDL_JoystickID id) {
   if (s->npads >= SDL3_MAX_GAMEPADS) return;
   SDL_Gamepad *g = SDL_OpenGamepad(id);
@@ -181,6 +200,7 @@ static void sdl3_pad_removed(struct sdl_state *s, SDL_JoystickID id) {
 
 static int sdl3_poll(void *self, fifa96_platform_key *out, size_t cap, int *count) {
   struct sdl_state *s = self;
+  uint8_t sent[SDL3_HELD_CODES] = {0};
   if (!count) return -1;
   *count = 0;
   SDL_PumpEvents();
@@ -190,30 +210,53 @@ static int sdl3_poll(void *self, fifa96_platform_key *out, size_t cap, int *coun
       case SDL_EVENT_QUIT:
         sdl3_push_key(out, cap, count, FIFA96_ENGINE_KEY_QUIT, 1);
         break;
-      case SDL_EVENT_KEY_DOWN:
-        if (!ev.key.repeat)
-          sdl3_push_key(out, cap, count,
-                        fifa96_platform_sdl3_map_scancode((int)ev.key.scancode), 1);
+      case SDL_EVENT_KEY_DOWN: {
+        int32_t code = fifa96_platform_sdl3_map_scancode((int)ev.key.scancode);
+        sdl3_key_hold(s, code, 1);
+        /* Auto-repeat is redundant with the held-state sample below; the
+         * fresh press is this poll's edge. */
+        if (!ev.key.repeat) {
+          sdl3_push_key(out, cap, count, code, 1);
+          if (code > 0 && code < SDL3_HELD_CODES) sent[code] = 1u;
+        }
         break;
-      case SDL_EVENT_KEY_UP:
-        sdl3_push_key(out, cap, count,
-                      fifa96_platform_sdl3_map_scancode((int)ev.key.scancode), 0);
+      }
+      case SDL_EVENT_KEY_UP: {
+        int32_t code = fifa96_platform_sdl3_map_scancode((int)ev.key.scancode);
+        sdl3_key_hold(s, code, 0);
+        sdl3_push_key(out, cap, count, code, 0);
         break;
+      }
       case SDL_EVENT_GAMEPAD_ADDED:
         sdl3_pad_added(s, ev.gdevice.which);
         break;
       case SDL_EVENT_GAMEPAD_REMOVED:
         sdl3_pad_removed(s, ev.gdevice.which);
         break;
-      case SDL_EVENT_GAMEPAD_BUTTON_DOWN:
-        sdl3_push_key(out, cap, count, sdl3_map_button(ev.gbutton.button), 1);
+      case SDL_EVENT_GAMEPAD_BUTTON_DOWN: {
+        int32_t code = sdl3_map_button(ev.gbutton.button);
+        sdl3_key_hold(s, code, 1);
+        sdl3_push_key(out, cap, count, code, 1);
+        if (code > 0 && code < SDL3_HELD_CODES) sent[code] = 1u;
         break;
-      case SDL_EVENT_GAMEPAD_BUTTON_UP:
-        sdl3_push_key(out, cap, count, sdl3_map_button(ev.gbutton.button), 0);
+      }
+      case SDL_EVENT_GAMEPAD_BUTTON_UP: {
+        int32_t code = sdl3_map_button(ev.gbutton.button);
+        sdl3_key_hold(s, code, 0);
+        sdl3_push_key(out, cap, count, code, 0);
         break;
+      }
       default:
         break;
     }
+  }
+  /* The held-state sample: every key still physically down is re-presented
+   * with state 1 on every poll, so a hold stays held in the engine's
+   * per-poll input model (native make/break flag semantics). Keys already
+   * pushed as this poll's fresh edge are skipped. */
+  for (int32_t code = 1; code < SDL3_HELD_CODES; code++) {
+    if (s->key_held[code] != 0 && sent[code] == 0)
+      sdl3_push_key(out, cap, count, code, 1);
   }
   return 0;
 }

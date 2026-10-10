@@ -64,15 +64,18 @@ shows the **match HUD on screen** (bar + score 0-0 + `00:00` at kickoff in
 `docs/screens/p5-v7-match-hud.png`); a KICK burst reaches the row-01 kickoff
 release gate, so the live clock starts ticking (`00:03` in
 `docs/screens/p5-v7-match-clock.png`) — the natural phase-1 → 2 transition
-visible through the HUD. The scene sprites stay in the placement pose
-(movement is still not observable interactively: a 40-press RIGHT burst
-leaves the scene band byte-identical, `compare -metric AE` = 0, while the
-presses reach `input_state[0]`; the live kickoff record carries the native
-0x19 code and the SDL hold policy drops auto-repeat — OL-T4-1 — so the row-04
-pad arm still meets an inactive record). Kick → score stays blocked
+visible through the HUD. The scene sprites stay in the placement pose:
+T3 landed the hold policy (OL-T4-1; the SDL backend now presents a held key
+as a per-poll state sample) and a re-run smoke holds RIGHT after the kickoff
+with `input_state[0] = 0x04` persisting, but the scene band stays
+byte-identical (`compare -metric AE` = 0) — the live slot record is team 0
+record 9 carrying action code 02 (`locomotion_restart_target`, unported), so
+no wired row consumes the pad for it (the T3 input-row seam runs for it and
+finds no matching pressed row; see "Interactive smoke" and "Known gaps").
+Kick → score stays blocked
 interactively: the S2/S3 goal chain is landed and the pan origin is now wired
 from row 04 (T2), but the interactive smoke never reaches a code-4 half-line
-event (the kickoff record carries 0x19), so the score source is
+event, so the score source is
 fixture-proven instead (see "Interactive smoke" and "Known gaps"). The M2 interactive-match plan's
 G1 closed (T1, after the review fix round), G2 closed **carried-with-legs**
 (T2 place landed, kickoff framing carried; T3 HUD landed under the phase-6
@@ -191,21 +194,23 @@ the build also produces the windowed `fifa96` target (`make game`).
   01's native release gate**, so the begun run leaves the kickoff wait for the
   live phase 2 and the clock ticks on screen (`00:03` in
   `docs/screens/p5-v7-match-clock.png`; the bottom-left HUD panel changes by
-  139 pixels between the two shots, pinning the running clock). (The SDL
-  keyboard path presents a hold
-  as single press pulses — the backend filters key auto-repeat, OL-T4-1 — so
-  the run used `xdotool key --repeat` bursts.) **Movement is still not
-  observable on screen:** a 40-press RIGHT burst leaves the scene band
-  byte-identical (crop `y < 591` of the 960×720 window, 0 differing pixels;
-  only the HUD clock changes, 100 pixels) though
-  the presses do reach `input_state[0]` (the T4 in-process probe observed
-  `in=04`; the headless fixture and the v7 tape pin the pad → target →
-  velocity → position seam). The slot-bound record carries the native 0x19
-  code after the kickoff transition (the `0x7DA26` inactive-record mapping;
-  row 19 is UNSUP), so no wired row consumes the pad for it; the natural pad
-  consumer (row 04's slot-dir arm) is producer-complete since S1 (FU-147) but
-  the live path stays gated by the 0x19 code and the hold policy. The
-  reachable pad → target → velocity → position seam is exercised headlessly
+  139 pixels between the two shots, pinning the running clock). **The hold
+  policy is landed (T3/OL-T4-1):** the SDL backend keeps the pressed set and
+  re-presents every held key as a per-poll state sample, so a held key no
+  longer pulses; `tests/test_engine_sdl3.c::test_held_key_is_a_state_sample`
+  holds one KEY_DOWN with no repeats and keeps `input_state[0] == 0x04` while
+  the controlled row-00 record moves across the granted frames. **Movement is
+  still not observable on the live smoke:** the T3 re-run held RIGHT for 3 s
+  after the kickoff (HUD clock `00:04`) and the scene band stayed
+  byte-identical (crop `y < 591` of the 960×720 window, `compare -metric AE`
+  = 0). The reason is now first-hand (null-backend probe replaying the same
+  walkthrough with the ISO): the post-kickoff slot record is **team 0 record
+  9 carrying action code 02** (`locomotion_restart_target`, unported —
+  FU-138 OL-18), with `input_state[0] == 0x04` persisting across 880 held
+  steps and zero velocity; the T3 input-row seam runs for it (outfield index
+  9) but code 02 selects no pressed row and its own body is unported. The
+  earlier "0x19 code" attribution is superseded by this probe. The reachable
+  pad → target → velocity → position seam is exercised headlessly
   (`test_engine_match_frame::test_pad_drives_controlled_locomotion`) and is
   what drives the tape's mover-integrated motion.
   **Kick (gameplay) and score stay blocked on screen:** the KICK press that
@@ -240,8 +245,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
   | match HUD (bar/score/clock) | reached (on screen) | `p5-v7-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
   | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:03` in `p5-v7-match-clock.png`; tape v7 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
-  | move the controlled player | blocked on screen | 40-press RIGHT burst: scene-band 0 differing pixels; presses reach `input_state[0]` (`in=04`) but the kickoff reset leaves the record on the native 0x19 code (row 19 UNSUP) and the SDL hold policy drops auto-repeat (OL-T4-1); the S1 pad seam is fixture-proven headlessly |
-  | kick the ball (gameplay) | blocked | no gameplay row dispatched (tape steps 12/15); possession/selection invokers unported |
+  | move the controlled player | blocked on screen; hold policy landed (T3) | 3 s held RIGHT: scene-band 0 differing pixels while `input_state[0] = 0x04` persists (T3 smoke + null probe); the slot record is team 0 record 9 code 02 (`locomotion_restart_target`, FU-138 OL-18), so no wired row consumes the pad; the S1 pad seam and the T3 SDL hold are fixture-proven (`test_held_key_is_a_state_sample`, `test_pad_drives_controlled_locomotion`) |
+  | kick the ball (gameplay) | blocked live; T3 pad kick fixture-proven | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); live it needs the carrier state (possession producers unported) — `test_pad_kick_release_runs_kick_row` |
   | score a goal | blocked naturally; chain producer-real in a fixture | the row-04 pan origin is wired (T2) but the acceptance tape's code-4 records stay far from the camera (lane ~1460+), so the tape camera never arms; the S2/S3 chain increments the score in `test_camera_pan_event_chain` (producer seed) and `test_row04_live_pan_arms_camera` (live row -> armer -> situation 5 -> score) |
   | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the static camera never arms (the live row-04 origin is wired but tape-dormant, T2); FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v7 asserts the fresh dispatcher cells at m 41/m 62 |
   | fouls / offside (live) | blocked; chains fixture-proven | the FU-150 entries have no live producer; `test_referee` + the `test_engine_referee_*` chains prove them, and tape v7 pins `ref_machine == REF_NONE` with no whistle/speech/decision cells |
@@ -617,6 +622,49 @@ the build also produces the windowed `fifa96` target (`make game`).
     tail (0x1577CA/CE + table 0x10E169), FUN_00071DF4's 0x11042B/0x11042C
     lookup, the reposition boundary arm and the other nine FUN_00071C94
     callers.
+- **M2 phase-8 T3 (input hold policy + pad kick, OL-T4-1/FU-75; 2026-10-09).**
+  Landed:
+  - **Hold policy (OL-T4-1 closed).** `platform_sdl3.c` keeps the held-key set
+    from the SDL press/release edges and re-presents every held mapped key as
+    a state-1 sample on each poll (auto-repeat stays filtered). This matches
+    the engine's per-poll `input_state` model and the native make/break flag
+    array; the alternative (OS auto-repeat passthrough) was rejected because
+    the repeat delay would still pulse the hold and the match layer's
+    absence-as-release contract (`fifa96_input_update`) cannot carry a hold
+    across polls. Consequence: a physically held key now repeats in the
+    front-end too (the front-end consumer takes every state-1 entry; native
+    repeat cadence unported — leg); the null tapes are unaffected.
+  - **Pad kick (row 07 via the code-1 input row).** First-hand derivation:
+    the `FUN_0007CA54` input-row dispatch selects code 1 when
+    `byte[rec+0x91] == 5` (`0x7CB36`) and the code-1 released row runs
+    `0x7D110` (`0x7D13B MOV ECX,1` / `0x7D140 MOV EDX,7`), installing action
+    7 — the ported kick machine — for a KICK/PASS release on a carrier. The
+    seam is wired in `fifa96_match_run.c` for slot-bearing outfield records
+    (records 1..10; record 0 is the keeper machine's own tables) with the
+    reachable handler subset `0x7CE38/0x7CEB0/0x7CF20/0x7CF54/0x7CFD0/
+    0x7D010/0x7D054/0x7D08C/0x7D110/0x7D174/0x7D0C4` (gates first-hand);
+    an `ECX=1` install re-dispatches the new row in the same frame and the
+    machine tail dispatches it again (the native invoke + `0x7CD29
+    CALL [rec+0x18]` pair). `match_kick_from_record` now stages
+    `slot_word6` from the live FU-70 released word (the native stage-1 mode
+    source). `test_engine_match_frame::test_pad_kick_release_runs_kick_row`
+    proves carrier → release → code 7 → row 07 → ball-pair actor/flags
+    (mode 0x10)/event-row staging; `test_engine_sdl3::
+    test_held_key_is_a_state_sample` proves the hold sample + movement.
+  - **Tape dormant, no re-pin**: M1/M2 `cmp` byte-identical (the acceptance
+    tape's KICK edges land at phase 0x13/1, gated out by the handlers'
+    `phase == 2`; the held RIGHT selects no pressed row for the staged
+    codes).
+  - Legs (owned by the follow-up waves): **L4.1** the machine
+    `out.forced`/`out.chase` application (`FUN_0007C990`/the code-8 gate,
+    FU-75 §1.5/§1.6 — the live movement blocker: the slot record's code 02
+    would be re-selected by this arm), **L4.2** the no-edge arm
+    (FU-75 §1.7), **L4.3** the `0x7E600` decision call inside `0x7D0C4`,
+    **L4.4** the `0x7CD60` `+0x7CB` arm body, **L4.5** the `0x7D1D4`
+    control-selection switch, **L4.6** row 02 `locomotion_restart_target`
+    (FU-138 OL-18) and the keeper-machine input tables (`FUN_000782D0`,
+    FU-74 §2) — with those, the live smoke pad movement becomes reachable.
+    The front-end held-key repeat cadence is a leg under the hold policy.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the
@@ -699,7 +747,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   tracked-side flags, probe cells, `FUN_0009252C` display gate, `FUN_000935A0`
   thresholds, `[0x15B684]`); S4 **OL-T11-76…82** (camera handlers/mode writers,
   selector-3 preamble arrays, FU-71 tails, palette-pool identity, team-record
-  producer, shade cube); plus carried `OL-T2-1…3`, `OL-T4-1` (SDL hold policy),
+  producer, shade cube); plus carried `OL-T2-1…3`, `OL-T4-1` (**closed by
+  phase-8 T3**: the SDL backend presents a held-key state sample; the pad kick
+  is wired through the input-row seam — see the phase-8 T3 entry),
   `OL-84`'s remaining situation-0xB producers / row-01 sinks, `OL-85/86`,
   `OL-87/88/89` (superseded in part by S2/S3; keep the goal-invoker register),
   the `OL-62…OL-83` residuals and the wave-7 B1–B4 phase-7 clusters (set
@@ -791,12 +841,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`0x8DC1B`) and the mover's staged-zero `+0x6F`/`+0x43`/`0x57A73` inputs
   (FU-77 errata + `test_engine_m2.c` v4.1 provenance); the AI-side mover
   integration and the row-04 `+0x6B` lane-word / `+0x8D` active-seed producers
-  **landed in M2 full-gameplay S1** (FU-147). Carried (T4 smoke): **OL-T4-1**, the
-  SDL hold policy — the backend drops key auto-repeat
-  (`src/fifa96_engine/platform_sdl3.c:194`), so a held key arrives as press
-  pulses and live on-screen movement needs a repeat/hold policy or the gamepad
-  path, landing with the row-04 pad arm in the S1 possession/locomotion port
-  (FU-147/S1). The goal chain that blocks the tape's
+  **landed in M2 full-gameplay S1** (FU-147). **OL-T4-1 landed in phase-8 T3**
+  (2026-10-09): `platform_sdl3.c` keeps the pressed set and presents each held
+  key as a per-poll state sample, so a held direction key reaches the engine's
+  per-poll input model as a true hold; the same task wired the pad kick
+  (carrier + KICK/PASS release → the `0x7D110` code-1 row → action 7) through
+  the `FUN_0007CA54` input-row seam (see the phase-8 T3 known-gaps entry; the
+  live smoke movement stays blocked by the unported machine forced decision /
+  row 02, legs L4.1/L4.6). The goal chain that blocks the tape's
   score step (`OL-87`/`OL-88`/`OL-89`) is owned by the next plan phase via the
   frozen FU-145 (arming) / FU-146 (consumers) slices (phase-6 S2/S3).
 - **M2 phase-7 P1 (set pieces & restarts, FU-149; 2026-10-09).** Landed from

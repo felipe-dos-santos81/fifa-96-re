@@ -170,17 +170,24 @@ int fifa96_outfield_chase_action(const fifa96_outfield_chase_state *state, uint8
   return 1;
 }
 
-/* The per-type decision gate flat `0x110680[type]&1` (first-hand read: 26
- * bytes {3,0,0,3,3,3,3,2,0,...,2,2,2,2,0,0,0,0,0,3}). The native indexes
- * unbounded; types beyond 0x19 are not reachable from a real record and the
- * adjacent image bytes are not part of this table, so they return 0. */
-static uint8_t outfield_type_gate(uint8_t type) {
+/* The per-type decision gate flat `0x110680[type]` (first-hand read this
+ * task: 32 bytes {3,0,0,3,3,3,3,2,0,...,2,2,2,2,0,0,0,0,0,3,...}). The
+ * handlers test the raw byte with `& 1` (most) or `& 3` (the `0x7CFD0`/
+ * `0x7D054`/`0x7D08C` selection writes), so the raw bits are exposed and the
+ * `&1` convenience stays. The native indexes unbounded; types beyond 0x19 are
+ * not reachable from a real record and the adjacent image bytes are not part
+ * of this table, so they return 0. */
+uint8_t fifa96_outfield_type_bits(uint8_t type) {
   static const uint8_t table[26] = {
       3, 0, 0, 3, 3, 3, 3, 2, 0, 0, 0, 0, 0,
       0, 0, 0, 2, 2, 2, 2, 0, 0, 0, 0, 0, 3,
   };
   if (type >= 26u) return 0;
-  return (uint8_t)(table[type] & 1u);
+  return table[type];
+}
+
+static uint8_t outfield_type_gate(uint8_t type) {
+  return (uint8_t)(fifa96_outfield_type_bits(type) & 1u);
 }
 
 int fifa96_outfield_chase_gate(const fifa96_outfield_chase_state *state, uint8_t type,

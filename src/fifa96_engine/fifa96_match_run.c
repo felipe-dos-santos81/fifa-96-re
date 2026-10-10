@@ -10,6 +10,7 @@
 #include "fifa96_loader/fifa96_animation.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
+#include "fifa96_loader/fifa96_outfield.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
 #include "fifa96_loader/fifa96_scene.h"
@@ -279,6 +280,229 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
                        ((uint32_t)(uint16_t)r->vel75 << 16));
 }
 
+/* ===== T3 (OL-T4-1/FU-75): the FUN_0007CA54 input-row dispatch ============
+ *
+ * The native outfield record machine (records 1..10; record 0 runs the keeper
+ * machine `FUN_000782D0` with its own tables) runs, before its current-handler
+ * tail, the slot-edge dispatch `0x7CB0D..0x7CC11` (FU-75 §1.2/§1.3,
+ * re-verified first-hand this task): with a bound control slot it selects a
+ * dispatch code from the raw slot edge words (code 1 when `byte[rec+0x91] ==
+ * 5`, `0x7CB36`) and runs the pressed (else released) 8-byte row table, whose
+ * handlers install action codes through `FUN_0007D9A4` or write the team role
+ * fields. `fifa96_outfield_input_row` is the ported subset; this seam binds it
+ * over the pool for the slot-bearing outfield record and executes the
+ * reachable handler subset, every gate read from the handler bytes this task
+ * (Ghidra `disassemble_bytes` 0x7CE38/0x7CEB0/0x7CF20/0x7CF54/0x7CFD0/
+ * 0x7D010/0x7D054/0x7D08C/0x7D110/0x7D174/0x7D0C4):
+ *
+ *   0x7CE38 install 0x0B invoke    0x7CEB0 install 8 invoke
+ *   0x7CF20 receiver timer         0x7CF54 install 9 invoke
+ *   0x7CFD0 chosen = rec, mode 0   0x7D010 install 0x21 invoke
+ *   0x7D054 mode = 1               0x7D08C mode = 2
+ *   0x7D110 install 7 invoke       0x7D174 install 0x23 no-invoke
+ *   0x7D0C4 the 0x7E600 arm returns `type == 0x0E` (call leg L4.3)
+ *   0x7CD60 returns 1 (arm leg)    0x7D1D4 the self-check returns 0 (body leg)
+ *
+ * Timing mirrors the native: a handler installs immediately and an `ECX=1`
+ * install invokes the new handler in the same frame (`0x7D149`); the
+ * record-machine tail then calls it again (`0x7CD29 CALL [rec+0x18]`), which
+ * this seam reproduces by re-dispatching the installed row before the tail
+ * dispatch below, so row 07's stage 0 and stage 1 both run on the install
+ * frame while the FU-70 released word is still live in `word[slot+6]`.
+ *
+ * Staged stand-ins (producers unported): the `0x1577F0` track word
+ * (`high_577ee_ge_50`, OL-72), `slot[+0x10]` (OL-69), the `[0x157AB0]`/
+ * `[0x1587AC]` flags and the record `+0x99` byte (OL-72). The no-edge-arm and
+ * the `out.forced`/`out.chase` outputs are computed but not applied (their
+ * record writes belong to the unported machine tail, FU-75 §1.5/§1.6/§1.7,
+ * legs L4.1/L4.2). */
+struct match_input_ctx {
+  struct fifa96_match_run *mr;
+  struct fifa96_match_entity *e;
+  uint32_t team;
+  int32_t id;
+  uint8_t invoke_code;   /* an ECX=1 install the seam dispatches after the scan */
+};
+
+static void match_input_install(struct match_input_ctx *c, uint8_t code, uint8_t invoke) {
+  if (fifa96_match_entities_install(c->e, (uint8_t)c->mr->state.phase, code, 0) == 1 &&
+      invoke != 0)
+    c->invoke_code = code;
+}
+
+static int match_input_handler(uint32_t handler, void *context) {
+  struct match_input_ctx *c = context;
+  struct fifa96_match_entity *e = c->e;
+  struct fifa96_match_team *team = &c->mr->entities.team[c->team];
+  uint8_t phase = (uint8_t)c->mr->state.phase;
+  uint8_t bits;
+  switch (handler) {
+    case 0x7CE38u:   /* pressed code-0 want 0x60: install 0x0B (invoke) */
+      if (phase != 2u) return 0;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) == 0u) return 0;
+      if (e->anim_id == 0x0Cu || e->anim_id == 0x59u || e->anim_id == 0x5Eu)
+        return 0;
+      match_input_install(c, 0x0B, 1);
+      return e->code == 0x0Bu;
+    case 0x7CEB0u:   /* released code-0 want 0x30: install 8 (invoke) */
+      if (phase != 2u) return 0;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) == 0u) return 0;
+      if (c->mr->entities.controlled < 0) return 0;
+      if (team->side ==
+          c->mr->entities
+              .team[(uint32_t)c->mr->entities.controlled / FIFA96_MATCH_ENTITY_RECORDS]
+              .side)
+        return 0;
+      match_input_install(c, 8u, 1);
+      return e->code == 8u;
+    case 0x7CF20u:   /* pressed/keeper arms want 0x80: receiver timer */
+      if (phase != 2u) return 1;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) != 0u) e->timer93 = 0x10;   /* 0x79B58 (+0x99 staged 0) */
+      return 1;
+    case 0x7CF54u:   /* released code-0 want 0x10: install 9 (invoke) */
+      if (phase != 2u) return 0;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) == 0u) return 0;
+      if (c->mr->entities.controlled < 0) return 0;
+      if (team->side ==
+          c->mr->entities
+              .team[(uint32_t)c->mr->entities.controlled / FIFA96_MATCH_ENTITY_RECORDS]
+              .side)
+        return 0;
+      match_input_install(c, 9u, 1);
+      return e->code == 9u;
+    case 0x7CFD0u:   /* pressed code-3 want 0x10: chosen = rec, mode = 0 */
+      if (phase == 2u) {
+        bits = fifa96_outfield_type_bits(e->code);
+        if ((bits & 3u) != 0u) {
+          team->chosen = c->id;
+          team->mode_82a = 0;
+        }
+      }
+      return 1;
+    case 0x7D010u:   /* released code-1 want 0x50: install 0x21 (invoke) */
+      if (phase == 2u) {
+        bits = fifa96_outfield_type_bits(e->code);
+        if ((bits & 1u) != 0u) match_input_install(c, 0x21u, 1);
+      }
+      return 1;
+    case 0x7D054u:   /* pressed code-4 want 0x10: mode = 1 */
+      if (phase == 2u) {
+        bits = fifa96_outfield_type_bits(e->code);
+        if ((bits & 3u) != 0u) team->mode_82a = 1;
+      }
+      return 1;
+    case 0x7D08Cu:   /* pressed code-4 want 0x40: mode = 2 */
+      if (phase == 2u) {
+        bits = fifa96_outfield_type_bits(e->code);
+        if ((bits & 3u) != 0u) team->mode_82a = 2;
+      }
+      return 1;
+    case 0x7D110u:   /* released code-1 wants 0x10..0x60: install 7 (invoke) */
+      if (phase != 2u) return 0;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) == 0u) return 0;
+      match_input_install(c, 7u, 1);
+      return e->code == 7u;
+    case 0x7D174u:   /* pressed code-2 wants 0x10/0x40: install 0x23 */
+      if (phase != 2u) return 0;
+      bits = fifa96_outfield_type_bits(e->code);
+      if ((bits & 1u) == 0u) return 0;
+      if (e->pos_y != 0) return 0;
+      match_input_install(c, 0x23u, 0);
+      return e->code == 0x23u;
+    case 0x7D0C4u:   /* released code-0 want 0x40: the 0x7E600 decision arm */
+      /* The native CALL 0x7E600 install is leg L4.3; every path returns
+       * `byte[rec+0x91] == 0x0E` (0x7D105 SETZ), so the no-install stand-in is
+       * the handler's own return value. */
+      return e->code == 0x0Eu;
+    case 0x7CD60u:   /* pressed code-3/released code-0 want 0x40: returns 1 */
+      return 1;      /* the +0x7CB arm body is leg L4.4 */
+    case 0x7D1D4u:   /* the control-selection switch */
+      /* 0x7D1DF: the controlled actor returns 0 immediately; the switch body
+       * for the other records is leg L4.5 (also a 0 here). */
+      return 0;
+    default:
+      return 0;
+  }
+}
+
+/* Returns the ECX=1 invoke code (> 0), 0 for no invoke, or a negative error. */
+static int match_run_outfield_input(struct fifa96_match_run *mr,
+                                    struct fifa96_match_entity *e) {
+  struct match_input_ctx c;
+  fifa96_outfield_input_state s;
+  fifa96_outfield_input_out out;
+  uint32_t team = e->team;
+  int32_t id = (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + e->index);
+  int32_t controlled = mr->entities.controlled;
+  memset(&s, 0, sizeof s);
+  s.has_slot = e->has_slot;
+  s.phase = (uint8_t)mr->state.phase;
+  if (mr->slot.entity == id) {
+    s.pressed = mr->slot.pressed;
+    s.released = mr->slot.released;
+  }
+  s.slot_word10 = 0;            /* slot +0x10 producer unported (OL-69) */
+  s.lane = e->lane;             /* native dword +0x69 */
+  s.user_present = controlled >= 0 ? 1u : 0u;
+  s.user_side =
+      controlled >= 0
+          ? mr->entities.team[(uint32_t)controlled / FIFA96_MATCH_ENTITY_RECORDS].side
+          : 0u;
+  s.side = mr->entities.team[team].side;
+  s.type = e->code;             /* native byte +0x91: the dispatch-code gate */
+  s.high_577ee_ge_50 = 0;       /* 0x1577F0 track word producer unported (OL-72) */
+  s.tracked = (controlled >= 0 && id == controlled) ? 1u : 0u;
+  s.user_absent_or_self = (controlled < 0 || id == controlled) ? 1u : 0u;
+  s.chaser = (mr->entities.team[team].chosen >= 0 &&
+              id == mr->entities.team[team].chosen)
+                 ? 1u
+                 : 0u;
+  s.flag_157ab0 = 0;            /* [0x157AB0] producer unported (OL-72) */
+  s.is_1578ac = 0;              /* [0x1587AC] unmodeled (OL-72) */
+  s.forced.is_team_controlled =
+      (id == mr->entities.team[team].target) ? 1u : 0u;
+  s.forced.is_team_second = (id == mr->entities.team[team].second) ? 1u : 0u;
+  s.forced.type_5 = e->code == 5u ? 1u : 0u;
+  {
+    int32_t oid = mr->entities.team[1u - team].target;
+    if (oid >= 0 &&
+        oid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      s.forced.opponent_has_ball =
+          mr->entities.team[(uint32_t)oid / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)oid % FIFA96_MATCH_ENTITY_RECORDS]
+              .carrier & 1u;
+    if (controlled >= 0 &&
+        controlled < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      s.forced.controlled_has_ball =
+          mr->entities.team[(uint32_t)controlled / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)controlled % FIFA96_MATCH_ENTITY_RECORDS]
+              .carrier & 1u;
+  }
+  s.current_code = e->code;
+  s.chase.phase = (uint8_t)mr->state.phase;
+  s.chase.type_gate = (uint8_t)(fifa96_outfield_type_bits(e->code) & 1u);
+  s.chase.not_team_controlled =
+      (id != mr->entities.team[team].target) ? 1u : 0u;
+  s.chase.not_team_second = (id != mr->entities.team[team].second) ? 1u : 0u;
+  s.chase.distance = (uint16_t)(e->lane >> 16);   /* 0x7CCCD `[rec+0x69]>>16` */
+  s.chase.user_present = s.user_present;
+  s.chase.unbound = e->has_slot == 0 ? 1u : 0u;
+  s.chase.timer = e->timer81;
+  c.mr = mr;
+  c.e = e;
+  c.team = team;
+  c.id = id;
+  c.invoke_code = 0;
+  if (fifa96_outfield_input_row(&s, match_input_handler, &c, &out) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  return (int)c.invoke_code;
+}
+
 /* FU-141: one pool record -> the FU-138/FU-140 staging record -> the FU-137
  * action dispatch, then the handler's requests back into the pool record. The
  * bound FU-70 slot's animation/direction bytes (native slot +0x20/+0x21, the
@@ -383,6 +607,24 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->vel73 = e->vel73;
   r->vel75 = e->vel75;
   r->body_timer9c = e->body_timer9c;
+  /* T3: the outfield record machine's input-row dispatch (native records 1..10
+   * via FUN_0007CA54 step 3; record 0 is the keeper machine's own tables)
+   * before the current-handler tail. An ECX=1 install invoked the new row
+   * during the scan; re-stage the fields the install changed and run it, so the
+   * tail dispatch below runs it a second time in the same frame (the native
+   * installer invoke + `0x7CD29 CALL [rec+0x18]` pair). */
+  if (e->has_slot != 0 && e->index != 0u) {
+    int invoke = match_run_outfield_input(mr, e);
+    if (invoke < 0) return invoke;
+    if (invoke > 0) {
+      r->code = e->code;
+      r->stage92 = e->stage92;
+      r->timer89 = e->timer89;
+      r->ran = e->ran;
+      rc = fifa96_match_dispatch_action(mr, e->code);
+      if (rc != FIFA96_OK && rc != -FIFA96_ERR_UNSUPPORTED) return rc;
+    }
+  }
   rc = fifa96_match_dispatch_action(mr, e->code);
   /* The arm handlers (rows 26/28/2A) write the dword views of the velocity
    * bytes; decompose them back onto the word views the mover reads so the

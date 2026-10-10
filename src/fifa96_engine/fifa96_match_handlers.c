@@ -793,6 +793,11 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->target_y = r->target_y;
   s->target_z = r->target_z;
   s->has_slot = r->has_slot;
+  /* T3: the native stage-1 mode source is the live `word[slot+6]` (the FU-70
+   * released word; `0x7BA29` latches the mode into it, `0x82CAC` reads it for
+   * the row-0F kick). The slot belongs to this record only when it is the
+   * bound one; other records carry no slot. */
+  s->slot_word6 = (mr->slot.entity == r->entity_id) ? (int16_t)mr->slot.released : 0;
   s->side = mr->entities.team[team].side;
   s->timer89 = r->timer89;
   s->timer81 = r->timer81;

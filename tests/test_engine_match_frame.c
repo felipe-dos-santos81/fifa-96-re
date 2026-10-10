@@ -930,6 +930,77 @@ static void test_pad_drives_controlled_locomotion(void) {
   drop_fixture(f);
 }
 
+/* T3 (FU-75 §1.2/§1.3 + FU-137 §4.1): the pad kick reaches the kick machine
+ * through the outfield record machine's input-row dispatch.
+ *
+ * First-hand /FIFA96.EXE this task: the slot-bound outfield record (records
+ * 1..10 run FUN_0007CA54; record 0 is the keeper machine) selects its
+ * dispatch code from the slot edge words — `byte[rec+0x91] == 5` (the action
+ * code, `0x7CB36`) selects code 1 — and runs the released table, whose
+ * `{mask 0x07FF, want 0x10, handler 0x7D110}` row installs action 7
+ * (`0x7D13B..0x7D150`: phase 2, the `0x110680[byte[rec+0x91]] & 1` gate,
+ * `EDX=7`, `ECX=1` invoke-now) — the ported row-07 kick machine. The native
+ * invokes the new handler immediately and the record-machine tail calls it
+ * again in the same frame (`0x7CD29 CALL [rec+0x18]`), so row 07 runs its
+ * stage 0 and stage 1 (the kick) on the release frame while the FU-70
+ * released word is still live in `word[slot+6]` (the stage-1 mode source).
+ * The engine's KICK release therefore lands `code == 7` on the carrier and
+ * the same frame's double dispatch runs the ported kick machine, latching the
+ * actor and the mode into the FU-73 ball pair. */
+static void test_pad_kick_release_runs_kick_row(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_state_set_phase(&mr.state, 2) == 0);
+
+  {
+    int32_t taker = mr.entities.team[0].target;
+    struct fifa96_match_entity *rec;
+    assert(taker >= 0 && taker < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+    assert(mr.slot.entity == taker);            /* bind + merge */
+    rec = &mr.entities.team[0].records[taker];
+
+    /* The carrier state (`byte[rec+0x91] == 5`) is what selects the code-1
+     * input rows; stage it through the real installer. */
+    assert(fifa96_match_entities_install(rec, 2, 5, 0) == 1);
+    assert(rec->code == 5u);
+
+    /* KICK press: the code-1 pressed table has only the 0x80 row, so the
+     * press installs nothing. */
+    {
+      fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+      assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+    }
+    one_granted_frame(&mr);
+    assert(rec->code == 5u);
+
+    /* Release: the FU-70 machine reports `slot.released = 0x10` on this
+     * frame's update; the input-row dispatch matches the code-1 released row
+     * and installs action 7 (invoke-now), so the same granted frame runs the
+     * ported kick machine. */
+    assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+    one_granted_frame(&mr);
+    assert(rec->code == 7u);
+    assert(mr.dispatched_ok & (1ull << 0x07u));
+    assert(rec->stage92 == 2u);                 /* stage 0 + same-frame stage 1 */
+    /* The kick ran through the FU-73 pairing: the actor latched and the mode
+     * is the live FU-70 released word (0x10), the native stage-1 source. */
+    assert(mr.entities.ball.pair.actor == taker);
+    assert(mr.entities.ball.pair.flags == 0x10u);
+    assert(mr.entities.ball.pair.code != 0u);   /* an event row was staged */
+
+    /* Releasing without a further edge changes nothing: the kick is a
+     * one-shot install (the record sits at the post-kick stage). */
+    one_granted_frame(&mr);
+    assert(rec->code == 7u);
+    assert(rec->stage92 == 2u);
+  }
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-147 S1: the per-frame driver runs the shared mover for every dispatched
  * record (native FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5; the
  * pool loop keeps the +0x9A skip) and the BF20 lane block
@@ -2653,6 +2724,7 @@ int main(void) {
   test_screen_step_probe_post();
   test_screen_advance_ring();
   test_pad_drives_controlled_locomotion();
+  test_pad_kick_release_runs_kick_row();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();

@@ -572,7 +572,9 @@ tests/test_outfield.c src/fifa96_loader/fifa96_outfield.c` runs clean.
    `0xB8..0xC2` are not decomposed.
 8. **`+0x82A` modes** (0/1/2 from `0x7CFD0`/`0x7D054`/`0x7D08C`, cleared by
    `0x7F93B`/`0x7F983`) are quoted as values only; their consumers are not
-   located.
+   located. **T3 update:** the writers are now executed live into the pool's
+   `team->mode_82a` (the `0x7CFD0`/`0x7D054`/`0x7D08C` handlers of the wired
+   input-row subset); the consumers stay this leg.
 9. **Type identities**: type 5 (carrier checks), type 3 press arm, and the
    `[rec+0x28]` byte values `0xC/0x59/0x5E` are quoted only as compared values
    (FU-67/FU-74 open legs carry over).
@@ -589,6 +591,48 @@ tests/test_outfield.c src/fifa96_loader/fifa96_outfield.c` runs clean.
     **Task 2 erratum: the row-08 body `0x81068..0x814AF` is ported and wired
     as `fifa96_outfield_row08_step` / `fifa96_match_action_08` (FU-142
     Appendix K.6, OL-70a closed; OL-82 for its unmodeled inputs/sinks).**
+
+## 10. T3 port landing — the input-row dispatch over the pool (2026-10-09)
+
+M2 phase-8 T3 wires the machine subset into the live frame. First-hand
+`disassemble_bytes` on /FIFA96.EXE this task re-read every handler the seam
+executes:
+
+* **The pad kick derivation.** The dispatch-code selection (`0x7CB22..0x7CB7E`)
+  picks code 1 for `byte[rec+0x91] == 5` (`0x7CB36 MOV EAX,[EBP+0x8E];
+  SAR EAX,0x18; CMP EAX,5`); the code-1 released table row
+  `{0x07FF, 0x0010, 0x7D110}` then runs `0x7D110`: `0x7D11E CMP EAX,2`
+  (phase), `0x7D12C MOV AL,[EAX+0x110680]; AND AL,1` (the type gate indexed by
+  `byte[rec+0x91]`), `0x7D13B MOV ECX,1` / `0x7D140 MOV EDX,7` /
+  `0x7D149 CALL 0x7D9A4` — install action 7 (the ported kick machine) with the
+  invoke-now flag, returning `type == 7` (`0x7D157 CMP ESI,7; SETZ`). The
+  live `word[slot+6]` released word is the stage-1 kick mode source
+  (`0x7BA29`/`0x82CAC`). Reachable pad → action-code path for action 7:
+  carrier (code 5) + KICK/PASS release.
+* **Wired handler subset** (all gates first-hand, listed with their return
+  semantics): `0x7CE38` install 0x0B invoke; `0x7CEB0` install 8 invoke;
+  `0x7CF20` receiver timer (returns 1 both paths); `0x7CF54` install 9
+  invoke; `0x7CFD0` `[team+0x7BF]=rec` + mode 0 (type gate `&3`, returns 1);
+  `0x7D010` install 0x21 invoke; `0x7D054`/`0x7D08C` mode 1/2 (gate `&3`);
+  `0x7D110` install 7 invoke; `0x7D174` install 0x23 no-invoke; `0x7D0C4`
+  returns `type == 0x0E` (the `0x7E600` call leg); `0x7CD60` returns 1 (arm
+  leg); `0x7D1D4` returns 0 for the controlled self (body leg).
+* **Engine seam**: `match_run_outfield_input` (/`match_input_handler`) in
+  `fifa96_match_run.c` builds the ported state (the slot edge words, the
+  action code as `type`, `tracked`/`user_absent_or_self`/`chaser` from the
+  pool ids) and runs `fifa96_outfield_input_row` for the slot-bearing
+  outfield record; an invoke install re-dispatches the new row before the
+  record dispatch tail (the native invoke + tail pair). The raw
+  `0x110680[type]` bits are exposed as `fifa96_outfield_type_bits`.
+* **Legs**: the forced-decision/chase application (L4.1), the no-edge arm
+  (L4.2), the `0x7E600` call (L4.3), the `0x7CD60` arm (L4.4), the `0x7D1D4`
+  switch (L4.5), row 02 (`locomotion_restart_target`, FU-138 OL-18) and the
+  keeper machine's own input tables (FU-74 §2) (L4.6). The live smoke's pad
+  movement is gated by L4.1 + L4.6 (the slot record carries code 02).
+* **Tests**: `test_engine_match_frame::test_pad_kick_release_runs_kick_row`
+  (carrier → KICK release → code 7 → row 07 → ball-pair actor/flags/event
+  row); `test_outfield::test_type_bits_table`; the SDL hold fixture in
+  `test_engine_sdl3.c`.
 
 ## Provenance
 
