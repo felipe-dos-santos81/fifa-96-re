@@ -3247,13 +3247,20 @@ setter on a phase-2 write (`0x740F6`) and by the restart body `0x84F90`
   (`[0x1590CC]`/`[0x159901]` team flags); the scheduler `FUN_000948AC` and the
   `[0x14C32A]` frame gate. Consequence: the engine carries tracked side -1
   (`add_goal`-equivalent) until this lands.
+  *Status (T4, §L.10): **closed** (S3); the tracked-side pick and the handler
+  presentation bodies stay legs.*
 * **OL-88 — goal detection.** `FUN_0008AF38 0x8B623..0x8B63E` (phase 2/0x10 +
   `[0x15781D]`) -> `FUN_00088940` -> `FUN_0008A938(6, side)`: the gameplay goal
   producer is unported, so no gameplay goal reaches the derived source yet.
+  *Status (T4, §L.10): **closed** (S2/T2); `FUN_00071DF4`'s tracked-record
+  auto-camera stays the leg.*
 * **OL-89 — writer side effects.** The posted ids are captured
   (`score_last_event`) but not dispatched: `FUN_0009252C` ->
   `FUN_00066E70`/`FUN_00066724` and the `FUN_000CBC4C` probe result are
   unported; the loader takes the probe as an input and the engine passes 0.
+  *Status (T4, §L.10): **closed except the sink** — the probe (S3) and the
+  gate/dispatch boundary (T4) are ported; the `FUN_00066724` chain is the
+  leg.*
 
 ### L.8 Tests and gate
 
@@ -3372,3 +3379,83 @@ arm (header contract; the table-1 queue is OL-73), so a situation-6 call
 through that seam takes the table-2 phase-5 row rather than the native queue
 (`0x8A9E8`); no ported caller passes 6. OL-87/OL-88 (L.7) stay open with the
 four machinery blocks above as their exact requirement.
+
+**Erratum (T4):** this verdict is superseded. S2/S3/T2 landed the four
+machinery blocks and T4 re-verified the chain end-to-end and ported the
+`FUN_0009252C` boundary; see §L.10 for the current statuses. The verdict
+remains accurate as the Task-3-era window.
+
+### L.10 T4 close-out — the natural goal chain (OL-87/88/89)
+
+T4 supersedes L.9's verdict. The four machinery blocks L.9 listed as OL-87/88's
+requirement landed across S2 (FU-145 armer/scanner/queue/fallback), S3 (FU-146
+scheduler/handlers/probe) and T2 (OL-T11-79 live row-04 pan origin); T4
+re-verifies every named link first-hand, pins the end-to-end score and ports
+the last named unported piece (the `FUN_0009252C` display boundary, OL-89).
+
+**T4 tool calls (Ghidra read-only, explicit `/FIFA96.EXE`).**
+`get_xrefs_to 0x93944` = **11** `UNCONDITIONAL_CALL` (`0x93D98`, `0x93DA1`,
+`0x94026`, `0x9402F`, `0x941E5`, `0x941EE`, `0x94489`, `0x94492`, `0x94667`,
+`0x94670`, `0x9486E` — the six `0x110F78` handlers); `disassemble_bytes 0x8A938`
+(26 insns, the queue condition + table jump); `decompile_function 0x8A938`
+(the full dispatcher); `decompile_function 0x9252C`, `0xA80E2`, `0x66724`;
+`decompile_function 0xCBC4C`; `get_xrefs_to 0x115FCC` (8) / `0x114A98` (9);
+`read_memory 0x115FC8`/`0x114A94` (image gate cells); `disassemble_bytes
+0x939B0` (the 0xD3 arm -> `0x93B73`); `disassemble_function 0x88940` (the goal
+scanner) and `0x736AC` (the camera track, the `0x73B6B` `FUN_00071DF4` call
+site).
+
+**Per-link status (first-hand this slice).**
+
+| link | native | status |
+|---|---|---|
+| goal producer | `FUN_00088940` situation 6 (call `0x88B44`) from the clock tail `0x8B63E` | closed (S2/T2; side = the snapshot sign/`[0x157A4C]`, the possession query feeds the announce sinks only) |
+| queue condition | `0x8A944..0x8A96B` `sit != 0 && != 0xB && [0x14C32A] != 0 && [0x15B6C0] == 0`; id table `0x8A8E0` (`sit-2 <= 8`), `[0x15B6B8] = (side == 0)` | closed (S2 `match_run_set_piece`; byte-match re-verified) |
+| queue ids | sit 6 -> id 5 (side 0) / 6 (side 1), latch `[0x15B6C0]=1` | closed (S2/S3) |
+| fallback | `0x8AA7B` direct arm -> sit-6 case `0x8AC28`: plain increment + table-2 row 6 (skip the phase write when `[0x157AC2]` is 2/3) | closed (S2 `match_run_goal_fallback`) |
+| consumer | scheduler `FUN_000948AC` -> `[0x15B6D4]` handler -> per-leg id tables -> writer | closed (S3); the per-leg tables reproduce the 11 sites' ids |
+| score writer | `FUN_00093944` | closed (S3; probe arm exact) |
+| probe | `FUN_000CBC4C` 6-limb counter | closed (S3 `fifa96_match_run_goal_probe`, exact native arm) |
+| post dispatch | `FUN_0009252C` -> gate `FUN_000A80E2` -> `FUN_00066724(id,0)` | **T4 ported (boundary)**: `fifa96_score_display_gate` + `score_post` + run cells `score_sound_device`/`score_sound_midi` + observation `score_display_event`; the `FUN_00066724` text/audio chain stays a leg |
+
+**OL status updates (superseding L.7 / L.9).**
+* **OL-87 — goal-screen handler cluster: closed.** The six period handlers,
+their step machines, the pending-id consumption through the writer and the
+scheduler order are ported (S3). Remaining legs: the tracked-side pick
+(`FUN_00092D8C`'s `[0x1590CC]`/`[0x159901]` team flags, FU-146 legs 4/10; the
+carried -1 keeps the writer's post block dormant) and the handler presentation
+bodies (FU-146 §8 items 7/8).
+* **OL-88 — goal detection: closed.** The camera-pan arm (`FUN_0007131C`),
+the clock-tail scan call and `FUN_00088940` are ported (S2/T2), with the live
+row-04 event as the reachable pan origin. Remaining leg: `FUN_00071DF4`
+(`0x73B6B` in `FUN_000736AC`), the every-frame tracked-record auto-camera —
+it reads the tracked record's `[rec+4]` type `0x18D8`, the height
+`[0x1577EE].hi > 0xF0`, the sub-object `[rec+0x20]` bytes `+0x20/+0x21` ×0xF
+into `[0x1577BE].hi`/`[0x1577C2]`, the `0x10E169`/`0x11042B/C` rate lookup and
+the keeper 0x1D/0x1E arm; the ball sub-object/velocity producers are unported,
+so the engine camera only moves on row events (the T2 port).
+* **OL-89 — writer side effects: closed except the sink.** The probe was
+already ported (S3); T4 ports the `FUN_0009252C`/`FUN_000A80E2` gate and the
+dispatch observation. The `FUN_00066724(id, 0)` HUD/commentary chain
+(`FUN_00065E00`/`FUN_000666A8`/`FUN_000A8084`, gated on
+`[0x155CE0]`/`[0x155D3C]`) stays the leg.
+
+**Gate T4 (score arises from replicated gameplay).**
+`tests/test_engine_match_frame.c::test_natural_goal_end_to_end` plays the
+natural kickoff (the 0x13 countdown + the T3 KICK press, no forced phase or
+`[0x5882A]`) into live phase 2, installs a live action-04 record with the
+ground-ball sub-object arm (the `0x7F035` slot-dir arm, ball height 0) and
+asserts each link: the row event (`vel_z != 0`, coda code 5) -> the pan past
+`0xB20` + armer zone 1 -> the scan's queue (id 5, `pending` 1, score still
+0-0) -> the next frame's scheduler/handler post -> score 1-0 (`last_side` 0,
+no post id with the carried tracked -1). `test_natural_goal_fallback_arm`
+covers the queue-condition closed arm (gate 0 at scan time -> the direct
+fallback increments the score and writes phase 5, no id queued). The T4 RED
+was the new display-boundary API (the loader `dispatched` field + the
+`fifa96_score_display_gate` declaration/module + the run cells failed to
+compile at BASE; tests first): `test_score_display_gate`,
+`test_score_event_dispatch_flag` and the extended
+`test_score_event_wired_run_path` are green after the port. `make check`
+**108/108**; M1 `09b726b7…` and M2 `2e709151…` byte-identical (the M2 tape
+stays dormant: no tape record reaches the half-line band and no pan producer
+fires; the m62 freshness block now also pins the fresh display cells).

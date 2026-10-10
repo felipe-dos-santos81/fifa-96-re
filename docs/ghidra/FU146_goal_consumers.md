@@ -310,6 +310,17 @@ scheduler reads plus these writer/reader sites.
 `FUN_000A8084`/`FUN_000A8103`. All of that is HUD/commentary presentation
 (OL-89).
 
+T4 re-verification (first-hand, `/FIFA96.EXE` read-only): the decompiled
+`FUN_0009252C`/`FUN_000A80E2` bodies match the walk above; the gate cells'
+writers are the sound subsystem — `[0x115FCC]` set by `FUN_000A7FD4`
+(`0xa803c`) and cleared by `FUN_000A8172` (`0xa819d`), `[0x114A98]` written by
+`FUN_000A8103`/`FUN_000A810B` and cleared by `FUN_000A8172` (`get_xrefs_to
+0x115FCC` = 8, `0x114A98` = 9) — and the image bytes at both are 0
+(`read_memory 0x115FC8`/`0x114A94`), so the gate is -1 and the dispatch is
+inert at the image defaults. The writer's shared post tail is confirmed at
+`0x939DA MOV EAX,0xD3 / JMP 0x93B73` (`CALL 0x9252C`). The port lands the
+gate and the dispatch observation; the `FUN_00066724` chain stays the leg.
+
 `FUN_000CBC4C` (`0xCBC4C..0xCBCB7`) is **not** a hardware RNG: it is a
 deterministic 6-limb counter over `0x112E68..0x112E7C`
 (`C0=0x112E68 … C5=0x112E7C`): the decompiled body adds the limb chain into
@@ -364,7 +375,9 @@ FUN_00093944(side):  INC word[side*2+0x157AC5]  (THE SCORE)
         |
         v
 FUN_0009252C: CALL 0x66E70 (-> FUN_000A80E2 gate) -> FUN_00066724(id,0)
-        (HUD post; unported, OL-89 — derived capture = score_last_event)
+        (HUD post; the gate + boundary are ported (T4:
+         fifa96_score_display_gate / score_display_event); the FUN_00066724
+         text/audio chain is the OL-89 leg)
    then FUN_000740A0(0,0): phase 0; if phase 2 -> [0x15781D]=0, camera reset
    tail: when [0x15B688] > 0xB4 -> FUN_000935A0 (goal-log ring, re-install)
 ```
@@ -474,11 +487,21 @@ native scheduler is in the frame body, not the render driver).
    the derived default keeps `score_tracked_side = -1` (App. L.6) until they
    land.
 5. **`FUN_000CBC4C` probe cells.** The exact image seed is recorded above; the
-   current engine passes `0` (OL-89). Porting the 6-limb counter is mechanical
-   but unverified against a running native.
-6. **`FUN_0009252C` display gate.** `FUN_000A80E2`'s `[0x115FCC]`/`[0x114A98]`
-   and the `FUN_00066724` chain are presentation (OL-89); the derived capture
-   is `score_last_event`.
+   S3 port landed the 6-limb counter as `fifa96_match_run_goal_probe` (the
+   `0x112E68..0x112E7C` limbs seeded from the image bytes, one increment +
+   carry fold, the low dword returned) and the post step calls it lazily on the
+   exact native arm (`match_run_screen_post`). T4 re-verified the body
+   first-hand and the pins stand (`test_goal_probe_limbs`,
+   `test_screen_step_probe_post`).
+6. **`FUN_0009252C` display gate.** The gate + dispatch boundary is ported
+   (T4): `fifa96_score_display_gate` is the first-hand `FUN_000A80E2`
+   (`device==0 -> -1; midi!=0 -> 1; else 0`), the writer's every post arm runs
+   it (`score_post`, the shared `0x93B73 CALL 0x9252C`), and the run carries
+   the two cells (`score_sound_device`/`score_sound_midi`, image 0/0) plus the
+   observation `score_display_event` (0 = none). The `FUN_00066724(id, 0)`
+   text/audio chain (`FUN_00065E00`/`FUN_000666A8`/`FUN_000A8084` gated on
+   `[0x155CE0]`/`[0x155D3C]`) stays a leg; at the image defaults the gate
+   returns -1, so the dispatch is inert and the derived capture is exact.
 7. **`FUN_000935A0` remainder.** The `FUN_00037EC4(10)` / `FUN_00037F0C(10|0x14)`
    score-threshold triggers and the `FUN_0004C324`/`FUN_00054104` screen exits
    are unported; the goal-log ring and re-install are the bounded subset.
@@ -658,8 +681,8 @@ re-pin (M1 `09b726b7…`, M2 `2e709151…`).
 | 2 `[0x14C32A]` producer | open (begin seeds 1, S2) |
 | 3 installer mode/side producers | open (derived mode 0, side 0) |
 | 4 tracked-side team flags | open (carried -1) |
-| 5 probe cells vs a running native | open (port exact vs first-hand bytes; no native run comparison) |
-| 6 `FUN_0009252C` display gate | open (carried `score_last_event`) |
+| 5 probe cells vs a running native | **closed** (ported as `fifa96_match_run_goal_probe` over the image-seeded limbs; T4 re-verified) |
+| 6 `FUN_0009252C` display gate | **closed (boundary)**: `fifa96_score_display_gate` + `score_display_event` (T4); the `FUN_00066724` text/audio sink stays a leg |
 | 7 `FUN_000935A0` thresholds/exits | open (ring/totals/re-install subset landed) |
 | 8 handler presentation bodies | open by design (the setup-step bodies; see errata 1-3) |
 | 9 legs 0/1 vs 2..5 id-6 divergence | **closed**: the per-leg id tables reproduce both |

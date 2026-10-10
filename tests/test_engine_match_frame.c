@@ -651,28 +651,57 @@ static void test_score_event_wired_run_path(void) {
   assert(mr.score_last_side == -1);
   assert(mr.score_max_diff == 0);
   assert(mr.score_last_event == 0);
+  /* T4 (OL-89): the FUN_0009252C display-gate cells carry the image defaults
+   * ([0x115FCC]/[0x114A98] = 0; the FUN_000A7FD4/FUN_000A8172 producers are
+   * legs) and no event has been dispatched. */
+  assert(mr.score_sound_device == 0);
+  assert(mr.score_sound_midi == 0);
+  assert(mr.score_display_event == 0);
 
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
+  assert(mr.score_sound_device == 0 && mr.score_display_event == 0);
 
   /* Goal 1: the carried -1 default is the plain increment + last side. */
   assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
   assert(mr.score[0] == 1 && mr.score[1] == 0);
   assert(mr.score_last_side == 0 && mr.score_last_event == 0);
   assert(mr.score_max_diff == 0);
+  assert(mr.score_display_event == 0);
 
-  /* Goals 2-3 with the tracked side staged: 3-0 posts the native 0x9B. */
+  /* Goals 2-3 with the tracked side staged: 3-0 posts the native 0x9B. The
+   * dispatch gate is closed at the image defaults, so nothing dispatches. */
   mr.score_tracked_side = 0;
   assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
   assert(mr.score[0] == 2 && mr.score_last_event == 0);
   assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
   assert(mr.score[0] == 3 && mr.score_last_event == 0x9B);
+  assert(mr.score_display_event == 0);
 
   /* Goal 4 on the non-tracked arm: 4-0 with the tracked side flipped to 1 is
-   * own 4, other 0 -> the native 0x9E. */
+   * own 4, other 0 -> the native 0x9E. The staged sound-device cell (the
+   * unported FUN_000A7FD4 producer is a leg) opens the FUN_000A80E2 gate, so
+   * the post dispatches (FUN_0009252C -> the derived
+   * `score_display_event`; the FUN_00066724 sink is the OL-89 leg). */
   mr.score_tracked_side = 1;
+  mr.score_sound_device = 1;
   assert(fifa96_match_run_score_event(&mr, 0, 3) == 0);
   assert(mr.score[0] == 4 && mr.score_last_event == 0x9E);
+  assert(mr.score_display_event == 0x9E);
+
+  /* 5-0 and 6-0 hit no post arm: the dispatch observation clears. */
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 5 && mr.score_last_event == 0);
+  assert(mr.score_display_event == 0);
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 6 && mr.score_last_event == 0);
+
+  /* A playing stream ([0x114A98] != 0) closes the gate: 7-0 posts 0x9F but
+   * does not dispatch. */
+  mr.score_sound_midi = 1;
+  assert(fifa96_match_run_score_event(&mr, 0, 0) == 0);
+  assert(mr.score[0] == 7 && mr.score_last_event == 0x9F);
+  assert(mr.score_display_event == 0);
 
   /* The live frame body still runs with the updated score (rendering stays
    * off, so no parity claim over the unmodeled screen/presentation paths). */
@@ -2589,6 +2618,155 @@ static void test_row04_arm_a_track_reload(void) {
   drop_fixture(f);
 }
 
+/* FU-145 S2/S3 + FU-146 (T4, OL-87/88/89): the natural goal end-to-end. The
+ * sequence is played, not forced: the kickoff runs its 0x13 countdown and the
+ * T3 KICK press (the pad path; no manual phase or [0x5882A] write) enters live
+ * phase 2. A live action-04 record then fires its ground-ball sub-object arm
+ * (the native 0x7F035 arm: the slot dir bytes with ball height 0, so no ball
+ * staging) and every native link runs in the frame-body order: the ported row
+ * event -> `fifa96_camera_event_set` -> the pan integrator -> the boundary
+ * armer (zone 1) -> the clock-tail scanner FUN_00088940 (situation 6) -> the
+ * table-1 queue (id 5, the `[0x14C32A] != 0 && [0x15B6C0] == 0` condition) ->
+ * the scheduler -> the leg-0 handler's post -> `fifa96_match_run_score_event`
+ * (1-0). The staged inputs are the scenario's record install, the camera park
+ * at the goal-mouth edge and the record's slot dir; the tracked-side installer
+ * pick stays the carried -1 leg, so the writer posts no id (score_last_event
+ * 0). */
+static void test_natural_goal_end_to_end(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  one_granted_frame(&mr);
+
+  /* the live entry: the installer latch cleared by the phase-2 step, the
+   * begin-seeded live session gate (the front-end producer is the FU-146 leg
+   * 2), the leg-0 handler and a fresh score pair. */
+  assert(mr.session_gate_14c32a == 1u);
+  assert(mr.situation_pending == 0u);
+  assert(mr.screen_leg == 0);
+  assert(mr.score[0] == 0u && mr.score[1] == 0u);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  e->active = 1;
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;
+  e->target_x = 0;
+  e->target_z = 0xB00;
+  e->actor_type = 16;
+  e->anim_id = 0;
+  e->timer81 = 0;
+  e->has_slot = 1;                     /* [rec+0x20] != 0 -> the 0x7F035 arm */
+  e->dir_x = 1;                        /* native slot +0x20/+0x21 dir bytes */
+  e->dir_z = 0x40;
+  assert(mr.entities.ball.y == 0);     /* natural ground-ball height */
+  assert(mr.slot.entity != id);
+
+  /* link 1: the live row body produced the camera event (not a fixture poke) */
+  one_granted_frame(&mr);
+  assert(mr.render.camera.vel_z != 0);
+  assert(e->code == 5);                /* the row coda: one event per episode */
+
+  /* link 2: the pan integrator moved the camera past the arming bound and the
+   * boundary armer fired with the goal-mouth zone the same frame */
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1u);
+  assert(mr.goal_snap_z > 0xB20);
+  assert(mr.goal_zone == 1u);
+
+  /* link 3: the clock-tail scanner queued situation 6 through the open-session
+   * queue arm (id 5 for side 0; the score has not moved yet) */
+  assert(mr.situation_id == 5u && mr.situation_pending == 1u);
+  assert(mr.score[0] == 0u && mr.score[1] == 0u);
+
+  /* link 4: the next frame's scheduler consumed the id through the leg-0
+   * handler's post and the writer incremented the score. `tracked_side` is
+   * still the carried -1 (the installer pick is the OL-87 leg), so no id is
+   * posted. The post re-latches the pending flag (0x93D46) and its phase-0
+   * write (0x93DB2) ends the scripted screen. */
+  one_granted_frame(&mr);
+  assert(mr.score[0] == 1u && mr.score[1] == 0u);
+  assert(mr.score_last_side == 0);
+  assert(mr.score_last_event == 0u);
+  assert(mr.situation_pending == 1u);
+  assert(mr.state.phase == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-146 §7 item 1 / FU-149 §1.1 (T4): the queue-condition fallback arm on the
+ * same natural path. With the live-session gate closed at scan time
+ * ([0x14C32A] == 0; its producers are the unported front-end block, FU-146 leg
+ * 2 — staged here as the closed-session state), the situation-6 entry takes
+ * the direct arm: the score increments on the scan frame (the FU-72 plain
+ * increment, not the writer) and the table-2 row 6 writes phase 5; no id
+ * enters the queue and the installer latch stays clear. */
+static void test_natural_goal_fallback_arm(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  one_granted_frame(&mr);
+  assert(mr.session_gate_14c32a == 1u && mr.situation_pending == 0u);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  e->active = 1;
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;
+  e->target_x = 0;
+  e->target_z = 0xB00;
+  e->actor_type = 16;
+  e->anim_id = 0;
+  e->timer81 = 0;
+  e->has_slot = 1;
+  e->dir_x = 1;
+  e->dir_z = 0x40;
+
+  one_granted_frame(&mr);
+  assert(mr.render.camera.vel_z != 0);
+  /* close the session before the scan frame: the same pan arms, but the
+   * scanner's situation-6 entry takes the direct arm. */
+  mr.session_gate_14c32a = 0;
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1u && mr.goal_zone == 1u);
+  assert(mr.score[0] == 1u && mr.score[1] == 0u);   /* direct increment */
+  assert(mr.score_last_side == -1);                 /* not the writer */
+  assert(mr.score_last_event == 0u);
+  assert(mr.state.phase == 5u);                     /* table-2 row 6 */
+  assert(mr.situation_id == 0u);
+  assert(mr.situation_pending == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-148 §3 (S4): the formation-id producer. FUN_0008EA70 writes
  * `[0x14C1E4+side]`; the match-init copy (FUN_00011620) sources the team
  * record +0x12 byte, and the placement family comes from the 0x14BFC0
@@ -2732,6 +2910,8 @@ int main(void) {
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();
   test_row04_arm_a_track_reload();
+  test_natural_goal_end_to_end();
+  test_natural_goal_fallback_arm();
   test_formation_producer();
   test_translation_install();
   puts("test_engine_match_frame OK");

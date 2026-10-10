@@ -428,8 +428,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   landed with FU-149 §7 / T1) and row 01's event/camera/ball-stage sinks, plus
   the FU-73 keeper/restart producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
-  `OL-88`/`OL-89` goal invokers (Task 3 verdict: no invoker reachable from the
-  ported state — FU-142 App. L.9); `OL-81`/`OL-83` row-field wrinkles; `OL-82`
+  `OL-88`/`OL-89` goal invokers (**closed by phase-8 S2/S3/T2/T4** — FU-142
+  §L.10; the tracked-side pick / `FUN_00071DF4` / display sink stay legs);
+  `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
   (`[0x14C1E4]`/`[0x14C1E5]`, engine derives id 0) and the camera-mode/angle
   feed the live per-record framing would use (FU-96 legs 1/3; the place itself
@@ -665,6 +666,42 @@ the build also produces the windowed `fifa96` target (`make game`).
     (FU-138 OL-18) and the keeper-machine input tables (`FUN_000782D0`,
     FU-74 §2) — with those, the live smoke pad movement becomes reachable.
     The front-end held-key repeat cadence is a leg under the hold policy.
+- **M2 phase-8 T4 (natural goal chain close-out, OL-87/88/89; 2026-10-09).**
+  Landed:
+  - **Natural goal end-to-end (gate T4: score from replicated gameplay).**
+    `test_engine_match_frame::test_natural_goal_end_to_end` plays the natural
+    kickoff (the 0x13 countdown + the T3 KICK press; no forced phase or
+    `[0x5882A]`) into live phase 2, fires the live action-04 ground-ball
+    sub-object arm (native `0x7F035`: the slot dir bytes with ball height 0,
+    no ball staging) and asserts each link: the row event -> the pan
+    integrator -> the armer (zone 1) -> the clock-tail scanner situation 6 ->
+    the queue id 5 (the `[0x14C32A] != 0 && [0x15B6C0] == 0` condition) ->
+    the scheduler -> the leg-0 handler post -> score 1-0 (tracked side -1, no
+    post id). `test_natural_goal_fallback_arm` covers the queue-condition
+    closed arm (gate 0 at scan time -> the FU-72 direct increment + the
+    table-2 phase-5 write, no id queued).
+  - **OL-89 display boundary ported (the last named unported piece).**
+    First-hand `FUN_0009252C` -> `FUN_000A80E2` (`[0x115FCC]==0 -> -1`;
+    `[0x114A98]!=0 -> 1`; else 0); every posting arm of the writer runs the
+    shared tail (`0x93B73 CALL 0x9252C`), so `fifa96_action_score_event` now
+    returns `out.dispatched` through `fifa96_score_display_gate` and the run
+    carries the gate cells (`score_sound_device`/`score_sound_midi`, image
+    0/0) plus the observation `score_display_event` (0 = none). The
+    `FUN_00066724(id, 0)` text/audio chain stays a leg; at the image defaults
+    the gate is -1 and nothing dispatches (goldens byte-identical).
+  - **Re-verification (fresh windows in FU-142 §L.10):** the 11 `FUN_00093944`
+    call sites, the `0x8A944..0x8A96B` queue condition + the `0x8A8E0` id
+    table, the `0x88B44` situation-6 arm of `FUN_00088940`, the `FUN_000CBC4C`
+    probe, and the `0x73B6B` `FUN_00071DF4` call site inside `FUN_000736AC`.
+  - **Tape dormant, no re-pin**: M1 `09b726b7…` / M2 `2e709151…` byte-identical
+    (no tape record reaches the half-line band and no pan producer fires); the
+    m62 freshness block now also pins the fresh display cells.
+  - **Carried legs** (FU-142 §L.10): the tracked-side pick
+    (`FUN_00092D8C`'s `[0x1590CC]`/`[0x159901]` flags, FU-146 leg 4 — the
+    writer's post block stays dormant with the carried -1), `FUN_00071DF4`
+    (the every-frame tracked-record auto-camera; its ball sub-object/velocity
+    producers are unported), the `FUN_00066724` sink and the handler
+    presentation bodies.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the
@@ -751,7 +788,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   phase-8 T3**: the SDL backend presents a held-key state sample; the pad kick
   is wired through the input-row seam — see the phase-8 T3 entry),
   `OL-84`'s remaining situation-0xB producers / row-01 sinks, `OL-85/86`,
-  `OL-87/88/89` (superseded in part by S2/S3; keep the goal-invoker register),
+  `OL-87/88/89` (**closed by S2/S3/T2/T4** — see the phase-8 T4 entry and
+  FU-142 §L.10 for the residual legs),
   the `OL-62…OL-83` residuals and the wave-7 B1–B4 phase-7 clusters (set
   pieces/restarts, fouls/referee, keeper+AI, presentation residual). Deferred
   minors roll-up (recorded for triage; doc/optional unless noted): P0.2 —
@@ -848,9 +886,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   (carrier + KICK/PASS release → the `0x7D110` code-1 row → action 7) through
   the `FUN_0007CA54` input-row seam (see the phase-8 T3 known-gaps entry; the
   live smoke movement stays blocked by the unported machine forced decision /
-  row 02, legs L4.1/L4.6). The goal chain that blocks the tape's
-  score step (`OL-87`/`OL-88`/`OL-89`) is owned by the next plan phase via the
-  frozen FU-145 (arming) / FU-146 (consumers) slices (phase-6 S2/S3).
+  row 02, legs L4.1/L4.6). The goal chain that blocked the tape's score step
+  (`OL-87`/`OL-88`/`OL-89`) was closed in phase-8 T2/T4 (see the T4 entry);
+  the tape's goal step stays the direct writer call because no tape record
+  reaches the half-line pan band (FU-142 §L.10).
 - **M2 phase-7 P1 (set pieces & restarts, FU-149; 2026-10-09).** Landed from
   the frozen FU-149 slice: the `FUN_0008A938` dispatcher head as
   `fifa96_match_run_set_piece(mr, situation, side, bx)` — the head gates
@@ -1028,9 +1067,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   ledger (legs 1–4 runtime strings/glyphs/audio, 5/6 closed-or-pinned, 7 the
   per-case overlay helpers, 8/10 partially landed, 9 the camera integrators,
   11 the palette-pool content producer, 12–14 the staged strip inputs). The
-  goal-invoker register (`OL-87/88/89`) remains the score-blocking carry:
-  phase 7 added no goal invoker (P1's L4 queue consumer, P2's staged act-2
-  path and P3's arm-gated keeper rows all stop short of one). Deferred-minor
+  goal-invoker register (`OL-87/88/89`) was the score-blocking carry through
+  phase 7; **phase-8 S2/S3/T2/T4 closed it** (see the T4 entry / FU-142
+  §L.10) — the residual legs are the tracked-side pick, `FUN_00071DF4` and
+  the `FUN_00066724` sink. Deferred-minor
   triage (recorded for the final review; doc/comment-level unless noted):
   P1 — the FU-149 §1.5/§2 "code 0 / first index 1" erratum cross-ref and the
   test-comment lifecycle-seed note stay open (the erratum-5 act-only-row
@@ -1201,11 +1241,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`[0x15882B]`), not a goal path. The negative is pinned by
   `test_goal_situation_dispatch_is_not_the_writer`,
   `test_natural_phase2_never_scores`, row 01's score-freshness assertions and
-  the tape's pre-score assertions. Open legs: **OL-87** (handlers + scheduler +
-  installer), **OL-88** (camera-pan goal detection), **OL-89** (posted-id
-  dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe). The engine
-  carries tracked side -1 (`add_goal`-equivalent) until OL-87 lands;
-  `fifa96_match_run_add_goal` remains for those unported paths.
+  the tape's pre-score assertions. Open legs at the Task-3 window: **OL-87**
+  (handlers + scheduler + installer), **OL-88** (camera-pan goal detection),
+  **OL-89** (posted-id dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe).
+  **Superseded by phase-8 S2/S3/T2/T4** (FU-142 §L.10): OL-87/88 are closed
+  and OL-89 is closed except the `FUN_00066724` sink, ported as
+  `fifa96_score_display_gate` + `score_display_event`. The engine still
+  carries tracked side -1 (`add_goal`-equivalent) until the tracked-side pick
+  lands; `fifa96_match_run_add_goal` remains for those unported paths.
 - Retail front-end art asset (no OPTIONS-like path exists in the ISO).
 - Per-row cluster legs carried in FU-139/FU-141/FU-142 (`OL-56`…`OL-71`:
   unmodeled record bytes, process globals, camera/track inputs, roster

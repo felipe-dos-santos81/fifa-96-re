@@ -496,6 +496,15 @@ struct fifa96_match_run {
   int32_t score_tracked_side;
   int32_t score_max_diff;
   uint8_t score_last_event;
+  /* T4 (OL-89): the FUN_0009252C display boundary. `score_sound_device` and
+   * `score_sound_midi` are the native gate cells [0x115FCC]/[0x114A98]
+   * (image 0/0; their FUN_000A7FD4/FUN_000A8172 and FUN_000A8103/A810B
+   * producers are the unported sound-device legs), and `score_display_event`
+   * is the id the latest score event dispatched through the gate (0 = none;
+   * the FUN_00066724 text/audio sink stays a leg). */
+  uint8_t score_sound_device;
+  uint8_t score_sound_midi;
+  uint8_t score_display_event;
   /* FU-143 wiring (M2 playability Task 3): the FU-62 second-rollover
    * completion (`period_seconds == limit + aux_seconds`) for the latest tick,
    * staged by fifa96_match_run_frame from fifa96_match_state_tick's

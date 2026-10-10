@@ -53,6 +53,7 @@ _Static_assert(offsetof(fifa96_action_score, tracked_side) == 8, "tracked_side")
 _Static_assert(offsetof(fifa96_action_score, max_diff) == 12, "max_diff");
 _Static_assert(offsetof(fifa96_action_score_out, posted) == 0, "posted");
 _Static_assert(offsetof(fifa96_action_score_out, post_id) == 1, "post_id");
+_Static_assert(offsetof(fifa96_action_score_out, dispatched) == 2, "dispatched");
 
 #define ACTION_INVALID ((fifa96_err_t)-FIFA96_ERR_INVALID)
 
@@ -1717,6 +1718,62 @@ static void test_score_event_invalid(void) {
   assert(s.last_side == -1);
 }
 
+/* T4 (OL-89): the FUN_0009252C display gate. First-hand /FIFA96.EXE 0xA80E2:
+ * `if ([0x115FCC] == 0) return -1; if ([0x114A98] != 0) return 1; return 0;`
+ * — the writer dispatches a posted id through FUN_0009252C (-> FUN_00066724)
+ * only when the gate returns 0, i.e. the sound device is initialised
+ * ([0x115FCC] != 0, the FUN_000A7FD4 write) and no stream is playing
+ * ([0x114A98] == 0, the FUN_000A8103/FUN_000A810B writes). The image bytes at
+ * both cells are 0, so the dispatch is inert at the image defaults. */
+static void test_score_display_gate(void) {
+  assert(fifa96_score_display_gate(0, 0) == -1);   /* sound never initialised */
+  assert(fifa96_score_display_gate(0, 1) == -1);
+  assert(fifa96_score_display_gate(1, 0) == 0);    /* init + idle stream */
+  assert(fifa96_score_display_gate(1, 1) == 1);    /* a stream is playing */
+  assert(fifa96_score_display_gate(1, 0xFF) == 1);
+}
+
+/* The dispatch flag mirrors the gate on every posting arm: the post is
+ * captured (posted/post_id) and dispatched only under gate 0. A call that
+ * posts nothing clears it. */
+static void test_score_event_dispatch_flag(void) {
+  fifa96_action_score s;
+  fifa96_action_score_out out;
+
+  /* 0xD3 (untracked): closed at the image defaults; opens with the staged
+   * sound-device init; a playing stream closes it again. */
+  score_init(&s, 0, 0, 1, 0);
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(out.posted == 1 && out.post_id == 0xD3);
+  assert(out.dispatched == 0);
+
+  score_init(&s, 0, 0, 1, 0);
+  s.sound_device = 1;
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(out.posted == 1 && out.post_id == 0xD3);
+  assert(out.dispatched == 1);
+
+  score_init(&s, 0, 0, 1, 0);
+  s.sound_device = 1;
+  s.sound_midi = 1;
+  assert(fifa96_action_score_event(&s, 0, 3, &out) == FIFA96_OK);
+  assert(out.posted == 1 && out.post_id == 0xD3);
+  assert(out.dispatched == 0);
+
+  /* the tracked arm (0x9B) mirrors the same gate */
+  score_init(&s, 2, 0, 0, 0);
+  s.sound_device = 1;
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(out.posted == 1 && out.post_id == 0x9B);
+  assert(out.dispatched == 1);
+
+  /* the -1 sentinel: no post, no dispatch even with the gate open */
+  score_init(&s, 0, 0, -1, 0);
+  s.sound_device = 1;
+  assert(fifa96_action_score_event(&s, 0, 0, &out) == FIFA96_OK);
+  assert(out.posted == 0 && out.dispatched == 0);
+}
+
 int main(void) {
   test_move_target();
   test_move_step();
@@ -1762,6 +1819,8 @@ int main(void) {
   test_score_event_tracked_thresholds();
   test_score_event_untracked_thresholds();
   test_score_event_invalid();
+  test_score_display_gate();
+  test_score_event_dispatch_flag();
   puts("test_action_handlers: all assertions passed");
   return 0;
 }

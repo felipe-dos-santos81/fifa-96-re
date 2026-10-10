@@ -882,6 +882,11 @@ static int fifa96_match_run_teardown(void *ctx) {
   mr->score_tracked_side = -1;
   mr->score_max_diff = 0;
   mr->score_last_event = 0;
+  /* T4/OL-89: the FUN_0009252C gate cells at the image defaults and no
+   * dispatch yet. */
+  mr->score_sound_device = 0;
+  mr->score_sound_midi = 0;
+  mr->score_display_event = 0;
   mr->global_5882a = 0;                /* drop the kickoff gate with the match */
   /* FU-145 S2: the restart-body clear (`0x84F90`) drops the goal-arm state
    * with the match; the session gate returns to 0 with the session. */
@@ -1078,6 +1083,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->score_tracked_side = -1;
   mr->score_max_diff = 0;
   mr->score_last_event = 0;
+  mr->score_sound_device = 0;     /* T4/OL-89 gate cells (image [0x115FCC]) */
+  mr->score_sound_midi = 0;       /* T4/OL-89 ([0x114A98]) */
+  mr->score_display_event = 0;    /* T4/OL-89: nothing dispatched */
   mr->engine = NULL;
   mr->backend.register_callback = NULL;
   mr->backend.cancel_callback = NULL;
@@ -1162,6 +1170,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->score_tracked_side = -1;
   mr->score_max_diff = 0;
   mr->score_last_event = 0;
+  mr->score_sound_device = 0;          /* T4/OL-89: fresh [0x115FCC] gate cell */
+  mr->score_sound_midi = 0;            /* T4/OL-89: fresh [0x114A98] gate cell */
+  mr->score_display_event = 0;         /* T4/OL-89: fresh dispatch boundary */
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
@@ -1358,6 +1369,8 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
   state.last_side = mr->score_last_side;
   state.tracked_side = mr->score_tracked_side;
   state.max_diff = mr->score_max_diff;
+  state.sound_device = mr->score_sound_device;   /* T4/OL-89 gate cells */
+  state.sound_midi = mr->score_sound_midi;
   rc = fifa96_action_score_event(&state, side, probe, &out);
   if (rc != FIFA96_OK) return (int)rc;   /* run untouched on a writer failure */
   mr->score[0] = state.score[0];
@@ -1366,6 +1379,7 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
   mr->score_tracked_side = state.tracked_side;
   mr->score_max_diff = state.max_diff;
   mr->score_last_event = out.posted ? out.post_id : 0u;
+  mr->score_display_event = out.dispatched ? out.post_id : 0u;
   return 0;
 }
 

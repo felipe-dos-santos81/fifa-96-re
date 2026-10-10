@@ -304,14 +304,18 @@
  *      track after every dispatch (the record moved, above) and the tape
  *      camera never moves (S2/S4 dormant), plus the existing word/dword
  *      velocity lockstep;
- *   3. S2/S3 goal-chain status — **fixture-proven, tape-dormant**: the
- *      arming/scan/queue chain (S2/FU-145) and the consumer machine (S3/
- *      FU-146, begin installs leg 0/mode 0) are landed, but the static camera
- *      never arms (no pan origin, OL-T11-79), so `goal_armed`/`goal_zone`/
+ *   3. S2/S3/T2/T4 goal-chain status — **fixture-proven, tape-dormant**: the
+ *      arming/scan/queue chain (S2/FU-145), the consumer machine (S3/FU-146,
+ *      begin installs leg 0/mode 0) and the live row-04 pan origin (T2/
+ *      OL-T11-79) are landed, but no tape record reaches the half-line pan
+ *      band and the tape camera is static, so `goal_armed`/`goal_zone`/
  *      snapshot, the queue cells and the screen machine stay fresh through the
  *      mechanics and score steps; the direct score call remains the only score
  *      producer (v4's pre-score freshness assert stands). The chain is proven
- *      in `test_goal_chain_pan_fixture`, `test_camera_pan_event_chain` and
+ *      in `test_row04_live_pan_arms_camera` (the live row event) and the T4
+ *      end-to-end `test_natural_goal_end_to_end` (natural kickoff -> pan ->
+ *      situation 6 -> id 5 -> handler -> score 1-0), plus
+ *      `test_goal_chain_pan_fixture` / `test_camera_pan_event_chain` /
  *      `test_goal_consumer_chain_fixture`;
  *   4. S4 presentation defaults: the pose feed is dormant
  *      (`render.camera_pose.view_mode == 0`, the unported handler arm), the
@@ -897,11 +901,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->mask_mech = mr->dispatched_ok;
     assert((res->mask_mech & ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))) ==
            ((1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A)));
-    /* v6 (S2/S3 status): the goal chain is dormant on this tape — no pan
-     * origin exists (OL-T11-79), so the armer and the clock-tail scan never
+    /* v6 (S2/S3 status; T2/T4 refresh): the goal chain is dormant on this tape
+     * — the live row-04 pan origin is landed (T2/OL-T11-79) but no tape record
+     * reaches the half-line band, so the armer and the clock-tail scan never
      * fire; the begin-installed consumer machine sits at the leg-0 kickoff
      * gate (step 1) with the installer latch `situation_pending` held and no
-     * queued id. The chain is fixture-proven (test_goal_chain_pan_fixture /
+     * queued id. The chain is fixture-proven (test_row04_live_pan_arms_camera /
+     * test_natural_goal_end_to_end / test_goal_chain_pan_fixture /
      * test_camera_pan_event_chain / test_goal_consumer_chain_fixture). */
     assert(mr->goal_armed == 0 && mr->goal_zone == 0);
     assert(mr->goal_snap_x == 0 && mr->goal_snap_y == 0 && mr->goal_snap_z == 0);
@@ -994,12 +1000,16 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->score[0] == 0 && mr->score[1] == 0);
     assert(mr->score_last_side == -1 && mr->score_tracked_side == -1);
     assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
-    /* v6 (S2/S3/S4): the chain stayed dormant through the live phase 2 and
-     * the S4 defaults never woke — the static camera never armed (no pan
-     * origin, OL-T11-79), no id entered the queue, the consumer machine is
-     * still at the leg-0 gate inside its 15 s duration, and the pose feed's
-     * unported mode 0 / the formation id 0 are untouched. Fixture-proven, not
-     * tape-forced. */
+    /* T4 (OL-89): the FUN_0009252C display boundary is fresh too — the gate
+     * cells carry the image defaults and nothing dispatched. */
+    assert(mr->score_sound_device == 0 && mr->score_sound_midi == 0);
+    assert(mr->score_display_event == 0);
+    /* v6 (S2/S3/S4; T2/T4 refresh): the chain stayed dormant through the live
+     * phase 2 and the S4 defaults never woke — the live pan origin is landed
+     * (T2) but no tape record reaches the half-line band, so the camera never
+     * armed, no id entered the queue, the consumer machine is still at the
+     * leg-0 gate inside its 15 s duration, and the pose feed's unported mode 0
+     * / the formation id 0 are untouched. Fixture-proven, not tape-forced. */
     assert(mr->goal_armed == 0 && mr->goal_zone == 0);
     assert(mr->situation_id == 0);
     assert(mr->screen_step == 1u && mr->situation_pending == 1u);

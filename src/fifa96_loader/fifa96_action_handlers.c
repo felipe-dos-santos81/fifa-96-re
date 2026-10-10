@@ -2146,6 +2146,28 @@ after_fold:
   return FIFA96_OK;
 }
 
+/* T4 (OL-89) / 0xA80E2: the `FUN_0009252C` display gate (first-hand: the
+ * decompiled body is `if ([0x115FCC] == 0) return -1; if ([0x114A98] != 0)
+ * return 1; return 0;`). Only 0 opens the `FUN_00066724(id, 0)` dispatch. */
+int fifa96_score_display_gate(int sound_device, int sound_midi) {
+  if (sound_device == 0) return -1;
+  if (sound_midi != 0) return 1;
+  return 0;
+}
+
+/* The shared post tail: every posting arm of the native writer jumps to the
+ * epilogue 0x93B73 (`CALL 0x9252C`, FU-142 App. L.2), so the id is captured
+ * (`posted`/`post_id`) and dispatched (`dispatched`) through the same gate. */
+static void score_post(const fifa96_action_score *state,
+                       fifa96_action_score_out *out, uint8_t id) {
+  out->posted = 1;
+  out->post_id = id;
+  out->dispatched =
+      fifa96_score_display_gate(state->sound_device, state->sound_midi) == 0
+          ? 1u
+          : 0u;
+}
+
 fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side,
                                        uint8_t probe, fifa96_action_score_out *out) {
   int32_t tracked;
@@ -2160,6 +2182,7 @@ fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side
   state->last_side = (int32_t)side;            /* 0x93959 MOV [0x15B670],EAX */
   out->posted = 0;
   out->post_id = 0;
+  out->dispatched = 0;
   if (tracked == -1) return FIFA96_OK;         /* 0x93961 JZ 0x93B78 (epilogue) */
 
   {                                            /* 0x93967..0x93992 */
@@ -2173,23 +2196,19 @@ fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side
     own = state->score[side];
     opp = state->score[side ^ 1u];
     if (own == 1u && opp < 3u && (probe & 3u) != 0u) {  /* 0x939B0..0x939D8 */
-      out->posted = 1;
-      out->post_id = 0xD3;                     /* 0x939DA MOV EAX,0xD3 -> 0x93B73 */
+      score_post(state, out, 0xD3);            /* 0x939DA MOV EAX,0xD3 -> 0x93B73 */
       return FIFA96_OK;
     }
     if (own == 4u && opp < 2u) {               /* 0x939E4..0x93A1C */
-      out->posted = 1;
-      out->post_id = 0x9E;
+      score_post(state, out, 0x9E);
       return FIFA96_OK;
     }
     if (own == 7u && opp < 3u) {               /* 0x93A22..0x93A5A */
-      out->posted = 1;
-      out->post_id = 0x9F;
+      score_post(state, out, 0x9F);
       return FIFA96_OK;
     }
     if (own == 9u && opp < 4u) {               /* 0x93A60..0x93AA0 */
-      out->posted = 1;
-      out->post_id = 0xA0;
+      score_post(state, out, 0xA0);
       return FIFA96_OK;
     }
     return FIFA96_OK;
@@ -2198,23 +2217,19 @@ fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side
   own = state->score[side];                    /* 0x93AA6 tracked arm */
   opp = state->score[side ^ 1u];
   if ((int32_t)diff + 3 == state->max_diff && state->max_diff > 3) {
-    out->posted = 1;                           /* 0x93AB2..0x93ACC */
-    out->post_id = 0x9A;
+    score_post(state, out, 0x9A);              /* 0x93AB2..0x93ACC */
     return FIFA96_OK;
   }
   if (own == 3u && opp == 0u) {                /* 0x93ACB..0x93B01 */
-    out->posted = 1;
-    out->post_id = 0x9B;
+    score_post(state, out, 0x9B);
     return FIFA96_OK;
   }
   if (own == 5u && opp < 3u) {                 /* 0x93B02..0x93B3F */
-    out->posted = 1;
-    out->post_id = 0x9C;
+    score_post(state, out, 0x9C);
     return FIFA96_OK;
   }
   if (own == 9u && opp < 5u) {                 /* 0x93B40..0x93B73 */
-    out->posted = 1;
-    out->post_id = 0x9D;
+    score_post(state, out, 0x9D);
     return FIFA96_OK;
   }
   return FIFA96_OK;

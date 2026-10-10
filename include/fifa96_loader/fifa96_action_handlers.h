@@ -1045,23 +1045,36 @@ fifa96_err_t fifa96_action_pursuit_step(fifa96_action_pursuit *state,
  * `FUN_000CBC4C` probe's low two bits set, non-tracked arm). Every posting arm
  * returns immediately (the shared epilogue).
  *
- * `state` carries the four native cells; `probe` is the `FUN_000CBC4C` return
- * byte (unported helper, caller-supplied; the native consumes it only on the
- * `score[side] == 1 && score[side^1] < 3` non-tracked arm). `tracked_side`
- * other than -1/0/1 -> -FIFA96_ERR_INVALID (hardening: the native indexes the
- * score pair unchecked); NULL `state`/`out` or `side > 1` likewise. Invalid
- * arguments leave `state` untouched. */
+ * `state` carries the four native cells plus the two `FUN_000A80E2` display-gate
+ * cells ([0x115FCC] sound-device init, [0x114A98] stream-playing); `probe` is
+ * the `FUN_000CBC4C` return byte (unported helper, caller-supplied; the native
+ * consumes it only on the `score[side] == 1 && score[side^1] < 3` non-tracked
+ * arm). `tracked_side` other than -1/0/1 -> -FIFA96_ERR_INVALID (hardening: the
+ * native indexes the score pair unchecked); NULL `state`/`out` or `side > 1`
+ * likewise. Invalid arguments leave `state` untouched. */
 typedef struct fifa96_action_score {
   uint16_t score[2];    /* native 0x157AC5 / 0x157AC7 goal words */
   int32_t last_side;    /* native 0x15B670: side of the last increment */
   int32_t tracked_side; /* native 0x15B6B4; -1 = no bookkeeping/events */
   int32_t max_diff;     /* native 0x15B6A4: max tracked-side goal difference */
+  uint8_t sound_device; /* T4: [0x115FCC] sound-device init (FUN_000A7FD4) */
+  uint8_t sound_midi;   /* T4: [0x114A98] stream playing (FUN_000A8103/A810B) */
 } fifa96_action_score;
 
 typedef struct fifa96_action_score_out {
-  uint8_t posted;       /* 1 = the native FUN_0009252C was called */
+  uint8_t posted;       /* 1 = a post arm fired (the native FUN_0009252C call) */
   uint8_t post_id;      /* 0x9A..0xA0 / 0xD3 when posted, else 0 */
+  uint8_t dispatched;   /* T4: 1 = the post reached FUN_00066724 (gate 0) */
 } fifa96_action_score_out;
 
 fifa96_err_t fifa96_action_score_event(fifa96_action_score *state, uint32_t side,
                                        uint8_t probe, fifa96_action_score_out *out);
+
+/* T4 (OL-89) / 0xA80E2: the `FUN_0009252C` display gate. First-hand
+ * `/FIFA96.EXE`: `if ([0x115FCC] == 0) return -1; if ([0x114A98] != 0) return
+ * 1; return 0;`. The writer dispatches a posted id through
+ * `FUN_0009252C` -> `FUN_00066724(id, 0)` only when it returns 0 (the sound
+ * device is initialised and no stream is playing). The image bytes at both
+ * cells are 0, so the dispatch is inert at the image defaults; the
+ * `FUN_00066724` text/audio chain stays a leg. */
+int fifa96_score_display_gate(int sound_device, int sound_midi);
