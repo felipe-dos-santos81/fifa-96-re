@@ -1013,6 +1013,7 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   uint32_t team = match_kick_team(mr);
   uint32_t i;
   int32_t self = -1;
+  int rc;
   const struct fifa96_match_entity *self_e = NULL;
   for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     const struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
@@ -1070,8 +1071,24 @@ static int match_kick_run(struct fifa96_match_run *mr, const fifa96_action_kick 
   ctx.event_rows[1] = match_kick_rows_carry;
   ctx.event_rows[2] = match_kick_rows_active;
   ctx.event_rows[3] = match_kick_rows_idle;
-  return fifa96_ball_kick_target(&mr->entities.ball.pair, &a, &slot, input, &ctx,
-                                 &mr->rng, mode, out);
+  rc = fifa96_ball_kick_target(&mr->entities.ball.pair, &a, &slot, input, &ctx,
+                               &mr->rng, mode, out);
+  if (rc != FIFA96_OK) return rc;
+  /* M2 phase-10 T1 (FU-148 §14 / FU-142 OL-88): the staged kick's receive arm
+   * — the native FUN_0007A490 tail's 0x7A8C7/0x7A8EF `FUN_0007A084` call,
+   * gated by the code-keyed receive flag the tail reports. Runs the camera
+   * event/tracked bind (the high-ball follow producer), the receiver scan and
+   * the team-target writes from the staged snapshot (the call point's block,
+   * before the native 0x7A934 inactive clear); a cleared tail re-applies the
+   * whole-block reset after, matching the native order. */
+  if (out->receive != 0) {
+    rc = fifa96_match_run_ball_receive(mr, out->receive_actor,
+                                       &out->receive_vector, out->receive_traj);
+    if (rc != FIFA96_OK) return rc;
+    if (out->cleared != 0)
+      (void)fifa96_ball_pair_clear(&mr->entities.ball.pair);
+  }
+  return FIFA96_OK;
 }
 
 /* The row-07 post-kick `FUN_0007D9A4(opp, 0x22, 0, 1)`: the opponent is the

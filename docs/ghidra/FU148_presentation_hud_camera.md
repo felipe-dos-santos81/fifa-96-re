@@ -1063,6 +1063,14 @@ reproduces scene AE 28535 (`p9-t3-hold-up.png`); the auto-camera's high-ball
 producer (height > 0xF0 with zero rates) is not reachable from the ported
 rows, so the visible follow-cam remains the ball-staging leg.
 
+**Phase-10 T1 update (2026-10-10, §14):** the ball-staging leg is ported and
+wired — `FUN_0007A084`'s receive arm now runs on the live kick path (the
+staging tail's code-keyed receive gate), so its camera event/tracked bind and
+receiver scan are live. The follow arm's `height > 0xF0` step is
+fixture-proven through the producer; the *visible* follow still needs a kick
+row whose staged trajectory exceeds 0xF0 (the wired pad's reachable rows cap
+at 205/0) — ledgered in §14.
+
 ### 12.4 Errata (T2, first-hand)
 
 1. **Timer cell (S4 §11.2).** FUN_00070544 stores the fast-path divisor at
@@ -1079,3 +1087,162 @@ rows, so the visible follow-cam remains the ball-staging leg.
    [0x157768])` — the decompiled `EDX = [0x1577F0] >> 16` is the high word
    = F2 (the dword alias at 0x1577F0/0x1577F2), not event_param. S4's
    `F6 = F2 - ramp(h - ty)` was already correct.
+
+---
+
+## 14. Port landing (phase-10 T1: the `FUN_0007A084` receive arm, 2026-10-10)
+
+M2 phase-10 T1, first-hand `/FIFA96.EXE` re-derivation of the ball-staging
+producer chain the phase-9 T3 slice named as the remaining high-ball gate
+source (FU-142 OL-88: "the high-ball producer (height > 0xF0 with a zero-rate
+camera) is not reachable from the ported rows yet"). The M1/M2 goldens are
+byte-identical (no re-pin; §14.4).
+
+### 14.1 The `FUN_0007A084` call path (fresh `disassemble_function 0x7A084`, 269 insns)
+
+`FUN_0007A490`'s tail calls the ball-event setter twice: `0x7A8C7`
+(`[0x158744] < 0`, the signed sub-code arm, dead for every kick row — the row
+sub-codes `row[9]` are all positive) and `0x7A8EF` (the code-keyed arm: code
+outside `[0, 0xF)` or `[0x1104BB+code] == 0`). The second arm is exactly the
+engine's `fifa96_ball_pair_stage_tail` `out->receive` flag (FU-139 §8; the
+same `0x1104BB` recompute table). `FUN_0007A084` then runs, first-hand:
+
+```
+0x7A08D  EBP = [0x158730]                  ; the staging actor
+0x7A0A4  code = [0x158740]>>24; if [0x1104BB+code] != 0 && [EBP+0x69]>>16 > 0x48
+           && ([EBP+0x8D]==0 || lane > 0x70) -> exit
+           ; for every receive code [0x1104BB+code] == 0 (the 0x7A8EF gate),
+           ; so this entry gate is provably a pass-through on the receive path
+0x7A0D6  if [[EBP]+4][0] == 0x18E2 -> the ball-class vector rebuild (0x7A0E5..0x7A201:
+           FUN_000795B4 polar from [EBP+0x59] to a random 0x79970-template target,
+           [0x15873E] = 0x80, the 0x114E04 sine fold into 0x15873A/3C, the
+           angle+0x5A0 speed word into 0x158738)
+0x7A207  EDX = 0x158738; EBX = dword[0x15873C] >> 16 = (int16)[0x15873E] = traj;
+         EAX = EBP; ECX = 0; CALL 0x71C94
+0x7A21E  anim id = byte[[EBP+0x28]]; [0x157A83] = 0 (controlled release)
+0x7A22D  the id/code/ball-x sound selection -> CALL 0x974DC
+0x7A2E6  EAX = [0x157A49]>>24 (phase)
+0x7A2F0  byte[0x158746] = 1 (ack)
+0x7A2F6  phase == 1 -> exit
+0x7A2FF  base = [0x157770..0x157778]; x += (dword[0x1577BE] >> 16) << 5;
+         z += (dword[0x1577C0] >> 16) << 5   ; the high halves = [0x1577C0]/C2]
+0x7A335  scan skip = (byte[EBP+0x8E] == 1 || (int8)[EBP+0x91] in {0x10,0x11,0x12})
+           ? (int16)(int8)[EBP+0x8D] : 0
+0x7A376  CALL 0x8DE8C(target, [EBP] team block, skip, out dist)
+0x7A37F  [0x158734] = ret; [EDX+0x7B2] = ret; [EDX+0x7B6] = 0
+0x7A38E  [[EBP]+0x7A6][+0x7B2] = 0; [+0x7B6] = 0
+0x7A3AC  code == 3 -> [EDX+0x7E7] = 0
+0x7A3C0  both teams' records 1..10: word[rec+0x81] = byte[0x157A3C][descriptor] |
+           byte[rec+0x9D] + 0xF   (unmodeled inputs)
+0x7A40A  EBP == [0x158724] -> [0x15872D] = 0x14 (carrier release)
+0x7A419  type not in {0x11,0x10,0x1D,0x1E} -> CALL 0x79D5C(EBP, 0x158738)
+           (the offside/foul nearest-pick body, FU-150 E-chain; unported)
+```
+
+The `FUN_0008DE8C` scan (fresh `disassemble_function 0x8DE8C`, 42 insns) walks
+11 records at stride `0xB2` from the EDX base, skips `+0x9A`/`+0x98`, compares
+the low words `+0x59`/`+0x61` against the target (`EDI[0]`/`EDI[8]`), and
+returns the nearest record (or 0) with the distance word — the already-ported
+`fifa96_entity_find_nearest`/`fifa96_ball_pair_receive` pair (FU-139 tests).
+
+The camera call maps byte-for-byte onto `fifa96_camera_event_set`: `FUN_00071C94`
+copies the 6-byte vector `0x158738` into `0x1577B8..0x1577BD` and
+`FUN_00070544` seeds the fast-path dividend from `0x1577BA`/`0x1577BC` = the
+vector's **middle (height) and z words**; EBX is the event height
+(`[0x1577F0]`) and ECX the ramp param (0). So
+`fifa96_camera_event_set(cam, vector.height, vector.z, traj, 0)` +
+`fifa96_camera_set_tracked(cam, actor)` is the exact arm, and the `0x739DC`
+call-site gate plus `fifa96_match_run_camera_follow`'s first arm complete the
+visible-follow chain (FU-148 §13.2).
+
+### 14.2 Ported subset (engine)
+
+`fifa96_match_run_ball_receive` (`src/fifa96_engine/fifa96_match_run.c`; header
+contract in `fifa96_match_run.h`), wired in `match_kick_run`
+(`fifa96_match_handlers.c`) whenever `fifa96_ball_kick_target` reports
+`out->receive` — i.e. from rows 07/0F and the shared set-piece taker
+deliveries (`match_sp_kick`), exactly the native `FUN_0007A490` tail callers:
+
+1. the camera event + tracked bind (the high-ball follow producer);
+2. `controlled = NONE` (`[0x157A83] = 0`);
+3. `pair.ack = 1` (`[0x158746]`);
+4. the phase-1 exit;
+5. the `0x157770` base + camera-velocity leads through the ported
+   `fifa96_ball_pair_receive_target` (the engine's 0x157770 stand-in is its
+   camera triple, FU-67 §4.1 / FU-149 L13);
+6. the own-team nearest scan through `fifa96_ball_pair_receive` (the skip rule
+   included);
+7. the receiver/team-target/opponent-clear writes;
+8. the carrier release `pos_release = 0x14`.
+
+**Legs (numbered):** L14.1 the `0x18E2` ball-class vector rebuild (the pool
+models no record class; every pool record is the `0x18D8` player class the
+follow arm gates on); L14.2 the `0x7A21E..0x7A2E1` anim-id/code sound-id
+selection and its `0x974DC` stoppage-push sink; L14.3 the
+`0x7A3C0..0x7A408` timer81 loop (the `+0x9D` byte and `[0x157A3C]` descriptor
+table are unmodeled); L14.4 the code-3 `[team+0x7E7]` clear (the cell is
+unmodeled, OL-72); L14.5 the `0x7A419..0x7A448` `FUN_00079D5C` foul/offside
+body.
+
+### 14.3 Live reachability (the follow's visible step)
+
+The wired pad maps KICK `0x10` and PASS `0x20` only. First-hand + live probes
+(ISO `make game` path, `test_live_pass_kick_runs_receive_arm`):
+
+* KICK release -> row 07 stage 1 `si = slot_word6` = 0x10 -> the active-table
+  rows 0/1 (class 0) -> **code 1, traj = add + x/divisor = 0xA0 + 0x2D0/0x10
+  = 205** (recompute arm: no receive, no camera event);
+* PASS release -> the same row with `si` 0x20 -> the carry-table rows
+  (`has_slot && active && phase 2 && class 1 && counter < 7`) -> **code 13
+  (receive), traj 0** (add and divisor are 0) -> the receive arm runs live.
+
+So the T1 producer fires live on the PASS kick (camera event/tracked, receiver
+bind, ack, controlled release, carrier countdown), but neither pad row stages
+a trajectory above 0xF0: the follow arm's visible step remains gated. The
+> 0xF0 producers are the mode-`0x40` long-ball arm (`0x7B194`: traj up to
+0x11F + the row add), the `flags == 0x40` code-4 arm (traj `0x90 + (rng&7) *
+(0x10 - desc_15)`, up to 0x100) and the band/height rows (`ball_height -
+pos_y >= 0x20`, unreachable while the derived `0x157750` ball height stand-in
+is 0). The `0x40` input key is not mapped in the engine; that and the
+`0x157750` ball-height producer are the remaining legs to a *visible* live
+follow (legs L14.6/L14.7).
+
+### 14.4 Tests, goldens, smoke
+
+Tests (all `make check`, 108/108 before/after; no new executables):
+
+* `test_engine_match_frame::test_ball_receive_arm_high_ball_chain` — the
+  staged pair (traj 0x100) -> the receive arm (event height, tracked,
+  controlled release, ack, receiver pick, team writes) -> the every-frame
+  camera update -> `fifa96_match_run_camera_follow == 1` with the velocity
+  from the tracked slot dirs;
+* `test_ball_receive_low_ball_no_follow` — the discriminating boundary: traj
+  0x50 (the row-1E release height) and the phase-1 gate; the arm refuses
+  (velocities untouched);
+* `test_ball_receive_skip_rule` — the `+0x8E`/`+0x91` skip bytes and the
+  carrier release;
+* `test_live_pass_kick_runs_receive_arm` (ISO) — the live carrier chain ->
+  PASS release -> row 07 -> code 13 -> the receive fields live (`ack` 1,
+  `receiver` a real teammate, `camera.tracked` = the actor, `controlled`
+  NONE, `pos_release` 0x14);
+* `test_engine_match_render::test_ball_record_draws_ball_slot` — the FU-85 §4
+  scene staging copies the ball record into slot 22 and the FU-89/85 renderer
+  draws it (the window-centre pixel is the ball slot's colour; culling the
+  slot or parking the record behind the camera returns the background).
+
+Goldens: `cmp` on `tests/golden/engine/m2-frames.txt` and `m1-frames.txt`
+byte-identical (the tape never stages a receive-coded kick: the kick edges sit
+outside phase 2 with the pair zeroed, §13.5). M1 untouched.
+
+Smoke (`DISPLAY=:1`, fresh session): `p10-t1-frontend.png` (byte-identical to
+the v9 front-end), `p10-t1-hud.png`, `p10-t1-clock.png`, `p10-t1-hold-up.png`
+(scene AE 28535 vs clock — the phase-9 T1 movement reproduced),
+`p10-t1-pass.png` and `p10-t1-kick.png` (scene AE 0 vs each other; the full
+delta is the clock band only). **Honest result: no visible follow-cam and no
+ball sprite during live play with the wired pad** — the receive arm is live
+(the smoke capture cannot show the internal fields) but the visible step is
+gated exactly as §14.3 records. The ball record's open-play position producer
+(the native ball-record machine: the reset/teleport `FUN_000886D4`/`0x8B6EB`,
+the kickoff `FUN_0008C24C`, the phase-0x1C `0x84BBB..0x84BDD` placement and
+the code-`16` vector-pop sequence `0x84630` — FU-82 §3.6, whose only static
+installer is the phase-0x19 foul sequence `0x89FA4`) stays leg **L14.8**.

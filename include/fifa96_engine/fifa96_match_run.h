@@ -852,6 +852,54 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  * OL-T11-79 leg. */
 int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);
 
+/* M2 phase-10 T1 (FU-148 §13.5 / FU-142 OL-88): the FUN_0007A084 receive arm,
+ * the staging tail's 0x7A8C7/0x7A8EF call (the code-keyed `receive` flag
+ * `fifa96_ball_pair_stage_tail` reports; the native gate at 0x7A8BE/0x7A8D1
+ * proves every receive code has `[0x1104BB+code] == 0`, so the 0x7A0A4 entry
+ * gate is a pass-through on this path).
+ *
+ * First-hand `/FIFA96.EXE` `disassemble_function 0x7A084` (269 insns):
+ *  - 0x7A207..0x7A219 `FUN_00071C94(actor [0x158730], 0x158738, EBX =
+ *    (int16)[0x15873E] = traj, ECX = 0)`: the camera event with the staged
+ *    vector copied into 0x1577B8..0x1577BD (FUN_00070544 seeds the fast path
+ *    from 0x1577BA/BC = the vector's middle (height) and z words), and the
+ *    actor stored as [0x1577CA] (tracked);
+ *  - 0x7A227 `[0x157A83] = 0` (the controlled actor is released);
+ *  - 0x7A2F0 `[0x158746] = 1` (the staged event is acknowledged);
+ *  - 0x7A2F6 phase `[0x157A49]>>24 == 1` exits before the scan (the camera
+ *    event has already run);
+ *  - 0x7A2FF..0x7A331 the [0x157770] base plus the camera velocity words
+ *    ([0x1577BE]/[0x1577C0] high halves << 5) leads, via the ported
+ *    `fifa96_ball_pair_receive_target` (the engine's 0x157770 stand-in is its
+ *    camera triple, FU-67 §4.1);
+ *  - 0x7A335..0x7A376 the actor's own-team scan (FUN_0008DE8C: 11 records,
+ *    word x/z, +0x98/+0x9A skips) with the skip word sign_extend8(+0x8D) when
+ *    the +0x8E type is 1 or the +0x91 action is 0x10/0x11/0x12, via the ported
+ *    `fifa96_ball_pair_receive`;
+ *  - 0x7A37B..0x7A3A2 `[0x158734] = receiver`; the actor team's +0x7B2 =
+ *    receiver / +0x7B6 = 0; the opponent block's +0x7B2/+0x7B6 = 0;
+ *  - 0x7A40A..0x7A412 the actor is `[0x158724]` (the possession carrier) ->
+ *    `[0x15872D] = 0x14`.
+ *
+ * `actor`/`vector`/`traj` are the native staged block at the 0x7A8EF call
+ * point ([0x158730]/0x158738/0x15873E) — the kick path passes
+ * `fifa96_ball_kick_out`'s receive snapshot so the arm runs before the
+ * 0x7A934 inactive clear's effects are re-applied by the caller.
+ *
+ * Legs (sinks/unmodeled cells, numbered in FU-148 §14): the
+ * 0x7A0D6..0x7A201 0x18E2-class vector rebuild (the pool does not model the
+ * record class); the 0x7A21E..0x7A2E1 animation-id sound selection and its
+ * 0x974DC stoppage-push sink; the 0x7A3C0..0x7A408 timer81 loop (the +0x9D
+ * byte and [0x157A3C] descriptor table are unmodeled); the code-3
+ * [team+0x7E7] clear (unmodeled cell, OL-72); the 0x7A419..0x7A448
+ * FUN_00079D5C foul/offside body (FU-150 E-chain).
+ *
+ * Returns FIFA96_OK (the arm ran), -FIFA96_ERR_INVALID (NULL mr/vector or an
+ * actor outside the pool), or -FIFA96_ERR_STATE (the run is not live). */
+int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
+                                  const fifa96_ball_pair_vector *vector,
+                                  int16_t traj);
+
 /* Step the derived FU-143 phase drivers for one granted 30 Hz frame (M2
  * playability Task 3). The frame body calls this once per granted frame, after
  * the FU-141 entity chain and before the FU-85 scene staging (the native clock

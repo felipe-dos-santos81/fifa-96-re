@@ -502,6 +502,57 @@ static void test_scene_stages_pool_entities(void) {
   fifa96_surface_destroy(f.s);
 }
 
+/* M2 phase-10 T1 (FU-148 §13.5): the ball entity render path. FUN_00036C70
+ * stages the 23rd slot from the ball record 0x15880C/10/14 (+ the 0x15885A
+ * heading) and the FU-85/89 renderer draws it like any pool record: the
+ * ball's zeroed anim id resolves the FU-84 row 0 (bank 0), whose frame-0
+ * synthetic sprite covers the window centre when the ball record sits at
+ * camera + 0x200. The native ball record's live open-play position producer
+ * is the T1 leg; this test pins the render path itself — with every player
+ * record parked out of the ring, the centre pixel is the ball slot's colour
+ * and culling the slot returns it to the background. */
+static void test_ball_record_draws_ball_slot(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      e->pos_x = 0;
+      e->pos_y = 0;
+      e->pos_z = -0x1000;   /* behind the camera: culled */
+      e->target_x = 0;
+      e->target_y = 0;
+      e->target_z = -0x1000;
+      e->skip_9a = 1;       /* the composer's hidden arm (0x36D61) */
+    }
+  }
+  f.mr.entities.ball.x = 0;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.ball.z = 0x200;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.entities[22].stage.pos.x == 0);
+  assert(f.mr.render.entities[22].stage.pos.z == 0x200);
+  assert(f.mr.render.entities[22].stage.hidden == 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* the ball slot's pixel */
+
+  /* culling the ball slot removes exactly that pixel */
+  f.mr.render.entities[22].stage.pos.y = -10000;
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x00);
+
+  /* a mover behind the camera culls the slot (the same record-driven cull the
+   * live path sees while the producer is unported) */
+  f.mr.render.entities[22].stage.pos.x = 0;
+  f.mr.render.entities[22].stage.pos.y = 0;
+  f.mr.render.entities[22].stage.pos.z = -0x200;
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x00);
+  fifa96_surface_destroy(f.s);
+}
+
 /* The fixture entity's frame index advances on the FU-84 `FUN_0008E008`
  * accumulator: duration 0x50, delta 2 -> delta<<4 = 0x20 per granted frame,
  * so the fourth grant advances frame 0 -> 1. The canvas follows through the
@@ -1643,6 +1694,7 @@ int main(void) {
   test_mirrored_frame_uses_signed_size();
   test_clip_clamped_to_smaller_surface();
   test_scene_stages_pool_entities();
+  test_ball_record_draws_ball_slot();
   test_entity_animates_over_frames();
   test_live_anim_inputs_drive_bank_row();
   test_anim_id_staging_round_trip();

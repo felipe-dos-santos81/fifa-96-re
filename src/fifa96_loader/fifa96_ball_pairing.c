@@ -784,6 +784,13 @@ kick_modes:
     if (fifa96_ball_pair_stage(state, state->actor, &staged, state->traj, code) !=
         FIFA96_OK)
       return -FIFA96_ERR_INVALID;
+    /* M2 phase-10 T1 (FU-148 §14): snapshot the staged block for the native
+     * FUN_0007A084 call point (0x7A8EF) — the 0x7A934 inactive clear below
+     * zeroes the block *after* the receive event in the native, so the engine
+     * runs the receive arm from this snapshot and re-clears after. */
+    out->receive_vector = state->vector;
+    out->receive_traj = state->traj;
+    out->receive_actor = state->actor;
     tail_actor.pos_x = actor->pos_x;
     tail_actor.pos_z = actor->pos_z;
     tail_actor.nudge_x = actor->nudge_x;

@@ -875,6 +875,46 @@ static void test_kick_target_invalid(void) {
          (fifa96_err_t)-FIFA96_ERR_INVALID);
 }
 
+/* M2 phase-10 T1 (FU-148 §14): the FUN_0007A490 head's staged-block snapshot
+ * for the engine's FUN_0007A084 arm. The native calls 0x7A084 at 0x7A8EF
+ * (after the head stage, before the 0x7A934 inactive clear); for a receive
+ * code with an inactive actor the 0x7A987 clear then zeroes the block. The
+ * loader reports both steps: `receive`/`cleared` plus the pre-clear snapshot
+ * the engine arm consumes. */
+static void test_kick_target_receive_snapshot_and_clear(void) {
+  fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  a.active = 0;                        /* the 0x7A934 inactive arm */
+  /* inactive -> the IDLE table (index 3, class 0 / band 1 / idx 1) */
+  row10_set(rows[3] + 30, 7, 0x100, 0x500, 0x20, 0, 0x11);
+  input.x = 0x200;
+  input.height = 0;
+  input.z = 0;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x10, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert(out.receive == 1);            /* recompute_table[7] == 0 */
+  assert(out.cleared == 1);            /* code 7 + inactive -> clear */
+  assert(out.receive_actor == 7);
+  assert(out.receive_traj == 0x20);
+  assert(out.receive_vector.x == 0x200);
+  assert(out.receive_vector.height == 0);
+  assert(out.receive_vector.z == 0);
+  /* the full call ends cleared (the 0x7A987 block reset) */
+  assert(st.actor == 0);
+  assert(st.traj == 0);
+  assert(st.vector.x == 0 && st.vector.height == 0 && st.vector.z == 0);
+  assert(st.ack == 0);
+}
+
 int main(void) {
   test_offset_zero_and_axes();
   test_offset_metric_branches();
@@ -900,6 +940,7 @@ int main(void) {
   test_stage_tail_recompute_and_receive();
   test_stage_tail_inactive_subcode_and_clear();
   test_stage_tail_face_anim_and_slot();
+  test_kick_target_receive_snapshot_and_clear();
   test_kick_target_resolves_and_stages();
   test_kick_target_clamp_and_angle_fold();
   test_kick_target_bit8_fold();

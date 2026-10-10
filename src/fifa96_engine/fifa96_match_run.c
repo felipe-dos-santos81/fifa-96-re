@@ -2334,6 +2334,93 @@ int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
                                   (int16_t)cam->event_param);
 }
 
+/* M2 phase-10 T1 (FU-148 §13.5 / FU-142 OL-88): the FUN_0007A084 derived
+ * receive arm (contract and first-hand windows in the header declaration).
+ * The staging tail's receive gate (fifa96_ball_pair_stage_tail) already
+ * proves every receive code has `[0x1104BB+code] == 0`, so the native entry
+ * gate 0x7A0A4 is a pass-through on this path; the 0x18E2-class vector
+ * rebuild, the sound-id selection/sink, the timer81 loop, the [team+0x7E7]
+ * clear and the FUN_00079D5C foul body are the numbered legs. */
+int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
+                                  const fifa96_ball_pair_vector *vector,
+                                  int16_t traj) {
+  struct fifa96_ball_pair_state *pair;
+  struct fifa96_camera *cam;
+  struct fifa96_match_entity *actor_rec;
+  struct fifa96_match_team *team;
+  fifa96_entity_candidate cands[FIFA96_MATCH_ENTITY_RECORDS];
+  fifa96_ball_pair_vec3i base;
+  fifa96_ball_pair_vec3i target;
+  fifa96_ball_pair_actor rec;
+  int32_t actor_id;
+  int index = -1;
+  uint32_t t;
+  if (!mr || !vector) return -FIFA96_ERR_INVALID;
+  if (!mr->running) return -FIFA96_ERR_STATE;
+  pair = &mr->entities.ball.pair;
+  cam = &mr->render.camera;
+  actor_id = actor;
+  if (actor_id < 0 ||
+      actor_id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)actor_id / FIFA96_MATCH_ENTITY_RECORDS;
+  actor_rec = &mr->entities.team[t].records[(uint32_t)actor_id % FIFA96_MATCH_ENTITY_RECORDS];
+  team = &mr->entities.team[t];
+  /* 0x7A207..0x7A219: the camera event (seed pair = the staged vector's
+   * middle/z words, height = the trajectory word) and the tracked bind. */
+  if (fifa96_camera_event_set(cam, (int16_t)vector->height,
+                              (int16_t)vector->z, traj, 0) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  (void)fifa96_camera_set_tracked(cam, actor_id);
+  /* 0x7A227: [0x157A83] = 0 — the controlled actor is released. */
+  mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  /* 0x7A2F0: [0x158746] = 1 — the staged event is acknowledged. */
+  pair->ack = 1;
+  /* 0x7A2F6: phase 1 exits before the receiver scan (the camera event ran). */
+  if (mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE) return FIFA96_OK;
+  /* 0x7A2FF..0x7A331: the [0x157770] base (the engine stand-in is its camera
+   * triple) plus the camera velocity words' leads. */
+  base.x = mr->render.camera.pos_x;
+  base.y = mr->render.camera.pos_y;
+  base.z = mr->render.camera.pos_z;
+  if (fifa96_ball_pair_receive_target(
+          &base, (int32_t)((uint32_t)(uint16_t)cam->vel_x << 16),
+          (int32_t)((uint32_t)(uint16_t)cam->vel_z << 16), &target) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  /* 0x7A335..0x7A376: the actor's own-team record scan. */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *e = &team->records[i];
+    cands[i].x = (int16_t)e->pos_x;
+    cands[i].y = (int16_t)e->pos_z;
+    cands[i].skip_98 = e->skip_98;
+    cands[i].skip_9a = e->skip_9a;
+  }
+  memset(&rec, 0, sizeof rec);
+  rec.kind = actor_rec->type;      /* +0x8E byte */
+  rec.action = actor_rec->code;    /* +0x91 byte */
+  rec.flag = actor_rec->active;    /* +0x8D byte */
+  if (fifa96_ball_pair_receive(&rec, cands, FIFA96_MATCH_ENTITY_RECORDS,
+                               (int16_t)target.x, (int16_t)target.z,
+                               &index) < 0)
+    return -FIFA96_ERR_INVALID;
+  /* 0x7A37B..0x7A3A2: the receiver and team-target writes (the native NULL is
+   * the engine NONE). */
+  pair->receiver =
+      index < 0 ? FIFA96_MATCH_ENTITY_NONE
+                : (int32_t)(t * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+  team->target = pair->receiver;
+  team->second = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[1u - t].target = FIFA96_MATCH_ENTITY_NONE;
+  mr->entities.team[1u - t].second = FIFA96_MATCH_ENTITY_NONE;
+  /* 0x7A3AC..0x7A3B9: code 3 clears the actor team's +0x7E7 (unmodeled cell,
+   * OL-72 — leg). */
+  /* 0x7A40A..0x7A412: the actor being [0x158724] (the possession carrier)
+   * arms the release countdown [0x15872D] = 0x14. */
+  if (actor_id == mr->entities.ball.carrier)
+    mr->entities.ball.pos_release = 0x14;
+  return FIFA96_OK;
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;

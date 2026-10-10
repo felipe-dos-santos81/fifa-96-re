@@ -3267,6 +3267,17 @@ setter on a phase-2 write (`0x740F6`) and by the restart body `0x84F90`
   *Status (T4, §L.10): **closed** (S2/T2); **T3** wired `FUN_00071DF4`'s
   every-frame call site and first arm (FU-148 §13.2); its table/keeper second
   arm stays the leg.*
+  *Status (phase-10 T1, FU-148 §14): the ball-staging leg the T3 status named
+  is **ported and wired** — `FUN_0007A084`'s receive arm (camera event/tracked
+  bind/receiver scan/team-target writes/carrier release) runs on the live kick
+  path via the staging tail's receive gate, so the high-ball producer is now
+  ported (`fifa96_match_run_ball_receive`, `match_kick_run`). The follow arm's
+  `height > 0xF0` step is fixture-proven through it; the **visible** live
+  follow still needs a kick row with traj > 0xF0 (the wired KICK/PASS rows cap
+  at 205/0 — the `0x40` long-ball key and the `0x157750` ball-height producer
+  are the T1 legs). The ball *record* render path is pixel-proven; its
+  open-play position producer (the code-`16` ball machine/resets) stays leg
+  L14.8. Goldens byte-identical; smoke honest (no visible follow/ball yet).*
 * **OL-89 — writer side effects.** The posted ids are captured
   (`score_last_event`) but not dispatched: `FUN_0009252C` ->
   `FUN_00066E70`/`FUN_00066724` and the `FUN_000CBC4C` probe result are

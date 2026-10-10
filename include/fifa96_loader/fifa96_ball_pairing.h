@@ -277,6 +277,15 @@ typedef struct fifa96_ball_kick_out {
   uint8_t slot_cb;  /* stage-tail 0x78B00 callback request (OL-62) */
   uint8_t nudge;    /* stage-tail recompute nudge ran */
   uint8_t anim;     /* stage-tail resolved 0x6E598 id */
+  /* M2 phase-10 T1 (FU-148 §14): the staged block at the native FUN_0007A084
+   * call point (0x7A8EF, inside FUN_0007A490 between the head stage and the
+   * 0x7A934 inactive clear). The caller runs the receive arm with these; a
+   * `cleared` result re-applies the whole-block reset afterwards, matching
+   * the native order (the 0x7A987 clear overwrites the receive's ack/receiver
+   * writes but not its camera/team effects). Zero when not staged. */
+  fifa96_ball_pair_vector receive_vector;   /* the staged 0x158738 block */
+  int16_t receive_traj;                     /* [0x15873E] */
+  int32_t receive_actor;                    /* [0x158730] */
 } fifa96_ball_kick_out;
 
 struct fifa96_rng;
