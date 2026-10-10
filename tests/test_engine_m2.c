@@ -595,8 +595,25 @@
  * see the M2_STAGE_ROWS comment), while the arms stage 26/28/2A organically.
  * The observed set is read from `mr.dispatched_ok` (bit c set when action code
  * c dispatched FIFA96_OK), the Task 15 observability seam, and must equal
- * M2_WIRED_MASK (14 rows). v4 re-states this shape (row 01 joins; row 00 is
+ * M2_WIRED_MASK (15 rows). v4 re-states this shape (row 01 joins; row 00 is
  * staged explicitly) and pins the m 1 taker in the forcing directives.
+ *
+ * --- v8.1 (M2 phase-9 T1): row 02 wired, tape dormant -----------------------
+ *
+ * M2 phase-9 T1 ports+wires action row 02 (FU-75 L4.6/FU-138 OL-18) and
+ * applies the machine's forced/chase outputs and no-edge arm (FU-75 L4.1/L4.2)
+ * in the `match_run_outfield_input` seam. The tape is unaffected: the only
+ * code-2 record is the begin state-1 arm's second kickoff pick, which
+ * dispatches row 02's `phase != 2` reset on the first granted 0x13 frame
+ * (`dispatched_ok` gains bit 2; `M2_WIRED_MASK` and the `mask_kick` allowed
+ * set grow to row 02) and its phase-2 window never holds code 2 after the
+ * m 41 staging; the forced/chase/no-edge applications need phase 2 and slot/
+ * unbound states the tape does not expose. The transcript stays
+ * byte-identical (`cmp` clean, 165 lines, M1 unmoved): the reset's code/timer
+ * writes are render-invisible and no record target changes. The live movement
+ * the row unlocks is pinned outside this tape
+ * (`test_engine_match_frame::test_held_key_moves_live_controlled_record` and
+ * the phase-9 T1 smoke).
  *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
@@ -660,8 +677,8 @@
 #define M2_NATURAL_PHASE2_CAP 600
 #define M2_NATURAL_POST_STEPS 60
 
-/* The wired action rows the accepted tape exercises (14 of the 19 wired at
- * the phase-8 close, FU-137 §7): the rows whose installer arm + body + pool
+/* The wired action rows the accepted tape exercises (15 of the 20 wired at
+ * the phase-9 T1 step, FU-137 §7): the rows whose installer arm + body + pool
  * binding are all bounded. 00 and 1E wire first; cluster B/D rows
  * 06/07/0F/18/21/23 close Gate G3; the FU-142a arms stage 26/28/2A; Gate G1
  * adds the outfield rows 04/08 (OL-70/OL-70a). M2 playable-match Task 2 adds
@@ -671,16 +688,19 @@
  * kickoff window. Row 00 dispatches from the explicit code-0 staging (S1: the
  * seeded native reset installs a decision code on active records, so the
  * pre-S1 reset artifact no longer installs row 00), so the tape's exercise
- * set grows to 14 rows. The phase-8 T1 rows 10..13 are wired but not
+ * set grows to 14 rows. M2 phase-9 T1 wires row 02 (FU-75 L4.6/FU-138 OL-18):
+ * the begin state-1 arm's second kickoff pick carries code 2 into the tape's
+ * first granted 0x13 frame and dispatches the row's `phase != 2` reset path,
+ * so the set grows to 15 rows. The phase-8 T1 rows 10..13 are wired but not
  * exercised here (the taker mask below); 1D (FU-151 P3) dispatches only in
  * the keeper fixtures. */
 #define M2_WIRED_MASK                                                        \
-  ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x04) | (1ull << 0x06) |       \
-   (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) | (1ull << 0x18) |       \
-   (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) | (1ull << 0x26) |       \
-   (1ull << 0x28) | (1ull << 0x2A))
+  ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |       \
+   (1ull << 0x06) | (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |       \
+   (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) |       \
+   (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 
-/* The phase-8 T1 taker rows (FU-149 §7, L13): wired (19/80) but dormant on
+/* The phase-8 T1 taker rows (FU-149 §7, L13): wired (20/80) but dormant on
  * this tape — the set-piece arms that install 0x10..0x13 gate on `goal_armed`,
  * which the never-panning camera never sets (v8 provenance). The armed path
  * is fixture-proven (test_taker_armed_rows_resolve /
@@ -1640,11 +1660,14 @@ int main(void) {
   assert((res.mask_kick & M2_KICKOFF_ROWS_MASK) != 0u);
   assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
   assert((res.mask_kick_next & M2_STAGED_ROWS_MASK) == 0u);
-  /* Nothing outside row 00, row 01 and the arm-installed kickoff codes
-   * dispatched on those grants either. */
-  assert((res.mask_kick & ~((1ull << 0x00) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+  /* Nothing outside row 00, row 01, row 02 and the arm-installed kickoff codes
+   * dispatched on those grants either. M2 phase-9 T1 adds row 02: the begin
+   * state-1 arm's second kickoff pick carries code 2 and its `phase != 2`
+   * reset path dispatches on the first granted 0x13 frame. */
+  assert((res.mask_kick & ~((1ull << 0x00) | (1ull << 0x02) | M2_KICKOFF_ROWS_MASK |
+                            M2_ARM_ROWS_MASK)) == 0u);
   assert((res.mask_kick_next &
-          ~((1ull << 0x00) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+          ~((1ull << 0x00) | (1ull << 0x02) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
   /* v2: the T5 kickoff placement is live at begin. */
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);

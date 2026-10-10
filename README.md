@@ -129,12 +129,15 @@ kickoff captures are byte-identical to the P5 shots) and a KICK burst leaves the
 kickoff wait for the live phase 2, the clock ticking on screen
 (`docs/screens/p8-v8-match-clock.png`, 00:02) with the
 live kickoff ball/anim placement
-(19/80 rows wired, the FU-143 phase driver and the derived score source
-included). Moving the controlled player on screen stays blocked on the live
-slot record's code 02 (`locomotion_restart_target`) with the pad presses
-reaching `input_state[0]` (the SDL hold policy landed in phase-8 T3; the S1
-pad → target → velocity → position seam is
-fixture-proven headlessly) — the blockers are L4.1/L4.6. Kicking the ball and
+(20/80 rows wired, the FU-143 phase driver and the derived score source
+included). **Moving the controlled player on screen is reached (M2 phase-9
+T1):** the ported row 02 (`locomotion_restart_target`; FU-75 L4.6) turns the
+live slot record into action code 4 and row 04's slot-dir target drives the
+shared mover — the same 3 s direction-hold smoke moved the record with LEFT
+(`docs/screens/p9-t1-hold-left.png`, scene-band AE 45710) and UP (AE 28535),
+while RIGHT walks it away from the stand-in camera (AE 0; follow-cam is T3);
+the held-key movement is pinned headlessly by
+`test_held_key_moves_live_controlled_record`. Kicking the ball and
 scoring stay blocked
 interactively: the pad kick is wired (T3) but needs the unported
 possession/carrier producers, and the goal chain is closed producer-to-writer

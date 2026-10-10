@@ -311,13 +311,23 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
  * frame while the FU-70 released word is still live in `word[slot+6]`.
  *
  * Staged stand-ins (producers unported): the `0x1577F0` track word
- * (`high_577ee_ge_50`, OL-72), `slot[+0x10]` (OL-69), the `[0x157AB0]`/
- * `[0x1587AC]` flags and the record `+0x99` byte (OL-72; the native handler
- * zero-gates `0x7CE63`/`0x7CF7F`/`0x7D19F` pass with the staged 0). The
- * no-edge arm and
- * the `out.forced`/`out.chase` outputs are computed but not applied (their
- * record writes belong to the unported machine tail, FU-75 §1.5/§1.6/§1.7,
- * legs L4.1/L4.2). */
+ * (`high_577ee_ge_50`, OL-72), the `[0x157AB0]`/`[0x1587AC]` flags and the
+ * record `+0x99` byte (OL-72; the native handler zero-gates
+ * `0x7CE63`/`0x7CF7F`/`0x7D19F` pass with the staged 0). The live `slot_word10`
+ * is the FU-70 slot's previous-mapped word (native `slot[+0x10] = mapped`,
+ * FU-70 §1.1) and the chase flags are wired from the pool (ball height
+ * `0x157750`, the side compare, the `+0x5D` y byte).
+ *
+ * L4.1/L4.2 (M2 phase-9 T1): the machine tail's computed outputs are applied.
+ * `out.no_edge_arm` (`0x7CC70`) copies the camera triple `0x5774C/50/54` into
+ * the staging target and runs `FUN_00079B58` (`+0x93 = 0x10`, the `+0x99`
+ * gate staged 0); `out.forced` (`FUN_0007C990` -> `0x7CA48
+ * FUN_0007D9A4(rec, code, EBX=0, ECX=0)`) and `out.chase` (the code-8 gate
+ * `0x7CD24`) install their codes through the pool installer, no invoke. The
+ * native machine runs the forced/chase tail for every record (input dispatch
+ * only for the slot-bearing ones); this seam keeps the slot-only scope, so the
+ * chase arm stays gated by its own `[rec+0x20] == 0` gate on the reachable
+ * path (the unbound-record walk is the L4.1 residual leg). */
 struct match_input_ctx {
   struct fifa96_match_run *mr;
   struct fifa96_match_entity *e;
@@ -436,7 +446,8 @@ static int match_input_handler(uint32_t handler, void *context) {
 
 /* Returns the ECX=1 invoke code (> 0), 0 for no invoke, or a negative error. */
 static int match_run_outfield_input(struct fifa96_match_run *mr,
-                                    struct fifa96_match_entity *e) {
+                                    struct fifa96_match_entity *e,
+                                    struct fifa96_match_run_record *r) {
   struct match_input_ctx c;
   fifa96_outfield_input_state s;
   fifa96_outfield_input_out out;
@@ -449,8 +460,8 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   if (mr->slot.entity == id) {
     s.pressed = mr->slot.pressed;
     s.released = mr->slot.released;
+    s.slot_word10 = mr->slot.prev_mapped;   /* native slot[+0x10] = mapped */
   }
-  s.slot_word10 = 0;            /* slot +0x10 producer unported (OL-69) */
   s.lane = e->lane;             /* native dword +0x69 */
   s.user_present = controlled >= 0 ? 1u : 0u;
   s.user_side =
@@ -494,9 +505,13 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
       (id != mr->entities.team[team].target) ? 1u : 0u;
   s.chase.not_team_second = (id != mr->entities.team[team].second) ? 1u : 0u;
   s.chase.distance = (uint16_t)(e->lane >> 16);   /* 0x7CCCD `[rec+0x69]>>16` */
+  s.chase.camera = (uint16_t)mr->entities.ball.y; /* 0x7CCD8 `[0x157750]` */
   s.chase.user_present = s.user_present;
+  s.chase.sides_differ =
+      (s.user_present != 0u && s.side != s.user_side) ? 1u : 0u;
   s.chase.unbound = e->has_slot == 0 ? 1u : 0u;
   s.chase.timer = e->timer81;
+  s.chase.third_zero = ((uint32_t)e->pos_y == 0u) ? 1u : 0u;  /* +0x5D */
   c.mr = mr;
   c.e = e;
   c.team = team;
@@ -504,6 +519,41 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   c.invoke_code = 0;
   if (fifa96_outfield_input_row(&s, match_input_handler, &c, &out) != FIFA96_OK)
     return -FIFA96_ERR_INVALID;
+  /* The native tail (step 5) runs after the input-row scan (step 3) and so
+   * gates on the post-install `byte[+0x91]`; the loader state is the entry
+   * snapshot, so when a scan handler installed a code, recompute the
+   * forced/chase outputs against the live code (the type gate and the
+   * type-5 keep both read `+0x91`). */
+  if (e->code != s.current_code) {
+    uint8_t next = 0;
+    out.forced = 0;
+    out.forced_code = 0;
+    out.chase = 0;
+    s.current_code = e->code;
+    s.type = e->code;
+    s.forced.type_5 = e->code == 5u ? 1u : 0u;
+    if (s.phase == 2u && (fifa96_outfield_type_bits(e->code) & 1u) != 0u) {
+      if (fifa96_outfield_forced_action(&s.forced, e->code, &next) == 1) {
+        out.forced = 1;
+        out.forced_code = next;
+      }
+      if (fifa96_outfield_chase_gate(&s.chase, e->code, e->code, &next) == 1)
+        out.chase = 1;
+    }
+  }
+  /* 0x7CC70 no-edge arm (L4.2): the camera triple into the output target and
+   * `FUN_00079B58` (+0x99 staged 0). */
+  if (out.no_edge_arm != 0) {
+    r->target_x = mr->render.camera.pos_x;
+    r->target_y = mr->render.camera.pos_y;
+    r->target_z = mr->render.camera.pos_z;
+    e->timer93 = 0x10;
+  }
+  /* 0x7CD24/L4.1: the forced decision and chase installs, no invoke. */
+  if (out.forced != 0)
+    (void)fifa96_match_entities_install(e, s.phase, out.forced_code, 0);
+  if (out.chase != 0)
+    (void)fifa96_match_entities_install(e, s.phase, 8u, 0);
   return (int)c.invoke_code;
 }
 
@@ -618,13 +668,17 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
    * tail dispatch below runs it a second time in the same frame (the native
    * installer invoke + `0x7CD29 CALL [rec+0x18]` pair). */
   if (e->has_slot != 0 && e->index != 0u) {
-    int invoke = match_run_outfield_input(mr, e);
+    int invoke = match_run_outfield_input(mr, e, r);
     if (invoke < 0) return invoke;
+    /* The machine tail's installs (the input-row handlers' invoke installs and
+     * the L4.1 forced/chase installs) write `+0x91/+0x92/+0x89/+0x9E` on the
+     * record before the same frame's `0x7CD29 CALL [rec+0x18]`; re-stage them
+     * so the tail dispatch runs the installed row against its own fields. */
+    r->code = e->code;
+    r->stage92 = e->stage92;
+    r->timer89 = e->timer89;
+    r->ran = e->ran;
     if (invoke > 0) {
-      r->code = e->code;
-      r->stage92 = e->stage92;
-      r->timer89 = e->timer89;
-      r->ran = e->ran;
       rc = fifa96_match_dispatch_action(mr, e->code);
       if (rc != FIFA96_OK && rc != -FIFA96_ERR_UNSUPPORTED) return rc;
     }

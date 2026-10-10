@@ -88,7 +88,7 @@
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
+    /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
@@ -1727,11 +1727,120 @@ static void test_action_01_runs_kickoff_body(void) {
   drop_fixture(&f);
 }
 
+/* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): row 02 restart/placement.
+ *
+ * First-hand /FIFA96.EXE this task (disassemble_bytes 0x7DFCC..0x7E1A2):
+ *  - `0x7DFD7` byte[+0x9E] = 1 (ran);
+ *  - phase 1 (`0x7DFE6..0x7E016`): target x = -dword[[team+0x7B2]+0x59],
+ *    target z = 0, `+0x89` = 0, `+0x92` = 0, then the tail return; the y dword
+ *    `+0x51` is not written;
+ *  - phase 2 (`0x7E01B`): `[team+0x7B2] = rec`; no slot + `byte[team+0x828]`
+ *    -> `CALL 0x7876C`; with a slot `FUN_0007D9A4(rec, 4, EBX=0, ECX=1)` and a
+ *    direct return (`0x7E046..0x7E068`) — the install-4 invoke-now; without a
+ *    slot the camera triple target (`0x7E069..0x7E089`), `+0x89 += delta` and
+ *    the `+0x92` stage machine (`0x7E08A..0x7E0F5`) whose stage-0 wait is
+ *    `lane > 0x40 ? 0x78 : 0xA` with the `FUN_0007DAB4` reset on the
+ *    `lane > 0x40` ready path (`0x7E0C8`);
+ *  - any other phase (`0x7E192`): `FUN_0007DAB4` reset.
+ * The stage-1 arm (nearest/metric/event/ball staging, `0x7E0F6..0x7E184`) and
+ * the stage-2 snap (`0x7E185`) stay OL-18 legs. */
+static void test_action_02_restart_and_phase2_arms(void) {
+  struct fixture f;
+  struct fifa96_match_entity *rec;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;                 /* team 0 record 1 */
+  rec = &f.mr.entities.team[0].records[1];
+  f.mr.entities.team[0].target = 1;          /* [team+0x7B2] = rec */
+
+  /* phase 1: the restart mirror, z = 0, timers/stage reset; y untouched. */
+  f.mr.state.phase = 1;
+  rec->pos_x = 0x1234;
+  f.mr.record.target_x = -5;
+  f.mr.record.target_y = 0x777;
+  f.mr.record.target_z = 0x555;
+  f.mr.record.timer89 = 7;
+  f.mr.record.stage92 = 3;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(f.mr.record.ran == 1);
+  assert(f.mr.record.target_x == -0x1234);
+  assert(f.mr.record.target_z == 0);
+  assert(f.mr.record.target_y == 0x777);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 0);
+
+  /* phase 2, no slot: camera triple target, timer += delta, stage-0 wait. */
+  f.mr.state.phase = 2;
+  f.mr.record.has_slot = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 2;
+  f.mr.record.lane = 0x20 << 16;             /* lane 0x20 <= 0x40 -> 0xA */
+  f.mr.entities.team[0].slot_pool = 1;
+  f.mr.record.helper_request = 0;
+  assert(fifa96_camera_init(&f.mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(f.mr.entities.team[0].target == 1);
+  assert(f.mr.record.helper_request == 1);   /* 0x7E041 CALL 0x7876C */
+  assert(f.mr.record.target_x == 0x11);
+  assert(f.mr.record.target_y == 0x22);
+  assert(f.mr.record.target_z == 0x33);
+  assert(f.mr.record.timer89 == 2);
+  assert(f.mr.record.stage92 == 0);          /* waits */
+
+  /* the 0xA threshold fires the stage advance (timer zeroed, stage 1). */
+  f.mr.record.timer89 = 0xA;
+  f.mr.record.helper_request = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1);
+  assert(f.mr.record.timer89 == 0);
+
+  /* the `lane > 0x40` ready path runs FUN_0007DAB4 before the advance
+   * (0x7E0C8): the reset installs the forced code (rec is [team+0x7B2], so 4)
+   * and stages `+0x92 = 0`, then the shared advance increments to 1 (the
+   * native fall-through into the stage-1 arm stays the OL-18 leg). */
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x78;
+  f.mr.record.lane = 0x41 << 16;
+  rec->active = 1;
+  rec->code = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(rec->code == 4u);
+  assert(f.mr.record.stage92 == 1);
+  assert(f.mr.record.timer89 == 0);
+
+  /* phase 2 with a slot: [team+0x7B2] = rec, install 4 invoke-now; the
+   * record's timer81 early-returns the invoked row 04 so the installed code
+   * is observable. */
+  f.mr.record.has_slot = 1;
+  rec->has_slot = 1;
+  rec->code = 2;
+  rec->timer81 = 1;
+  f.mr.record.timer81 = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x55;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(f.mr.entities.team[0].target == 1);
+  assert(rec->code == 4u);                   /* FUN_0007D9A4(rec, 4, 0, ECX=1) */
+  assert(rec->timer89 == 0);                 /* installer 0x7DA7E */
+  assert((f.mr.dispatched_ok & (1ull << 0x04u)) != 0u);  /* invoke-now ran row 04 */
+
+  /* any other phase: FUN_0007DAB4 reset. */
+  f.mr.state.phase = 0;
+  f.mr.record.stage92 = 3;
+  f.mr.record.timer89 = 9;
+  rec->code = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 0);          /* code-0 install staged byte */
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
   test_action_00_runs_move_step();
   test_action_01_runs_kickoff_body();
+  test_action_02_restart_and_phase2_arms();
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
   test_action_11_runs_corner_body();

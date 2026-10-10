@@ -164,8 +164,14 @@ table is unchanged (`34 × UNSUPPORTED + 1 × NOT_FOUND`).
 * **OL-17 — row 01 arms.** Celebration-id chain, `FUN_0008DE8C` nearest, ball
   stage `FUN_0007A490`, `FUN_000974DC` sound and the `FUN_0008F188` ring
   signals are unported (FU-82 §3.1).
-* **OL-18 — row 02 arms.** Stage 1/2 nearest/vector/`FUN_00092820`/ball stage
-  and the `FUN_0007DAB4` chooser remain unported (FU-82 §3.2, FU-76 §1.1).
+* **OL-18 — row 02 arms.** **Narrowed (M2 phase-9 T1, FU-75 L4.6/§11):** the
+  phase-1 restart mirror, the phase-2 `[team+0x7B2] = rec` + merge request +
+  install-4 invoke-now, the no-slot camera-target/`+0x89 += delta` arm and the
+  `restart_wait` stage-0 advance are ported and wired as
+  `fifa96_match_action_02` (first-hand `disassemble_bytes 0x7DFCC..0x7E1A2`;
+  `test_engine_match_handlers::test_action_02_restart_and_phase2_arms`). The
+  stage-1 nearest/vector/`FUN_00092820`/ball-stage arm (`0x7E0F6..0x7E184`)
+  and the stage-2 `0x79B1C` snap remain unported (FU-82 §3.2, FU-76 §1.1).
 * **OL-19 — row 03 indirect pieces.** The `[rec+0x1C]` phase-handler call
   (`0x7E252`), camera placement `FUN_00079F3C` (`0x7E3A8`) and the phase-7 ball
   scan (`0x7E418`) are unported (FU-77 §7 legs 1/5).
@@ -227,3 +233,22 @@ path touched). Port write set: `include/fifa96_loader/fifa96_action_handlers.h`,
 `tests/test_engine_match_handlers.c`, `CMakeLists.txt` (engine links
 `fifa96_action_handlers`), `docs/ghidra/FU137_dispatch_mechanics.md` (errata).
 `game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.
+
+## Errata (M2 phase-9 T1 / FU-75 L4.6)
+
+* **Row `02` flips from "pure part ported, wiring open" to ported + wired.**
+  `fifa96_match_action_02` (M2 phase-9 T1, first-hand `disassemble_bytes
+  0x7DFCC..0x7E1A2` on /FIFA96.EXE) binds the row-02 cores to the FU-141 pool:
+  phase 1 writes the `-dword[[team+0x7B2]+0x59]` mirror with `+0x55 = 0`,
+  `+0x89 = 0`, `+0x92 = 0`; phase 2 writes `[team+0x7B2] = rec`, requests
+  `FUN_0007876C` when slotless with `byte[team+0x828] != 0`, installs `4`
+  invoke-now when bound to a slot, else writes the `0x15774C` camera target +
+  `+0x89 += delta` and runs the stage-0 `lane > 0x40 ? 0x78 : 0xA` wait (the
+  `lane > 0x40` ready path resets first); any other phase resets. §5's table
+  row `01`/`02`/`03`/`0D` is a slice-time snapshot: `02` is now `FIFA96_OK`
+  through `fifa96_match_dispatch_action` (row 01 landed earlier in
+  M2 playable-match Task 2; the live FU-137 §7 totals are 20 ported / 59
+  UNSUP / 1 NOTF). OL-18 narrows to the stage-1/2 arms. Tests:
+  `test_engine_match_handlers::test_action_02_restart_and_phase2_arms`; the
+  live movement gate is
+  `test_engine_match_frame::test_held_key_moves_live_controlled_record`.

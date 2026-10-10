@@ -278,6 +278,102 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): row 02 restart/placement ==
+ *
+ * `fifa96_match_action_02` ports the row-02 state machine (native
+ * `0x7DFCC..0x7E1A2`, first-hand `disassemble_bytes` this task; FU-77 §2.2):
+ *  - `0x7DFD7` `byte[+0x9E] = 1` (ran);
+ *  - phase 1 (`0x7DFE6..0x7E016`): `EAX = [[rec]+0x7B2]` (the team's
+ *    `[team+0x7B2]` controlled entity), `EAX = dword[EAX+0x59]`, target z dword
+ *    `+0x55 = 0`, `+0x89 = 0`, `byte[+0x92] = 0`, `NEG EAX`,
+ *    `dword[+0x4D] = EAX` (the tested
+ *    `fifa96_action_locomotion_restart_target` mirror; the y dword `+0x51` is
+ *    untouched), then the tail return;
+ *  - phase 2 (`0x7E01B`): `dword[team+0x7B2] = rec`; with no slot and
+ *    `byte[team+0x828] != 0` the `FUN_0007876C` merge request
+ *    (`0x7E02D..0x7E045`); with a slot `ECX=1, EDX=4, EBX=0,
+ *    CALL 0x7D9A4` and a direct return (`0x7E046..0x7E068`) — install 4
+ *    invoke-now; without a slot the camera triple `0x15774C` target, the
+ *    dword `+0x89 += delta` and the `+0x92` stage dispatch
+ *    (`0x7E069..0x7E09C`): stage 0 waits per
+ *    `fifa96_action_locomotion_restart_wait` (`lane > 0x40 ? 0x78 : 0xA`,
+ *    `0x7E0B0..0x7E0D8`), the ready `lane > 0x40` path runs `FUN_0007DAB4`
+ *    first (`0x7E0C8`), then the shared advance zeroes `+0x89` and increments
+ *    `byte[+0x92]` (`0x7E0DE..0x7E0F5`, which falls into the stage-1 arm);
+ *  - any other phase (`0x7E192`): `FUN_0007DAB4` reset.
+ * The stage-1 arm (`0x7E0F6..0x7E184`: the stack position copy, the side
+ * `+/-0x1E0` z offset, the `0x8DE8C` nearest, the `0x8DCD4` metric into
+ * 0x158738, the `0x92820` event and the `0x7A490` ball staging) and the
+ * stage-2 snap (`0x7E185`, `0x79B1C` plus the `+0x44` reset) stay OL-18 legs;
+ * they write no `rec+0x4D` target, so the camera target survives the leg. The
+ * `FUN_0007876C` merge rides `helper_request` (the native immediate call; the
+ * frame drain runs it, the row-01 convention). */
+static int fifa96_match_action_02(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *e;
+  int32_t id = r->entity_id;
+  uint32_t t;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  e = &team->records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+  r->ran = 1;                                  /* 0x7DFD7 */
+  if (mr->state.phase == 1u) {                 /* 0x7DFE6 */
+    int32_t controlled_x = 0;
+    int32_t cid = team->target;                /* [team+0x7B2] */
+    if (cid >= 0 &&
+        cid < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+      controlled_x =
+          mr->entities.team[(uint32_t)cid / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)cid % FIFA96_MATCH_ENTITY_RECORDS]
+              .pos_x;                          /* dword [controlled+0x59] */
+    (void)fifa96_action_locomotion_restart_target(
+        controlled_x, &r->target_x, &r->target_z);   /* 0x7DFF7..0x7E013 */
+    r->timer89 = 0;                            /* 0x7DFFE */
+    r->stage92 = 0;                            /* 0x7E008 */
+    return FIFA96_OK;                          /* 0x7E016 -> tail */
+  }
+  if (mr->state.phase != 2u) {                 /* 0x7E01B -> 0x7E192 */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  team->target = id;                           /* 0x7E027 [team+0x7B2] = rec */
+  if (r->has_slot == 0) {                      /* 0x7E02D */
+    if (team->slot_pool != 0)                  /* 0x7E036 byte[team+0x828] */
+      r->helper_request = 1;                   /* 0x7E041 CALL 0x7876C */
+  }
+  if (r->has_slot != 0) {                      /* 0x7E046 */
+    if (fifa96_match_entities_install(e, 2u, 4u, 0) == 1) {
+      /* 0x7E04C..0x7E05A: install 4 invoke-now; re-stage the installer's
+       * writes so the invoked row sees them (the T3 seam's invoke pair). */
+      r->code = e->code;
+      r->stage92 = e->stage92;
+      r->timer89 = e->timer89;
+      r->ran = e->ran;
+      (void)fifa96_match_dispatch_action(mr, 4u);
+    }
+    return FIFA96_OK;                          /* 0x7E05F..0x7E068 */
+  }
+  r->target_x = mr->render.camera.pos_x;       /* 0x7E069..0x7E089 */
+  r->target_y = mr->render.camera.pos_y;
+  r->target_z = mr->render.camera.pos_z;
+  r->timer89 += r->delta;                      /* 0x7E06B..0x7E081 */
+  if ((uint8_t)r->stage92 == 0u) {             /* 0x7E08A..0x7E0AA */
+    uint8_t ready = 0;
+    uint8_t reset = 0;
+    (void)fifa96_action_locomotion_restart_wait((int16_t)(r->lane >> 16),
+                                                r->timer89, &ready, &reset);
+    if (!ready) return FIFA96_OK;              /* 0x7E199 */
+    if (reset != 0) match_row_reset(mr, e);    /* 0x7E0C8 FUN_0007DAB4 */
+    r->timer89 = 0;                            /* 0x7E0DE */
+    r->stage92 = (uint8_t)(r->stage92 + 1u);   /* 0x7E0EE..0x7E0F0 */
+  }
+  return FIFA96_OK;                            /* stage 1/2 arms OL-18 */
+}
+
 /* ===== FU-151 P3 (M2 phase-7 Task 3): the two full keeper machines =========
  *
  * Row 1E (`0x7550C`, stage table `0x754E4`, ten stages) and row 1D
@@ -2531,8 +2627,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
     {0x01, fifa96_match_action_01,
      "FU-143 §11 (M2 playable-match Task 2/OL-84): row 01 ported (0x7DBC0..0x7DFC8, phase==1 gate, stage 0/1/2 walk) — situation 0xB -> phase 2; camera/event/ball-stage sinks + rows 02/0x10..0x13 legs OL-84"},
-    {0x02, NULL,
-     "FU-137 §6: FU-136 row 02: not ported (partial); locomotion_restart_target + FU-138 restart_wait; OL-18"},
+    {0x02, fifa96_match_action_02,
+     "FU-75 L4.6/FU-138 OL-18 (M2 phase-9 T1): row 02 ported (0x7DFCC..0x7E1A2, first-hand): the phase-1 restart mirror (locomotion_restart_target), the phase-2 [team+0x7B2] bind + merge request + install-4 invoke-now over the pool, the no-slot camera-target/timer + the restart-wait stage 0; the stage-1/2 arms (nearest/metric/0x92820/0x7A490/0x79B1C) stay OL-18"},
     {0x03, NULL,
      "FU-137 §6: FU-136 row 03: not ported (partial); hold/clamp + FU-138 counter/phase1_clamp; OL-19"},
     {0x04, fifa96_match_action_04,

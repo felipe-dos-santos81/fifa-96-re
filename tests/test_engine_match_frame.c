@@ -127,6 +127,38 @@ static void drop_fixture(struct fixture f) {
   fifa96_platform_destroy(f.plat);
 }
 
+/* M2 phase-9 T1: the live held-key movement is only reachable with the
+ * formation-seeded kickoff (the ISO `352ko.fmt` seed places the second kickoff
+ * pick on record 9, where the derived slot lands). Without the ISO the test
+ * skips, the project's ISO-gated convention. */
+#define T1_ISO_PATH "game/FIFAPCCD96.iso"
+
+static int t1_iso_available(void) {
+  FILE *iso = fopen(T1_ISO_PATH, "rb");
+  if (!iso) return 0;
+  fclose(iso);
+  return 1;
+}
+
+static struct fixture make_fixture_iso(uint64_t step_ns) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = step_ns;
+  struct fixture f;
+  f.plat = fifa96_platform_null_create(&pcfg);
+  assert(f.plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = T1_ISO_PATH;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  f.engine = fifa96_engine_create(&ecfg, f.plat);
+  assert(f.engine != NULL);
+  assert(fifa96_engine_boot(f.engine) == 0);
+  return f;
+}
+
 /* The frame body runs once per 100 Hz PIT tick, not once per engine step.
  * The null default step is 16666667 ns (~60 Hz): 30 steps fire 50 PIT ticks
  * (30 * 16.67 ms = 500 ms), so the pace must consume 50 ticks and grant 15
@@ -620,12 +652,17 @@ static void test_kickoff_enters_phase2_naturally(void) {
   /* FU-147 S1: with the +0x8D active seed the native `0x8DE8C` skip is the
    * record's ordinal (`+0x8A>>24` = byte +0x8D), so stage 2's nearest pick no
    * longer returns the taker itself; the `0x7DF61` conditional merge moves the
-   * FU-70 slot to the nearest teammate and the drain runs FUN_00078670
-   * (0x7867A), clearing the release word. The no-ISO fixture puts every record
-   * at the origin, so the tie pick is record 0. */
-  assert(mr.slot.entity == 0);
-  assert(mr.entities.team[0].records[0].has_slot == 1);
+   * FU-70 slot to the nearest teammate (the no-ISO tie pick is record 0) and
+   * the drain runs FUN_00078670 (0x7867A), clearing the release word. The
+   * same frame's record-2 dispatch then runs the ported row 02 (M2 phase-9
+   * T1/FU-75 L4.6): phase 2, no slot, `[team+0x828] != 0` -> the `0x7E041
+   * FUN_0007876C` request attaches the slot to the second kickoff pick
+   * (record 2), exactly as the native immediate call would. */
+  assert(mr.slot.entity == 2);
+  assert(mr.entities.team[0].records[0].has_slot == 0);
   assert(mr.entities.team[0].records[1].has_slot == 0);
+  assert(mr.entities.team[0].records[2].has_slot == 1);
+  assert(mr.entities.team[0].records[2].code == 2u);   /* phase-2 arm waits */
   assert(mr.slot.released == 0u);      /* consumed by the handoff reset */
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 
@@ -981,17 +1018,31 @@ static void test_pad_kick_release_runs_kick_row(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  assert(fifa96_match_state_set_phase(&mr.state, 2) == 0);
+  /* M2 phase-9 T1: the natural kickoff reaches live phase 2 (the same path as
+   * test_natural_phase2_never_scores); there the ported row 02 (the second
+   * kickoff pick, code 02) takes the FU-70 slot and its invoked row 04 stages
+   * the carrier state 5 (`0x7F133` install 5 invoke-now, unconditional). */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  for (int i = 0; i < 6; i++) one_granted_frame(&mr);   /* row 02/04 settle */
 
   {
-    int32_t taker = mr.entities.team[0].target;
+    int32_t taker = mr.slot.entity;
     struct fifa96_match_entity *rec;
-    assert(taker >= 0 && taker < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
-    assert(mr.slot.entity == taker);            /* bind + merge */
+    assert(taker == 2);
     rec = &mr.entities.team[0].records[taker];
-
-    /* The carrier state (`byte[rec+0x91] == 5`) is what selects the code-1
-     * input rows; stage it through the real installer. */
+    assert(rec->has_slot == 1u);
+    /* Stage the carrier state through the real installer (the row-04 coda
+     * reaches code 5 only once the record is moving; the pad path itself is
+     * what this test pins). */
     assert(fifa96_match_entities_install(rec, 2, 5, 0) == 1);
     assert(rec->code == 5u);
 
@@ -1026,6 +1077,151 @@ static void test_pad_kick_release_runs_kick_row(void) {
     assert(rec->stage92 == 2u);
   }
 
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* M2 phase-9 T1 / FU-75 L4.1: the record machine's phase-2 forced decision is
+ * applied. The native tail `0x7CC82..0x7CD24` runs `FUN_0007C990`
+ * (`fifa96_outfield_forced_action`) behind the per-type gate
+ * `flat[0x110680+type]&1` and installs its code through `FUN_0007D9A4` (no
+ * invoke); the T3 seam computed `out.forced` but discarded it. Here the bound
+ * slot record carries code 3 (the type gate passes) and is its team's
+ * `[team+0x7B2]` controlled entity with no carrier anywhere, so the forced
+ * decision is code 4 — installed the same frame, and the frame's tail dispatch
+ * runs row 04, whose unconditional `0x7F133` coda installs the carrier code 5
+ * (invoke-now). The observed net `3 -> 5` therefore requires the applied
+ * forced install: on BASE the flag was computed but not applied, the record
+ * kept code 3, row 04 never dispatched and the code stayed 3. */
+static void test_machine_forced_decision_installs_on_slot_record(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 1;
+  e->active = 1;
+  e->code = 3;                       /* flat[0x110680+3] & 1 != 0 */
+  mr.slot.entity = 1;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 1;    /* [team+0x7B2] = rec -> controlled */
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 1;        /* keeps team_select_target off */
+  one_granted_frame(&mr);
+  assert(e->code == 5u);             /* forced 4 -> row 04's coda 5 */
+  assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);   /* the same tail ran row 04 */
+}
+
+/* M2 phase-9 T1 / FU-75 L4.2: the no-edge arm. With a bound slot, both raw
+ * edge words zero, `slot[+0x10] & 0xF0 != 0`, phase 2 and
+ * `0x30 < (int16)(lane>>16) < 0x90`, the native `0x7CC70` copies the camera
+ * triple `0x5774C/50/54` into `rec+0x4D/+0x51/+0x55` and runs
+ * `FUN_00079B58` (`rec+0x93 = 0x10`). A held KICK supplies the `+0x10`
+ * previous-mapped word (the FU-70 slot update's `prev_mapped`): the first
+ * frame's press edge runs the scan, the second frame has no edges and takes
+ * the arm. On BASE `slot_word10` was staged 0, so the arm never fired. */
+static void test_machine_no_edge_arm_copies_camera_target(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 1;
+  e->active = 1;
+  e->code = 3;
+  e->timer81 = 1;
+  e->lane = 0x40 << 16;              /* 0x30 < lane < 0x90 */
+  mr.slot.entity = 1;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* rec is not the team target */
+  mr.entities.controlled = 1;        /* keeps team_select_target off */
+  assert(fifa96_camera_init(&mr.render.camera, 0x111, 0x222, 0x333) == FIFA96_OK);
+  mr.input_state[0] = 0x10;          /* KICK held: mapped +0x10, no direction */
+  one_granted_frame(&mr);            /* press edge: scan, no arm */
+  assert(e->target_x == 0 && e->target_z == 0);
+  one_granted_frame(&mr);            /* no edges + prev_mapped 0x10: the arm */
+  assert(e->target_x == 0x111);
+  assert(e->target_y == 0x222);
+  assert(e->target_z == 0x333);
+  assert(e->timer93 == 0x10u);       /* 0x79B58 (+0x99 staged 0) */
+}
+
+/* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): the live held-key movement on the
+ * real frame path. The formation-seeded kickoff leaves the FU-70 slot on team
+ * 0 record 9 (`locomotion_restart_target`, first-hand probe: code 02, vel 0),
+ * because the row-01 stage-2 nearest/merge moved it there. With row 02 ported
+ * the first phase-2 frame installs 4 (invoke-now), row 04 writes the slot-dir
+ * target `pos + dir<<7`, and the shared mover integrates the position; holding
+ * RIGHT supplies the FU-70 slot direction bytes (0,-1), so the record's z
+ * moves. On BASE the record stays code 02 with zero velocity (the T3 f-up8
+ * probe). The no-input control stays still while still reaching code 4. */
+static void test_held_key_moves_live_controlled_record(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int32_t id;
+  int32_t start_x;
+  int32_t start_z;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  id = mr.slot.entity;
+  assert(id == 9);                   /* the formation-seeded second pick */
+  rec = &mr.entities.team[0].records[9];
+  assert(rec->has_slot == 1u);
+  assert(rec->code == 2u);           /* row 02 carries the slot, unported on BASE */
+  start_x = rec->pos_x;
+  start_z = rec->pos_z;
+  {
+    fifa96_platform_key right = {FIFA96_ENGINE_KEY_RIGHT, 1};
+    assert(fifa96_match_run_input(&mr, &right, 1) == 0);
+  }
+  for (int i = 0; i < 30; i++) one_granted_frame(&mr);
+  assert(rec->code == 4u);           /* row 02's install-4 invoke */
+  assert((mr.dispatched_ok & (1ull << 0x04u)) != 0u);
+  assert(rec->vel75 != 0);           /* the mover ramped the z velocity */
+  assert(rec->pos_z < start_z);      /* RIGHT -> slot dir (0,-1) */
+  assert(rec->pos_x == start_x);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+
+  /* Control: the same kickoff with no held key reaches code 4 (the install
+   * does not depend on input) but the zero slot direction leaves the record
+   * still. */
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  rec = &mr.entities.team[0].records[9];
+  start_x = rec->pos_x;
+  start_z = rec->pos_z;
+  for (int i = 0; i < 30; i++) one_granted_frame(&mr);
+  assert(rec->code == 4u);
+  assert(rec->pos_x == start_x && rec->pos_z == start_z);
+  assert(rec->vel73 == 0 && rec->vel75 == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -2662,6 +2858,10 @@ static void test_natural_goal_end_to_end(void) {
   assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  /* M2 phase-9 T1 (FU-75 L4.1): the applied forced decision re-asserts the
+   * team-role policy in phase 2, so a live code-4 record is its team's
+   * `[team+0x7B2]` controlled entity (otherwise FUN_0007C990 installs 3). */
+  mr.entities.team[1].target = id;
   e->active = 1;
   e->pos_x = 0;
   e->pos_y = 0;
@@ -2737,6 +2937,9 @@ static void test_natural_goal_fallback_arm(void) {
   assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  /* the applied L4.1 forced decision keeps a live code-4 record only on its
+   * team's `[team+0x7B2]` controlled entity (else code 3 is installed). */
+  mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   e->active = 1;
   e->pos_x = 0;
   e->pos_y = 0;
@@ -2903,6 +3106,9 @@ int main(void) {
   test_screen_advance_ring();
   test_pad_drives_controlled_locomotion();
   test_pad_kick_release_runs_kick_row();
+  test_machine_forced_decision_installs_on_slot_record();
+  test_machine_no_edge_arm_copies_camera_target();
+  test_held_key_moves_live_controlled_record();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();

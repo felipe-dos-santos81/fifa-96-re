@@ -268,9 +268,9 @@ int fifa96_outfield_input_row(const fifa96_outfield_input_state *state,
     }
   }
   /* 0x7CC82..0x7CD24: the phase-2 forced decision and the code-8 chase gate,
-   * both behind the per-type gate. The two flags are computed for the caller;
-   * the engine seam does not apply their record writes yet (legs L4.1/L4.2),
-   * so they are inert outputs on the reachable path. */
+   * both behind the per-type gate. The two flags are computed here; the engine
+   * seam applies their record writes (M2 phase-9 T1: the forced/chase installs
+   * and the no-edge arm, `fifa96_match_run.c`). */
   if (state->phase == 2u && outfield_type_gate(state->type) != 0) {
     if (fifa96_outfield_forced_action(&state->forced, state->current_code, &next) == 1) {
       out->forced = 1;

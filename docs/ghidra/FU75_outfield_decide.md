@@ -634,6 +634,53 @@ executes:
   row); `test_outfield::test_type_bits_table`; the SDL hold fixture in
   `test_engine_sdl3.c`.
 
+## 11. T1 port landing — L4.1/L4.2 applied and L4.6 row 02 (2026-10-10)
+
+M2 phase-9 T1 lands the live-movement subset. First-hand `/FIFA96.EXE`
+`disassemble_bytes 0x7DFCC..0x7E1A2` this task for the row-02 body; the
+FU-75/FU-77/FU-138 citations for the rest were re-checked against the open
+program.
+
+* **L4.1 — the forced-decision/chase application.** `match_run_outfield_input`
+  (`fifa96_match_run.c`) now applies the machine outputs it already computed:
+  `out.forced` installs `out.forced_code` and `out.chase` installs code `8`
+  through the pool installer with no invoke (native `0x7CA48`/`0x7CD24`
+  `FUN_0007D9A4(rec, code, EBX=0, ECX=0)`), after the seam re-stages
+  `+0x91/+0x92/+0x89/+0x9E` so the same frame's tail dispatch runs the
+  installed row. The chase state build is completed to the native fields:
+  `camera = [0x157750]` (the engine ball height), `sides_differ` from the
+  record/user side compare, `third_zero` from `+0x5D`, and `slot_word10` now
+  comes from the live FU-70 `slot[+0x10]` (= `prev_mapped`, FU-70 §1.1). The
+  native machine runs the forced/chase tail for every outfield record (the
+  input dispatch only for slot-bearing ones); this seam keeps the slot-record
+  scope, so the chase arm's `[rec+0x20] == 0` gate keeps it unreachable on the
+  live path — the unbound-record walk remains the **L4.1 residual**.
+* **L4.2 — the no-edge arm.** `out.no_edge_arm` (`0x7CC70`) now copies the
+  camera triple `0x5774C/50/54` into the staging target and runs
+  `FUN_00079B58` (`+0x93 = 0x10`, `+0x99` staged 0). Reachable with a held
+  button (`slot[+0x10] & 0xF0 != 0`) and no press/release edges in phase 2;
+  the direction-only holds (`0x01..0x08`) do not set the `0xF0` bits, so the
+  live held-direction smoke does not fire it.
+* **L4.6 — row 02.** The native `0x7DFCC..0x7E1A2` body is ported as
+  `fifa96_match_action_02` (FU-137 §6.1 flips to `ported`): the phase-1
+  `fifa96_action_locomotion_restart_target` mirror, the phase-2
+  `[team+0x7B2] = rec` + `0x7E041` merge request + install-4 invoke-now, the
+  no-slot camera-target/`+0x89 += delta` arm and the
+  `fifa96_action_locomotion_restart_wait` stage-0 advance. The stage-1/2 arms
+  stay **OL-18** (they write no `rec+0x4D`, so the camera target survives the
+  leg). The keeper-machine input tables (`FUN_000782D0`, FU-74 §2) stay
+  unported: the live slot record is an outfield record (record 0 needs
+  `[team+0x829] != 0` to be picked) — the **L4.6 residual**.
+* **Live movement result.** The ISO probe's post-kickoff slot record (team 0
+  record 9, code `02`, vel 0) now installs `4` on its first live phase-2 frame
+  and the invoked row 04 writes the slot-dir target `pos + dir<<7`; the shared
+  mover integrates it. Holding RIGHT (FU-70 slot dir `(0,-1)`) moves the
+  record's z; the no-input control stays still while still reaching code 4
+  (`test_engine_match_frame::test_held_key_moves_live_controlled_record`).
+  M2 golden byte-identical (the tape's code-2 record only exercises row 02's
+  `phase != 2` reset in the forced 0x13 window; `cmp` clean, 165 lines); the
+  tape's observed dispatch set gains row 02 (`M2_WIRED_MASK`).
+
 ## Provenance
 
 Ghidra MCP on `/fifa96_le.bin`: `get_current_program_info`;
