@@ -938,13 +938,14 @@ static void test_record_event_reflect_and_event(void) {
   in.action_91 = 3;
   in.height_5d = 0;
   in.ball_height = 0x10;
-  /* v1 = 30>>2 = 7, v2 = 40>>2 = 10; h5d <= ball -> reflect: bearing 5 > vx 3
-   * negates v2. */
+  /* v1 = 30>>2 = 7, v2 = 40>>2 = 10; sext(0 + 0x68) = 0x68 > ball 0x10 ->
+   * reflect (0x70CFA..0x70D03): e1 = +bearing 5 (vel_x 3 >= 0) > e2 = +vel_x 3
+   * (vel_z 4 >= 0) negates v1 (0x70D81 CMP; JLE -> v2). */
   assert(fifa96_camera_record_event(&cam, &rng, &in, &out) == 1);
   assert(out.applied == 1);
   assert(out.sink == 1 && out.sink_code == 0x1C);
-  assert(out.vec_1 == 7 && out.vec_2 == -10);
-  assert(out.distance == fifa96_entity_distance(7, -10));
+  assert(out.vec_1 == -7 && out.vec_2 == 10);
+  assert(out.distance == fifa96_entity_distance(-7, 10));
   assert(cam.event_param == 0x10);            /* event_param := ball height */
   assert(cam.timer_limit != 0);               /* the FUN_00070544 ramp ran */
 }
@@ -961,17 +962,50 @@ static void test_record_event_height_ramp(void) {
   cam.vel_x = 3;
   cam.vel_z = 4;
   cam.speed = 5;
-  cam.event_param = 0x20;
   in.skip_9a = 0;
   in.action_91 = 3;
-  in.height_5d = 0x40;                        /* > ball: the ramp arm */
-  in.ball_height = 0x10;
+  in.ball_height = 0x100;
+  in.height_5d = 0x90;                /* ball - 0x70: the ramp band's lower edge */
+  cam.event_param = 0x20;
   assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
-  /* f0 = 0x20 + ((0x20 - 0x40) >> 1) = 0x10; the second step is skipped
-   * (0x40 < 0x10 false) and the seeds are NOT reflected. */
+  /* sext(0x90 + 0x68) = 0xF8 <= ball -> the ramp arm toward 0x90 + 0x70 =
+   * 0x100: new = 0x100 + ((0x20 - 0x100) >> 1) = 0x90; the second step is
+   * skipped (0x100 < 0x90 false) and the seeds are NOT reflected. */
   assert(out.vec_1 == 7 && out.vec_2 == 10);
-  assert(cam.event_param == 0x10);
+  assert(cam.event_param == 0x90);
   assert(out.applied == 1);
+  /* the band's upper edge (ball - 0x68) still ramps: 0x98 + 0x68 == ball. */
+  assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;
+  cam.event_step_z = 40;
+  cam.vel_x = 3;
+  cam.vel_z = 4;
+  cam.speed = 5;
+  cam.event_param = 0x180;
+  in.height_5d = 0x98;
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  /* target = 0x98 + 0x70 = 0x108; the two-step case:
+   * new = 0x108 + ((0x180 - 0x108) >> 1) = 0x144; target 0x108 < 0x144 ->
+   * the second step: 0x144 + ((0x144 - 0x108) >> 1) = 0x162. */
+  assert(cam.event_param == 0x162);
+  assert(out.vec_1 == 7 && out.vec_2 == 10);
+  /* one past the upper edge reflects: 0x99 + 0x68 = 0x101 > ball. */
+  assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;
+  cam.event_step_z = 40;
+  cam.vel_x = 3;
+  cam.vel_z = 4;
+  cam.speed = 5;
+  cam.event_param = 0x20;
+  in.height_5d = 0x99;
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  /* e1 = +bearing 5 > e2 = +vel_x 3 negates v1; event_param := ball. */
+  assert(out.vec_1 == -7 && out.vec_2 == 10);
+  assert(cam.event_param == 0x100);
 }
 
 static void test_record_event_jitter_and_gates(void) {
@@ -1000,9 +1034,10 @@ static void test_record_event_jitter_and_gates(void) {
   assert(fifa96_rng_step(&expect, &d3) == FIFA96_OK);
   t = (int16_t)((int32_t)(d1 & 0x3Fu) + 0x30);
   /* t = (draw1 & 0x3F) + 0x30 with the draw2/draw3 signs; then the reflect
-   * arm (vel_x 0 >= 0 -> e1 = bearing 5, e2 = vel_z 0 -> 5 > 0 negates v2). */
-  assert(out.vec_1 == ((d2 & 1u) ? t : (int16_t)-t));
-  assert(out.vec_2 == -((d3 & 1u) ? t : (int16_t)-t));
+   * arm (vel_x 0 >= 0 -> e1 = +bearing 5; vel_z 0 >= 0 -> e2 = +vel_x 0;
+   * 5 > 0 negates v1). */
+  assert(out.vec_1 == -((d2 & 1u) ? t : (int16_t)-t));
+  assert(out.vec_2 == ((d3 & 1u) ? t : (int16_t)-t));
   assert(out.vec_1 != 0 || out.vec_2 != 0);
   /* a NULL rng on the jitter path is an error. */
   assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);

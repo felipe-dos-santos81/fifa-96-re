@@ -952,27 +952,42 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
     v1 = (int16_t)((d2 & 1u) ? t : -t);
     v2 = (int16_t)((d3 & 1u) ? t : -t);
   }
-  if ((int32_t)in->height_5d > (int32_t)in->ball_height) {
-    /* 0x70CFA..0x70D41: the event height ramps toward rec+0x5D (two halving
-     * steps when the first lands below it). */
-    int32_t f0 = (int32_t)(int16_t)cam->event_param;
-    f0 = f0 + ((f0 - (int32_t)in->height_5d) >> 1);
-    cam->event_param = (uint16_t)f0;
-    if ((int32_t)in->height_5d < f0) {
-      int32_t f0b = (int32_t)(int16_t)cam->event_param;
-      cam->event_param =
-          (uint16_t)(f0b + ((f0b - (int32_t)in->height_5d) >> 1));
+  {
+    /* 0x70C4E/0x70C8F: BX = sext of the 16-bit sum word[rec+0x5D] + 0x70 (the
+     * ramp target); 0x70C54/0x70C9E: CX = the same word + 0x68;
+     * 0x70CFA..0x70D03: sext(CX) > dword[0x157750] -> the reflect arm
+     * (JG 0x70D43), else the ramp. (T2-review erratum, fix round 1: the
+     * pre-fix body split on `height_5d > ball_height` -> ramp — the inverse
+     * mapping, missing both offsets; first-hand 0x70C8F..0x70D91.) */
+    int32_t target =
+        (int32_t)(int16_t)(uint16_t)((uint32_t)(uint16_t)in->height_5d + 0x70u);
+    int32_t cx =
+        (int32_t)(int16_t)(uint16_t)((uint32_t)(uint16_t)in->height_5d + 0x68u);
+    if (cx > (int32_t)(int16_t)in->ball_height) {
+      /* 0x70D43..0x70D91: reflect one seed by the `[0x1577C0]/[0x1577C2]` sign
+       * compare against the `[0x1577BE]` bearing, then re-seed the height.
+       * 0x70D81 CMP e1,e2; JLE -> NEG word[ESP+4] (v2), so the fall-through
+       * (e1 > e2) negates v1. */
+      int32_t e1 = (cam->vel_x >= 0) ? (int32_t)(int16_t)cam->speed
+                                    : -(int32_t)(int16_t)cam->speed;
+      int32_t e2 = (cam->vel_z >= 0) ? (int32_t)(int16_t)cam->vel_x
+                                    : -(int32_t)(int16_t)cam->vel_x;
+      if (e1 > e2) v1 = (int16_t)(0 - (uint16_t)v1);
+      else v2 = (int16_t)(0 - (uint16_t)v2);
+      cam->event_param = (uint16_t)in->ball_height;
+    } else {
+      /* 0x70D05..0x70D41: the two-step `[0x1577F0]` ramp toward the target:
+       * new = target + ((event - target) >> 1), then, while target < new,
+       * new += (new - target) >> 1 (the second step re-reads the stored
+       * word, 0x70D27..0x70D38). */
+      int32_t ev = (int32_t)(int16_t)cam->event_param;
+      int32_t nw = target + ((ev - target) >> 1);
+      cam->event_param = (uint16_t)nw;
+      if (target < nw) {
+        int32_t cur = (int32_t)(int16_t)cam->event_param;
+        cam->event_param = (uint16_t)(cur + ((cur - target) >> 1));
+      }
     }
-  } else {
-    /* 0x70D43..0x70D91: reflect one seed by the `[0x1577C0]/[0x1577C2]` sign
-     * compare against the `[0x1577BE]` bearing, then re-seed the height. */
-    int32_t e1 = (cam->vel_x >= 0) ? (int32_t)(int16_t)cam->speed
-                                   : -(int32_t)(int16_t)cam->speed;
-    int32_t e2 = (cam->vel_z >= 0) ? (int32_t)cam->vel_x
-                                   : -(int32_t)cam->vel_x;
-    if (e1 > e2) v2 = (int16_t)(0 - (uint16_t)v2);
-    else v1 = (int16_t)(0 - (uint16_t)v1);
-    cam->event_param = (uint16_t)in->ball_height;
   }
   /* 0x70D9D..0x70DCE: the 0x8DC68 distance into the vector's first word, the
    * 0x92820(rec, 0x1C) sink request, then FUN_00071C94(rec, {dist, v1, v2},

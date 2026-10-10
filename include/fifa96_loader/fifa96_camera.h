@@ -312,10 +312,15 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
  * - (pos_z - target_z))` (the native 0x1577BA/BC step pair minus the
  * `[0x15774C] - [0x157764]` origin correction); when both are zero, three RNG
  * draws give `t = (draw1 & 0x3F) + 0x30` and the two signs (draw2/draw3);
- * then either the two-step event-height ramp toward `rec+0x5D` (when
- * `rec+0x5D > ball_height`) or the re-seed `event_param := ball_height` with
- * one seed reflected by the `[0x1577C0]/[0x1577C2]` sign compare against the
- * `[0x1577BE]` bearing; then the `0x8DC68` distance and
+ * then either the re-seed `event_param := ball_height` with one seed
+ * reflected (when `sext(height_5d + 0x68) > ball_height`, 0x70CFA..0x70D03:
+ * `e1 = ±speed` by the `vel_x` sign and `e2 = ±vel_x` by the `vel_z` sign;
+ * `e1 > e2` negates `v1`, else `v2` — 0x70D81..0x70D8C) or the two-step
+ * event-height ramp toward `height_5d + 0x70` (`new = target + ((event -
+ * target) >> 1)`, then `new += (new - target) >> 1` while `target < new`,
+ * 0x70D05..0x70D41; T2-review erratum, fix round 1 — the pre-fix comment
+ * split `rec+0x5D > ball_height -> ramp` and negated `v2` on `e1 > e2`);
+ * then the `0x8DC68` distance and
  * `fifa96_camera_event_set(cam, v1, v2, event_param, 0)` (the native
  * FUN_00071C94 with the vector `{distance, v1, v2}` and ECX 0). `cam` supplies
  * the `[0x1577BA]/[0x1577BC]` step pair (`event_step_x/z`), the target/origin

@@ -1085,7 +1085,7 @@ the same set (no new/removed sites). Disposition refresh:
   `0x157750` ball-height producer is 0/unreachable (L14.7), so it is
   fixture-pinned (`test_engine_match_frame::test_record_event_tail_gate_fires_in_frame`,
   `tests/test_camera.c::test_record_event_*`).
-* The remaining five stay legs with their containing bodies unchanged:
+* The remaining six stay legs with their containing bodies unchanged:
   `0x7F4E7` (row 05 stage-0 tail, OL-63 algebra), `0x71B8A` (the armer angle
   arm, FU-71 leg 9.6 / the 0x10E169 table), `0x6FA62` (`FUN_0006E8E8`
   `0x6E8E8..0x6FE83`), `0x77423`/`0x77DC6`/`0x82A6C` (rows 1B/1C/0D).

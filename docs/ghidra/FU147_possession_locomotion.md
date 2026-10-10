@@ -471,9 +471,23 @@ Minimal seam files: `include/fifa96_loader/fifa96_action_handlers.h`,
    the FUN_00071C94 event). Wired after the lane block in
    `match_run_dispatch_entity` (`match_run_record_camera_event`), with the
    per-record `[0x157820]/[0x157822]` run cells (FU-151 row-1E stage 6). Dormant
-   until the `0x157750` producer is live (L14.7); fixtures
-   `test_record_event_tail_gate_fires_in_frame` + `test_camera::
-   test_record_event_*`.
+    until the `0x157750` producer is live (L14.7); fixtures
+    `test_record_event_tail_gate_fires_in_frame` + `test_camera::
+    test_record_event_*`.
+    **T2-review erratum (2026-10-10, fix round 1):** the update's "the
+    `+0x5D`/ball height ramp or the `[0x1577C0]/[0x1577C2]`-sign seed
+    reflect" summary mis-derived the body's split. First-hand
+    `0x70C8F..0x70D91`: the split compares
+    `sext(word[rec+0x5D] + 0x68) > dword[0x157750]` (`0x70C4E/0x70C8F` and
+    `0x70C54/0x70C9E` arm the `+0x70`/`+0x68` sums; `0x70CFA..0x70D03 JG`) —
+    true takes the **reflect** arm (`0x70D81 CMP e1,e2; JLE` negates the
+    ESP+4 word, so `e1 > e2` negates **v1**, else v2; e1 = ±`[0x1577BE]` by
+    the `[0x1577C0]` sign, e2 = ±`[0x1577C0]` by the `[0x1577C2]` sign), false
+    the two-step ramp toward `word[rec+0x5D] + 0x70` (`new = target +
+    ((event - target) >> 1)`, the second step `new += (new - target) >> 1`
+    while `target < new`). Under the caller band `0x7C861/0x7C871` (admits
+    `[ball-0x70, ball]`) the ramp covers `[ball-0x70, ball-0x68]`. The port
+    and its tests are corrected this round (t2-report "Fix round 1").
 8. `[0x157AB2]` semantics unnamed (set at phase-2 entry `0x74101`, cleared at
    `0x75475`/`0x76077`; also touched by row 1D per FU-140).
 9. Driver pre-pass `0x8DA43..0x8DA90`: `0x10F37C` tracked-point table and the

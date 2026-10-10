@@ -757,12 +757,12 @@
  *     OL-70/OL-82 and the FU-147/FU-151 selection legs.
  *   - the T1 taker rows 10..13 (L13) and the set-piece arms: as v8 (they gate
  *     on `goal_armed`, which the never-panning camera never sets).
- *   - the pan callers: the eight remaining `FUN_00071C94` callers (row 04 and
- *     row 1E wired — FU-148 §13.4), the `FUN_00070DE0` reposition bit-8
- *     boundary arm, the tracked-player tail and the `FUN_00071DF4`
- *     table/keeper second arm; the auto-camera's high-ball trigger needs the
- *     ball-staging producers (`FUN_0007A490`/`FUN_0007A084`), so the visible
- *     follow-cam stays a leg.
+ *   - the pan callers: the six remaining `FUN_00071C94` callers (row 04, row
+ *     1E, the ball staging and the camera event wired — FU-148 §13.4), the
+ *     `FUN_00070DE0` reposition bit-8 boundary arm, the tracked-player tail
+ *     and the `FUN_00071DF4` table/keeper second arm; the auto-camera's
+ *     high-ball trigger needs the ball-staging producers
+ *     (`FUN_0007A490`/`FUN_0007A084`), so the visible follow-cam stays a leg.
  *   - the live pad loop (FU-75 §1.5-§1.7/§2): **L4.1 landed (M2 phase-10
  *     T2)** — the native machine's forced/chase tail now runs for every
  *     outfield record (the unbound-record walk); L4.2 applied, L4.3

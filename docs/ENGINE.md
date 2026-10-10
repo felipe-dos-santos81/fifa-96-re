@@ -1190,7 +1190,7 @@ the build also produces the windowed `fifa96` target (`make game`).
     and reports the `0x92820(rec,0x1C)` sink (OL-27 leg). Dormant until the
     `0x157750` ball-height producer (L14.7); fixture-pinned
     (`test_record_event_tail_gate_fires_in_frame`, `test_camera::
-    test_record_event_*`). The other five (`0x7F4E7`, `0x71B8A`, `0x6FA62`,
+    test_record_event_*`). The other six (`0x7F4E7`, `0x71B8A`, `0x6FA62`,
     `0x77423`, `0x77DC6`, `0x82A6C`) stay ledgered with their containing
     bodies.
   - **Goldens: no re-pin** (M1/M2 byte-identical, 165 lines). The M2
