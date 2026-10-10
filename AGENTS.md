@@ -80,3 +80,12 @@ derived from one binary (`FIFA96.EXE`):
   `docs/superpowers/plans/` + `specs/` (the process record). `.superpowers/sdd/`
   is git-ignored per-plan scratch — its `progress.md` ledger is the recovery map
   after context loss; trust the ledger and `git log` over recollection.
+
+## Completion percentage (README title)
+
+- The README title percentage is **derived, never hand-tuned**:
+  `floor(100 × wired / total)` over the match-action dispatch census — the
+  "N/M action rows wired" headline in `docs/ENGINE.md` (currently 21/80 → 26%).
+- Whenever a task changes the wired count (new rows wired, or a re-count of
+  the census), recompute it and update the README title **in the same
+  commit**, keeping it consistent with the ENGINE.md census line.
