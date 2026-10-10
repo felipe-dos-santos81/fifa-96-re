@@ -758,10 +758,12 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   cam->event_step_z = 0;
   cam->pan_counter = 0;                          /* 0x700f4 clears 0x157821 */
   /* 0x700f4 reads the 0x1104AB table at [0x14C2FE]*8 + [0x14C2FA]*2; the
-   * image defaults are both zero -> 0x157819/1A/1B = 10/16/8. */
+   * image defaults are both zero -> [0x157819] = 10, [0x15781A] = 16, and
+   * [0x15781B] = [0x15781A] + (0x20 - [0x15781A]) / 2 = 24 (0x70137 SUB,
+   * 0x7013b SAR 1, 0x70142 ADD, 0x70146 store). */
   cam->pan_decay = 10;
   cam->pan_rate_hi = 16;
-  cam->pan_rate_lo = 8;
+  cam->pan_rate_lo = (uint8_t)(cam->pan_rate_hi + (0x20 - cam->pan_rate_hi) / 2);
   /* 71C94 0x71cdb..0x71cf8: clamp the height to [target y, 0x640];
    * FUN_00070544 0x705f1/0x705fe zeroes the cell again when the clamped
    * value is < 1 (the idle arm). */
@@ -797,7 +799,7 @@ int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
     if (rng) {
       uint16_t value = 0;
       if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
-      angle += (int8_t)(value & 0xFF);           /* 0x92ac8 low byte - 0x80 */
+      angle += (int32_t)(value & 0xFF) - 0x80;   /* 0x70b05/0x70b07: low - 0x80 */
     }
     cam->vel_x = camera_mul16(speed, fifa96_entity_sine(angle));
     cam->vel_z = camera_mul16(speed, fifa96_entity_sine(angle + 0x100));
@@ -869,13 +871,18 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
     cam->pos_y = adopted[1];
     cam->pos_z = adopted[2];
   }
-  /* The mask effects (bit 8 is the boundary arm, leg). */
-  if ((flags_cur & 3u) != 0) cam->vel_x = (int16_t)camera_shift_step(-cam->vel_x, 2);
-  if ((flags_cur & 0x4u) != 0) cam->vel_z = 0;
-  if ((flags_cur & 0x10u) != 0) {
-    /* The elevation jitter: +-2*delta on the y target; the FUN_00070B94
-     * elevation loop is a leg (OL-T11-79). */
-    cam->pos_y += (cam->pos_y < 0 ? -4 : 4);
+  /* The mask effects, over the changed flags (`uVar5 = prev ^ cur`, the
+   * native 0x710fd tail). `local_1c` is the PREVIOUS classify's return byte
+   * (flags_prev == 0 when it returned 1): bit 4 zeroes vel_z only when
+   * flags_prev == 0; bit 0x10 takes the y jitter when flags_prev != 0 and the
+   * FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
+  {
+    uint16_t changed = (uint16_t)(flags_prev ^ flags_cur);
+    if ((changed & 3u) != 0) cam->vel_x = (int16_t)camera_shift_step(-cam->vel_x, 2);
+    if ((changed & 0x4u) != 0 && flags_prev == 0) cam->vel_z = 0;
+    if ((changed & 0x10u) != 0 && flags_prev != 0) {
+      cam->pos_y += (cam->pos_y < 0 ? -4 : 4);   /* +-2*delta (delta 2 staged) */
+    }
   }
   cam->speed = (uint16_t)(int16_t)fifa96_entity_distance(cam->vel_x, cam->vel_z);
   return 1;

@@ -31,7 +31,8 @@ typedef struct fifa96_camera {
    * - pan_rate_hi/lo: [0x15781A]/[0x15781B], the slow-path velocity scale
    *   k (/0x20) for the height > 0 / height <= 0 arms. The three rate bytes
    *   are the FUN_000700F4 table (0x1104AB + [0x14C2FE]*8 + [0x14C2FA]*2)
-   *   image defaults 10/16/8. */
+   *   image defaults: decay 10, hi 16, and lo = hi + (0x20 - hi)/2 = 24
+   *   (0x70137..0x70146). */
   uint8_t event_suspended;
   int16_t ramp_divisor;
   uint8_t pan_counter;
@@ -236,10 +237,13 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
  * FUN_00065CF8 sink arguments (returned through `class_of`/`param`, left
  * untouched at height 0), advances [0x157821] (cap 100), decays the height by
  * pan_decay/0x20, runs the ([0x14C1D4]|[0x14C1D6]) & 4 random walk when
- * `walk_gate & 4` (the atan direction + the rng low byte jitter, velocity
- * magnitude kept; an absent `rng` skips the jitter and is a leg), then re-runs
+ * `walk_gate & 4` (the atan direction + `rng_low - 0x80` jitter, velocity
+ * magnitude kept; an absent `rng` skips the jitter), then re-runs
  * FUN_00070544(0) over the stored step pair. Returns FIFA96_OK or
- * -FIFA96_ERR_INVALID (NULL cam). */
+ * -FIFA96_ERR_INVALID (NULL cam). Leg (OL-T11-79): the engine frame path
+ * passes `walk_gate` 0 because the [0x14C1D4]/[0x14C1D6] producer is
+ * unported, so the random walk is only reachable from callers that stage the
+ * gate (the tests). */
 int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
                            int walk_gate, int32_t *class_of, int32_t *param);
 
@@ -250,9 +254,10 @@ int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
  * the previous point toward the current one (FUN_0008DC50(delta, 1) per axis)
  * while the candidate keeps the previous flags (the adopted point is the
  * farthest one whose classification still equals the previous triple's), then
- * applies the mask effects: current-flag bits 3 negate-quarter vel_x, bit 4
- * zeroes vel_z, bit 0x10 jitters y (the FUN_00070B94 elevation loop is a leg),
- * and recomputes the bearing. Returns 1 when the walk/reposition ran, 0 for
+ * applies the mask effects over the changed flags (`prev ^ cur`): bits 3
+ * negate-quarter vel_x, bit 4 zeroes vel_z when the previous classify was
+ * inside (flags_prev == 0), bit 0x10 jitters y when flags_prev != 0 (the
+ * FUN_00070B94 elevation loop is the else leg), and recomputes the bearing. Returns 1 when the walk/reposition ran, 0 for
  * the overlap no-op, -FIFA96_ERR_INVALID on NULL. `type_off_x`/`type_off_z`
  * are the caller-staged 0x10F334/3C tables (unused by the derived core).
  * Legs (OL-T11-79): the bit-0x8 boundary arm (target z +-0xB11/+-0xB0F, the

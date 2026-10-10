@@ -499,7 +499,7 @@ right on the two timer cells but FUN_00070544 stores the fast-path divisor
 `[0x1577FA]`; the 6-byte seed is `{bearing, step_x, step_z}` at
 `0x1577B8/BA/BC` (`event_step_x/z`), re-read/re-written by FUN_00070544. The
 slow path scales each nonzero velocity by `k/0x20` with k = `[0x15781A]`
-(height arm, image 16) / `[0x15781B]` (idle arm, image 8); `[0x157819]`
+(height arm, image 16) / `[0x15781B]` (idle arm, image 24 = hi + (0x20-hi)/2); `[0x157819]`
 (image 10) is FUN_000709D0's height decay rate; `[0x157821]` is the pan
 counter and the fast/slow selector.
 

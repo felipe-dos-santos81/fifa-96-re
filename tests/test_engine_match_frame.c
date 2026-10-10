@@ -2476,6 +2476,48 @@ static void test_row04_live_pan_arms_camera(void) {
   drop_fixture(f);
 }
 
+/* FU-148 §2.1(c) + §12 (T2 review): the row-04 **arm A** (`[rec+0x28]` byte
+ * 0x13) tail. The native 0x7EFD4 writes `[0x1577FA] = F2 + F2/4`
+ * unconditionally after the FUN_00071C94 call; with the height-0 call the
+ * FUN_00070544 idle arm gives F2 = 6, so the pan timer becomes 7 even though
+ * event_param stays 0 (the pre-review `event_param != 0` guard wrongly
+ * skipped it). Arm A's step seed is the type table << 6 (1344, 5632). */
+static void test_row04_arm_a_track_reload(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(mr.slot.entity != id);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  e->active = 1;
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;
+  e->target_x = 0;
+  e->target_z = 0xB00;
+  e->actor_type = 16;
+  e->anim_id = 0x13;                   /* arm A: event_track_reload */
+  e->timer81 = 0;
+  mr.entities.ball.y = 0x20;
+
+  one_granted_frame(&mr);
+  assert(mr.render.camera.vel_z != 0);           /* the row's event fired */
+  assert(mr.render.camera.event_param == 0);     /* the idle-height call */
+  assert(mr.render.camera.timer == 7);           /* F2(6) + F2/4 = 7 */
+  assert(e->code == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-148 §3 (S4): the formation-id producer. FUN_0008EA70 writes
  * `[0x14C1E4+side]`; the match-init copy (FUN_00011620) sources the team
  * record +0x12 byte, and the placement family comes from the 0x14BFC0
@@ -2617,6 +2659,7 @@ int main(void) {
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();
+  test_row04_arm_a_track_reload();
   test_formation_producer();
   test_translation_install();
   puts("test_engine_match_frame OK");

@@ -2266,15 +2266,21 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
    * type-table step seed (<<6 / <<5) and height EBX = 0; arm A
    * (row byte 0x13, `event_track_reload`) also sets ECX = 1, the
    * FUN_00070544 ramp param, and its tail writes
-   * `[0x1577FA] = [0x1577F0] + ([0x1577F0] >> 2)` (the pan timer). This is
-   * the natural gameplay-row pan origin the FU-145 armer consumes. */
-  if (out.events != 0) {
+   * `[0x1577FA] = F2 + F2/4` unconditionally (0x7EFD4 reads the high word of
+   * [0x1577F0] = F2 = [0x1577F2]). The half-line branch sets `out.events`
+   * with `event_code` 0 (its sinks are 0x974F0/0x651F0, not 71C94), so the
+   * gate below is the event code. This is the natural gameplay-row pan origin
+   * the FU-145 armer consumes. */
+  if (out.events != 0 && out.event_code != 0) {
     int rc2 = fifa96_camera_event_set(&mr->render.camera, out.event_x, out.event_z,
                                       0, out.event_track_reload);
     if (rc2 < 0) return rc2;
-    if (out.event_track_reload != 0 && (int16_t)mr->render.camera.event_param != 0) {
+    if (out.event_track_reload != 0) {
+      /* 0x7EFD4: [0x1577FA] = F2 + (F2 >> 2); F2 = ramp(event height), or 6
+       * on the FUN_00070544 idle arm. */
       int16_t h = (int16_t)mr->render.camera.event_param;
-      mr->render.camera.timer = (uint16_t)(int16_t)(h + (h >> 2));  /* 0x7EFD4 */
+      int16_t f2 = h > 0 ? fifa96_camera_ramp(h) : 6;
+      mr->render.camera.timer = (uint16_t)(int16_t)(f2 + (f2 >> 2));
     }
   }
   for (i = 0; i < out.install_count; i++) {
@@ -2295,8 +2301,9 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   if (out.slot_merge != 0) r->helper_request = 1;                    /* 0x7876C */
   /* out.anim (0x6E598, OL-52), out.slot_backup/slot_restore (0x78A84/
    * 0x78AA4, OL-65), out.corner/team7e7_inc/opp_7e7_clear (team block bytes,
-   * OL-72) and out.events' remaining sinks (the 0x974DC/0x8F188 sound arms —
-   * the 0x71C94 event itself is wired above) have no derived consumer. */
+   * OL-72) and the half-line branch's `out.events` sinks (0x974F0/0x651F0;
+   * the two 0x71C94 arms are wired above and carry event_code 0x15/0x1D) have
+   * no derived consumer. */
   return FIFA96_OK;
 }
 

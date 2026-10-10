@@ -615,7 +615,7 @@ the build also produces the windowed `fifa96` target (`make game`).
     FUN_000703E8, the 0x15780C/0E smoothing words, the sound sinks
     (FUN_00065CF8/FUN_000974DC/FUN_000651F0/FUN_000974F0), the tracked-player
     tail (0x1577CA/CE + table 0x10E169), FUN_00071DF4's 0x11042B/0x11042C
-    lookup, the reposition boundary arm and the other ten FUN_00071C94 row
+    lookup, the reposition boundary arm and the other nine FUN_00071C94
     callers.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5

@@ -685,6 +685,8 @@ static void test_event_set_window_pan(void) {
   assert(cam.anchor_time == 50 && cam.anchor2_time == 50);
   assert(cam.anchor2_x == 0 && cam.anchor2_z == 0xB00 + 25 * 50);
   assert(cam.rate_x == 0 && cam.rate_z == 0 && cam.event_cursor == 0);
+  /* FUN_000700F4 image defaults: decay 10, k-hi 16, k-lo = 16 + (0x20-16)/2 */
+  assert(cam.pan_decay == 10 && cam.pan_rate_hi == 16 && cam.pan_rate_lo == 24);
   /* the accepted integrator then moves the camera: one delta-2 frame */
   assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
   assert(cam.pos_z == 0xB32);
@@ -803,7 +805,7 @@ static void test_pan_step_band_decay_rearm(void) {
   cam.event_param = 0x30;
   cam.pan_decay = 10;
   cam.pan_rate_hi = 16;
-  cam.pan_rate_lo = 8;
+  cam.pan_rate_lo = 24;
   cam.vel_z = 20;
   cam.ramp_divisor = 50;
   cam.event_step_x = 0;
@@ -827,20 +829,22 @@ static void test_pan_step_idle_height_band_skipped(void) {
   cam.vel_z = 12;
   cam.ramp_divisor = 12;
   cam.event_step_z = 12 * 12;
-  cam.pan_rate_lo = 8;                 /* the FUN_000700F4 image default */
+  cam.pan_rate_lo = 24;                /* FUN_000700F4: hi + (0x20-hi)/2 */
   int32_t class_of = -1, param = -1;
   assert(fifa96_camera_pan_step(&cam, NULL, 0, &class_of, &param) == FIFA96_OK);
   assert(class_of == -1 && param == -1);
   assert(cam.pan_counter == 1);
   assert(cam.event_param == 0);
   assert(cam.timer == 0 && cam.timer_limit == 0xC);
-  assert(cam.vel_z == 12 * 8 / 0x20);  /* height <= 0 -> k = [0x15781B] = 8 */
+  assert(cam.vel_z == 12 * 24 / 0x20);  /* height <= 0 -> k = [0x15781B] = 24 */
 }
 
 static void test_pan_step_walk(void) {
   /* (> 0x19 bearing with the [0x14C1D4|D6]&4 gate and an rng): the velocity
-   * is rebuilt from the atan direction + the rng byte jitter, magnitude kept,
-   * then the slow-path re-arm shrinks it. */
+   * is rebuilt from the atan direction + `rng_low - 0x80` (native 0x70b07),
+   * magnitude kept, then the slow-path re-arm shrinks it. Seed 0x1234's first
+   * draw low byte is 0x01: angle = atan(3,4)=105 + 1 - 128 = -22 ->
+   * vel (5*sin(-22), 5*cos(-22)) >> 16 = (-1, 4) -> k=16 slow path -> (0, 2). */
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 0, 0, 0);
   cam.event_param = 0x30;
@@ -854,11 +858,11 @@ static void test_pan_step_walk(void) {
   struct fifa96_rng rng;
   assert(fifa96_rng_seed(&rng, 0x1234u) == FIFA96_OK);
   assert(fifa96_camera_pan_step(&cam, &rng, 4, NULL, NULL) == FIFA96_OK);
-  /* the jittered direction products stay within the 5-unit magnitude, then
-   * the k=16 slow path halves them. */
-  assert(cam.vel_x >= 0 && cam.vel_x <= 5);
-  assert(cam.vel_z >= 0 && cam.vel_z <= 5);
-  assert(cam.pan_counter == 1 && cam.event_param == 15);
+  assert(cam.vel_x == 0 && cam.vel_z == 2);
+  assert(cam.speed == 2);
+  assert(cam.event_param == 15);
+  assert(cam.event_step_x == 0 && cam.event_step_z == 60);
+  assert(cam.pan_counter == 1);
 }
 
 static void test_pan_step_invalid(void) {
