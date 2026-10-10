@@ -863,7 +863,10 @@ int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);
  *    (int16)[0x15873E] = traj, ECX = 0)`: the camera event with the staged
  *    vector copied into 0x1577B8..0x1577BD (FUN_00070544 seeds the fast path
  *    from 0x1577BA/BC = the vector's middle (height) and z words), and the
- *    actor stored as [0x1577CA] (tracked);
+ *    actor stored as [0x1577CA] (tracked). The 0x71C99 [0x157A6C] bail
+ *    returns 1 from `fifa96_camera_event_set` without the reset/tracked
+ *    store, but this arm *continues* (ack/scan/release still run); only a
+ *    negative setter error aborts;
  *  - 0x7A227 `[0x157A83] = 0` (the controlled actor is released);
  *  - 0x7A2F0 `[0x158746] = 1` (the staged event is acknowledged);
  *  - 0x7A2F6 phase `[0x157A49]>>24 == 1` exits before the scan (the camera
@@ -874,7 +877,10 @@ int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);
  *    camera triple, FU-67 §4.1);
  *  - 0x7A335..0x7A376 the actor's own-team scan (FUN_0008DE8C: 11 records,
  *    word x/z, +0x98/+0x9A skips) with the skip word sign_extend8(+0x8D) when
- *    the +0x8E type is 1 or the +0x91 action is 0x10/0x11/0x12, via the ported
+ *    the +0x91 action is 1 or 0x10/0x11/0x12 — the native's
+ *    `MOV EAX,dword[EBP+0x8E]; SAR EAX,0x18` reads the dword alias's high
+ *    byte, i.e. +0x91 (the same idiom as dword[+0x69]>>16 = +0x6B); the
+ *    +0x8E facing octant is not read by this gate — via the ported
  *    `fifa96_ball_pair_receive`;
  *  - 0x7A37B..0x7A3A2 `[0x158734] = receiver`; the actor team's +0x7B2 =
  *    receiver / +0x7B6 = 0; the opponent block's +0x7B2/+0x7B6 = 0;

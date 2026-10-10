@@ -1126,8 +1126,12 @@ same `0x1104BB` recompute table). `FUN_0007A084` then runs, first-hand:
 0x7A2F6  phase == 1 -> exit
 0x7A2FF  base = [0x157770..0x157778]; x += (dword[0x1577BE] >> 16) << 5;
          z += (dword[0x1577C0] >> 16) << 5   ; the high halves = [0x1577C0]/C2]
-0x7A335  scan skip = (byte[EBP+0x8E] == 1 || (int8)[EBP+0x91] in {0x10,0x11,0x12})
-           ? (int16)(int8)[EBP+0x8D] : 0
+0x7A335  MOV EAX,dword[EBP+0x8E]; SAR EAX,0x18
+           ; the dword alias's HIGH byte = +0x91 (little-endian; the same idiom
+           ; as dword[+0x69]>>16 = +0x6B). The gate is action-based:
+           ; skip = ((int8)[EBP+0x91] == 1 || (int8)[EBP+0x91] in
+           ;         {0x10,0x11,0x12}) ? (int16)(int8)[EBP+0x8D] : 0
+           ; +0x8E is the facing octant (FUN_00079C50), not read here.
 0x7A376  CALL 0x8DE8C(target, [EBP] team block, skip, out dist)
 0x7A37F  [0x158734] = ret; [EDX+0x7B2] = ret; [EDX+0x7B6] = 0
 0x7A38E  [[EBP]+0x7A6][+0x7B2] = 0; [+0x7B6] = 0
@@ -1163,15 +1167,17 @@ contract in `fifa96_match_run.h`), wired in `match_kick_run`
 `out->receive` — i.e. from rows 07/0F and the shared set-piece taker
 deliveries (`match_sp_kick`), exactly the native `FUN_0007A490` tail callers:
 
-1. the camera event + tracked bind (the high-ball follow producer);
+1. the camera event + tracked bind (the high-ball follow producer); the
+   `0x71C99` `[0x157A6C]` bail (setter return 1) skips the reset/tracked
+   store but the arm continues;
 2. `controlled = NONE` (`[0x157A83] = 0`);
 3. `pair.ack = 1` (`[0x158746]`);
 4. the phase-1 exit;
 5. the `0x157770` base + camera-velocity leads through the ported
    `fifa96_ball_pair_receive_target` (the engine's 0x157770 stand-in is its
    camera triple, FU-67 §4.1 / FU-149 L13);
-6. the own-team nearest scan through `fifa96_ball_pair_receive` (the skip rule
-   included);
+6. the own-team nearest scan through `fifa96_ball_pair_receive` (the
+   `+0x91` action skip rule included);
 7. the receiver/team-target/opponent-clear writes;
 8. the carrier release `pos_release = 0x14`.
 
@@ -1219,8 +1225,9 @@ Tests (all `make check`, 108/108 before/after; no new executables):
 * `test_ball_receive_low_ball_no_follow` — the discriminating boundary: traj
   0x50 (the row-1E release height) and the phase-1 gate; the arm refuses
   (velocities untouched);
-* `test_ball_receive_skip_rule` — the `+0x8E`/`+0x91` skip bytes and the
-  carrier release;
+* `test_ball_receive_skip_rule` — the `+0x91` action-skip rule (the `+0x8E`
+  octant==1 case must not skip; action 1/0x10 must) and the carrier release;
+  the low-ball twin also pins the `0x71C99` bail continuation;
 * `test_live_pass_kick_runs_receive_arm` (ISO) — the live carrier chain ->
   PASS release -> row 07 -> code 13 -> the receive fields live (`ack` 1,
   `receiver` a real teammate, `camera.tracked` = the actor, `controlled`

@@ -2367,11 +2367,16 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
   actor_rec = &mr->entities.team[t].records[(uint32_t)actor_id % FIFA96_MATCH_ENTITY_RECORDS];
   team = &mr->entities.team[t];
   /* 0x7A207..0x7A219: the camera event (seed pair = the staged vector's
-   * middle/z words, height = the trajectory word) and the tracked bind. */
-  if (fifa96_camera_event_set(cam, (int16_t)vector->height,
-                              (int16_t)vector->z, traj, 0) != FIFA96_OK)
-    return -FIFA96_ERR_INVALID;
-  (void)fifa96_camera_set_tracked(cam, actor_id);
+   * middle/z words, height = the trajectory word) and the tracked bind. The
+   * FUN_00071C94 [0x157A6C] bail (0x71C99) returns 1 without the reset and
+   * without the 0x71D27 tracked store, but FUN_0007A084 *continues* (the
+   * ack/scan/release below still run) — only a negative error aborts. */
+  {
+    int ev = fifa96_camera_event_set(cam, (int16_t)vector->height,
+                                     (int16_t)vector->z, traj, 0);
+    if (ev < 0) return ev;
+    if (ev == FIFA96_OK) (void)fifa96_camera_set_tracked(cam, actor_id);
+  }
   /* 0x7A227: [0x157A83] = 0 — the controlled actor is released. */
   mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
   /* 0x7A2F0: [0x158746] = 1 — the staged event is acknowledged. */
@@ -2396,7 +2401,10 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
     cands[i].skip_9a = e->skip_9a;
   }
   memset(&rec, 0, sizeof rec);
-  rec.kind = actor_rec->type;      /* +0x8E byte */
+  /* 0x7A335..0x7A349: the skip source is the +0x91 action byte (`MOV
+   * EAX,dword[EBP+0x8E]; SAR EAX,0x18` selects the dword alias's high byte —
+   * the same idiom as dword[+0x69]>>16 = +0x6B); +0x8E is the facing octant
+   * (0x79C50) and is not read here, so the helper's `kind` stays 0. */
   rec.action = actor_rec->code;    /* +0x91 byte */
   rec.flag = actor_rec->active;    /* +0x8D byte */
   if (fifa96_ball_pair_receive(&rec, cands, FIFA96_MATCH_ENTITY_RECORDS,

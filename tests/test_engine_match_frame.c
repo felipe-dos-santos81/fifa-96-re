@@ -3470,14 +3470,32 @@ static void test_ball_receive_low_ball_no_follow(void) {
   assert(mr.entities.ball.pair.receiver == 0x7AA);   /* untouched */
   assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
 
+  /* M2 phase-10 T1 fix round 1: the FUN_00071C94 [0x157A6C] bail (0x71C99)
+   * returns 1 from the ported setter and skips the 0x71D27 tracked store,
+   * but FUN_0007A084 continues — the ack, receiver scan and release run. */
+  mr.state.phase = 2;
+  mr.render.camera.event_suspended = 1;
+  mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  mr.entities.ball.pair.receiver = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.ball.pair.ack = 0;
+  mr.entities.controlled = 9;
+  assert(fifa96_match_run_ball_receive(&mr, 9, &vec, 0x50) == FIFA96_OK);
+  assert(mr.entities.ball.pair.ack == 1);
+  assert(mr.entities.ball.pair.receiver >= 0);       /* the scan ran */
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
+  assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);  /* bailed */
+  mr.render.camera.event_suspended = 0;
+
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
 
-/* The slot-skip rule (native 0x7A346..0x7A36D): when the actor's +0x8E type
- * is 1 or its +0x91 action is 0x10/0x11/0x12, the scan skips the record at
- * the sign_extend8(+0x8D) ordinal. With record 7 skipped the next nearest
- * candidate (record 3) wins. */
+/* The slot-skip rule (native 0x7A335..0x7A36D): `MOV EAX,dword[EBP+0x8E];
+ * SAR EAX,0x18` reads the dword alias's high byte — the +0x91 action code
+ * (the same idiom as dword[+0x69]>>16 = +0x6B), NOT the +0x8E facing octant.
+ * When the action is 1 or 0x10/0x11/0x12, the scan skips the record at the
+ * sign_extend8(+0x8D) ordinal; with record 7 skipped the next nearest
+ * candidate (record 3) wins. The octant==1 case (action 0) must NOT skip. */
 static void test_ball_receive_skip_rule(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -3502,13 +3520,19 @@ static void test_ball_receive_skip_rule(void) {
   vec.x = 0;
   vec.height = 0;
   vec.z = 0;
-  mr.entities.team[0].records[9].type = 1;      /* +0x8E == 1 */
+  /* the octant byte (+0x8E) is NOT the skip source: type == 1 with action 0
+   * keeps the nearest candidate (record 7) */
+  mr.entities.team[0].records[9].type = 1;
   mr.entities.team[0].records[9].active = 7;    /* the skip ordinal */
+  assert(fifa96_match_run_ball_receive(&mr, 9, &vec, 0x100) == FIFA96_OK);
+  assert(mr.entities.ball.pair.receiver == 7);
+
+  /* action == 1 skips the ordinal (the native 0x7A346 `== 1` clause) */
+  mr.entities.team[0].records[9].code = 1;
   assert(fifa96_match_run_ball_receive(&mr, 9, &vec, 0x100) == FIFA96_OK);
   assert(mr.entities.ball.pair.receiver == 3);
 
-  /* the same skip via the action byte (+0x91 == 0x10) */
-  mr.entities.team[0].records[9].type = 0;
+  /* the {0x10,0x11,0x12} action set skips the same ordinal */
   mr.entities.team[0].records[9].code = 0x10;
   assert(fifa96_match_run_ball_receive(&mr, 9, &vec, 0x100) == FIFA96_OK);
   assert(mr.entities.ball.pair.receiver == 3);

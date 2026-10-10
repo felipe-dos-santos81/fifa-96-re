@@ -221,10 +221,17 @@ static void test_receive_skip_rule(void) {
   actor.flag = 2;
   assert(fifa96_ball_pair_receive(&actor, c, 3, 0, 0, &receiver) == 1);
   assert(receiver == 2);
+  /* M2 phase-10 T1 fix round 1: the octant byte (+0x8E, modelled as `kind`)
+   * is NOT the skip source — the native 0x7A335 `dword[+0x8E]>>24` reads the
+   * +0x91 action code; `kind == 1` with action 0 must keep the nearest
+   * record. */
   actor.kind = 1;
   assert(fifa96_ball_pair_receive(&actor, c, 3, 0, 0, &receiver) == 1);
-  assert(receiver == 1);
+  assert(receiver == 2);
   actor.kind = 0;
+  actor.action = 1;                    /* the native `== 1` clause */
+  assert(fifa96_ball_pair_receive(&actor, c, 3, 0, 0, &receiver) == 1);
+  assert(receiver == 1);
   actor.action = 0x12;
   assert(fifa96_ball_pair_receive(&actor, c, 3, 0, 0, &receiver) == 1);
   assert(receiver == 1);

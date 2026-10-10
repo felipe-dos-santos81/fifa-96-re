@@ -40,9 +40,11 @@ typedef struct fifa96_ball_pair_actor {
   int16_t velocity_x;
   int16_t velocity_z;
   uint8_t has_ball;
-  uint8_t kind;
-  uint8_t action;
-  uint8_t flag;
+  uint8_t kind;     /* native +0x8E (the facing octant; NOT the receive-skip
+                     * source — the native 0x7A335 gate reads the +0x91 action
+                     * byte, see fifa96_ball_pair_receive) */
+  uint8_t action;   /* native +0x91 action code (the receive-skip source) */
+  uint8_t flag;     /* native +0x8D active byte (the skip ordinal) */
 } fifa96_ball_pair_actor;
 
 typedef struct fifa96_ball_pair_delta {

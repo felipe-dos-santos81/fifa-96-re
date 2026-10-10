@@ -58,7 +58,14 @@ int fifa96_ball_pair_receive(const fifa96_ball_pair_actor *actor,
   int16_t best = 0;
   int index;
   if (!actor || !candidates || !receiver_index) return -FIFA96_ERR_INVALID;
-  if (actor->kind == 1 || actor->action == 0x10 || actor->action == 0x11 ||
+  /* M2 phase-10 T1 fix round 1: the native 0x7A335 gate is
+   * `MOV EAX,dword[EBP+0x8E]; SAR EAX,0x18` — the dword alias's high byte,
+   * i.e. the +0x91 action code (the same little-endian idiom as
+   * `dword[+0x69]>>16` = +0x6B and the 0x110680 dispatch gate at 0x7CC93).
+   * +0x8E is the facing octant (FUN_00079C50) and is not read by this gate:
+   * all four comparisons test +0x91, so the condition is
+   * `action == 1 || action in {0x10,0x11,0x12}`. */
+  if (actor->action == 1 || actor->action == 0x10 || actor->action == 0x11 ||
       actor->action == 0x12)
     skip = (uint16_t)(int16_t)(int8_t)actor->flag;
   index =
