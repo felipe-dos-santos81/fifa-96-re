@@ -492,7 +492,9 @@ native scheduler is in the frame body, not the render driver).
    carry fold, the low dword returned) and the post step calls it lazily on the
    exact native arm (`match_run_screen_post`). T4 re-verified the body
    first-hand and the pins stand (`test_goal_probe_limbs`,
-   `test_screen_step_probe_post`).
+   `test_screen_step_probe_post`); **no native run is available to compare the
+   cell values against**, so this leg (live-native verification) stays open —
+   the first-hand re-verification is static only.
 6. **`FUN_0009252C` display gate.** The gate + dispatch boundary is ported
    (T4): `fifa96_score_display_gate` is the first-hand `FUN_000A80E2`
    (`device==0 -> -1; midi!=0 -> 1; else 0`), the writer's every post arm runs

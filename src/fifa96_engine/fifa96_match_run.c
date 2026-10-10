@@ -312,7 +312,9 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
  *
  * Staged stand-ins (producers unported): the `0x1577F0` track word
  * (`high_577ee_ge_50`, OL-72), `slot[+0x10]` (OL-69), the `[0x157AB0]`/
- * `[0x1587AC]` flags and the record `+0x99` byte (OL-72). The no-edge-arm and
+ * `[0x1587AC]` flags and the record `+0x99` byte (OL-72; the native handler
+ * zero-gates `0x7CE63`/`0x7CF7F`/`0x7D19F` pass with the staged 0). The
+ * no-edge arm and
  * the `out.forced`/`out.chase` outputs are computed but not applied (their
  * record writes belong to the unported machine tail, FU-75 §1.5/§1.6/§1.7,
  * legs L4.1/L4.2). */
@@ -422,8 +424,10 @@ static int match_input_handler(uint32_t handler, void *context) {
     case 0x7CD60u:   /* pressed code-3/released code-0 want 0x40: returns 1 */
       return 1;      /* the +0x7CB arm body is leg L4.4 */
     case 0x7D1D4u:   /* the control-selection switch */
-      /* 0x7D1DF: the controlled actor returns 0 immediately; the switch body
-       * for the other records is leg L4.5 (also a 0 here). */
+      /* 0x7D1DF: the controlled actor returns 0 immediately. The switch body
+       * for the other records (which runs the camera/nearest selection and
+       * returns 1 on its non-self paths, FU-75 §6.4) is leg L4.5, so the
+       * stub's 0 is the self-path return only. */
       return 0;
     default:
       return 0;

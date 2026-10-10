@@ -1099,8 +1099,8 @@ change.
   never touch the cell). Table A's four "not ported (partial)" cells are
   superseded; the staging/kick-vector/sink residue is FU-149 §7.3 legs
   L13.1..L13.7. §7 totals refreshed in place: action ported 15 -> 19, action
-  not ported 26 -> 22, not ported 60 -> 56; dispatch 60 `-UNSUP` (56 not ported
-  rows + 34 phase rows + the unwired `27`/`29`/`2C` + the dead `2B`), 19
+  not ported 26 -> 22, not ported 60 -> 56; dispatch 60 `-UNSUP` (22 not ported
+  action rows + 34 phase rows + the unwired `27`/`29`/`2C` + the dead `2B`), 19
   `FIFA96_OK`, 1 `NOTF`; `docs/ENGINE.md` / `README.md` show `19/80` and
   `60 UNSUP / 19 OK / 1 NOTF`. Cross-checked against
   `src/fifa96_engine/fifa96_match_handlers.c`

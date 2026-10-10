@@ -26,9 +26,10 @@ bind + `FUN_0007876C` merge attach the human slot to the kickoff taker, row
 00's slot-direction target feeds the wired FU-77 shared mover
 `FUN_0007BF20` for that record, and the M2 golden is re-pinned for the
 resulting movement — first differing line frame 59, 107 hash lines).** The M2-B
-acceptance tape **v7** (the phase-7 acceptance, P5; v6 was the phase-6
-full-gameplay acceptance, S5, and v5 was the M2
-interactive-match G3 close-out and the lineage v4 G4 acceptance / v4.1 pad
+acceptance tape **v8** (the phase-8 live-loop acceptance, T5; v7 was the
+phase-7 acceptance, P5, v6 the phase-6
+full-gameplay acceptance, S5, and v5 the M2
+interactive-match G3 close-out; the lineage v4 G4 acceptance / v4.1 pad
 locomotion / v4.2 camera place / v5 HUD / v5.1 possession producers is retained
 as provenance) is green: it asserts the drawing directly (the formation-placed
 records reach the
@@ -57,22 +58,41 @@ reachable through the m 41 staging (v7 pins the claim take: `+0x9B` and the
 0x15774C focus triple), while the set-piece, referee and replay/overlay chains
 stay tape-dormant and fixture-proven (v7 asserts the fresh cells at m 41/m 62
 and names each dormancy gate); the phase-7 close-out entry below carries the
-whole-range summary, the re-pin ledger and the leg register. The interactive
-`make game` smoke re-run on this host (2026-10-09, phase-7 P5) reaches match
+whole-range summary, the re-pin ledger and the leg register. The phase-8
+live-loop tasks T1–T4 (FU-149 §7 taker rows, FU-148 §12 camera live feed,
+OL-T4-1 hold/kick, OL-87/88/89 natural goal) landed under the same tape
+without moving a presented frame, and **v8** asserts each layer's tape-level
+status: the taker rows are wired but armed-path dormant (the set-piece arms
+need `goal_armed`, which the never-panning camera never sets), the row-04 pan
+origin is wired live but the tape's code-4 rows carry lane 1460+ so no event
+fires (the camera's only triple change is the row-1E claim place, not a pan),
+the SDL hold policy and the `FUN_0007CA54` pad-kick seam are landed but the
+tape's edges land at phase 0x13 where the handler phase gates refuse, and the
+goal chain is closed producer-to-writer with the natural end-to-end goal
+proven in a fixture (`test_natural_goal_end_to_end`, score 1-0); the phase-8
+close-out entry below carries the whole-range summary, the re-pin ledger and
+the leg register. The interactive
+`make game` smoke re-run on this host (2026-10-10, phase-8 T5) reaches match
 start and
 shows the **match HUD on screen** (bar + score 0-0 + `00:00` at kickoff in
-`docs/screens/p5-v7-match-hud.png`); a KICK burst reaches the row-01 kickoff
-release gate, so the live clock starts ticking (`00:03` in
-`docs/screens/p5-v7-match-clock.png`) — the natural phase-1 → 2 transition
-visible through the HUD. The scene sprites stay in the placement pose:
+`docs/screens/p8-v8-match-hud.png`); a KICK burst reaches the row-01 kickoff
+release gate, so the live clock starts ticking (`00:02` in
+`docs/screens/p8-v8-match-clock.png`) — the natural phase-1 → 2 transition
+visible through the HUD. The T5 fresh front-end and kickoff captures are
+byte-identical (`cmp`) to the phase-7 P5 shots, so the phase-8 landings moved
+no live pixels. The scene sprites stay in the placement pose:
 T3 landed the hold policy (OL-T4-1; the SDL backend now presents a held key
-as a per-poll state sample) and a re-run smoke holds RIGHT after the kickoff
-with `input_state[0] = 0x04` persisting, but the scene band stays
-byte-identical (`compare -metric AE` = 0) — the live slot record is team 0
+as a per-poll state sample) and the T5 re-run smoke holds RIGHT after the
+kickoff (HUD clock `00:14`) with the scene band staying
+byte-identical (`compare -metric AE` = 0 on the `y < 591` crop; full-frame
+AE 1345 = the HUD clock/score board only) — the live slot record is team 0
 record 9 carrying action code 02 (`locomotion_restart_target`, unported), so
 no wired row consumes the pad for it (the T3 input-row seam runs for it and
-finds no matching pressed row; see "Interactive smoke" and "Known gaps").
-Kick → score stays blocked
+finds no matching pressed row; the T3 null probe `probe_t3.out` records the
+code-02 state; see "Interactive smoke" and "Known gaps"). A T5 Z-burst during
+live play likewise leaves the scene band at AE 0 (full-frame 201 = the clock):
+the pad kick is wired but its scene-facing effect needs a carrier record, and
+the possession producers are unported. Kick → score stays blocked
 interactively: the S2/S3 goal chain is landed and the pan origin is now wired
 from row 04 (T2), but the interactive smoke never reaches a code-4 half-line
 event, so the score source is
@@ -181,8 +201,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   placement/probe/kick/resolution; the taker codes the P1 arms install now
   execute and hand back to phase 2 through the shared situation-0xB entry);
   dispatch results 60 UNSUP / 19 OK / 1 NOTF.
-- **Interactive smoke (phase-7 P5 re-run, this host 2026-10-09; the phase-6 S5
-  run first verified the phase-6 reach and the follow-up-5 T4 run the
+- **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-7 P5
+  run first verified the phase-7 reach, the phase-6 S5
+  run the phase-6 reach and the follow-up-5 T4 run the
   walkthrough):** `make game` window opens (960×720
   integer-scaled SDL3; ESC quits, exit 0 — verified in a clean run; the intro
   and the procedural front-end draw). The walkthrough reaches **match start** —
@@ -190,20 +211,23 @@ the build also produces the windowed `fifa96` target (`make game`).
   confirm → FU-66 STATE16 bridge) — with the derived palette (OL-T11-6) and
   the **match HUD** (P0.2/OL-T11-7) drawn on screen: the Frames.fsh bar at the
   bottom-left with the score pair (0-0) and the `%02d:%02d` clock at kickoff
-  `00:00` (`docs/screens/p5-v7-match-hud.png`). **A KICK burst latches row
+  `00:00` (`docs/screens/p8-v8-match-hud.png`). **A KICK burst latches row
   01's native release gate**, so the begun run leaves the kickoff wait for the
-  live phase 2 and the clock ticks on screen (`00:03` in
-  `docs/screens/p5-v7-match-clock.png`; the bottom-left HUD panel changes by
-  139 pixels between the two shots, pinning the running clock). **The hold
+  live phase 2 and the clock ticks on screen (`00:02` in
+  `docs/screens/p8-v8-match-clock.png`). The T5 front-end and kickoff captures
+  are byte-identical to the P5 shots (`cmp`), so the phase-8 T1–T4 landings
+  moved no live pixels. **The hold
   policy is landed (T3/OL-T4-1):** the SDL backend keeps the pressed set and
   re-presents every held key as a per-poll state sample, so a held key no
   longer pulses; `tests/test_engine_sdl3.c::test_held_key_is_a_state_sample`
   holds one KEY_DOWN with no repeats and keeps `input_state[0] == 0x04` while
   the controlled row-00 record moves across the granted frames. **Movement is
-  still not observable on the live smoke:** the T3 re-run held RIGHT for 3 s
-  after the kickoff (HUD clock `00:04`) and the scene band stayed
+  still not observable on the live smoke:** the T5 re-run held RIGHT for 3 s
+  after the kickoff (HUD clock `00:14`, `docs/screens/p8-v8-hold.png`) and the
+  scene band stayed
   byte-identical (crop `y < 591` of the 960×720 window, `compare -metric AE`
-  = 0). The reason is now first-hand (null-backend probe replaying the same
+  = 0; the full-frame AE 1345 is the HUD clock/score board). The reason is
+  first-hand (the T3 null-backend probe `probe_t3.out` replaying the same
   walkthrough with the ISO): the post-kickoff slot record is **team 0 record
   9 carrying action code 02** (`locomotion_restart_target`, unported —
   FU-138 OL-18), with `input_state[0] == 0x04` persisting across 880 held
@@ -213,14 +237,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   pad → target → velocity → position seam is exercised headlessly
   (`test_engine_match_frame::test_pad_drives_controlled_locomotion`) and is
   what drives the tape's mover-integrated motion.
-  **Kick (gameplay) and score stay blocked on screen:** the KICK press that
-  lands the kickoff transition dispatches no gameplay row (the possession/
-  selection invokers are unported). The natural goal *producer* now exists
-  (T2 wired row 04's event outputs to the real pan setter), but the acceptance
+  **Kick (gameplay) and score stay blocked on screen:** a T5 Z-burst during
+  live play leaves the scene band at AE 0 (full-frame 201 = the clock), so the
+  KICK press dispatches no scene-facing gameplay row. The natural goal
+  *producer* exists
+  (T2 wired row 04's event outputs to the real pan setter) and the chain was
+  closed end-to-end by T4 (natural goal -> score 1-0 in
+  `test_engine_match_frame::test_natural_goal_end_to_end`), but the acceptance
   tape's code-4 records never meet the half-line event gates, so the tape
-  camera stays static and no goal enters the tape; the full chain is
-  producer-real in the fixture instead
-  (`test_engine_match_frame::test_row04_live_pan_arms_camera`). The
+  camera never pans and no goal enters the tape. The
   goal **consumer** chain was landed by S3 (FU-146): begin installs the
   goal-screen machine (`0x92D8C/0x92E2C`), the frame body runs the
   session-gated scheduler (`FUN_000948AC 0x4B1A1`, before the clock body), and
@@ -228,7 +253,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   `fifa96_match_run_score_event` — the score increments through the native
   chain in a fixture
   (`test_engine_match_frame::test_goal_consumer_chain_fixture`), while both
-  goldens stay byte-identical (the tape camera never arms, so no natural goal
+  goldens stay byte-identical (the tape camera never pans, so no natural goal
   enters the tape). `fifa96_match_run_goal_queue`'s direct fallback now honours
   the native `[0x157AC2] in {2,3}` phase-5 skip. The P5 smoke shots' measured
   content (identical to the S5 re-run): 3.60% non-black window pixels (the
@@ -236,22 +261,22 @@ the build also produces the windowed `fifa96` target (`make game`).
   `#900808` (11301 px); the sprite color
   `#E044A0` (the OL-T11-6 6-bit `0x38/0x11/0x28 << 2`) is live (1200 px).
 
-  Reached vs blocked (P5 smoke, 2026-10-09; identical reach to S5):
+  Reached vs blocked (T5 smoke, 2026-10-10; identical reach to P5/S5):
 
   | step | state | evidence |
   |---|---|---|
-  | window + intro + front-end draw | reached | `p5-v7-frontend.png`; ESC exit 0 (clean run) |
-  | panel DECLINE/CONFIRM → match start | reached | match canvas replaces the front-end; `p5-v7-match-hud.png` |
+  | window + intro + front-end draw | reached | `p8-v8-frontend.png` (byte-identical to the P5 shot); ESC exit 0 (clean run) |
+  | panel DECLINE/CONFIRM → match start | reached | match canvas replaces the front-end; `p8-v8-match-hud.png` (byte-identical to the P5 shot) |
   | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
-  | match HUD (bar/score/clock) | reached (on screen) | `p5-v7-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
-  | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:03` in `p5-v7-match-clock.png`; tape v7 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
-  | move the controlled player | blocked on screen; hold policy landed (T3) | 3 s held RIGHT: scene-band 0 differing pixels while `input_state[0] = 0x04` persists (T3 smoke + null probe); the slot record is team 0 record 9 code 02 (`locomotion_restart_target`, FU-138 OL-18), so no wired row consumes the pad; the S1 pad seam and the T3 SDL hold are fixture-proven (`test_held_key_is_a_state_sample`, `test_pad_drives_controlled_locomotion`) |
-  | kick the ball (gameplay) | blocked live; T3 pad kick fixture-proven | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); live it needs the carrier state (possession producers unported) — `test_pad_kick_release_runs_kick_row` |
-  | score a goal | blocked naturally; chain producer-real in a fixture | the row-04 pan origin is wired (T2) but the acceptance tape's code-4 records stay far from the camera (lane ~1460+), so the tape camera never arms; the S2/S3 chain increments the score in `test_camera_pan_event_chain` (producer seed) and `test_row04_live_pan_arms_camera` (live row -> armer -> situation 5 -> score) |
-  | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the static camera never arms (the live row-04 origin is wired but tape-dormant, T2); FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v7 asserts the fresh dispatcher cells at m 41/m 62 |
-  | fouls / offside (live) | blocked; chains fixture-proven | the FU-150 entries have no live producer; `test_referee` + the `test_engine_referee_*` chains prove them, and tape v7 pins `ref_machine == REF_NONE` with no whistle/speech/decision cells |
-  | keeper restart rows 1D/1E (live) | blocked; row 1E machine tape-reachable | the taker rows 0x10..0x13 are ported but dormant on the tape (the set-piece arms never fire; FU-149 L13/T1) and row 1E executes on the tape's m 41 staging (v7 pins the claim take + the 0x15774C focus triple); row 1D is fixture-proven (`test_keeper_machines`) |
-  | replay / overlay / sub strip (live) | blocked | zero-gated rows with no producers yet (FU-152 legs 1/2/3/7); tape v7 pins `replay.state`/`sub.active`/`overlay.armed` 0 and `ball_row` NULL |
+  | match HUD (bar/score/clock) | reached (on screen) | `p8-v8-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
+  | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:02` in `p8-v8-match-clock.png`; tape v8 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
+  | move the controlled player | blocked on screen; hold policy landed (T3) | 3 s held RIGHT (`p8-v8-hold.png`, clock `00:14`): scene-band AE 0 while `input_state[0] = 0x04` persists (T3 smoke + `probe_t3.out`); the slot record is team 0 record 9 code 02 (`locomotion_restart_target`, FU-138 OL-18), so no wired row consumes the pad; the S1 pad seam and the T3 SDL hold are fixture-proven (`test_held_key_is_a_state_sample`, `test_pad_drives_controlled_locomotion`); blockers L4.1/L4.6 |
+  | kick the ball (gameplay) | blocked live; T3 pad kick fixture-proven | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); live it needs the carrier state (possession producers unported) and a live Z-burst leaves the scene AE 0 — `test_pad_kick_release_runs_kick_row` |
+  | score a goal | blocked naturally; chain producer-real in a fixture | the row-04 pan origin is wired (T2) but the acceptance tape's code-4 records stay far from the camera (lane ~1460+), so the tape camera never pans; the S2/S3 chain increments the score in `test_camera_pan_event_chain` (producer seed), `test_row04_live_pan_arms_camera` (live row -> armer -> situation 5 -> score) and `test_natural_goal_end_to_end` (natural kickoff -> pan -> situation 6 -> id 5 -> handler -> score 1-0) |
+  | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed` and the never-panning camera never arms (the live row-04 origin is wired but tape-dormant, T2); FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v8 asserts the fresh dispatcher cells (`sp_*`) and the absent taker mask at m 41/m 62 |
+  | fouls / offside (live) | blocked; chains fixture-proven | the FU-150 entries have no live producer; `test_referee` + the `test_engine_referee_*` chains prove them, and tape v8 pins `ref_machine == REF_NONE` with no whistle/speech/decision cells |
+  | keeper restart rows 1D/1E (live) | blocked; row 1E machine tape-reachable | the taker rows 0x10..0x13 are ported but dormant on the tape (the set-piece arms never fire; FU-149 L13/T1) and row 1E executes on the tape's m 41 staging (v8 pins the claim take + the 0x15774C focus triple and the camera triple it resets to); row 1D is fixture-proven (`test_keeper_machines`) |
+  | replay / overlay / sub strip (live) | blocked | zero-gated rows with no producers yet (FU-152 legs 1/2/3/7); tape v8 pins `replay.state`/`sub.active`/`overlay.armed` 0 and `ball_row` NULL |
   | half/period end → exit | reached (headless) | tape: live class-1 period end → phase 0x0C → OVER→POST→EXIT; native periods last minutes, so not run to completion in the smoke |
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
@@ -260,7 +285,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   the 165-frame M2-B transcript (`tests/golden/engine/m2-frames.txt`):
   `frame=<n> hash=<hex>` plus `state=<phase>/<home>-<away>` while a match is
   live, the forced kickoff phases 0x13/0x14, the wired-row `FIFA96_OK` dispatch
-  set, and the score step. Tape **v7** (the phase-7 acceptance, P5; v6's
+  set, and the score step. Tape **v8** (the phase-8 live-loop acceptance, T5;
+  v7's phase-7 acceptance — P5 —, v6's
   phase-6 full-gameplay acceptance — S5 — and v5's M2 interactive G3
   acceptance with the v4 G4/v3 provenance are retained as the assertion
   lineage) stages the
@@ -332,8 +358,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   byte-identical), 157 lines 9..165 differ, and every `state=` suffix is again
   unchanged; the natural probe still lands live phase 2 at step 215. The
   **full-gameplay S2** (goal arming, `FU-145`, phase-6 wave-2 S2) transcript is
-  **byte-identical** (no re-pin): the tape camera never leaves the reset
-  triple, so the new armer never fires and the clock-tail goal scan is a gate
+  **byte-identical** (no re-pin): the tape camera never pans (the only triple
+  change is the row-1E claim place, T5), so the new armer never fires and the
+  clock-tail goal scan is a gate
   no-op — the "dormant chain" risk materialised as predicted; the chain is
   fixture-proven (`test_engine_match_frame::test_goal_chain_pan_fixture`, a
   camera-velocity pan past the bounds → armed → snapshot → queued situation 6).
@@ -347,14 +374,17 @@ the build also produces the windowed `fifa96` target (`make game`).
   is likewise **byte-identical** (no re-pin): the pose feed's `view_mode`
   default 0 is the unported handler arm, no translation pool is staged, and the
   formation id defaults 0 (`352ko.fmt` as before); the new pan event setter has
-  no natural invoker, so the tape camera still never moves. The S2 L1 chain is
+  no natural invoker, so the tape camera never pans (T5: still true — the only
+  triple change is the row-1E claim place). The S2 L1 chain is
   now producer-proven (`test_engine_match_frame::test_camera_pan_event_chain`:
   the real `fifa96_camera_event_set` pans the integrator into the arming band
   → queued situation 5 → S3 consumer score).
   The **phase-8 T2** (camera live feed, `FU-148` §12) transcript is likewise
   **byte-identical** (no re-pin): the row-04 pan origin is now wired live, but
   the tape's code-4 rows dispatch with lane ~1460+ (the half-line event gates
-  fail), so no event fires and the camera stays static; the natural chain is
+  fail), so no event fires and the pan never runs (v8 asserts the pan/event
+  cells fresh; the row-1E claim place is the camera's only triple change); the
+  natural chain is
   producer-real in `test_engine_match_frame::test_row04_live_pan_arms_camera`
   (live action-04 record → event → armer → queued situation 5 → score 1-0).
   The
@@ -403,7 +433,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   gate named (scanner `goal_armed`, `ref_machine == REF_NONE`, the zero-gated
   presentation rows), and the remaining forcing inventory is restated with its
   owning legs. It is byte-identical to v6 (no re-pin; `cmp` clean, 165 lines;
-  M1 unmoved) — the phase-7 ports moved no presented frame. Regenerate with
+  M1 unmoved) — the phase-7 ports moved no presented frame. **v8/T5**
+  (phase-8 live-loop acceptance) adds the phase-8 assertion layer: the T1
+  taker mask absent + the `sp_*` staging cells fresh (armed-proof in the
+  taker fixtures), the T2 camera at the reset triple at m 41 and at the
+  row-1E claim-place triple at m 62 with every pan/event cell fresh (no pan
+  ever runs; the place is the only triple change), the T3 `phase != 2` pins at
+  the KICK edges plus the zeroed ball pair/carrier (the pad-kick seam gates
+  out; fixture-proven), and the T4 display-gate freshness with the score step
+  noted as the direct writer call (the natural chain is fixture-proven:
+  `test_natural_goal_end_to_end` scores 1-0). It is byte-identical to v7 (no
+  re-pin; `cmp` clean, 165 lines; M1 unmoved) — the phase-8 T1–T4 landings
+  moved no presented frame. Regenerate with
   `./build/test_engine_m2 > tests/golden/engine/m2-frames.txt` (the test exits
   non-zero while rewriting the file; re-run `make check` to verify).
 
@@ -428,7 +469,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   landed with FU-149 §7 / T1) and row 01's event/camera/ball-stage sinks, plus
   the FU-73 keeper/restart producers
   `0x7546E`/`0x75B58`/`0x76072`; `OL-85` extra-time flag wiring; `OL-87`/
-  `OL-88`/`OL-89` goal invokers (**closed by phase-8 S2/S3/T2/T4** — FU-142
+  `OL-88`/`OL-89` goal invokers (**closed by phase-6 S2/S3 + phase-8 T2/T4** —
+  FU-142
   §L.10; the tracked-side pick / `FUN_00071DF4` / display sink stay legs);
   `OL-81`/`OL-83` row-field wrinkles; `OL-82`
   row-08 scan producer; the T1 formation-id producer
@@ -594,6 +636,41 @@ the build also produces the windowed `fifa96` target (`make game`).
   in FU-148 §11.5: the image-default pose array is `+0x4C` (not `+0x48`/
   NULL), the pool floor is 0x3000 (not 0x3600), the pose-feed ordering choice
   and the handler-table typos.
+- **M2 phase-8 T1 (taker/corner row machines, FU-149 §7; 2026-10-09).**
+  Landed from the frozen FU-149 L13 + a fresh first-hand derivation (the slice
+  did not freeze the row bodies): `fifa96_match_action_10/11/12/13`
+  (throw-in/corner/free-kick/penalty taker machines) with the head gates and
+  marker blocks, the full stage cascades with every native gate, the
+  record/camera-visible writes, the RNG draws and both resolution exits
+  (situation 0xB -> phase 2; row 0x10's `|x| >= 0x720` situation-2 re-queue;
+  rows 0x10/0x11 write `[0x157A6A] = 0x12C`, rows 0x12/0x13 never touch it),
+  the shared helpers (`match_sp_entity`/`_nearest` with the `+0x9A` self
+  stamp, `_anchor`/`_commit`/`_snap`, `_setup_832a8`, `_probe_85498`,
+  `_resolve`, `_kick` through the ported `fifa96_ball_kick_target`) and the
+  run state `sp_flag_158784`/`sp_delivery`/`sp_157821`. The wired count goes
+  15/80 -> **19/80** (dispatch 60 UNSUP / 19 OK / 1 NOTF); the FU-137 §7/§6.1
+  tables and FU-149 §7 carry the refreshed counts and the §1.6 erratum
+  (full windows; row 0x12's second event table; row 0x13 has no offside
+  timer). **Both goldens byte-identical, no re-pin** (the tape never
+  dispatches 0x10..0x13: the set-piece arms stay dormant on the never-panning
+  camera; v8 pins the taker mask absent and the `sp_*` cells fresh). Fixtures:
+  `test_action_10..13_runs_*_body`, `test_taker_armed_rows_resolve`
+  (P1 set-piece arm: throw-in BX=1 fallback -> phase 3 + 0x10; corner ->
+  phase 4 + 0x11; both resolve) and `test_taker_armed_referee_rows_resolve`
+  (FU-150 contact chain -> phase 7 + 0x12 / phase 6 + 0x13; both resolve).
+  Carried legs (FU-149 §7.3, L13.1..L13.7): L13.1 the
+  `FUN_000832A8`/`FUN_00083164`/`FUN_0008DB6C` throw setup; L13.2 the
+  input-driven `FUN_00083428` throw/claim machine (replaced by the no-slot
+  timer+draw completion so a slotted live taker still resolves); L13.3 the
+  kick event sub-table arms and their vector sources (collapsed to one derived
+  delivery per kick stage — the real `fifa96_ball_kick_target` runs, the exact
+  arm vector/RNG cadence diverge); L13.4 the presentation sinks
+  (`0x974DC(0x1E)`, the `0x8F188` ids); L13.5 the `0x8DE8C` pick origins;
+  L13.6 the state producers (`[0x157821]`/`[0x157A6A]`); L13.7 the penalty
+  remainder (`0x84D5B` free-record hand-off, `0x14C114` input words, slot
+  gate). Hardening divergences documented: the `0x10F334/0x10F33C` index mask
+  to 0x1F; the reset path's forced-decision install is the existing shared
+  `match_row_reset`.
 - **M2 phase-8 T2 (camera live feed / pan origin, FU-148 §12; 2026-10-09).**
   Landed the producer chain OL-T11-79 asked for:
   - **Event setter complete** (`fifa96_camera_event_set`): the `[0x157A6C]`
@@ -698,10 +775,66 @@ the build also produces the windowed `fifa96` target (`make game`).
     m62 freshness block now also pins the fresh display cells.
   - **Carried legs** (FU-142 §L.10): the tracked-side pick
     (`FUN_00092D8C`'s `[0x1590CC]`/`[0x159901]` flags, FU-146 leg 4 — the
-    writer's post block stays dormant with the carried -1), `FUN_00071DF4`
+    writer's post block stays dormant with the carried -1), the
+    `FUN_000A7FD4` display-gate cell producers (the gate reads
+    `[0x115FCC]`/`[0x114A98]`, image 0/0; the `FUN_000A8172` clear is the
+    other writer), `FUN_00071DF4`
     (the every-frame tracked-record auto-camera; its ball sub-object/velocity
     producers are unported), the `FUN_00066724` sink and the handler
     presentation bodies.
+- **M2 phase-8 close-out (T5 acceptance; 2026-10-10).** Whole-range summary:
+  the phase-8 plan `2026-10-09-fifa96-m2-phase8-live-loop.md` closed the live
+  gameplay loop's four named gaps — T1 the taker/corner row machines (L13;
+  wired 19/80), T2 the camera live feed / pan origin (OL-T11-79; the first
+  reachable gameplay-row pan producer), T3 the input hold policy + pad kick
+  (OL-T4-1 + the `FUN_0007CA54` seam) and T4 the natural goal chain
+  (OL-87/88/89 closed producer-to-writer) — serialized under subagent-driven
+  development, each reviewed (T1 one fix round, T2 one fix round, T3 approved
+  clean, T4 approved clean), then T5 (this acceptance: tape v8, the smoke
+  above, these docs). Gate status against the plan: **Gate T1** taker/corner
+  rows execute (armed fixtures) and L13 narrows with evidence — pass after
+  the fix round (row-0x12 timer/relay pick, counts/docs); **Gate T2** the
+  natural pan path can arm the goal chain — pass after the fix round (idle
+  rate 24, arm-A tail, event gate, jitter centering; live row-04 fixture);
+  **Gate T3** pad moves the record and kicks the ball in a headless fixture
+  (hold proven at BASE discrimination; kick row 07 via the seam) — pass,
+  with the on-screen movement clause **not met, carried on L4.1/L4.6**; **Gate
+  T4** score arises from replicated gameplay — pass
+  (`test_natural_goal_end_to_end` scores 1-0 on the natural kickoff; the
+  tape's direct call stays the honest dormant-tape form); **Gate T5** tape v8
+  green, smoke honest, whole-plan review material landed — pass. Every task's
+  `make check` was green in sequence (108/108 throughout; the suite did not
+  grow in phase 8 — the tasks extended existing fixtures), with the engine
+  suites under ASan/UBSan.
+  **Re-pin ledger (phase-8): no re-pin at any task.** M1 immovable
+  (`09b726b7…`, unchanged since M1); M2 byte-identical through T1–T5
+  (`2e709151…`, the S1 v5.1 re-pin lineage — each task's `cmp` evidence; the
+  T5 acceptance re-ran `./build/test_engine_m2` with the ISO present and
+  `cmp` clean, 165 lines). v8 adds assertions only. One acceptance-time
+  correction to earlier prose: the tape camera does change triple once — the
+  row-1E keeper claim place (FU-151, part of the S1-lineage golden) resets it
+  to the focus triple at the mechanics window; "the camera never moves"
+  meant "never pans", and v8 states it precisely (T5 re-verified the place is
+  golden-material: skipping the drain changes frames 49..165).
+  **Leg register carried out of phase 8** (each task's entry above and the FU
+  docs hold the detail): **T1/FU-149 §7.3** L13.1–L13.7 (throw setup; the
+  `FUN_00083428` input machine; kick event arms/vectors; presentation sinks;
+  pick origins; state producers; penalty remainder); **T2/OL-T11-79 residue**
+  the nine carried `FUN_00071C94` callers, the `FUN_00070DE0` reposition
+  bit-8 boundary arm, the `walk_gate` frame path, the sound sinks, the
+  `FUN_00071DF4` 0x11042B/C lookup and the tracked-player tail; **T3/FU-75**
+  L4.1 the forced-decision/chase application, L4.2 the no-edge arm, L4.3
+  `0x7E600`, L4.4 `0x7CD60`, L4.5 the `0x7D1D4` switch, L4.6 row 02 +
+  keeper input tables, plus the front-end repeat cadence; **T4/OL-87/88/89
+  residual** the tracked-side pick, the `FUN_000A7FD4` producers,
+  `FUN_00071DF4` and the `FUN_00066724` sink. Deferred minors rolled up for
+  the final review: T1's FU-137 §7 errata parenthetical arithmetic (fixed at
+  T5); T2's review minors (all fixed in the fix round; the census is nine
+  carried callers); T3's three comment minors (L4.5 stub wording, L4.2
+  flags-inert note, L4.1 `+0x99` gate note — fixed at T5); T4's two doc
+  minors (the ENGINE.md phase-6 S2/S3 attribution and the FU-146 leg-5
+  no-native-run qualifier — fixed at T5). No open phase-8 minor blocks any
+  gate; the triage list is the final-review input.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the
@@ -1068,7 +1201,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   per-case overlay helpers, 8/10 partially landed, 9 the camera integrators,
   11 the palette-pool content producer, 12–14 the staged strip inputs). The
   goal-invoker register (`OL-87/88/89`) was the score-blocking carry through
-  phase 7; **phase-8 S2/S3/T2/T4 closed it** (see the T4 entry / FU-142
+  phase 7; **phase-6 S2/S3 + phase-8 T2/T4 closed it** (see the T4 entry /
+  FU-142
   §L.10) — the residual legs are the tracked-side pick, `FUN_00071DF4` and
   the `FUN_00066724` sink. Deferred-minor
   triage (recorded for the final review; doc/comment-level unless noted):
@@ -1244,7 +1378,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   the tape's pre-score assertions. Open legs at the Task-3 window: **OL-87**
   (handlers + scheduler + installer), **OL-88** (camera-pan goal detection),
   **OL-89** (posted-id dispatch `FUN_0009252C` and the `FUN_000CBC4C` probe).
-  **Superseded by phase-8 S2/S3/T2/T4** (FU-142 §L.10): OL-87/88 are closed
+  **Superseded by phase-6 S2/S3 + phase-8 T2/T4** (FU-142 §L.10): OL-87/88 are
+  closed
   and OL-89 is closed except the `FUN_00066724` sink, ported as
   `fifa96_score_display_gate` + `score_display_event`. The engine still
   carries tracked side -1 (`add_goal`-equivalent) until the tracked-side pick

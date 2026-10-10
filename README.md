@@ -93,9 +93,10 @@ into the port:
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v7** — the phase-7
-acceptance — is green: the 15 wired
-action rows exercised, the resource-loaded formation/record placement drawing
+chain run headless (the M2-B acceptance tape **v8** — the phase-8 live-loop
+acceptance — is green: the 19 wired
+action rows' tape-exercised subset, the resource-loaded formation/record
+placement drawing
 on
 the indexed match canvas from the first granted frame, the FU-96 leg-5
 per-record camera place snapping the in-ring records, the derived
@@ -106,35 +107,45 @@ the slot record's lane-track invariant) asserted, the S2/S3 goal chain pinned
 dormant-on-tape/fixture-proven (armer, queue and screen machine freshness),
 the S4 defaults pinned (`view_mode == 0`, formation id 0), the phase-7 P1–P4
 landings pinned (the row-1E keeper machine's tape-reachable claim take; the
-FU-149/FU-150/FU-152 cells asserted fresh with their dormancy gates), plus the
+FU-149/FU-150/FU-152 cells asserted fresh with their dormancy gates), the
+phase-8 T1–T4 layers pinned (the taker mask absent + `sp_*` cells fresh; the
+camera pan cells fresh at m 41 and the row-1E claim-place triple at m 62 —
+the tape never pans; `phase != 2` at the kick edges with the ball pair
+zeroed; the display-gate cells fresh with the score step kept as the direct
+writer call), plus the
 natural-phase-2 probe (a directive-free
 replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
 and the canvas-level RGB assertion; the golden carries the drawing,
 palette, pad-locomotion, camera-place v4.2, HUD and S1 possession re-pins
-and is byte-identical since S1 — S2, S3, S4, S5 and the phase-7 ports P1–P5
+and is byte-identical since S1 — S2, S3, S4, S5, the phase-7 ports P1–P5 and
+the phase-8 live-loop tasks T1–T5
 moved no presented frame), and the
-windowed `make game` build runs on SDL3. The P5 interactive smoke re-run on the
-development host (2026-10-09) reaches match start (the match
+windowed `make game` build runs on SDL3. The T5 interactive smoke re-run on the
+development host (2026-10-10) reaches match start (the match
 canvas replaces the front-end; the derived palette `OL-T11-6` landed in
 follow-up 4, so RGB is visible — FU-144; the HUD landed in P0.2/OL-T11-7 —
-`docs/screens/p5-v7-match-hud.png`, 0-0/00:00) and a KICK burst leaves the
+`docs/screens/p8-v8-match-hud.png`, 0-0/00:00; the fresh front-end and
+kickoff captures are byte-identical to the P5 shots) and a KICK burst leaves the
 kickoff wait for the live phase 2, the clock ticking on screen
-(`docs/screens/p5-v7-match-clock.png`, 00:03) with the
+(`docs/screens/p8-v8-match-clock.png`, 00:02) with the
 live kickoff ball/anim placement
 (19/80 rows wired, the FU-143 phase driver and the derived score source
-included). Moving the controlled player on screen stays blocked on the native
-inactive 0x19 record and the SDL hold policy (the pad presses reach
-`input_state[0]` and the S1 pad → target → velocity → position seam is
-fixture-proven headlessly). Kicking the ball and scoring stay blocked
-interactively on the unported
-possession/selection invokers, with the S2/S3 goal chain landed but
-tape-dormant (no natural pan origin; the score chain is fixture-proven); the
+included). Moving the controlled player on screen stays blocked on the live
+slot record's code 02 (`locomotion_restart_target`) with the pad presses
+reaching `input_state[0]` (the SDL hold policy landed in phase-8 T3; the S1
+pad → target → velocity → position seam is
+fixture-proven headlessly) — the blockers are L4.1/L4.6. Kicking the ball and
+scoring stay blocked
+interactively: the pad kick is wired (T3) but needs the unported
+possession/carrier producers, and the goal chain is closed producer-to-writer
+(T2/T4; the natural end-to-end goal scores 1-0 in a fixture) while
+tape-dormant (no record reaches the half-line pan band); the
 phase-7 chains (set pieces/restarts, fouls/offside, keeper restarts,
 replay/overlay) are likewise not reachable live yet — their producers/gates are
-carried on numbered legs (FU-149 L1–L13, FU-150 +L4, FU-151 15 legs, FU-152 14
-legs) and fixture-proven; the
+carried on numbered legs (FU-149 L1–L13 incl. the T1 residue L13.1–L13.7,
+FU-150 +L4, FU-151 15 legs, FU-152 14 legs) and fixture-proven; the
 phase-1 → phase-2
-transition is visible through the HUD clock (phase-7 P5; pinned
+transition is visible through the HUD clock (phase-8 T5; pinned
 headlessly too). Not
 ported: physical VGA/CRTC timing and device
 audio output (both modelled as pure data), and the remaining match
