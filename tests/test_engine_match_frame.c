@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
+#include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
@@ -1525,6 +1526,20 @@ static void test_held_key_moves_live_controlled_record(void) {
  * `x += vel_x*delta; z += vel_z*delta` integration roll the ball record the
  * render slot 22 stages. First-hand windows: `disassemble_function 0x8BAF0`
  * (0x8BB55..0x8BBFC, 0x8BDEC..0x8C052). */
+/* Fix round 2: the L14.8.c max-clamp shift count pinned at its own level.
+ * The machine build carries no sanitizers and every hardware shift masks the
+ * count (x86 `SAR AX,CL`, this host's aarch64 `ASR w,w`), so the `& 0x1F` is
+ * behaviorally invisible to a machine-level frame test — this direct pin is
+ * the only discriminating check (removing the mask returns 1023 for 0xFFFF).
+ * Native `0x8BF41..47`: `MOV ECX,[EBP+0x76]; SAR ECX,6; SAR AX,CL`. */
+static void test_ball_head_error_shift_mask(void) {
+  assert(fifa96_match_run_ball_head_error_shift(0) == 0);
+  assert(fifa96_match_run_ball_head_error_shift(0x3F) == 0);
+  assert(fifa96_match_run_ball_head_error_shift(0x40) == 1);
+  assert(fifa96_match_run_ball_head_error_shift(0x80) == 2);
+  assert(fifa96_match_run_ball_head_error_shift(0xFFFF) == 31);
+}
+
 static void test_ball_machine_phase2_open_play_lead(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -4162,6 +4177,7 @@ int main(void) {
   test_input_options_producer_sets_range_bits();
   test_record_event_tail_gate_fires_in_frame();
   test_record_event_gate_live_from_height_producer();
+  test_ball_head_error_shift_mask();
   test_ball_machine_phase2_open_play_lead();
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();

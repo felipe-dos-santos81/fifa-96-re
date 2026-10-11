@@ -1718,3 +1718,22 @@ Quoted errata against §16.2/§16.3/§16.4, first-hand re-checked this round:
 
 No golden moved (the visual byte is write-only in the engine; M1/M2
 byte-identical re-verified after the fixes).
+
+### 16.6 Fix round 2 (T2 re-review, 2026-10-11)
+
+The re-review found the L14.8.c `& 0x1F` pin non-discriminating: the
+`fifa96_engine` target builds without sanitizers (`-g -std=gnu11 -Wall
+-Wextra -Werror`; sanitizers are test-TU-only) and both x86 `SAR r,CL` and
+the host's aarch64 `ASR w,w` mask the count in hardware, so a machine-level
+frame test cannot RED for the mask's removal. Resolution:
+
+* `fifa96_match_run_ball_head_error_shift(head_error)` (declared in
+  `fifa96_engine_internal.h`) now carries the `0x8BF41..47` expression
+  `(head_error >> 6) & 0x1F`; the machine calls it, and
+  `test_ball_head_error_shift_mask` pins it directly (`0 → 0`, `0x3F → 0`,
+  `0x40 → 1`, `0x80 → 2`, `0xFFFF → 31`; scratch-removing the mask returns
+  1023 → RED).
+* The 0x1104D2 octant table is deduplicated: the port now reuses the
+  already-landed `fifa96_match_heading_table` (the FU-77 §4 read of the same
+  flat data; the native consumers `0x8BF01`/`0x8C236` and the locomotion
+  heading fold read one table), deleting the round-1 duplicate.

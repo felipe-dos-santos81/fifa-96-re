@@ -41,3 +41,14 @@ struct fifa96_engine {
  * 0x1104D2 (32 bytes) and the 0x10F680 stride-velocity row (0x500 words). */
 extern const uint8_t fifa96_match_heading_table[32];
 extern const int16_t fifa96_match_stride_table[0x500];
+
+/* M2 phase-11 T2 fix round 2 (FU-148 §16): the FUN_0008BAF0 head-error max
+ * clamp shift count, `0x8BF41..47` = `MOV ECX,[EBP+0x76]; SAR ECX,6;
+ * SAR AX,CL`, with the CL & 0x1F x86 mask (the 8086 uses the full CL; the
+ * 186+ and this 32-bit image's 386+ mask to 5 bits). Exposed so the mask
+ * itself is unit-pinned: the machine build carries no sanitizers and every
+ * hardware shift masks the count, so an expression-level pin is the only
+ * discriminating test for the `& 0x1F` (the native cell 0x158862 is the
+ * machine's `head_error` word; the high word of the native dword read is
+ * unmodeled). Returns `(head_error >> 6) & 0x1F`. */
+int32_t fifa96_match_run_ball_head_error_shift(int32_t head_error);

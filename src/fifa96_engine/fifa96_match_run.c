@@ -2664,20 +2664,11 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * (modeled as the image-default field); L14.8.d the native `[0x14C32A] == 0`
  * run gate (the engine `session_gate_14c32a` is the FU-146 scheduler proxy
  * seeded 1 for live matches, so the machine runs each granted frame). */
-static const int8_t match_run_ball_visual_table[32] = {
-  /* The 0x1104D2 byte table indexed by `((uint16)heading & 0x3FF) >> 5`
-   * (idx 0..31). The native read is `MOV EAX,dword ptr [EAX + 0x1104CF];
-   * SAR EAX,0x18` — bytes `8b 80 cf 04 11 00` at 0x8BF01 and 0x8C236, **no
-   * SIB scale**: the dword at 0x1104CF+idx has its top byte at 0x1104D2+idx,
-   * so the effective lookup is the single byte there (an unaligned dword
-   * read + top-byte extract, not the stride-4 `dword>>24` gather the first
-   * draft assumed — a 4th instance of the AGENTS alias-trap class; contrast
-   * 0x8BF66's sine `[EAX*4 + 0x114E04]` which does carry the scale). The
-   * read is a perfectly symmetric octant wrap (`0 0 0`, then `1`..`7` ×4,
-   * then a trailing `0`), first-hand `read_memory 0x1104D2` (32 B). */
-  0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4,
-  4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 0,
-};
+int32_t fifa96_match_run_ball_head_error_shift(int32_t head_error) {
+  /* 0x8BF41..47: the native shift count CL is masked to 5 bits on the 386+
+   * this 32-bit LE image requires (the 8086 uses the full CL). */
+  return ((head_error >> 6) & 0x1F);
+}
 
 static void match_run_ball_machine(struct fifa96_match_run *mr) {
   struct fifa96_match_ball *b = &mr->entities.ball;
@@ -2748,7 +2739,9 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
           int32_t sum = (int16_t)((uint16_t)b->heading + (uint16_t)steer);
           int32_t u = sum & 0x3FF;                          /* 0x8BEDC */
           b->heading = (int16_t)(u > 0x200 ? u - 0x400 : u); /* 0x8BEE2..F5 */
-          b->visual_dir = match_run_ball_visual_table[u >> 5]; /* 0x8BEFA..F01 */
+          /* The 0x1104D2 byte table (read natively as `[EAX+0x1104CF] >> 24`
+           * with no SIB scale); shared with the locomotion heading fold. */
+          b->visual_dir = (int8_t)fifa96_match_heading_table[u >> 5]; /* 0x8BEFA..F01 */
         }
       }
     }
@@ -2762,7 +2755,7 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
     } else {
       int32_t max = b->max_speed;
       if ((int32_t)b->speed > max / 2)                      /* 0x8BF2F..3F */
-        max >>= ((int32_t)b->head_error >> 6) & 0x1F;       /* 0x8BF41..47 */
+        max >>= fifa96_match_run_ball_head_error_shift((int32_t)b->head_error); /* 0x8BF41..47 */
       if (speed > max) speed = max;                         /* 0x8BF4A..4F */
       {
         int32_t vx = (int32_t)(((int64_t)speed *

@@ -528,6 +528,7 @@ add_test(NAME test_engine_match_lifecycle COMMAND test_engine_match_lifecycle
 
 add_executable(test_engine_match_frame tests/test_engine_match_frame.c)
 target_link_libraries(test_engine_match_frame PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_frame PRIVATE src)
 target_compile_options(test_engine_match_frame PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_frame PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_frame COMMAND test_engine_match_frame
