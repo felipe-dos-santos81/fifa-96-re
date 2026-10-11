@@ -122,8 +122,19 @@ byte-identical, movement clearly visible (LEFT scene-band ~5.7e4 px, UP
 long-ball key / `0x157750` ball-height / code-`16` ball-record producers
 are the carried legs (FU-148 §14); the live roll makes the scene band no
 longer byte-reproducible across smoke sessions (the HUD band stays exact).
+**Phase-11 landed the ball producers (T1 2026-10-11: the `0x40` long-ball
+key + the `0x157750` camera-height producer; T2 2026-10-11: the
+`FUN_0008BAF0` ball machine, FU-148 §15/§16):** the ball record is now
+produced, staged (the reset's row-3 appearance) and drawn live with a real
+sprite — the T2 smoke trace pins the slot moving and resolving
+(`slot22 … sprite=yes`) — while the on-screen ball waits on a live camera
+place (the stand-in camera `(0,0,0)` projects the phase-2 lead off the
+right edge; FU-148 leg L14.8.e) and the ball height stays 0 in open play
+(legs 15.a/15.b unchanged).
 Kicking the ball stays blocked
-interactively (no kick-attributable on-screen delta): the pad kick is wired
+interactively (no kick-attributable on-screen delta; the phase-11 T2 ball
+machine made the record live but off-window under the stand-in camera): the
+pad kick is wired
 (T3) and its carrier producers are now
 landed headlessly (T2/OL-63: movement -> row-05 claim -> code 5 -> row 07 ->
 the staged ball pair in `test_live_carrier_claim_and_kick`), and the goal

@@ -184,6 +184,37 @@ struct fifa96_match_ball {
   uint8_t pos_release;   /* 0x15872D */
   uint8_t pos_counter_e; /* 0x15872E */
   uint8_t pos_counter_f; /* 0x15872F */
+  /* M2 phase-11 T2 (L14.8): the FUN_0008BAF0 per-frame ball machine cells
+   * (first-hand `disassemble_function 0x8BAF0`, 0x8BAF0..0x8C065). The block
+   * base is 0x1587EC; the writes below are the exact native cells:
+   *   target 0x158830/34/38 (the lead/commit triple FUN_0008C24C copies into
+   *   x/y/z, the phase-lead writers and the per-frame phase-2 arm);
+   *   speed 0x158848 (the metric of vel_x/vel_z), vel_x 0x15884A, vel_z
+   *   0x15884C (the ±1-ramped velocity words, integrated by the tail);
+   *   max_speed 0x15884E (5 default / 7 phase-2 offset arm / 3 reset);
+   *   `heading` above is 0x15885A and visual_dir 0x158852 (the 0x1104CF
+   *   dword-top-byte table fold); target_heading 0x15885E; ramp_timer
+   *   0x158856;
+   *   metric 0x15883C + metric_dx 0x15883E + metric_dz 0x158840 (the
+   *   FUN_0008DCD4 metric triple); head_gate 0x158881 (the FUN_0006E724
+   *   row-flags probe the reset sets from row 3) and head_error 0x158862
+   *   (the FUN_0008C068 producer; image default 0). */
+  int32_t target_x, target_y, target_z; /* 0x158830 / 0x158834 / 0x158838 */
+  int16_t speed;                        /* 0x158848 */
+  int16_t vel_x;                        /* 0x15884A */
+  int16_t vel_z;                        /* 0x15884C */
+  int16_t max_speed;                    /* 0x15884E */
+  int16_t target_heading;               /* 0x15885E */
+  int16_t ramp_timer;                   /* 0x158856 */
+  int16_t metric;                       /* 0x15883C */
+  int16_t metric_dx;                    /* 0x15883E */
+  int16_t metric_dz;                    /* 0x158840 */
+  uint8_t head_gate;                    /* 0x158881 */
+  uint16_t head_error;                  /* 0x158862 */
+  int8_t visual_dir;                    /* 0x158852 */
+  uint8_t appear_row;                   /* the FUN_0006E724 row id (0x158866
+                                         * pointer's row; reset installs 3) */
+  uint8_t machine_ran;                  /* derived run observability */
 };
 
 struct fifa96_match_entities {

@@ -368,7 +368,7 @@ struct scene_fixture {
   uint8_t blob[SCENE_BLOB_LEN];
   int32_t off0[2];
   int32_t off1[4];
-  struct fifa96_render_bank banks[2];
+  struct fifa96_render_bank banks[4];
   uint8_t frames[16 * 5];
 };
 
@@ -412,6 +412,13 @@ static void scene_fixture_init(struct scene_fixture *f) {
   f->banks[1].offsets = f->off1;
   f->banks[1].count = 2;
   f->banks[1].step = 1;
+  /* M2 phase-11 T2: the ball stages the reset's appearance row 3 (FU-84 row 3,
+   * +8 sprite bank 3); banks 2/3 mirror bank 0 so the row resolves to the same
+   * 32x32 0x22 frame-0 sprite. */
+  f->banks[2] = f->banks[0];
+  f->banks[3] = f->banks[0];
+  f->banks[2].count = 2;   /* the ball's rows can advance frame 0 -> 1 */
+  f->banks[3].count = 2;
 
   for (unsigned i = 0; i < 16; i++) {
     f->frames[i * 5 + 0] = 0x50;
@@ -424,7 +431,7 @@ static void scene_fixture_init(struct scene_fixture *f) {
   struct fifa96_match_run_render *r = &f->mr.render;
   r->frames = f->frames;
   r->banks = f->banks;
-  r->bank_count = 2;
+  r->bank_count = 4;
   r->sprite_data = f->blob;
   r->sprite_data_len = (uint32_t)sizeof f->blob;
   r->enabled = 1;
@@ -473,6 +480,13 @@ static void test_scene_stages_pool_entities(void) {
   f.mr.entities.ball.x = 0x20;
   f.mr.entities.ball.y = 0x30;
   f.mr.entities.ball.z = 0x400;
+  /* M2 phase-11 T2: the ball record now feeds the FUN_0008BAF0 machine — park
+   * it (target := the record, metric 0) and stage the no-steer gate so this
+   * staging fixture is not dragged by the open-play lead. */
+  f.mr.entities.ball.target_x = f.mr.entities.ball.x;
+  f.mr.entities.ball.target_y = f.mr.entities.ball.y;
+  f.mr.entities.ball.target_z = f.mr.entities.ball.z;
+  f.mr.entities.ball.head_gate = 0;
   f.mr.entities.ball.heading = (int16_t)0x123;
   f.mr.entities.team[0].records[0].anim_id = 1;   /* FU-84 row 1 (bank 1) */
 
@@ -502,15 +516,15 @@ static void test_scene_stages_pool_entities(void) {
   fifa96_surface_destroy(f.s);
 }
 
-/* M2 phase-10 T1 (FU-148 §13.5): the ball entity render path. FUN_00036C70
- * stages the 23rd slot from the ball record 0x15880C/10/14 (+ the 0x15885A
- * heading) and the FU-85/89 renderer draws it like any pool record: the
- * ball's zeroed anim id resolves the FU-84 row 0 (bank 0), whose frame-0
- * synthetic sprite covers the window centre when the ball record sits at
- * camera + 0x200. The native ball record's live open-play position producer
- * is the T1 leg; this test pins the render path itself — with every player
- * record parked out of the ring, the centre pixel is the ball slot's colour
- * and culling the slot returns it to the background. */
+/* M2 phase-10 T1 (FU-148 §13.5), extended by phase-11 T2: the ball entity
+ * render path. FUN_00036C70 stages the 23rd slot from the ball record
+ * 0x15880C/10/14 (+ the 0x15885A heading) and the FU-85/89 renderer draws it
+ * like any pool record: the ball's appearance row (the reset's FUN_0006E724
+ * row-3 install, staged as the pool `appear_row`; T2) resolves the FU-84 row 3
+ * (bank 3), whose frame-0 fixture sprite covers the window centre when the
+ * ball record sits at camera + 0x200. This test pins the render path itself —
+ * with every player record parked out of the ring, the centre pixel is the
+ * ball slot's colour and culling the slot returns it to the background. */
 static void test_ball_record_draws_ball_slot(void) {
   struct scene_fixture f;
   scene_fixture_init(&f);
@@ -529,6 +543,11 @@ static void test_ball_record_draws_ball_slot(void) {
   f.mr.entities.ball.x = 0;
   f.mr.entities.ball.y = 0;
   f.mr.entities.ball.z = 0x200;
+  /* M2 phase-11 T2: park the machine (target := the record) so the render-path
+   * fixture holds the ball where the pixel assertions expect it. */
+  f.mr.entities.ball.target_x = 0;
+  f.mr.entities.ball.target_y = 0;
+  f.mr.entities.ball.target_z = 0x200;
   drive_granted(&f.mr, 1);
   assert(f.mr.render.entities[22].stage.pos.x == 0);
   assert(f.mr.render.entities[22].stage.pos.z == 0x200);
@@ -550,6 +569,63 @@ static void test_ball_record_draws_ball_slot(void) {
   fifa96_surface_clear(f.s, 0);
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
   assert(f.s->indexed[120 * 320 + 160] == 0x00);
+  fifa96_surface_destroy(f.s);
+}
+
+/* M2 phase-11 T2 (FU-148 §16, L14.8): the machine-driven ball pixels. The
+ * FUN_0008BAF0 phase-2 lead (camera (0,0,0) -> the 0x120/0x120 spot) drags the
+ * ball record from the parked camera + 0x200 spot; the composer stages the
+ * advanced record each granted frame and the FU-85/89 renderer draws it — the
+ * canvas hash and the drawn-pixel count change with the motion while the ball
+ * remains drawn (the centre pixel stays the ball slot's colour). */
+static void test_ball_machine_moves_ball_slot_pixels(void) {
+  struct scene_fixture f;
+  uint64_t parked_hash;
+  uint32_t parked_drawn;
+  scene_fixture_init(&f);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      e->pos_x = 0;
+      e->pos_y = 0;
+      e->pos_z = -0x1000;
+      e->target_x = 0;
+      e->target_y = 0;
+      e->target_z = -0x1000;
+      e->skip_9a = 1;
+    }
+  }
+  f.mr.state.phase = 0;                    /* park the phase-2 lead */
+  f.mr.state.period_length = 90;
+  f.mr.entities.ball.x = 0;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.ball.z = 0x200;
+  f.mr.entities.ball.target_x = 0;         /* target := the record (metric 0) */
+  f.mr.entities.ball.target_y = 0;
+  f.mr.entities.ball.target_z = 0x200;
+  /* The fixture bank carries two offsets: hold the heading steer off (the
+   * 0x158881 gate cell) so the rendered direction stays 0 while the machine
+   * still rolls the record (the phase-2 lead sets the target_heading). */
+  f.mr.entities.ball.head_gate = 0;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.entities.ball.x == 0 && f.mr.entities.ball.z == 0x200);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* the ball slot's pixel */
+  parked_hash = fifa96_surface_hash(f.s);
+  parked_drawn = drawn_count(f.s, 0);
+
+  /* The phase-2 lead takes over: the ball record rolls toward the lead and the
+   * staged slot follows it. */
+  f.mr.state.phase = 2;
+  for (int i = 0; i < 4; i++) drive_granted(&f.mr, 1);
+  assert(f.mr.entities.ball.z < 0x200);
+  assert(f.mr.render.entities[22].stage.pos.x == f.mr.entities.ball.x);
+  assert(f.mr.render.entities[22].stage.pos.z == f.mr.entities.ball.z);
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(drawn_count(f.s, 0) > 0);                 /* the ball is still drawn */
+  assert(fifa96_surface_hash(f.s) != parked_hash);
+  assert(drawn_count(f.s, 0) != parked_drawn);
   fifa96_surface_destroy(f.s);
 }
 
@@ -1695,6 +1771,7 @@ int main(void) {
   test_clip_clamped_to_smaller_surface();
   test_scene_stages_pool_entities();
   test_ball_record_draws_ball_slot();
+  test_ball_machine_moves_ball_slot_pixels();
   test_entity_animates_over_frames();
   test_live_anim_inputs_drive_bank_row();
   test_anim_id_staging_round_trip();

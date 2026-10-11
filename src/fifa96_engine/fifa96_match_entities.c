@@ -50,6 +50,17 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
   pool->controlled = FIFA96_MATCH_ENTITY_NONE;
   pool->slot_merge = FIFA96_MATCH_ENTITY_NONE;
   pool->ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  /* M2 phase-11 T2 (L14.8): the FUN_000886D4 reset posture of the
+   * FUN_0008BAF0 machine cells — target := the ball record (0x88755..0x8876D
+   * copies 0x15880C/10/14 into 0x158830/34/38), velocity/heading/timer words
+   * zeroed (0x88787/0x88798/0x887BB), and the FUN_0006E724(0x1587EC, 3, 0)
+   * row-3 appearance install whose +2 flags & 2 = 2 gate the heading steer
+   * (0x158881; first-hand row 3 `03 0B 07 03 7E E2 10 00 03` at 0x10EF1B). */
+  pool->ball.target_x = pool->ball.x;
+  pool->ball.target_y = pool->ball.y;
+  pool->ball.target_z = pool->ball.z;
+  pool->ball.head_gate = 2;
+  pool->ball.appear_row = 3;   /* FUN_0006E724(0x1587EC, 3, 0) at 0x887D5 */
   return FIFA96_OK;
 }
 
@@ -470,6 +481,25 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
   pool->ball.x = FIFA96_MATCH_ENTITY_KICKOFF_BALL_X;
   pool->ball.y = 0;   /* FUN_0008C24C 0x8C299: `[0x158810] = 0` */
   pool->ball.z = 0;
+  /* M2 phase-11 T2 (L14.8): the commit (`FUN_0008C24C`) copies the staged
+   * target triple into the ball record and zeroes the velocity words
+   * (0x8C272/0x8C280/0x8C2A6/0x8C2AD/0x8C2B4); the kickoff machine
+   * (FUN_0008B688 0x8B709) stores the visual byte dword 3 and the reset
+   * posture's target := ball holds. */
+  pool->ball.target_x = pool->ball.x;
+  pool->ball.target_y = pool->ball.y;
+  pool->ball.target_z = pool->ball.z;
+  pool->ball.vel_x = 0;
+  pool->ball.vel_z = 0;
+  pool->ball.speed = 0;
+  pool->ball.heading = 0;
+  pool->ball.target_heading = 0;
+  pool->ball.visual_dir = 3;
+  pool->ball.appear_row = 3;   /* the FUN_0008B688 kickoff re-install posture */
+  pool->ball.ramp_timer = 0;
+  pool->ball.metric = 0;
+  pool->ball.metric_dx = 0;
+  pool->ball.metric_dz = 0;
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
       struct fifa96_match_entity *e = &pool->team[t].records[i];

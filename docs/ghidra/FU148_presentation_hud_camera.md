@@ -1493,3 +1493,188 @@ Numbered legs:
   until L14.8 (phase-11 T2) lands the ball's live height.
 * **15.c the `0x7CD60` swap arm's slot-block field clears** (OL-68) and the
   second arm's tracked-side producer (`camera.tracked` is the engine surface).
+
+---
+
+## 16. Port landing (phase-11 T2: the `FUN_0008BAF0` ball machine, L14.8, 2026-10-11)
+
+M2 phase-11 T2, first-hand `/FIFA96.EXE` re-derivation of the L14.8 leg the
+phase-10 T1 report named ("the ball record's open-play position producer").
+Goldens `cmp` byte-identical — M1 `09b726b7…` untouched and M2 `5524cf40…`
+unchanged (the tape's live window keeps the ball outside the 320-wide canvas;
+§16.4) — and `make check` **108/108** (three new tests, one updated fixture).
+
+### 16.1 First-hand windows this task
+
+* `disassemble_function 0x8BAF0` (379 insns; the 0x8BDEC..0x8C065 tail
+  re-read), the `FUN_0008AF38` gate `0x8B65B..0x8B669` (fresh
+  `disassemble_bytes`), `0x4B180..0x4B1BF` (the every-frame call order),
+  `0x8C24C..0x8C2C3` (`FUN_0008C24C`), `0x8C068..0x8C08F` + the decompile of
+  `FUN_0008C068`, the decompiles of `FUN_0006E724` (the row install) and
+  `FUN_0006FE84` (the appearance machine), `FUN_0008B688`
+  (`0x8B688..0x8B8B7`, the kickoff reset).
+* Writer census this task (`search_instructions`): `15880c` (22 sites: the
+  0x84BDD penalty `ADD`, the reset/teleport stores, the 0x8B6EB kickoff
+  store, `FUN_0008C24C`'s copy and the machine's tail `ADD`s — **no
+  kick/possession machine writes the ball record**), `158830` (23), `15884a`
+  (6), `158848` (10), `15885e` (7), `158881` (2 reads, no static writer),
+  `158862` (11, all in `FUN_0008C068`).
+* Table reads: `read_memory 0x110492` (32 B), `0x1104AE` (40 B),
+  `0x1104D2` (68 B and 128 B); `search_byte_patterns
+  00000001010101020202020303030304040404` confirms the 0x1104D2 anchor (one
+  of the wide reads returns the 0x11048E-shifted bytes — the pattern search
+  settles it).
+
+### 16.2 The machine (L14.8) — the ball record's per-frame producer
+
+`FUN_0008AF38` (the clock body the engine mirrors as the FU-143 phase funnel)
+calls `FUN_0008BAF0` at `0x8B664` whenever `[0x14C32A] == 0`, after the
+entity chain. `FUN_0008BAF0` is the only per-frame writer of the ball record
+position `0x15880C/14`; the FU-120 census's other writers are the
+reset/teleport `FUN_000886D4` (`x = ∓0x720/0x1560`), the kickoff machine
+`FUN_0008B688` (`x = 0x960`, target `0x1E0`), the commit `FUN_0008C24C`
+(target triple → the record) and the penalty `0x84BDD` placement — all
+already ported.
+
+Machine body, first-hand:
+
+```
+0x8BAF6  EBP = 0x1587EC              ; the ball block base
+0x8BB08  [0x15884E] = 5              ; max speed (word)
+phase = [0x157A4A]>>24
+  phase 2 (0x8BB55): if period [0x157AC2] > 3 -> target := the record
+     (0x8BB74); else the camera-derived lead:
+        three_q = camZ - (camZ>>2) = 3*camZ/4
+        tx = (-three_q)>>1 = -3*camZ/8     ; ECX
+        tz = three_q                        ; EBX
+        dx = -3*camZ/8 - camX               ; EDI (sign of the 32-bit value)
+        dz = -camZ/4                        ; ESI
+        target.y = 0
+        if metric(dx,dz) < 0x120: tx ± 0x120, tz ± 0x120; [0x15884E] = 7
+        target = (tx, 0, tz)
+  phase 6 (0x8BB13): target = (±0x4B0, ?, ±0x930) by the camZ/ball sign   [leg]
+  phase 0x0C (0x8BC01) / 0x13 / 0x14: fixed leads + the match-over words   [leg]
+tail (0x8BDEC..0x8C052), every phase:
+  FUN_0008DCD4(ball, target) -> 0x15883C distance, 0x15883E dx, 0x158840 dz
+  if distance == 0: target_heading := heading; else
+     target_heading 0x15885E := angle(dx,dz)  (0x8DD70 = FUN_000CD474)
+  if byte[0x158881] != 0:                          ; the FUN_0006E724 gate
+     if distance <= 0x60: aim at [0x157A73] (default the camera triple
+        0x15774C; word[+0], word[+8]) — the foul override 0x1587C0 is the
+        unported foul machine's
+     steer 0x15885A toward target_heading: delta wrapped 10-bit
+        (delta & 0x3FF, fold over 0x200), clamped ±((0x10 - speed) << 2),
+        sum wrapped again; visual byte 0x158852 := ((int32_t*)0x1104CF)
+        [(uint16)heading & 0x3FF) >> 5] >> 24
+  speed = distance >> 3
+  if speed == 0: 0x158848/4A/4C := 0 (no integration)
+  else: max = [0x15884E]; if prev speed > max/2: max >>= head_error>>6
+        (0x158862, the FUN_0008C068 producer; image default 0)
+        speed = min(speed, max)
+        vx = round16(speed * sine(target_heading));        0x114E04
+        vz = round16(speed * sine(target_heading + 0x100))
+        ramp_timer 0x158856 += delta; when > speed/2: timer = 0,
+        vel_x 0x15884A and vel_z 0x15884C step ±1 toward (vx,vz)
+        speed word 0x158848 := metric(vel_x, vel_z)
+        ball.x += vel_x * delta; ball.z += vel_z * delta   ; y untouched
+  FUN_0006FE84(0x1587EC)                              ; appearance machine [leg]
+```
+
+`0x158881` is written by `FUN_0006E724(0x1587EC, row, param)` as
+`byte[0x157588 + row*9 + 2] & 2` (the `[0x157588] = 0x10EF00` FU-84 row
+table, installed at 0x73D91); the reset's `FUN_0006E724(0x1587EC, 3, 0)`
+(0x887D5) installs row 3 and the gate reads `2` (row 3 flags `07` at
+0x10EF1B). The reset's row-3 install is the native ball *appearance* (the
+0x158866 pointer the composer reads at 0x36E20).
+
+**Erratum (first-hand).** The phase-10 T1 report (§14.4) named the L14.8
+producer "the code-16 vector-pop sequence `0x84630`". First-hand this task:
+`FUN_00084630` is a 3-stage *pool-record* action (stage 0 copies `+0x59 →
++0x4D`; the advance gate is `byte[[0x158866]] == 0x48`; stage 1 polar
+`FUN_000795B4(rec+0x59, 0x15880C)` and the `0x6A/0x55` animation; stage 2
+copies and runs the `+0x44` reset) — the fouled player's face-the-ball
+sequence, whose only static installer is the phase-0x19 foul sequence
+`0x89FA4` (`0x7D9A4(0x16, [0x15888F])`). It *reads* the ball record; it does
+not produce its position. The producer is `FUN_0008BAF0` as above.
+
+### 16.3 Ported subset (engine)
+
+`match_run_ball_machine` (`src/fifa96_engine/fifa96_match_run.c`) runs once
+per granted frame after `fifa96_match_run_goal_scan`, before the scene
+staging (the native 0x8B664 site), and implements the phase-2 lead and the
+common tail exactly (the metric/angle/sine primitives are the ported
+`fifa96_entity_distance`/`fifa96_entity_angle`/`fifa96_entity_sine`). The
+state lives on the pool ball (`fifa96_match_ball`: `target_*`, `speed`,
+`vel_x/z`, `max_speed`, `target_heading`, `ramp_timer`, `metric*`,
+`head_gate`, `head_error`, `visual_dir`, `appear_row`, `machine_ran`);
+`fifa96_match_entities_init`/`kickoff_place` seed the reset/commit posture
+(`head_gate = 2`, `appear_row = 3`, target := record). The scene staging
+passes `appear_row` as the ball slot's `anim_id` (the reset's row 3; the
+earlier zeroed stand-in resolved row 0), and the FU-85 resolver draws the
+ball from PLAYART bank 3.
+
+### 16.4 Tests, goldens, smoke
+
+Tests (`make check` 108/108; RED-verified by disabling the machine call):
+
+* `test_engine_match_frame.c::test_ball_machine_phase2_open_play_lead` — the
+  phase-2 lead (0x120/0x120 from the fresh camera triple), the metric
+  (0x18C)/target-heading (0x80)/steer-clamp (0x40)/visual (2) frame-1 pins,
+  the ±1 ramp and the integration (2+4+6 = 12 on both axes by frame 3).
+* `test_engine_match_frame.c::test_live_ball_record_produced_in_open_play`
+  (ISO) — the kickoff phases hold the spawn (the last pre-flip frame observes
+  `(0x1E0, 0)`), the machine runs live and moves the record at phase 2, the
+  staged slot 22 tracks it.
+* `test_engine_match_render.c::test_ball_machine_moves_ball_slot_pixels` —
+  parked vs rolling: the staged slot's position tracks the record, the ball
+  stays drawn (the fixture's bank 3 mirrors bank 0; the canvas hash and the
+  drawn-pixel count change with the motion).
+* Fixture updates: `test_scene_stages_pool_entities` (park target := record;
+  the no-steer gate), `test_ball_record_draws_ball_slot` (park + the row-3
+  staging), the scene fixture now carries 4 banks.
+
+Goldens: `cmp` byte-identical on `m1-frames.txt` and `m2-frames.txt`. The
+tape's live window ends before the ball's projection enters the 320-wide
+canvas (its world x stays ≈0x1E0..0x120 while the stand-in camera place is
+`(0,0,0)`, so the projected x' stays > 320), and FU-89 culls the slot before
+the resolver; the tape posture is unchanged.
+
+Smoke (`DISPLAY=:1`, fresh session, window 960x720 + mutter frame):
+`docs/screens/p11-t2-{frontend,hud,walk,live,after-kicks}.png` — the
+front-end → X (decline → panel) → Return (confirm) start, a KICK burst
+reaches live play (clock ticking), the walked record moves, and an
+instrumented trace of the live run (temporary debug print at the FU-89 slot
+loop, reverted after the run) pins the ball slot moving with the record —
+`T2DBG slot22 pos=(296,0,244) … anim=3 bank=3 frame=8 dir=6 vis=1 draw=1
+sprite=yes off=32 err=0` through `(264,0,264)`, `sprite=yes` throughout.
+**Honest result: no ball is visible in the smoke captures** — with the
+engine's static stand-in camera place `(0,0,0)` the camera-derived lead
+parks the ball near `(0x120,0x120)`, whose projection (`x' = 160 +
+x*320/z ≈ 480`) lands outside the 320-wide canvas while the camera place
+never pans (the native camera place pans with the action; the engine's pan
+chain is event-gated, §12/§13). The visible ball therefore waits on the
+camera-place feed, not on the ball machine.
+
+Numbered legs (L14.8 additions):
+
+* **L14.8.a** the phase-6 goal-area and phase-0xC/0x13/0x14 leads and their
+  match-over words `0x158822` (the engine lifecycle owns exits).
+* **L14.8.b** the `FUN_0006FE84`/`FUN_0006E518` appearance/animation machine
+  (the `+0x84` timer, the `0x11052A` row successor, the `0x15887B` frame
+  byte); the port stages the row-3 appearance and the heading only.
+* **L14.8.c** the `FUN_0008C068` `0x158862` head-error producer (modeled as
+  the image-default field; the max-speed shift degenerates at 0).
+* **L14.8.d** the native `[0x14C32A] == 0` run gate (the engine
+  `session_gate_14c32a` is the FU-146 scheduler proxy seeded 1 for live
+  matches, so the machine runs each granted frame).
+* **L14.8.e** the visible-ball camera feed: the phase-2 lead is
+  camera-derived; with the stand-in place `(0,0,0)` the lead (and with it the
+  ball) projects off the right edge — a live camera place/pan is what puts
+  the ball on screen (the T4/S5-era pan chain is event-gated).
+* **15.a/15.b status:** the ball machine does **not** produce the ball
+  *height* — `y` (0x158810) is untouched by the machine and stays 0 in open
+  play, so the `d == 0x70` band bootstrap (15.a) is not reachable from this
+  machine; the row 04/05/06/1E `ball_height` stand-ins (15.b) read the
+  engine's `ball.y`, which the native also keeps 0 in open play — the
+  stand-ins are not superseded by L14.8 and 15.b stays open for a genuine
+  height producer.

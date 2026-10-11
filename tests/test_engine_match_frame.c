@@ -1515,6 +1515,106 @@ static void test_held_key_moves_live_controlled_record(void) {
   drop_fixture(f);
 }
 
+/* M2 phase-11 T2 (FU-148 §16, L14.8): the FUN_0008BAF0 ball machine over the
+ * frame body. With the fresh camera triple (0,0,0) the native phase-2
+ * (period <= 3) lead at 0x8BB55..0x8BBFC is
+ *   tx = -3*camZ/8 ± 0x120 = 0x120, tz = 3*camZ/4 ± 0x120 = 0x120
+ * (the offsets apply because |(dx,dz)| = 0 < 0x120; `[0x15884E] = 7`), the
+ * metric direction to (0x120, 0x120) is the 45° heading 0x40, and the tail's
+ * sine velocity targets are (3, 3) — the ±1 ramp and the
+ * `x += vel_x*delta; z += vel_z*delta` integration roll the ball record the
+ * render slot 22 stages. First-hand windows: `disassemble_function 0x8BAF0`
+ * (0x8BB55..0x8BBFC, 0x8BDEC..0x8C052). */
+static void test_ball_machine_phase2_open_play_lead(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.entities.ball.head_gate == 2);   /* FUN_000886D4 row 3 & 2 */
+  assert(mr.entities.ball.x == 0 && mr.entities.ball.z == 0);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;               /* no period end in 10 ticks */
+
+  one_granted_frame(&mr);                    /* granted frame 1 */
+  assert(mr.entities.ball.machine_ran == 1);
+  assert(mr.entities.ball.target_x == 0x120);            /* 0x8BBF0 */
+  assert(mr.entities.ball.target_y == 0);
+  assert(mr.entities.ball.target_z == 0x120);
+  assert(mr.entities.ball.max_speed == 7);               /* 0x8BBE6 */
+  /* Frame-1 metric source: (0x120, 0x120) from the record — dist 0x18C and
+   * the angle (FUN_000CD474) of the equal pair is the 45° heading 0x80. */
+  assert(mr.entities.ball.metric == 0x18C);
+  assert(mr.entities.ball.target_heading == 0x80);
+  assert(mr.entities.ball.heading == 0x40);              /* clamped to turn */
+  assert(mr.entities.ball.visual_dir == 2);              /* 0x1104CF[(0x40)>>5] */
+  /* Frame 1's sine velocity targets are (5, 5); the speed/2 ramp timer starts
+   * at 0, so both axes step ±1 and integrate by delta 2. */
+  assert(mr.entities.ball.vel_x == 1 && mr.entities.ball.vel_z == 1);
+  assert(mr.entities.ball.speed == 1);
+  assert(mr.entities.ball.x == 2 && mr.entities.ball.z == 2);
+
+  one_granted_frame(&mr);                    /* granted frame 2 */
+  one_granted_frame(&mr);                    /* granted frame 3 */
+  /* By frame 3 the ramp reaches the 3-unit velocity target and the ball has
+   * rolled 2+4+6 = 12 units on both axes. */
+  assert(mr.entities.ball.vel_x == 3 && mr.entities.ball.vel_z == 3);
+  assert(mr.entities.ball.speed == 3);
+  assert(mr.entities.ball.x == 12 && mr.entities.ball.z == 12);
+
+  /* The record the render stage consumes moved with the machine. */
+  if (mr.render.enabled) {
+    assert(mr.render.entities[22].stage.pos.x == mr.entities.ball.x);
+    assert(mr.render.entities[22].stage.pos.z == mr.entities.ball.z);
+  }
+}
+
+/* M2 phase-11 T2 (FU-148 §16, L14.8): the live ISO open-play producer. The
+ * natural kickoff + KICK press reaches phase 2 (the existing live chain); from
+ * there the ball machine alone advances the ball record 0x15880C/14 — the
+ * T2-visible ball source the FU-120 writer census leaves as the sole per-frame
+ * producer. Pins: the machine ran live, the record moved off the kickoff spawn
+ * with the phase-2 lead selected, and the staged slot 22 follows it. */
+static void test_live_ball_record_produced_in_open_play(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  int32_t pre_x = 0, pre_z = 0;
+  int32_t start_x, start_z;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  /* The kickoff phases hold the committed spawn; the machine only starts
+   * rolling once the phase flips (the last pre-flip frame observes it). */
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) {
+    pre_x = mr.entities.ball.x;
+    pre_z = mr.entities.ball.z;
+    one_granted_frame(&mr);
+  }
+  assert(mr.state.phase == 2u);
+  assert(pre_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
+  assert(pre_z == 0);
+  start_x = mr.entities.ball.x;
+  start_z = mr.entities.ball.z;
+  for (int i = 0; i < 30; i++) one_granted_frame(&mr);
+  assert(mr.entities.ball.machine_ran == 1);
+  assert(mr.entities.ball.x != start_x || mr.entities.ball.z != start_z);
+  /* The phase-2 lead is the live target (the camera triple at the kickoff
+   * default (0,0,0) -> the 0x120/0x120 spot). */
+  assert(mr.entities.ball.target_x == 0x120 || mr.entities.ball.target_z == 0x120);
+  if (mr.render.enabled) {
+    assert(mr.render.entities[22].stage.pos.x == mr.entities.ball.x);
+    assert(mr.render.entities[22].stage.pos.z == mr.entities.ball.z);
+  }
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* M2 phase-9 T2 (FU-142 OL-63): the live carrier producers. The natural ISO
  * kickoff + held UP movement walks the slot record through row 02's install 4
  * into row 04's half-line coda (`0x7F133` install 5, invoke-now) on the real
@@ -4041,10 +4141,12 @@ int main(void) {
   test_input_options_producer_sets_range_bits();
   test_record_event_tail_gate_fires_in_frame();
   test_record_event_gate_live_from_height_producer();
+  test_ball_machine_phase2_open_play_lead();
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();
   test_live_long_ball_mode40_band2_follow();
   test_live_pass_kick_runs_receive_arm();
+  test_live_ball_record_produced_in_open_play();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();

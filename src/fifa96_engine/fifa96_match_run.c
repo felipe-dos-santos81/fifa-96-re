@@ -1032,6 +1032,10 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
   ball->stage.pos.x = mr->entities.ball.x;
   ball->stage.pos.y = mr->entities.ball.y;
   ball->stage.pos.z = mr->entities.ball.z;
+  /* M2 phase-11 T2: the ball's appearance row (the reset's FUN_0006E724 row 3
+   * install, 0x887D5) selects the FU-84 row the FU-85 resolver draws; the
+   * earlier zeroed stand-in resolved row 0. */
+  ball->stage.anim_id = (int32_t)mr->entities.ball.appear_row;
   ball->stage.heading =
       (int32_t)((uint32_t)(uint16_t)mr->entities.ball.heading << 16);
   ball->stage.hidden = 0;
@@ -2594,6 +2598,187 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
   return FIFA96_OK;
 }
 
+/* ===== M2 phase-11 T2 (L14.8): the FUN_0008BAF0 ball machine ==============
+ *
+ * First-hand /FIFA96.EXE this task: `disassemble_function 0x8BAF0` (379
+ * insns; the tail window 0x8BDEC..0x8C065 re-read), the FUN_0008AF38 gate
+ * (0x8B65B..0x8B669), `0x8C24C` (the commit), `0x8C068` (the head helper),
+ * `0x6FE84`/`0x6E724` (the appearance machine), the writer census
+ * (`search_instructions 15880c / 158830 / 15884a / 158848`) and
+ * `read_memory 0x1104D2 / 0x1104AE / 0x110492` (the 0x1104CF dword-top-byte
+ * direction table). The native runs the machine from the clock tail
+ * (`FUN_0008AF38` 0x8B664) whenever `[0x14C32A] == 0`, after the entity
+ * chain; it is the only per-frame producer of the ball record position
+ * 0x15880C/14 (the FU-120 writer census: resets, commits, the penalty
+ * placement and this tail's `ADD [0x1587EC+0x20/0x28]` integration) — i.e.
+ * the ball the composer stages into render slot 22 (`FUN_00036C70` 0x36E12).
+ *
+ * Ported subset (the phase-2 open-play lead + the common tail):
+ *
+ *  - entry `[0x15884E] = 5` (0x8BB08).
+ *  - phase 2 (0x8BB55..0x8BBFC): when the period byte [0x157AC2] <= 3 the
+ *    lead is camera-derived — `x = -3*camZ/8 ± 0x120`, `z = 3*camZ/4 ±
+ *    0x120` (y = 0), the ± offsets selected by the sign of `dx = -3*camZ/8 -
+ *    camX` / `dz = -camZ/4` and applied only while `|(dx,dz)| < 0x120`; that
+ *    offset arm stores `[0x15884E] = 7` (0x8BBE6). Period > 3 freezes the
+ *    target onto the ball record (0x8BB74). The camera triple is the engine
+ *    `render.camera.pos_x/pos_z` (native 0x15774C/0x157754).
+ *  - common tail (0x8BDEC..0x8C052): the FUN_0008DCD4 metric of
+ *    (target - ball) into 0x15883C (components 0x15883E/0x158840); when the
+ *    ball sits on the target the velocity words zero and the integration is
+ *    skipped; else:
+ *      - target_heading 0x15885E := the metric angle (0x8DD70 = FUN_000CD474;
+ *        the ball's own heading when the metric is 0);
+ *      - the 0x158881 gate (the FUN_0006E724 row-flags probe: the reset's
+ *        row-3 install `FUN_0006E724(0x1587EC, 3, 0)` stores row 3's +2
+ *        flags & 2 = 2) admits the heading steer: within 0x60 of the lead the
+ *        aim switches to the focus record ([0x157A73], default the camera
+ *        triple 0x15774C — engine `render.camera`), and the heading
+ *        0x15885A is turned toward the target heading, wrapped 10-bit
+ *        (`& 0x3FF`, fold over 0x200) and clamped to
+ *        `±((0x10 - speed) << 2)`; the visual byte 0x158852 is the 0x1104CF
+ *        dword-top-byte table at `(int16)heading >> 5`;
+ *      - speed = metric >> 3, clamped by `max_speed` (0x15884E) and, when
+ *        the previous speed exceeds max/2, by `max >> (head_error >> 6)`
+ *        (0x158862; image default 0 — L14.8.c);
+ *      - the per-axis velocity targets are the 0x114E04 sine fold of the
+ *        target heading (`fifa96_entity_sine(a)`,
+ *        `fifa96_entity_sine(a + 0x100)`), ramped ±1 whenever the 0x158856
+ *        timer rolls (period `speed/2` frames); the speed word 0x158848
+ *        := the metric of (vel_x, vel_z) (0x8DC68 = the same primitive);
+ *      - the integration: `ball.x += vel_x * delta`, `ball.z += vel_z *
+ *        delta` (0x8C036..0x8C052). y is untouched (stays 0).
+ *    The appearance/animation machine `FUN_0006FE84` (+0x84 timer, the
+ *    0x11052A row successor, the 0x15887B frame byte) is the L14.8 visual
+ *    leg — the engine stages the heading and the reset's row-3 appearance;
+ *    the FU-85 frame data is synthetic and does not consume the bytes.
+ *
+ * Legs: L14.8.a the phase-6 goal-area and phase-0xC/0x13/0x14 lead arms and
+ * their match-over state words (0x158822; the engine lifecycle owns exits);
+ * L14.8.b the FUN_0006FE84/FUN_0006E518 appearance animation machine and the
+ * 0x15887B frame byte; L14.8.c the FUN_0008C068 0x158862 head-error producer
+ * (modeled as the image-default field); L14.8.d the native `[0x14C32A] == 0`
+ * run gate (the engine `session_gate_14c32a` is the FU-146 scheduler proxy
+ * seeded 1 for live matches, so the machine runs each granted frame). */
+static const int8_t match_run_ball_visual_table[32] = {
+  /* `((const int32_t *)0x1104CF)[idx] >> 24`, idx 0..31 (the
+   * `(uint16)heading & 0x3FF) >> 5` fold); first-hand read_memory 0x1104D2
+   * (128 B) — the coherent 0..7 octant table with its neighbouring bytes. */
+  0, 1, 2, 3, 4, 5, 6, 7, 48, 0, 0, -48, 1, 0, 0, 0,
+  0, -48, 1, 0, 0, 0, 0, 10, 0, 0, -48, 1, 0, 0, 0, 0,
+};
+
+static void match_run_ball_machine(struct fifa96_match_run *mr) {
+  struct fifa96_match_ball *b = &mr->entities.ball;
+  fifa96_camera *cam = &mr->render.camera;
+  int32_t delta = (int32_t)mr->state.frame_delta;
+  b->max_speed = 5;                                         /* 0x8BB08 */
+  if (mr->state.phase == 2u) {                              /* 0x8BB55 */
+    if (mr->state.period > 3u) {                            /* 0x8BB65 */
+      b->target_x = b->x;                                   /* 0x8BB74 */
+      b->target_y = b->y;
+      b->target_z = b->z;
+    } else {
+      int32_t cam_z = cam->pos_z;
+      int32_t three_q = cam_z - (cam_z >> 2);               /* 0x8BB8A */
+      int32_t neg_eighth = (-three_q) >> 1;                 /* 0x8BB8E/96 */
+      int32_t tx = neg_eighth;                              /* ECX */
+      int32_t tz = three_q;                                 /* EBX */
+      int32_t dx = neg_eighth - cam->pos_x;                 /* 0x8BB9E EDI */
+      int32_t dz = -cam_z >> 2;                             /* 0x8BBAD ESI */
+      b->target_y = 0;                                      /* 0x8BBA7 */
+      if (fifa96_entity_distance(dx, dz) < 0x120) {         /* 0x8BBBB */
+        tx += dx < 0 ? -0x120 : 0x120;                      /* 0x8BBC2..CC */
+        tz += dz < 0 ? -0x120 : 0x120;                      /* 0x8BBD4..E0 */
+        b->max_speed = 7;                                   /* 0x8BBE6 */
+      }
+      b->target_x = tx;                                     /* 0x8BBF0 */
+      b->target_z = tz;                                     /* 0x8BBF6 */
+    }
+  }
+  /* 0x8BDEC: the FUN_0008DCD4 metric of (target - ball). */
+  b->metric_dx = (int16_t)((uint16_t)b->target_x - (uint16_t)b->x);
+  b->metric_dz = (int16_t)((uint16_t)b->target_z - (uint16_t)b->z);
+  b->metric = (int16_t)fifa96_entity_distance(b->metric_dx, b->metric_dz);
+  if (b->metric == 0) {                                     /* 0x8BDFB */
+    b->target_heading = b->heading;                         /* 0x8BE20 */
+  } else {
+    int32_t angle = 0;
+    (void)fifa96_entity_angle(b->metric_dx, b->metric_dz, &angle);   /* 0x8BE12 */
+    b->target_heading = (int16_t)angle;                     /* 0x8BE25 */
+  }
+  if (b->head_gate != 0) {                                  /* 0x8BE2A */
+    int32_t tgt = b->target_heading;
+    if (b->metric <= 0x60) {                                /* 0x8BE42 */
+      /* 0x8BE4C..0x8BE82: aim at the focus record [0x157A73] — the default
+       * camera triple 0x15774C/54 (the foul-spot override 0x1587C0 is the
+       * unported foul machine's, FU-150). */
+      int16_t fdx = (int16_t)((uint16_t)cam->pos_x - (uint16_t)b->x);
+      int16_t fdz = (int16_t)((uint16_t)cam->pos_z - (uint16_t)b->z);
+      if (fdx == 0 && fdz == 0) tgt = b->heading;
+      else {
+        int32_t fangle = 0;
+        (void)fifa96_entity_angle(fdx, fdz, &fangle);
+        tgt = (int16_t)fangle;
+      }
+      b->target_heading = (int16_t)tgt;                     /* 0x8BE25 store */
+    }
+    {
+      int32_t steer = (int16_t)((uint16_t)tgt - (uint16_t)b->heading);
+      if (steer != 0) {                                     /* 0x8BE94 */
+        steer &= 0x3FF;                                     /* 0x8BE9A */
+        if (steer > 0x200) steer -= 0x400;                  /* 0x8BEA0..A5 */
+        {
+          int32_t turn = (0x10 - (int32_t)b->speed) << 2;   /* 0x8BEAD */
+          if (steer > turn) steer = turn;                   /* 0x8BEB9..C3 */
+          if (steer < -turn) steer = -turn;                 /* 0x8BEC5..D3 */
+        }
+        {
+          int32_t sum = (int16_t)((uint16_t)b->heading + (uint16_t)steer);
+          int32_t u = sum & 0x3FF;                          /* 0x8BEDC */
+          b->heading = (int16_t)(u > 0x200 ? u - 0x400 : u); /* 0x8BEE2..F5 */
+          b->visual_dir = match_run_ball_visual_table[u >> 5]; /* 0x8BEFA..F01 */
+        }
+      }
+    }
+  }
+  {
+    int32_t speed = b->metric >> 3;                         /* 0x8BF0F */
+    if (speed == 0) {                                       /* 0x8BF1D */
+      b->speed = 0;                                         /* 0x8BF1F..27 */
+      b->vel_x = 0;
+      b->vel_z = 0;
+    } else {
+      int32_t max = b->max_speed;
+      if ((int32_t)b->speed > max / 2)                      /* 0x8BF2F..3F */
+        max >>= (int32_t)b->head_error >> 6;                /* 0x8BF41..47 */
+      if (speed > max) speed = max;                         /* 0x8BF4A..4F */
+      {
+        int32_t vx = (int32_t)(((int64_t)speed *
+                                fifa96_entity_sine(b->target_heading) + 0x8000) >> 16);
+        int32_t vz = (int32_t)(((int64_t)speed *
+                                fifa96_entity_sine((int32_t)b->target_heading + 0x100) +
+                                0x8000) >> 16);
+        /* 0x8BFC0..0x8C035: the per-axis ±1 ramp on the speed/2 timer. */
+        int32_t period = (int32_t)b->speed >> 1;
+        b->ramp_timer = (int16_t)(b->ramp_timer + delta);
+        if ((int32_t)b->ramp_timer > period) {
+          b->ramp_timer = 0;
+          if ((int32_t)vx > (int32_t)b->vel_x) b->vel_x = (int16_t)(b->vel_x + 1);
+          else if ((int32_t)vx < (int32_t)b->vel_x) b->vel_x = (int16_t)(b->vel_x - 1);
+          if ((int32_t)vz > (int32_t)b->vel_z) b->vel_z = (int16_t)(b->vel_z + 1);
+          else if ((int32_t)vz < (int32_t)b->vel_z) b->vel_z = (int16_t)(b->vel_z - 1);
+        }
+        b->speed = (int16_t)fifa96_entity_distance(b->vel_x, b->vel_z); /* 0x8C023 */
+      }
+      /* 0x8C036..0x8C052: the integration. */
+      b->x += (int32_t)b->vel_x * delta;
+      b->z += (int32_t)b->vel_z * delta;
+    }
+  }
+  b->machine_ran = 1;
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -2719,6 +2904,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * table-2 fallback). */
     rc = fifa96_match_run_goal_scan(mr);
     if (rc < 0) return rc;
+    /* M2 phase-11 T2 (L14.8): the FUN_0008BAF0 ball machine — the native
+     * clock tail (FUN_0008AF38 0x8B664, after the period/goal block) and the
+     * only per-frame producer of the ball record position the render slot 22
+     * stages. Runs after the goal scan, before the scene staging, so the
+     * frame draws the advanced record. */
+    match_run_ball_machine(mr);
     /* FU-85 §4: FUN_00036C70 stages the render slots after the FU-4B100
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
      * positions/animations reflect this frame. Rendering stays opt-in: the
