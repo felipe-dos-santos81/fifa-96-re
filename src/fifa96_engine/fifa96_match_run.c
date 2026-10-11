@@ -2751,7 +2751,7 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
     } else {
       int32_t max = b->max_speed;
       if ((int32_t)b->speed > max / 2)                      /* 0x8BF2F..3F */
-        max >>= (int32_t)b->head_error >> 6;                /* 0x8BF41..47 */
+        max >>= ((int32_t)b->head_error >> 6) & 0x1F;       /* 0x8BF41..47 */
       if (speed > max) speed = max;                         /* 0x8BF4A..4F */
       {
         int32_t vx = (int32_t)(((int64_t)speed *
