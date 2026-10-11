@@ -89,3 +89,6 @@ derived from one binary (`FIFA96.EXE`):
 - Whenever a task changes the wired count (new rows wired, or a re-count of
   the census), recompute it and update the README title **in the same
   commit**, keeping it consistent with the ENGINE.md census line.
+- The status narrative lives in `docs/PROGRESS.md` (moved out of the README);
+  update it when a slice closes, and keep `docs/ENGINE.md` as the
+  engine-level gates/legs record.
