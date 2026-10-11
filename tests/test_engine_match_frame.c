@@ -2061,6 +2061,9 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
       fifa96_match_run_init(&mr);
       continue;
     }
+    /* the T1-L3 bootstrap stand-in (leg): the height-table row needs
+     * `d >= 0x38` and no ported producer raises [0x157750] off zero, so the
+     * smallest exact-hit event H = 0x74 opens the camera window for the kick. */
     assert(fifa96_camera_event_set(&mr.render.camera, 0, 0, 0x74, 0) == FIFA96_OK);
     for (int i = 0; i < 60; i++) {
       if ((int16_t)mr.render.camera.pos_y >= 0x38) break;
@@ -2178,13 +2181,16 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
 /* M2 phase-12 T1 / FU-153 (15.a): the live record jump producer — the
  * FUN_0006E8E8 aux-keyed starter + the FUN_0007BF20 jump arc. The record is
  * put on the verified jump-aux row (0x5E frame 0, aux 0x0E; the live row
- * selector that reaches it is unported, FU-153-L1's remaining leg) with
- * timer81 = 0x10, so the per-frame arm stages `ramp(0x10) = 15` into the
- * +0x85/+0x87 pair and `pos_y = 0x10`, and the same frame's arc advances
- * +0x87 by the whole-frame delta 2 and samples the shared 0x10F3C4 arc:
- * t=17 -> 16 (the crest), then 15, 13, 12, 9, 6, 2 and the `t > 2*15` landing
- * (pos_y 0, pair 0, target := position). Every value is a first-hand table
- * sample (`0x10F3C4`). */
+ * selector that reaches it is unported, FU-153-L1's remaining leg), and the
+ * per-frame arm stages `ramp(word[+0x83]) = ramp(0x10) = 15` into the
+ * +0x85/+0x87 pair and `pos_y = 0x10` (T1 fix round 1: the arm's ramp
+ * argument is its own +0x83 marker, NOT the +0x81 countdown — the
+ * `dword[+0x81] >> 16` alias; this test sets timer81 = 0 so the trap would
+ * show as `base 3`, detected by the `jump_base == 15` assert), and the same
+ * frame's arc advances +0x87 by the whole-frame delta 2 and samples the shared
+ * 0x10F3C4 arc: t=17 -> 16 (the crest), then 15, 13, 12, 9, 6, 2 and the
+ * `t > 2*15` landing (pos_y 0, pair 0, target := position). Every value is a
+ * first-hand table sample (`0x10F3C4`). */
 static void test_record_jump_arc_starter(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -2195,10 +2201,7 @@ static void test_record_jump_arc_starter(void) {
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   e->anim_id = 0x5E;
   e->frame = 0;
-  /* The native +0x81 timer decays by the delta when the +0x7F limit high word
-   * is <= the delta; keep the limit above 2 so the arm still sees ~0x10. */
-  e->timer7f = 0x00100000u;
-  e->timer81 = 0x10;
+  e->timer81 = 0;   /* the arm must NOT read it (fix round 1: was 0x10) */
   assert(e->pos_y == 0);
   one_granted_frame(&mr);
   assert(e->pos_y == 16);          /* the aux arm + the same frame's arc */

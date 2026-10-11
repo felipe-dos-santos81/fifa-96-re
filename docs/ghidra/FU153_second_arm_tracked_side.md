@@ -449,3 +449,58 @@ draw and the even grid, `d < 0x70` as the height-table discriminator; B: the
 exact-`0x70`-sample band-2 kick with the k=7 `0x100` draw and
 `fifa96_match_run_camera_follow == 1`). Smoke `p12-t1-*`: live motion, no
 visible follow (honest). Goldens unmoved.
+
+---
+
+## 11. Errata (T1 fix round 1, 2026-10-11) — the arm's ramp argument is `+0x83`, not `+0x81`
+
+**Quoted from §10 (left in place, per the no-rewrite rule):**
+
+> * **the FUN_0006E8E8 animation-aux-keyed jump arms** (`match_run_record_jump_arm`):
+>   aux 0x0E -> case 0xD `pos_y 0x10` + `+0x85 = +0x87 = ramp(word[+0x81])`
+>   (`0x6EDFD/0x6EE04/0x6EE14`), aux 0x3A -> case 0x39 `pos_y 0x18` + the same
+>   pair (`0x6ED1F/0x6ED26/0x6ED33`), aux 0x0F -> case 0xE the zero-height
+>   relaunch (`0x6EE90..0x6EEBE`).
+
+**The `ramp(word[+0x81])` reading is wrong — the fifth `dword>>16` alias
+strike in this project.** The arms' ramp argument is the word at **`+0x83`**,
+read through the trap `dword[+0x81] >> 16` (= the word at `+0x81+2`), and the
+value is the arm's own just-stored marker:
+
+```
+aux 0x3A (case 0x39), first-hand disassemble_bytes:
+  0x6ED08  MOV word[EBP+0x83], 0x18          ; the marker
+  0x6ED11  MOV EAX, dword[EBP+0x81]          ; low word +0x81, high word +0x83
+  0x6ED17  SAR EAX, 0x10                     ; = word[+0x83] = 0x18
+  0x6ED1A  CALL 0x702F8                      ; ramp(0x18)
+  0x6ED1F  MOV word[EBP+0x85], AX
+  0x6ED26  MOV word[EBP+0x87], AX
+  0x6ED33  MOV dword[EBP+0x5d], 0x18
+
+aux 0x0E (case 0xD):
+  0x6EDE6  MOV word[EBP+0x83], 0x10
+  0x6EDEF  MOV EAX, dword[EBP+0x81]; 0x6EDF5 SAR EAX,0x10; 0x6EDF8 CALL 0x702F8
+  0x6EDFD/0x6EE04  store +0x85/+0x87;  0x6EE14  MOV dword[EBP+0x5d], 0x10
+
+aux 0x25 (case 0x24, unported):
+  0x6FB2F  MOV word[EBP+0x83], 0x50
+  0x6FB38/0x6FB3E/0x6FB41  the same dword-shift -> ramp(0x50)
+```
+
+The decompile agrees literally: case 0xd stores `+0x83 = 0x10` and the next
+line calls `FUN_000702f8((dword[+0x81]) >> 16)`; case 0x39 the same with
+`0x18`. `word[+0x81]` is a **different cell** — the decayed countdown
+(`0x7CA5C CMP word[EAX+0x81],0` / `0x7CA78 MOV word[EBP+0x81],0`, the
+`entity_timer_decay` twin).
+
+**Corrections to §10's consequences.** The live jump bases for the verified
+rows are `ramp(0x10) = 15` (crest 16) and `ramp(0x18) = 18`; there is **no
+`timer81` dependency** for the jump base, so T1-L1's "`timer81` producer"
+framing (and the T1 report's "tiny 1-frame blip" concern) are withdrawn —
+the misread made the port compute `ramp(timer81→0) = 3` (`pos_y = 1`), which
+the T1 unit test masked by staging `timer81 = 0x10`. Fixed in the T1 fix
+round 1 commit (see the T1 report §"Fix round 1"); the unit test now sets
+`timer81 = 0` and still pins `jump_base 15` / the crest-16 trace, so the trap
+is regression-detected. The case-0x0F arm's `FUN_00079B1C` snap (`0x6EE90/0x6EE92`, the
+target := position call before the `+0x85` check) is added to the T1-L1 leg.
+

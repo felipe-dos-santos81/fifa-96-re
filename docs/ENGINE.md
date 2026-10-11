@@ -1554,7 +1554,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   (scene AE 9381..38998) and **no visible follow-cam** — the camera stays the
   stand-in (the pitch is not drawn; no re-centering), consistent with legs
   T1-L3/L14.8.e. `make check` **110 assertions / 108/108**; ASan/UBSan clean;
-  the `wired` census stays 21/80 (no action row changed).
+  the `wired` census stays 21/80 (no action row changed). **T1 fix round 1
+  (2026-10-11):** the review's Critical — the arm's ramp argument is the arm's
+  own `+0x83` marker read through the `dword[+0x81] >> 16` alias
+  (`0x6ED08`/`0x6ED11`/`0x6ED17`: store 0x18 then `ramp(0x18)`; likewise
+  `0x6EDE6`/`0x6EDEF`/`0x6EDF5` 0x10, `0x6FB2F`/`0x6FB38` 0x50), **not**
+  `word[+0x81]` (`0x7CA5C` proves the countdown is a different cell) — is
+  fixed (the fifth `dword>>16` alias strike; FU-153 §11 errata); the live jump
+  base is a constant `ramp(0x10) = 15` (crest 16) / `ramp(0x18) = 18` with no
+  `timer81` seed needed, so the earlier "tiny blip" framing is withdrawn; the
+  unit test now stages `timer81 = 0` and still pins the crest-16 trace; the
+  test-A bootstrap injection is labelled T1-L3 and the case-0x0F missing
+  `FUN_00079B1C` snap (`0x6EE92`) is on the T1-L1 leg.
   **Build topology note (candidate ledger item, no change made):** the
   `fifa96_engine` target builds **without** ASan/UBSan (CMakeLists attaches
   the sanitizer flags to the test targets only; `build/CMakeFiles/

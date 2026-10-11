@@ -975,20 +975,32 @@ static uint16_t match_run_frame_aux(uint8_t anim_id, uint8_t frame) {
 }
 
 /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0006E8E8 jump arms, first-hand
- * `disassemble_bytes` this task (`0x6ED11..0x6ED69`, `0x6EDF5..0x6EE3E`,
+ * `disassemble_bytes` this task (`0x6ED08..0x6ED69`, `0x6EDE6..0x6EE3E`,
  * `0x6EE90..0x6EEB7`, `0x6FB2F..0x6FB5C`) and `decompile_function 0x6E8E8`.
  * The switch index is `(aux & 0xFF) - 1`, so the arm for aux `0x0E` is case
  * `0xD` etc. Ported subset (the height/timer writes; the arm's velocity,
- * sine-step and `+0x83` writes and the case-`0xE` else arm's frame-3 resolve
- * stay legs — FU153-L1):
- *  - aux 0x0E (case 0xD): `+0x85 = +0x87 = ramp(word[+0x81]); pos_y = 0x10;`
- *    (`0x6EDFD`/`0x6EE04`, the `0x6EE14` store);
- *  - aux 0x3A (case 0x39): `+0x85 = +0x87 = ramp(word[+0x81]); pos_y = 0x18;`
- *    (`0x6ED1F`/`0x6ED26`, the `0x6ED33` store);
+ * sine-step and `+0x83`-marker writes, the case-`0xE` `FUN_00079B1C` snap
+ * (`0x6EE90/0x6EE92`) and its `pos_y != 0` else arm's FUN_0006E490(frame 3)
+ * resolve stay legs — FU153-L1):
+ *  - aux 0x0E (case 0xD): `+0x83 = 0x10` (`0x6EDE6`), then
+ *    `+0x85 = +0x87 = ramp((dword[+0x81]) >> 16) = ramp(word[+0x83]) = ramp(0x10)`
+ *    (`0x6EDEF`/`0x6EDF5`/`0x6EDF8`, stores `0x6EDFD`/`0x6EE04`), `pos_y = 0x10`
+ *    (`0x6EE14`);
+ *  - aux 0x3A (case 0x39): `+0x83 = 0x18` (`0x6ED08`), then the same alias
+ *    read `ramp(word[+0x83]) = ramp(0x18)` (`0x6ED11`/`0x6ED17`/`0x6ED1A`,
+ *    stores `0x6ED1F`/`0x6ED26`), `pos_y = 0x18` (`0x6ED33`);
+ *  - (the unported aux 0x25 arm has the same shape: `+0x83 = 0x50` at
+ *    `0x6FB2F`, `ramp(word[+0x83])` at `0x6FB38`/`0x6FB3E`/`0x6FB41`);
  *  - aux 0x0F (case 0xE, the zero-height relaunch): `if (pos_y == 0) {
  *    if (+0x85 == 0) +0x85 = ramp(pos_y + 0x1C); pos_y = 0; +0x87 = 0; }`
- *    (`0x6EE97..0x6EEBE`; the `pos_y != 0` else arm's FUN_0006E490(frame 3)
- *    call is a leg).
+ *    (`0x6EEA1..0x6EEBE`; this arm reads the word `+0x5D` directly, not the
+ *    alias).
+ * **Erratum (T1 fix round 1, fifth `dword>>16` alias strike):** the ramp
+ * argument is the arm's own `+0x83` marker (the just-stored 0x10/0x18/0x50),
+ * NOT `word[+0x81]`: `dword[+0x81] >> 16` is the word at `+0x83` (the trap);
+ * the decayed countdown `word[+0x81]` is a different cell (`0x7CA5C`
+ * `CMP word[EAX+0x81],0` / `0x7CA78` zeroes it). `ramp(0x10) = 15` (crest 16)
+ * and `ramp(0x18) = 18` are the live bases.
  * The arms run every frame the frame holds the aux (the native FUN_0006E8E8
  * runs per record per frame after the action handler, `0x7CD30`/`0x785AD`), so
  * the jump is re-staged while the frame lasts and the BF20 arc takes over when
@@ -997,13 +1009,13 @@ static void match_run_record_jump_arm(struct fifa96_match_run_record *r, uint16_
   int16_t base;
   switch (aux & 0xFFu) {
     case 0x0E:
-      base = fifa96_camera_ramp((int16_t)r->timer81);
+      base = fifa96_camera_ramp(0x10);   /* ramp(word[+0x83]), the marker above */
       r->pos_y = 0x10;
       r->jump_base = base;
       r->jump_timer = base;
       break;
     case 0x3A:
-      base = fifa96_camera_ramp((int16_t)r->timer81);
+      base = fifa96_camera_ramp(0x18);
       r->pos_y = 0x18;
       r->jump_base = base;
       r->jump_timer = base;

@@ -89,14 +89,17 @@ struct fifa96_match_entity {
   int32_t pos_x, pos_y, pos_z;          /* +0x59 / +0x5D / +0x61 */
   /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0007BF20 jump arc state — word
    * +0x85 (the arm-staged ramp time = the arc peak; set by the FUN_0006E8E8
-   * jump arms at `0x6ED1F`/`0x6EDFD`/`0x6FB46`, cleared by the landing edge)
+   * jump arms at `0x6ED1F`/`0x6EDFD`/`0x6FB46` to `ramp(word[+0x83])` — the
+   * arm's just-stored marker read through the `dword[+0x81] >> 16` alias
+   * (0x10/0x18/0x50; in particular NOT the timer81 countdown word at +0x81,
+   * `0x7CA5C`), cleared by the landing edge)
    * and word +0x87 (the running time, advanced by the whole-frame delta at the
    * `0x7C072` arc entry and zeroed at the `0x7C0AE` landing). While
    * `+0x85 != 0` (`0x7C05F JZ`) the arc writes `pos_y` (+0x5D) from
    * `fifa96_camera_arc_height(+0x85, +0x87)` (`0x7C072..0x7C101`) and lands
    * (`0x7C096 JLE` arm: pos_y 0, both words 0, target := position) when
    * `+0x87 > 2*(+0x85)`. `+0x83` is written by the arms but read only by the
-   * unported FUN_0006E8E8 event gates (leg). */
+   * unported FUN_0006E8E8 event gates and the arm's own ramp argument (leg). */
   int16_t jump_base;    /* +0x85 */
   int16_t jump_timer;   /* +0x87 */
   int32_t target_x, target_y, target_z; /* +0x4D / +0x51 / +0x55 */
