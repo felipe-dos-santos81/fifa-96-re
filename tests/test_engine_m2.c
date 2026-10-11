@@ -993,6 +993,44 @@
  * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
  * (`09b726b7…`).
  *
+ * --- v12 acceptance completion (M2 phase-12 T4): strata + dormancy -----------
+ *
+ * T4 adds the phase's acceptance strata on top of the T2 re-pin without
+ * moving the tape: the transcript is byte-identical to the v12 golden (no
+ * further re-pin; T2's v12 is the phase's record).
+ *
+ * Added strata:
+ *   1. **The on-canvas ball stratum** (T2's pins, extended to the visible
+ *      window): at the first granted frame (9) the ball slot 22's clean
+ *      projection is drawable ON canvas — pinned exactly (`sx` 10266855 =
+ *      x' 156.66, the pixel the smoke trace drew; the stand-in yaw measured
+ *      off the right edge) — plus the staged T2-L1 art identity (anim_id 3,
+ *      the row-3 appear install; frame 0 of the synthetic per-row table). The
+ *      parked-window samples (m 58/61/72) keep the v12 drawable + lateral
+ *      bound form.
+ *   2. **The follow-arm chain reference**: at m 58 the tape asserts its own
+ *      predicate, `fifa96_match_run_camera_follow(mr) == 0`, over the pool
+ *      jump-state dormancy. The live positive is the T1 ISO chain in
+ *      `tests/test_engine_match_frame.c::
+ *      test_live_airborne_long_ball_seed_then_band2_follow` (the exact-`0x70`
+ *      arc sample -> band 2 -> `camera_follow == 1`), which this stratum
+ *      references rather than duplicates (it needs the ISO asset chain and
+ *      the FU-153 jump producer's live seed).
+ *   3. **The honest dormancy record**: visible follow stays blocked on
+ *      T1-L1 (the arm velocity/sine/move writes + live row selector + the
+ *      `0x6EE92` snap), T1-L2 (the row-07 stage-2 `+0x44` ack) and T1-L3
+ *      (the camera bootstrap: nothing raises `0x157750` off zero); the
+ *      ball-slot art is a playart pose on the synthetic table (T2-L1); the
+ *      live camera place/pan is R2-L4 (no live event fires in the tape
+ *      window). The tape pins what is true: no pool record carries jump
+ *      state, the follow predicate refuses, and the projector's drawable
+ *      balls are the seeded-view placements.
+ *   4. **T2-L2 closed (no-ISO harness)**: the clean-projection samples are
+ *      mode-gated on `render.enabled`; without the ISO the tape now reaches
+ *      the documented `SKIP golden comparison (no ISO)` path green (rc 0,
+ *      first-hand) instead of aborting in the helper's live-slot assert.
+ *      ISO-present behavior is unchanged (the gate is always true there).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -1352,6 +1390,16 @@ struct m2_result {
   int32_t ball_final_x, ball_final_z;             /* the record at m 72 */
   int ball_final_drawable;
   int32_t ball_final_sx;
+  /* v12 acceptance completion (phase-12 T4): the on-canvas ball stratum at
+   * the first granted frame (the native view seed's visible window) and the
+   * staged T2-L1 art identity at the ball slot, plus the T1 follow-arm
+   * dormancy observations (the reference to the live ISO chain). */
+  int ball_early_drawable;   /* slot 22 clean projection at frame 9 (1 = drawn) */
+  int32_t ball_early_sx;     /* its clean screen x (16.16) at frame 9 */
+  uint8_t ball_slot_anim;    /* render.entities[22].stage.anim_id at frame 9 */
+  uint8_t ball_slot_frame;   /* render.entities[22].stage.frame at frame 9 */
+  int follow_on_tape;        /* fifa96_match_run_camera_follow(mr) at m 58 */
+  int jumps_active;          /* pool records with live jump state at m 58 */
   /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + full-gameplay
    * P0.2 / OL-T11-7): non-background SCENE pixels (above the derived HUD band,
    * y < 190) in the engine's indexed match canvas at the last pre-grant frame
@@ -1864,12 +1912,36 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * can never present the 0x70 boundary the band-2 kick needs — the follow
      * arm refuses at its height gate (`follow_speed` 5 from the pan, but
      * `event_param` 0 <= 0x10 at 0x739DC). */
-    res->ball_link_drawable = m2_slot_clean_screen(e, 22u, &res->ball_link_sx);
-    assert(res->ball_link_drawable == 1);
-    assert(res->ball_link_sx >= (e->surface->width << 16));   /* laterally off */
+    if (e->match_run.render.enabled) {   /* T2-L2: the no-ISO mode stages no slots */
+      res->ball_link_drawable = m2_slot_clean_screen(e, 22u, &res->ball_link_sx);
+      assert(res->ball_link_drawable == 1);
+      assert(res->ball_link_sx >= (e->surface->width << 16));   /* laterally off */
+    }
     assert(mr->entities.ball.y == 0);
     assert(mr->render.camera.pos_y == 0);
     assert(mr->render.camera.event_param <= 0x10);
+    /* v12 acceptance completion (phase-12 T4): the follow-arm chain reference.
+     * The chain this phase landed (FU-153; the T1 ISO test
+     * test_engine_match_frame::test_live_airborne_long_ball_seed_then_band2_follow)
+     * holds fifa96_match_run_camera_follow == 1 when a live jump arc presents
+     * the exact 0x70 band-2 sample at a kick frame; on this tape the arm
+     * refuses — the height gates are closed (event_param 0 <= 0x10; the ball
+     * height and the camera Y are 0) — and no pool record carries live jump
+     * state: the arc producer's aux-row starters (FU-153 rows 0x5E/0x12/0x14/
+     * 0x5C; the tape's wired set carries none) never enter. This is the honest
+     * T1-L1..L3 dormancy on the accepted tape. */
+    res->follow_on_tape = fifa96_match_run_camera_follow(mr);
+    assert(res->follow_on_tape == 0);
+    {
+      int jumps = 0;
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          if (mr->entities.team[t].records[i].jump_base != 0 ||
+              mr->entities.team[t].records[i].jump_timer != 0)
+            jumps++;
+      res->jumps_active = jumps;
+      assert(res->jumps_active == 0);
+    }
   } else if (m == M2_M_SCORED) {
     /* M2 phase-10 T3: the scored-frame asserts — the queue's next granted body
      * ran the scheduler -> the leg-0 handler's post -> the FUN_00093944
@@ -1899,9 +1971,11 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * of the parked camera, still laterally off the canvas. */
     res->ball_goal_x = mr->entities.ball.x;
     res->ball_goal_z = mr->entities.ball.z;
-    res->ball_goal_drawable = m2_slot_clean_screen(e, 22u, &res->ball_goal_sx);
-    assert(res->ball_goal_drawable == 1);
-    assert(res->ball_goal_sx >= (e->surface->width << 16));
+    if (e->match_run.render.enabled) {
+      res->ball_goal_drawable = m2_slot_clean_screen(e, 22u, &res->ball_goal_sx);
+      assert(res->ball_goal_drawable == 1);
+      assert(res->ball_goal_sx >= (e->surface->width << 16));
+    }
     assert(res->ball_goal_x != res->ball_link_x ||
            res->ball_goal_z != res->ball_link_z);
   } else if (m == M2_M_FINAL) {
@@ -1951,9 +2025,11 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.pos_z == 0xB48);
     res->ball_final_x = mr->entities.ball.x;
     res->ball_final_z = mr->entities.ball.z;
-    res->ball_final_drawable = m2_slot_clean_screen(e, 22u, &res->ball_final_sx);
-    assert(res->ball_final_drawable == 1);
-    assert(res->ball_final_sx >= (e->surface->width << 16));
+    if (e->match_run.render.enabled) {
+      res->ball_final_drawable = m2_slot_clean_screen(e, 22u, &res->ball_final_sx);
+      assert(res->ball_final_drawable == 1);
+      assert(res->ball_final_sx >= (e->surface->width << 16));
+    }
   }
 }
 
@@ -2124,6 +2200,18 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         res->staged_rec0_z = e->match_run.render.entities[0].stage.pos.z;
         res->staged_rec11_z = e->match_run.render.entities[11].stage.pos.z;
         res->staged_anim_id = (uint8_t)e->match_run.render.entities[11].stage.anim_id;
+        /* v12 acceptance completion (phase-12 T4): the phase's on-canvas ball
+         * stratum — at the first granted frame the native view seed puts the
+         * ball slot's clean projection ON canvas (the stand-in yaw 0 measured
+         * x' 480, off the right edge; the T2 pin). The staged T2-L1 art
+         * identity is recorded: the ball's row-3 appear install (anim_id 3)
+         * resolves through the render's documented synthetic per-row frame
+         * table, so the drawn sprite is a playart pose until the real
+         * 0x10E200-family tables land (leg T2-L1; the placement half is what
+         * this stratum pins). */
+        res->ball_early_drawable = m2_slot_clean_screen(e, 22u, &res->ball_early_sx);
+        res->ball_slot_anim = (uint8_t)e->match_run.render.entities[22u].stage.anim_id;
+        res->ball_slot_frame = (uint8_t)e->match_run.render.entities[22u].stage.frame;
         /* v4 (OL-T11-6 acceptance): the indexed canvas is RGB-visible — at
          * least one non-background pixel maps through the installed surface
          * palette to a non-black RGB triplet, so the palette is applied to
@@ -2336,11 +2424,19 @@ int main(void) {
    * ball-slot projection negative: with the native view seed the slot is
    * drawable at every sample (the screen-bound form is asserted in the
    * directive blocks; the parked goal-mouth side view leaves it laterally off
-   * canvas). No live height exists (no visible follow; legs 15.a/15.b). */
+   * canvas). No live height exists (no visible follow; legs 15.a/15.b). v12
+   * acceptance completion (T4): the follow-arm chain itself is pinned at m 58
+   * via its own predicate (fifa96_match_run_camera_follow == 0, with the T1
+   * ISO chain as the positive control) and the arc producer's dormancy is
+   * asserted over the pool (no record carries jump state). */
   assert(res.ball_machine_ran == 1);
-  assert(res.ball_link_drawable == 1);
-  assert(res.ball_goal_drawable == 1);
-  assert(res.ball_final_drawable == 1);
+  if (with_iso) {
+    assert(res.ball_link_drawable == 1);
+    assert(res.ball_goal_drawable == 1);
+    assert(res.ball_final_drawable == 1);
+  }
+  assert(res.follow_on_tape == 0);
+  assert(res.jumps_active == 0);
   /* The record's accepted trace (exact pins — the golden sees the early
    * on-canvas ball but not the parked-window projection): the m 58 link
    * (456, 28), the m 61 sample one machine run
@@ -2406,6 +2502,16 @@ int main(void) {
     assert(res.staged_rec0_z == -2376);    /* team 0 record 0 staged as placed */
     assert(res.staged_rec11_z == 2508);    /* team 1 record 0 staged as placed */
     assert(res.staged_anim_id == 0x26u);   /* kickoff selector row staged */
+    /* v12 acceptance completion (phase-12 T4): the on-canvas ball stratum at
+     * the first granted frame (the native view seed's visible window; the T2
+     * pin) and the staged T2-L1 art identity (the row-3 appear install
+     * resolving through the synthetic per-row frame table). The clean x is
+     * pinned exactly on canvas: measured 10266855 (16.16 = x' 156.66), the
+     * same pixel the smoke trace drew (integer x 156). */
+    assert(res.ball_early_drawable == 1);
+    assert(res.ball_early_sx == 10266855);
+    assert(res.ball_slot_anim == 3u);
+    assert(res.ball_slot_frame == 0u);
   }
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
   assert(st.presents == (uint64_t)res.steps);

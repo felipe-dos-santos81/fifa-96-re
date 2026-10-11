@@ -188,6 +188,24 @@ engine-code sanitizer finding on any exercised path (a bounded `DISPLAY=:1`
 run of the sanitized main exits timeout-only — no ASan/UBSan memory-error
 report; LSan flags 3 third-party allocations at exit, libdbus/libnvidia-glcore
 via `SDL_GL_LoadLibrary`); wired 21/80 unchanged.
+**Phase-12 T4 (2026-10-11) completes the acceptance v12 and closes the wave:**
+the M2 tape keeps T2's v12 transcript byte-identical (the re-pin is T2's
+record; no further re-pin; M1 unmoved) and adds the phase's strata on top —
+the on-canvas ball at the first granted frame (clean x' 156.66 pinned
+exactly; the smoke's drawn pixel), the staged T2-L1 art identity, the
+follow-arm predicate pinned dormant (`fifa96_match_run_camera_follow == 0`,
+with the T1 ISO chain as the positive control) and the pool-wide jump-state
+dormancy; the pre-existing no-ISO harness abort (T2-L2) is closed by
+mode-gating the projection samples, so the no-assets run reaches the
+documented `SKIP golden comparison (no ISO)` path green. The fresh
+`p12-t4-*` smoke reproduces the visible facts: the front-end capture is
+byte-identical to `p12-t2-frontend` (AE 0), the kickoff view draws the ball
+slot on screen (the HUD band AE 0 vs `p12-t2-ball-kickoff`; the drawn sprite
+is the T2-L1 pose-art caveat — placement, not content), the KICK burst
+starts the clock and empties the slot through the roll, holding UP moves the
+controlled record (scene AE 2636; clock 00:02..00:15) and the camera does not
+re-centre (no visible follow; legs T1-L3/R2-L4). `make check` 108/108 under
+the sanitized engine; wired 21/80 (README title 26%).
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

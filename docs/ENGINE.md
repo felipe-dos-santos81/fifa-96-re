@@ -87,7 +87,8 @@ the goal-mouth-park samples flip to drawable with the lateral bound pinned).
 The camera *place/pan* in live play stays the T1/R1 coupling (R2-L4); the
 ball-slot sprite content is the new leg T2-L1 (the documented synthetic
 per-row frame tables + the staged bank order). M1 unmoved. The smoke
-stays honest; the phase-10 T4 close-out entry below carries the whole-range
+stays honest (T4 re-verified `p12-t4-*`: movement + the ball slot on screen,
+no re-centering); the phase-10 T4 close-out entry below carries the whole-range
 summary, the re-pin ledger and the leg register. The phase-6 ports S1–S4
 landed under the same tape without moving a presented frame: S1 possession/
 locomotion (FU-147), S2 goal arming (FU-145), S3 goal consumers (FU-146) and
@@ -418,7 +419,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   | match HUD (bar/score/clock) | reached (on screen) | `p9-v9-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
   | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:02` in `p9-v9-match-clock.png` (byte-identical to the T5 shot); tape v10 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
   | move the controlled player | **reached (M2 phase-9 T1; T4 re-run)** | the ported row 02 (FU-75 L4.6) turns the post-kickoff slot record (team 0 record 9, code 02) into code 4 on its first live phase-2 frame and row 04 writes the slot-dir target; the T4 re-run held **LEFT** for 3 s (`p9-v9-hold-left.png`, byte-identical to the T3 shot): scene-band AE 45902; **UP** (`p9-v9-hold-up.png`): AE 28535; **RIGHT** (`p9-v9-hold-right.png`): scene AE 0 (the yaw/pitch-0 stand-in camera does not draw the negative-z walk; *(errata, phase-12 T2 2026-10-11: that view premise is superseded by the native camera-0 seed — FU-154 §5.1 — the AE pins above stand as measured pre-seed)*). Headless gates: `test_held_key_moves_live_controlled_record` (ISO), `test_machine_forced_decision_installs_on_slot_record`, `test_machine_no_edge_arm_copies_camera_target` |
-  | follow-cam / auto-camera (live) | **not visibly following yet (M2 phase-12 T1; honest smoke; `p12-t1-*` 2026-10-11: live motion, no re-centering)** | the every-frame FUN-00071DF4 call site + first arm, the row-04 pan origin, the `FUN_0007A084` receive arm (wired in `match_kick_run`) and — phase-11 T1 — the `0x157750` camera-height producer (FUN_00070B94 + the integrator store, `fifa96_camera_height`) with the record-event tail gate and kick band on the live cell are ported; the follow arm's `height > 0xF0` step is fixture-proven through the producer (`test_ball_receive_arm_high_ball_chain`) and **the `0x40` long-ball key is live** (the V request -> code-7 stage-1 `is_team_cb` -> mode 0x40: `test_live_long_ball_mode40_band2_follow` proves flags 0x40/band-2/code-4/traj 0x100/receive/follow-1 with the camera Y at the band boundary); **phase-12 T1 (FU-153) ports the live record jump producer** — the FUN_0006E8E8 animation-aux-keyed starter (the verified rows 0x5E/0x12/0x14/0x5C aux arms) + the `FUN_0007BF20 0x7C057..0x7C113` jump arc (`jump_base`/`jump_timer`, the shared `0x10F3C4` arc via `fifa96_camera_arc_height`) over the pool — and the live ISO chains: the airborne height-table code-4 receive sets the camera event to the k=5 exact-hit `0xE0` (`test_live_airborne_long_ball_seed_then_band2_follow`, A) and a second fresh chain crosses band 2 at the exact `0x70` arc sample with `traj/event_param 0x100` and `fifa96_match_run_camera_follow == 1` (B); the recording still cannot run fully live end-to-end: the live camera bootstrap (no ported producer raises `0x157750` off zero; the height table needs `d >= 0x38`) is leg **T1-L3** and the row-07 stage-2 `+0x44` animation ack that blocks the second kick of one possession is leg **T1-L2** (FU-153 §10) — the earlier `p11-t1-*` posture holds (`p12-t1-*`: no re-centering) |
+  | follow-cam / auto-camera (live) | **not visibly following yet (M2 phase-12 T1; honest smoke; `p12-t1-*` 2026-10-11: live motion, no re-centering; T4 re-verified `p12-t4-*`: movement + ball slot on screen, no re-centering)** | the every-frame FUN-00071DF4 call site + first arm, the row-04 pan origin, the `FUN_0007A084` receive arm (wired in `match_kick_run`) and — phase-11 T1 — the `0x157750` camera-height producer (FUN_00070B94 + the integrator store, `fifa96_camera_height`) with the record-event tail gate and kick band on the live cell are ported; the follow arm's `height > 0xF0` step is fixture-proven through the producer (`test_ball_receive_arm_high_ball_chain`) and **the `0x40` long-ball key is live** (the V request -> code-7 stage-1 `is_team_cb` -> mode 0x40: `test_live_long_ball_mode40_band2_follow` proves flags 0x40/band-2/code-4/traj 0x100/receive/follow-1 with the camera Y at the band boundary); **phase-12 T1 (FU-153) ports the live record jump producer** — the FUN_0006E8E8 animation-aux-keyed starter (the verified rows 0x5E/0x12/0x14/0x5C aux arms) + the `FUN_0007BF20 0x7C057..0x7C113` jump arc (`jump_base`/`jump_timer`, the shared `0x10F3C4` arc via `fifa96_camera_arc_height`) over the pool — and the live ISO chains: the airborne height-table code-4 receive sets the camera event to the k=5 exact-hit `0xE0` (`test_live_airborne_long_ball_seed_then_band2_follow`, A) and a second fresh chain crosses band 2 at the exact `0x70` arc sample with `traj/event_param 0x100` and `fifa96_match_run_camera_follow == 1` (B); the recording still cannot run fully live end-to-end: the live camera bootstrap (no ported producer raises `0x157750` off zero; the height table needs `d >= 0x38`) is leg **T1-L3** and the row-07 stage-2 `+0x44` animation ack that blocks the second kick of one possession is leg **T1-L2** (FU-153 §10) — the earlier `p11-t1-*` posture holds (`p12-t1-*`: no re-centering) |
   | kick the ball (gameplay) | **carrier + receive arm live (T2/phase-10 T1, headless); live long-ball kick path landed (phase-11 T1, headless); ball machine landed (phase-11 T2): the record is live, drawn and moving; the on-screen ball landed — the phase-12 T2 native camera-0 view seed projects the slot on canvas (16/16 kick-roll frames in the live ISO pin; M2 v12 re-pinned; the camera place/pan stays the T1/R1 event leg R2-L4, and the slot's sprite content is leg T2-L1)** | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); the possession/carrier producers are landed (T2: `test_live_carrier_claim_and_kick`) and the PASS kick now runs the `FUN_0007A084` receive arm live (T1: `test_live_pass_kick_runs_receive_arm` — ack/receiver/tracked/controlled/release); phase-11 T1 adds the live `0x40` long-ball request (the V key → FUN_0007CD60) and the mode-0x40 kick chain (`test_live_long_ball_mode40_band2_follow`); **phase-11 T2 (FU-148 §16)** ports the `FUN_0008BAF0` ball machine (L14.8) — the only per-frame ball-record position producer — into `match_run_ball_machine` (the phase-2 camera-derived lead + the metric/heading/velocity-ramp/integration tail), seeds the reset/commit posture and stages the reset's row-3 appearance (PLAYART bank 3). Live, the record moves and the slot resolves/draws (`test_live_ball_record_produced_in_open_play`, `test_ball_machine_moves_ball_slot_pixels`, smoke trace `slot22 … sprite=yes`); **phase-12 T2 (FU-154 §5.1)** seeds the native camera-0 view (yaw 0xBF9C/pitch 200 in `fifa96_match_run_reset_render`), so the camera-derived lead now projects on canvas (the live ISO pin measures 16/16 kick-roll frames, x' 152 -> 4; the tape's m 58/61/72 park samples flip drawable with the lateral bound pinned; M2 re-pinned to v12) — the live camera *place/pan* stays the T1/R1 event coupling (leg R2-L4) and the slot's sprite content (synthetic per-row frame tables + staged bank order) is the new leg T2-L1; the ball height (`y`) stays 0 (leg 15.a/15.b unchanged) |
   | score a goal | **reached naturally on the tape (M2 phase-10 T3)** | the band-reachable acceptance drives the natural chain on the tape: the m 42 scenario (every forcing declared) stages the camera park + record placement (the f-up8 T4 fixture's staged inputs) plus the claim-isolation and act-1 flag forcings, and from there the row-04 slot-dir event -> pan -> armer (zone 1) -> situation 6 -> table-1 queue (id 5) -> scheduler -> leg-0 handler -> FUN_00093944 writer scores 1-0 with the untracked arm's 0xD3 post (tape frames 47..65, `state=0/1-0` from frame 66); the m 41 code-4 record's lane enters the band natively (measured, ~62 granted frames after m 41), the claim machine's mid-walk slot steal and the ~4400-step mouth co-migration are the recorded blockers that make the rest staged; fixtures `test_camera_pan_event_chain`, `test_row04_live_pan_arms_camera`, `test_natural_goal_end_to_end` retain the unforced positives |
   | set pieces / restarts (live) | blocked; chains fixture-proven | the restart scanner requires `phase 2 && goal_armed`; the camera now arms on the tape (M2 phase-10 T3 — the natural goal) but the post-goal phase-0 hold keeps the scanner's phase gate closed, so the restart rows stay dormant; FU-149 P1 queue/arm/scan and the counter are fixture-proven, the L13/T1 taker rows 0x10..0x13 execute and resolve in the armed fixtures (`test_taker_armed_rows_resolve`/`test_taker_armed_referee_rows_resolve`), and tape v10 asserts the fresh dispatcher cells (`sp_*`) and the absent taker mask post-goal |
@@ -1680,6 +1681,59 @@ the build also produces the windowed `fifa96` target (`make game`).
   re-verification (recipe + quoted LSan output in the t3-report fix-round
   section), and `docs/PROGRESS.md` carries the same claim. `wired` 21/80
   (unchanged).
+- **M2 phase-12 T4 (acceptance v12 completion + the phase-12 leg register;
+  2026-10-11).** The final phase-12 slice adds the acceptance strata for the
+  phase's visible legs on the T2 v12 tape (`tests/test_engine_m2.c`) without
+  moving it — the transcript stays byte-identical to the v12 golden
+  (`2759dace…`; no further re-pin), M1 unmoved (`09b726b7…`):
+  - **the on-canvas ball stratum** at the visible window: at the first granted
+    frame (9) slot 22's clean projection is drawable ON canvas, pinned
+    exactly (clean x `10266855` = x' 156.66 — the pixel the smoke draw trace
+    measured; the stand-in yaw measured it off the right edge) — plus the
+    staged art identity (anim_id 3, the reset's row-3 appearance install;
+    frame 0 of the synthetic per-row table, leg T2-L1);
+  - **the follow-arm chain reference**: at m 58 the tape asserts its own
+    predicate `fifa96_match_run_camera_follow(mr) == 0` and the pool-wide
+    jump-state dormancy (no record carries `jump_base`/`jump_timer`); the live
+    positive is the T1 ISO chain
+    (`test_engine_match_frame::test_live_airborne_long_ball_seed_then_band2_follow`
+    — the exact-`0x70` sample -> band 2 -> follow 1), referenced rather than
+    duplicated; a scratch RED (the T2 seed zeroed, reverted) fires the tape's
+    first projection stratum (`ball_link_drawable == 1`, rc 134);
+  - **T2-L2 closed**: the clean-projection samples are mode-gated on
+    `render.enabled`, so the no-ISO run now reaches the documented
+    `SKIP golden comparison (no ISO)` path green (rc 0, first-hand) instead of
+    aborting in the helper's live-slot assert (the phase-11 T3 residue); the
+    ISO-present behavior is unchanged.
+
+  **Smoke (`DISPLAY=:1`, fresh `p12-t4-*`; honest):** the front-end capture is
+  byte-identical to `p12-t2-frontend` (AE 0); the tape navigation reaches the
+  match, the kickoff view draws the ball slot on screen at the centre (the T2
+  observation reproduced; the HUD band AE 0 vs `p12-t2-ball-kickoff`, the
+  scene band differs only by the live animation phase, AE 8812); the KICK
+  burst starts the clock and the roll window empties the slot (scene AE 9834
+  kickoff -> after-roll); holding UP moves the controlled record (scene AE
+  2636 across the hold; clock 00:02 -> 00:15) and the view does **not**
+  re-centre — **no visible follow-cam**, consistent with legs T1-L3/R2-L4;
+  captures
+  `docs/screens/p12-t4-{frontend,ball-kickoff,kick,walk,after-roll}.png`.
+  **Phase-12 leg register (folded here):** **T1-L1** (the jump arm's
+  velocity/sine/move writes + the live row selector + the case-0x0F
+  `FUN_00079B1C` snap `0x6EE92`), **T1-L2** (the row-07 stage-2 `+0x44`
+  animation ack: a second kick per possession cannot stage), **T1-L3** (the
+  live camera bootstrap: nothing raises `0x157750` off zero; the height table
+  needs `d >= 0x38`), **T2-L1** (the ball-slot sprite provenance: the
+  executable per-row frame tables `0x10E200..` and the FU-84 row +8 bank
+  index vs the staged bank order), **T2-L2 closed above**, **R2-L1** (the
+  live view-object handler that keeps the ball framed after the roll),
+  **R2-L4** (the live camera place/pan reachability: no live event fires; the
+  camera stays the stand-in), **L155.1** (R3/FU-155: the native machine's
+  legal window is byte==0 sessions, so the engine's run-every-frame composite
+  is the disclosed approximation — L155.2..4 stay on FU-155). T3's bounded
+  LSan observation (3 third-party allocations at SDL exit) and the
+  unsanitized non-engine libraries remain recorded observations (a topology
+  candidate), not legs. `make check` 108/108 (ASan/UBSan engine + test TUs);
+  `wired` 21/80 unchanged; README title stays 26%.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the
