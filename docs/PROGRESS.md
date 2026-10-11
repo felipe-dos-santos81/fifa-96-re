@@ -179,8 +179,11 @@ the ball-slot *sprite content* (the documented synthetic per-row frame tables
 + the staged PLAYART-first bank order) is the new leg T2-L1; the view-object
 handler that keeps the ball framed after the roll is R2-L1.
 Kicking the ball stays blocked
-interactively (no kick-attributable on-screen delta; the phase-11 T2 ball
-machine made the record live but off-window under the stand-in camera): the
+interactively as a *gameplay* outcome: the roll-window slot draw is
+presentation (the phase-12 T2 camera-derived lead + the seeded native view),
+while the live kick/possession invokers and camera producers remain
+unported or unreachable — the row-07 second-kick `+0x44` ack (T1-L2), the
+live pan reachability (R2-L4) and the view-object handler (R2-L1): the
 pad kick is wired
 (T3) and its carrier producers are now
 landed headlessly (T2/OL-63: movement -> row-05 claim -> code 5 -> row 07 ->

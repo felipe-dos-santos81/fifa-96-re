@@ -1606,7 +1606,7 @@ static void test_ball_machine_phase2_open_play_lead(void) {
  * staged slot — the FU-88 matrix from the live view angles, the reciprocal
  * tables, the FU-85 camera staging of the FU-71 triple and the 16.16 screen
  * transform (the same primitive sequence as test_engine_m2's
- * m2_slot_clean_visible, which the M2 tape uses for the same ball slot).
+ * m2_slot_clean_screen, which the M2 tape uses for the same ball slot).
  * Returns the near-gate drawable flag and the screen x in 16.16 so the caller
  * can apply the canvas bound. */
 static int live_slot_clean_screen(const struct fifa96_match_run *mr,
