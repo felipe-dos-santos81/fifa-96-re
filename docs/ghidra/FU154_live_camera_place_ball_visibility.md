@@ -412,3 +412,75 @@ the repo root with `game/FIFAPCCD96.iso`. Scratch only; not committed.
 
 Carried docs: FU-96 §4/§7, FU-112 §1/§3, FU-148 §12/§13/§15/§16, FU-152 §2.8/
 §2.9, FU-85 §4, plan R2/§Global Constraints.
+
+---
+
+## 9. T2 landing (phase-12, 2026-10-11) — the view seed, the measured window, the new leg
+
+**Step 1 of §5 landed.** `fifa96_match_run_reset_render` now seeds
+`r->yaw = 0xBF9C`, `r->pitch = 200` (new `MATCH_RUN_VIEW_YAW`/`_PITCH`
+defines next to the carried `MATCH_RUN_VIEW_RATIO`). The statics were
+re-verified first-hand this task against `/FIFA96.EXE` before coding:
+`read_memory 0x107560` = `9c bf 00 00 c8 00 00 00` (+0x58 yaw 0xBF9C, +0x5C
+pitch 200); `read_memory 0x107554` = `00 15 00 00` (+0x4C dword 0x1500);
+`read_memory 0x107DC8` = `08 75 10 00` (the fresh-match view pointer
+0x107508); `0x4C907..0x4C928` copies `[0x107DC8]+0x58..0x5F` to 0x14E4EC/F0
+(2x MOVSD) and `[+0x4C]` to 0x14E4F4, returning 0x14E4E0 — which the draw
+feeds to the matrix call (`0x58A4D LEA EAX,[EDX+0xc]; CALL 0x4C4B4`); the
+lead bytes at `0x8BB7C..0x8BBF6` read the aligned `[0x157754]`/`[0x15774C]`
+as carried. No push-back was needed on §1/§2/§5.1.
+
+**Measured (live ISO chain, deterministic; scratch probe matching the unit
+test).** With the seed the staged slot 22's render-own clean projection is on
+canvas for all 16 kick-roll window frames (x' 152 -> 4, exits left at the
+17th), camera still the `(0,0,0)` stand-in; with the stand-in yaw 0 the same
+chain is 0/90 frames (settled x' = 480). Pinned in
+`tests/test_engine_match_frame.c::test_live_ball_record_produced_in_open_play`
+(the derived art pair staged exactly as `fifa96_match_bridge_from_frontend`
+does, then the projection + canvas bound asserted: `on_canvas_frames == 16`,
+first x' = 152) and the reset pin in
+`tests/test_engine_match_render.c::test_init_resets_render_state`; the scene
+fixtures re-stage yaw = pitch = 0 (their documented identity-view premise), so
+the pixel/hash pins there are unchanged.
+
+**M2 tape: re-pinned to v12 with reason + frame diff** (the intended
+first visible-ball upgrade). `diff` against the committed v11 golden: lines
+1..8 byte-identical (the pre-grant frames 6..8 draw the empty render list);
+lines 9..85 (**77 lines**) all differ — frame 9 is the first granted frame
+with the 23-slot scene, and the whole view is now the native camera-0
+orientation; in the pre-park window (frames 9..45, camera `(0,0,0)`) the ball
+slot draws on canvas (projected x' ≈ 157 at the `(480,0,0)` kickoff spawn),
+and at the m 58/61/72 goal-mouth-park samples the clean projection flips
+not-drawable -> **drawable** (the near gate now passes) with the lateral
+screen bound asserted off-canvas (measured clean x' = 2030/2055/2128; the
+v12 stratum adds the bound the v11 `clean_visible` flag lacked —
+`m2_slot_clean_screen` returns the clean x). New M2 sha `2759dace…` (85
+lines); M1 unmoved (`09b726b7…`); `make check` 108/108; ASan/UBSan clean.
+
+**Smoke (`DISPLAY=:1`, fresh `p12-t2-*`; honest).** The match runs (clock
+starts on the KICK burst) and the ball slot is now **drawn on screen**: the
+instrumented SDL session (scratch patch to the run loop + render, reverted;
+`FIFA96_T2_TRACE` env-gated) traces 626 `match_run_draw_sprite` calls for
+slot 22 at x = 156 (320-space) at the kickoff spawn — the slot that never
+passed the near gate before the seed — and the traced clean projection rolls
+x' 152 -> 4 after the kick. **Caveat (new leg T2-L1):** the sprite *content*
+resolved at the ball's spot is a PLAYART player-pose frame (bank 3 frame 0,
+19..24 x 39..44 family; the earlier `sprite=yes` smoke never checked the
+art): the render's frame source is the documented synthetic identity table
+(`r->frames`, "the real per-row tables are executable object-4 data
+(0x10E200..0x10EF00) ... open leg"), and the FU-84 row 3's +8 bank byte (3,
+first-hand `read_memory 0x10EF1B..` = `03 0b 07 03 7e e2 10 00 03`) indexes
+the engine's PLAYART-first staged bank list. So the *placement* half of
+L14.8.e is closed and visible; the ball's *exact art* (per-row frame tables +
+the native assembled bank order) is T2-L1. The live camera place/pan stays
+R2-L4 (T1/R1); the settled-lead exit (R2-L5) is unchanged.
+
+**New numbered leg.**
+* **T2-L1 — the ball-slot sprite provenance.** Which sprite the native row 3
+  selects for the ball slot: the executable per-row frame tables
+  (`0x10E200..0x10EF00` family; T1 ported them for the aux word only), the
+  FU-84 row +8 bank index vs the native assembled bank-list order (the engine
+  stages PLAYART banks 0..90 first, then GAMEART0 whose banks stage
+  count-0/absent), and whether PLAYART bank 3 is native-reachable for row 3.
+  Until then the slot draws the synthetic table's frame-0 sprite (a PLAYART
+  player pose).

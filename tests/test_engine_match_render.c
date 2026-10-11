@@ -136,7 +136,13 @@ static void test_init_resets_render_state(void) {
   assert(mr.render.camera.pos_z == 0);
   assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
   assert(mr.render.camera.speed == 0 && mr.render.camera.paused == 0);
-  assert(mr.render.yaw == 0 && mr.render.pitch == 0);
+  /* FU-154 §2.2/§5.1 (M2 phase-12 T2): the fresh-match render view is the
+   * native camera object 0's static matrix fields — image [0x107DC8] =
+   * 0x107508, its +0x58 yaw = 0xBF9C and +0x5C pitch = 200 (first-hand
+   * `read_memory 0x107560` = 9c bf 00 00 c8 00 00 00) — not the prior
+   * zeroed stand-in. Same object whose +0x4C = 0x1500 is the carried
+   * MATCH_RUN_VIEW_RATIO. */
+  assert(mr.render.yaw == 0xBF9C && mr.render.pitch == 200);
   assert(mr.render.view_class == 0 && mr.render.input_bit2 == 0);
   assert(mr.render.window.box.w == 0 && mr.render.window.box.h == 0);
   assert(mr.render.display.suspend == 0 && mr.render.display.state == 0);
@@ -437,6 +443,12 @@ static void scene_fixture_init(struct scene_fixture *f) {
   r->enabled = 1;
   (void)fifa96_window_init(&r->window, 320, 240);
   (void)fifa96_window_define_full(&r->window, 320, 240);
+  /* M2 phase-12 T2 (FU-154 §5.1): this fixture's documented premise is the
+   * identity view (header: yaw = pitch = 0), so re-stage it over the reset's
+   * native camera-0 seed (0xBF9C/200) exactly as setup_render does for the
+   * render_fixture family; the camera-relative pixel derivations stand. */
+  r->yaw = 0;
+  r->pitch = 0;
   /* phase 0 is class 0 (the clock never ends a period, FU-143 §3); the
    * explicit length keeps direct frame-body drives clear of the state-init
    * zero-length period end. */

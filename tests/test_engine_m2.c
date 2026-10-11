@@ -1,4 +1,4 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v11 (spec §5; the
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v12 (spec §5; the
  * M2 phase-11 visible-ball acceptance, T3; the v10 phase-10 visible-layer
  * acceptance, T3/T4, the v9 phase-9 live-pad-loop acceptance, T4, the v8
  * phase-8 live-loop acceptance, T5, the v7 phase-7 acceptance, P5, the v6
@@ -948,6 +948,51 @@
  * ball's projection outside the canvas, FU-148 §16.4), so no frame-diff
  * ledger entry is added by this task.
  *
+ * --- v12 (M2 phase-12 T2): the native view seed — THE RE-PIN -----------------
+ *
+ * v12 is the phase-12 T2 landing (FU-154 §5.1, leg L14.8.e): the fresh-match
+ * render view now seeds the native camera-0 orientation (yaw = 0xBF9C,
+ * pitch = 200 — the static matrix fields at 0x107560, first-hand) instead of
+ * the yaw = pitch = 0 stand-in. `fifa96_projection_matrix` consumes the
+ * angles, so every frame that draws the staged scene re-renders.
+ *
+ * Frame diff (against the committed v11 golden, `diff`/`cmp` measured, ISO
+ * present): lines 1..8 are byte-identical — the pre-grant frames 6..8 draw
+ * the empty render list (the pre-v3 evidence: `draw_px_pre == 0`), so their
+ * hash is orientation-independent. Lines 9..85 (**77 lines**) all differ:
+ * frame 9 is the first granted frame with the 23-slot staged scene
+ * (`draw_px_first > 0`), and the whole view is now the native camera-0
+ * orientation instead of the identity view. In the pre-park window
+ * (presented frames 9..45, the camera still the (0,0,0) stand-in) the seeded
+ * view also draws the ball slot on canvas (projected x' ≈ 157 at the
+ * (480,0,0) kickoff spawn) — the drawable ball this phase exists for. From
+ * the m 42 goal-mouth park the ball stays drawable but laterally off canvas
+ * (the parked side view; pinned below).
+ *
+ * What v12 re-pins at the sequence points:
+ *   1. The ball-slot clean projection flips from not-drawable (v11: with
+ *      yaw 0 the goal-mouth-parked ball sat behind the camera and the
+ *      near-depth gate rejected it) to **drawable 1** at all three samples
+ *      (m 58/m 61/m 72). The clean flag is the near gate only, so the v12
+ *      stratum also asserts the screen bound: all three samples are laterally
+ *      off the 320-wide canvas to the right (measured clean x' =
+ *      2030/2055/2128; FU-154 §1.2's native-yaw band). The `m2_slot_clean_*`
+ *      helper now returns the clean x for that bound (`out_x`).
+ *   2. The v11 no-visible-follow negative is unchanged: the ball height and
+ *      the camera Y are both 0, so `d = ball_height - pos_y` cannot present
+ *      the `0x70` boundary the band-2 kick needs and `event_param` stays
+ *      <= 0x10 at 0x739DC (legs 15.a producer form; the live pan is the
+ *      T1/R1 coupling, R2-L4).
+ *   3. The v11 ball-machine stratum (machine_ran, the lead/machine pins, the
+ *      record trace) is unchanged — the seed moves the render orientation
+ *      only; the ball record's lead is camera-triple-derived (no yaw term).
+ *
+ * Golden decision (v12): **re-pin with the written reason + frame diff above**
+ * — the intended first visible-ball upgrade (FU-154 §5.1 / plan T2), not a
+ * regression. Regenerated with the ISO present
+ * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
+ * (`09b726b7…`).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -1292,17 +1337,21 @@ struct m2_result {
                               * -1 while the score pair is fresh */
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
-  /* v11 (phase-11 acceptance, T3): the FUN_0008BAF0 ball-machine stratum on
-   * the tape — sampled at the m 58 goal link and the m 61 scored observation
-   * — plus the FU-89 clean projection of the ball slot (the no-on-screen-ball
-   * negative) and the final-position sample at m 72. */
+  /* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the FUN_0008BAF0
+   * ball-machine stratum on the tape — sampled at the m 58 goal link and the
+   * m 61 scored observation — plus the FU-89 clean projection of the ball slot
+   * (v12: drawable but laterally off canvas at the parked goal-mouth camera)
+   * and the final-position sample at m 72. */
   int ball_machine_ran;      /* the T2 machine ran on the tape (m 58 sample) */
   int32_t ball_link_x, ball_link_z;               /* live position at m 58 */
-  int ball_link_off_canvas;  /* slot 22 clean projection visible (0 = off) */
+  int ball_link_drawable;    /* slot 22 clean near-gate projection (1 = drawn) */
+  int32_t ball_link_sx;      /* its clean screen x (16.16) at m 58 */
   int32_t ball_goal_x, ball_goal_z;               /* the record at m 61 */
-  int ball_goal_off_canvas;
+  int ball_goal_drawable;
+  int32_t ball_goal_sx;
   int32_t ball_final_x, ball_final_z;             /* the record at m 72 */
-  int ball_final_off_canvas;
+  int ball_final_drawable;
+  int32_t ball_final_sx;
   /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + full-gameplay
    * P0.2 / OL-T11-7): non-background SCENE pixels (above the derived HUD band,
    * y < 190) in the engine's indexed match canvas at the last pre-grant frame
@@ -1366,17 +1415,20 @@ static void append_state(char *transcript, size_t cap, size_t *used, uint8_t pha
   *used += (size_t)n;
 }
 
-/* v11 (phase-11 acceptance): the engine's own FU-89 clean-pass projection for
- * one render slot — the staging replication of `fifa96_match_run_render`'s
- * per-slot loop (matrix/reciprocals, the FU-85 §4 camera stage, the slot
- * stage, the relative vector and `fifa96_projection_screen`) so the tape can
- * pin that the ball slot's projection is not drawable (`clean_visible` 0).
- * The window fallback mirrors the render's `have_window` (a zero box uses
- * the full surface centre). The jitter pass is skipped: a zero clean flag
- * already refutes `drawable = clean_visible && jitter_visible`. Returns the
- * `clean_visible` byte (0 = off the canvas). This duplicates the render's
+/* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the engine's own FU-89
+ * clean-pass projection for one render slot — the staging replication of
+ * `fifa96_match_run_render`'s per-slot loop (matrix/reciprocals, the FU-85 §4
+ * camera stage, the slot stage, the relative vector and
+ * `fifa96_projection_screen`) so the tape can pin the ball slot's drawability
+ * and screen position. The window fallback mirrors the render's `have_window`
+ * (a zero box uses the full surface centre). The jitter pass is skipped: a
+ * zero clean flag already refutes `drawable = clean_visible && jitter_visible`
+ * (the v12 screen-bound pin additionally needs the clean x, hence `out_x`).
+ * Returns the `clean_visible` byte (0 = behind the near gate); the screen x in
+ * 16.16 is written to `out_x` when non-NULL. This duplicates the render's
  * staging, a drift hazard bounded by the golden and the render tests. */
-static uint8_t m2_slot_clean_visible(const struct fifa96_engine *e, uint32_t slot) {
+static uint8_t m2_slot_clean_screen(const struct fifa96_engine *e, uint32_t slot,
+                                    int32_t *out_x) {
   const struct fifa96_match_run_render *r = &e->match_run.render;
   fifa96_render_pos cam_src, cam;
   fifa96_render_slot staged;
@@ -1412,6 +1464,7 @@ static uint8_t m2_slot_clean_visible(const struct fifa96_engine *e, uint32_t slo
   assert(fifa96_projection_transform(matrix, &rel, &rot) == FIFA96_OK);
   assert(fifa96_projection_screen(recip_x, recip_y, &center, &rot, &out, &visible) ==
          FIFA96_OK);
+  if (out_x) *out_x = out.x;
   return visible;
 }
 
@@ -1799,17 +1852,21 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->ball_machine_ran = mr->entities.ball.machine_ran;
     res->ball_link_x = mr->entities.ball.x;
     res->ball_link_z = mr->entities.ball.z;
-    /* The v11 negatives. No on-screen ball: the engine's own FU-89 clean
-     * projection of the ball slot is not drawable — the camera is parked at
-     * the goal mouth (pos_z 0xB28 here) and the ball (z 28) is behind it, so
-     * the near-depth gate (`rot.z < 5`) rejects it (L14.8.e). No visible
-     * follow (leg 15.a in the `d == 0x70` crossing form): the ball height and
-     * the camera Y are both 0 here, so `d = ball_height - pos_y` can never
-     * present the 0x70 boundary the band-2 kick needs — the follow arm
-     * refuses at its height gate (`follow_speed` 5 from the pan, but
+    /* The v11 negative, re-derived by v12 (T2): with the native view seed the
+     * engine's own FU-89 clean projection of the ball slot is now **drawable**
+     * — the park puts the camera at the goal mouth (pos_z 0xB28 here) looking
+     * along the seeded yaw, and the ball (456, 28) sits in front of it (the
+     * stand-in yaw 0 put it behind the camera; L14.8.e). The tape's parked
+     * side view still leaves it laterally off canvas, so the screen bound is
+     * the honest v12 pin (measured x' = 2030 >> the 320-wide canvas). No
+     * visible follow (leg 15.a in the `d == 0x70` crossing form): the ball
+     * height and the camera Y are both 0 here, so `d = ball_height - pos_y`
+     * can never present the 0x70 boundary the band-2 kick needs — the follow
+     * arm refuses at its height gate (`follow_speed` 5 from the pan, but
      * `event_param` 0 <= 0x10 at 0x739DC). */
-    res->ball_link_off_canvas = m2_slot_clean_visible(e, 22u);
-    assert(res->ball_link_off_canvas == 0);
+    res->ball_link_drawable = m2_slot_clean_screen(e, 22u, &res->ball_link_sx);
+    assert(res->ball_link_drawable == 1);
+    assert(res->ball_link_sx >= (e->surface->width << 16));   /* laterally off */
     assert(mr->entities.ball.y == 0);
     assert(mr->render.camera.pos_y == 0);
     assert(mr->render.camera.event_param <= 0x10);
@@ -1838,12 +1895,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.tracked == mr->entities.team[0].target);
     res->mask_final = mr->dispatched_ok;
     /* v11: the machine kept integrating the record through the goal frames
-     * (one more granted body since the link sample); the ball is still the
-     * off-canvas slot. */
+     * (one more granted body since the link sample); v12: drawable in front
+     * of the parked camera, still laterally off the canvas. */
     res->ball_goal_x = mr->entities.ball.x;
     res->ball_goal_z = mr->entities.ball.z;
-    res->ball_goal_off_canvas = m2_slot_clean_visible(e, 22u);
-    assert(res->ball_goal_off_canvas == 0);
+    res->ball_goal_drawable = m2_slot_clean_screen(e, 22u, &res->ball_goal_sx);
+    assert(res->ball_goal_drawable == 1);
+    assert(res->ball_goal_sx >= (e->surface->width << 16));
     assert(res->ball_goal_x != res->ball_link_x ||
            res->ball_goal_z != res->ball_link_z);
   } else if (m == M2_M_FINAL) {
@@ -1886,15 +1944,16 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
     assert(mr->render.camera_pose.view_mode == 0);
     assert(mr->formation[0] == 0 && mr->formation[1] == 0);
-    /* v11: the ball record and its off-canvas projection through the
-     * post-goal window (the machine tail has no phase gate). The camera
-     * stays parked at the goal mouth (the fifth pan body's 0xB32 rolled one
-     * more 0xB48 step by this sample), so the ball is behind it. */
+    /* v11: the ball record and its projection through the post-goal window
+     * (the machine tail has no phase gate); v12: drawable in front of the
+     * parked camera (the fifth pan body's 0xB32 rolled one more 0xB48 step by
+     * this sample), still laterally off canvas. */
     assert(mr->render.camera.pos_z == 0xB48);
     res->ball_final_x = mr->entities.ball.x;
     res->ball_final_z = mr->entities.ball.z;
-    res->ball_final_off_canvas = m2_slot_clean_visible(e, 22u);
-    assert(res->ball_final_off_canvas == 0);
+    res->ball_final_drawable = m2_slot_clean_screen(e, 22u, &res->ball_final_sx);
+    assert(res->ball_final_drawable == 1);
+    assert(res->ball_final_sx >= (e->surface->width << 16));
   }
 }
 
@@ -2270,19 +2329,21 @@ int main(void) {
    * M2_POST_GOAL_FRAMES post-goal frames and stops — no period-end exit
    * exists on the natural-goal path, so res.exit_step stays -1). */
   assert(res.exit_step < 0);
-  /* v11 (phase-11 acceptance, T3): the ball-machine stratum sampled in the
-   * m 58/m 61/m 72 blocks. The machine is live on the tape and the record
-   * moves; the long-ball chain (T1) and the machine fixtures (T2) carry the
-   * positives — see the v11 provenance block. The honest negatives: the ball
-   * slot's clean projection is not drawable at every sample (the camera is
-   * parked at the goal mouth and the ball sits behind the near-depth gate;
-   * L14.8.e) and no live height exists (no visible follow; legs 15.a/15.b). */
+  /* v11 (phase-11 acceptance, T3) ball-machine stratum, re-derived by v12:
+   * sampled in the m 58/m 61/m 72 blocks. The machine is live on the tape and
+   * the record moves; the long-ball chain (T1) and the machine fixtures (T2)
+   * carry the positives — see the v11/v12 provenance blocks. v12 flips the
+   * ball-slot projection negative: with the native view seed the slot is
+   * drawable at every sample (the screen-bound form is asserted in the
+   * directive blocks; the parked goal-mouth side view leaves it laterally off
+   * canvas). No live height exists (no visible follow; legs 15.a/15.b). */
   assert(res.ball_machine_ran == 1);
-  assert(res.ball_link_off_canvas == 0);
-  assert(res.ball_goal_off_canvas == 0);
-  assert(res.ball_final_off_canvas == 0);
-  /* The off-canvas record's accepted trace (exact pins — the golden cannot
-   * see the ball): the m 58 link (456, 28), the m 61 sample one machine run
+  assert(res.ball_link_drawable == 1);
+  assert(res.ball_goal_drawable == 1);
+  assert(res.ball_final_drawable == 1);
+  /* The record's accepted trace (exact pins — the golden sees the early
+   * on-canvas ball but not the parked-window projection): the m 58 link
+   * (456, 28), the m 61 sample one machine run
    * later (450, 36) = the link + vel (-3, 4) * delta 2, and the m 72 sample
    * three runs later (432, 60). */
   assert(res.ball_link_x == 456 && res.ball_link_z == 28);

@@ -1602,12 +1602,61 @@ static void test_ball_machine_phase2_open_play_lead(void) {
   }
 }
 
+/* M2 phase-12 T2 (FU-154 §1/§5.1): the render's own clean projection of a
+ * staged slot — the FU-88 matrix from the live view angles, the reciprocal
+ * tables, the FU-85 camera staging of the FU-71 triple and the 16.16 screen
+ * transform (the same primitive sequence as test_engine_m2's
+ * m2_slot_clean_visible, which the M2 tape uses for the same ball slot).
+ * Returns the near-gate drawable flag and the screen x in 16.16 so the caller
+ * can apply the canvas bound. */
+static int live_slot_clean_screen(const struct fifa96_match_run *mr,
+                                  const struct fifa96_surface *s, uint32_t slot,
+                                  int32_t *out_x) {
+  const struct fifa96_match_run_render *r = &mr->render;
+  fifa96_render_pos cam_src, cam;
+  fifa96_render_slot staged;
+  fifa96_projection_point center, out;
+  fifa96_projection_vec rel, rot;
+  int32_t matrix[9];
+  int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
+  int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
+  uint8_t visible = 0;
+  assert(r->entity_count > slot);
+  if (slot >= r->entity_count) return 0;
+  assert(fifa96_projection_matrix(r->yaw, r->pitch, matrix) == FIFA96_OK);
+  assert(fifa96_projection_reciprocal(s->width, recip_x) == FIFA96_OK);
+  assert(fifa96_projection_reciprocal(s->height, recip_y) == FIFA96_OK);
+  cam_src.x = r->camera.pos_x;
+  cam_src.y = r->camera.pos_y;
+  cam_src.z = r->camera.pos_z;
+  assert(fifa96_render_camera_stage(&cam_src, &cam) == FIFA96_OK);
+  assert(fifa96_render_slot_stage(&r->entities[slot].stage, &staged) == FIFA96_OK);
+  if (r->window.box.w > 0 && r->window.box.h > 0) {
+    center.x = r->window.cx_fix;
+    center.y = r->window.cy_fix;
+  } else {
+    center.x = (s->width >> 1) << 16;
+    center.y = (s->height >> 1) << 16;
+  }
+  rel.x = (int32_t)((uint32_t)staged.pos.x - (uint32_t)cam.x);
+  rel.y = (int32_t)((uint32_t)staged.pos.y - (uint32_t)cam.y);
+  rel.z = (int32_t)((uint32_t)staged.pos.z - (uint32_t)cam.z);
+  assert(fifa96_projection_transform(matrix, &rel, &rot) == FIFA96_OK);
+  assert(fifa96_projection_screen(recip_x, recip_y, &center, &rot, &out,
+                                  &visible) == FIFA96_OK);
+  if (out_x) *out_x = out.x;
+  return visible;
+}
+
 /* M2 phase-11 T2 (FU-148 §16, L14.8): the live ISO open-play producer. The
  * natural kickoff + KICK press reaches phase 2 (the existing live chain); from
  * there the ball machine alone advances the ball record 0x15880C/14 — the
  * T2-visible ball source the FU-120 writer census leaves as the sole per-frame
  * producer. Pins: the machine ran live, the record moved off the kickoff spawn
- * with the phase-2 lead selected, and the staged slot 22 follows it. */
+ * with the phase-2 lead selected, and the staged slot 22 follows it.
+ * M2 phase-12 T2 (FU-154 §4/§5.1, L14.8.e): the visible-ball acceptance — the
+ * native view seed (reset_render's 0xBF9C/200) projects the staged slot 22 on
+ * canvas through the kick-roll window (measured below). */
 static void test_live_ball_record_produced_in_open_play(void) {
   struct fixture f;
   struct fifa96_match_run mr;
@@ -1617,6 +1666,13 @@ static void test_live_ball_record_produced_in_open_play(void) {
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* M2 phase-12 T2: stage the derived art pair exactly as the ISO bridge does
+   * at match start (fifa96_match_bridge_from_frontend) so the scene composer
+   * stages the live slots — the render's real input for the on-canvas
+   * projection below. */
+  assert(fifa96_match_run_stage(&mr, f.engine->surface, "/ART/PLAYART.PVI",
+                                "/ART/GAMEART0.PVI") == 0);
+  assert(mr.render.enabled == 1);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   {
@@ -1637,7 +1693,28 @@ static void test_live_ball_record_produced_in_open_play(void) {
   assert(pre_z == 0);
   start_x = mr.entities.ball.x;
   start_z = mr.entities.ball.z;
-  for (int i = 0; i < 30; i++) one_granted_frame(&mr);
+  /* FU-154 §4/§5.1 (M2 phase-12 T2, L14.8.e): the visible-ball window. With
+   * the native view seed the render's own clean projection of the staged ball
+   * slot lands on canvas for all 16 kick-roll window frames (measured x'
+   * 152 -> 4, exits left at the 17th); with the stand-in yaw 0 the same
+   * projection was 0/90 frames on canvas (the settled lead projects
+   * x' = 480). The camera stays the (0,0,0) stand-in here — the live pan is
+   * the T1/R1 coupling (FU-154 §3, R2-L4). */
+  int on_canvas_frames = 0;
+  int32_t first_on_x = 0;
+  for (int i = 0; i < 30; i++) {
+    one_granted_frame(&mr);
+    if (i < 16) {
+      int32_t sx = 0;
+      if (live_slot_clean_screen(&mr, f.engine->surface, 22u, &sx) && sx >= 0 &&
+          sx < (f.engine->surface->width << 16)) {
+        if (on_canvas_frames == 0) first_on_x = sx;
+        on_canvas_frames++;
+      }
+    }
+  }
+  assert(on_canvas_frames == 16);
+  assert(first_on_x >> 16 == 152);   /* the roll-in x' pin */
   assert(mr.entities.ball.machine_ran == 1);
   assert(mr.entities.ball.x != start_x || mr.entities.ball.z != start_z);
   /* The phase-2 lead is the live target (the camera triple at the kickoff

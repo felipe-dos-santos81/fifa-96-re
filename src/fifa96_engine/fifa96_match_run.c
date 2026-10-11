@@ -394,6 +394,16 @@ static const uint8_t match_run_frame_records[0xD00] = {
  * (FUN_0004D7E8, values 4608/3048/3464..) is unported (open leg). */
 #define MATCH_RUN_NEAR_LIMIT 0x140
 #define MATCH_RUN_VIEW_RATIO 0x1500
+/* FU-154 §2.2/§5.1 (M2 phase-12 T2, L14.8.e): the fresh-match render view's
+ * orientation. The native view object is camera 0 — image [0x107DC8] =
+ * 0x107508 (first-hand `read_memory 0x107DC8`) — whose static matrix fields
+ * are +0x58 yaw = 0xBF9C and +0x5C pitch = 200 (`read_memory 0x107560` =
+ * 9c bf 00 00 c8 00 00 00). FUN_0004C904 copies +0x58/+0x5C into 0x14E4EC/F0
+ * for the projection matrix (first-hand 0x4C918..0x4C928), and the live
+ * pose feed's mode-0 default arm writes no pose, so these statics are the
+ * live seed. Same object whose +0x4C = 0x1500 is MATCH_RUN_VIEW_RATIO. */
+#define MATCH_RUN_VIEW_YAW 0xBF9C
+#define MATCH_RUN_VIEW_PITCH 200
 
 /* FU-61 §2.3 sampler mapping rows: row 0/1 is the identity pinned by
  * tests/test_input.c (`row_identity`). The view-dependent row index [0x7DEC]
@@ -1531,6 +1541,12 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   (void)fifa96_camera_init(&r->camera, 0, 0, 0);
   (void)fifa96_window_init(&r->window, 0, 0);
   (void)fifa96_match_display_init(&r->display, 0);
+  /* FU-154 §5.1 (M2 phase-12 T2): seed the view orientation from the native
+   * camera-0 statics (the projection matrix consumes r->yaw/r->pitch at the
+   * render call); the prior zero stand-in left the phase-2 ball lead off
+   * canvas. */
+  r->yaw = MATCH_RUN_VIEW_YAW;
+  r->pitch = MATCH_RUN_VIEW_PITCH;
   r->view_ratio = MATCH_RUN_VIEW_RATIO;
   for (int i = 0; i < 256; i++) r->remap[i] = (uint8_t)(i == 0 ? 0xFF : i);
   for (int i = 0; i < (int)FIFA96_MATCH_RUN_RENDER_SLOTS; i++) r->entities[i].anim_turn = 1;

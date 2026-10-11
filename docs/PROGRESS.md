@@ -160,6 +160,24 @@ blocks a second kick in one possession is leg T1-L2 (FU-153 §10). The
 9381..38998) and **no visible follow-cam** — the camera stays the stand-in.
 Goldens unmoved (M1 `09b726b7…` / M2 `5524cf40…` byte-identical);
 `make check` 108/108; wired 21/80 (unchanged).
+**Phase-12 T2 (2026-10-11) lands the on-screen ball (FU-154 §5.1, closing
+L14.8.e at its bounded step):** the fresh-match view now seeds the native
+camera-0 orientation (yaw 0xBF9C, pitch 200 — the image statics at
+`0x107560`, same object as the carried `MATCH_RUN_VIEW_RATIO`) instead of the
+`yaw = pitch = 0` stand-in, so the camera-derived phase-2 lead projects on
+canvas: the live ISO pin measures the ball slot on canvas for all 16
+kick-roll frames (x' 152 → 4; the stand-in was 0/90 frames) and the smoke
+shows the slot **drawn on screen** (instrumented run: 626 slot-22 draw calls
+at x = 156 at the kickoff spawn — previously the near gate never passed it).
+The M2 acceptance tape is **re-pinned to v12** with the reason + frame diff
+(lines 1..8 byte-identical, the pre-grant empty scene; lines 9..85, 77 lines,
+all re-render the native orientation; the goal-mouth-park ball samples flip
+not-drawable → drawable with the lateral bound asserted off-canvas; new M2
+sha `2759dace…`; M1 unmoved `09b726b7…`). The live camera *place/pan* stays
+the T1/R1 event coupling (R2-L4: no live event fires in the smoke window) and
+the ball-slot *sprite content* (the documented synthetic per-row frame tables
++ the staged PLAYART-first bank order) is the new leg T2-L1; the view-object
+handler that keeps the ball framed after the roll is R2-L1.
 Kicking the ball stays blocked
 interactively (no kick-attributable on-screen delta; the phase-11 T2 ball
 machine made the record live but off-window under the stand-in camera): the
