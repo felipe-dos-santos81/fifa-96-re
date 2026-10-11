@@ -1648,6 +1648,27 @@ the build also produces the windowed `fifa96` target (`make game`).
   **108/108**; ASan/UBSan clean; RED evidence for the v11 layer: disabling
   the machine call aborts on `mr->entities.ball.machine_ran == 1` (scratch,
   restored).
+- **M2 phase-12 T3 (engine sanitizer build — the build-topology slice;
+  2026-10-11).** The phase-12 T2 entry's build-topology note is closed by
+  this landing — quoted: the `fifa96_engine` target built **without**
+  ASan/UBSan ("UB inside engine TUs is invisible to the suite — recorded for
+  a future build-topology slice"). Now `fifa96_engine` compiles with
+  `-fsanitize=address,undefined -fno-sanitize-recover=all` alongside the kept
+  strict flags (`build/CMakeFiles/fifa96_engine.dir/flags.make` =
+  `-g -std=gnu11 -Wall -Wextra -Werror -fsanitize=address,undefined
+  -fno-sanitize-recover=all`); a static archive has no link step, so the
+  `-fsanitize=address,undefined` runtime propagates to every consumer via the
+  target's INTERFACE link options, and the SDL3 `fifa96` main carries the same
+  private compile+link pair inside the `SDL3_FOUND` guard (`ldd build/fifa96`
+  -> `libasan.so.8` / `libubsan.so.1`; the headless-only path re-verified on a
+  fresh tree with `-DCMAKE_DISABLE_FIND_PACKAGE_SDL3=ON` — configure + full
+  build, 0 errors). Run under the sanitized engine: `make check` **108/108**;
+  M1/M2 byte-exact to the goldens (`cmp` clean; `09b726b7…` / `2759dace…`; no
+  re-pin); a 12 s bounded `DISPLAY=:1` run of the sanitized `fifa96` main
+  (boot/front-end idle) ends only by timeout with no ASan/UBSan report.
+  **Triage: zero sanitizer findings** on every exercised engine path — no UB
+  surfaced, so this slice lands no fixes and no new legs; the report channel
+  stays live for future slices. `wired` 21/80 (unchanged).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

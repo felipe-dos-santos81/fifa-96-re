@@ -444,7 +444,9 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
-target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror)
+target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror
+  -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(fifa96_engine INTERFACE -fsanitize=address,undefined)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
                                           fifa96_font fifa96_match_lifecycle
@@ -618,6 +620,8 @@ if(SDL3_FOUND)
   add_executable(fifa96 src/fifa96_engine/fifa96_main.c
                  src/fifa96_engine/platform_sdl3.c)
   target_link_libraries(fifa96 PRIVATE fifa96_engine SDL3::SDL3)
+  target_compile_options(fifa96 PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+  target_link_options(fifa96 PRIVATE -fsanitize=address,undefined)
 else()
   message(STATUS "engine: SDL3 NOT found -> headless-only build")
 endif()

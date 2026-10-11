@@ -178,6 +178,13 @@ the T1/R1 event coupling (R2-L4: no live event fires in the smoke window) and
 the ball-slot *sprite content* (the documented synthetic per-row frame tables
 + the staged PLAYART-first bank order) is the new leg T2-L1; the view-object
 handler that keeps the ball framed after the roll is R2-L1.
+**Phase-12 T3 (2026-10-11) sanitizes the engine build (build topology, no
+gameplay change):** `fifa96_engine` now compiles under ASan/UBSan with
+`-fno-sanitize-recover=all`, the runtime propagates to every consumer, and
+the SDL3 `fifa96` main is instrumented too (the headless-only path stays
+verified). The full suite now runs under the sanitized engine — `make check`
+108/108, goldens byte-exact (M1 `09b726b7…` / M2 `2759dace…`), zero
+sanitizer findings on every exercised engine path; wired 21/80 unchanged.
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),
