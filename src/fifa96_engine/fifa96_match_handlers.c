@@ -941,9 +941,15 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
     s->is_team_second = (id >= 0 && id == sid) ? 1u : 0u;
     /* 0x815D0 `CMP EBP,[EAX+0x7CB]`: the code-7 stage-1 long-ball arm asks
      * whether this record is the team's +0x7CB long-ball callback (set by
-     * FUN_0007CD60, M2 phase-11 T1 / FU-75 §1.4). */
-    s->is_team_cb =
-        (id >= 0 && (uint32_t)id == mr->entities.team[team].timer7cb) ? 1u : 0u;
+     * FUN_0007CD60, M2 phase-11 T1 / FU-75 §1.4). The native compares record
+     * pointers, and a record pointer is never NULL, so `[team+0x7CB] == 0`
+     * (no request armed) can never select the 0x40 mode — the `!= 0` guard
+     * is the native NULL comparison (final review: team-0 record-0 would
+     * otherwise alias the 0 = none sentinel). */
+    s->is_team_cb = (id >= 0 && mr->entities.team[team].timer7cb != 0 &&
+                     (uint32_t)id == mr->entities.team[team].timer7cb)
+                        ? 1u
+                        : 0u;
     s->team_target_present = tid >= 0 ? 1u : 0u;
     s->opp_target_present = oid >= 0 ? 1u : 0u;
     if (tid >= 0 &&

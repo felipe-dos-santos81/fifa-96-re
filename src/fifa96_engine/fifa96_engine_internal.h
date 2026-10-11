@@ -48,7 +48,9 @@ extern const int16_t fifa96_match_stride_table[0x500];
  * 186+ and this 32-bit image's 386+ mask to 5 bits). Exposed so the mask
  * itself is unit-pinned: the machine build carries no sanitizers and every
  * hardware shift masks the count, so an expression-level pin is the only
- * discriminating test for the `& 0x1F` (the native cell 0x158862 is the
- * machine's `head_error` word; the high word of the native dword read is
- * unmodeled). Returns `(head_error >> 6) & 0x1F`. */
+ * discriminating test for the `& 0x1F`. The native cell 0x158862 is the
+ * low word of the dword the shift reads (`[EBP+0x76]` with the machine base
+ * 0x1587EC); its high word (+0x78, 0x158864) is unmodeled but provably
+ * irrelevant here — `>> 6` keeps bits 6..10 only, so bits >= 16 vanish
+ * before `& 0x1F` (final review). Returns `(head_error >> 6) & 0x1F`. */
 int32_t fifa96_match_run_ball_head_error_shift(int32_t head_error);

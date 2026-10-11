@@ -1309,6 +1309,12 @@ static void test_action_07_runs_body(void) {
   assert(f.mr.record.type == 0);  /* no face arm ran: +0x8E untouched */
   assert(f.mr.entities.ball.pair.actor == 0);
   assert(f.mr.entities.ball.pair.code != 0);
+  /* Final-review sentinel guard: entity_id 0 (team-0 record 0) with no long-
+   * ball request (`timer7cb` 0) must not read as `is_team_cb` — the native
+   * 0x815D0 compares record pointers, never NULL — so the stage-1 mode is the
+   * slot word (0), not the 0x40 long-ball arm. */
+  assert(f.mr.entities.team[0].timer7cb == 0);
+  assert((f.mr.entities.ball.pair.flags & 0x40u) == 0);
 
   /* stage 2 without byte[+0x44] (unmodeled, OL-65) waits. */
   f.mr.record.stage92 = 2;

@@ -557,6 +557,11 @@ static int match_input_handler(uint32_t handler, void *context) {
       int32_t id = c->id;
       if (phase != 2u) return 1;
       if (team->timer7cb != 0) return 1;
+      /* The port stores the id with 0 as "none" where the native stores the
+       * record pointer (never NULL). An id-0 (team-0 record 0) request would
+       * collide with the sentinel and read as unarmed (`0x815D0`; record 0 is
+       * the keeper machine's own record, never a pad/request actor) —
+       * unreachable in the wired subset, left verbatim (final review). */
       if (id == team->target) {
         team->timer7cb = (uint32_t)id;
         team->timer820 = 0x3C;
@@ -584,7 +589,7 @@ static int match_input_handler(uint32_t handler, void *context) {
          * belongs to one entity at a time). */
         if (c->mr->slot.entity == c->id) c->mr->slot.entity = team->target;
       }
-      team->timer7cb = (uint32_t)team->target;
+      team->timer7cb = (uint32_t)team->target;   /* same id-0 sentinel caveat */
       team->timer820 = 0x3C;
       return 1;
     }
@@ -2668,8 +2673,13 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * L14.8.b the FUN_0006FE84/FUN_0006E518 appearance animation machine and the
  * 0x15887B frame byte; L14.8.c the FUN_0008C068 0x158862 head-error producer
  * (modeled as the image-default field); L14.8.d the native `[0x14C32A] == 0`
- * run gate (the engine `session_gate_14c32a` is the FU-146 scheduler proxy
- * seeded 1 for live matches, so the machine runs each granted frame). */
+ * ball-machine gate at 0x8B65B (`CMP byte [0x14C32A],0 / JNZ` around the
+ * 0x8B664 `CALL FUN_0008BAF0`) — deliberately not modeled: the gate writer
+ * is unmodeled (FU-146 leg 2) and the same byte is read with the opposite
+ * polarity by the scheduler site (`0x4B198 CMP / JZ`: the FU-146 proxy runs
+ * iff `!= 0`), so one seeded value cannot satisfy both gates; the engine runs
+ * the machine every granted frame and records the asymmetry as the open
+ * question (FU-148 §17, L14.8.d errata). */
 int32_t fifa96_match_run_ball_head_error_shift(int32_t head_error) {
   /* 0x8BF41..47: the native shift count CL is masked to 5 bits on the 386+
    * this 32-bit LE image requires (the 8086 uses the full CL). */

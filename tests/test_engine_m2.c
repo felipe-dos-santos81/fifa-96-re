@@ -922,8 +922,11 @@
  *   3. The honest negatives, asserted at every sample:
  *      - **no on-screen ball** — the engine's own FU-89 clean projection of
  *        the ball slot (slot 22, computed with the render's exact staging
- *        primitives) is off the 320x240 canvas under the stand-in camera
- *        place; the live ball waits on a live camera place/pan (leg L14.8.e).
+ *        primitives) is not drawable: at the m 58/61/72 samples the camera is
+ *        parked at the goal mouth (pos_z 0xB28/0xB32/0xB48), so the ball
+ *        (z 28..60) sits behind the camera and the near-depth gate
+ *        (`rot.z < 5`) rejects it before any x-clip; the live ball waits on
+ *        a live camera place/pan (leg L14.8.e).
  *      - **no visible follow** — the ball height and the camera Y are both 0,
  *        so `d = ball_height - pos_y` can never present the `d == 0x70`
  *        boundary the band-2 kick needs (leg 15.a in its crossing form; the
@@ -1367,11 +1370,12 @@ static void append_state(char *transcript, size_t cap, size_t *used, uint8_t pha
  * one render slot — the staging replication of `fifa96_match_run_render`'s
  * per-slot loop (matrix/reciprocals, the FU-85 §4 camera stage, the slot
  * stage, the relative vector and `fifa96_projection_screen`) so the tape can
- * pin that the ball slot's projection lands off the canvas. The window
- * fallback mirrors the render's `have_window` (a zero box uses the full
- * surface centre). The jitter pass is skipped: a zero clean flag already
- * refutes `drawable = clean_visible && jitter_visible`. Returns the
- * `clean_visible` byte (0 = off the canvas). */
+ * pin that the ball slot's projection is not drawable (`clean_visible` 0).
+ * The window fallback mirrors the render's `have_window` (a zero box uses
+ * the full surface centre). The jitter pass is skipped: a zero clean flag
+ * already refutes `drawable = clean_visible && jitter_visible`. Returns the
+ * `clean_visible` byte (0 = off the canvas). This duplicates the render's
+ * staging, a drift hazard bounded by the golden and the render tests. */
 static uint8_t m2_slot_clean_visible(const struct fifa96_engine *e, uint32_t slot) {
   const struct fifa96_match_run_render *r = &e->match_run.render;
   fifa96_render_pos cam_src, cam;
@@ -1382,6 +1386,10 @@ static uint8_t m2_slot_clean_visible(const struct fifa96_engine *e, uint32_t slo
   int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
   int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
   uint8_t visible = 0;
+  /* The 0 below is a not-drawable pin, not a vacuous pass: the ball slot (22)
+   * must be a live render slot at every call (the golden/render tests catch a
+   * collapsed staging first). */
+  assert(r->entity_count > slot);
   if (slot >= r->entity_count) return 0;
   assert(fifa96_projection_matrix(r->yaw, r->pitch, matrix) == FIFA96_OK);
   assert(fifa96_projection_reciprocal(e->surface->width, recip_x) == FIFA96_OK);
@@ -1792,13 +1800,14 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->ball_link_x = mr->entities.ball.x;
     res->ball_link_z = mr->entities.ball.z;
     /* The v11 negatives. No on-screen ball: the engine's own FU-89 clean
-     * projection of the ball slot lands off the 320x240 canvas (the stand-in
-     * camera place; L14.8.e). No visible follow (leg 15.a in the `d == 0x70`
-     * crossing form): the ball height and the camera Y are both 0 here, so
-     * `d = ball_height - pos_y` can never present the 0x70 boundary the
-     * band-2 kick needs — the follow arm refuses at its height gate
-     * (`follow_speed` 5 from the pan, but `event_param` 0 <= 0x10 at
-     * 0x739DC). */
+     * projection of the ball slot is not drawable — the camera is parked at
+     * the goal mouth (pos_z 0xB28 here) and the ball (z 28) is behind it, so
+     * the near-depth gate (`rot.z < 5`) rejects it (L14.8.e). No visible
+     * follow (leg 15.a in the `d == 0x70` crossing form): the ball height and
+     * the camera Y are both 0 here, so `d = ball_height - pos_y` can never
+     * present the 0x70 boundary the band-2 kick needs — the follow arm
+     * refuses at its height gate (`follow_speed` 5 from the pan, but
+     * `event_param` 0 <= 0x10 at 0x739DC). */
     res->ball_link_off_canvas = m2_slot_clean_visible(e, 22u);
     assert(res->ball_link_off_canvas == 0);
     assert(mr->entities.ball.y == 0);
@@ -1878,7 +1887,10 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera_pose.view_mode == 0);
     assert(mr->formation[0] == 0 && mr->formation[1] == 0);
     /* v11: the ball record and its off-canvas projection through the
-     * post-goal window (the machine tail has no phase gate). */
+     * post-goal window (the machine tail has no phase gate). The camera
+     * stays parked at the goal mouth (the fifth pan body's 0xB32 rolled one
+     * more 0xB48 step by this sample), so the ball is behind it. */
+    assert(mr->render.camera.pos_z == 0xB48);
     res->ball_final_x = mr->entities.ball.x;
     res->ball_final_z = mr->entities.ball.z;
     res->ball_final_off_canvas = m2_slot_clean_visible(e, 22u);
@@ -2262,9 +2274,9 @@ int main(void) {
    * m 58/m 61/m 72 blocks. The machine is live on the tape and the record
    * moves; the long-ball chain (T1) and the machine fixtures (T2) carry the
    * positives — see the v11 provenance block. The honest negatives: the ball
-   * slot's clean projection is off the canvas at every sample (no on-screen
-   * ball under the stand-in camera place; L14.8.e) and no live height exists
-   * (no visible follow; legs 15.a/15.b). */
+   * slot's clean projection is not drawable at every sample (the camera is
+   * parked at the goal mouth and the ball sits behind the near-depth gate;
+   * L14.8.e) and no live height exists (no visible follow; legs 15.a/15.b). */
   assert(res.ball_machine_ran == 1);
   assert(res.ball_link_off_canvas == 0);
   assert(res.ball_goal_off_canvas == 0);

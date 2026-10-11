@@ -136,7 +136,9 @@ right edge; FU-148 leg L14.8.e) and the ball height stays 0 in open play
 acceptance tape is now v11** — the ball machine pinned live on the tape
 (the exact off-spawn integration trace, the visual/anim strata) with the
 honest negatives asserted at every sample (the FU-89 clean projection of
-the ball slot off the canvas; the ball/camera heights 0, so `d = 0x70` can
+the ball slot not drawable — the camera is parked at the goal mouth, so
+the ball sits behind the near-depth gate; the ball/camera heights 0, so
+`d = 0x70` can
 never present and the follow arm refuses — no visible follow) and the
 long-ball chain referenced to its fixtures; the deferred phase-10
 docs/comment minors swept (tape header/dead exit leftovers, the three stale

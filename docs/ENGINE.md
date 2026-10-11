@@ -63,8 +63,9 @@ positions, while the on-screen ball waits on the camera place, leg
 L14.8.e); **phase-11 T3 (2026-10-11) is the acceptance v11 layer** — the
 ball machine pinned live on the tape (the m 42.. phase-2 lead/integration
 with exact off-spawn positions, the visual/anim strata) together with the
-honest negatives (the ball slot's clean projection off the canvas under the
-stand-in camera place; no live height, so no `d == 0x70` boundary and no
+honest negatives (the ball slot's clean projection not drawable — the
+goal-mouth camera puts the ball behind the near-depth gate; no live
+height, so no `d == 0x70` boundary and no
 visible follow — legs L14.8.e/15.a), the long-ball chain referenced to its
 fixtures, and the deferred docs/comment minors swept; no re-pin. The smoke
 stays honest; the phase-10 T4 close-out entry below carries the whole-range
@@ -1424,8 +1425,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_live_ball_record_produced_in_open_play`, the render
   `test_ball_machine_moves_ball_slot_pixels`; fixtures parked against the
   machine. **Goldens: no re-pin** (M1 `09b726b7…` / M2 `5524cf40…`
-  byte-identical — the tape's live window keeps the ball's projection
-  outside the canvas, FU-148 §16.4). **Smoke (DISPLAY=:1, fresh `p11-t2-*`;
+  byte-identical — the tape's live window keeps the ball off the drawable
+  set: the goal-mouth camera parks it behind the near-depth gate, FU-148
+  §16.4/§17.1). **Smoke (DISPLAY=:1, fresh `p11-t2-*`;
   honest):** the match starts (front-end → X → panel confirm), the walk
   works, and an instrumented run pins the ball slot live and moving
   (`slot22 pos=(296,0,244) anim=3 bank=3 frame=8 dir=6 vis=1 draw=1
@@ -1469,8 +1471,10 @@ the build also produces the windowed `fifa96` target (`make game`).
     `test_kick_target_mode40_slot_traj`);
   - **the honest negatives**: no on-screen ball — the tape computes the
     engine's own FU-89 clean projection of the ball slot (the render's exact
-    staging primitives) and pins it off the 320x240 canvas at every sample
-    (the stand-in camera place; leg L14.8.e); no visible follow — the ball
+    staging primitives) and pins it not drawable (`clean_visible` 0) at every
+    sample: the camera is parked at the goal mouth (pos_z 0xB28/0xB32/0xB48
+    at the m 58/61/72 samples), so the ball sits behind it and the near-depth
+    gate (`rot.z < 5`) rejects it (leg L14.8.e); no visible follow — the ball
     height and the camera Y are both 0, so `d = ball_height - pos_y` can
     never present the `d == 0x70` boundary the band-2 kick needs (leg 15.a in
     its crossing form; the follow arm refuses at its 0x739DC height gate,

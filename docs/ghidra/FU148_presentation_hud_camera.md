@@ -1784,3 +1784,44 @@ final-review triage items; no behavior claim in the port changes):
   remains a separate leg. The in-code `ball_height` stand-in comments
   (`fifa96_match_handlers.c` rows 04/05/06/1E, `fifa96_match_run.c`'s chase
   `camera`) now name this leg 15.b explicitly.
+
+### 17.1 Final-review errata (phase-11, 2026-10-11)
+
+Quoted errata against §15.3/§16, first-hand re-checked in this fix wave:
+
+* **§15.3 leg 15.b promise superseded.** The bullet's "stay on the FU-75 §1.6
+  ball-record proxy until L14.8 (phase-11 T2) lands the ball's live height"
+  is superseded by §16: L14.8 landed the position machine and `FUN_0008BAF0`
+  never writes `y` (0x158810), so the height producer did not arrive with it;
+  leg 15.b stays open for a genuine height producer.
+* **§16.4 L14.8.d rationale inverted.** The bullet's "(the engine
+  `session_gate_14c32a` is the FU-146 scheduler proxy seeded 1 for live
+  matches, so the machine runs each granted frame)" reads the gate backwards.
+  First-hand `disassemble_bytes`: `0x8B65B 80 3d 2a c3 14 00 00` = `CMP byte
+  [0x14C32A],0`, `7505` = `JNZ +5`, `0x8B664 e8 87 04 00 00` = `CALL
+  0x8BAF0` — the **native ball machine runs iff the byte is 0**, the opposite
+  polarity of the scheduler site `0x4B198` (same `CMP` bytes, `7405` = `JZ
+  +5`, `0x4B1A1 e8 06 97 04 00` = `CALL 0x948AC`, runs iff the byte is
+  **nonzero**). Seed 1 would close the ball-machine gate; the engine instead
+  deliberately ignores it (`match_run_ball_machine` runs every granted frame)
+  because the gate's writer is unmodeled — FU-146 leg 2; a fresh
+  `get_xrefs_to 0x14C32A` gives three write refs, all session/front-end
+  entries (`0x1B7C8`/`0x1B7D5` in `FUN_0001B7B8`: mode 4 -> 1 else 0, and
+  `0x32DFF` in `FUN_00032DE0` -> 1), none in the match frame path. **Open
+  question (recorded, not resolved):** one byte cannot satisfy both
+  polarities; if a writer toggles it between the `0x4B198` read and the
+  `0x8B65B` read, both calls run (scheduler then machine), otherwise a live
+  match (byte 1) runs the scheduler and skips the ball machine — that decides
+  whether the engine's run-every-frame approximation is benign.
+* **§16.2/§16.4 tape off-canvas mechanism (carried by §16.2's opener).**
+  "the tape's live window keeps the ball outside the 320-wide canvas ...
+  while the stand-in camera place is (0,0,0), so the projected x' stays >
+  320" misattributes the T2 **smoke**'s stand-in camera to the tape.
+  First-hand trace of the tape's three samples
+  (instrumented `m2_slot_clean_visible`, reverted after the run): m 58
+  `cam=(0,0,0xB28) staged=(456,0,28) rot.z=-2828`, m 61 `cam=(0,0,0xB32)
+  staged=(450,0,36) rot.z=-2830`, m 72 `cam=(0,0,0xB48) staged=(432,0,60)
+  rot.z=-2828` — the goal-chain camera is parked at the goal mouth, the ball
+  is **behind** the camera, and `FIFA96_PROJECTION_NEAR` (5) rejects it
+  before any x-clip. The x'≈480 story belongs to the T2 smoke's live session
+  (the `(0,0,0)` stand-in), not the tape.

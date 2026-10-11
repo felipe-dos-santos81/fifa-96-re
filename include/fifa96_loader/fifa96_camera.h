@@ -98,9 +98,10 @@ int fifa96_camera_out_of_bounds(int32_t x, int32_t z);
  *   if ((int16)height <= 0) return 0;
  *   y = max(0, T16[0x94 - |F2 - timer|] - T16[0x94 - F2])
  *
- * where T16 is the 150-word table at flat `0x10F3C4` (first-hand
- * `read_memory`), height = `word[0x1577F0]` (the engine `event_param`),
- * timer = `word[0x1577FA]` (the engine `timer`), limit = `word[0x1577F4]`
+ * where T16 is the 149-word table at flat `0x10F3C4` (first-hand
+ * `read_memory`, 298 B; FU-148 §17 corrected the window), height =
+ * `word[0x1577F0]` (the engine `event_param`), timer = `word[0x1577FA]`
+ * (the engine `timer`), limit = `word[0x1577F4]`
  * (`timer_limit`) and F2 = `word[0x1577F2]` (`event_peak`). FUN_000736AC
  * `0x737a1..0x737b4` stores the result into `0x157750` (the camera Y = the
  * engine `pos_y`) when the event height is nonzero. Callers: the engine's

@@ -142,10 +142,10 @@ struct fifa96_match_team {
                              * (FUN_0007CD60 `[[rec]+0x7B2]`/tracked swap; 0 =
                              * none). The code-7 stage-1 `rec == [team+0x7CB]`
                              * arm selects mode 0x40; FUN_0008C33C/0x8D098
-                             * clear it on reset. */
-  uint32_t timer81e;        /* +0x81E dword whose high word aliases +0x820
-                             * (kept for layout; the native reads it as the
-                             * +0x820 word) */
+                             * clear it on reset. The native stores a record
+                             * pointer (never NULL); the id-0 store would
+                             * alias the 0 = none sentinel (unreachable: no
+                             * request actor is record 0 — final review). */
   uint8_t flag7be;          /* +0x7BE interception band flag */
   int32_t tracker7c7;       /* +0x7C7 camera-nearest tracker: the team-relative
                              * record index (native record pointer; FU-147 S1
