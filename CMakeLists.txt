@@ -446,6 +446,8 @@ add_library(fifa96_engine
 target_include_directories(fifa96_engine PUBLIC include PRIVATE src)
 target_compile_options(fifa96_engine PRIVATE -Wall -Wextra -Werror
   -fsanitize=address,undefined -fno-sanitize-recover=all)
+# INTERFACE: the sanitizer runtime reaches every consumer of this static
+# archive, including any future one — intended here.
 target_link_options(fifa96_engine INTERFACE -fsanitize=address,undefined)
 target_link_libraries(fifa96_engine PRIVATE fifa96_iso9660 fifa96_tick fifa96_pacing fifa96_vgt_player
                                           fifa96_frontend fifa96_sprite fifa96_record fifa96_bigf
