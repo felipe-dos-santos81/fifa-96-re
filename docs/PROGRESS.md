@@ -145,6 +145,21 @@ docs/comment minors swept (tape header/dead exit leftovers, the three stale
 header notes, the `+0x8E` alias comment, the leg-15.b stand-in pointers,
 the FU-148 §14/§15 errata as §17); no re-pin (M1/M2 byte-identical),
 `make check` 108/108.
+**Phase-12 T1 (2026-10-11) lands the live record jump producer (FU-153,
+leg 15.a's next hop) and the live band-2 crossing:** the FUN_0006E8E8
+animation-aux-keyed jump starter + the `FUN_0007BF20` jump arc run over the
+pool (the executable FU-84 frame records ported as the aux source), and the
+ISO chains drive the airborne height-table code-4 receive (the k=5 exact-hit
+`0xE0` event + the even arc grid) and the exact-`0x70`-sample band-2 kick
+(the k=7 `0x100` event, `camera_follow == 1`, vel (15,0)) — all with no pinned
+`pos_y`. The chain still cannot run fully live end-to-end: the live camera
+bootstrap (nothing raises `[0x157750]` off zero; the height table needs
+`d >= 0x38`) is leg T1-L3 and the row-07 stage-2 `+0x44` animation ack that
+blocks a second kick in one possession is leg T1-L2 (FU-153 §10). The
+`p12-t1-*` smoke is honest: live motion (clock 00:04..00:14; scene AE
+9381..38998) and **no visible follow-cam** — the camera stays the stand-in.
+Goldens unmoved (M1 `09b726b7…` / M2 `5524cf40…` byte-identical);
+`make check` 108/108; wired 21/80 (unchanged).
 Kicking the ball stays blocked
 interactively (no kick-attributable on-screen delta; the phase-11 T2 ball
 machine made the record live but off-window under the stand-in camera): the

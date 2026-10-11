@@ -666,46 +666,53 @@ static const uint16_t camera_height_arc[149] = {
     1596, 1597, 1597, 1598, 1599, 1599, 1600, 1600, 1600,
 };
 
+/* The shared `[0x157744]` arc sample (`0x10F3C4`):
+ * `T[0x94 - |peak - timer|] - T[0x94 - peak]`, clamped >= 0. Two native
+ * producers read the same installed table:
+ *  - FUN_00070B94 (`0x70B94..0x70C05`, first-hand `disassemble_bytes`):
+ *    `BX = word[0x1577F4]; if ((int16)timer >= (int16)BX) return 0;
+ *     if ((int16)word[0x1577F0] <= 0) return 0;` then this formula;
+ *  - the FU-153 / T1 record jump arc (FUN_0007BF20 `0x7C0BF..0x7C113`,
+ *    first-hand `disassemble_bytes`): `EDX = 0x94 - |+0x85 - +0x87|`,
+ *    `EBX = T16[EDX]`, `ECX = 0x94 - word[+0x85]`, `EAX = T16[ECX]`,
+ *    `EBX -= EAX`, store +0x5D, clamp < 0 -> 0.
+ * The native indexes are trusted (the producers guarantee
+ * `|peak - timer| <= 0x94`); the clamp below is the defensive port bound. */
+int16_t fifa96_camera_arc_height(int16_t peak, int16_t timer) {
+  int32_t diff = (int32_t)peak - (int32_t)timer;
+  int32_t index;
+  int32_t value;
+  if (diff < 0) diff = -diff;
+  index = 0x94 - diff;
+  if (index < 0) index = 0;
+  else if (index > 0x94) index = 0x94;
+  value = (int32_t)camera_height_arc[index];
+  index = 0x94 - (int32_t)peak;
+  if (index < 0) index = 0;
+  else if (index > 0x94) index = 0x94;
+  value -= (int32_t)camera_height_arc[index];
+  if (value < 0) return 0;                              /* 0x70bfd JGE */
+  return (int16_t)value;
+}
+
 /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): FUN_00070B94
  * (`0x70B94..0x70C05`), first-hand `disassemble_bytes`. The body:
  *
  *   BX = word[0x1577F4]                    ; limit
  *   if ((int16)timer >= (int16)BX) return 0;
  *   if ((int16)word[0x1577F0] <= 0) return 0;
- *   ECX = word[0x1577F2] - timer           ; the dword 0x1577F0 >> 16 alias
- *   EBX = 0x94 - word[0x1577F2]
- *   AX = word[0x10F3C4 + 2*(0x94 - |ECX|)]
- *   AX -= word[0x10F3C4 + 2*EBX]
- *   if AX < 0: AX = 0
+ *   ... the shared arc formula (fifa96_camera_arc_height)
  *
  * The engine field map: timer = word[0x1577FA], limit = word[0x1577F4],
  * height = word[0x1577F0] (the `[0x1577EE].hi` event height), F2 =
- * word[0x1577F2] = camera_event_ramp's stored `event_peak`. The index bounds
- * are native-trusted; the engine clamps them defensively (the callers guarantee
- * timer < 2*F2 and F2 <= 0x94, so the clamp is inert on the ported paths). */
+ * word[0x1577F2] = camera_event_ramp's stored `event_peak`. */
 int16_t fifa96_camera_height(const fifa96_camera *cam) {
   int32_t timer;
-  int32_t f2;
-  int32_t diff;
-  int32_t index;
-  int32_t value;
   if (!cam) return 0;
   timer = (int16_t)cam->timer;
   if (timer >= (int16_t)cam->timer_limit) return 0;     /* 0x70ba3 JGE */
   if ((int16_t)cam->event_param <= 0) return 0;         /* 0x70ba8 JLE */
-  f2 = (int16_t)cam->event_peak;
-  diff = f2 - timer;
-  if (diff < 0) diff = -diff;
-  index = 0x94 - diff;
-  if (index < 0) index = 0;
-  else if (index > 0x94) index = 0x94;
-  value = (int32_t)camera_height_arc[index];
-  index = 0x94 - f2;
-  if (index < 0) index = 0;
-  else if (index > 0x94) index = 0x94;
-  value -= (int32_t)camera_height_arc[index];
-  if (value < 0) return 0;                              /* 0x70bfd JGE */
-  return (int16_t)value;
+  return fifa96_camera_arc_height((int16_t)cam->event_peak, (int16_t)timer);
 }
 
 /* FUN_000795A4 (0x795A4..0x795B2): (a*b + 0x8000) >> 16, the low word. */

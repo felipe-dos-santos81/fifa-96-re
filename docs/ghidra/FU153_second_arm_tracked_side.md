@@ -374,3 +374,78 @@ Closing 15.a in the engine:
   (slot staging; `counter23` never filled), `src/fifa96_loader/fifa96_action_handlers.c:113-130`
   (the band), `src/fifa96_loader/fifa96_ball_pairing.c:780-788` (the mode-0x40 code-4 traj).
 * Probes `/tmp/opencode/fu153/probe{,2,3}.c` (sources kept for the controller).
+
+---
+
+## 10. T1 landing (phase-12) — the producer port, the chain reality, new legs
+
+**Landed (first-hand re-verified this task; `/FIFA96.EXE`, fresh reads).** The
+T1 implementation ports exactly the reachable subset of §5.1/§7:
+
+* **the `FUN_0007BF20` jump arc `0x7C057..0x7C113`** into the engine's
+  per-record mover path (`match_run_record_jump_step` over the new pool/staging
+  `jump_base` (+0x85)/`jump_timer` (+0x87) fields; the `0x7C057/0x7C05F` gate,
+  the `0x7C065..0x7C07A` advance, the `0x7C094/0x7C096` landing edge with the
+  `0x7C098..0x7C0BA` zeroing + position->target MOVSD, the
+  `0x7C0BF..0x7C101` arc). The shared `[0x157744] = 0x10F3C4` sampler is
+  exposed as `fifa96_camera_arc_height(peak, timer)` (same table as
+  FUN_00070B94, first-hand: `0x70B94` body + the `0x7C0D9 MOV EAX,[0x157744]`).
+* **the FUN_0006E8E8 animation-aux-keyed jump arms** (`match_run_record_jump_arm`):
+  aux 0x0E -> case 0xD `pos_y 0x10` + `+0x85 = +0x87 = ramp(word[+0x81])`
+  (`0x6EDFD/0x6EE04/0x6EE14`), aux 0x3A -> case 0x39 `pos_y 0x18` + the same
+  pair (`0x6ED1F/0x6ED26/0x6ED33`), aux 0x0F -> case 0xE the zero-height
+  relaunch (`0x6EE90..0x6EEBE`). The arm's velocity/sine/move writes and the
+  case-0xE `pos_y != 0` frame-3 resolve stay leg **T1-L1** (the live row
+  selector that reaches the jump-aux rows 0x5E/0x12/0x14/0x5C is the same leg:
+  every ported `fifa96_arm_anim_select` id set {0x46,0x5D,0x60,0x61,0x15,0x19,
+  0x02,0x03,0x58,0x5B,0x6B,0x26,0x0F,0x53,0x69,0x5F} misses them — the rows
+  are entered only by direct FUN_0006E598 calls from unported action bodies,
+  e.g. `0x81DA4` inside the row-0x0C body, first-hand this task).
+* **the executable FU-84 frame records `0x10E200..0x10EF00`** (0xD00 bytes,
+  reconciled byte-for-byte against `read_memory 0x10E200`/`0x10E400`) as the
+  aux source; the duration/sprite columns stay on the render's synthetic leg
+  so the tape does not move.
+
+**Independently re-verified (the §4.4 spot-checks).** The exact-hit height set
+`{0x71..0x74, 0x95..0x9C, 0xC1..0xC4, 0xDD..0xE4, 0x2CD..0x2DC, 0x4D5..0x4E8}`
+(60 values; H=0xE0 samples 0x70 at t=16/96; H=0x70 crest 110 and H=0x100 never
+sample it) reproduced from the reconciled `0x10F3C4`/`0x10F4EE` tables; the
+stage-0 JGE / band algebra and the `FUN_0006E8E8` install constants
+(`0x6ED33`/`0x6EE14`/`0x6FB5C`) re-read.
+
+**Push-back (with evidence) on the §7 recommendation.** (1) The recommended
+"installer-arm" reading is wrong: the heights live in the **FUN_0006E8E8**
+animation-aux arms, not in the installer `FUN_0007D9A4` (decompile: it writes
+`+0x91/+0x92/+0x89/+0x9E/+0x7B` and the `+0x18` action pointer only — no
+`+0x5D`/`+0x85`). (2) The chain cannot run fully live: the airborne
+height-table row needs `d = camera.pos_y - rec.pos_y >= 0x38`
+(`fifa96_action_handlers.c` height arm), while **no ported producer raises
+`0x157750` off zero** (the §4.3 writer census; `FUN_00070C08` re-seeds only
+with `ball != 0`, `0x7C81B`) — the seed kick is therefore reachable only over
+a bootstrapped event. (3) The two-kick sequence of §7 collides with the
+row-07 machine's stage-2 `+0x44` gate, whose animation/event producer is
+unported (the engine `row44` stays 0), so a second kick by the same record in
+one possession cannot stage — the T1 test splits the chain (fresh chain per
+half).
+
+**New legs (engine).**
+
+* **T1-L1** the FUN_0006E8E8 arm's velocity/sine/move writes + the live jump
+  row selector (above).
+* **T1-L2** the row-07 stage-2 `+0x44` animation/event ack (blocks the second
+  kick per possession; the engine `row44` producer is FU-151/FU-84's unported
+  fan-out).
+* **T1-L3** the live camera bootstrap: the producer that raises `[0x157750]`
+  off zero in open play (the direct-cut rows 0x7456E/0x755A9/0x76DB5/0x7751B
+  `rec[+0x5D]+0x38`, 0x75F86/0x85919 `0x80`, and the record-event path) — the
+  T1 test discloses the `fifa96_camera_event_set` bootstrap stand-in for it.
+
+**Chain evidence (engine tests, RED-verified).**
+`test_record_jump_arc_starter` (the starter + arc trace 16/15/13/12/9/6/2 and
+the t=31 landing; the arm's `ramp(0x10) = 15` first-hand) and the ISO
+`test_live_airborne_long_ball_seed_then_band2_follow` (A: the live claim ->
+aux-row jump -> the height-table code-4 receive with the mode-0x40 k=5 `0xE0`
+draw and the even grid, `d < 0x70` as the height-table discriminator; B: the
+exact-`0x70`-sample band-2 kick with the k=7 `0x100` draw and
+`fifa96_match_run_camera_follow == 1`). Smoke `p12-t1-*`: live motion, no
+visible follow (honest). Goldens unmoved.

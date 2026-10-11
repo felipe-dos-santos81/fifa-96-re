@@ -87,6 +87,18 @@ struct fifa96_match_entity {
   uint32_t timer7f;         /* +0x7F, countdown limit = >>16 */
   int32_t timer89;          /* +0x89 action timer */
   int32_t pos_x, pos_y, pos_z;          /* +0x59 / +0x5D / +0x61 */
+  /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0007BF20 jump arc state — word
+   * +0x85 (the arm-staged ramp time = the arc peak; set by the FUN_0006E8E8
+   * jump arms at `0x6ED1F`/`0x6EDFD`/`0x6FB46`, cleared by the landing edge)
+   * and word +0x87 (the running time, advanced by the whole-frame delta at the
+   * `0x7C072` arc entry and zeroed at the `0x7C0AE` landing). While
+   * `+0x85 != 0` (`0x7C05F JZ`) the arc writes `pos_y` (+0x5D) from
+   * `fifa96_camera_arc_height(+0x85, +0x87)` (`0x7C072..0x7C101`) and lands
+   * (`0x7C096 JLE` arm: pos_y 0, both words 0, target := position) when
+   * `+0x87 > 2*(+0x85)`. `+0x83` is written by the arms but read only by the
+   * unported FUN_0006E8E8 event gates (leg). */
+  int16_t jump_base;    /* +0x85 */
+  int16_t jump_timer;   /* +0x87 */
   int32_t target_x, target_y, target_z; /* +0x4D / +0x51 / +0x55 */
   int32_t vel_x, vel_z;                 /* +0x71 / +0x73 (16.16 pair) */
   int16_t lane_x, lane_z;               /* +0x6B lane / +0x6D cam-minus-pos x

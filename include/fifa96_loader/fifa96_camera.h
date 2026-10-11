@@ -108,6 +108,14 @@ int fifa96_camera_out_of_bounds(int32_t x, int32_t z);
  * `fifa96_camera_update_walk` (the native integrator store site). */
 int16_t fifa96_camera_height(const fifa96_camera *cam);
 
+/* FU-153 / M2 phase-12 T1 (15.a): the shared `[0x157744]` arc sample —
+ * `T[0x94 - |peak - timer|] - T[0x94 - peak]`, clamped >= 0, over the same
+ * 149-word `0x10F3C4` table FUN_00070B94 reads. The record jump arc
+ * (FUN_0007BF20 `0x7C0BF..0x7C113`, first-hand `disassemble_bytes`) computes
+ * its `+0x5D` height with exactly this formula, peak = `word[+0x85]` (the
+ * arm-staged ramp time) and timer = `word[+0x87]` (the running time). */
+int16_t fifa96_camera_arc_height(int16_t peak, int16_t timer);
+
 /* FU-148 §2.1(a)/§6.2 (S4 presentation completion): the FUN_000505D0 pose
  * feed. A pose record is the native 6-dword {x,y,z,yaw,pitch,angle}; the
  * camera behavior table 0x108B64 holds six 0x54-byte blocks with the class

@@ -397,6 +397,13 @@ struct fifa96_match_run_record {
   int32_t target_x;
   int32_t target_y;     /* native +0x51 (row-28 target = pos copies) */
   int32_t target_z;
+  /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0007BF20 jump state — word +0x85
+   * (the arm-staged ramp time = the arc peak) and word +0x87 (the running
+   * time). The 0x7C057 `+0x85 != 0` gate guards the `0x7C072..0x7C113` arc
+   * block staged right after the mover; the landing edge zeroes both and
+   * copies the position into the target. */
+  int16_t jump_base;   /* native +0x85 */
+  int16_t jump_timer;  /* native +0x87 */
   int32_t place_x;     /* FU-140 row 1E: native 0x15774C */
   int32_t place_y;     /* native 0x157750 */
   int32_t place_z;     /* native 0x157754 */
