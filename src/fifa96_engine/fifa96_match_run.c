@@ -665,7 +665,9 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
       (id != mr->entities.team[team].target) ? 1u : 0u;
   s.chase.not_team_second = (id != mr->entities.team[team].second) ? 1u : 0u;
   s.chase.distance = (uint16_t)(e->lane >> 16);   /* 0x7CCCD `[rec+0x69]>>16` */
-  s.chase.camera = (uint16_t)mr->entities.ball.y; /* 0x7CCD8 `[0x157750]` */
+  s.chase.camera = (uint16_t)mr->entities.ball.y; /* 0x7CCD8 [0x157750]
+                                                   * ball-record stand-in,
+                                                   * FU-75 §1.6; leg 15.b */
   s.chase.user_present = s.user_present;
   s.chase.sides_differ =
       (s.user_present != 0u && s.side != s.user_side) ? 1u : 0u;
@@ -2605,8 +2607,10 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * (0x8B65B..0x8B669), `0x8C24C` (the commit), `0x8C068` (the head helper),
  * `0x6FE84`/`0x6E724` (the appearance machine), the writer census
  * (`search_instructions 15880c / 158830 / 15884a / 158848`) and
- * `read_memory 0x1104D2 / 0x1104AE / 0x110492` (the 0x1104CF dword-top-byte
- * direction table). The native runs the machine from the clock tail
+ * `read_memory 0x1104D2 / 0x1104AE / 0x110492` (the 0x1104D2 byte-granular
+ * octant table, shared as `fifa96_match_heading_table`; the pre-fix
+ * "0x1104CF dword-top-byte" phrase was the stride-4 misread, FU-148 §16.5).
+ * The native runs the machine from the clock tail
  * (`FUN_0008AF38` 0x8B664) whenever `[0x14C32A] == 0`, after the entity
  * chain; it is the only per-frame producer of the ball record position
  * 0x15880C/14 (the FU-120 writer census: resets, commits, the penalty
@@ -2619,7 +2623,8 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  *  - phase 2 (0x8BB55..0x8BBFC): when the period byte [0x157AC2] <= 3 the
  *    lead is camera-derived — `x = -3*camZ/8 ± 0x120`, `z = 3*camZ/4 ±
  *    0x120` (y = 0), the ± offsets selected by the sign of `dx = -3*camZ/8 -
- *    camX` / `dz = -camZ/4` and applied only while `|(dx,dz)| < 0x120`; that
+ *    camX` / `dz = three_q - camZ` (0x8BBAD) and applied only while
+ *    `|(dx,dz)| < 0x120`; that
  *    offset arm stores `[0x15884E] = 7` (0x8BBE6). Period > 3 freezes the
  *    target onto the ball record (0x8BB74). The camera triple is the engine
  *    `render.camera.pos_x/pos_z` (native 0x15774C/0x157754).
@@ -2636,8 +2641,9 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  *        triple 0x15774C — engine `render.camera`), and the heading
  *        0x15885A is turned toward the target heading, wrapped 10-bit
  *        (`& 0x3FF`, fold over 0x200) and clamped to
- *        `±((0x10 - speed) << 2)`; the visual byte 0x158852 is the 0x1104CF
- *        byte table at `(uint16)heading & 0x3FF) >> 5`;
+ *        `±((0x10 - speed) << 2)`; the visual byte 0x158852 is the 0x1104D2
+ *        octant table (`[EAX+0x1104CF] >> 24` without a SIB scale) at
+ *        `((uint16)heading & 0x3FF) >> 5`;
  *      - speed = metric >> 3, clamped by `max_speed` (0x15884E) and, when
  *        the previous speed exceeds max/2, by `max >> (head_error >> 6)`
  *        (0x158862; image default 0 — L14.8.c); the `SAR AX,CL` shift

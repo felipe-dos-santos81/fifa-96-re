@@ -1,12 +1,16 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v9 (spec §5; the
- * M2 phase-9 live-pad-loop acceptance, T4; the v8 phase-8 live-loop
- * acceptance, T5, the v7 phase-7 acceptance, P5, the v6
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v11 (spec §5; the
+ * M2 phase-11 visible-ball acceptance, T3; the v10 phase-10 visible-layer
+ * acceptance, T3/T4, the v9 phase-9 live-pad-loop acceptance, T4, the v8
+ * phase-8 live-loop acceptance, T5, the v7 phase-7 acceptance, P5, the v6
  * phase-6 acceptance, the v5 interactive-match G3 close-out and the
  * v4/v4.1/v4.2 per-task re-pins are retained as provenance below).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
- * move -> kick -> score -> period end -> exit to front-end. Every presented
+ * move -> kick -> the forced mechanics window -> the band scenario -> the
+ * natural goal (1-0). The pre-v10 period-end exit to the front-end no longer
+ * exists on this path (v10 provenance below): the match holds at phase 0 and
+ * the tape records the post-goal window and stops. Every presented
  * frame records one `frame=<n> hash=<hex>` line; while a match is live the
  * line additionally carries `state=<phase>/<home>-<away>` (the FU-62 match
  * clock phase, native [0x157A4A]>>24, and the FU-72 §2.4 score pair). With
@@ -885,7 +889,63 @@
  *     `FUN_00071DF4` table/keeper second arm, the `FUN_00070DE0` bit-8
  *     boundary arm, the tracked-player tail) — OL-T11-79/§13.4.
  *
-  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
+ * --- v11 (M2 phase-11 acceptance, T3): the visible-ball assertion layer ------
+ *
+ * v11 is the phase-11 acceptance (the visible ball: T1 the `0x157750`
+ * camera-height producer + the `0x40` long-ball key — L14.6/L14.7; T2 the
+ * `FUN_0008BAF0` ball machine — L14.8). It adds assertions, provenance and
+ * the deferred docs/comment minors only — no engine write and no forcing
+ * changed — so the transcript and golden are byte-identical to v10 (`cmp`
+ * against the committed tests/golden/engine/m2-frames.txt clean, 85 lines;
+ * M1 unmoved; the re-pin lineage is in the golden-decision paragraphs below).
+ * What v11 pins at the spec §5 sequence points:
+ *   1. The ball machine is **live on the tape** (FU-148 §16, L14.8): from the
+ *      m 41 phase-2 flip the phase-2 (period <= 3) camera lead runs on the
+ *      m 42.. grants and integrates the record; the m 58 goal-link block pins
+ *      the strata exactly — `machine_ran` 1, the reset posture (`appear_row`
+ *      3, `head_gate` 2), the camera-derived lead beyond the 0x120 offset
+ *      window (`max_speed` 5, target (-1071, 2142) from camZ = 0xB28), the
+ *      record off the spawn toward the lead (456, 28) with the velocity ramp
+ *      en route (vel (-3, 4), speed 4 < max 5) and the 0x1104D2 octant byte
+ *      (`visual_dir` 7 for heading -102); the m 61 and m 72 blocks pin the
+ *      continued integration ((450, 36) one run later, (432, 60) three runs
+ *      later). The exact pins exist because the golden cannot see the ball
+ *      (below).
+ *   2. The long-ball chain (T1, L14.6/L14.7) is **not on this tape** — the
+ *      key tape holds no 0x40 key — and is fixture/live-proven instead:
+ *      `test_live_long_ball_mode40_band2_follow` (the live V request -> mode
+ *      0x40 -> band-2 code-4 -> traj 0x100 -> receive -> `camera_follow` 1),
+ *      `test_camera_height_producer` and `test_kick_target_mode40_slot_traj`.
+ *      The T2 positives are `test_ball_machine_phase2_open_play_lead`,
+ *      `test_live_ball_record_produced_in_open_play` and
+ *      `test_ball_machine_moves_ball_slot_pixels`.
+ *   3. The honest negatives, asserted at every sample:
+ *      - **no on-screen ball** — the engine's own FU-89 clean projection of
+ *        the ball slot (slot 22, computed with the render's exact staging
+ *        primitives) is off the 320x240 canvas under the stand-in camera
+ *        place; the live ball waits on a live camera place/pan (leg L14.8.e).
+ *      - **no visible follow** — the ball height and the camera Y are both 0,
+ *        so `d = ball_height - pos_y` can never present the `d == 0x70`
+ *        boundary the band-2 kick needs (leg 15.a in its crossing form; the
+ *        follow arm refuses at its 0x739DC height gate with `event_param`
+ *        0 <= 0x10, even though the pan sets `follow_speed` 5); the ball
+ *        machine does not produce a height (L14.8, legs 15.a/15.b unchanged).
+ * The forcing inventory is unchanged (the v10 list above governs; nothing
+ * new is forced by v11). The pre-v10 exit-path leftovers (the resolving-frame
+ * phase/score samples, the FU-142a mirror, the consumed clock and the post-
+ * exit break cadence) were dead on this path and were removed by the T3
+ * sweep; the exit itself stays detected for `main`'s `exit_step < 0` check.
+ *
+ * Golden decision (v11): **byte-identical, no re-pin** — assertions,
+ * provenance and comment/doc sweeps only; no presented frame moved (`cmp`
+ * clean against the committed v10 golden, 85 lines, verified with the ISO
+ * present at acceptance); M1 unmoved (`09b726b7…`; M2 `5524cf40…`). The
+ * phase-11 T1/T2 landings themselves also moved no presented frame (each
+ * report's `cmp` evidence; re-verified at T3 — the live window keeps the
+ * ball's projection outside the canvas, FU-148 §16.4), so no frame-diff
+ * ledger entry is added by this task.
+ *
+ * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
  * Both the ISO and no-assets runs start the match on step 5 (the no-assets
@@ -946,9 +1006,9 @@
  * exit path is gone; the test asserts `exit_step < 0` in both modes): the
  * post's phase-0 write holds the match (the restart producers are the FU-146
  * leg-8 situation re-queue legs), so the tape records this many post-goal
- * frames and stops. `M2_POST_EXIT_FRAMES` stays the run loop's (now dead)
- * post-exit break cadence. */
-#define M2_POST_EXIT_FRAMES 20
+ * frames and stops. The old post-exit break cadence and its exit-path sample
+ * fields were dead leftovers and were removed (phase-11 T3 sweep); the exit
+ * itself stays detected so `main` can assert it never happens. */
 #define M2_POST_GOAL_FRAMES 20
 
 /* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
@@ -1227,12 +1287,19 @@ struct m2_result {
   int goal_step;             /* engine step whose body wrote the natural goal
                               * (the scheduler -> handler -> writer frame);
                               * -1 while the score pair is fresh */
-  uint8_t phase_before_exit; /* sampled on the resolving frame */
-  uint8_t phase_after_exit;  /* FU-142a mirror after the exit step (derived 0x0C) */
-  uint8_t clock_pending;     /* clock_period_ended after the exit step (consumed) */
-  uint16_t score_before_exit[2];
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
+  /* v11 (phase-11 acceptance, T3): the FUN_0008BAF0 ball-machine stratum on
+   * the tape — sampled at the m 58 goal link and the m 61 scored observation
+   * — plus the FU-89 clean projection of the ball slot (the no-on-screen-ball
+   * negative) and the final-position sample at m 72. */
+  int ball_machine_ran;      /* the T2 machine ran on the tape (m 58 sample) */
+  int32_t ball_link_x, ball_link_z;               /* live position at m 58 */
+  int ball_link_off_canvas;  /* slot 22 clean projection visible (0 = off) */
+  int32_t ball_goal_x, ball_goal_z;               /* the record at m 61 */
+  int ball_goal_off_canvas;
+  int32_t ball_final_x, ball_final_z;             /* the record at m 72 */
+  int ball_final_off_canvas;
   /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + full-gameplay
    * P0.2 / OL-T11-7): non-background SCENE pixels (above the derived HUD band,
    * y < 190) in the engine's indexed match canvas at the last pre-grant frame
@@ -1294,6 +1361,50 @@ static void append_state(char *transcript, size_t cap, size_t *used, uint8_t pha
                    (unsigned)home, (unsigned)away);
   assert(n > 0 && *used + (size_t)n < cap);
   *used += (size_t)n;
+}
+
+/* v11 (phase-11 acceptance): the engine's own FU-89 clean-pass projection for
+ * one render slot — the staging replication of `fifa96_match_run_render`'s
+ * per-slot loop (matrix/reciprocals, the FU-85 §4 camera stage, the slot
+ * stage, the relative vector and `fifa96_projection_screen`) so the tape can
+ * pin that the ball slot's projection lands off the canvas. The window
+ * fallback mirrors the render's `have_window` (a zero box uses the full
+ * surface centre). The jitter pass is skipped: a zero clean flag already
+ * refutes `drawable = clean_visible && jitter_visible`. Returns the
+ * `clean_visible` byte (0 = off the canvas). */
+static uint8_t m2_slot_clean_visible(const struct fifa96_engine *e, uint32_t slot) {
+  const struct fifa96_match_run_render *r = &e->match_run.render;
+  fifa96_render_pos cam_src, cam;
+  fifa96_render_slot staged;
+  fifa96_projection_point center, out;
+  fifa96_projection_vec rel, rot;
+  int32_t matrix[9];
+  int32_t recip_x[FIFA96_PROJECTION_RECIP_COUNT];
+  int32_t recip_y[FIFA96_PROJECTION_RECIP_COUNT];
+  uint8_t visible = 0;
+  if (slot >= r->entity_count) return 0;
+  assert(fifa96_projection_matrix(r->yaw, r->pitch, matrix) == FIFA96_OK);
+  assert(fifa96_projection_reciprocal(e->surface->width, recip_x) == FIFA96_OK);
+  assert(fifa96_projection_reciprocal(e->surface->height, recip_y) == FIFA96_OK);
+  cam_src.x = r->camera.pos_x;
+  cam_src.y = r->camera.pos_y;
+  cam_src.z = r->camera.pos_z;
+  assert(fifa96_render_camera_stage(&cam_src, &cam) == FIFA96_OK);
+  assert(fifa96_render_slot_stage(&r->entities[slot].stage, &staged) == FIFA96_OK);
+  if (r->window.box.w > 0 && r->window.box.h > 0) {
+    center.x = r->window.cx_fix;
+    center.y = r->window.cy_fix;
+  } else {
+    center.x = (e->surface->width >> 1) << 16;
+    center.y = (e->surface->height >> 1) << 16;
+  }
+  rel.x = (int32_t)((uint32_t)staged.pos.x - (uint32_t)cam.x);
+  rel.y = (int32_t)((uint32_t)staged.pos.y - (uint32_t)cam.y);
+  rel.z = (int32_t)((uint32_t)staged.pos.z - (uint32_t)cam.z);
+  assert(fifa96_projection_transform(matrix, &rel, &rot) == FIFA96_OK);
+  assert(fifa96_projection_screen(recip_x, recip_y, &center, &rot, &out, &visible) ==
+         FIFA96_OK);
+  return visible;
 }
 
 /* Applies the match-relative directives at the top of engine step `next`. The
@@ -1644,6 +1755,55 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->entities.team[0].records[9].code == 0x1Eu);
     assert(mr->entities.team[0].records[9].has_ball == 0u);
     assert(mr->keeper_cam_x == 0 && mr->keeper_cam_y == 0 && mr->keeper_cam_z == 0);
+    /* --- v11 (phase-11 acceptance, T3): the ball-machine stratum. ---
+     * The FUN_0008BAF0 machine (phase-11 T2, FU-148 §16) runs every granted
+     * frame; from the m 41 phase-2 flip the camera lead (period 1 <= 3)
+     * has run on the m 42.. grants and integrated the record off the kickoff
+     * spawn. The long-ball chain itself is not on this tape (no 0x40 key in
+     * the key tape): it is fixture/live-proven
+     * (`test_live_long_ball_mode40_band2_follow` + the unit pins
+     * `test_camera_height_producer` / `test_kick_target_mode40_slot_traj`). */
+    assert(mr->entities.ball.machine_ran == 1);
+    assert(mr->entities.ball.appear_row == 3u);    /* the reset row-3 install */
+    assert(mr->entities.ball.head_gate == 2u);     /* row-3 flags & 2 (0x158881) */
+    /* The lead was camera-derived beyond the 0x120 offset window: the parked/
+     * panning camera is ~0xB00 away, so `max_speed` stays the 5 entry value
+     * (the 7 arm needs |(dx,dz)| < 0x120). The last machine run's lead is the
+     * camZ = 0xB28 derivation: target = (-(0x85E>>1), 0x85E) =
+     * (-1071, 2142) with three_q = 0xB28 - 0x2CA = 0x85E. */
+    assert(mr->entities.ball.max_speed == 5);
+    assert(mr->entities.ball.target_x == -1071 &&
+           mr->entities.ball.target_z == 2142);
+    assert(mr->entities.ball.metric != 0);
+    /* The record has left the kickoff spawn toward the lead: six phase-2
+     * machine runs (the m 42..m 57 grants at steps 47..62 — the engine's
+     * first phase-2 body after the m 41 flip; each integrates `vel * delta`
+     * with delta 2) walked (0x1E0, 0) to (456, 28); the velocity ramp still
+     * climbs to the sine targets (vel (-3, 4), speed 4 < max 5). Exact pins
+     * because the off-canvas ball is invisible to the golden. */
+    assert(mr->entities.ball.x == 456 && mr->entities.ball.z == 28);
+    assert(mr->entities.ball.vel_x == -3 && mr->entities.ball.vel_z == 4);
+    assert(mr->entities.ball.speed > 0 &&
+           mr->entities.ball.speed <= mr->entities.ball.max_speed);
+    /* The visual stratum: heading -102 -> & 0x3FF = 0x39A -> idx 28 of the
+     * 0x1104D2 byte table -> 7 (the shared `fifa96_match_heading_table`). */
+    assert(mr->entities.ball.visual_dir == 7);
+    res->ball_machine_ran = mr->entities.ball.machine_ran;
+    res->ball_link_x = mr->entities.ball.x;
+    res->ball_link_z = mr->entities.ball.z;
+    /* The v11 negatives. No on-screen ball: the engine's own FU-89 clean
+     * projection of the ball slot lands off the 320x240 canvas (the stand-in
+     * camera place; L14.8.e). No visible follow (leg 15.a in the `d == 0x70`
+     * crossing form): the ball height and the camera Y are both 0 here, so
+     * `d = ball_height - pos_y` can never present the 0x70 boundary the
+     * band-2 kick needs — the follow arm refuses at its height gate
+     * (`follow_speed` 5 from the pan, but `event_param` 0 <= 0x10 at
+     * 0x739DC). */
+    res->ball_link_off_canvas = m2_slot_clean_visible(e, 22u);
+    assert(res->ball_link_off_canvas == 0);
+    assert(mr->entities.ball.y == 0);
+    assert(mr->render.camera.pos_y == 0);
+    assert(mr->render.camera.event_param <= 0x10);
   } else if (m == M2_M_SCORED) {
     /* M2 phase-10 T3: the scored-frame asserts — the queue's next granted body
      * ran the scheduler -> the leg-0 handler's post -> the FUN_00093944
@@ -1668,6 +1828,15 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.pos_z == 0xB32);   /* the fifth pan body */
     assert(mr->render.camera.tracked == mr->entities.team[0].target);
     res->mask_final = mr->dispatched_ok;
+    /* v11: the machine kept integrating the record through the goal frames
+     * (one more granted body since the link sample); the ball is still the
+     * off-canvas slot. */
+    res->ball_goal_x = mr->entities.ball.x;
+    res->ball_goal_z = mr->entities.ball.z;
+    res->ball_goal_off_canvas = m2_slot_clean_visible(e, 22u);
+    assert(res->ball_goal_off_canvas == 0);
+    assert(res->ball_goal_x != res->ball_link_x ||
+           res->ball_goal_z != res->ball_link_z);
   } else if (m == M2_M_FINAL) {
     /* The final directive observation (v10/T4): it runs at the top of the
      * frame-77 step, so this snapshot covers the presented frames 1..76 —
@@ -1708,6 +1877,12 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
     assert(mr->render.camera_pose.view_mode == 0);
     assert(mr->formation[0] == 0 && mr->formation[1] == 0);
+    /* v11: the ball record and its off-canvas projection through the
+     * post-goal window (the machine tail has no phase gate). */
+    res->ball_final_x = mr->entities.ball.x;
+    res->ball_final_z = mr->entities.ball.z;
+    res->ball_final_off_canvas = m2_slot_clean_visible(e, 22u);
+    assert(res->ball_final_off_canvas == 0);
   }
 }
 
@@ -1931,16 +2106,12 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     }
     if (res->match_start_step > 0 && res->exit_step < 0 &&
         e->mode != FIFA96_ENGINE_MODE_MATCH) {
+      /* The match left MATCH: the pre-v10 period-end exit is gone from this
+       * path (v10 provenance), so this only feeds `main`'s `exit_step < 0`
+       * honest negative. The old exit-path samples (the resolving-frame
+       * phase/score, the FU-142a mirror and the consumed clock) were dead
+       * leftovers and were removed (phase-11 T3 sweep). */
       res->exit_step = steps;
-      res->phase_before_exit = s_phase;
-      res->score_before_exit[0] = s_home;
-      res->score_before_exit[1] = s_away;
-      res->mask_final = e->match_run.dispatched_ok;
-      /* v2: the live FU-143 driver consumed the clock completion and wrote
-       * the derived selector-0 chooser phase; run_end's teardown resets the
-       * match state but leaves the FU-142a machine mirror at 0x0C. */
-      res->phase_after_exit = e->match_run.phase_machine.state;
-      res->clock_pending = e->match_run.clock_period_ended;
     }
     /* M2 phase-10 T3: the natural goal's writer frame — the scheduler -> the
      * leg-0 handler -> the FUN_00093944 writer writes the score pair and the
@@ -1950,7 +2121,6 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     if (res->goal_step < 0 && live &&
         (e->match_run.score[0] != 0u || e->match_run.score[1] != 0u))
       res->goal_step = steps;
-    if (res->exit_step > 0 && steps - res->exit_step >= M2_POST_EXIT_FRAMES) break;
     if (res->goal_step > 0 && steps - res->goal_step >= M2_POST_GOAL_FRAMES) break;
   }
   assert(steps < M2_STEP_CAP);               /* the sequence ends by itself */
@@ -2088,6 +2258,24 @@ int main(void) {
    * M2_POST_GOAL_FRAMES post-goal frames and stops — no period-end exit
    * exists on the natural-goal path, so res.exit_step stays -1). */
   assert(res.exit_step < 0);
+  /* v11 (phase-11 acceptance, T3): the ball-machine stratum sampled in the
+   * m 58/m 61/m 72 blocks. The machine is live on the tape and the record
+   * moves; the long-ball chain (T1) and the machine fixtures (T2) carry the
+   * positives — see the v11 provenance block. The honest negatives: the ball
+   * slot's clean projection is off the canvas at every sample (no on-screen
+   * ball under the stand-in camera place; L14.8.e) and no live height exists
+   * (no visible follow; legs 15.a/15.b). */
+  assert(res.ball_machine_ran == 1);
+  assert(res.ball_link_off_canvas == 0);
+  assert(res.ball_goal_off_canvas == 0);
+  assert(res.ball_final_off_canvas == 0);
+  /* The off-canvas record's accepted trace (exact pins — the golden cannot
+   * see the ball): the m 58 link (456, 28), the m 61 sample one machine run
+   * later (450, 36) = the link + vel (-3, 4) * delta 2, and the m 72 sample
+   * three runs later (432, 60). */
+  assert(res.ball_link_x == 456 && res.ball_link_z == 28);
+  assert(res.ball_goal_x == 450 && res.ball_goal_z == 36);
+  assert(res.ball_final_x == 432 && res.ball_final_z == 60);
   /* v10 (T4): the natural goal's writer frame is pinned exactly — the writer
    * ran in frame 65's body (match frame 65, engine step match_start + 60):
    * the m 42 scenario stages at 42, the band walk + pan + queue run 47..65

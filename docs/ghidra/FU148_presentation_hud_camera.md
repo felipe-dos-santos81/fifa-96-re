@@ -1737,3 +1737,50 @@ frame test cannot RED for the mask's removal. Resolution:
   already-landed `fifa96_match_heading_table` (the FU-77 §4 read of the same
   flat data; the native consumers `0x8BF01`/`0x8C236` and the locomotion
   heading fold read one table), deleting the round-1 duplicate.
+
+---
+
+## 17. T3 minors-sweep errata (phase-11 T3, 2026-10-11)
+
+Quoted errata against §14/§15, first-hand re-checked this task (the phase-10
+final-review triage items; no behavior claim in the port changes):
+
+* **§14.1 entry gate inverted.** The `0x7A0A4` pseudocode's
+  `([EBP+0x8D]==0 || lane > 0x70) -> exit` is wrong on the first term.
+  First-hand `disassemble_bytes 0x7A084..0x7A0F1`: `0x7A0C0 CMP byte ptr
+  [EBP+0x8D],0` / `0x7A0C7 JNZ 0x7A44D` (exit), then `0x7A0CD CMP EAX,0x70` /
+  `0x7A0D0 JG 0x7A44D`. The gate exits on `[EBP+0x8D] != 0 || lane > 0x70`.
+  The §14.1 pass-through conclusion for receive codes stands unchanged: the
+  arm runs only when `[0x1104BB+code] != 0` (`0x7A0AC CMP byte ptr
+  [EAX+0x1104BB],0` / `0x7A0B3 JZ 0x7A0D6`).
+* **§14.1 timer81 loop is one team, not both.** `0x7A3C0 both teams' records
+  1..10` is wrong: the loop base is `[ESP+0x1C]` = `[[EBP]+0x7A6]` (the
+  `[team+0x7A6]` **opponent-team** pointer, saved at `0x7A093`/`0x7A0A0` from
+  the acting record's team), and the counter `EDX` walks 1..0xA over that one
+  block (`0x7A3C4 MOV EDX,1`; `0x7A3FD ADD EAX,0xB2`; `0x7A402 MOVSX
+  EBX,DX` / `0x7A405 CMP EBX,0xB` / `0x7A408 JL`). The `word[rec+0x81]` store
+  is the acting record's **opponent team's** records 1..10.
+* **§15.1 read window and pointer cite.** The arc table window is **298 B**
+  (149 16-bit entries, index 148: `EBX = 0x94 - F2` and the read
+  `word[[0x157744] + 2*EDX]`), not 296 B; and the `get_xrefs_to` target is
+  **`0x157744`** (the pointer cell holding the flat `0x10F3C4` table base —
+  the §15.1 pseudocode below already used it), not `0x10F744`.
+* **§15.1 load address.** The pseudocode line `0x737a1 CX = word[0x1577F0]`
+  is mis-addressed: the load is at **`0x73793`** (`668b0df0771500` =
+  `MOV CX, word ptr [0x1577F0]`); `0x737a1` (`6685c9` = `TEST CX,CX`) is the
+  height gate the pseudocode's own `0x737a4 JZ` then reads.
+* **§15.2 JGE cite.** The stage-0 gate's `(0x81531 JGE)` is wrong: `0x81531`
+  is `MOVSX EAX,DX` and the JGE is at **`0x81536`** (`7d 14`, after
+  `0x81534 CMP EAX,EBX`). The reachability conclusion stands (the band
+  advances for `d = ball_height - pos_y <= 0x70`; `d > 0x70` waits and the
+  tail cancels at `timer89 > 0x3C`).
+* **§15.3 leg 15.a wording.** "A wired live producer of a camera height
+  **above the boundary**" is loose: the band-2 (code-4) row needs the exact
+  `d == 0x70` crossing presented at the dispatching kick — the stage-0 gate
+  admits `d <= 0x70` and only the boundary is band 2, while a held kick above
+  it waits and then cancels (`timer89 > 0x3C`, `0x8153F JG 0x81702`). The
+  parenthetical "the ball machine's ball height via L14.8" is superseded by
+  §16's status: `FUN_0008BAF0` never writes `y`, so the live height producer
+  remains a separate leg. The in-code `ball_height` stand-in comments
+  (`fifa96_match_handlers.c` rows 04/05/06/1E, `fifa96_match_run.c`'s chase
+  `camera`) now name this leg 15.b explicitly.

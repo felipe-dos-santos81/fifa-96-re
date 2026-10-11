@@ -29,10 +29,12 @@ int fifa96_input_lockout(uint8_t *state, int *frames);
  * [0x14C1D6] (player 1). The consumer bits are `(words[0] | words[1]) & 1`
  * (the FU-145 boundary reflect input), `& 2` (the FUN_000736AC interpolation
  * bit) and `& 4` (the FUN_000709D0 pan-step random walk gate). `cells` is the
- * eight config dwords 0x105278/0x10527C/0x105288/0x10528C/0x105290/0x10529C/
- * 0x1052A0/0x1052A4 (fresh get_xrefs_to = reads only in FUN_0001C9BC, 0x105278
- * has no static writer; the image is zero, so the derived words are zero until
- * a front-end config producer is staged). `gate` is the native [0x15753C]
+ *  eight config dwords 0x105278/0x10527C/0x105288/0x10528C/0x105290/0x10529C/
+ *  0x1052A0/0x1052A4 (fresh get_xrefs_to = the match-path reads only in
+ *  FUN_0001C9BC; the block's static writer is the front-end options editor
+ *  FUN_0001C728 — phase-10 T2, the block below; the image is zero, so the
+ *  derived words are zero until the front-end stages it). `gate` is the
+ *  native [0x15753C]
  * entry test (`FUN_0006D1B2() == 1`, i.e. the cell equal to 0; the image/BSS
  * default): a nonzero gate leaves both words untouched. Returns 1 when the
  * words were built, 0 for the refused gate, -FIFA96_ERR_INVALID with both

@@ -290,9 +290,12 @@ struct fifa96_match_run_render {
   int input_bit2;
   /* FU-145 S2 (0x718FF): the boundary reflect arm's input bit 0 — the native
    * tests `(word[0x14C1D4] | word[0x14C1D6]) & 1` (the per-side range words
-   * FU-139 reads; image-zero, runtime producer unported, leg L1). The engine
-   * carries a caller-staged bit (default 0), mirroring `input_bit2` (the
-   * sibling bit 1 the FU-71 update reads). */
+   * FU-139 reads; image-zero). The runtime producer path is landed (phase-10
+   * T2: the front-end options editor FUN_0001C728 -> the eight config cells ->
+   * `fifa96_input_range_words`; the engine derives this bit in
+   * `fifa96_match_run_set_input_options`). No front-end staging runs on the
+   * tape, so the cell keeps the caller-staged default 0, mirroring
+   * `input_bit2` (the sibling bit 1 the FU-71 update reads). */
   int input_bit0;
   struct fifa96_window window;
   fifa96_match_display display;

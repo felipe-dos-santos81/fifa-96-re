@@ -60,8 +60,14 @@ landed the `0x40` long-ball key and the `0x157750` camera-height producer**
 machine (L14.8)** — the ball record's open-play position producer (FU-148
 §16; the live trace pins the ball slot resolving and drawing at moving
 positions, while the on-screen ball waits on the camera place, leg
-L14.8.e), so the smoke stays
-honest; the phase-10 T4 close-out entry below carries the whole-range
+L14.8.e); **phase-11 T3 (2026-10-11) is the acceptance v11 layer** — the
+ball machine pinned live on the tape (the m 42.. phase-2 lead/integration
+with exact off-spawn positions, the visual/anim strata) together with the
+honest negatives (the ball slot's clean projection off the canvas under the
+stand-in camera place; no live height, so no `d == 0x70` boundary and no
+visible follow — legs L14.8.e/15.a), the long-ball chain referenced to its
+fixtures, and the deferred docs/comment minors swept; no re-pin. The smoke
+stays honest; the phase-10 T4 close-out entry below carries the whole-range
 summary, the re-pin ledger and the leg register. The phase-6 ports S1–S4
 landed under the same tape without moving a presented frame: S1 possession/
 locomotion (FU-147), S2 goal arming (FU-145), S3 goal consumers (FU-146) and
@@ -1439,6 +1445,63 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0xFFFF` pin, and the `0e19173` subject's "8086 CL width" wording is
   corrected in place (the 8086 uses the full CL; the 186+/386 mask to
   5 bits — the `& 0x1F` code is exact). Goldens re-verified byte-identical.
+- **M2 phase-11 T3 (acceptance v11 + the deferred docs-minors sweep;
+  2026-10-11).** The phase-11 acceptance layer: the M2-B tape is now **v11**
+  — assertions, provenance, comment/doc sweeps only, no engine write and no
+  forcing change, so the transcript stays byte-identical to v10 (`cmp` clean,
+  85 lines) with M1 unmoved (`09b726b7…`; M2 `5524cf40…`; **no re-pin** —
+  the T1/T2 landings each re-verified here as frame-neutral, FU-148 §16.4).
+  What v11 pins at the spec §5 points:
+  - **the ball machine live on the tape** (T2/L14.8): from the m 41
+    phase-2 flip the FUN_0008BAF0 tail runs on the m 42.. grants and the
+    phase-2 (period <= 3) camera lead integrates the record off the kickoff
+    spawn — the m 58 goal-link block pins the stratum exactly (`machine_ran`
+    1; the reset posture `appear_row` 3 / `head_gate` 2; the lead beyond the
+    0x120 offset window with `max_speed` 5 and target (-1071, 2142) from
+    camZ = 0xB28; the record at (456, 28) with the ramp en route, vel
+    (-3, 4) / speed 4 and the 0x1104D2 octant byte 7), and the m 61/m 72
+    blocks pin the continued integration ((450, 36) one run later, (432, 60)
+    three runs later). The exact pins exist because the golden cannot see
+    the off-canvas ball;
+  - **the long-ball chain by reference** (T1/L14.6-L14.7): the tape holds no
+    0x40 key; the chain stays fixture/live-proven
+    (`test_live_long_ball_mode40_band2_follow`, `test_camera_height_producer`,
+    `test_kick_target_mode40_slot_traj`);
+  - **the honest negatives**: no on-screen ball — the tape computes the
+    engine's own FU-89 clean projection of the ball slot (the render's exact
+    staging primitives) and pins it off the 320x240 canvas at every sample
+    (the stand-in camera place; leg L14.8.e); no visible follow — the ball
+    height and the camera Y are both 0, so `d = ball_height - pos_y` can
+    never present the `d == 0x70` boundary the band-2 kick needs (leg 15.a in
+    its crossing form; the follow arm refuses at its 0x739DC height gate,
+    `event_param` 0 <= 0x10, though the pan sets `follow_speed` 5), and the
+    machine produces no ball height (legs 15.a/15.b unchanged).
+  The deferred minors sweep landed as modifications: the tape header
+  v9→v11 + the stale period-end sequence line; the dead exit-path leftovers
+  removed (the resolving-frame phase/score samples, the FU-142a mirror, the
+  consumed clock and the post-exit break cadence — the exit stays detected
+  for the `exit_step < 0` negative); `fifa96_match_entities.h`'s `type`
+  comment corrected to the native byte +0x8E (the `dword[+0x8E]>>24` alias
+  is +0x91 — the recurring alias trap); `fifa96_input.h`'s "no static
+  writer" twin and `fifa96_match_run.h`'s `input_bit0` note retargeted to
+  the phase-10 T2 producer path (FUN_0001C728 / `fifa96_match_run_set_input_options`);
+  the row 04/05/06/1E + chase `ball_height` stand-in comments in
+  `fifa96_match_handlers.c`/`fifa96_match_run.c` named as FU-75 §1.6 /
+  **leg 15.b** proxies (not the exact `[0x157750]` cell); the run.c machine
+  block's table phrase, `dz` form and unbalanced paren fixed;
+  `tests/test_ball_pairing.c`'s insertion artifact repaired; and the FU-148
+  §14/§15 errata quoted as §17 (the `+0x8D` entry-gate inversion, the
+  one-team timer81 loop, the 298 B window / `0x157744` cite, the `0x73793`
+  load, the `0x81536` JGE and the leg 15.a crossing form).
+  **Build topology note (candidate ledger item, no change made):** the
+  `fifa96_engine` target builds **without** ASan/UBSan (CMakeLists attaches
+  the sanitizer flags to the test targets only; `build/CMakeFiles/
+  fifa96_engine.dir/flags.make` = `-g -std=gnu11 -Wall -Wextra -Werror`), so
+  UB inside engine TUs is invisible to the suite — recorded for a future
+  build-topology slice (T3 changes no build system). `make check`
+  **108/108**; ASan/UBSan clean; RED evidence for the v11 layer: disabling
+  the machine call aborts on `mr->entities.ball.machine_ran == 1` (scratch,
+  restored).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

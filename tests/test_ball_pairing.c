@@ -891,7 +891,8 @@ static void test_kick_target_mode40_slot_traj(void) {
   assert((int16_t)st.traj == expected);
 }
 
-static void test_kick_target_negative_band_and_no_row(void) {  fifa96_ball_pair_state st;
+static void test_kick_target_negative_band_and_no_row(void) {
+  fifa96_ball_pair_state st;
   fifa96_ball_kick_actor a;
   fifa96_ball_kick_slot sl;
   fifa96_ball_kick_ctx ctx;

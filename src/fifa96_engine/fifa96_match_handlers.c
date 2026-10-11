@@ -2347,7 +2347,8 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.score_word[0] = (int16_t)mr->score[0];
   s.score_word[1] = (int16_t)mr->score[1];
   s.side_flip = 0;                  /* [0x157ABE] producer unported (OL-72) */
-  s.ball_height = mr->entities.ball.y;
+  s.ball_height = mr->entities.ball.y;   /* [0x157750] ball-record stand-in
+                                          * (FU-75 §1.6; leg 15.b) */
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
   s.camera_z = mr->render.camera.pos_z;
@@ -2500,7 +2501,8 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
   c.actor = id;
   c.timer89 = r->timer89;
   c.lane = e->lane_x;                    /* native dword[+0x69]>>16 = +0x6B */
-  c.ball_height = mr->entities.ball.y;   /* dword [0x157750] (OL-65) */
+  c.ball_height = mr->entities.ball.y;   /* [0x157750] stand-in, FU-75 §1.6
+                                          * (leg 15.b; not the exact cell) */
   c.timer81 = (int16_t)r->timer81;
   c.close_word = e->lane_x;              /* native word +0x6B */
   c.bound_word = e->bound;               /* native word +0x77 */
@@ -2662,7 +2664,8 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   s.word6d = e->lane_z;             /* native word +0x6D */
   s.word7d = 0;                     /* native +0x7D (the face write is not
                                      * persisted; producer unported, OL-82) */
-  s.ball_height = mr->entities.ball.y;   /* dword 0x157750 (OL-65) */
+  s.ball_height = mr->entities.ball.y;   /* [0x157750] stand-in, FU-75 §1.6
+                                          * (leg 15.b; not the exact cell) */
   s.is_ball_track = id == controlled ? 1u : 0u;   /* [0x1577CA] stand-in */
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
@@ -2770,7 +2773,8 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
                        .pos_z;
   }
   s.self_index = id >= 0 ? id % (int32_t)FIFA96_MATCH_ENTITY_RECORDS : 0;
-  s.ball_height = mr->entities.ball.y;    /* derived 0x157750 (OL-65) */
+  s.ball_height = mr->entities.ball.y;    /* [0x157750] stand-in, FU-75 §1.6
+                                           * (leg 15.b; not the exact cell) */
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
   s.camera_z = mr->render.camera.pos_z;

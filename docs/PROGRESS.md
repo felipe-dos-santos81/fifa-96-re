@@ -36,8 +36,10 @@ into the port:
 [`ENGINE.md`](ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v10** — the phase-10
-visible-layer acceptance (the T3 natural-goal re-pin) — is green: the 21 wired
+chain run headless (the M2-B acceptance tape **v11** — the phase-10
+visible-layer acceptance (the v10 natural-goal re-pin) plus the phase-11
+visible-ball assertion layer (T3; assertions/provenance only, the transcript
+byte-identical to v10) — is green: the 21 wired
 action rows' tape-observed subset (14 rows, incl. the row-05 carrier claim), the resource-loaded formation/record
 placement drawing
 on
@@ -130,7 +132,17 @@ sprite — the T2 smoke trace pins the slot moving and resolving
 (`slot22 … sprite=yes`) — while the on-screen ball waits on a live camera
 place (the stand-in camera `(0,0,0)` projects the phase-2 lead off the
 right edge; FU-148 leg L14.8.e) and the ball height stays 0 in open play
-(legs 15.a/15.b unchanged).
+(legs 15.a/15.b unchanged). **T3 (2026-10-11) closes the wave: the M2
+acceptance tape is now v11** — the ball machine pinned live on the tape
+(the exact off-spawn integration trace, the visual/anim strata) with the
+honest negatives asserted at every sample (the FU-89 clean projection of
+the ball slot off the canvas; the ball/camera heights 0, so `d = 0x70` can
+never present and the follow arm refuses — no visible follow) and the
+long-ball chain referenced to its fixtures; the deferred phase-10
+docs/comment minors swept (tape header/dead exit leftovers, the three stale
+header notes, the `+0x8E` alias comment, the leg-15.b stand-in pointers,
+the FU-148 §14/§15 errata as §17); no re-pin (M1/M2 byte-identical),
+`make check` 108/108.
 Kicking the ball stays blocked
 interactively (no kick-attributable on-screen delta; the phase-11 T2 ball
 machine made the record live but off-window under the stand-in camera): the
