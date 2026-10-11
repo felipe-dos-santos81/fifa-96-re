@@ -1429,6 +1429,16 @@ the build also produces the windowed `fifa96` target (`make game`).
   off the right edge (leg L14.8.e: the visible ball waits on a live camera
   place/pan). The ball height `y` stays 0 (the machine never writes it), so
   legs 15.a/15.b are unchanged. `make check` **108/108**; ASan/UBSan clean.
+  **T2 fix round 1 (2026-10-11):** the review's Critical landed — the visual
+  byte's table was a stride-4 misread of `0x8BF01`/`0x8C236` (`MOV
+  EAX,[EAX+0x1104CF]`, bytes `8b 80 cf 04 11 00`, no SIB): the native read
+  is the byte table at `0x1104D2` (0×3, 1..7 ×4, 0), now ported
+  byte-granular (FU-148 §16.5 quoted errata); the test pin corrected
+  (`visual_dir == 0`), the `dz` formula fixed to `three_q - camZ`
+  (`0x8BBAD`), the L14.8.c `head_error` shift path gained a synthetic
+  `0xFFFF` pin, and the `0e19173` subject's "8086 CL width" wording is
+  corrected in place (the 8086 uses the full CL; the 186+/386 mask to
+  5 bits — the `& 0x1F` code is exact). Goldens re-verified byte-identical.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

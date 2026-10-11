@@ -192,8 +192,9 @@ struct fifa96_match_ball {
    *   speed 0x158848 (the metric of vel_x/vel_z), vel_x 0x15884A, vel_z
    *   0x15884C (the ±1-ramped velocity words, integrated by the tail);
    *   max_speed 0x15884E (5 default / 7 phase-2 offset arm / 3 reset);
-   *   `heading` above is 0x15885A and visual_dir 0x158852 (the 0x1104CF
-   *   dword-top-byte table fold); target_heading 0x15885E; ramp_timer
+   *   `heading` above is 0x15885A and visual_dir 0x158852 (the 0x1104D2
+   *   byte table, read natively as `[EAX+0x1104CF]>>24`); target_heading
+   *   0x15885E; ramp_timer
    *   0x158856;
    *   metric 0x15883C + metric_dx 0x15883E + metric_dz 0x158840 (the
    *   FUN_0008DCD4 metric triple); head_gate 0x158881 (the FUN_0006E724

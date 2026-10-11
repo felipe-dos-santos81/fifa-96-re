@@ -1678,3 +1678,43 @@ Numbered legs (L14.8 additions):
   engine's `ball.y`, which the native also keeps 0 in open play — the
   stand-ins are not superseded by L14.8 and 15.b stays open for a genuine
   height producer.
+
+### 16.5 Fix round 1 errata (T2 review, 2026-10-11)
+
+Quoted errata against §16.2/§16.3/§16.4, first-hand re-checked this round:
+
+* §16.2's `visual byte 0x158852 := ((int32_t*)0x1104CF)[((uint16)heading &
+  0x3FF) >> 5] >> 24` and §16.3's "the `0x1104CF` dword-top-byte visual
+  byte" are **wrong on the stride**. The native read `0x8BF01` (and the
+  identical `0x8C236` in `FUN_0008C068`) is bytes `8b 80 cf 04 11 00` =
+  `MOV EAX,dword ptr [EAX + 0x1104CF]` — ModRM `0x80`, **no SIB**, scale 1
+  (contrast the sine at `0x8BF66`: `8b 04 85 ...` = `[EAX*4 + 0x114E04]`,
+  which does carry the scale). The `SAR EAX,0x18` then selects the byte at
+  `0x1104CF + idx + 3` = **`0x1104D2 + idx`**, i.e. the lookup is the
+  single byte table at `0x1104D2` (first-hand `read_memory 0x1104D2` 32 B:
+  `00 00 00 01 01 01 01 02 02 02 02 03 03 03 03 04 04 04 04 05 05 05 05 06
+  06 06 06 07 07 07 07 00` — the symmetric octant wrap 0×3 / 1..7 ×4 /
+  0). The port had gathered the top bytes of stride-4 dwords (`1,2,…,7,48,
+  0,0,−48,…`) — a fourth instance of the AGENTS `dword>>16/24` alias-trap
+  class, pinned by a wrong test value.
+* §16.2's index note stands: `0x8BEF2 AND BH,3` clears the sign before
+  `0x8BEFA MOVSX EAX,BX; SAR 5`, so the index is the unsigned
+  `((uint16)heading & 0x3FF) >> 5` (0..31) on every path; the stored
+  heading `0x15885A` is the signed wrapped value (checks ok, no signed
+  table base). `FUN_0008C068`'s `0x8C22E SAR EAX,5` reads the same
+  unsigned index.
+* §16.4's test bullet "the metric (0x18C)/target-heading (0x80)/steer-clamp
+  (0x40)/visual (2) frame-1 pins" — the visual pin is **0** (idx
+  `(0x40)>>5 = 2` → byte `0x1104D4 = 0`); the "visual (2)" was the
+  misread's product.
+* §16.2's phase-2 `dz` is `three_q - camZ` (`0x8BBAD SUB ESI,EAX` with
+  `ESI = three_q`, `EAX = camZ`), **not** `(-camZ) >> 2`; the two differ
+  whenever `camZ % 4 != 0` (and the `|camZ| ∈ 1..3` sign test), affecting
+  the `< 0x120` compare.
+* The `0e19173` commit subject "8086 CL width" is inverted: the 8086 uses
+  the full CL; the 186+ (and the 386 the 32-bit LE image requires) mask CL
+  to 5 bits. The `& 0x1F` code is exact for this platform and is now
+  exercised by a synthetic `head_error = 0xFFFF` pin (L14.8.c).
+
+No golden moved (the visual byte is write-only in the engine; M1/M2
+byte-identical re-verified after the fixes).

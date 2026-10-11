@@ -2637,10 +2637,14 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  *        0x15885A is turned toward the target heading, wrapped 10-bit
  *        (`& 0x3FF`, fold over 0x200) and clamped to
  *        `±((0x10 - speed) << 2)`; the visual byte 0x158852 is the 0x1104CF
- *        dword-top-byte table at `(int16)heading >> 5`;
+ *        byte table at `(uint16)heading & 0x3FF) >> 5`;
  *      - speed = metric >> 3, clamped by `max_speed` (0x15884E) and, when
  *        the previous speed exceeds max/2, by `max >> (head_error >> 6)`
- *        (0x158862; image default 0 — L14.8.c);
+ *        (0x158862; image default 0 — L14.8.c); the `SAR AX,CL` shift
+ *        count is the CL & 0x1F mask (the 8086 uses the full CL; the 186+
+ *        and the 386 this 32-bit LE image requires mask to 5 bits — the
+ *        `0e19173` commit subject's "8086 CL width" is inverted; the code
+ *        is exact);
  *      - the per-axis velocity targets are the 0x114E04 sine fold of the
  *        target heading (`fifa96_entity_sine(a)`,
  *        `fifa96_entity_sine(a + 0x100)`), ramped ±1 whenever the 0x158856
@@ -2661,11 +2665,18 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * run gate (the engine `session_gate_14c32a` is the FU-146 scheduler proxy
  * seeded 1 for live matches, so the machine runs each granted frame). */
 static const int8_t match_run_ball_visual_table[32] = {
-  /* `((const int32_t *)0x1104CF)[idx] >> 24`, idx 0..31 (the
-   * `(uint16)heading & 0x3FF) >> 5` fold); first-hand read_memory 0x1104D2
-   * (128 B) — the coherent 0..7 octant table with its neighbouring bytes. */
-  0, 1, 2, 3, 4, 5, 6, 7, 48, 0, 0, -48, 1, 0, 0, 0,
-  0, -48, 1, 0, 0, 0, 0, 10, 0, 0, -48, 1, 0, 0, 0, 0,
+  /* The 0x1104D2 byte table indexed by `((uint16)heading & 0x3FF) >> 5`
+   * (idx 0..31). The native read is `MOV EAX,dword ptr [EAX + 0x1104CF];
+   * SAR EAX,0x18` — bytes `8b 80 cf 04 11 00` at 0x8BF01 and 0x8C236, **no
+   * SIB scale**: the dword at 0x1104CF+idx has its top byte at 0x1104D2+idx,
+   * so the effective lookup is the single byte there (an unaligned dword
+   * read + top-byte extract, not the stride-4 `dword>>24` gather the first
+   * draft assumed — a 4th instance of the AGENTS alias-trap class; contrast
+   * 0x8BF66's sine `[EAX*4 + 0x114E04]` which does carry the scale). The
+   * read is a perfectly symmetric octant wrap (`0 0 0`, then `1`..`7` ×4,
+   * then a trailing `0`), first-hand `read_memory 0x1104D2` (32 B). */
+  0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4,
+  4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 0,
 };
 
 static void match_run_ball_machine(struct fifa96_match_run *mr) {
@@ -2685,7 +2696,7 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
       int32_t tx = neg_eighth;                              /* ECX */
       int32_t tz = three_q;                                 /* EBX */
       int32_t dx = neg_eighth - cam->pos_x;                 /* 0x8BB9E EDI */
-      int32_t dz = -cam_z >> 2;                             /* 0x8BBAD ESI */
+      int32_t dz = three_q - cam_z;                         /* 0x8BBAD ESI */
       b->target_y = 0;                                      /* 0x8BBA7 */
       if (fifa96_entity_distance(dx, dz) < 0x120) {         /* 0x8BBBB */
         tx += dx < 0 ? -0x120 : 0x120;                      /* 0x8BBC2..CC */

@@ -1520,8 +1520,8 @@ static void test_held_key_moves_live_controlled_record(void) {
  * (period <= 3) lead at 0x8BB55..0x8BBFC is
  *   tx = -3*camZ/8 ± 0x120 = 0x120, tz = 3*camZ/4 ± 0x120 = 0x120
  * (the offsets apply because |(dx,dz)| = 0 < 0x120; `[0x15884E] = 7`), the
- * metric direction to (0x120, 0x120) is the 45° heading 0x40, and the tail's
- * sine velocity targets are (3, 3) — the ±1 ramp and the
+ * metric direction to (0x120, 0x120) is the 45° heading 0x80, and the tail's
+ * sine velocity targets are (5, 5) — the ±1 ramp and the
  * `x += vel_x*delta; z += vel_z*delta` integration roll the ball record the
  * render slot 22 stages. First-hand windows: `disassemble_function 0x8BAF0`
  * (0x8BB55..0x8BBFC, 0x8BDEC..0x8C052). */
@@ -1544,7 +1544,9 @@ static void test_ball_machine_phase2_open_play_lead(void) {
   assert(mr.entities.ball.metric == 0x18C);
   assert(mr.entities.ball.target_heading == 0x80);
   assert(mr.entities.ball.heading == 0x40);              /* clamped to turn */
-  assert(mr.entities.ball.visual_dir == 2);              /* 0x1104CF[(0x40)>>5] */
+  /* The visual byte: the native `[EAX+0x1104CF] dword >> 24` (scale-1, no
+   * SIB) = the 0x1104D2 byte table; idx (0x40)>>5 = 2 -> 0. */
+  assert(mr.entities.ball.visual_dir == 0);
   /* Frame 1's sine velocity targets are (5, 5); the speed/2 ramp timer starts
    * at 0, so both axes step ±1 and integrate by delta 2. */
   assert(mr.entities.ball.vel_x == 1 && mr.entities.ball.vel_z == 1);
@@ -1553,11 +1555,30 @@ static void test_ball_machine_phase2_open_play_lead(void) {
 
   one_granted_frame(&mr);                    /* granted frame 2 */
   one_granted_frame(&mr);                    /* granted frame 3 */
-  /* By frame 3 the ramp reaches the 3-unit velocity target and the ball has
-   * rolled 2+4+6 = 12 units on both axes. */
+  /* By frame 3 the ramp has stepped to 3 on both axes (heading toward the
+   * 5-unit sine target) and the ball has rolled 2+4+6 = 12 units. */
   assert(mr.entities.ball.vel_x == 3 && mr.entities.ball.vel_z == 3);
   assert(mr.entities.ball.speed == 3);
   assert(mr.entities.ball.x == 12 && mr.entities.ball.z == 12);
+
+  /* L14.8.c synthetic pin (the 0x158862 FUN_0008C068 head-error producer is
+   * unported; its image default 0 leaves the clamp latent). Frames 4..6 reach
+   * the 5-unit sine target (frame 5's speed/2 timer holds), then
+   * `head_error = 0xFFFF` -> `(0xFFFF >> 6) & 0x1F = 31` -> `max = 7 >> 31 =
+   * 0`: the velocity target collapses to 0 and the ramp steps down to 4 by
+   * frame 8 (with head_error 0 the axes would hold at 5/5, speed 6). */
+  one_granted_frame(&mr);                    /* granted frame 4: 3 -> 4 */
+  one_granted_frame(&mr);                    /* granted frame 5: timer holds */
+  one_granted_frame(&mr);                    /* granted frame 6: 4 -> 5 */
+  assert(mr.entities.ball.vel_x == 5 && mr.entities.ball.vel_z == 5);
+  assert(mr.entities.ball.speed == 6);       /* metric(5,5) = 6 */
+  mr.entities.ball.head_error = 0xFFFF;
+  one_granted_frame(&mr);                    /* frame 7: max 0, timer 2 -> hold */
+  assert(mr.entities.ball.vel_x == 5 && mr.entities.ball.vel_z == 5);
+  one_granted_frame(&mr);                    /* frame 8: timer 4 > 3 -> 5 -> 4 */
+  assert(mr.entities.ball.vel_x == 4 && mr.entities.ball.vel_z == 4);
+  assert(mr.entities.ball.speed == 5);       /* metric(4,4) = 5 */
+  mr.entities.ball.head_error = 0;
 
   /* The record the render stage consumes moved with the machine. */
   if (mr.render.enabled) {
