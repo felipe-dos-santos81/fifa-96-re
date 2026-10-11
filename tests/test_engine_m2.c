@@ -845,9 +845,11 @@
  *      0), the row-05 join and the **exact** observed dispatch set
  *      (`M2_WIRED_MASK & ~bit 0x00` — 13 rows, not a subset).
  *   3. The scored frame (m 61) pins 1-0 / 0xD3 / the phase-0 write / the
- *      post's re-latch; the final frame (m 72) pins the **exact**
- *      `M2_WIRED_MASK` (14 rows, row 00 rejoined) so the post-goal frames
- *      73..85 stay guarded by the end-of-run exact mask.
+ *      post's re-latch; the final directive (m 72, top of the frame-77 step)
+ *      pins the **exact** `M2_WIRED_MASK` (14 rows, row 00 rejoined) and
+ *      `run_tape` re-reads `dispatched_ok` after the final frame, so the
+ *      whole post-goal window (frames 77..85) is guarded by the exact mask —
+ *      the golden alone would only catch render-visible dispatches there.
  *   4. The post-goal P1/P2/P4 dormancy cells (the set-piece dispatcher +
  *      taker mask, the referee machine, the replay/sub/overlay rows,
  *      `ball_row`) are re-asserted in the m 72 block — the old direct-score
@@ -939,11 +941,13 @@
 #define M2_M_SCORED 61
 #define M2_M_FINAL 72
 
-/* Post-exit front-end frames recorded before the tape stops (the no-assets
- * mode keeps the period-end exit path). ISO mode: the phase-10 T3 post-goal
- * window — the match holds at phase 0 after the natural goal (the restart
- * producers are the FU-146 leg-8 situation re-queue legs), so the tape
- * records this many post-goal frames and stops. */
+/* Post-goal frames recorded before the tape stops. The phase-10 T3 natural
+ * goal lands in ISO and no-assets alike (the pre-v10 no-assets period-end
+ * exit path is gone; the test asserts `exit_step < 0` in both modes): the
+ * post's phase-0 write holds the match (the restart producers are the FU-146
+ * leg-8 situation re-queue legs), so the tape records this many post-goal
+ * frames and stops. `M2_POST_EXIT_FRAMES` stays the run loop's (now dead)
+ * post-exit break cadence. */
 #define M2_POST_EXIT_FRAMES 20
 #define M2_POST_GOAL_FRAMES 20
 
@@ -1604,8 +1608,9 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->mask_final = mr->dispatched_ok;
     /* v10 (T4): exact — the observed set at the goal link is the accepted
      * mask minus row 00 (which rejoins only on the post-goal phase-0
-     * frames); the exact form also refuses any row outside the accepted
-     * set. */
+     * frames); the exact form also refuses any **wired** row outside the
+     * accepted set (`dispatched_ok` records the wired rows' FIFA96_OK
+     * dispatches only). */
     assert(res->mask_final == (M2_WIRED_MASK & ~(1ull << 0x00)));
     /* The pan: the row-04 slot-dir event's vel_z +5 (the held LEFT's live
      * slot dir (0, +1) -> the (0, +64) seed / 12) integrated the camera past
@@ -1664,13 +1669,15 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.tracked == mr->entities.team[0].target);
     res->mask_final = mr->dispatched_ok;
   } else if (m == M2_M_FINAL) {
-    /* The final observation (v10/T4): the post-goal phase-0 window adds the
-     * row-00 dispatch (the m 41 staged code 0 reaches a body once the
-     * phase-2 re-forcible tail is closed by the phase-0 hold — the L4.1
-     * walk's step-6 dispatch runs on the phase-0 frames), so the observed
-     * set is the wired mask with row 00 back: 14 rows, asserted exactly.
-     * main() compares this stored mask at the end of the run, so the
-     * post-goal frames 73..85 stay guarded against any further dispatch. */
+    /* The final directive observation (v10/T4): it runs at the top of the
+     * frame-77 step, so this snapshot covers the presented frames 1..76 —
+     * the post-goal phase-0 window adds the row-00 dispatch (the m 41 staged
+     * code 0 reaches a body once the phase-2 re-forcible tail is closed by
+     * the phase-0 hold — the L4.1 walk's step-6 dispatch runs on the phase-0
+     * frames), so the observed set is the wired mask with row 00 back: 14
+     * rows, asserted exactly here and again after the loop. `run_tape`
+     * re-reads `dispatched_ok` after the final frame, so the remaining
+     * post-goal frames (77..85) are guarded by main()'s exact compare too. */
     res->mask_final = mr->dispatched_ok;
     assert(res->mask_final == M2_WIRED_MASK);
     assert(mr->state.phase == 0);
@@ -1948,6 +1955,12 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   }
   assert(steps < M2_STEP_CAP);               /* the sequence ends by itself */
   res->steps = steps;
+  /* v10 (T4) review: the m 72 directive snapshots `dispatched_ok` at the top
+   * of the frame-77 step; this post-run re-read compares the live mask after
+   * the final frame, so the remaining post-goal window (frames 77..85) is
+   * guarded exactly — the golden alone would only catch render-visible
+   * dispatches there. main() compares this value. */
+  res->mask_final = e->match_run.dispatched_ok;
   fifa96_platform_null_stats(plat, out_stats);
   *out_len = used;
   fifa96_engine_destroy(e);

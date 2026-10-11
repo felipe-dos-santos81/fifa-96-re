@@ -103,23 +103,27 @@ per-record camera place snapping the in-ring records, the derived
 kickoff phase-1 entry and the derived state-1 arm + row 01 chain reaching the
 live phase 2 asserted, the match HUD (bar + score/clock) drawn from the first
 match frame, the S1 possession/locomotion state (the `+0x8D` active seed and
-the slot record's lane-track invariant) asserted, the S2/S3 goal chain pinned
-dormant-on-tape/fixture-proven (armer, queue and screen machine freshness),
-the S4 defaults pinned (`view_mode == 0`, formation id 0), the phase-7 P1–P4
-landings pinned (the row-1E keeper machine's tape-reachable claim take; the
-FU-149/FU-150/FU-152 cells asserted fresh with their dormancy gates), the
-phase-8 T1–T4 layers pinned (the taker mask absent + `sp_*` cells fresh; the
-camera pan cells fresh at m 41 and the row-1E claim-place triple at m 62 —
-the tape never pans; `phase != 2` at the kick edges with the ball pair
-zeroed; the display-gate cells fresh with the score step kept as the direct
-writer call), the phase-9 T1–T3 layers pinned (the row-02 reset dispatch bit
+the slot record's lane-track invariant) asserted, the S4 defaults pinned
+(`view_mode == 0`, formation id 0), the pre-band (m 41) dormancy pins (the
+phase-7 P1–P4 cells; the row-1E keeper machine's pre-v10 tape-reachable claim
+take — on v10 the goal scenario isolates the claim record, so the tape pins
+the staged code 0x1E and the fresh keeper cells at the goal link instead; the
+FU-149/FU-150/FU-152 cells fresh with their dormancy gates), the phase-8 T1–T4
+layers pinned (the taker mask absent + `sp_*` cells fresh; the camera
+pan/event cells fresh at m 41 — the pre-v10 "tape never pans" pins are
+superseded by the T3 re-pin; `phase != 2` at the kick edges with the ball pair
+zeroed; the display-gate cells pinned fresh with the natural-chain score — the
+pre-v10 direct-writer-call step is superseded), the phase-9 T1–T3 layers pinned (the row-02 reset dispatch bit
 inside the forced kickoff window with the live held-key machine path
-fixture-proven; row 05 never dispatched, the `0x158728..0x15872F` possession
-block fresh, `ball.carrier` NONE with the live claim/kick fixture-proven; and
-the pan layer dormant — zero range words, no `camera.tracked` bind,
-`follow_speed` 0, no stage-5 row-1E event, the tracked-side default 1 with
-the probe-0 direct score step keeping the 0xD3 gate closed and the natural
-0xD3 post fixture-proven), plus the
+fixture-proven; the m 41 row-05 `ball.carrier` NONE and the fresh
+`0x158728..0x15872F` possession block are the pre-band record, superseded at
+m 58 by the live claim/kick), the **v10 natural goal** (the m 42 staging
+inputs; the m 58 goal link: the armer zone 1 with the 0xB28 snapshot, the
+table-1 queue id 5, the pan `vel_z == 5` with `camera.tracked` bound, the
+row-05 dispatch; the m 61 1-0 writer with the 0xD3 post; the m 72 exact
+14-row mask and the restored P1/P2/P4 dormancy — the earlier S2/S3
+"dormant-on-tape" and phase-9 "pan dormant" claims are the pre-v10 record),
+plus the
 natural-phase-2 probe (a directive-free
 replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
 and the canvas-level RGB assertion; the golden carries the drawing,
@@ -170,7 +174,8 @@ acceptance tape** (v10: m 47..65, `state=0/1-0` from frame 66; the golden
 re-pinned 165→85 lines — the first re-pin since S1 v5.1). The phase-10 T4
 smoke (2026-10-11, fresh `p10-t4-*` captures) re-verifies: front-end/HUD
 byte-identical, movement clearly visible (LEFT scene-band ~5.7e4 px, UP
-~1.5e4), **no visible follow-cam and no on-screen ball** — the `0x40`
+~1.5e4), **no visible follow-cam and no on-screen ball**
+(`p10-t4-hold-left/up.png`; `p10-t4-kick.png`/`p10-t4-pass.png`) — the `0x40`
 long-ball key / `0x157750` ball-height / code-`16` ball-record producers
 are the carried legs (FU-148 §14); the live roll makes the scene band no
 longer byte-reproducible across smoke sessions (the HUD band stays exact).
