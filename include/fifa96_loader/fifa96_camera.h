@@ -59,6 +59,13 @@ typedef struct fifa96_camera {
    * the previous frame's tail left. `fifa96_camera_update_walk` captures it;
    * `fifa96_match_run_camera_follow` gates on it. */
   int16_t follow_speed;
+  /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): `word[0x1577F2]` = F2, the event
+   * ramp's peak time. FUN_00070544 computes it (`F2 = FUN_000702F8(event
+   * height)`); FUN_00070B94 reads it as the camera-height arc's apex. The
+   * engine folds the stored F2 here at the event set (both the height and the
+   * idle arm; the native idle arm stores 6). No earlier phase modeled the
+   * cell, so `fifa96_camera_height` (the 0x157750 producer) needs it. */
+  int16_t event_peak;
 } fifa96_camera;
 
 #define FIFA96_CAMERA_TRACKED_NONE (-1)
@@ -82,6 +89,23 @@ int fifa96_camera_set_tracked(fifa96_camera *cam, int32_t id);
 int fifa96_camera_target(const fifa96_camera *cam, int16_t *x, int16_t *z);
 int fifa96_camera_reflect(fifa96_camera *cam, int input_bit0, int transition_active);
 int fifa96_camera_out_of_bounds(int32_t x, int32_t z);
+
+/* M2 phase-11 T1 (FU-148 §14.5 / L14.7): FUN_00070B94 (`0x70B94..0x70C05`,
+ * first-hand `disassemble_bytes`) — the camera-height producer behind the
+ * native `word[0x157750]`:
+ *
+ *   if ((int16)timer >= (int16)limit) return 0;
+ *   if ((int16)height <= 0) return 0;
+ *   y = max(0, T16[0x94 - |F2 - timer|] - T16[0x94 - F2])
+ *
+ * where T16 is the 150-word table at flat `0x10F3C4` (first-hand
+ * `read_memory`), height = `word[0x1577F0]` (the engine `event_param`),
+ * timer = `word[0x1577FA]` (the engine `timer`), limit = `word[0x1577F4]`
+ * (`timer_limit`) and F2 = `word[0x1577F2]` (`event_peak`). FUN_000736AC
+ * `0x737a1..0x737b4` stores the result into `0x157750` (the camera Y = the
+ * engine `pos_y`) when the event height is nonzero. Callers: the engine's
+ * `fifa96_camera_update_walk` (the native integrator store site). */
+int16_t fifa96_camera_height(const fifa96_camera *cam);
 
 /* FU-148 §2.1(a)/§6.2 (S4 presentation completion): the FUN_000505D0 pose
  * feed. A pose record is the native 6-dword {x,y,z,yaw,pitch,angle}; the

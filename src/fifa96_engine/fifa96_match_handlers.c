@@ -921,11 +921,16 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->pos_y_word = (int16_t)r->pos_y;
   s->pos_z = r->pos_z;
   s->lane_word = (int16_t)r->lane;
-  s->ball_height = (int16_t)mr->entities.ball.y;   /* derived 0x157750 (OL-65) */
+  /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the native event's ball height is
+   * `word[0x157750]` (FUN_0007AE70 0x7AEFD `MOV DX,[0x157750]; CX=[rec+0x5D];
+   * SUB EDX,ECX`). The camera Y is that word's producer (the T1 port stores
+   * it in `camera.pos_y`), so the band now reads the live camera height, not
+   * the FU-75 §1.6 ball-record stand-in. */
+  s->ball_height = (int16_t)mr->render.camera.pos_y;
   /* Pool-derived team/target state; the native +0x44/+0x85/+0x87 bytes, the
-   * [team+0x7CB] callback record, the 0x1577CA exclusion and the roster
-   * descriptor are unported (OL-65), and the 0x157A4D/0x14C2F6/0x14C326/
-   * 0x14C32A mode gates default to their zero-image values (OL-66). */
+   * 0x1577CA exclusion and the roster descriptor are unported (OL-65), and the
+   * 0x157A4D/0x14C2F6/0x14C326/0x14C32A mode gates default to their
+   * zero-image values (OL-66). */
   {
     int32_t id = r->entity_id;
     int32_t tid = mr->entities.team[team].target;
@@ -934,6 +939,11 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
     s->staged_code = (uint8_t)mr->entities.ball.pair.code;
     s->is_team_target = (id >= 0 && id == tid) ? 1u : 0u;
     s->is_team_second = (id >= 0 && id == sid) ? 1u : 0u;
+    /* 0x815D0 `CMP EBP,[EAX+0x7CB]`: the code-7 stage-1 long-ball arm asks
+     * whether this record is the team's +0x7CB long-ball callback (set by
+     * FUN_0007CD60, M2 phase-11 T1 / FU-75 §1.4). */
+    s->is_team_cb =
+        (id >= 0 && (uint32_t)id == mr->entities.team[team].timer7cb) ? 1u : 0u;
     s->team_target_present = tid >= 0 ? 1u : 0u;
     s->opp_target_present = oid >= 0 ? 1u : 0u;
     if (tid >= 0 &&

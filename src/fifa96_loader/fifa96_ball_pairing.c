@@ -355,6 +355,7 @@ static fifa96_err_t kick_arm_40(const fifa96_ball_kick_actor *actor,
   int32_t vx;
   int32_t goal_z;
   int32_t drift;
+  int32_t slot_dir_z;
   uint16_t r;
   int slot_mode6 = (ctx->mode_state == 6 || ctx->mode_state == 0x10);
   local.height = 0;
@@ -411,17 +412,26 @@ static fifa96_err_t kick_arm_40(const fifa96_ball_kick_actor *actor,
       if (fifa96_rng_step(rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
       local.x = (int32_t)slot->anim_1d * ((int32_t)(r & 0x3Fu) + 0xA0);
     }
+    /* 0x7B28F..0x7B2B9 (M2 phase-11 T1, first-hand): the dir_z side flip —
+     * `[0x157A49]>>24 == 1 || [rec]->[0x826] == 0` keeps `slot[+0x21]`, else
+     * the word is NEG'd; both traj arms below read the flipped value (the
+     * 0x7B2D9 `dir_z == 1` test included). The pre-T1 port used the raw
+     * byte. */
+    if (actor->side != 0 && actor->sub_phase1 == 0) slot_dir_z = -slot->dir_z;
+    else slot_dir_z = slot->dir_z;
     if (slot_mode6) {
       if (fifa96_rng_step(rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
-      if ((r & 0xFu) == 0 && slot->dir_z == 1) {
+      if ((r & 0xFu) == 0 && slot_dir_z == 1) {
         traj = 0xC0;
       } else {
         if (fifa96_rng_step(rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
-        traj = (int32_t)(r & 0xFu) + (int32_t)slot->dir_z * 0x3C + 0x10;
+        /* 0x7B2E8: `INC EDX; IMUL EDX,EDX,0x3C` = (dir_z + 1) * 0x3C + 0x10
+         * (the pre-T1 port dropped the +1). */
+        traj = (int32_t)(r & 0xFu) + ((int32_t)slot_dir_z + 1) * 0x3C + 0x10;
       }
     } else {
       if (fifa96_rng_step(rng, &r) != FIFA96_OK) return -FIFA96_ERR_INVALID;
-      traj = ((int32_t)(r & 0xFu) + 0x30) * (int32_t)slot->dir_z + 0x48;
+      traj = ((int32_t)(r & 0xFu) + 0x30) * (int32_t)slot_dir_z + 0x48;
     }
   }
   if ((int16_t)traj < 0x20) traj = 0x20;

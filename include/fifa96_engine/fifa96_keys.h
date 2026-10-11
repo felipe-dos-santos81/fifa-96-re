@@ -15,3 +15,9 @@
 /* Match action keys (no front-end meaning). */
 #define FIFA96_ENGINE_KEY_KICK 8
 #define FIFA96_ENGINE_KEY_PASS 9
+/* M2 phase-11 T1 (FU-75 §1.4 / FU-148 §14.6): the pad 0x40 word — the
+ * long-ball key. The engine's KICK/PASS map to the native slot words 0x10/0x20
+ * (match_run_map_key), so this key ORs 0x40 into the raw word. The native's
+ * 0x7CD60 request handler is the word's consumer (pressed code-3 / released
+ * code-0 rows). SDL3 binds V. */
+#define FIFA96_ENGINE_KEY_LONG_BALL 10

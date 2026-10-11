@@ -133,9 +133,18 @@ struct fifa96_match_team {
   uint8_t search_gate;      /* +0x829 */
   uint8_t mode_82a;         /* +0x82A */
   uint8_t update_count;     /* +0x82C, wraps at 0xB */
-  uint16_t timer820;        /* +0x820 countdown */
-  uint32_t timer7cb;        /* +0x7CB enable */
-  uint32_t timer81e;        /* +0x81E limit = >>16 */
+  uint16_t timer820;        /* +0x820 countdown (M2 phase-11 T1: the
+                             * FUN_0007CD60 long-ball window, 0x3C frames;
+                             * FUN_0008D8EC 0x8DAF3 decays it by the frame
+                             * delta and clears the arm +0x7CB at 0) */
+  uint32_t timer7cb;        /* +0x7CB the long-ball callback record id
+                             * (FUN_0007CD60 `[[rec]+0x7B2]`/tracked swap; 0 =
+                             * none). The code-7 stage-1 `rec == [team+0x7CB]`
+                             * arm selects mode 0x40; FUN_0008C33C/0x8D098
+                             * clear it on reset. */
+  uint32_t timer81e;        /* +0x81E dword whose high word aliases +0x820
+                             * (kept for layout; the native reads it as the
+                             * +0x820 word) */
   uint8_t flag7be;          /* +0x7BE interception band flag */
   int32_t tracker7c7;       /* +0x7C7 camera-nearest tracker: the team-relative
                              * record index (native record pointer; FU-147 S1

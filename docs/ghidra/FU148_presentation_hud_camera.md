@@ -1336,3 +1336,160 @@ The tape effect is recorded in the M2 v10 provenance
 armer, the scanner and the consumer chain all fire on the tape now (the
 phase-9 T3 "tape dormant" note is superseded by the phase-10 T3 re-pin);
 the remaining §13.4 callers stay legs as §13.4 lists them.
+
+---
+
+## 15. Port landing (phase-11 T1: the `0x157750` camera-height producer + the `0x40` long-ball key, 2026-10-11)
+
+M2 phase-11 T1, first-hand `/FIFA96.EXE` re-derivation of the two §14.3/§14.4
+named legs: **L14.7** (the `0x157750` ball-height producer) and **L14.6** (the
+`0x40` long-ball key). Goldens `cmp` byte-identical — M1 `09b726b7…` untouched
+and M2 `5524cf40…` unchanged (the tape stages no camera event height and no
+long-ball input) — and `make check` **108/108** (no new executables).
+
+### 15.1 L14.7 — FUN_00070B94, the native `word[0x157750]` producer
+
+First-hand windows this task (`disassemble_bytes 0x73783..0x737e7`,
+`0x70B94..0x70C05`, `read_memory 0x10F3C4` 296 B, `0x10F744`
+x86-64 `get_xrefs_to`):
+
+```
+0x73783  BX = word[0x157A64]                   ; the frame delta
+0x7378a  DX = word[0x1577FA]; ADD EDX,EBX      ; the running timer += delta
+0x7379a  word[0x1577FA] = DX
+0x737a1  CX = word[0x1577F0]                   ; the event height
+0x737a4  JZ 0x737b9                            ; no height -> no Y store
+0x737a6  EAX = dword[0x1577F8]; SAR EAX,0x10   ; = word[0x1577FA] (timer)
+0x737ae  CALL 0x70B94                          ; the height arc
+0x737b4  dword[0x157750] = EAX                 ; the camera Y (= engine pos_y)
+0x737b9  AX = word[0x1577FA]; CMP AX,word[0x1577F4]  ; the pan-step check (T2)
+```
+
+FUN_00070B94 (`0x70B94..0x70C05`):
+
+```
+BX = word[0x1577F4]
+if ((int16)timer >= (int16)BX) return 0
+if ((int16)word[0x1577F0] <= 0) return 0
+ECX = (dword[0x1577F0] >> 16) - timer          ; word[0x1577F2] = F2
+EBX = 0x94 - (int16)word[0x1577F2]
+EAX = |ECX|; EDX = 0x94 - EAX
+AX  = word[[0x157744] + 2*EDX]
+AX -= word[[0x157744] + 2*EBX]
+if (AX < 0) AX = 0
+```
+
+`[0x157744] = 0x10F3C4` (store at 0x6FFE9 in FUN_0006FFC0), a 149-entry 16-bit
+ramp table (first-hand; 0,21,43,64,85,…,1600 at index 146..148). The engine
+ports it as `fifa96_camera_height` (`camera_height_arc`) and stores
+`event_peak` (= word[0x1577F2] = `fifa96_camera_ramp(event height)`) at the
+event set; `fifa96_camera_update_walk` writes `pos_y` at the native site and
+order (after the timer accumulation, before the pan-step check). Unit-pinned
+arc (event height 0x100: F2 59, F4 118, F6 0): pos_y = 17, 33, 49, 64, 79, 93
+at t = 2..12, the crest 253 at t 58, 17 at t 116, and the `timer >= limit`
+guard 0 at t 118; the idle arm leaves pos_y 0.
+
+Consumer corrections to the exact native cell (`word[0x157750]`):
+
+* the FUN_0007BF20 tail gate (`0x7C81B dword[0x157750] == 0 -> skip`) now reads
+  `camera.pos_y` in `match_run_record_camera_event` — the T2-phase-10 pan caller
+  `0x70DD1`'s wake condition;
+* FUN_0007AE70's event ball height (`0x7AEFD MOV DX,[0x157750]`) in
+  `match_kick_from_record`'s `ball_height`, so the kick band `d = ball_height -
+  pos_y` (the 0x81526/0x81531 gates) sees the live camera Y.
+
+The remaining `[0x157750]` gameplay stand-ins (row 04/05/06/1E `ball_height`,
+the chase `camera` word) keep the FU-75 §1.6 ball-record proxy until the
+code-16 ball machine (L14.8 / phase-11 T2) makes the ball's height live — leg
+15.3.
+
+### 15.2 L14.6 — the `0x40` long-ball key
+
+First-hand this task:
+
+* code-7 stage 1 (`0x815CD..0x81646`): `SI = 0x40` when
+  `CMP EBP,[EAX+0x7CB]` (0x815D0, EAX = `[rec]` = the team block) holds, else
+  the live `word[slot+6]` (0x815E6), else `[0x158743] == 3 -> 0x40` (0x815EC),
+  else -1; the `[0x14C32A]`/`[0x15B680] == 4` downgrade is unchanged.
+* FUN_0007CD60 (`0x7CD60..0x7CDD5`, the input-row handler at **pressed code-3 /
+  released code-0 want 0x40**): `[...+0x7CB] != 0` exits; `EBX = [team+0x7B2]`;
+  `rec == EBX -> [team+0x7CB] = rec, [team+0x820] = 0x3C`; else `rec ==
+  [0x1577CA]` and `[EBX+0x20] == 0` -> `FUN_000786A0(rec, EBX)` (the slot swap)
+  + `[team+0x7CB] = EBX`, `+0x820 = 0x3C`; returns 1 always.
+* FUN_0008D8EC `0x8DAF3..0x8DB2C`: `limit = dword[team+0x81E] >> 16` =
+  **word[team+0x820]** (the alias); `timer > delta -> timer -= delta; else
+  timer = 0, [team+0x7CB] = 0`.
+* FUN_0007B194 `0x7B28F..0x7B315` **errata**: (1) the dir_z side flip
+  (`[0x157A49]>>24 == 1 || [rec]->[0x826] == 0` keeps `slot[+0x21]`, else the
+  value NEGs; the 0x7B2D9 `dir_z == 1` test reads the flipped word); (2) the
+  mode-6 traj is `(dir_z + 1) * 0x3C + 0x10 + (r & 0xF)` (0x7B2E8 `INC EDX;
+  IMUL EDX,EDX,0x3C`). The pre-T1 port dropped both; fixed and unit-pinned
+  (`test_kick_target_mode40_slot_traj`).
+
+Ports: `FIFA96_ENGINE_KEY_LONG_BALL` (SDL3 **V**, gamepad **WEST**) ->
+`match_run_map_key` ORs the native word 0x40; the `0x7CD60` body replaces the
+L4.4 stub in `match_input_handler` (the first arm + the gates + the swap);
+`match_kick_from_record` stages `is_team_cb = (id == team[team+0x7CB])`; the
+team `+0x820` countdown semantics corrected (the pre-T1 port read the separate
+zero `timer81e` cell and cleared the arm on its first frame).
+
+Live reachability (probe + tests): the request fires pre-claim while the
+record's dispatch code is 0/3 and `rec == [team+0x7B2]` (the walk state), arms
+`timer7cb = rec`/`timer820 = 0x3C`, and the post-claim KICK release runs code 7
+-> stage 1 mode 0x40. The band-2 (code-4 receive) row needs `d = ball_height -
+pos_y == 0x70` exactly: the stage-0 gate `pos_y + 0x70 >= ball_height` (0x81531
+JGE) advances only for band <= 0x70 and waits/cancels above (`d > 0x70` ->
+0x81538: `timer89 <= 0x3C` wait, else the tail). With the camera Y at the
+boundary the live chain completes end-to-end (15.3); a **live** camera Y
+reaching the boundary (and the > 0x70 bootstrap event that raises it) is leg
+15.3.
+
+### 15.3 Tests, goldens, smoke, legs
+
+Tests (`make check` 108/108):
+
+* `test_camera.c::test_camera_height_producer` — the FUN_00070B94 arc, its
+  guards and the idle discriminator (first-hand pinned values).
+* `test_engine_match_frame.c::test_record_event_gate_live_from_height_producer`
+  — the ported event setter raises `camera.pos_y` and the record event's
+  reflect arm re-seeds `event_param` to that live height (the tail gate live
+  from the producer); `test_record_event_tail_gate_fires_in_frame` updated to
+  the `pos_y` staging.
+* `test_engine_match_frame.c::test_live_long_ball_mode40_band2_follow` (ISO) —
+  kickoff -> walk -> the producer ramp -> the live **V** request
+  (`timer7cb = 9`, `timer820 = 0x3C`) -> the walk claim -> the pinned band
+  boundary -> the **Z** kick -> `pair.flags == 0x40`, `pair.code == 4`,
+  `pair.traj == 0x100` (the RNG-0 seeded draw), ack/tracked/`event_param`
+  0x100 -> `fifa96_match_run_camera_follow == 1` with the tracked slot dirs in
+  the camera velocity (15, 0) — the visible follow's motion source.
+* `test_ball_pairing.c::test_kick_target_mode40_slot_traj` — the mode-0x40
+  slot-arm traj (side-0 formula, the side-1 flip clamp, the mode-6 `+1`),
+  twin-RNG pinned.
+
+Goldens: `cmp` byte-identical on `m1-frames.txt` and `m2-frames.txt`.
+
+Smoke (`DISPLAY=:1`, fresh session, client-area 960x720): the front-end and
+HUD captures are byte-identical to the phase-10 twins (`p11-t1-frontend.png`
+vs `p10-t1-frontend.png`, `p11-t1-hud.png` vs `p10-t1-hud.png`); the
+long-ball walkthrough (walk UP ~1.2 s -> V -> walk UP ~0.6 s -> eight Z
+presses over ~4 s) reaches live play (clock 00:12 -> 00:17,
+`p11-t1-long-ball.png` -> `p11-t1-after-kicks.png`), the walked record and the
+live roll clearly move (scene-band AE 14894/24230 across the kick bursts) and
+— honestly — **no visible follow-cam and no ball sprite**: the camera stays the
+static stand-in. The live camera Y cannot bootstrap to the band boundary from
+a cold start (no wired live event carries height >= 0x74; the live receive arm
+stages traj 0/0x88..0x97 rows and the keepers 0x38/0x50 < 0x70), so the
+visible follow remains the fixture chain above.
+
+Numbered legs:
+
+* **15.a the live band-2 bootstrap.** The pad long-ball can only stage the
+  code-4 receive row with `d == 0x70` exactly; a wired live producer of a
+  camera height above the boundary (the ball machine's ball height via L14.8,
+  or a lofted set-piece delivery) is what makes the band-2 pad kick, and with
+  it a visible live follow, reachable without the fixture staging.
+* **15.b the remaining `[0x157750]` gameplay stand-ins** (row 04/05/06/1E
+  `ball_height`, the chase `camera`) stay on the FU-75 §1.6 ball-record proxy
+  until L14.8 (phase-11 T2) lands the ball's live height.
+* **15.c the `0x7CD60` swap arm's slot-block field clears** (OL-68) and the
+  second arm's tracked-side producer (`camera.tracked` is the engine surface).

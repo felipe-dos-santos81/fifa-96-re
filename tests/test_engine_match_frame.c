@@ -1236,13 +1236,16 @@ static void test_machine_no_edge_arm_copies_camera_target(void) {
   mr.entities.team[1].side = 1;
   mr.entities.team[0].target = 2;    /* rec is not the team target */
   mr.entities.controlled = 1;        /* keeps team_select_target off */
-  assert(fifa96_camera_init(&mr.render.camera, 0x111, 0x222, 0x333) == FIFA96_OK);
+  assert(fifa96_camera_init(&mr.render.camera, 0x111, 0, 0x333) == FIFA96_OK);
   mr.input_state[0] = 0x10;          /* KICK held: mapped +0x10, no direction */
   one_granted_frame(&mr);            /* press edge: scan, no arm */
   assert(e->target_x == 0 && e->target_z == 0);
   one_granted_frame(&mr);            /* no edges + prev_mapped 0x10: the arm */
   assert(e->target_x == 0x111);
-  assert(e->target_y == 0x222);
+  /* The Y follows the camera pos_y at the arm; with no live event height the
+   * L14.7 producer leaves it 0 (a nonzero Y here would be the row-04 event's
+   * height-0 clamp to the live camera Y plus the FUN_00070B94 arc). */
+  assert(e->target_y == 0);
   assert(e->target_z == 0x333);
   assert(e->timer93 == 0x10u);       /* 0x79B58 (+0x99 staged 0) */
 }
@@ -1356,9 +1359,12 @@ static void test_input_options_producer_sets_range_bits(void) {
 /* M2 phase-10 T2 (FU-147 §3.3 leg 7): the FUN_0007BF20 tail's per-record
  * camera event (`0x7C7D3..0x7C8FC`, CALL 0x70C08) now runs in the frame. The
  * fixture satisfies every outer gate (lane 0 <= 0x10 and < bound, both
- * 0x157820/22 flags clear, bearing 5 > 4, ball height 0x10, no tracked record,
- * the +0x5D band) on a paused camera so the lane refresh keeps lane 0; the
- * record event's reflect arm re-seeds the event height to the ball height. */
+ * 0x157820/22 flags clear, bearing 5 > 4, camera height 0x10, no tracked
+ * record, the +0x5D band) on a paused camera so the lane refresh keeps lane 0;
+ * the record event's reflect arm re-seeds the event height to the ball height.
+ * M2 phase-11 T1: the height word is the live `dword[0x157750]` = the camera
+ * Y (`camera.pos_y`, the FUN_00070B94 arc producer); this fixture stages the
+ * value directly (the producer-driven wake is the sibling test below). */
 static void test_record_event_tail_gate_fires_in_frame(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
@@ -1378,7 +1384,7 @@ static void test_record_event_tail_gate_fires_in_frame(void) {
   mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;       /* team 1: the chase/user gates */
-  mr.entities.ball.y = 0x10;
+  mr.render.camera.pos_y = 0x10;     /* 0x157750 (T1/L14.7) */
   mr.render.camera.paused = 1;       /* no integration: lane stays 0 */
   mr.render.camera.speed = 5;        /* [0x1577BE] bearing > 4 */
   mr.render.camera.event_param = 0;
@@ -1389,6 +1395,48 @@ static void test_record_event_tail_gate_fires_in_frame(void) {
       if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
   one_granted_frame(&mr);
   assert(mr.render.camera.event_param == 0x10);
+}
+
+/* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the height producer wakes the same
+ * tail gate. The camera is live (not paused): the ported FUN_00071C94 event
+ * setter seeds the event (height 0x20, F2 = 21, f8 = 42 -> vel_z 6 > the 4
+ * bearing gate), the FUN_00070B94 arc raises `pos_y` on the frame's
+ * integrator store, and the record event's reflect arm then re-seeds
+ * `event_param` to that live Y. On BASE the gate read the (zero) ball record
+ * height and skipped. */
+static void test_record_event_gate_live_from_height_producer(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane_x = 0x20;
+  e->bound = 0x20;
+  e->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;
+  mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 0xFC, 0x20, 0) ==
+         FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0);
+  assert(mr.render.camera.event_param == 0x20);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  /* The arc raised the Y on this frame's integrator store (t = 2) and the
+   * record event's reflect arm re-seeded event_param to the live height (the
+   * arm then re-seeds the camera velocities through its nested event set, so
+   * the post-frame speed is the reflected jitter, not the 6 the gate read). */
+  assert(mr.render.camera.pos_y > 0);
+  assert(mr.render.camera.event_param == (uint16_t)mr.render.camera.pos_y);
 }
 
 /* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): the live held-key movement on the
@@ -1565,6 +1613,121 @@ static void test_live_carrier_claim_and_kick(void) {
  * chain above. Discriminating vs BASE: without the T1 wiring the receive
  * fields stay untouched (`ack` 0, `receiver` NONE, `controlled` keeps the
  * carrier). */
+/* M2 phase-11 T1 (FU-75 §1.4 / FU-148 §14.5/§14.6, L14.6/L14.7): the live
+ * long-ball chain. The probe-derived sequence (first-hand this task):
+ *
+ *   1. kickoff -> phase 2 (slot rec 9, team target 9, controlled 10);
+ *   2. the record walks (code 4) while the ported event setter raises the
+ *      camera Y (the L14.7 FUN_00070B94 arc, live: pos_y crosses 0x70);
+ *   3. the 0x40 LONG_BALL key press+release runs the record's released code-0
+ *      row -> FUN_0007CD60 -> `[team+0x7CB] = rec`, `[team+0x820] = 0x3C`
+ *      (the request arm; first arm, `rec == [team+0x7B2]`);
+ *   4. the UP walk claims (code 5, carrier = rec) inside the 0x3C window;
+ *   5. the mid-kick frame boundary: `pos_y = 0x70` (the band gate admits
+ *      exactly d == 0x70) and the ported event cleared so the pin holds;
+ *   6. the KICK press/release runs the code-7 machine; stage 1 reads the
+ *      live `is_team_cb` -> mode 0x40; the band-2 row (code 4) stages; the
+ *      code-4 RNG arm gives traj 0x90 + (r&7)*0x10 = 0x100 (the run's RNG is
+ *      seeded 0, so the draw is deterministic);
+ *   7. the receive arm (code 4 = `[0x1104BB+4] == 0`) binds the camera event
+ *      (event_param = 0x100) and the tracked record, acks and picks the
+ *      receiver;
+ *   8. the every-frame follow arm consumes the > 0xF0 height and takes the
+ *      tracked slot dirs into the camera velocity — the visible follow.
+ *
+ * Discriminating vs BASE: without the T1 wiring the 0x40 key is unmapped, the
+ * request cannot arm (`timer7cb` stays 0), and the kick stages the idle slot
+ * row (no 0x40 flags, no receive/event). */
+static void test_live_long_ball_mode40_band2_follow(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int32_t id;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  id = mr.slot.entity;
+  assert(id == 9);
+  rec = &mr.entities.team[0].records[9];
+  /* (2) walk four frames and raise the camera Y through the producer. */
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 4; i++) one_granted_frame(&mr);
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 0, 0x90, 0) == FIFA96_OK);
+  for (int i = 0; i < 40 && mr.render.camera.pos_y < 0x70; i++) one_granted_frame(&mr);
+  assert(mr.render.camera.pos_y >= 0x70);          /* the live arc */
+  assert(mr.render.camera.event_param == 0x90);    /* still the staged event */
+  /* (3) the long-ball request through the live input rows. */
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  {
+    fifa96_platform_key lb = {FIFA96_ENGINE_KEY_LONG_BALL, 1};
+    assert(fifa96_match_run_input(&mr, &lb, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  assert(mr.entities.team[0].timer7cb == (uint32_t)id);
+  assert(mr.entities.team[0].timer820 == 0x3C);
+  /* (4) walk to the claim inside the request window. */
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 60 && mr.entities.ball.carrier != id; i++)
+    one_granted_frame(&mr);
+  assert(mr.entities.ball.carrier == id);
+  assert(rec->code == 5u);
+  /* (5/6) the band boundary and the mode-0x40 kick. The first attempt after
+   * a held direction leaves the slot hold-mask dirty (the released word is
+   * swallowed); the NULL grant cleans it. */
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  for (int attempt = 0; attempt < 6; attempt++) {
+    mr.render.camera.event_param = 0;      /* the pinned-Y staging */
+    mr.render.camera.pos_y = 0x70;
+    mr.entities.ball.pair.code = 0;
+    {
+      fifa96_platform_key k = {FIFA96_ENGINE_KEY_KICK, 1};
+      assert(fifa96_match_run_input(&mr, &k, 1) == 0);
+    }
+    one_granted_frame(&mr);
+    assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+    one_granted_frame(&mr);
+    one_granted_frame(&mr);
+    if (mr.entities.ball.pair.code == 4u) break;
+  }
+  assert(mr.entities.ball.pair.flags == 0x40);     /* the live mode */
+  assert(mr.entities.ball.pair.code == 4u);        /* the receive row */
+  assert((int16_t)mr.entities.ball.pair.traj == 0x100);   /* > 0xF0 */
+  /* (7) the receive arm ran. */
+  assert(mr.entities.ball.pair.ack == 1);
+  assert(mr.entities.ball.pair.receiver >= 0);
+  assert(mr.render.camera.tracked == id);
+  assert(mr.render.camera.event_param == 0x100);
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
+  /* (8) the follow arm takes the tracked slot dirs into the camera velocity. */
+  rec->dir_x = 1;
+  rec->dir_z = 0;
+  assert(fifa96_match_run_camera_follow(&mr) == 1);
+  assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.speed != 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 static void test_live_pass_kick_runs_receive_arm(void) {
   struct fixture f;
   struct fifa96_match_run mr;
@@ -3877,8 +4040,10 @@ int main(void) {
   test_unbound_chase_installs_and_runs_row08();
   test_input_options_producer_sets_range_bits();
   test_record_event_tail_gate_fires_in_frame();
+  test_record_event_gate_live_from_height_producer();
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();
+  test_live_long_ball_mode40_band2_follow();
   test_live_pass_kick_runs_receive_arm();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();

@@ -136,7 +136,8 @@ static int sdl3_present(void *self, const fifa96_platform_frame *f) {
 /* Pure scancode -> engine key mapping (no SDL state needed), shared by the
  * poll path below and tests/test_engine_sdl3.c. Keyboard bindings: arrows
  * navigate, RETURN confirms, BACKSPACE is the primary panel-back/DECLINE key
- * with X as the secondary, Z/C are the match KICK/PASS actions, ESCAPE
+ * with X as the secondary, Z/C are the match KICK/PASS actions, V is the
+ * long-ball key (M2 phase-11 T1; the native slot word 0x40), ESCAPE
  * quits. 0 = unmapped. */
 int fifa96_platform_sdl3_map_scancode(int scancode) {
   switch (scancode) {
@@ -149,6 +150,7 @@ int fifa96_platform_sdl3_map_scancode(int scancode) {
     case SDL_SCANCODE_X:         return FIFA96_ENGINE_KEY_DECLINE;
     case SDL_SCANCODE_Z:         return FIFA96_ENGINE_KEY_KICK;
     case SDL_SCANCODE_C:         return FIFA96_ENGINE_KEY_PASS;
+    case SDL_SCANCODE_V:         return FIFA96_ENGINE_KEY_LONG_BALL;
     case SDL_SCANCODE_ESCAPE:    return FIFA96_ENGINE_KEY_QUIT;
     default:                     return 0;
   }
@@ -162,6 +164,7 @@ static int32_t sdl3_map_button(Uint8 b) {
     case SDL_GAMEPAD_BUTTON_DPAD_RIGHT: return FIFA96_ENGINE_KEY_RIGHT;
     case SDL_GAMEPAD_BUTTON_SOUTH:      return FIFA96_ENGINE_KEY_CONFIRM;
     case SDL_GAMEPAD_BUTTON_EAST:       return FIFA96_ENGINE_KEY_DECLINE;
+    case SDL_GAMEPAD_BUTTON_WEST:       return FIFA96_ENGINE_KEY_LONG_BALL;
     case SDL_GAMEPAD_BUTTON_START:      return FIFA96_ENGINE_KEY_QUIT;
     default:                            return 0;
   }

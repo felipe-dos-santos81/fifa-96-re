@@ -1445,6 +1445,65 @@ static void test_rate_event(void) {
   assert(fifa96_camera_rate_event(NULL, 1, 2, 0xF1) == -FIFA96_ERR_INVALID);
 }
 
+/* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the FUN_00070B94 camera-height
+ * producer behind the native `word[0x157750]`. First-hand
+ * `disassemble_bytes 0x73783..0x737b4` (FUN_000736AC: the timer accumulates
+ * `word[0x1577FA] += delta`; when `word[0x1577F0]` (the event height) is
+ * nonzero the Y is `FUN_00070B94(timer)`) and `0x70B94..0x70C05`:
+ *   timer >= limit -> 0; height <= 0 -> 0;
+ *   y = max(0, T16[0x94 - |F2 - timer|] - T16[0x94 - F2])
+ * with T16 the 149-word table at flat 0x10F3C4 (first-hand `read_memory`) and
+ * F2 = `word[0x1577F2]` = fifa96_camera_ramp(event height) (the ramp table's
+ * `guard 3`/`0x94` arms included). The engine stores F2 as `event_peak` at
+ * the event set and the arc as `pos_y` each update. */
+static void test_camera_height_producer(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera idle = fresh_camera();
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  assert(fifa96_camera_init(&idle, 0, 0, 0) == FIFA96_OK);
+  /* idle: no event -> the native store is skipped (the Y never moves). */
+  for (int i = 0; i < 40; i++)
+    assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+  assert(cam.pos_y == 0);
+  assert(cam.event_peak == 0);
+  /* a live height 0x100 event: F2 = ramp(0x100) = 0x3B, F4 = 0x76, F6 = 0
+   * (the NEG path: F6 = F2 - ramp(h - ty) with ty = pos_y = 0). */
+  assert(fifa96_camera_event_set(&cam, 0, 0x200, 0x100, 0) == FIFA96_OK);
+  assert(cam.event_peak == 59);
+  assert(cam.timer == 0 && cam.timer_limit == 118);
+  /* The first-hand arc at delta 2: t=2 -> 17, t=4 -> 33 ... t=12 -> 93. */
+  static const int16_t arc[6] = {17, 33, 49, 64, 79, 93};
+  for (int i = 0; i < 6; i++) {
+    assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+    assert(cam.pos_y == arc[i]);
+  }
+  for (int i = 6; i < 29; i++)
+    assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+  assert(cam.pos_y == 253);            /* t = 58, the arc's crest */
+  for (int i = 29; i < 58; i++)
+    assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+  assert(cam.pos_y == 17);             /* t = 116, the descending arc */
+  assert(fifa96_camera_update(&cam, 2, 0, 0) == FIFA96_OK);
+  assert(cam.pos_y == 0);              /* t = 118 >= limit: the guard arm */
+  /* the arc's direct read (the unit contract). */
+  cam.timer = 58;
+  cam.pos_y = 0;
+  assert(fifa96_camera_height(&cam) == 253);
+  cam.timer = 118;
+  assert(fifa96_camera_height(&cam) == 0);
+  cam.timer = 58;
+  cam.event_param = 0;
+  assert(fifa96_camera_height(&cam) == 0);
+  assert(fifa96_camera_height(NULL) == 0);
+  /* the height-0 event discriminator: the idle arm stores F2 = 6 but
+   * event_param = 0 gates the store, so the Y stays 0. */
+  assert(fifa96_camera_event_set(&idle, 0, 0, 0, 0) == FIFA96_OK);
+  assert(idle.event_peak == 6);
+  for (int i = 0; i < 40; i++)
+    assert(fifa96_camera_update(&idle, 2, 0, 0) == FIFA96_OK);
+  assert(idle.pos_y == 0);
+}
+
 /* ---- FU-152 §2.3 (P4): the FUN_0004D134 replay camera selector ---- */
 
 static void test_replay_select(void) {
@@ -1594,6 +1653,7 @@ int main(void) {
   test_classifier_bits();
   test_pan_band();
   test_rate_event();
+  test_camera_height_producer();
   test_replay_select();
   puts("test_camera: ok");
   return 0;

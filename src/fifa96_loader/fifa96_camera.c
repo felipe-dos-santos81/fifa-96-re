@@ -49,6 +49,7 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->event_step_z = 0;
   cam->tracked = FIFA96_CAMERA_TRACKED_NONE;   /* 0x700F4 0x70258 */
   cam->follow_speed = 0;
+  cam->event_peak = 0;                         /* 0x1577F2 */
   return FIFA96_OK;
 }
 
@@ -82,6 +83,12 @@ int fifa96_camera_update_walk(fifa96_camera *cam, struct fifa96_rng *rng,
   gate_speed = (int16_t)cam->speed;
   if ((int16_t)cam->speed != 0 || (int16_t)cam->event_param != 0) {
     cam->timer = (uint16_t)(cam->timer + (uint16_t)delta);
+    /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): FUN_000736AC 0x737a1..0x737b4 —
+     * with a live event height (`word[0x1577F0] != 0`) the camera Y (native
+     * word[0x157750], this struct's `pos_y`) is the FUN_00070B94 arc. The
+     * store precedes the pan-step check (0x737b9) and the integration. */
+    if ((int16_t)cam->event_param != 0)
+      cam->pos_y = fifa96_camera_height(cam);
     /* FU-152 §2.9 (T2) / FUN_000736AC 0x737b9..0x737da: the timer-driven pan
      * step runs before the same frame's integration; the walk gate is the
      * native ([0x14C1D4]|[0x14C1D6]) & 4 read at 0x70ab1..0x70ac2 (T3). */
@@ -637,6 +644,70 @@ int16_t fifa96_camera_ramp(int16_t height) {
   return (int16_t)value;
 }
 
+/* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the FUN_00070B94 camera-height arc
+ * table, flat 0x10F3C4 (first-hand `read_memory`, 149 x 16-bit; the caller's
+ * index `0x94 - (...)`, max 0x94, needs entries 0..148; the 0x640/1600 top is
+ * the arc's ceiling). */
+static const uint16_t camera_height_arc[149] = {
+       0,   21,   43,   64,   85,  106,  127,  148,  168,  189,
+     209,  229,  249,  269,  288,  308,  327,  347,  366,  385,
+     404,  422,  441,  459,  477,  495,  513,  531,  549,  566,
+     584,  601,  618,  635,  651,  668,  684,  701,  717,  733,
+     749,  765,  780,  796,  811,  826,  841,  856,  871,  885,
+     900,  914,  928,  942,  956,  969,  983,  996, 1009, 1023,
+    1036, 1048, 1061, 1073, 1086, 1098, 1110, 1122, 1134, 1145,
+    1157, 1168, 1179, 1190, 1201, 1212, 1223, 1233, 1243, 1254,
+    1264, 1273, 1283, 1293, 1302, 1311, 1320, 1329, 1338, 1347,
+    1356, 1364, 1372, 1380, 1388, 1396, 1404, 1411, 1419, 1426,
+    1433, 1440, 1447, 1453, 1460, 1466, 1472, 1478, 1484, 1490,
+    1496, 1501, 1506, 1511, 1516, 1521, 1526, 1531, 1535, 1539,
+    1544, 1548, 1551, 1555, 1559, 1562, 1565, 1568, 1571, 1574,
+    1577, 1579, 1582, 1584, 1586, 1588, 1590, 1591, 1593, 1594,
+    1596, 1597, 1597, 1598, 1599, 1599, 1600, 1600, 1600,
+};
+
+/* M2 phase-11 T1 (FU-148 §14.5 / L14.7): FUN_00070B94
+ * (`0x70B94..0x70C05`), first-hand `disassemble_bytes`. The body:
+ *
+ *   BX = word[0x1577F4]                    ; limit
+ *   if ((int16)timer >= (int16)BX) return 0;
+ *   if ((int16)word[0x1577F0] <= 0) return 0;
+ *   ECX = word[0x1577F2] - timer           ; the dword 0x1577F0 >> 16 alias
+ *   EBX = 0x94 - word[0x1577F2]
+ *   AX = word[0x10F3C4 + 2*(0x94 - |ECX|)]
+ *   AX -= word[0x10F3C4 + 2*EBX]
+ *   if AX < 0: AX = 0
+ *
+ * The engine field map: timer = word[0x1577FA], limit = word[0x1577F4],
+ * height = word[0x1577F0] (the `[0x1577EE].hi` event height), F2 =
+ * word[0x1577F2] = camera_event_ramp's stored `event_peak`. The index bounds
+ * are native-trusted; the engine clamps them defensively (the callers guarantee
+ * timer < 2*F2 and F2 <= 0x94, so the clamp is inert on the ported paths). */
+int16_t fifa96_camera_height(const fifa96_camera *cam) {
+  int32_t timer;
+  int32_t f2;
+  int32_t diff;
+  int32_t index;
+  int32_t value;
+  if (!cam) return 0;
+  timer = (int16_t)cam->timer;
+  if (timer >= (int16_t)cam->timer_limit) return 0;     /* 0x70ba3 JGE */
+  if ((int16_t)cam->event_param <= 0) return 0;         /* 0x70ba8 JLE */
+  f2 = (int16_t)cam->event_peak;
+  diff = f2 - timer;
+  if (diff < 0) diff = -diff;
+  index = 0x94 - diff;
+  if (index < 0) index = 0;
+  else if (index > 0x94) index = 0x94;
+  value = (int32_t)camera_height_arc[index];
+  index = 0x94 - f2;
+  if (index < 0) index = 0;
+  else if (index > 0x94) index = 0x94;
+  value -= (int32_t)camera_height_arc[index];
+  if (value < 0) return 0;                              /* 0x70bfd JGE */
+  return (int16_t)value;
+}
+
 /* FUN_000795A4 (0x795A4..0x795B2): (a*b + 0x8000) >> 16, the low word. */
 static int16_t camera_mul16(int32_t a, int32_t b) {
   int64_t v = ((int64_t)a * (int64_t)b + 0x8000) >> 16;
@@ -678,6 +749,7 @@ static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
     cam->timer_limit = (uint16_t)f4;
     cam->timer = (uint16_t)f6;
   }
+  cam->event_peak = f2;   /* 0x1577F2 (M2 phase-11 T1 / FUN_00070B94 input) */
   cam->ramp_divisor = f8;
   /* 0x70630..0x706d9: the fast path (F8 != 0 and [0x157821] == 0) divides the
    * stored step pair; the slow path scales each nonzero velocity by

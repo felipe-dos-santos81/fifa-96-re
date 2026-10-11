@@ -627,7 +627,12 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
     t->intercept = FIFA96_MATCH_ENTITY_NONE;
   }
   if (t->timer7cb != 0) {                                    /* 0x8DAF3 */
-    int32_t limit = (int16_t)(t->timer81e >> 16);
+    /* First-hand `disassemble_bytes 0x8DAF3..0x8DB2C`: the limit is
+     * `dword[team+0x81E] >> 16` = **word[team+0x820]** (the dword alias's high
+     * word), i.e. the timer itself: `if (timer > delta) timer -= delta; else {
+     * timer = 0; [team+0x7CB] = 0; }`. The pre-T1 port read the separate
+     * `timer81e` cell (0), which cleared the arm on the first frame. */
+    int32_t limit = (int16_t)t->timer820;
     int32_t d = (int32_t)frame->delta;
     if (limit > d) t->timer820 = (uint16_t)(t->timer820 - (uint16_t)frame->delta);
     else {

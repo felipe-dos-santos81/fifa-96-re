@@ -784,8 +784,114 @@ static void test_kick_target_code4_rng_divisor(void) {
   assert(st.vector.x == 0 && st.vector.z == 0);
 }
 
-static void test_kick_target_negative_band_and_no_row(void) {
+/* M2 phase-11 T1 (FU-148 §14.6 / L14.6): the FUN_0007B194 mode-0x40 slot-arm
+ * traj, first-hand `disassemble_bytes 0x7B28F..0x7B315`:
+ *   - 0x7B28F..0x7B2B9 the dir_z side flip: `[0x157A49].hi == 1` or the
+ *     actor's side 0 keeps `slot[+0x21]`, else the value NEGs (both the
+ *     `dir_z == 1` test and the traj arms read the flipped word);
+ *   - 0x7B2CD..0x7B2F8 (mode_state 6/0x10): `(r & 0xF) == 0 && dir_z == 1`
+ *     -> 0xC0, else `(dir_z + 1) * 0x3C + 0x10 + (r & 0xF)`;
+ *   - 0x7B2FF..0x7B315: `((r & 0xF) + 0x30) * dir_z + 0x48`.
+ * The pre-T1 port dropped the mode-6 +1 and the side flip; the traj then adds
+ * the staged row's `add` and clamps `< 0x20` to 0x20 (0x7B3AA). */
+static void test_kick_target_mode40_slot_traj(void) {
   fifa96_ball_pair_state st;
+  fifa96_ball_kick_actor a;
+  fifa96_ball_kick_slot sl;
+  fifa96_ball_kick_ctx ctx;
+  fifa96_ball_kick_out out;
+  struct fifa96_rng rng;
+  struct fifa96_rng expect;
+  uint8_t rows[4][200];
+  const uint8_t *event_rows[4];
+  fifa96_ball_pair_vector input;
+  uint16_t d[6];
+  int16_t expected;
+  uint8_t add = 0x10;
+  /* side 0, mode_state 0, dir_x 0, dir_z 1: traj = ((r3&0xF)+0x30)*1+0x48
+   * (draws: local.x, local.x sign, traj, vx, drift sign). */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 120, 3, 0x10, 0x7D0, add, 0, 0);   /* band 0 (d = 0) */
+  sl.present = 1;
+  sl.dir_x = 0;
+  sl.dir_z = 1;
+  sl.word6 = 0x40;
+  ctx.ball_height = 0;
+  input.x = 0x300;
+  input.height = 0;
+  input.z = 0x100;
+  assert(fifa96_rng_seed(&expect, 0) == FIFA96_OK);
+  for (int i = 0; i < 3; i++) assert(fifa96_rng_step(&expect, &d[i]) == FIFA96_OK);
+  expected = (int16_t)((((int32_t)(d[2] & 0xFu) + 0x30) * 1) + 0x48 + add);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x40, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert((int16_t)st.traj == expected);
+  /* side 1 with sub_phase1 0 negates dir_z -> ((r&0xF)+0x30)*-1 + 0x48 < 0x20
+   * -> the 0x7B3AA clamp -> 0x20 + add. */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 120, 3, 0x10, 0x7D0, add, 0, 0);
+  a.side = 1;
+  sl.present = 1;
+  sl.dir_x = 0;
+  sl.dir_z = 1;
+  sl.word6 = 0x40;
+  ctx.ball_height = 0;
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x40, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert((int16_t)st.traj == 0x20 + add);
+  /* sub_phase1 keeps the byte (the side-1 no-flip arm). */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 120, 3, 0x10, 0x7D0, add, 0, 0);
+  a.side = 1;
+  a.sub_phase1 = 1;
+  sl.present = 1;
+  sl.dir_x = 0;
+  sl.dir_z = 1;
+  sl.word6 = 0x40;
+  ctx.ball_height = 0;
+  assert(fifa96_rng_seed(&expect, 0) == FIFA96_OK);
+  for (int i = 0; i < 3; i++) assert(fifa96_rng_step(&expect, &d[i]) == FIFA96_OK);
+  expected = (int16_t)((((int32_t)(d[2] & 0xFu) + 0x30) * 1) + 0x48 + add);
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x40, &out) ==
+         FIFA96_OK);
+  assert((int16_t)st.traj == expected);
+  /* mode_state 6 (the 0x7B2E8 +1): `(r & 0xF) == 0 && dir_z == 1` -> 0xC0,
+   * else (dir_z + 1) * 0x3C + 0x10 + (r & 0xF), + the row add. The draw order
+   * (first-hand 0x7B1F3..0x7B315): the dir_x != 0 divisor roll (desc_e = 0 ->
+   * divisor 5), a second local.x draw when the roll is nonzero, the 0xC0 test,
+   * then the formula draw. */
+  kick_fixture(&st, &a, &sl, &ctx, &rng, rows, event_rows);
+  row10_set(rows[2] + 120, 3, 0x10, 0x7D0, add, 0, 0);
+  sl.present = 1;
+  sl.dir_x = 1;
+  sl.dir_z = 1;
+  sl.word6 = 0x40;
+  sl.anim_1d = 1;
+  ctx.mode_state = 6;
+  ctx.ball_height = 0;
+  {
+    uint16_t probe;
+    assert(fifa96_rng_seed(&expect, 0) == FIFA96_OK);
+    assert(fifa96_rng_step(&expect, &probe) == FIFA96_OK);
+    if ((int32_t)(probe % 5u) != 0)
+      assert(fifa96_rng_step(&expect, &probe) == FIFA96_OK);  /* local.x */
+    assert(fifa96_rng_step(&expect, &probe) == FIFA96_OK);    /* 0xC0 test */
+    if ((probe & 0xFu) == 0) {
+      expected = (int16_t)(0xC0 + add);
+    } else {
+      assert(fifa96_rng_step(&expect, &probe) == FIFA96_OK);
+      expected = (int16_t)(2 * 0x3C + 0x10 + (int32_t)(probe & 0xFu) + add);
+    }
+  }
+  assert(fifa96_ball_kick_target(&st, &a, &sl, &input, &ctx, &rng, 0x40, &out) ==
+         FIFA96_OK);
+  assert(out.staged == 1);
+  assert((int16_t)st.traj == expected);
+}
+
+static void test_kick_target_negative_band_and_no_row(void) {  fifa96_ball_pair_state st;
   fifa96_ball_kick_actor a;
   fifa96_ball_kick_slot sl;
   fifa96_ball_kick_ctx ctx;
@@ -952,6 +1058,7 @@ int main(void) {
   test_kick_target_clamp_and_angle_fold();
   test_kick_target_bit8_fold();
   test_kick_target_code4_rng_divisor();
+  test_kick_target_mode40_slot_traj();
   test_kick_target_negative_band_and_no_row();
   test_kick_target_slot_dir_arm();
   test_kick_target_invalid();

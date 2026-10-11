@@ -184,8 +184,8 @@ static const uint8_t match_run_input_row[FIFA96_INPUT_MAP_ROW] = {
  * 0x50 keypad 2/down), 0x8 (0x46945, 0x4B keypad 4/left) and 0x4 (0x46952,
  * 0x4D keypad 6/right); the diagonal flags at 0x4695F..0x4698F (keypad
  * 7/9/1/3) OR 0x9/0x5/0xA/0x6, cross-checking those axis assignments.
- * Buttons: KICK 0x10, PASS 0x20 (the 0x40 long-ball and 0x80 keeper arms have
- * no engine key yet). */
+ * Buttons: KICK 0x10, PASS 0x20, LONG_BALL 0x40 (the FU-75 §1.4 `0x7CD60`
+ * request word, M2 phase-11 T1; the 0x80 keeper arm has no engine key). */
 static int match_run_map_key(int32_t raw_code, uint8_t *code) {
   switch (raw_code) {
     case FIFA96_ENGINE_KEY_UP:    *code = 0x01u; return 1;
@@ -194,6 +194,7 @@ static int match_run_map_key(int32_t raw_code, uint8_t *code) {
     case FIFA96_ENGINE_KEY_RIGHT: *code = 0x04u; return 1;
     case FIFA96_ENGINE_KEY_KICK:  *code = 0x10u; return 1;
     case FIFA96_ENGINE_KEY_PASS:  *code = 0x20u; return 1;
+    case FIFA96_ENGINE_KEY_LONG_BALL: *code = 0x40u; return 1;
     default:                      return 0;
   }
 }
@@ -332,9 +333,12 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
  *
  * The dword/word aliases are the pool's low-word staging (the same derivation
  * convention the chase gate's `[0x157750] < 0x30` and `+0x5D == 0` use;
- * FU-75 §1.6): `ball.y` is the 0x157750 word, `pos_y` the +0x5D word,
- * `lane_x` the +0x6B word, `bound` the +0x77 word, `camera.speed` the
- * 0x1577BE bearing and `camera.tracked` the [0x1577CA] pool id. */
+ * FU-75 §1.6): `pos_y` the +0x5D word, `lane_x` the +0x6B word, `bound` the
+ * +0x77 word, `camera.speed` the 0x1577BE bearing and `camera.tracked` the
+ * [0x1577CA] pool id. **M2 phase-11 T1 (L14.7):** the height word is the
+ * exact native cell `dword[0x157750]` = the camera Y (`camera.pos_y`, the
+ * FUN_00070B94 arc producer) — the earlier `ball.y` stand-in is superseded
+ * now that the producer is live. */
 static void match_run_record_camera_event(struct fifa96_match_run *mr,
                                           struct fifa96_match_entity *e) {
   fifa96_camera *cam = &mr->render.camera;
@@ -342,7 +346,7 @@ static void match_run_record_camera_event(struct fifa96_match_run *mr,
   fifa96_camera_record_event_out out;
   int32_t id = (int32_t)((uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS +
                          e->index);
-  int16_t ball = (int16_t)mr->entities.ball.y;
+  int16_t ball = (int16_t)cam->pos_y;         /* 0x157750 (T1/L14.7) */
   int16_t height_5d = (int16_t)e->pos_y;
   if ((int16_t)e->lane_x > 0x10) return;                    /* 0x7C7D3 */
   if ((int16_t)e->lane_x >= (int16_t)e->bound) return;      /* 0x7C7E2 */
@@ -401,7 +405,9 @@ static void match_run_record_camera_event(struct fifa96_match_run *mr,
  *   0x7D054 mode = 1               0x7D08C mode = 2
  *   0x7D110 install 7 invoke       0x7D174 install 0x23 no-invoke
  *   0x7D0C4 the 0x7E600 arm returns `type == 0x0E` (call leg L4.3)
- *   0x7CD60 returns 1 (arm leg)    0x7D1D4 the self-check returns 0 (body leg)
+ *   0x7D1D4 the self-check returns 0 (body leg)
+ *   0x7CD60 the long-ball request (M2 phase-11 T1, FU-75 §1.4: the
+ *          `[team+0x7CB]` callback + `+0x820 = 0x3C` arm; returns 1)
  *
  * Timing mirrors the native: a handler installs immediately and an `ECX=1`
  * install invokes the new handler in the same frame (`0x7D149`); the
@@ -532,8 +538,56 @@ static int match_input_handler(uint32_t handler, void *context) {
        * `byte[rec+0x91] == 0x0E` (0x7D105 SETZ), so the no-install stand-in is
        * the handler's own return value. */
       return e->code == 0x0Eu;
-    case 0x7CD60u:   /* pressed code-3/released code-0 want 0x40: returns 1 */
-      return 1;      /* the +0x7CB arm body is leg L4.4 */
+    case 0x7CD60u: { /* pressed code-3/released code-0 want 0x40: the long-ball
+                      * request (M2 phase-11 T1 / FU-75 §1.4, L14.6) */
+      /* First-hand `disassemble_bytes 0x7CD60..0x7CDD5`:
+       *   0x7CD6F  if ([0x157A4A]>>24 != 2) return 1;
+       *   0x7CD76  if ([team+0x7CB] != 0) return 1;
+       *   0x7CD7F  EBX = [team+0x7B2] (the team target record)
+       *   0x7CD85  if (rec == EBX) { [team+0x7CB] = rec; [team+0x820] = 0x3C;
+       *            return 1; }
+       *   0x7CD9E  ESI = [0x1577CA]; require rec == ESI, then EBX != 0 and
+       *            [EBX+0x20] == 0 (the target must be slot-free)
+       *   0x7CDB4  FUN_000786A0(rec, EBX) (the slot swap; from-held/to-free)
+       *   0x7CDB9  [team+0x7CB] = EBX; [team+0x820] = 0x3C;
+       * The handler returns 1 on every path (the row scan stops). The
+       * 0x815D0 code-7 stage-1 arm reads [team+0x7CB] == rec as `is_team_cb`
+       * (mode 0x40). */
+      struct fifa96_match_entity *target;
+      int32_t id = c->id;
+      if (phase != 2u) return 1;
+      if (team->timer7cb != 0) return 1;
+      if (id == team->target) {
+        team->timer7cb = (uint32_t)id;
+        team->timer820 = 0x3C;
+        return 1;
+      }
+      if (id != c->mr->render.camera.tracked) return 1;
+      if (team->target < 0 ||
+          team->target >=
+              (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+        return 1;
+      target = &c->mr->entities
+                    .team[(uint32_t)team->target / FIFA96_MATCH_ENTITY_RECORDS]
+                    .records[(uint32_t)team->target % FIFA96_MATCH_ENTITY_RECORDS];
+      if (target->has_slot != 0) return 1;
+      {
+        fifa96_action_duel_slot from;
+        fifa96_action_duel_slot to;
+        from.has_slot = e->has_slot;
+        to.has_slot = target->has_slot;
+        if (fifa96_action_duel_swap(&from, &to) != FIFA96_OK) return 1;
+        e->has_slot = from.has_slot;
+        target->has_slot = to.has_slot;
+        /* FUN_000786A0 moves the slot block with the record pointer; the
+         * engine's single-slot model rebinds it (the FU-70 0x57C64 block
+         * belongs to one entity at a time). */
+        if (c->mr->slot.entity == c->id) c->mr->slot.entity = team->target;
+      }
+      team->timer7cb = (uint32_t)team->target;
+      team->timer820 = 0x3C;
+      return 1;
+    }
     case 0x7D1D4u:   /* the control-selection switch */
       /* 0x7D1DF: the controlled actor returns 0 immediately. The switch body
        * for the other records (which runs the camera/nearest selection and
