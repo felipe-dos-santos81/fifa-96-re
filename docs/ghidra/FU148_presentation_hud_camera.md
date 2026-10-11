@@ -1292,3 +1292,41 @@ gated exactly as §14.3 records. The ball record's open-play position producer
 the kickoff `FUN_0008C24C`, the phase-0x1C `0x84BBB..0x84BDD` placement and
 the code-`16` vector-pop sequence `0x84630` — FU-82 §3.6, whose only static
 installer is the phase-0x19 foul sequence `0x89FA4`) stays leg **L14.8**.
+
+**Phase-10 T3 addendum (2026-10-10, §13.4/§14): the band-reachable natural
+goal on the acceptance tape.** The T3 acceptance (the first M2 re-pin since
+the S1 v5.1) drove the natural chain on the tape through the wired row-04
+pan origin: the m 42 scenario (declared in `tests/test_engine_m2.c`) stages
+the fixture-precedent inputs and everything from there is natural — the
+row-04 slot-dir event (the held LEFT's live slot dir `(0, +1)` → the
+`0x7F035` arm's `(0, +64)` seed → `fifa96_camera_event_set` vel_z +5) → the
+pan integrator → the boundary armer (zone 1, snapshot 0xB28) → the scan →
+the table-1 queue (id 5) → the scheduler → the leg-0 handler post → the
+writer (1-0, the untracked arm's 0xD3). Two §13.4-adjacent derivations land
+from the measurement (first-hand, the tape's own m 41 state):
+
+- **The claim machine's mid-walk slot steal (measured, m 41 row-1E).** The
+  L4.1 walk order puts the claim record's 1E dispatch before the team
+  target's 04; the claim's per-dispatch helper request makes the per-record
+  entity drain merge the slot onto the claimant before the target record's
+  row-04 handler runs, so the handler's `has_slot` is always 0 and the
+  `0x7EFEE` event arm degenerates to the `0x7F056` velocity-words seed. On
+  this tape the seed is `(0, ±4)` (the stride nibble `+0x7B` is 0 — its
+  `+0x79` producer has no writer, so every install resets it), and the
+  `/12` divisor zeroes it: no pan. The T3 scenario isolates the claim
+  record with the native `+0x9A` exclusion (the walk's own mechanism);
+  the steal itself stays unported-leg territory (the claim machine's
+  per-dispatch helper emission is part of the FU-151 stage ladder).
+- **The mouth co-migration (measured).** With a live slot-dir pan (vel ±5,
+  i.e. ±10 per granted body at delta 2), the camera would reach the
+  `|camZ| > 0xB20` arming bound only through a record-bound burst/coast
+  cycle averaging ~2 units per granted frame (the record chases at ~2
+  units/frame; the pan decays 5→3→2→1→0 over ~24 bodies once the record
+  leaves the 0x40 band) — ~4400 steps from the claim place to the mouth.
+  The scenario parks the camera at the goal-mouth edge instead (the
+  f-up8 T4 fixture's own staged input).
+
+The tape effect is recorded in §13.2's dormancy row: the pan origin, the
+armer, the scanner and the consumer chain all fire on the tape now (the
+phase-9 T3 "tape dormant" note is superseded by the phase-10 T3 re-pin);
+the remaining §13.4 callers stay legs as §13.4 lists them.

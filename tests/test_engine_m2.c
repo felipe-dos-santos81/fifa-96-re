@@ -776,15 +776,49 @@
  *     handler presentation/display sinks, FU-146 §8).
  *
  * Golden decision (v9): **byte-identical, no re-pin** — assertions and
- * provenance only; no presented frame moved (`cmp` clean against the
- * committed v8.3 golden, 165 lines, verified with the ISO present at
- * acceptance); M1 unmoved (`09b726b7…`; M2 `2e709151…`). The phase-9 T1/T2/T3
- * landings themselves also moved no presented frame (each task's `cmp`
- * evidence, re-verified at T4); the plan's expected first re-pin since S1 did
- * not land — no intended upgrade reached the tape (T3's no-re-pin reason
- * above).
- *
- * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
+  * provenance only; no presented frame moved (`cmp` clean against the
+  * committed v8.3 golden, 165 lines, verified with the ISO present at
+  * acceptance); M1 unmoved (`09b726b7…`; M2 `2e709151…`). The phase-9 T1/T2/T3
+  * landings themselves also moved no presented frame (each task's `cmp`
+  * evidence, re-verified at T4); the plan's expected first re-pin since S1 did
+  * not land — no intended upgrade reached the tape (T3's no-re-pin reason
+  * above).
+  *
+  * --- v10-pre (M2 phase-10 T3): the band-reachable natural goal — THE RE-PIN -
+  *
+  * The first M2 re-pin since the S1 v5.1: the natural goal reaches the tape.
+  * The phase-10 plan's T3 built the band-reachable acceptance per spec §5
+  * (every forcing declared, see the m 42 block): the lane derivation is
+  * measured live (the m 41 code-4 record — the L4.1 walk's forced-decision
+  * team-target install — enters the half-line band natively ~62 granted
+  * frames after m 41 at ~2 units per granted frame), and the staged inputs
+  * are the f-up8 T4 fixture's own three (the claim isolation, the act-1 flag,
+  * the goal-mouth camera park + the record placement at the camera), with the
+  * measured blockers recorded (the claim machine's mid-walk slot steal; the
+  * ~4400-step pan-history co-migration to the mouth). From the staged inputs
+  * on, the whole chain is natural: the row-04 slot-dir event (the held LEFT's
+  * live slot dir), the pan integrator, the boundary armer (zone 1, snapshot
+  * 0xB28), the clock-tail scanner's table-1 queue (id 5, side 0), the
+  * scheduler, the leg-0 handler's post and the FUN_00093944 writer (1-0, the
+  * untracked arm's 0xD3 post, the phase-0 write ending the scripted screen).
+  *
+  * Frame diff (against the v9.1 golden, `cmp`/diff measured): the transcript
+  * is 85 lines in both modes (the golden was 165); lines 1..46 are
+  * byte-identical (the boot/intro/front-end frames and the forced 0x13/0x14
+  * windows through the m 41 mechanics frame); the first differing line is
+  * frame 47 (the m 42 band scenario: the goal-mouth camera park + the record
+  * placement render through the parked camera), and every line from 47 on
+  * differs (the goal chain's frames 47..65, the writer frame's post state
+  * `state=0/1-0` from frame 66, and the 20 post-goal phase-0 hold frames
+  * 66..85 — the FU-146 leg-8 restart legs keep the match at phase 0, so the
+  * tape records the post-goal window and stops instead of running the 1 s
+  * period end out to the frame-145 exit; the goal frame is 66's pre-step
+  * sample, i.e. the writer ran in frame 65's body). The key-tape change from
+  * index 45 on (the phase-2 window holds LEFT, the +z slot dir, instead of
+  * RIGHT) is part of the same upgrade: the held direction is the live event
+  * seed. M1 is untouched (test_engine_m1 green, same golden).
+  *
+  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
  * Both the ISO and no-assets runs start the match on step 5 (the no-assets
@@ -824,14 +858,28 @@
  *   m 41 mechanics: assert the arms' record codes, force phase 2, shorten the
  *        period to 1 s (class-1 phase: the clock runs) and stage the wired
  *        rows 04/06/07/08/0F/18/21/23/1E;
- *   m 62 score: assert the full wired-row dispatch set, add the goal. */
+ *   m 42 band scenario (phase-10 T3): stage the goal-mouth camera park, the
+ *        band record placement, the claim isolation and the act-1 flag (the
+ *        declared forcings; see the m 42 block) — before the first phase-2
+ *        grant (m 44) so the forced-decision code-4 install lands on the
+ *        placed record;
+ *   m 62 goal link asserts (the pan in flight) and the scored-frame set below
+ *        (the armed/queued and the written score — the natural chain). */
 #define M2_M_KICKOFF 1
 #define M2_M_HALF 21
 #define M2_M_MECH 41
-#define M2_M_GOAL 62
+#define M2_M_BAND 42
+#define M2_M_LINK 58
+#define M2_M_SCORED 61
+#define M2_M_FINAL 72
 
-/* Post-exit front-end frames recorded before the tape stops. */
+/* Post-exit front-end frames recorded before the tape stops (the no-assets
+ * mode keeps the period-end exit path). ISO mode: the phase-10 T3 post-goal
+ * window — the match holds at phase 0 after the natural goal (the restart
+ * producers are the FU-146 leg-8 situation re-queue legs), so the tape
+ * records this many post-goal frames and stops. */
 #define M2_POST_EXIT_FRAMES 20
+#define M2_POST_GOAL_FRAMES 20
 
 /* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
  * bar's y = y1 - Frames-frame-4-height - 2 = 240 - 41 - 2 = 197 (FU-148
@@ -846,7 +894,7 @@
 #define M2_NATURAL_PHASE2_CAP 600
 #define M2_NATURAL_POST_STEPS 60
 
-/* The wired action rows the accepted tape exercises (15 of the 21 wired at
+/* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
  * binding are all bounded. 00 and 1E wire first; cluster B/D rows
  * 06/07/0F/18/21/23 close Gate G3; the FU-142a arms stage 26/28/2A; Gate G1
@@ -854,8 +902,8 @@
  * row 01 (the kickoff taker, FU-143 §11): the derived state-1 arm at begin
  * stages action 1 and the row's situation-0xB call carries the natural
  * phase-1 -> 2 transition, so the tape dispatches row 01 during its forced
- * kickoff window. Row 00 dispatches from the explicit code-0 staging (S1: the
- * seeded native reset installs a decision code on active records, so the
+ * kickoff window. Row 00 dispatches from the explicit code-0 staging (S1:
+ * the seeded native reset installs a decision code on active records, so the
  * pre-S1 reset artifact no longer installs row 00), so the tape's exercise
  * set grows to 14 rows. M2 phase-9 T1 wires row 02 (FU-75 L4.6/FU-138 OL-18):
  * the begin state-1 arm's second kickoff pick carries code 2 into the tape's
@@ -864,13 +912,24 @@
  * makes the phase-2 forced tail re-force staged codes on non-target records
  * before the same frame's dispatch, so the explicit code-0 (row 00) and code-6
  * (row 06) staging no longer reaches the dispatch; the observed set is 13
- * rows and both rows join the forcing-limited group (v9.1 block above).** The
- * phase-8 T1 rows 10..13 are wired but not exercised here (the taker mask
- * below); 1D (FU-151 P3) dispatches only in the keeper fixtures. */
+ * rows and both rows join the forcing-limited group (v9.1 block above).**
+ * **v10-pre (M2 phase-10 T3): the natural goal chain puts the row-04 coda's
+ * 0x7F133 code-5 install on the placed record and the same-frame re-dispatch
+ * runs the row-05 carrier claim (row 05 joins the observed set), while the m 42
+ * claim isolation (the native +0x9A skip on the m 41 row-1E record — its 1E
+ * machine otherwise steals the slot mid-walk every granted frame, measured)
+ * keeps row 1E off the tape. The post-goal phase-0 hold then lets the m 41
+ * staged code 0 reach a body (the L4.1 walk's step-6 dispatch runs on the
+ * phase-0 frames once the phase-2 re-forcible tail is closed by the hold), so
+ * row 00 rejoins the observed set: 14 rows with 1E swapped for 05. The
+ * claim's own chain stays fixture-proven
+ * (test_engine_match_frame::test_keeper_claim_*).** The phase-8 T1 rows
+ * 10..13 are wired but not exercised here (the taker mask below); 1D
+ * (FU-151 P3) dispatches only in the keeper fixtures. */
 #define M2_WIRED_MASK                                                        \
-  ((1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |                       \
-   (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |                       \
-   (1ull << 0x18) | (1ull << 0x1E) | (1ull << 0x21) | (1ull << 0x23) |       \
+  ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |      \
+   (1ull << 0x05) | (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |      \
+   (1ull << 0x18) | (1ull << 0x21) | (1ull << 0x23) |                       \
    (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 
 /* The phase-8 T1 taker rows (FU-149 §7, L13): wired (21/80) but dormant on
@@ -953,102 +1012,102 @@ static const fifa96_platform_key M2_KEYS[] = {
     [42] = {FIFA96_ENGINE_KEY_RIGHT, 1},
     [43] = {FIFA96_ENGINE_KEY_RIGHT, 1},
     [44] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [45] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [46] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [47] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [48] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [49] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [50] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [51] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [52] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [53] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [54] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [55] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [56] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [57] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [58] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [59] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [60] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [61] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [62] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [63] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [64] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [65] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [66] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [67] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [68] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [69] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [70] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [71] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [72] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [73] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [74] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [75] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [76] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [77] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [78] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [79] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [80] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [81] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [82] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [83] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [84] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [85] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [86] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [87] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [88] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [89] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [90] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [91] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [92] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [93] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [94] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [95] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [96] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [97] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [98] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [99] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [100] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [101] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [102] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [103] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [104] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [105] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [106] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [107] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [108] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [109] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [110] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [111] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [112] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [113] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [114] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [115] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [116] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [117] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [118] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [119] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [120] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [121] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [122] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [123] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [124] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [125] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [126] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [127] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [128] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [129] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [130] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [131] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [132] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [133] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [134] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [135] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [136] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [137] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [138] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [139] = {FIFA96_ENGINE_KEY_RIGHT, 1},
-    [140] = {FIFA96_ENGINE_KEY_RIGHT, 0},
+    [45] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [46] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [47] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [48] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [49] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [50] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [51] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [52] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [53] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [54] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [55] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [56] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [57] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [58] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [59] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [60] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [61] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [62] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [63] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [64] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [65] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [66] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [67] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [68] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [69] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [70] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [71] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [72] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [73] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [74] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [75] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [76] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [77] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [78] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [79] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [80] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [81] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [82] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [83] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [84] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [85] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [86] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [87] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [88] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [89] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [90] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [91] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [92] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [93] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [94] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [95] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [96] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [97] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [98] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [99] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [100] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [101] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [102] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [103] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [104] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [105] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [106] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [107] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [108] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [109] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [110] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [111] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [112] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [113] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [114] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [115] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [116] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [117] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [118] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [119] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [120] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [121] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [122] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [123] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [124] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [125] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [126] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [127] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [128] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [129] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [130] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [131] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [132] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [133] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [134] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [135] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [136] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [137] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [138] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [139] = {FIFA96_ENGINE_KEY_LEFT, 1},
+    [140] = {FIFA96_ENGINE_KEY_LEFT, 0},
     /* Natural probe: the m 1 window never runs without directives, so stage 0
      * completes at granted frame 60 (engine step 205 in the ISO cadence);
      * press KICK just before it and release at step 213, so the release edge
@@ -1089,9 +1148,12 @@ struct m2_result {
   int armed_28;              /* team 0 held code 0x28 */
   int armed_2a;              /* team 0 record 1 held code 0x2A */
   uint64_t mask_mech;        /* dispatched_ok observed at the mechanics step */
-  uint64_t mask_final;       /* dispatched_ok at the exit step */
+  uint64_t mask_final;       /* dispatched_ok at the goal/scored step */
   uint64_t mask_kick;        /* dispatched_ok after the KICK-consuming grant (step 12) */
   uint64_t mask_kick_next;   /* after the following grant (step 15), covering install->dispatch */
+  int goal_step;             /* engine step whose body wrote the natural goal
+                              * (the scheduler -> handler -> writer frame);
+                              * -1 while the score pair is fresh */
   uint8_t phase_before_exit; /* sampled on the resolving frame */
   uint8_t phase_after_exit;  /* FU-142a mirror after the exit step (derived 0x0C) */
   uint8_t clock_pending;     /* clock_period_ended after the exit step (consumed) */
@@ -1369,152 +1431,167 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     for (size_t i = 0; i < sizeof M2_STAGE_ROWS / sizeof M2_STAGE_ROWS[0]; i++)
       assert(fifa96_match_entities_install(&mr->entities.team[0].records[1 + i], 2,
                                            M2_STAGE_ROWS[i], 0) == 1);
-  } else if (m == M2_M_GOAL) {
-    /* Every wired row dispatched FIFA96_OK during the replay. */
+  } else if (m == M2_M_BAND) {
+    /* M2 phase-10 T3 (the band-reachable acceptance): the scenario staging that
+     * puts the natural goal chain on the tape, per spec §5 with every forcing
+     * declared (the value + why it is native-reachable or honestly staged).
+     * The lane derivation (first-hand, measured live on this tape's own m 41
+     * state): the phase-2 code-4 record is the L4.1 walk's forced-decision
+     * team-target install (the m 41 team target), and its lane enters the
+     * half-line band natively — the unslotted camera-arm target (0x7E9BB) has
+     * the record chase the camera at ~2 units per granted frame, so the lane
+     * crosses 0x40 ~62 granted frames after m 41. The measured blockers that
+     * make the rest staged: (1) the m 41 row-1E claim machine steals the slot
+     * mid-walk every granted frame (the walk order: the claim's 1E dispatch
+     * precedes the target record's 04, and the claim's helper request makes the
+     * per-record drain merge the slot onto the claimant first), so the row-04
+     * handler always sees has_slot == 0 and its event arm degenerates to the
+     * velocity-words seed (the stride nibble is 0 on this tape, so the seed is
+     * (0, +-4) and the /12 divisor zeroes it — no pan); (2) the camera must
+     * cross |camZ| > 0xB20 inside the goal mouth for the boundary armer, and
+     * the pan-history co-migration from the claim place to the mouth measures
+     * ~2 units per granted frame (the record-bound burst/coast cycle) — ~4400
+     * steps, outside a scripted tape. The staged inputs (the f-up8 T4 fixture
+     * precedent — test_natural_goal_end_to_end stages exactly these three):
+     * the claim record isolated, the act-1 timeline flag, the camera park at
+     * the goal-mouth edge and the record placed at the camera inside the band.
+     * Everything from the staged inputs on is the natural chain: the row-04
+     * slot-dir event (the held LEFT's live slot dir (0, +1) -> the (0, +64)
+     * seed -> vel_z +5), the pan integrator, the boundary armer (zone 1), the
+     * clock-tail scanner, the table-1 queue (id 5), the scheduler, the leg-0
+     * handler and the FUN_00093944 writer. */
+    {
+      /* The claim record (the m 41 row-1E staging, records[9]) isolated with
+       * the native +0x9A exclusion (the same mechanism the native walk and
+       * the T2 fixtures use): its 1E machine otherwise steals the slot
+       * mid-walk every granted frame (measured), which keeps the code-4
+       * record's row-04 event arm off the slot-dir path. Honestly staged. */
+      mr->entities.team[0].records[9].skip_9a = 1;
+      /* The act-1 timeline flag [0x5882A]: the natural phase-1 producer (the
+       * tick_total >= 0x78 arm, FUN_00088DC8 0x88EF3) is bypassed by the m 1
+       * forcing (the tape never holds phase 1), so the flag is staged to the
+       * value the natural chain reaches at its own phase-2 entry — it unblocks
+       * the goal-screen consumer machine's leg-0 gate so the machine advances
+       * to its PHASE step and clears the situation_pending latch (the natural
+       * chain's phase-2 entry state, asserted by test_natural_goal_end_to_
+       * end). Without it the scan's queue arm refuses on the held latch and
+       * the goal takes the direct fallback (also fixture-proven, but the
+       * queue -> scheduler -> handler chain is the tape's point). */
+      mr->global_5882a = 1u;
+      /* The camera park at the goal-mouth edge (0, 0, 0xB00) — honestly
+       * staged: the native camera reaches the mouth only through the pan
+       * history (the co-migration above); the park is the scenario's initial
+       * condition (the fixture's own staged input). */
+      assert(fifa96_camera_init(&mr->render.camera, 0, 0, 0xB00) == FIFA96_OK);
+      /* The record placement: the code-4 record (the m 41 team target — the
+       * forced-decision install's own product, so this is mode-independent:
+       * the ISO target is record 10, the degraded-formation target record 1)
+       * placed 0x10 south of the parked camera, inside the half-line band
+       * (lane 0x10 <= 0x40, staged bound 0x40 >= the lane so the bound_tail
+       * admits it, and the camera inside the record's +z angle cone). The
+       * native walk into the band is measured above; the arrival is staged.
+       * The staged lane word/deltas/bound mirror the BF20 lane block's own
+       * fields so the next refresh is a no-op for them. */
+      {
+        int32_t enc = mr->entities.team[0].target;
+        struct fifa96_match_entity *er;
+        assert(enc >= 0 && enc < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
+        er = &mr->entities.team[0].records[(uint32_t)enc];
+        assert(mr->slot.entity == enc);      /* the target is the slot record */
+        assert(er->has_slot == 1);
+        er->pos_x = 0;
+        er->pos_y = 0;
+        er->pos_z = 0xB00 - 0x10;
+        er->target_x = 0;
+        er->target_y = 0;
+        er->target_z = 0xB00;
+        er->lane_x = 0x10;
+        er->lane_z = 0;
+        er->cam_dz6f = 0x10;
+        er->bound = 0x40;
+        er->vel73 = 0;
+        er->vel75 = 0;
+      }
+    }
+  } else if (m == M2_M_LINK) {
+    /* M2 phase-10 T3: the goal-link asserts — the natural chain's mid-flight
+     * state (the pan integrator's fourth post-event body crossed the 0xB20
+     * arming bound inside the goal mouth and the same body's clock-tail
+     * scanner queued situation 6; the queue's id is consumed by the next
+     * granted frame's scheduler, so the score pair is still fresh — the
+     * fixture's link-2/link-3 shape). */
     res->mask_final = mr->dispatched_ok;
-    assert(res->mask_final == M2_WIRED_MASK);
-    /* G3 (M2 playable-match Task 3 / OL-87/88/89): the natural replay drove the
-     * wired rows through the live phase 2 with no goal invoker, so the score
-     * pair and the FUN_00093944 writer cells are still fresh here, before the
-     * tape's direct score step. A gameplay goal would move them. */
+    assert((res->mask_final & M2_WIRED_MASK) == (M2_WIRED_MASK & ~(1ull << 0x00)));
+    /* The pan: the row-04 slot-dir event's vel_z +5 (the held LEFT's live
+     * slot dir (0, +1) -> the (0, +64) seed / 12) integrated the camera past
+     * the 0xB20 arming bound inside the goal mouth (|camZ| word-truncated,
+     * the FU-145 word trap), zone 1, snapshot frozen at the crossing. */
+    assert(mr->goal_armed == 1 && mr->goal_zone == 1);
+    assert(mr->goal_snap_x == 0 && mr->goal_snap_y == 0 && mr->goal_snap_z == 0xB28);
+    assert(mr->render.camera.pos_z == 0xB28);
+    assert(mr->render.camera.vel_x == 0 && mr->render.camera.vel_z == 5);
+    /* The camera-tracked bind: the row-04 event arm's 0x71D27 equivalent —
+     * the event set camera.tracked to the code-4 record (the team target). */
+    assert(mr->render.camera.tracked == mr->entities.team[0].target);
+    /* The queue: the scan's situation-6 entry took the table-1 queue arm (the
+     * m 42 flag let the consumer machine advance and clear the latch), so id
+     * 5 is pending for side 0 and the score pair is still fresh. */
+    assert(mr->situation_id == 5 && mr->situation_pending == 1);
+    assert(mr->sit_side_pending == 1);
     assert(mr->score[0] == 0 && mr->score[1] == 0);
-    assert(mr->score_last_side == -1 && mr->score_tracked_side == 1);
-    assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
-    /* T4 (OL-89): the FUN_0009252C display boundary is fresh too — the gate
-     * cells carry the image defaults and nothing dispatched. */
+    assert(mr->score_last_side == -1 && mr->score_last_event == 0);
+    /* The row-04 coda: the event body's 0x7F133 install put code 5 on the
+     * placed record and the same-frame re-dispatch ran the row-05 carrier
+     * claim (the dispatched set gains row 05). */
+    assert(mr->entities.team[0].records[(uint32_t)mr->entities.team[0].target %
+                                        FIFA96_MATCH_ENTITY_RECORDS]
+               .code == 5u);
+    assert((mr->dispatched_ok & (1ull << 0x05)) != 0u);
+    /* The claim isolation (the m 42 staging): the m 41 row-1E record never
+     * dispatched — its code is still the staged 0x1E and every keeper cell
+     * stays fresh (the honest scenario state; the claim's own chain is
+     * fixture-proven, test_engine_match_frame::test_keeper_claim_*). */
+    assert(mr->entities.team[0].records[9].code == 0x1Eu);
+    assert(mr->entities.team[0].records[9].has_ball == 0u);
+    assert(mr->keeper_cam_x == 0 && mr->keeper_cam_y == 0 && mr->keeper_cam_z == 0);
+  } else if (m == M2_M_SCORED) {
+    /* M2 phase-10 T3: the scored-frame asserts — the queue's next granted body
+     * ran the scheduler -> the leg-0 handler's post -> the FUN_00093944
+     * writer: 1-0. The tracked-side pick (the flags-zero default 1) makes the
+     * side-0 goal the untracked arm, so the FUN_000CBC4C probe posts the
+     * native 0xD3 (captured; the display gate stays closed at the image sound
+     * cells) and the post's phase-0 write ends the scripted screen — the
+     * match holds at phase 0 (class 2: the stoppage clock) with the restart
+     * producers unported (the FU-146 leg 8 situation re-queue), so the tape
+     * records the post-goal window and stops (no period-end exit exists on
+     * this path; the honest freeze is the engine state). */
+    assert(mr->score[0] == 1 && mr->score[1] == 0);
+    assert(mr->score_last_side == 0);
+    assert(mr->score_tracked_side == 1);
+    assert(mr->score_last_event == 0xD3);
     assert(mr->score_sound_device == 0 && mr->score_sound_midi == 0);
     assert(mr->score_display_event == 0);
-    /* v6 (S2/S3/S4; T2/T4 refresh): the chain stayed dormant through the live
-     * phase 2 and the S4 defaults never woke — the live pan origin is landed
-     * (T2) but no tape record reaches the half-line band, so the camera never
-     * armed, no id entered the queue, the consumer machine is still at the
-     * leg-0 gate inside its 15 s duration, and the pose feed's unported mode 0
-     * / the formation id 0 are untouched. Fixture-proven, not tape-forced. */
-    assert(mr->goal_armed == 0 && mr->goal_zone == 0);
-    assert(mr->situation_id == 0);
-    assert(mr->screen_step == 1u && mr->situation_pending == 1u);
-    assert(mr->screen_timer < mr->screen_period_frames);
-    assert(mr->render.camera_pose.view_mode == 0);
-    assert(mr->formation[0] == 0 && mr->formation[1] == 0);
-    /* v7 (P3 row-1E reachable): the m 41 staging installed row 0x1E on team 0
-     * record 9; its dispatch runs the full FU-151 ten-stage keeper machine
-     * (`fifa96_keeper_claim_step`). The first dispatch claimed the ball —
-     * `+0x9B` set on the pool record — and wrote the 0x15774C focus triple
-     * (`keeper_cam`; the claim-take place `pos + offset`) — the tape-level
-     * proof the P3 machine executes end to end. The machine stays in the hold
-     * stage through the tape: the staged row code is still 0x1E, the record
-     * still carries the ball, and the saved/vector/gauge/latch/flag cells
-     * remain fresh (the release tail sits on the later `timer89` gates the
-     * tape's window does not reach). The focus triple is the derived
-     * camera-focus cell (FU-147 leg 13 stand-in for 0x15774C/50/54), so the
-     * exact position is the ISO formation-seeded one; y = +0x38 holds in both
-     * modes (the claim place's fixed lift). */
-    {
-      const struct fifa96_match_entity *kr = &mr->entities.team[0].records[9];
-      assert(kr->code == 0x1Eu);
-      assert(kr->has_ball == 1u);
-      assert(kr->timer89 > 0);
-      assert(mr->keeper_cam_y == 0x38);
-      if (mr->render.enabled) {
-        assert(mr->keeper_cam_x == -118 && mr->keeper_cam_z == -66);
-      } else {
-        assert(mr->keeper_cam_x == -4 && mr->keeper_cam_z == 0);
-      }
-      assert(mr->keeper_reset_x == 0 && mr->keeper_reset_y == 0 &&
-             mr->keeper_reset_z == 0);
-      assert(mr->keeper_saved_x == 0 && mr->keeper_saved_z == 0);
-      assert(mr->keeper_vec_band == 0 && mr->keeper_vec_dx == 0 &&
-             mr->keeper_vec_dz == 0);
-      assert(mr->keeper_gauge == 0);
-      assert(mr->keeper_latch_157ab2 == 0u);
-      assert(mr->flag_157820 == 0u && mr->flag_157822 == 0u);
-    }
-    /* v7 (P1/P2/P4 dormancy at the live mechanics step): the same fresh cells
-     * as m 41 — the row-1E dispatch is the only phase-7 landing that runs on
-     * the tape. */
-    assert(mr->sit_side_pending == 0u);
-    assert(mr->corner_count[0] == 0u && mr->corner_count[1] == 0u);
-    assert(mr->side_swap == 0u);
-    assert(mr->store_15882b == 0u && mr->store_15882c == 0u);
-    assert(mr->incident_x == 0 && mr->incident_z == 0);
-    assert(mr->ref_machine == FIFA96_MATCH_RUN_REF_NONE);
-    assert(mr->ref_whistle == 0u && mr->ref_speech == 0u);
-    assert(mr->referee.sequence == 0u && mr->referee.log_count == 0u);
-    assert(mr->render.replay.state == 0u && mr->render.replay.hud_armed == 0u);
-    assert(mr->render.sub.active == 0u);
-    assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
-    assert(mr->render.ball_row == NULL);
-    /* v8 (phase-8 T1/T2/T3/T4 at the live score step):
-     *  - T1: still no set-piece arm fired; the taker mask stays absent and the
-     *    L13 staging cells fresh (the armed path lives in the fixtures).
-     *  - T2: the camera triple equals the row-1E keeper claim place above —
-     *    the tape's only camera position change (a take-once reset through the
-     *    entity drain, FU-151), NOT a pan: the velocity/event/pan cells are
-     *    still fresh, so the live row-04 feed never fired (lane ~1460+).
-     *  - T3: the kick seam never staged a pair or a carrier; the T3 pad path
-     *    is fixture-proven (test_pad_kick_release_runs_kick_row) and its live
-     *    residue is L4.1..L4.6 (provenance above).
-     *  - T4: the goal chain is producer-real (T2) and consumer-real (S3) but
-     *    no tape record reaches the band; the score step below stays the
-     *    direct writer call (test_natural_goal_end_to_end carries the
-     *    positive). */
-    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u &&
-           mr->sp_157821 == 0u);
-    assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
-    assert(mr->render.camera.pos_x == mr->keeper_cam_x &&
-           mr->render.camera.pos_y == mr->keeper_cam_y &&
-           mr->render.camera.pos_z == mr->keeper_cam_z);
-    assert(mr->render.camera.vel_x == 0 && mr->render.camera.vel_z == 0 &&
-           mr->render.camera.timer == 0u &&
-           mr->render.camera.event_param == 0u &&
-           mr->render.camera.pan_counter == 0u &&
-           mr->render.camera.event_step_x == 0 &&
-           mr->render.camera.event_step_z == 0 &&
-           mr->render.camera.rate_x == 0 && mr->render.camera.rate_z == 0 &&
-           mr->render.camera.speed == 0u);
-    assert(mr->entities.ball.pair.actor == 0 &&
-           mr->entities.ball.pair.flags == 0u &&
-           mr->entities.ball.pair.code == 0u &&
-           mr->entities.ball.pair.traj == 0);
-    assert(mr->entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);
-    /* v9 (T2/T3 at the live score step; the phase-9 landings stay dormant):
-     *  - T2/OL-63: still no code-5 record and no row-05 dispatch through the
-     *    live phase-2 window, so the possession block stays fresh (no claim,
-     *    no stage-0 dir write; the carrier producers are live only on the
-     *    fixture's possession path).
-     *  - T3/FU-148 §13: no pan/event set `camera.tracked` and the auto-camera
-     *    never entered (`follow_speed` 0); the row-1E stage-5 event pair is
-     *    fresh (asserted above) — the stage-5 `0x75DC4` call would post
-     *    `event_param` 0x50. The direct score step below passes probe 0 with
-     *    the T3 tracked default 1, keeping the 0xD3 gate closed. */
-    {
-      int code5 = 0;
-      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
-          if (mr->entities.team[t].records[i].code == 5u) code5++;
-      assert(code5 == 0);
-    }
-    assert((mr->dispatched_ok & (1ull << 0x05)) == 0u);
-    assert(mr->entities.ball.pos_index == 0u &&
-           mr->entities.ball.pos_rotation == 0u &&
-           mr->entities.ball.pos_dir_x == 0 &&
-           mr->entities.ball.pos_dir_z == 0 &&
-           mr->entities.ball.pos_counter_c == 0u &&
-           mr->entities.ball.pos_release == 0u &&
-           mr->entities.ball.pos_counter_e == 0u &&
-           mr->entities.ball.pos_counter_f == 0u);
-    assert(mr->render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
-    assert(mr->render.camera.follow_speed == 0);
-    /* C3-OL2: the score step runs the derived FUN_00093944 source; with the
-     * T3 tracked-side default 1 the side-0 goal takes the untracked arm, whose
-     * probe is the staged 0, so no id posts (score_last_event 0) and the
-     * transcript is unchanged. v8/T4: the step stays the direct writer call —
-     * no tape record reaches the half-line pan band, so the natural chain
-     * cannot fire here (the FU-142 §L.10 residual producers stay legs). */
-    assert(fifa96_match_run_score_event(mr, 0, 0) == 0);
-    assert(mr->score_last_side == 0 && mr->score_last_event == 0);
+    assert(mr->state.phase == 0);
+    assert(mr->situation_pending == 1);   /* the post's 0x93D46 re-latch */
+    assert(mr->goal_armed == 1 && mr->goal_zone == 1);
+    assert(mr->goal_snap_z == 0xB28);
+    assert(mr->render.camera.pos_z == 0xB32);   /* the fifth pan body */
+    assert(mr->render.camera.tracked == mr->entities.team[0].target);
+    res->mask_final = mr->dispatched_ok;
+  } else if (m == M2_M_FINAL) {
+    /* The final observation: the post-goal phase-0 window adds the row-00
+     * dispatch (the m 41 staged code 0 reaches a body once the phase-2
+     * re-forcible tail is closed by the phase-0 hold — the L4.1 walk's step-6
+     * dispatch runs on the phase-0 frames), so the observed set is the wired
+     * mask with row 00 back: 14 rows. */
+    assert((mr->dispatched_ok & M2_WIRED_MASK) == M2_WIRED_MASK);
+    assert(mr->state.phase == 0);
+    assert(mr->score[0] == 1 && mr->score[1] == 0);
+    res->mask_final = mr->dispatched_ok;
+    res->mask_final = mr->dispatched_ok;
   }
 }
+
 
 /* Boots the engine, replays the tape with the match directives, and appends
  * one transcript line per presented frame. The per-step invariants (one
@@ -1544,6 +1621,7 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   memset(res, 0, sizeof *res);
   res->match_start_step = -1;
   res->exit_step = -1;
+  res->goal_step = -1;
 
   size_t used = 0;
   int steps = 0;
@@ -1746,7 +1824,16 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       res->phase_after_exit = e->match_run.phase_machine.state;
       res->clock_pending = e->match_run.clock_period_ended;
     }
+    /* M2 phase-10 T3: the natural goal's writer frame — the scheduler -> the
+     * leg-0 handler -> the FUN_00093944 writer writes the score pair and the
+     * post's phase-0 write ends the scripted screen, so no period-end exit
+     * exists on this path (the restart producers are the FU-146 leg-8 legs);
+     * the tape records the post-goal window and stops. */
+    if (res->goal_step < 0 && live &&
+        (e->match_run.score[0] != 0u || e->match_run.score[1] != 0u))
+      res->goal_step = steps;
     if (res->exit_step > 0 && steps - res->exit_step >= M2_POST_EXIT_FRAMES) break;
+    if (res->goal_step > 0 && steps - res->goal_step >= M2_POST_GOAL_FRAMES) break;
   }
   assert(steps < M2_STEP_CAP);               /* the sequence ends by itself */
   res->steps = steps;
@@ -1870,9 +1957,15 @@ int main(void) {
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
-  /* The golden pins frames 6..145 as the match (exit at frame 145), i.e. the
-   * forced mechanics window (m 41) plus the 1 s phase-2 clock (100 ticks). */
-  assert(res.exit_step - res.match_start_step == 140);
+  /* M2 phase-10 T3: the golden pins the goal frames — the forced mechanics
+   * window (m 41), the m 42 band scenario, the natural goal chain (the event
+   * -> pan -> armer -> queue -> scheduler -> handler -> writer) and the
+   * post-goal phase-0 hold (the FU-146 leg-8 restart legs; the tape records
+   * M2_POST_GOAL_FRAMES post-goal frames and stops — no period-end exit
+   * exists on the natural-goal path, so res.exit_step stays -1). */
+  assert(res.exit_step < 0);
+  assert(res.goal_step > M2_M_BAND + res.match_start_step);
+  assert(res.goal_step - res.match_start_step < M2_M_SCORED);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */
@@ -1927,20 +2020,15 @@ int main(void) {
     assert(res.staged_anim_id == 0x26u);   /* kickoff selector row staged */
   }
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
-  /* v2: the live FU-143 driver consumed the clock completion and wrote the
-   * derived selector-0 chooser phase 0x0C on the exit step. */
-  assert(res.phase_after_exit == 0x0Cu);
-  assert(res.clock_pending == 0u);
-  assert(res.phase_before_exit == 2);                    /* forced class-1 period end */
-  assert(res.score_before_exit[0] == 1 && res.score_before_exit[1] == 0);
   assert(st.presents == (uint64_t)res.steps);
   assert(st.present_hash != 0u);
-  /* The state lines pin the forced kickoff phases, the scoreless first frame
-   * and the goal. */
+  /* The state lines pin the forced kickoff phases, the scoreless phase-2
+   * frames, the natural goal (the writer frame's post state: the phase-0
+   * hold with the 1-0 pair) and the post-goal hold. */
   assert(strstr(transcript, " state=19/") != NULL);
   assert(strstr(transcript, " state=20/") != NULL);
   assert(strstr(transcript, " state=2/0-0\n") != NULL);
-  assert(strstr(transcript, " state=2/1-0\n") != NULL);
+  assert(strstr(transcript, " state=0/1-0\n") != NULL);
   assert(fwrite(transcript, 1, tlen, stdout) == tlen);
 
   if (!with_iso) {

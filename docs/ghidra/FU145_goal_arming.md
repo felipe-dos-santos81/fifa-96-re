@@ -607,3 +607,19 @@ re-verified on `/FIFA96.EXE` this slice: `disassemble_bytes` `0x7131C`/`0x718A9`
 | L6 zone-bit consumers | settled (bits dead) |
 | L7 `[0x157ACB]` | dropped (errata 1) |
 | L8 period-4 skip | unreachable/unmodelled (errata 6) |
+
+**Phase-10 T3 addendum (2026-10-10): the boundary armer fires on the
+acceptance tape.** The phase-10 T3 band-reachable acceptance (the first M2
+re-pin since the S1 v5.1) puts the whole S2/S3 chain on the tape: the m 42
+scenario's staged inputs (the f-up8 T4 fixture precedent, every forcing
+declared in `tests/test_engine_m2.c`) feed the natural row-04 slot-dir event
+(vel_z +5), the pan integrator crosses `|camZ| > 0xB20` on its fourth
+post-event body (snapshot 0xB28, zone 1 — the `match_run_goal_abs_word`
+word-trap path exercised live), and the same body's clock-tail scanner queues
+situation 6 through the table-1 arm (id 5, side 0 — the act-1 flag staging
+reproduces the natural phase-2 entry's cleared consumer-machine latch, so the
+`[0x14C32A] != 0 && [0x15B6C0] == 0` queue condition passes on the tape). The
+next granted body's scheduler -> leg-0 handler post -> FUN_00093944 writer
+scores 1-0 with the untracked arm's 0xD3 post. The §5 arming-bounds and
+word-trap derivations need no change; the S2 "static camera" tape-dormancy
+notes are superseded by this addendum.
