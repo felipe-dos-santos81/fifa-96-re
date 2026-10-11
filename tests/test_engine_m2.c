@@ -744,9 +744,11 @@
  * `test_unbound_chase_installs_and_runs_row08`,
  * `test_record_event_tail_gate_fires_in_frame`).
  *
- * Remaining forcing inventory, updated for the phase-9 state (the v7/v8 lists
- * still govern the transcript shape; each item carries its leg; nothing else
- * is forced):
+ * Remaining forcing inventory at v9.1 (**historical snapshot; the v10 block
+ * below carries the current list** — the taker/pan/direct-score items here
+ * are superseded by the T3 re-pin: the camera arms, the pan runs and the
+ * natural goal scores on the tape; each item keeps its leg; nothing else was
+ * forced):
  *   - kickoff phases 0x13/0x14 (m 1/m 21), the phase-2 mechanics entry and
  *     the 1 s period (m 41): as v8 (OL-84 residual / FU-143 §11.5 / OL-85).
  *   - the mechanics row staging (m 41): the natural AI/possession invokers are
@@ -756,13 +758,19 @@
  *     target algebra `0x7F3A1..0x7F57B` + the `FUN_0007F7E0` fallback),
  *     OL-70/OL-82 and the FU-147/FU-151 selection legs.
  *   - the T1 taker rows 10..13 (L13) and the set-piece arms: as v8 (they gate
- *     on `goal_armed`, which the never-panning camera never sets).
+ *     on `goal_armed`, which the never-panning camera never sets). (v10:
+ *     still dormant, but the camera now arms — the post-goal phase-0 hold
+ *     closes the scanner's `phase 2` gate instead; see the v10 taker-row
+ *     note at M2_TAKER_ROWS_MASK.)
  *   - the pan callers: the six remaining `FUN_00071C94` callers (row 04, row
  *     1E, the ball staging and the camera event wired — FU-148 §13.4), the
  *     `FUN_00070DE0` reposition bit-8 boundary arm, the tracked-player tail
  *     and the `FUN_00071DF4` table/keeper second arm; the auto-camera's
  *     high-ball trigger needs the ball-staging producers
  *     (`FUN_0007A490`/`FUN_0007A084`), so the visible follow-cam stays a leg.
+ *     (v10: the receive arm is ported (phase-10 T1) and the pan runs on the
+ *     tape; the visible follow-cam now waits on the `0x40` long-ball key /
+ *     the `0x157750` ball-height producer — FU-148 §14.3/§14.4.)
  *   - the live pad loop (FU-75 §1.5-§1.7/§2): **L4.1 landed (M2 phase-10
  *     T2)** — the native machine's forced/chase tail now runs for every
  *     outfield record (the unbound-record walk); L4.2 applied, L4.3
@@ -773,7 +781,11 @@
  *     half-line pan band; the tracked-side pick is closed (T3) and the
  *     residual producers stay legs (`FUN_000A7FD4` gate cells,
  *     `FUN_00071DF4`'s table/keeper arm, the `FUN_00066724` sink and the
- *     handler presentation/display sinks, FU-146 §8).
+ *     handler presentation/display sinks, FU-146 §8). (v10: superseded — the
+ *     T3 band scenario reaches the band and the queue -> scheduler ->
+ *     handler -> writer chain runs naturally at m 47..65; the direct-call
+ *     forcing is gone, replaced by the m 42 scenario and the m 58/m 61/m 72
+ *     observations.)
  *
  * Golden decision (v9): **byte-identical, no re-pin** — assertions and
   * provenance only; no presented frame moved (`cmp` clean against the
@@ -784,23 +796,25 @@
   * not land — no intended upgrade reached the tape (T3's no-re-pin reason
   * above).
   *
-  * --- v10-pre (M2 phase-10 T3): the band-reachable natural goal — THE RE-PIN -
-  *
-  * The first M2 re-pin since the S1 v5.1: the natural goal reaches the tape.
-  * The phase-10 plan's T3 built the band-reachable acceptance per spec §5
-  * (every forcing declared, see the m 42 block): the lane derivation is
-  * measured live (the m 41 code-4 record — the L4.1 walk's forced-decision
-  * team-target install — enters the half-line band natively ~62 granted
-  * frames after m 41 at ~2 units per granted frame), and the staged inputs
-  * are the f-up8 T4 fixture's own three (the claim isolation, the act-1 flag,
-  * the goal-mouth camera park + the record placement at the camera), with the
-  * measured blockers recorded (the claim machine's mid-walk slot steal; the
-  * ~4400-step pan-history co-migration to the mouth). From the staged inputs
-  * on, the whole chain is natural: the row-04 slot-dir event (the held LEFT's
-  * live slot dir), the pan integrator, the boundary armer (zone 1, snapshot
-  * 0xB28), the clock-tail scanner's table-1 queue (id 5, side 0), the
-  * scheduler, the leg-0 handler's post and the FUN_00093944 writer (1-0, the
-  * untracked arm's 0xD3 post, the phase-0 write ending the scripted screen).
+ * --- v10 (M2 phase-10 T3/T4): band-reachable natural goal — THE RE-PIN — plus
+ * the T4 acceptance layer ----------------------------------------------------
+ *
+ * The first M2 re-pin since the S1 v5.1: the natural goal reaches the tape.
+ * The phase-10 plan's T3 built the band-reachable acceptance per spec §5
+ * (every forcing declared, see the m 42 block): the lane derivation is
+ * measured live (the m 41 code-4 record — the L4.1 walk's forced-decision
+ * team-target install — enters the half-line band natively ~62 granted
+ * frames after m 41 at ~2 units per granted frame), and the staged inputs
+ * are the f-up8 T4 fixture's camera park + record placement **plus two
+ * additional declared forcings** (the claim isolation and the act-1 flag —
+ * the fixture stages only the park and the placement), with the measured
+ * blockers recorded (the claim machine's mid-walk slot steal; the
+ * ~4400-step pan-history co-migration to the mouth). From the staged inputs
+ * on, the whole chain is natural: the row-04 slot-dir event (the held LEFT's
+ * live slot dir), the pan integrator, the boundary armer (zone 1, snapshot
+ * 0xB28), the clock-tail scanner's table-1 queue (id 5, side 0), the
+ * scheduler, the leg-0 handler's post and the FUN_00093944 writer (1-0, the
+ * untracked arm's 0xD3 post, the phase-0 write ending the scripted screen).
   *
   * Frame diff (against the v9.1 golden, `cmp`/diff measured): the transcript
   * is 85 lines in both modes (the golden was 165); lines 1..46 are
@@ -816,8 +830,59 @@
   * sample, i.e. the writer ran in frame 65's body). The key-tape change from
   * index 45 on (the phase-2 window holds LEFT, the +z slot dir, instead of
   * RIGHT) is part of the same upgrade: the held direction is the live event
-  * seed. M1 is untouched (test_engine_m1 green, same golden).
-  *
+ * seed. M1 is untouched (test_engine_m1 green, same golden).
+ *
+ * **T4 (the phase-10 acceptance) adds the assertion layer** — no engine
+ * write, no forcing change, so the transcript stays byte-identical to the T3
+ * re-pin (`cmp` clean, 85 lines; M1 unmoved `09b726b7…`; no gratuitous
+ * re-pin). What v10 asserts at the spec §5 sequence points:
+ *   1. The m 42 staging inputs are pinned at the staging site (the claim
+ *      record's `skip_9a`, the act-1 flag, the parked camera triple, the
+ *      placed record's pos/target/lane/bound and the zeroed velocity words —
+ *      each declared in-block).
+ *   2. The goal link (m 58) pins the pan in flight (the +5 event velocity,
+ *      zone 1, the 0xB28 snapshot, the tracked bind), the queue (id 5, side
+ *      0), the row-05 join and the **exact** observed dispatch set
+ *      (`M2_WIRED_MASK & ~bit 0x00` — 13 rows, not a subset).
+ *   3. The scored frame (m 61) pins 1-0 / 0xD3 / the phase-0 write / the
+ *      post's re-latch; the final frame (m 72) pins the **exact**
+ *      `M2_WIRED_MASK` (14 rows, row 00 rejoined) so the post-goal frames
+ *      73..85 stay guarded by the end-of-run exact mask.
+ *   4. The post-goal P1/P2/P4 dormancy cells (the set-piece dispatcher +
+ *      taker mask, the referee machine, the replay/sub/overlay rows,
+ *      `ball_row`) are re-asserted in the m 72 block — the old direct-score
+ *      block's coverage restored with the natural goal's own consequences
+ *      named (`sit_side_pending` 1, `situation_id` 5, `screen_step` 5,
+ *      `situation_pending` 1).
+ * Current forcing inventory on v10 (each item carries its leg; the v9.1
+ * list above is the historical snapshot):
+ *   - kickoff phases 0x13/0x14 (m 1/m 21), the phase-2 mechanics entry and
+ *     the 1 s period (m 41): unchanged (OL-84 residual / FU-143 §11.5 /
+ *     OL-85).
+ *   - the m 41 mechanics row staging (`M2_STAGE_ROWS`): the natural
+ *     AI/possession invokers stay unported (OL-63 residual, OL-70/OL-82,
+ *     FU-147/FU-151 selection legs).
+ *   - the m 42 band scenario inputs: the claim isolation (the claim
+ *     machine's per-dispatch helper emission — part of the FU-151 stage
+ *     ladder), the act-1 flag (the natural phase-1 producer is bypassed by
+ *     the m 1 forcing), the camera park (the mouth co-migration measures
+ *     ~4400 steps — the pan-history producers) and the record placement
+ *     (the lane enters the band natively, measured; the arrival is staged).
+ *   - the post-goal hold: the restart producers are the FU-146 leg-8
+ *     situation re-queue legs, so no natural period-end exit exists on this
+ *     path.
+ *   - the visible follow-cam / on-screen ball: the `0x40` long-ball key
+ *     (L14.6) and the `0x157750` ball-height producer (L14.7) gate the live
+ *     follow arm; the ball record's open-play position producer (the
+ *     code-`16` machine, L14.8) gates the render — phase-10 T1 landed the
+ *     receive arm itself.
+ *   - the taker rows 0x10..0x13 / set-piece arms: armed-path dormant (the
+ *     scanner needs `phase 2 && goal_armed`; the post-goal hold is phase 0)
+ *     — FU-149 L13/T1.
+ *   - the remaining pan callers (`FUN_00071C94` §13.4 six, the
+ *     `FUN_00071DF4` table/keeper second arm, the `FUN_00070DE0` bit-8
+ *     boundary arm, the tracked-player tail) — OL-T11-79/§13.4.
+ *
   * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -863,8 +928,9 @@
  *        declared forcings; see the m 42 block) — before the first phase-2
  *        grant (m 44) so the forced-decision code-4 install lands on the
  *        placed record;
- *   m 62 goal link asserts (the pan in flight) and the scored-frame set below
- *        (the armed/queued and the written score — the natural chain). */
+ *   m 58 goal link asserts (the pan in flight) and the scored-frame (m 61) /
+ *        final (m 72) sets below (the armed/queued and the written score —
+ *        the natural chain). */
 #define M2_M_KICKOFF 1
 #define M2_M_HALF 21
 #define M2_M_MECH 41
@@ -913,7 +979,7 @@
  * before the same frame's dispatch, so the explicit code-0 (row 00) and code-6
  * (row 06) staging no longer reaches the dispatch; the observed set is 13
  * rows and both rows join the forcing-limited group (v9.1 block above).**
- * **v10-pre (M2 phase-10 T3): the natural goal chain puts the row-04 coda's
+ * **v10 (M2 phase-10 T3/T4): the natural goal chain puts the row-04 coda's
  * 0x7F133 code-5 install on the placed record and the same-frame re-dispatch
  * runs the row-05 carrier claim (row 05 joins the observed set), while the m 42
  * claim isolation (the native +0x9A skip on the m 41 row-1E record — its 1E
@@ -921,7 +987,8 @@
  * keeps row 1E off the tape. The post-goal phase-0 hold then lets the m 41
  * staged code 0 reach a body (the L4.1 walk's step-6 dispatch runs on the
  * phase-0 frames once the phase-2 re-forcible tail is closed by the hold), so
- * row 00 rejoins the observed set: 14 rows with 1E swapped for 05. The
+ * row 00 rejoins the observed set: 14 rows with 1E swapped for 05; the T4
+ * layer asserts this set exactly at m 58 (13 rows) and m 72 (14 rows). The
  * claim's own chain stays fixture-proven
  * (test_engine_match_frame::test_keeper_claim_*).** The phase-8 T1 rows
  * 10..13 are wired but not exercised here (the taker mask below); 1D
@@ -933,9 +1000,11 @@
    (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 
 /* The phase-8 T1 taker rows (FU-149 §7, L13): wired (21/80) but dormant on
- * this tape — the set-piece arms that install 0x10..0x13 gate on `goal_armed`,
- * which the never-panning camera never sets (v8 provenance). The armed path
- * is fixture-proven (test_taker_armed_rows_resolve /
+ * this tape — the set-piece arms that install 0x10..0x13 need the restart
+ * scanner (`phase 2 && goal_armed`), and the natural goal's post-goal
+ * phase-0 hold keeps the scanner's phase gate closed even though the camera
+ * now arms (v10 provenance; on the pre-re-pin tape neither held). The armed
+ * path is fixture-proven (test_taker_armed_rows_resolve /
  * test_taker_armed_referee_rows_resolve). */
 #define M2_TAKER_ROWS_MASK \
   ((1ull << 0x10) | (1ull << 0x11) | (1ull << 0x12) | (1ull << 0x13))
@@ -1283,11 +1352,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * forced 0x13 window (before this mechanics entry); the live phase-2
      * machine path stays fixture-proven (v9 provenance). */
     assert((res->mask_mech & (1ull << 0x02)) != 0u);
-    /* v6 (S2/S3 status; T2/T4 refresh): the goal chain is dormant on this tape
-     * — the live row-04 pan origin is landed (T2/OL-T11-79) but no tape record
-     * reaches the half-line band, so the armer and the clock-tail scan never
-     * fire; the begin-installed consumer machine sits at the leg-0 kickoff
-     * gate (step 1) with the installer latch `situation_pending` held and no
+    /* v6 (S2/S3 status; T2/T4 refresh; **v10: state at this pre-band step —
+     * the m 42 scenario later stages the band and the goal runs, see the
+     * v10 block**): the goal chain is dormant at m 41 — the live row-04 pan
+     * origin is landed (T2/OL-T11-79) but no tape record has yet reached the
+     * half-line band, so the armer and the clock-tail scan never fire; the
+     * begin-installed consumer machine sits at the leg-0 kickoff gate
+     * (step 1) with the installer latch `situation_pending` held and no
      * queued id. The chain is fixture-proven (test_row04_live_pan_arms_camera /
      * test_natural_goal_end_to_end / test_goal_chain_pan_fixture /
      * test_camera_pan_event_chain / test_goal_consumer_chain_fixture). */
@@ -1301,7 +1372,9 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * (FU-152 P4) are all fresh before the mechanics staging. They stay fresh
      * because no live producer drives them on this tape: the restart scanner
      * is gated by `goal_armed` (run.c: `phase 2/0x10 && goal_armed`), which
-     * the static camera never sets (OL-T11-79), the contact/offside entries
+     * only the m 42 band scenario arms — the post-goal phase-0 hold then
+     * keeps the scanner's phase gate closed (v10; the pre-re-pin reason was
+     * the never-panning camera) — the contact/offside entries
      * have no live caller, and the P4 rows are zero-gated at rest
      * (`replay.state` 0, `sub.active` 0, `overlay.armed` 0, `ball_row` NULL).
      * Every chain is fixture-proven instead (see the v7 provenance). */
@@ -1451,10 +1524,12 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * cross |camZ| > 0xB20 inside the goal mouth for the boundary armer, and
      * the pan-history co-migration from the claim place to the mouth measures
      * ~2 units per granted frame (the record-bound burst/coast cycle) — ~4400
-     * steps, outside a scripted tape. The staged inputs (the f-up8 T4 fixture
-     * precedent — test_natural_goal_end_to_end stages exactly these three):
-     * the claim record isolated, the act-1 timeline flag, the camera park at
-     * the goal-mouth edge and the record placed at the camera inside the band.
+     * steps, outside a scripted tape. The staged inputs (the camera park at
+     * the goal-mouth edge and the record placement follow the f-up8 T4
+     * fixture, test_natural_goal_end_to_end; the claim isolation and the
+     * act-1 flag are additional declared forcings): the claim record
+     * isolated, the act-1 timeline flag, the camera park at the goal-mouth
+     * edge and the record placed at the camera inside the band.
      * Everything from the staged inputs on is the natural chain: the row-04
      * slot-dir event (the held LEFT's live slot dir (0, +1) -> the (0, +64)
      * seed -> vel_z +5), the pan integrator, the boundary armer (zone 1), the
@@ -1509,6 +1584,12 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
         er->lane_z = 0;
         er->cam_dz6f = 0x10;
         er->bound = 0x40;
+        /* v10 (T4): the +0x73/+0x75 velocity words are zeroed because the
+         * row-04 no-slot arm's 0x7F056 event seed reads exactly these words
+         * (`(vel73 << 2, vel75 << 2)`), and every native install rewrites
+         * them (the tape's measured stride-nibble-0 state: the seed is
+         * (0, 0)). The placement must not fabricate a pan seed from the
+         * stale pre-staging walk words. */
         er->vel73 = 0;
         er->vel75 = 0;
       }
@@ -1521,7 +1602,11 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * granted frame's scheduler, so the score pair is still fresh — the
      * fixture's link-2/link-3 shape). */
     res->mask_final = mr->dispatched_ok;
-    assert((res->mask_final & M2_WIRED_MASK) == (M2_WIRED_MASK & ~(1ull << 0x00)));
+    /* v10 (T4): exact — the observed set at the goal link is the accepted
+     * mask minus row 00 (which rejoins only on the post-goal phase-0
+     * frames); the exact form also refuses any row outside the accepted
+     * set. */
+    assert(res->mask_final == (M2_WIRED_MASK & ~(1ull << 0x00)));
     /* The pan: the row-04 slot-dir event's vel_z +5 (the held LEFT's live
      * slot dir (0, +1) -> the (0, +64) seed / 12) integrated the camera past
      * the 0xB20 arming bound inside the goal mouth (|camZ| word-truncated,
@@ -1579,19 +1664,45 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.tracked == mr->entities.team[0].target);
     res->mask_final = mr->dispatched_ok;
   } else if (m == M2_M_FINAL) {
-    /* The final observation: the post-goal phase-0 window adds the row-00
-     * dispatch (the m 41 staged code 0 reaches a body once the phase-2
-     * re-forcible tail is closed by the phase-0 hold — the L4.1 walk's step-6
-     * dispatch runs on the phase-0 frames), so the observed set is the wired
-     * mask with row 00 back: 14 rows. */
-    assert((mr->dispatched_ok & M2_WIRED_MASK) == M2_WIRED_MASK);
+    /* The final observation (v10/T4): the post-goal phase-0 window adds the
+     * row-00 dispatch (the m 41 staged code 0 reaches a body once the
+     * phase-2 re-forcible tail is closed by the phase-0 hold — the L4.1
+     * walk's step-6 dispatch runs on the phase-0 frames), so the observed
+     * set is the wired mask with row 00 back: 14 rows, asserted exactly.
+     * main() compares this stored mask at the end of the run, so the
+     * post-goal frames 73..85 stay guarded against any further dispatch. */
+    res->mask_final = mr->dispatched_ok;
+    assert(res->mask_final == M2_WIRED_MASK);
     assert(mr->state.phase == 0);
     assert(mr->score[0] == 1 && mr->score[1] == 0);
-    res->mask_final = mr->dispatched_ok;
-    res->mask_final = mr->dispatched_ok;
+    /* v10 (T4): the P1/P2/P4 dormancy coverage restored in the v10 layer —
+     * the natural goal consumes the goal chain but leaves the set-piece
+     * dispatcher + taker arms, the referee machine and the presentation rows
+     * (replay/sub/overlay) fresh through the post-goal window. The
+     * natural-goal consequences are named, not asserted dormant:
+     * `sit_side_pending` 1 (the table-1 queue's side), `situation_id` 5 /
+     * `screen_step` 5 (the consumer machine advanced to its PHASE step) and
+     * `situation_pending` 1 (the post's re-latch). The chains are
+     * fixture-proven (v7/v8 provenance; FU-149/FU-150/FU-152). */
+    assert(mr->corner_count[0] == 0u && mr->corner_count[1] == 0u);
+    assert(mr->side_swap == 0u);
+    assert(mr->store_15882b == 0u && mr->store_15882c == 0u);
+    assert(mr->incident_x == 0 && mr->incident_z == 0);
+    assert(mr->ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+    assert(mr->ref_whistle == 0u && mr->ref_speech == 0u);
+    assert(mr->referee.sequence == 0u && mr->referee.stage == 0u);
+    assert(mr->referee.contact_kind == 0u && mr->referee.log_count == 0u);
+    assert(mr->render.replay.state == 0u && mr->render.replay.hud_armed == 0u);
+    assert(mr->render.sub.active == 0u);
+    assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
+    assert(mr->render.ball_row == NULL);
+    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u &&
+           mr->sp_157821 == 0u);
+    assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
+    assert(mr->render.camera_pose.view_mode == 0);
+    assert(mr->formation[0] == 0 && mr->formation[1] == 0);
   }
 }
-
 
 /* Boots the engine, replays the tape with the match directives, and appends
  * one transcript line per presented frame. The per-step invariants (one
@@ -1964,8 +2075,11 @@ int main(void) {
    * M2_POST_GOAL_FRAMES post-goal frames and stops — no period-end exit
    * exists on the natural-goal path, so res.exit_step stays -1). */
   assert(res.exit_step < 0);
-  assert(res.goal_step > M2_M_BAND + res.match_start_step);
-  assert(res.goal_step - res.match_start_step < M2_M_SCORED);
+  /* v10 (T4): the natural goal's writer frame is pinned exactly — the writer
+   * ran in frame 65's body (match frame 65, engine step match_start + 60):
+   * the m 42 scenario stages at 42, the band walk + pan + queue run 47..65
+   * and the m 61 scored observation (frame 66) reads the written pair. */
+  assert(res.goal_step == res.match_start_step + 60);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */

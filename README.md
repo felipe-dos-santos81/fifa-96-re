@@ -93,9 +93,9 @@ into the port:
 [`docs/ENGINE.md`](docs/ENGINE.md)) boots the real CD image, plays/skips the
 intro, drives the front-end, and reaches the M2 match: the 30 Hz match
 lifecycle, input/control slot, camera, entity pool and deterministic render
-chain run headless (the M2-B acceptance tape **v9** — the phase-9 live-pad-loop
-acceptance — is green: the 21 wired
-action rows' tape-exercised subset (15 rows), the resource-loaded formation/record
+chain run headless (the M2-B acceptance tape **v10** — the phase-10
+visible-layer acceptance (the T3 natural-goal re-pin) — is green: the 21 wired
+action rows' tape-observed subset (14 rows, incl. the row-05 carrier claim), the resource-loaded formation/record
 placement drawing
 on
 the indexed match canvas from the first granted frame, the FU-96 leg-5
@@ -124,9 +124,10 @@ natural-phase-2 probe (a directive-free
 replay of the tape reaches live phase 2 with row 01 dispatched and no goal)
 and the canvas-level RGB assertion; the golden carries the drawing,
 palette, pad-locomotion, camera-place v4.2, HUD and S1 possession re-pins
-and is byte-identical since S1 — S2, S3, S4, S5, the phase-7 ports P1–P5, the
+and stayed byte-identical through S2, S3, S4, S5, the phase-7 ports P1–P5, the
 phase-8 live-loop tasks T1–T5 and the phase-9 live-pad-loop tasks T1–T4
-moved no presented frame), and the
+(no presented frame moved) until the phase-10 T3 natural goal — the first
+re-pin since S1 (165→85 lines)), and the
 windowed `make game` build runs on SDL3. The T5 interactive smoke re-run on the
 development host (2026-10-10) reaches match start (the match
 canvas replaces the front-end; the derived palette `OL-T11-6` landed in
@@ -159,14 +160,28 @@ committed T1/T3 twin (LEFT/UP to T3, RIGHT to T1)
 `p9-v9-match-clock.png`, `p9-v9-hold-left.png` (scene AE 45902),
 `p9-v9-hold-up.png` (AE 28535), `p9-v9-hold-right.png` (AE 0)), and a
 live-play KICK burst leaves the scene band at AE 0 (full 228 = the clock) —
-no live ball render, the kick's carrier is headless. Kicking the ball and
-scoring stay blocked
-interactively: the pad kick is wired (T3) and its carrier producers are now
+no live ball render, the kick's carrier is headless. **The phase-10
+visible-layer wave landed (T1–T4):** the `FUN_0007A084` receive arm is
+ported and runs live on a PASS kick (the high-ball follow chain
+fixture-proven), the L4.1 unbound-record walk now moves every outfield
+record (the live roll; the controlled record's pad path unchanged) and the
+T3 band-reachable acceptance drives the **natural goal onto the M2
+acceptance tape** (v10: m 47..65, `state=0/1-0` from frame 66; the golden
+re-pinned 165→85 lines — the first re-pin since S1 v5.1). The phase-10 T4
+smoke (2026-10-11, fresh `p10-t4-*` captures) re-verifies: front-end/HUD
+byte-identical, movement clearly visible (LEFT scene-band ~5.7e4 px, UP
+~1.5e4), **no visible follow-cam and no on-screen ball** — the `0x40`
+long-ball key / `0x157750` ball-height / code-`16` ball-record producers
+are the carried legs (FU-148 §14); the live roll makes the scene band no
+longer byte-reproducible across smoke sessions (the HUD band stays exact).
+Kicking the ball stays blocked
+interactively (no kick-attributable on-screen delta): the pad kick is wired
+(T3) and its carrier producers are now
 landed headlessly (T2/OL-63: movement -> row-05 claim -> code 5 -> row 07 ->
 the staged ball pair in `test_live_carrier_claim_and_kick`), and the goal
 chain is closed producer-to-writer
-(T2/T4; the natural end-to-end goal scores 1-0 in a fixture, post 0xD3) while
-tape-dormant (no record reaches the half-line pan band); the
+(T2/T4; the natural end-to-end goal scores 1-0 in a fixture, post 0xD3) and
+now **tape-reached** by the phase-10 T3 band scenario; the
 phase-7 chains (set pieces/restarts, fouls/offside, keeper restarts,
 replay/overlay) are likewise not reachable live yet — their producers/gates are
 carried on numbered legs (FU-149 L1–L13 incl. the T1 residue L13.1–L13.7,

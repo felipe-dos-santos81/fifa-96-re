@@ -1297,7 +1297,11 @@ installer is the phase-0x19 foul sequence `0x89FA4`) stays leg **L14.8**.
 goal on the acceptance tape.** The T3 acceptance (the first M2 re-pin since
 the S1 v5.1) drove the natural chain on the tape through the wired row-04
 pan origin: the m 42 scenario (declared in `tests/test_engine_m2.c`) stages
-the fixture-precedent inputs and everything from there is natural — the
+the camera park at the goal-mouth edge and the record placement at the
+camera (the f-up8 T4 fixture's staged inputs), plus two additional declared
+forcings the fixture does not stage (the claim-record isolation via the
+native `+0x9A` exclusion and the act-1 timeline flag), and everything from
+there is natural — the
 row-04 slot-dir event (the held LEFT's live slot dir `(0, +1)` → the
 `0x7F035` arm's `(0, +64)` seed → `fifa96_camera_event_set` vel_z +5) → the
 pan integrator → the boundary armer (zone 1, snapshot 0xB28) → the scan →
@@ -1326,7 +1330,9 @@ from the measurement (first-hand, the tape's own m 41 state):
   The scenario parks the camera at the goal-mouth edge instead (the
   f-up8 T4 fixture's own staged input).
 
-The tape effect is recorded in §13.2's dormancy row: the pan origin, the
+The tape effect is recorded in the M2 v10 provenance
+(`tests/test_engine_m2.c`, the m 42/m 58/m 61/m 72 blocks) and the
+`docs/ENGINE.md` "score a goal" row: the pan origin, the
 armer, the scanner and the consumer chain all fire on the tape now (the
 phase-9 T3 "tape dormant" note is superseded by the phase-10 T3 re-pin);
 the remaining §13.4 callers stay legs as §13.4 lists them.
