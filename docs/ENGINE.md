@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-21/80 action rows wired, the derived FU-143 phase driver wired into the run
+22/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
@@ -259,18 +259,22 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **21/80 rows wired** — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **22/80 rows wired** — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
   record claims `[0x158724]`), `04`, `06`,
-  `07`, `08`, `0F`, `18`, `1E`, `21`, `23` (playability G1 + arms-and-wiring
-  G3; `01` is the M2 playable-match Task 2 kickoff taker), `26`, `28`, `2A`
+  `07`, `08`, `0E`, `0F`, `18`, `1E`, `21`, `23` (playability G1 +
+  arms-and-wiring G3; `01` is the M2 playable-match Task 2 kickoff taker;
+  `0E` is the phase-13 T3 live jump selector — FU-160 §2: the row-23 tackle
+  install (`install = 0x0E`) now runs the stage 0/1/2/3 body and installs
+  anim row 0x12 on the record, whose f2 aux-0x0E frame fires the ported jump
+  arm + BF20 arc), `26`, `28`, `2A`
   (cluster G), `1D` (FU-151 P3 close-down) and `10`, `11`, `12`, `13`
   (FU-149 L13/T1: the throw-in/corner/free-kick/penalty taker machines —
   placement/probe/kick/resolution; the taker codes the P1 arms install now
   execute and hand back to phase 2 through the shared situation-0xB entry);
-  dispatch results 58 UNSUP / 21 OK / 1 NOTF.
+  dispatch results 57 UNSUP / 22 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

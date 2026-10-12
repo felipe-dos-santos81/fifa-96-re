@@ -90,7 +90,7 @@
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
-    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
@@ -435,6 +435,74 @@ static void test_live_throw_in_camera_y_cut(void) {
     int32_t d = (int32_t)f.mr.render.camera.pos_y - (int32_t)f.mr.record.pos_y;
     assert(d >= 0x38);
   }
+  drop_fixture(&f);
+}
+
+/* FU-160 §2 (phase-13 T3): the row-0x0E live jump selector. Stage 0 builds
+ * the target from the camera stand-in (0x71B9C) + the 0x8DCD4/0x79C50 metric
+ * and face; stage 1 re-arms the self receiver timer (0x79B58) and installs
+ * anim row 0x12 (frame 0, FUN_0006E598) once `timer89 >= 0x0C` (12 units at
+ * delta 2 = 6 frames); stage 2 advances on the controlled/jump_base gate;
+ * stage 3 resets when the anim row is terminal (the live byte44 producer).
+ * The phase gate resets any non-phase-2 call. */
+static void test_action_0e_live_jump_selector(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[1];
+  e->active = 1;
+  f.mr.record.entity_id = 1;                /* team 0, index 1 */
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0E;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 2;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.type = 0;
+  f.mr.render.camera.pos_x = 0x310;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0x200;
+  f.mr.state.phase = 2u;
+
+  /* the phase gate resets (0x8271B..0x82726) */
+  f.mr.state.phase = 1u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0xFFu && e->stage92 == 0xFFu);
+  f.mr.state.phase = 2u;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0;
+
+  /* stage 0 -> stage 1 in the same call (target/face/timer89 reset) */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.target_x == 0x310 && f.mr.record.target_z == 0x200);
+  assert(e->timer93 == 0x10);               /* 0x79B58 on self */
+  /* stage 1 waits: timer89 accumulates by delta (2/frame) */
+  for (int i = 0; i < 5; i++)
+    assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);        /* 10 < 0x0C */
+  assert(e->anim_id != 0x12);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(e->anim_id == 0x12 && e->frame == 0u && e->row44 == 0u);
+  assert(f.mr.record.anim_id == 0x12 && f.mr.record.ran == 1);
+  assert(f.mr.record.stage92 == 2u && f.mr.record.timer89 == 0);
+
+  /* stage 2 -> 3 on the jump_base gate */
+  e->jump_base = 15;
+  f.mr.record.jump_base = 15;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  /* stage 3: a terminal anim row resets through the live +0x44 (row 0
+   * flags 0x07 -> row44 1; the forced decision installs code 4 here) */
+  f.mr.record.row44 = 1u;
+  f.mr.entities.team[0].target = 1;
+  e->type = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u);
+  assert(e->code == 4u);
   drop_fixture(&f);
 }
 
@@ -2043,6 +2111,7 @@ int main(void) {
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
   test_live_throw_in_camera_y_cut();
+  test_action_0e_live_jump_selector();
   test_action_11_runs_corner_body();
   test_action_12_runs_free_kick_body();
   test_action_13_runs_penalty_body();

@@ -2529,6 +2529,63 @@ static void test_record_jump_case_0f_snap_frame3(void) {
   drop_fixture(f);
 }
 
+/* FU-160 §2 / FU-159 §3.3 (phase-13 T3): the live row-0x0E selector on the
+ * natural kickoff chain. The tackle arm's `install = 0x0E` drain is replaced
+ * by its exact engine equivalent (`fifa96_match_entities_install`), and the
+ * dispatch runs the ported body live: stage 0/1 build the target + wait the
+ * 0x0C timer, then install anim row 0x12 on the record; the row's f2 funnel
+ * frame (aux 0x0E) fires the already-ported jump arm + BF20 arc, so the
+ * record is airborne within the bounded window. This is the live selector the
+ * T1 chain had to stand in for (`rec->anim_id = 0x5E` was the disclosed
+ * stand-in). */
+static void test_live_row_0e_selector_installs_jump(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int installed = 0;
+  int airborne = 0;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* stage the match art pair so the scene stage advances the anim frames
+   * (the bridge does this in the engine path; the direct-run fixture must
+   * call it explicitly) */
+  assert(fifa96_match_run_stage(&mr, f.engine->surface,
+                                "/ART/PLAYART.PVI", "/ART/GAMEART0.PVI") == FIFA96_OK);
+  assert(mr.render.enabled == 1);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  one_granted_frame(&mr);
+
+  rec = &mr.entities.team[1].records[4];
+  assert(rec->active != 0u);
+  assert(fifa96_match_entities_install(rec, (uint8_t)mr.state.phase, 0x0E, 0) == 1);
+  assert(rec->code == 0x0Eu);
+  for (int i = 0; i < 80; i++) {
+    one_granted_frame(&mr);
+    if (rec->anim_id == 0x12u && rec->frame == 0u) {
+      installed = 1;
+      break;
+    }
+  }
+  assert(installed == 1);          /* stage 1 installed row 0x12 (frame 0) */
+  assert(rec->row44 == 0u);        /* row 0x12 flags 0x00 */
+  assert(rec->timer93 == 0x10u);   /* the 0x79B58 self receiver timer */
+  for (int i = 0; i < 40 && rec->pos_y == 0; i++) one_granted_frame(&mr);
+  airborne = rec->pos_y != 0;
+  assert(airborne == 1);           /* the f2 aux-0x0E jump arm + arc */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-147 S1: the row-1E claim's `+0x9B` possession flag and `[0x157A83]`
  * actor bind must leave the dispatch staging for the pool (the `+0x9B`
  * producer). The claim fires while `stage92 < 3` and the record does not hold
@@ -4757,6 +4814,7 @@ int main(void) {
   test_record_jump_case_0f_snap_frame3();
   test_live_airborne_long_ball_seed_then_band2_follow();
   test_live_long_ball_mode40_band2_follow();
+  test_live_row_0e_selector_installs_jump();
   test_live_pass_kick_runs_receive_arm();
   test_live_claim_pan_row04_half_line();
   test_live_ball_record_produced_in_open_play();
