@@ -1816,6 +1816,91 @@ the build also produces the windowed `fifa96` target (`make game`).
     L158.2 (extended: sanitizer write-back site + motion stand-in),
     L158.3/L158.4 unchanged; **new L158.5** (the presenter's `[0x109000]`
     scale / `FUN_00057278` screen-pair source).
+- **M2 phase-13 T3 (jump/ack residuals — the repeatable live sequence;
+  FU-159/160/161/162/166; 2026-10-11).** The jump chain is now live and
+  repeatable in the engine; five pieces landed:
+  - **The row-0x0E live jump selector (FU-160 §2/§4 rec #1; the census
+    headline).** The row-23 tackle arm's `install = 0x0E` drain
+    (`fifa96_match_handlers.c:2203`) now runs the ported body
+    (`0x82710..0x82ACF`): the phase gate + `timer89` accumulate, stage 0
+    (index gate, the `0x71B9C` camera-target stand-in, the `0x8DCD4` metric +
+    `0x79C50` face), stage 1 (the `0x157794` target, the `0x79B58` self
+    receiver timer, `timer89 >= 0x0C` -> `FUN_0006E598(self, 0x12, frame 0)`,
+    ran), stage 2 (controlled/`jump_base` -> 3; the camera/slot arm
+    `0x82820..0x82A9C` is leg **FU160-L4**), stage 3 (`+0x44` reset). The
+    installed row 0x12's f2 funnel (aux 0x0E) runs the already-ported jump
+    arm + BF20 arc. **wired 21 -> 22/80** (dispatch 57 UNSUP / 22 OK /
+    1 NOTF); README title recomputed to **27%** in the same commit. Tests:
+    `test_action_0e_live_jump_selector` (unit stage/gate/reset) +
+    `test_live_row_0e_selector_installs_jump` (ISO: natural kickoff ->
+    install 0x0E -> anim 0x12 frame 0 -> airborne). Rec #2 (row-0x5E via the
+    row-0x0C stumble) still waits on a live contact entry; rec #3 (rows
+    0x14/0x5C) stays the bounded negative.
+  - **The byte44 ack producer + row successor + install helper (FU-159
+    §4.1/§5.2/§5.4).** `+0x44` is the current anim row's flags bit 0
+    (native row install `0x6E6CC`), derived from `anim_id` at the dispatch
+    staging instead of the always-zero pass-through, so the kick-07/08
+    stage-2 gates now fire (`s.byte44` staged live) — the second kick in one
+    possession is unblocked (`test_pad_kick_release_runs_kick_row` pins the
+    reset). `fifa96_match_run_record_anim_install` ports the FUN_0006E598
+    store core (id clamp, frame resolve, row44, the `+0x46 = 1` install
+    default, the `+0x32 = 0` frame-timer reset) and the public
+    `fifa96_match_run_record_anim_successor` ports the FUN_0008E008
+    frame-wrap `next_id` chain (0x6F keep, `< 0x70` install, `>= 0x70` mirror
+    `(type+4)&7` + install; install frame = row last + 1 with the clamp;
+    terminal rows take the movement tables — leg FU159-L5), wired at the
+    scene stage's wrap edge. Tests: `test_record_anim_install_row44`,
+    `test_record_row_successor_chain`, `test_record_jump_case_0f_snap_frame3`
+    (unit) + the live chain reaches row `0x5E -> 0x0F -> 0x00`.
+  - **The aux one-shot model + impulsion + freeze + stop (FU-161
+    §3.1/§5.2/§5.4).** `e->aux_word` (native `+0x36`) re-arms on the
+    (anim_id, frame) resolve edge; the ported one-shot arms (0x0E/0x3A)
+    clear their byte, the sustained arms (0x0F/0x05/0x2A/0x2B/0x0C) keep it —
+    the arc no longer re-stages every tick (`test_record_jump_arc_starter`
+    proves the descent without the old anim mask). `match_run_record_impulse`
+    (`vel = dir[oct] << shift`, speed = the `0x8DC68` metric) + the new
+    `fifa96_match_dir_x/_z` tables (flat 0x10F334/0x10F33C) drive 0x0E (`<<2`
+    one-shot), 0x2A (row keyed `{0x4D,0x59,0x11,0x5E} -> <<2`), 0x2B (while
+    `timer < 2*base`, row 0x5E `<<2`, + the frame freeze consumed by the
+    scene stage) and 0x0C (grounded target step; the `0x10F331`/`0x10F339`
+    dword bases resolve to the same dir bytes through the `>>24` alias, fresh
+    this task) and 0x05 (`FUN_00079B1C` snap). Tests:
+    `test_record_jump_impulsion`, `test_record_jump_sustained_and_freeze`,
+    `test_record_jump_grounded_step`, ISO
+    `test_live_jump_impulsion_carry_and_stop` (axis impulse (4,0)/4 -> the
+    carry -> the f5 snap zeroes speed/vel and sets target := pos).
+  - **The throw-in cut index fix (FU-162-L3).** The row-0x10 stage-3 camera
+    cut now indexes the `0x10F334/0x10F33C` offsets with the **live face
+    octant** `record.type` (native `byte[rec+0x8E]`, fresh `0x8591e`), not
+    the never-written `actor_type` (OL-83);
+    `test_live_throw_in_camera_y_cut` re-derived per octant (mutation-RED
+    verified). The `0x7A490` throw launch (FU-162-L4) stays the live
+    throw-in -> receive -> follow prerequisite.
+  - **The session seed (FU-166/R14).** `fifa96_match_run_begin` now seeds
+    `session_gate_14c32a = 0` — the settled ordinary-match value (every
+    GAME-SELECT item but Practise writes mode 0; byte 1 is the `ptmsel`
+    Practise session). The goal-consumer/scheduler fixtures stage the byte-1
+    session explicitly (it is the native family they exercise); the M2
+    acceptance tape stages gate 1 at the kickoff directive to keep pinning
+    the ported queue/scheduler chain, so **M2 stays v13 byte-exact**. The
+    default-path tape re-derivation (byte 0 -> the direct `0x8AA7B` goal arm)
+    is leg **FU166-L5** (T4 scope).
+  - **Goldens**: M1 `09b726b7…` byte-identical (immovable); M2 `5f7e7692…`
+    byte-identical (no re-pin) — the tape never dispatches row 0x0E and its
+    records stay on terminal self-loop rows. `make check` 108/108
+    (sanitized, strict). **Smoke** (`DISPLAY=:1`, `p13-t3-*`): the live
+    match runs (kickoff `00:00` with the ball art -> live play `00:05` with
+    moving records); the tackle-driven row-0x0E jump is not key-drivable, so
+    the live chain's evidence is the ISO tests.
+  - **New legs**: FU160-L4 (row-0x0E stage-2 camera-follow/slot arm),
+    FU159-L5 (refined: the `+0x46` lean flags-bit-2 update; the install
+    default 1 is modeled), FU161-L3 (re-scoped: the "second direction pair"
+    is the same 0x10F334/0x10F33C bytes through the `0x10F331`/`0x10F339`
+    dword bases; the `0x33` rotated index stays), FU166-L5 (above); the
+    row-0x5E live installer (FU160 rec #2), FU159-L1's other-row sine steps,
+    FU161-L4 (+0x98/+0x99) and FU161-L5/L6 are carried unchanged. The
+    one-shot model covers the ported arms only; the unported one-shot arms
+    (e.g. row 0x5C's high 0x24) keep their bytes (no-op repeats).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

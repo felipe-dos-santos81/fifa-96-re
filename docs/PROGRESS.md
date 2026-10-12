@@ -261,6 +261,40 @@ and the v13 re-pin are the roll's runtime evidence). Legs: L158.1
 (native entity-pass pose suppression, DOSBox-X), L158.2 (sanitizer
 write-back site + motion stand-in), L158.3/L158.4 unchanged, new L158.5
 (the presenter's `[0x109000]` scale / `FUN_00057278` screen-pair source).
+**Phase-13 T3 (2026-10-11) lands the jump/ack residuals — the repeatable
+live sequence (FU-159/160/161/162/166; wired 21 -> 22/80, README title
+27%).** Five pieces:
+(1) the **row-0x0E live jump selector** (FU-160 §2/§4 rec #1): the row-23
+tackle arm's `install = 0x0E` drain now runs the ported `0x82710..0x82ACF`
+body (phase gate, `timer89`, stage 0 target/face, stage 1's
+`0x79B58` self timer + `timer89 >= 0x0C` -> `FUN_0006E598(self, 0x12,
+frame 0)`, stage 2 controlled/`jump_base` -> 3, stage 3 `+0x44` reset), so
+the tackle chain ends in the already-ported jump arm + BF20 arc (the
+stage-2 camera/slot arm is FU160-L4); (2) the **byte44 ack producer**
+(FU-159 §4.1: `+0x44` = the anim row's flags bit 0, derived at the dispatch
+staging and staged into the kick-07/08 machines) + the **row successor**
+(FU-159 §5.2: the FUN_0008E008 frame-wrap `next_id` chain wired at the
+scene stage; terminal rows keep the movement-table leg) + the
+`record_anim_install` helper (the FUN_0006E598 store core), so the record
+returns to a terminal row and the kick stage-2 reset fires — the second
+kick in one possession; (3) the **aux one-shot model + impulsion family**
+(FU-161: `e->aux_word` re-armed on the (anim_id, frame) resolve edge, the
+one-shot arms clear their byte; `match_run_record_impulse` +
+`fifa96_match_dir_x/_z` drive 0x0E/0x2A/0x2B, the 0x2B frame freeze, the
+0x0C grounded step and the 0x05 snap), so the jump carries along the facing
+and stops at landing; (4) the **throw-in cut index fix** (FU-162-L3: the
+live face octant, not the never-written `actor_type`); (5) the **session
+seed** (FU-166/R14: begin seeds `[0x14C32A] = 0` — the settled ordinary
+match; byte 1 is the Practise session, staged explicitly by the
+goal-chain fixtures and the M2 tape, so M2 stays v13). Tests: the unit
+pins for the install/successor/impulsion/freeze/grounded step/case-0x0F,
+the live selector (`test_live_row_0e_selector_installs_jump`) and the live
+carry-and-stop (`test_live_jump_impulsion_carry_and_stop`). **M1/M2
+byte-exact** (`09b726b7…`/`5f7e7692…`, no re-pin); `make check` 108/108
+(sanitized, strict). The `p13-t3-*` smoke runs the live match
+(`docs/screens/p13-t3-live-kickoff.png` `00:00` with the ball art ->
+`p13-t3-live-play.png` `00:05` with moving records); the tackle-driven jump
+is not key-drivable, so the live chain's evidence is the ISO tests.
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

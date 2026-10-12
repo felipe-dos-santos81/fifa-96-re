@@ -503,3 +503,36 @@ stand-in (`anim_id` direct write) remains the disclosed stand-in for them.
 * Scratch (read-only scans): `/tmp/opencode/r8/rowtab.py` (the 111-row native
   table parse + `next_id` scan), `/tmp/opencode/r8/movscan.py` (movement-window
   byte scan), `/tmp/opencode/r8/fu160_scan.py` (first-pass combined scan).
+
+---
+
+## Status append — T3 implementation (phase-13, 2026-10-11)
+
+**Rec #1 landed (the headline):** the row-0x0E body (`0x82710..0x82ACF`) is
+ported and wired — `fifa96_match_action_0E` + `{0x0E, ...}` in the action
+table. The row-23 tackle arm's `out.install_0e -> install = 0x0E` drain now
+runs a live body: phase gate + `timer89`, stage 0 (index gate, `0x71B9C`
+camera-target stand-in, `0x8DCD4` metric + `0x79C50` face), stage 1
+(`0x157794` target stand-in, the `0x79B58` self receiver timer,
+`timer89 >= 0x0C` -> `FUN_0006E598(self, 0x12, frame 0)` via the new
+`fifa96_match_run_record_anim_install`, `ran = 1`), stage 2
+(controlled/`jump_base` -> 3; the else camera-follow/slot-dir arm
+`0x82820..0x82A9C` is the **new leg FU160-L4**) and stage 3 (`+0x44` reset —
+the record frees once the successor reaches a terminal row). The installed
+row 0x12's f2 aux-0x0E frame runs the already-ported jump arm + BF20 arc.
+
+Tests: `test_action_0e_live_jump_selector` (unit: phase/stage gates, the
+timer89 wait, the install, the stage-2/3 reset) and
+`test_live_row_0e_selector_installs_jump` (ISO: natural kickoff -> install
+0x0E -> anim row 0x12 frame 0 -> airborne within the bounded window); the
+handler census expectation flips row 0x0E to OK.
+
+**Census:** wired 21 -> **22/80** (dispatch 57 UNSUP / 22 OK / 1 NOTF);
+README title recomputed to **27%** in the same commit (AGENTS.md). Goldens:
+M1 `09b726b7…` / M2 `5f7e7692…` byte-exact; the tape never dispatches 0x0E,
+so no re-pin.
+
+Rec #2 (row 0x5E via the row-0x0C stumble): **still blocked** — the
+`fifa96_match_run_contact` entry remains test-only (needs a live caller +
+the magnitude helper + the `[0x7CF]` counter). Rec #3 (rows 0x14/0x5C):
+unchanged leg. New leg FU160-L4 recorded; FU160-L1/L2/L3 unchanged.

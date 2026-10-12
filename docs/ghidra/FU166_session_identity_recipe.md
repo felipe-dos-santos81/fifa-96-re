@@ -514,3 +514,28 @@ model; that change is implementation work, not this recon's.
 * Engine: `src/fifa96_engine/fifa96_match_run.c:1497/1740/1821/2366/3270/3291/4773`
   and `:3034..3046`; `fifa96_match_handlers.c:584/1407/1687/1721/1837`;
   `include/fifa96_engine/fifa96_match_run.h:604/615`.
+
+---
+
+## Status append — T3 implementation (phase-13, 2026-10-11)
+
+**The engine seed is settled to 0 (R14).** `fifa96_match_run_begin` now seeds
+`mr->session_gate_14c32a = 0` — the ordinary played match's value (all
+GAME-SELECT items but Practise pass mode 0; byte 1 is the `ptmsel` Practise
+session). Consequences:
+- the per-frame scheduler stays off and `fifa96_match_run_set_piece` takes the
+  native byte-0 direct arm (the `0x8AA7B` path) for the engine's live match;
+- the goal-consumer/scheduler fixtures that exercise the **byte-1 family**
+  stage `session_gate_14c32a = 1` explicitly (`test_goal_chain_pan_fixture`,
+  `test_goal_consumer_chain_fixture`, `test_camera_pan_event_chain`,
+  `test_row04_live_pan_arms_camera`, `test_view_pose_feed_arms_camera`,
+  `test_natural_goal_end_to_end`); the fallback fixture settles its machine
+  explicitly under the byte-0 default;
+- the **M2 acceptance tape** stages gate 1 at the kickoff directive so it
+  keeps pinning the ported queue/scheduler chain — M2 stays v13 byte-exact
+  (`5f7e7692…`), M1 unmoved (`09b726b7…`).
+
+**New leg FU166-L5:** re-derive the M2 acceptance tape under the byte-0
+default (the natural pan would take the direct goal arm: score increment +
+table-2 situation-6/phase-5 instead of the queue -> scheduler -> post chain).
+T4 scope (the acceptance slice owns the tape). FU166-L1..L4 unchanged.

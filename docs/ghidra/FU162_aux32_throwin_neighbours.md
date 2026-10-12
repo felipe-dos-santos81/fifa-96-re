@@ -439,3 +439,22 @@ FU-84 §1, FU-140 line 88, FU-149 §7 (line 638), FU-151 §2.7/2.9, FU-153,
 FU-157 §1/§4/§5/§7, FU-159 §3.
 
 Carried: FU-96 §7 (anchors), FU-71 (camera triple), FU-70 (record layout).
+
+---
+
+## Status append — T3 implementation (phase-13, 2026-10-11)
+
+**FU162-L3 closed.** `fifa96_match_handlers.c` (row 0x10 stage 3) now indexes
+the 0x10F334/0x10F33C offsets with the live face octant `r->type` (native
+`byte[rec+0x8E]`, fresh `0x8591e MOV EAX,[EBP+0x8b]; SAR EAX,0x18`) instead of
+the never-written `r->actor_type` (OL-83). `test_live_throw_in_camera_y_cut`
+was re-derived per octant (all eight octants, with `actor_type` deliberately
+mismatched; mutation-RED verified against the old index) — the cut's dx/dz are
+now faithful for a real taker's facing. The port still masks to the 32-entry
+derived tables (the existing hardening divergence).
+
+**Not landed (unchanged):** FU162-L1 (the save-type input mapping), FU162-L2
+(the aux-0x32 keeper chain — keeper scope), FU162-L4 (the `0x7A490` throw
+launch — the live throw-in -> receive -> follow prerequisite; OL-62), FU162-L5
+(the throw target/relay machine + the dead-ended `sp_delivery`), FU162-L6 (the
+pick origin `0x157770` vs the camera place).

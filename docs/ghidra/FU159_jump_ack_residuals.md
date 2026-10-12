@@ -495,3 +495,52 @@ unit test; otherwise keep as FU159-L1.
 * The read-only scan `/tmp/opencode/r7/scan.py` (jump-aux rows from the ported
   tables) and `scan2.py` (next_id hits) — sources kept for the controller.
 ```
+
+---
+
+## Status append — T3 implementation (phase-13, 2026-10-11)
+
+Landed (commit `feat(engine,fu159)` + the fu160/fu161 riders):
+
+1. **byte44 producer (T1-L2 closed).** `+0x44` is the current anim row's
+   flags bit 0 (`0x6E6CC`); the engine derives it from `anim_id` at the
+   dispatch staging (`match_run_row_terminal_flag`) instead of the always-zero
+   pool pass-through, and stages it into `match_kick_from_record`'s
+   `s->byte44` and the row-08 `s.byte44`. The kick-07 stage-2 reset now fires
+   (`test_pad_kick_release_runs_kick_row` pins the post-kick reset into the
+   forced decision) — the second kick in one possession is unblocked.
+2. **Minimal row successor (§5.2).** `fifa96_match_run_record_anim_successor`
+   ports the FUN_0008E008 frame-wrap chain: non-terminal rows install the
+   `next_id` (`0x6F` keep; `< 0x70` install; `>= 0x70` mirror `(type+4)&7` +
+   install `- 0x70`); the install frame argument is the row's last frame + 1
+   (the `+0x46 = 1` install default at `0x6E6D8`) clamped by the new row
+   (`FUN_0006E490`). Wired at the scene stage's wrap edge
+   (`out.advanced && prev_frame >= row.last_frame`), so `0x5E -> 0x0F -> 0x00`
+   runs and the record returns to a terminal row (row44 0 -> 0 -> 1).
+   Terminal rows take the movement/steering tables — still leg **FU159-L5**
+   (the `+0x46` flags-bit-2 update is the residual; the install default 1 is
+   modeled and exact for the non-terminal rows with flags bit 2 clear).
+3. **Install helper (§5.4).** `fifa96_match_run_record_anim_install` ports the
+   FUN_0006E598 store core (id clamp `> 0x6E -> 0`, frame resolve, row44, the
+   `+0x32 = 0` frame-timer reset, forced aux re-arm). The T1 test stand-in
+   (`rec->anim_id = 0x5E` raw writes) is replaced in the arc starter and the
+   live chain.
+4. **Case-0x0F snap + frame-3 resolve (§2.3).** `match_run_record_snap`
+   (FUN_00079B1C: target := pos, lane/speed/vel/body zero) is used by the
+   0x0F pos_y==0 branch and by aux 0x05 (the live-chain stop); the pos_y != 0
+   branch resolves frame 3 through the FUN_0006E490 clamp.
+5. **One-shot aux wording.** The `+0x36` one-shot model (FU-161 §5.4) is
+   implemented: `e->aux_word` re-arms on the (anim_id, frame) resolve edge and
+   the ported one-shot arms clear their byte. The arc starter proves the
+   descent without the old `anim_id = 0` mask.
+
+Tests: `test_record_anim_install_row44`, `test_record_row_successor_chain`,
+`test_record_jump_case_0f_snap_frame3` (unit); the live T1 chain re-stages the
+jump via the helper for the airborne kick. Goldens: M1/M2 byte-exact, no
+re-pin; `wired` unchanged by this piece (the row-0x0E wiring is FU-160's).
+
+Carried legs: FU159-L1 (the other-row sine steps; the jump arm's own impulse
+is now ported under FU-161), FU159-L2 (rows 0x14/0x5C installers), FU159-L3
+(sinks), FU159-L4 (frame byte+3), FU159-L5 (refined above), FU159-L6 (row
+0x5E's live installer — the row-0x0C stake; row 0x12's is now live via
+row-0x0E).

@@ -595,3 +595,45 @@ forward step + snap**, case `0x0F` at `0x6F02D`: `pos += 0x20·[sin,cos]` then
   `tests/test_engine_match_frame.c:2352-2379` (arc test), `:2171-2337` (live
   chain); `include/fifa96_engine/fifa96_match_entities.h:122-127` (record
   words).
+
+---
+
+## Status append — T3 implementation (phase-13, 2026-10-11)
+
+Landed (commit `feat(engine,fu161)` plus the fu159 rider that carries the
+one-shot model and the snap):
+
+1. **The impulse family.** `match_run_record_impulse(r, shift)` implements the
+   case-0x0D/0x29/0x2A store set: `vel73/vel75 = dir[oct] << shift` (the new
+   `fifa96_match_dir_x/_z` tables, flat 0x10F334/0x10F33C — first-hand
+   `read_memory`), `speed71 = fifa96_entity_distance(vel)`, the dword views
+   recomposed. Wired: aux 0x0E (`<<2`, one-shot), 0x2A (row-keyed
+   `{0x4D,0x59,0x11,0x5E} -> <<2`, sustained) and 0x2B (the same keying, while
+   `timer < 2*base`, sustained). **FU161-L1 closes for the ported arms.**
+2. **The frame freeze.** The 0x2B arm stages `frame_freeze` (native
+   `word[+0x32] = 0`, `0x6EA03`); `match_run_scene_stage` consumes it (skips
+   the advance for that record, timer = 0). **FU161-L2 closes.**
+3. **The snap and the grounded step.** `match_run_record_snap` ports
+   `FUN_00079B1C` (aux 0x0F/0x05); aux 0x05 is the live chain's stop. Aux
+   0x0C ports the grounded target step (`0x6EBFB..0x6EC48`).
+   **FU161-L3 re-scoped (premise erratum):** the fresh disassembly shows the
+   0x0C arm reads `dword[oct+0x10F331]` / `dword[oct+0x10F339]` with `SAR
+   24`, i.e. the **same** 0x10F334/0x10F33C dir bytes through the dword-base
+   alias — there is no second direction pair (FU-162 §1's alias-trap
+   resolution reproduced). The rotated `0x33` index stays a leg.
+4. **The one-shot model** (recommended in §7 step 4) is implemented in the
+   fu159 rider: `e->aux_word` (+0x36) re-arms on the (anim_id, frame) resolve
+   edge; the ported one-shot arms (0x0E/0x3A) clear their byte, the sustained
+   arms keep it. The arc starter proves the native descent (the old per-tick
+   re-stage froze the arc at the crest; the T1 unit test's `anim_id = 0` mask
+   is gone).
+
+Tests: `test_record_jump_impulsion`, `test_record_jump_sustained_and_freeze`,
+`test_record_jump_grounded_step` (unit) and ISO
+`test_live_jump_impulsion_carry_and_stop` (axis impulse (4,0)/4 -> the carry
+moves the record -> the f5 aux-0x05 snap zeroes speed/vel and sets
+target := pos). Goldens M1/M2 byte-exact; `wired` unchanged by this piece.
+
+Carried legs: FU161-L3 (rotated index), FU161-L4 (+0x98/+0x99), FU161-L5
+(dead arms 0x25/0x2E), FU161-L6 (row sets); the row-0x12 f3 `0x0002` and f5
+`0x0012` arms stay unported sub-cases of the row-0x0E chain.
