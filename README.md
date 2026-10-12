@@ -1,4 +1,4 @@
-# FIFA 96 (DOS, 1995) — Reverse Engineering (30%)
+# FIFA 96 (DOS, 1995) — Reverse Engineering (32%)
 
 ![FIFA 96 splash screen running on the native SDL3 engine](docs/screen.png)
 

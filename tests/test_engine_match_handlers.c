@@ -91,7 +91,7 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
+    /* 14 */ UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
@@ -103,7 +103,7 @@ static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, UNSUP, NOTF,  UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 1E */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 1E */ UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP,
 };
 
 struct fixture {
@@ -1856,8 +1856,8 @@ static void test_phase_rows_dispatch_per_classification(void) {
     assert(rc == phase_expect[phase]);
     if (phase == FIFA96_MATCH_PHASE_INT3_SLOT)
       assert(rc == NOTF);
-    else
-      assert(rc == UNSUP);
+    else if (fifa96_match_phase_table[phase].fn == NULL)
+      assert(rc == UNSUP);           /* an unported row never returns OK */
   }
   drop_fixture(&f);
 }

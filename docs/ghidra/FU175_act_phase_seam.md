@@ -464,3 +464,55 @@ Engine/loader source read: `src/fifa96_engine/fifa96_match_handlers.c`
 Docs cross-cited: FU-137 (§2/§3/§5.2/§6.2/§9), FU-143 (§1..§5, §10, §11),
 FU-165 (§1..§3, §6), FU-170 (§3, §7, §8), FU-174 (§2, §7 note 2, §8 legs).
 No writes beyond this slice file and the workspace report.
+
+---
+
+## 10. Landing status — phase-15 T1 (2026-10-12)
+
+The §6 T1 wiring recommendation landed. **New module**
+`src/fifa96_engine/fifa96_match_act.{c,h}` (mirroring
+`fifa96_match_phase_machine.c`):
+
+* `struct fifa96_match_act { int16_t id; uint8_t stage; int16_t timer; }` — the
+  native `[0x158828]`/`[0x158829]`/`[0x158818]` slot (fresh re-read this
+  slice: `read_memory 0x158808` = 40 zero bytes, the slot is BSS).
+* `fifa96_match_act_dispatch(mr, act, stage, invoke)` — the `FUN_000888FC`
+  mirror: the `id != act` latch, `id/stage` write, `timer = 0`, then the
+  invoke-now via `fifa96_match_dispatch_phase(mr, 0x16 + act)` when the phase
+  row resolves. This is the **live caller** for `fifa96_match_dispatch_phase`.
+* `fifa96_match_act_tick(mr)` — the `0x8B669..0x8B672` clock-tail tick (fresh
+  `disassemble_bytes 0x8B655`: `CMP dword [0x158808],0` / `JZ` / `CALL dword
+  [0x158808]`), wired at the existing clock-tail slot in
+  `fifa96_match_run_frame`.
+
+The ad-hoc FU-170 §7 `act9_armed`/`act9_timer` singleton is **absorbed** into
+`mr->act`; the sit-0xC arm is `fifa96_match_act_dispatch(mr, 9, 0, 0)` (the
+native invoke-now is deferred to the tick to preserve the granted-frame
+cadence, see §6/FU170-L1) and `act9_gate` stays the derived handshake marker.
+
+**Phase-row ranking (§7) outcome.** Rank 1 **phase 0x1F / act 9 (`0x88F4C`)**
+landed as the first honest phase row: the native handler is both the
+phase-table row `0x110794[0x1F]` and the act slot `0x1107EC[9]` (the FU165-L9
+dual identity), and its producer (sit-0xC `0x8AF0E`) is live, so
+`fifa96_match_dispatch_phase(0x1F)` now returns `FIFA96_OK` and the row runs
+each granted frame. The derived body keeps the FU-170 §7 model (stage-0
+`[0x15882A]` clear; stage-3 `timer >= 0x3C` → `[0x15882A] = 1` + slot clear;
+stages 1/2 compressed) with the `0x73E28`/`0x93850`/`0x361B0`/`0x4C324` sinks
+as FU181-L5 legs. Ranks 2-9 stay open: their producers need act 1/2/0xB or the
+per-record walk.
+
+**Tape: byte-identical.** `./build/test_engine_m1 | cmp - …` and
+`./build/test_engine_m2 | cmp - …` both match the goldens
+(M1 `09b726b7…`, M2 `7b4b241a…` v14) after the seam, so **no re-pin**. The
+act-9 tick reproduces the exact FU-170 §7 cadence (the same-frame arm+tick
+leaves `mr.act.timer == 2`), which is why the v14 strata held.
+
+**Census.** +1 action row (0x17, the FU-181 row) and +1 phase row (0x1F) →
+the action+phase census moves 24/80 → 26/80 (25 action + 1 phase) = **32%**
+(README title recomputed in the same commit). The action row 0x17 is wired but
+its armed path is dormant (its only producer, act-4 stage 0, is behind the
+unported sit-2..4 formation-order arm; FU181-L1).
+
+**Legs.** FU175-L1 (the per-record `[rec+0x1C]` caller) stays open; FU175-L3
+(the singleton) is now realised by the shared `mr->act` slot — no current
+fixture stages two acts; FU175-L4/L5/L6 carried unchanged.

@@ -440,6 +440,7 @@ add_library(fifa96_engine
   src/fifa96_engine/fifa96_match_handlers.c
   src/fifa96_engine/fifa96_match_entities.c
   src/fifa96_engine/fifa96_match_phase_machine.c
+  src/fifa96_engine/fifa96_match_act.c
   src/fifa96_engine/fifa96_match_locomotion_tables.c
   src/fifa96_engine/fifa96_menu_art.c
   src/fifa96_engine/platform_null.c)
@@ -598,6 +599,14 @@ target_include_directories(test_engine_match_phase_machine PRIVATE src)
 target_compile_options(test_engine_match_phase_machine PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_engine_match_phase_machine PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_match_phase_machine COMMAND test_engine_match_phase_machine
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
+add_executable(test_engine_match_act tests/test_engine_match_act.c)
+target_link_libraries(test_engine_match_act PRIVATE fifa96_engine)
+target_include_directories(test_engine_match_act PRIVATE src)
+target_compile_options(test_engine_match_act PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_engine_match_act PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_engine_match_act COMMAND test_engine_match_act
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_engine_m2 tests/test_engine_m2.c)

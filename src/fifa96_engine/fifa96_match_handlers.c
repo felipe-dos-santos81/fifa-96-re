@@ -83,6 +83,7 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_match_handlers.h"
+#include "fifa96_engine/fifa96_match_act.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_loader/fifa96_action_handlers.h"
@@ -3401,6 +3402,101 @@ static int fifa96_match_action_0C(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* Row 17 `0x84730..0x849AF` (FU-181 §2, first-hand this slice; FU-81 §2 4-arm
+ * table `0x84720`): the line-up walk. The phase gate `[0x157A4A]>>24 == 0xB`
+ * (`0x84743`) else the `0x849A1` FUN_0007DAB4 reset tail; the `+0x89` timer
+ * accumulates `[0x157A64]` (`0x8474F..0x84765`); the `+0x92` stage walk:
+ *  - stage 0 (`0x84780`): stash the position triple into `0x1587FC`, target
+ *    x := -0x680, target y := 0, target z := the ±0x50 facing from the
+ *    position-z sign (`0x8479D..0x847C2`), the `0x8DCD4` commit, `+0x89` := 0,
+ *    `+0x92`++ (falls into stage 1's timer wait);
+ *  - stage 1 (`0x847E5`): wait `+0x89 >= 0x3C` with the `0x45001` ball-shape
+ *    and `[+0x63]>>16 < 0x20` gates, then the `0x4C324` presentation exit and
+ *    `+0x92`++ (falls into stage 2);
+ *  - stage 2 (`0x8483F`): the per-team formation-matrix sync
+ *    (`0x84842..0x848D1`), `0x8C758`/`0x6E598`, then position x := 0xFFFFF7A0
+ *    (-0x860), y := 0, z := 0, the `0x1587FC` -> target copy, the `0x8DCD4`
+ *    commit, `+0x89` := 0, `+0x92`++ (RET);
+ *  - stage 3 (`0x8494C`): wait `+0x89 >= 0x3C` with the same gates, then the
+ *    `0x4C324`/`0x4728C` presentations, the `0x1587FC` -> position copy and
+ *    the `0x7DAB4` reset.
+ * The formation matrices, `0x8DCD4`/`0x8C758`/`0x6E598`/`0x45001`/`0x4728C`/
+ * `0x4C324` and the `0x10F370`/`0x1587FC` cells are FU181-L4 sinks: the derived
+ * port keeps the derivable gate/timer/stage walk and the abort-free epilogue
+ * (`0x8476D CMP AL,3; JA 0x849A6`). The row's only producer is act-4 stage 0
+ * (`0x89740`, invoke-now), which the engine cannot reach until the
+ * `FUN_0008A938` sit-2..4 formation-order gate `0x8AB08..0x8AB62` (FU-149 L12)
+ * lands (FU181-L1): row 0x17 is wired but its armed path is dormant. */
+static int fifa96_match_action_17(struct fifa96_match_run *mr) {
+  static const uint8_t gates[1] = {0x0Bu};
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *e;
+  fifa96_action_stage st;
+  fifa96_action_stage_out out;
+  int32_t id = r->entity_id;
+  uint32_t t, idx;
+  int rc;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  e = &team->records[idx];
+  memset(&st, 0, sizeof st);
+  st.phase = mr->state.phase;
+  st.stage = r->stage92;
+  st.timer89 = r->timer89;
+  st.delta = r->delta;
+  st.active = r->active;
+  rc = fifa96_action_stage_enter(&st, gates, 1, &out);   /* 0x8473B..0x8474A */
+  if (rc != FIFA96_OK) return rc;
+  if (out.reset != 0) {                                   /* 0x8474A -> 0x849A1 */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  fifa96_action_stage_tick(&st);                          /* 0x8474F..0x84765 */
+  if (st.stage > 3u) {                                    /* 0x8476D JA */
+    r->timer89 = st.timer89;
+    return FIFA96_OK;
+  }
+  if (st.stage == 0u) {                                   /* 0x84780 */
+    r->target_x = -0x680;
+    r->target_y = 0;
+    r->target_z = r->pos_z <= 0 ? -0x50 : 0x50;           /* 0x847A9..0x847C2 */
+    st.timer89 = 0;
+    st.stage = 1;                                         /* falls into stage 1 wait */
+    r->timer89 = st.timer89;
+    r->stage92 = st.stage;
+    return FIFA96_OK;
+  }
+  if (st.stage == 1u && st.timer89 < 0x3C) {              /* 0x847E5..0x847EE */
+    r->timer89 = st.timer89;
+    r->stage92 = st.stage;
+    return FIFA96_OK;
+  }
+  if (st.stage == 1u) {                                   /* 0x84813 advance */
+    fifa96_action_stage_advance(&st, &out);               /* +0x89=0, stage 2 */
+  }
+  if (st.stage == 2u) {                                   /* 0x8483F */
+    r->pos_x = -0x860;                                    /* 0x84918 */
+    r->pos_y = 0;                                         /* 0x8490C */
+    r->pos_z = 0;                                         /* 0x84903 */
+    fifa96_action_stage_advance(&st, &out);               /* +0x89=0, stage 3 */
+    r->timer89 = st.timer89;
+    r->stage92 = st.stage;
+    return FIFA96_OK;
+  }
+  /* stage 3 (0x8494C): wait then reset */
+  if (st.timer89 >= 0x3C) {
+    match_row_reset(mr, e);                               /* 0x849A1 */
+    return FIFA96_OK;
+  }
+  r->timer89 = st.timer89;
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -3443,7 +3539,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x14, NULL, "FU-137 §6: FU-136 row 14: not ported (partial); scatter_celebration helpers; OL-9"},
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},
-    {0x17, NULL, "FU-137 §6: FU-136 row 17: not ported (partial); FU-81 4-arm table 0x84720; OL-9"},
+    {0x17, fifa96_match_action_17,
+     "FU-181 §2 (phase-15 T1): row 17 ported over the action-stage helpers (0x84730..0x849AF: the 0x84743 phase-0xB gate, the 0x84720 4-arm stage table, the -0x680/±0x50 facing walk and the 0x849A1 0x7DAB4 reset); the formation-matrix/0x8DCD4/0x8C758/0x6E598/0x45001/0x4728C/0x4C324 sinks stay FU181-L4; the only producer (act-4 stage 0, 0x89740) is gated by the sit-2..4 formation-order arm 0x8AB08..0x8AB62 (FU-149 L12) -> wired, armed path dormant (FU181-L1)"},
     {0x18, fifa96_match_action_18,
      "FU-139 §10/FU-137: row 18 ported (0x849B0..0x84AE1 machine; 0x4C324 bind, 0x8DB6C NSEARCH + 0x786A0 SWAP, 0x7DAB4 reset) over the pool; install arm 0x8A32F; anim row byte and bind globals OL-68"},
     {0x19, NULL, "FU-140 §2/§3: row 19 not ported (partial); keeper_hold_* + FU-140 fallback; OL-33"},
@@ -3512,7 +3609,8 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x1C, NULL, "FU-137 §6: FU-136 phase 1C: not ported; FU-83 timeline; OL-13"},
     {0x1D, NULL, "FU-137 §6: FU-136 phase 1D: not ported; FU-83 timeline, installs 0x19/3; OL-13"},
     {0x1E, NULL, "FU-137 §6: FU-136 phase 1E: not ported; FU-83 timeline; OL-13"},
-    {0x1F, NULL, "FU-137 §6: FU-136 phase 1F: not ported; FU-83 timeline; OL-13"},
+    {0x1F, fifa96_match_action_phase_1F,
+     "FU-175 §7 rank 1 / FU-181 §4 (phase-15 T1): phase 1F = the act-9 handler 0x88F4C as the derived 4-stage skeleton (stage-0 [0x15882A] clear and stage-3 timer>=0x3C -> [0x15882A]=1 + the act-slot clear); the 0x88F9A phase-0x15 write is the sit-0xC arm (FU-170 §7); the 0x73E28/0x93850/0x361B0/0x4C324 sinks and the word[0x15881A] gate producer stay FU181-L5/FU175-L5"},
     {0x20, NULL, "FU-137 §6: FU-136 phase 20: not ported; FU-83 timeline, installs 0x24; OL-13"},
     {0x21, NULL, "FU-137 §6: FU-136 phase 21: not ported; FU-83 timeline; OL-13"},
     {0x22, NULL, "FU-137 §6: FU-136 phase 22: not ported; FU-83 timeline; OL-13"},

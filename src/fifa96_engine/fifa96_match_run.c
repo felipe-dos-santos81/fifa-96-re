@@ -2013,8 +2013,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;
-  mr->act9_armed = 0;                  /* FU-170 §7: fresh act-9 producer */
-  mr->act9_timer = 0;
+  (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
@@ -2098,8 +2097,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
-  mr->act9_armed = 0;                  /* FU-170 §7: fresh act-9 producer */
-  mr->act9_timer = 0;
+  (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
@@ -2272,8 +2270,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     uint8_t pm_state_before = mr->phase_machine.state;
     uint8_t pm_phase_before = mr->phase_machine.phase;
     (void)fifa96_match_run_screen_install(mr, 0, 0, 0);
-    mr->act9_armed = 0;
-    mr->act9_timer = 0;
+    (void)fifa96_match_act_init(&mr->act);
     mr->act9_gate = 0;
     mr->state.phase = phase_before;
     mr->state.prev_phase = prev_before;
@@ -2592,29 +2589,28 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     rc = (fifa96_err_t)fifa96_match_run_phase_arm(mr, out.phase);
     if (rc != 0) return (int)rc;
   }
-  /* FU-150 P2: the act row's FUN_000888FC invocation (invoke-now). Only act 2
-   * (the sit-9/sit-0xA rows) has a ported body: the derived phase-0x18
-   * free-kick/penalty hand-off machine, seeded with the row's stage (0 for
-   * sit 9, 1 for sit 0xA). Other acts stay unported (OL-13). */
+  /* FU-150 P2: the act row's FUN_000888FC invocation. Act 2 (the sit-9/sit-0xA
+   * rows) has a ported body: the derived phase-0x18 free-kick/penalty hand-off
+   * machine (the `ref_machine`), seeded with the row's stage (0 for sit 9, 1
+   * for sit 0xA). Act 9 (sit 0xC, FU-170 §7) writes phase 0x15 on the
+   * controlled side (`0x88F9A`..`0x88FB0`) and installs act 9; the act machine
+   * then ticks the phase-0x1F row from the clock tail. Other acts install the
+   * slot (0x8890A) but their phase rows stay unported (OL-13). The native
+   * invoke-now (BX=1) is deferred to the clock-tail tick for act 9 to preserve
+   * the granted-frame cadence (FU170-L1). Do NOT clear `situation_pending`: the
+   * native sit-0xC dispatch does not touch `[0x15B6C0]`. */
   if (out.act == 2u) {
     mr->ref_machine = FIFA96_MATCH_RUN_REF_RESTART;
     mr->ref_restart_stage = out.stage;
     rc = (fifa96_err_t)fifa96_match_run_referee_step(mr);
     if (rc != 0) return (int)rc;
   } else if (out.act == 9u) {
-    /* FU-170 §7 item 2 (phase-14 T3): the derived act-9 producer — the
-     * sit-0xC row's `0x8AF0E` invocation (act 9 stage 0, invoke). The native
-     * stage 0 writes phase 0x15 on the controlled side (`0x88F9A`..`0x88FB0`
-     * `MOV EDX,[0x157AAC]; SAR 24; EAX=0x15; CALL 0x740A0`) and stages 1/2
-     * pass in the same call, so the derived machine arms here and the
-     * stage-3 timer (`word[0x158818] >= 0x3C`, 30 granted frames) runs in
-     * `fifa96_match_run_frame`. Do NOT clear `situation_pending`: the native
-     * sit-0xC dispatch does not touch `[0x15B6C0]`. Stage-0's camera reset /
-     * presentations and the phase-0x15 arm stay FU170-L2. */
     rc = (fifa96_err_t)match_run_write_phase(mr, 0x15u);
     if (rc != 0) return (int)rc;
-    mr->act9_armed = 1u;
-    mr->act9_timer = 0;
+  }
+  if (out.act != FIFA96_ACTION_PHASE_NONE) {
+    rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage, 0);
+    if (rc != 0) return (int)rc;
   }
   return 0;
 }
@@ -3709,24 +3705,16 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * stages. Runs after the goal scan, before the scene staging, so the
      * frame draws the advanced record. */
     match_run_ball_machine(mr);
-    /* FU-170 §7 item 3 (phase-14 T3): the derived act-9 stage-3 timer. The
-     * native act tick is the clock tail's `0x8B669 CMP dword[0x158808],0 /
-     * 0x8B672 CALL dword[0x158808]`, directly after the ball machine
-     * (`0x8B664 CALL 0x8BAF0`) and inside the byte-0 arm; the port runs the
-     * derived act here, any phase (the native tick is ungated by phase). At
-     * `word[0x158818] >= 0x3C` (`0x890B1..0x890E3`) the act sets
-     * `[0x15882A] = 1` — the leg-0 GATE producer. Stage 1/2 gate fidelity is
-     * FU170-L1 (the derived route passes them in the arm frame); the act-2
-     * model stays a separate machine (the singleton divergence, FU170-L5). */
-    if (mr->act9_armed) {
-      mr->act9_timer = (int16_t)(mr->act9_timer + (int16_t)mr->state.frame_delta);
-      if ((int32_t)mr->act9_timer >= 0x3C) {
-        mr->global_5882a = 1u;
-        mr->act9_gate = 1u;   /* the act-9-produced gate (see the header) */
-        mr->act9_armed = 0u;
-        mr->act9_timer = 0;
-      }
-    }
+    /* M2 phase-15 T1 / FU-175 §2: the native act tick — the clock tail's
+     * `0x8B669 CMP dword[0x158808],0 / 0x8B670 JZ / 0x8B672 CALL
+     * dword[0x158808]` — runs after the ball machine (`0x8B664 CALL 0x8BAF0`)
+     * and inside the byte-0 arm, ungated by phase. `fifa96_match_act_tick`
+     * runs the installed act handler through `fifa96_match_dispatch_phase`
+     * (the act-9 phase-0x1F row sets `[0x15882A]` at its stage-3 timer, the
+     * leg-0 GATE producer). The FU-170 §7 ad-hoc `act9_armed`/`act9_timer`
+     * pair is absorbed into the act slot. */
+    rc = fifa96_match_act_tick(mr);
+    if (rc < 0) return rc;
     /* FU-85 §4: FUN_00036C70 stages the render slots after the FU-4B100
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
      * positions/animations reflect this frame. Rendering stays opt-in: the

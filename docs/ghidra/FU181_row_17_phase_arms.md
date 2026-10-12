@@ -334,3 +334,45 @@ FU174 §7 note 2. The `+0x100000` LE-image rule and the alias traps
 (`[0x158816]>>16` = `[0x15881A]`; `[0x158828]>>24` = `[0x15882B]`,
 `[0x158829]>>24` = `[0x15882C]`; `[[0x1587EC]+0x8E]>>24` = byte `[rec+0x91]`)
 are applied. No writes beyond this slice file and the workspace report.
+
+---
+
+## 9. Landing status — phase-15 T1 (2026-10-12)
+
+§6's three-step coupling landed (row-body + producer wiring), with the R23 act
+seam (FU-175) as step 1:
+
+1. **R23 act seam** — new `src/fifa96_engine/fifa96_match_act.{c,h}` (FU-175
+   §10): `fifa96_match_act_dispatch`/`_tick` give
+   `fifa96_match_dispatch_phase` a live caller; the sit-0xC act-9 arm and the
+   clock-tail tick now run through it.
+2. **Row 0x17 body** — `fifa96_match_action_17` (`fifa96_match_handlers.c`)
+   ports the derivable skeleton of §2: the `0x84743` phase-0xB gate (else the
+   `0x849A1` `FUN_0007DAB4` reset), the `0x8474F..0x84765` `+0x89` timer, the
+   `0x84720` 4-arm stage walk (stage 0 target `-0x680`/±`0x50` by the
+   position-z sign and `+0x92`++; stage 1 wait `+0x89 >= 0x3C`; stage 2 the
+   `+0x59 := 0xFFFFF7A0 (-0x860)` write; stage 3 wait then reset) and the
+   `0x8476D JA` abort-free epilogue. Slot `fifa96_match_action_table[0x17]`
+   is set. The formation matrices, `0x8DCD4`/`0x8C758`/`0x6E598`/`0x45001`/
+   `0x4728C`/`0x4C324` and `0x10F370`/`0x1587FC` stay FU181-L4 legs.
+3. **Act-4 producer** — *not* landed as a live producer; the honest finding is
+   that act 4 stage 0's row-0x17 install is gated on a formation-matrix
+   difference (`0x8969D CMP [EDI+0x14C360]` vs `[ECX+0x157BD2]`, `0x896A3
+   JZ`), and those matrices (`0x157BD2`/`0x14C360`) are written only by the
+   unported placement phase handlers. With the engine's unported formation
+   state the diff is always equal, so a faithful act-4 port would be a no-op
+   and row 0x17 has **no live producer this session** — the FU181-L1 dormancy.
+   Wiring act 4 through the seam (`fifa96_match_act_dispatch`) is the seam's
+   job and is ready; the `0x8AB08..0x8AB62` sit-2..4 formation-order gate
+   (FU-149 L12) is the missing invoker. Row 0x17 is therefore **wired but
+   armed-path dormant** — the same honesty class as the FU-149 taker rows.
+4. **Act 8 / act 9** — act 9 (phase 0x1F, `0x88F4C`) landed via FU-175 §7
+   rank 1 (the first honest phase row). Act 8 (phase 0x1E) stays open.
+
+**Tape: byte-identical** (M1 `09b726b7…`, M2 `7b4b241a…` v14; no re-pin).
+**Census:** 24/80 → 26/80 (25 action + 1 phase) = 32%.
+
+The §4 dual-identity hazard (FU165-L9) is not exercised in the engine: phase
+0x1F is reached only through the global act tick, never the per-record
+`[rec+0x1C]` walk (unported, FU175-L1), so the handler cannot run twice for one
+byte.

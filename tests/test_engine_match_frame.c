@@ -4116,16 +4116,16 @@ static void test_restart_chain_fixture(void) {
   assert(mr.screen_timer == 0u);         /* the step advance zeroes it */
   assert(mr.global_5882a == 0u);         /* the SETUP0 clear (0x93C30) */
   assert(mr.state.phase == 0x15u);       /* the derived act-9 stage 0 */
-  assert(mr.act9_armed == 1u);
-  assert(mr.act9_timer == 2u);           /* the same-frame act tick */
+  assert(mr.act.id == 9);                /* the act slot installed (0x8890A) */
+  assert(mr.act.timer == 2);             /* the same-frame act tick (0x88F51) */
 
   /* the stage-3 timer: 30 granted frames from the arm set the gate */
   for (int i = 0; i < 28; i++) one_granted_frame(&mr);
-  assert(mr.act9_armed == 1u && mr.global_5882a == 0u);
+  assert(mr.act.id == 9 && mr.global_5882a == 0u);
   one_granted_frame(&mr);                /* the 29th tick: 2 + 58 = 0x3C */
   assert(mr.global_5882a == 1u);
-  assert(mr.act9_armed == 0u);           /* the act ends (the slot unloads) */
-  assert(mr.act9_timer == 0);            /* the completion zeroes it */
+  assert(mr.act.id == 0);                /* the act ends (0x890D3 clears the slot) */
+  assert(mr.act.timer == 0);             /* the completion zeroes it */
   assert(mr.screen_step == 1u);          /* the GATE opens next frame */
 
   one_granted_frame(&mr);                /* GATE -> SETUP2 -> PHASE waits */

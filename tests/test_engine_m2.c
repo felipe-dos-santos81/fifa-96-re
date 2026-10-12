@@ -1556,10 +1556,10 @@ struct m2_result {
    * (the corner counter, the screen machine holding at its PHASE step) and
    * the restart completion (the POST idle with the latch clear). */
   int gate_step;             /* first post-goal step with global_5882a set */
-  uint8_t phase15_armed;     /* act9_armed at phase15_step (= 1) */
+  uint8_t phase15_armed;     /* act.id == 9 at phase15_step (= 1) */
   uint8_t phase15_gate;      /* global_5882a at phase15_step (= 0, just cleared) */
   uint8_t gate_marker;       /* act9_gate at gate_step (= 1, the produced gate) */
-  uint8_t gate_armed;        /* act9_armed at gate_step (= 0, the arm spent) */
+  uint8_t gate_armed;        /* act.id == 9 at gate_step (= 0, the slot unloaded) */
   uint8_t phase4_corner;     /* corner_count[0] at phase4_step (= 1) */
   uint8_t phase4_screen_step;   /* screen_step at phase4_step (the PHASE hold) */
   uint8_t restart_screen_step;  /* screen_step at restart_step (POST idle) */
@@ -2511,14 +2511,14 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     if (res->goal_step > 0 && live) {
       if (res->phase15_step < 0 && e->match_run.state.phase == 0x15u) {
         res->phase15_step = steps;
-        res->phase15_armed = e->match_run.act9_armed;
+        res->phase15_armed = (uint8_t)(e->match_run.act.id == 9);
         res->phase15_gate = e->match_run.global_5882a;
       }
       if (res->gate_step < 0 && res->phase15_step > 0 &&
           e->match_run.global_5882a != 0u) {
         res->gate_step = steps;
         res->gate_marker = e->match_run.act9_gate;
-        res->gate_armed = e->match_run.act9_armed;
+        res->gate_armed = (uint8_t)(e->match_run.act.id == 9);
       }
       if (res->phase4_step < 0 && res->phase15_step > 0 &&
           e->match_run.state.phase == 4u) {

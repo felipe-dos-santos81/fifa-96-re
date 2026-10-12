@@ -4,6 +4,7 @@
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_match_phase_machine.h"
+#include "fifa96_engine/fifa96_match_act.h"
 #include "fifa96_engine/fifa96_platform.h"
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_control.h"
@@ -609,18 +610,15 @@ struct fifa96_match_run {
    * accumulation, `[0x58818] += [0x57A64]`) while the phase is 1; init/begin
    * clear it. */
   uint8_t global_5882a;
-  /* FU-170 §7 (phase-14 T3): the derived act-9 producer state. The native
-   * singleton act slot `[0x158808]` holds `0x88F4C` between the sit-0xC
-   * dispatch (`0x8AF0E` -> `FUN_000888FC(9, 0, invoke)`) and the stage-3
-   * completion; the port models its two observable effects — the stage-0
-   * phase-0x15 write and the stage-3 timer (`word[0x158818] >= 0x3C`, 30
-   * granted frames) that sets `global_5882a` (stages 1/2 compressed to pass,
-   * FU170-L1). `act9_armed` is set by the act-9 arm in
-   * `match_run_situation_side`, ticked by `fifa96_match_run_frame` after the
-   * ball machine (the native act tick `0x8B672`), disarmed at completion;
-   * init/begin clear both. */
-  uint8_t act9_armed;
-  int16_t act9_timer;
+  /* M2 phase-15 T1 / FU-175: the native singleton act slot `FUN_000888FC`
+   * installs (`id = byte[0x158828]`, `stage = byte[0x158829]`, `timer =
+   * word[0x158818]`). The act machine (`fifa96_match_act_dispatch` /
+   * `fifa96_match_act_tick`) owns it; the clock-tail tick runs after the ball
+   * machine (the native `0x8B672`). This absorbs the FU-170 §7 ad-hoc
+   * `act9_armed`/`act9_timer` pair: act 9 is now `dispatch(mr, 9, 0, invoke)`
+   * and its handler is the phase-0x1F row (`0x88F4C`) reached through
+   * `fifa96_match_dispatch_phase`. init/begin clear it. */
+  struct fifa96_match_act act;
   /* The derived act-9 → GATE handshake marker: within the restart window the
    * native `[0x15882A]` gate has exactly one reachable producer. Fresh xrefs
    * (24 touches): the leg-0 SETUP0 clears it unconditionally (`0x93C30`;

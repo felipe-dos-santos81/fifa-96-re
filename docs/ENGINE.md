@@ -5,7 +5,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-24/80 action rows wired, the derived FU-143 phase driver wired into the run
+26/80 dispatch rows wired (25 action + the first wired phase row 0x1F), the
+derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
@@ -259,7 +260,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **24/80 rows wired** — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **26/80 rows wired** (25 action + the first phase
+  row `0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -274,11 +276,18 @@ the build also produces the windowed `fifa96` target (`make game`).
   `[0x1577CA]` tracked bind), `0B`, `0C` (phase-14 T1/FU-169: the duel body
   and the contact-decision body — the live row-0x5E installer chain),
   `26`, `28`, `2A`
-  (cluster G), `1D` (FU-151 P3 close-down) and `10`, `11`, `12`, `13`
+  (cluster G), `1D` (FU-151 P3 close-down), `10`, `11`, `12`, `13`
   (FU-149 L13/T1: the throw-in/corner/free-kick/penalty taker machines —
   placement/probe/kick/resolution; the taker codes the P1 arms install now
-  execute and hand back to phase 2 through the shared situation-0xB entry);
-  dispatch results 55 UNSUP / 24 OK / 1 NOTF.
+  execute and hand back to phase 2 through the shared situation-0xB entry) and
+  `17` (M2 phase-15 T1/FU-181: the line-up walk `0x84730..0x849AF`, wired but
+  armed-path dormant — its only producer act-4 stage 0 `0x89740` is gated by
+  the sit-2..4 formation-order arm `0x8AB08..0x8AB62`, FU-149 L12/FU181-L1).
+  The phase table contributes its first honest row: **phase `0x1F` (= act 9
+  handler `0x88F4C`)** — the FU-175 act/phase seam gives
+  `fifa96_match_dispatch_phase` a live caller and the sit-0xC act-9 producer
+  (FU-170 §7) reaches the row every granted frame. dispatch results
+  53 UNSUP / 26 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
@@ -2207,6 +2216,23 @@ the build also produces the windowed `fifa96` target (`make game`).
     smoke** (scoring is a gameplay outcome the port cannot force on the SDL
     session); the post-goal continuation's runtime evidence is the v14 tape
     + the fixtures.
+- **M2 phase-15 T1 (the native act/phase dispatch seam + row 0x17; FU-175 /
+  FU-181; 2026-10-12).** The act seam (`FUN_000888FC` + the `0x8B669..0x8B672`
+  clock-tail tick) is ported in `src/fifa96_engine/fifa96_match_act.c` and
+  wired into `fifa96_match_run_frame`'s clock-tail slot; it gives
+  `fifa96_match_dispatch_phase` a live caller and absorbs the FU-170 §7 ad-hoc
+  act-9 singleton. Phase `0x1F` (= act 9 handler `0x88F4C`) is the first wired
+  phase row; action row `0x17` (the line-up walk) is wired but armed-path
+  dormant. **M1 `09b726b7…` / M2 `7b4b241a…` byte-identical** (the seam
+  reproduces the exact FU-170 §7 act-9 cadence), so **no tape re-pin**;
+  `make check` **110/110** (sanitized, strict; the new
+  `test_engine_match_act`). **Census 24/80 → 26/80 = 32%** (README title
+  recomputed). **Smoke (`DISPLAY=:1`, this session; honest):** the windowed
+  game boots and draws the intro splash and the front-end menu
+  (`docs/screens/p15-t1-intro.png`, `p15-t1-frontend.png`), but the
+  post-confirm STATE16 bridge drew black in this session — the visible match
+  was **not reached**, so no live gameplay reach is claimed; T1 is
+  tape-dormant, so no visible delta is expected.
 - **M2 phase-14 T4 (acceptance v14 completion + the T1–T3 review riders;
   2026-10-12).** Docs/comments + test strata only — **no behavior change**:
   M2 v14 byte-exact (`./build/test_engine_m2 | cmp -`), M1 `09b726b7…`
@@ -2827,7 +2853,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   classes `0x1106AD`) and the transitions `FUN_000740A0` / `FUN_000888FC` /
   `FUN_0008A938` / `FUN_0008B9CC` are derived and ported at the loader level
   (`fifa96_action_phase_row/_act/_situation/_period_end`), with open legs
-  `OL-72`…`OL-79`. The phase driver `fifa96_match_run_phase_drive` is **wired
+  `OL-72`…`OL-79`. **Phase-15 T1 (FU-175/FU-181):** phase `0x1F` (act 9 handler
+  `0x88F4C`) is the first wired phase row — the native act/phase dispatch seam
+  (`FUN_000888FC` + the `0x8B669..0x8B672` clock-tail tick, ported in
+  `src/fifa96_engine/fifa96_match_act.c`) gives `fifa96_match_dispatch_phase`
+  a live caller, and the derived act-9 producer (FU-170 §7) reaches the row
+  each granted frame; the handler's `0x73E28`/`0x93850`/`0x361B0`/`0x4C324`
+  sinks stay FU181-L5. The phase driver `fifa96_match_run_phase_drive` is **wired
   into the run loop** (M2 playability Task 3): each granted frame it applies
   the class-1/class-2 gate and consumes the FU-62 clock's `sec == limit + aux`
   completion (`mr.clock_period_ended`), running the derived `FUN_0008B9CC`
