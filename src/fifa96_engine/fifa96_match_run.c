@@ -1211,9 +1211,9 @@ static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
          * fresh this task); sustained. */
         if (r->pos_y == 0) {
           int oct = (int)(r->type & 0x7u);
-          r->target_x = r->pos_x + ((int32_t)fifa96_match_dir_x[oct] << 5);
+          r->target_x = r->pos_x + (int32_t)fifa96_match_dir_x[oct] * 0x20;
           r->target_y = r->pos_y;
-          r->target_z = r->pos_z + ((int32_t)fifa96_match_dir_z[oct] << 5);
+          r->target_z = r->pos_z + (int32_t)fifa96_match_dir_z[oct] * 0x20;
         }
         break;
       default:

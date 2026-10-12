@@ -2544,6 +2544,7 @@ static void test_live_row_0e_selector_installs_jump(void) {
   struct fifa96_match_entity *rec;
   int installed = 0;
   int airborne = 0;
+  int saw_0f = 0;
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
@@ -2582,6 +2583,17 @@ static void test_live_row_0e_selector_installs_jump(void) {
   for (int i = 0; i < 40 && rec->pos_y == 0; i++) one_granted_frame(&mr);
   airborne = rec->pos_y != 0;
   assert(airborne == 1);           /* the f2 aux-0x0E jump arm + arc */
+  /* the live repetition enabler: the row chain 0x12 -> 0x0F -> 0x00 runs
+   * through the scene-stage successor; the terminal row sets +0x44 = 1 and
+   * the row-0x0E stage-3 arm resets the action record (the free-for-a-new-
+   * action edge the tackle chain needs). */
+  for (int i = 0; i < 140 && rec->anim_id != 0u; i++) {
+    one_granted_frame(&mr);
+    if (rec->anim_id == 0x0Fu) saw_0f = 1;
+  }
+  assert(saw_0f == 1);             /* the successor moved 0x12 -> 0x0F live */
+  assert(rec->anim_id == 0u);      /* ... and 0x0F -> 0x00 */
+  assert(rec->row44 == 1u);        /* row 0 flags 0x07 (terminal) */
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
