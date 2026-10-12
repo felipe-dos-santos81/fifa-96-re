@@ -707,16 +707,31 @@ both teams after every phase write (the native `FUN_000740A0`
 occupied-record skip, and the `[rec+0x1C]` handler invoked with the native
 register ABI (EAX=rec / EDX=&rec[0x4D] / EBX=-1) through the new
 `fifa96_match_dispatch_phase_record` + the run's phase-walk cursor (the
-`fn(mr)`-vs-record ABI gap is **FU191-L3**). The walk is **gated on
-`fn != NULL`** (a structural no-op until this row landed; the divergence from
-the native unconditional `FUN_0008DCD4` distance write is **FU191-L2**). The
+`fn(mr)`-vs-record ABI gap is **FU191-L3**). The walk is **per-phase** (it
+dispatches whichever non-NULL row it is handed, gated on `fn != NULL`); **on the
+live engine it dispatches only phase `0x02`**, the sole phase both written by
+`match_run_write_phase` and non-NULL — the write arguments are confined to the
+game-phase family `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xD,0xF,0x11,0x13,0x14,0x15}`
+(all `< 0x16`), and the act-tail rows `0x18/0x19/0x1F/0x20` are never written by
+this function (the divergence from the native unconditional `FUN_0008DCD4`
+distance write is **FU191-L2**, recorded not hidden). **Brief deviation
+(recorded):** the brief said "replace the global `fifa96_match_dispatch_phase`
+call with the native per-record walk", but there is no such caller in the frame
+body (only the act seam calls it); the walk is instead **added** to
+`match_run_write_phase` — the mirror of the native `FUN_000740A0`, the walk's sole
+caller — leaving the act-tail callers intact. The
 phase-table row `0x02` = the ported native `0x6DCC8` (`fifa96_match_phase_02`):
 reads `[rec+0xC]`, indexes the direction pair by the walk's `EBX=-1` (per-side
 default `word[0x1577DE+side*4]>>16`) or an explicit index, writes
 `target_x = byte0*±0x26` / `target_y=0` / `target_z = byte1*±0x21` (side-flipped
 by `[team+0x826]`); the `[rec+0xC]` OL-13 source is unported (**FU192-L1**), so
 the live body is dispatched-but-gated. The walk + phase `0x02` are
-**tape-inert** (targets render-invisible). **Action row `03`**
+**tape-inert** (targets render-invisible). **Phase `0x15` was deliberately left
+unwired**: the native row `0x110794[0x15] = 0x6DCC8` is the same body and
+`match_run_write_phase(mr, 0x15)` is a live write (the act-9 sit-0xC producer),
+so a **conservative 35** is recorded (a defensible **36** exists); its own
+writer path was not separately pinned, so it is deferred to T3 (the per-record
+cohort). **Action row `03`**
 (`fifa96_match_action_03`: the `0x7E1A4..0x7E524` hold/clamp body over the
 FU-138 helpers + `fifa96_match_entities_camera_place`, its live phase-2 hot
 path calling `[rec+0x1C]` = `0x110794[2] = 0x6DCC8`) is **ported but leg'd**: the

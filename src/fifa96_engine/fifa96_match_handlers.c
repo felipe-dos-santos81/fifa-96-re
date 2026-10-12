@@ -4632,9 +4632,11 @@ int fifa96_match_action_03(struct fifa96_match_run *mr) {
     e->timer93 = 0x10u;                              /* 0x79B58 */
     return FIFA96_OK;
   }
-  /* phase 0x13/0x14 special arm (0x7E1CE..0x7E223, FU177-L4): target :=
-   * (0x780, 0, 0); the FUN_0008DCD4(&rec[0x59], &rec[0x4D]) fast-length metric
-   * < 0x30 sets target_x = 0xAE0; FUN_00079B58; exit. */
+  /* phase 0x13/0x14 special arm (0x7E1CE..0x7E223): the target triple
+   * (0x780,0,0) and the FUN_0008DCD4(&rec[0x59], &rec[0x4D]) fast-length metric
+   * < 0x30 -> target_x = 0xAE0 are derived here, and the FUN_00079B58 +0x93
+   * write is inlined (FU177-L3). FU177-L4 now covers only the arm's remaining
+   * sub-parts, not the target writes. */
   if (phase == 0x13u || phase == 0x14u) {
     fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
     fifa96_arm_vec to = { 0x780, 0, 0 };
@@ -4650,8 +4652,9 @@ int fifa96_match_action_03(struct fifa96_match_run *mr) {
   }
   /* slot gate (0x7E224): slot != 0 && phase != 0xC -> the slot branch. */
   if (r->has_slot != 0 && phase != 0x0Cu) {
-    /* slot branch A (0x7E230): the byte-0x157A4C sub-gate == 1, or phase 6 /
-     * phase 0x15 -> CALL [rec+0x1C]; exit. */
+    /* slot branch A (0x7E230): the `[0x157A49]>>24` sub-gate (native byte
+     * 0x157A4C; `mr->global_157a4c`) == 1, or phase 6 / phase 0x15 ->
+     * CALL [rec+0x1C]; exit. */
     if (mr->global_157a4c == 1u || phase == 6u || phase == 0x15u) {
       match_row_phase_call(mr, e, r);
       return FIFA96_OK;
@@ -4691,8 +4694,9 @@ int fifa96_match_action_03(struct fifa96_match_run *mr) {
   }
   /* idle core (0x7E2D3..0x7E308): the `[rec+0x1C]` phase call, then the
    * placement counter `word[rec+0x7B] = min(([rec+0x63]>>22)+1, word[rec+0x79])`.
-   * FU177-L1: `[rec+0x63]` (move_attr) and `[rec+0x79]` (limit) are unported on
-   * the staging record -> staged 0, so the derived counter is min(1, 0) = 0. */
+   * FU177-L1: `[rec+0x63]` (move_attr) is unported on the staging record ->
+   * staged 0, so `(0>>22)+1 = 1`; the limit word is the pool entity's `timer79`
+   * (`[rec+0x79]`), i.e. the derived counter is min(1, e->timer79). */
   match_row_phase_call(mr, e, r);
   {
     uint16_t counter = 0;
@@ -4733,7 +4737,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x02, fifa96_match_action_02,
      "FU-75 L4.6/FU-138 OL-18 (M2 phase-9 T1): row 02 ported (0x7DFCC..0x7E1A2, first-hand): the phase-1 restart mirror (locomotion_restart_target), the phase-2 [team+0x7B2] bind + merge request + install-4 invoke-now over the pool, the no-slot camera-target/timer + the restart-wait stage 0; the stage-1/2 arms (nearest/metric/0x92820/0x7A490/0x79B1C) stay OL-18"},
     {0x03, NULL,
-     "FU-177 §2/§3/§7 + FU-198 §5.3 (phase-17 T1): row 03 hold/clamp body 0x7E1A4..0x7E524 ported (fifa96_match_action_03, over the FU-138 helpers fifa96_action_locomotion_hold/clamp_placement/placement_counter/phase1_clamp + fifa96_match_entities_camera_place for 0x79F3C) but NOT counted: the live phase-2 hot path's [rec+0x1C] = 0x6DCC8 target-rewrite chain is TAPE-VISIBLE — wiring the slot moved M2 at transcribed frame 29 (the forced code-3 record's row-03 body runs in the phase-2 window and its phase-0x13/0x14 special arm rewrites the target chain), so per controller R7 the row legs (owner FU177-L1) and the slot stays NULL/uncounted; the body is exported for direct unit testing. Remaining legs: the FUN_0008C418 team bound block (the phase-2 clamp inputs), FUN_00079C20 (slot branch B), FUN_00079B58 (+0x93), the phase-0x13/0x14 special arm body, the phase-7 0x158747 wall scan, the phase-8/0xC tails (FU177-L1..L6) and the OL-13 [rec+0xC] metadata (FU192-L1). OL-19"},
+     "FU-177 §2/§3/§7 + FU-198 §5.3 (phase-17 T1): row 03 hold/clamp body 0x7E1A4..0x7E524 ported (fifa96_match_action_03, over the FU-138 helpers fifa96_action_locomotion_hold/clamp_placement/placement_counter/phase1_clamp + fifa96_match_entities_camera_place for 0x79F3C) but NOT counted: the live phase-2 hot path's [rec+0x1C] = 0x6DCC8 target-rewrite chain is TAPE-VISIBLE — wiring the slot moved M2 at transcribed frame 29 (the forced code-3 record's row-03 body runs in the phase-2 window and its phase-0x13/0x14 special arm rewrites the target chain), so per controller R7 the row legs (owner FU177-L1) and the slot stays NULL/uncounted; the body is exported for direct unit testing. The per-record [rec+0x1C] seam (FU175-L1) is landed by T1 (fifa96_match_dispatch_phase_record + the walk cursor); remaining legs: the FUN_0008C418 team bound block (the phase-2 clamp inputs), FUN_00079C20 (slot branch B), FUN_00079B58 (+0x93, inlined on the special arm), the phase-0x13/0x14 special arm's remaining sub-parts (its target/metric are derived), the phase-7 0x158747 wall scan, the phase-8/0xC tails (FU177-L1..L6) and the OL-13 [rec+0xC] metadata (FU192-L1). OL-19"},
     {0x04, fifa96_match_action_04,
      "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72; the +0x8E record.type/actor_type split OL-83"},
     {0x05, fifa96_match_action_05,
