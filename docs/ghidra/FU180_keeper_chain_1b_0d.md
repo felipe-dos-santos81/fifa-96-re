@@ -335,3 +335,21 @@ row-0x1B stage-4 finish), `0x77400` (80 B), `0x77DA8` (48 B), `0x8251C`
 `fifa96_action_handlers.c` (1390). Docs cross-cited: FU-74, FU-82, FU-136,
 FU-137, FU-138, FU-140, FU-151, FU-174. No writes beyond this slice file and
 the workspace report.
+
+---
+
+## 8. Landing note — M2 phase-15 T2 (2026-10-12)
+
+Applied: `fifa96_match_action_1B` (`fifa96_match_handlers.c`) is the bounded
+derived body of `0x76D28..0x77727` (the phase-0xD+side head camera place/take/
+actor, the timer, stages 0/1/3/4 with the `+0x51 += 0x20`, the `0x77636` rush
+exit and the ported `fifa96_keeper_reposition_b_finish`), and the row-0x1B
+table slot is set. Its **installer is co-scoped with row 0x1F**: the ported
+row-0x1F no-slot dive emits `install(0x1B, staged=1) + dispatch(0x1B)`
+(`0x76557` invoke-now), so the chain runs end-to-end and the row is counted.
+The `0x14E04` sine rotation (FU180-L2), the `0x76B28` steering (FU180-L3) and
+the stage-2 wide body incl. the `0x71C94` call (`0x77423`, FU180-L1) stay
+numbered legs — the port keeps the native control flow (all roads reach
+`0x77636`) with the unported data writes disclosed. The second installer
+`0x78299` and the `FUN_0008D8EC → FUN_000782D0 → FUN_00077EAC` pre-pass stay
+FU180-L4/L5. `0x0D` is untouched (T3's, co-wired with row 09).

@@ -373,3 +373,22 @@ Docs cross-cited: FU-79 §2, FU-136 §1, FU-137 §2/§6.1, FU-138, FU-139 §9,
 FU-140 §1/§2/§3.2/§3.4/§6, FU-141 §5, FU-142 Appendix K.5, FU-164, FU-174 §2/§6,
 the phase-15 R27 brief. No writes beyond this slice file and the workspace
 report.
+
+---
+
+## 9. Landing note — M2 phase-15 T2 (2026-10-12)
+
+Applied: `fifa96_keeper_hold_predict` (`src/fifa96_loader/fifa96_keeper.c`, the
+`0x74832..0x74ACC` gate cascade with the six `0x1577xx` leads as caller
+arguments) and `fifa96_match_action_19` (`fifa96_match_handlers.c`), with the
+row-0x19 table slot set — the census moves by one action row. The body binds
+`hold_track`, the `+0x98` copy-out, the slot/human-phase `[0x157A49]>>24` arm,
+the phase gate, `hold_guard`/`guard_clamp`, the predictor, `hold_intercept` and
+`hold_fallback`. The predictor's projection stays a leg (FU179-L2/L3): the
+engine's staged-zero camera leads drive the step-3 bail (`[0x1577C0]==0 &&
+[0x1577C2]==0`), the honest staged-zero partial. The row is dispatched by the
+M2 tape (the row-04 `0x7E866`/`0x7E8C1` code-0x19 install) but is
+frame-neutral there (only `+0x9E`/`[0x157C5D]`/the tracker write at `phase !=
+2`), so the golden stays byte-exact and only the observed `M2_WIRED_MASK` grows
+(bit 0x19). The `0x79C20` slot placement (FU179-L4) and the `[rec+0x1C]` phase
+method (FU179-L5) remain legs.

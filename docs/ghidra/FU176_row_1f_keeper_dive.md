@@ -396,3 +396,23 @@ Engine/loader source read first-hand:
 Docs cross-cited: FU-136 §2, FU-137 §2, FU-140 §1/§2/§3, FU-151 §2.4/§3.5,
 FU-164, FU-174 §1/§2/§9. No writes beyond this slice file and the workspace
 report.
+
+---
+
+## 8. Landing note — M2 phase-15 T2 (2026-10-12)
+
+Applied: `fifa96_match_action_1F` (`src/fifa96_engine/fifa96_match_handlers.c`)
+binds the four ported helpers to `0x76380..0x765C2` and the row-0x1F table slot
+is set (`fifa96_match_action_table[0x1F].fn`) — the census moves by one action
+row. The **FU176-L1** off-by-one is fixed in `fifa96_keeper_arm_step`: the
+tail now writes `out->stage = (+0x92 at the tail) + 1` (`0x76568 INC AH`), so a
+direct stage-3 entry advances to 4 (the prior port returned 3 for both the
+stage-2-slot and the stage-3 entries). The stage-2 no-slot dive drains its
+`0x1B` install invoke-now through `fifa96_match_entities_install` +
+`fifa96_match_dispatch_action` (staged byte 1, exactly `0x76557`), and the
+stage-3 tail runs `fifa96_keeper_input_decide` over the record cells and drains
+its 4/0x19/0x1C/0x1B installs (staged byte `clear_c5c ? 1 : 0`, matching the
+native `EBX` in `FUN_00076130`). Still unported (legs, unchanged): the
+`0x79B6C` camera hook and the `0x6E598` event 0x28 (FU176-L2), the `rec[+4]`
+dive descriptor (FU176-L4, derived divisor 0x64). The row is install-live (the
+phase-6 arm `0x8D558`) but not reached by the M2 tape (byte-exact, no re-pin).

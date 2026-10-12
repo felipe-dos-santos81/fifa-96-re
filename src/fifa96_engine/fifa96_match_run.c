@@ -2013,6 +2013,17 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;
+  /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster process
+   * cells ([0x157A4C]/[0x157C5C]/[0x157C5D]/[0x157C54..5B]/the predictor
+   * latches; producers unported, staged zero). */
+  mr->global_157a4c = 0;
+  mr->global_157c5c = 0;
+  mr->global_157c5d = 0;
+  memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->predict_c44 = 0;
+  mr->predict_c48_x = 0;
+  mr->predict_c48_y = 0;
+  mr->predict_c48_z = 0;
   (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
   mr->pass_parity = 0;
@@ -2097,6 +2108,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
+  /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster cells. */
+  mr->global_157a4c = 0;
+  mr->global_157c5c = 0;
+  mr->global_157c5d = 0;
+  memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->predict_c44 = 0;
+  mr->predict_c48_x = 0;
+  mr->predict_c48_y = 0;
+  mr->predict_c48_z = 0;
   (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */

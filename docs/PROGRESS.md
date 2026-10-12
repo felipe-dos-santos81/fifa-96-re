@@ -507,6 +507,19 @@ act 4 stays behind the unported formation-order arm — the rows-27/29/2C
 precedent). M1/M2 stayed byte-identical (no tape re-pin); the derived
 action+phase census moved 24/80 → 25/80 (**31%**).
 
+**Phase-15 T2 (2026-10-12) wired the keeper cluster** (FU-176/FU-179/FU-180):
+rows `0x1F` (keeper dive/arm, installer live on the phase-6 penalty arm
+`0x8D558`), `0x1B` (keeper reposition/rush bounded body, installed invoke-now
+by row `0x1F`'s no-slot dive `0x76557` — the co-scoped chain) and `0x19`
+(keeper hold, installer live on the row-04 `0x7E866`/`0x7E8C1` arms). The
+FU176-L1 `fifa96_keeper_arm_step` stage-3 off-by-one (the `0x76568 INC AH`
+tail) is fixed. A new pure helper `fifa96_keeper_hold_predict` ports the
+row-0x19 predictor gates (the projection stays FU179-L2/L3). Row `0x19` is
+dispatched by the M2 tape but is frame-neutral (only `+0x9E`/`[0x157C5D]`/the
+tracker write at `phase != 2`), so M1/M2 stayed **byte-identical** (no golden
+re-pin; only the observed `M2_WIRED_MASK` grew). The census moved 25/80 →
+28/80 (**35%**).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

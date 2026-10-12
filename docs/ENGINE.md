@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-25/80 dispatch rows wired (24 action + the first wired phase row 0x1F), the
+28/80 dispatch rows wired (27 action + the first wired phase row 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,7 +260,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **25/80 rows wired** (24 action + the first phase
+- Action dispatch (FU-137): **28/80 rows wired** (27 action + the first phase
   row `0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
@@ -284,11 +284,24 @@ the build also produces the windowed `fifa96` target (`make game`).
   **ported body but is not counted** — the rows-27/29/2C precedent (a ported
   body with no engine installer stays unwired and uncounted): its only
   producer, act-4 stage 0 `0x89740`, is behind the unported sit-2..4
-  formation-order arm `0x8AB08..0x8AB62` (FU-149 L12 / FU181-L1). The phase
+  formation-order arm `0x8AB08..0x8AB62` (FU-149 L12 / FU181-L1). M2
+  **phase-15 T2** (FU-176/FU-179/FU-180) wires the keeper cluster: `19` (the
+  keeper-hold body `0x746E4..0x74CB7`; the install producer is live on row-04
+  `0x7E866`/`0x7E8C1`), `1B` (the reposition/rush bounded body
+  `0x76D28..0x77727`, installed invoke-now by row `0x1F`'s no-slot dive
+  `0x76557`) and `1F` (the keeper dive/arm body `0x76380..0x765C2`; installer
+  live on the phase-6 penalty arm `0x8D558`). Row `19` is dispatched by the
+  tape's row-04 code-0x19 install and is **frame-neutral** there (the body
+  writes only `+0x9E`/`[0x157C5D]`/the deepest-keeper tracker at the tape's
+  `phase != 2` state, so M2 stays byte-exact — no golden re-pin, the observed
+  `M2_WIRED_MASK` just grows); rows `1B`/`1F` are install-live but not reached
+  (the phase-6 penalty arm is not on the tape). The unported `0x14E04` sine
+  rotation / `0x76B28` steering (row `1B`, FU180-L1/L2/L3) and the row-`19`
+  predictor projection (FU179-L2/L3) stay numbered legs. The phase
   table contributes its first honest row: **phase `0x1F` (= act 9 handler
   `0x88F4C`)** — the FU-175 act/phase seam gives `fifa96_match_dispatch_phase`
   a live caller and the sit-0xC act-9 producer (FU-170 §7) reaches the row
-  every granted frame. dispatch results 54 UNSUP / 25 OK / 1 NOTF.
+  every granted frame. dispatch results 51 UNSUP / 28 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

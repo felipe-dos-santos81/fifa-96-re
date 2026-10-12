@@ -142,6 +142,29 @@ fifa96_err_t fifa96_keeper_hold_fallback(const fifa96_keeper_point *cam, uint8_t
                                          int32_t cam_vel_z, int32_t lane, int32_t dir,
                                          uint16_t dir_word, int32_t vel_x, int32_t lead_x,
                                          fifa96_keeper_point *out);
+
+/* The row-0x19 predictor `0x74832..0x74ACC` (FU-179 §4, first-hand
+ * `/FIFA96.EXE`): a camera-relative intercept projector whose six `0x1577xx`
+ * camera-velocity/field words are caller arguments (the
+ * `fifa96_keeper_hold_fallback` precedent), not globals. The engine's
+ * staged-zero camera convention drives the step-3 bail (`[0x1577C0]==0 &&
+ * [0x1577C2]==0`), so the caller falls to the carrier dive / weighted
+ * fallback. `scalar` is the native `[0x157C44]` and `target` the `[0x157C48..]`
+ * triple; `predicted` is 1 only when the projection produced a target — the
+ * projection itself (`FUN_00071C40`/`FUN_00071B9C`, the `FUN_000702F8`/
+ * `FUN_00070B94` trig internals) is unported (FU179-L2/L3), so the bounded
+ * port returns `predicted = 0` whenever it would reach it. NULL cam/out ->
+ * -FIFA96_ERR_INVALID. */
+typedef struct fifa96_keeper_predict {
+  int32_t scalar;              /* [0x157C44] (native -1 until the projection) */
+  fifa96_keeper_point target;  /* [0x157C48..0x157C53] */
+  uint8_t predicted;           /* 1 when the projection produced a target */
+} fifa96_keeper_predict;
+
+fifa96_err_t fifa96_keeper_hold_predict(const fifa96_keeper_point *cam, uint8_t side,
+                                        int16_t lead_x, int16_t lead_z, int16_t lead_z2,
+                                        int32_t ball_y, uint8_t ball_y_flag,
+                                        uint8_t bound_actor, fifa96_keeper_predict *out);
 fifa96_err_t fifa96_keeper_arm_camera(uint8_t stage, uint8_t team_side, uint8_t phase,
                                       fifa96_keeper_point *target, uint8_t *camera_hook);
 fifa96_err_t fifa96_keeper_input_decide(const fifa96_keeper_input *in,

@@ -1308,8 +1308,15 @@
 #define M2_WIRED_MASK                                                        \
   ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |      \
    (1ull << 0x05) | (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |      \
-   (1ull << 0x18) | (1ull << 0x21) | (1ull << 0x23) |                       \
+   (1ull << 0x18) | (1ull << 0x19) | (1ull << 0x21) | (1ull << 0x23) |      \
    (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
+/* v15 (phase-15 T2, FU-179): row 0x19 joins the observed set — the row-04
+ * carrier install `0x7E866`/`0x7E8C1` stages code 0x19 on the tape and, now
+ * that the body is ported, the dispatch records FIFA96_OK. The body is a pure
+ * record/camera write at the tape's `phase != 2` state (only `+0x9E` /
+ * `[0x157C5D]` / the deepest-keeper tracker), so the frames stay byte-exact:
+ * no golden re-pin, the mask only grows. Rows 0x1F/0x1B stay off the tape
+ * (the phase-6 penalty arm is not reached). */
 
 /* The phase-8 T1 taker rows (FU-149 §7, L13): wired (21/80) but dormant on
  * this tape — the set-piece arms that install 0x10..0x13 need the restart
@@ -2773,10 +2780,11 @@ int main(void) {
    * dispatched on those grants either. M2 phase-9 T1 adds row 02: the begin
    * state-1 arm's second kickoff pick carries code 2 and its `phase != 2`
    * reset path dispatches on the first granted 0x13 frame. */
-  assert((res.mask_kick & ~((1ull << 0x00) | (1ull << 0x02) | M2_KICKOFF_ROWS_MASK |
-                            M2_ARM_ROWS_MASK)) == 0u);
+  assert((res.mask_kick & ~((1ull << 0x00) | (1ull << 0x02) | (1ull << 0x19) |
+                            M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
   assert((res.mask_kick_next &
-          ~((1ull << 0x00) | (1ull << 0x02) | M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+          ~((1ull << 0x00) | (1ull << 0x02) | (1ull << 0x19) | M2_KICKOFF_ROWS_MASK |
+            M2_ARM_ROWS_MASK)) == 0u);
   /* v2: the T5 kickoff placement is live at begin. */
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);

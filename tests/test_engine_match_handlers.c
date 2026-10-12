@@ -91,8 +91,8 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
-    /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
+    /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK,
+    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -2561,6 +2561,75 @@ static void test_action_0b_duel_gates_and_choice(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-15 T2 (FU-176/FU-179/FU-180): the keeper cluster ========== */
+
+/* Row 0x1F (FU-176): the stage-2 no-slot RNG dive installs row 0x1B
+ * invoke-now — the co-scoped second-order chain. */
+static void test_action_1f_runs_dive_and_installs_1b(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;             /* the slot-branch dispatch */
+  f.mr.record.has_slot = 0;            /* -> the no-slot RNG dive */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x40;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1F) == FIFA96_OK);
+  assert((f.mr.dispatched_ok & (1ull << 0x1F)) != 0u);
+  assert((f.mr.dispatched_ok & (1ull << 0x1B)) != 0u);   /* the dive invoked 0x1B */
+  assert(e->code == 0x1Bu);            /* the install landed on the record */
+  drop_fixture(&f);
+}
+
+/* Row 0x19 (FU-179): the phase-2 guard binds the clamped camera triple and the
+ * deepest-keeper tracker. */
+static void test_action_19_hold_guard_binds_camera(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_team *team = &f.mr.entities.team[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.has_slot = 0;
+  f.mr.record.lane = 0;                /* [+0x69]>>16 = 0 */
+  team->side = 1;
+  team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.keeper_cam_x = 0x400;           /* > 0x390 -> clamped */
+  f.mr.keeper_cam_y = 0;
+  f.mr.keeper_cam_z = 0x1000;          /* > 0xAE0 -> hold_guard sets +0xAE0 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x19) == FIFA96_OK);
+  assert(team->tracker7c7 == 0);       /* the deepest-keeper tracker bound */
+  assert(f.mr.record.target_x == 0x390);
+  assert(f.mr.record.target_z == 0xAE0);
+  drop_fixture(&f);
+}
+
+/* Row 0x1B (FU-180): the phase-0xD head camera place and the stage-4
+ * reposition_b_finish (not-controlled -> install 0x19). */
+static void test_action_1b_head_and_finish(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0x0D;
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  f.mr.record.pos_x = 0x200;
+  f.mr.record.pos_y = 0x10;
+  f.mr.record.pos_z = 0x30;
+  f.mr.record.place_offset_x = 0;
+  f.mr.record.place_offset_z = 0;
+  f.mr.record.stage92 = 4;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;   /* not controlled */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.keeper_cam_x == 0x200);                    /* head camera place */
+  assert(f.mr.keeper_cam_z == 0x30);
+  assert(f.mr.keeper_cam_y == 0x10 + 0x38);
+  assert(e->code == 0x19u);                              /* the finish install */
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -2602,6 +2671,9 @@ int main(void) {
   test_action_21_runs_body();
   test_action_23_runs_body();
   test_action_06_runs_body();
+  test_action_1f_runs_dive_and_installs_1b();
+  test_action_19_hold_guard_binds_camera();
+  test_action_1b_head_and_finish();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

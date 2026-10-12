@@ -185,6 +185,8 @@ fifa96_err_t fifa96_keeper_arm_step(uint8_t stage, uint8_t event_flag, uint8_t b
                                     uint8_t ball_flag, uint8_t has_slot, uint8_t slot_pressed,
                                     uint8_t code, uint8_t phase_latch,
                                     fifa96_keeper_arm_out *out) {
+  uint8_t s = stage;      /* the dispatch stage (control flow) */
+  uint8_t reg92 = stage;  /* the native `+0x92` byte at the `0x76568` tail (FU176-L1) */
   if (!out) return -FIFA96_ERR_INVALID;
   out->stage = stage;
   out->event_code = 0;
@@ -194,33 +196,39 @@ fifa96_err_t fifa96_keeper_arm_step(uint8_t stage, uint8_t event_flag, uint8_t b
   out->run_handler = 0;
   out->reset = 0;
   out->flag_9e = 0;
-  if (stage > 3) return FIFA96_OK;
-  if (stage == 0) {
-    out->flag_9e = 1;
-    if (event_flag == 0) return FIFA96_OK;
-    out->event_code = 0x28;
-    stage = 1;
+  if (s > 3) return FIFA96_OK;           /* 0x76425 JA 0x765BC (no stage write) */
+  if (s == 0) {
+    out->flag_9e = 1;                    /* 0x76440 */
+    if (event_flag == 0) return FIFA96_OK;   /* 0x7644? JZ epilogue, +0x92 stays 0 */
+    out->event_code = 0x28;              /* 0x7645E FUN_0006E598(rec,0x28,sector,0) */
+    reg92 = 1;                           /* 0x76466..0x7646C writes +0x92 = 1 */
+    s = 1;
   }
-  if (stage == 1) {
-    if (ball_actor == 0 || ball_flag == 0) {
-      out->stage = 1;
+  if (s == 1) {
+    if (ball_actor == 0 || ball_flag == 0) {  /* 0x7647E/0x7648B */
+      out->stage = 1;                    /* +0x92 already 1 */
       return FIFA96_OK;
     }
-    stage = 2;
+    reg92 = 2;                           /* 0x76498..0x7649E writes +0x92 = 2 */
+    s = 2;
   }
-  if (stage == 2) {
-    if (has_slot == 0) {
-      out->stage = 2;
-      out->install_code = 0x1B;
-      out->invoke = 1;
+  if (s == 2) {
+    if (has_slot == 0) {                 /* 0x764B0 JNZ 0x76568; no-slot RNG dive */
+      out->stage = 2;                    /* +0x92 stays 2 (no tail write) */
+      out->install_code = 0x1B;          /* 0x76557 */
+      out->invoke = 1;                   /* 0x76548 ECX=1 */
       return FIFA96_OK;
     }
-    stage = 3;
+    s = 3;                               /* falls into the tail 0x76568 */
   }
-  out->stage = 3;
-  out->copy_pos = 1;
-  out->run_handler = (has_slot != 0 && slot_pressed != 0) ? 1 : 0;
-  out->reset = (code == 0x1F && phase_latch == 0) ? 1 : 0;
+  /* Tail 0x76568..0x76578: `MOV AH,byte[+0x92]; INC AH; MOV byte[+0x92],AH`.
+   * The entry value (reg92) is the stage-1/2 in-body write, or the raw entry
+   * for a direct stage-3 dispatch; a stage-3 entry therefore advances to 4
+   * (FU176-L1). */
+  out->stage = (uint8_t)(reg92 + 1u);
+  out->copy_pos = 1;                     /* 0x76580 pos -> target */
+  out->run_handler = (has_slot != 0 && slot_pressed != 0) ? 1 : 0;  /* 0x76597 */
+  out->reset = (code == 0x1F && phase_latch == 0) ? 1 : 0;          /* 0x765AC..0x765B7 */
   return FIFA96_OK;
 }
 
@@ -320,6 +328,33 @@ fifa96_err_t fifa96_keeper_hold_fallback(const fifa96_keeper_point *cam, uint8_t
   out->x = x;
   out->y = 0;
   out->z = base;
+  return FIFA96_OK;
+}
+
+/* The row-0x19 predictor `0x74832..0x74ACC` gates (FU-179 §4, first-hand
+ * `disassemble_bytes 0x74832`): step 2 `0x74854` bails when `sign([0x157754])
+ * == team[+0x826]` (the `XOR`/`JZ`); step 3 `0x7487b` bails when both camera-z
+ * leads are zero; step 4 `0x74893` bails when `[0x157750] <= 0` and
+ * `byte[0x157821] == 0`; step 5 `0x748a9` bails when an actor is bound; step 6
+ * `0x748b6` writes `[0x157C44] = -1` and enters the trig projection. */
+fifa96_err_t fifa96_keeper_hold_predict(const fifa96_keeper_point *cam, uint8_t side,
+                                        int16_t lead_x, int16_t lead_z, int16_t lead_z2,
+                                        int32_t ball_y, uint8_t ball_y_flag,
+                                        uint8_t bound_actor, fifa96_keeper_predict *out) {
+  if (!cam || !out) return -FIFA96_ERR_INVALID;
+  out->scalar = 0;
+  out->target = *cam;
+  out->predicted = 0;
+  (void)lead_x;
+  if ((uint8_t)(cam->z < 0 ? 1 : 0) == (uint8_t)(side & 1u)) return FIFA96_OK; /* 0x74875 */
+  if (lead_z == 0 && lead_z2 == 0) return FIFA96_OK;                           /* 0x7488d */
+  if (ball_y <= 0 && ball_y_flag == 0) return FIFA96_OK;                       /* 0x748a3 */
+  if (bound_actor != 0) return FIFA96_OK;                                      /* 0x748b0 */
+  /* 0x748b6..0x74AC1: the projection (FUN_00071C40/FUN_00071B9C and the
+   * FUN_000702F8/FUN_00070B94 trig internals) is unported (FU179-L2/L3); the
+   * native -1 scalar write is kept, `predicted` stays 0 so the caller falls
+   * through to the carrier dive / weighted fallback. */
+  out->scalar = -1;
   return FIFA96_OK;
 }
 

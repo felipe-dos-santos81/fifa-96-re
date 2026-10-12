@@ -29,6 +29,9 @@ _Static_assert(offsetof(fifa96_keeper_rep_a_out, install_code) == 0, "install_co
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, reset) == 1, "reset");
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, stage_advance) == 2, "stage_advance");
 _Static_assert(offsetof(fifa96_keeper_rep_a_out, flag_9e) == 3, "flag_9e");
+_Static_assert(offsetof(fifa96_keeper_predict, scalar) == 0, "scalar");
+_Static_assert(offsetof(fifa96_keeper_predict, target) == 4, "target");
+_Static_assert(offsetof(fifa96_keeper_predict, predicted) == 16, "predicted");
 _Static_assert(offsetof(fifa96_keeper_input, has_slot) == 0, "has_slot");
 _Static_assert(offsetof(fifa96_keeper_input, phase) == 1, "phase");
 _Static_assert(offsetof(fifa96_keeper_input, human_phase) == 2, "human_phase");
@@ -253,10 +256,36 @@ static void test_arm_step(void) {
   assert(fifa96_keeper_arm_step(2, 0, 0, 0, 1, 0, 0x1E, 0, &out) == FIFA96_OK);
   assert(out.run_handler == 0 && out.reset == 0);
   assert(fifa96_keeper_arm_step(3, 0, 0, 0, 1, 0, 0x1F, 1, &out) == FIFA96_OK);
-  assert(out.stage == 3 && out.copy_pos == 1 && out.reset == 0);
+  assert(out.stage == 4 && out.copy_pos == 1 && out.reset == 0);   /* FU176-L1: tail +0x92=entry+1 */
   assert(fifa96_keeper_arm_step(4, 1, 1, 1, 1, 1, 0x1F, 0, &out) == FIFA96_OK);
   assert(out.stage == 4 && out.copy_pos == 0 && out.event_code == 0 && out.flag_9e == 0);
   assert(fifa96_keeper_arm_step(0, 0, 0, 0, 0, 0, 0, 0, NULL) == BODY_INVALID);
+}
+
+/* FU-179 §4 (phase-15 T2): the row-0x19 predictor gate cascade. The engine's
+ * staged-zero leads drive the step-3 bail, so the row correctly degenerates to
+ * the carrier/fallback. */
+static void test_hold_predict(void) {
+  fifa96_keeper_point cam = point(0x10, 0x20, 0x30);
+  fifa96_keeper_predict out;
+  /* step 2 (0x74854): sign(cam.z) == side -> bail (cam.z > 0, side 0). */
+  assert(fifa96_keeper_hold_predict(&cam, 0, 0, 0, 0, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.predicted == 0);
+  /* step 3 (0x7487b): both camera-z leads zero -> bail. */
+  assert(fifa96_keeper_hold_predict(&cam, 1, 0, 0, 0, 1, 1, 0, &out) == FIFA96_OK);
+  assert(out.predicted == 0);
+  /* step 4 (0x74893): ball_y <= 0 without the flag -> bail. */
+  assert(fifa96_keeper_hold_predict(&cam, 1, 0, 1, 0, 0, 0, 0, &out) == FIFA96_OK);
+  assert(out.predicted == 0);
+  /* step 5 (0x748a9): a bound actor -> bail. */
+  assert(fifa96_keeper_hold_predict(&cam, 1, 0, 1, 0, 1, 0, 1, &out) == FIFA96_OK);
+  assert(out.predicted == 0);
+  /* step 6: the projection is unported (FU179-L2/L3); the native -1 scalar
+   * stands and predicted stays 0. */
+  assert(fifa96_keeper_hold_predict(&cam, 1, 0, 1, 0, 1, 0, 0, &out) == FIFA96_OK);
+  assert(out.predicted == 0 && out.scalar == -1);
+  assert(fifa96_keeper_hold_predict(NULL, 0, 0, 0, 0, 0, 0, 0, &out) == BODY_INVALID);
+  assert(fifa96_keeper_hold_predict(&cam, 0, 0, 0, 0, 0, 0, 0, NULL) == BODY_INVALID);
 }
 
 static void test_reposition_a_gate(void) {
@@ -544,6 +573,7 @@ int main(void) {
   test_guard_clamp();
   test_dive_target();
   test_arm_step();
+  test_hold_predict();
   test_reposition_a_gate();
   test_reposition_b_finish();
   test_lunge_track();

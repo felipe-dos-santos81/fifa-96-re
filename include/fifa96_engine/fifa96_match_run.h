@@ -602,6 +602,25 @@ struct fifa96_match_run {
   uint8_t keeper_latch_157ab2;
   uint8_t flag_157820;
   uint8_t flag_157822;
+  /* M2 phase-15 T2 (FU-176/FU-179/FU-180): the keeper-cluster process cells.
+   * `global_157a4c` = native `[0x157A4C]` — the row-0x1F stage-3 reset latch
+   * (aliased `[0x157A49]>>24`, the byte the `FUN_00076130` human-phase gate
+   * reads); `global_157c5c` = native `[0x157C5C]` (row-0x1F prologue clear and
+   * the input handler's `clear_c5c`); `global_157c5d` = native `[0x157C5D]`
+   * (row-0x19 CPU-keeper latch, write-only); `keeper_latch[8]` = native
+   * `[0x157C54..0x157C5B]` (row-0x1B stage-0 clears, stage-2 `[0x157C55]`
+   * read, FU180-L7); `predict_c44` = `[0x157C44]` and `predict_c48_x/y/z` =
+   * `[0x157C48..0x157C53]` (the row-0x19 predictor latches). Their native
+   * producers are unported (the FU176-L2/FU179-L1/FU180 L-class legs); init
+   * and begin stage them zero. */
+  uint8_t global_157a4c;
+  uint8_t global_157c5c;
+  uint8_t global_157c5d;
+  uint8_t keeper_latch[8];
+  int32_t predict_c44;
+  int32_t predict_c48_x;
+  int32_t predict_c48_y;
+  int32_t predict_c48_z;
   /* M2 playable-match Task 2 / OL-84 residual: the native `[0x5882A]` kickoff
    * gate, the flag the act-1 (phase-0x17 handler FUN_00088DC8) stage 1 sets at
    * the shared timeline timer `[0x58818] >= 0x78` (`0x88EF3..0x88F07`) and
