@@ -3781,7 +3781,7 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
 
 /* ===== M2 phase-16 T3 / FU-186: rows 0x1A / 0x1C keeper chain =============
  *
- * `fifa96_match_action_1C` (row 0x1C, uncounted-until? no — **counted**) is the
+ * `fifa96_match_action_1C` (row 0x1C, **counted**) is the
  * bounded derived body of `0x77728..` (FU-186 §2.2, first-hand
  * `disassemble_bytes 0x77728` this slice). The row's installer is **live**:
  * the wired `fifa96_match_action_1F` stage-3 tail drains

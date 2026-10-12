@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v15 (spec §5; the
- * M2 phase-15 census-frontier acceptance, T4; the v14 phase-14 restart-chain
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v16 (spec §5; the
+ * M2 phase-16 act-machine-frontier acceptance, T6; the v15 phase-15
+ * census-frontier acceptance, T4; the v14 phase-14 restart-chain
  * re-pin, T3, the v13/v12 phase-13/phase-12 re-pins, the M2 phase-11
  * visible-ball acceptance, T3, the v10 phase-10 visible-layer acceptance,
  * T3/T4, the v9 phase-9 live-pad-loop acceptance, T4, the v8 phase-8 live-loop
@@ -1242,9 +1243,9 @@
  * v15 riders (the T1–T3 regression pins). The phase-15 reviews surfaced a set
  * of cheap regression pins; they already exist as handler unit tests, so the
  * acceptance layer adds the tape/strata-level or cross-check form that would
- * catch a re-break (`run_phase15_riders` below, ISO-independent pure state).
+ * catch a re-break (`run_census_riders` below, ISO-independent pure state).
  * **All seven riders are mutation-RED** — each rider's deliberately-broken
- * mutation aborts `run_phase15_riders` at its own assertion (the per-rider
+ * mutation aborts `run_census_riders` at its own assertion (the per-rider
  * mutations are recorded in the phase-15 T4 report):
  *   - act seam + phase 0x1F (FU175): `fifa96_match_dispatch_phase(mr, 0x1F)`
  *     reaches the ported handler and its stage-0 `[0x15882A]` clear runs;
@@ -1268,6 +1269,47 @@
  * acceptance); M1 unmoved (`09b726b7…`; M2 `7b4b241a…`). The phase-15 T1/T2/T3
  * landings themselves also moved no presented frame (each report's `cmp`
  * evidence; re-verified at T4).
+ *
+ * --- v16 (M2 phase-16 acceptance, T6): the act-machine-frontier strata ------
+ *
+ * v16 is the phase-16 acceptance (the act-machine + census frontier: T1 the
+ * act-machine phase-0x18 producer, FU-183; T2 rows 0x14/0x22, FU-184/FU-185;
+ * T3 the keeper chain 0x1A/0x1C, FU-186; T4 row 0x16 + phase 0x19, FU-187/
+ * FU-188; T5 the installer hunt + rows 03/0x0D, FU-189/FU-190). Every phase-16
+ * landing is **install-live/tape-dormant** — the frame body never changes — so,
+ * exactly like the phase-15 v14→v15 precedent, v16 is a **strata-only label
+ * bump**: it adds the phase-16 riders (`run_phase16_riders`), the census-shape
+ * pins (now T1–T5) and this provenance, with **no presented frame moved**. The
+ * transcript and golden are byte-identical to v15 (`cmp` against the committed
+ * `tests/golden/engine/m2-frames.txt` clean, 792 lines; M1 unmoved). Holding
+ * the v15 label instead would also be defensible (the bytes are the same), but
+ * the phase-15 precedent labels the *acceptance layer*, not the tape bytes, and
+ * v16 records that this phase's acceptance strata exist — the honest, precedent-
+ * consistent choice (the plan's "v16 strata (or v15-held with recorded reason)",
+ * resolved to v16 with the reason recorded here).
+ *
+ * What v16 pins at the spec §5 sequence points:
+ *   1. The census shape (T1–T5): the acceptance cross-check `run_census_riders`
+ *      asserts the exact wired counts (31 action + the phase rows
+ *      0x18/0x19/0x1F = 34/80 = 42%) and every phase-16 slot (0x14/0x16/0x1C
+ *      wired; 0x03/0x0D/0x17/0x1A/0x22/0x24 NULL), so a silent re-wire, an
+ *      un-census or a slot flip fails the tape, not only the handler unit
+ *      tests.
+ *   2. The phase-16 behavior (`run_phase16_riders`): phase 0x18's act-timer
+ *      head add (T1/FU-183), phase 0x19's stage-0 advance (T4/FU-187), row
+ *      0x14's stage-0 timer gate (T2/FU-184) and row 0x16's stage 0→2 advance
+ *      (T4/FU-187). Mutation-RED: disabling the phase-0x18 head add aborts the
+ *      rider at its own assert (recorded in the phase-16 T6 report).
+ *   3. No tape-level change: the four phase-16 rows/phase bodies are all
+ *      install-live but off the tape's dispatch set (the tape carries no
+ *      code-0x14/0x16/0x1C record and no act-2/act-3 producer), so the
+ *      accepted `mask_final` and every stratum below are unchanged — the
+ *      `M2_WIRED_MASK` observation simply carries the new bits' absence.
+ *
+ * Golden decision (v16): **byte-identical, no re-pin** — the phase-16 landings
+ * moved no presented frame (each task's `cmp` evidence, re-verified at T6); M1
+ * unmoved (`09b726b7…`); M2 sha held at `7b4b241a…` (the v15 bytes) with the
+ * v16 strata label.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -2703,13 +2745,14 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   fifa96_platform_destroy(plat);
 }
 
-/* v15 (phase-15 T4): the phase-15 rider cross-checks — the T1–T3 regression
- * pins at the acceptance layer. The handler unit tests carry the primaries
- * (test_engine_match_act.c / test_engine_match_handlers.c); this is the durable
- * tape/strata-level or cross-check form that would catch a re-break from a
- * different entry point, at the census frontier the phase exists for. Pure C
- * state, ISO-independent (runs in both the ISO and no-asset tape modes). */
-static void run_phase15_riders(void) {
+/* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks — the
+ * T1–T5 regression pins at the acceptance layer. The handler unit tests carry
+ * the primaries (test_engine_match_act.c / test_engine_match_handlers.c); this
+ * is the durable tape/strata-level or cross-check form that would catch a
+ * re-break from a different entry point, at the census frontier the phases
+ * exist for. Pure C state, ISO-independent (runs in both the ISO and no-asset
+ * tape modes). */
+static void run_census_riders(void) {
   /* 1. The census shape (T1–T5): the exact wired counts and the phase-15/16
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
    *    the handler unit tests. 34/80 = 42% (31 action + the phase rows
@@ -2839,6 +2882,64 @@ static void run_phase15_riders(void) {
   }
 }
 
+/* v16 (phase-16 T6): the phase-16 rider cross-checks — the acceptance-layer
+ * behavioral pins for the census frontier's landed rows (the handler primaries
+ * live in test_engine_match_handlers.c). Pure C state, ISO-independent, prints
+ * nothing, so the transcript stays byte-exact. */
+static void run_phase16_riders(void) {
+  /* 1. Phase 0x18 (T1/FU-183): the act-2 hand-off is wired and its head
+   *    accumulates the act timer (`word[0x158818] += [0x157A64]`). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.act.id = 2;
+    mr.act.stage = 0;
+    mr.act.timer = 5;
+    mr.state.frame_delta = 2;
+    assert(fifa96_match_dispatch_phase(&mr, 0x18) == FIFA96_OK);
+    assert(mr.act.timer == 7);            /* the 0x8922C head add */
+  }
+  /* 2. Phase 0x19 + row 0x16 (T4/FU-187): the act-3 phase is wired; its
+   *    stage-0 hand-off advances the act slot (the row-0x16 install route). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.act.id = 3;
+    mr.act.stage = 0;
+    mr.state.frame_delta = 2;
+    assert(fifa96_match_dispatch_phase(&mr, 0x19) == FIFA96_OK);
+    assert(mr.act.stage == 1u);           /* stage 0 -> 1 (0x8A0C9) */
+  }
+  /* 3. Row 0x14 (T2/FU-184): the celebration body runs — the stage-0 head
+   *    accumulates timer89 and waits below the 0x3C gate. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.record.entity_id = 1;              /* a valid pool record */
+    mr.record.active = 1;
+    mr.record.stage92 = 0;
+    mr.record.timer89 = 0;
+    mr.record.delta = 5;
+    assert(fifa96_match_dispatch_action(&mr, 0x14u) == FIFA96_OK);
+    assert(mr.record.timer89 == 5u);      /* head accumulate (0x8785C) */
+    assert(mr.record.stage92 == 0u);      /* the 0x3C gate holds */
+  }
+  /* 4. Row 0x16 (T4/FU-187): the face-the-ball body advances stage 0 -> 2 on
+   *    the object-code == 0x48 gate (row44 0: no reset). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.record.entity_id = 0;
+    mr.record.stage92 = 0;
+    mr.record.pos_x = 0x111;
+    mr.record.pos_z = 0x333;
+    mr.referee.referee_object_code = 0x48;
+    assert(fifa96_match_dispatch_action(&mr, 0x16u) == FIFA96_OK);
+    assert(mr.record.stage92 == 2u);      /* 0x84654 -> 0x84692 -> 0x846FD */
+    assert(mr.record.target_x == 0x111);  /* the stage copy landed */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -2863,11 +2964,12 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
-  /* v15 (phase-15 T4): the phase-15 rider cross-checks (both modes, pure
-   * state): the census shape + the T1–T3 regression pins. Run first so each
-   * rider's own mutation aborts at its assert, before the tape consumes the
-   * process; they print nothing, so the transcript is unaffected. */
-  run_phase15_riders();
+  /* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks (both
+   * modes, pure state): the census shape + the T1–T5 regression pins. Run first
+   * so each rider's own mutation aborts at its assert, before the tape consumes
+   * the process; they print nothing, so the transcript is unaffected. */
+  run_census_riders();
+  run_phase16_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
@@ -2967,7 +3069,7 @@ int main(void) {
    * the tape's `phase != 2` state, so the exact accepted mask below gains the
    * bit with no golden re-pin). The act seam + phase 0x1F are pinned by the
    * v14 act-9 window above (`phase15_armed` 1 / `gate_marker` 1) and the
-   * `run_phase15_riders` cross-check. */
+   * `run_census_riders` cross-check. */
   assert((res.mask_restart & (1ull << 0x19)) != 0u);
   assert((res.mask_final & (1ull << 0x19)) != 0u);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */

@@ -672,6 +672,32 @@ precedent); the four leg-state guards + the phase-0x1D gap are pinned in
 `test_engine_match_handlers.c`. `make check` **110/110**; M1 `09b726b7…` + M2
 `7b4b241a…` **byte-identical** (no re-pin); census unchanged **34/80 = 42%**.
 
+**Phase-16 T6 (2026-10-12) — acceptance: tape v16 (byte-identical) + review
+riders + smoke + the census reconciled** (this slice). The phase added phase
+`0x18` (T1) and rows `0x14`/`0x1C`/`0x16` + phase `0x19` (T2–T4), with the
+frontier rows `0x03`/`0x0D`/`0x17`/`0x1A`/`0x22`/`0x24`/`0x20`/`0x25` resolved
+to numbered legs (T5). Every landing is install-live/tape-dormant, so **no
+presented frame moved**: M1 `09b726b7…` unmoved and M2 held at the v15 bytes
+`7b4b241a…` (792 lines, `cmp` clean). The tape is labelled **v16** (the
+phase-15 v14→v15 precedent: the label tracks the acceptance layer, not the tape
+bytes), with the phase-16 provenance block and the `run_phase16_riders`
+acceptance pins (phase `0x18`'s act-timer head add, phase `0x19`'s stage-0
+advance, rows `0x14`/`0x16`); the phase-15 census riders are renamed
+`run_census_riders` (now T1–T5). The seven T1–T5 review minors are folded in
+(the `test_action_16_runs_body` `0xFF` disjunct, the AGENTS.md `24/80` example,
+the ENGINE "both counted rows" wording + the T2 errata back-reference + the
+action-dispatch enumeration note, the row-0x1C comment artifact, the rider
+rename). The acceptance smoke (`DISPLAY=:1`, `make game`) draws the EA-SPORTS
+intro (`docs/screens/p16-t6-intro.png`) and the front-end
+(`docs/screens/p16-t6-frontend.png`); the SDL exit leaks 1942 B of dbus/nvidia-GL
+host-library memory (pre-existing LSan noise, not an engine leak). The census is
+reconciled against FU-190: action non-NULL `31` + phase rows `0x18/0x19/0x1F` =
+**34/80**, dispatch `45 UNSUP / 34 OK / 1 NOTF` (sum 80), **42%**. Every
+unmoved phase-16 frontier item is registered with its owner in `docs/ENGINE.md`
+(the T6 bullet) — `FU181-L1`, `OL-13`, `FU184-L1..L7`, `OL-65/FU185-L6`,
+`FU186-L1..L9`, `FU187-L1..L5`, `FU188-L1/L3/L5`, `FU189-L1/L2`, `FU178-L1`,
+`FU177-L1`, `FU175-L1`, `FU190-L1/L2`. `make check` **110/110**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

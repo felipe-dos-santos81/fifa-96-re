@@ -280,6 +280,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   (FU-149 L13/T1: the throw-in/corner/free-kick/penalty taker machines —
   placement/probe/kick/resolution; the taker codes the P1 arms install now
   execute and hand back to phase 2 through the shared situation-0xB entry).
+  *(This enumeration is the pre-phase-15 core; the phase-15/16 action rows
+  `09`, `0x14`, `0x16`, `0x19`, `0x1B`, `0x1C`, `0x1F` join the wired set in
+  the bullets below — the `31 action` count above is the authority.)*
   Row `17` (M2 phase-15 T1/FU-181: the line-up walk `0x84730..0x849AF`) has a
   **ported body but is not counted** — the rows-27/29/2C precedent (a ported
   body with no engine installer stays unwired and uncounted): its only
@@ -338,7 +341,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   live/tape-dormant, so M2 stays byte-exact (no re-pin).
   dispatch results 45 UNSUP / 34 OK / 1 NOTF (sum 80; action 45 = 31 OK + 14
   UNSUP, phase 35 = 3 OK + 31 UNSUP + 1 NOTF). *(errata, phase-16 T2 review:
-  the `50 UNSUP / 29 OK / 1 NOTF` this line replaced was likewise off by one —
+  the `49 UNSUP / 31 OK / 1 NOTF` this line replaced was likewise off by one —
   the corrected derived numbers above are the authority. phase-16 T3: row `0x1C`
   wired, so `48 UNSUP / 31 OK / 1 NOTF` → `47 UNSUP / 32 OK / 1 NOTF`. phase-16
   T4: row `0x16` + phase `0x19` wired, so `47 UNSUP / 32 OK / 1 NOTF` → `45
@@ -394,7 +397,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   stage-0 gate polarity (`[0x158866] == 0x48`, FU187-L1) and the anim/face/band
   sinks (FU187-L2/L4), the phase-0x19 stage/timer aliasing (FU187-L3) and the
   row-0x24 `0x157A38` lane table / `0x6E1D0` release (FU188-L3/L5) stay legs.
-  Both counted rows are install-live/tape-dormant, so M1 `09b726b7…` and M2
+  Both counted units (row `0x16` + phase `0x19`) are install-live/tape-dormant,
+  so M1 `09b726b7…` and M2
   `7b4b241a…` stay **byte-exact (no re-pin)**; census 32/80 → **34/80 = 42%**.
 - **M2 phase-16 T5 (FU-189/FU-190) — installer hunt + rows `03`/`0x0D`
   completion: all four conditional rows stay NULL/uncounted (honest legs, no
@@ -421,6 +425,58 @@ the build also produces the windowed `fifa96` target (`make game`).
   `7b4b241a…` stay **byte-exact (no re-pin)**; `tests/test_engine_match_handlers.c`
   pins the four legs (NULL slot + named owner + UNSUP dispatch) and the
   phase-0x1D gap (`fifa96_match_dispatch_phase(0x1D) == UNSUP`).
+- **M2 phase-16 T6 (acceptance) — the tape is v16 (byte-identical), the review
+  riders folded in, the smoke recorded, the census reconciled.**
+  **Tape decision: v16 strata, no re-pin.** Every phase-16 landing is
+  install-live/tape-dormant, so no presented frame moved: M1 `09b726b7…` is
+  unmoved and M2 is held at the v15 bytes `7b4b241a…` (792 lines, `cmp` clean
+  against `tests/golden/engine/m2-frames.txt`). The v16 label records that this
+  phase's acceptance strata exist at the acceptance layer (the phase-15
+  v14→v15 precedent labels the acceptance layer, not the tape bytes); holding
+  v15 was the alternative, recorded here as rejected for precedent
+  consistency. `tests/test_engine_m2.c` gains the v16 provenance block and the
+  phase-16 riders (`run_phase16_riders`: phase 0x18's act-timer head add
+  [FU-183], phase 0x19's stage-0 advance [FU-187], row 0x14's stage-0 timer
+  gate [FU-184], row 0x16's stage 0→2 advance [FU-187]); the phase-15 census
+  riders are renamed `run_census_riders` (they now carry T1–T5). Mutation-RED:
+  disabling the phase-0x18 head add aborts `run_phase16_riders` at its own
+  assert.
+  **Review riders (the T1–T5 deferred minors, each verified first-hand).**
+  (1) `test_action_16_runs_body` tightened to `stage92 == 2u` (the `0xFF`
+  reset needs `row44 != 0`, false on that path); (2) the stale AGENTS.md
+  completion-percentage example (`24/80 → 30%`) swept to `34/80 → 42%`;
+  (3) this file's T4 line now reads "both counted units (row `0x16` + phase
+  `0x19`)"; (4) the T2 errata back-reference corrected from the wrong
+  `50/29/1` to the actual predecessor `49 UNSUP / 31 OK / 1 NOTF` (sum 81, off
+  by one); (5) the action-dispatch enumeration is marked the pre-phase-15 core
+  (the phase-15/16 rows are named in the bullets); (6) the row-0x1C source
+  comment's drafting artifact removed; (7) `run_phase15_riders` renamed
+  `run_census_riders`. No rider moved the tape.
+  **Smoke (`DISPLAY=:1`, this host 2026-10-12, `make game`):** the window
+  opens (960×720 client) and the EA-SPORTS intro (`docs/screens/p16-t6-intro.png`)
+  → front-end (`docs/screens/p16-t6-frontend.png`) draw; ESC exits. The
+  phase-16 landings are install-live/tape-dormant, so **no visible delta is
+  claimed**. The SDL exit leaks 1942 B (dbus `dbus_bus_register` +
+  nvidia-GL under `SDL_CreateWindowAndRenderer`, `platform_sdl3.c:78`) under
+  LSan — **pre-existing host-library noise**, not an engine leak.
+  **Census: unchanged, `34/80 = 42%`** (`floor(100 × 34/80) = 42`); dispatch
+  `45 UNSUP / 34 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35
+  = 3 OK + 31 UNSUP + 1 NOTF); README title `42%` — all consistent.
+  **Remaining legs (owners; derivations live in the FU slice named).**
+  Row-0x17 producer chain **FU181-L1** (FU-183); the phase-18 FU-83 timeline
+  remainder **OL-13**; the row-0x14 scatter divergence **FU184-L1** and the
+  celebration/arm/release remainders **FU184-L2/L3/L4/L7**; the row-0x22
+  `opponent_invoke` angle-input gate **OL-65 / FU185-L6** (0x22 uncounted);
+  the keeper-chain remainders **FU186-L1..L9** (incl. the `0x1A`
+  `FUN_00077EAC` installer ladder **FU186-L5**); the row-0x16 `[0x158866]`
+  polarity **FU187-L1** + anim/face sinks **FU187-L2/L4** + phase-0x19
+  stage/timer aliasing **FU187-L3**; the phase-0x20 situation-0 producer
+  **FU188-L1** + row-0x24 lane table/release **FU188-L3/L5**; row `0x20`
+  (phase-0x1D-gated) **FU189-L1** + row `0x25` (no installer) **FU189-L2**;
+  row `0x0D` row-09 arm 1 **FU178-L1**; row `03` `0x6DCC8` **FU177-L1** + the
+  per-record `[rec+0x1C]` seam **FU175-L1**; the phase-row cohort envelope
+  **FU190-L1/L2**. Every phase-16 FU leg is unchanged from its slice; this
+  bullet is the owner register, not a re-derivation.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

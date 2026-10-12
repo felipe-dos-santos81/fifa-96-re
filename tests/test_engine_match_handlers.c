@@ -2863,7 +2863,7 @@ static void test_action_16_runs_body(void) {
   assert(f.mr.record.target_x == 0x111);        /* 0x84662 pos -> target */
   assert(f.mr.record.target_y == 0x22);
   assert(f.mr.record.target_z == 0x333);
-  assert(f.mr.record.stage92 == 2u || f.mr.record.stage92 == 0xFFu); /* advanced */
+  assert(f.mr.record.stage92 == 2u);            /* advanced to stage 2 (row44 0) */
   assert(f.mr.record.timer89 == 0);             /* 0x84680 / 0x846e5 */
   assert(f.mr.entities.team[0].records[0].anim_id == 0x6Au ||
          f.mr.entities.team[0].records[0].anim_id == 0x55u);   /* 0x846c9 */
