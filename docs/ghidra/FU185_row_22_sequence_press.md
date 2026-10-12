@@ -465,6 +465,9 @@ installer family) stand.
   precedent), and the exported `fifa96_match_action_22` body is unit-tested
   directly. **Owner: OL-65** (the `+0x6F`/`+0x7D` producers); once OL-65 lands
   the gate can fire and the row becomes countable. Census after T2: **31/80 =
-  38%** (28 action + row `0x14` + phase `0x18`/`0x1F`). This supersedes the
-  controller ruling W3's count (W3's premise — FU-185 §7's "the strict test
-  passes" — is refuted by this leg, exactly as T1 refuted the row-0x17 arm).
+  38%** (28 action + row `0x14` + phase `0x18`/`0x1F`). **Ruling W8** (phase-16
+  T2 review, 2026-10-12): the action-table slot `0x22` is reverted to `NULL` and
+  the row is **not counted** — this supersedes controller Ruling W3's count,
+  whose premise (FU-185 §7's "the strict test passes") is refuted by FU185-L6,
+  exactly as T1 refuted the row-0x17 arm. Ruling W8 is the attribution for the
+  census decision (recorded here in git, not only the SDD ledger).

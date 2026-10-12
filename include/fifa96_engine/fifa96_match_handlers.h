@@ -102,6 +102,9 @@ int fifa96_match_action_17(struct fifa96_match_run *mr);
  * be `< 0x55` — `out.opponent_invoke` never fires. This is the rows-27/29/2C
  * precedent (a ported body with no reachable engine installer stays unwired and
  * uncounted); the body is exported so it is tested directly and ready for the
- * phase when OL-65 lands. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
- * out-of-range `mr->record.entity_id`. */
+ * phase when OL-65 lands. **Ruling W8** (phase-16 T2 review): the slot stays
+ * NULL / the row uncounted — this supersedes controller Ruling W3's count, whose
+ * premise (FU-185 §7's "the strict test passes") is refuted by FU185-L6.
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
+ * `mr->record.entity_id`. */
 int fifa96_match_action_22(struct fifa96_match_run *mr);

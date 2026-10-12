@@ -2502,7 +2502,13 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase) {
      * scanned record the native dereferences the stale
      * cell; the port hardens to no record-keyed installs (leg FU173-L1 for the
      * other scanner arms). The release (row-0x14 stage 2's phase-1 write
-     * 0x87C71) stays unported: FU173-L2/L3. */
+     * 0x87C71) stays unported: FU173-L2/L3.
+     *
+     * QUOTED ERRATA (phase-16 T2, Ruling W8): the sentence above is
+     * SUPERSEDED, not rewritten — T2's `fifa96_match_action_14` stage 2 ports
+     * exactly this release (native `0x87C71` -> `fifa96_match_run_kickoff_entry`,
+     * the shared phase-1 entry factored from begin). The old text is kept
+     * verbatim; this errata supersedes it. */
     for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
       struct fifa96_match_team *team = &mr->entities.team[t];
       if (mr->goal_record >= 0 && team->side == mr->goal_record_side) {
