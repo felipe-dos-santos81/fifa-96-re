@@ -449,3 +449,22 @@ install-live/tape-dormant: M1/M2 byte-identical → no re-pin.
 blocks the gate end-to-end), FU185-L2 (`0x79B1C` word clears), FU185-L3
 (`+0x43`), FU185-L4 (`0x6E598` anim request consumer) and FU185-L5 (second
 installer family) stand.
+
+### 11. Legs (T2 round)
+
+* **FU185-L6 — the row-07 `opponent_invoke` gate is structurally ungated
+  in-engine (OL-65).** The gate `kick_machine_07` (`0x8164B..0x816E4`) compares
+  `fifa96_action_kick_angle(opp_angle_x, opp_angle_z)` against `opp_face_word`.
+  The engine stages `opp_angle_x = opp->lane_z` (`+0x6D`) but leaves
+  `opp_angle_z` (`+0x6F`) and `opp_face_word` (`+0x7D`) at 0 (OL-65). Since
+  `fifa96_entity_angle(x, 0)` is always `+-0x100` (or `0x80` at `x == 0`) and
+  the folded diff against `opp_face_word == 0` is always `> 0x55`, a brute-force
+  sweep over every `lane_z in [-0x1200, 0x1200]` shows `out.opponent_invoke`
+  never fires. Therefore the row-0x22 installer is **unreachable in-engine**:
+  the action-table slot `0x22` stays **NULL/uncounted** (the rows-27/29/2C
+  precedent), and the exported `fifa96_match_action_22` body is unit-tested
+  directly. **Owner: OL-65** (the `+0x6F`/`+0x7D` producers); once OL-65 lands
+  the gate can fire and the row becomes countable. Census after T2: **31/80 =
+  38%** (28 action + row `0x14` + phase `0x18`/`0x1F`). This supersedes the
+  controller ruling W3's count (W3's premise — FU-185 §7's "the strict test
+  passes" — is refuted by this leg, exactly as T1 refuted the row-0x17 arm).

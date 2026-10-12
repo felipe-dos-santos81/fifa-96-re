@@ -2712,18 +2712,18 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_phase15_riders(void) {
   /* 1. The census shape (T1–T3): the exact wired counts and the phase-15 slots.
    *    A silent re-wire / un-census / slot flip fails here, not only in the
-   *    handler unit tests. 32/80 = 40% (30 action + the phase rows 0x18/0x1F). */
+   *    handler unit tests. 31/80 = 38% (29 action + the phase rows 0x18/0x1F). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 30u && phase_wired == 2u);   /* 32/80 = 40% */
+    assert(action_wired == 29u && phase_wired == 2u);   /* 31/80 = 38% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */
-    assert(fifa96_match_action_table[0x22].fn != NULL); /* T2: sequence/press */
+    assert(fifa96_match_action_table[0x22].fn == NULL); /* T2: ported, ungated (FU185-L6) */
     assert(fifa96_match_action_table[0x1F].fn != NULL); /* T2: keeper dive */
     assert(fifa96_match_action_table[0x1B].fn != NULL); /* T2: keeper reposition */
     assert(fifa96_match_action_table[0x19].fn != NULL); /* T2: keeper hold */

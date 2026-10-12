@@ -595,22 +595,25 @@ remains numbered legs — no dead code. M1/M2 stay **byte-identical** (no re-pin
 `p16-t1-frontend.png`); the row is install-live/tape-dormant, so no visible delta
 is claimed.
 
-M2 phase-16 T2 (FU-184/FU-185) wires the two first-order celebration/sequence
-bodies: **row `0x14`** (the 3-stage celebration/scatter `0x8784C..0x87CBC` — the
-FU-82 `fifa96_action_sequence_scatter_celebration` + the 6-slot buffer, the idx
-walk, and the stage-2 reset + release through the new
+M2 phase-16 T2 (FU-184/FU-185) lands the celebration/sequence pair: **row
+`0x14`** is wired and counted (the 3-stage celebration/scatter
+`0x8784C..0x87CBC` — the FU-82 `fifa96_action_sequence_scatter_celebration` +
+the 6-slot buffer, the idx walk, and the stage-2 reset + release through the new
 `fifa96_match_run_kickoff_entry`, factored from begin; the installer is the live
 phase-5 goal arm `match_run.c:2494`, proven end-to-end by
-`test_action_14_live_phase5_route`) and **row `0x22`** (the phase-2-only
-sequence/press `0x8539C..0x85481` via the FU-136
-`fifa96_action_sequence_press_event`). The row-07 `opp_type` source is corrected
-to the native `+0x91` code byte (FU185-L1). `make check` 110/110; M1/M2 stay
+`test_action_14_live_phase5_route`). **Row `0x22`** is ported
+(`fifa96_match_action_22`, the phase-2-only sequence/press `0x8539C..0x85481`
+via the FU-136 `fifa96_action_sequence_press_event`) but **NOT counted**: its
+only installer (the wired row-07 `0x816DF` invoke-now) is structurally ungated
+in-engine — FU185-L6 (first-hand, brute-forced) shows the gate's opponent
+`word[+0x6F]`/`word[+0x7D]` angle inputs are unmodeled (OL-65, staged 0), so
+`fifa96_entity_angle(lane_z, 0)` always yields `±0x100` and the folded diff
+against `opp_face_word == 0` can never be `< 0x55`. The body is exported and
+unit-tested directly (rows-27/29/2C precedent), ready for the phase when OL-65
+lands. The row-07 `opp_type` source is corrected to the native `+0x91` code byte
+(FU185-L1; no engine-level discriminator yet). `make check` 110/110; M1/M2 stay
 **byte-identical** (install-live/tape-dormant; no re-pin); census 30/80 →
-**32/80 = 40%**. Honest caveat (FU185-L6, first-hand): the row-07
-`opponent_invoke` gate reads the opponent `+0x6F`/`+0x7D` angle inputs, which
-the engine leaves at 0 (OL-65), so the `0x22` install is dormant until that leg
-lands (controller ruling W3 counts the row; the caveat is recorded in ENGINE.md
-and the FU-185 append).
+**31/80 = 38%**.
 
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never

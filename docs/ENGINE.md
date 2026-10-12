@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-32/80 dispatch rows wired (30 action + the wired phase rows 0x18 and 0x1F), the
+31/80 dispatch rows wired (29 action + the wired phase rows 0x18 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,7 +260,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **32/80 rows wired** (30 action + the phase rows
+- Action dispatch (FU-137): **31/80 rows wired** (29 action + the phase rows
   `0x18`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
@@ -324,16 +324,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   `fifa96_action_sequence_scatter_celebration` + the 6-slot buffer, the idx
   walk and the stage-2 reset + release through the factored
   `fifa96_match_run_kickoff_entry`; the installer is the live phase-5 goal arm
-  `match_run.c:2494`, whose route to the row is proven end-to-end) and **row
-  `0x22`** (the sequence/press 3-stage body `0x8539C..0x85481`: the phase-2
-  gate, the `0x79B1C` snap and the FU-136
-  `fifa96_action_sequence_press_event` stage-1 decision); the row-07
-  `opp_type` source is corrected to the native `+0x91` code byte (FU185-L1).
-  Both rows are install-live/tape-dormant, so M2 stays byte-exact (no re-pin).
-  First-hand caveat: the row-07 `opponent_invoke` gate reads the opponent
-  `word[+0x6F]`/`word[+0x7D]` angle inputs, which the engine leaves at 0
-  (OL-65), so the `0x22` install is dormant until that leg lands.
-  dispatch results 48 UNSUP / 32 OK / 1 NOTF.
+  `match_run.c:2494`, whose route to the row is proven end-to-end). **Row `0x22`
+  is ported but NOT counted** (the rows-27/29/2C precedent): its only installer
+  (the wired row-07 `0x816DF` invoke-now) is structurally ungated in-engine —
+  FU185-L6 (first-hand) shows the gate's opponent `word[+0x6F]`/`word[+0x7D]`
+  angle inputs are unmodeled (OL-65, staged 0), so `fifa96_entity_angle(lane_z,
+  0)` always yields `±0x100` and the folded diff against `opp_face_word == 0`
+  can never be `< 0x55` (a brute-force sweep confirms `out.opponent_invoke`
+  never fires); the body `fifa96_match_action_22` is exported and unit-tested
+  directly, ready for the phase when OL-65 lands. The row-07 `opp_type` source
+  is corrected to the native `+0x91` code byte (FU185-L1; no engine-level
+  discriminator yet — FU185-L6 blocks the gate). Both landed rows are install-
+  live/tape-dormant, so M2 stays byte-exact (no re-pin).
+  dispatch results 49 UNSUP / 31 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

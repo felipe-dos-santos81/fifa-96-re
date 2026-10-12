@@ -94,7 +94,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK,
-    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
+    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -2762,11 +2762,13 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
   drop_fixture(&f);
 }
 
-/* FU-185 §2/§6 (phase-16 T2): the wired row 0x22 sequence/press body
- * (`0x8539C..0x85481`). The phase gate (else the shared reset), the head snap,
- * stage 0 (active -> ran/snap/advance), stage 1 (the FU-136 press decision on
- * the lane band `word[+0x6B]`) and stage 2 (the `+0x44` reset). A stub body
- * would leave ran/stage/anim untouched and fail every assertion below. */
+/* FU-185 §2/§10 (phase-16 T2): the row-0x22 sequence/press body
+ * (`0x8539C..0x85481`). The slot is NULL/uncounted (FU185-L6: the row-07
+ * installer gate is structurally ungated in-engine), so the body is driven
+ * directly. The phase gate (else the shared reset), the head snap, stage 0
+ * (active -> ran/snap/advance), stage 1 (the FU-136 press decision on the lane
+ * band `word[+0x6B]`) and stage 2 (the `+0x44` reset). A stub body would leave
+ * ran/stage/anim untouched and fail every assertion below. */
 static void test_action_22_runs_body(void) {
   struct fixture f;
   /* phase gate: a non-phase-2 dispatch resets. */
@@ -2775,7 +2777,7 @@ static void test_action_22_runs_body(void) {
   f.mr.record.entity_id = 1;
   f.mr.record.stage92 = 3;
   f.mr.record.timer89 = 9;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0xFF && f.mr.record.timer89 == 0);
 
   /* stage 0, active: ran + snap + timer 0 + stage 1. */
@@ -2793,7 +2795,7 @@ static void test_action_22_runs_body(void) {
   f.mr.record.target_x = 0;
   f.mr.record.target_y = 0;
   f.mr.record.target_z = 0;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.ran == 1);
   assert(f.mr.record.target_x == 0x111 && f.mr.record.target_y == 0x222 &&
          f.mr.record.target_z == 0x333);
@@ -2807,7 +2809,7 @@ static void test_action_22_runs_body(void) {
   f.mr.record.active = 0;
   f.mr.record.stage92 = 0;
   f.mr.entities.team[0].records[1].active = 0;   /* stage with the record */
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0xFF);           /* reset: same-code no install */
 
   /* stage 1, band <= 0x30: the anim 0x4F install and the stage-2 advance. */
@@ -2819,7 +2821,7 @@ static void test_action_22_runs_body(void) {
   f.mr.record.lane = (int32_t)(0x20u << 16);   /* native word[+0x6B] = 0x20 */
   f.mr.record.timer89 = 0;
   f.mr.record.delta = 0;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u && f.mr.record.timer89 == 0);
   assert(f.mr.record.anim_id == 0x4F);
   assert(f.mr.entities.team[0].records[1].anim_id == 0x4Fu);
@@ -2828,7 +2830,7 @@ static void test_action_22_runs_body(void) {
   f.mr.record.stage92 = 1;
   f.mr.record.lane = (int32_t)(0x31u << 16);
   f.mr.record.timer89 = 0x1F;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0u);   /* reset: phase-2 active forced install */
 
   /* stage 1, band > 0x30 with timer <= 0x1E: wait (the 0x8543C tail). */
@@ -2840,13 +2842,13 @@ static void test_action_22_runs_body(void) {
   f.mr.record.lane = (int32_t)(0x31u << 16);
   f.mr.record.timer89 = 0x1E;
   f.mr.record.delta = 0;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 1u);
 
   /* stage 2: the +0x44 ack resets. */
   f.mr.record.stage92 = 2;
   f.mr.record.row44 = 1;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0u);   /* the +0x44 reset */
   drop_fixture(&f);
 }

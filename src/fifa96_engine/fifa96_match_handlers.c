@@ -4170,7 +4170,7 @@ static int fifa96_match_action_14(struct fifa96_match_run *mr) {
  * `ran`/snap/timer=0/advance), stage 1 (the FU-136 `sequence_press_event`
  * band/timer decision -> anim 0x4F, or reset) and stage 2 (`+0x44` -> reset).
  * Every terminating arm is the shared `match_row_reset`. */
-static int fifa96_match_action_22(struct fifa96_match_run *mr) {
+int fifa96_match_action_22(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   struct fifa96_match_entity *e = match_sp_entity(mr, NULL, NULL);
   uint8_t stage;
@@ -4287,8 +4287,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x20, NULL, "FU-137 §6: FU-136 row 20: not ported (partial); FU-82 7-arm table 0x84ED0; OL-9"},
     {0x21, fifa96_match_action_21,
      "FU-139 §10/FU-137: row 21 ported (0x85214..0x8539B machine; camera copy, 0x8DE8C nearest + 0x4A anim arm, 0x7DAB4 reset, team-target ball 4/receiver) over the pool; install arms 0x7D046 (and row-05 0x7F791/0x7F7B6); +0x44 and anim record writes OL-68/OL-52"},
-    {0x22, fifa96_match_action_22,
-     "FU-185 §2/§6 (phase-16 T2): row 22 sequence/press body ported (0x8539C..0x85481, phase-2-only 3 stages): the phase gate (else match_row_reset), timer89 += delta, the 0x79B1C snap (target := pos; FU185-L2 word-clear residual), stage 0 (active gate -> ran/snap/timer=0/advance), stage 1 (fifa96_action_sequence_press_event on the lane band word[+0x6B] -> anim 0x4F per FU-185, or reset) and stage 2 (+0x44 -> reset). Installer live (wired row-07 0x816DF invoke-now on the opponent team target via match_kick_invoke_opponent; the FU-182 OL-56 'producer-dormant' premise is FU-185 §5.1 errata — the target producer is ported); the +0x43 anim-flags byte is FU185-L3"},
+    {0x22, NULL,
+     "FU-185 §2/§10 (phase-16 T2): row 22 sequence/press body ported (fifa96_match_action_22, 0x8539C..0x85481) but NOT counted (the rows-27/29/2C precedent — a ported body with no reachable engine installer stays unwired). Its only installer is the wired row-07 0x816DF invoke-now on the opponent team target, but the gate is structurally ungated in-engine: FU185-L6 (first-hand) shows the opponent word[+0x6F]/word[+0x7D] angle inputs are unmodeled (OL-65, staged 0), so fifa96_entity_angle(lane_z, 0) always yields +-0x100 and the folded diff against opp_face_word==0 can never be < 0x55 — a brute-force sweep proves out.opponent_invoke never fires. Uncounted until OL-65 lands; the body is exported for direct unit testing (declared in fifa96_match_handlers.h). OL-65"},
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},

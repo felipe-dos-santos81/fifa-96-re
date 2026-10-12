@@ -90,3 +90,18 @@ int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase);
  * out-of-range `mr->record.entity_id` (like every row body it assumes a
  * non-NULL `mr`; the dispatch entry points guard that). */
 int fifa96_match_action_17(struct fifa96_match_run *mr);
+
+/* The ported action row-0x22 body (FU-185 §2/§6): the sequence/press machine
+ * `0x8539C..0x85481`. Its action-table slot
+ * (`fifa96_match_action_table[0x22]`) is **NULL** — the row is not counted —
+ * because its only installer (the wired row-07 `0x816DF` invoke-now on the
+ * opponent team target) is structurally ungated in-engine: FU185-L6 (first-
+ * hand) shows the gate's opponent `word[+0x6F]`/`word[+0x7D]` angle inputs are
+ * unmodeled (OL-65, staged 0), so `fifa96_entity_angle(lane_z, 0)` always
+ * yields `+-0x100` and the folded diff against `opp_face_word == 0` can never
+ * be `< 0x55` — `out.opponent_invoke` never fires. This is the rows-27/29/2C
+ * precedent (a ported body with no reachable engine installer stays unwired and
+ * uncounted); the body is exported so it is tested directly and ready for the
+ * phase when OL-65 lands. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
+ * out-of-range `mr->record.entity_id`. */
+int fifa96_match_action_22(struct fifa96_match_run *mr);
