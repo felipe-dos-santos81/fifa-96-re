@@ -2262,7 +2262,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * act slot and the phase; the engine's install runs last in begin, so the
    * derived reset mirror clears the act-9 machinery and restores the phase
    * cells without a second setter edge (`prev_phase` keeps the reset-0
-   * value). */
+   * value). The ordering itself is the derived assumption (the native
+   * front-end install precedes the reset/kickoff entry; no native run
+   * measures the two orders) — minted as leg **FU170-L10** in the FU-170 T4
+   * status. */
   {
     uint8_t phase_before = mr->state.phase;
     uint8_t prev_before = mr->state.prev_phase;
@@ -2458,7 +2461,13 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase) {
      * code 0x15 over records 1..10 (`PUSH -1; ECX=0x15; EBX=0xA; EDX=1` ->
      * 0x8CEB8), write the goal record into `[team+0x7B2]` and install code
      * 0x14 on it (`0x8D461..0x8D475`); else install code 0 over records 0..10
-     * (`0x8D47C`). Without a scanned record the native dereferences the stale
+     * (`0x8D47C`). Both install paths then fall to the trailing native
+     * presentation sink the port drops: `0x8D48E XOR EAX,EAX` + `0x8D490
+     * CALL 0x513BC` (EAX=0 -> `0x513CC CALL 0x566D0`, the `[0x108FE4/
+     * 0x108FE0/0x108FDC]` reader, whose AL&1 arm writes `[0x108E1C]=0x1D`;
+     * fresh `0x8D47C..0x8D4A3`/`0x513BC..0x513D3`/`0x566D0..0x566EF` this
+     * round) — minted as leg **FU173-L8** in the FU-173 T4 status. Without a
+     * scanned record the native dereferences the stale
      * cell; the port hardens to no record-keyed installs (leg FU173-L1 for the
      * other scanner arms). The release (row-0x14 stage 2's phase-1 write
      * 0x87C71) stays unported: FU173-L2/L3. */
@@ -3074,10 +3083,17 @@ int fifa96_match_run_screen_step(struct fifa96_match_run *mr) {
          * the latched-direct route and lands the corner counter + phase 4 +
          * the 0x11 taker arm through the table-2 row. It is gated on the
          * derived act-9 → GATE handshake (`act9_gate`, the header doc): the
-         * native GATE's only runtime producer is act 9 stage 3, so the
-         * produced gate carries the corner arm; a staged gate (the M2 v13
-         * tape's m 42 compression) advances without it — the disclosed
-         * hardening that keeps the v13 strata additive. The two
+         * window-scoped statement — the leg-0 SETUP0 clears the native gate
+         * first (`0x93C30`), act-9 stage 0 clears it again (`0x88F9A`) while
+         * writing phase 0x15, and the machine then waits at step 1 with the
+         * singleton act slot holding act 9, so the only producer that can
+         * open *that window's* gate is the act-9 stage-3 completion
+         * (`0x890C4`). The refused non-act-9 values: act 1's kickoff set
+         * (`0x88F07`, cleared `0x88E56`), act 2's tail (`0x895EC`), the reset
+         * (`0x886F4`) and the harness-staged m 42 compression. The produced
+         * gate carries the corner arm; a staged gate (the M2 v13 tape's m 42
+         * compression) advances without it — the disclosed hardening that
+         * keeps the v13 strata additive. The two
          * [0x157AB4]/[0x157AB6] clears need fields that do not exist
          * (display-only, FU170-L2). */
         if (mr->screen_leg == 0 && mr->act9_gate != 0u) {

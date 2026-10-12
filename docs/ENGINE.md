@@ -2118,11 +2118,22 @@ the build also produces the windowed `fifa96` target (`make game`).
     `0x8B672` after `0x8B664`) and the stage-3 timer (`word[0x158818] >=
     0x3C`, 30 granted frames) sets `global_5882a`. The sit-3 arm is gated on
     the derived **act-9 -> GATE handshake** (`act9_gate`): the native
-    `[0x15882A]` has exactly one runtime producer (act 9 stage 3), so a
+    `[0x15882A]` gate's only reachable producer *inside the restart window*
+    is act 9 stage 3 (`0x890C4`) — SETUP0 clears it first (`0x93C30`; legs
+    1/3 write their `[0x15B684]`-selected value at
+    `0x93E84`/`0x942F5`/`0x93EB6`/`0x94327`), stage 0 clears it again
+    (`0x88F9A`) while writing phase 0x15, and the machine then waits with
+    the singleton act slot holding act 9; the kickoff gate (act 1 sets
+    `0x88F07` / clears `0x88E56`), act 2's tail (`0x895EC`), the reset
+    (`0x886F4`) and staged values are the refused non-act-9 values, so a
     staged gate (the M2 v13 tape's m 42 compression — a native-unreachable
     state) advances without the corner arm; this disclosed hardening is what
     keeps the v13 strata byte-identical (the faithful SETUP2 measured taking
-    the m 44 sit-3 route and moving frame 48+; see the T3 report). Downstream
+    the m 44 sit-3 route and moving frame 48+; see the T3 report). **Errata
+    (phase-14 T4): the T3 report's "exactly one runtime producer" was
+    falsified by fresh xrefs (24 touches, writers as above) — the
+    window-scoped statement is the corrected form; FU170-L9's
+    remove-and-re-pin criterion is unchanged.** Downstream
     needed no new code: the corner counter + phase 4 + the 0x11 arm, the
     taker ladder (`fifa96_match_action_11`), the situation-0xB resolve, the
     PHASE latch clear and the POST idle were all wired. The begin install's
@@ -2196,6 +2207,55 @@ the build also produces the windowed `fifa96` target (`make game`).
     smoke** (scoring is a gameplay outcome the port cannot force on the SDL
     session); the post-goal continuation's runtime evidence is the v14 tape
     + the fixtures.
+- **M2 phase-14 T4 (acceptance v14 completion + the T1–T3 review riders;
+  2026-10-12).** Docs/comments + test strata only — **no behavior change**:
+  M2 v14 byte-exact (`./build/test_engine_m2 | cmp -`), M1 `09b726b7…`
+  unmoved, `make check` 109/109 (sanitized, strict), wired **24/80** and
+  README title **30%** unchanged.
+  - **The v14 acceptance strata complete** (`tests/test_engine_m2.c`): the
+    new per-window state pins in the existing strata style (no golden
+    duplication) — the 0x15 window entry carries the derived act-9 armed
+    with the gate just cleared (`phase15_armed` 1 / `phase15_gate` 0), the
+    GATE production lands 96 steps in (`gate_marker` 1, the arm spent), the
+    sit-3 phase-4 entry 100 steps in carries `corner_count[0] == 1` and
+    leaves the screen machine holding at its PHASE step (3), the taker
+    ladder runs 303 steps, the restart completes at the POST idle with the
+    latch clear (`restart_screen_step` 4 / `restart_pending` 0) and the tape
+    records `M2_POST_RESTART_FRAMES`. The T3 ordering pins, the m 72 exact
+    set and the ISO/noiso paths are retained. Mutation-RED verified:
+    bypassing the PHASE hold fails `phase4_screen_step == 3`; shifting the
+    stage-3 threshold three steps fails `gate_step - phase15_step == 96`.
+  - **T3 review Important 1 (the falsified producer claim).** The
+    `act9_gate` rationale is reworded window-scoped at the header, the
+    SETUP2 body, the test provenance, here, PROGRESS.md and the FU-170 T4
+    append: the native `[0x15882A]` gate has multiple writers (fresh
+    `get_xrefs_to` = 24; act-1 `0x88E56`/`0x88F07`, act-2 tail `0x895EC`,
+    act-7 `0x899F0`/`0x89A39`, act-9 stage-0 `0x88F9A` / stage-3 `0x890C4`,
+    the reset `0x886F4`, SETUP0 leg 0 `0x93C30` and legs 1/3
+    `0x93E84`/`0x942F5`/`0x93EB6`/`0x94327`) — the correct statement is that
+    *inside the restart window* only the act-9 stage-3 completion can open
+    it (the singleton act slot holds act 9 while the machine waits at step
+    1). FU170-L9's remove-and-re-pin criterion stands.
+  - **T3 review minors.** (i) **Errata pointer** (old line not rewritten):
+    the "pins the 85-frame M2-B transcript" figure in the phase-10-era
+    acceptance list above is superseded — the tape lineage is v10 85 -> v13
+    85 (additive) -> **v14 792 lines**. (ii) The phase-5 arm's else path
+    drops the trailing native presentation sink `0x8D490 CALL 0x513BC`
+    (EAX=0 -> `0x513CC CALL 0x566D0`, the `[0x108E1C]` cell; fresh bytes) —
+    named in the `fifa96_match_run.c` comment and minted **FU173-L8**.
+    (iii) The begin reset mirror's derived ordering equivalence is minted
+    **FU170-L10** (no native run measures the front-end-install vs
+    reset/kickoff order).
+  - **Smoke (`DISPLAY=:1`, `p14-t4-*`).** Intro -> menu panel -> match: the
+    kickoff still is **byte-identical to the T3 kickoff shot** (`cmp` clean;
+    and T3 verified that one byte-identical to T2's), so the still needs a
+    *held* gameplay key to dismiss (a tap is missed between 30 Hz polls; the
+    pre-existing freeze, not a regression), after which the live match runs
+    continuously (00:02 -> 00:05 -> 00:31;
+    `docs/screens/p14-t4-{frontend,kickoff,live-play,play2,late}.png`). **No
+    live goal/post-goal segment exists in the smoke** (scoring cannot be
+    forced on the SDL session); the continuation's runtime evidence is the
+    v14 tape + the fixtures.
 - **M2 phase-14 T1 (row-0x0E stage-2 else arm + the live row-0x5E installer;
   FU-167/168/169; 2026-10-12).** Two pieces landed; **wired 22 -> 24/80**
   (dispatch 55 UNSUP / 24 OK / 1 NOTF); README title recomputed to **30%** in

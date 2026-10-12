@@ -411,10 +411,15 @@ act-9 arm writes phase 0x15 and its stage-3 timer (`word[0x158818] >= 0x3C`,
 sit 3; every downstream consumer was already wired (corner counter + phase 4
 + the 0x11 taker, the taker ladder, the situation-0xB resolve, the PHASE
 latch clear, the POST idle). The sit-3 arm is gated on the derived act-9 ->
-GATE handshake (the native gate has exactly one runtime producer), which
-keeps the v13 tape's staged m 42 gate additive — a disclosed hardening
-(FU170-L9; the faithful SETUP2 measured taking the m 44 route and moving
-frame 48+). The v14 tape pins the 0x15 window (lines 370..469), phase 4
+GATE handshake: the native gate's only reachable producer *inside the restart
+window* is the act-9 stage-3 completion (SETUP0 clears it first, stage 0
+clears it again while writing phase 0x15, and the machine then waits with the
+singleton act slot holding act 9; the kickoff gate, act 2's tail, the reset
+and staged values are the refused non-act-9 values — the phase-14 T4 reword
+of the falsified "exactly one runtime producer" claim; fresh xrefs, 24
+touches), which keeps the v13 tape's staged m 42 gate additive — a disclosed
+hardening (FU170-L9; the faithful SETUP2 measured taking the m 44 route and
+moving frame 48+). The v14 tape pins the 0x15 window (lines 370..469), phase 4
 (470..772), the resumed phase 2 (773..792) and the taker row 0x11 in the
 post-run mask; `head -85 new | cmp - old` clean. (2) **the byte-0 live
 release, bounded (FU-173 R21-2)** — the scan's goal record is stored (the
@@ -435,6 +440,29 @@ still, dismissing to live play and running continuously (match clock 00:02 ->
 no live goal/post-goal segment exists in the smoke (scoring cannot be forced
 on the SDL session), so the post-goal continuation's runtime evidence is the
 v14 tape + the fixtures.
+**Phase-14 T4 (2026-10-12) completes the acceptance and folds the T1–T3
+review riders (docs/comments + test strata only — no behavior change; M2 v14
+byte-exact, M1 unmoved, `make check` 109/109, wired 24/80 and README 30%
+unchanged).** (1) The v14 strata gain per-window state pins (no golden
+duplication): the 0x15 window entry (act-9 armed, gate just cleared), the
+GATE production 96 steps in, the sit-3 phase-4 entry 100 steps in (corner
+counter 1; the screen machine holding at PHASE), the taker ladder 303 steps,
+the restart at the POST idle with the latch clear, and the
+`M2_POST_RESTART_FRAMES` tail — mutation-RED verified (PHASE-hold bypass and
+stage-3 threshold shift). (2) The `act9_gate` rationale is reworded
+window-scoped at the six sites (the T3 "exactly one runtime producer" claim
+was falsified by fresh xrefs: 24 writers — act 1/2/7/9 + the reset + SETUP0;
+only the act-9 stage-3 completion can open the restart window's gate);
+FU170-L9's criterion stands. (3) The phase-5 else path's dropped
+presentation sink (`0x8D490 -> 0x513BC`, `[0x108E1C]`) is named in code and
+minted FU173-L8; the begin reset mirror's ordering equivalence is minted
+FU170-L10; the stale "85-frame" acceptance line gains an errata pointer. The
+`p14-t4-*` smoke (`DISPLAY=:1`): intro -> menu -> the kickoff still
+(byte-identical to T3's — the pre-existing freeze; a *held* gameplay key
+dismisses it, taps are missed between the 30 Hz polls) -> live play at 00:02
+-> 00:05 -> 00:31
+(`docs/screens/p14-t4-{frontend,kickoff,live-play,play2,late}.png`); no live
+goal segment (scoring cannot be forced on the SDL session).
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

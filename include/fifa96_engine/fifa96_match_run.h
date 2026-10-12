@@ -621,14 +621,24 @@ struct fifa96_match_run {
    * init/begin clear both. */
   uint8_t act9_armed;
   int16_t act9_timer;
-  /* The derived act-9 → GATE handshake marker: the native `[0x15882A]` gate
-   * has exactly one runtime producer (act 9 stage 3), so a gate value that
-   * no act-9 completion produced is a staged/forced state the native cannot
-   * reach. `act9_gate` marks the completion; SETUP2's sit-3 arm consumes it
-   * (the native step-2 queue runs on the produced gate). A staged gate (the
-   * M2 v13 tape's m 42 compression) therefore advances without the corner
-   * arm — the disclosed hardening that keeps the v13 strata; see the FU-170
-   * T3 status. Cleared by SETUP0 (fresh cycle) and init/begin. */
+  /* The derived act-9 → GATE handshake marker: within the restart window the
+   * native `[0x15882A]` gate has exactly one reachable producer. Fresh xrefs
+   * (24 touches): the leg-0 SETUP0 clears it unconditionally (`0x93C30`;
+   * legs 1/3 write their `[0x15B684]`-selected value — set `0x93E84`/`0x942F5`
+   * on the staged path, clear `0x93EB6`/`0x94327` on the settled path), the
+   * reset clears it (`0x886F4`), act-1's kickoff handler clears at `0x88E56`
+   * and sets at `0x88F07`, act-2's tail sets at `0x895EC`, and act-9 stage 0
+   * clears it again (`0x88F9A`) while it writes phase 0x15. After that write
+   * the screen machine waits at step 1 with the singleton act slot holding
+   * act 9 (the sit-0xC dispatch), so the only producer that can open *that
+   * window's* gate is the act-9 stage-3 completion (`0x890C4`); the kickoff
+   * gate (act 1), act-2's value, the reset and staged/forced values (the
+   * M2 v13 tape's m 42 compression) are the refused non-act-9 values.
+   * `act9_gate` marks the completion; SETUP2's sit-3 arm consumes it (the
+   * native step-2 queue runs on the produced gate). A staged gate therefore
+   * advances without the corner arm — the disclosed hardening that keeps the
+   * v13 strata; see the FU-170 T3/T4 status. Cleared by SETUP0 (fresh cycle)
+   * and init/begin. */
   uint8_t act9_gate;
   /* FU-145 S2 (goal arming) run state, native cells:
    *  - `goal_armed` = [0x15781D] the pan-arm flag (armed by the armer

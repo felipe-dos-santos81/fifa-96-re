@@ -450,3 +450,22 @@ L4 (mid-match `FUN_00073E28`), L5 (rollover timing), L6 (tape frame count)
 and L7 (phase-arm coverage) stand. The live byte-0 match therefore still
 holds at phase 5 after a natural goal (now with the native celebration codes
 installed) until the row-0x14 port lands.
+
+---
+
+## Status append — T4 riders (2026-10-12, phase-14 T4; append-only)
+
+**FU173-L8 (new) — the phase-5 else path's dropped presentation sink.** Fresh
+`disassemble_bytes 0x8D47C..0x8D4A3` this round: the non-goal team's else arm
+(`PUSH -1; EBX=0xA; ECX=EDX=0; CALL 0x8CEB8` at `0x8D47C..0x8D489`, install
+code 0 over records 0..10) falls to `0x8D48E XOR EAX,EAX` + `0x8D490 CALL
+0x513BC` — the trailing native presentation sink the port drops. With EAX=0:
+`0x513BC CMP EAX,1 / JNZ 0x513CC` -> `0x513CC CALL 0x566D0` (fresh
+`0x513BC..0x513D3`/`0x566D0..0x566EF`: the `[0x108FE4] + [0x108FE0]` /
+`[0x108FDC]` reader) whose AL&1 arm writes `[0x108E1C] = 0x1D` (`0x513D5`).
+The goal-record team's path (`0x8D461..0x8D475`) rejoins the same sink
+(`0x8D495 ADD ESP,0x100` epilogue). The port names the drop at the
+`fifa96_match_run_phase_arm` phase-5 else arm; L8 carries the sink (its
+`[0x108E1C]` consumer and the `0x566D0` presentation semantics) with the
+celebration-port remainder. FU173-L1..L7 stand; the phase-5 arm's
+`test_phase5_celebration_arm` pin is unchanged.

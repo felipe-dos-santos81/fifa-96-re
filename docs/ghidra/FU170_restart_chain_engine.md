@@ -437,3 +437,62 @@ restart-completion break + `M2_POST_RESTART_FRAMES`), the fixture
 0x15 window; the 30-grant timer; sit 3 -> phase 4 + counter + the 0x11
 install; the taker ladder to phase 2; the POST idle) — mutation-RED
 verified. Legs: L1–L8 stand; **L9 minted**.
+
+---
+
+## Status append — T4 acceptance + riders (2026-10-12, phase-14 T4; append-only)
+
+**Quoted errata — the T3 status's producer claim (above, "Because the native
+`[0x15882A]` gate has exactly one runtime producer (act 9 stage 3)") is
+falsified by fresh xrefs this round.** `get_xrefs_to 0x15882A` = 24 touches;
+the writers disassembled fresh:
+
+- act-1's kickoff handler: clear `0x88E56` (`XOR CL,CL` -> `MOV
+  byte[0x15882A], CL`), set `0x88F07` (`DH=1`) under `word[0x158818] >= 0x78`
+  (`0x88EF3..0x88F07`);
+- act 2 (`0x8922C`, the act table `0x1107EC` read this round): tail set
+  `0x895EC` (`CH=1`);
+- act-9 stage 0 (`0x88F81`): clear `0x88F9A` (`AH=0`) before its camera reset
+  and the phase-0x15 write (`0x88FB0 EAX=0x15 CALL 0x740A0`);
+- act-9 stage 3 (`0x890B1`): set `0x890C4` (`CL=1`) under
+  `word[0x158818] >= 0x3C`;
+- act 7 (`0x89868`): clear `0x899F0` (`AH=0`) and set `0x89A39` (`DL=1`
+  after the `0x974DC(0x1E)` presentation), both under `word[0x158818] >=
+  0x78`;
+- the reset `FUN_000886D4`: clear `0x886F4` (`AH=0`, with the `[0x158829]`
+  and `[0x158818]` clears);
+- the leg-0 SETUP0: clear `0x93C30` (`AH=0`, before the `0x93C36 MOV EAX,0xC`
+  + `0x93C41 CALL 0x8A938` sit-0xC queue); legs 1/3 write the
+  `[0x15B684]`-selected value (`0x93E84`/`0x942F5` set 1 on the staged path,
+  `0x93EB6`/`0x94327` clear on the settled path);
+- further WRITE touches (fresh xref classification, not re-disassembled):
+  `0x84C2A`/`0x84D29` (the `0x84xxx` restart body), `0x8955F`, `0x898BB`.
+
+**The corrected, window-scoped statement** (landed at the header
+`fifa96_match_run.h` `act9_gate` doc, the `SETUP2` body comment,
+`tests/test_engine_m2.c`'s v14 provenance, `docs/ENGINE.md`, `docs/PROGRESS.md`
+and this append): after the leg-0 SETUP0's clear and act-9 stage 0's re-clear
+(the sit-0xC dispatch, which also writes phase 0x15), the screen machine waits
+at step 1 with the singleton act slot holding act 9, so the only producer that
+can open *that window's* gate is the act-9 stage-3 completion; act 1's kickoff
+gate, act 2's tail value, act 7's values, the reset and harness-staged values
+are the refused non-act-9 values. The `act9_gate` hardening and FU170-L9's
+remove-and-re-pin criterion stand unchanged.
+
+**FU170-L10 (new) — the begin reset mirror's ordering equivalence.** The
+engine's begin runs the screen install last and supersedes its handler-run
+residue by save/restore of the phase cells (no setter edge). The equivalence
+assumes the native front-end match-screen install (`FUN_00092D8C`, run once at
+`0x92EF7`) precedes the match reset `FUN_000886D4` and the kickoff entry
+`FUN_00088DC8`; no native run measures the two orders. Remove-and-re-check if
+a live trace of the install/reset order lands.
+
+**T4 acceptance completion.** The M2 v14 strata gain per-window state pins (no
+golden change): the 0x15 window entry (armed 1, gate just cleared 0), the
+GATE production step (96 steps in; `act9_gate` 1, the arm spent), the sit-3
+phase-4 entry (100 steps in; corner counter 1; the screen machine holding at
+its PHASE step 3), the taker ladder (303 steps), the restart completion (POST
+idle step 4, latch clear) and the `M2_POST_RESTART_FRAMES` tail. Mutation-RED
+verified: bypassing the PHASE hold fails the screen-step pin; shifting the
+stage-3 threshold by three steps fails the 96-step pin. M2 v14 byte-exact
+(`./build/test_engine_m2 | cmp -`); M1 unmoved; `make check` 109/109.

@@ -1152,11 +1152,18 @@
  * the PHASE latch clear and the POST idle).
  *
  * The SETUP2 sit-3 arm is gated on the derived act-9 -> GATE handshake
- * (`mr->act9_gate`): the native `[0x15882A]` GATE has exactly one runtime
- * producer (act 9 stage 3), so the produced gate carries the corner arm; the
- * tape's m 42 staged gate (a declared v13 compression) is a state the native
- * cannot reach and advances without it — the disclosed hardening that keeps
- * the v13 strata byte-identical.
+ * (`mr->act9_gate`): within the restart window the native `[0x15882A]` gate
+ * has exactly one reachable producer — SETUP0 clears it (`0x93C30`; legs 1/3
+ * write their `[0x15B684]`-selected value at `0x93E84`/`0x942F5`/`0x93EB6`/
+ * `0x94327`), act-9 stage 0 clears it again (`0x88F9A`) while writing phase
+ * 0x15, and the machine then waits at step 1 with the singleton act slot
+ * holding act 9, so only the act-9 stage-3 completion (`0x890C4`) can open
+ * *that window's* gate; the kickoff gate (act 1: `0x88F07` set, `0x88E56`
+ * clear), act 2's tail (`0x895EC`), the reset (`0x886F4`) and harness-staged
+ * values are the refused non-act-9 values. The produced gate carries the
+ * corner arm; the tape's m 42 staged gate (a declared v13 compression) is a
+ * state the native cannot reach and advances without it — the disclosed
+ * hardening that keeps the v13 strata byte-identical.
  *
  * Frame diff (against the committed v13 golden, `cmp`/`diff` measured with the
  * ISO present): the transcript grows 85 -> 792 lines; the first 85 lines are
@@ -1173,6 +1180,17 @@
  * the screen machine idling at POST with the latch clear, and the post-run
  * dispatch mask `M2_WIRED_MASK | M2_RESTART_ROWS_MASK` (the first tape
  * dispatch of the corner taker row 0x11); the m 72 exact set is unchanged.
+ *
+ * T4 acceptance completion (phase-14 T4) adds the per-window state pins: the
+ * 0x15 window opens with the derived act-9 armed and the gate just cleared
+ * (`phase15_armed` 1 / `phase15_gate` 0), its GATE production lands 96 steps
+ * in (`gate_marker` 1, the arm spent) and the sit-3 phase-4 entry 100 steps
+ * in (corner counter 1, the screen machine holding at its PHASE step, 3); the
+ * taker ladder runs 303 steps, then the restart completes at the POST idle
+ * with the latch clear (`restart_screen_step` 4 / `restart_pending` 0) and
+ * the tape records `M2_POST_RESTART_FRAMES` past it. Mutation-RED verified:
+ * bypassing the PHASE hold fails `phase4_screen_step == 3`; shifting the
+ * stage-3 threshold three steps fails `gate_step - phase15_step == 96`.
  *
  * Golden decision (v14): **re-pin with the written reason + frame diff above**
  * — the intended post-goal continuation (plan T3), not a regression.
@@ -1531,6 +1549,21 @@ struct m2_result {
   int restart_step;          /* the step the restart completed; -1 if never */
   uint64_t mask_restart;     /* dispatched_ok at restart_step */
   uint16_t restart_corner;   /* corner_count[0] at restart_step */
+  /* v14 acceptance completion (phase-14 T4): the restart-chain state pins
+   * sampled at the sequence points in the existing strata style — the act-9
+   * window entry (armed, the gate just cleared), the GATE production step
+   * (the derived marker latched, the arm spent), the sit-3 phase-4 entry
+   * (the corner counter, the screen machine holding at its PHASE step) and
+   * the restart completion (the POST idle with the latch clear). */
+  int gate_step;             /* first post-goal step with global_5882a set */
+  uint8_t phase15_armed;     /* act9_armed at phase15_step (= 1) */
+  uint8_t phase15_gate;      /* global_5882a at phase15_step (= 0, just cleared) */
+  uint8_t gate_marker;       /* act9_gate at gate_step (= 1, the produced gate) */
+  uint8_t gate_armed;        /* act9_armed at gate_step (= 0, the arm spent) */
+  uint8_t phase4_corner;     /* corner_count[0] at phase4_step (= 1) */
+  uint8_t phase4_screen_step;   /* screen_step at phase4_step (the PHASE hold) */
+  uint8_t restart_screen_step;  /* screen_step at restart_step (POST idle) */
+  uint8_t restart_pending;      /* situation_pending at restart_step (= 0) */
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
   /* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the FUN_0008BAF0
@@ -2246,6 +2279,7 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   res->phase15_step = -1;
   res->phase4_step = -1;
   res->restart_step = -1;
+  res->gate_step = -1;
 
   size_t used = 0;
   int steps = 0;
@@ -2475,17 +2509,31 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         (e->match_run.score[0] != 0u || e->match_run.score[1] != 0u))
       res->goal_step = steps;
     if (res->goal_step > 0 && live) {
-      if (res->phase15_step < 0 && e->match_run.state.phase == 0x15u)
+      if (res->phase15_step < 0 && e->match_run.state.phase == 0x15u) {
         res->phase15_step = steps;
+        res->phase15_armed = e->match_run.act9_armed;
+        res->phase15_gate = e->match_run.global_5882a;
+      }
+      if (res->gate_step < 0 && res->phase15_step > 0 &&
+          e->match_run.global_5882a != 0u) {
+        res->gate_step = steps;
+        res->gate_marker = e->match_run.act9_gate;
+        res->gate_armed = e->match_run.act9_armed;
+      }
       if (res->phase4_step < 0 && res->phase15_step > 0 &&
-          e->match_run.state.phase == 4u)
+          e->match_run.state.phase == 4u) {
         res->phase4_step = steps;
+        res->phase4_corner = (uint8_t)e->match_run.corner_count[0];
+        res->phase4_screen_step = e->match_run.screen_step;
+      }
       if (res->restart_step < 0 && res->phase4_step > 0 &&
           e->match_run.state.phase == 2u && e->match_run.screen_step == 4u &&
           e->match_run.corner_count[0] == 1u) {
         res->restart_step = steps;
         res->mask_restart = e->match_run.dispatched_ok;
         res->restart_corner = e->match_run.corner_count[0];
+        res->restart_screen_step = e->match_run.screen_step;
+        res->restart_pending = e->match_run.situation_pending;
       }
     }
     if (res->restart_step > 0 &&
@@ -2671,6 +2719,29 @@ int main(void) {
   assert(res.restart_corner == 1u);
   assert(res.steps > 85);
   assert((res.mask_restart & (1ull << 0x11)) != 0u);   /* the corner taker */
+  /* v14 acceptance completion (phase-14 T4): the restart-chain state pins.
+   * The act-9 window (the v14 lines 370..469) opens with the derived producer
+   * armed and the gate just cleared by SETUP0; the GATE production step (96
+   * steps later) latches the derived `act9_gate` marker and spends the arm;
+   * the sit-3 phase-4 entry (100 steps after the window entry) carries the
+   * corner counter and leaves the screen machine holding at its PHASE step
+   * for the taker ladder (303 steps) until the restart completion (phase 2,
+   * POST idle, latch clear), after which the tape runs
+   * M2_POST_RESTART_FRAMES. */
+  assert(res.gate_step > res.phase15_step);
+  assert(res.gate_step < res.phase4_step);
+  assert(res.gate_step - res.phase15_step == 96);
+  assert(res.phase15_armed == 1u);
+  assert(res.phase15_gate == 0u);
+  assert(res.gate_marker == 1u);
+  assert(res.gate_armed == 0u);
+  assert(res.phase4_step - res.phase15_step == 100);
+  assert(res.phase4_corner == 1u);
+  assert(res.phase4_screen_step == 3u);       /* holding at PHASE for phase 2 */
+  assert(res.restart_step - res.phase4_step == 303);
+  assert(res.restart_screen_step == 4u);      /* the POST idle */
+  assert(res.restart_pending == 0u);
+  assert(res.steps - res.restart_step == M2_POST_RESTART_FRAMES);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */
