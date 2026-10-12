@@ -410,3 +410,58 @@ Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit; scripts disabled):
 `fifa96_action_handlers.c`. Docs cross-cited: FU-79, FU-82, FU-136, FU-137,
 FU-140, FU-151, FU-174, FU-176, FU-179, FU-180, FU-182. No writes beyond this
 slice file and the workspace report.
+
+---
+
+## 8. Landing note — M2 phase-16 T3 (2026-10-12)
+
+**Ruling W4 applied (count 0x1C, not 0x1A).** Wired and **counted**:
+`fifa96_match_action_1C` (`fifa96_match_handlers.c`), the bounded derived body
+of the row-0x1C lunge `0x77728..` (first-hand `disassemble_bytes 0x77728`
+this slice):
+
+* head `0x77735`: `timer89 += (uint16)delta`;
+* stage 0 `0x77762`: `ran = 1` (`+0x9E`), `timer89 = 0`, `keeper_latch[2] = 0`
+  (`0x157C56`), `stage92` -> 1, then fall through into stage 1;
+* stage 1 `0x7778E`: `fifa96_arm_dist_stage(pos,target,&distance,&lane)` (the
+  `0x8DCD4` out triple `+0x65` distance / `+0x67` dx / `+0x69` dz, first-hand
+  `disassemble_bytes 0x8DCD4` this slice: `out+0 = distance`, `out+2 = dx`
+  (to.x-from.x), `out+4 = dz` (to.z-from.z)), then the `fifa96_keeper_lunge_track`
+  on-target arm gated `|fifa96_entity_angle(distance, target_y)| < 0x55`
+  (`0x777DE`): the `pos` shift `+= trunc_shift(dx|dz,1)` (`0x8DC50`); then
+  `timer89 = 0`, `stage92` -> 2 (`0x779B9`);
+* stage 2 `0x779D1`: `row44 != 0` -> `match_row_reset` (`0x7DAB4`).
+
+The **installer is live today** — the wired `fifa96_match_action_1F` stage-3
+tail drains `fifa96_keeper_input_decide`, whose both-slot-dirs-zero arm emits
+`install=0x1C, invoke=1` (`FUN_00076130` `0x76291`->`0x762A4`), and the tail
+calls `fifa96_match_entities_install(...,0x1C,...)` +
+`fifa96_match_dispatch_action(mr,0x1C)`. The engine route is proven end-to-end
+by `test_action_1c_live_route` (row-0x1F -> `e->code == 0x1C` + the
+`dispatched_ok` bit). Census 31/80 -> **32/80 = 40%**.
+
+**Ported/registered but UNCOUNTED:** `fifa96_match_action_1A` (exported,
+declared in `fifa96_match_handlers.h`) is the bounded `0x7662C..` head +
+stage-0 slice (the phase-0xD + `[0x157AAC]>>24` side bind, the `+0x89` timer,
+the `+0x92 > 4` tail, and `fifa96_keeper_reposition_a_gate`'s install-4 arm /
+the `+0x9E`/`+0x89=0`/`+0x92+=2` + `0x79B1C` snap arm). Its action-table slot
+stays **NULL** because its only installer is the unported `FUN_00077EAC` CPU
+ladder (`0x78227`/`0x7824F`/`0x78277`, FU186-L5) on the unported
+`FUN_0008D8EC -> FUN_000782D0` pre-pass — the rows-27/29/2C precedent (a ported
+body with no live engine installer stays unwired/uncounted).
+
+**Legs re-pinned (unchanged scope):** FU186-L1 (the `0x1A` `[0x157C2C]`
+direction machine + movement/event block + stages 1-4), FU186-L2 (the `0x1C`
+`0x79C50` face with its `0x1577C0/C2` lead inputs, the `+0x7F` heading, the
+`0x77856` rotated arm (`0x114E04` sine + `0x795A4`), the `0x6E598` anim, the
+`0x76B28` steering and the `0x779DE..0x77E8B` tail), FU186-L3 (the `0x14E04`
+sine table), FU186-L4 (`FUN_000765C4`), FU186-L5 (`FUN_00077EAC`), FU186-L6
+(`FUN_000782D0`), FU186-L7 (`FUN_0008D8EC`), FU186-L8 (the `0x92820` mailbox),
+FU186-L9 (`FUN_0009E420`). The row-0x1B sine/steering arms are re-pinned to
+FU186-L2/L3 (FU-180 §8 landing note unchanged).
+
+Tests: `test_action_1c_runs_body` / `test_action_1c_lunge_arm` /
+`test_action_1c_live_route` / `test_action_1a_runs_body`
+(`tests/test_engine_match_handlers.c`), each mutation-RED (stubbing the body
+aborts at its first effect assertion). `make check` 110/110; M1 `09b726b7…`
+and M2 `7b4b241a…` byte-identical → no re-pin.

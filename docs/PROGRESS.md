@@ -615,6 +615,24 @@ lands. The row-07 `opp_type` source is corrected to the native `+0x91` code byte
 **byte-identical** (install-live/tape-dormant; no re-pin); census 30/80 →
 **31/80 = 38%**.
 
+M2 phase-16 T3 (FU-186) lands the keeper reposition/lunge chain: **row `0x1C`**
+is wired and counted (`fifa96_match_action_1C`, the bounded `0x77728..` lunge —
+head timer, stage 0, the `0x8DCD4` metric + the `fifa96_keeper_lunge_track`
+on-target pos shift, stage 2). Its installer is **live today**: the wired
+row-0x1F stage-3 tail drains `fifa96_keeper_input_decide`, whose
+both-slot-dirs-zero arm installs `0x1C` invoke-now (`FUN_00076130`
+`0x76291`→`0x762A4`), and the tail then dispatches it — proven by
+`test_action_1c_live_route`. **Row `0x1A`** is ported as the bounded `0x7662C..`
+stage-0 slice (`fifa96_match_action_1A`, exported) but **NOT counted**: its only
+installer is the unported `FUN_00077EAC` CPU ladder on the unported
+`FUN_0008D8EC → FUN_000782D0` pre-pass (FU186-L5/L6/L7), so its slot stays NULL
+(rows-27/29/2C precedent). FU-186 also corrects FU-182 §5's installer census
+(the `0x773DC`/`0x70DAF`/`0x80814`/`0x9E665` sites are false positives). The
+deep remainder (the `0x1A` direction machine, the `0x1C` rotated arm/anim/
+steering/tail, `FUN_000765C4`, the two CPU machines, the `0x92820` mailbox) is
+recorded as FU186-L1..L9. `make check` 110/110; M1/M2 stay **byte-identical**
+(install-live/tape-dormant; no re-pin); census 31/80 → **32/80 = 40%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

@@ -108,3 +108,18 @@ int fifa96_match_action_17(struct fifa96_match_run *mr);
  * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
  * `mr->record.entity_id`. */
 int fifa96_match_action_22(struct fifa96_match_run *mr);
+
+/* The ported action row-0x1A body (FU-186 §2.1/§4.1): the bounded head +
+ * stage-0 slice of `0x7662C..` (the phase-0xD + `[0x157AAC]>>24` side bind, the
+ * `+0x89` timer, the `+0x92 > 4` tail and the `fifa96_keeper_reposition_a_gate`
+ * stage-0 branch + the `0x79B1C` snap). Its action-table slot
+ * (`fifa96_match_action_table[0x1A]`) is **NULL** — the row is not counted —
+ * because its only installer is the unported `FUN_00077EAC` CPU ladder
+ * (`0x78227`/`0x7824F`/`0x78277`, FU186-L5) on the unported
+ * `FUN_0008D8EC -> FUN_000782D0` pre-pass; this is the rows-27/29/2C precedent
+ * (a ported body with no live engine installer stays unwired and uncounted).
+ * The body is exported so it is tested directly and ready for the ladder. The
+ * `[0x157C2C]` direction machine + movement/event block + stages 1-4 are
+ * FU186-L1. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
+ * `mr->record.entity_id`. */
+int fifa96_match_action_1A(struct fifa96_match_run *mr);

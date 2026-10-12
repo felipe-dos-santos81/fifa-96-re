@@ -93,7 +93,7 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK,
+    /* 14 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
@@ -2762,6 +2762,114 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-16 T3 (FU-186): rows 0x1A / 0x1C keeper chain ============= */
+
+/* Row 0x1C (FU-186 §2.2): the bounded lunge body. Stage 0 arms
+ * (ran / timer89=0 / keeper_latch[2]=0 / stage->1) and falls through into
+ * stage 1 (the 0x8DCD4 metric + the fifa96_keeper_lunge_track gate), then
+ * locks stage 2. A stub leaves every field untouched and fails. */
+static void test_action_1c_runs_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x11;
+  f.mr.record.delta = 5;
+  f.mr.record.row44 = 0;
+  memset(f.mr.keeper_latch, 1, sizeof f.mr.keeper_latch);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert((f.mr.dispatched_ok & (1ull << 0x1C)) != 0u);
+  assert(f.mr.record.ran == 1u);          /* 0x7776A +0x9E */
+  assert(f.mr.record.stage92 == 2u);      /* 0 -> 1 -> 2 */
+  assert(f.mr.record.timer89 == 0);       /* 0x77777 / 0x779B9 */
+  assert(f.mr.keeper_latch[2] == 0);      /* 0x157C56 cleared */
+  assert(f.mr.keeper_latch[1] == 1);      /* 0x157C55 survives */
+  drop_fixture(&f);
+}
+
+/* Row 0x1C stage 1 (FU-186 §2.2): with |angle(distance,target_y)| < 0x55 the
+ * on-target arm shifts pos_x by trunc_shift(dx,1); pos_z is unchanged (dz 0).
+ * A stub would leave pos_x at 0x100. */
+static void test_action_1c_lunge_arm(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;                /* dispatch stage 1 directly */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.target_x = 0x120;           /* dx = 0x20 */
+  f.mr.record.target_y = 0xA0;            /* distance << target_y -> on-target */
+  f.mr.record.target_z = 0x100;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.record.pos_x == 0x110);     /* += trunc_shift(0x20,1) */
+  assert(f.mr.record.pos_z == 0x100);     /* dz 0 */
+  drop_fixture(&f);
+}
+
+/* Row 0x1C live installer route (FU-186 §4): the wired row-0x1F stage-3 tail
+ * drains fifa96_keeper_input_decide; with the slot dirs both zero it installs
+ * 0x1C invoke-now and the tail dispatches it, so the record's code becomes
+ * 0x1C and the row-0x1C bit lands in dispatched_ok. */
+static void test_action_1c_live_route(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;                   /* the inside-box phase */
+  f.mr.record.stage92 = 0;                /* arm_step stage 0 -> tail */
+  f.mr.record.has_slot = 1;
+  f.mr.record.code = 0x19;                /* type_bits(0x19)=3 -> bit 0 set */
+  f.mr.record.lane = (int32_t)0x41 << 16; /* lane > 0x40 */
+  f.mr.record.dir_x = 0;
+  f.mr.record.dir_z = 0;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x40;
+  f.mr.global_5882a = 1;                  /* the stage-0 event gate */
+  f.mr.global_157a4c = 0;
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.keeper_cam_x = 0;
+  f.mr.keeper_cam_y = 0;
+  f.mr.keeper_cam_z = -0x7B0;             /* the side-0 inside box */
+  f.mr.entities.ball.pair.actor = 1;      /* the ball ack gates pass */
+  f.mr.entities.ball.pair.ack = 1;
+  f.mr.slot.entity = 0;                   /* the pressed slot on this record */
+  f.mr.slot.pressed = 1;
+  e->code = 0x19u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1F) == FIFA96_OK);
+  assert(e->code == 0x1Cu);               /* the input_decide install landed */
+  assert((f.mr.dispatched_ok & (1ull << 0x1C)) != 0u);   /* and dispatched */
+  drop_fixture(&f);
+}
+
+/* Row 0x1A (FU-186 §2.1): the bounded stage-0 body. The slot is NULL/uncounted
+ * (its only installer is the unported FUN_00077EAC ladder), so the body is
+ * driven directly. The tracked-teammate predicate is unported (FU186-L4), so
+ * the gate takes the zero branch: ran=1, timer89=0, stage += 2, target := pos.
+ * A stub leaves these untouched. */
+static void test_action_1a_runs_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;                   /* the head does not bind (not 0x0D) */
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer89 = 0x33;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x333;
+  f.mr.record.target_x = 0;
+  f.mr.record.target_z = 0;
+  assert(fifa96_match_action_1A(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.ran == 1u);          /* 0x766BE +0x9E */
+  assert(f.mr.record.timer89 == 0);       /* 0x766BE */
+  assert(f.mr.record.stage92 == 2u);      /* +0x92 += 2 */
+  assert(f.mr.record.target_x == 0x111);  /* 0x766F7 0x79B1C snap */
+  assert(f.mr.record.target_z == 0x333);
+  drop_fixture(&f);
+}
+
 /* FU-185 §2/§10 (phase-16 T2): the row-0x22 sequence/press body
  * (`0x8539C..0x85481`). The slot is NULL/uncounted (FU185-L6: the row-07
  * installer gate is structurally ungated in-engine), so the body is driven
@@ -3033,6 +3141,10 @@ int main(void) {
   test_action_09_clear_branch_detaches();
   test_action_09_unported_stage_marks();
   test_action_1b_stage0_latch_partial_clear();
+  test_action_1c_runs_body();
+  test_action_1c_lunge_arm();
+  test_action_1c_live_route();
+  test_action_1a_runs_body();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

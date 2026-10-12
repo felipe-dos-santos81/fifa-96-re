@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-31/80 dispatch rows wired (29 action + the wired phase rows 0x18 and 0x1F), the
+32/80 dispatch rows wired (30 action + the wired phase rows 0x18 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,7 +260,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **31/80 rows wired** (29 action + the phase rows
+- Action dispatch (FU-137): **32/80 rows wired** (30 action + the phase rows
   `0x18`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
@@ -336,10 +336,38 @@ the build also produces the windowed `fifa96` target (`make game`).
   is corrected to the native `+0x91` code byte (FU185-L1; no engine-level
   discriminator yet — FU185-L6 blocks the gate). Both landed rows are install-
   live/tape-dormant, so M2 stays byte-exact (no re-pin).
-  dispatch results 48 UNSUP / 31 OK / 1 NOTF (sum 80; action 45 = 29 OK + 16
+  dispatch results 47 UNSUP / 32 OK / 1 NOTF (sum 80; action 45 = 30 OK + 15
   UNSUP, phase 35 = 2 OK + 32 UNSUP + 1 NOTF). *(errata, phase-16 T2 review:
   the `50 UNSUP / 29 OK / 1 NOTF` this line replaced was likewise off by one —
-  the corrected derived numbers above are the authority.)*
+  the corrected derived numbers above are the authority. phase-16 T3: row `0x1C`
+  wired, so `48 UNSUP / 31 OK / 1 NOTF` → `47 UNSUP / 32 OK / 1 NOTF`.)*
+- **M2 phase-16 T3 (FU-186) — the keeper chain: row `0x1C` wired/counted; row
+  `0x1A` ported/uncounted; `0x1B` legs re-pinned.** FU-186 corrects FU-182 §5's
+  installer census (the true `0x1A` installers are only the three `FUN_00077EAC`
+  ladder arms `0x78227`/`0x7824F`/`0x78277`; the true `0x1C` installers are
+  `FUN_00077EAC` `0x782B6` and `FUN_00076130` `0x76291`/`0x7634B`; FU-182's
+  `0x773DC`/`0x70DAF`/`0x80814`/`0x9E665` are false positives — mailbox/animation
+  arguments and a constant getter). **`0x1C`** (`fifa96_match_action_1C`, the
+  bounded `0x77728..` lunge body: head `timer89 += delta`, stage 0
+  (`ran`/`timer89=0`/`keeper_latch[2]=0`/stage→1), stage 1 = the `0x8DCD4`
+  metric + the `fifa96_keeper_lunge_track` on-target pos shift
+  (`|angle(distance,target_y)| < 0x55`), stage 2 (`row44` → `match_row_reset`))
+  is **wired and counted**: its installer is live today — the wired row-0x1F
+  stage-3 tail drains `fifa96_keeper_input_decide`, whose both-slot-dirs-zero
+  arm installs `0x1C` invoke-now (`FUN_00076130` `0x76291`→`0x762A4`) and the
+  tail then dispatches it (proven by `test_action_1c_live_route`). **`0x1A`**
+  (`fifa96_match_action_1A`, the bounded `0x7662C..` stage-0 slice) is ported
+  and exported but its slot stays **NULL/uncounted**: its only installer is the
+  unported `FUN_00077EAC` CPU ladder on the unported `FUN_0008D8EC →
+  FUN_000782D0` pre-pass (FU186-L5/L6/L7). The deep remainder — the `0x1A`
+  `[0x157C2C]` direction machine + movement block (FU186-L1), the `0x1C`
+  rotated arm (`0x114E04` sine + `0x795A4`), the `0x6E598` anim, the `0x76B28`
+  steering and the `0x779DE` tail (FU186-L2/L3), `FUN_000765C4` (FU186-L4), the
+  two `FUN_00077EAC`/`FUN_000782D0` machines (FU186-L5/L6) and the `0x92820`
+  mailbox / `FUN_0009E420` getter (FU186-L8/L9) — stays numbered legs. The
+  row-0x1B sine/steering arms are re-pinned to FU186-L2/L3 (no change to its
+  FU-180 landing). Both rows are install-live/tape-dormant, so M1/M2 stay
+  byte-exact (no re-pin); census 31/80 → **32/80 = 40%**.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

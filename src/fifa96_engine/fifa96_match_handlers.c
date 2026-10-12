@@ -3779,6 +3779,156 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== M2 phase-16 T3 / FU-186: rows 0x1A / 0x1C keeper chain =============
+ *
+ * `fifa96_match_action_1C` (row 0x1C, uncounted-until? no — **counted**) is the
+ * bounded derived body of `0x77728..` (FU-186 §2.2, first-hand
+ * `disassemble_bytes 0x77728` this slice). The row's installer is **live**:
+ * the wired `fifa96_match_action_1F` stage-3 tail drains
+ * `fifa96_keeper_input_decide`, whose both-slot-dirs-zero arm emits
+ * `install=0x1C, invoke=1` (`FUN_00076130` `0x76291`->`0x762A4`), and the tail
+ * then calls `fifa96_match_entities_install(...,0x1C,...)` +
+ * `fifa96_match_dispatch_action(mr,0x1C)` (FU-186 §4). So wiring this slot
+ * makes the route execute end-to-end. Derivations (fresh this slice):
+ *  - head `0x77735`: `timer89 += (uint16)delta`;
+ *  - stage 0 `0x77762`: `ran=1` (`+0x9E`), `timer89=0`, `keeper_latch[2]=0`
+ *    (`0x157C56`), `stage92` -> 1, then it falls through into stage 1;
+ *  - stage 1 `0x7778E`: `fifa96_arm_dist_stage(pos,target,&distance,&lane)`
+ *    (the `0x8DCD4` out triple `+0x65` distance / `+0x67` dx / `+0x69` dz), the
+ *    `0x79C50` face (its inputs are the unmodeled `0x1577C0/C2` leads, and the
+ *    `+0x7F` heading cell has no home — both FU186-L2 legs), then the
+ *    `fifa96_keeper_lunge_track` on-target arm gated `|angle(distance,
+ *    target_y)| < 0x55` (`0x777DE`): the `pos` shift
+ *    `+= trunc_shift(dx|dz,1)` (`0x8DC50`) + event 0x3C. The `0x77856` rotated
+ *    arm (`0x114E04` sine + `0x795A4`), the `0x6E598` anim install and the
+ *    `0x76B28` steering are FU186-L2 legs; then `timer89=0`, `stage92` -> 2
+ *    (`0x779B9`);
+ *  - stage 2 `0x779D1`: `row44 != 0` -> `match_row_reset` (`0x7DAB4`);
+ *  - the tail `0x779DE..0x77E8B` (the `word[+0x81]`/memory-mailbox block) is
+ *    FU186-L2.
+ *
+ * `fifa96_match_action_1A` (row 0x1A) is the bounded head + stage-0 body of
+ * `0x7662C..` (FU-186 §2.1, first-hand `0x7662C`/`0x76618`): the phase-0xD +
+ * `[0x157AAC]>>24` side bind (`[0x157A83]=rec`, `0x76641`), the `+0x89 +=
+ * delta` timer, the `+0x92 > 4` tail (`0x7667E`), and stage 0
+ * (`fifa96_keeper_reposition_a_gate`, the `0x765C4` tracked-teammate branch:
+ * the install-4 invoke-now arm `0x7669D` or the `+0x9E=1`/`+0x89=0`/`+0x92+=2`
+ * arm `0x766BE` + the `0x79B1C` snap). The row's only installer is the
+ * unported `FUN_00077EAC` CPU ladder (FU186-L5), so the **slot stays NULL**
+ * (the rows-27/29/2C precedent: a ported body with no live engine installer is
+ * uncounted) and the body is exported for direct testing. The
+ * `[0x157C2C]` direction machine + movement/event block and stages 1-4 are
+ * FU186-L1. */
+static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *e;
+  uint32_t t, idx;
+  int32_t id = r->entity_id;
+  uint8_t stage;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  e = &team->records[idx];
+
+  r->timer89 += (int32_t)r->delta;                  /* 0x77735 dword[+0x89] += */
+  stage = r->stage92;
+  if (stage == 0u) {                                /* 0x77762 */
+    r->ran = 1;                                     /* 0x7776A +0x9E = 1 */
+    r->timer89 = 0;                                 /* 0x77777 */
+    mr->keeper_latch[2] = 0;                        /* 0x77783 [0x157C56] = 0 */
+    r->stage92 = 1u;                                /* 0x77788 */
+    stage = 1u;                                     /* fall through */
+  }
+  if (stage == 1u) {                                /* 0x7778E */
+    fifa96_arm_vec from, to;
+    int32_t distance = 0, lane = 0;
+    int32_t angle = 0;
+    from.x = r->pos_x;
+    from.y = r->pos_y;
+    from.z = r->pos_z;
+    to.x = r->target_x;
+    to.y = r->target_y;
+    to.z = r->target_z;
+    (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane);   /* 0x77797 */
+    /* 0x777B4 `0x79C50(rec, -[0x1577C0], -[0x1577C2])` and the 0x777CC `+0x7F`
+     * heading are FU186-L2 (unmodeled inputs / no cell). */
+    if (fifa96_entity_angle(distance, r->target_y, &angle) == FIFA96_OK) { /* 0x777DE */
+      fifa96_keeper_vec delta_v;
+      fifa96_keeper_point pos;
+      uint8_t on_target = 0, event_code = 0;
+      int16_t steer_x = 0, steer_z = 0;
+      delta_v.distance = (int16_t)distance;
+      delta_v.dx = (int16_t)((uint16_t)to.x - (uint16_t)from.x);   /* 0x8DCDD */
+      delta_v.dz = (int16_t)((uint16_t)to.z - (uint16_t)from.z);
+      pos.x = r->pos_x;
+      pos.y = r->pos_y;
+      pos.z = r->pos_z;
+      (void)fifa96_keeper_lunge_track(&delta_v, (int16_t)angle, &pos, &on_target,
+                                      &steer_x, &steer_z, &event_code);  /* 0x777F6 */
+      if (on_target != 0) {                         /* the |angle| < 0x55 arm */
+        r->pos_x = pos.x;
+        r->pos_z = pos.z;
+      }
+      /* else the 0x77856 rotated arm -> FU186-L2. (staged, unused) */
+      (void)event_code;
+      (void)steer_x;
+      (void)steer_z;
+    }
+    /* 0x77997 the `0x6E598` anim and the `0x76B28` steering -> FU186-L2. */
+    r->timer89 = 0;                                 /* 0x779B9 */
+    r->stage92 = 2u;                                /* 0x779CB */
+    stage = 2u;
+  }
+  if (stage == 2u && r->row44 != 0u)                /* 0x779D1 `[+0x44] != 0` */
+    match_row_reset(mr, e);                         /* 0x7DAB4 */
+  return FIFA96_OK;                                 /* the 0x779DE tail -> FU186-L2 */
+}
+
+int fifa96_match_action_1A(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_team *team;
+  struct fifa96_match_entity *e;
+  uint32_t t, idx;
+  int32_t id = r->entity_id;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return -FIFA96_ERR_INVALID;
+  t = (uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS;
+  idx = (uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS;
+  team = &mr->entities.team[t];
+  e = &team->records[idx];
+
+  if (mr->state.phase == 0x0Du &&                     /* 0x76634 */
+      team->side == mr->phase_machine.side_controlled) /* [0x157AAC]>>24 */
+    r->controlled = 1;                                /* 0x76641 [0x157A83] = rec */
+  r->timer89 += (int32_t)r->delta;                    /* 0x76662 */
+  if (r->stage92 > 4u) return FIFA96_OK;              /* 0x7667E JA 0x76B21 */
+  if (r->stage92 == 0u) {                             /* 0x76693 stage 0 */
+    fifa96_keeper_rep_a_out g;
+    (void)fifa96_keeper_reposition_a_gate(
+        0u /* FUN_000765C4 tracked-teammate result, FU186-L4 */, &g);
+    if (g.install_code != 0) {                        /* 0x7669D install 4 now */
+      if (g.reset != 0) match_row_reset(mr, e);       /* 0x7669D FUN_0007DAB4 */
+      if (fifa96_match_entities_install(e, (uint8_t)mr->state.phase, g.install_code, 0) == 1)
+        (void)fifa96_match_dispatch_action(mr, g.install_code);     /* 0x7D9A4 */
+      return FIFA96_OK;
+    }
+    if (g.flag_9e != 0) r->ran = 1;                   /* 0x766BE +0x9E = 1 */
+    r->timer89 = 0;                                   /* 0x766BE */
+    r->stage92 = (uint8_t)(r->stage92 + g.stage_advance);  /* 0x766BE +0x92 += 2 */
+    r->target_x = r->pos_x;                           /* 0x766F7 0x79B1C snap */
+    r->target_y = r->pos_y;
+    r->target_z = r->pos_z;
+    /* 0x766FC.. the `[0x157C2C]` direction machine + movement/event block and
+     * stages 1-4 -> FU186-L1. */
+  }
+  return FIFA96_OK;
+}
+
 /* ===== M2 phase-15 T2 / FU-179: row 0x19 keeper hold ======================
  *
  * `fifa96_match_action_19` binds the ported `fifa96_keeper_hold_*` helpers to
@@ -4274,10 +4424,12 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-139 §10/FU-137: row 18 ported (0x849B0..0x84AE1 machine; 0x4C324 bind, 0x8DB6C NSEARCH + 0x786A0 SWAP, 0x7DAB4 reset) over the pool; install arm 0x8A32F; anim row byte and bind globals OL-68"},
     {0x19, fifa96_match_action_19,
      "FU-179 §3/§6 rank 1 (phase-15 T2): row 19 keeper-hold body ported (fifa96_match_action_19, 0x746E4..0x74CB7): +0x9E/[0x157C5D], the deepest-keeper tracker (hold_track), the +0x98 early-out, the slot/human-phase arm, the phase gate (no-slot 0x74C98 phase-method request FU179-L5), the phase-2 guard (hold_guard/guard_clamp, all five rejections incl. the tracked-opponent lane 0x747EA), the predictor (fifa96_keeper_hold_predict; six 0x1577xx leads staged zero, FU179-L1/L2/L3), the carrier dive (hold_intercept) and the weighted fallback (hold_fallback); the 0x79C20 slot placement FU179-L4 and the FUN_00079B58 receiver-timer arms 0x74823/0x74B63 FU179-L7; installer live (row-04 0x7E866/0x7E8C1)"},
-    {0x1A, NULL, "FU-140 §2: row 1A not ported (partial); keeper_reposition_a_gate; OL-34"},
+    {0x1A, NULL,
+     "FU-186 §2.1/§4.1 (phase-16 T3): row 1A keeper-reposition body ported (fifa96_match_action_1A, 0x7662C.. stage-0 slice: the phase-0xD+[0x157AAC] side bind, the +0x89 timer, the +0x92>4 tail and the fifa96_keeper_reposition_a_gate stage-0 arm + the 0x79B1C snap) but NOT counted: its only installer is the unported FUN_00077EAC CPU ladder (0x78227/0x7824F/0x78277, FU186-L5) on the unported FUN_0008D8EC -> FUN_000782D0 pre-pass; the rows-27/29/2C precedent (ported body, entry unresolved); the [0x157C2C] direction machine + movement/event block + stages 1-4 are FU186-L1; OL-34; -UNSUPPORTED"},
     {0x1B, fifa96_match_action_1B,
      "FU-180 §2 (phase-15 T2): row 1B reposition/rush bounded body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 (0x76DF6/0x76E3B/0x7769F/0x776C1) and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the 0x14E04 sine rotation, the 0x76B28 steering, the stage-2 wide body (0x71C94) stay FU180-L1/L2/L3; installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
-    {0x1C, NULL, "FU-140 §2: row 1C not ported (partial); keeper_lunge_track; OL-35"},
+    {0x1C, fifa96_match_action_1C,
+     "FU-186 §2.2/§4.1 (phase-16 T3): row 1C keeper-lunge body ported (fifa96_match_action_1C, 0x77728..: head timer89 += delta, stage 0 (ran/timer89=0/keeper_latch[2]=0/stage->1), stage 1 = the 0x8DCD4 metric + the fifa96_keeper_lunge_track on-target pos shift (|angle(distance,target_y)|<0x55) and stage 2 (row44 -> match_row_reset); installer LIVE: the wired row-0x1F stage-3 tail drains fifa96_keeper_input_decide whose both-slot-dirs-zero arm installs 0x1C invoke-now (FUN_00076130 0x76291->0x762A4), so the route executes end-to-end; the 0x79C50 face, the +0x7F heading, the 0x77856 rotated arm (0x114E04 sine + 0x795A4), the 0x6E598 anim, the 0x76B28 steering and the 0x779DE tail stay FU186-L2; the second installer FUN_00077EAC 0x782B6 stays FU186-L5"},
     {0x1D, fifa96_match_action_1D,
      "FU-151 §Port contract item 2/FU-79 §6/§2.5: row 1D ported (fifa96_keeper_closedown_step, 0x74EB0..0x754E1, stages 0..4) over the pool; place/commit/helper/reset/situation + the clearance staging (events 0x30/0x31) bound; 0x157C5E table, 0x744D4/0x74CDC/0x79B1C/0x7B878/0x8F188/0x7A490/0x8DE8C+0x786A0 and the UI/audio calls FU-151 legs"},
     {0x1E, fifa96_match_action_1E,

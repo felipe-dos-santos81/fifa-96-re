@@ -2710,16 +2710,17 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
  * different entry point, at the census frontier the phase exists for. Pure C
  * state, ISO-independent (runs in both the ISO and no-asset tape modes). */
 static void run_phase15_riders(void) {
-  /* 1. The census shape (T1–T3): the exact wired counts and the phase-15 slots.
-   *    A silent re-wire / un-census / slot flip fails here, not only in the
-   *    handler unit tests. 31/80 = 38% (29 action + the phase rows 0x18/0x1F). */
+  /* 1. The census shape (T1–T5): the exact wired counts and the phase-15/16
+   *    slots. A silent re-wire / un-census / slot flip fails here, not only in
+   *    the handler unit tests. 32/80 = 40% (30 action + the phase rows
+   *    0x18/0x1F). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 29u && phase_wired == 2u);   /* 31/80 = 38% */
+    assert(action_wired == 30u && phase_wired == 2u);   /* 32/80 = 40% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */
@@ -2728,6 +2729,8 @@ static void run_phase15_riders(void) {
     assert(fifa96_match_action_table[0x1B].fn != NULL); /* T2: keeper reposition */
     assert(fifa96_match_action_table[0x19].fn != NULL); /* T2: keeper hold */
     assert(fifa96_match_action_table[0x09].fn != NULL); /* T3: sequence/steer */
+    assert(fifa96_match_action_table[0x1C].fn != NULL); /* T3: keeper lunge (counted) */
+    assert(fifa96_match_action_table[0x1A].fn == NULL); /* T3: ported, FUN_00077EAC installer unported */
     assert(fifa96_match_action_table[0x17].fn == NULL); /* T1: ported, no installer */
     assert(fifa96_match_action_table[0x0D].fn == NULL); /* T3: ported, no installer */
     assert(fifa96_match_action_table[0x03].fn == NULL); /* T3: stays UNSUP */
