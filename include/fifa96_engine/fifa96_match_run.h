@@ -769,6 +769,39 @@ struct fifa96_match_run {
    * L11, unported), so begin/init seed the BSS default 0 and the requeue arm
    * is dormant unless a caller stages it. */
   uint8_t sp_157821;
+  /* FU-196 §3/§4 (M2 phase-17 T2): the situation-producer machine. The native
+   * match-init `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) and the period-end
+   * `FUN_0004B02C(0)` (0x4950A) + `FUN_00088860` (0x88860) are the sole native
+   * producers of situations 0/8 (FU-196 §3.1/§3.2); the engine had none.
+   * `fifa96_match_run_period_setup` ports `FUN_0004B02C`. Its live `begin`
+   * wiring is gated by `period_setup_live` (0 = the tape-neutral sequence):
+   * situation 0 fires act 0xA (phase 0x20) and situation 8 fires act 7 (phase
+   * 0x1D), whose bodies are NULL until T5, so dispatching them at begin today
+   * can move the M2 tape (FU196 §4 T2 rec 2 / FU196-L8). Wire live only with
+   * T5's phase-0x20/0x1D bodies. Init/begin clear it. */
+  uint8_t period_setup_live;
+  /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
+   * state. `formation_order[side][i]` mirrors the desired line-up matrix
+   * `0x14C360 + side*0x7B + i*4`; `formation_current[side][i]` mirrors the
+   * current order `0x157BD2 + side*0x2C + i*4` (the `FUN_00073EE0` reset copies
+   * the desired order into it, FU-197 §5.3); `formation_mismatch[side]` is the
+   * `FUN_0008C974` residual `[0x157B8E + side]`; `formation_order_ok` gates the
+   * whole arm. The native desired-order producer is the formation/line-up setup
+   * `FUN_00011620`/`FUN_00011978`/`FUN_00012010` (menu callers), which the
+   * engine does not model (FU197-L4); so `formation_order_ok` stays 0 (the
+   * matrices are the zero stand-in) and the arm is provably dormant on the tape
+   * — the sort would compare equal arrays and store a residual 0, which must
+   * NOT be wired live (a fake producer, R45/FU-197 §8). Init/begin zero the
+   * state and clear the gate. */
+  int32_t formation_order[FIFA96_MATCH_ENTITY_TEAMS][FIFA96_MATCH_ENTITY_RECORDS];
+  int32_t formation_current[FIFA96_MATCH_ENTITY_TEAMS][FIFA96_MATCH_ENTITY_RECORDS];
+  uint8_t formation_mismatch[FIFA96_MATCH_ENTITY_TEAMS];
+  uint8_t formation_order_ok;
+  /* FU-197 §2: the arm's stored re-dispatch cells `[0x158820]` (side, word) and
+   * `[0x15881E]` (situation, word) set at `0x8AB45`/`0x8AB50` and read by act-4
+   * stage 1 (`0x897AE`/`0x897B4`). Only the gated act-4 arm writes them. */
+  uint8_t store_158820;
+  uint8_t store_15881e;
   /* FU-150 P2 (fouls/referee/offside): the caller-owned `fifa96_referee_state`
    * (registrar/decision/sequence cells), the staged `fifa96_match_config`
    * (settings gates `[0x14C306]` field_4c306 / `[0x14C2F2]` field_4c2f2; init
@@ -1224,6 +1257,38 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
  * handler errors are absorbed: the native walk ignores the handler return). */
 int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phase,
                                        uint32_t team);
+
+/* FU-196 §3/§4 T2 rec (M2 phase-17 T2): the native `FUN_0004B02C` situation
+ * producer — the match-init / period-end machine the engine lacked. `mode == 1`
+ * is the `FUN_000493A0` match-init arm (0x49415): after the derived restart
+ * sinks, dispatch situation 0 (`fifa96_match_run_set_piece(mr, 0, 0, 0)` — the
+ * 0x4B0A5 mirror → table-2 sit 0 = phase 0x11 + act 0xA). `mode == 0` is the
+ * `FUN_00088860` period-end arm (0x88860): gated on `state.phase == 0xC`, when
+ * `global_157ac2 == 4` (extra time) dispatch situation 8 with the RNG side
+ * (`fifa96_rng_step` & 1, the 0x888C8 mirror), else situation 1 on the
+ * controlled side (the 0x888F2 mirror). Both modes then apply the extra-time
+ * gate (`(input_range[0] | input_range[1]) & 0x0100`, the 0x4B0CB `TEST AH,1`):
+ * on set, dispatch situation 8 (side 0) and `global_157ac2 = 4` (0x4B0D9).
+ * The `FUN_00074034`/`FUN_0007412C`/`FUN_0007417C`/`FUN_0008CBB0`/`FUN_00078824`
+ * restart/refresh sinks, the `[0x157A5C]`/word[0x157A62] prefix clears and the
+ * `FUN_00068822`/`FUN_000CB2B6` tails stay numbered legs (FU196-L2/L6); the
+ * extra-time bit 8 semantics are FU196-L1. This is producer-only: it sets no
+ * table slot and installs no row (R45/R9). Returns 0, or -FIFA96_ERR_INVALID on
+ * NULL. The live `begin` caller is gated by `mr->period_setup_live`. */
+int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode);
+
+/* FU-197 §4/§9 item 2 (M2 phase-17 T2): the `FUN_0008C974` formation-order
+ * sorter + residual counter for one team. Computes the display side index
+ * `(team.side ^ side_swap) & 1` (the `0x741B4` 0x8C98B..0x8C998), selection-
+ * sorts `formation_current[side]` to match `formation_order[side]` (the
+ * `0x8C9A6..0x8CAF8` loop), and stores the post-sort residual into
+ * `formation_mismatch[side]` (the `0x8CB1C..0x8CB5E` count). Gated on
+ * `mr->formation_order_ok`: 0 (the live default, FU197-L4) is a no-op, because
+ * the desired matrix has no producer and sorting the zero stand-in is a fake
+ * (R45). The companion `0x157B90` bytes / `0x157BA6` words, the `0x8C758`
+ * entity re-link and the `0x4728C` placement-commit sink stay FU197-L2 legs.
+ * Returns 0, or -FIFA96_ERR_INVALID (NULL or team > 1). */
+int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team);
 
 /* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
  * out of `fifa96_match_run_begin` (`:2213-2224`). Runs the native `0x740A0`

@@ -2062,6 +2062,17 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
   mr->sp_157821 = 0;
+  /* FU-196/FU-197 (M2 phase-17 T2): the producer gates default off and the
+   * act-4 formation state is the zero stand-in (the desired-order producer is
+   * unported, FU197-L4). */
+  mr->period_setup_live = 0;
+  mr->formation_order_ok = 0;
+  memset(mr->formation_order, 0, sizeof mr->formation_order);
+  memset(mr->formation_current, 0, sizeof mr->formation_current);
+  mr->formation_mismatch[0] = 0;
+  mr->formation_mismatch[1] = 0;
+  mr->store_158820 = 0;
+  mr->store_15881e = 0;
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
@@ -2173,6 +2184,16 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
   mr->sp_157821 = 0;
+  /* FU-196/FU-197 (M2 phase-17 T2): a fresh match drops the producer gates
+   * (the tape-neutral sequence) and the act-4 formation state. */
+  mr->period_setup_live = 0;
+  mr->formation_order_ok = 0;
+  memset(mr->formation_order, 0, sizeof mr->formation_order);
+  memset(mr->formation_current, 0, sizeof mr->formation_current);
+  mr->formation_mismatch[0] = 0;
+  mr->formation_mismatch[1] = 0;
+  mr->store_158820 = 0;
+  mr->store_15881e = 0;
   /* FU-148 S4: a fresh match restarts at the BSS formation default 0 (the
    * native FUN_00011620 team-record producer is leg). */
   mr->formation[0] = 0;
@@ -2205,6 +2226,14 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * words and bits are rebuilt here and in that setter. */
   (void)fifa96_input_range_words(mr->input_cfg, 0, mr->input_range);
   match_run_input_bits_update(mr);
+  /* FU-196 §4 T2 rec 2 (M2 phase-17 T2): the native match-init producer
+   * `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) dispatches situation 0 after
+   * the range words are built. Its phase-0x20 (act 0xA) and phase-0x11 bodies
+   * are NULL until T5, so dispatching it live can move the M2 tape (FU196-L8).
+   * Landed gated: `period_setup_live` defaults 0 (the tape-neutral sequence);
+   * wire live only with T5's phase-0x20/0x1D bodies. The exact placement among
+   * begin's derived steps is a recorded assumption (FU196-L2). */
+  if (mr->period_setup_live) (void)fifa96_match_run_period_setup(mr, 1);
   /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
@@ -2812,6 +2841,53 @@ int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side) {
   return fifa96_match_run_set_piece(mr, 6u, side, 0u);
 }
 
+/* FU-197 §4 (M2 phase-17 T2): the `FUN_0008C974` formation-order sorter and
+ * residual counter, over the derived order matrices. The native body
+ * (`0x8C974..0x8CBAD`) computes the display side index `(side ^ [0x157ABE]) & 1`
+ * (`0x8C98B..0x8C998` via `0x741B4`), then selection-sorts the current order
+ * `0x157BD2 + side*0x2C` onto the desired order `0x14C360 + side*0x7B` (the
+ * `0x8C9A6..0x8CAF8` loop: on a hit swap the two dwords and restart `i = 0`),
+ * and finally stores the post-sort residual mismatch count into
+ * `[0x157B8E + side]` (`0x8CB1C..0x8CB5E`). The residual is 0 for a valid
+ * permutation and nonzero only when a desired entry cannot be matched (FU197
+ * §4.4). Gated on `mr->formation_order_ok`: the native desired-order producer
+ * is the formation/line-up setup `FUN_00011620`/`FUN_00012010` (FU197-L4), which
+ * the engine does not model, so the live default 0 makes this a no-op — wiring
+ * the zero stand-in live would compute a residual 0 and act as a fake producer
+ * (R45). The companion arrays (`0x157B90` bytes / `0x157BA6` words), the
+ * `0x8C758` entity re-link and the `0x4728C` placement-commit sink stay
+ * FU197-L2 legs; the exact no-match arm is FU197-L1. */
+int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team) {
+  if (!mr || team > 1u) return -FIFA96_ERR_INVALID;
+  if (!mr->formation_order_ok) return 0;   /* the matrices are unported */
+  {
+    uint32_t side = ((uint32_t)mr->entities.team[team].side ^ mr->side_swap) & 1u;
+    int32_t *cur = mr->formation_current[side];
+    const int32_t *des = mr->formation_order[side];
+    uint32_t i = 0;
+    while (i < FIFA96_MATCH_ENTITY_RECORDS) {
+      if (cur[i] == des[i]) { i++; continue; }
+      /* find j > i holding the desired entry; on a hit swap and restart
+       * (0x8CAF3), else leave the entry as a residual (0x8CB2E) and advance. */
+      uint32_t j = i + 1u;
+      while (j < FIFA96_MATCH_ENTITY_RECORDS && cur[j] != des[i]) j++;
+      if (j < FIFA96_MATCH_ENTITY_RECORDS) {
+        int32_t t = cur[i]; cur[i] = cur[j]; cur[j] = t;
+        i = 0;
+        continue;
+      }
+      i++;
+    }
+    {
+      uint32_t residual = 0;
+      for (uint32_t k = 0; k < FIFA96_MATCH_ENTITY_RECORDS; k++)
+        if (cur[k] != des[k]) residual++;
+      mr->formation_mismatch[side] = (uint8_t)residual;   /* 0x8CB5E */
+    }
+  }
+  return 0;
+}
+
 int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
                                uint8_t side, uint8_t bx) {
   int rc;
@@ -2861,11 +2937,74 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
   }
   /* 0x8AAA8..0x8AB7A: the BX==0 table-2 route. The native sit 2..4
    * [0x157B8E]/[0x157B8F] formation-order gate + act-4 arm (0x8AB08..0x8AB62)
-   * and the sit-1 arm (0x8AABF..0x8AB06) are unported act-handler machinery
-   * (FU-149 L12); the derived route is the table-2 row. Situation 6 keeps
-   * its score fallback (0x8AC28); situation 3 counts before the write. */
+   * is ported gated (FU-197 §2; M2 phase-17 T2): the two `FUN_0008C974` sorts
+   * run, then when the goal-side flag [0x157A4C] != 1 and some team's residual
+   * is nonzero the arm stores the re-dispatch cells and invokes act 4
+   * (phase 0x1A). The engine's desired-order producer is unported (FU197-L4),
+   * so `formation_order_ok` is 0 live and the arm is provably dormant — the
+   * table-2 row runs instead (the sit-1 twin 0x8AABF..0x8AB06 stays FU-149
+   * L12). Situation 6 keeps its score fallback (0x8AC28); situation 3 counts
+   * before the write. */
+  if ((situation == 2u || situation == 3u || situation == 4u) &&
+      mr->formation_order_ok) {
+    (void)fifa96_match_run_formation_sort(mr, 0u);   /* 0x8AB0D */
+    (void)fifa96_match_run_formation_sort(mr, 1u);   /* 0x8AB17 */
+    if (mr->global_157a4c != 1u &&                   /* 0x8AB24 CMP EAX,1 */
+        (mr->formation_mismatch[0] != 0u || mr->formation_mismatch[1] != 0u)) {
+      mr->store_158820 = side;                       /* 0x8AB45 */
+      mr->store_15881e = situation;                  /* 0x8AB50 */
+      return fifa96_match_act_dispatch(mr, 4, 0, 1); /* 0x8AB57 */
+    }
+  }
   if (situation == 6u) return match_run_goal_fallback(mr, side);
   return match_run_situation_side(mr, situation, side, 1);
+}
+
+/* FU-196 §3/§4 T2 rec (M2 phase-17 T2): the native `FUN_0004B02C` situation
+ * producer — the match-init / period-end machine the engine lacked. `mode == 1`
+ * is the `FUN_000493A0` match-init arm (0x4B095): dispatch situation 0
+ * (0x4B0A5). `mode == 0` is the `FUN_00088860` period-end arm (0x4B064): gated
+ * on phase 0xC, on the extra-time period index dispatch situation 8 with the
+ * RNG side (0x888C8), else situation 1 on the controlled side (0x888F2). Both
+ * modes then apply the extra-time gate (0x4B0F6, `TEST AH,1`). Producer-only:
+ * no table slot, no row install (R45/R9). See the header for the leg set and
+ * the live-begin gate (`period_setup_live`). */
+int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  /* 0x4B038..0x4B062: the shared prefix. The native clears [0x157AB3],
+   * [0x157A4F], [0x157A5C] and word[0x157A62+2]; only [0x157A4F] (the FU-139
+   * §11 pass toggle) is modelled, the rest are FU196-L2 legs. */
+  mr->pass_parity = 0;                                 /* 0x4B038 */
+  if (mode == 1) {
+    /* 0x4B095..0x4B0A5: the FUN_00074034 / FUN_0007417C restart sinks
+     * (FU196-L6/L2 legs), then the match-init situation 0 (side 0, BX 0). */
+    (void)fifa96_match_run_set_piece(mr, 0u, 0u, 0u);
+  } else if (mode == 0) {
+    /* 0x4B064..0x4B095: the FUN_0007412C / FUN_0008CBB0 / FUN_00078824 setup
+     * sinks (FU196-L2 legs), then FUN_00088860's phase-0xC body. Natively
+     * FUN_00088860 returns to FUN_0004B02C, which continues to the common
+     * extra-time gate below (no early exit). */
+    if (mr->state.phase == 0x0Cu) {                    /* 0x88863 */
+      if (mr->global_157ac2 == 4u) {                   /* extra time (0x888A0) */
+        uint16_t r = 0;
+        (void)fifa96_rng_step(&mr->rng, &r);           /* FUN_00092AC8 */
+        (void)fifa96_match_run_set_piece(mr, 8u, (uint8_t)(r & 1u), 0u); /* 0x888C8 */
+        /* FUN_0008F188(0xC1,0,8) sink stays a leg (FU196-L2). */
+      } else {
+        (void)fifa96_match_run_set_piece(
+            mr, 1u, mr->phase_machine.side_controlled, 0u);              /* 0x888F2 */
+      }
+    }
+  }
+  /* 0x4B0F6..0x4B0E0: the both-team FUN_0008C418 refresh (FU196-L2 leg) then
+   * the extra-time gate — bit 8 of the OR of the two input/range words
+   * (the 0x4B0CB `TEST AH,1`; bit semantics FU196-L1). */
+  if ((mr->input_range[0] | mr->input_range[1]) & 0x0100u) {
+    (void)fifa96_match_run_set_piece(mr, 8u, 0u, 0u);  /* 0x4B0D9 */
+    mr->global_157ac2 = 4u;                            /* 0x4B0E0 */
+  }
+  /* 0x4B10B: [0x158822] = 0 / [0x157A68] = 0 / FUN_000CB2B6() stay legs. */
+  return 0;
 }
 
 /* FU-145 L4 / FU-149 §1.3: the `[0x1577CA]` ball-record team-byte source is

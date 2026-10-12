@@ -2942,6 +2942,43 @@ static void run_phase16_riders(void) {
   }
 }
 
+/* v17 (M2 phase-17 T2): the producer-machine dormancy pins. The FU-196
+ * situation producer and the FU-197 act-4 formation arm are landed gated: the
+ * live tape keeps the tape-neutral sequence (`period_setup_live` 0,
+ * `formation_order_ok` 0), so nothing new dispatches and the M2 bytes stay
+ * `7b4b241a…` (FU196-L8 / FU-197 §8 R45). Pure C state, ISO-independent, prints
+ * nothing, so the transcript is unaffected. */
+static void run_phase17_t2_riders(void) {
+  /* 1. The producer gates default off: a silent activation would move the tape. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(mr.period_setup_live == 0u);
+    assert(mr.formation_order_ok == 0u);
+    assert(mr.formation_mismatch[0] == 0u && mr.formation_mismatch[1] == 0u);
+  }
+  /* 2. The situation-0 producer drives the act map (FU-196 §4 T2 rec). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_run_period_setup(&mr, 1) == 0);
+    assert(mr.state.phase == 0x11u);   /* sit 0 -> phase 0x11 */
+    assert(mr.act.id == 0x0Au);        /* sit 0 -> act 0xA */
+  }
+  /* 3. The act-4 arm stays dormant without the matrices (R45): the sit-3 route
+   *    takes the table-2 phase write and never installs act 4 (row 0x17). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.session_gate_14c32a = 0;
+    mr.entities.team[0].side = 0;
+    mr.entities.team[1].side = 1;
+    assert(fifa96_match_run_set_piece(&mr, 3u, 0u, 0u) == 0);
+    assert(mr.act.id != 4);
+    assert(mr.state.phase == 4u);
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -2972,6 +3009,7 @@ int main(void) {
    * the process; they print nothing, so the transcript is unaffected. */
   run_census_riders();
   run_phase16_riders();
+  run_phase17_t2_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;

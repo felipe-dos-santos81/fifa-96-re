@@ -540,6 +540,42 @@ the build also produces the windowed `fifa96` target (`make game`).
   incl. the side flip and the OL-13 gate), the walk (scan + skip + NULL-row
   gate) and the row-03 direct body; mutation-RED discriminators: the `0x26`
   scale and the `0x9A` skip.
+- **M2 phase-17 T2 (FU-196/FU-197) — the situation producer machine + the
+  act-4 formation arm, both landed gated (census unchanged `35/80 = 43%`).**
+  The native situation producers the engine lacked are ported as
+  `fifa96_match_run_period_setup(mr, mode)`: `mode == 1` is the match-init
+  `FUN_000493A0 -> FUN_0004B02C(1)` (0x4B0A5 → situation 0 = phase 0x11 + act
+  0xA), `mode == 0` is the `FUN_00088860` period-end arm (0x4B064: phase-0xC
+  gated → situation 8 on the extra-time period index with the RNG side 0x888C8,
+  else situation 1 on the controlled side 0x888F2), plus the common extra-time
+  gate (0x4B0F6 `(input_range[0]|input_range[1]) & 0x0100` → situation 8 + the
+  period index 4). Situation 0xB was already producer-live (row 01). **The live
+  `begin` path is gated**: `period_setup_live` defaults 0 (the tape-neutral
+  sequence), because situation 0 fires phase 0x20/act 0xA and situation 8 fires
+  phase 0x1D/act 7, whose bodies are NULL until T5 (FU196-L8); wire it live only
+  with T5's phase-0x20/0x1D bodies (the phase-16 T1 producer-first ordering, R9).
+  The act-4 sit-2..4 formation-order arm (`0x8AB08..0x8AB62`: the two
+  `FUN_0008C974` sorts, the `[0x157A4C] != 1 && ([0x157B8E]|[0x157B8F])` gate,
+  the `[0x158820]`/`[0x15881E]` store cells and the act-4 invoke) is ported over
+  the derived order matrices (`formation_order`/`formation_current`/
+  `formation_mismatch`) + `fifa96_match_run_formation_sort`, but **gated on
+  `formation_order_ok`, which stays 0**: the desired-order `0x14C360` producer is
+  the unported formation/line-up setup `FUN_00011620`/`FUN_00012010`
+  (**FU197-L4**), so the arm is provably dormant — sorting the zero stand-in
+  would compute a residual 0 and act as a fake producer (R45/FU-197 §8). **Row
+  `0x17` stays NULL / uncounted** (its installer `0x89740` is act-4 stage 0,
+  phase `0x1A`, still NULL; owners **FU181-L1/FU183/FU197**). Remaining legs:
+  the `FUN_00074034`/`FUN_0007412C`/`FUN_0007417C`/`FUN_0008CBB0`/`FUN_00078824`
+  restart/refresh sinks + the extra-time bit-8 semantics (**FU196-L1/L2/L6**),
+  the `0x157B90`/`0x157BA6` companions + the `0x8C758` entity re-link + the
+  `0x4728C` placement-commit sink + the sit-1 arm twin (**FU197-L1/L2/FU149-L12**),
+  and the OL-13 `[rec+0xC]` metadata source (**FU192-L1** remains a leg — its
+  genuine producer is the same unported formation setup, so porting it would
+  un-gate T1's row-03 rewrite, R4). `tests/test_engine_match_handlers.c` pins the
+  producer modes (`p17-t2`), the sorter and the arm gate; mutation-RED
+  discriminators: the extra-time mask `0x0100` and the `formation_order_ok` gate.
+  The `test_engine_m2` `run_phase17_t2_riders` pins the dormancy; M1 `09b726b7…`
+  and M2 `7b4b241a…` stay **byte-exact (no re-pin)**.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

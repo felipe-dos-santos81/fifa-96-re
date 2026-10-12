@@ -3383,6 +3383,166 @@ static void test_action_14_live_phase5_route(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-17 T2 (FU-196/FU-197): the producer machine =============== */
+
+/* FU-196 §3.1/§4 T2 rec: the mode-1 match-init producer dispatches situation 0
+ * (0x4B0A5): the table-2 sit-0 row writes phase 0x11 and installs act 0xA
+ * (phase 0x20). The extra-time gate stays clear (the range words are 0). */
+static void test_period_setup_mode1_dispatches_sit0(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.session_gate_14c32a = 0;        /* the direct path (a live match) */
+  f.mr.input_range[0] = 0;
+  f.mr.input_range[1] = 0;
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_period_setup(&f.mr, 1) == 0);
+  assert(f.mr.state.phase == 0x11u);   /* sit 0 -> phase 0x11 (the table row) */
+  assert(f.mr.act.id == 0x0Au);        /* sit 0 -> act 0xA (phase 0x20) */
+  assert(f.mr.global_157ac2 == 0u);    /* no extra-time bit */
+  drop_fixture(&f);
+}
+
+/* FU-196 §3.2/§4 T2 rec: the extra-time gate `(input_range[0] |
+ * input_range[1]) & 0x0100` (0x4B0CB TEST AH,1) dispatches situation 8 after
+ * the mode branch and latches the period index 4 (0x4B0D9 + 0x4B0E0). */
+static void test_period_setup_mode1_extra_time_sit8(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.session_gate_14c32a = 0;
+  f.mr.input_range[1] = 0x0100u;       /* bit 8 of the OR (FU196-L1) */
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_period_setup(&f.mr, 1) == 0);
+  assert(f.mr.global_157ac2 == 4u);    /* 0x4B0E0 */
+  assert(f.mr.act.id == 7);            /* sit 8 -> act 7 (match re-init) */
+  drop_fixture(&f);
+}
+
+/* FU-196 §3.2: the mode-0 period-end producer — gated on phase 0xC; without
+ * extra time it dispatches situation 1 on the controlled side (0x888F2). */
+static void test_period_setup_mode0_period_end_sit1(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 0x0Cu;            /* the FUN_00088860 gate (0x88863) */
+  f.mr.global_157ac2 = 0u;             /* no extra time */
+  f.mr.input_range[0] = 0;
+  f.mr.input_range[1] = 0;
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_period_setup(&f.mr, 0) == 0);
+  assert(f.mr.act.id == 1);            /* sit 1 -> act 1 (kickoff) */
+  drop_fixture(&f);
+}
+
+/* FU-196 §3.2: on the same period-end gate with the period index 4 (extra
+ * time) the mode-0 arm dispatches situation 8 (0x888C8) with the RNG side. */
+static void test_period_setup_mode0_extra_time_sit8(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 0x0Cu;
+  f.mr.global_157ac2 = 4u;             /* extra time */
+  f.mr.input_range[0] = 0;
+  f.mr.input_range[1] = 0;
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_period_setup(&f.mr, 0) == 0);
+  assert(f.mr.act.id == 7);            /* sit 8 -> act 7 */
+  drop_fixture(&f);
+}
+
+/* FU-196 §3.2: the mode-0 producer is a no-op off the period-end phase. */
+static void test_period_setup_mode0_phase_gate(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  f.mr.input_range[0] = 0;
+  f.mr.input_range[1] = 0;
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_period_setup(&f.mr, 0) == 0);
+  assert(f.mr.act.id == 0);            /* no dispatch */
+  drop_fixture(&f);
+}
+
+static void test_period_setup_null_invalid(void) {
+  assert(fifa96_match_run_period_setup(NULL, 1) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_period_setup(NULL, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-197 §4.1/§4.2: the `FUN_0008C974` selection sort reorders the current
+ * order onto the desired permutation (residual 0); an unmatched desired entry
+ * leaves a nonzero residual. Gated on `formation_order_ok`. */
+static void test_formation_sort_orders_and_counts(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.entities.team[0].side = 0;
+  f.mr.side_swap = 0;
+  /* the gate is off: the sort is a no-op (the live default, FU197-L4). */
+  assert(f.mr.formation_order_ok == 0u);
+  f.mr.formation_current[0][0] = 0x11;
+  assert(fifa96_match_run_formation_sort(&f.mr, 0) == 0);
+  assert(f.mr.formation_current[0][0] == 0x11);
+  /* a scrambled permutation sorts back onto the desired order. */
+  f.mr.formation_order_ok = 1;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    f.mr.formation_order[0][i] = (int32_t)i;
+    f.mr.formation_current[0][i] =
+        (int32_t)((i + 1u) % FIFA96_MATCH_ENTITY_RECORDS);   /* +1 rotation */
+  }
+  assert(fifa96_match_run_formation_sort(&f.mr, 0) == 0);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(f.mr.formation_current[0][i] == f.mr.formation_order[0][i]);
+  assert(f.mr.formation_mismatch[0] == 0u);
+  /* a desired entry absent from the current order leaves a residual. */
+  f.mr.formation_order[0][0] = 0x7E;   /* absent */
+  assert(fifa96_match_run_formation_sort(&f.mr, 0) == 0);
+  assert(f.mr.formation_mismatch[0] != 0u);
+  assert(fifa96_match_run_formation_sort(&f.mr, 2) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_formation_sort(NULL, 0) == -FIFA96_ERR_INVALID);
+  drop_fixture(&f);
+}
+
+/* FU-197 §2/§8 (R45): the act-4 arm is gated on the formation matrices. With
+ * `formation_order_ok` 0 (the live default) the sit-3 route takes the table-2
+ * phase write and never dispatches act 4 (row 0x17's installer). Only a
+ * populated non-permutation (a fixture) trips the arm. */
+static void test_formation_arm_dormant_until_matrices(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.session_gate_14c32a = 0;        /* the direct path */
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[1].side = 1;
+  f.mr.global_157a4c = 0;
+  f.mr.act.id = 0;
+  assert(f.mr.formation_order_ok == 0u);
+  assert(fifa96_match_run_set_piece(&f.mr, 3u, 0u, 0u) == 0);
+  assert(f.mr.act.id == 0);            /* no act-4 dispatch */
+  assert(f.mr.state.phase == 4u);      /* the table-2 sit-3 route ran */
+  assert(f.mr.store_15881e == 0u);     /* no arm store */
+  /* enable the gate with a populated non-permutation -> the arm trips. */
+  f.mr.formation_order_ok = 1;
+  f.mr.formation_order[0][0] = 0x7E;   /* absent from the zeroed current */
+  f.mr.act.id = 0;
+  assert(fifa96_match_run_set_piece(&f.mr, 3u, 0u, 0u) == 0);
+  assert(f.mr.store_15881e == 3u);     /* 0x8AB50 */
+  assert(f.mr.store_158820 == 0u);     /* 0x8AB45 (side) */
+  assert(f.mr.act.id == 4);            /* act 4 (phase 0x1A NULL) */
+  /* the goal-side flag == 1 suppresses the arm (0x8AB27). */
+  f.mr.global_157a4c = 1;
+  f.mr.act.id = 0;
+  f.mr.session_gate_14c32a = 0;
+  assert(fifa96_match_run_set_piece(&f.mr, 3u, 0u, 0u) == 0);
+  assert(f.mr.act.id == 0);
+  drop_fixture(&f);
+}
+
+/* FU-196 §4 T2 rec 2 / FU-197 §5: the producer gates default off on a begun
+ * run (the M2 tape-neutral sequence). */
+static void test_producer_gates_default_off(void) {
+  struct fixture f;
+  make_fixture(&f);
+  assert(f.mr.period_setup_live == 0u);
+  assert(f.mr.formation_order_ok == 0u);
+  assert(f.mr.formation_mismatch[0] == 0u && f.mr.formation_mismatch[1] == 0u);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -3454,6 +3614,15 @@ int main(void) {
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();
   test_seam_runs_wired_handler();
+  test_period_setup_mode1_dispatches_sit0();
+  test_period_setup_mode1_extra_time_sit8();
+  test_period_setup_mode0_period_end_sit1();
+  test_period_setup_mode0_extra_time_sit8();
+  test_period_setup_mode0_phase_gate();
+  test_period_setup_null_invalid();
+  test_formation_sort_orders_and_counts();
+  test_formation_arm_dormant_until_matrices();
+  test_producer_gates_default_off();
   puts("test_engine_match_handlers OK");
   return 0;
 }
