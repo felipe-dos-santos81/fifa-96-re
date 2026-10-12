@@ -15,7 +15,7 @@
 ## Global Constraints
 
 - Baseline: `make check` **110/110** (sanitized); wired **34/80**; README title **42%**; HEAD `3358e0c`. M1 `09b726b7…` (691 lines); M2 `7b4b241a…` (v16 label, 792 lines).
-- Census arithmetic (this phase): action non-NULL `31` (unchanged); phase `3/35` → `+N` (the cohort rows the tasks prove producer-live). The exact target is whatever the tasks prove — **no hand-set number**; each task recomputes `floor(100 × wired/80)` when its count moves.
+- Census arithmetic (this phase): action non-NULL `31` (baseline; `→32` iff T1 counts row 03, per R3); phase `3/35` → `+N` (the cohort rows the tasks prove producer-live). The exact target is whatever the tasks prove — **no hand-set number**; each task recomputes `floor(100 × wired/80)` when its count moves.
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL bytes before trusting a call target.
 - **Determinism — the spine:** null backend source of truth; **M1 never moves**; **M2 stays `7b4b241a…` byte-identical** (v16 bytes). The per-record walk is render-invisible by construction; **any presented-frame move is a regression to investigate, not a re-pin** — the task stops and reports. The T7 acceptance adds a **v17 strata label + riders** (the phase-15 v14→v15 precedent: the label tracks the acceptance layer, not the bytes) with the reason recorded; **no re-pin**.
 - No fakes; unreachable → numbered legs; single situation entry; ISO-gated tests skip without the ISO.
