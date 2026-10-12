@@ -664,3 +664,32 @@ The phase-14 T2 coupling slice feeds this arm's live inputs from the cells
    (the same `[0x1577CA]` this arm reads at `0x82806`). See FU-171's T2
    status for the discriminators and the FU171-L7 residual sites.
 3. **FU168-L1/L2/L6/L7 unchanged**; no arm byte re-read this slice.
+
+## T4 status — L7 note (d) lands (2026-10-12, phase-14 T4 fix wave — append-only)
+
+The §7.3/§9.4 cross-references "see FU168-L7 note (d)" (lines with the lane
+gate and the `handlers.c` lane-word reads) dangled: §10.7 defines only notes
+(a)/(b)/(c). Note (d) is supplied here (the T1 helper cross-check, per the
+phase-14 T4 final review):
+
+**(d) helper surface gaps — the T1 cross-check.**
+
+1. **arm-2 inline snap vs the static `match_run_record_snap`.** Action-0x0B
+   arm 2's snap (`fifa96_match_handlers.c:3252-3265`) inlines the identical
+   store set as the **static** `match_run_record_snap`
+   (`fifa96_match_run.c:1070-1081`, the `FUN_00079B1C` subset: target triple
+   := position, lane/speed71/vel73/vel75/vel_x/vel_z/body_timer cleared). A
+   non-static wrapper (or a shared header helper) is the clean fix; the arm-2
+   copy also carries the `row44` reset the helper does not.
+2. **arm 0's `0x79B6C` commit vs `match_sp_anchor`.** Arm 0's commit
+   (`fifa96_match_handlers.c:3177-3189`, `0x81ADA/0x81AE2`) forces `pos_y = 0`
+   before the target := pos write, while `match_sp_anchor`
+   (`fifa96_match_handlers.c:1464-1480`, the `FUN_00079B6C` re-anchor subset)
+   keeps the `y` argument as passed (its callers pass the record's or an
+   explicit `0` y). The y-forcing difference is the one to preserve if the
+   inline is folded into the helper.
+3. **`fifa96_action_sequence_duel_event` parameter misnomers retained.** The
+   names `delta_angle`/`aim` are the FU-82-era misnomers for the band and
+   `speed71` inputs — see FU-169
+   `docs/ghidra/FU169_row5e_live_installer.md:383-386`; no rename in the T1
+   landing (audit item only).

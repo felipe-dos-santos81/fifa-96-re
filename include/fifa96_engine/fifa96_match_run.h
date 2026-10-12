@@ -624,8 +624,9 @@ struct fifa96_match_run {
   /* The derived act-9 → GATE handshake marker: within the restart window the
    * native `[0x15882A]` gate has exactly one reachable producer. Fresh xrefs
    * (24 touches): the leg-0 SETUP0 clears it unconditionally (`0x93C30`;
-   * legs 1/3 write their `[0x15B684]`-selected value — set `0x93E84`/`0x942F5`
-   * on the staged path, clear `0x93EB6`/`0x94327` on the settled path), the
+   * legs 1/3 set `0x93E84`/`0x942F5` when `[0x15B684] != 0`
+   * (`0x93E74 CMP`/`0x93E7B JZ`, `0x942EA TEST`/`0x942EC JZ`) and clear
+   * `0x93EB6`/`0x94327` on the staged (`== 0`) path), the
    * reset clears it (`0x886F4`), act-1's kickoff handler clears at `0x88E56`
    * and sets at `0x88F07`, act-2's tail sets at `0x895EC`, and act-9 stage 0
    * clears it again (`0x88F9A`) while it writes phase 0x15. After that write

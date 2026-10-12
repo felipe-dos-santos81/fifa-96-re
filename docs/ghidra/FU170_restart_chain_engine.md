@@ -462,9 +462,9 @@ the writers disassembled fresh:
 - the reset `FUN_000886D4`: clear `0x886F4` (`AH=0`, with the `[0x158829]`
   and `[0x158818]` clears);
 - the leg-0 SETUP0: clear `0x93C30` (`AH=0`, before the `0x93C36 MOV EAX,0xC`
-  + `0x93C41 CALL 0x8A938` sit-0xC queue); legs 1/3 write the
-  `[0x15B684]`-selected value (`0x93E84`/`0x942F5` set 1 on the staged path,
-  `0x93EB6`/`0x94327` clear on the settled path);
+  + `0x93C41 CALL 0x8A938` sit-0xC queue); legs 1/3 set `0x93E84`/`0x942F5`
+  when `[0x15B684] != 0` (`0x93E74 CMP`/`0x93E7B JZ`, `0x942EA TEST`/`0x942EC
+  JZ`) and clear `0x93EB6`/`0x94327` on the staged (`== 0`) path);
 - further WRITE touches (fresh xref classification, not re-disassembled):
   `0x84C2A`/`0x84D29` (the `0x84xxx` restart body), `0x8955F`, `0x898BB`.
 
