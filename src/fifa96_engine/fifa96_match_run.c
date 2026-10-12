@@ -2004,6 +2004,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->running = 0;
   mr->stage_owner = NULL;
   memset(&mr->record, 0, sizeof mr->record);
+  memset(&mr->celebration, 0, sizeof mr->celebration); /* FU-184 row-0x14 scatter */
   (void)fifa96_match_entities_init(&mr->entities);
   (void)fifa96_match_phase_machine_init(&mr->phase_machine);
   memset(&mr->rng, 0, sizeof mr->rng);
@@ -2097,6 +2098,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->score_sound_midi = 0;            /* T4/OL-89: fresh [0x114A98] gate cell */
   mr->score_display_event = 0;         /* T4/OL-89: fresh dispatch boundary */
   memset(&mr->record, 0, sizeof mr->record); /* fresh FU-138/FU-140 record */
+  memset(&mr->celebration, 0, sizeof mr->celebration); /* FU-184 row-0x14 scatter */
   (void)fifa96_match_entities_init(&mr->entities); /* fresh FU-141 pool */
   (void)fifa96_match_phase_machine_init(&mr->phase_machine); /* fresh FU-142a machine */
   /* FU-142d: a fresh match seeds the RNG (the native FUN_000493A0 match-init
@@ -2210,18 +2212,14 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * and action row 01 calls FUN_0008A938 situation 0xB at 0x7DF90 once the
    * derived act-1 producer arms `mr->global_5882a` (M2 playable-match Task 2 /
    * FU-143 §11). */
-  (void)match_run_write_phase(mr, FIFA96_MATCH_RUN_KICKOFF_PHASE);
-  /* M2 playable-match Task 2 / OL-84 residual: the same setter call runs the
-   * FUN_0008D098 state-1 arm per team (native 0x740C8/0x740DB; state 1 arm
-   * 0x8D1B1..0x8D243), staging the kickoff actions 1/2 and the team targets.
-   * It runs before the placement commit below, matching the native order
-   * (0x88E82 FUN_000740A0 precedes 0x88E87 FUN_00073E08; the 0x8D1D1
-   * FUN_00079CCC pick reads the placement outputs the formation seed set). */
-  (void)fifa96_match_phase_machine_kickoff(mr);
-  /* The state-1 arm's `FUN_0007876C` merge (`0x8D243`) recorded the taker as
-   * the slot requester; consume it now so the FU-70 slot points at the taker
-   * before the first frame body (the native rebinds `[0x57C64]` in place). */
-  match_run_entity_drain(mr);
+  /* M2 playable-match Task 2 / OL-84 residual + FU-184 §5/§7 T2-2: the shared
+   * kickoff phase entry (native 0x740A0): the phase-1 latch, the per-team
+   * FUN_0008D098 state-1 arm (0x740C8/0x740DB, staging the kickoff actions 1/2
+   * and the team targets) and the FUN_0007876C merge drain. It runs before the
+   * placement commit below, matching the native order (0x88E82 FUN_000740A0
+   * precedes 0x88E87 FUN_00073E08; the 0x8D1D1 FUN_00079CCC pick reads the
+   * placement outputs the formation seed set). */
+  (void)fifa96_match_run_kickoff_entry(mr);
   /* FU-96 leg 5 (M2 interactive T2): the per-record camera place
    * `FUN_00079F3C` runs inside the native `FUN_0008CF60` loop between the
    * phase handler and the `FUN_00079B6C` commit, on the non-controlled team's
@@ -2380,6 +2378,20 @@ static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
     mr->goal_armed = 0;
     mr->goal_zone = 0;
   }
+  return 0;
+}
+
+/* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
+ * out of begin so the row-0x14 celebration release (native `0x87C71`
+ * `FUN_000740A0(1, side)`) runs the identical sequence. The native order is the
+ * `FUN_000740A0` phase-1 write, the per-team `FUN_0008D098` state-1 arm, and
+ * the `FUN_0007876C` merge drain; begin then runs the `FUN_00073E08` placement
+ * commit (its caller keeps that step, matching `0x88E82` before `0x88E87`). */
+int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  (void)match_run_write_phase(mr, FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  (void)fifa96_match_phase_machine_kickoff(mr);
+  match_run_entity_drain(mr);
   return 0;
 }
 

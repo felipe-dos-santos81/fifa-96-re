@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-30/80 dispatch rows wired (28 action + the wired phase rows 0x18 and 0x1F), the
+32/80 dispatch rows wired (30 action + the wired phase rows 0x18 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,7 +260,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **30/80 rows wired** (28 action + the phase rows
+- Action dispatch (FU-137): **32/80 rows wired** (30 action + the phase rows
   `0x18`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
@@ -319,7 +319,21 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU177-L1). The T3 carry applies the FU180 errata: the row-0x1B stage-0 latch
   clear writes only `0x157C54/57/58/59/5A/5B` (`0x76E0F`, six stores), leaving
   `0x157C55/56` for the stage-2 rush gate (FU180-L7).
-  dispatch results 50 UNSUP / 29 OK / 1 NOTF.
+  **Phase-16 T2** (FU-184/FU-185) wires **row `0x14`** (the celebration/scatter
+  3-stage body `0x8784C..0x87CBC`: the 5-point
+  `fifa96_action_sequence_scatter_celebration` + the 6-slot buffer, the idx
+  walk and the stage-2 reset + release through the factored
+  `fifa96_match_run_kickoff_entry`; the installer is the live phase-5 goal arm
+  `match_run.c:2494`, whose route to the row is proven end-to-end) and **row
+  `0x22`** (the sequence/press 3-stage body `0x8539C..0x85481`: the phase-2
+  gate, the `0x79B1C` snap and the FU-136
+  `fifa96_action_sequence_press_event` stage-1 decision); the row-07
+  `opp_type` source is corrected to the native `+0x91` code byte (FU185-L1).
+  Both rows are install-live/tape-dormant, so M2 stays byte-exact (no re-pin).
+  First-hand caveat: the row-07 `opponent_invoke` gate reads the opponent
+  `word[+0x6F]`/`word[+0x7D]` angle inputs, which the engine leaves at 0
+  (OL-65), so the `0x22` install is dormant until that leg lands.
+  dispatch results 48 UNSUP / 32 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

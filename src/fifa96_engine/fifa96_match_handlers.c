@@ -972,7 +972,12 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
                .records[(uint32_t)oid % FIFA96_MATCH_ENTITY_RECORDS];
       s->opp_target_carrier = opp->carrier != 0 ? 1u : 0u;
       s->opp_present = 1;
-      s->opp_type = opp->type;
+      /* FU185-L1 (phase-16 T2): the native row-07 opponent gate reads the
+       * record's action **code** byte `+0x91` (`0x81683 MOV EAX,[ESI+0x8E];
+       * SAR EAX,0x18` = byte +0x91), not the `+0x8E` face octant. The pool
+       * `code` field is that byte (the same mapping the acting record uses at
+       * `s->type = r->code`). */
+      s->opp_type = opp->code;
       s->opp_has_slot = opp->has_slot;
       s->opp_lane_word = opp->lane_x;    /* +0x6B (<0xD0 gate) */
       s->opp_angle_x = opp->lane_z;      /* dword[+0x6D]>>16 = word[+0x6D] */
@@ -4026,6 +4031,199 @@ static int fifa96_match_action_09(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== FU-184 (phase-16 T2): the row-0x14 celebration/scatter body =========
+ *
+ * The native row-0x14 body `0x8784C..0x87CBC` (FU-184 §4; installer: the live
+ * phase-5 goal arm `match_run.c:2494`). A 3-stage machine over the goal record
+ * (`mr->record`): the head accumulates `timer89 += delta`; stage 0 builds a
+ * five-point scatter + the six-slot buffer and arms the first point; stage 1
+ * walks the remaining points; stage 2 resets the record and — unless the
+ * record's team side is 1 (`0x87C1A`, FU184-L6) — releases to phase 1 at
+ * `0x87C71` (the `match_run_kickoff_entry` T2-2 factoring). */
+
+/* The shared arm block (`0x87A88` stage 0/re-entry, `0x87B53` stage 1): `points
+ * [idx+1]` -> the record target `+0x4D`, the `0x8DCD4` metric into `+0x65` and
+ * the `0x79C50` face into `+0x8E`. The `[0x1587B8+idx]` id-compare anim post
+ * (`0x87AD1..0x87AFB`, `fifa96_action_sequence_event`) needs the celebration
+ * id tables `0x10F344/46/49/4C`, whose producer is unported, so the anim post
+ * is a numbered leg (FU184-L1 sibling) and only the target/metric/face payload
+ * lands. */
+static void match_celebration_arm(struct fifa96_match_run *mr,
+                                  struct fifa96_match_run_record *r) {
+  int32_t idx = mr->celebration.idx;
+  const fifa96_action_vec3 *point;
+  fifa96_arm_vec from;
+  fifa96_arm_vec to;
+  int32_t dz = 0;
+  uint8_t octant = r->type;
+  if (idx < 0 || idx + 1 > 5) idx = 4;   /* native idx in 0..4 (points[1..5]) */
+  point = &mr->celebration.points[idx + 1];
+  r->target_x = point->x;                /* 0x87AB6 MOVSD x3 */
+  r->target_y = point->y;
+  r->target_z = point->z;
+  from.x = r->pos_x;
+  from.y = r->pos_y;
+  from.z = r->pos_z;
+  to.x = r->target_x;
+  to.y = r->target_y;
+  to.z = r->target_z;
+  (void)fifa96_arm_dist_stage(&from, &to, &r->distance, &dz);   /* 0x8DCD4 */
+  if (fifa96_arm_face(&from, &to, &octant) == FIFA96_OK) r->type = octant; /* 0x79C50 */
+}
+
+static int fifa96_match_action_14(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_entity *e = match_sp_entity(mr, NULL, NULL);
+  uint8_t stage;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  /* head `0x87854..0x8787F`: timer89 += (zero-extended) delta; the
+   * `[0x157AA3] = rec` write and the `0x974F0`/`0x36200` sinks are legs
+   * (FU184-L4). */
+  r->timer89 += (uint16_t)r->delta;                 /* 0x8785C */
+  stage = r->stage92;
+  if (stage == 0u) {                                /* 0x878A1 */
+    fifa96_action_vec3 base;
+    int32_t dir_x, dir_z;
+    uint32_t rng8[8];
+    uint32_t i;
+    if (r->timer89 < 0x3C) return FIFA96_OK;        /* 0x878A9 timer >= 60 */
+    /* The ball-record anim (`0x878B6..0x878F0`: `[[team+0x7A6]+0x28]` first
+     * byte == 0x26 -> anim 0x46/0x47 by rng&1) needs the team's ball-record
+     * pointer and its animation row; the engine ball is not a pool record and
+     * the mapping is unproven (FU184-L7), so this install is a leg and draws
+     * no RNG (the engine ball row is 3, never 0x26). */
+    base.x = r->pos_x;                              /* 0x878F5 MOVSD x3 */
+    base.y = r->pos_y;
+    base.z = r->pos_z;
+    dir_x = r->pos_x < 0 ? -1 : 1;                  /* 0x87900..0x87911 */
+    dir_z = r->pos_z > 0 ? -1 : 1;                  /* 0x87912..0x87923 */
+    if (r->side == 1u) dir_x = 0;                   /* 0x87924..0x87931 */
+    for (i = 0; i < 8u; i++) {                      /* eight 0x92AC8 draws */
+      uint16_t draw = 0;
+      (void)fifa96_rng_step(&mr->rng, &draw);
+      rng8[i] = draw;
+    }
+    (void)fifa96_action_sequence_scatter_celebration(&base, dir_x, dir_z, rng8,
+                                                     mr->celebration.points);
+    /* The native copies the pre-clamp points[4] to the 6th slot `[0x158714]`
+     * BEFORE the clamp loop (`0x87A2A`); the ported helper clamps in place, so
+     * the 6th slot carries the clamped points[4] — the recorded FU184-L1
+     * divergence. */
+    mr->celebration.points[5] = mr->celebration.points[4];
+    mr->celebration.idx = 0;                        /* the fresh-scatter index */
+    match_celebration_arm(mr, r);                   /* the idx-0 arm block */
+    r->timer89 = 0;                                 /* 0x87B06 */
+    r->stage92 = 1u;                                /* 0x87B12 stage++ */
+    return FIFA96_OK;
+  }
+  if (stage == 1u) {                                /* 0x87B1F */
+    int32_t idx = mr->celebration.idx;
+    /* `0x87B1F..0x87B32`: `FUN_00045001()` = `[0x1067EC] & 0xF0`. The input
+     * producer is unported (FU184-L3), so the derived gate is always false and
+     * this early advance is dormant; the timing advance below carries. */
+    match_celebration_arm(mr, r);                   /* 0x87B53 */
+    if (r->distance < 0x20 ||                       /* 0x87B92 word[+0x65] */
+        r->timer89 > 0x4B0 ||                       /* 0x87BA3 */
+        (idx == 3 && r->timer89 > 0x12C) ||         /* 0x87BAB..0x87BB4 */
+        (idx == 4 && r->timer89 > 0xB4)) {          /* 0x87BBC..0x87BD3 */
+      idx++;
+      mr->celebration.idx = idx;                    /* 0x87BDF */
+      if (idx >= 5) {                               /* 0x87BE4 */
+        r->timer89 = 0;                             /* 0x87BF8 */
+        r->stage92 = 2u;                            /* 0x87C06 stage++ */
+        return FIFA96_OK;
+      }
+      /* `0x87BE9..0x87BEF`: stage-- then re-enter the full arm block, which
+       * re-increments the stage (the FU-82 §3.5 curious re-entry). */
+      match_celebration_arm(mr, r);                 /* 0x87A88 re-entry */
+      r->timer89 = 0;                               /* 0x87B06 */
+      r->stage92 = 1u;
+      return FIFA96_OK;
+    }
+    return FIFA96_OK;                               /* 0x87CB6 tail (wait) */
+  }
+  if (stage == 2u) {                                /* 0x87C13 */
+    match_row_reset(mr, e);                         /* 0x7DAB4 */
+    if (r->side != 1u) {                            /* 0x87C1A..0x87C25 (FU184-L6) */
+      /* `0x87C2B..0x87C71`: the `[0x10F328/2C/30]` camera reset, the
+       * `[0x157AAF] = side ^ 1` display swap (leg) and the phase-1 entry. */
+      (void)fifa96_camera_init(&mr->render.camera, 0, 0, 0);   /* 0x700F4 */
+      (void)fifa96_match_run_kickoff_entry(mr);                /* 0x87C71 */
+      (void)fifa96_match_entities_kickoff_place(&mr->entities,
+                                                mr->render.camera.pos_x,
+                                                mr->render.camera.pos_y,
+                                                mr->render.camera.pos_z); /* 0x73E08 */
+      mr->celebration.idx = 0;                      /* 0x87C43 */
+    }
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;                                 /* stage >= 3: tail */
+}
+
+/* ===== FU-185 (phase-16 T2): the row-0x22 sequence/press body ==============
+ *
+ * The native row-0x22 body `0x8539C..0x85481` (FU-185 §2; installer: the wired
+ * row-07 `0x816DF` invoke-now on the opponent team target, `match_kick_invoke_
+ * opponent`). A phase-2-only 3-stage machine over `mr->record`: the phase gate
+ * (`dword[0x157A4A]>>24 == 2`), `timer89 += delta`, the `0x79B1C` snap
+ * (target := pos + the word clears, FU185-L2), then stage 0 (active gate ->
+ * `ran`/snap/timer=0/advance), stage 1 (the FU-136 `sequence_press_event`
+ * band/timer decision -> anim 0x4F, or reset) and stage 2 (`+0x44` -> reset).
+ * Every terminating arm is the shared `match_row_reset`. */
+static int fifa96_match_action_22(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_entity *e = match_sp_entity(mr, NULL, NULL);
+  uint8_t stage;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 2u) {                      /* 0x853AB phase gate */
+    match_row_reset(mr, e);                         /* 0x85478 */
+    return FIFA96_OK;
+  }
+  r->timer89 += (uint16_t)r->delta;                 /* 0x853B6 timer89 += delta */
+  /* `0x853CB CALL 0x79B1C` snap: target := pos (the FU185-L2 word-clear set is
+   * the recorded residual). */
+  r->target_x = r->pos_x;
+  r->target_y = r->pos_y;
+  r->target_z = r->pos_z;
+  stage = r->stage92;
+  if (stage == 0u) {                                /* 0x853E9 */
+    if (r->active == 0u) {                          /* 0x853F1 */
+      match_row_reset(mr, e);                       /* 0x85476 */
+      return FIFA96_OK;
+    }
+    r->ran = 1;                                     /* 0x85400 +0x9E = 1 */
+    r->target_x = r->pos_x;                         /* 0x85407 snap */
+    r->target_y = r->pos_y;
+    r->target_z = r->pos_z;
+    /* 0x8540C byte[+0x43] = 0 (the FUN_0006E598 row-flags byte, FU185-L3). */
+    r->timer89 = 0;                                 /* 0x85416 */
+    r->stage92 = 1u;                                /* 0x85420 */
+    return FIFA96_OK;
+  }
+  if (stage == 1u) {                                /* 0x85428 */
+    int16_t band = (int16_t)(r->lane >> 16);        /* 0x85428 word[+0x6B] */
+    fifa96_action_sequence_press p;
+    (void)fifa96_action_sequence_press_event(band, r->timer89, &p);  /* FU-136 */
+    if (p.fire != 0u) {                             /* band <= 0x30 */
+      if (fifa96_match_run_record_anim_install(mr, e, 0x4F, 0) == FIFA96_OK) {
+        r->anim_id = e->anim_id;                    /* 0x85453 0x6E598 */
+        r->frame = e->frame;
+        r->row44 = e->row44;
+      }
+      r->timer89 = 0;                               /* 0x8545E */
+      r->stage92 = 2u;                              /* 0x85468 */
+    } else if (p.reset != 0u) {                     /* band > 0x30 && timer > 0x1E */
+      match_row_reset(mr, e);                       /* 0x85476 */
+    }
+    return FIFA96_OK;                               /* else: wait at 0x8543C */
+  }
+  if (stage == 2u) {                                /* 0x85470 */
+    if (r->row44 != 0u) match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;                                 /* stage > 2: tail RET */
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -4066,7 +4264,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-149 L13/T1: row 12 ported (free-kick taker, 0x83D68..0x84597, gate {2,7}, tables 0x83D2C/0x83D4C): incident placement + wall-point fold (0x83E26), FUN_000832A8 (0x84077), delivery probe span 3 (0x840B2), lane gate (0x8416A), kick + resolution + relay (0x841AD), +0x44 wait, reset; the wall block 0x158747/0x83B80 and kick vectors are FU-149 L13 legs"},
     {0x13, fifa96_match_action_13,
      "FU-149 L13/T1: row 13 ported (penalty taker, 0x84B00..0x84EEB, gate {2,6}, table 0x84AE4 7 arms): spot focus + commit (0x84BAD), spot aim distance gate (0x84C48), opponent/slot gate (0x84CBA), lane gate (0x84DF4), penalty strike mode 0x40 (0x84E26), ball-ack gate + resolution (0x84E61), +0x44 reset; the 0x4C114 input words, 0x78A84/0x78AA4 slot bodies and the 0x20-edge hand-off are FU-149 L13 legs"},
-    {0x14, NULL, "FU-137 §6: FU-136 row 14: not ported (partial); scatter_celebration helpers; OL-9"},
+    {0x14, fifa96_match_action_14,
+     "FU-184 §4/§7 (phase-16 T2): row 14 celebration/scatter body ported (0x8784C..0x87CBC, 3 stages): head timer89 += delta; stage 0 = the 5-point fifa96_action_sequence_scatter_celebration + the 6-slot buffer (points[5] = the clamped points[4], FU184-L1) + the arm block (target/metric/face); stage 1 = the arm walk with the distance<0x20 / timer>0x4B0 / idx3>0x12C / idx4>0xB4 advance and the 0x87BE9 stage-- re-entry; stage 2 = match_row_reset + the release (camera reset + fifa96_match_run_kickoff_entry 0x87C71 + the 0x73E08 placement commit) unless side==1 (0x87C1A, FU184-L6). Installer live (phase-5 goal arm match_run.c:2494); legs: the ball-record anim (FU184-L7), the 0x10F344 id tables/anim post (FU184-L1 sibling), the 0x45001 input gate (FU184-L3), the head sinks (FU184-L4) and the release tails (FU184-L5)"},
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},
     {0x17, NULL,
@@ -4088,7 +4287,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x20, NULL, "FU-137 §6: FU-136 row 20: not ported (partial); FU-82 7-arm table 0x84ED0; OL-9"},
     {0x21, fifa96_match_action_21,
      "FU-139 §10/FU-137: row 21 ported (0x85214..0x8539B machine; camera copy, 0x8DE8C nearest + 0x4A anim arm, 0x7DAB4 reset, team-target ball 4/receiver) over the pool; install arms 0x7D046 (and row-05 0x7F791/0x7F7B6); +0x44 and anim record writes OL-68/OL-52"},
-    {0x22, NULL, "FU-137 §6: FU-136 row 22: not ported (partial); sequence_press_event; OL-9"},
+    {0x22, fifa96_match_action_22,
+     "FU-185 §2/§6 (phase-16 T2): row 22 sequence/press body ported (0x8539C..0x85481, phase-2-only 3 stages): the phase gate (else match_row_reset), timer89 += delta, the 0x79B1C snap (target := pos; FU185-L2 word-clear residual), stage 0 (active gate -> ran/snap/timer=0/advance), stage 1 (fifa96_action_sequence_press_event on the lane band word[+0x6B] -> anim 0x4F per FU-185, or reset) and stage 2 (+0x44 -> reset). Installer live (wired row-07 0x816DF invoke-now on the opponent team target via match_kick_invoke_opponent; the FU-182 OL-56 'producer-dormant' premise is FU-185 §5.1 errata — the target producer is ported); the +0x43 anim-flags byte is FU185-L3"},
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, NULL, "FU-137 §6: FU-136 row 24: not ported (partial); sequence_lane/anim_byte; OL-9"},

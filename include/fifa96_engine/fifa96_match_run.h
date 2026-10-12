@@ -6,6 +6,7 @@
 #include "fifa96_engine/fifa96_match_phase_machine.h"
 #include "fifa96_engine/fifa96_match_act.h"
 #include "fifa96_engine/fifa96_platform.h"
+#include "fifa96_loader/fifa96_action_handlers.h"
 #include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_control.h"
 #include "fifa96_loader/fifa96_font.h"
@@ -509,6 +510,17 @@ struct fifa96_match_run_record {
   uint8_t global_157ac2;    /* native [0x157AC2] arm-0 mode byte */
 };
 
+/* FU-184 §4 (phase-16 T2): the row-0x14 celebration scatter state — the native
+ * `[0x158720]` scatter index and the 6-point scatter buffer `[0x1586D8..]`
+ * (the five `fifa96_action_sequence_scatter_celebration` points plus the
+ * native's pre-clamp points[4] copy at `[0x158714]`, FU184-L1). It persists
+ * across the stage-0 -> stage-1 frames of the row machine; init and begin zero
+ * it, and the row's stage-2 resets `idx` (native `0x87C43`). */
+struct fifa96_match_run_celebration {
+  int32_t idx;                    /* native [0x158720] */
+  fifa96_action_vec3 points[6];    /* native [0x1586D8..0x158714] */
+};
+
 struct fifa96_match_run {
   struct fifa96_match_lifecycle lc;
   struct fifa96_match_pace pace;
@@ -572,6 +584,7 @@ struct fifa96_match_run {
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
   fifa96_control_slot slot;                      /* FU-70 slot bound to player 0 */
   struct fifa96_match_run_record record;         /* FU-141 dispatch staging record */
+  struct fifa96_match_run_celebration celebration; /* FU-184 row-0x14 scatter state */
   struct fifa96_match_entities entities;         /* FU-141 entity/ball pool */
   struct fifa96_match_phase_machine phase_machine; /* FU-142a installer-arms machine */
   /* FU-142d: the match RNG (seeded by begin, zerod by init; the native seeds at
@@ -1180,6 +1193,17 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
  * `[0x157A4A]` write precedes `FUN_0008D098`). Returns 0 or
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
+
+/* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
+ * out of `fifa96_match_run_begin` (`:2213-2224`). Runs the native `0x740A0`
+ * sequence for the kickoff phase 1: the phase-1 latch
+ * (`match_run_write_phase`), the per-team `FUN_0008D098` state-1 arm
+ * (`fifa96_match_phase_machine_kickoff`) and the entity drain that consumes
+ * the arm's slot-merge request. begin calls it between the formation seed/slot
+ * bind and the `FUN_00073E08` placement commit, matching the native order; the
+ * row-0x14 celebration release calls it to continue past a goal (native
+ * `0x87C71`). Returns FIFA96_OK or -FIFA96_ERR_INVALID (NULL). */
+int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr);
 
 /* ===== FU-150 P2 — fouls / referee / offside =============================== */
 

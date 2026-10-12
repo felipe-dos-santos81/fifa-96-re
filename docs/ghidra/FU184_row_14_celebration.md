@@ -520,3 +520,53 @@ Docs cross-cited: FU-82 §3.5/§6/§9, FU-136 §2/§3, FU-173 §4.2/§6/§7/§8/
 appends, FU-182 §1/§4, FU-137 §6, AGENTS.md census rule. No rename/comment/
 label/function/script/project save; no git. Write set: this file only.
 `game/FIFAPCCD96.iso` untouched; `fifa96.rep/**` churn not staged.
+
+---
+
+## 11. T2 status (phase-16, 2026-10-12) — row 0x14 LANDED
+
+Implementation slice T2 of the phase-16 plan. **No prior section rewritten.**
+
+**What landed.** `fifa96_match_action_14` (`src/fifa96_engine/fifa96_match_handlers.c`)
+implements the §4 3-stage machine over `mr->record`:
+
+* head: `timer89 += (uint16)delta` (§4.1 `0x8785C`); the `[0x157AA3]` write and
+  the `0x974F0`/`0x36200` sinks stay legs (FU184-L4).
+* stage 0 (§4.3): the `timer89 >= 0x3C` gate; the eight `0x92AC8` draws feed
+  `fifa96_action_sequence_scatter_celebration` (the FU-82 helper) into the new
+  `mr->celebration.points[6]`; the 6th slot is the helper's clamped `points[4]`
+  (the pre-clamp copy is FU184-L1, recorded); the shared arm block copies
+  `points[idx+1]` into `+0x4D` and runs the `0x8DCD4` metric / `0x79C50` face;
+  `timer89 = 0`, `stage92 = 1`.
+* stage 1 (§4.4): the `0x87B53` arm walk with the advance conditions
+  `distance < 0x20` (`dword[EBP+0x63]>>16` = **word `+0x65`** = the metric
+  distance, an alias-trap correction of the slice's "height" gloss), `timer89 >
+  0x4B0`, `idx==3 && timer > 0x12C`, `idx==4 && timer > 0xB4`, the `0x87BE9`
+  stage-- re-entry, and `idx==5 -> stage 2`. The `FUN_00045001`
+  (`[0x1067EC] & 0xF0`) early advance is staged 0 (FU184-L3).
+* stage 2 (§4.5): `match_row_reset` (`0x7DAB4`) then, unless
+  `mr->record.side == 1` (`0x87C1A`, FU184-L6), the release: the `0x700F4`
+  camera reset and `fifa96_match_run_kickoff_entry` (the T2-2 factoring of the
+  begin phase-1 entry) plus the `0x73E08` placement commit.
+
+The `[0x157AA3]` pointer cell, the `0x157AAF` display swap and the `0x8CFAC`/
+`0x513EC`/`0x4C324` tails stay legs (FU184-L4/L5).
+
+**T2-2 factoring.** `fifa96_match_run_kickoff_entry(mr)` is extracted from
+`fifa96_match_run_begin` (`:2213-2224`) — the phase-1 latch
+(`match_run_write_phase`), the per-team state-1 arm
+(`fifa96_match_phase_machine_kickoff`) and the entity drain. begin calls it;
+the row-0x14 release calls it. Tapes byte-identical (M1 `09b726b7…`, M2
+`7b4b241a…`) → no re-pin.
+
+**Evidence.** `tests/test_engine_match_handlers.c::test_action_14_runs_body`
+(RED/GREEN: the timer gate, the RNG-recomputed scatter target, the idx walk,
+the stage-2 reset + release; mutation-RED with the body stubbed aborts at the
+first assertion) and `::test_action_14_live_phase5_route` (the phase-5 goal arm
+`fifa96_match_run_situation(mr, 6)` installs code `0x14` on the scanned record
+and the wired row dispatches OK).
+
+**Legs.** FU184-L1 (6th-slot pre-clamp copy) stands, recorded in the body; the
+id-table anim post (the `0x10F344/46/49/4C` tables) is added as an unported-data
+leg; FU184-L3/L4/L5/L6/L7 stand; FU184-L2 (the un-written `y`) is moot in the
+engine (the helper writes `y = base.y`).

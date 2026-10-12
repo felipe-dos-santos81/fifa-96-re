@@ -401,3 +401,51 @@ Engine/loader source read: `src/fifa96_engine/fifa96_match_handlers.c`
 FU-82 §3.8, FU-136, FU-137, FU-142 §6/K.6.5, FU-164, FU-182; AGENTS.md census
 rule; the phase-16 plan §R33/§T2. No writes beyond this slice and the workspace
 report; no rename/label/comment/function/script/project save; no git.
+
+---
+
+## 10. T2 status (phase-16, 2026-10-12) — row 0x22 LANDED (+ FU185-L1 finding)
+
+Implementation slice T2 of the phase-16 plan. **No prior section rewritten.**
+
+**What landed.** `fifa96_match_action_22` (`src/fifa96_engine/fifa96_match_handlers.c`)
+implements the §2 phase-2-only 3-stage machine over `mr->record`: the phase gate
+(else `match_row_reset`), `timer89 += (uint16)delta`, the `0x79B1C` snap
+(`target := pos`; the word-clear set is FU185-L2), stage 0 (`active` gate ->
+`ran`/snap/`timer89 = 0`/advance), stage 1 (`fifa96_action_sequence_press_event`
+on the lane band `word[+0x6B]` -> the anim `0x4F` install via
+`fifa96_match_run_record_anim_install`, or reset), and stage 2 (`+0x44` ->
+reset). The `+0x43` byte is FU185-L3.
+
+**FU185-L1 fix landed.** `s->opp_type` now sources the opponent record's **code
+byte** (`opp->code`, native `+0x91`) at
+`src/fifa96_engine/fifa96_match_handlers.c` (`match_kick_from_record`), not the
+`+0x8E` face octant — the §5.2 / FU185-L1 correction. The engine-load
+consequence:
+
+**FU185-L6 (new, first-hand) — the row-07 gate is angle-dead, not type-dead.**
+The row-07 `opponent_invoke` gate (`kick_machine_07` `0x8164B..0x816E4`) compares
+`fifa96_action_kick_angle(opp_angle_x, opp_angle_z)` against `opp_face_word`.
+The engine stages `opp_angle_x = opp->lane_z` (the `+0x6D` word), but
+`opp_angle_z` (`+0x6F`) and `opp_face_word` (`+0x7D`) are **unmodeled (0,
+OL-65)**. Since `fifa96_entity_angle(x, 0)` is always `+-0x100` (or `0x80` at
+`x == 0`) for every `x`, the folded diff against `opp_face_word == 0` is always
+`> 0x55`; a brute-force sweep of every `lane_z` in `[-0x1200, 0x1200]` confirms
+`out.opponent_invoke` never fires. So the `0x22` install is **dormant in the
+engine** until OL-65 (the `+0x6F`/`+0x7D` producers) lands — independent of the
+FU185-L1 source byte (neither the octant nor the code reaches the gate). This
+refines §7's "statically satisfiable gate": statically satisfiable in the
+native, not in the engine's current stand-in state. Controller ruling **W3**
+counts `0x22`; this leg is recorded as the honest caveat (see `docs/ENGINE.md`).
+
+**Evidence.** `tests/test_engine_match_handlers.c::test_action_22_runs_body`
+(RED/GREEN: the phase gate, stage 0 active/inactive, stage 1 fire/reset/wait,
+stage 2; mutation-RED with the body stubbed aborts at the phase-gate assertion).
+The loader gate itself is covered by
+`tests/test_action_handlers.c` (`opp_type == 6` post-kick). Rows 0x14/0x22 are
+install-live/tape-dormant: M1/M2 byte-identical → no re-pin.
+
+**Legs.** FU185-L1 (fixed; no engine-level discriminator exists because FU185-L6
+blocks the gate end-to-end), FU185-L2 (`0x79B1C` word clears), FU185-L3
+(`+0x43`), FU185-L4 (`0x6E598` anim request consumer) and FU185-L5 (second
+installer family) stand.
