@@ -1,9 +1,11 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v12 (spec §5; the
- * M2 phase-11 visible-ball acceptance, T3; the v10 phase-10 visible-layer
- * acceptance, T3/T4, the v9 phase-9 live-pad-loop acceptance, T4, the v8
- * phase-8 live-loop acceptance, T5, the v7 phase-7 acceptance, P5, the v6
- * phase-6 acceptance, the v5 interactive-match G3 close-out and the
- * v4/v4.1/v4.2 per-task re-pins are retained as provenance below).
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v15 (spec §5; the
+ * M2 phase-15 census-frontier acceptance, T4; the v14 phase-14 restart-chain
+ * re-pin, T3, the v13/v12 phase-13/phase-12 re-pins, the M2 phase-11
+ * visible-ball acceptance, T3, the v10 phase-10 visible-layer acceptance,
+ * T3/T4, the v9 phase-9 live-pad-loop acceptance, T4, the v8 phase-8 live-loop
+ * acceptance, T5, the v7 phase-7 acceptance, P5, the v6 phase-6 acceptance,
+ * the v5 interactive-match G3 close-out and the v4/v4.1/v4.2 per-task re-pins
+ * are retained as provenance below).
  *
  * Drives the spec §5 sequence with the null backend and a scripted key tape:
  * boot -> skip intro -> front-end -> start match (selector 0) -> kickoff ->
@@ -1199,6 +1201,70 @@
  * (`09b726b7…`); old M2 sha `5f7e7692…` (v13, 85 lines) -> new M2 sha
  * `7b4b241a72c461a354121c53b900d8d11cf59f59f03495e08e5fa08b75e45da8`
  * (v14, 792 lines).
+ *
+ * --- v15 (M2 phase-15 acceptance, T4): the census-frontier strata -----------
+ *
+ * v15 is the phase-15 acceptance (the census frontier: T1 the native act/phase
+ * dispatch seam + row 0x17, FU-175/FU-181; T2 the keeper cluster
+ * 0x1F/0x1B/0x19, FU-176/FU-179/FU-180; T3 the outfield cluster 03/09/0x0D,
+ * FU-177/FU-178/FU-180). It adds assertions, provenance and the regression
+ * pins the T1–T3 reviews surfaced — no engine write and no forcing changed — so
+ * the transcript and golden are byte-identical to v14 (`cmp` against the
+ * committed tests/golden/engine/m2-frames.txt clean, 792 lines; M1 unmoved; the
+ * re-pin lineage is in the golden-decision paragraphs below). The v14 re-pin
+ * (the post-goal restart chain) remains the phase's record: T1's act seam
+ * reproduced the exact FU-170 §7 act-9 cadence and the T2/T3 landings are
+ * install-live/tape-dormant, so v15 is strata-only (no further re-pin).
+ *
+ * What v15 pins at the spec §5 sequence points:
+ *   1. The act seam + phase 0x1F are wired and honest (T1/FU-175): the tape's
+ *      post-goal restart window reaches act 9 -> phase 0x1F on the granted
+ *      frames (the v14 `phase15_armed` 1 / `gate_marker` 1 pins), and the
+ *      acceptance cross-check asserts the phase-table row `0x1F` is non-NULL —
+ *      the seam's live caller is `fifa96_match_dispatch_phase`.
+ *   2. Action row 0x19 is dispatched by the tape (T2/FU-179): the row-04
+ *      carrier install `0x7E866`/`0x7E8C1` stages code 0x19 and the ported body
+ *      records FIFA96_OK; the body is a pure record/camera write at the tape's
+ *      `phase != 2` state, so the frames stay byte-exact (the observed
+ *      `M2_WIRED_MASK` grows; no golden re-pin). Rows `0x1F`/`0x1B` are wired
+ *      but off the tape (the phase-6 penalty arm is not reached); row `09` is
+ *      wired but tape-dormant (the tape carries no code-9 record).
+ *   3. The census shape (T1–T3): the phase-15 action rows `0x1F`/`0x1B`/`0x19`/
+ *      `09` are wired (each with a ported engine installer) and the
+ *      ported-body-but-uninstalled rows stay NULL — row `0x17` (T1: act-4
+ *      stage 0 behind the unported sit-2..4 formation-order arm, FU181-L1) and
+ *      row `0x0D` (T3: its only installer lives in the unported row-09 arm 1,
+ *      FU178-L1), the rows-27/29/2C precedent. Row `03` stays UNSUP (the FU-177
+ *      §7 T3-R2 fake is rejected). The acceptance cross-check pins the exact
+ *      counts (28 action + 1 phase = 29/80 = 36%), so a silent re-wire, an
+ *      un-census or a slot flip fails the tape, not only the handler unit tests.
+ *
+ * v15 riders (the T1–T3 regression pins). The phase-15 reviews surfaced a set
+ * of cheap regression pins; they already exist as handler unit tests, so the
+ * acceptance layer adds the tape/strata-level or cross-check form that would
+ * catch a re-break (`run_phase15_riders` below, ISO-independent pure state):
+ *   - act seam + phase 0x1F (FU175): `fifa96_match_dispatch_phase(mr, 0x1F)`
+ *     reaches the ported handler and its stage-0 `[0x15882A]` clear runs;
+ *   - row 0x17 (FU181): the slot is NULL and the dispatcher returns
+ *     UNSUPPORTED, while the ported body stays reachable by direct call;
+ *   - keeper-cluster install (FU176): row 0x1F's stage-2 no-slot RNG dive
+ *     installs 0x1B invoke-now (the co-scoped second-order chain);
+ *   - row-0x19 guard (FU179): the tracked-opponent lane `0x747EA` rejection
+ *     falls through to the weighted fallback, not the guard clamp;
+ *   - row 09 stage-0 count + row 0x0D NULL slot (FU178): row 09's arm-0 set
+ *     branch runs and the row is wired; row 0x0D's slot is NULL (body ported,
+ *     uncounted);
+ *   - row-0x1B stage-0 latch partial clear (T2 fidelity fix / FU180-L7): the
+ *     native six-store form (`0x157C54/57/58/59/5A/5B`) leaves `0x157C55/56`
+ *     (the stage-2 rush gate's byte) — the six stores, never the reverted
+ *     `memset(sizeof)` regression.
+ *
+ * Golden decision (v15): **byte-identical, no re-pin** — assertions, provenance
+ * and cross-check pins only; no presented frame moved (`cmp` clean against the
+ * committed v14 golden, 792 lines, verified with the ISO present at
+ * acceptance); M1 unmoved (`09b726b7…`; M2 `7b4b241a…`). The phase-15 T1/T2/T3
+ * landings themselves also moved no presented frame (each report's `cmp`
+ * evidence; re-verified at T4).
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1210,6 +1276,7 @@
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_match_entities.h"
+#include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 #include "fifa96_loader/fifa96_match_state.h"
@@ -2633,6 +2700,132 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   fifa96_platform_destroy(plat);
 }
 
+/* v15 (phase-15 T4): the phase-15 rider cross-checks — the T1–T3 regression
+ * pins at the acceptance layer. The handler unit tests carry the primaries
+ * (test_engine_match_act.c / test_engine_match_handlers.c); this is the durable
+ * tape/strata-level or cross-check form that would catch a re-break from a
+ * different entry point, at the census frontier the phase exists for. Pure C
+ * state, ISO-independent (runs in both the ISO and no-asset tape modes). */
+static void run_phase15_riders(void) {
+  /* 1. The census shape (T1–T3): the exact wired counts and the phase-15 slots.
+   *    A silent re-wire / un-census / slot flip fails here, not only in the
+   *    handler unit tests. 29/80 = 36% (28 action + the phase row 0x1F). */
+  {
+    unsigned action_wired = 0, phase_wired = 0;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
+      if (fifa96_match_action_table[i].fn != NULL) action_wired++;
+    for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
+      if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
+    assert(action_wired == 28u && phase_wired == 1u);   /* 29/80 = 36% */
+    assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
+    assert(fifa96_match_action_table[0x1F].fn != NULL); /* T2: keeper dive */
+    assert(fifa96_match_action_table[0x1B].fn != NULL); /* T2: keeper reposition */
+    assert(fifa96_match_action_table[0x19].fn != NULL); /* T2: keeper hold */
+    assert(fifa96_match_action_table[0x09].fn != NULL); /* T3: sequence/steer */
+    assert(fifa96_match_action_table[0x17].fn == NULL); /* T1: ported, no installer */
+    assert(fifa96_match_action_table[0x0D].fn == NULL); /* T3: ported, no installer */
+    assert(fifa96_match_action_table[0x03].fn == NULL); /* T3: stays UNSUP */
+  }
+  /* 2. The act seam + phase 0x1F (T1/FU-175): the seam's dispatch reaches the
+   *    ported phase-0x1F handler and its stage-0 `[0x15882A]` clear runs. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.global_5882a = 1u;                /* the stage-0 clear target (0x88F9A) */
+    mr.state.frame_delta = 2;
+    assert(fifa96_match_dispatch_phase(&mr, 0x1F) == FIFA96_OK);
+    assert(mr.global_5882a == 0u);       /* 0x88F9A */
+  }
+  /* 3. Row 0x17 (T1/FU-181): the NULL slot (census item 2) + the dispatcher's
+   *    UNSUPPORTED, while the ported body stays reachable by direct call. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_dispatch_action(&mr, 0x17u) == -FIFA96_ERR_UNSUPPORTED);
+    mr.record.entity_id = 0;
+    mr.state.phase = 0x0Bu;
+    mr.record.stage92 = 0;
+    mr.record.pos_z = 0;
+    assert(fifa96_match_action_17(&mr) == FIFA96_OK);
+    assert(mr.record.target_x == -0x680 && mr.record.target_z == -0x50);
+  }
+  /* 4. The keeper-cluster install (T2/FU-176): row 0x1F's stage-2 no-slot RNG
+   *    dive installs 0x1B invoke-now (the co-scoped second-order chain). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.record.entity_id = 0;
+    mr.record.stage92 = 2;
+    mr.record.has_slot = 0;
+    mr.record.pos_x = 0x100;
+    mr.record.pos_z = 0x40;
+    mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+    assert(fifa96_match_dispatch_action(&mr, 0x1Fu) == FIFA96_OK);
+    assert((mr.dispatched_ok & (1ull << 0x1B)) != 0u);        /* the invoke-now */
+    assert(mr.entities.team[0].records[0].code == 0x1Bu);     /* the install landed */
+  }
+  /* 5. The row-0x19 guard (T2/FU-179): the tracked-opponent lane 0x747EA
+   *    rejection falls through to the weighted fallback (target.z = the side
+   *    base -0x9F0), not the guard-pass clamp (-0x7E0). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.record.entity_id = 0;
+    mr.state.phase = 2;
+    mr.record.has_slot = 0;
+    mr.record.lane = 0;                  /* rec lane word 0 */
+    mr.entities.team[0].side = 0;
+    mr.entities.team[0].tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
+    mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+    mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 0;
+    mr.entities.team[1].records[0].lane = (int32_t)(0xFFFFu << 16); /* opp lane -1 */
+    assert(fifa96_match_dispatch_action(&mr, 0x19u) == FIFA96_OK);
+    assert(mr.record.target_z == -0x9F0);   /* the fallback, not the clamp */
+  }
+  /* 6. Row 09 stage-0 (T3/FU-178): the arm-0 set branch runs (anim 0x11, the
+   *    stage advance) and the row is wired/counted. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    struct fifa96_match_entity *e = &mr.entities.team[0].records[0];
+    mr.record.entity_id = 0;
+    mr.state.phase = 2;
+    mr.record.active = 1;
+    mr.record.stage92 = 0;
+    mr.record.lane = 0;
+    mr.record.pos_x = 0x100;
+    mr.record.pos_y = 0x10;
+    mr.record.pos_z = 0x200;
+    e->lane_z = 0x40;                    /* the face dx (+0x6D) */
+    e->cam_dz6f = 0x20;                  /* the face dz (+0x6F) */
+    assert(fifa96_match_dispatch_action(&mr, 0x09u) == FIFA96_OK);
+    assert((mr.dispatched_ok & (1ull << 0x09)) != 0u);
+    assert(mr.record.stage92 == 1u);     /* the arm-0 advance (0x80BEB) */
+    assert(e->anim_id == 0x11u);         /* the 0x6E598 anim install */
+  }
+  /* 7. The row-0x1B stage-0 latch partial clear (T2 fidelity fix / FU180-L7):
+   *    the native six-store form clears only 0x157C54/57/58/59/5A/5B and leaves
+   *    0x157C55/56 (keeper_latch[1]/[2]) — FU180-L7's stage-2 rush gate reads
+   *    byte[0x157C55]. The reverted `memset(sizeof)` would clear all eight. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.record.entity_id = 0;
+    mr.state.phase = 0;                  /* the head does not bind */
+    mr.record.stage92 = 0;
+    memset(mr.keeper_latch, 1, sizeof mr.keeper_latch);
+    assert(fifa96_match_dispatch_action(&mr, 0x1Bu) == FIFA96_OK);
+    assert(mr.keeper_latch[0] == 0);     /* 0x157C54 cleared */
+    assert(mr.keeper_latch[3] == 0);     /* 0x157C57 cleared */
+    assert(mr.keeper_latch[4] == 0);     /* 0x157C58 cleared */
+    assert(mr.keeper_latch[5] == 0);     /* 0x157C59 cleared */
+    assert(mr.keeper_latch[6] == 0);     /* 0x157C5A cleared */
+    assert(mr.keeper_latch[7] == 0);     /* 0x157C5B cleared */
+    assert(mr.keeper_latch[1] == 1);     /* 0x157C55 survives (FU180-L7) */
+    assert(mr.keeper_latch[2] == 1);     /* 0x157C56 survives */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -2671,6 +2864,10 @@ int main(void) {
           "test_engine_m2 natural probe: live phase 2 at step %d (match start "
           "%d), row 01 dispatched, score 0-0\n",
           nat.phase2_step, nat.match_start_step);
+
+  /* v15 (phase-15 T4): the phase-15 rider cross-checks (both modes, pure
+   * state): the census shape + the T1–T3 regression pins. */
+  run_phase15_riders();
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
@@ -2749,6 +2946,15 @@ int main(void) {
   assert(res.restart_screen_step == 4u);      /* the POST idle */
   assert(res.restart_pending == 0u);
   assert(res.steps - res.restart_step == M2_POST_RESTART_FRAMES);
+  /* v15 (phase-15 T4): the phase-15 tape-level stratum — action row 0x19 is
+   * dispatched by the tape (the row-04 carrier install `0x7E866`/`0x7E8C1`
+   * stages code 0x19; the ported body records FIFA96_OK and is frame-neutral at
+   * the tape's `phase != 2` state, so the exact accepted mask below gains the
+   * bit with no golden re-pin). The act seam + phase 0x1F are pinned by the
+   * v14 act-9 window above (`phase15_armed` 1 / `gate_marker` 1) and the
+   * `run_phase15_riders` cross-check. */
+  assert((res.mask_restart & (1ull << 0x19)) != 0u);
+  assert((res.mask_final & (1ull << 0x19)) != 0u);
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */

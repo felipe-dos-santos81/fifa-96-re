@@ -532,6 +532,51 @@ applies the FU-180 errata: the row-0x1B stage-0 latch clear is six stores
 (`0x157C54/57/58/59/5A/5B`), not all eight. M1/M2 stay **byte-identical**;
 census 28/80 → 29/80 (**36%**).
 
+**Phase-15 close-out (T4 acceptance, 2026-10-12).** The phase is adopted as the
+M2 acceptance **v15** — a strata-only layer (the transcript is byte-identical
+to the v14 golden `7b4b241a…`, 792 lines; M1 `09b726b7…` unmoved; no re-pin —
+T1's act seam reproduced the exact FU-170 §7 act-9 cadence and T2/T3 are
+install-live/tape-dormant). `tests/test_engine_m2.c` gains the v15 provenance
+block plus the T1–T3 regression **riders** as tape/strata-level cross-checks
+(all mutation-RED): the census shape (exact 28 action + 1 phase = **29/80 =
+36%**, the phase-15 slots pinned so a silent re-wire/un-census/slot-flip fails
+the tape), the act seam + phase `0x1F` dispatch, row `0x17`'s NULL slot (the
+rows-27/29/2C precedent), the keeper-cluster install (`0x1F`→`0x1B` invoke-now)
+and the row-`0x19` tracked-opponent guard, row `09`'s stage-0 set branch and row
+`0x0D`'s NULL slot, and the row-`0x1B` stage-0 six-store latch partial clear
+(leaving `0x157C55/56`, FU180-L7). The census is confirmed **29/80 = 36%**
+(28 action + the first honest phase row), consistent across README, ENGINE.md
+and here.
+
+The honest smoke (`DISPLAY=:1`, SDL3 present) walks intro → front-end → **match**
+(`docs/screens/p15-t4-intro.png`, `-frontend.png`, `-match.png`, `-live.png`);
+the match frame matches the T2/T3 walkthrough (mean 0.0687 vs T3's 0.0684) and
+the smoke shows **no live phase-15 row** — the phase rows are install-live /
+tape-dormant, so no visible delta is claimed.
+
+The remaining phase-15 legs, each with its named owner (the phase-16 work that
+resolves it; R30/FU-182 §7 frontier): **FU175-L1** (the per-record
+`[rec+0x1C]` walker / record-threaded handler signature — unblocks rows 03/`0x17`
+and the phase rows) and **FU175-L5** (`word[0x15881A]` act-9 gate producer) →
+phase-16 act-seam follow-on; **FU175-L3** realized (the `mr->act` absorb).
+**FU176-L1 closed** by T2 (the `fifa96_keeper_arm_step` stage-3 off-by-one);
+**FU180-L7** closed by T3 (the six-store latch form + the rider above).
+**FU177-L1..L6** (row-03 deps: the `0x6DCC8` phase handler, the `0x158747` wall
+scan, `FUN_00079B58`, the phase-`0x13`/`0x14` arm, the `[rec+0x1C]` `EBX=-1`
+arg, the phase-8/0xC tails) → phase-16 row-03 (co-scope with FU175-L1).
+**FU178-L1** (row-09 arms 1/2/3, holding the `0x0C`/`0x0D` installs — co-wires
+row `0x0D`) and **FU178-L7** (the aliased descriptor reads) → phase-16 row-09
+arms. **FU179-L1** (predictor live leads) and **FU179-L7** (the `FUN_00079B58`
+receiver-timer arms) → phase-16 row-`0x19` remainder (plus L2/L3 the projection,
+L4 the `0x79C20` clamp, L5 the `[rec+0x1C]` method tied to FU175-L1).
+**FU180-L4/L5** (the `FUN_000782D0` record-0 machine and the `FUN_00077EAC`
+keeper CPU decision) and **FU180-L8** (the row-`0x0D` unported sinks) → phase-16
+keeper chain / row-`0x0D` co-wire. **FU181-L1..L6** (row-`0x17` deps + the
+act-9 stage 1/2 gates + the act-8 record pick) → phase-16 row-`0x17` producer
+(the act-4/sit-2..4 formation-order arm). The R30-first frontier itself (rows
+`0x14`/`0x22`, then `0x1A`/`0x1C`, `0x16`, `0x24`, `0x20`, `0x25`) carries
+FU182-L1..L4.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

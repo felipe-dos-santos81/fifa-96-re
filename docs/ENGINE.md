@@ -2248,6 +2248,58 @@ the build also produces the windowed `fifa96` target (`make game`).
     smoke** (scoring is a gameplay outcome the port cannot force on the SDL
     session); the post-goal continuation's runtime evidence is the v14 tape
     + the fixtures.
+- **M2 phase-15 T4 (acceptance v15 + the census close-out; 2026-10-12).**
+  Docs/assertions only — **no behavior change**: M2 v15 **byte-identical** to
+  the v14 golden (`7b4b241a…`, 792 lines; `./build/test_engine_m2 | cmp -`),
+  M1 `09b726b7…` unmoved, `make check` **110/110** (sanitized, strict), wired
+  **29/80 = 36%** and the README title **36%** unchanged. The phase is adopted
+  as the v15 acceptance (`tests/test_engine_m2.c`): a strata-only layer (no
+  re-pin — T1's act seam reproduced the exact FU-170 §7 act-9 cadence and
+  T2/T3 are install-live/tape-dormant) with a provenance block plus the T1–T3
+  regression **riders** as tape/strata-level cross-checks (`run_phase15_riders`,
+  ISO-independent, all mutation-RED): the census shape (exact 28 action + 1
+  phase, the phase-15 slots pinned so a silent re-wire/un-census/slot-flip
+  fails the tape), the act seam + phase `0x1F` dispatch (stage-0 `[0x15882A]`
+  clear), row `0x17`'s NULL slot + UNSUPPORTED dispatch (body reachable by
+  direct call), the keeper-cluster install (`0x1F` stage-2 no-slot dive installs
+  `0x1B` invoke-now) and the row-`0x19` tracked-opponent guard (`0x747EA` →
+  the weighted fallback), row `09`'s arm-0 set branch (anim `0x11`) and row
+  `0x0D`'s NULL slot, and the row-`0x1B` stage-0 six-store latch partial clear
+  (`0x157C54/57/58/59/5A/5B` cleared, `0x157C55/56` surviving — FU180-L7's
+  stage-2 rush gate; the `memset(sizeof)` form is the regression). **Census
+  confirmed 29/80 = 36%** (28 action + the first honest phase row `0x1F`),
+  mutually consistent across README/PROGRESS.md/here.
+  - **Phase-15 legs (named owners).** The remaining legs each carry their owner
+    (the phase-16 work that resolves it; R30/FU-182 §7 frontier). **Closed:**
+    FU176-L1 (T2's `fifa96_keeper_arm_step` stage-3 off-by-one fix), FU180-L7
+    (T3's six-store latch form + the v15 rider), FU175-L3 (T1's `mr->act`
+    absorb). **Act-seam follow-on (phase-16):** FU175-L1 (the per-record
+    `[rec+0x1C]` walker / record-threaded handler signature — unblocks rows
+    03/`0x17` and the phase rows) and FU175-L5 (`word[0x15881A]` act-9 gate
+    producer; FU165-L2 tie). **Row-03 (phase-16):** FU177-L1..L6 (`0x6DCC8`, the
+    `0x158747` wall scan, `FUN_00079B58`, the phase-`0x13`/`0x14` arm, the
+    `EBX=-1` third arg, the phase-8/0xC tails). **Row-09 arms (phase-16):**
+    FU178-L1 (arms 1/2/3, holding the `0x0C`/`0x0D` installs — co-wires row
+    `0x0D`) and FU178-L7 (the aliased descriptor reads). **Row-`0x19`
+    remainder (phase-16):** FU179-L1 (predictor live leads) and FU179-L7 (the
+    `FUN_00079B58` receiver-timer arms; also L2/L3 the projection, L4 the
+    `0x79C20` clamp, L5 the `[rec+0x1C]` method tied to FU175-L1).
+    **Keeper-chain (phase-16):** FU180-L4 (the `FUN_000782D0` record-0 machine),
+    FU180-L5 (the `FUN_00077EAC` CPU decision) and FU180-L8 (the row-`0x0D`
+    unported sinks — co-wire with FU178-L1). **Row-`0x17` producer
+    (phase-16):** FU181-L1..L6 (the act-4/sit-2..4 formation-order arm + the
+    act-9 stage 1/2 gates + the act-8 record pick). The R30-first frontier
+    itself (rows `0x14`/`0x22`, then `0x1A`/`0x1C`, `0x16`, `0x24`, `0x20`,
+    `0x25`) carries FU182-L1..L4. Full per-leg owner text in `docs/PROGRESS.md`.
+  - **Smoke (`DISPLAY=:1`, `p15-t4-*`).** SDL3 present: the windowed game boots
+    and walks intro → front-end → **match** (`docs/screens/p15-t4-intro.png`,
+    `p15-t4-frontend.png`, `p15-t4-match.png`, `p15-t4-live.png`). The match
+    frame is the same front-end/intro/match walkthrough as T2/T3 (mean 0.0687
+    vs T3's 0.0684; stddev 0.117 — a real scene, not the black bridge) and no
+    **live phase-15 row is visible** — the phase-15 rows are
+    install-live/tape-dormant (the act seam + restart chain is tape-pinned), so
+    no phase-15 visible delta is claimed. The exit log carries only the
+    external SDL/dbus/nvidia LSan leaks (not a regression).
 - **M2 phase-15 T1 (the native act/phase dispatch seam + row 0x17; FU-175 /
   FU-181; 2026-10-12).** The act seam (`FUN_000888FC` + the `0x8B669..0x8B672`
   clock-tail tick) is ported in `src/fifa96_engine/fifa96_match_act.c` and
