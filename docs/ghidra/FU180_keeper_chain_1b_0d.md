@@ -407,3 +407,19 @@ precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
 > `metric_lane` (`+0x69` = dz). Fresh `disassemble_bytes 0x8DCD4` this round
 > confirms the x/z low-word deltas (the y axis is never read) and the octagonal
 > distance into `out[0]`.
+
+---
+
+## 11. Erratum — M2 phase-15 final review (2026-10-12)
+
+> **FU180-L8 (§6):** "the `0x79C50`/`0x8DCD4` face/vector calls — all named
+> helpers, not decomposed here". **Corrected (this round):** `0x8DCD4` is now
+> **ported** as `fifa96_arm_dist_stage` (`fifa96_arm_helpers.c`) and is the
+> row-0x0D arm-1 metric (the §10 erratum above). It is no longer an unported
+> sink. The unported sinks remaining in L8 are `0x702F8` (arm-0 ball
+> parameter), `0x6E598` (animation selector) and `0x79C50` (face/vector).
+
+> **FU-180 §9 landing note:** "The `0x702F8`/`0x6E598`/`0x8DCD4`/`0x79C50`
+> sinks are exposed as requests (FU180-L8)." **Corrected:** `0x8DCD4` is the
+> ported `fifa96_arm_dist_stage`, called directly by the row-0x0D arm-1 body;
+> the sinks still exposed as requests are `0x702F8`/`0x6E598`/`0x79C50`.

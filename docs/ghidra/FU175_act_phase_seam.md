@@ -439,6 +439,13 @@ they cannot move the census until a body lands.
    (`0x1107EC[0..0xC]`); the dwords past `[0xC]` are unrelated. Any port must
    bound `act <= 0xC` (`FUN_000888FC` itself has no bounds check — a native
    over-index reads the adjacent data).
+7. **FU175-L7 — the act-2/`ref_machine` double-run at the T1 seam.** Act 2
+   installs its act slot with `invoke=0` (`fifa96_match_run.c`, the T1 seam)
+   while the engine still drives phase 0x18 through the separate `ref_machine`;
+   once phase 0x18 is ported the act-2 slot and the `ref_machine` would both run
+   the row. Needs a one-line act-2 suppression (or a documented single owner) at
+   the seam before phase-0x18 work. No behavior change today (phase 0x18 is
+   unported, the tick no-ops, the tape is unchanged).
 
 ---
 
@@ -516,4 +523,6 @@ stays NULL (FU181-L1).
 
 **Legs.** FU175-L1 (the per-record `[rec+0x1C]` caller) stays open; FU175-L3
 (the singleton) is now realised by the shared `mr->act` slot — no current
-fixture stages two acts; FU175-L4/L5/L6 carried unchanged.
+fixture stages two acts; FU175-L4/L5/L6 carried unchanged. **FU175-L7** (the
+act-2/`ref_machine` double-run once phase 0x18 lands — minted in the final-review
+fix round) is noted at the seam in `fifa96_match_run.c`.

@@ -86,6 +86,7 @@ int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase);
  * FU-149 L12) and the formation matrices are unported (FU181-L1). This is the
  * rows-27/29/2C precedent (a ported body with no engine installer stays
  * unwired and uncounted); the body is exported so it is tested directly and
- * ready for the act-4 seam. Returns FIFA96_OK, -FIFA96_ERR_INVALID (NULL `mr`
- * or an unset `mr->record.entity_id`). */
+ * ready for the act-4 seam. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
+ * out-of-range `mr->record.entity_id` (like every row body it assumes a
+ * non-NULL `mr`; the dispatch entry points guard that). */
 int fifa96_match_action_17(struct fifa96_match_run *mr);

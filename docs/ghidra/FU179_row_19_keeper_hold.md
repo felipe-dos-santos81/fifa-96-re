@@ -352,6 +352,11 @@ The predictor's live camera-velocity producers (`0x1577BE/C0/C2`, `0x157778`,
    `[0x157C44]`/`[0x157C48]` (the intercept scalar + triple); the remaining
    OL-33 sub-legs (the `FUN_00079C20` slot-move body, the carrier-dive
    predicates' internal bands) carry as above.
+7. **FU179-L7 — the two dropped `FUN_00079B58` self receiver-timer arms.**
+   Minted in the §9 T2 landing note: the `0x74823` (guard-pass) and `0x74B63`
+   (carrier-dive) `CALL 0x79B58` effects (`byte[+0x99] == 0 -> +0x93 = 0x10`)
+   are not ported; the `+0x99` gate producer is unported (the row-04/row-08
+   staged-0 convention).
 
 ---
 
@@ -400,3 +405,22 @@ method (FU179-L5) remain legs.
 (carrier dive) — are minted as **FU179-L7** (the `byte[+0x99] == 0 -> +0x93 =
 0x10` effect; the +0x99 gate producer is unported, the row-04/row-08 staged-0
 convention).
+
+---
+
+## 10. Erratum — M2 phase-15 final review (2026-10-12)
+
+> **FU-179 §3.3 (line 112):** "`0x747EA JGE` (tracked opponent's `+0x6B` >=
+> rec's `+0x6B`)". **Corrected — the operand order is inverted (fresh
+> `disassemble_bytes 0x747D4` this round):** the native is `0x747D4 MOV
+> ESI,dword[EAX+0x7C7]` (the **deepest-keeper** record), `0x747DA CMP ECX,ESI` /
+> `0x747DC JNZ 0x74832` (this record must be that deepest keeper), `0x747E2 MOV
+> AX,word[ESI+0x6B]`, `0x747E6 CMP AX,word[EBP+0x6B]`, `0x747EA JGE 0x74832`,
+> where `EBP = [[ECX]+0x7A6]+0x7B2]` (the tracked-opponent keeper, set at
+> `0x7479D..0x747B1`). The rejection is therefore **record (deepest keeper)
+> `+0x6B` >= tracked-opponent `+0x6B`** — the record's lane at or past the
+> opponent's lane fails, i.e. the inverse of the line quoted above; record ≤
+> opponent passes. The ported guard (`word[deepest+0x6B] >= word[opp+0x6B]`, the
+> §9 T2 note and `src/fifa96_engine/fifa96_match_handlers.c`, row-0x19 body) and
+> the merged `test_action_19_guard_tracked_opponent_rejects` already encode the
+> correct direction — documentation-only correction.

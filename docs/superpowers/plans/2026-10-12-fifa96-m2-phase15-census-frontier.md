@@ -107,3 +107,16 @@ R23–R30 run **concurrently** (the user-directed speed-up surface). Each is rea
 - **Determinism:** T1's act seam is the only tape risk (v15 additive iff the frames move); T2/T3 expect no re-pin; M1 never moves.
 - **Census:** baseline 24/80 (NOT FU-174's 22/80 — that was the pre-phase-14-T1 snapshot); target 31/80 + any live phase rows; every moving task recomputes the README % + ENGINE line in its own commit.
 - **Tooling:** ghidra-mcp is the sole evidence source (AGENTS.md rules); rea MCP only as a secondary read-only view; context7 only if SDL3/CMake docs become relevant.
+
+---
+
+## Landing notes (post-execution)
+
+> **Task 3 "Produces: rows 03 and 0x0D execute end-to-end" (line 90):** not met
+> as written. Honest landing: only row **09** was counted in T3 (its bounded
+> stage-0); row **0x0D** was ported byte-complete but is **uncounted** — its
+> only installer (row-09 arm 1, `0x80F61`) stays unported (FU178-L1), so the
+> action-table slot stays NULL (the rows-27/29/2C precedent); row **03** stays
+> **UNSUP** (FU177). The census after the wave is **29/80 = 36%** (28 action +
+> the first wired phase row 0x1F), not the self-review's 31/80 target. Recorded
+> in the SDD ledger (Ruling 7).

@@ -2632,6 +2632,12 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     if (rc != 0) return (int)rc;
   }
   if (out.act != FIFA96_ACTION_PHASE_NONE) {
+    /* FU175-L7: latent act-2/ref_machine double-run. Act 2 installs its act
+     * slot here with invoke=0 while the engine still drives phase 0x18 through
+     * the separate `ref_machine` (above); when phase 0x18 lands, the act-2 slot
+     * and the ref_machine would both run the row. Add a one-line act-2
+     * suppression at this seam before phase-0x18 work. No behavior change today
+     * (phase 0x18 is unported, its tick no-ops, the tape is unchanged). */
     rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage, 0);
     if (rc != 0) return (int)rc;
   }
