@@ -1070,6 +1070,67 @@
  * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
  * (`09b726b7…`); new M2 sha `5f7e7692…` (85 lines).
  *
+ * --- v13 acceptance completion (M2 phase-13 T4): strata + riders ------------
+ *
+ * T4 adds the phase's acceptance strata on top of the T2 re-pin without
+ * moving the tape: the transcript stays byte-identical to the v13 golden
+ * (`5f7e7692…`; no further re-pin — the FU166-L5 decision below keeps the
+ * staged session). M1 unmoved (`09b726b7…`).
+ *
+ * The phase's visible legs, asserted or referenced:
+ *   1. **The live claim pan + throw-in cut (T1, FU-157)** — the ISO tests
+ *      `test_engine_match_frame::test_live_claim_pan_row04_half_line` (the
+ *      row-04 half-line event pans `pos_x 0 -> 0x90` monotonically with
+ *      `vel_x 5` / `tracked 9`; mutation-RED verified) and
+ *      `test_engine_match_handlers::test_live_throw_in_camera_y_cut` (the
+ *      restored stage-3 `[0x157750] := 0x80`). The tape's own pan runs the
+ *      goal chain's parked-window form (v10/v12 provenance); the live
+ *      in-open-play pan is the T1 fixture's positive.
+ *   2. **The ball art (T2, FU-158)** — extended here: the captured-bank pin
+ *      `ball_bank == 128` (frame 9) stays, and the composer roll byte is now
+ *      pinned at all four acceptance samples (`0` at frame 9 — the kickoff
+ *      spawn's zero velocity gates the +1; `5`/`6`/`1` at m 58/61/72, the
+ *      motion half of the dedicated draw; the drawn frame stays in 0..7, the
+ *      0x5739D bank-8 bound).
+ *   3. **The jump chain (T3, FU-159/160/161)** — the wired row-0x0E selector
+ *      (22/80), the byte44 producer + row successor + install helper, and the
+ *      impulsion/one-shot/freeze/stop arms are unit/ISO-proven
+ *      (`test_action_0e_live_jump_selector`,
+ *      `test_live_row_0e_selector_installs_jump`,
+ *      `test_record_anim_install_row44`, `test_record_row_successor_chain`,
+ *      `test_record_jump_impulsion`, `test_record_jump_sustained_and_freeze`,
+ *      `test_record_jump_grounded_step`,
+ *      `test_live_jump_impulsion_carry_and_stop`, plus the T4 rider
+ *      `test_record_jump_arm_aux_3a_base_literal`). On this tape the wire is
+ *      dormant: `(mask_final & (1 << 0x0E)) == 0` (no tackle contact), no pool
+ *      record carries jump state at m 58 (`jumps_active == 0`) and the follow
+ *      predicate refuses.
+ *   4. **The honest dormancy**: the row-0x0E stage-2 camera/slot arm is leg
+ *      FU160-L4 (`0x82820..0x82A9C` unported — the engine reaches stage 3
+ *      only through the controlled/`jump_base` gate); the live follow stays
+ *      partial (the pan is live, the sustained follow needs the unported
+ *      receive -> follow coupling; `follow_on_tape == 0`); the jump is not
+ *      key-drivable (the row-23 tackle drain is AI/contact-gated — the T3
+ *      smoke note), so its runtime evidence is the ISO tests.
+ *   5. **The no-ISO tape path is CI-covered** (T4 rider): CTest runs the same
+ *      tape as `test_engine_m2_noiso` from the build directory, where
+ *      `game/FIFAPCCD96.iso` does not resolve, so the documented
+ *      `SKIP golden comparison (no ISO)` path is exercised even with the ISO
+ *      present in the checkout (the primary `test_engine_m2` registration
+ *      keeps pinning the golden).
+ *
+ * FU166-L5 decision (T4): **keep the staged byte-1 session.** The tape's
+ * purpose is to pin the deepest ported chain end-to-end — the
+ * queue -> scheduler -> post -> writer goal family, natively the byte-1
+ * (Practise) session's (FU-166 §5). The engine's byte-0 default is pinned
+ * where it belongs (the begin seed, asserted at match start) and covered
+ * end-to-end by `test_engine_match_frame::test_natural_goal_fallback_arm`
+ * (the direct `0x8AA7B` arm: score + table-2 situation 6/phase 5).
+ * Re-deriving this tape under byte 0 would replace the deepest chain with the
+ * shallower direct arm on the acceptance tape and re-pin a v14 for no
+ * coverage gain — the staged value is a real native session, not a fabricated
+ * one. Recorded in FU-166 (T4 status).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -1429,6 +1490,14 @@ struct m2_result {
   int32_t ball_final_x, ball_final_z;             /* the record at m 72 */
   int ball_final_drawable;
   int32_t ball_final_sx;
+  /* v13 acceptance completion (phase-13 T4): the composer roll byte at the
+   * four acceptance samples — the T2 art stratum's motion half (the drawn
+   * frame `roll & 0xF` advances while the record moves and stays inside the
+   * captured bank's 8 frames, the 0x5739D sanitizer bound). */
+  uint8_t ball_roll_first;   /* render.ball_roll at the first granted frame (9) */
+  uint8_t ball_roll_link;    /* ... at the m 58 link sample */
+  uint8_t ball_roll_goal;    /* ... at the m 61 scored sample */
+  uint8_t ball_roll_final;   /* ... at the m 72 final sample */
   /* v12 acceptance completion (phase-12 T4): the on-canvas ball stratum at
    * the first granted frame (the native view seed's visible window) and the
    * staged T2-L1 art identity at the ball slot, plus the T1 follow-arm
@@ -1949,6 +2018,9 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->ball_machine_ran = mr->entities.ball.machine_ran;
     res->ball_link_x = mr->entities.ball.x;
     res->ball_link_z = mr->entities.ball.z;
+    /* v13 acceptance completion (T4): the roll byte has advanced with the
+     * moving record (the T2 composer half). */
+    res->ball_roll_link = mr->render.ball_roll;
     /* The v11 negative, re-derived by v12 (T2): with the native view seed the
      * engine's own FU-89 clean projection of the ball slot is now **drawable**
      * — the park puts the camera at the goal mouth (pos_z 0xB28 here) looking
@@ -2020,6 +2092,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * of the parked camera, still laterally off the canvas. */
     res->ball_goal_x = mr->entities.ball.x;
     res->ball_goal_z = mr->entities.ball.z;
+    res->ball_roll_goal = mr->render.ball_roll;
     if (e->match_run.render.enabled) {
       res->ball_goal_drawable = m2_slot_clean_screen(e, 22u, &res->ball_goal_sx);
       assert(res->ball_goal_drawable == 1);
@@ -2074,6 +2147,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.camera.pos_z == 0xB48);
     res->ball_final_x = mr->entities.ball.x;
     res->ball_final_z = mr->entities.ball.z;
+    res->ball_roll_final = mr->render.ball_roll;
     if (e->match_run.render.enabled) {
       res->ball_final_drawable = m2_slot_clean_screen(e, 22u, &res->ball_final_sx);
       assert(res->ball_final_drawable == 1);
@@ -2265,6 +2339,9 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         res->ball_slot_frame = (uint8_t)e->match_run.render.entities[22u].stage.frame;
         /* phase-13 T2 (FU-158): the dedicated draw's captured source bank. */
         res->ball_bank = e->match_run.render.ball_bank;
+        /* v13 acceptance completion (T4): the roll stands at 0 before any
+         * ball motion (the kickoff spawn's zero velocity gates the +1). */
+        res->ball_roll_first = e->match_run.render.ball_roll;
         /* v4 (OL-T11-6 acceptance): the indexed canvas is RGB-visible — at
          * least one non-background pixel maps through the installed surface
          * palette to a non-black RGB triplet, so the palette is applied to
@@ -2568,8 +2645,27 @@ int main(void) {
     /* phase-13 T2 (FU-158 §5/§8.1): the staged GAMEART0 `ball.fsh` bank is the
      * dedicated draw's source (91 PLAYART slots + entry 37). */
     assert(res.ball_bank == 128u);
+    /* v13 acceptance completion (phase-13 T4): the composer roll stratum. The
+     * roll stands at 0 at the first granted frame (the kickoff spawn's zero
+     * velocity gates the +1), then advances with the moving record: 5 at the
+     * m 58 link sample, 6 one granted motion frame later at the m 61 scored
+     * sample, and 1 at m 72 (wrapped through the 0x5739D sanitizer's bank-8
+     * bound). The drawn frame (`roll & 0xF`) never leaves 0..7. */
+    assert(res.ball_roll_first == 0u);
+    assert(res.ball_roll_link == 5u);
+    assert(res.ball_roll_goal == 6u);
+    assert(res.ball_roll_final == 1u);
   }
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
+  /* v13 acceptance completion (phase-13 T4): the row-0x0E live jump selector
+   * is wired (22/80) but dormant on this tape — no record enters the row-23
+   * tackle drain (AI/contact-gated), so its bit never lands in the dispatch
+   * set. The wire's live positive is the ISO chain
+   * `test_engine_match_frame::test_live_row_0e_selector_installs_jump` (plus
+   * the unit `test_action_0e_live_jump_selector`), referenced not duplicated;
+   * the armed jump producer's own dormancy on the tape is pinned at m 58
+   * (`res.jumps_active == 0`). */
+  assert((res.mask_final & (1ull << 0x0E)) == 0u);
   assert(st.presents == (uint64_t)res.steps);
   assert(st.present_hash != 0u);
   /* The state lines pin the forced kickoff phases, the scoreless phase-2

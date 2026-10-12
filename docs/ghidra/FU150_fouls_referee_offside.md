@@ -611,7 +611,8 @@ armed step pointer (`FUN_0008AF38 0x8B669/0x8B672`) re-enters the next frame
 at `table[3] = 0x894A2`. There the stage-3 gate
 (`[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`) decides; because the
 stage-2 body's `FUN_0006E724(0x1587EC, 0)` install keeps/rerolls the ball row
-to 0/0x62/0x65 (flags 0x07, so `[0x158882] = 1`), **kind == 3 completes under
+to 0/0x62/0x63/0x64/0x65 (flags 0x07, so `[0x158882] = 1`), **kind == 3
+completes under
 byte 0 on the re-entry call** — the old `foul_kind == 3 || gate` rule was
 net-right. kind != 3 installs row 0x49 (`0x89464`, flags 0x00) and holds
 armed at stage 3. The engine models the split (`ref_restart_stage = 2`) and

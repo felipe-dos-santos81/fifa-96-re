@@ -5075,7 +5075,7 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  * the ball block's `+0x96` byte (base `0x1587EC`) written by `FUN_0006E724`
  * as `row_flags & 1` (fresh decompile) — the ball record's current anim-row
  * terminal flag. The stage-2 body's `FUN_0006E724(0x1587EC, 0, ...)` at
- * `0x8941D` keeps/rerolls the ball row to 0/0x62/0x65 (flags 0x07 ->
+ * `0x8941D` keeps/rerolls the ball row to 0/0x62/0x63/0x64/0x65 (flags 0x07 ->
  * `[0x158882] = 1`), and the kind != 3 branch then installs row 0x49
  * (`0x89464`, flags 0x00 -> 0). Net native:
  *  - **kind == 3** under byte 0: the stage-2 split, then the stage-3 entry

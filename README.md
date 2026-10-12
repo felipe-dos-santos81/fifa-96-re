@@ -42,7 +42,7 @@ the port's golden fixtures — captured byte excerpts committed under
 | `docs/PROGRESS.md` | The current progress narrative (moved out of the README): evidence-map coverage, port chains, engine/M2 acceptance state, carried legs |
 | `src/fifa96_loader/`, `include/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
 | `src/fifa96_engine/`, `include/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`docs/ENGINE.md`](docs/ENGINE.md) |
-| `tests/`, `tests/golden/` | CTest suite (108 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
+| `tests/`, `tests/golden/` | CTest suite (109 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
 | `tools/fifa96_play.c` | Host runner — the single `make run` tool ([docs/HOST_RUNNER.md](docs/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
 | `tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `tools/fifa96_detect.c` sniff |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
@@ -69,7 +69,7 @@ percentage above is derived from the `docs/ENGINE.md` wired-row census.
 ## Build and run
 
 ```bash
-make check                     # configure + strict build + full CTest suite (108 tests)
+make check                     # configure + strict build + full CTest suite (109 tests)
 make game                      # windowed native engine (needs SDL3 + game/FIFAPCCD96.iso)
 make run FILE=game/FIFAPCCD96.iso    # flagship: sniff the ISO, bounded decode pass under build/run/
 make run FILE=tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode

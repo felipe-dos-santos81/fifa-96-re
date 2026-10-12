@@ -295,6 +295,36 @@ byte-exact** (`09b726b7…`/`5f7e7692…`, no re-pin); `make check` 108/108
 (`docs/screens/p13-t3-live-kickoff.png` `00:00` with the ball art ->
 `p13-t3-live-play.png` `00:05` with moving records); the tackle-driven jump
 is not key-drivable, so the live chain's evidence is the ISO tests.
+**Phase-13 T4 (2026-10-12) closes the wave: acceptance v13 + the two
+phase-12 riders + the honest smoke.** The M2 tape (T2's v13 re-pin) gains the
+phase's acceptance strata without moving: the T1 pan/throw-in positives
+referenced, the T2 ball stratum extended with the composer roll pins (`0` at
+frame 9 — the kickoff spawn's zero velocity; `5`/`6`/`1` at m 58/61/72), the
+T3 jump chain referenced with its tape dormancy asserted (row 0x0E never
+dispatched on the tape; `jumps_active`/`follow_on_tape` refuse), and the
+honest dormancy named (FU160-L4 stage-2 arm, partial live follow, jump not
+key-drivable). Riders: the **aux-`0x3A` jump-arm regression pin** (row `0x5C`
+f2 aux `0x243A`, fresh `read_memory 0x10EDBE`; `ramp(0x18) = 18` asserted
+literally, mutation-RED verified by reintroducing the `dword[+0x81]>>16`
+alias strike) makes the alias class regression-proof on the second ported
+one-shot arm, and the **no-ISO tape path is now CI-covered** (the
+`test_engine_m2_noiso` CTest registration runs the same tape from the build
+directory, where `game/FIFAPCCD96.iso` does not resolve: `SKIP golden
+comparison (no ISO)`, rc 0, even with the ISO present). FU166-L5 decided
+**keep the staged byte-1 session** (the tape pins the deepest ported chain —
+queue -> scheduler -> post -> writer; the byte-0 default stays pinned at
+begin and is covered end-to-end by `test_natural_goal_fallback_arm`);
+FU166-L6's residuals are folded (kind proxy, decision-word check, camera
+gates, teardown poke) and the keep/reroll set swept to
+`{0,0x62,0x63,0x64,0x65}` at all five sites (fresh `decompile_function
+0x6E724`). **M1/M2 byte-exact** (`09b726b7…`/`5f7e7692…`, no further re-pin);
+`make check` 109/109 (sanitized, strict; +1 = the no-ISO registration);
+wired 22/80 (README title 27%). The `p13-t4-*` smoke shows the kickoff ball
+art (byte-identical to `p13-t2-kickoff`, deterministic), live play with
+moving records (AE 2636-3458 per walk window), the near-field close-up cut
+(no sustained whole-scene pan isolated on screen) and the sparse late
+lone-record framing; the jump stays not key-drivable (the ISO tests are its
+runtime evidence).
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

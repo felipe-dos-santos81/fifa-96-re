@@ -597,7 +597,7 @@ table `0x89214`); the aborting body incremented the stage before the gate
 at `table[3] = 0x894A2` and bypasses `0x89487`. The stage-3 gate
 `[0x158882] != 0 || kind == 3 || [0x14C32A] != 0` then decides; the stage-2
 `FUN_0006E724(0x1587EC, 0, ...)` install at `0x8941D` keeps/rerolls the ball
-row to 0/0x62/0x65 (flags 0x07 -> `[0x158882] = 1`), so **kind == 3
+row to 0/0x62/0x63/0x64/0x65 (flags 0x07 -> `[0x158882] = 1`), so **kind == 3
 completes under byte 0 on the re-entry call** (the old
 `foul_kind == 3 || gate` rule was net-right); kind != 3 installs row 0x49 at
 `0x89464` (flags 0x00) and holds armed at stage 3. The engine models the
@@ -610,7 +610,57 @@ The ball block (base `0x1587EC`) `+0x96` byte `[0x158882]` is set by every
 `0x887D5` (`FUN_000886D4`, row 3, the match reset -> 1), `0x8C2CE`
 (`FUN_0008C24C`, row 0, the kickoff commit -> 1), `0x8A18C` (row 0x48), the
 `FUN_0006FE84` appearance-machine pairs (`0x6FF37`/`0x6FF85`), and the act-2
-body's own `0x8941D` (keep/reroll -> rows 0/0x62/0x65, all flags 0x07 -> 1)
+body's own `0x8941D` (keep/reroll -> rows 0/0x62/0x63/0x64/0x65, all flags 0x07 -> 1)
 and `0x89464` (row 0x49 -> 0). The engine does not model the byte; a future
 port should track the ball row-terminal flag to reproduce the stage-3 gate
 without the kind proxy.
+
+---
+
+## T4 status — the acceptance decision + the residuals fold (phase-13, 2026-10-12)
+
+**FU166-L5 decided: keep the M2 acceptance tape's staged byte-1 session (no
+re-derivation).** The tape's purpose is to pin the deepest ported chain
+end-to-end — the queue -> scheduler -> post -> writer goal family, which is
+natively the byte-1 (Practise) session's. The engine's byte-0 default stays
+pinned where it belongs (the `fifa96_match_run_begin` seed, asserted at match
+start on the tape) and is covered end-to-end by
+`test_engine_match_frame::test_natural_goal_fallback_arm` (the direct `0x8AA7B`
+arm: score + table-2 situation 6 / phase 5). Re-deriving the tape under byte 0
+would replace the deepest chain with the shallower direct arm on the
+acceptance tape and re-pin a v14 for no coverage gain; the staged value is a
+real native session, not a fabricated one. Recorded in `tests/test_engine_m2.c`
+(the v13 acceptance-completion block) and `docs/ENGINE.md` (T4 section).
+
+**FU166-L6 residuals folded (from the T3 round-2 re-review).** The four named
+compressions, made explicit here:
+- the **kind proxy** — the engine's stage-3 gate passes kind 3 via
+  `foul_kind == 3` where the native passes via the ball-row flag
+  `[0x158882] = 1` left by the keep/reroll install (`0x8941D`); the future
+  port tracks the ball row-terminal flag (the writer catalogue above);
+- the **decision-word check** (`0x89494/0x89499`: the caller's decision word
+  must be 6 or 0x10) is not modeled;
+- the **camera-word gates** (`word[0x15883A].hi > 0x20`,
+  `word[0x158816].hi < 0x78`, `word[0x158848] != 0` aborts) are not modeled;
+- the **teardown poke** — the `0x895E6` teardown's `[0x15882A] = 1` poke and
+  the abort-skip split are modeled only through `ref_restart_stage`; the
+  `[0x158828]` machine-kind / `[0x158808]` step-pointer stores stay
+  unmodeled.
+
+**Keep/reroll set sweep (T4).** The round-2 text's `0/0x62/0x65` is corrected
+in place to `0/0x62/0x63/0x64/0x65` (all five sites: this doc x2, FU-150,
+`docs/ENGINE.md`, the `fifa96_match_run.c` comment and the frame test). Fresh
+`decompile_function 0x6E724` this task confirms the keep set
+(`{'\0','b','c','d','e'}` = `{0,0x62,0x63,0x64,0x65}`) and the reroll switch
+(`& 3`: 0 -> the param, 1 -> 99 = 0x63, 2 -> 100 = 0x64, 3 -> 0x65), so the
+full outcome set is `{0,0x62,0x63,0x64,0x65}`; all five rows carry flags
+`0x07`, so the derived `[0x158882] = row_flags & 1 = 1` is unchanged.
+
+**Quote-rewording marker (T4).** The round-2 erratum's blockquote above
+condenses its source without marking the rewording: the verbatim round-1
+sentences are "Because the engine's session gate is binary, the `!= 0` term
+always holds once `0x8947A` passes, so the effective native condition is
+**abort iff the session gate is 0**" and "The engine now models the byte-0
+abort for all kinds"; the quoted "the engine now aborts iff the gate is 0" is
+a rewording of those two (the blockquote's ellipsis marks the omission, not
+the rewording). The conclusion stands — only the quote form is marked here.

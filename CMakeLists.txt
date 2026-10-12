@@ -607,6 +607,11 @@ target_compile_options(test_engine_m2 PRIVATE -fsanitize=address,undefined -fno-
 target_link_options(test_engine_m2 PRIVATE -fsanitize=address,undefined)
 add_test(NAME test_engine_m2 COMMAND test_engine_m2
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+# The no-ISO tape path (`SKIP golden comparison (no ISO)`) stays CI-covered
+# even with the ISO present: same tape, run where `game/FIFAPCCD96.iso`
+# does not resolve (the build directory).
+add_test(NAME test_engine_m2_noiso COMMAND test_engine_m2
+         WORKING_DIRECTORY ${CMAKE_BINARY_DIR})
 
 find_package(SDL3 QUIET)
 if(SDL3_FOUND)

@@ -1937,7 +1937,8 @@ the build also produces the windowed `fifa96` target (`make game`).
     next driver call (`0x8B669/0x8B672`) re-enters at `table[3] = 0x894A2`,
     bypassing `0x89487`. The stage-3 gate's `[0x158882]` term is the ball
     block `+0x96` row-terminal flag: the stage-2 `FUN_0006E724(0x1587EC, 0)`
-    keep/reroll leaves rows 0/0x62/0x65 (flags 0x07 -> 1), so **kind == 3
+    keep/reroll leaves rows 0/0x62/0x63/0x64/0x65 (flags 0x07 -> 1), so
+    **kind == 3
     completes under byte 0 on the re-entry call** (the old `kind==3 || gate`
     exception was net-right), while kind != 3 installs row 0x49 (flags 0x00)
     and holds armed. The engine models the split as `ref_restart_stage = 2`
@@ -1948,6 +1949,78 @@ the build also produces the windowed `fifa96` target (`make game`).
     semantics and the ball-base writer catalogue (`0x887D5` row 3,
     `0x8C2CE` row 0, `0x8A18C` row 0x48, `0x8941D` keep/reroll,
     `0x89464` row 0x49).
+- **M2 phase-13 T4 (acceptance v13 + the two riders + smoke; 2026-10-12).**
+  The final phase-13 slice adds the acceptance strata on the T2 v13 tape
+  without moving it — the transcript stays byte-identical to the v13 golden
+  (`5f7e7692…`; no further re-pin), M1 unmoved (`09b726b7…`):
+  - **Acceptance strata** (`tests/test_engine_m2.c`, the v13
+    acceptance-completion block): the T1 positives are referenced
+    (`test_live_claim_pan_row04_half_line`,
+    `test_live_throw_in_camera_y_cut`); the T2 ball stratum is extended — the
+    captured-bank pin `ball_bank == 128` stays and the composer roll is now
+    pinned at all four acceptance samples (`0` at frame 9 — the kickoff
+    spawn's zero velocity gates the +1; `5`/`6`/`1` at m 58/61/72; the drawn
+    frame stays in 0..7, the 0x5739D bank-8 bound); the T3 jump chain is
+    referenced (the row-0x0E selector, the byte44/successor/install and the
+    impulsion/freeze/stop pins) and its tape dormancy asserted
+    (`(mask_final & (1 << 0x0E)) == 0`, `jumps_active == 0`,
+    `follow_on_tape == 0`); the honest dormancy is named (FU160-L4's
+    stage-2 camera/slot arm, the partial live follow, the non-key-drivable
+    jump).
+  - **FU166-L5 decided: keep the M2 tape's staged byte-1 session** — the
+    tape pins the deepest ported chain end-to-end (queue -> scheduler ->
+    post -> writer, natively the byte-1 Practise family); the engine's
+    byte-0 default is pinned where it belongs (the begin seed, asserted at
+    match start) and covered end-to-end by
+    `test_engine_match_frame::test_natural_goal_fallback_arm` (the direct
+    `0x8AA7B` arm: score + table-2 situation 6/phase 5). Re-deriving would
+    trade the deepest chain for the shallower direct arm on the acceptance
+    tape and re-pin a v14 for no coverage gain. Recorded in FU-166's T4
+    status.
+  - **Riders (from phase-12's final review).** (1) The aux-`0x3A` jump-arm
+    regression pin (`test_record_jump_arm_aux_3a_base_literal`): the row
+    `0x5C` frame-2 aux `0x243A` (fresh `read_memory 0x10EDBE`:
+    `00 01 3A 24 02`) reaches the arm; `fifa96_camera_ramp(0x18) == 18` is
+    asserted literally and the frame asserts `jump_base == 18` /
+    `jump_timer == 20` / `pos_y == 23` / the one-shot `0x2400` — RED-verified
+    by reintroducing the `dword[+0x81] >> 16` alias strike (reading the
+    `+0x81` countdown resolves `ramp(0) = 3` and aborts exactly there), so
+    the alias class is regression-proof on the second ported one-shot arm
+    (the 0x0E guard stays in `test_record_jump_arc_starter`). (2) The no-ISO
+    tape path is now CI-covered: the CTest registration
+    `test_engine_m2_noiso` runs the same tape from the build directory,
+    where `game/FIFAPCCD96.iso` does not resolve, so
+    `SKIP golden comparison (no ISO)` (rc 0) is exercised even with the ISO
+    present in the checkout; the primary registration keeps pinning the
+    golden.
+  - **Docs sweep**: the keep/reroll set corrected to `{0,0x62,0x63,0x64,0x65}`
+    (from `0/0x62/0x65`) at all five sites (the `fifa96_match_run.c`
+    comment, the frame test, this section's fix-round-2 text, FU-150,
+    FU-166 x2) — fresh `decompile_function 0x6E724` re-verifies the keep set
+    and the reroll switch; FU166-L6's four residuals are folded explicitly
+    (kind proxy, decision-word check, camera gates, teardown poke) and the
+    round-2 blockquote's rewording is marked (FU-166 T4 status).
+  - **Goldens**: M1 `09b726b7…` byte-exact; M2 `5f7e7692…` (v13)
+    byte-exact, no re-pin. `make check` **109/109** (sanitized, strict;
+    +1 = the no-ISO registration). `wired` 22/80 unchanged; README title
+    stays **27%** (verified `floor(100*22/80) = 27`).
+  - **Smoke** (`DISPLAY=:1`, `p13-t4-*`; honest): the panel -> match shows
+    the kickoff with the ball art (byte-identical to `p13-t2-kickoff`,
+    deterministic across sessions); the kick starts the live play
+    (kickoff -> play AE 6280; records move, held-key walk AE 2636-3458 per
+    window) and the visible window then cuts to a near-field close-up (the
+    T1-reported class; no sustained whole-scene pan isolated on screen); the
+    late match holds a sparse near-field framing with a lone record (clock
+    advancing, AE ~150/window — the honest visible state); the jump stays
+    not key-drivable (the tackle drain is contact-gated), so its runtime
+    evidence is the ISO tests. Captures:
+    `docs/screens/p13-t4-{frontend,live-kickoff,live-play,camera-cut,walk,hold}.png`.
+  - **Leg register after T4**: closures/decisions — FU166-L5 decided (keep;
+    the byte-0 tape re-derivation is no longer planned), FU166-L6 residuals
+    folded (still a leg), T1-L1's alias rider closed by the pin. Carried
+    unchanged: FU160-L4 (stage-2 camera arm), FU159-L5, FU161-L3/L4/L5/L6,
+    the row-0x5E live installer, the row-0x12 f3/f5 sub-arms, R5-L1..L7,
+    R2-L1/R2-L4, L155.1..4, the FU-149..152 leg sets.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

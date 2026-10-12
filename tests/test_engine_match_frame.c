@@ -2423,6 +2423,45 @@ static void test_record_jump_arc_starter(void) {
   drop_fixture(f);
 }
 
+/* phase-13 T4 rider (from the phase-12 final review): the aux-`0x3A` jump
+ * arm regression pin — the alias-strike class made regression-proof on the
+ * second ported one-shot arm (the `0x0E` arm's `timer81 = 0` guard in
+ * test_record_jump_arc_starter covers the first). The arm's ramp argument is
+ * its own `+0x83` marker (fresh `disassemble_bytes` this task, `0x6ED08`
+ * `MOV word[EBP+0x83],0x18`; `0x6ED11 MOV EAX,dword[EBP+0x81]; 0x6ED17 SAR
+ * EAX,0x10`; `0x6ED1A CALL 0x702F8`; the stores `0x6ED1F/0x6ED26` and
+ * `0x6ED33 MOV dword[EBP+0x5D],0x18`) — `dword[+0x81] >> 16` is the word at
+ * `+0x83` (the just-stored 0x18), NOT the `+0x81` countdown; the fifth
+ * `dword>>16` alias strike. The row `0x5C` frame-2 aux is `0x243A` (native
+ * frame table `0x10EDBE`: `00 01 3A 24 02`, fresh `read_memory` this task),
+ * so this row genuinely reaches the arm. `timer81 = 0` would make the alias
+ * misread resolve `ramp(0) = 3`; the `jump_base == 18` assert is the RED
+ * check without the constant (mutation-verified: reading `timer81` aborts
+ * here). */
+static void test_record_jump_arm_aux_3a_base_literal(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+  /* the live path: the row-0x5C frame-2 install stages the native aux word */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5C, 2) == FIFA96_OK);
+  assert(e->anim_id == 0x5Cu && e->frame == 2u);
+  assert(fifa96_camera_ramp(0x18) == 18);   /* the literal base */
+  e->timer81 = 0;   /* the arm must NOT read it (the alias trap) */
+  one_granted_frame(&mr);
+  /* The arm sets base/timer = ramp(0x18) = 18 and pos_y = 0x18; the same
+   * frame's arc advances the timer by delta 2 and samples the shared
+   * 0x10F3C4 table at t = 20 (1600 - 1577 = 23). */
+  assert(e->jump_base == 18 && e->jump_timer == 20);
+  assert(e->pos_y == 23);
+  assert(e->aux_word == 0x2400u);   /* one-shot: only the low byte cleared */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-159 §4.1/§5.4 (T3): the FUN_0006E598 store core + the row-flags bit-0
  * producer (+0x44). First-hand row-table values: row 0x00 flags 0x07
  * (terminal -> 1), row 0x5E flags 0x00 (-> 0), row 0x26 flags 0x07 (-> 1).
@@ -3512,7 +3551,8 @@ static void test_taker_armed_referee_rows_resolve(void) {
  * armed and the next driver call dispatches `table[3] = 0x894A2`. The
  * stage-3 gate then decides on the ball row-terminal flag `[0x158882]`:
  * kind == 3 leaves it 1 (the `0x8941D` keep/reroll install lands rows
- * 0/0x62/0x65, flags 0x07), so the decision completes on the re-entry call;
+ * 0/0x62/0x63/0x64/0x65, flags 0x07), so the decision completes on the
+ * re-entry call;
  * kind != 3 installs row 0x49 at `0x89464` (flags 0x00) and the gate-0 term
  * aborts (`0x894B7`), still armed at stage 3. The engine models the split as
  * `ref_restart_stage = 2`. */
@@ -5069,6 +5109,7 @@ int main(void) {
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();
   test_record_jump_arc_starter();
+  test_record_jump_arm_aux_3a_base_literal();
   test_record_anim_install_row44();
   test_record_row_successor_chain();
   test_record_jump_case_0f_snap_frame3();
