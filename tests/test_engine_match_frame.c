@@ -6,6 +6,7 @@
 
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_engine_internal.h"
+#include "fifa96_engine/fifa96_match_act.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
@@ -3541,14 +3542,15 @@ static void test_engine_referee_contact_fk(void) {
   assert(mr.referee.rec_first == 5 && mr.referee.rec_second == 6);
   assert(mr.incident_x == 0x500 && mr.incident_z == 0);
   assert(mr.referee.sequence == FIFA96_REF_SEQ_NONE);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 1u);            /* stage 0 ran immediately */
   assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 phase write */
   assert(mr.ref_whistle == 0x1Eu);               /* the soft-foul whistle */
-  /* the act-2 decision step: phase 7 + the FK taker on the controlled team */
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  /* the act-2 decision step (the act-machine tick): phase 7 + the FK taker on
+   * the controlled team; the terminal clears the act slot */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.act.id == 0);
   assert(mr.ref_speech == 0x2Au);
   assert(mr.entities.team[1].target == 12);
   assert(mr.entities.team[1].records[1].code == 0x12u);  /* FK on the fouled side */
@@ -3567,7 +3569,7 @@ static void test_engine_referee_contact_fk(void) {
     assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
   }
   assert(mr.state.phase == 0x0Au);
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 6u);
   assert(mr.ref_speech == 0x23u);
   assert(mr.entities.team[1].records[1].code == 0x13u);  /* penalty taker */
@@ -3592,7 +3594,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
   match_frame_stage_restarts(&mr);
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);
   assert(mr.entities.team[1].records[1].code == 0x12u);
   mr.record.entity_id = 12;             /* team 1 record 1 */
@@ -3619,7 +3621,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
     const int32_t spot[3] = {0x100, 0, -0x800};
     assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
   }
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 6u);
   assert(mr.entities.team[1].records[1].code == 0x13u);
   mr.record.entity_id = 12;
@@ -3668,19 +3670,19 @@ static void test_engine_referee_restart_default_gate_split(void) {
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
   assert(mr.referee.foul_kind == 0u);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 1u);    /* stage 0 ran: whistle + phase 0xA */
   assert(mr.state.phase == 0x0Au);
   assert(mr.ref_whistle == 0x1Eu);
   /* the split: the machine stays armed, the stage advances, no decision */
-  assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 2u);
   assert(mr.state.phase == 0x0Au);
   assert(mr.ref_speech == 0u);
   /* the stage-3 hold (kind != 3, gate 0): still armed, still no decision */
-  assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 2u);
   assert(mr.state.phase == 0x0Au);
   assert(mr.ref_speech == 0u);
@@ -3699,15 +3701,15 @@ static void test_engine_referee_restart_default_gate_split(void) {
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
   mr.referee.foul_kind = 3u;             /* staged: the act-2 gate test */
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.act.id == 2);
   assert(mr.state.phase == 0x0Au);
-  assert(fifa96_match_run_referee_step(&mr) == 1);   /* the split */
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the split */
+  assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 2u);
   assert(mr.state.phase == 0x0Au);
-  assert(fifa96_match_run_referee_step(&mr) == 1);   /* the stage-3 decision */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the stage-3 decision */
   assert(mr.state.phase == 7u);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.act.id == 0);
   assert(mr.ref_speech == 0x2Au);
   assert(mr.entities.team[1].target == 12);
   assert(mr.entities.team[1].records[1].code == 0x12u);
@@ -3855,11 +3857,11 @@ static void test_engine_referee_offside_chain(void) {
   assert(fifa96_match_run_referee_step(&mr) == 1);
   assert(mr.referee.stage == 2u);
   assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.act.id == 2);
   assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 on return */
-  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);                  /* kind 3 forces free kick */
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.act.id == 0);
   assert(mr.ref_speech == 0x2Au);
   assert(mr.entities.team[1].records[1].code == 0x12u);  /* FK on the fouled side */
   assert(mr.entities.team[1].target == 12);

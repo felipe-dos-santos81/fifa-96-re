@@ -526,3 +526,28 @@ writes beyond this slice file and the workspace report.
 > this wave) and the phase-15 close. FU-183's read-only derivations (the producer
 > chain, the `0x1107EC` overlay, the arm bytes, the row-0x17 verdict) are
 > unaffected; only the stale count sentence is corrected.
+
+---
+
+## 10. Phase-16 T1 status (append, controller-ruled 2026-10-12)
+
+T1 implemented the controller's NEEDS_CONTEXT ruling **(B)**: the act machine
+owns the one genuinely producer-live unported phase row — **phase `0x18` / act
+2** (§5 rank 2; handler `0x8922C` = the free-kick/penalty hand-off, ported as
+`fifa96_match_action_phase_18` over the existing `match_run_ref_step_restart`).
+The sit-9 / sit-0xA producer dispatches act 2 invoke-now (the native
+`FUN_000888FC(2, stage, BX=1)`) and the clock-tail tick advances it; the ad-hoc
+`ref_machine = REF_RESTART` route (the FU175-L7 double-run) is **retired** — the
+act slot is the single owner. Census `29/80 → 30/80 = 37%`; M1/M2 byte-identical
+(no re-pin).
+
+**Ruling W2 (row 0x17).** The sit-2..4 formation-order arm is a proven no-op
+(§7): its `FUN_0008C974` counter is fed only by the unported
+`0x14C360`/`0x157BD2` matrices, and those have no engine producer
+(`match_run_ref_view` stages `duel_ok = 1` for exactly this reason). Row `0x17`
+therefore stays NULL and uncounted; **no arm code was written** (no fakes;
+unreachable → legs). The row-0x17 producer chain remains the existing legs
+**FU183-L1** (the formation-order producer), **FU183-L2** (the act-4 body /
+phase-0x1A row), **FU183-L3** (the invoke-now install port) and **FU183-L6**
+(the sit-1 arm / act-1 stage-1 hand-off). No new legs minted; the existing set
+stands.

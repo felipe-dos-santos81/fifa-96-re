@@ -101,8 +101,8 @@ static void test_tick_timer_and_completion(void) {
   mr.state.frame_delta = 2;
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);     /* id 0 -> no-op */
   assert(mr.act.id == 0 && mr.state.phase == 0u);
-  /* act 2 -> phase 0x18 unported: installs, but the tick does nothing */
-  assert(fifa96_match_act_dispatch(&mr, 2, 0, 0) == FIFA96_OK);
+  /* act 1 -> phase 0x17 unported: installs, but the tick does nothing */
+  assert(fifa96_match_act_dispatch(&mr, 1, 0, 0) == FIFA96_OK);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.act.timer == 0);
   /* act 9 -> phase 0x1F: 30 ticks of delta 2 reach 0x3C */
@@ -122,6 +122,56 @@ static void test_tick_timer_and_completion(void) {
   assert(mr.act9_gate == 1u);                 /* the derived marker */
   assert(mr.act.id == 0 && mr.act.timer == 0 && mr.act.stage == 0);
   assert(fifa96_match_act_tick(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-183 §5/§6 rank 2 (phase-16 T1): phase 0x18 is the wired act-2 row. The
+ * body is the derived free-kick/penalty hand-off; the act machine owns it (the
+ * sit-9/sit-0xA producer dispatches act 2 invoke-now, the clock tail ticks it).
+ * Mutation-RED: a NULL phase-0x18 slot leaves the phase unwritten and the act
+ * slot installed, so every assertion below fails. */
+static void test_phase_18_registered(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x18].fn == fifa96_match_action_phase_18);
+  assert(fifa96_match_dispatch_phase(&mr, 0x18) == FIFA96_OK);
+  assert(mr.state.phase == 0x0Au);      /* the stage-0 hand-off write */
+  assert(mr.ref_restart_stage == 1u);
+  assert(fifa96_match_dispatch_phase(NULL, 0x18) == -FIFA96_ERR_INVALID);
+}
+
+/* The act-2 invoke-now runs the phase-0x18 stage-0 hand-off on the dispatch
+ * call (the native FUN_000888FC(2, stage, BX=1)); the act machine then ticks
+ * the row and its terminal clears the act slot. */
+static void test_phase_18_act_owns_handoff(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  assert(fifa96_match_act_dispatch(&mr, 2, 0, 1) == FIFA96_OK);
+  assert(mr.act.id == 2 && mr.act.timer == 2);   /* the head timer add */
+  assert(mr.state.phase == 0x0Au);               /* the stage-0 phase write */
+  assert(mr.ref_restart_stage == 1u);
+  assert(mr.ref_whistle == 0x1Eu);               /* the soft-foul whistle */
+  /* the tick advances the hand-off (the act machine owns it); the decision
+   * terminal clears the act slot */
+  mr.session_gate_14c32a = 1;                    /* the decision gate */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.state.phase == 7u);                  /* the FK default decision */
+  assert(mr.act.id == 0 && mr.act.stage == 0 && mr.act.timer == 0);
+}
+
+/* The genuinely-live producer (the census claim): situation 9 (the referee
+ * restart path) reaches the phase-0x18 row through the shared set-piece entry
+ * and the act machine. Mutation-RED: a NULL row leaves the phase at 2. */
+static void test_phase_18_producer_live_via_sit9(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;                      /* force the direct path */
+  assert(fifa96_match_run_set_piece(&mr, 9, 0, 0) == 0);
+  assert(mr.act.id == 2);                        /* the act machine installed act 2 */
+  assert(mr.ref_restart_stage == 1u);            /* stage 0 ran (invoke-now) */
+  assert(mr.state.phase == 0x0Au);               /* the phase-0x18 body wrote it */
 }
 
 /* Row 0x17 is NOT counted: its table slot is NULL (no engine installer — the
@@ -205,6 +255,9 @@ int main(void) {
   test_dispatch_installs_and_latches();
   test_dispatch_invoke_runs_handler();
   test_tick_timer_and_completion();
+  test_phase_18_registered();
+  test_phase_18_act_owns_handoff();
+  test_phase_18_producer_live_via_sit9();
   test_row_17_not_counted();
   test_row_17_phase_gate_resets();
   test_row_17_stage_walk();

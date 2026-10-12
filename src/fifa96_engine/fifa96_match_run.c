@@ -2612,33 +2612,31 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     rc = (fifa96_err_t)fifa96_match_run_phase_arm(mr, out.phase);
     if (rc != 0) return (int)rc;
   }
-  /* FU-150 P2: the act row's FUN_000888FC invocation. Act 2 (the sit-9/sit-0xA
-   * rows) has a ported body: the derived phase-0x18 free-kick/penalty hand-off
-   * machine (the `ref_machine`), seeded with the row's stage (0 for sit 9, 1
-   * for sit 0xA). Act 9 (sit 0xC, FU-170 §7) writes phase 0x15 on the
-   * controlled side (`0x88F9A`..`0x88FB0`) and installs act 9; the act machine
-   * then ticks the phase-0x1F row from the clock tail. Other acts install the
-   * slot (0x8890A) but their phase rows stay unported (OL-13). The native
-   * invoke-now (BX=1) is deferred to the clock-tail tick for act 9 to preserve
-   * the granted-frame cadence (FU170-L1). Do NOT clear `situation_pending`: the
-   * native sit-0xC dispatch does not touch `[0x15B6C0]`. */
+  /* FU-150 P2 / FU-183 §5 (phase-16 T1): the act row's FUN_000888FC invocation.
+   * Act 2 (the sit-9/sit-0xA rows) is phase 0x18 = the derived free-kick /
+   * penalty hand-off (`fifa96_match_action_phase_18` -> `match_run_ref_step_restart`).
+   * The ACT MACHINE owns the row: seed the body's restart stage and dispatch
+   * act 2 invoke-now (the native `FUN_000888FC(2, stage, BX=1)`), so the
+   * stage-0 hand-off runs on this call exactly as the retired direct route did;
+   * the clock-tail tick (`fifa96_match_act_tick`) then advances it each granted
+   * frame. The ad-hoc `ref_machine = REF_RESTART` route (the FU175-L7
+   * double-run) is retired — the act slot is the single owner. Act 9 (sit 0xC,
+   * FU-170 §7) writes phase 0x15 on the controlled side (`0x88F9A`..`0x88FB0`)
+   * and installs act 9; its invoke defers to the tick to preserve the
+   * granted-frame cadence (FU170-L1). Other acts install the slot (0x8890A) but
+   * their phase rows stay unported (OL-13). Do NOT clear `situation_pending`:
+   * the native sit-0xC dispatch does not touch `[0x15B6C0]`. */
   if (out.act == 2u) {
-    mr->ref_machine = FIFA96_MATCH_RUN_REF_RESTART;
     mr->ref_restart_stage = out.stage;
-    rc = (fifa96_err_t)fifa96_match_run_referee_step(mr);
-    if (rc != 0) return (int)rc;
   } else if (out.act == 9u) {
     rc = (fifa96_err_t)match_run_write_phase(mr, 0x15u);
     if (rc != 0) return (int)rc;
   }
   if (out.act != FIFA96_ACTION_PHASE_NONE) {
-    /* FU175-L7: latent act-2/ref_machine double-run. Act 2 installs its act
-     * slot here with invoke=0 while the engine still drives phase 0x18 through
-     * the separate `ref_machine` (above); when phase 0x18 lands, the act-2 slot
-     * and the ref_machine would both run the row. Add a one-line act-2
-     * suppression at this seam before phase-0x18 work. No behavior change today
-     * (phase 0x18 is unported, its tick no-ops, the tape is unchanged). */
-    rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage, 0);
+    /* Act 2 is invoke-now (the stage-0 hand-off runs on this call); act 9 (and
+     * every other act) installs only, its invoke deferred to the clock tail. */
+    rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage,
+                                                 out.act == 2u ? 1 : 0);
     if (rc != 0) return (int)rc;
   }
   return 0;
@@ -5324,7 +5322,34 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->global_5882a = 0;                          /* 0x8955F */
   }
   mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
+  /* FU-183 §5 (phase-16 T1): the act machine owns phase 0x18 — clear the act-2
+   * slot at the terminal (the retired `ref_machine = REF_RESTART` route no
+   * longer does, so nothing else would clear it). */
+  if (mr->act.id == 2) {
+    mr->act.id = 0;
+    mr->act.stage = 0;
+    mr->act.timer = 0;
+  }
   return 1;
+}
+
+/* FU-183 §5/§6 rank 2 (phase-16 T1): the phase-0x18 / act-2 row body — the
+ * derived free-kick / penalty hand-off. The native act-2 handler `0x8922C` is
+ * the per-record phase-0x18 timeline; the derived body is the ported
+ * `match_run_ref_step_restart` (stages 0/1/2, FU-150 erratum). The act machine
+ * owns the row: `match_run_situation_side` dispatches act 2 invoke-now (the
+ * native `FUN_000888FC(2, stage, BX=1)`) and the `0x8B669` clock-tail tick
+ * advances it each granted frame (FU175-L7's ad-hoc `ref_machine` double-run is
+ * retired). The head accumulates the act timer (`word[0x158818] +=
+ * word[0x157A64]`, the 0x8922C head); the terminal (inside the body) clears the
+ * act slot. Returns FIFA96_OK (the phase-row convention; the native
+ * `FUN_000888FC`/clock-tail invoke ignores the handler's return), or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_18(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);
+  (void)match_run_ref_step_restart(mr);
+  return FIFA96_OK;
 }
 
 int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
@@ -5527,8 +5552,6 @@ int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {
       if (out.done != 0u && mr->ref_machine == machine)
         mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
       return 1;
-    case FIFA96_MATCH_RUN_REF_RESTART:
-      return match_run_ref_step_restart(mr);
     default:
       return 0;
   }

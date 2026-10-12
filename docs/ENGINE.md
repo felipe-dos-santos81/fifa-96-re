@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-29/80 dispatch rows wired (28 action + the first wired phase row 0x1F), the
+30/80 dispatch rows wired (28 action + the wired phase rows 0x18 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,8 +260,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **29/80 rows wired** (28 action + the first phase
-  row `0x1F`) — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **30/80 rows wired** (28 action + the phase rows
+  `0x18`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -2321,6 +2321,29 @@ the build also produces the windowed `fifa96` target (`make game`).
   post-confirm STATE16 bridge drew black in this session — the visible match
   was **not reached**, so no live gameplay reach is claimed; T1 is
   tape-dormant, so no visible delta is expected.
+- **M2 phase-16 T1 (the act machine owns phase 0x18 / act 2; FU-183;
+  2026-10-12).** The one genuinely producer-live unported phase row lands:
+  phase `0x18` = the act-2 (`0x8922C`) free-kick/penalty hand-off, ported as
+  `fifa96_match_action_phase_18` over the existing
+  `match_run_ref_step_restart`. The ACT MACHINE owns the row (the sit-9 /
+  sit-0xA producer dispatches act 2 invoke-now — the native
+  `FUN_000888FC(2, stage, BX=1)` — and the clock tail ticks it), and the ad-hoc
+  `ref_machine = REF_RESTART` route (the FU175-L7 double-run) is **retired**:
+  the act slot is the single owner, so there is no double-run. The sit-2..4
+  formation-order arm / row `0x17` producer chain is a proven **no-op** (its
+  `FUN_0008C974` counter is fed only by the unported `0x14C360`/`0x157BD2`
+  matrices) and is recorded as numbered legs — row `0x17` stays NULL and
+  uncounted (FU181-L1), no dead arm code. **M1 `09b726b7…` / M2 `7b4b241a…`
+  byte-identical** (the row reproduces the retired route's exact same-frame
+  stage-0 + tick advance, and the restart producer is off the tape), so **no
+  tape re-pin**; `make check` **110/110** (sanitized, strict; the new
+  `test_engine_match_act` phase-0x18 tests + the updated restart tests).
+  **Census 29/80 → 30/80 = 37%** (README title recomputed). **Smoke
+  (`DISPLAY=:1`, this session; honest):** the windowed game boots, draws the
+  intro splash and the front-end menu (`docs/screens/p16-t1-intro.png`,
+  `p16-t1-frontend.png`); the row is install-live/tape-dormant (M2
+  byte-identical), so no visible delta is claimed. The exit log carries only
+  the external SDL/dbus/nvidia LSan leaks (not a regression).
 - **M2 phase-14 T4 (acceptance v14 completion + the T1–T3 review riders;
   2026-10-12).** Docs/comments + test strata only — **no behavior change**:
   M2 v14 byte-exact (`./build/test_engine_m2 | cmp -`), M1 `09b726b7…`

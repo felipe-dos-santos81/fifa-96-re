@@ -1184,14 +1184,14 @@ int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
 /* ===== FU-150 P2 — fouls / referee / offside =============================== */
 
 /* The derived machine dispatcher slots (`mr->ref_machine`). NONE = idle; the
- * module sequences map to their FIFA96_REF_SEQ_* value; RESTART is the derived
- * act-2 (phase-0x18) free-kick/penalty hand-off machine the sit-9/0xA rows
- * start (a compression of the native stage 1..3 camera-lead gates, FU-150
- * erratum). */
+ * two module sequences map to their FIFA96_REF_SEQ_* value. The former RESTART
+ * slot (the act-2 phase-0x18 free-kick/penalty hand-off) is RETIRED (FU-183 §5
+ * / phase-16 T1): the phase-0x18 row `fifa96_match_action_phase_18` is owned by
+ * the act machine (`fifa96_match_act_dispatch`/`_tick`), so there is no second
+ * driver (the retired FU175-L7 double-run). */
 #define FIFA96_MATCH_RUN_REF_NONE 0u
 #define FIFA96_MATCH_RUN_REF_FOUL FIFA96_REF_SEQ_ACT3
 #define FIFA96_MATCH_RUN_REF_OFFSIDE FIFA96_REF_SEQ_ACT6
-#define FIFA96_MATCH_RUN_REF_RESTART 3u
 
 /* FU-150 §Port contract: the derived contact entry. The native contact
  * registrar FUN_0008A3FC is called from the action-0x0C body (unported,
@@ -1247,17 +1247,23 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
  * `match_run_write_phase` + the FU-149 arm, the record install on rec_first,
  * and the situation dispatch through the shared
  * `fifa96_match_run_set_piece(..., BX=1)` (whose direct path may start the
- * RESTART machine and run its step, the native invoke-now order). RESTART runs
- * the derived act-2 hand-off: stage 0 writes phase 0xA on the fouled side
- * (whistle when the foul kind is 0), stage 1 runs the FK/penalty decision
- * (first-hand 0x894A2..0x895AC: `contact_kind == 3` or the session gate
- * proceeds; phase 7 default, phase 6 when |incident x| < 0x420 and z lies in
- * the fouler-side band [-0xB10,-0x7B0] side 0 / [0x7B0,0xB10] side 1) and arms
- * the FU-149 phase 7/6 taker. Also drives the [0x157A6A] suppression countdown
- * (0x7438D..0x743A5, saturated at 0) and stages the live phase into the
- * referee state. Returns 1 when a step ran, 0 when idle, or a -fifa96_err_t
- * (including -FIFA96_ERR_INVALID for NULL). */
+ * act-2 phase-0x18 machine, run invoke-now). Also drives the [0x157A6A]
+ * suppression countdown (0x7438D..0x743A5, saturated at 0) and stages the live
+ * phase into the referee state. Returns 1 when a step ran, 0 when idle, or a
+ * -fifa96_err_t (including -FIFA96_ERR_INVALID for NULL). (The former RESTART
+ * arm is retired — FU-183 §5 / phase-16 T1: the act machine owns the
+ * phase-0x18 hand-off `fifa96_match_action_phase_18`.) */
 int fifa96_match_run_referee_step(struct fifa96_match_run *mr);
+
+/* FU-183 §5/§6 rank 2 (phase-16 T1): the phase-0x18 / act-2 row body. Runs the
+ * derived free-kick/penalty hand-off (`match_run_ref_step_restart`): stage 0
+ * writes phase 0xA on the fouled side (whistle when the foul kind is 0), the
+ * stage 1/2 gates run the FK/penalty decision (phase 7 default, phase 6 in the
+ * fouler-side spot band) and arm the FU-149 taker; the terminal clears the act
+ * slot. The act machine owns the row (the sit-9/sit-0xA producer dispatches act
+ * 2 invoke-now; the clock tail ticks it). Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL. */
+int fifa96_match_action_phase_18(struct fifa96_match_run *mr);
 
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the

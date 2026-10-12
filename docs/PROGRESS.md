@@ -579,6 +579,22 @@ act-9 stage 1/2 gates + the act-8 record pick) → phase-16 row-`0x17` producer
 `0x14`/`0x22`, then `0x1A`/`0x1C`, `0x16`, `0x24`, `0x20`, `0x25`) carries
 FU182-L1..L4.
 
+M2 phase-16 T1 (FU-183) lands the act-machine producer's honest cohort: the act
+machine owns the one genuinely producer-live unported phase row — **phase `0x18`
+/ act 2** (the free-kick/penalty hand-off `0x8922C`, ported as
+`fifa96_match_action_phase_18` over `match_run_ref_step_restart`). The sit-9 /
+sit-0xA producer dispatches act 2 invoke-now (the native
+`FUN_000888FC(2, stage, BX=1)`) and the clock tail ticks it; the ad-hoc
+`ref_machine = REF_RESTART` route (the FU175-L7 double-run) is retired — one
+owner. The sit-2..4 formation-order arm stays unported (a proven no-op: its
+`FUN_0008C974` counter is fed only by the unported `0x14C360`/`0x157BD2`
+matrices), so row `0x17` stays NULL/uncounted (FU181-L1) and its producer chain
+remains numbered legs — no dead code. M1/M2 stay **byte-identical** (no re-pin);
+`make check` 110/110; census 29/80 → **30/80 = 37%**. The honest smoke
+(`DISPLAY=:1`) walks intro → front-end (`docs/screens/p16-t1-intro.png`,
+`p16-t1-frontend.png`); the row is install-live/tape-dormant, so no visible delta
+is claimed.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
