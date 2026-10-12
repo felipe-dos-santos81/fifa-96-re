@@ -1840,9 +1840,16 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
-  /* FU-145 S2: a fresh match drops the goal-arm/queue state and seeds the
-   * live-session gate 1 ([0x14C32A], FU-146 leg 2) so a fired goal queues
-   * ids 5/6 instead of taking the table-2 fallback. */
+  /* FU-166 (phase-13 T3, R14): a fresh match drops the goal-arm/queue state
+   * and seeds the session gate 0 ([0x14C32A]) — the settled value of every
+   * ordinary played match (Friendly/Leagues/Tournaments/Playoffs: mode 0,
+   * `FUN_00024B00` 0x24BEB `XOR EAX,EAX`). Byte 1 is the **Practise**
+   * session only (`FUN_00032DE0` -> `FUN_0001B7B8(4)`), a different session
+   * whose scheduler/queue family is natively dead in the regular match; the
+   * earlier seed 1 was the disclosed composite (L14.8.d). Under the settled 0
+   * the per-frame scheduler is off and the goal scan/queue takes the native
+   * byte-0 direct arm (`0x8A957 JZ 0x8AA7B`), the value the FU-146/FU-155
+   * polarity pair carries for the engine's live match type. */
   mr->goal_armed = 0;
   mr->goal_zone = 0;
   mr->goal_snap_x = 0;
@@ -1850,7 +1857,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->goal_snap_z = 0;
   mr->situation_id = 0;
   mr->situation_pending = 0;
-  mr->session_gate_14c32a = 1;
+  mr->session_gate_14c32a = 0;
   /* FU-149 P1: a fresh match drops the set-piece dispatcher state (the native
    * match reset FUN_00073EE0 zeroes the corner counters 0x157AD4/0x157AD6;
    * the [0x157ABE] swap and the incident triple carry their unported-producer

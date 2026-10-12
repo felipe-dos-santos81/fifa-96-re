@@ -326,7 +326,8 @@
  *      (`render.camera_pose.view_mode == 0`, the unported handler arm), the
  *      formation id stays 0 (`352ko.fmt`) and no translation pool is staged;
  *   5. the begin-installed consumer machine is idle at the derived leg 0/
- *      mode 0 with the live-session gate seeded 1 (`session_gate_14c32a`).
+ *      mode 0 with the session gate seeded 0 (`session_gate_14c32a`;
+ *      FU-166/R14: the settled ordinary-match value).
  *
  * Remaining forcing inventory, updated for the phase-6 state (the v5 list
  * above still governs the transcript shape; each item carries its leg):
@@ -1596,6 +1597,15 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
       res->ctrl_kickoff_z = mr->entities.team[0].records[idx].pos_z;
     }
     assert(fifa96_match_state_set_phase(&mr->state, 0x13) == 0);
+    /* T3/FU-166 (R14): the tape stages the byte-1 session gate so it pins the
+     * **ported queue/scheduler goal chain** — the Practise session's native
+     * family (FU-166 §5: the `0x4B198 != 0` scheduler and the queued 0x8A957
+     * arm). The engine's ordinary-match default is the settled byte 0
+     * (`fifa96_match_run_begin`), under which the same scan takes the direct
+     * `0x8AA7B` arm (score + table-2 situation 6); re-deriving this tape under
+     * that default is FU166-L5 (T4 scope). The staged value is a real native
+     * session, not a fabricated one. */
+    mr->session_gate_14c32a = 1;
     mr->phase_machine.state = 0x13;                     /* kickoff: forced live phase */
   } else if (m == M2_M_HALF) {
     assert(fifa96_match_state_set_phase(&mr->state, 0x14) == 0);
@@ -2185,9 +2195,10 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
           assert(e->match_run.entities.team[t].records[i].active == (uint8_t)i);
       /* v6 (S3/FU-146): begin installed the goal-screen consumer machine at
-       * the derived leg 0/mode 0 with the live-session gate seeded 1. */
+       * the derived leg 0/mode 0 with the session gate seeded 0 (FU-166/R14:
+       * the settled ordinary-match value; byte 1 is the Practise session). */
       assert(e->match_run.screen_leg == 0 && e->match_run.screen_mode == 0);
-      assert(e->match_run.session_gate_14c32a == 1);
+      assert(e->match_run.session_gate_14c32a == 0);
       /* v6 (S4/FU-148): the dormant presentation defaults — the pose feed's
        * unported mode 0 and the formation id 0 (`352ko.fmt`). */
       assert(e->match_run.render.camera_pose.view_mode == 0);

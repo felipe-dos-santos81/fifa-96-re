@@ -618,10 +618,12 @@ struct fifa96_match_run {
    *    side-0 goal, 6 = side-1 goal) and `situation_pending` = [0x15B6C0] its
    *    latch; written by `fifa96_match_run_goal_queue` (S2), consumed by the
    *    S3 scheduler/handlers;
-   *  - `session_gate_14c32a` = [0x14C32A]: begin seeds 1 (a live match
-   *    session; the native writers are front-end, FU-146 leg 2). With the
-   *    gate 0 or a pending situation the queue route falls back to the
-   *    native table-2 situation-6 arm. */
+   *  - `session_gate_14c32a` = [0x14C32A]: begin seeds 0 (FU-166/R14: the
+   *    settled value of every ordinary played match — Friendly/Leagues/
+   *    Tournaments/Playoffs write mode 0; byte 1 is the Practise session
+   *    only, `FUN_00032DE0`). With the gate 0 the per-frame scheduler is off
+   *    and the queue route falls back to the native table-2 situation-6 arm
+   *    (the native byte-0 direct goal path). */
   uint8_t goal_armed;
   uint8_t goal_zone;
   int32_t goal_snap_x;

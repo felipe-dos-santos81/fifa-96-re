@@ -2613,7 +2613,9 @@ static void test_goal_scan_queue_and_fallback(void) {
     struct fifa96_match_run fb;
     fifa96_match_run_init(&fb);
     assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
-    assert(fb.session_gate_14c32a == 1);            /* begin seeds the gate */
+    assert(fb.session_gate_14c32a == 0);            /* begin seeds the settled
+                                                     * ordinary-match value
+                                                     * (FU-166/R14) */
     assert(fb.goal_armed == 0 && fb.situation_pending == 1);
     fb.state.phase = 2;
     fb.session_gate_14c32a = 0;                     /* session gate closed */
@@ -3373,7 +3375,13 @@ static void test_goal_chain_pan_fixture(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  assert(mr.session_gate_14c32a == 1);    /* begin seeds the live session */
+  assert(mr.session_gate_14c32a == 0);    /* begin seeds the settled
+                                           * ordinary-match value (FU-166) */
+  /* FU-166/R14: the queue -> scheduler -> post/score chain under test is the
+   * native **byte-1 (Practise) session** family; the engine's ordinary-match
+   * default is byte 0 (the direct goal arm). Stage the byte-1 session
+   * explicitly so the ported scheduler machinery is exercised. */
+  mr.session_gate_14c32a = 1;
   mr.state.phase = 2;
   mr.state.period_length = 90;
   /* the kickoff-complete gate settles the machine (step 1 -> 4) and the
@@ -3423,6 +3431,7 @@ static void test_goal_consumer_chain_fixture(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   {
@@ -3742,6 +3751,9 @@ static void test_view_pose_feed_arms_camera(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* FU-166/R14: the queued-arm expectation below is the byte-1 session
+   * family; stage it explicitly (the engine's ordinary-match default is 0). */
+  mr.session_gate_14c32a = 1;
   mr.state.phase = 2;
   mr.state.period_length = 90;
   mr.global_5882a = 1;
@@ -3785,6 +3797,7 @@ static void test_camera_pan_event_chain(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   mr.state.phase = 2;
   mr.state.period_length = 90;
   mr.global_5882a = 1;
@@ -3824,6 +3837,7 @@ static void test_row04_live_pan_arms_camera(void) {
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   mr.state.phase = 2;
   mr.state.period_length = 90;
   mr.global_5882a = 1;
@@ -3941,6 +3955,11 @@ static void test_natural_goal_end_to_end(void) {
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  /* FU-166/R14: the end-to-end chain under test (table-1 queue id 5 ->
+   * scheduler -> post -> score) is the native **byte-1 (Practise) session**
+   * family; stage it explicitly (the engine's ordinary-match default is the
+   * byte-0 direct arm). */
+  mr.session_gate_14c32a = 1;
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   {
@@ -3954,8 +3973,8 @@ static void test_natural_goal_end_to_end(void) {
   one_granted_frame(&mr);
 
   /* the live entry: the installer latch cleared by the phase-2 step, the
-   * begin-seeded live session gate (the front-end producer is the FU-146 leg
-   * 2), the leg-0 handler and a fresh score pair. */
+   * staged byte-1 session gate (FU-166; the front-end producer is the FU-146
+   * leg 2), the leg-0 handler and a fresh score pair. */
   assert(mr.session_gate_14c32a == 1u);
   assert(mr.situation_pending == 0u);
   assert(mr.screen_leg == 0);
@@ -4021,11 +4040,10 @@ static void test_natural_goal_end_to_end(void) {
 }
 
 /* FU-146 §7 item 1 / FU-149 §1.1 (T4): the queue-condition fallback arm on the
- * same natural path. With the live-session gate closed at scan time
- * ([0x14C32A] == 0; its producers are the unported front-end block, FU-146 leg
- * 2 — staged here as the closed-session state), the situation-6 entry takes
- * the direct arm: the score increments on the scan frame (the FU-72 plain
- * increment, not the writer) and the table-2 row 6 writes phase 5; no id
+ * same natural path. With the session gate closed at scan time ([0x14C32A] ==
+ * 0 — FU-166/R14: the settled ordinary-match default), the situation-6 entry
+ * takes the direct arm: the score increments on the scan frame (the FU-72
+ * plain increment, not the writer) and the table-2 row 6 writes phase 5; no id
  * enters the queue and the installer latch stays clear. */
 static void test_natural_goal_fallback_arm(void) {
   struct fixture f = make_fixture(10000000ull);
@@ -4043,7 +4061,14 @@ static void test_natural_goal_fallback_arm(void) {
   for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
   assert(mr.state.phase == 2u);
   one_granted_frame(&mr);
-  assert(mr.session_gate_14c32a == 1u && mr.situation_pending == 0u);
+  assert(mr.session_gate_14c32a == 0u);
+  /* begin installs the goal-screen machine unconditionally (the engine's
+   * model), but the byte-0 session never runs its per-frame scheduler
+   * (FU-166), so clear the installer latch through the machine's own
+   * phase-clear step explicitly before the scan. */
+  mr.global_5882a = 1;
+  assert(fifa96_match_run_screen_step(&mr) == 0);
+  assert(mr.situation_pending == 0u);
 
   assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
   e = &mr.entities.team[1].records[4];
