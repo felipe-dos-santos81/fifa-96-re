@@ -698,6 +698,41 @@ unmoved phase-16 frontier item is registered with its owner in `docs/ENGINE.md`
 `FU186-L1..L9`, `FU187-L1..L5`, `FU188-L1/L3/L5`, `FU189-L1/L2`, `FU178-L1`,
 `FU177-L1`, `FU175-L1`, `FU190-L1/L2`. `make check` **110/110**.
 
+**Phase-17 T1 (2026-10-12) — the per-record phase seam + phase row `0x02`
+wired/counted; action row `03` ported but leg'd (tape-visible)** (this slice).
+Lands the native per-record walk `FUN_0008D098` (`0x8D0F2..0x8D166`) as
+`fifa96_match_run_record_phase_walk`, called from `match_run_write_phase` for
+both teams after every phase write (the native `FUN_000740A0`
+`0x740C8`/`0x740DB`): 11 records at the `0xB2` stride, the `[rec+0x9A]`
+occupied-record skip, and the `[rec+0x1C]` handler invoked with the native
+register ABI (EAX=rec / EDX=&rec[0x4D] / EBX=-1) through the new
+`fifa96_match_dispatch_phase_record` + the run's phase-walk cursor (the
+`fn(mr)`-vs-record ABI gap is **FU191-L3**). The walk is **gated on
+`fn != NULL`** (a structural no-op until this row landed; the divergence from
+the native unconditional `FUN_0008DCD4` distance write is **FU191-L2**). The
+phase-table row `0x02` = the ported native `0x6DCC8` (`fifa96_match_phase_02`):
+reads `[rec+0xC]`, indexes the direction pair by the walk's `EBX=-1` (per-side
+default `word[0x1577DE+side*4]>>16`) or an explicit index, writes
+`target_x = byte0*±0x26` / `target_y=0` / `target_z = byte1*±0x21` (side-flipped
+by `[team+0x826]`); the `[rec+0xC]` OL-13 source is unported (**FU192-L1**), so
+the live body is dispatched-but-gated. The walk + phase `0x02` are
+**tape-inert** (targets render-invisible). **Action row `03`**
+(`fifa96_match_action_03`: the `0x7E1A4..0x7E524` hold/clamp body over the
+FU-138 helpers + `fifa96_match_entities_camera_place`, its live phase-2 hot
+path calling `[rec+0x1C]` = `0x110794[2] = 0x6DCC8`) is **ported but leg'd**: the
+slot stays NULL because wiring it moved the M2 tape at transcribed frame 29
+(controller R7) — its `[rec+0x1C]`/phase-0x13/0x14 target-rewrite chain is
+tape-visible. Owner **FU177-L1**; the body is exported and direct-tested. Legs:
+the `FUN_0008C418` team bound block (the phase-2 clamp inputs), `FUN_00079C20`,
+`FUN_00079B58`, the phase-0x13/0x14 special arm, the phase-7 `0x158747` wall
+scan, the phase-8/0xC tails (**FU177-L1..L6**). New tests pin the seam (the
+`0x6DCC8` arithmetic incl. the side flip + the OL-13 gate), the walk (scan +
+skip + NULL-row gate) and the row-03 direct body, with mutation-RED
+discriminators (the `0x26` scale; the `0x9A` skip). `make check` **110/110**;
+M1 `09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin); census
+`34/80 → **35/80 = 43%**` (31 action + phase `0x02`/`0x18`/`0x19`/`0x1F`);
+dispatch `44 UNSUP / 35 OK / 1 NOTF` (sum 80).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

@@ -29,6 +29,7 @@
 #include "fifa96_loader/fifa96_err.h"
 
 struct fifa96_match_run;
+struct fifa96_match_entity;
 
 #define FIFA96_MATCH_ACTION_ROWS 45u /* 0x1106E0[45], codes 0x00..0x2C */
 #define FIFA96_MATCH_PHASE_ROWS 35u  /* 0x110794[35], phases 0x00..0x22 */
@@ -77,6 +78,55 @@ int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code);
  * `[rec+0x1C](rec, rec+0x4D)`); this seam passes only `mr` today. Task 10
  * (plan C10) may extend the handler typedef when it adds the record walk. */
 int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase);
+
+/* FU-191 §2/§6/§9 + FU-198 §5.2 (M2 phase-17 T1): the per-record phase
+ * dispatch — the native walk `FUN_0008D098`'s `0x8D107 CALL 0x6D920` +
+ * `0x8D110 CALL dword[ECX+0x1C]`. The stager writes
+ * `[rec+0x1C] = 0x110794[[0x157A4A]>>24]` and the walk then calls that pointer
+ * with the watcom register ABI **EAX = rec**, **EDX = &rec[0x4D]** (the target
+ * triple), **EBX = -1** (FU-191 §6). The engine's `fifa96_match_handler_fn` is
+ * `int (*)(mr)` — no record — so this sibling threads the record and the native
+ * EBX argument through the run's phase-walk cursor
+ * (`mr->phase_walk_rec`/`phase_walk_edge`/`phase_walk_active`), which a ported
+ * per-record body reads; the native `[rec+0x1C]` staging is modelled here by
+ * resolving the phase row (the walk's gate is `fn != NULL`, FU-191 §10).
+ * `mr == NULL` -> -FIFA96_ERR_INVALID; a phase past the table or the INT3 slot
+ * -> -FIFA96_ERR_NOT_FOUND; a NULL row -> -FIFA96_ERR_UNSUPPORTED (the walk
+ * skips); otherwise the handler's return value verbatim. */
+int fifa96_match_dispatch_phase_record(struct fifa96_match_run *mr, uint8_t phase,
+                                       struct fifa96_match_entity *rec, int32_t edge);
+
+/* FU-191 §6 / FU-198 §5.1 (M2 phase-17 T1): the ported native handler
+ * `FUN_0006DCC8` (`0x6DCC8..0x6DD3B`, fresh decompile + disassembly) — the
+ * per-record phase-table rows `0x02`/`0x15`. It reads the cursor record's
+ * native `[rec+0xC]` direction-byte pair (modelled as
+ * `struct fifa96_match_entity.phase_meta`, FU-192 §3), indexes it by the native
+ * third argument (`edge < 0` selects the per-side default
+ * `word[0x1577DE + side*4] >> 16`; else `edge`), and writes the target triple
+ * `rec+0x4D/+0x51/+0x55` = `(int16)(byte0 * +-0x26)`, `0`, `(int16)(byte1 *
+ * +-0x21)`, sign-flipped when `[team+0x826] != 0` (FU-198 §5.1). The `[rec+0xC]`
+ * source is the OL-13 loader metadata (unported, FU192-L1): an unset
+ * `phase_meta` makes this a documented no-op on the live path (FU-177 §7
+ * dispatched-but-gated). Returns FIFA96_OK, or -FIFA96_ERR_INVALID (NULL `mr`). */
+int fifa96_match_phase_02(struct fifa96_match_run *mr);
+
+/* FU-177 §2/§3/§7 + FU-198 §5.3 (M2 phase-17 T1): the ported action row-03 body
+ * `0x7E1A4..0x7E524` — the hold/clamp placement over the FU-138 helpers
+ * (`fifa96_action_locomotion_hold`/`clamp_placement`/`placement_counter`/
+ * `phase1_clamp`) and the already-ported `fifa96_match_entities_camera_place`
+ * (`FUN_00079F3C`, FU-96 leg 5). Its live phase-2 hot path runs the per-record
+ * `[rec+0x1C]` call (`0x7E2DD CALL dword[ESI+0x1C]` = `0x110794[2] = 0x6DCC8`)
+ * through `fifa96_match_dispatch_phase_record`. **The action-table slot stays
+ * NULL / uncounted**: wiring it moved the M2 tape at frame 29 (the forced
+ * code-3 record's body and its phase-0x13/0x14 special arm are tape-visible),
+ * so per controller R7 the row legs (owner FU177-L1) and the body is exported
+ * for direct unit testing. The unported arms (the `FUN_0008C418` team bound
+ * block the phase-2 clamp reads, `FUN_00079C20` slot dir step, `FUN_00079B58`
+ * +0x93 helper, the phase-0x13/0x14 special arm, the phase-7 `0x158747` wall
+ * scan and the phase-8/0xC tails) are named legs (FU177-L1..L6). Returns
+ * FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
+ * `mr->record.entity_id`. */
+int fifa96_match_action_03(struct fifa96_match_run *mr);
 
 /* The ported action row-0x17 body (FU-181 §2): the line-up walk
  * `0x84730..0x849AF`. Its action-table slot (`fifa96_match_action_table[0x17]`)

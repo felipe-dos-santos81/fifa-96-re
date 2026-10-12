@@ -161,6 +161,15 @@ struct fifa96_match_entity {
   int32_t place_x, place_y, place_z;
   int8_t place_offset_x; /* caller-supplied 0x10F334[type8] */
   int8_t place_offset_z; /* caller-supplied 0x10F33C[type8] */
+  /* FU-191 §6 / FU-192 §3 (M2 phase-17 T1): the native record `[rec+0xC]` —
+   * the per-record direction-byte pair the phase handler `0x6DCC8` (phase rows
+   * `0x02`/`0x15`) indexes and scales (FU-198 §5.1). The native pointer is
+   * staged by `FUN_0006D920` from `FUN_0004C384(anim*6+1) + [rec+0x8D]>>24 *
+   * 0x256`; that loader metadata source is unported (OL-13 / FU192-L1), so the
+   * live walk leaves this NULL and `0x6DCC8` is dispatched-but-gated (FU-177
+   * §7 / the phase-16 row-0x16 W9 precedent). A fixture stages a byte pair to
+   * exercise the body's arithmetic directly. `NULL` always means "unported". */
+  const int8_t *phase_meta;  /* native [rec+0xC] */
 };
 
 struct fifa96_match_team {

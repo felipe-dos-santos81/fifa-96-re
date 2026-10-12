@@ -2028,6 +2028,11 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->predict_c48_z = 0;
   (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
+  mr->phase_walk_rec = NULL;           /* FU-191: fresh per-record walk cursor */
+  mr->phase_walk_edge = 0;
+  mr->phase_walk_active = 0;
+  mr->phase_dir_default[0] = 0;        /* [0x1577DE] producer unported */
+  mr->phase_dir_default[1] = 0;
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
@@ -2124,6 +2129,11 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->predict_c48_z = 0;
   (void)fifa96_match_act_init(&mr->act); /* FU-175: fresh act slot */
   mr->act9_gate = 0;
+  mr->phase_walk_rec = NULL;           /* FU-191: fresh per-record walk cursor */
+  mr->phase_walk_edge = 0;
+  mr->phase_walk_active = 0;
+  mr->phase_dir_default[0] = 0;        /* [0x1577DE] producer unported */
+  mr->phase_dir_default[1] = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
@@ -2361,6 +2371,25 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
   return 0;
 }
 
+/* FU-191 §2/§9 (M2 phase-17 T1): the native per-record phase walk
+ * `FUN_0008D098`'s loop (`0x8D0F2..0x8D166`). 11 records at the `0xB2` stride;
+ * skip `[rec+0x9A] != 0` (`0x8D0F7`); stage/call the phase row's handler with
+ * the EAX=rec/EDX=&rec[0x4D]/EBX=-1 ABI (`0x8D107`/`0x8D110`, threaded through
+ * the walk cursor). The native also calls FUN_0008DCD4 per record (the distance
+ * triple `+0x65/+0x67/+0x69`); the engine defers it with the per-record bodies
+ * (FU191-L2). */
+int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phase,
+                                       uint32_t team) {
+  if (mr == NULL || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  if (phase >= FIFA96_MATCH_PHASE_ROWS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &mr->entities.team[team].records[i];
+    if (e->skip_9a != 0) continue;            /* 0x8D0F7 CMP byte[ECX+0x9A],0 */
+    (void)fifa96_match_dispatch_phase_record(mr, phase, e, -1);  /* 0x8D110 */
+  }
+  return FIFA96_OK;
+}
+
 /* FU-145 §3 item 3 / 0x740F6 (S2): the shared phase write. Every engine
  * phase write goes through the FU-62 setter and mirrors the FU-142a machine
  * (the native [0x157A4D] switch byte is the [0x157A4A] phase dword's high
@@ -2377,6 +2406,16 @@ static int match_run_write_phase(struct fifa96_match_run *mr, uint8_t phase) {
   if (phase == 2u) {
     mr->goal_armed = 0;
     mr->goal_zone = 0;
+  }
+  /* FU-191 §4/§9: the native FUN_000740A0 runs the per-team FUN_0008D098 walk
+   * (0x740C8 team[side], 0x740DB team[side^1]) immediately after the [0x157A4D]
+   * phase write. Gated on a ported phase row (fn != NULL) so it is a structural
+   * no-op until a per-record body lands (FU-191 §10; the divergence from the
+   * native unconditional FUN_0008DCD4 distance write is FU191-L2). */
+  if (phase < FIFA96_MATCH_PHASE_ROWS &&
+      fifa96_match_phase_table[phase].fn != NULL) {
+    (void)fifa96_match_run_record_phase_walk(mr, phase, 0u);
+    (void)fifa96_match_run_record_phase_walk(mr, phase, 1u);
   }
   return 0;
 }

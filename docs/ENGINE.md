@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-34/80 dispatch rows wired (31 action + the wired phase rows 0x18, 0x19 and 0x1F), the
+35/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,8 +260,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **34/80 rows wired** (31 action + the phase rows
-  `0x18`/`0x19`/`0x1F`) — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **35/80 rows wired** (31 action + the phase rows
+  `0x02`/`0x18`/`0x19`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -477,6 +477,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   per-record `[rec+0x1C]` seam **FU175-L1**; the phase-row cohort envelope
   **FU190-L1/L2**. Every phase-16 FU leg is unchanged from its slice; this
   bullet is the owner register, not a re-derivation.
+- **M2 phase-17 T1 (FU-191/FU-198) — the per-record phase seam + phase row
+  `0x02` wired/counted, action row `03` ported but leg'd (tape-visible).**
+  The native per-record walk `FUN_0008D098` (`0x8D0F2..0x8D166`) is landed as
+  `fifa96_match_run_record_phase_walk` and called from `match_run_write_phase`
+  for both teams after every phase write (the native `FUN_000740A0`
+  `0x740C8`/`0x740DB`) — 11 records at the `0xB2` stride, the `[rec+0x9A]`
+  occupied-record skip, and the `[rec+0x1C]` handler called with the native ABI
+  (EAX=rec / EDX=&rec[0x4D] / EBX=-1) through the new
+  `fifa96_match_dispatch_phase_record` + the run's phase-walk cursor
+  (`fifa96_match_handlers.{c,h}` / `fifa96_match_run.h`; the `fn(mr)` ABI gap is
+  FU191-L3). **Gated on `fn != NULL`** so the walk was a structural no-op until
+  this row landed (the divergence from the native unconditional
+  `FUN_0008DCD4` distance write is **FU191-L2**, recorded not hidden). The
+  phase-table row `0x02` = the ported native `0x6DCC8`
+  (`fifa96_match_phase_02`): reads `[rec+0xC]`, indexes the direction pair by
+  the walk's `EBX=-1` (the per-side default `word[0x1577DE+side*4]>>16`) or an
+  explicit index, and writes `target_x = byte0*±0x26` / `target_y=0` /
+  `target_z = byte1*±0x21` (side-flipped by `[team+0x826]`); the `[rec+0xC]`
+  OL-13 source is unported (**FU192-L1**), so the live body is
+  dispatched-but-gated (the phase-16 row-`0x16` W9 precedent). The walk +
+  phase `0x02` are **tape-inert** (targets are render-invisible; the render
+  reads pos/anim/frame/hidden only), verified byte-exact. **Action row `03`**
+  (`fifa96_match_action_03`: the `0x7E1A4..0x7E524` hold/clamp body over the
+  FU-138 helpers + `fifa96_match_entities_camera_place`, its live phase-2 hot
+  path calling `[rec+0x1C]` = `0x110794[2] = 0x6DCC8` through the T1 seam) is
+  **ported but its slot stays NULL / uncounted**: wiring it moved the M2 tape at
+  transcribed frame 29 (controller R7), so the row **legs** (owner
+  **FU177-L1**; the body is exported and direct-tested). Remaining legs: the
+  `FUN_0008C418` team bound block (the phase-2 clamp inputs), `FUN_00079C20`,
+  `FUN_00079B58`, the phase-0x13/0x14 special arm, the phase-7 `0x158747` wall
+  scan and the phase-8/0xC tails (**FU177-L1..L6**). Row `03` remains a live
+  force-decision code (`match_run.c:960`) so its uncounted status is honest, not
+  dormant. Census `34/80 → **35/80 = 43%**` (`floor(100 × 35/80) = 43`); dispatch
+  `44 UNSUP / 35 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35
+  = 4 OK + 30 UNSUP + 1 NOTF); README title `43%` — all consistent. M1
+  `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no re-pin)**.
+  `tests/test_engine_match_handlers.c` pins the seam (the `0x6DCC8` arithmetic
+  incl. the side flip and the OL-13 gate), the walk (scan + skip + NULL-row
+  gate) and the row-03 direct body; mutation-RED discriminators: the `0x26`
+  scale and the `0x9A` skip.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

@@ -1291,7 +1291,8 @@
  * What v16 pins at the spec §5 sequence points:
  *   1. The census shape (T1–T5): the acceptance cross-check `run_census_riders`
  *      asserts the exact wired counts (31 action + the phase rows
- *      0x18/0x19/0x1F = 34/80 = 42%) and every phase-16 slot (0x14/0x16/0x1C
+ *      0x18/0x19/0x1F = the v16 base; phase-17 T1 adds row 0x02 → 35/80 = 43%)
+ *      and every phase-16 slot (0x14/0x16/0x1C
  *      wired; 0x03/0x0D/0x17/0x1A/0x22/0x24 NULL), so a silent re-wire, an
  *      un-census or a slot flip fails the tape, not only the handler unit
  *      tests.
@@ -2755,18 +2756,19 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T5): the exact wired counts and the phase-15/16
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 34/80 = 42% (31 action + the phase rows
-   *    0x18/0x19/0x1F). */
+   *    the handler unit tests. 35/80 = 43% (31 action + the phase rows
+   *    0x18/0x19/0x1F + the phase-17 T1 row 0x02). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 3u);   /* 34/80 = 42% */
+    assert(action_wired == 31u && phase_wired == 4u);   /* 35/80 = 43% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
+    assert(fifa96_match_phase_table[0x02].fn != NULL);  /* phase-17 T1: the 0x6DCC8 per-record row */
     assert(fifa96_match_phase_table[0x20].fn == NULL);  /* T4: ported, situation-0 producer absent (FU188-L1) */
     assert(fifa96_match_action_table[0x16].fn != NULL); /* T4: fouled-player face-the-ball (counted) */
     assert(fifa96_match_action_table[0x24].fn == NULL); /* T4: ported, phase-0x20 producer absent (FU188-L1) */
@@ -2780,7 +2782,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_action_table[0x1A].fn == NULL); /* T3: ported, FUN_00077EAC installer unported */
     assert(fifa96_match_action_table[0x17].fn == NULL); /* T1: ported, no installer */
     assert(fifa96_match_action_table[0x0D].fn == NULL); /* T3: ported, no installer */
-    assert(fifa96_match_action_table[0x03].fn == NULL); /* T3: stays UNSUP */
+    assert(fifa96_match_action_table[0x03].fn == NULL); /* phase-17 T1: row 03 leg (FU177-L1) */
   }
   /* 2. The act seam + phase 0x1F (T1/FU-175): the seam's dispatch reaches the
    *    ported phase-0x1F handler and its stage-0 `[0x15882A]` clear runs. */

@@ -657,6 +657,20 @@ struct fifa96_match_run {
    * and its handler is the phase-0x1F row (`0x88F4C`) reached through
    * `fifa96_match_dispatch_phase`. init/begin clear it. */
   struct fifa96_match_act act;
+  /* FU-191 §6/§9 (M2 phase-17 T1): the per-record phase-walk cursor. The native
+   * walk `FUN_0008D098` threads the record through EAX and the third argument
+   * through EBX=-1; the engine's `fifa96_match_handler_fn` carries only `mr`, so
+   * `fifa96_match_run_record_phase_walk` stages the current record + the native
+   * EBX here before `fifa96_match_dispatch_phase_record`, and a ported
+   * per-record body (`fifa96_match_phase_02`) reads it. `phase_walk_active` is
+   * 0 outside the walk. `phase_dir_default[2]` is the native per-side default
+   * direction index `word[0x1577DE + side*4] >> 16` the `0x6DCC8` third-argument
+   * `< 0` path selects (FU-198 §5.1); its producer is unported (a runtime cell),
+   * so init/begin stage it 0 (FU-177 §7 dispatched-but-gated). */
+  struct fifa96_match_entity *phase_walk_rec;
+  int32_t phase_walk_edge;
+  uint8_t phase_walk_active;
+  int32_t phase_dir_default[2];
   /* The derived act-9 → GATE handshake marker: within the restart window the
    * native `[0x15882A]` gate has exactly one reachable producer. Fresh xrefs
    * (24 touches): the leg-0 SETUP0 clears it unconditionally (`0x93C30`;
@@ -1193,6 +1207,23 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
  * `[0x157A4A]` write precedes `FUN_0008D098`). Returns 0 or
  * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase);
+
+/* FU-191 §2/§9 (M2 phase-17 T1): the native per-record phase walk
+ * `FUN_0008D098`'s loop (`0x8D0F2..0x8D166`) — the second caller of the phase
+ * table (FU175-L1). For `team`'s 11 records (stride `0xB2`), skip the
+ * occupied-record exclusion `[rec+0x9A] != 0` (`0x8D0F7`), then call the phase
+ * row's handler through `fifa96_match_dispatch_phase_record(mr, phase, rec, -1)`
+ * (the native `0x8D107 CALL 0x6D920` stages `[rec+0x1C] = 0x110794[phase]` and
+ * `0x8D110 CALL dword[ECX+0x1C]` invokes it with the EAX=rec/EDX=&rec[0x4D]/
+ * EBX=-1 ABI). `match_run_write_phase` calls it for both teams after every phase
+ * write (the native `FUN_000740A0` `0x740C8`/`0x740DB`), **gated on
+ * `fifa96_match_phase_table[phase].fn != NULL`** so it is a structural no-op
+ * until a per-record body lands (FU-191 §10; the gap vs the native
+ * unconditional `FUN_0008DCD4` distance write is FU191-L2). `phase` out of the
+ * table, or `team >= 2`, -> -FIFA96_ERR_INVALID; otherwise FIFA96_OK (per-record
+ * handler errors are absorbed: the native walk ignores the handler return). */
+int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phase,
+                                       uint32_t team);
 
 /* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
  * out of `fifa96_match_run_begin` (`:2213-2224`). Runs the native `0x740A0`
