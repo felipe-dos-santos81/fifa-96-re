@@ -515,3 +515,14 @@ Docs cross-cited: FU-137 (§2/§3), FU-143 (§2.1/§3.2), FU-149 (§1.1/§1.2/§
 L12), FU-165 (§3.5/§3.6/§3.7/§6/§7), FU-170 (§7), FU-174 (L1/L3), FU-175
 (§1..§10), FU-181 (§1..§9), FU-182 (§1/§3/§9, L1/L4). AGENTS.md census rule. No
 writes beyond this slice file and the workspace report.
+
+---
+
+## Erratum (controller, phase-16 wave)
+
+> §7's closing line — "the action table still 24; total **25/80 = 31%**" — carries
+> the pre-phase-15 baseline. The verified current census is **29/80 = 36%**
+> (action 28 non-NULL + the wired phase row 0x1F), per FU-190 §1 (fresh evidence,
+> this wave) and the phase-15 close. FU-183's read-only derivations (the producer
+> chain, the `0x1107EC` overlay, the arm bytes, the row-0x17 verdict) are
+> unaffected; only the stale count sentence is corrected.
