@@ -984,63 +984,183 @@ static uint16_t match_run_frame_aux(uint8_t anim_id, uint8_t frame) {
                     ((uint16_t)match_run_frame_records[off + 1u] << 8));
 }
 
+/* FU-159 §4.1 (T3): the native +0x44 producer — `row_flags & 1` written by
+ * every row install (`FUN_0006E598` `0x6E6CC`; pool twin `FUN_0008DF84`
+ * `0x8DFC1`). The engine derives it from the live `anim_id` (the same value
+ * the install wrote, since `anim_id` only changes at install/successor). */
+static uint8_t match_run_row_terminal_flag(uint8_t anim_id) {
+  fifa96_anim_row row;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)anim_id, &row) != FIFA96_OK)
+    return 0;
+  return (uint8_t)(row.flags & 0x01u);
+}
+
+/* FU-159 §5.4 / FU-160 §1.4 (T3): the FUN_0006E598 store core (see the header
+ * doc for the fresh evidence). */
+int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
+                                         struct fifa96_match_entity *e,
+                                         int32_t id, uint8_t frame) {
+  fifa96_anim_row row;
+  uint32_t slot;
+  if (mr == NULL || e == NULL) return -FIFA96_ERR_INVALID;
+  if (id < 0 || id > 0x6E) id = 0;                    /* 0x6E68E..0x6E69B */
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  id, &row) != FIFA96_OK)
+    return -FIFA96_ERR_INVALID;
+  if ((int32_t)frame > (int32_t)row.last_frame) frame = 0;   /* FUN_0006E490 */
+  e->anim_id = (uint8_t)id;
+  e->frame = frame;
+  e->row44 = (uint8_t)(row.flags & 0x01u);            /* 0x6E6CC */
+  e->aux_seen = 0xFFFFu;                              /* force the +0x36 re-arm */
+  slot = (uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS + e->index;
+  if (slot < FIFA96_MATCH_RUN_RENDER_SLOTS)
+    mr->render.entities[slot].anim_timer = 0;         /* word[+0x32] = 0 */
+  return FIFA96_OK;
+}
+
+/* FU-159 §3.1/§5.2 (T3): the FUN_0008E008 frame-wrap row successor (see the
+ * header doc for the fresh evidence). */
+int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
+  fifa96_anim_row row;
+  fifa96_anim_row next_row;
+  uint8_t next;
+  int32_t frame;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)e->anim_id, &row) != FIFA96_OK)
+    return FIFA96_OK;
+  /* Terminal rows branch to the movement/steering tables (unported; FU159-L5
+   * carries the bounds). Byte44 is the derived row-flags bit 0. */
+  if ((row.flags & 0x01u) != 0) return FIFA96_OK;
+  next = row.next_id;                                  /* row+3 */
+  frame = (int32_t)row.last_frame + 1;   /* byte[+0x46] = 1 at install (0x6E6D8) */
+  if (next == 0x6Fu) {
+    next = row.anim_id;                                /* keep the current row */
+  } else if (next >= 0x70u) {
+    /* `FUN_00079C50(rec, -dir[oct])`: the 0x10F334/0x10F33C vectors negate to
+     * the (oct + 4) & 7 direction, so the facing octant flips by 4. */
+    e->type = (uint8_t)((e->type + 4u) & 7u);
+    next = (uint8_t)(next - 0x70u);
+  }
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)next, &next_row) != FIFA96_OK)
+    return FIFA96_OK;
+  if (frame > (int32_t)next_row.last_frame) frame = 0;  /* FUN_0006E490 clamp */
+  e->anim_id = next;
+  e->frame = (uint8_t)frame;
+  e->row44 = (uint8_t)(next_row.flags & 0x01u);
+  e->aux_seen = 0xFFFFu;
+  return FIFA96_OK;
+}
+
+/* FU-161 §5.4 (T3): the arm dispatch consumes the aux word's two bytes as two
+ * passes (low first, then high; CL 0/8) and each one-shot arm XORs its own
+ * byte out of `rec+0x36` (`0x6FBE6..0x6FBFF`), so it fires once per frame
+ * resolve; sustained arms leave the byte and re-fire every frame the frame
+ * holds. The engine's ported arms: 0x0E/0x3A one-shot, 0x0F/0x05 sustained. */
+
+/* FU-159 §2.3 (T3): the `FUN_00079B1C` snap store set (fresh decompile
+ * `0x79B1C..0x79B4B`): target triple := position triple; `word[+0x69] = 0`
+ * (lane), `word[+0x71] = 0` (speed71), `byte[+0x9C] = 0` (body timer), then
+ * `word[+0x67] = word[+0x65] = word[+0x69]` (dx/distance) and
+ * `word[+0x75] = word[+0x73] = word[+0x71]` (the velocity words). The engine
+ * keeps both velocity views in lockstep (the mover consumes the words; the
+ * +0x65/+0x67 words are recomputed by the mover/lane staging, FU-161 rec). */
+static void match_run_record_snap(struct fifa96_match_run_record *r) {
+  r->target_x = r->pos_x;
+  r->target_y = r->pos_y;
+  r->target_z = r->pos_z;
+  r->lane = 0;
+  r->speed71 = 0;
+  r->vel73 = 0;
+  r->vel75 = 0;
+  r->vel_x = 0;
+  r->vel_z = 0;
+  r->body_timer9c = 0;
+}
+
+/* The `FUN_0006E490` frame clamp (`0x6E490..0x6E4C4`): `frame < 0 -> last`,
+ * `frame > last -> 0`. */
+static uint8_t match_run_frame_clamp(uint8_t anim_id, int32_t frame) {
+  fifa96_anim_row row;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  (int32_t)anim_id, &row) != FIFA96_OK)
+    return 0;
+  if (frame < 0) return row.last_frame;
+  if (frame > (int32_t)row.last_frame) return 0;
+  return (uint8_t)frame;
+}
+
 /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0006E8E8 jump arms, first-hand
  * `disassemble_bytes` this task (`0x6ED08..0x6ED69`, `0x6EDE6..0x6EE3E`,
  * `0x6EE90..0x6EEB7`, `0x6FB2F..0x6FB5C`) and `decompile_function 0x6E8E8`.
  * The switch index is `(aux & 0xFF) - 1`, so the arm for aux `0x0E` is case
  * `0xD` etc. Ported subset (the height/timer writes; the arm's velocity,
- * sine-step and `+0x83`-marker writes, the case-`0xE` `FUN_00079B1C` snap
- * (`0x6EE90/0x6EE92`) and its `pos_y != 0` else arm's FUN_0006E490(frame 3)
- * resolve stay legs — FU153-L1):
+ * sine-step and `+0x83`-marker writes stay legs — FU153-L1):
  *  - aux 0x0E (case 0xD): `+0x83 = 0x10` (`0x6EDE6`), then
  *    `+0x85 = +0x87 = ramp((dword[+0x81]) >> 16) = ramp(word[+0x83]) = ramp(0x10)`
  *    (`0x6EDEF`/`0x6EDF5`/`0x6EDF8`, stores `0x6EDFD`/`0x6EE04`), `pos_y = 0x10`
- *    (`0x6EE14`);
+ *    (`0x6EE14`); **one-shot** (`0x6EE5F..0x6EE6C XOR`).
  *  - aux 0x3A (case 0x39): `+0x83 = 0x18` (`0x6ED08`), then the same alias
  *    read `ramp(word[+0x83]) = ramp(0x18)` (`0x6ED11`/`0x6ED17`/`0x6ED1A`,
- *    stores `0x6ED1F`/`0x6ED26`), `pos_y = 0x18` (`0x6ED33`);
+ *    stores `0x6ED1F`/`0x6ED26`), `pos_y = 0x18` (`0x6ED33`); **one-shot**
+ *    (`0x6EDB8..0x6EDC3 XOR`).
  *  - (the unported aux 0x25 arm has the same shape: `+0x83 = 0x50` at
  *    `0x6FB2F`, `ramp(word[+0x83])` at `0x6FB38`/`0x6FB3E`/`0x6FB41`);
- *  - aux 0x0F (case 0xE, the zero-height relaunch): `if (pos_y == 0) {
- *    if (+0x85 == 0) +0x85 = ramp(pos_y + 0x1C); pos_y = 0; +0x87 = 0; }`
- *    (`0x6EEA1..0x6EEBE`; this arm reads the word `+0x5D` directly, not the
- *    alias).
+ *  - aux 0x0F (case 0xE): `if (pos_y != 0) frame := 3 via FUN_0006E490`
+ *    (`0x6EE7B..0x6EE8B`, bytes `bb 03 00 00 00` / `e8 05 f6 ff ff`); else the
+ *    `FUN_00079B1C` snap then `if (+0x85 == 0) +0x85 = ramp(pos_y + 0x1C);
+ *    pos_y = 0; +0x87 = 0` (`0x6EE90..0x6EEBE`); **sustained**.
+ *  - aux 0x05 (case 4): `MOV EAX,EBP; CALL 0x79B1C` (`0x6EA63`, bytes
+ *    `e8 b2 b0 00 00`), the stop; **sustained**.
  * **Erratum (T1 fix round 1, fifth `dword>>16` alias strike):** the ramp
  * argument is the arm's own `+0x83` marker (the just-stored 0x10/0x18/0x50),
  * NOT `word[+0x81]`: `dword[+0x81] >> 16` is the word at `+0x83` (the trap);
  * the decayed countdown `word[+0x81]` is a different cell (`0x7CA5C`
  * `CMP word[EAX+0x81],0` / `0x7CA78` zeroes it). `ramp(0x10) = 15` (crest 16)
- * and `ramp(0x18) = 18` are the live bases.
- * The arms run every frame the frame holds the aux (the native FUN_0006E8E8
- * runs per record per frame after the action handler, `0x7CD30`/`0x785AD`), so
- * the jump is re-staged while the frame lasts and the BF20 arc takes over when
- * the frame (and its aux) advances. */
-static void match_run_record_jump_arm(struct fifa96_match_run_record *r, uint16_t aux) {
-  int16_t base;
-  switch (aux & 0xFFu) {
-    case 0x0E:
-      base = fifa96_camera_ramp(0x10);   /* ramp(word[+0x83]), the marker above */
-      r->pos_y = 0x10;
-      r->jump_base = base;
-      r->jump_timer = base;
-      break;
-    case 0x3A:
-      base = fifa96_camera_ramp(0x18);
-      r->pos_y = 0x18;
-      r->jump_base = base;
-      r->jump_timer = base;
-      break;
-    case 0x0F:
-      if (r->pos_y == 0) {
-        if (r->jump_base == 0)
-          r->jump_base = fifa96_camera_ramp((int16_t)(r->pos_y + 0x1C));
-        r->pos_y = 0;
-        r->jump_timer = 0;
-      }
-      break;
-    default:
-      break;
+ * and `ramp(0x18) = 18` are the live bases. */
+static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
+                                          uint16_t aux) {
+  uint16_t word = aux;
+  for (int pass = 0; pass < 2; pass++) {
+    uint8_t b = (uint8_t)(pass == 0 ? (word & 0xFFu) : (word >> 8));
+    int16_t base;
+    if (b == 0) continue;
+    switch (b) {
+      case 0x0E:
+        base = fifa96_camera_ramp(0x10);   /* ramp(word[+0x83]), the marker above */
+        r->pos_y = 0x10;
+        r->jump_base = base;
+        r->jump_timer = base;
+        word &= (uint16_t)(pass == 0 ? 0xFF00u : 0x00FFu);   /* one-shot */
+        break;
+      case 0x3A:
+        base = fifa96_camera_ramp(0x18);
+        r->pos_y = 0x18;
+        r->jump_base = base;
+        r->jump_timer = base;
+        word &= (uint16_t)(pass == 0 ? 0xFF00u : 0x00FFu);   /* one-shot */
+        break;
+      case 0x0F:
+        if (r->pos_y != 0) {
+          r->frame = match_run_frame_clamp(r->anim_id, 3);   /* 0x6EE7B */
+        } else {
+          match_run_record_snap(r);                          /* 0x6EE92 */
+          if (r->jump_base == 0)
+            r->jump_base = fifa96_camera_ramp((int16_t)(r->pos_y + 0x1C));
+          r->pos_y = 0;
+          r->jump_timer = 0;
+        }
+        break;   /* sustained */
+      case 0x05:
+        match_run_record_snap(r);                            /* 0x6EA65 */
+        break;   /* sustained */
+      default:
+        break;
+    }
   }
+  return word;
 }
 
 /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0007BF20 jump arc block
@@ -1114,7 +1234,11 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   }
   r->type = e->type;
   r->actor_type = e->actor_type;
-  r->row44 = e->row44;   /* FU-151: the row-1E/1D stage gates */
+  /* FU-159 §4.1 (T3): +0x44 is the current anim row's flags bit 0, produced
+   * by every row install (0x6E6CC); deriving it from the live `anim_id` is
+   * equivalent (anim_id only changes at install/successor) and replaces the
+   * always-zero pool pass-through that blocked the kick-07 stage-2 reset. */
+  r->row44 = match_run_row_terminal_flag(e->anim_id);
   r->code = e->code;   /* native +0x91: the kick/row-04 gates index this byte */
   r->anim_id = e->anim_id;   /* OL-80: byte[[rec+0x28]] live row id */
   r->frame = e->frame;       /* OL-80: native +0x3D live frame index */
@@ -1207,10 +1331,22 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   /* FU-153 / T1: the native per-record tail runs FUN_0006E8E8 (the animation
    * event machine) right after the action handler and before the mover
    * (`0x7CD2B CALL [rec+0x18]` -> `0x7CD30 CALL 0x6E8E8` -> `0x7CD48 CALL
-   * 0x7BF20`). Its jump arms are keyed on the resolved frame's aux word
-   * (`rec+0x36`); the engine reads the ported frame record for the current
-   * (anim row, frame) and re-stages the height/timer cells on the record. */
-  match_run_record_jump_arm(r, match_run_frame_aux(e->anim_id, e->frame));
+   * 0x7BF20`). Its arms are keyed on the resolved frame's aux word
+   * (`rec+0x36`); FU-161 §5.4 (T3): the word is re-armed on the (anim_id,
+   * frame) resolve edge and the one-shot arms clear their own byte, so the
+   * engine reads `e->aux_word`, not the raw frame aux every tick. The action
+   * handler may have installed a row through the helper (which sets
+   * `aux_seen = 0xFFFF`), so the edge check runs after the dispatch. */
+  {
+    uint16_t seen = (uint16_t)(((uint16_t)e->anim_id << 8) | e->frame);
+    if (seen != e->aux_seen) {                    /* the +0x36 resolve edge */
+      e->aux_seen = seen;
+      e->aux_word = match_run_frame_aux(e->anim_id, e->frame);
+    }
+  }
+  r->aux_word = e->aux_word;
+  r->frame_freeze = 0;
+  r->aux_word = match_run_record_jump_arm(r, r->aux_word);
   /* The arm handlers (rows 26/28/2A) write the dword views of the velocity
    * bytes; decompose them back onto the word views the mover reads so the
    * native `+0x71/+0x73/+0x75` bytes stay in lockstep (an arm's `vel_x=0`
@@ -1268,7 +1404,9 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->timer7b = r->timer7b;
   e->lane = r->lane;
   e->type = r->type;
-  e->row44 = r->row44;       /* FU-151: machine gate write-back */
+  e->row44 = r->row44;       /* FU-159 §4.1: the derived row-flags bit 0 */
+  e->aux_word = r->aux_word; /* FU-161 §5.4: the one-shot word write-back */
+  e->frame_freeze = r->frame_freeze;   /* FU-161 §5.2: the freeze request */
   e->anim_id = r->anim_id;   /* OL-80: the arm bodies' `anim_sel` write-back */
   e->frame = r->frame;
   e->vel_x = r->vel_x;
@@ -1445,13 +1583,30 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
     state.delta = (uint16_t)mr->state.frame_delta;
     state.frame_index = e->stage.frame;
     state.turn = e->anim_turn;
+    uint8_t prev_frame = (uint8_t)e->stage.frame;
     fifa96_anim_advance_out out;
     if (fifa96_animation_advance(&state, record.duration, row.last_frame, &out) !=
         FIFA96_OK)
       continue;
     e->anim_timer = state.timer;
     e->stage.frame = out.frame_index;
-    if (rec) rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
+    if (rec) {
+      rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
+      /* FU-159 §5.2/§3.1 (T3): the `FUN_0008E008` frame-wrap row successor —
+       * the native fires it on the frame-timer expiry of the row's **last**
+       * frame (`(int)(byte[row+1]) <= frame` at `0x8E0E9`, before the advance)
+       * and installs the row's `next_id` for non-terminal rows (byte44 == 0).
+       * The engine's advance edge equivalent: `out.advanced` with the
+       * pre-advance frame at/past the row's last frame. The install's frame
+       * argument is `byte[+0x46] + byte[+0x3D]` with `+0x46 = 1` (the install
+       * default, 0x6E6D8), so the successor usually starts the next row at
+       * frame 0 (the resolver clamp); FU159-L5 carries the flags-bit-2 lean
+       * nuance. */
+      if (out.advanced && prev_frame >= row.last_frame) {
+        (void)fifa96_match_run_record_anim_successor(rec);
+        e->stage.frame = (int32_t)rec->frame;
+      }
+    }
   }
 }
 

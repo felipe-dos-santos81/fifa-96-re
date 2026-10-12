@@ -907,6 +907,9 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->target_y = r->target_y;
   s->target_z = r->target_z;
   s->has_slot = r->has_slot;
+  /* FU-159 §4.1/T3: +0x44 is the current anim row's flags bit 0 (derived by
+   * the dispatch staging); the kick-07 stage-2 reset gates on it. */
+  s->byte44 = r->row44;
   /* T3: the native stage-1 mode source is the live `word[slot+6]` (the FU-70
    * released word; `0x7BA29` latches the mode into it, `0x82CAC` reads it for
    * the row-0F kick). The slot belongs to this record only when it is the
@@ -2656,7 +2659,8 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   s.stage = r->stage92;
   s.active = r->active;
   s.has_slot = r->has_slot;
-  s.byte44 = 0;                     /* native +0x44 producer unported (OL-82) */
+  s.byte44 = r->row44;              /* FU-159 §4.1/T3: the anim-row terminal
+                                     * flag (derived at the dispatch staging) */
   s.byte3d = r->frame;              /* native +0x3D, staged live (OL-80) */
   s.byte_15877d = 0;                /* [0x15877D] producer unported (OL-82) */
   s.byte_15872f = 0;                /* [0x15872F] producer unported (OL-82) */

@@ -464,8 +464,11 @@ struct fifa96_match_run_record {
                         * read it while rows 28/2A/0F/07/08 persist `type`) */
   uint8_t row44;       /* native +0x44 animation/event ack byte (FU-151: the
                         * row-1E stage 0/2/8 and row-1D stage 0/4 gates read
-                        * it; the producer is the unported animation/event
-                        * pipeline, a numbered leg) */
+                        * it; FU-159/T3: produced from the current anim row's
+                        * flags bit 0 at the dispatch staging) */
+  uint16_t aux_word;   /* native +0x36: the resolved frame's aux word (the
+                        * FUN_0006E8E8 one-shot model, FU-161 §5.4) */
+  uint8_t frame_freeze;/* aux-0x2B frame-timer freeze request (FU-161 §5.2) */
   uint8_t code;        /* native +0x91 (the byte the installer writes and the
                         * 0x110680/0x7E600/0x7C990 gates index; staged from the
                         * pool entity so handlers never use the face octant) */
@@ -878,6 +881,43 @@ int fifa96_match_run_score_event(struct fifa96_match_run *mr, uint32_t side, uin
  * Sole driver: the registered 100 Hz tick trampoline (fifa96_match_run_tick),
  * so one call happens per PIT tick. fifa96_match_run_step must NOT call it. */
 int fifa96_match_run_frame(struct fifa96_match_run *mr);
+
+/* FU-159 §5.4 / FU-160 §1.4 (T3): the `FUN_0006E598` store core over a pool
+ * record — the row install the unported action bodies (row `0x0E` ->
+ * `0x827D0`) and the tests use. First-hand `/FIFA96.EXE`
+ * `disassemble_bytes 0x6E598..0x713`:
+ *  - the id clamp `(int16)id < 0 || >= 0x6F -> 0` (`0x6E68E..0x6E69B`);
+ *  - the row pointer `[0x157588] + id*9` and the flags folds
+ *    `+0x45 = flags & 4`, `+0x43 = flags & 2`, `+0x44 = flags & 1`
+ *    (`0x6E6B4..0x6E6CC`) — the engine's `row44` producer;
+ *  - `+0x46 = 1` (`0x6E6D8`) and the `+0x3F` lean 0/2/-2 from flags bits
+ *    4/5 (`0x6E6E0..0x6E6FB`);
+ *  - the frame resolve `FUN_0006E490` (`0x6E6FE..0x6E706`: `frame < 0 ->
+ *    last`, `frame > last -> 0`) and the frame-timer zero `word[+0x32] = 0`
+ *    (`0x6E70B`).
+ * The derived surface stores `anim_id`/`frame`/`row44`, forces the aux
+ * re-arm (`aux_seen = 0xFFFF`) and zeroes the render slot's `anim_timer`
+ * (the +0x32 twin; the slot is `team*11 + index`). NULL `mr`/`e` or an
+ * out-of-range slot -> -FIFA96_ERR_INVALID. Returns FIFA96_OK. */
+int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
+                                         struct fifa96_match_entity *e,
+                                         int32_t id, uint8_t frame);
+
+/* FU-159 §3.1/§5.2 (T3): the `FUN_0008E008` frame-wrap row successor over a
+ * pool record (the pool twin `FUN_0008DF84` install core). First-hand
+ * `decompile_function 0x8E008`: on the frame-timer expiry of a record whose
+ * current frame is its row's last, the successor is the row's `next_id`
+ * (`+3`) when `byte[+0x44] == 0` — `0x6F` keeps the current row, `< 0x70`
+ * installs it, `>= 0x70` mirrors the face (`FUN_00079C50(-dir[oct])`) and
+ * installs `next_id - 0x70`; the install frame argument is
+ * `byte[+0x46] + byte[+0x3D]` (the just-zero-resolved last frame plus the
+ * `+0x46 = 1` install default, so a same-size-or-smaller next row starts at
+ * frame 0). Terminal rows (`flags & 1`) take the movement/steering tables
+ * (`0x11052A`/`0x1105AA`, FU159-L5/FU161-L3) and are this helper's no-op.
+ * The mirror octant is `(type + 4) & 7` (the 0x10F334/0x10F33C vectors
+ * negate exactly; `FUN_00079C50` recomputes the same octant). Stores
+ * `anim_id`/`frame`/`row44`. NULL -> -FIFA96_ERR_INVALID. */
+int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e);
 
 /* M2 phase-9 T3 (FU-152 §2.9 / FU-145 §1.2): the every-frame FUN_00071DF4
  * call site (FUN_000736AC 0x739C6..0x73B6B). Runs the ported first arm when

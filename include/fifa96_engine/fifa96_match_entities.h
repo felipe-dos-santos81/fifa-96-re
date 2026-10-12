@@ -77,8 +77,22 @@ struct fifa96_match_entity {
   uint8_t skip_98;          /* +0x98 exclusion */
   uint8_t skip_9a;          /* +0x9A exclusion (occupied record) */
   uint8_t row44;            /* native +0x44 (animation/event ack byte; the
-                             * keeper stage gates read it; the producer is the
-                             * unported animation/event pipeline, FU-151 legs) */
+                             * keeper stage gates read it; FU-159 §4.1/T3: the
+                             * producer is the row install's `row_flags & 1`
+                             * (0x6E6CC/0x8DFC1), derived from `anim_id` by
+                             * `fifa96_match_run_record_anim_install` and the
+                             * frame-wrap successor) */
+  uint16_t aux_word;        /* native +0x36: the resolved frame's aux word.
+                             * The FUN_0006E8E8 dispatch consumes its two bytes
+                             * as two passes; one-shot arms clear their own
+                             * byte (FU-161 §5.4). Re-armed on the (anim_id,
+                             * frame) resolve edge; `aux_seen` 0xFFFF forces a
+                             * re-arm (row install). */
+  uint16_t aux_seen;        /* derived: (anim_id << 8) | frame of the last
+                             * aux resolve */
+  uint8_t frame_freeze;     /* derived: the aux-0x2B frame-timer freeze
+                             * (native `word[+0x32] = 0`, 0x6EA03), consumed by
+                             * `match_run_scene_stage` */
   uint8_t has_slot;         /* +0x20 control slot bound */
   uint8_t timer93;          /* +0x93 countdown byte */
   uint16_t timer81;         /* +0x81 countdown word */

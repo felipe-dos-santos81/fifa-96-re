@@ -1098,11 +1098,16 @@ static void test_pad_kick_release_runs_kick_row(void) {
     assert(mr.entities.ball.pair.flags == 0x10u);
     assert(mr.entities.ball.pair.code != 0u);   /* an event row was staged */
 
-    /* Releasing without a further edge changes nothing: the kick is a
-     * one-shot install (the record sits at the post-kick stage). */
+    /* FU-159 §4.2 (T3, the ack fix): the kick is a one-shot install, but the
+     * record sits on a terminal anim row (row 0, flags 0x07 -> +0x44 = 1), so
+     * the next frame's stage-2 gate fires the native reset: the record leaves
+     * code 7 into the phase-2 forced decision (code 4 here) and the stage
+     * clears. Previously +0x44 staged 0 and the record stuck at stage 2 —
+     * the second-kick blocker this task removes. */
     one_granted_frame(&mr);
-    assert(rec->code == 7u);
-    assert(rec->stage92 == 2u);
+    assert(rec->row44 == 1u);                   /* row 0 flags bit 0 */
+    assert(rec->code == 4u);                    /* the forced decision */
+    assert(rec->stage92 == 0u);
   }
 
   assert(fifa96_match_run_end(&mr) == 0);
@@ -2210,9 +2215,10 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
     }
     assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
     one_granted_frame(&mr);
-    /* the live jump: the aux row -> the FUN_0006E8E8 arm -> the BF20 arc. */
-    rec->anim_id = 0x5E;
-    rec->frame = 0;
+    /* the live jump: the aux row -> the FUN_0006E8E8 arm -> the BF20 arc.
+     * T3: staged through the bounded `record_anim_install` helper (the
+     * FUN_0006E598 store core) instead of the raw field writes. */
+    assert(fifa96_match_run_record_anim_install(&mr, rec, 0x5E, 0) == FIFA96_OK);
     for (int i = 0; i < 8 && rec->pos_y == 0; i++) one_granted_frame(&mr);
     if (rec->pos_y == 0) {
       assert(fifa96_match_run_end(&mr) == 0);
@@ -2227,6 +2233,17 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
       if ((int16_t)mr.render.camera.pos_y >= 0x38) break;
       one_granted_frame(&mr);
     }
+    /* T3 (FU-161 one-shot): the kick's height-table route gates on the
+     * kicker's live `pos_y` (`fifa96_action_kick_event_row`, loader
+     * `fifa96_action_handlers.c:113-117`: `event->height = actor->pos_y`, and
+     * `event->height != 0` selects the height table). The T1 stand-in stayed
+     * airborne only because the unmodeled one-shot re-fired the 0x0E arm every
+     * frame; with the native one-shot the first arc has landed by now, so
+     * re-stage the live jump right before the kick (the helper forces the aux
+     * re-arm); the arc's ~8-frame life spans the KICK sequence below. */
+    assert(fifa96_match_run_record_anim_install(&mr, rec, 0x5E, 0) == FIFA96_OK);
+    for (int i = 0; i < 8 && rec->pos_y == 0; i++) one_granted_frame(&mr);
+    assert(rec->pos_y != 0);
     {
       fifa96_platform_key lb = {FIFA96_ENGINE_KEY_LONG_BALL, 1};
       assert(fifa96_match_run_input(&mr, &lb, 1) == 0);
@@ -2240,8 +2257,9 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
     }
     one_granted_frame(&mr);
     assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
-    for (int i = 0; i < 8 && mr.entities.ball.pair.code == 0; i++)
+    for (int i = 0; i < 8 && mr.entities.ball.pair.code == 0; i++) {
       one_granted_frame(&mr);
+    }
     /* the airborne discriminator: the kick staged code 4 with d < 0x70 — the
      * band table would give code 6 there, so the height table ran. */
     assert(mr.entities.ball.pair.code == 4u);
@@ -2357,14 +2375,18 @@ static void test_record_jump_arc_starter(void) {
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
-  e->anim_id = 0x5E;
-  e->frame = 0;
+  /* T3: staged through the bounded FUN_0006E598 store core. */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 0) == FIFA96_OK);
   e->timer81 = 0;   /* the arm must NOT read it (fix round 1: was 0x10) */
   assert(e->pos_y == 0);
   one_granted_frame(&mr);
   assert(e->pos_y == 16);          /* the aux arm + the same frame's arc */
   assert(e->jump_base == 15 && e->jump_timer == 17);
-  e->anim_id = 0;                  /* leave the aux frame; the arc descends */
+  /* FU-161 §5.4 (T3): the 0x0E arm is one-shot — the aux byte is cleared on
+   * the resolve, so the frame no longer re-stages and the arc descends on its
+   * own (no `anim_id` mask needed; previously the unmodeled re-fire froze the
+   * arc at the crest). */
+  assert(e->aux_word == 0u);
   one_granted_frame(&mr); assert(e->pos_y == 15 && e->jump_timer == 19);
   one_granted_frame(&mr); assert(e->pos_y == 13 && e->jump_timer == 21);
   one_granted_frame(&mr); assert(e->pos_y == 12 && e->jump_timer == 23);
@@ -2373,6 +2395,135 @@ static void test_record_jump_arc_starter(void) {
   one_granted_frame(&mr); assert(e->pos_y == 2 && e->jump_timer == 29);
   one_granted_frame(&mr);          /* t=31 > 2*15: the landing edge */
   assert(e->pos_y == 0 && e->jump_base == 0 && e->jump_timer == 0);
+  assert(e->target_x == e->pos_x && e->target_z == e->pos_z);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-159 §4.1/§5.4 (T3): the FUN_0006E598 store core + the row-flags bit-0
+ * producer (+0x44). First-hand row-table values: row 0x00 flags 0x07
+ * (terminal -> 1), row 0x5E flags 0x00 (-> 0), row 0x26 flags 0x07 (-> 1).
+ * The install clamps the id (`> 0x6E -> 0`), the frame (`> last -> 0`, the
+ * FUN_0006E490 rule; row 0x5E last = 5) and forces the aux re-arm; the
+ * per-frame dispatch derives row44 from the live anim_id even when the pool
+ * byte is stale. */
+static void test_record_anim_install_row44(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
+  assert(e->anim_id == 0x00 && e->row44 == 1u);
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 0) == FIFA96_OK);
+  assert(e->anim_id == 0x5E && e->row44 == 0u);
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
+  assert(e->anim_id == 0x26 && e->row44 == 1u);
+  /* frame clamp: row 0x5E last = 5 -> frame 9 installs at 0 */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 9) == FIFA96_OK);
+  assert(e->frame == 0u);
+  /* id clamp: 0x80 -> row 0 */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x80, 0) == FIFA96_OK);
+  assert(e->anim_id == 0x00 && e->row44 == 1u);
+  /* the dispatch derivation overrides a stale pool byte */
+  e->anim_id = 0x5E;
+  e->row44 = 1u;                    /* stale */
+  one_granted_frame(&mr);
+  assert(e->row44 == 0u);
+  e->anim_id = 0x00;
+  one_granted_frame(&mr);
+  assert(e->row44 == 1u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-159 §3.1/§5.2 (T3): the FUN_0008E008 frame-wrap successor over the pool.
+ * First-hand rows: 0x5E {last 5, flags 0x00, next 0x0F}, 0x0F {last 4, flags
+ * 0x00, next 0x00}, 0x00 {last 0, flags 0x07 (terminal), next 0x00}, 0x0E
+ * {self-loop}, 0x14 {next 0x7F: mirror + 0x0F}, 0x26 {terminal self-loop}.
+ * The install frame argument is last + 1 with the +0x46 = 1 install default
+ * (0x6E6D8), clamped by the new row's last (0x6E490) — so the chain lands at
+ * frame 0. */
+static void test_record_row_successor_chain(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  e = &mr.entities.team[1].records[4];
+
+  /* 0x5E (last frame) -> 0x0F frame 0, row44 0 */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 5) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
+  assert(e->anim_id == 0x0F && e->frame == 0u && e->row44 == 0u);
+  /* 0x0F (last 4) -> 0x00 frame 0, row44 1 (terminal) */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x0F, 4) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
+  assert(e->anim_id == 0x00 && e->frame == 0u && e->row44 == 1u);
+  /* terminal rows are this helper's no-op (the movement tables are
+   * FU159-L5/FU161-L3) */
+  assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
+  assert(e->anim_id == 0x00 && e->row44 == 1u);
+  /* self-loop 0x0E restarts at frame 0 */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x0E, 8) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
+  assert(e->anim_id == 0x0E && e->frame == 0u);
+  /* mirror: row 0x14 next 0x7F -> face flips by 4 and 0x0F installs */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x14, 6) == FIFA96_OK);
+  e->type = 3u;
+  assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
+  assert(e->anim_id == 0x0F && e->frame == 0u && e->type == 7u);
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 5) == FIFA96_OK);
+  assert(fifa96_match_run_record_anim_install(NULL, e, 0x5E, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_record_anim_install(&mr, NULL, 0x5E, 0) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_record_anim_successor(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU-159 §2.3 (T3): the case-0x0F arm — the `pos_y != 0` branch resolves the
+ * frame to 3 through the FUN_0006E490 clamp (`0x6EE7B..0x6EE8B`); the
+ * `pos_y == 0` branch runs the FUN_00079B1C snap and the relaunch
+ * (`0x6EE90..0x6EEBE`). Row 0x14 f0 carries aux 0x0F (first-hand frame read
+ * 0x10E4BC `40 00 0F 00 00`). */
+static void test_record_jump_case_0f_snap_frame3(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+
+  /* pos_y != 0: frame := 3 (row 0x14 last 6 admits 3) */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x14, 0) == FIFA96_OK);
+  e->pos_y = 0x10;
+  one_granted_frame(&mr);
+  assert(e->frame == 3u);
+  assert(e->pos_y == 0x10);          /* no landing writes on this branch */
+  /* pos_y == 0: the snap + the relaunch base. Re-arm through the install
+   * (the aux one-shot cleared the word). */
+  e->pos_y = 0;
+  e->lane = 0x1234;
+  e->speed71 = 9;
+  e->vel73 = 5;
+  e->vel75 = -5;
+  e->vel_x = 0x12345678;
+  e->vel_z = 0x23456789;
+  e->body_timer9c = 7;
+  e->target_x = 0x111;
+  e->target_z = 0x222;
+  e->jump_base = 0;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x14, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  /* the arm's relaunch base survives the same frame's arc: base = ramp(0x1C),
+   * timer advanced by delta (t=2), pos_y sampled from the shared arc */
+  assert(e->jump_base == fifa96_camera_ramp(0x1C));
+  assert(e->jump_timer == 2);
+  assert(e->pos_y == fifa96_camera_arc_height((int16_t)fifa96_camera_ramp(0x1C), 2));
+  assert(e->lane == 0 && e->speed71 == 0 && e->vel73 == 0 && e->vel75 == 0);
+  assert(e->vel_x == 0 && e->vel_z == 0 && e->body_timer9c == 0);
   assert(e->target_x == e->pos_x && e->target_z == e->pos_z);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -4601,6 +4752,9 @@ int main(void) {
   test_held_key_moves_live_controlled_record();
   test_live_carrier_claim_and_kick();
   test_record_jump_arc_starter();
+  test_record_anim_install_row44();
+  test_record_row_successor_chain();
+  test_record_jump_case_0f_snap_frame3();
   test_live_airborne_long_ball_seed_then_band2_follow();
   test_live_long_ball_mode40_band2_follow();
   test_live_pass_kick_runs_receive_arm();
