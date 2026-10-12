@@ -19,7 +19,9 @@ derived from one binary (`FIFA96.EXE`):
   + full CTest suite. Run it (green) before any push.
 - Single test: `ctest --test-dir build -R <name> --output-on-failure`, e.g.
   `-R test_engine_m2`; binaries also run directly from the **repo root**
-  (`./build/test_engine_m2`) — tests assume CWD = repo root.
+  (`./build/test_engine_m2`) — tests assume CWD = repo root; the one
+  exception is `test_engine_m2_noiso`, which CTest runs from the build dir
+  to exercise the no-ISO skip.
 - `make game` — windowed SDL3 engine; needs SDL3 (the build silently degrades to
   headless-only without it) and `game/FIFAPCCD96.iso`. Smoke runs use `DISPLAY=:1`.
 - `make run FILE=…` — host runner (`auto` sniffs the container; see README for modes).

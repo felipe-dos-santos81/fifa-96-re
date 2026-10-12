@@ -257,7 +257,10 @@ the null backend's chained FNV-1a) — new M2 sha `5f7e7692…`; **M1 unmoved**
 unambiguous soccer ball (`docs/screens/p13-t2-ball-crop.png`, 4x); post-kick
 the ball leaves the fixed view within ~1 s (the phase-2 lead; no live follow
 — R2-L4), so the roll frames do not land in the stills (the unit sequence
-and the v13 re-pin are the roll's runtime evidence). Legs: L158.1
+and the v13 re-pin are the roll's runtime evidence);
+`p13-t2-live-play.png` is byte-identical to the kickoff still (the same
+fixed view — the duplicate is the two-session determinism check, not a
+second state). Legs: L158.1
 (native entity-pass pose suppression, DOSBox-X), L158.2 (sanitizer
 write-back site + motion stand-in), L158.3/L158.4 unchanged, new L158.5
 (the presenter's `[0x109000]` scale / `FUN_00057278` screen-pair source).

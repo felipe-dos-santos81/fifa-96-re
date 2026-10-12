@@ -82,3 +82,26 @@ R5–R7 run **concurrently**. Each is read-only on the repo: it writes ONLY its 
 - **Dependency order:** Wave R (parallel) → T1 → T2 → T3 → T4. T2's ball art is independent of T1; T3's repeated-kick work wants T1/T2's state for the smoke.
 - **Split rule:** any recon question that cannot bound its answer in one slice → land the bounded part and number the rest as legs (the wave does not stretch).
 - **Determinism:** T2's art change likely re-pins M2 with reason + frame diff (the visible-quality upgrade); T1/T3 live-only paths expect no re-pin; M1 never moves.
+
+---
+
+## Errata (execution record, phase-13; added 2026-10-12 after the two-axis review)
+
+- **Wave R grew by one authorized second wave, not a stretched slice.** The
+  Split rule above bounds a reconnaissance *slice*; separately, the user
+  directed "use 8 agents to speed up", so the controller authorized a second
+  read-only recon wave R8–R14 (FU-160…FU-166, commit `ddee100`) ahead of T3 —
+  same read-only contract (slice + workspace report only, no repo writes).
+  The T1/T3 gate **fallback clauses** are the ones that were taken (visible
+  sustained pan and the full live repeatable sequence remain the numbered
+  legs R5-L2/FU160-L4 and FU159-L3/L5/L6 — not gate breaches).
+- **T3 also landed R14's session seed** (`fifa96_match_run_begin` seeds
+  `[0x14C32A] = 0`, the settled ordinary match, FU-166 §5) per the execution
+  ruling carrying R8/R9/R10/R14 refinements into T3; the M2 tape keeps
+  byte-1 *staged* at the kickoff directive (FU166-L5, keep-staged) so v13
+  stands byte-exact.
+- **T4 rider #2** landed as this plan's own Files line predicted (the
+  `CMakeLists.txt` ISO-path one-liner): `test_engine_m2_noiso` runs from the
+  build dir (`WORKING_DIRECTORY ${CMAKE_BINARY_DIR}`), overriding the path
+  environment so the no-ISO tape path is CI-covered on the committed tape
+  (109/109).
