@@ -786,13 +786,14 @@ typedef struct fifa96_action_0d_out {
   int32_t timer89;         /* +0x89 after */
   uint8_t clear_actor;     /* [0x157A83] = 0 (head) */
   uint8_t word83_20;       /* +0x83 = 0x20 */
-  uint8_t word85_zero;     /* +0x87 = 0 */
+  uint8_t word87_zero;     /* +0x87 = 0 */
   uint8_t ball_param;      /* 0x702F8 call (unported, FU180-L8) */
   int16_t word85;          /* +0x85 after (0x702F8 return; staged 0) */
   uint8_t anim;            /* 0x6E598 call */
   uint8_t anim_id;         /* the requested anim id (0x10 arm0 / 0x0B arm1) */
   uint8_t metric;          /* 0x8DCD4 call (arm 1) */
-  int16_t metric_dist;     /* out word +0x65 */
+  int16_t metric_dist;     /* out[0] word +0x65 (fifa96_arm_dist_stage) */
+  int16_t metric_lane;     /* out[2] word +0x69 = dz (fifa96_arm_dist_stage) */
   uint8_t face;            /* 0x79C50 call (arm 3) */
   int32_t face7d;          /* the face angle (native +0x7D) */
   uint8_t face_sector;     /* the octant (native +0x8E) */

@@ -382,3 +382,28 @@ action-table slot for code `0x0D` stays **NULL**: its only installer is row-09's
 ported body with no ported installer and stays uncounted (the rows-27/29/2C
 precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
 `0x8DCD4`/`0x79C50` sinks are exposed as requests (FU180-L8).
+
+---
+
+## 10. Erratum + fix round — M2 phase-15 T3 review (2026-10-12)
+
+> **FU-180 §3, row-0x0D arm-1 offsets:** "`target += (int8)0x10F331/0x10F339
+> [sector]<<6`". **Corrected (fresh `read`/`disassemble_bytes 0x82636` this
+> round):** the arm-1 code loads the **dword** `[0x10F331 + sector]` /
+> `[0x10F339 + sector]` and shifts it `SAR 0x18` (`>>24`), which yields the
+> byte at `0x10F334 + sector` / `0x10F33C + sector` — the **same effective byte
+> tables arm 0 reads directly** (`0x825BB`/`0x825C3`). The `0x10F331`/`0x10F339`
+> addresses are only the dword-load *bases*; the `+3` from `>>24` makes the
+> effective tables identical. So a single caller-supplied `type_off_x`/
+> `type_off_z` pair (`0x10F334`/`0x10F33C`) is correct for **both** arms, and the
+> §9 landing note's `0x10F334/0x10F33C[sector]<<6` is the reconciled reading.
+
+> **FU-180 §3, row-0x0D arm-1 metric:** "`0x8DCD4(pos,target,+0x65)`". **Fix
+> (this round):** the T3 body previously used the 2-arg `0x8DC68`
+> (`fifa96_entity_distance`); the native is the 3-arg `FUN_0008DCD4`, ported as
+> `fifa96_arm_dist_stage` (`fifa96_arm_helpers.c`), which writes the
+> `{word distance, word dx, word dz}` triple at `+0x65/+0x67/+0x69`. The body
+> now calls `fifa96_arm_dist_stage` and reports `metric_dist` (`+0x65`) and
+> `metric_lane` (`+0x69` = dz). Fresh `disassemble_bytes 0x8DCD4` this round
+> confirms the x/z low-word deltas (the y axis is never read) and the octagonal
+> distance into `out[0]`.

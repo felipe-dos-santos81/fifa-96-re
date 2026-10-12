@@ -81,7 +81,9 @@
  * Appendix H 12-arm machine). All other action rows
  * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
  * tested pure parts but unported arms; rows 27, 2C and 29 have ported bodies
- * but are unwired with their entries unresolved per the FU-142f census; the
+ * but are unwired with their entries unresolved per the FU-142f census; row 0D
+ * has a ported body (fifa96_action_sequence_0d_step) but its only installer,
+ * row-09 0x80F61, is inside the unported row-09 arm 1 (FU178-L1); the
  * rest are `not ported`, with 2B now a dead entry per FU-142f). FU-139
  * (cluster B) keeps 05/06 UNSUP (their carrier/pursuit arms are unported);
  * FU-139 §10 (Task 12) wires the possession/tackle rows 18/21/23

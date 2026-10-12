@@ -371,9 +371,12 @@ release edge `0x7CFB2`, the wired row-06 RNG arm `0x807C1`). Fresh
 (`0x809F0 = {0x80A3F, 0x80BFB, 0x80FCC, 0x8103A}`, `0x1106E0[9] = 0x080A00`)
 and every arm-0 byte. The arm-0 set branch ports the two `0x114E04` sine folds
 as `fifa96_entity_sine(face7d)` / `fifa96_entity_sine(face7d+0x100)` fed to a
-local `0x795A4` multiply port (`match_row09_mul`) — verified equivalent to the
-native `SHL AH,7; SBB; ADD AH,AH; SBB; XOR; SUB` fold (the sign bit and the
-mirror bit agree for the sign-extended 10-bit angle). **Erratum to §3.3:** the
+local `0x795A4` multiply port (`match_row09_mul`). The `fifa96_entity_sine`
+idiom is *reasoned* (not separately unit-verified) to reduce to the native
+`SHL AH,7; SBB; ADD AH,AH; SBB; XOR; SUB` fold for the sign-extended 10-bit
+angle: the native mirrors on bit8 and negates on bit15, and for a canonical
+signed 10-bit angle bit15 (the sign extension) equals bit9 (the entity idiom's
+sign bit) — so the two agree on the reachable inputs. **Erratum to §3.3:** the
 second `0x795A4` call at `0x80B32` multiplies by `(int16)t1` (ECX is
 overwritten at `0x80B22`), not by the second sine — the port reproduces that
 literally. Unmodelled cells staged zero with disclosed producers: the

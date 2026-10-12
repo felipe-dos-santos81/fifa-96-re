@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_ball_pairing.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_rng.h"
@@ -1424,7 +1425,7 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
     out->word83_20 = 1;                             /* 0x82574 */
     out->ball_param = 1;                            /* 0x8258d */
     state->word85 = 0;                              /* 0x702F8 return, FU180-L8 */
-    out->word85_zero = 1;                           /* 0x825a4 word[+0x87]=0 */
+    out->word87_zero = 1;                           /* 0x825a4 word[+0x87]=0 */
     out->anim = 1;                                  /* 0x825ad 0x6E598 */
     out->anim_id = 0x10;                            /* the 0x82583 EDX immediate */
     tx = state->type_off_x ? state->type_off_x[state->sector & 0x1Fu] : 0;
@@ -1441,15 +1442,30 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
     state->target_x = state->pos_x;                 /* 0x82633 MOVSD x3 */
     state->target_y = state->pos_y;
     state->target_z = state->pos_z;
+    /* 0x8263f/0x8265c: the dword loads at `0x10F331/0x10F339[sector]` shifted
+     * `>>24` yield the byte at `0x10F334/0x10F33C[sector]` — the SAME tables arm
+     * 0 reads directly (see the FU-180 §3 erratum), so one `type_off_x`/
+     * `type_off_z` pair is correct for both arms. */
     if (state->type_off_x != NULL)                  /* 0x8263f..0x8264e */
       state->target_x += (int32_t)state->type_off_x[state->sector & 0x1Fu] << 6;
     if (state->type_off_z != NULL)                  /* 0x8265c..0x82671 */
       state->target_z += (int32_t)state->type_off_z[state->sector & 0x1Fu] << 6;
     out->target_set = 1;
-    out->metric = 1;                                /* 0x82679 0x8DCD4 */
-    out->metric_dist = (int16_t)fifa96_entity_distance(
-        (int16_t)(state->target_x - state->pos_x),
-        (int16_t)(state->target_z - state->pos_z));
+    out->metric = 1;                                /* 0x82679 FUN_0008DCD4 */
+    {
+      /* The native `0x8DCD4(EAX=&pos[0x59], EDX=&target[0x4D], EBX=&rec[0x65])`
+       * writes the `{word distance, word dx, word dz}` triple at `+0x65/+0x67/
+       * +0x69` — the ported `fifa96_arm_dist_stage` (x/z low words only; the y
+       * axis is never read, FU-142 Appendix C.3). This is NOT the 2-arg
+       * `0x8DC68` distance the row-09 port uses. */
+      fifa96_arm_vec from = { state->pos_x, state->pos_y, state->pos_z };
+      fifa96_arm_vec to = { state->target_x, state->target_y, state->target_z };
+      int32_t distance = 0;
+      int32_t lane = 0;
+      (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane);
+      out->metric_dist = (int16_t)distance;         /* +0x65 word */
+      out->metric_lane = (int16_t)lane;             /* +0x69 word (dz) */
+    }
     out->anim = 1;                                  /* 0x82693 0x6E598 */
     out->anim_id = 0x0B;                            /* 0x82683 EDX */
     state->timer89 = 0;                             /* 0x8269e */

@@ -358,13 +358,15 @@ static void test_sequence_0d_row(void) {
   assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
   assert(o.word83_20 == 1);
   assert(o.ball_param == 1);          /* 0x702F8 */
-  assert(o.word85_zero == 1);         /* +0x87 = 0 */
+  assert(o.word87_zero == 1);         /* +0x87 = 0 */
   assert(o.vel_scale == 1);          /* arm 0 velocity scale */
   assert(o.ran == 1);                 /* +0x9E */
   assert(o.target_set == 1);          /* arm 1 pos -> target */
   assert(s.target_x == 0x180);        /* 0x100 + (2 << 6) */
   assert(s.target_z == 0x1C0);        /* 0x200 + (-1 << 6) */
   assert(o.metric == 1);              /* 0x8DCD4 request */
+  assert(o.metric_dist == 0x90);      /* fifa96_arm_dist_stage: dx 0x80, dz -0x40 */
+  assert(o.metric_lane == -0x40);     /* the +0x69 word = dz */
   assert(o.face == 1);                /* 0x79C50 request (arm 3) */
   assert(o.anim == 1);
   assert(o.anim_id == 0x0B);          /* arm 1 overrides arm 0's 0x10 */
