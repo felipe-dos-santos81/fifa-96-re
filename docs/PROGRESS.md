@@ -538,7 +538,9 @@ to the v14 golden `7b4b241a…`, 792 lines; M1 `09b726b7…` unmoved; no re-pin 
 T1's act seam reproduced the exact FU-170 §7 act-9 cadence and T2/T3 are
 install-live/tape-dormant). `tests/test_engine_m2.c` gains the v15 provenance
 block plus the T1–T3 regression **riders** as tape/strata-level cross-checks
-(all mutation-RED): the census shape (exact 28 action + 1 phase = **29/80 =
+(**all seven mutation-RED** — each mutation aborts `run_phase15_riders` at its
+own assertion; the per-rider mutation is recorded in the phase-15 T4 report):
+the census shape (exact 28 action + 1 phase = **29/80 =
 36%**, the phase-15 slots pinned so a silent re-wire/un-census/slot-flip fails
 the tape), the act seam + phase `0x1F` dispatch, row `0x17`'s NULL slot (the
 rows-27/29/2C precedent), the keeper-cluster install (`0x1F`→`0x1B` invoke-now)

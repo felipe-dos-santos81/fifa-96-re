@@ -2257,7 +2257,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   re-pin — T1's act seam reproduced the exact FU-170 §7 act-9 cadence and
   T2/T3 are install-live/tape-dormant) with a provenance block plus the T1–T3
   regression **riders** as tape/strata-level cross-checks (`run_phase15_riders`,
-  ISO-independent, all mutation-RED): the census shape (exact 28 action + 1
+  ISO-independent; **all seven riders mutation-RED**, each mutation aborting
+  `run_phase15_riders` at its own assertion — the per-rider mutation is recorded
+  in the phase-15 T4 report): the census shape (exact 28 action + 1
   phase, the phase-15 slots pinned so a silent re-wire/un-census/slot-flip
   fails the tape), the act seam + phase `0x1F` dispatch (stage-0 `[0x15882A]`
   clear), row `0x17`'s NULL slot + UNSUPPORTED dispatch (body reachable by

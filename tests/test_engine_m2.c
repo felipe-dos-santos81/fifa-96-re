@@ -1242,7 +1242,10 @@
  * v15 riders (the T1–T3 regression pins). The phase-15 reviews surfaced a set
  * of cheap regression pins; they already exist as handler unit tests, so the
  * acceptance layer adds the tape/strata-level or cross-check form that would
- * catch a re-break (`run_phase15_riders` below, ISO-independent pure state):
+ * catch a re-break (`run_phase15_riders` below, ISO-independent pure state).
+ * **All seven riders are mutation-RED** — each rider's deliberately-broken
+ * mutation aborts `run_phase15_riders` at its own assertion (the per-rider
+ * mutations are recorded in the phase-15 T4 report):
  *   - act seam + phase 0x1F (FU175): `fifa96_match_dispatch_phase(mr, 0x1F)`
  *     reaches the ported handler and its stage-0 `[0x15882A]` clear runs;
  *   - row 0x17 (FU181): the slot is NULL and the dispatcher returns
@@ -2850,6 +2853,12 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
+  /* v15 (phase-15 T4): the phase-15 rider cross-checks (both modes, pure
+   * state): the census shape + the T1–T3 regression pins. Run first so each
+   * rider's own mutation aborts at its assert, before the tape consumes the
+   * process; they print nothing, so the transcript is unaffected. */
+  run_phase15_riders();
+
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
   struct m2_result res;
@@ -2864,10 +2873,6 @@ int main(void) {
           "test_engine_m2 natural probe: live phase 2 at step %d (match start "
           "%d), row 01 dispatched, score 0-0\n",
           nat.phase2_step, nat.match_start_step);
-
-  /* v15 (phase-15 T4): the phase-15 rider cross-checks (both modes, pure
-   * state): the census shape + the T1–T3 regression pins. */
-  run_phase15_riders();
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
