@@ -885,7 +885,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
 /* FU-159 §5.4 / FU-160 §1.4 (T3): the `FUN_0006E598` store core over a pool
  * record — the row install the unported action bodies (row `0x0E` ->
  * `0x827D0`) and the tests use. First-hand `/FIFA96.EXE`
- * `disassemble_bytes 0x6E598..0x713`:
+ * `disassemble_bytes 0x6E598..0x6E713`:
  *  - the id clamp `(int16)id < 0 || >= 0x6F -> 0` (`0x6E68E..0x6E69B`);
  *  - the row pointer `[0x157588] + id*9` and the flags folds
  *    `+0x45 = flags & 4`, `+0x43 = flags & 2`, `+0x44 = flags & 1`

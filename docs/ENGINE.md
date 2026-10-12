@@ -2021,6 +2021,22 @@ the build also produces the windowed `fifa96` target (`make game`).
     unchanged: FU160-L4 (stage-2 camera arm), FU159-L5, FU161-L3/L4/L5/L6,
     the row-0x5E live installer, the row-0x12 f3/f5 sub-arms, R5-L1..L7,
     R2-L1/R2-L4, L155.1..4, the FU-149..152 leg sets.
+- **M2 phase-13 final whole-plan review fix (2026-10-12).** The review's MF1:
+  the row-0x0E stage-2 gate read `entities.controlled` (`[0x157A83]`); the
+  native at `0x82806 CMP EBP,[0x001577CA]` (`3b2dca771500`) compares the
+  **camera-tracked** record (`render.camera.tracked`, FU-152 §2.9) and
+  `0x82812 CMP word[EBP+0x85],0` the jump word — both to the same advance
+  block (`0x82AA0`: `timer89 = 0`, stage `2 -> 3`). The port now reads
+  `mr->render.camera.tracked == r->entity_id` (FU-160 §7 errata; the old
+  `entities.controlled` read was a cell conflation, not a recorded
+  stand-in). The unit pin `test_action_0e_live_jump_selector` asserts
+  the tracked-only and `+0x85` arms separately (RED-verified against the
+  pre-fix read). Minors: the successor compare cite corrected to
+  `0x8E143/0x8E146` (was `0x8E0E9`, the tail of the frame-arg build), the
+  `ball_bank` capture gains the undecoded-slot guard, the
+  `0x6E598..0x6E713` range notation fixed, and AGENTS.md's census line synced
+  to `22/80 -> 27%`. `make check` 109/109; M1/M2 byte-exact (the tape never
+  dispatches row 0x0E, so no re-pin).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

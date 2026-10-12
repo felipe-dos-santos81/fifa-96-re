@@ -1663,7 +1663,8 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
       rec->frame = (uint8_t)out.frame_index;   /* OL-80 +0x3D */
       /* FU-159 §5.2/§3.1 (T3): the `FUN_0008E008` frame-wrap row successor —
        * the native fires it on the frame-timer expiry of the row's **last**
-       * frame (`(int)(byte[row+1]) <= frame` at `0x8E0E9`, before the advance)
+       * frame (`(int)(byte[row+1]) <= frame` at `0x8E143/0x8E146`, before the
+       * advance)
        * and installs the row's `next_id` for non-terminal rows (byte44 == 0).
        * The engine's advance edge equivalent: `out.advanced` with the
        * pre-advance frame at/past the row's last frame. The install's frame
@@ -4946,10 +4947,12 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->bank_count = total;
   /* FU-158 §8.1 (phase-13 T2): capture the GAMEART0 `ball.fsh` bank (the
    * dedicated draw's source) at the player-container offset; a pitch container
-   * without the entry (or an index past the byte bank domain) keeps the 0xFF
-   * "absent" sentinel and the FU-84 resolve. */
+   * without the entry, an undecoded slot (`data == NULL`, the zeroed bank) or
+   * an index past the byte bank domain keeps the 0xFF "absent" sentinel and
+   * the FU-84 resolve (the render guard keeps the 0xFF-slot sentinel
+   * collision benign). */
   r->ball_bank = FIFA96_MATCH_RUN_BALL_BANK_NONE;
-  if (pitch.ball_index >= 0) {
+  if (pitch.ball_index >= 0 && pitch.items[pitch.ball_index].data != NULL) {
     uint32_t ball_slot = player.count + (uint32_t)pitch.ball_index;
     if (ball_slot <= 0xFFu) r->ball_bank = (uint8_t)ball_slot;
   }

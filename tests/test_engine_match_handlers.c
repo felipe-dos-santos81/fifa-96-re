@@ -444,8 +444,9 @@ static void test_live_throw_in_camera_y_cut(void) {
  * the target from the camera stand-in (0x71B9C) + the 0x8DCD4/0x79C50 metric
  * and face; stage 1 re-arms the self receiver timer (0x79B58) and installs
  * anim row 0x12 (frame 0, FUN_0006E598) once `timer89 >= 0x0C` (12 units at
- * delta 2 = 6 frames); stage 2 advances on the controlled/jump_base gate;
- * stage 3 resets when the anim row is terminal (the live byte44 producer).
+ * delta 2 = 6 frames); stage 2 advances on the tracked (`[0x1577CA]`)/
+ * jump_base gate; stage 3 resets when the anim row is terminal (the live
+ * byte44 producer).
  * The phase gate resets any non-phase-2 call. */
 static void test_action_0e_live_jump_selector(void) {
   struct fixture f;
@@ -492,7 +493,16 @@ static void test_action_0e_live_jump_selector(void) {
   assert(f.mr.record.anim_id == 0x12 && f.mr.record.ran == 1);
   assert(f.mr.record.stage92 == 2u && f.mr.record.timer89 == 0);
 
-  /* stage 2 -> 3 on the jump_base gate */
+  /* stage 2 -> 3 on the camera-tracked gate: the native compare is
+   * `CMP EBP,[0x1577CA]` (0x82806) — render.camera.tracked, NOT the
+   * controlled [0x157A83] the pre-fix port read. */
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = f.mr.record.entity_id;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  /* ... and on the +0x85 word (0x82812) when tracked does not name it */
+  f.mr.record.stage92 = 2u;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
   e->jump_base = 15;
   f.mr.record.jump_base = 15;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);

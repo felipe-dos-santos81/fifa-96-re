@@ -1253,9 +1253,11 @@ static struct fifa96_match_entity *match_sp_entity(struct fifa96_match_run *mr,
  *    then `FUN_0006E598(self, 0x12, frame 0)` (`0x827E2`, the fresh
  *    `record_anim_install`; the `ECX = byte[+0x8E]` load is dead, FU-160
  *    §1.4), `byte[+0x9E] = 1` (ran), `timer89 = 0`, stage -> 2;
- *  - stage 2 `0x82806..0x82AB2`: `record == [0x1577CA]` (the controlled
- *    actor) or `word[+0x85] != 0` -> `timer89 = 0`, stage -> 3; the else arm
- *    (`0x82820..0x82A9C`, the camera-follow/slot-dir block) is FU160-L4;
+ *  - stage 2 `0x82806..0x82AB2`: `record == [0x1577CA]` (the camera-tracked
+ *    record, engine `mr->render.camera.tracked`; the separate controlled cell
+ *    is `[0x157A83]`) or `word[+0x85] != 0` -> `timer89 = 0`, stage -> 3; the
+ *    else arm (`0x82820..0x82A9C`, the camera-follow/slot-dir block) is
+ *    FU160-L4;
  *  - stage 3 `0x82AB8..0x82AC4`: `byte[+0x44] != 0` -> `FUN_0007DAB4` reset
  *    (the completed-animation reset; row44 is the live anim-row terminal
  *    flag, so the record frees when the successor reaches a terminal row). */
@@ -1308,8 +1310,8 @@ static int fifa96_match_action_0E(struct fifa96_match_run *mr) {
     r->timer89 = 0;                                  /* 0x827F4 */
     r->stage92 = 2u;                                 /* 0x82800 */
   }
-  if (r->stage92 == 2u) {                            /* 0x82806 */
-    if (mr->entities.controlled == r->entity_id || r->jump_base != 0) {
+  if (r->stage92 == 2u) {                            /* 0x82806/0x82812 */
+    if (mr->render.camera.tracked == r->entity_id || r->jump_base != 0) {
       r->timer89 = 0;                                /* 0x82AA6 */
       r->stage92 = 3u;                               /* 0x82AB2 */
     }
@@ -2954,7 +2956,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x0D, NULL,
      "FU-137 §6: FU-136 row 0D: not ported (partial); FU-82 4-arm 0x8250C + FU-138 velocity_scale; OL-22"},
     {0x0E, fifa96_match_action_0E,
-     "FU-160 §2/FU-159 §3.3 (phase-13 T3): row 0E ported (0x82710..0x82ACF, fresh first-hand): the phase gate + timer89 accumulate, stage 0 (index gate, 0x71B9C camera-target stand-in, 0x8DCD4 metric + 0x79C50 face), stage 1 (0x157794 target, 0x79B58 self receiver timer, timer89 >= 0x0C -> install row 0x12 on self via FUN_0006E598 frame 0, ran), stage 2 (controlled/jump_base -> 3; the camera-follow arm 0x82820..0x82A9C is FU160-L4) and stage 3 (+0x44 reset) — the live jump selector: row-23 tackle -> install 0x0E -> row 0x12 -> the ported jump arm/arc"},
+     "FU-160 §2/FU-159 §3.3 (phase-13 T3): row 0E ported (0x82710..0x82ACF, fresh first-hand): the phase gate + timer89 accumulate, stage 0 (index gate, 0x71B9C camera-target stand-in, 0x8DCD4 metric + 0x79C50 face), stage 1 (0x157794 target, 0x79B58 self receiver timer, timer89 >= 0x0C -> install row 0x12 on self via FUN_0006E598 frame 0, ran), stage 2 (tracked [0x1577CA]/jump_base -> 3; the camera-follow arm 0x82820..0x82A9C is FU160-L4) and stage 3 (+0x44 reset) — the live jump selector: row-23 tackle -> install 0x0E -> row 0x12 -> the ported jump arm/arc"},
     {0x0F, fifa96_match_action_0F,
      "FU-139 §9/FU-137 §5.2: row 0F ported (0x82AD0..0x82DCF machine; 0x7B9C4 kick path + 0x79B1C snap/0x79B6C face) over the pool; corner/predictor table inputs OL-66"},
     {0x10, fifa96_match_action_10,

@@ -1107,11 +1107,11 @@
  *      predicate refuses.
  *   4. **The honest dormancy**: the row-0x0E stage-2 camera/slot arm is leg
  *      FU160-L4 (`0x82820..0x82A9C` unported — the engine reaches stage 3
- *      only through the controlled/`jump_base` gate); the live follow stays
- *      partial (the pan is live, the sustained follow needs the unported
- *      receive -> follow coupling; `follow_on_tape == 0`); the jump is not
- *      key-drivable (the row-23 tackle drain is AI/contact-gated — the T3
- *      smoke note), so its runtime evidence is the ISO tests.
+ *      only through the tracked (`[0x1577CA]`)/`jump_base` gate); the live
+ *      follow stays partial (the pan is live, the sustained follow needs the
+ *      unported receive -> follow coupling; `follow_on_tape == 0`); the jump
+ *      is not key-drivable (the row-23 tackle drain is AI/contact-gated — the
+ *      T3 smoke note), so its runtime evidence is the ISO tests.
  *   5. **The no-ISO tape path is CI-covered** (T4 rider): CTest runs the same
  *      tape as `test_engine_m2_noiso` from the build directory, where
  *      `game/FIFAPCCD96.iso` does not resolve, so the documented

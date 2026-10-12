@@ -536,3 +536,28 @@ Rec #2 (row 0x5E via the row-0x0C stumble): **still blocked** — the
 `fifa96_match_run_contact` entry remains test-only (needs a live caller +
 the magnitude helper + the `[0x7CF]` counter). Rec #3 (rows 0x14/0x5C):
 unchanged leg. New leg FU160-L4 recorded; FU160-L1/L2/L3 unchanged.
+
+## 7. Errata — final whole-plan review (2026-10-12)
+
+Quoted from the T3 status append above:
+
+> stage 2
+> (controlled/`jump_base` -> 3; the else camera-follow/slot-dir arm
+> `0x82820..0x82A9C` is the **new leg FU160-L4**)
+
+**Correction (fresh `disassemble_bytes 0x82806..0x82835`, final review).** The
+native stage-2 gate compares the record against **`[0x1577CA]` — the
+camera-tracked entity** (FU-152 §2.9), exactly as §2.2 above quotes it — and
+against the `+0x85` word; both arms jump to the same advance block `0x82AA0`
+(`MOV CH,[EBP+0x92]`, `timer89 = 0`, `INC CH`, store — stage `2 -> 3`). Bytes:
+`0x82806 CMP EBP,[0x001577CA]` (`3b2dca771500`), `0x8280C JZ 0x82AA0`
+(`0f848e020000`), `0x82812 CMP word[EBP+0x85],0` (`6683bd8500000000`),
+`0x8281A JNZ 0x82AA0` (`0f8580020000`). The landed T3 port read
+`entities.controlled` (`[0x157A83]`, the separate controlled-actor cell) — a
+cell conflation, not a recorded stand-in; §4 rec #1 already names the arm the
+`[0x1577CA]` tracked arm. The final review fixed it to
+`mr->render.camera.tracked == r->entity_id`, and
+`test_action_0e_live_jump_selector` now pins the tracked-only arm and the
+`+0x85` arm separately (RED-verified against the pre-fix read). No new leg:
+the `[0x1577CA]` cell is modeled (its three writers, FU-152 §2.9);
+FU160-L4 (the else camera-follow arm) is unchanged.
