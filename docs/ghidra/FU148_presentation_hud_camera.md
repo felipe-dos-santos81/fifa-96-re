@@ -1825,3 +1825,36 @@ Quoted errata against §15.3/§16, first-hand re-checked in this fix wave:
   is **behind** the camera, and `FIFA96_PROJECTION_NEAR` (5) rejects it
   before any x-clip. The x'≈480 story belongs to the T2 smoke's live session
   (the `(0,0,0)` stand-in), not the tape.
+
+## 18. Erratum (phase-13 T3, 2026-10-11): L14.8.d resolved — the `[0x14C32A]` session pair
+
+Quoted from §16.4 (the prior section is not rewritten):
+
+> **Open question (recorded, not resolved):** one byte cannot satisfy both
+> polarities; if a writer toggles it between the `0x4B198` read and the
+> `0x8B65B` read, both calls run (scheduler then machine), otherwise a live
+> match (byte 1) runs the scheduler and skips the ball machine — that decides
+> whether the engine's run-every-frame approximation is benign.
+
+**Answer (FU-166/R14, phase-13 T3).** `[0x14C32A] = ([0x14C1D0] == 4)` is a
+**per-GAME-SELECT-item session flag**, not a per-frame toggle: every ordinary
+played match (Friendly/Leagues/Tournaments/Playoffs/Modem/demo — the six
+`FUN_0001B7B8` callers pass modes `{5,0,1,2,3,4}`; only mode 4, the Practise
+launcher `FUN_00032DE0`, yields byte 1) carries **byte 0**; byte 1 is the
+single-team **Practise** session. The two consumers are therefore
+**consistent per session**:
+
+* byte 0 (every ordinary match): the ball machine runs (`0x8B65B == 0`) and
+  the scheduler is skipped (`0x4B198 != 0` is false);
+* byte 1 (Practise): the scheduler runs and the ball machine is natively dead.
+
+No value runs both, and no writer toggles the byte inside a match (the three
+writers are the front-end session entries). The engine followed this in T3:
+`fifa96_match_run_begin` seeds the settled **0**, so
+`match_run_ball_machine`'s unconditional per-frame run plus the gated
+scheduler are **byte-0-exact** (the earlier seed 1 was the disclosed
+composite, L14.8.d's old rationale, now superseded). **Residual leg:** the
+machine's call site is still unconditional — under a byte-1 session the native
+machine is dead, so a future Practise-session model must gate it on
+`session_gate_14c32a == 0`.
+

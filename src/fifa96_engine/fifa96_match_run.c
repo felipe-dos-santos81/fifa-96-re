@@ -1673,6 +1673,16 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
        * nuance. */
       if (out.advanced && prev_frame >= row.last_frame) {
         (void)fifa96_match_run_record_anim_successor(rec);
+        /* T3 review minor 5: the install changes the row, so the same
+         * frame's staged slot must re-stage the new row id and bank (the
+         * pre-computed row/bank_index above belong to the old row). The
+         * native `FUN_00036C70` reads the row at staging time, after the
+         * record machine's install. */
+        e->stage.anim_id = (int32_t)rec->anim_id;
+        if (fifa96_animation_row_lookup(match_run_anim_rows,
+                                        FIFA96_ANIM_ROW_COUNT,
+                                        (int32_t)rec->anim_id, &row) == FIFA96_OK)
+          e->bank_index = row.sprite_bank;
         e->stage.frame = (int32_t)rec->frame;
       }
     }
@@ -3296,12 +3306,15 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * 0x15887B frame byte; L14.8.c the FUN_0008C068 0x158862 head-error producer
  * (modeled as the image-default field); L14.8.d the native `[0x14C32A] == 0`
  * ball-machine gate at 0x8B65B (`CMP byte [0x14C32A],0 / JNZ` around the
- * 0x8B664 `CALL FUN_0008BAF0`) — deliberately not modeled: the gate writer
- * is unmodeled (FU-146 leg 2) and the same byte is read with the opposite
- * polarity by the scheduler site (`0x4B198 CMP / JZ`: the FU-146 proxy runs
- * iff `!= 0`), so one seeded value cannot satisfy both gates; the engine runs
- * the machine every granted frame and records the asymmetry as the open
- * question (FU-148 §17, L14.8.d errata). */
+ * 0x8B664 `CALL FUN_0008BAF0`) — **resolved by FU-166/R14 (phase-13 T3)**:
+ * `[0x14C32A]` is the per-GAME-SELECT-item session flag (every ordinary
+ * played match passes mode 0 -> byte 0; byte 1 is the Practise session), and
+ * the two consumers are **consistent per session**: byte 0 runs the machine
+ * (the `== 0` arm) with the scheduler skipped (`0x4B198 != 0` requires byte
+ * != 0), byte 1 the reverse. The engine's settled default is byte 0
+ * (`fifa96_match_run_begin`), so the unconditional machine + the gated
+ * scheduler are byte-0-exact; under a byte-1 session the native machine is
+ * dead and the engine would over-run it (residual; FU-148 §17 errata). */
 int32_t fifa96_match_run_ball_head_error_shift(int32_t head_error) {
   /* 0x8BF41..47: the native shift count CL is masked to 5 bits on the 386+
    * this 32-bit LE image requires (the 8086 uses the full CL). */
@@ -5045,14 +5058,35 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  *  - stage 0 (0x89318/0x8935A): the soft-foul whistle then phase 0xA on the
  *    fouled side (the native then cascades through the stage 1/2 camera-lead
  *    gates; the port derives one stage per granted frame, FU-150 erratum);
- *  - stage 1 (0x894A2..0x895AC): the decision. The 0x894A2 gate's
- *    [0x158882] has no direct writer in the image (census = 1 read), so the
- *    derived condition is `foul_kind == 3 || session gate` (leg). Phase 7 by
- *    default; phase 6 when the contact kind is not 3, |incident x| < 0x420
- *    and z lies in the fouler-side band [-0xB10,-0x7B0] side 0 /
- *    [0x7B0,0xB10] side 1 (0x894DB..0x89550, verified). Speech 0x23 (6) /
- *    0x2A (7) on rec_second, [0x15882A] cleared (0x8955F) and the FU-149
- *    phase arm installs the taker/keeper. */
+ *  - stage 1 (0x894A2..0x895AC): the decision.
+ *
+ * **The gate, re-derived first-hand (T3 review round 1, FU-166/R14).** The
+ * native decision blocks are:
+ *  - `0x8947A MOV AL,[0x14C32A]; TEST AL,AL; JZ 0x89615` — the end of the
+ *    stage-2 body: a **byte-0 session aborts the hand-off for every contact
+ *    kind** (the act-2 family is the Practise session's, FU-166 §5);
+ *  - `0x89494/0x89499 CMP EAX,6; JZ; CMP EAX,0x10; JNZ 0x89615` — the
+ *    caller's decision word must be 6 or 0x10 (compressed away, leg
+ *    FU166-L6);
+ *  - `0x894A2 CMP byte[0x158882],0; JNZ 0x894C4` then
+ *    `0x894AB AL=[0x15888C]; CMP EAX,3; JZ 0x894C4` then
+ *    `0x894B7 CMP byte[0x14C32A],0; JZ 0x89615` — the stage-3 gate
+ *    `[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`. `[0x158882]` is the
+ *    ball machine block's `+0x96` byte (base 0x1587EC), written by
+ *    `FUN_0006E724` as `row_flags & 1` (fresh decompile) — the ball record's
+ *    current anim-row **terminal flag** (the reset's row-3 install gives
+ *    flags 0x07 -> 1; the act-2 body itself re-installs row 0/0x49 at
+ *    `0x8941D`/`0x89464` immediately before the read).
+ * For the engine's binary session gate the `!= 0` term always holds once the
+ * 0x8947A check has passed, so the stage-3 gate is passed and the effective
+ * condition is: **abort iff the session gate is 0; otherwise proceed** (the
+ * old `foul_kind == 3 || gate` compression let kind-3 contacts slip through
+ * under byte 0, where the native aborts at 0x8947A). Phase 7 by default;
+ * phase 6 when the contact kind is not 3, |incident x| < 0x420 and z lies in
+ * the fouler-side band [-0xB10,-0x7B0] side 0 / [0x7B0,0xB10] side 1
+ * (0x894DB..0x89550, verified). Speech 0x23 (6) / 0x2A (7) on rec_second,
+ * [0x15882A] cleared (0x8955F) and the FU-149 phase arm installs the
+ * taker/keeper. */
 static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
   int rc;
   if (mr->ref_restart_stage == 0u) {
@@ -5065,8 +5099,8 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->ref_restart_stage = 1u;
     return 1;
   }
-  if (!(mr->referee.foul_kind == 3u || mr->session_gate_14c32a != 0u)) {
-    mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;   /* 0x894BE -> 0x89615 */
+  if (mr->session_gate_14c32a == 0u) {
+    mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;   /* 0x89487 -> 0x89615 */
     return 1;
   }
   {

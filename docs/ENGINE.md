@@ -1901,6 +1901,27 @@ the build also produces the windowed `fifa96` target (`make game`).
     FU161-L4 (+0x98/+0x99) and FU161-L5/L6 are carried unchanged. The
     one-shot model covers the ported arms only; the unported one-shot arms
     (e.g. row 0x5C's high 0x24) keep their bytes (no-op repeats).
+  - **Fix round 1 (2026-10-11, commits `3948564` + the review fix).** The
+    grounded 0x0C step's signed shift was UBSan-UB (`3948564`, now `* 0x20`;
+    the live row-0x0E test also asserts the successor chain
+    `0x12 -> 0x0F -> 0x00` + the terminal `+0x44 = 1` live). The review's
+    act-2 finding is resolved with fresh bytes: `0x8947A` aborts the referee
+    act-2 hand-off under byte 0 for **every** contact kind (the family is the
+    Practise session's), and `[0x158882]` is the ball block's `+0x96` byte
+    (`FUN_0006E724` writes `row_flags & 1`, fresh decompile) — the old
+    `foul_kind == 3 || gate` compression let kind-3 contacts through under
+    byte 0; the engine now aborts iff the gate is 0
+    (`test_engine_referee_restart_default_gate_aborts`; the byte-1 fork stays
+    covered by `test_engine_referee_contact_fk`). L14.8.d's open question is
+    answered (FU-148 §18 errata): the two `[0x14C32A]` poles are consistent
+    per session, byte 0 = machine + no scheduler, which is the engine's
+    settled default. Also: the row-0x0E `timer89` delta is zero-extended
+    (`0x82734 MOV AX,[0x157A64]`), the scene-stage successor re-stages the
+    new row id/bank for the same-frame draw, and the pad fixture now executes
+    a literal second kick in one possession. New leg **FU166-L6** (the act-2
+    multi-stage compression: the `0x89214` 6-entry table, the decision-word
+    check `0x89494/0x89499`, the camera-word gates). `make check` 108/108;
+    M1/M2 byte-exact.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

@@ -637,3 +637,11 @@ target := pos). Goldens M1/M2 byte-exact; `wired` unchanged by this piece.
 Carried legs: FU161-L3 (rotated index), FU161-L4 (+0x98/+0x99), FU161-L5
 (dead arms 0x25/0x2E), FU161-L6 (row sets); the row-0x12 f3 `0x0002` and f5
 `0x0012` arms stay unported sub-cases of the row-0x0E chain.
+
+**Fix round 1 (2026-10-11, commit `3948564`).** The grounded 0x0C step's
+target write used `(int32_t)dir[oct] << 5`, which is UB for the table's `-1`
+entries; UBSan tripped as soon as a live record faced a negative-direction
+octant (exposed by the extended live row-0x0E chain). Fixed to the exact
+`* 0x20` product; the live chain now also asserts the successor chain
+`0x12 -> 0x0F -> 0x00` + the terminal `+0x44 = 1` live. `make check`
+108/108; M1/M2 byte-exact.

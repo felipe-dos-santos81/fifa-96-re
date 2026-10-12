@@ -577,3 +577,21 @@ first-hand re-verified on `/FIFA96.EXE` this slice: `decompile_function`
 | **new** `[0x158882]` producer | new — carried 0 (erratum 7) |
 | **L4 carry-in** live-session sit 9/0xA queue path | open — the dispatcher faithfully queues ids 1/2 (sit 9) / 0xA (sit 0xA) and the restart waits on the untraced consumer (FU-149 L4); the reachable FK chain is the native direct/pending path the tests stage. Settle by tracing the `[0x15B6A8]` consumer. |
 | **new** stage-4 `0x14C3A0` stats copy | open — the native stage 4 also writes `[0x14C3A0][side*0x7B + (int8)rec+0x8D] = severity` (`0x8A313`); the cell's producer/consumer are unported (stats side), so the port keeps the `[0x157B90]` add only |
+
+---
+
+## Status append — T3 review round 1 (phase-13, 2026-10-11)
+
+The derived act-2 hand-off's decision gate (`match_run_ref_step_restart`) is
+re-derived in FU-166's T3 status append (fix round 1): the native `0x8947A`
+`[0x14C32A]` read aborts the hand-off under byte 0 for **every** contact kind
+(the act-2 family is the Practise session's), so the old
+`foul_kind == 3 || session gate` compression (which let kind-3 contacts
+through under byte 0) is corrected; `[0x158882]` is the ball block's `+0x96`
+byte written by `FUN_0006E724` as `row_flags & 1` (fresh decompile), not an
+unwritten cell. The engine now aborts iff the session gate is 0;
+`test_engine_referee_restart_default_gate_aborts` covers the default path and
+the byte-1 fork stays covered by `test_engine_referee_contact_fk`. The
+multi-stage compression (the `0x89214` table, the decision-word check, the
+camera-word gates) is **FU166-L6**; the prior sections are not rewritten.
+

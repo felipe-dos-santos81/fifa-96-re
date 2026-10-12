@@ -317,7 +317,8 @@ static void test_action_10_runs_throw_in_body(void) {
   f.mr.record.delta = 0x80;                /* the whole-frame [0x157A64] */
   f.mr.record.stage92 = 0;
   f.mr.state.phase = 3u;                   /* the throw-in phase gate */
-  f.mr.session_gate_14c32a = 1;            /* live session */
+  f.mr.session_gate_14c32a = 1;            /* the byte-1 (Practise)
+                                            * session staged (FU-166) */
   f.mr.goal_snap_x = 0x100;
   f.mr.goal_snap_y = 0;
   f.mr.goal_snap_z = 0x400;
@@ -403,7 +404,8 @@ static void test_live_throw_in_camera_y_cut(void) {
   f.mr.record.delta = 0x80;                /* the whole-frame [0x157A64] */
   f.mr.record.stage92 = 0;
   f.mr.state.phase = 3u;                   /* the throw-in phase gate */
-  f.mr.session_gate_14c32a = 1;            /* live session */
+  f.mr.session_gate_14c32a = 1;            /* the byte-1 (Practise)
+                                            * session staged (FU-166) */
   f.mr.goal_snap_x = 0x100;
   f.mr.goal_snap_y = 0;
   f.mr.goal_snap_z = 0x400;

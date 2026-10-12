@@ -539,3 +539,42 @@ session). Consequences:
 default (the natural pan would take the direct goal arm: score increment +
 table-2 situation-6/phase-5 instead of the queue -> scheduler -> post chain).
 T4 scope (the acceptance slice owns the tape). FU166-L1..L4 unchanged.
+
+**Fix round 1 (T3 review, 2026-10-11): the act-2 restart leg re-derived.**
+The referee act-2 hand-off (`match_run_ref_step_restart`) had compressed the
+native decision gate into `foul_kind == 3 || session gate` (leg). Fresh
+disassembly resolves it:
+
+* `0x8947A MOV AL,[0x14C32A]; TEST AL,AL; JZ 0x89615` — the end of the
+  stage-2 body: **a byte-0 session aborts the hand-off for every contact
+  kind** (the act-2 family is the Practise session's);
+* `0x89494/0x89499 CMP EAX,6; JZ; CMP EAX,0x10; JNZ 0x89615` — the caller's
+  decision word must be 6 or 0x10;
+* `0x894A2 CMP byte[0x158882],0; JNZ` + `0x894AB kind==3` +
+  `0x894B7 [0x14C32A]==0 -> abort` — the stage-3 gate
+  `[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`. **`[0x158882]` is not
+  an unwritten cell**: fresh `decompile_function 0x6E724` shows the ball
+  block's `+0x96` byte (base `0x1587EC`) is written by `FUN_0006E724` as
+  `row_flags & 1` — the ball record's current anim-row **terminal flag**
+  (the reset installs row 3, flags `0x07` -> 1; the act-2 body itself
+  re-installs row 0/0x49 at `0x8941D`/`0x89464` right before the read).
+
+Because the engine's session gate is binary, the `!= 0` term always holds
+once `0x8947A` passes, so the effective native condition is **abort iff the
+session gate is 0**; the old compression wrongly let kind-3 contacts reach
+the phase-7/6 fork under byte 0 (where the native aborts at `0x8947A`). The
+engine now models the byte-0 abort for all kinds (`fifa96_match_run.c`
+`match_run_ref_step_restart`, fresh comment) and
+`test_engine_referee_restart_default_gate_aborts` pins the default-gate
+behavior (soft + kind-3); the byte-1 fork stays covered by
+`test_engine_referee_contact_fk`.
+
+**New leg FU166-L6 — the act-2 multi-stage compression.** The native act-2
+dispatch (`0x89214` 6-entry jump table, stages 0..5) runs the whistle/phase
+0xA (stage 0), the `FUN_0004BEC8` (RET 0) check + `[0x158818]`/`[0x158829]`
+stage machinery (stage 1), the kind dispatch + the ball-row re-installs +
+the decision-word check (stage 2) and the `[0x158882]`/kind/gate decision
+(stage 3) with camera-word gates (`word[0x15883A].hi > 0x20`,
+`word[0x158816].hi < 0x78`, `word[0x158848] != 0` aborts). The engine
+compresses stages 2/3 into one step and does not model the decision-word
+check or the camera gates.

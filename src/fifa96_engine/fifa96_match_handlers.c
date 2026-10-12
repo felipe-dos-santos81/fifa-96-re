@@ -1269,7 +1269,10 @@ static int fifa96_match_action_0E(struct fifa96_match_run *mr) {
     match_row_reset(mr, e);
     return FIFA96_OK;
   }
-  r->timer89 += (int16_t)r->delta;                   /* 0x8272E..0x82742 */
+  /* 0x8272E..0x82742: `XOR EAX,EAX; MOV AX,[0x157A64]; ADD EDX,EAX` — the
+   * delta word is **zero-extended** (the T3 review minor 3; observable only
+   * at delta >= 0x8000). */
+  r->timer89 += (uint16_t)r->delta;
   if ((uint8_t)r->stage92 > 3u) return FIFA96_OK;    /* 0x82748/0x8274A */
   if (r->stage92 == 0u) {                            /* 0x8275D */
     if (r->active == 0u) {

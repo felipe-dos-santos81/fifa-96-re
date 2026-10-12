@@ -1108,6 +1108,29 @@ static void test_pad_kick_release_runs_kick_row(void) {
     assert(rec->row44 == 1u);                   /* row 0 flags bit 0 */
     assert(rec->code == 4u);                    /* the forced decision */
     assert(rec->stage92 == 0u);
+
+    /* T3 review minor 7: the literal second kick in the same possession. The
+     * reset freed the record; re-stage the carrier state through the real
+     * installer (the ball-recovery producer is the unported possession
+     * machinery) and run the same live release path again: the code-1
+     * released row installs 7 invoke-now, the row-07 machine stages a second
+     * ball pair on the same record in the same match. */
+    assert(fifa96_match_entities_install(rec, 2, 5, 0) == 1);
+    assert(rec->code == 5u);
+    mr.entities.controlled = taker;
+    mr.entities.team[0].target = taker;
+    fifa96_ball_pair_clear(&mr.entities.ball.pair);   /* consume the 1st staging */
+    {
+      fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+      assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+    }
+    one_granted_frame(&mr);
+    assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+    one_granted_frame(&mr);
+    assert(rec->code == 7u);                    /* the second kick installed */
+    assert(mr.entities.ball.pair.actor == taker);
+    assert(mr.entities.ball.pair.code != 0u);   /* a second staging */
+    assert(mr.dispatched_ok & (1ull << 0x07u));
   }
 
   assert(fifa96_match_run_end(&mr) == 0);
@@ -2932,7 +2955,8 @@ static void test_goal_scan_queue_and_fallback(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
-  mr.session_gate_14c32a = 1;                       /* live session (leg 2 seam) */
+  mr.session_gate_14c32a = 1;   /* the byte-1 (Practise) session staged
+                                 * (FU-166/R14) */
   mr.goal_armed = 1;
   mr.goal_zone = 1;
   mr.goal_snap_z = 0xB80;
@@ -3068,7 +3092,7 @@ static void match_frame_stage_restarts(struct fifa96_match_run *mr) {
 static void test_set_piece_queue_ids(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  mr.session_gate_14c32a = 1;                      /* live session */
+  mr.session_gate_14c32a = 1;   /* the byte-1 (Practise) session staged */
   assert(fifa96_match_run_set_piece(&mr, 2, 0, 0) == 0);
   assert(mr.situation_id == 9u && mr.situation_pending == 1u);
   assert(mr.sit_side_pending == 1u);
@@ -3367,7 +3391,7 @@ static void test_engine_referee_contact_fk(void) {
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;                            /* live in-play phase */
   mr.config.field_4c306 = 1;                     /* soft: kind stays 0 */
-  mr.session_gate_14c32a = 1;                    /* live session */
+  mr.session_gate_14c32a = 1;   /* the byte-1 (Practise) session staged */
   mr.situation_pending = 1;                      /* force the direct path */
   match_frame_stage_restarts(&mr);
   match_frame_rng_arm_hard_foul(&mr);
@@ -3479,6 +3503,55 @@ static void test_taker_armed_referee_rows_resolve(void) {
   assert(mr.state.phase == 2u);
   assert(mr.referee.offside_suppress == 0);   /* the penalty row sets no timer */
   assert(mr.record.stage92 == 6u);
+}
+
+/* FU-166/R14 + FU-150 (T3 review round 1): the act-2 restart under the
+ * settled byte-0 default. Fresh `0x8947A MOV AL,[0x14C32A]; TEST AL,AL; JZ
+ * 0x89615` aborts the hand-off for **every** contact kind (the act-2 family
+ * is the byte-1 Practise session's), so under the engine's default gate 0 the
+ * stage-0 whistle/phase-0xA writes stand and the decision step ends with no
+ * phase 7/6 write, no speech and no taker. The old compression
+ * (`foul_kind == 3 || gate`) wrongly let kind-3 contacts through — pinned
+ * here (case B). The byte-1 fork stays covered by
+ * `test_engine_referee_contact_fk`. */
+static void test_engine_referee_restart_default_gate_aborts(void) {
+  struct fifa96_match_run mr;
+  const int32_t point[3] = {0x500, 0x777, 0};
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;             /* soft: kind stays 0 */
+  mr.session_gate_14c32a = 0;            /* the settled ordinary-match default */
+  mr.situation_pending = 1;              /* force the direct path */
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  assert(mr.referee.foul_kind == 0u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.ref_restart_stage == 1u);    /* stage 0 ran: whistle + phase 0xA */
+  assert(mr.state.phase == 0x0Au);
+  assert(mr.ref_whistle == 0x1Eu);
+  /* the decision step aborts at the 0x8947A byte-0 gate */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.state.phase == 0x0Au);       /* no phase 7/6 write */
+  assert(mr.ref_speech == 0u);
+  assert(mr.entities.team[1].target != 12);       /* no FK taker */
+  assert(mr.entities.team[1].records[1].code != 0x12u);
+  assert(mr.entities.team[1].records[1].code != 0x13u);
+
+  /* case B: the hard kind (foul_kind 3) also aborts under byte 0 — the
+   * native 0x8947A read precedes the kind check at 0x894AB/0x894B2. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x0Au;
+  mr.session_gate_14c32a = 0;
+  mr.referee.foul_kind = 3u;
+  mr.referee.rec_first_side = 0u;
+  mr.ref_machine = FIFA96_MATCH_RUN_REF_RESTART;
+  mr.ref_restart_stage = 1u;
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.state.phase == 0x0Au);
+  assert(mr.ref_speech == 0u);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -3720,8 +3793,8 @@ static void test_scan_restart_arms(void) {
   assert(fifa96_match_run_goal_scan(&mr) == 0);
   assert(mr.state.phase == 0x10u);
 
-  /* live session: the head queues the restart id instead of writing the
-   * phase (L4) */
+  /* the byte-1 (Practise) session: the head queues the restart id instead
+   * of writing the phase (L4) */
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
   mr.session_gate_14c32a = 1;
@@ -4119,7 +4192,7 @@ static void test_screen_advance_ring(void) {
  * reports zone 0 (|z| >= 0xB90), so the scan takes the corner/goal-kick arm
  * (FU-149 P1): snap z positive and ball side 0 (the fresh run's
  * [0x1577CA] stand-in is unset) -> cond true -> sit 4, queued id 0 for the
- * side-1 kick in the live session (the begun run's gate is open). */
+ * side-1 kick in the byte-1 (Practise) session (staged; FU-166). */
 static void test_view_pose_feed_arms_camera(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -4146,7 +4219,8 @@ static void test_view_pose_feed_arms_camera(void) {
   assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
   assert(mr.goal_zone == 0);
   /* FU-149 P1: the corner/goal-kick arm fires (cond true -> sit 4, side
-   * 0 ^ 1 = 1) and the live session queues the side-1 restart id 0. */
+   * 0 ^ 1 = 1) and the byte-1 (Practise) session queues the side-1
+   * restart id 0. */
   assert(mr.situation_pending == 1);
   assert(mr.situation_id == 0u);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
@@ -4946,6 +5020,7 @@ int main(void) {
   test_taker_armed_rows_resolve();
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
+  test_engine_referee_restart_default_gate_aborts();
   test_taker_armed_referee_rows_resolve();
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();
