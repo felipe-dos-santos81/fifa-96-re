@@ -555,3 +555,50 @@ concrete two-body/two-wire T1 plan (Rec #1) with a bounded fallback (Rec #2);
 the `0x5E` installer chain, timing and successor are all first-hand. No repo
 write beyond this slice + the R17 report; no git; no code. FU160-L4 (the
 row-0x0E stage-2 else arm) is R15/FU-167's half and independent.
+
+## T1 wiring status (2026-10-12, phase-14 T1 — append-only)
+
+**Rec #1 landed in full** (no fallback): `fifa96_match_action_0B` /
+`fifa96_match_action_0C` in `fifa96_match_handlers.c`, both wires, the
+per-team `duel_7d7`/`stumble_7cf` counters (staged into the row-04
+`team_7d7`/`opp_7d7` inputs, a bonus over the stand-in 0), and the unit chain
+test that runs the whole installer end to end
+(`test_action_0b_duel_chain_installs_row_5e`: 0x0B arm 0 -> arm 1 ->
+action-0x0C on the found record -> the row-0x5E install on A -> the successor
+0x5E -> 0x0F -> 0x00 + the terminal `+0x44`). Census **22 -> 24/80**,
+README **30%** (same commit); goldens byte-exact (the tape never dispatches
+these rows).
+
+Fresh-byte corrections and implementation notes (appended errata):
+
+1. **§3.2's arm-1 `choice == 0x59` dive gate is dead.** The body head zeroes
+   the choice local (`0x8191D MOV dword[ESP+0x14],EDX` with `EDX = 0`) on
+   **every** invocation, so arm 1's `0x81B63 CMP dword[ESP+0x14],0x59`
+   always falls through; the arm-1 gate is the `<= 0x60` band alone. The
+   port omits the dead compare (`fifa96_match_action_0B` arm 1).
+2. **The arm-0 fall-through into arm 1 is inert.** Arm 0 ends at `0x81B19`
+   with no jump and the next bytes are arm 1 (`0x81B1F`), but the fresh
+   choice install set `+0x3D = 0`, so arm 1's frame gate tails. The port
+   runs arm 1 only when the stage is already 1 (equivalent); arm 1's
+   completion **does** fall through into arm 2 (`0x81C55`) and the port keeps
+   that same-dispatch snap/+0x44 reset.
+3. **The `0x79B6C` call is the commit+face tail, richer than "the face
+   write"** (§3.1 wording): `pos := arg` (the record's own triple), `pos_y =
+   0`, `target := pos`, the lane low word / velocity / `+0x9C` clears, then
+   `FUN_00079C50`. The transient anim install it ends with (`FUN_0006E598
+   (rec, active ? 0 : 0x26, 0)`, overwritten by the choice install in the
+   same call) and its `0x6E48C` re-anchor are the new **FU169-L8** leg.
+4. **The `0x0C` A==0 alternate entry is out-of-contract in the native**
+   (`0x81DCF MOV EAX,[0x15888F]` then `[EAX+0x28]` with `EAX = 0`): the
+   engine returns as a retry instead of faulting (`match_sp_action_0c_
+   alternate`).
+5. **Arm 1's `<= 0x60` search origin is `rec.pos`** (not the derived point)
+   and the registrar point is `found.pos` (`ECX = &found+0x59`), both as
+   §3.2 read; the engine passes the registered A/B/point into the derived
+   `fifa96_match_run_contact` (the disclosed kind-1 re-register).
+6. **The live pad-tackle producer note.** The ported input arm's rule
+   `{0x07FF, 0x0060, 0x7CE38}` needs the 0x20|0x40 pad bits (PASS +
+   LONG_BALL); a live ISO duel smoke was not landed (the band/RNG gates make
+   it non-deterministic), so the chain's coverage is the unit dispatch chain
+   at the exact `fifa96_match_dispatch_action` seam the frame loop calls;
+   the live pad smoke stays with FU169-L5/L6 and T4's acceptance.

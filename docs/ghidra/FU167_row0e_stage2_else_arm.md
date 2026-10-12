@@ -747,3 +747,35 @@ requirement list, so FU164-L1 is answered for this site).
 **FU160-L4 closed** (derivation complete; the wiring lands with T1 per the
 ranked rec in §6). No repo file changed besides this slice and the workspace
 report; no git command run; `/FIFA96.EXE` untouched.
+
+## T1 wiring status (2026-10-12, phase-14 T1 — append-only)
+
+**Landed.** The §6 rank-1/2/3 wiring is in `fifa96_match_handlers.c`
+(`match_sp_pan_arm`, called from the `fifa96_match_action_0E` stage-2 block):
+the gates, the direct focus write, the lateral seed, the dx/dz + turn clamp,
+the amplitude, the polar vector and the split event-set/tracked-bind pair
+(plus the record `+0x9B` clear of `0x71D2D`). The rank-4/5 items stay legs as
+listed in §7. Two implementation notes:
+
+1. **The lane gate reads the pool `lane_x`, not `r->lane >> 16`.** The two
+   are the same native word `+0x6B`, but only `lane_x` is refreshed by the
+   BF20 lane block (`fifa96_match_run.c:1444`); the `e->lane` dword's high
+   word is a separate stale view (FU168-L7(d)). §9.4's "(or pool `lane_x`)"
+   is the option taken. Tested by
+   `test_action_0e_stage2_else_arm_gate_retry` (lane_x 0x60 -> retry with
+   `lane` untouched).
+2. **The event seed pair feeds the ramp divisor** (`camera_event_ramp`'s
+   fast path divides by `f8`), so the test asserts the observable
+   `event_param`/`event_peak`/focus/bind/advance rather than `event_step_*`
+   (the seed-pair equality would need the `f8` inverse).
+
+Tests (all in `tests/test_engine_match_handlers.c`):
+`test_action_0e_stage2_else_arm_binds_camera` (the focus, the tracked bind,
+`event_param = camY + (draw & 0x3F)`, `event_peak = ramp(event_param)`, the
+`+0x9B` clear, `stage 2 -> 3`), `test_action_0e_stage2_else_arm_gate_retry`
+(both strict camY bounds, the lane bound, the tracked and `jump_base` skips)
+and the ISO extension in `tests/test_engine_match_frame.c`
+(`test_live_row_0e_selector_installs_jump`: the live tracked bind + the
+same-frame stage-3 advance inside the row-0x12 install window; the mid-band
+camera Y is test-staged — FU168-L5 owns the live producer). Goldens
+byte-exact (the tape never dispatches 0x0E); `make check` 109/109.

@@ -620,3 +620,23 @@ Engine/loader source read: `fifa96_match_handlers.c` (852-931, 995-1015,
 `docs/ghidra/FU156/FU157/FU160/FU164` (cross-cited) and `docs/ENGINE.md`
 (260-280, 1815-1900). No writes: no rename, comment, label, function, script
 or project save.
+
+## T2 wiring status (2026-10-12, phase-14 T1 — append-only)
+
+The §7.2 rec landed with the T1 row-0x0E else arm (the pan is one body with
+the FU-167 arm; FU-167's T1 status section carries the implementation notes
+and tests). Points against this slice's own text:
+
+1. **The live reachability leg (FU168-L5) stands**: the ISO extension stages
+   `camera.pos_y = 0x40` and `lane_x = 0x10` for the pan frame — the live
+   mid-band Y producer (R19/FU-171) is still the open leg, so the §7.3 chain
+   step 3 is not yet naturally live.
+2. **The `<= 0x60` arm-1 behaviour** belongs to the 0x0B duel (FU-169), not
+   this arm.
+3. **The seed-pair assertion limit** (the §7.2 red/GREEN sketch's
+   `event_step_*` equality): `fifa96_camera_event_set`'s ramp divides the
+   seed pair by `f8`, so the tests assert `event_param`/`event_peak` and the
+   bind instead (FU-167 status note 2).
+4. **FU168-L1 (the descriptor term)** is 0 in the port as the slice
+   predicted; **FU168-L6** (the pool `place_offset_*` never written live) is
+   moot for this arm — the direct `fifa96_match_dir_x/_z` read was taken.

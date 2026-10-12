@@ -2642,6 +2642,24 @@ static void test_live_row_0e_selector_installs_jump(void) {
   assert(installed == 1);          /* stage 1 installed row 0x12 (frame 0) */
   assert(rec->row44 == 0u);        /* row 0x12 flags 0x00 */
   assert(rec->timer93 == 0x10u);   /* the 0x79B58 self receiver timer */
+  /* FU-167/FU-168 (phase-14 T1): the stage-2 else arm on the live chain. The
+   * record is not yet camera-tracked and has no jump arc (the f2 aux-0x0E
+   * arming is one granted frame away), so the arm fires when the camera Y is
+   * mid-band. The live Y producer is R19/FU-171's leg (FU168-L5) and the lane
+   * is refreshed by the BF20 block after this dispatch, so the test stages
+   * both (0x40 in the strict (0x20,0x70) window; lane_x 0x10 < 0x60), then
+   * asserts the tracked bind + the same-frame stage-3 advance. */
+  {
+    int32_t rec_id = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 4u);
+    assert(rec->stage92 == 2u);
+    mr.render.camera.pos_y = 0x40;
+    rec->lane_x = 0x10;
+    one_granted_frame(&mr);
+    assert(mr.render.camera.tracked == rec_id);   /* [0x1577CA] := rec */
+    assert(rec->stage92 == 3u);
+    assert(mr.render.camera.event_param != 0);    /* the 0x71C94 event height */
+  }
+  mr.render.camera.pos_y = 0;
   for (int i = 0; i < 40 && rec->pos_y == 0; i++) one_granted_frame(&mr);
   airborne = rec->pos_y != 0;
   assert(airborne == 1);           /* the f2 aux-0x0E jump arm + arc */

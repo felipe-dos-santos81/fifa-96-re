@@ -90,7 +90,7 @@
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
-    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
@@ -2114,12 +2114,370 @@ static void test_action_02_restart_and_phase2_arms(void) {
   drop_fixture(&f);
 }
 
+/* ===== Phase-14 T1 / FU-167 + FU-168: the row-0x0E stage-2 else arm ========
+ *
+ * Fresh bytes `0x82820..0x82A9E` (verified this task): when the record is NOT
+ * camera-tracked (`rec != [0x1577CA]`, `0x82806`) and has no live jump arc
+ * (`word[+0x85] == 0`, `0x82812`), the in-body gates
+ * `0x20 < (int32)[0x157750] < 0x70` (`0x82828..0x82834`) and
+ * `(int16)word[+0x6B] < 0x60` (`0x8283a..0x82843`, the pool `lane_x`) must
+ * hold, else the record stays at stage 2 and retries (the `CL = 0` tail).
+ * On success the arm re-places the camera focus at
+ * `rec.pos + 0x40*0x10F334/3C[type]` (`0x82849..0x82893`), builds the pan
+ * vector and calls `FUN_00071C94` (`0x82A6C`) — which binds `[0x1577CA] = rec`
+ * (`0x71D27`) and clears `byte[rec+0x9B]` (`0x71D2D`) — then advances
+ * `timer89 = 0; stage -> 3` unconditionally (`CL = 1`, `0x82A95`). */
+static void test_action_0e_stage2_else_arm_binds_camera(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  fifa96_camera *cam;
+  struct fifa96_rng rng_copy;
+  uint16_t draw1 = 0;
+  uint16_t draw2 = 0;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[1];
+  e->active = 1;
+  e->lane_x = 0x20;                 /* word +0x6B < 0x60 */
+  e->has_ball = 1;                  /* 0x71D2D clears it on the bind */
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0E;
+  f.mr.record.stage92 = 2;
+  f.mr.record.timer89 = 5;
+  f.mr.record.delta = 2;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.type = 0;             /* dir (0,+1) -> focus = pos + (0,0x40) */
+  f.mr.record.face7d = 0x100;
+  f.mr.record.speed71 = 5;
+  f.mr.record.jump_base = 0;
+  f.mr.state.phase = 2u;
+  cam = &f.mr.render.camera;
+  assert(fifa96_camera_init(cam, 0x300, 0x40, 0x200) == FIFA96_OK);
+  cam->speed = 0x10;                /* word[0x1577BE] */
+  /* the two draws the arm consumes: the lateral seed (no slot), the height */
+  rng_copy = f.mr.rng;
+  assert(fifa96_rng_step(&rng_copy, &draw1) == FIFA96_OK);
+  assert(fifa96_rng_step(&rng_copy, &draw2) == FIFA96_OK);
+
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  /* the focus re-placement (0x8284c/0x8288d/0x82857/0x82893) */
+  assert(cam->pos_x == 0x300);
+  assert(cam->pos_z == 0x240);
+  /* the pan event + the tracked bind (0x82A6C -> 0x71D27) */
+  assert(cam->tracked == 1);
+  assert(cam->event_param == (int16_t)(0x40 + (int16_t)(draw2 & 0x3F)));
+  assert(cam->event_peak == fifa96_camera_ramp((int16_t)cam->event_param));
+  assert(e->has_ball == 0u);
+  /* the advance: timer89 = 0, stage 2 -> 3 in the same dispatch */
+  assert(f.mr.record.stage92 == 3u);
+  assert(f.mr.record.timer89 == 0);
+  /* the RNG seed was drawn: the pan actually moved the event step pair (the
+   * exact seed pair is divided through the ramp divisor, FU-152 §2.9) */
+  assert(cam->event_step_x != 0 || cam->event_step_z != 0);
+  drop_fixture(&f);
+}
+
+/* The same arm's retry semantics: each failed in-body gate leaves the record
+ * at stage 2 with no camera write and no bind (the `JZ 0x82AC5` tail). The
+ * tracked / `jump_base != 0` advance skips the arm entirely. */
+static void test_action_0e_stage2_else_arm_gate_retry(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  fifa96_camera *cam;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[1];
+  e->active = 1;
+  e->lane_x = 0x20;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0E;
+  f.mr.record.stage92 = 2;
+  f.mr.record.timer89 = 5;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.type = 0;
+  f.mr.record.jump_base = 0;
+  f.mr.state.phase = 2u;
+  cam = &f.mr.render.camera;
+  assert(fifa96_camera_init(cam, 0x300, 0x40, 0x200) == FIFA96_OK);
+
+  /* camY = 0x20 (the gate is strict: > 0x20) -> retry */
+  cam->pos_y = 0x20;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.record.timer89 == 5);
+  assert(cam->pos_x == 0x300 && cam->pos_z == 0x200);
+  assert(cam->tracked == FIFA96_CAMERA_TRACKED_NONE);
+
+  /* camY = 0x70 (strict: < 0x70) -> retry */
+  cam->pos_y = 0x70;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(cam->tracked == FIFA96_CAMERA_TRACKED_NONE);
+
+  /* lane_x = 0x60 (strict: < 0x60) -> retry */
+  cam->pos_y = 0x40;
+  e->lane_x = 0x60;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(cam->tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cam->pos_x == 0x300 && cam->pos_z == 0x200);
+
+  /* already tracked -> advance without the camera writes */
+  e->lane_x = 0x20;
+  cam->tracked = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  assert(cam->pos_x == 0x300 && cam->pos_z == 0x200);
+
+  /* a live jump arc -> advance without the camera writes */
+  cam->tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.record.stage92 = 2;
+  f.mr.record.jump_base = 0x10;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  assert(cam->pos_x == 0x300 && cam->pos_z == 0x200);
+  assert(cam->tracked == FIFA96_CAMERA_TRACKED_NONE);
+  drop_fixture(&f);
+}
+
+/* ===== Phase-14 T1 / FU-169: the row-0x5E live installer chain ============
+ *
+ * Fresh bytes (`0x81908..0x81C71` action-0x0B, `0x81C90..0x81DC5`
+ * action-0x0C): the duel body's arm 0 installs the contact anim
+ * `{0x0C,0x59}` on itself (`0x81AFB`), arm 1 registers the contact (kind 2,
+ * A = the initiator, B = the found opponent, `0x81BCF`) and installs action
+ * 0x0C on the found record (`0x81BEB`), then falls into arm 2 (the snap).
+ * The found record's action-0x0C stage 0 (`0x81CDC..0x81DC5`) finds A in row
+ * 0x59 at frame >= 2 and the `0x795B4` lead band >= 0x30 -> increments the
+ * initiator team's `+0x7CF`, installs anim row 0x5E on A (`0x81DB9`) and
+ * resets itself. */
+static void test_action_0b_duel_chain_installs_row_5e(void) {
+  struct fixture f;
+  struct fifa96_match_entity *rec;   /* the duel initiator (A) */
+  struct fifa96_match_entity *opp;   /* the challenged record (B) */
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  rec = &f.mr.entities.team[0].records[1];
+  opp = &f.mr.entities.team[1].records[1];
+  rec->active = 1;
+  opp->active = 1;
+  opp->pos_x = 0x340;                /* band 0x40 from rec.pos */
+  opp->pos_z = 0x200;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0B;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.type = 2;              /* dir (1,0) -> search point = pos + 0x20 */
+  f.mr.record.speed71 = 4;           /* <= 4 -> the standing 0x0C choice */
+  f.mr.record.face7d = 0;
+
+  /* arm 0: the choice anim on self + the 0x79B6C snap + face toward found */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(rec->anim_id == 0x0Cu && rec->frame == 0u);
+  assert(f.mr.record.ran == 1u);
+  assert(f.mr.record.stage92 == 1u);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.target_x == f.mr.record.pos_x);   /* the snap */
+  assert(f.mr.record.target_z == f.mr.record.pos_z);
+  assert(f.mr.record.lane == 0 && f.mr.record.speed71 == 0);
+  assert(f.mr.record.face7d == 0x100);                 /* toward opp (+x) */
+
+  /* arm 1 waits for the anim frame byte (+0x3D) to leave 0 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 1u);
+  f.mr.record.frame = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  assert(f.mr.entities.team[0].duel_7d7 == 1u);        /* 0x81B83 */
+  assert(f.mr.referee.contact_kind == 2u);             /* the registrar kind */
+  assert(f.mr.referee.rec_first == 1);                 /* A = the initiator */
+  assert(f.mr.referee.rec_second == 12);               /* B = the challenged */
+  assert(opp->code == 0x0Cu && opp->stage92 == 0u);    /* action 0x0C, no invoke */
+  assert(opp->type == f.mr.record.type);               /* the +0x8E copy */
+  /* arm 2 ran in the same dispatch (the native fall-through): the snap holds */
+
+  /* the challenged record runs the action-0x0C stage 0 */
+  rec->anim_id = 0x59u;
+  rec->frame = 2u;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0Cu;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x340;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.delta = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(rec->anim_id == 0x5Eu && rec->frame == 0u);   /* the live row-0x5E install */
+  assert(rec->row44 == 0u);
+  assert(f.mr.entities.team[0].stumble_7cf == 1u);     /* the team +0x7CF counter */
+  /* B reset itself (0x81DBE FUN_0007DAB4) */
+  assert(f.mr.record.stage92 == 0u);
+  assert(opp->code != 0x0Cu);
+  /* the frame-wrap successor chains 0x5E -> 0x0F -> 0x00 (FU-169 §5) */
+  assert(fifa96_match_run_record_anim_successor(rec) == FIFA96_OK);
+  assert(rec->anim_id == 0x0Fu);
+  assert(fifa96_match_run_record_anim_successor(rec) == FIFA96_OK);
+  assert(rec->anim_id == 0x00u);
+  assert(rec->row44 == 1u);                            /* row 0 flags 0x07 terminal */
+  drop_fixture(&f);
+}
+
+/* The action-0x0C stage-0 gates: the frame >= 2 retry, the alternate gate
+ * thresholds (row 0x11 frame >= 2 / any other row frame >= 3), and the
+ * `< 0x30` foul path (the B velocity write + the `fifa96_match_run_contact`
+ * re-call; the row-0x11 entry skips the velocity write). */
+static void test_action_0c_stage0_gates_and_foul_path(void) {
+  struct fixture f;
+  struct fifa96_match_entity *a;    /* the initiator ([0x15888F]) */
+  struct fifa96_match_entity *b;    /* the running record */
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  a = &f.mr.entities.team[0].records[1];
+  b = &f.mr.entities.team[1].records[1];
+  a->active = 1;
+  b->active = 1;
+  a->pos_x = 0x320;                  /* band 0x20 < 0x30 from b */
+  a->pos_z = 0x200;
+  a->anim_id = 0x59u;
+  a->frame = 2u;
+  f.mr.referee.rec_first = 1;
+  f.mr.referee.rec_second = 12;
+  f.mr.record.entity_id = 12;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0Cu;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.speed71 = 8;
+  f.mr.record.face7d = 0;
+  f.mr.record.delta = 2;
+
+  /* frame < 2 -> the retry tail (no reset, no stage change) */
+  a->frame = 1u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u && b->anim_id != 0x5Eu);
+  a->frame = 2u;
+
+  /* band < 0x30 -> the foul path: the row != 0x11 velocity write on B
+   * (0x81E13..0x81E87) then the 0x81E8A re-call registration */
+  assert(fifa96_entity_sine(0x100) == 0x10000);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.vel73 == 0);                       /* mul16(8, sine(0)) */
+  assert((int16_t)f.mr.record.vel75 == 8);              /* mul16(8, sine(0x100)) */
+  assert(f.mr.referee.contact_kind == 1u);              /* the disclosed re-register */
+  assert(f.mr.referee.rec_first == 1 && f.mr.referee.rec_second == 12);
+  assert(f.mr.record.stage92 == 0u && b->anim_id != 0x5Eu);
+
+  /* the alternate gate: A in row 0x11 frame 2 -> the foul path without the
+   * velocity write (the 0x81E11 JZ skips 0x81E13) */
+  a->anim_id = 0x11u;
+  a->frame = 2u;
+  f.mr.record.vel73 = 0x1234;
+  f.mr.record.vel75 = 0x2345;
+  f.mr.referee.contact_kind = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.record.vel73 == 0x1234 && f.mr.record.vel75 == 0x2345);
+  assert(f.mr.referee.contact_kind == 1u);
+  /* ... row 0x11 frame 1 -> retry */
+  a->frame = 1u;
+  f.mr.referee.contact_kind = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.referee.contact_kind == 0u);
+  assert(f.mr.record.stage92 == 0u);
+
+  /* ... any other row: frame 2 -> retry, frame 3 -> the foul path */
+  a->anim_id = 0x00u;
+  a->frame = 2u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.referee.contact_kind == 0u);
+  a->frame = 3u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
+  assert(f.mr.referee.contact_kind == 1u);
+  drop_fixture(&f);
+}
+
+/* The action-0x0B gates: the band window (0x20,0x70), the session gate on
+ * arm 1, and the aligned-facing 0x59 dive choice. */
+static void test_action_0b_duel_gates_and_choice(void) {
+  struct fixture f;
+  struct fifa96_match_entity *rec;
+  struct fifa96_match_entity *opp;
+  make_fixture(&f);
+  f.mr.state.phase = 2u;
+  rec = &f.mr.entities.team[0].records[1];
+  opp = &f.mr.entities.team[1].records[1];
+  rec->active = 1;
+  opp->active = 1;
+  opp->pos_x = 0x340;
+  opp->pos_z = 0x200;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x0B;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.type = 2;
+  f.mr.record.face7d = 0x100;        /* aligned with the +x direction */
+  f.mr.record.speed71 = 5;           /* > 4 -> the facing test decides */
+  f.mr.entities.team[0].target = 1;  /* the forced-decision code on reset */
+  rec->code = 0x0B;                  /* the dispatched code (the reset gate) */
+
+  /* the aligned dive: |face7d - atan| = 0 < 0x1000 -> the 0x59 choice */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(rec->anim_id == 0x59u);
+
+  /* the band window is strict: opp too close (band 0x20) resets */
+  rec->anim_id = 0;
+  rec->code = 0x0B;
+  opp->pos_x = 0x320;
+  f.mr.record.stage92 = 0;
+  f.mr.record.type = 2;
+  f.mr.record.pos_x = 0x300;
+  f.mr.record.speed71 = 4;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(rec->anim_id != 0x59u && rec->anim_id != 0x0Cu);
+  assert(f.mr.record.stage92 == 0u);   /* the reset install reinstalled */
+
+  /* ... and too far (band >= 0x70) resets */
+  rec->code = 0x0B;
+  opp->pos_x = 0x380;
+  f.mr.record.stage92 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(rec->anim_id == 0u);
+
+  /* the session gate on arm 1 (0x81B73): the found record's action-0x0C
+   * install is vetoed and the duel record resets */
+  rec->code = 0x0B;
+  opp->pos_x = 0x340;
+  f.mr.record.stage92 = 0;
+  f.mr.record.frame = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(rec->anim_id == 0x0Cu);
+  opp->code = 0;                       /* clear the arm-0 side effects */
+  f.mr.record.frame = 1;
+  f.mr.session_gate_14c32a = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0B) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0u);   /* reset, never stage 2 */
+  assert(opp->code != 0x0Cu);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
   test_action_00_runs_move_step();
   test_action_01_runs_kickoff_body();
   test_action_02_restart_and_phase2_arms();
+  test_action_0e_stage2_else_arm_binds_camera();
+  test_action_0e_stage2_else_arm_gate_retry();
+  test_action_0b_duel_chain_installs_row_5e();
+  test_action_0c_stage0_gates_and_foul_path();
+  test_action_0b_duel_gates_and_choice();
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
   test_live_throw_in_camera_y_cut();

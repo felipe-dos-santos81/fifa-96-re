@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-22/80 action rows wired, the derived FU-143 phase driver wired into the run
+24/80 action rows wired, the derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
 formation/record placement (OL-T11-8: `352ko.fmt` seated from
@@ -259,7 +259,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **22/80 rows wired** — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **24/80 rows wired** — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -269,12 +269,16 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0E` is the phase-13 T3 live jump selector — FU-160 §2: the row-23 tackle
   install (`install = 0x0E`) now runs the stage 0/1/2/3 body and installs
   anim row 0x12 on the record, whose f2 aux-0x0E frame fires the ported jump
-  arm + BF20 arc), `26`, `28`, `2A`
+  arm + BF20 arc; the phase-14 T1 else arm `0x82820..0x82A9E` completes the
+  stage 2 body — FU-167/FU-168: the camera-follow/pan arm and the
+  `[0x1577CA]` tracked bind), `0B`, `0C` (phase-14 T1/FU-169: the duel body
+  and the contact-decision body — the live row-0x5E installer chain),
+  `26`, `28`, `2A`
   (cluster G), `1D` (FU-151 P3 close-down) and `10`, `11`, `12`, `13`
   (FU-149 L13/T1: the throw-in/corner/free-kick/penalty taker machines —
   placement/probe/kick/resolution; the taker codes the P1 arms install now
   execute and hand back to phase 2 through the shared situation-0xB entry);
-  dispatch results 57 UNSUP / 22 OK / 1 NOTF.
+  dispatch results 55 UNSUP / 24 OK / 1 NOTF.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
@@ -2037,6 +2041,70 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0x6E598..0x6E713` range notation fixed, and AGENTS.md's census line synced
   to `22/80 -> 27%`. `make check` 109/109; M1/M2 byte-exact (the tape never
   dispatches row 0x0E, so no re-pin).
+- **M2 phase-14 T1 (row-0x0E stage-2 else arm + the live row-0x5E installer;
+  FU-167/168/169; 2026-10-12).** Two pieces landed; **wired 22 -> 24/80**
+  (dispatch 55 UNSUP / 24 OK / 1 NOTF); README title recomputed to **30%** in
+  the same commit:
+  - **The row-0x0E stage-2 else arm (FU160-L4 closed; FU-167 §6 rank-1,
+    FU-168).** The missing `0x82820..0x82A9E` block now runs inside
+    `fifa96_match_action_0E` (`match_sp_pan_arm`): the strict gates
+    `0x20 < camera.pos_y < 0x70` and `(int16)word[+0x6B] < 0x60` (the live
+    pool `lane_x`; FU-168 §9.4's "(or pool `lane_x`)" — the `e->lane` dword
+    high word is a separate stale view, FU168-L7(d)), the focus re-placement
+    `pos + 0x40*dir[type]` as the direct camera write (not the `place_*`
+    drain — FU-168 §7.2 hazard), the slot-dir/RNG lateral seed, the dx/dz
+    pair + `0xCD474` turn clamp, the amplitude (`2*speed71 + cam speed`
+    clamped `0x1E` x the height factor clamped `0xA`, `<= 0x780`), the polar
+    vector (`0x795A4` products), and the `0x71C94` event through the split
+    `fifa96_camera_event_set` + `fifa96_camera_set_tracked` pair — the bind
+    `[0x1577CA] = rec` plus the record's `+0x9B` clear (`0x71D2D`) is the
+    live follow trigger; a gate failure leaves the record at stage 2 (the
+    native `CL = 0` retry semantics), success advances `timer89 = 0;
+    stage -> 3` in the same dispatch. Legs: the `0x92820`/`0x8F188`/`0x651F0`/
+    `0x974F0` sinks (FU167-L3), the descriptor term (FU167-L1), the
+    `[0x157815]` byte (FU167-L2), the `0x71C94` tail cells (FU167-L5) and
+    the live mid-band camera-Y producer (FU168-L5). Tests:
+    `test_action_0e_stage2_else_arm_binds_camera` (focus/bind/event/advance),
+    `test_action_0e_stage2_else_arm_gate_retry` (both camY bounds, the lane
+    bound, the tracked and jump-base skips) and the extended ISO
+    `test_live_row_0e_selector_installs_jump` (the live tracked bind + the
+    stage-3 advance on the row-0x12 window).
+  - **The live row-0x5E installer chain (FU-169 rec #1, full).** Two new
+    bodies: `fifa96_match_action_0B` (the duel body `0x81908..0x81C71`: arm
+    0's derived point + nearest opponent + strict `(0x20,0x70)` band + the
+    speed/facing `{0x0C,0x59}` choice + the `0x79B6C` snap/face + the anim
+    install on self; arm 1's frame gate, band `<= 0x60`, `[0x14C32A]`
+    session gate, the `+0x7D7` duel counter, the kind-2 registrar, the
+    `+0x8E` type copy and the action-0x0C install on the found record; the
+    same-dispatch arm-2 snap/`+0x44` reset — the native fall-through) and
+    `fifa96_match_action_0C` (head + stage 0 `0x81CDC..0x81DC5`: the active
+    reset, A = `[0x15888F]`, the A anim-0x59/frame-`>= 2` gate, the `0x795B4`
+    lead band (`A.pos + 2*A.vel`) `>= 0x30` -> the `+0x7CF` stumble counter,
+    the anim row 0x5E install on A and the self reset; the `< 0x30` and
+    alternate-gate foul branches run `fifa96_match_run_contact` — the
+    disclosed kind-1 re-register — after the `0x81E13` B velocity write).
+    The new per-team `duel_7d7`/`stumble_7cf` counters are staged into the
+    row-04 `team_7d7`/`opp_7d7` inputs (the native `[team+0x7D7]` gate).
+    Tests: `test_action_0b_duel_chain_installs_row_5e` (the full unit chain
+    0x0B arm0 -> arm1 -> 0x0C stage 0 -> anim 0x5E on A -> the successor
+    0x5E -> 0x0F -> 0x00 + the terminal `+0x44`), the gate/choice and
+    foul-path pins. **Erratum (fresh bytes):** arm 1's `choice == 0x59`
+    compare (`0x81B63`) reads the local zeroed at the body head (`0x8191D`)
+    on every entry, so the port's gate is the `<= 0x60` band alone. Legs:
+    the ring-post `[[rec+4]] == 0x18DE` (FU169-L3), the events/sinks/`0x8ED40`
+    (FU169-L2), the `0x0C` stages 1..6 + the retry exit (FU169-L4), the
+    action-0x09 `0x0C` producer (FU169-L1), the timing window (FU169-L5) and
+    the `0x79B6C` anim re-anchor/transient row install (FU169-L8 new).
+  - **Goldens**: M1 `09b726b7…` byte-identical (immovable); M2 `5f7e7692…`
+    byte-identical (no re-pin — the tape never dispatches 0x0E/0x0B/0x0C).
+    `make check` 109/109 (sanitized, strict). **Smoke** (`DISPLAY=:1`,
+    `p14-t1-*`): the live match runs with the new bodies — the kickoff draws
+    the players + ball (`docs/screens/p14-t1-kickoff.png`, 0-0/00:00) and a
+    KICK burst starts the clock with the records moving
+    (`docs/screens/p14-t1-live-play.png`, 00:03, the ball leaves the fixed
+    view — the R2-L4/T2 follow leg, unchanged). The duel/0x5E chain's runtime
+    evidence is the dispatch-chain tests (the pad producer needs the
+    PASS+LONG_BALL bits and a band/RNG window).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

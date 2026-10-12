@@ -195,6 +195,13 @@ struct fifa96_match_team {
   struct fifa96_match_entity records[FIFA96_MATCH_ENTITY_RECORDS];
   uint8_t flag830;          /* +0x830 team-tail byte (FU-142 §2) */
   int32_t chosen831;        /* +0x831 encoded entity id or NONE (0x2A arm) */
+  /* FU-169 (phase-14 T1): the two per-team contact counters the action-0x0B/
+   * 0x0C bodies own. The duel counter `+0x7D7` is the row-04 rare-arm gate
+   * (`0x7ED1B`, staged into `fifa96_outfield_row04_state.team_7d7`); the
+   * stumble counter `+0x7CF` counts the action-0x0C `>= 0x30` installs (the
+   * 1-in-7 commentary event `0xA2` is a leg, FU169-L2). */
+  uint32_t duel_7d7;        /* +0x7D7 (0x81B83 increment) */
+  uint32_t stumble_7cf;     /* +0x7CF (0x81D6B increment) */
 };
 
 /* FU-120 §2 ball record plus the FU-139 §3.1 staging block. The update chain

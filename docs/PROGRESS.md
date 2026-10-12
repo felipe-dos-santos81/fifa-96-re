@@ -328,6 +328,38 @@ moving records (AE 2636-3458 per walk window), the near-field close-up cut
 (no sustained whole-scene pan isolated on screen) and the sparse late
 lone-record framing; the jump stays not key-drivable (the ISO tests are its
 runtime evidence).
+**Phase-14 T1 (2026-10-12) completes the row-0x0E selector and lands the
+live row-0x5E installer chain (FU-167/FU-168/FU-169; wired 22 -> 24/80,
+README title 30%).** Two pieces: (1) the **row-0x0E stage-2 else arm**
+(FU160-L4 closed): the camera-follow/pan block `0x82820..0x82A9E` now runs
+in `fifa96_match_action_0E` — the strict `0x20 < camera Y < 0x70` and
+`lane_x < 0x60` gates (a failure retries at stage 2), the focus
+re-placement `pos + 0x40*dir[type]` as the direct camera write (the
+`place_*` drain would clear `tracked` the same frame — FU-168 §7.2), the
+RNG/slot lateral seed, the dx/dz + turn-clamped angle, the amplitude and the
+polar vector, and the `0x71C94` event through `fifa96_camera_event_set` +
+`fifa96_camera_set_tracked` — the `[0x1577CA] = rec` bind is the live
+sustained-follow trigger, asserted live by the extended ISO
+`test_live_row_0e_selector_installs_jump` (the mid-band camera Y staged;
+the live Y producer stays FU168-L5); (2) the **live row-0x5E installer
+chain** (FU-169 Rec #1, full): the new `fifa96_match_action_0B` duel body
+(the `{0x0C,0x59}` choice install on self, the kind-2 registrar + the
+action-0x0C install on the found opponent, the same-dispatch arm-2 snap) and
+`fifa96_match_action_0C` contact body (A = `[0x15888F]` in row 0x59 frame
+`>= 2` + the `0x795B4` lead band `>= 0x30` -> the `+0x7CF` stumble counter,
+the anim row-0x5E install on A, the self reset; the foul branches through
+the disclosed kind-1 `fifa96_match_run_contact` re-register), with the new
+per-team `duel_7d7`/`stumble_7cf` counters staged into the row-04 gates; the
+unit chain test runs 0x0B -> 0x0C -> anim 0x5E -> the successor
+0x5E -> 0x0F -> 0x00 end to end. Fresh-byte erratum: the duel arm-1
+`choice == 0x59` compare is dead (the local is zeroed at the body head) —
+the gate is the band alone. **M1/M2 byte-exact** (`09b726b7…`/`5f7e7692…`,
+no re-pin — the tape never dispatches these rows); `make check` 109/109
+(sanitized, strict). The `p14-t1-*` smoke runs the live match with the new
+bodies: kickoff players + ball drawn (`docs/screens/p14-t1-kickoff.png`,
+0-0/00:00) and a KICK burst starts the clock with moving records
+(`p14-t1-live-play.png`, 00:03; the ball leaves the fixed view — the
+R2-L4/T2 follow leg, unchanged).
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),
