@@ -308,3 +308,53 @@ Engine/loader source read first-hand: `src/fifa96_engine/fifa96_match_handlers.c
 FU-96, FU-136/137/138/142f/148/149/151/164/165/169/173/174/175/176/177/178/179/
 180/181/182; the phase-16 plan; AGENTS.md census rule. No writes beyond this
 slice file and the workspace report.
+
+---
+
+## 9. T5 landing note (phase-16 T5, 2026-10-12)
+
+The §6 completion paths (§6.1 row 0x0D, §6.2 row 03) were executed as decisions
+under controller Ruling W6. **Neither row lands, and the 0x20/0x25 hunt (§5,
+FU189-L5) resolves to legs.** The verified census is **unchanged**:
+`floor(100 × 34/80) = 42` (31 action + phase 0x18/0x19/0x1F), dispatch
+`45 UNSUP / 34 OK / 1 NOTF` (sum 80).
+
+* **Row 0x0D — no landing.** T5 re-read row-09 arm 1 `0x80BFB..0x80FCB`
+  first-hand: the installs `0x80EFA` (0x0C) and `0x80F61` (0x0D,
+  `ba0d000000`/`e835caffff`) are on the `0x80E13..` path, which is gated by
+  `[0x15877C]` (FU178-L6), `[rec+0x3D]` (the FU-84 frame), `[rec+0x24]` (the
+  owner) and `[[rec+4]+0x13]`, and calls the unported arm-1 helpers/sinks
+  (`0x8f188`/`0x8ed40`/`0x92820`/`0x7a490`/`0x8a3fc`). FU-178 §6 ranks arm 1 the
+  heaviest / last, and neither FU-178 nor FU-190 shows the install reachable, so
+  per W6 the bounded arm is **not** ported: **FU178-L1 is the owner** and the row
+  stays uncounted (§6.1's single-dependency claim is necessary but not sufficient
+  — reachability of the arm-1 gates is the second condition).
+* **Row 03 — no landing.** Both dependencies stay unported: `0x6DCC8`
+  (`get_xrefs_to` = 5: phase slots `0x11079C`/`0x1107E8` + three internal calls;
+  its source `[rec+0xC]` is the OL-13 metadata pointer) and the per-record
+  `[rec+0x1C]` seam (the engine models phase dispatch via
+  `fifa96_match_dispatch_phase`, not a record-threaded `[rec+0x1C]`). **Owners
+  FU177-L1 + FU175-L1**; the row stays uncounted.
+* **Row 0x20 — no landing (leg FU189-L1).** The installer `0x899a2` is real but
+  phase-0x1D-gated: `0x89868`'s sole xref is the phase slot `0x110808`, and no
+  engine source dispatches situation 8 (the act-7 producer), so the route is
+  absent.
+* **Row 0x25 — no landing (leg FU189-L2).** No installer exists.
+
+The four leg-state guards + the phase-0x1D gap are pinned in
+`tests/test_engine_match_handlers.c` (`test_action_20_phase_1d_gated_leg`,
+`test_action_25_no_installer_leg`, `test_action_03_completion_path_leg`,
+`test_action_0d_arm1_installer_leg`). M1 `09b726b7…` + M2 `7b4b241a…`
+byte-identical (no re-pin).
+
+## 10. T5 provenance (this slice)
+
+Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit; scripts disabled):
+`get_xrefs_to` `0x89868` (1), `0x6DCC8` (5), `0x8251C` (1), `0x7E1A4` (1);
+`read_memory` `0x1106E0` (180 B), `0x110794` (140 B);
+`disassemble_bytes` `0x8999c` (24 B), `0x80BF0`/`0x80CCA`/`0x80E59` (row-09 arm
+1), `0x80F50`; `search_byte_patterns` `BA25000000`. Engine source read:
+`fifa96_match_handlers.c` (action/phase tables), `fifa96_match_run.c`
+(`match_run_situation_side`), `fifa96_action_handlers.c`
+(`fifa96_action_phase_situations`). No writes beyond this slice file and the
+workspace report.

@@ -396,6 +396,31 @@ the build also produces the windowed `fifa96` target (`make game`).
   row-0x24 `0x157A38` lane table / `0x6E1D0` release (FU188-L3/L5) stay legs.
   Both counted rows are install-live/tape-dormant, so M1 `09b726b7…` and M2
   `7b4b241a…` stay **byte-exact (no re-pin)**; census 32/80 → **34/80 = 42%**.
+- **M2 phase-16 T5 (FU-189/FU-190) — installer hunt + rows `03`/`0x0D`
+  completion: all four conditional rows stay NULL/uncounted (honest legs, no
+  invented wiring).** The controller's Ruling **W6**. **Row `0x20`**: the
+  installer *exists* (`0x899a2` = `MOV EDX,0x20; MOV EAX,[ESP+8]; CALL 0x7D9A4`,
+  fresh) inside the phase-0x1D handler `0x89868`, but `0x89868`'s sole reference
+  is the phase-table slot `0x110808` (`[0x1D]`, fresh `get_xrefs_to = 1`) — the
+  act-7 route — and no engine source dispatches situation 8 (the act-7 producer;
+  the dispatched set is 1/2/3/6/9/0xB/0xC), so the phase-0x1D route is absent and
+  the installer never fires (leg **FU189-L1**, owner: the phase-0x1D route).
+  **Row `0x25`**: no static installer exists — the bounded exhaustive
+  `MOV EDX/DX,0x25` scan (`BA25000000`/`66BA2500`/`C7C225000000`) finds no
+  `FUN_0007D9A4` site (the `0x7E460` hit is the `0x6E598` anim sink) — so the row
+  stays uncounted and no installer is invented (leg **FU189-L2**). **Row `03`**:
+  both completion dependencies — `0x6DCC8` (FU177-L1, fresh `get_xrefs_to = 5`)
+  and the per-record `[rec+0x1C]` seam (FU175-L1) — stay unported (legs
+  **FU177-L1 + FU175-L1**). **Row `0x0D`**: its only installer `0x80F61`
+  (`ba0d000000`/`e835caffff`) sits in row-09 arm 1 (FU178-L1), whose install path
+  is gated by unported producers (`[0x15877C]` FU178-L6, `[rec+0x3D]` the FU-84
+  frame, `[rec+0x24]` the owner, `[[rec+4]+0x13]`) and helpers/sinks
+  (`0x8f188`/`0x8ed40`/`0x92820`/`0x7a490`/`0x8a3fc`) — FU-178/FU-190 do not show
+  it reachable, so the row stays uncounted (leg **FU178-L1**). No census change
+  (the wired set is unchanged, `34/80 = 42%`); M1 `09b726b7…` and M2
+  `7b4b241a…` stay **byte-exact (no re-pin)**; `tests/test_engine_match_handlers.c`
+  pins the four legs (NULL slot + named owner + UNSUP dispatch) and the
+  phase-0x1D gap (`fifa96_match_dispatch_phase(0x1D) == UNSUP`).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

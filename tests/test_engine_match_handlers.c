@@ -951,6 +951,86 @@ static void test_action_29_unwired_entry(void) {
   drop_fixture(&f);
 }
 
+/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5): the row-0x20 installer hunt.
+ * The installer exists — fresh `0x899a2` = `MOV EDX,0x20; MOV EAX,[ESP+8];
+ * CALL 0x7D9A4` (bytes `ba20000000`/`e8f43fffff`) — inside the phase-0x1D
+ * handler `0x89868`, but `0x89868`'s sole reference is the phase-table slot
+ * `0x110808` (`[0x1D]`, fresh get_xrefs_to = 1), i.e. the act-7 route
+ * (act `a` -> phase `0x16+a`). No engine source dispatches situation 8 (the
+ * act-7 producer; the dispatched set is 1/2/3/6/9/0xB/0xC), so the phase-0x1D
+ * route is absent and the installer never fires. The row stays `fn == NULL` /
+ * uncounted (leg **FU189-L1**, owner: the phase-0x1D route). */
+static void test_action_20_phase_1d_gated_leg(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x20];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-189") != NULL);
+  assert(strstr(row->evidence, "FU189-L1") != NULL);
+  assert(strstr(row->evidence, "0x899a2") != NULL);
+  assert(action_expect[0x20] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x20) == UNSUP);
+  /* the phase-0x1D route (act 7) is not producer-live: its slot is NULL. */
+  assert(fifa96_match_dispatch_phase(&f.mr, 0x1D) == UNSUP);
+  drop_fixture(&f);
+}
+
+/* FU-189 §4/§6 + FU-190 §6.2 (phase-16 T5): the row-0x25 installer hunt — a
+ * bounded exhaustive negative. No static `FUN_0007D9A4` site passes 0x25 (the
+ * three `MOV EDX/DX,0x25` encodings `BA25000000`/`66BA2500`/`C7C225000000`;
+ * the only default-space `0x7xxxx` hit `0x7E460` is the `0x6E598` anim sink),
+ * so no installer exists and the row stays `fn == NULL` / uncounted; no
+ * installer is invented (leg **FU189-L2**). */
+static void test_action_25_no_installer_leg(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x25];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU-189") != NULL);
+  assert(strstr(row->evidence, "FU189-L2") != NULL);
+  assert(strstr(row->evidence, "0x7E460") != NULL);
+  assert(action_expect[0x25] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x25) == UNSUP);
+  drop_fixture(&f);
+}
+
+/* FU-190 §6.1 + FU-177/FU-175 (phase-16 T5): row 03's completion path — the
+ * live phase-2 `[rec+0x1C]` handler `0x6DCC8` (fresh get_xrefs_to = 5: two
+ * phase-table DATA refs + three internal calls) and the per-record
+ * `[rec+0x1C]` seam — stays unported, so the row stays `fn == NULL` /
+ * uncounted (both owner legs named); standalone wiring would drop the
+ * hot-path target rewrite (a fake, FU-177 §7 T3-R2 rejected). */
+static void test_action_03_completion_path_leg(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x03];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU177-L1") != NULL);
+  assert(strstr(row->evidence, "FU175-L1") != NULL);
+  assert(strstr(row->evidence, "0x6DCC8") != NULL);
+  assert(action_expect[0x03] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x03) == UNSUP);
+  drop_fixture(&f);
+}
+
+/* FU-178/FU-190 §6.1 (phase-16 T5): row 0x0D's completion path — the row-09
+ * arm-1 installer `0x80F61` (`MOV EDX,0xD; MOV EAX,ESI; XOR EBX,EBX;
+ * CALL 0x7D9A4`, bytes `ba0d000000`/`e835caffff`) — stays unported (row-09 arm
+ * 1 = FU178-L1; its gate producers `[0x15877C]`/`[rec+0x3D]`/`[rec+0x24]` and
+ * helpers/sinks `0x8f188`/`0x8ed40`/`0x92820`/`0x7a490`/`0x8a3fc` are
+ * unported), so the row stays `fn == NULL` / uncounted. */
+static void test_action_0d_arm1_installer_leg(void) {
+  struct fixture f;
+  const struct fifa96_match_handler *row = &fifa96_match_action_table[0x0D];
+  make_fixture(&f);
+  assert(row->fn == NULL);
+  assert(strstr(row->evidence, "FU178-L1") != NULL);
+  assert(strstr(row->evidence, "0x80F61") != NULL);
+  assert(action_expect[0x0D] == UNSUP);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == UNSUP);
+  drop_fixture(&f);
+}
+
 /* FU-142f (M2 arms-and-wiring Task 9, FU-142 Appendix I): row 2B's native
  * entry 0x87738 is the final `RET` of the row-29 body — the shared epilogue
  * (FU-142 §1.1), not a standalone stub — and the exhaustive installer census
@@ -3211,6 +3291,10 @@ int main(void) {
   test_action_27_unwired_entry();
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();
+  test_action_20_phase_1d_gated_leg();
+  test_action_25_no_installer_leg();
+  test_action_03_completion_path_leg();
+  test_action_0d_arm1_installer_leg();
   test_dead_2b_evidence();
   test_action_05_wired_carrier();
   test_action_05_claim_dirs_and_stages();

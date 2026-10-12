@@ -343,3 +343,39 @@ Engine source read: `src/fifa96_engine/fifa96_match_handlers.c`
 (33..79). Docs cross-cited: FU-82 (§2.1/§3.7/§3.10/OL-2), FU-142f (OL-48),
 FU-182 (§5/§9 FU182-L2), FU-184/FU-178-L1 (context). No writes beyond this slice
 and the workspace report.
+
+---
+
+## 10. T5 landing note (phase-16 T5, 2026-10-12)
+
+R37's installer hunt holds; **neither row lands this phase** (controller Ruling
+W6: nothing counts unconditionally; count only what genuinely lands). No body
+was ported and no slot was wired.
+
+* **Row 0x20 — does not land (leg FU189-L1 stands).** T5 re-verified first-hand:
+  `0x899a2 = ba20000000` (`MOV EDX,0x20`) + `0x899ab = e8f43fffff`
+  (`CALL 0x7D9A4`); `get_xrefs_to 0x89868 = 1` (DATA from `0x110808` =
+  `0x110794 + 0x1D*4`, the phase-table slot — the act-7 route). The engine's
+  `fifa96_action_phase_situations[8]` produces act 7 (`{NONE,7,0,OPEN_LEG,0}`),
+  but no engine source dispatches situation 8 (the live set is 1/2/3/6/9/0xB/0xC)
+  and `fifa96_match_phase_table[0x1D].fn == NULL`, so the installer is
+  phase-seam-gated and never fires. The slot stays NULL; the body `0x84EEC`
+  stays unported. **FU189-L1 is the owner.**
+* **Row 0x25 — does not land (leg FU189-L2 stands).** Re-ran the three-encoding
+  scan: `BA25000000` returns `0x1f527/0x22033/0x7e460/0xa9b41` (all non-installer)
+  plus four `.image` overlay false positives; `66BA2500` / `C7C225000000` are
+  empty. No `FUN_0007D9A4` site passes 0x25. The slot stays NULL; no installer is
+  invented. **FU189-L2 is the owner.**
+
+## 11. T5 provenance (this slice)
+
+Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit; scripts disabled):
+`get_xrefs_to` `0x89868` (1), `0x6DCC8` (5), `0x8251C` (1), `0x7E1A4` (1);
+`read_memory` `0x1106E0` (180 B), `0x110794` (140 B);
+`disassemble_bytes` `0x8999c` (24 B, the 0x20 install), `0x80BF0`/`0x80CCA`/
+`0x80E59` (the full row-09 arm 1 `0x80BFB..0x80FCB`, incl. the 0x0C install
+`0x80EFA` and the 0x0D install `0x80F61`), `0x80F50` (0x0D sibling);
+`search_byte_patterns` `BA25000000`. Engine source read: `fifa96_match_handlers.c`
+(the action/phase tables), `fifa96_match_run.c` (`match_run_situation_side`),
+`fifa96_action_handlers.c` (`fifa96_action_phase_situations[0x0D]`). No writes
+beyond this slice file and the workspace report.

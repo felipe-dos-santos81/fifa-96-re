@@ -654,6 +654,24 @@ release (FU188-L3/L5) stay legs. `make check` **110/110**; M1 `09b726b7…` + M2
 `7b4b241a…` **byte-identical** (install-live/tape-dormant; no re-pin); census
 32/80 → **34/80 = 42%**.
 
+**Phase-16 T5 (2026-10-12) — the installer hunt + rows 03/0x0D completion: all
+four conditional rows stay NULL/uncounted (honest legs, no invented wiring)**
+(FU-189 §10 / FU-190 §9; controller Ruling W6). The slice re-verified the
+installer facts first-hand and found **no bounded landing**: **0x20**'s installer
+*exists* (`0x899a2`, inside the phase-0x1D handler `0x89868`) but `0x89868`'s sole
+dispatch is the phase-table slot `[0x1D]` (act 7) and no engine source dispatches
+situation 8 (the act-7 producer), so the installer never fires (leg **FU189-L1**);
+**0x25** has **no static installer** (the bounded `MOV EDX/DX,0x25` scan finds
+none; `0x7E460` is the `0x6E598` anim sink) so it stays uncounted and no installer
+is invented (leg **FU189-L2**); **03**'s two dependencies (`0x6DCC8` FU177-L1 +
+the `[rec+0x1C]` seam FU175-L1) stay unported (legs **FU177-L1 + FU175-L1**); and
+**0x0D**'s only installer `0x80F61` sits in row-09 arm 1 (FU178-L1), whose gate
+producers and helpers/sinks are unported and not shown reachable (leg
+**FU178-L1**). No body was ported and no slot was wired (the rows-27/29/2C
+precedent); the four leg-state guards + the phase-0x1D gap are pinned in
+`test_engine_match_handlers.c`. `make check` **110/110**; M1 `09b726b7…` + M2
+`7b4b241a…` **byte-identical** (no re-pin); census unchanged **34/80 = 42%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
