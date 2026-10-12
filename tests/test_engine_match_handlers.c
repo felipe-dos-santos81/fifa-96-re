@@ -2605,9 +2605,12 @@ static void test_action_19_hold_guard_binds_camera(void) {
   drop_fixture(&f);
 }
 
-/* Row 0x1B (FU-180): the phase-0xD head camera place and the stage-4
- * reposition_b_finish (not-controlled -> install 0x19). */
-static void test_action_1b_head_and_finish(void) {
+/* Row 0x1B head-bind + same-dispatch stage-4 finish (T2 review FINDING 1): the
+ * head writes the record's controlled field (`[0x157A83]=rec`, 0x76DBF) and the
+ * finish must read it back immediately (0x776D8) — not the lagging pool cell.
+ * With the head bound and the CPU side (global_157a4c 0) the finish takes the
+ * controlled+situation-5 path, so no 0x19 install lands. */
+static void test_action_1b_head_bind_same_dispatch_finish(void) {
   struct fixture f;
   make_fixture(&f);
   struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
@@ -2618,15 +2621,55 @@ static void test_action_1b_head_and_finish(void) {
   f.mr.record.pos_x = 0x200;
   f.mr.record.pos_y = 0x10;
   f.mr.record.pos_z = 0x30;
-  f.mr.record.place_offset_x = 0;
-  f.mr.record.place_offset_z = 0;
   f.mr.record.stage92 = 4;
-  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;   /* not controlled */
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;   /* pool cell lags */
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   assert(f.mr.keeper_cam_x == 0x200);                    /* head camera place */
   assert(f.mr.keeper_cam_z == 0x30);
   assert(f.mr.keeper_cam_y == 0x10 + 0x38);
+  assert(e->code != 0x19u);                              /* controlled -> no install */
+  drop_fixture(&f);
+}
+
+/* Row 0x1B stage-4 finish on the not-controlled path (no head bind: phase !=
+ * 0x0D): the ported reposition_b_finish installs 0x19. */
+static void test_action_1b_finish_not_controlled(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;                                  /* head does not bind */
+  f.mr.record.stage92 = 4;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   assert(e->code == 0x19u);                              /* the finish install */
+  drop_fixture(&f);
+}
+
+/* Row 0x19 guard rejection 0x747EA (T2 review FINDING 2): the tracked opponent
+ * lane `word[opp+0x6B]` rejects the guard when `rec_lane >= opp_lane`, so the
+ * row falls through to the weighted fallback (target.z = the side base
+ * -0x9F0) instead of the guard-pass clamp (-0x7E0). */
+static void test_action_19_guard_tracked_opponent_rejects(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_team *team = &f.mr.entities.team[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.has_slot = 0;
+  f.mr.record.lane = 0;                /* rec lane word 0 */
+  team->side = 0;
+  team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.keeper_cam_x = 0;
+  f.mr.keeper_cam_y = 0;
+  f.mr.keeper_cam_z = 0;
+  /* the opponent team target points at a record whose lane word is -1, so
+   * `rec_lane(0) >= opp_lane(-1)` -> the 0x747EA rejection fires. */
+  f.mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 0;
+  f.mr.entities.team[1].records[0].lane = (int32_t)(0xFFFFu << 16);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x19) == FIFA96_OK);
+  assert(f.mr.record.target_z == -0x9F0);   /* the fallback, not the guard clamp */
   drop_fixture(&f);
 }
 
@@ -2673,7 +2716,9 @@ int main(void) {
   test_action_06_runs_body();
   test_action_1f_runs_dive_and_installs_1b();
   test_action_19_hold_guard_binds_camera();
-  test_action_1b_head_and_finish();
+  test_action_1b_head_bind_same_dispatch_finish();
+  test_action_1b_finish_not_controlled();
+  test_action_19_guard_tracked_opponent_rejects();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

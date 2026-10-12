@@ -392,3 +392,11 @@ frame-neutral there (only `+0x9E`/`[0x157C5D]`/the tracker write at `phase !=
 2`), so the golden stays byte-exact and only the observed `M2_WIRED_MASK` grows
 (bit 0x19). The `0x79C20` slot placement (FU179-L4) and the `[rec+0x1C]` phase
 method (FU179-L5) remain legs.
+
+**T2 review fix (2026-10-12):** the phase-2 guard now encodes all five
+`0x7479D..0x74831` rejections, including `0x747EA` (the tracked-opponent lane
+`word[deepest+0x6B] >= word[[[team+0x7A6]+0x7B2]+0x6B]`). The two dropped
+`FUN_00079B58` self receiver-timer arms — `0x74823` (guard-pass) and `0x74B63`
+(carrier dive) — are minted as **FU179-L7** (the `byte[+0x99] == 0 -> +0x93 =
+0x10` effect; the +0x99 gate producer is unported, the row-04/row-08 staged-0
+convention).

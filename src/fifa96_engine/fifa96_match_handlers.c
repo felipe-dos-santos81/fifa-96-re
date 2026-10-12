@@ -3679,6 +3679,7 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   struct fifa96_match_team *team;
   struct fifa96_match_entity *e;
   uint8_t stage;
+  uint8_t actor_is_rec;
   int32_t id = r->entity_id;
   uint32_t t, idx;
   if (id < 0 ||
@@ -3689,11 +3690,13 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   team = &mr->entities.team[t];
   e = &team->records[idx];
 
-  /* Head (0x76D31..0x76DBF). */
+  /* Head (0x76D31..0x76DBF). The per-sector offsets are the native
+   * `[EAX+0x10F331]>>24` / `[EAX+0x10F339]>>24` (the byte at +3 = the 0x1B
+   * tables `0x10F334[sector]` / `0x10F33C[sector]`, FU180 §2). */
   if (mr->state.phase == 0x0Du &&
       team->side == mr->phase_machine.side_controlled) {
-    int32_t cam_x = r->pos_x + (int32_t)r->place_offset_x * 16;  /* 0x10F334[sector]<<4 */
-    int32_t cam_z = r->pos_z + (int32_t)r->place_offset_z * 16;  /* 0x10F33C[sector]<<4 */
+    int32_t cam_x = r->pos_x + (int32_t)r->place_offset_x * 16;  /* 0x10F331[sector]>>24 <<4 */
+    int32_t cam_z = r->pos_z + (int32_t)r->place_offset_z * 16;  /* 0x10F339[sector]>>24 <<4 */
     int32_t cam_y = r->pos_y + 0x38;                             /* 0x76D9F */
     mr->keeper_cam_x = cam_x;                                    /* 0x76D6A */
     mr->keeper_cam_z = cam_z;                                    /* 0x76D81 */
@@ -3705,18 +3708,25 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
     r->has_ball = 1;                                             /* 0x76DAE */
     r->controlled = 1;                                           /* 0x76DBF */
   }
+  /* [0x157A83] readback (0x7764D/0x776D8): the native reads the live actor
+   * cell immediately; the head's `[rec+0x20]-independent` bind lands on
+   * `record.controlled`, which the frame commit later drains into the pool
+   * cell `entities.controlled`. Within one dispatch (install staged=1 can run
+   * stage 1->2->4 in a single call) the pool cell still lags, so the
+   * controlled-actor test is the OR of the head's record write and the
+   * persisted pool value. */
+  actor_is_rec = (uint8_t)(r->controlled != 0 || mr->entities.controlled == id
+                               ? 1u
+                               : 0u);
   r->timer89 += (int32_t)r->delta;                               /* 0x76DC5 */
   stage = r->stage92;
   if (stage > 4u) return FIFA96_OK;                              /* 0x76DE1 JA */
   if (stage == 0u) {                                             /* 0x76DF6 */
     r->ran = 1;
     r->timer89 = 0;
-    mr->keeper_latch[0] = 0;   /* 0x157C54 */
-    mr->keeper_latch[3] = 0;   /* 0x157C57 */
-    mr->keeper_latch[4] = 0;   /* 0x157C58 */
-    mr->keeper_latch[5] = 0;   /* 0x157C59 */
-    mr->keeper_latch[6] = 0;   /* 0x157C5A */
-    mr->keeper_latch[7] = 0;   /* 0x157C5B */
+    /* 0x76E0F..0x76E2F: the `0x157C54..0x157C5B` latch clear (FU180 §2 states
+     * the range; the first-hand store list is 0x157C54/57/58/59/5A/5B). */
+    memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
     stage = 1u;                                                  /* 0x76E2F..0x76E35 */
   }
   if (stage == 1u) {                                             /* 0x76E3B */
@@ -3725,7 +3735,7 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   }
   if (stage == 2u) {                                             /* 0x76FC7 */
     if (r->row44 == 0) { r->stage92 = stage; return FIFA96_OK; }  /* 0x7763A */
-    if (mr->global_157a4c != 1u || mr->entities.controlled != id)
+    if (mr->global_157a4c != 1u || actor_is_rec == 0)
       stage = 4u;                                                /* 0x7764B/0x77655 -> 0x776C1 */
     else
       stage = 3u;   /* the 0x79C50/0x6E598 actor event is FU180-L1 */
@@ -3744,10 +3754,8 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   {
     uint8_t install_code = 0;
     uint8_t notify_code = 0;
-    uint8_t is_controlled =
-        (uint8_t)(mr->entities.controlled == id ? 1u : 0u);
     (void)fifa96_keeper_reposition_b_finish(
-        is_controlled, (uint8_t)(mr->global_157a4c == 1u ? 1u : 0u), &install_code,
+        actor_is_rec, (uint8_t)(mr->global_157a4c == 1u ? 1u : 0u), &install_code,
         &notify_code);
     if (install_code != 0)                                       /* 0x7770E install 0x19 */
       (void)fifa96_match_entities_install(e, (uint8_t)mr->state.phase, install_code, 0);
@@ -3768,9 +3776,12 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
  * `0x79C20` placement is FU179-L4); the phase gate (phase != 2 -> the no-slot
  * tail with the `[rec+0x1C]` phase-method request, FU179-L5, and the
  * `[0x157A49]>>24==1` `+0x7b` write); the phase-2 guard
- * (`hold_guard`/`guard_clamp`); the predictor (`fifa96_keeper_hold_predict`);
- * the carrier dive (`hold_intercept`); the weighted fallback
- * (`hold_fallback`). The six `0x1577xx` camera leads have no ported producer
+ * (`hold_guard`/`guard_clamp`, all five `0x7479D..0x74831` rejections incl. the
+ * tracked-opponent lane `0x747EA`); the predictor
+ * (`fifa96_keeper_hold_predict`); the carrier dive (`hold_intercept`); the
+ * weighted fallback (`hold_fallback`). The `FUN_00079B58` receiver-timer arms
+ * (`0x74823` guard-pass, `0x74B63` carrier-dive) are the FU179-L7 leg. The six
+ * `0x1577xx` camera leads have no ported producer
  * (FU179-L1), so the predictor conservatively bails and the row runs the
  * carrier/fallback exactly as the native does under the staged-zero camera. */
 static int fifa96_match_action_19(struct fifa96_match_run *mr) {
@@ -3826,14 +3837,38 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
   cam.z = mr->keeper_cam_z;
   lane = (int16_t)(r->lane >> 16);  /* [+0x69]>>16 */
   bound = (uint8_t)(mr->entities.controlled != FIFA96_MATCH_ENTITY_NONE ? 1u : 0u);
-  /* Phase-2 guard (0x7479D..0x74831). */
-  if (bound == 0 && lane < 0x2D0 && mr->keeper_cam_y == 0 &&
-      team->tracker7c7 == (int32_t)idx) {
-    if (fifa96_keeper_hold_guard(&cam, side, &out) == FIFA96_OK) {
+  /* Phase-2 guard (0x7479D..0x74831): the five native rejections all jump to
+   * the predictor (0x74832) — `bound` = `[0x157A83]` (0x747B3), lane
+   * `[+0x69]>>16` (0x747C5), `[0x157750]` (0x747D2), the deepest-keeper
+   * tracker `[team+0x7C7] == rec` (0x747DC), and (0x747EA) the tracked
+   * opponent lane `word[deepest+0x6B] >= word[opp+0x6B]` where the opponent
+   * record is `[[team+0x7A6]+0x7B2]` (the opponent team target). */
+  {
+    uint8_t guard_ok = (uint8_t)(bound == 0 && lane < 0x2D0 &&
+                                 mr->keeper_cam_y == 0 &&
+                                 team->tracker7c7 == (int32_t)idx);
+    if (guard_ok != 0) {
+      uint32_t opp = (uint32_t)(t ^ 1u);
+      int32_t opp_id = mr->entities.team[opp].target;   /* [[team+0x7A6]+0x7B2] */
+      if (opp_id >= 0 &&
+          opp_id <
+              (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+        int16_t opp_lane =
+            (int16_t)(mr->entities.team[opp]
+                          .records[(uint32_t)opp_id % FIFA96_MATCH_ENTITY_RECORDS]
+                          .lane >> 16);
+        if (lane >= opp_lane) guard_ok = 0;             /* 0x747EA JGE reject */
+      }
+    }
+    if (guard_ok != 0 &&
+        fifa96_keeper_hold_guard(&cam, side, &out) == FIFA96_OK) {
       (void)fifa96_keeper_guard_clamp(&out, side);
       r->target_x = out.x;
       r->target_y = out.y;
       r->target_z = out.z;
+      /* 0x74823 FUN_00079B58(rec): the self receiver timer (+0x93 = 0x10 when
+       * byte[+0x99] == 0). FU179-L7 leg — the +0x99 gate producer is unported
+       * (the row-04/row-08 convention stages it 0). */
       return FIFA96_OK;
     }
   }
@@ -3859,6 +3894,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
       r->target_x = out.x;
       r->target_y = out.y;
       r->target_z = out.z;
+      /* 0x74B63 FUN_00079B58(rec): the self receiver timer, FU179-L7 leg. */
       return FIFA96_OK;
     }
   }
@@ -3919,7 +3955,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x18, fifa96_match_action_18,
      "FU-139 §10/FU-137: row 18 ported (0x849B0..0x84AE1 machine; 0x4C324 bind, 0x8DB6C NSEARCH + 0x786A0 SWAP, 0x7DAB4 reset) over the pool; install arm 0x8A32F; anim row byte and bind globals OL-68"},
     {0x19, fifa96_match_action_19,
-     "FU-179 §3/§6 rank 1 (phase-15 T2): row 19 keeper-hold body ported (fifa96_match_action_19, 0x746E4..0x74CB7): +0x9E/[0x157C5D], the deepest-keeper tracker (hold_track), the +0x98 early-out, the slot/human-phase arm, the phase gate (no-slot 0x74C98 phase-method request FU179-L5), the phase-2 guard (hold_guard/guard_clamp), the predictor (fifa96_keeper_hold_predict; six 0x1577xx leads staged zero, FU179-L1/L2/L3), the carrier dive (hold_intercept) and the weighted fallback (hold_fallback); the 0x79C20 slot placement FU179-L4; installer live (row-04 0x7E866/0x7E8C1)"},
+     "FU-179 §3/§6 rank 1 (phase-15 T2): row 19 keeper-hold body ported (fifa96_match_action_19, 0x746E4..0x74CB7): +0x9E/[0x157C5D], the deepest-keeper tracker (hold_track), the +0x98 early-out, the slot/human-phase arm, the phase gate (no-slot 0x74C98 phase-method request FU179-L5), the phase-2 guard (hold_guard/guard_clamp, all five rejections incl. the tracked-opponent lane 0x747EA), the predictor (fifa96_keeper_hold_predict; six 0x1577xx leads staged zero, FU179-L1/L2/L3), the carrier dive (hold_intercept) and the weighted fallback (hold_fallback); the 0x79C20 slot placement FU179-L4 and the FUN_00079B58 receiver-timer arms 0x74823/0x74B63 FU179-L7; installer live (row-04 0x7E866/0x7E8C1)"},
     {0x1A, NULL, "FU-140 §2: row 1A not ported (partial); keeper_reposition_a_gate; OL-34"},
     {0x1B, fifa96_match_action_1B,
      "FU-180 §2 (phase-15 T2): row 1B reposition/rush bounded body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 (0x76DF6/0x76E3B/0x7769F/0x776C1) and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the 0x14E04 sine rotation, the 0x76B28 steering, the stage-2 wide body (0x71C94) stay FU180-L1/L2/L3; installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
