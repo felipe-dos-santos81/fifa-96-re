@@ -3505,16 +3505,18 @@ static void test_taker_armed_referee_rows_resolve(void) {
   assert(mr.record.stage92 == 6u);
 }
 
-/* FU-166/R14 + FU-150 (T3 review round 1): the act-2 restart under the
- * settled byte-0 default. Fresh `0x8947A MOV AL,[0x14C32A]; TEST AL,AL; JZ
- * 0x89615` aborts the hand-off for **every** contact kind (the act-2 family
- * is the byte-1 Practise session's), so under the engine's default gate 0 the
- * stage-0 whistle/phase-0xA writes stand and the decision step ends with no
- * phase 7/6 write, no speech and no taker. The old compression
- * (`foul_kind == 3 || gate`) wrongly let kind-3 contacts through — pinned
- * here (case B). The byte-1 fork stays covered by
- * `test_engine_referee_contact_fk`. */
-static void test_engine_referee_restart_default_gate_aborts(void) {
+/* FU-166/R14 + FU-150 (T3 re-review round 2): the act-2 net rule under the
+ * settled byte-0 default. The `0x89487` abort is a **one-call split**: the
+ * stage byte is incremented before it (`0x89478/0x8947F` -> 3) and the shared
+ * epilogue (`0x89615`) skips the `0x895E6` teardown, so the machine stays
+ * armed and the next driver call dispatches `table[3] = 0x894A2`. The
+ * stage-3 gate then decides on the ball row-terminal flag `[0x158882]`:
+ * kind == 3 leaves it 1 (the `0x8941D` keep/reroll install lands rows
+ * 0/0x62/0x65, flags 0x07), so the decision completes on the re-entry call;
+ * kind != 3 installs row 0x49 at `0x89464` (flags 0x00) and the gate-0 term
+ * aborts (`0x894B7`), still armed at stage 3. The engine models the split as
+ * `ref_restart_stage = 2`. */
+static void test_engine_referee_restart_default_gate_split(void) {
   struct fifa96_match_run mr;
   const int32_t point[3] = {0x500, 0x777, 0};
   fifa96_match_run_init(&mr);
@@ -3530,28 +3532,45 @@ static void test_engine_referee_restart_default_gate_aborts(void) {
   assert(mr.ref_restart_stage == 1u);    /* stage 0 ran: whistle + phase 0xA */
   assert(mr.state.phase == 0x0Au);
   assert(mr.ref_whistle == 0x1Eu);
-  /* the decision step aborts at the 0x8947A byte-0 gate */
+  /* the split: the machine stays armed, the stage advances, no decision */
   assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
-  assert(mr.state.phase == 0x0Au);       /* no phase 7/6 write */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(mr.ref_speech == 0u);
+  /* the stage-3 hold (kind != 3, gate 0): still armed, still no decision */
+  assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
   assert(mr.ref_speech == 0u);
   assert(mr.entities.team[1].target != 12);       /* no FK taker */
   assert(mr.entities.team[1].records[1].code != 0x12u);
-  assert(mr.entities.team[1].records[1].code != 0x13u);
 
-  /* case B: the hard kind (foul_kind 3) also aborts under byte 0 — the
-   * native 0x8947A read precedes the kind check at 0x894AB/0x894B2. */
+  /* case B: the hard kind (foul_kind 3, staged — the severity producer is the
+   * FU-150 decide) completes on the re-entry call: the stage-2 split, then
+   * the stage-3 gate passes via the ball row-terminal flag (kind == 3). */
   fifa96_match_run_init(&mr);
-  mr.state.phase = 0x0Au;
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
   mr.session_gate_14c32a = 0;
-  mr.referee.foul_kind = 3u;
-  mr.referee.rec_first_side = 0u;
-  mr.ref_machine = FIFA96_MATCH_RUN_REF_RESTART;
-  mr.ref_restart_stage = 1u;
-  assert(fifa96_match_run_referee_step(&mr) == 1);
-  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  mr.referee.foul_kind = 3u;             /* staged: the act-2 gate test */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
   assert(mr.state.phase == 0x0Au);
-  assert(mr.ref_speech == 0u);
+  assert(fifa96_match_run_referee_step(&mr) == 1);   /* the split */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_RESTART);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_run_referee_step(&mr) == 1);   /* the stage-3 decision */
+  assert(mr.state.phase == 7u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr.ref_speech == 0x2Au);
+  assert(mr.entities.team[1].target == 12);
+  assert(mr.entities.team[1].records[1].code == 0x12u);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -5020,7 +5039,7 @@ int main(void) {
   test_taker_armed_rows_resolve();
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
-  test_engine_referee_restart_default_gate_aborts();
+  test_engine_referee_restart_default_gate_split();
   test_taker_armed_referee_rows_resolve();
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();

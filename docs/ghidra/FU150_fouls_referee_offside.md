@@ -595,3 +595,26 @@ the byte-1 fork stays covered by `test_engine_referee_contact_fk`. The
 multi-stage compression (the `0x89214` table, the decision-word check, the
 camera-word gates) is **FU166-L6**; the prior sections are not rewritten.
 
+## Erratum — T3 re-review round 2 (phase-13, 2026-10-11)
+
+Quoted from the round-1 append above:
+
+> the native `0x8947A` `[0x14C32A]` read aborts the hand-off under byte 0 for
+> **every** contact kind ... The engine now aborts iff the session gate is 0;
+> `test_engine_referee_restart_default_gate_aborts` covers the default path
+
+**Corrected.** The `0x89487` abort is a **one-call split, not a hand-off
+abort**: the stage byte was incremented before it (`0x89478/0x8947F` -> 3)
+and the shared epilogue (`0x89615`) skips the `0x895E6` teardown
+(`[0x15882A]=1`, `[0x158828]=0`, `[0x158808]=0`, `[0x158829]=0`), so the
+armed step pointer (`FUN_0008AF38 0x8B669/0x8B672`) re-enters the next frame
+at `table[3] = 0x894A2`. There the stage-3 gate
+(`[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`) decides; because the
+stage-2 body's `FUN_0006E724(0x1587EC, 0)` install keeps/rerolls the ball row
+to 0/0x62/0x65 (flags 0x07, so `[0x158882] = 1`), **kind == 3 completes under
+byte 0 on the re-entry call** — the old `foul_kind == 3 || gate` rule was
+net-right. kind != 3 installs row 0x49 (`0x89464`, flags 0x00) and holds
+armed at stage 3. The engine models the split (`ref_restart_stage = 2`) and
+`test_engine_referee_restart_default_gate_split` supersedes the round-1 test.
+The full re-entry catalogue is FU166-L6 (FU-166 status append).
+

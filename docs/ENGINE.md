@@ -1922,6 +1922,32 @@ the build also produces the windowed `fifa96` target (`make game`).
     multi-stage compression: the `0x89214` 6-entry table, the decision-word
     check `0x89494/0x89499`, the camera-word gates). `make check` 108/108;
     M1/M2 byte-exact.
+  - **Fix round 2 (2026-10-11, re-review): the act-2 net rule corrected.**
+    Quoted from the round-1 entry above:
+
+    > the engine now aborts iff the gate is 0
+    > (`test_engine_referee_restart_default_gate_aborts`; ...)
+
+    That was a **single-call misreading**: the `0x89487`/`0x894B7` abort jumps
+    to the shared epilogue (`0x89615`) and **skips the `0x895E6` teardown**
+    (`[0x15882A]=1`, `[0x158828]=0`, `[0x158808]` step pointer = 0,
+    `[0x158829]` stage = 0), so the machine stays armed; the dispatcher reads
+    the stage from memory (`0x892FE MOV AL,[0x158829]`, table `0x89214`) and
+    the aborting body already incremented it (`0x89478/0x8947F` -> 3), so the
+    next driver call (`0x8B669/0x8B672`) re-enters at `table[3] = 0x894A2`,
+    bypassing `0x89487`. The stage-3 gate's `[0x158882]` term is the ball
+    block `+0x96` row-terminal flag: the stage-2 `FUN_0006E724(0x1587EC, 0)`
+    keep/reroll leaves rows 0/0x62/0x65 (flags 0x07 -> 1), so **kind == 3
+    completes under byte 0 on the re-entry call** (the old `kind==3 || gate`
+    exception was net-right), while kind != 3 installs row 0x49 (flags 0x00)
+    and holds armed. The engine models the split as `ref_restart_stage = 2`
+    (`fifa96_match_run.c`, fresh comment), and
+    `test_engine_referee_restart_default_gate_split` pins both byte-0 cases
+    (soft holds; kind 3 completes) and the byte-1 fork stays covered by
+    `test_engine_referee_contact_fk`. FU166-L6 is extended with the re-entry
+    semantics and the ball-base writer catalogue (`0x887D5` row 3,
+    `0x8C2CE` row 0, `0x8A18C` row 0x48, `0x8941D` keep/reroll,
+    `0x89464` row 0x49).
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

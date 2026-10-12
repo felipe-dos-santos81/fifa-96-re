@@ -578,3 +578,39 @@ the decision-word check (stage 2) and the `[0x158882]`/kind/gate decision
 `word[0x158816].hi < 0x78`, `word[0x158848] != 0` aborts). The engine
 compresses stages 2/3 into one step and does not model the decision-word
 check or the camera gates.
+
+**Erratum (re-review round 2, 2026-10-11) — the round-1 byte-0 conclusion.**
+Quoted from the round-1 act-2 paragraph above:
+
+> a byte-0 session aborts the hand-off for every contact kind ... the engine
+> now aborts iff the gate is 0 (`match_run_ref_step_restart`, fresh comment)
+> and `test_engine_referee_restart_default_gate_aborts` pins the default-gate
+> behavior
+
+**Corrected: the abort is an armed one-call split.** Fresh bytes: the abort
+(`0x89487`/`0x894B7` `JZ 0x89615`) skips the `0x895E6` teardown
+(`[0x15882A]=1`, `[0x158828]=0`, `[0x158808]=0`, `[0x158829]=0`); the
+dispatcher reads the **stage byte from memory** (`0x892FE MOV AL,[0x158829]`,
+table `0x89214`); the aborting body incremented the stage before the gate
+(`0x89478/0x8947F` -> 3), so the next driver call (`FUN_0008AF38`
+`0x8B669 CMP dword[0x158808],0` / `0x8B672 CALL dword[0x158808]`) re-enters
+at `table[3] = 0x894A2` and bypasses `0x89487`. The stage-3 gate
+`[0x158882] != 0 || kind == 3 || [0x14C32A] != 0` then decides; the stage-2
+`FUN_0006E724(0x1587EC, 0, ...)` install at `0x8941D` keeps/rerolls the ball
+row to 0/0x62/0x65 (flags 0x07 -> `[0x158882] = 1`), so **kind == 3
+completes under byte 0 on the re-entry call** (the old
+`foul_kind == 3 || gate` rule was net-right); kind != 3 installs row 0x49 at
+`0x89464` (flags 0x00) and holds armed at stage 3. The engine models the
+split (`ref_restart_stage = 2`);
+`test_engine_referee_restart_default_gate_split` supersedes the round-1 test.
+
+**FU166-L6 extension — the re-entry semantics and the ball-base writers.**
+The ball block (base `0x1587EC`) `+0x96` byte `[0x158882]` is set by every
+`FUN_0006E724(base, row, ...)` install as `row_flags & 1`:
+`0x887D5` (`FUN_000886D4`, row 3, the match reset -> 1), `0x8C2CE`
+(`FUN_0008C24C`, row 0, the kickoff commit -> 1), `0x8A18C` (row 0x48), the
+`FUN_0006FE84` appearance-machine pairs (`0x6FF37`/`0x6FF85`), and the act-2
+body's own `0x8941D` (keep/reroll -> rows 0/0x62/0x65, all flags 0x07 -> 1)
+and `0x89464` (row 0x49 -> 0). The engine does not model the byte; a future
+port should track the ball row-terminal flag to reproduce the stage-3 gate
+without the kind proxy.
