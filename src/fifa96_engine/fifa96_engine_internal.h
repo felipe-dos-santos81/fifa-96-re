@@ -42,6 +42,12 @@ struct fifa96_engine {
 extern const uint8_t fifa96_match_heading_table[32];
 extern const int16_t fifa96_match_stride_table[0x500];
 
+/* Phase-13 T3 (FU-161 §3.1): the 8-octant direction bytes flat
+ * 0x10F334/0x10F33C, first-hand `read_memory` (see the tables file). The
+ * jump-arm impulsion and the grounded 0x0C target step index this pair. */
+extern const int8_t fifa96_match_dir_x[8];
+extern const int8_t fifa96_match_dir_z[8];
+
 /* M2 phase-11 T2 fix round 2 (FU-148 §16): the FUN_0008BAF0 head-error max
  * clamp shift count, `0x8BF41..47` = `MOV ECX,[EBP+0x76]; SAR ECX,6;
  * SAR AX,CL`, with the CL & 0x1F x86 mask (the 8086 uses the full CL; the

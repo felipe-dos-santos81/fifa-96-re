@@ -1092,6 +1092,30 @@ static uint8_t match_run_frame_clamp(uint8_t anim_id, int32_t frame) {
   return (uint8_t)frame;
 }
 
+/* FU-161 §3.1/§5.2 (T3): the facing-relative impulsion — the case-0x0D
+ * (`0x6EE1B..0x6EE5B`, `<<2`), case-0x29 (`0x6F5E8..0x6F647`, `<<2` for the
+ * row set `{0x4D,0x59,0x11,0x5E}` else `×2`) and case-0x2A (`0x6E997..0x6E9FB`,
+ * `0x5E` `<<2` else `×2`) common store set:
+ *   `oct = byte[+0x8E]` (the fresh `MOV EAX,[EBP+0x8B]; SAR EAX,0x18`),
+ *   `vel73 = dir_x[oct] << shift`, `vel75 = dir_z[oct] << shift`
+ *   (`0x10F334`/`0x10F33C`, first-hand) and
+ *   `speed71 = FUN_0008DC68(vel73, vel75)` (`0x6EE52` = the ported
+ *   `fifa96_entity_distance`: 4 axis / 5 diagonal).
+ * The dword views (+0x71/+0x73) recompose the word writes for the mover
+ * (match_run.c:544-547 convention). */
+static void match_run_record_impulse(struct fifa96_match_run_record *r, int shift) {
+  int oct = (int)(r->type & 0x7u);
+  int32_t vx = (int32_t)fifa96_match_dir_x[oct] * (1 << shift);
+  int32_t vz = (int32_t)fifa96_match_dir_z[oct] * (1 << shift);
+  r->vel73 = (int16_t)vx;
+  r->vel75 = (int16_t)vz;
+  r->speed71 = (int16_t)fifa96_entity_distance(vx, vz);
+  r->vel_x = (int32_t)((uint32_t)(uint16_t)r->speed71 |
+                       ((uint32_t)(uint16_t)r->vel73 << 16));
+  r->vel_z = (int32_t)((uint32_t)(uint16_t)r->vel73 |
+                       ((uint32_t)(uint16_t)r->vel75 << 16));
+}
+
 /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0006E8E8 jump arms, first-hand
  * `disassemble_bytes` this task (`0x6ED08..0x6ED69`, `0x6EDE6..0x6EE3E`,
  * `0x6EE90..0x6EEB7`, `0x6FB2F..0x6FB5C`) and `decompile_function 0x6E8E8`.
@@ -1133,6 +1157,7 @@ static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
         r->pos_y = 0x10;
         r->jump_base = base;
         r->jump_timer = base;
+        match_run_record_impulse(r, 2);    /* 0x6EE1B..0x6EE5B: dir[oct]<<2 */
         word &= (uint16_t)(pass == 0 ? 0xFF00u : 0x00FFu);   /* one-shot */
         break;
       case 0x3A:
@@ -1156,6 +1181,41 @@ static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
       case 0x05:
         match_run_record_snap(r);                            /* 0x6EA65 */
         break;   /* sustained */
+      case 0x2A: {
+        /* 0x6F597..0x6F647: row `{0x4D,0x59,0x11,0x5E}` -> `<<2`, else `×2`;
+         * sustained (the carry re-applies while its frame holds). */
+        int i;
+        int shift = 1;
+        static const uint8_t rows[] = {0x4D, 0x59, 0x11, 0x5E};
+        for (i = 0; i < 4; i++)
+          if (r->anim_id == rows[i]) shift = 2;
+        match_run_record_impulse(r, shift);
+        break;
+      }
+      case 0x2B:
+        /* 0x6E960..0x6EA09: while `jump_timer < 2*jump_base` re-apply the
+         * impulse (row 0x5E -> `<<2`, else `×2`) and freeze the frame timer
+         * (`word[+0x32] = 0`, `0x6EA03`); sustained, so it re-fires every
+         * frame the frame holds. */
+        if ((int32_t)(int16_t)r->jump_timer <
+            2 * (int32_t)(int16_t)r->jump_base) {
+          match_run_record_impulse(r, r->anim_id == 0x5Eu ? 2 : 1);
+          r->frame_freeze = 1;
+        }
+        break;
+      case 0x0C:
+        /* 0x6EBFB..0x6EC48: grounded target step — `if (pos_y != 0) skip;
+         * target := pos; target_x += dir_x[oct]<<5; target_z +=
+         * dir_z[oct]<<5` (the `0x10F331`/`0x10F339` dword bases resolve to
+         * the same 0x10F334/0x10F33C dir bytes through the `>>24` alias,
+         * fresh this task); sustained. */
+        if (r->pos_y == 0) {
+          int oct = (int)(r->type & 0x7u);
+          r->target_x = r->pos_x + ((int32_t)fifa96_match_dir_x[oct] << 5);
+          r->target_y = r->pos_y;
+          r->target_z = r->pos_z + ((int32_t)fifa96_match_dir_z[oct] << 5);
+        }
+        break;
       default:
         break;
     }
@@ -1574,6 +1634,15 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
                                     (int32_t)e->stage.anim_id, &row) != FIFA96_OK)
       continue;
     e->bank_index = row.sprite_bank;
+    /* FU-161 §5.2 (T3): the aux-0x2B frame freeze — the arm zeroed the frame
+     * timer (`word[+0x32] = 0`, 0x6EA03) for this frame while the arc is
+     * airborne, so the frame holds (native: the timer never expires; the
+     * engine skips the advance). Consumption is take-once per staging. */
+    if (rec != NULL && rec->frame_freeze) {
+      rec->frame_freeze = 0;
+      e->anim_timer = 0;
+      continue;
+    }
     fifa96_anim_frame record;
     if (fifa96_animation_frame(r->frames, (int32_t)e->stage.frame, row.last_frame,
                                &record) != FIFA96_OK)

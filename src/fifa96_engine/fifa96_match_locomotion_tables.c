@@ -22,6 +22,15 @@ const uint8_t fifa96_match_heading_table[32] = {
     0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 6, 6, 6, 6, 7, 7, 7, 7, 0
 };
 
+/* flat 0x10F334/0x10F33C, the 8-octant direction bytes (phase-13 T3 / FU-161
+ * §3.1 first-hand `read_memory 0x10F334`): {0,1,1,1,0,-1,-1,-1} and
+ * {1,1,0,-1,-1,-1,0,1}. The jump-arm impulse (`0x6EE1B..0x6EE3E`, `0x6F5E8`,
+ * `0x6E997`) and the grounded 0x0C target step (`0x6EC17/0x6EC34`, read
+ * through the `0x10F331`/`0x10F339` dword bases — the `>>24` alias) both index
+ * this pair. */
+const int8_t fifa96_match_dir_x[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+const int8_t fifa96_match_dir_z[8] = {1, 1, 0, -1, -1, -1, 0, 1};
+
 /* flat 0x10F680, 0x500 int16 (2560 bytes read from /FIFA96.EXE) */
 const int16_t fifa96_match_stride_table[0x500] = {
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,

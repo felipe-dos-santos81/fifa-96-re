@@ -2586,6 +2586,160 @@ static void test_live_row_0e_selector_installs_jump(void) {
   drop_fixture(f);
 }
 
+/* FU-161 §3.1/§5.2 (T3): the facing-relative impulse — aux 0x0E
+ * (`0x6EE1B..0x6EE5B`) and the sustained 0x2A/0x2B family. `dir_x`/`dir_z`
+ * are the first-hand 0x10F334/0x10F33C octant bytes; the metric is the ported
+ * `fifa96_entity_distance` (4 axis / 5 diagonal). The 0x2B gate freezes the
+ * frame (`frame_freeze`) only while `jump_timer < 2*jump_base`. */
+static void test_record_jump_impulsion(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+
+  /* axis octant 2: dir (1,0) << 2 = (4,0), metric 4 */
+  e->type = 2;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(e->vel73 == 4 && e->vel75 == 0 && e->speed71 == 4);
+  /* the dword views stay in lockstep: +0x71 = {speed, vel73}, +0x73 =
+   * {vel73, vel75} */
+  assert((int16_t)e->vel_x == 4);
+  assert((int16_t)((uint32_t)e->vel_x >> 16) == 4);
+  assert((int16_t)((uint32_t)e->vel_z >> 16) == 0);
+
+  /* diagonal octant 1: dir (1,1) << 2 = (4,4), metric 5 (reset the stride
+   * timer so the mover's retarget does not pull the fresh impulse) */
+  e->type = 1;
+  e->body_timer9c = 0;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(e->vel73 == 4 && e->vel75 == 4 && e->speed71 == 5);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-161 §5.2 (T3): the sustained 0x2A impulse re-applies every frame the
+ * frame holds (no one-shot clear), and the 0x2B arm adds the frame freeze
+ * while airborne. Row 0x5E frame 1 aux 0x002A, frame 2 aux 0x032B
+ * (first-hand frame reads 0x10E3E6). */
+static void test_record_jump_sustained_and_freeze(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+  e->type = 2;                       /* dir (1,0) */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 1) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(e->vel73 == 4 && e->vel75 == 0 && e->speed71 == 4);
+  assert(e->aux_word == 0x2Au);      /* sustained: not cleared */
+  e->body_timer9c = 0;               /* keep the stride retarget out */
+  one_granted_frame(&mr);
+  assert(e->vel73 == 4 && e->speed71 == 4);   /* re-fired */
+
+  /* f2 aux 0x032B: airborne (10 < 30) -> impulse + the frame freeze */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 2) == FIFA96_OK);
+  e->body_timer9c = 0;
+  e->jump_base = 15;
+  e->jump_timer = 10;
+  one_granted_frame(&mr);
+  assert(e->vel73 == 4 && e->vel75 == 0 && e->speed71 == 4);
+  assert(e->frame_freeze == 1u);
+  /* landed (timer >= 2*base): the arm's gate refuses, so no freeze is staged
+   * (the word is sustained and re-fires, but the gate holds) */
+  e->jump_base = 15;
+  e->jump_timer = 30;
+  e->body_timer9c = 0;
+  one_granted_frame(&mr);
+  assert(e->frame_freeze == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-161 §5.3 (T3): the grounded 0x0C target step (`0x6EBFB..0x6EC48`) — with
+ * `pos_y == 0` the target is the position plus `dir[oct] << 5`; the
+ * `0x10F331`/`0x10F339` dword bases resolve to the same 0x10F334/0x10F33C
+ * bytes through the `>>24` alias (fresh this task). */
+static void test_record_jump_grounded_step(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t start_x;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+  e->type = 2;                       /* dir (1,0) -> +0x20 x */
+  e->pos_y = 0;
+  start_x = e->pos_x;
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 3) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(e->target_x == start_x + 0x20);
+  assert(e->target_z == e->pos_z);   /* the staged pos at the arm */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-161 §3.1/§6 (phase-13 T3): the live jump carry-and-stop on the natural
+ * kickoff chain. The 0x5E row's aux 0x0E impulsion carries the record along
+ * the facing (`vel = dir[oct] << 2`, the mover integrates `pos += delta*vel`)
+ * and the f5 aux-0x05 snap stops it (`FUN_00079B1C`: speed/vel zero,
+ * target := pos). The row is staged through `record_anim_install` (the
+ * FUN_0006E598 store core) with the art pair staged so the frame advance
+ * reaches f5. */
+static void test_live_jump_impulsion_carry_and_stop(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int32_t start_x;
+  int carried = 0;
+  int saw_f5 = 0;
+  int snap_ok = 0;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_stage(&mr, f.engine->surface,
+                                "/ART/PLAYART.PVI", "/ART/GAMEART0.PVI") == FIFA96_OK);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  one_granted_frame(&mr);
+
+  rec = &mr.entities.team[1].records[4];
+  rec->type = 2;                     /* +x facing (octant 2: dir (1,0)) */
+  start_x = rec->pos_x;
+  assert(fifa96_match_run_record_anim_install(&mr, rec, 0x5E, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(rec->speed71 == 4 && rec->vel73 == 4 && rec->vel75 == 0);
+  for (int i = 0; i < 90; i++) {
+    one_granted_frame(&mr);
+    if (rec->pos_x != start_x) carried = 1;
+    if (rec->anim_id == 0x5E && rec->frame == 5) saw_f5 = 1;
+    if (saw_f5 && rec->speed71 == 0 && rec->vel73 == 0 && rec->vel75 == 0 &&
+        rec->target_x == rec->pos_x && rec->target_z == rec->pos_z) {
+      snap_ok = 1;   /* the f5 aux-0x05 snap ran (FUN_00079B1C) */
+      break;
+    }
+  }
+  assert(carried == 1);              /* the impulsion carried the record */
+  assert(snap_ok == 1);              /* the f5 snap stopped it */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-147 S1: the row-1E claim's `+0x9B` possession flag and `[0x157A83]`
  * actor bind must leave the dispatch staging for the pool (the `+0x9B`
  * producer). The claim fires while `stage92 < 3` and the record does not hold
@@ -4812,9 +4966,13 @@ int main(void) {
   test_record_anim_install_row44();
   test_record_row_successor_chain();
   test_record_jump_case_0f_snap_frame3();
+  test_record_jump_impulsion();
+  test_record_jump_sustained_and_freeze();
+  test_record_jump_grounded_step();
   test_live_airborne_long_ball_seed_then_band2_follow();
   test_live_long_ball_mode40_band2_follow();
   test_live_row_0e_selector_installs_jump();
+  test_live_jump_impulsion_carry_and_stop();
   test_live_pass_kick_runs_receive_arm();
   test_live_claim_pan_row04_half_line();
   test_live_ball_record_produced_in_open_play();
