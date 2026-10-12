@@ -1453,17 +1453,23 @@ static int fifa96_match_action_10(struct fifa96_match_run *mr) {
     /* 0x858E4: the 0x4C380 no-op (leg); 0x858E9..0x858F2 the animation-frame
      * gate on the record's byte +0x3D. */
     if (r->frame < 4u) return FIFA96_OK;
-    /* 0x858F8..0x85966: the 0x18 event and the 0x10F334/0x10F33C actor-type
+    /* 0x858F8..0x85966: the 0x18 event and the 0x10F334/0x10F33C face-octant
      * ball-line build, then the FUN_000700F4 reset at the line (the derived
-     * subset applies the type offsets to the record position, the tables are
+     * subset applies the octant offsets to the record position, the tables are
      * the ported `match_kick_dir_x/z`). */
     {
-      /* The native indexes the 0x10F334/0x10F33C byte tables with the raw
-       * actor type (unbounded image read); the port masks to the 32-entry
-       * derived tables (hardening divergence). */
-      uint32_t dir_idx = (uint32_t)r->actor_type & 0x1Fu;
-      int32_t dx = (int32_t)match_kick_dir_x[dir_idx] << 6;
-      int32_t dz = (int32_t)match_kick_dir_z[dir_idx] << 6;
+      /* FU-162 §3.3.A (T3 fix): the native indexes the 0x10F334/0x10F33C byte
+       * tables with the **live face octant** `byte[rec+0x8E]` (fresh
+       * `0x8591e MOV EAX,[EBP+0x8b]; SAR EAX,0x18` — the `+0x8E` byte, the
+       * port's `record.type`), not `r->actor_type` (native `+0x8B`), which no
+       * code writes (OL-83). The port masks to the 32-entry derived tables
+       * (hardening divergence). */
+      uint32_t dir_idx = (uint32_t)r->type & 0x1Fu;
+      /* The native `SHL EDX,6` shifts the sign-extended dword (two's
+       * complement); the unsigned shift keeps that exact 32-bit wrap without
+       * the C signed-overflow UB (UBSan-clean). */
+      int32_t dx = (int32_t)((uint32_t)match_kick_dir_x[dir_idx] << 6);
+      int32_t dz = (int32_t)((uint32_t)match_kick_dir_z[dir_idx] << 6);
       /* FU-157 §4.2/§5 (T1): the native cut writes `[0x157750] := 0x80`
        * (0x85911/0x85919) and hands the just-written value to FUN_000700F4
        * as its Y (0x85950/0x85958; CALL at 0x8596B), so the place is

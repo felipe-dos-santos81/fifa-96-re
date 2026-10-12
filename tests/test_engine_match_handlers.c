@@ -370,17 +370,23 @@ static void test_action_10_runs_throw_in_body(void) {
   drop_fixture(&f);
 }
 
-/* FU-157 §4.2/§5 (T1): the throw-in stage-3 camera cut restores the native
- * `[0x157750] = 0x80`. Native 0x85911..0x85919 (`MOV EAX,0x80`; the record
- * position MOVSD x3; `MOV [0x00157750],EAX`) then 0x85950/0x85958 pushes the
- * just-written 0x80 as the FUN_000700F4 Y (CALL 0x700F4 at 0x8596B), so the
- * cut is FUN_000700F4(rec.pos_x + type<<6, 0x80, rec.pos_z + type<<6, 0). The
- * Y > 0 wakes the BF20 record-event tail gate (0x7C81B `dword[0x157750] != 0`,
+/* FU-157 §4.2/§5 (T1) + FU-162 §3.3.A (T3 fix): the throw-in stage-3 camera
+ * cut restores the native `[0x157750] = 0x80`. Native 0x85911..0x85919
+ * (`MOV EAX,0x80`; the record position MOVSD x3; `MOV [0x00157750],EAX`) then
+ * 0x85950/0x85958 pushes the just-written 0x80 as the FUN_000700F4 Y (CALL
+ * 0x700F4 at 0x8596B), so the cut is FUN_000700F4(rec.pos_x + dir_x[oct]<<6,
+ * 0x80, rec.pos_z + dir_z[oct]<<6, 0) with the **live face octant**
+ * `oct = byte[rec+0x8E]` (fresh `0x8591e MOV EAX,[EBP+0x8b]; SAR EAX,0x18`),
+ * not the never-written `+0x8B` actor-type byte (FU-162-L3). The Y > 0 wakes
+ * the BF20 record-event tail gate (0x7C81B `dword[0x157750] != 0`,
  * match_run.c:589) and puts a grounded taker's height-table band
  * `d = [0x157750] - rec.pos_y` at 0x80 >= 0x38 (the airborne kick-route
  * predicate, 0x1102FE / fifa96_action_handlers.c:113-115) — the bootstrap the
- * live follow needs (T3 carries the live row selector). */
+ * live follow needs (T3 carries the live row selector). The offset tables are
+ * the ported `match_kick_dir_x`/`_z` (native 0x10F334/0x10F33C). */
 static void test_live_throw_in_camera_y_cut(void) {
+  static const int expected_x[8] = {0, 1, 1, 1, 0, -1, -1, -1};
+  static const int expected_z[8] = {1, 1, 0, -1, -1, -1, 0, 1};
   struct fixture f;
   make_fixture(&f);
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
@@ -405,12 +411,22 @@ static void test_live_throw_in_camera_y_cut(void) {
   /* stage 0 placement -> 1 setup -> 2 probe wait */
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u);
-  /* the second dispatch crosses the stage-3 cut: the camera is placed at the
-   * record position + the type-0 offset (0, 64) with the native Y = 0x80. */
-  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
-  assert(f.mr.render.camera.pos_y == 0x80);
-  assert(f.mr.render.camera.pos_x == 0x110);
-  assert(f.mr.render.camera.pos_z == 0x440);
+  /* the stage-3 cut loops over the eight face octants: the record's live face
+   * octant (`type`, native +0x8E) selects the 0x10F334/0x10F33C offsets; the
+   * staged `actor_type` (native +0x8B) must be ignored. */
+  for (int oct = 0; oct < 8; oct++) {
+    f.mr.record.stage92 = 2;
+    f.mr.record.timer89 = 0x100;           /* crosses the 0x78 probe timer */
+    f.mr.record.frame = 4;
+    f.mr.record.pos_x = 0x110;
+    f.mr.record.pos_z = 0x400;
+    f.mr.record.type = (uint8_t)oct;
+    f.mr.record.actor_type = (uint8_t)((oct + 3) & 7);   /* must be ignored */
+    assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+    assert(f.mr.render.camera.pos_y == 0x80);
+    assert(f.mr.render.camera.pos_x == 0x110 + expected_x[oct] * 0x40);
+    assert(f.mr.render.camera.pos_z == 0x400 + expected_z[oct] * 0x40);
+  }
   /* the BF20 tail gate's height operand (0x7C81B) is the camera Y: nonzero. */
   assert(f.mr.render.camera.pos_y != 0);
   /* the height-table band d = [0x157750] - rec.pos_y >= 0x38 (a grounded
