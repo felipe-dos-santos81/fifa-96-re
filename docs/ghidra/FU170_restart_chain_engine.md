@@ -386,3 +386,54 @@ Engine reads: `fifa96_match_run.c` (`:2395`, `:2492..2526`, `:2637..2691`,
 and the golden `tests/golden/engine/m2-frames.txt` (tail). No writes: no
 rename/comment/label/function/script/project save; the retail ISO was not
 read or written.
+
+---
+
+## Status append — T3 landing (2026-10-12, phase-14 T3; append-only)
+
+The phase-14 T3 slice landed the §7 minimal wire (read-only Ghidra this
+round: fresh `read_memory 0x93B80`/`0x93B98`/`0x88F3C`/`0x1107EC`/`0x8A904`
+and fresh `disassemble_bytes 0x93C24..0x93C5F`, `0x93CD0..0x93CF7`,
+`0x93DCA..0x93DE3`, `0x8AF0E..0x8AF25`, `0x890B1..0x890E4`,
+`0x8AB08..0x8AB61`, `0x8ABF3..0x8AC29` — all byte-for-byte as §2/§3 above;
+the §4 erratum stands: the stage-3 gate reads `word[0x158818]` via the
+`0x158816` dword alias).
+
+**What landed** (`src/fifa96_engine/fifa96_match_run.c` + the header):
+
+1. `MATCH_RUN_SCREEN_SETUP0` (leg 0) queues sit 0xC after the `global_5882a`
+   clear (the native `0x93C30` then `0x93C41`).
+2. `match_run_situation_side` gains the derived act-9 arm (stage-0
+   `match_run_write_phase(0x15)` + `act9_armed`/`act9_timer`; no
+   `situation_pending` touch).
+3. The frame body ticks the derived act after `match_run_ball_machine` (the
+   native tick `0x8B672` after `0x8B664`); at `>= 0x3C` it sets
+   `global_5882a` and disarms.
+4. `MATCH_RUN_SCREEN_SETUP2` (leg 0) queues sit 3 (`0x93CE4`).
+5. The begin install's handler-run residue is superseded by a derived reset
+   mirror (save/restore the phase cells; the native front-end install
+   precedes the match reset FUN_000886D4/kickoff entry FUN_00088DC8).
+
+**The measured conflict and the `act9_gate` compression (new leg below).**
+The §5 expectation "the first 85 lines cannot move" is true for links 1–3
+but NOT for a naive SETUP2: the native step-2 sit-3 queue is unconditional,
+so on the M2 v13 tape the staged m 42 gate (a declared compression) opens
+the GATE at m 44 and a faithful SETUP2 writes phase 4 + the corner arm there
+— measured: `dispatched_ok` at m 58 gains bit 0x11 and loses bit 0x05 (the
+goal scenario diverges from frame 48). Because the native `[0x15882A]` gate
+has exactly one runtime producer (act 9 stage 3), a gate value no act-9
+completion produced is a native-unreachable state; the landed port gates the
+sit-3 arm on the derived completion marker (`act9_gate`, set by the stage-3
+completion, consumed by SETUP2, cleared by SETUP0/init/begin). The v13 tape
+is therefore byte-identical through line 85 and the restart chain runs from
+the advance (first-hand: the v14 tape's 0x15 window at lines 370..469, the
+phase-4 window 470..772, the resumed phase-2 play 773..792, the taker row
+0x11 in the post-run mask). **FU170-L9 (new): the `act9_gate` hardening
+review** — remove-and-re-pin if the tape is ever re-scoped non-additively.
+
+**Acceptance**: `tests/test_engine_m2.c` v14 (85 -> 792 lines, additive; the
+restart-completion break + `M2_POST_RESTART_FRAMES`), the fixture
+`test_restart_chain_fixture` (TAIL > 0xB4 at exactly 0xB4-not-advanced; the
+0x15 window; the 30-grant timer; sit 3 -> phase 4 + counter + the 0x11
+install; the taker ladder to phase 2; the POST idle) — mutation-RED
+verified. Legs: L1–L8 stand; **L9 minted**.

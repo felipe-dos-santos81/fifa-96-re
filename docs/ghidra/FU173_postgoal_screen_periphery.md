@@ -411,3 +411,42 @@ Repo reads (read-only): `src/fifa96_engine/fifa96_match_run.c`
 `docs/ENGINE.md:262`.
 No writes: no rename/comment/label/function/script/project save. Repo: this
 slice + `r21-report.md` only.
+
+## Status append — T3 landing (2026-10-12, phase-14 T3; append-only)
+
+**R21-1 landed as the FU-170 restart wire** (see the FU-170 T3 status):
+SETUP0's sit-0xC queue, the derived act-9 producer (phase 0x15 + the
+30-granted-frame stage-3 timer) and SETUP2's sit-3 queue under the derived
+act-9 -> GATE handshake (the staged-gate hardening that keeps the v13 tape
+additive). The M2 tape extends v13 -> v14 (85 -> 792 lines, first 85
+byte-identical) and the restart chain runs to completion (phase 0x15 ->
+phase 4 -> the corner taker -> phase 2; the taker row 0x11 dispatches on the
+tape for the first time).
+
+**R21-2 landed bounded** (fresh `disassemble_bytes 0x8D433..0x8D4A1` and
+`0x8D47C..0x8D4A1` this round, byte-for-byte as §4.2):
+
+1. **The scan's goal record** — `goal_record`/`goal_record_side` (the
+   `[0x157A9F]` cell) stored by `fifa96_match_run_goal_scan`'s goal arm
+   (replacing the `:2757` discard; the no-candidate index hardens to 0
+   like `match_run_phase_pick`). The throw-in/corner/keeper scanner-arm
+   writes stay **FU173-L1**.
+2. **`phase_arm(5)`** — the celebration install set: per team, the
+   goal-record team gets code 0x15 over records 1..10 (`(1,10,0x15,-1)`
+   through `fifa96_match_arm_install_multi`), the `[team+0x7B2]` write and
+   code 0x14 on the goal record; the other team code 0 over 0..10. A NONE
+   record (no scan) takes the port's no-record hardening (the native would
+   dereference the stale cell). Test: `test_phase5_celebration_arm` (both
+   team shapes + the hardening), mutation-RED verified; the extended
+   `test_natural_goal_fallback_arm` pins the scan store.
+
+**The release stays unported** — row 0x14 (`0x8784C`) and row 0x15
+(`0x87CD0`) have no handler bodies (`fifa96_match_handlers.c` slots NULL), so
+row 0x14's stage-2 `0x87C71` phase-1 write + the shared kickoff entry cannot
+land without the celebration port: **FU173-L3** (row-0x14 stages 0/1 with
+the release at its derived end) and **FU173-L2** (row 0x15) now carry the
+byte-0 continuation to phase 2; L1 (the other scanner-arm record writes),
+L4 (mid-match `FUN_00073E28`), L5 (rollover timing), L6 (tape frame count)
+and L7 (phase-arm coverage) stand. The live byte-0 match therefore still
+holds at phase 5 after a natural goal (now with the native celebration codes
+installed) until the row-0x14 port lands.

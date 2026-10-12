@@ -1138,6 +1138,49 @@
  * boot enters the front-end directly, so the leading CONFIRM wraps through the
  * front-end confirm/panel path instead of skipping the intro), which keeps the
  * match-relative directives aligned without a second tape.
+ *
+ * --- v14 (M2 phase-14 T3): the post-goal restart chain — THE RE-PIN ----------
+ *
+ * v14 is the phase-14 T3 landing (FU-170 §7): the post-goal hold now releases
+ * through the derived leg-0 restart chain instead of freezing at the old stop.
+ * The engine gained the three missing links — SETUP0's sit-0xC queue
+ * (`0x93C41`), the derived act-9 producer (stage-0 phase 0x15 + the stage-3
+ * timer `word[0x158818] >= 0x3C` -> `[0x15882A]`, the native act tick
+ * `0x8B672` after the ball machine) and SETUP2's sit-3 queue (`0x93CE4`) —
+ * every downstream consumer was already wired (the corner counter, phase 4 +
+ * the 0x11 taker arm, the taker ladder, the situation-0xB resolve to phase 2,
+ * the PHASE latch clear and the POST idle).
+ *
+ * The SETUP2 sit-3 arm is gated on the derived act-9 -> GATE handshake
+ * (`mr->act9_gate`): the native `[0x15882A]` GATE has exactly one runtime
+ * producer (act 9 stage 3), so the produced gate carries the corner arm; the
+ * tape's m 42 staged gate (a declared v13 compression) is a state the native
+ * cannot reach and advances without it — the disclosed hardening that keeps
+ * the v13 strata byte-identical.
+ *
+ * Frame diff (against the committed v13 golden, `cmp`/`diff` measured with the
+ * ISO present): the transcript grows 85 -> 792 lines; the first 85 lines are
+ * byte-identical (`head -85 new | cmp - old` clean, `diff` empty) and the
+ * first differing line is line 86 (the first appended one). The appended lines
+ * add the post-goal hold frames, the derived act-9 phase-0x15 window
+ * (`state=21/1-0` from line 370), the sit-3 phase-4 window (`state=4/1-0`),
+ * the taker ladder and the resumed phase-2 play (`state=2/1-0` to line 792,
+ * where the tape stops M2_POST_RESTART_FRAMES past the restart completion).
+ *
+ * What v14 pins at the sequence points: the restart chain ran to completion —
+ * `phase15_step > goal_step`, `phase4_step > phase15_step`,
+ * `restart_step > phase4_step` (all sampled post-goal), the corner counter 1,
+ * the screen machine idling at POST with the latch clear, and the post-run
+ * dispatch mask `M2_WIRED_MASK | M2_RESTART_ROWS_MASK` (the first tape
+ * dispatch of the corner taker row 0x11); the m 72 exact set is unchanged.
+ *
+ * Golden decision (v14): **re-pin with the written reason + frame diff above**
+ * — the intended post-goal continuation (plan T3), not a regression.
+ * Regenerated with the ISO present
+ * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
+ * (`09b726b7…`); old M2 sha `5f7e7692…` (v13, 85 lines) -> new M2 sha
+ * `7b4b241a72c461a354121c53b900d8d11cf59f59f03495e08e5fa08b75e45da8`
+ * (v14, 792 lines).
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1187,15 +1230,16 @@
 #define M2_M_SCORED 61
 #define M2_M_FINAL 72
 
-/* Post-goal frames recorded before the tape stops. The phase-10 T3 natural
- * goal lands in ISO and no-assets alike (the pre-v10 no-assets period-end
- * exit path is gone; the test asserts `exit_step < 0` in both modes): the
- * post's phase-0 write holds the match (the restart producers are the FU-146
- * leg-8 situation re-queue legs), so the tape records this many post-goal
- * frames and stops. The old post-exit break cadence and its exit-path sample
- * fields were dead leftovers and were removed (phase-11 T3 sweep); the exit
- * itself stays detected so `main` can assert it never happens. */
-#define M2_POST_GOAL_FRAMES 20
+/* v14 (phase-14 T3): post-restart frames recorded before the tape stops. The
+ * v13 tape recorded `M2_POST_GOAL_FRAMES` (20) post-goal frames and stopped at
+ * the frozen hold; T3 wires the derived restart chain (FU-170: the TAIL
+ * advance + the sit-0xC/act-9/sit-3 links), so the tape now runs to the
+ * restart completion — phase 2 again with the corner counter set and the
+ * screen machine idling at its POST step — plus this many frames pinning the
+ * resumed phase-2 state. The v13 → v14 extension is purely additive: the
+ * advance fires ~85 granted frames past the v13 stop, so the first 85 lines
+ * are byte-identical. */
+#define M2_POST_RESTART_FRAMES 20
 
 /* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
  * bar's y = y1 - Frames-frame-4-height - 2 = 240 - 41 - 2 = 197 (FU-148
@@ -1258,6 +1302,11 @@
  * test_taker_armed_referee_rows_resolve). */
 #define M2_TAKER_ROWS_MASK \
   ((1ull << 0x10) | (1ull << 0x11) | (1ull << 0x12) | (1ull << 0x13))
+
+/* v14 (phase-14 T3): the rows the post-goal restart chain adds to the
+ * dispatched set — the sit-3 corner arm's 0x11 taker (the first tape
+ * dispatch of a taker row; the pre-restart m 72 set still excludes it). */
+#define M2_RESTART_ROWS_MASK (1ull << 0x11)
 
 /* The derived kickoff row 01 (the state-1 arm's action 1 on the taker). */
 #define M2_KICKOFF_ROWS_MASK (1ull << 0x01)
@@ -1473,6 +1522,15 @@ struct m2_result {
   int goal_step;             /* engine step whose body wrote the natural goal
                               * (the scheduler -> handler -> writer frame);
                               * -1 while the score pair is fresh */
+  /* v14 acceptance (phase-14 T3): the post-goal restart-chain strata — the
+   * derived act-9 phase-0x15 window, the sit-3 phase-4 window, the restart
+   * completion (phase 2 again with the screen machine idling at its POST step
+   * and the corner counter set) and the dispatched set at completion. */
+  int phase15_step;          /* first post-goal step at phase 0x15; -1 until */
+  int phase4_step;           /* first phase-4 step after the 0x15 window */
+  int restart_step;          /* the step the restart completed; -1 if never */
+  uint64_t mask_restart;     /* dispatched_ok at restart_step */
+  uint16_t restart_corner;   /* corner_count[0] at restart_step */
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
   /* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the FUN_0008BAF0
@@ -2185,6 +2243,9 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   res->match_start_step = -1;
   res->exit_step = -1;
   res->goal_step = -1;
+  res->phase15_step = -1;
+  res->phase4_step = -1;
+  res->restart_step = -1;
 
   size_t used = 0;
   int steps = 0;
@@ -2404,13 +2465,31 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
     }
     /* M2 phase-10 T3: the natural goal's writer frame — the scheduler -> the
      * leg-0 handler -> the FUN_00093944 writer writes the score pair and the
-     * post's phase-0 write ends the scripted screen, so no period-end exit
-     * exists on this path (the restart producers are the FU-146 leg-8 legs);
-     * the tape records the post-goal window and stops. */
+     * post's phase-0 write ends the scripted screen. v14 (phase-14 T3): the
+     * hold now releases through the derived restart chain (FU-170) — the TAIL
+     * advance, the sit-0xC queue, the derived act-9 producer, the sit-3
+     * corner arm and the taker's resolve — and the tape runs to the restart
+     * completion + M2_POST_RESTART_FRAMES instead of stopping 20 frames past
+     * the goal. */
     if (res->goal_step < 0 && live &&
         (e->match_run.score[0] != 0u || e->match_run.score[1] != 0u))
       res->goal_step = steps;
-    if (res->goal_step > 0 && steps - res->goal_step >= M2_POST_GOAL_FRAMES) break;
+    if (res->goal_step > 0 && live) {
+      if (res->phase15_step < 0 && e->match_run.state.phase == 0x15u)
+        res->phase15_step = steps;
+      if (res->phase4_step < 0 && res->phase15_step > 0 &&
+          e->match_run.state.phase == 4u)
+        res->phase4_step = steps;
+      if (res->restart_step < 0 && res->phase4_step > 0 &&
+          e->match_run.state.phase == 2u && e->match_run.screen_step == 4u &&
+          e->match_run.corner_count[0] == 1u) {
+        res->restart_step = steps;
+        res->mask_restart = e->match_run.dispatched_ok;
+        res->restart_corner = e->match_run.corner_count[0];
+      }
+    }
+    if (res->restart_step > 0 &&
+        steps - res->restart_step >= M2_POST_RESTART_FRAMES) break;
   }
   assert(steps < M2_STEP_CAP);               /* the sequence ends by itself */
   res->steps = steps;
@@ -2543,9 +2622,10 @@ int main(void) {
   /* M2 phase-10 T3: the golden pins the goal frames — the forced mechanics
    * window (m 41), the m 42 band scenario, the natural goal chain (the event
    * -> pan -> armer -> queue -> scheduler -> handler -> writer) and the
-   * post-goal phase-0 hold (the FU-146 leg-8 restart legs; the tape records
-   * M2_POST_GOAL_FRAMES post-goal frames and stops — no period-end exit
-   * exists on the natural-goal path, so res.exit_step stays -1). */
+   * post-goal phase-0 hold. v14 (phase-14 T3): the tape no longer stops at
+   * the hold — it runs the derived restart chain to completion and records
+   * M2_POST_RESTART_FRAMES past it; no period-end exit exists on this path
+   * (the v14 provenance block above), so res.exit_step stays -1. */
   assert(res.exit_step < 0);
   /* v11 (phase-11 acceptance, T3) ball-machine stratum, re-derived by v12:
    * sampled in the m 58/m 61/m 72 blocks. The machine is live on the tape and
@@ -2580,6 +2660,17 @@ int main(void) {
    * the m 42 scenario stages at 42, the band walk + pan + queue run 47..65
    * and the m 61 scored observation (frame 66) reads the written pair. */
   assert(res.goal_step == res.match_start_step + 60);
+  /* v14 (phase-14 T3): the post-goal restart chain ran to completion — the
+   * derived act-9 phase-0x15 window, the sit-3 phase-4 window, then phase 2
+   * again with the corner counter set and the screen machine idling at POST;
+   * the tape's v13 stop (85 lines) is passed and the dispatched set at
+   * completion carries the corner taker (row 0x11). */
+  assert(res.phase15_step > res.goal_step);
+  assert(res.phase4_step > res.phase15_step);
+  assert(res.restart_step > res.phase4_step);
+  assert(res.restart_corner == 1u);
+  assert(res.steps > 85);
+  assert((res.mask_restart & (1ull << 0x11)) != 0u);   /* the corner taker */
   assert(res.armed_26 && res.armed_28 && res.armed_2a);  /* installer arms fired */
   assert(res.move_step_seen == 7);                       /* move input reached the run */
   assert(res.hold_step_seen == 9);                       /* RIGHT still held */
@@ -2656,7 +2747,11 @@ int main(void) {
     assert(res.ball_roll_goal == 6u);
     assert(res.ball_roll_final == 1u);
   }
-  assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
+  /* v14 (phase-14 T3): the post-run re-read now spans the restart chain, so
+   * the accepted set is the wired mask plus the restart rows the corner-arm
+   * chain exercises (the taker 0x11; M2_RESTART_ROWS_MASK) — the m 72
+   * directive keeps the pre-restart exact set above. */
+  assert(res.mask_final == (M2_WIRED_MASK | M2_RESTART_ROWS_MASK));
   /* v13 acceptance completion (phase-13 T4): the row-0x0E live jump selector
    * is wired (22/80) but dormant on this tape — no record enters the row-23
    * tackle drain (AI/contact-gated), so its bit never lands in the dispatch
@@ -2670,11 +2765,15 @@ int main(void) {
   assert(st.present_hash != 0u);
   /* The state lines pin the forced kickoff phases, the scoreless phase-2
    * frames, the natural goal (the writer frame's post state: the phase-0
-   * hold with the 1-0 pair) and the post-goal hold. */
+   * hold with the 1-0 pair), the post-goal hold and the v14 restart windows
+   * (0x15 = 21, 4) into the resumed 1-0 phase 2. */
   assert(strstr(transcript, " state=19/") != NULL);
   assert(strstr(transcript, " state=20/") != NULL);
   assert(strstr(transcript, " state=2/0-0\n") != NULL);
   assert(strstr(transcript, " state=0/1-0\n") != NULL);
+  assert(strstr(transcript, " state=21/1-0\n") != NULL);   /* the act-9 window */
+  assert(strstr(transcript, " state=4/1-0\n") != NULL);    /* the corner window */
+  assert(strstr(transcript, " state=2/1-0\n") != NULL);    /* the resumed play */
   assert(fwrite(transcript, 1, tlen, stdout) == tlen);
 
   if (!with_iso) {

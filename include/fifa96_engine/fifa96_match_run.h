@@ -609,6 +609,27 @@ struct fifa96_match_run {
    * accumulation, `[0x58818] += [0x57A64]`) while the phase is 1; init/begin
    * clear it. */
   uint8_t global_5882a;
+  /* FU-170 §7 (phase-14 T3): the derived act-9 producer state. The native
+   * singleton act slot `[0x158808]` holds `0x88F4C` between the sit-0xC
+   * dispatch (`0x8AF0E` -> `FUN_000888FC(9, 0, invoke)`) and the stage-3
+   * completion; the port models its two observable effects — the stage-0
+   * phase-0x15 write and the stage-3 timer (`word[0x158818] >= 0x3C`, 30
+   * granted frames) that sets `global_5882a` (stages 1/2 compressed to pass,
+   * FU170-L1). `act9_armed` is set by the act-9 arm in
+   * `match_run_situation_side`, ticked by `fifa96_match_run_frame` after the
+   * ball machine (the native act tick `0x8B672`), disarmed at completion;
+   * init/begin clear both. */
+  uint8_t act9_armed;
+  int16_t act9_timer;
+  /* The derived act-9 → GATE handshake marker: the native `[0x15882A]` gate
+   * has exactly one runtime producer (act 9 stage 3), so a gate value that
+   * no act-9 completion produced is a staged/forced state the native cannot
+   * reach. `act9_gate` marks the completion; SETUP2's sit-3 arm consumes it
+   * (the native step-2 queue runs on the produced gate). A staged gate (the
+   * M2 v13 tape's m 42 compression) therefore advances without the corner
+   * arm — the disclosed hardening that keeps the v13 strata; see the FU-170
+   * T3 status. Cleared by SETUP0 (fresh cycle) and init/begin. */
+  uint8_t act9_gate;
   /* FU-145 S2 (goal arming) run state, native cells:
    *  - `goal_armed` = [0x15781D] the pan-arm flag (armed by the armer
    *    0x713DB; cleared by a phase-2 write 0x740F6, the reflect arm 0x71908,
@@ -632,6 +653,16 @@ struct fifa96_match_run {
   int32_t goal_snap_x;
   int32_t goal_snap_y;
   int32_t goal_snap_z;
+  /* FU-173 §4.2 (phase-14 T3): the goal-record cell the byte-0 phase-5
+   * celebration arm reads — the native `[0x157A9F]` pointer (the goal
+   * scanner's selected possession record). The engine store is the pool id
+   * (`team * RECORDS + index`) plus the block team's side byte (the arm's
+   * comparison operand); written by `fifa96_match_run_goal_scan`'s goal arm
+   * (the only scanner arm whose record selection the port derives — FU173-L1
+   * bounds the throw-in/corner writes), NONE until a scan, cleared by
+   * init/begin; consumed by `fifa96_match_run_phase_arm(5)`. */
+  int32_t goal_record;
+  uint8_t goal_record_side;
   uint8_t situation_id;
   uint8_t situation_pending;
   uint8_t session_gate_14c32a;

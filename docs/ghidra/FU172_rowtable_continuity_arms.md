@@ -554,3 +554,28 @@ sub-arms are characterized. Ranked T3 rec §10: Tier 1 = f3 freeze + f0/f1
 the call-site split (every advance for terminal rows); Tier 3 = f1 `0x10`,
 the fold producer, the `+0x3F` bias, the row-`0x0C` stake, the sinks. Legs
 FU172-L1..L10 minted.
+
+## Status append — T3 landing (2026-10-12, phase-14 T3; append-only)
+
+Tier 1 landed (`src/fifa96_engine/fifa96_match_run.c`,
+`match_run_record_jump_arm`), with fresh `disassemble_bytes` this round
+verifying both targets: the f3 case at `0x6E930` (`MOV EAX,[EBP+0x83]` /
+`MOV EDX,[EBP+0x85]` / the two `SAR 0x10` / `ADD EAX,EAX` / `CMP EDX,EAX` /
+`JGE 0x6FBE6` / `word[EAX+0xA] = 0` / RET — the sustained freeze-only twin)
+and the auxiliary dispatch table `0x6E800` (case index 9 -> `0x6EEB7`:
+`MOV dword[EBP+0x5D],0` + `MOV word[EBP+0x87],0` + `JMP 0x6FBE6` — the
+landing tail; `0x6FBE6` is the second-pass continuation, not the one-shot
+XOR).
+
+* **f3 aux `0x02`** — `case 0x02:` sets `r->frame_freeze = 1` while
+  `jump_timer < 2*jump_base` (sustained; the engine's aux switch keys the
+  raw byte, so the FU-172 §7 "case 0x01" native index is the port's 0x02).
+* **f0/f1 low aux `0x0A`** — `case 0x0A:` clears `pos_y` and `jump_timer`
+  (sustained).
+
+Test: `test_engine_match_frame::test_jump_arm_f3_freeze_and_f0_landing`
+(the armed/landed freeze gate + the stale-arc landing tail), mutation-RED
+verified (both cases disabled -> the freeze assert fails). Tier 2/3 stay
+legs; **FU172-L7 closed**, the rest stand (L1..L6, L8..L10 carried — the
+call-site split is deliberately deferred: it touches successor staging the
+M2 tape exercises).

@@ -400,6 +400,41 @@ running and the records moving (`p14-t2-kickoff.png`, `p14-t2-live-play.png`,
 (`p14-t2-long-ball.png`, 00:12) — with **no whole-scene pan visible** (the
 fixed near-field view), so the gate lands as deepest provable + legs, with
 the sustained follow proven in the ISO rider.
+**Phase-14 T3 (2026-10-12) makes the match continue past a goal — the M2
+tape extends v13 -> v14 and the restart chain runs to completion (FU-170;
+wired 24/80 and README 30% unchanged; M2 `5f7e7692…` -> `7b4b241a…`, 85 ->
+792 lines, additive).** Three landings: (1) **the FU-170 3-link restart
+wire** — `MATCH_RUN_SCREEN_SETUP0` (leg 0) queues sit 0xC, the derived
+act-9 arm writes phase 0x15 and its stage-3 timer (`word[0x158818] >= 0x3C`,
+30 granted frames, ticked after `match_run_ball_machine` — the native
+`0x8B672`) sets `global_5882a`, and `MATCH_RUN_SCREEN_SETUP2` (leg 0) queues
+sit 3; every downstream consumer was already wired (corner counter + phase 4
++ the 0x11 taker, the taker ladder, the situation-0xB resolve, the PHASE
+latch clear, the POST idle). The sit-3 arm is gated on the derived act-9 ->
+GATE handshake (the native gate has exactly one runtime producer), which
+keeps the v13 tape's staged m 42 gate additive — a disclosed hardening
+(FU170-L9; the faithful SETUP2 measured taking the m 44 route and moving
+frame 48+). The v14 tape pins the 0x15 window (lines 370..469), phase 4
+(470..772), the resumed phase 2 (773..792) and the taker row 0x11 in the
+post-run mask; `head -85 new | cmp - old` clean. (2) **the byte-0 live
+release, bounded (FU-173 R21-2)** — the scan's goal record is stored (the
+`[0x157A9F]` cell) and `phase_arm(5)` installs the celebration codes
+(0x15 over 1..10 on the goal team + 0x14 on the goal record; 0 on the other
+team); the release (row-0x14 stage 2's phase-1 write) stays FU173-L2/L3 (the
+celebration rows are unwired). (3) **the row-0x12 Tier-1 arms (FU-172)** —
+the f3 aux-0x02 airborne freeze and the f0/f1 aux-0x0A landing tail, with
+mutation-RED unit pins. Folded: the FU-171 cited-window erratum
+(`0x739B0..0x73B80`) + the pan step's `0x737C8` second-admission cite.
+Tests: `test_restart_chain_fixture`, `test_phase5_celebration_arm`,
+`test_jump_arm_f3_freeze_and_f0_landing` (+ the extended
+`test_natural_goal_fallback_arm`); mutation-RED verified for each new wire.
+`make check` 109/109 (sanitized, strict); M1 `09b726b7…` never moved. The
+`p14-t3-*` smoke (`DISPLAY=:1`) shows the live match booting to the kickoff
+still, dismissing to live play and running continuously (match clock 00:02 ->
+00:11 -> 00:24; `docs/screens/p14-t3-{frontend,kickoff,live-play,play2,late}.png`);
+no live goal/post-goal segment exists in the smoke (scoring cannot be forced
+on the SDL session), so the post-goal continuation's runtime evidence is the
+v14 tape + the fixtures.
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

@@ -4066,6 +4066,182 @@ static void test_goal_consumer_chain_fixture(void) {
   drop_fixture(f);
 }
 
+/* FU-170 §7 (phase-14 T3): the derived leg-0 post-goal restart chain, live in
+ * the engine — the hold's TAIL advance (`[0x15B688] > 0xB4`), SETUP0's sit-0xC
+ * queue (`0x93C41`), the derived act-9 producer (stage-0 phase 0x15 + the
+ * stage-3 timer `word[0x158818] >= 0x3C` -> `global_5882a`, the native act
+ * tick `0x8B672`), the GATE open, SETUP2's sit-3 queue (`0x93CE4`: corner
+ * counter + phase 4 + the 0x11 taker install) and the taker's resolve back to
+ * phase 2 through the situation-0xB entry, leaving the screen machine idle at
+ * its POST step. RED on the pre-T3 engine: SETUP0 clears `global_5882a` and
+ * nothing re-sets it at phase 0, so the restore freezes at the GATE. */
+static void test_restart_chain_fixture(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  int taker = -1;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.session_gate_14c32a = 1;   /* the byte-1 family the tape stages */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  assert(mr.situation_pending == 0);
+  one_granted_frame(&mr);
+
+  /* the goal: the post's writer + phase-0 write; the machine stands at its
+   * TAIL step, the kickoff-era `global_5882a` still set (the advance's SETUP0
+   * is the only post-goal clear). */
+  assert(fifa96_match_run_goal_queue(&mr, 0) == 0);
+  one_granted_frame(&mr);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);
+  assert(mr.state.phase == 0u);
+  assert(mr.screen_step == 5u);          /* MATCH_RUN_SCREEN_TAIL */
+  assert(mr.screen_timer == 0u);
+  assert(mr.global_5882a == 1u);         /* the kickoff-era leftover */
+
+  /* the `[0x15B688] > 0xB4` gate: 90 granted frames bring the timer to exactly
+   * 0xB4 without the advance (the native `JLE`), the 91st crosses it. */
+  for (int i = 0; i < 90; i++) one_granted_frame(&mr);
+  assert(mr.screen_timer == 0xB4u);
+  assert(mr.screen_step == 5u);
+  assert(mr.state.phase == 0u);
+  one_granted_frame(&mr);                /* the advance: FUN_000935A0 */
+  assert(mr.screen_step == 1u);          /* SETUP0 ran; the GATE waits */
+  assert(mr.screen_timer == 0u);         /* the step advance zeroes it */
+  assert(mr.global_5882a == 0u);         /* the SETUP0 clear (0x93C30) */
+  assert(mr.state.phase == 0x15u);       /* the derived act-9 stage 0 */
+  assert(mr.act9_armed == 1u);
+  assert(mr.act9_timer == 2u);           /* the same-frame act tick */
+
+  /* the stage-3 timer: 30 granted frames from the arm set the gate */
+  for (int i = 0; i < 28; i++) one_granted_frame(&mr);
+  assert(mr.act9_armed == 1u && mr.global_5882a == 0u);
+  one_granted_frame(&mr);                /* the 29th tick: 2 + 58 = 0x3C */
+  assert(mr.global_5882a == 1u);
+  assert(mr.act9_armed == 0u);           /* the act ends (the slot unloads) */
+  assert(mr.act9_timer == 0);            /* the completion zeroes it */
+  assert(mr.screen_step == 1u);          /* the GATE opens next frame */
+
+  one_granted_frame(&mr);                /* GATE -> SETUP2 -> PHASE waits */
+  assert(mr.screen_step == 3u);
+  assert(mr.state.phase == 4u);          /* the sit-3 phase-4 write */
+  assert(mr.corner_count[0] == 1u);      /* the 0x8ABFF corner counter */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (mr.entities.team[t].records[i].code == 0x11u) taker = (int)i;
+  assert(taker >= 0);                    /* the phase-4 arm's 0x11 install */
+
+  /* the corner taker: the stage-0 0x3C wait, the delivery ladder and the
+   * situation-0xB resolve back to phase 2; the screen machine's PHASE step
+   * then clears the latch and the POST idles. */
+  for (int i = 0; i < 400 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  one_granted_frame(&mr);
+  assert(mr.screen_step == 4u);          /* POST (idle) */
+  assert(mr.situation_pending == 0u);
+  assert(mr.score[0] == 1 && mr.score[1] == 0);   /* no double score */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-173 §4.2 / R21-2 (phase-14 T3): the byte-0 phase-5 celebration arm
+ * (`0x8D433`, first-hand `read_memory 0x8D040[5]`): the scanned goal-record
+ * team gets code 0x15 over records 1..10 (record 0 kept) and code 0x14 on
+ * the goal record with the `[team+0x7B2]` target write; the other team gets
+ * code 0 over 0..10 (`0x8D47C`). RED on the pre-T3 engine: `phase_arm(5)` is
+ * a no-op. */
+static void test_phase5_celebration_arm(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    mr.entities.team[0].records[i].code = 0x26u;
+    mr.entities.team[1].records[i].code = 0x26u;
+  }
+  /* the scan's record store (the [0x157A9F] cell): team 0 record 3 */
+  mr.goal_record = 3;
+  mr.goal_record_side = 0;
+  assert(fifa96_match_run_situation(&mr, 6) == 0);   /* table-2 row 6 */
+  assert(mr.state.phase == 5u);
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(mr.entities.team[0].records[i].code == (i == 3u ? 0x14u : 0x15u));
+  assert(mr.entities.team[0].records[0].code == 0x26u);  /* first = 1 */
+  assert(mr.entities.team[0].target == 3);               /* [EBP+0x7B2] */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(mr.entities.team[1].records[i].code == 0u);   /* first = 0, code 0 */
+
+  /* the goal record on the other side: team 1's block is the matching one */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.goal_record = 13;                                   /* team 1 record 2 */
+  mr.goal_record_side = 1;
+  assert(fifa96_match_run_situation(&mr, 6) == 0);
+  assert(mr.entities.team[1].records[2].code == 0x14u);
+  assert(mr.entities.team[1].records[1].code == 0x15u);
+  assert(mr.entities.team[1].target == 13);
+  assert(mr.entities.team[0].records[0].code == 0u);
+
+  /* without a scanned record the native dereferences the stale cell; the
+   * port's NONE hardening skips the record-keyed installs (no invention). */
+  fifa96_match_run_init(&mr);
+  match_frame_stage_restarts(&mr);
+  mr.goal_record = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_run_situation(&mr, 6) == 0);
+  assert(mr.state.phase == 5u);
+  assert(mr.entities.team[0].records[3].code == 0u);
+}
+
+/* FU-172 §7/§10 (phase-14 T3, Tier 1): the row-0x12 f3 aux-`0x02` airborne
+ * freeze (the `0x2B` twin without the impulse; sustained) and the f0/f1 low
+ * aux-`0x0A` landing tail (`0x6EEB7`: `pos_y := 0; jump_timer := 0`;
+ * sustained). RED on the pre-T3 engine: both aux bytes fall into the
+ * `default` no-op. */
+static void test_jump_arm_f3_freeze_and_f0_landing(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+
+  /* f3 aux 0x0002: airborne (10 < 2*15) -> the frame freeze, sustained */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x12, 3) == FIFA96_OK);
+  e->jump_base = 15;
+  e->jump_timer = 10;
+  one_granted_frame(&mr);
+  assert(e->aux_word == 0x0002u);     /* sustained: not cleared */
+  assert(e->frame_freeze == 1u);
+  /* landed (timer >= 2*base): the gate refuses, so no freeze is staged */
+  e->jump_base = 15;
+  e->jump_timer = 30;
+  one_granted_frame(&mr);
+  assert(e->frame_freeze == 0u);
+
+  /* f0 aux 0x000A: the landing tail clears the stale arc (base zeroed so the
+   * same frame's arc step cannot re-lift it) */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x12, 0) == FIFA96_OK);
+  e->jump_base = 0;
+  e->jump_timer = 0x30;
+  e->pos_y = 0x20;
+  one_granted_frame(&mr);
+  assert(e->pos_y == 0);
+  assert(e->jump_timer == 0);
+  assert(e->aux_word == 0x000Au);     /* sustained */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-146 S3: the installer state (`FUN_00092D8C`/`FUN_00092E2C`). begin runs
  * the derived leg 0 / mode 0 / side 0 install; an explicit install switches
  * leg/mode, zeroes the score pair/writer bookkeeping, seeds the per-mode
@@ -5255,6 +5431,8 @@ int main(void) {
   test_scan_restart_arms();
   test_goal_chain_pan_fixture();
   test_goal_consumer_chain_fixture();
+  test_restart_chain_fixture();
+  test_phase5_celebration_arm();
   test_screen_install_state();
   test_screen_schedule_ids();
   test_goal_probe_limbs();
@@ -5278,6 +5456,7 @@ int main(void) {
   test_live_carrier_claim_and_kick();
   test_record_jump_arc_starter();
   test_record_jump_arm_aux_3a_base_literal();
+  test_jump_arm_f3_freeze_and_f0_landing();
   test_record_anim_install_row44();
   test_record_row_successor_chain();
   test_record_jump_case_0f_snap_frame3();

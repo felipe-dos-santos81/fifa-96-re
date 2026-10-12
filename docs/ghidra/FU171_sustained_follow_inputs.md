@@ -641,3 +641,33 @@ re-verified §1/§3 first-hand before any code change:
   re-staged from `camera.pos_y` with its own live-chain assertions (row-05's
   `0x7F4B0`/`0x7F4D0` reads, row-08's `0x81157`, the chase gate's
   `0x7CCD8 < 0x30`) and the tape checked for movement.
+
+## T3 status (2026-10-12, phase-14 T3 — append-only)
+
+Two review minors folded this round; fresh Ghidra reads (program
+`/FIFA96.EXE`, scripts disabled), no repo file changed except this append:
+
+1. **Erratum: the T2 status's call-site window.** The T2 status item 2
+   quotes `disassemble_bytes 0x739C0..0x73B6F` (97 insns) while its own
+   first cite is `0x739BB DL=byte[0x157821]` — a site **outside** that
+   window. The covering window is the method record's `0x739B0..0x73B80`
+   (107 insns); fresh `disassemble_bytes 0x739B0..0x739C7` this round
+   confirms the boundary: `0x739B0 AND EAX,0x1` / `0x739B3 AND EDX,0x3` /
+   `0x739B6 SHL EAX,0x2` / `0x739B9 ADD EAX,EDX` / `0x739BB MOV
+   DL,[0x157821]` / `0x739C1 MOV [0x157814],AL` / `0x739C6 TEST DL,DL`
+   (gate 1). The §3.2 engine mapping is unaffected (the four gates are
+   implemented); only the quoted window was mis-stated.
+2. **The pan step's second admission `0x737C8` cited.** Fresh
+   `disassemble_bytes 0x737A1..0x737D2`: `0x737A1 TEST CX,CX` /
+   `0x737A4 JZ 0x737B9` (the arc-Y store arm — the `word[0x1577F8]`
+   `0x70B94`-family producer follows), `0x737B9 MOV AX,[0x1577FA]` /
+   `0x737BF CMP AX,[0x1577F4]` / `0x737C6 JG 0x737DA` (timer > limit ->
+   the pan step), and the second admission `0x737C8 CMP dword[0x15775C],0`
+   (`83 3d 5c 77 15 00 00`) / `0x737CF JLE 0x737DF` + `0x737D1 CMP
+   dword[0x157750],0` / `JG` — the descent form `prevY > 0 && camY <= 0 &&
+   timer <= limit`, exactly as §2.3 derived. The engine carries only the
+   `timer > limit` arm (`fifa96_camera_update_walk`); the descent arm stays
+   a numbered leg of the live producer set (**FU171-L4/L7** family — the
+   camera Y producer gap the phase-14 T3 status in ENGINE.md records; the
+   FU-170 restart wire now supplies the goal path, the open-play Y producer
+   stays open).

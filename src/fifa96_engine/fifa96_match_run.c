@@ -1205,6 +1205,24 @@ static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
           r->frame_freeze = 1;
         }
         break;
+      case 0x02:
+        /* FU-172 §7 (phase-14 T3, Tier 1; fresh `0x6E930..0x6E95F`): the
+         * row-0x12 f3 airborne freeze-only twin of 0x2B — while
+         * `jump_timer < 2*jump_base` zero the frame timer (`word[EAX+0xA] =
+         * 0`, the rec+0x32 cell; no impulse, no XOR); sustained. */
+        if ((int32_t)(int16_t)r->jump_timer <
+            2 * (int32_t)(int16_t)r->jump_base)
+          r->frame_freeze = 1;
+        break;
+      case 0x0A:
+        /* FU-172 §7 (phase-14 T3, Tier 1; fresh case-index 9 -> `0x6EEB7`):
+         * the row-0x12 f0/f1 landing tail — `MOV dword[EBP+0x5D],0` (pos_y)
+         * then `MOV word[EBP+0x87],0` (jump_timer), then the common
+         * second-pass tail (sustained: the byte is not XORed out). Guards a
+         * stale arc at the row head. */
+        r->pos_y = 0;
+        r->jump_timer = 0;
+        break;
       case 0x0C:
         /* 0x6EBFB..0x6EC48: grounded target step — `if (pos_y != 0) skip;
          * target := pos; target_x += dir_x[oct]<<5; target_z +=
@@ -1995,6 +2013,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;
+  mr->act9_armed = 0;                  /* FU-170 §7: fresh act-9 producer */
+  mr->act9_timer = 0;
+  mr->act9_gate = 0;
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
@@ -2005,6 +2026,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
+  mr->goal_record_side = 0;
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
@@ -2075,6 +2098,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
+  mr->act9_armed = 0;                  /* FU-170 §7: fresh act-9 producer */
+  mr->act9_timer = 0;
+  mr->act9_gate = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */
@@ -2093,6 +2119,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->goal_snap_x = 0;
   mr->goal_snap_y = 0;
   mr->goal_snap_z = 0;
+  mr->goal_record = FIFA96_MATCH_ENTITY_NONE;   /* FU-173 §4.2: no scan yet */
+  mr->goal_record_side = 0;
   mr->situation_id = 0;
   mr->situation_pending = 0;
   mr->session_gate_14c32a = 0;
@@ -2226,7 +2254,29 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * side 0 are the derived front-end defaults (the [0x14AF7C]/[0x14AF74]/
    * [0x14AF60] producers are FU-146 legs 1/3). It arms the goal-screen step
    * machine so the frame scheduler consumes queued goals. */
-  (void)fifa96_match_run_screen_install(mr, 0, 0, 0);
+  /* FU-170 §7 item 1 (phase-14 T3): the installer runs its handler once
+   * (0x92EF7), and under the derived act-9 route the leg-0 step-0 sit-0xC
+   * queue arms the act-9 machine and writes phase 0x15. Natively the screen
+   * install happens at the front-end match-screen entry, before the match
+   * reset (FUN_000886D4) and the kickoff entry (FUN_00088DC8) supersede the
+   * act slot and the phase; the engine's install runs last in begin, so the
+   * derived reset mirror clears the act-9 machinery and restores the phase
+   * cells without a second setter edge (`prev_phase` keeps the reset-0
+   * value). */
+  {
+    uint8_t phase_before = mr->state.phase;
+    uint8_t prev_before = mr->state.prev_phase;
+    uint8_t pm_state_before = mr->phase_machine.state;
+    uint8_t pm_phase_before = mr->phase_machine.phase;
+    (void)fifa96_match_run_screen_install(mr, 0, 0, 0);
+    mr->act9_armed = 0;
+    mr->act9_timer = 0;
+    mr->act9_gate = 0;
+    mr->state.phase = phase_before;
+    mr->state.prev_phase = prev_before;
+    mr->phase_machine.state = pm_state_before;
+    mr->phase_machine.phase = pm_phase_before;
+  }
   return 0;
 }
 
@@ -2394,12 +2444,37 @@ static int32_t match_run_phase_pick(const struct fifa96_match_run *mr, uint32_t 
 
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase) {
   if (!mr) return -FIFA96_ERR_INVALID;
-  if (phase != 3u && phase != 4u && phase != 6u && phase != 7u &&
+  if (phase != 3u && phase != 4u && phase != 5u && phase != 6u && phase != 7u &&
       phase != 8u && phase != 9u && phase != 0x0Du)
     return 0;
   /* The native FUN_000740A0 writes [0x157A4A] before FUN_0008D098, and the
    * installs read the latched phase (`FUN_0008CEB8` passes [0x157A4A]>>24). */
   mr->entities.phase = phase;
+  if (phase == 5u) {
+    /* FU-173 §4.2 / R21-2 (phase-14 T3, first-hand 0x8D433..0x8D4A1): the
+     * byte-0 celebration install set. Per team (EBP = the team base): when
+     * the team's side byte equals the goal record's team (the `[0x157A9F]`
+     * cell dereferenced to its team pointer, `0x8D433..0x8D447`), install
+     * code 0x15 over records 1..10 (`PUSH -1; ECX=0x15; EBX=0xA; EDX=1` ->
+     * 0x8CEB8), write the goal record into `[team+0x7B2]` and install code
+     * 0x14 on it (`0x8D461..0x8D475`); else install code 0 over records 0..10
+     * (`0x8D47C`). Without a scanned record the native dereferences the stale
+     * cell; the port hardens to no record-keyed installs (leg FU173-L1 for the
+     * other scanner arms). The release (row-0x14 stage 2's phase-1 write
+     * 0x87C71) stays unported: FU173-L2/L3. */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+      struct fifa96_match_team *team = &mr->entities.team[t];
+      if (mr->goal_record >= 0 && team->side == mr->goal_record_side) {
+        int32_t idx = mr->goal_record % FIFA96_MATCH_ENTITY_RECORDS;
+        (void)fifa96_match_arm_install_multi(&mr->entities, t, 1, 10, 0x15, -1);
+        team->target = mr->goal_record;
+        (void)fifa96_match_entities_install(&team->records[idx], phase, 0x14u, 0);
+      } else if (mr->goal_record >= 0) {
+        (void)fifa96_match_arm_install_multi(&mr->entities, t, 0, 10, 0, -1);
+      }
+    }
+    return 0;
+  }
   if (phase == 0x0Du) {
     /* 0x8D65D: no install-3 prefix (first-hand, unlike the set-piece arms):
      * controlled -> code 0 over records 1..10 (record 0 kept), the other team
@@ -2517,6 +2592,20 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     mr->ref_restart_stage = out.stage;
     rc = (fifa96_err_t)fifa96_match_run_referee_step(mr);
     if (rc != 0) return (int)rc;
+  } else if (out.act == 9u) {
+    /* FU-170 §7 item 2 (phase-14 T3): the derived act-9 producer — the
+     * sit-0xC row's `0x8AF0E` invocation (act 9 stage 0, invoke). The native
+     * stage 0 writes phase 0x15 on the controlled side (`0x88F9A`..`0x88FB0`
+     * `MOV EDX,[0x157AAC]; SAR 24; EAX=0x15; CALL 0x740A0`) and stages 1/2
+     * pass in the same call, so the derived machine arms here and the
+     * stage-3 timer (`word[0x158818] >= 0x3C`, 30 granted frames) runs in
+     * `fifa96_match_run_frame`. Do NOT clear `situation_pending`: the native
+     * sit-0xC dispatch does not touch `[0x15B6C0]`. Stage-0's camera reset /
+     * presentations and the phase-0x15 arm stay FU170-L2. */
+    rc = (fifa96_err_t)match_run_write_phase(mr, 0x15u);
+    if (rc != 0) return (int)rc;
+    mr->act9_armed = 1u;
+    mr->act9_timer = 0;
   }
   return 0;
 }
@@ -2753,8 +2842,19 @@ int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
    * (leg L4), so the derived side is always the snapshot sign. */
   side = mr->goal_snap_z < 0 ? 1 : 0;
   /* 0x889C7..0x88B31: the possession nearest over the side's team block;
-   * the sinks (0x795B4/0x79C50/0x6E598/0x741B4/0x651F0/0x974F0) stay legs. */
-  (void)match_run_goal_nearest(mr, (uint32_t)side, mr->goal_snap_x, mr->goal_snap_z);
+   * the sinks (0x795B4/0x79C50/0x6E598/0x741B4/0x651F0/0x974F0) stay legs.
+   * FU-173 §4.2 / R21-2 (phase-14 T3): the selected record is the native
+   * `[0x157A9F]` cell the phase-5 celebration arm reads; the four scanner
+   * arms all write it natively, but only the goal arm's selection is derived
+   * here (the throw-in/corner writes stay FU173-L1). The derived no-candidate
+   * fallback mirrors `match_run_phase_pick` (record 0). */
+  {
+    int32_t picked =
+        match_run_goal_nearest(mr, (uint32_t)side, mr->goal_snap_x, mr->goal_snap_z);
+    if (picked < 0) picked = 0;
+    mr->goal_record = (int32_t)(side * FIFA96_MATCH_ENTITY_RECORDS) + picked;
+    mr->goal_record_side = mr->entities.team[(uint32_t)side].side;
+  }
   /* 0x88B37/0x88B42/0x88B44: MOV EAX,6; XOR EBX,EBX;
    * CALL FUN_0008A938(6, record_side, 0) — the queued side is the selected
    * record's team byte, which is the searched block's side. */
@@ -2931,8 +3031,17 @@ int fifa96_match_run_screen_step(struct fifa96_match_run *mr) {
          * the staged [0x15B684]==0 path, FU-146 leg 10); leg 4 clears the pan
          * arm and the snapshot (0x9453C..0x9454E). The presentation/staging
          * remainder (the ±0x720 hint, the 0x10F328/0x15B6C8/0x158897 copies,
-         * the situation re-queue, FUN_0004C324) is FU-146 §8 leg 8. */
-        if (mr->screen_leg == 0 || mr->screen_leg == 1 || mr->screen_leg == 3) {
+         * the situation re-queue, FUN_0004C324) is FU-146 §8 leg 8.
+         * FU-170 §7 item 1 (phase-14 T3): the leg-0 step's sit-0xC queue
+         * (`0x93C36 MOV EAX,0xC` + `0x93C41 CALL 0x8A938`, EBX/EDX 0) runs
+         * under the latched-direct route (the POST re-latch keeps
+         * `situation_pending` 1), reaching the act-9 entry `0x8AF0E`. Legs
+         * 1/3 queue their own situations at their step 2 (FU170-L3). */
+        if (mr->screen_leg == 0) {
+          mr->global_5882a = 0;
+          mr->act9_gate = 0;
+          (void)fifa96_match_run_set_piece(mr, 0x0Cu, 0u, 0u);
+        } else if (mr->screen_leg == 1 || mr->screen_leg == 3) {
           mr->global_5882a = 0;
         } else if (mr->screen_leg == 4) {
           mr->goal_armed = 0;
@@ -2959,7 +3068,22 @@ int fifa96_match_run_screen_step(struct fifa96_match_run *mr) {
          * leg 8; `screen_install` seeds the duration instead, and the
          * [0x15781D] re-arm is not applied because the 0x158897 snapshot
          * producer is unported (arming with a zero triple would poison the
-         * FU-145 camera armer). */
+         * FU-145 camera armer).
+         * FU-170 §7 item 4 (phase-14 T3): the leg-0 step's sit-3 queue
+         * (`0x93CDD MOV EAX,3` + `0x93CE4 CALL 0x8A938`, EDX=0) runs under
+         * the latched-direct route and lands the corner counter + phase 4 +
+         * the 0x11 taker arm through the table-2 row. It is gated on the
+         * derived act-9 → GATE handshake (`act9_gate`, the header doc): the
+         * native GATE's only runtime producer is act 9 stage 3, so the
+         * produced gate carries the corner arm; a staged gate (the M2 v13
+         * tape's m 42 compression) advances without it — the disclosed
+         * hardening that keeps the v13 strata additive. The two
+         * [0x157AB4]/[0x157AB6] clears need fields that do not exist
+         * (display-only, FU170-L2). */
+        if (mr->screen_leg == 0 && mr->act9_gate != 0u) {
+          mr->act9_gate = 0;
+          (void)fifa96_match_run_set_piece(mr, 3u, 0u, 0u);
+        }
         mr->screen_step++;
         mr->screen_timer = 0;
         continue;
@@ -3569,6 +3693,24 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * stages. Runs after the goal scan, before the scene staging, so the
      * frame draws the advanced record. */
     match_run_ball_machine(mr);
+    /* FU-170 §7 item 3 (phase-14 T3): the derived act-9 stage-3 timer. The
+     * native act tick is the clock tail's `0x8B669 CMP dword[0x158808],0 /
+     * 0x8B672 CALL dword[0x158808]`, directly after the ball machine
+     * (`0x8B664 CALL 0x8BAF0`) and inside the byte-0 arm; the port runs the
+     * derived act here, any phase (the native tick is ungated by phase). At
+     * `word[0x158818] >= 0x3C` (`0x890B1..0x890E3`) the act sets
+     * `[0x15882A] = 1` — the leg-0 GATE producer. Stage 1/2 gate fidelity is
+     * FU170-L1 (the derived route passes them in the arm frame); the act-2
+     * model stays a separate machine (the singleton divergence, FU170-L5). */
+    if (mr->act9_armed) {
+      mr->act9_timer = (int16_t)(mr->act9_timer + (int16_t)mr->state.frame_delta);
+      if ((int32_t)mr->act9_timer >= 0x3C) {
+        mr->global_5882a = 1u;
+        mr->act9_gate = 1u;   /* the act-9-produced gate (see the header) */
+        mr->act9_armed = 0u;
+        mr->act9_timer = 0;
+      }
+    }
     /* FU-85 §4: FUN_00036C70 stages the render slots after the FU-4B100
      * update chain (0x49523, after the 0x49514 CALL 0x4B100), so the staged
      * positions/animations reflect this frame. Rendering stays opt-in: the
