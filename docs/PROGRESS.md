@@ -520,6 +520,18 @@ tracker write at `phase != 2`), so M1/M2 stayed **byte-identical** (no golden
 re-pin; only the observed `M2_WIRED_MASK` grew). The census moved 25/80 →
 28/80 (**35%**).
 
+M2 phase-15 T3 (FU-177/FU-178/FU-180) closes the outfield cluster: row `09`
+(sequence/steer) is wired as its stage-0 arm (`0x80A00..0x80BFA`) — the live
+pad-release and row-06 installers make it an honest census mover; arms 1/2/3
+stay FU178-L1 (the reached stage lands in `mr->match09_leg_stage`). Row `0x0D`'s
+byte-complete body is ported (`fifa96_action_sequence_0d_step`) but the row is
+**uncounted** (its only installer is inside the unported row-09 arm 1; the
+rows-27/29/2C precedent). Row `03` stays UNSUP (the FU-177 §7 T3-R2 fake is
+rejected; the live phase-2 path needs the unported `0x6DCC8`). The T3 carry
+applies the FU-180 errata: the row-0x1B stage-0 latch clear is six stores
+(`0x157C54/57/58/59/5A/5B`), not all eight. M1/M2 stay **byte-identical**;
+census 28/80 → 29/80 (**36%**).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

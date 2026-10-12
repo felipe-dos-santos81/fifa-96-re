@@ -617,6 +617,12 @@ struct fifa96_match_run {
   uint8_t global_157c5c;
   uint8_t global_157c5d;
   uint8_t keeper_latch[8];
+  /* M2 phase-15 T3 / FU-178: the row-09 stage an engine dispatch reached but
+   * did not implement (arms 1/2/3 = FU178-L1). 0 = none; 1/2/3 = the unported
+   * arm the handler parked at (the native advances/acts there). Written by
+   * `fifa96_match_action_09`, cleared by init; observability for the explicit
+   * unported path (never a silent no-op). */
+  uint8_t match09_leg_stage;
   int32_t predict_c44;
   int32_t predict_c48_x;
   int32_t predict_c48_y;

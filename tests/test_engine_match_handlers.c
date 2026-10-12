@@ -89,7 +89,7 @@
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
  * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
-    /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,
+    /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ UNSUP, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK,
     /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
@@ -2673,6 +2673,93 @@ static void test_action_19_guard_tracked_opponent_rejects(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-15 T3 (FU-177/FU-178/FU-180) ============================= */
+
+/* Row 09 arm-0 set branch (FU-178 §3): active phase-2 stage-0 record — the
+ * face target (e->lane_z/cam_dz6f), the target copy, the 0x79B58 receiver
+ * timer, the 0x6E598 anim 0x11 install and the +0x92 stage advance. */
+static void test_action_09_stage0_set_branch(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.lane = 0;                /* dword[+0x69]>>17 = 0 speed */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x10;
+  f.mr.record.pos_z = 0x200;
+  e->lane_z = 0x40;                    /* the face dx (+0x6D) */
+  e->cam_dz6f = 0x20;                  /* the face dz (+0x6F) */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert((f.mr.dispatched_ok & (1ull << 0x09)) != 0u);
+  assert(f.mr.record.ran == 1);        /* 0x80BCC */
+  assert(f.mr.record.stage92 == 1);    /* arm 0 advanced (0x80BEB) */
+  assert(f.mr.record.target_x == 0x100);  /* target = pos (0x80B8E) */
+  assert(f.mr.record.target_z == 0x200);
+  assert(e->timer93 == 0x10);          /* 0x79B58 receiver timer */
+  assert(e->anim_id == 0x11);          /* the 0x6E598 anim install */
+  drop_fixture(&f);
+}
+
+/* Row 09 arm-0 clear branch (FU-178 §3): inactive -> reset + detach the record
+ * from the team's `+0x7B2`/`+0x7B6` slots. */
+static void test_action_09_clear_branch_detaches(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_team *team = &f.mr.entities.team[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.active = 0;
+  f.mr.record.stage92 = 0;
+  team->target = 0;
+  team->second = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(team->target == FIFA96_MATCH_ENTITY_NONE);   /* 0x80A5A */
+  assert(team->second == FIFA96_MATCH_ENTITY_NONE);   /* 0x80A73 */
+  assert(f.mr.record.stage92 == 0xFF);                /* match_row_reset */
+  drop_fixture(&f);
+}
+
+/* Row 09 stages 1/2/3 are the unported arms (FU178-L1): the handler parks and
+ * records the unported stage for observability (never a silent no-op). */
+static void test_action_09_unported_stage_marks(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 2;             /* arm 1/2/3 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.match09_leg_stage == 2); /* the disclosed unported arm */
+  assert(f.mr.record.stage92 == 2);    /* parked, not silently advanced */
+  drop_fixture(&f);
+}
+
+/* Latch-revert discriminator (T3 carry / FU180 errata): the row-0x1B stage-0
+ * clear touches only 0x157C54/57/58/59/5A/5B — the 0x157C55/56 bytes (kernel
+ * latch [1]/[2]) must survive, because FU180-L7's stage-2 rush gate reads
+ * byte[0x157C55]. The prior `memset(sizeof)` (all eight) was the regression. */
+static void test_action_1b_stage0_latch_partial_clear(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;                /* head does not bind */
+  f.mr.record.stage92 = 0;
+  memset(f.mr.keeper_latch, 1, sizeof f.mr.keeper_latch);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.keeper_latch[0] == 0);   /* 0x157C54 cleared */
+  assert(f.mr.keeper_latch[1] == 1);   /* 0x157C55 NOT cleared (FU180-L7) */
+  assert(f.mr.keeper_latch[2] == 1);   /* 0x157C56 NOT cleared */
+  assert(f.mr.keeper_latch[3] == 0);   /* 0x157C57 cleared */
+  assert(f.mr.keeper_latch[4] == 0);   /* 0x157C58 cleared */
+  assert(f.mr.keeper_latch[5] == 0);   /* 0x157C59 cleared */
+  assert(f.mr.keeper_latch[6] == 0);   /* 0x157C5A cleared */
+  assert(f.mr.keeper_latch[7] == 0);   /* 0x157C5B cleared */
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -2719,6 +2806,10 @@ int main(void) {
   test_action_1b_head_bind_same_dispatch_finish();
   test_action_1b_finish_not_controlled();
   test_action_19_guard_tracked_opponent_rejects();
+  test_action_09_stage0_set_branch();
+  test_action_09_clear_branch_detaches();
+  test_action_09_unported_stage_marks();
+  test_action_1b_stage0_latch_partial_clear();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

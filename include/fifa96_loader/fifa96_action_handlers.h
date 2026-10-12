@@ -735,6 +735,77 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
                                                    int16_t *vel_x, int16_t *vel_z,
                                                    int16_t *speed);
 
+/* ===== FU-180 §3 / FU-82 §3.4 (M2 phase-15 T3): row 0x0D body =====
+ *
+ * `fifa96_action_sequence_0d_step` is the byte-complete port of the row-0D
+ * handler `0x8251C..0x826FE` (fresh `disassemble_bytes` this slice), the 4-arm
+ * table `0x8250C` = `{0x82567, 0x8261F, 0x826B0, 0x826D5}`. The native arms
+ * fall through (a stage-N dispatch runs arms N..3 in one call):
+ *  - head `0x82526..0x82555`: `timer89 += delta`; when `rec == [0x157A83]`
+ *    (`is_actor`) clear the actor; `stage = +0x92`; `> 3` -> tail;
+ *  - arm 0 `0x82567` (inactive -> the `0x826F1` reset tail): `word[+0x83]=0x20`,
+ *    `word[+0x85] = 0x702F8((int16)word[+0x81], 0x10)` (unported sink, FU180-L8),
+ *    `word[+0x87]=0`, `0x6E598(rec, anim, sector)`, the velocity scale
+ *    (`fifa96_action_sequence_velocity_scale`), `+0x9E=1`, `timer89=0`,
+ *    `+0x92++`;
+ *  - arm 1 `0x8261F`: while `word[+0x85] != 0` wait; else pos->target, the
+ *    `(int8)0x10F334/0x10F33C[sector] << 6` target offsets, the `0x8DCD4`
+ *    metric into `+0x65`, anim `0x0B`, `timer89=0`, `+0x92++`;
+ *  - arm 2 `0x826B0`: `word[+0x71] != 0 && byte[+0x44] != 0` -> tail; else
+ *    `timer89=0`, `+0x92++`;
+ *  - arm 3 `0x826D5`: `0x79C50(rec, word[+0x71]>>16, word[+0x73]>>16)`; a
+ *    `timer89 > 0x14` -> the `0x826F1` reset.
+ * The unported sinks are reported as requests (`ball_param` = the `0x702F8`
+ * call, `anim` = the `0x6E598` call, `metric` = the `0x8DCD4` call, `face` =
+ * the `0x79C50` call) — FU180-L8. Row 0D has no engine installer (its only
+ * installer, row-09 `0x80F61`, is inside the unported row-09 arm 1), so the
+ * action-table slot stays NULL (uncounted, the rows-27/29/2C precedent).
+ * NULL `state`/`out` -> -FIFA96_ERR_INVALID. */
+typedef struct fifa96_action_0d_state {
+  uint8_t stage92;      /* +0x92 in */
+  uint8_t active;       /* +0x8D */
+  uint8_t byte44;       /* +0x44 anim-row terminal */
+  uint8_t is_actor;     /* rec == [0x157A83] */
+  uint8_t sector;       /* +0x8E byte = [rec+0x8B]>>24 */
+  uint16_t word81;      /* +0x81 (0x702F8 first argument) */
+  int32_t timer89;      /* +0x89 in (body adds delta) */
+  uint16_t delta;       /* [0x157A64] */
+  int16_t vel73;        /* +0x73 in */
+  int16_t vel75;        /* +0x75 in */
+  int16_t speed71;      /* +0x71 in */
+  int16_t word85;       /* +0x85 in (the arm-1 wait gate) */
+  int32_t pos_x, pos_y, pos_z;             /* +0x59/+0x5D/+0x61 */
+  int32_t target_x, target_y, target_z;    /* +0x4D/+0x51/+0x55 (in/out) */
+  const int8_t *type_off_x;  /* 0x10F334 table (8-bit entries) */
+  const int8_t *type_off_z;  /* 0x10F33C table */
+} fifa96_action_0d_state;
+
+typedef struct fifa96_action_0d_out {
+  uint8_t ran;             /* +0x9E */
+  uint8_t stage92;         /* +0x92 after */
+  int32_t timer89;         /* +0x89 after */
+  uint8_t clear_actor;     /* [0x157A83] = 0 (head) */
+  uint8_t word83_20;       /* +0x83 = 0x20 */
+  uint8_t word85_zero;     /* +0x87 = 0 */
+  uint8_t ball_param;      /* 0x702F8 call (unported, FU180-L8) */
+  int16_t word85;          /* +0x85 after (0x702F8 return; staged 0) */
+  uint8_t anim;            /* 0x6E598 call */
+  uint8_t anim_id;         /* the requested anim id (0x10 arm0 / 0x0B arm1) */
+  uint8_t metric;          /* 0x8DCD4 call (arm 1) */
+  int16_t metric_dist;     /* out word +0x65 */
+  uint8_t face;            /* 0x79C50 call (arm 3) */
+  int32_t face7d;          /* the face angle (native +0x7D) */
+  uint8_t face_sector;     /* the octant (native +0x8E) */
+  uint8_t reset;           /* FUN_0007DAB4 request */
+  uint8_t vel_scale;       /* velocity scale ran */
+  int16_t vel73, vel75;    /* +0x73/+0x75 after */
+  int16_t speed71;         /* +0x71 after */
+  uint8_t target_set;      /* the +0x4D triple was (re)written */
+} fifa96_action_0d_out;
+
+fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
+                                            fifa96_action_0d_out *out);
+
 /* ===== FU-139 §9 (M2 arms-and-wiring Task 11): rows 07/0F kick machines =====
  *
  * `row 0x07` (`0x814B0..0x81737`, FU-76 §3.2 first-hand re-verified):

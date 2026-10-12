@@ -1399,6 +1399,86 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
   return FIFA96_OK;
 }
 
+/* FU-180 §3 / FU-82 §3.4 (M2 phase-15 T3): the byte-complete row-0D body
+ * (`0x8251C..0x826FE`, first-hand `disassemble_bytes` this slice; the 4-arm
+ * table `0x8250C` = `{0x82567, 0x8261F, 0x826B0, 0x826D5}`). The native arms
+ * fall through, so a stage-N dispatch runs arms N..3 (subject to the arm gates)
+ * in one call. The `0x702F8`/`0x6E598`/`0x8DCD4`/`0x79C50` sinks are exposed
+ * as requests (FU180-L8); the `0x10F334`/`0x10F33C` per-sector bytes index the
+ * caller-supplied tables. */
+fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
+                                            fifa96_action_0d_out *out) {
+  uint8_t stage;
+  if (!state || !out) return -FIFA96_ERR_INVALID;
+  memset(out, 0, sizeof *out);
+
+  /* head 0x82526..0x8254a. */
+  state->timer89 += (int32_t)state->delta;          /* 0x82526..0x8253a */
+  if (state->is_actor != 0) out->clear_actor = 1;   /* 0x82540..0x82546 */
+  stage = state->stage92;
+  if (stage > 3u) goto done;                        /* 0x82552 JA 0x826f8 */
+
+  if (stage == 0u) {                                /* arm 0, 0x82567 */
+    int16_t tx, tz;
+    if (state->active == 0u) { out->reset = 1; goto done; }  /* 0x826f1 */
+    out->word83_20 = 1;                             /* 0x82574 */
+    out->ball_param = 1;                            /* 0x8258d */
+    state->word85 = 0;                              /* 0x702F8 return, FU180-L8 */
+    out->word85_zero = 1;                           /* 0x825a4 word[+0x87]=0 */
+    out->anim = 1;                                  /* 0x825ad 0x6E598 */
+    out->anim_id = 0x10;                            /* the 0x82583 EDX immediate */
+    tx = state->type_off_x ? state->type_off_x[state->sector & 0x1Fu] : 0;
+    tz = state->type_off_z ? state->type_off_z[state->sector & 0x1Fu] : 0;
+    (void)fifa96_action_sequence_velocity_scale(tx, tz, &state->vel73,
+                                                &state->vel75, &state->speed71);
+    out->vel_scale = 1;
+    out->ran = 1;                                   /* 0x82603 */
+    state->timer89 = 0;
+    stage = 1u;                                     /* 0x82617 */
+  }
+  if (stage == 1u) {                                /* arm 1, 0x8261f */
+    if (state->word85 != 0) goto done;              /* 0x8261f JNZ 0x826f8 */
+    state->target_x = state->pos_x;                 /* 0x82633 MOVSD x3 */
+    state->target_y = state->pos_y;
+    state->target_z = state->pos_z;
+    if (state->type_off_x != NULL)                  /* 0x8263f..0x8264e */
+      state->target_x += (int32_t)state->type_off_x[state->sector & 0x1Fu] << 6;
+    if (state->type_off_z != NULL)                  /* 0x8265c..0x82671 */
+      state->target_z += (int32_t)state->type_off_z[state->sector & 0x1Fu] << 6;
+    out->target_set = 1;
+    out->metric = 1;                                /* 0x82679 0x8DCD4 */
+    out->metric_dist = (int16_t)fifa96_entity_distance(
+        (int16_t)(state->target_x - state->pos_x),
+        (int16_t)(state->target_z - state->pos_z));
+    out->anim = 1;                                  /* 0x82693 0x6E598 */
+    out->anim_id = 0x0B;                            /* 0x82683 EDX */
+    state->timer89 = 0;                             /* 0x8269e */
+    stage = 2u;                                     /* 0x826a8 */
+  }
+  if (stage == 2u) {                                /* arm 2, 0x826b0 */
+    if (state->speed71 != 0 && state->byte44 != 0) goto done; /* 0x826bb */
+    state->timer89 = 0;                             /* 0x826c3 */
+    stage = 3u;                                     /* 0x826cd */
+  }
+  if (stage == 3u) {                                /* arm 3, 0x826d5 */
+    int32_t face = 0;                               /* native +0x7D (caller state unmodelled) */
+    uint8_t sect = state->sector;                   /* native +0x8E zero-guard return */
+    out->face = 1;                                  /* 0x826e3 0x79C50 */
+    (void)fifa96_entity_face((int16_t)state->vel73, (int16_t)state->vel75, &face, &sect);
+    out->face7d = face;
+    out->face_sector = sect;
+    if (state->timer89 > 0x14) out->reset = 1;      /* 0x826e8 */
+  }
+
+done:
+  out->stage92 = stage;
+  out->timer89 = state->timer89;
+  out->vel73 = state->vel73;
+  out->vel75 = state->vel75;
+  out->speed71 = state->speed71;
+  return FIFA96_OK;
+}
+
 /* ===== FU-139 §9 (Task 11): rows 07/0F kick machines =====
  *
  * First-hand evidence: /FIFA96.EXE `disassemble_bytes` `0x814B0..0x81760`

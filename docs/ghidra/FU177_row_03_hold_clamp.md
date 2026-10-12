@@ -309,3 +309,22 @@ this slice file and the workspace report.
 > (`0x7E3A8`) … are unported". **Corrected by FU-177 §4:** `FUN_00079F3C` is
 > ported and wired as `fifa96_match_entities_camera_place` (FU-96 leg 5). The
 > open work is per-record wiring inside row 03, not the body.
+
+---
+
+## 10. Landing note — M2 phase-15 T3 (2026-10-12)
+
+**Row 03 is NOT wired and stays `-UNSUPPORTED`** (§7 T3-R2 rejected: wiring the
+provable core without the live `[rec+0x1C] = 0x6DCC8` call would silently drop
+the hot-path target rewrite — a fake). The action-table slot stays `NULL` and
+the row's evidence now names the precise dependency set: `0x6DCC8`
+(FU177-L1, co-scope R23/FU-175), the phase-7 `0x158747` wall scan
+(FU177-L2/FU-149 L13), `FUN_00079B58` (FU177-L3), the phase-0x13/0x14 arm
+(FU177-L4), the `[rec+0x1C]` `EBX=-1` third argument (FU177-L5) and the
+phase-8/0xC tails (FU177-L6). No row-03 code landed: the honest slice is the
+full R1 sequence behind R23, which is not bounded in one task.
+
+**Erratum carried forward (§4):** `FUN_00079F3C` (`0x7E3A8`) is already ported
+and wired as `fifa96_match_entities_camera_place` (FU-96 leg 5); the FU-138
+OL-19 "unported" camera item is stale. The residual work is per-record wiring
+inside row 03, not the body.

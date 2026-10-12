@@ -353,3 +353,32 @@ numbered legs — the port keeps the native control flow (all roads reach
 `0x77636`) with the unported data writes disclosed. The second installer
 `0x78299` and the `FUN_0008D8EC → FUN_000782D0 → FUN_00077EAC` pre-pass stay
 FU180-L4/L5. `0x0D` is untouched (T3's, co-wired with row 09).
+
+---
+
+## 9. Landing note — M2 phase-15 T3 (2026-10-12)
+
+**Row-0x1B latch clear corrected (carry).** The row-0x1B stage-0 body in the
+engine (`fifa96_match_action_1B`) previously cleared `0x157C54..0x157C5B` with a
+`memset(sizeof)` — all eight bytes. Fresh `disassemble_bytes 0x76E0F` this
+slice gives the exact native store list: `0x157C59`, `0x157C5B`, `0x157C5A`,
+`0x157C57`, `0x157C58`, `0x157C54` — **six** byte stores. `keeper_latch[1]`
+(`0x157C55`) and `keeper_latch[2]` (`0x157C56`) are **not** cleared. The engine
+now writes the six individual stores; a test pins the two survivors.
+
+> **FU-180 §2, stage 0 / FU180-L7, "all eight" wording:** "clear the latches
+> `0x157C54..0x157C5B`" and "Row-0x1B stage 0 clears them
+> (`0x76E0F..0x76E2F`)". **Corrected:** the store list is the six addresses
+> above, not the eight-byte range. This matters because FU180-L7's stage-2 rush
+> gate reads `byte[0x157C55]`: a full-range clear would zero a latch the stage-2
+> gate must observe. (Producers/consumers outside rows 0x1B/0x1C remain
+> FU180-L7.)
+
+**Row 0x0D body ported, uncounted.** `fifa96_action_sequence_0d_step`
+(`fifa96_action_handlers.c`) is the byte-complete port of `0x8251C..0x826FE`
+(the 4-arm table `0x8250C`; fresh `disassemble_bytes` this slice). The
+action-table slot for code `0x0D` stays **NULL**: its only installer is row-09's
+`0x80F61`, which sits in row-09 **arm 1** (unported, FU178-L1), so the row is a
+ported body with no ported installer and stays uncounted (the rows-27/29/2C
+precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
+`0x8DCD4`/`0x79C50` sinks are exposed as requests (FU180-L8).

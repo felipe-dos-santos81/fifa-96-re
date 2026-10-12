@@ -356,3 +356,33 @@ Docs cross-cited: FU-136 row-09 (T16-C "arms unported"), FU-81 §2/§2.1 (the
 `0x809F0` table + chain model), FU-138 §2 (the stage-0 sketch
 `0x80A87..0x80ADB`), FU-174 §1/§2/§4 (census, the two live installers, rank 3).
 No writes beyond this slice file and the workspace report.
+
+---
+
+## 10. Landing note — M2 phase-15 T3 (2026-10-12)
+
+Applied (bounded, per §8): `fifa96_match_action_09` (`fifa96_match_handlers.c`)
+is the **stage-0-only** landing — the phase-2 gate (`0x80A0B`, else the
+`0x7DAB4` reset), the stage `> 3` tail (`0x80A2A`), and the **arm 0**
+(`0x80A3F..0x80BFA`) clear/set branches. The row-09 action-table slot is now
+non-NULL and the row is **counted**: its two installers are live (the pad
+release edge `0x7CFB2`, the wired row-06 RNG arm `0x807C1`). Fresh
+`disassemble_bytes` this slice confirmed the table/arm boundaries
+(`0x809F0 = {0x80A3F, 0x80BFB, 0x80FCC, 0x8103A}`, `0x1106E0[9] = 0x080A00`)
+and every arm-0 byte. The arm-0 set branch ports the two `0x114E04` sine folds
+as `fifa96_entity_sine(face7d)` / `fifa96_entity_sine(face7d+0x100)` fed to a
+local `0x795A4` multiply port (`match_row09_mul`) — verified equivalent to the
+native `SHL AH,7; SBB; ADD AH,AH; SBB; XOR; SUB` fold (the sign bit and the
+mirror bit agree for the sign-extended 10-bit angle). **Erratum to §3.3:** the
+second `0x795A4` call at `0x80B32` multiplies by `(int16)t1` (ECX is
+overwritten at `0x80B22`), not by the second sine — the port reproduces that
+literally. Unmodelled cells staged zero with disclosed producers: the
+`0x1577C0/C2` lead words (OL-82), `word[+0x79]` (the `+0x7B` source) and the
+`[0x15877C]` shared flag (FU178-L6, write-only here).
+
+**Arms 1/2/3 (stages 1–3) stay FU178-L1.** The handler parks at stage 1/2/3 and
+records the reached-but-unported stage in `mr->match09_leg_stage` (observability
+— never a silent no-op). The `0x0D`/`0x0C` installs at `0x80F61`/`0x80EFA` are
+inside arm 1, so **row 0x0D's action-table slot stays NULL** and it is
+**uncounted** until arm 1 lands (the rows-27/29/2C precedent); its body is
+ported separately as `fifa96_action_sequence_0d_step` (FU-180 §9).

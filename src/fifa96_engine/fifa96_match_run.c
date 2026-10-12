@@ -2020,6 +2020,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157c5c = 0;
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->match09_leg_stage = 0;           /* T3/FU-178: no unported row-09 arm */
   mr->predict_c44 = 0;
   mr->predict_c48_x = 0;
   mr->predict_c48_y = 0;
@@ -2113,6 +2114,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157c5c = 0;
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->match09_leg_stage = 0;
+
   mr->predict_c44 = 0;
   mr->predict_c48_x = 0;
   mr->predict_c48_y = 0;

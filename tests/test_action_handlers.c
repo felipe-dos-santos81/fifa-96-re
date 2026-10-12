@@ -316,6 +316,84 @@ static void test_sequence_velocity_scale(void) {
   assert(fifa96_action_sequence_velocity_scale(1, 1, &vx, &vz, NULL) == ACTION_INVALID);
 }
 
+/* FU-180 §3 (T3): the row-0D 4-arm body (native 0x8251C..0x826FE). The arms
+ * fall through (stage 0 -> 1 -> 2 -> 3 in one call); the unported
+ * 0x702F8/0x6E598/0x8DCD4/0x79C50 sinks are reported as requests (FU180-L8). */
+static void test_sequence_0d_row(void) {
+  fifa96_action_0d_state s;
+  fifa96_action_0d_out o;
+  static const int8_t tox[8] = {2, 0, 0, 0, 0, 0, 0, 0};
+  static const int8_t toz[8] = {-1, 0, 0, 0, 0, 0, 0, 0};
+
+  memset(&s, 0, sizeof s);
+  assert(fifa96_action_sequence_0d_step(NULL, &o) == ACTION_INVALID);
+  assert(fifa96_action_sequence_0d_step(&s, NULL) == ACTION_INVALID);
+
+  /* head + stage 0 inactive -> the 0x826F1 reset tail. */
+  memset(&s, 0, sizeof s);
+  s.stage92 = 0;
+  s.active = 0;
+  s.is_actor = 1;                     /* head clears the actor */
+  s.delta = 5;
+  s.timer89 = 0x10;
+  s.type_off_x = tox;
+  s.type_off_z = toz;
+  assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
+  assert(o.clear_actor == 1);
+  assert(o.reset == 1);
+  assert(o.timer89 == 0x15);          /* 0x10 + delta 5 */
+  assert(o.stage92 == 0);             /* reset does not advance */
+
+  /* stage 0 active -> the full 0->1->2->3 fall-through. */
+  memset(&s, 0, sizeof s);
+  s.stage92 = 0;
+  s.active = 1;
+  s.sector = 0;
+  s.pos_x = 0x100;
+  s.pos_y = 0x10;
+  s.pos_z = 0x200;
+  s.target_x = 0x0BAD;
+  s.type_off_x = tox;
+  s.type_off_z = toz;
+  assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
+  assert(o.word83_20 == 1);
+  assert(o.ball_param == 1);          /* 0x702F8 */
+  assert(o.word85_zero == 1);         /* +0x87 = 0 */
+  assert(o.vel_scale == 1);          /* arm 0 velocity scale */
+  assert(o.ran == 1);                 /* +0x9E */
+  assert(o.target_set == 1);          /* arm 1 pos -> target */
+  assert(s.target_x == 0x180);        /* 0x100 + (2 << 6) */
+  assert(s.target_z == 0x1C0);        /* 0x200 + (-1 << 6) */
+  assert(o.metric == 1);              /* 0x8DCD4 request */
+  assert(o.face == 1);                /* 0x79C50 request (arm 3) */
+  assert(o.anim == 1);
+  assert(o.anim_id == 0x0B);          /* arm 1 overrides arm 0's 0x10 */
+  assert(o.stage92 == 3);
+
+  /* stage > 3 -> the 0x826F8 tail. */
+  memset(&s, 0, sizeof s);
+  s.stage92 = 4;
+  s.active = 1;
+  s.type_off_x = tox;
+  s.type_off_z = toz;
+  assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
+  assert(o.stage92 == 4);
+  assert(o.ran == 0 && o.reset == 0 && o.face == 0);
+
+  /* arm 3 reset: entered at stage 3 with timer89 > 0x14. */
+  memset(&s, 0, sizeof s);
+  s.stage92 = 3;
+  s.timer89 = 0x20;
+  s.delta = 0;
+  s.vel73 = 0x20;                     /* face dx (dword[+0x71]>>16) */
+  s.vel75 = 0x10;                     /* face dz (dword[+0x73]>>16) */
+  s.type_off_x = tox;
+  s.type_off_z = toz;
+  assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
+  assert(o.face == 1);
+  assert(o.reset == 1);               /* 0x20 > 0x14 */
+}
+
 /* FU-139 §3.4: the FUN_0007B9C4 negative-mode range band (native
  * 0x7BBE4..0x7BC15): an already non-negative mode is returned unchanged, a
  * negative one becomes 0x20 below 0x5A0, 0x30 below 0x780, else 0x10. */
@@ -1785,6 +1863,7 @@ int main(void) {
   test_locomotion_placement_counter();
   test_locomotion_phase1_clamp();
   test_sequence_velocity_scale();
+  test_sequence_0d_row();
   test_kick_range_band();
   test_kick_event_row_height_table();
   test_kick_event_row_carry_fast_path();
