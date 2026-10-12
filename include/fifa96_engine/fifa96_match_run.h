@@ -1208,13 +1208,15 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr);
 /* ===== FU-150 P2 — fouls / referee / offside =============================== */
 
 /* The derived machine dispatcher slots (`mr->ref_machine`). NONE = idle; the
- * two module sequences map to their FIFA96_REF_SEQ_* value. The former RESTART
- * slot (the act-2 phase-0x18 free-kick/penalty hand-off) is RETIRED (FU-183 §5
- * / phase-16 T1): the phase-0x18 row `fifa96_match_action_phase_18` is owned by
- * the act machine (`fifa96_match_act_dispatch`/`_tick`), so there is no second
- * driver (the retired FU175-L7 double-run). */
+ * surviving module sequence maps to its FIFA96_REF_SEQ_* value. The former
+ * RESTART slot (the act-2 phase-0x18 free-kick/penalty hand-off) is RETIRED
+ * (FU-183 §5 / phase-16 T1): the phase-0x18 row `fifa96_match_action_phase_18`
+ * is owned by the act machine (`fifa96_match_act_dispatch`/`_tick`), so there
+ * is no second driver (the retired FU175-L7 double-run). The former FOUL slot
+ * (the act-3 phase-0x19 foul sequence) is RETIRED by the same rule (FU-187 §5 /
+ * phase-16 T4): the phase-0x19 row `fifa96_match_action_phase_19` is owned by
+ * the act machine, dispatched invoke-now from `fifa96_match_run_contact`. */
 #define FIFA96_MATCH_RUN_REF_NONE 0u
-#define FIFA96_MATCH_RUN_REF_FOUL FIFA96_REF_SEQ_ACT3
 #define FIFA96_MATCH_RUN_REF_OFFSIDE FIFA96_REF_SEQ_ACT6
 
 /* FU-150 §Port contract: the derived contact entry. The native contact
@@ -1229,11 +1231,13 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr);
  * literal entry kind 1 (the staged `referee.contact_kind`) and a second draw
  * supplied as the severity `rng_bits` (only consumed when field_4c306 > 1),
  * then writes the [0x15888E] re-call flag (`recall_consumed`). Outcome: an
- * ACT3 decision starts the phase-0x19 machine and runs stage 0 immediately
- * (the native FUN_000888FC invoke-now); a severity-0 decision routes
- * situation 9 (fouled side, BX=1) through the shared
+ * ACT3 decision dispatches act 3 invoke-now through the act seam
+ * (`fifa96_match_act_dispatch(mr, 3, 0, 1)`; the native `FUN_000888FC(3,0,BX=1)`
+ * at `0x8A6FE`), which runs the phase-0x19 stage 0 immediately (FU-187 §5 /
+ * phase-16 T4 — the former ad-hoc FOUL machine is retired); a severity-0
+ * decision routes situation 9 (fouled side, BX=1) through the shared
  * `fifa96_match_run_set_piece` entry (which, on the direct path, starts the
- * RESTART machine). Mirrors the clamped incident triple into
+ * act-2 phase-0x18 machine). Mirrors the clamped incident triple into
  * `incident_x`/`incident_z`. Returns 1 when the decision ran, 0 when a gate
  * skipped it, or -FIFA96_ERR_INVALID (NULL mr / invalid rec_a). */
 int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
@@ -1265,8 +1269,8 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
                                        uint8_t *offside);
 
 /* Run the active referee machine once (one granted 30 Hz frame; the frame body
- * calls this after the FU-141 entity chain). NONE -> 0. FOUL/OFFSIDE run the
- * module step and apply its requests: the whistle/speech observation slots
+ * calls this after the FU-141 entity chain). NONE -> 0. OFFSIDE runs the module
+ * step and applies its requests: the whistle/speech observation slots
  * (`ref_whistle`/`ref_speech`), the phase write through
  * `match_run_write_phase` + the FU-149 arm, the record install on rec_first,
  * and the situation dispatch through the shared
@@ -1276,7 +1280,9 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
  * phase into the referee state. Returns 1 when a step ran, 0 when idle, or a
  * -fifa96_err_t (including -FIFA96_ERR_INVALID for NULL). (The former RESTART
  * arm is retired — FU-183 §5 / phase-16 T1: the act machine owns the
- * phase-0x18 hand-off `fifa96_match_action_phase_18`.) */
+ * phase-0x18 hand-off `fifa96_match_action_phase_18`; the former FOUL arm is
+ * retired — FU-187 §5 / phase-16 T4: the act machine owns the phase-0x19 foul
+ * sequence `fifa96_match_action_phase_19`.) */
 int fifa96_match_run_referee_step(struct fifa96_match_run *mr);
 
 /* FU-183 §5/§6 rank 2 (phase-16 T1): the phase-0x18 / act-2 row body. Runs the
@@ -1288,6 +1294,33 @@ int fifa96_match_run_referee_step(struct fifa96_match_run *mr);
  * 2 invoke-now; the clock tail ticks it). Returns FIFA96_OK, or
  * -FIFA96_ERR_INVALID for NULL. */
 int fifa96_match_action_phase_18(struct fifa96_match_run *mr);
+
+/* FU-187 §2/§5 rank 7 (phase-16 T4): the phase-0x19 / act-3 row body. The
+ * native handler `0x89FA4` is the 7-stage foul sequence (`fifa96_ref_foul_
+ * sequence_step`); the derived body aliases `mr->act.stage/timer` <-> the
+ * sequence (`referee.stage/timer`) so the native head add (`[0x158818] +=
+ * [0x157A64]`) is performed exactly once (FU187-L3), applies the requests
+ * through `match_run_ref_apply` (stage 0 writes phase 0xF + installs action
+ * 0x16 on rec_first; stage 6 the situation-0xA re-dispatch) and clears the act
+ * slot before the terminal situation (the native 0x8A3D0/0x8A3D6/0x8A3EA
+ * order). The act machine owns the row (the foul decision dispatches act 3
+ * invoke-now; the clock tail ticks it). Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL. */
+int fifa96_match_action_phase_19(struct fifa96_match_run *mr);
+
+/* FU-188 §2/§6 (phase-16 T4): the phase-0x20 / act-0xA row body (the code-0x24
+ * timeline). Its phase-table slot (`fifa96_match_phase_table[0x20]`) is **NULL**
+ * — the row is not counted — because its only producer is situation 0, which no
+ * engine source/test dispatches (FU-188 §6). The body is derived/ported and
+ * exported so it is tested directly and ready for the situation-0 producer
+ * (FU188-L1). Derived stages: head `mr->act.timer += frame_delta`; stage 0
+ * installs code 0x24 on both teams' 11 records (the native `0x8B750`/`0x8B78B`
+ * invoke-now — the generic invoke has no engine port, FU188-L4, so only the
+ * install lands) and advances; stage 1 the `0x974D8(0x3E8)` wait; stage 2
+ * clears the act slot and re-dispatches situation 1 (`0x8B85D`). The timeline
+ * cells (`0x15880C..0x158852`) and the `word[0x15881A]`/`0x45001` gates are
+ * FU188-L2 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL. */
+int fifa96_match_action_phase_20(struct fifa96_match_run *mr);
 
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the

@@ -633,6 +633,27 @@ steering/tail, `FUN_000765C4`, the two CPU machines, the `0x92820` mailbox) is
 recorded as FU186-L1..L9. `make check` 110/110; M1/M2 stay **byte-identical**
 (install-live/tape-dormant; no re-pin); census 31/80 → **32/80 = 40%**.
 
+M2 phase-16 T4 (FU-187/FU-188) wires the act machine's second payload —
+**row `0x16`** (fouled-player face-the-ball, `0x84630..0x8471C`) and **phase
+`0x19`** (the act-3 foul sequence `0x89FA4`). Phase 0x19 is registered
+(`fifa96_match_action_phase_19` over `fifa96_ref_foul_sequence_step` +
+`match_run_ref_apply`, aliasing `mr->act.stage/timer` so the native head add is
+counted once, FU187-L3), and the act-3 producer routes through the seam — the
+row-0x0C contact's `FIFA96_REF_SEQ_ACT3` decision now calls
+`fifa96_match_act_dispatch(mr, 3, 0, 1)` (the native `0x8A6FE FUN_000888FC
+(3,0,1)`), the phase-0x19 stage 0 installs code `0x16` on `[0x15888F]`
+(`0x8A0A0`), and the clock tail ticks it; the ad-hoc `ref_machine = REF_FOUL`
+double-run (FU175-L7) is retired. Row 0x16 is wired/counted and its 3-stage body
+ported. **Row `0x24`** (`fifa96_match_action_24`) and **phase `0x20`**
+(`fifa96_match_action_phase_20`) are ported and exported, but their slots stay
+**NULL/uncounted** (Ruling W5): FU-188 proves their only producer is situation 0,
+which no engine source/test dispatches — no producer was faked; the owner is
+**FU188-L1**. The row-0x16 `[0x158866]` gate polarity (FU187-L1), the anim/face
+sinks (FU187-L2/L4/L5) and the row-0x24 `0x157A38` lane table / `0x6E1D0`
+release (FU188-L3/L5) stay legs. `make check` **110/110**; M1 `09b726b7…` + M2
+`7b4b241a…` **byte-identical** (install-live/tape-dormant; no re-pin); census
+32/80 → **34/80 = 42%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

@@ -174,6 +174,57 @@ static void test_phase_18_producer_live_via_sit9(void) {
   assert(mr.state.phase == 0x0Au);               /* the phase-0x18 body wrote it */
 }
 
+/* FU-187 §2/§5 rank 7 (phase-16 T4): phase 0x19 is the wired act-3 foul row.
+ * The body is the derived 7-stage foul sequence; the act machine owns it (the
+ * row-0x0C contact dispatches act 3 invoke-now, the clock tail ticks it).
+ * Mutation-RED: a NULL phase-0x19 slot leaves the sequence stage unwritten and
+ * the dispatch returns UNSUPPORTED, so every assertion below fails. */
+static void test_phase_19_registered(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x19].fn == fifa96_match_action_phase_19);
+  assert(fifa96_match_dispatch_phase(&mr, 0x19) == FIFA96_OK);
+  assert(mr.referee.stage == 1u);        /* stage 0 ran: install 0x16 + phase 0xF */
+  assert(mr.act.stage == 1u);
+  assert(mr.state.phase == 0x0Fu);
+  assert(fifa96_match_dispatch_phase(NULL, 0x19) == -FIFA96_ERR_INVALID);
+}
+
+/* The act-3 invoke-now runs the phase-0x19 stage 0 on the dispatch call (the
+ * native FUN_000888FC(3,0,BX=1)); the clock tail advances it. */
+static void test_phase_19_act_owns_foul(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  assert(fifa96_match_act_dispatch(&mr, 3, 0, 1) == FIFA96_OK);
+  assert(mr.act.id == 3 && mr.act.stage == 1u);   /* the head timer add + stage 0 */
+  assert(mr.act.timer == 0);                      /* stage 0 resets the timer */
+  assert(mr.state.phase == 0x0Fu);                /* the stage-0 phase write */
+  /* the tick advances stages 1 (gate) -> 2 (speech) */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.id == 3 && mr.act.stage == 2u);
+}
+
+/* FU-188 §2/§6 (phase-16 T4): phase 0x20 is ported but its slot is NULL
+ * (uncounted — the sole producer is situation 0, absent from every engine
+ * caller). The body is driven directly: stage 0 installs code 0x24 on both
+ * teams' 11 records and advances; the NULL slot returns UNSUPPORTED. */
+static void test_phase_20_body_direct(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x20].fn == NULL);   /* uncounted */
+  assert(fifa96_match_dispatch_phase(&mr, 0x20) == -FIFA96_ERR_UNSUPPORTED);
+  mr.act.id = 0x0A;
+  mr.act.stage = 0;
+  assert(fifa96_match_action_phase_20(&mr) == FIFA96_OK);
+  assert(mr.entities.team[0].records[0].code == 0x24u);   /* the 22-record install */
+  assert(mr.entities.team[0].records[10].code == 0x24u);
+  assert(mr.entities.team[1].records[0].code == 0x24u);
+  assert(mr.entities.team[1].records[10].code == 0x24u);
+  assert(mr.act.stage == 1u);                             /* 0x8B7BB */
+  assert(fifa96_match_action_phase_20(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* Row 0x17 is NOT counted: its table slot is NULL (no engine installer — the
  * rows-27/29/2C precedent; see the handlers.h declaration / FU181-L1), so the
  * dispatcher returns UNSUPPORTED while the ported body stays reachable by
@@ -258,6 +309,9 @@ int main(void) {
   test_phase_18_registered();
   test_phase_18_act_owns_handoff();
   test_phase_18_producer_live_via_sit9();
+  test_phase_19_registered();
+  test_phase_19_act_owns_foul();
+  test_phase_20_body_direct();
   test_row_17_not_counted();
   test_row_17_phase_gate_resets();
   test_row_17_stage_walk();

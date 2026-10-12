@@ -123,3 +123,16 @@ int fifa96_match_action_22(struct fifa96_match_run *mr);
  * FU186-L1. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
  * `mr->record.entity_id`. */
 int fifa96_match_action_1A(struct fifa96_match_run *mr);
+
+/* The ported action row-0x24 lane/anim body (FU-188 §4/§6, phase-16 T4): the
+ * 3-stage machine `0x86510..0x866F1`. Its action-table slot
+ * (`fifa96_match_action_table[0x24]`) is **NULL** — the row is not counted —
+ * because its sole producer is the phase-0x20 / act-0xA timeline's code-0x24
+ * install (`0x8B750`/`0x8B78B`, invoke-now on all 22 records), whose only
+ * producer is situation 0 — not dispatched by any engine source/test (FU-188
+ * §6). This is the rows-27/29/2C precedent (a ported body with no live engine
+ * installer stays unwired and uncounted); the situation-0 producer
+ * (FU188-L1) is the owner. The body is exported so it is tested directly and
+ * ready for the phase-0x20 builder. Returns FIFA96_OK, or -FIFA96_ERR_INVALID
+ * for an out-of-range `mr->record.entity_id`. */
+int fifa96_match_action_24(struct fifa96_match_run *mr);

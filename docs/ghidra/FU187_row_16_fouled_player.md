@@ -344,3 +344,39 @@ Engine/loader source read: `src/fifa96_engine/fifa96_match_handlers.c`
 §16.2 (+ its erratum), FU-150 (E2/E3/E4/E5/E8/E10 + port erratum 3), FU-175
 (§1..§3, §7, §10), FU-182 (§1, §5), FU-165 L9, AGENTS census rule. No writes
 beyond this slice file and the workspace report.
+
+---
+
+## 8. Phase-16 T4 status (append, controller-ruled 2026-10-12)
+
+T4 landed the controller's Ruling **W5**: **row `0x16` and phase `0x19` are
+wired and counted; row `0x24` and phase `0x20` stay NULL/uncounted** (see
+FU-188 §10). The act machine's second payload mirrors T1's phase-0x1F/act-9 and
+phase-0x18/act-2 landings:
+
+* **Phase `0x19` registered** — `fifa96_match_phase_table[0x19].fn =
+  fifa96_match_action_phase_19` (`fifa96_match_handlers.c`). The body
+  (`fifa96_match_run.c`) is the ported 7-stage sequence
+  (`fifa96_ref_foul_sequence_step`) + `match_run_ref_apply`. It **aliases**
+  `mr->act.stage/timer` <-> `referee.stage/timer` around the step, so the native
+  head add (`0x89FC8..0x89FDC`) runs exactly once (FU187-L3 reconciled — no
+  double count), and clears the act slot before the stage-6 situation-0xA
+  re-dispatch (`0x8A3D0/0x8A3D6/0x8A3EA` order).
+* **Act-3 producer routed through the seam** — `fifa96_match_run_contact`'s
+  `FIFA96_REF_SEQ_ACT3` branch now calls `fifa96_match_act_dispatch(mr, 3, 0,
+  1)` (the native `0x8A6FE FUN_000888FC(3,0,1)`), the phase-0x19 stage 0
+  installs code `0x16` on `[0x15888F]` (`0x8A0A0`) via `match_run_ref_apply`, and
+  the clock-tail tick advances the sequence. The ad-hoc
+  `ref_machine = REF_FOUL` route (the FU175-L7 double-run) is **retired** — the
+  act slot is the single owner; `fifa96_match_run_referee_step`'s `REF_FOUL`
+  case (and the `FIFA96_MATCH_RUN_REF_FOUL` define) are removed.
+* **Row `0x16` registered** — `fifa96_match_action_table[0x16].fn =
+  fifa96_match_action_16` (`0x84630..0x8471C`, the 3-stage face-the-ball body).
+  Its producer (the phase-0x19 stage-0 install) is live, so the row is counted.
+
+**Census:** `32/80 → 34/80 = 42%` (`floor(100 × 34/80) = 42`). M1 `09b726b7…` +
+M2 `7b4b241a…` **byte-identical** (the foul producer is off the tapes) → **no
+re-pin**. RED/GREEN + mutation-RED for row `0x16` (`test_action_16_runs_body` /
+`_stage0_gate` / `_stage2_reset`) and phase `0x19` (`test_phase_19_registered` /
+`test_phase_19_act_owns_foul`, the last also driven by
+`test_engine_referee_foul_sequence`). The FU187-L1..L6 legs stand; no new legs.

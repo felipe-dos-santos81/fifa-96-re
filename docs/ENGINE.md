@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-32/80 dispatch rows wired (30 action + the wired phase rows 0x18 and 0x1F), the
+34/80 dispatch rows wired (31 action + the wired phase rows 0x18, 0x19 and 0x1F), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,8 +260,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **32/80 rows wired** (30 action + the phase rows
-  `0x18`/`0x1F`) — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **34/80 rows wired** (31 action + the phase rows
+  `0x18`/`0x19`/`0x1F`) — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -336,11 +336,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   is corrected to the native `+0x91` code byte (FU185-L1; no engine-level
   discriminator yet — FU185-L6 blocks the gate). Both landed rows are install-
   live/tape-dormant, so M2 stays byte-exact (no re-pin).
-  dispatch results 47 UNSUP / 32 OK / 1 NOTF (sum 80; action 45 = 30 OK + 15
-  UNSUP, phase 35 = 2 OK + 32 UNSUP + 1 NOTF). *(errata, phase-16 T2 review:
+  dispatch results 45 UNSUP / 34 OK / 1 NOTF (sum 80; action 45 = 31 OK + 14
+  UNSUP, phase 35 = 3 OK + 31 UNSUP + 1 NOTF). *(errata, phase-16 T2 review:
   the `50 UNSUP / 29 OK / 1 NOTF` this line replaced was likewise off by one —
   the corrected derived numbers above are the authority. phase-16 T3: row `0x1C`
-  wired, so `48 UNSUP / 31 OK / 1 NOTF` → `47 UNSUP / 32 OK / 1 NOTF`.)*
+  wired, so `48 UNSUP / 31 OK / 1 NOTF` → `47 UNSUP / 32 OK / 1 NOTF`. phase-16
+  T4: row `0x16` + phase `0x19` wired, so `47 UNSUP / 32 OK / 1 NOTF` → `45
+  UNSUP / 34 OK / 1 NOTF`.)*
 - **M2 phase-16 T3 (FU-186) — the keeper chain: row `0x1C` wired/counted; row
   `0x1A` ported/uncounted; `0x1B` legs re-pinned.** FU-186 corrects FU-182 §5's
   installer census (the true `0x1A` installers are only the three `FUN_00077EAC`
@@ -368,6 +370,32 @@ the build also produces the windowed `fifa96` target (`make game`).
   row-0x1B sine/steering arms are re-pinned to FU186-L2/L3 (no change to its
   FU-180 landing). Both rows are install-live/tape-dormant, so M1/M2 stay
   byte-exact (no re-pin); census 31/80 → **32/80 = 40%**.
+- **M2 phase-16 T4 (FU-187/FU-188) — row `0x16` + phase `0x19` wired/counted;
+  row `0x24` + phase `0x20` ported/uncounted.** The act machine's second payload
+  (controller Ruling W5). **Phase `0x19`** (`fifa96_match_action_phase_19`) is
+  the native phase-0x19 / act-3 handler `0x89FA4` — the 7-stage foul sequence —
+  ported as the derived `fifa96_ref_foul_sequence_step` + `match_run_ref_apply`;
+  it aliases `mr->act.stage/timer` <-> `referee.stage/timer` so the native head
+  add is counted once (FU187-L3), and clears the act slot before the stage-6
+  situation-0xA re-dispatch (the native `0x8A3D0/0x8A3D6/0x8A3EA` order).
+  **Row `0x16`** (`fifa96_match_action_16`, the `0x84630..0x8471C` 3-stage
+  face-the-ball body) is **wired and counted**: the act-3 producer now routes
+  through the seam — the row-0x0C contact's `FIFA96_REF_SEQ_ACT3` decision calls
+  `fifa96_match_act_dispatch(mr, 3, 0, 1)` (the native `0x8A6FE FUN_000888FC
+  (3,0,1)`), the phase-0x19 stage 0 installs code `0x16` on `[0x15888F]`
+  (`0x8A0A0`), and the clock-tail tick advances the sequence (the retired
+  `ref_machine = REF_FOUL` double-run, FU175-L7). Census +1 action +1 phase.
+  **Row `0x24`** (`fifa96_match_action_24`, the `0x86510..0x866F1` lane/anim
+  body) and **phase `0x20`** (`fifa96_match_action_phase_20`, the `0x8B688`
+  code-0x24 timeline) are **ported and exported but their slots stay
+  NULL/uncounted**: FU-188 proves the pair's only producer is situation 0, which
+  no engine source/test dispatches (the rows-27/29/2C precedent; the owner leg is
+  **FU188-L1**, the situation-0 producer). No producer was faked. The row-0x16
+  stage-0 gate polarity (`[0x158866] == 0x48`, FU187-L1) and the anim/face/band
+  sinks (FU187-L2/L4), the phase-0x19 stage/timer aliasing (FU187-L3) and the
+  row-0x24 `0x157A38` lane table / `0x6E1D0` release (FU188-L3/L5) stay legs.
+  Both counted rows are install-live/tape-dormant, so M1 `09b726b7…` and M2
+  `7b4b241a…` stay **byte-exact (no re-pin)**; census 32/80 → **34/80 = 42%**.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

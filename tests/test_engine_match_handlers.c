@@ -93,7 +93,7 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 14 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
@@ -104,7 +104,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 14 */ UNSUP, UNSUP, NOTF,  UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 14 */ UNSUP, UNSUP, NOTF,  UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP,
 };
 
@@ -2762,6 +2762,104 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-16 T4 (FU-187/FU-188): rows 0x16 / 0x24 =================== */
+
+/* Row 0x16 (FU-187 §1): the counted 3-stage fouled-player face-the-ball body.
+ * Stage 0 copies pos -> target then waits on the object code
+ * `[0x158866] == 0x48` (`mr->referee.referee_object_code`); stage 1 runs the
+ * ball band + the RNG anim pick (0x6A/0x55) + the face; stage 2 the +0x44
+ * reset. A stubbed body leaves stage92 at 0 and every target/anim untouched. */
+static void test_action_16_runs_body(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_y = 0x22;
+  f.mr.record.pos_z = 0x333;
+  f.mr.referee.referee_object_code = 0x48;      /* the 0x84671 gate passes */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x16) == FIFA96_OK);
+  assert((f.mr.dispatched_ok & (1ull << 0x16)) != 0u);
+  assert(f.mr.record.target_x == 0x111);        /* 0x84662 pos -> target */
+  assert(f.mr.record.target_y == 0x22);
+  assert(f.mr.record.target_z == 0x333);
+  assert(f.mr.record.stage92 == 2u || f.mr.record.stage92 == 0xFFu); /* advanced */
+  assert(f.mr.record.timer89 == 0);             /* 0x84680 / 0x846e5 */
+  assert(f.mr.entities.team[0].records[0].anim_id == 0x6Au ||
+         f.mr.entities.team[0].records[0].anim_id == 0x55u);   /* 0x846c9 */
+  drop_fixture(&f);
+}
+
+/* Row 0x16 stage-0 gate (FU-187 §1 / FU187-L1): with the object code != 0x48
+ * the body stalls at stage 0 — the target copy landed but the stage does not
+ * advance and stage 1 (the anim install) never runs. */
+static void test_action_16_stage0_gate(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_z = 0x333;
+  f.mr.referee.referee_object_code = 0;         /* 0x84671 JNZ: wait */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x16) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x111);        /* the copy ran before the gate */
+  assert(f.mr.record.stage92 == 0u);            /* stalled */
+  assert(f.mr.entities.team[0].records[0].anim_id == 0u);  /* no install */
+  drop_fixture(&f);
+}
+
+/* Row 0x16 stage 2 (FU-187 §1): with `+0x44` non-zero the body runs the shared
+ * FUN_0007DAB4 reset (stage92 0xFF, code cleared); with `+0x44` zero it is the
+ * terminal wait (the target stays a pos copy). */
+static void test_action_16_stage2_reset(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.pos_x = 0x111;
+  f.mr.record.pos_z = 0x333;
+  f.mr.record.target_x = 0x999;
+  f.mr.record.row44 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x16) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x111);        /* 0x846fd re-copy */
+  assert(f.mr.record.stage92 == 2u);            /* no reset (row44 0) */
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.entities.team[0].records[0].code = 0x16u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x16) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].code == 0u);   /* 0x8470e match_row_reset */
+  assert(f.mr.record.stage92 == 0u);            /* the reset re-entered the installer */
+  drop_fixture(&f);
+}
+
+/* Row 0x24 (FU-188 §4): the ported/uncounted lane/anim body. Stage 0 seeds
+ * pos_x = 0x9F0, zeroes the movement words and commits target_x = 0x7E0, then
+ * advances to stage 1 (the distance gate); the action-table slot stays NULL. */
+static void test_action_24_runs_body(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_action_table[0x24].fn == NULL);   /* uncounted */
+  assert(fifa96_match_dispatch_action(&mr, 0x24u) == -FIFA96_ERR_UNSUPPORTED);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 0;
+  mr.record.active = 1;
+  mr.record.side = 0;
+  mr.record.player_e = 0;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.pos_x == 0x9F0);             /* 0x8657A */
+  assert(mr.record.speed71 == 0);               /* 0x865A8 */
+  assert(mr.record.target_x == 0x7E0);          /* 0x86617 */
+  assert(mr.record.stage92 == 2u);              /* 0 -> 1 -> 2 (distance < 0x20) */
+  /* with the distance gate holding (word[+0x65] >= 0x20) stage 1 waits */
+  mr.record.distance = 0x20;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);   /* stage 2: 0x6E1D0 leg */
+  assert(mr.record.stage92 == 2u);
+  mr.record.distance = 0x20;
+  mr.record.stage92 = 1;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 == 1u);              /* 0x866BD JGE: wait */
+}
+
 /* ===== M2 phase-16 T3 (FU-186): rows 0x1A / 0x1C keeper chain ============= */
 
 /* Row 0x1C (FU-186 §2.2): the bounded lunge body. Stage 0 arms
@@ -3145,6 +3243,10 @@ int main(void) {
   test_action_1c_lunge_arm();
   test_action_1c_live_route();
   test_action_1a_runs_body();
+  test_action_16_runs_body();
+  test_action_16_stage0_gate();
+  test_action_16_stage2_reset();
+  test_action_24_runs_body();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

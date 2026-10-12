@@ -452,3 +452,40 @@ source read first-hand: `src/fifa96_engine/fifa96_match_act.{c,h}` (whole),
 FU-67 §3, FU-137 §2/§6, FU-165-L2, FU-170 §7, FU-174 §2, FU-175 §1/§2/§10,
 FU-181 §3/§4, FU-182 §1/§5. No writes beyond this slice file and the workspace
 report.
+
+---
+
+## 10. Phase-16 T4 status (append, controller-ruled 2026-10-12)
+
+T4 landed the controller's Ruling **W5**: the code-0x24 pair is **ported but
+NOT counted**. Row `0x24` (`fifa96_match_action_24`, `0x86510..0x866F1`, the
+3-stage lane/anim body) and phase `0x20` (`fifa96_match_action_phase_20`,
+`0x8B688`, the code-0x24 timeline) are implemented and **exported** (declared in
+`fifa96_match_handlers.h` / `fifa96_match_run.h`) for direct unit testing
+(`test_action_24_runs_body`, `test_phase_20_body_direct`), but their table slots
+stay **NULL** (`fifa96_match_action_table[0x24]`, `fifa96_match_phase_table
+[0x20]`) because their only producer is **situation 0**, which no engine
+source/test dispatches (FU188-L1). This is the rows-27/29/2C precedent — a
+ported body with no live engine installer stays unwired and uncounted; **no
+producer was faked** to make the pair count.
+
+Derived mapping decisions recorded (all cited legs stand):
+
+* **Row 0x24 field mapping** follows the entity header
+  (`fifa96_match_entities.h`): `pos_x` = `+0x59`, `pos_z` = `+0x61`, `target_x`
+  = `+0x4D`, `target_z` = `+0x55`. FU-188 §4's `pos_x`/`pos_z` labels are
+  mirrored by that header; the header governs.
+* **The stage-0 wait** (`0x865CB..0x8660D`, the `dword[+0x8A]>>0x19` /
+  `0x79C50` threshold) is unmodeled (FU188-L3); the derived model advances (the
+  threshold-0 reading), documented in the body.
+* **The stage-0 lane write** (`+0x7B` from `table_0x157A38[byte[[rec+4]+0xD]]`)
+  is a leg (FU188-L5): `player_d` is staged 0.
+* **The phase-0x20 invoke-now install** (`0x8B750`/`0x8B78B`, 22 records) has no
+  generic engine port (FU188-L4), so the derived builder installs code `0x24` on
+  both teams' 11 records without the same-frame invoke; the timeline cells
+  (`0x15880C..0x158852`), the `word[0x15881A]`/`0x45001` gates and the
+  `0x974D8(0x3E8)` wait are FU188-L2 legs.
+
+**Census:** unchanged by the pair (the slots stay NULL); the T4 move is row
+`0x16` + phase `0x19` (FU-187 §8). Owner for the pair remains **FU188-L1** (the
+situation-0 producer `FUN_0004b02c`/`FUN_000493a0`).

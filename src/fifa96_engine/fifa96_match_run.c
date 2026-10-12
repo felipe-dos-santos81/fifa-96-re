@@ -5370,6 +5370,80 @@ int fifa96_match_action_phase_18(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* FU-187 §2/§5 rank 7 (phase-16 T4): the phase-0x19 / act-3 row body — the
+ * 7-stage foul sequence. The native handler `0x89FA4` reads the ACT slot's
+ * stage/timer (`[0x158829]`/`[0x158818]`); the derived body aliases
+ * `mr->act.stage/timer` <-> `referee.stage/timer` around the ported
+ * `fifa96_ref_foul_sequence_step`, so the native head add (`[0x158818] +=
+ * [0x157A64]`, `0x89FC8..0x89FDC`) is performed exactly once by the step's
+ * `state->timer += state->delta` (FU187-L3 reconciled — no double count). The
+ * step's requests apply through `match_run_ref_apply`: stage 0 writes phase
+ * 0xF (`0x8A091`) and installs action 0x16 on `rec_first` (`0x8A0A0`), stage 6
+ * dispatches situation 0xA (`0x8A3F0`). On the terminal the act slot is cleared
+ * BEFORE the situation apply (the native `0x8A3D0/0x8A3D6/0x8A3EA` order), so
+ * the clock-tail tick stops. Returns FIFA96_OK (the phase-row convention), or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_19(struct fifa96_match_run *mr) {
+  struct fifa96_ref_sequence_out out;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->referee.stage = mr->act.stage;               /* the act slot is the authority */
+  mr->referee.timer = (uint16_t)mr->act.timer;
+  mr->referee.delta = mr->state.frame_delta;
+  rc = fifa96_ref_foul_sequence_step(&mr->referee, &out);
+  if (rc < 0) return rc;
+  mr->act.stage = mr->referee.stage;               /* mirror the advanced stage back */
+  mr->act.timer = (int16_t)mr->referee.timer;
+  if (out.done != 0u) {                            /* native 0x8A3D0/0x8A3D6/0x8A3EA */
+    mr->act.id = 0;
+    mr->act.stage = 0;
+    mr->act.timer = 0;
+  }
+  rc = match_run_ref_apply(mr, &out);
+  if (rc != 0) return rc;
+  return FIFA96_OK;
+}
+
+/* FU-188 §2/§6 (phase-16 T4): the phase-0x20 / act-0xA row body (the code-0x24
+ * timeline). Its phase-table slot stays NULL (uncounted): the sole producer is
+ * situation 0 (FU188-L1). Derived stages (the native `0x8B688`):
+ *  - head (`0x8B691`): `mr->act.timer += frame_delta`;
+ *  - stage 0 (`0x8B6C3`): install code 0x24 on both teams' 11 records (the
+ *    native invoke-now loops `0x8B750`/`0x8B78B`, FU-188 §3). The engine has no
+ *    generic invoke-now (FU188-L4), so only the install lands (the timeline
+ *    cells and the `0x700F4` camera reset are FU188-L2 legs); timer = 0,
+ *    stage -> 1;
+ *  - stage 1 (`0x8B7CB`): the `0x974D8(0x3E8)` wait (derived: timer >= 0x3E8;
+ *    the sink is FU188-L2), then stage -> 2;
+ *  - stage 2 (`0x8B7F6`): clear the act slot (`0x8B819..0x8B82C`; the
+ *    `word[0x15881A] >= 0x3C` / `0x45001` gates are FU188-L2 legs) and
+ *    re-dispatch situation 1 (`0x8B85D`).
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_20(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);
+  if (mr->act.stage == 0u) {                       /* 0x8B6C3 */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        (void)fifa96_match_entities_install(&mr->entities.team[t].records[i],
+                                            (uint8_t)mr->state.phase, 0x24u, 0);
+    mr->act.timer = 0;                             /* 0x8B7B4 */
+    mr->act.stage = 1u;                            /* 0x8B7BB */
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 1u) {                       /* 0x8B7CB */
+    if (mr->act.timer < 0x3E8) return FIFA96_OK;   /* the 0x974D8(0x3E8) wait */
+    mr->act.timer = 0;
+    mr->act.stage = 2u;
+    return FIFA96_OK;
+  }
+  /* stage 2 terminal (0x8B7F6): clear the act slot, then situation 1 (BX=0). */
+  mr->act.id = 0;
+  mr->act.stage = 0;
+  mr->act.timer = 0;
+  return (int)fifa96_match_run_situation(mr, 1u);
+}
+
 int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
                              int32_t rec_a, int32_t rec_b, const int32_t point[3]) {
   struct fifa96_ref_record fouler;
@@ -5405,11 +5479,15 @@ int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
   mr->incident_x = mr->referee.point[0];      /* [0x158897] mirror */
   mr->incident_z = mr->referee.point[2];      /* [0x15889F] mirror */
   if (out.sequence == FIFA96_REF_SEQ_ACT3) {
-    /* FUN_000888FC(3,0,1) invoke-now: stage 0 runs on this call. */
+    /* FU-187 §5 (phase-16 T4): the act-3 producer routes through the act seam
+     * — the native `0x8A6FE FUN_000888FC(3,0,1)`. The phase-0x19 body runs
+     * stage 0 invoke-now (install action 0x16 on the fouler + phase 0xF) and
+     * the clock-tail tick advances it; the former ad-hoc FOUL machine (the
+     * FU175-L7 double-run) is retired. */
     mr->referee.sequence = FIFA96_REF_SEQ_ACT3;
-    mr->referee.stage = 0;
-    mr->ref_machine = FIFA96_MATCH_RUN_REF_FOUL;
-    return fifa96_match_run_referee_step(mr);
+    rc = fifa96_match_act_dispatch(mr, 3, 0, 1);
+    if (rc != 0) return rc;
+    return 1;
   }
   if (out.restart != 0u) {
     /* 0x8A729: FUN_0008A938(9, fouled side, BX=1) through the P1 shared entry
@@ -5550,17 +5628,6 @@ int fifa96_match_run_referee_step(struct fifa96_match_run *mr) {
         (uint16_t)(mr->referee.offside_suppress - d);
   }
   switch (mr->ref_machine) {
-    case FIFA96_MATCH_RUN_REF_FOUL:
-      machine = mr->ref_machine;
-      rc = fifa96_ref_foul_sequence_step(&mr->referee, &out);
-      if (rc < 0) return rc;
-      rc = match_run_ref_apply(mr, &out);
-      if (rc < 0) return rc;
-      /* The apply may start the act-2 machine (stage 6's situation 0xA); do
-       * not clear it. */
-      if (out.done != 0u && mr->ref_machine == machine)
-        mr->ref_machine = FIFA96_MATCH_RUN_REF_NONE;
-      return 1;
     case FIFA96_MATCH_RUN_REF_OFFSIDE:
       machine = mr->ref_machine;
       rc = fifa96_ref_offside_sequence_step(&mr->referee, &out);
