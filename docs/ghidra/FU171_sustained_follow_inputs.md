@@ -542,3 +542,102 @@ FU-96 §7.
 
 Status: recon complete; **no repo file changed except this slice**; no
 census change (22/80 rows; README title unchanged); no golden touched.
+
+---
+
+## T2 status (2026-10-12, phase-14 T2 — append-only)
+
+The phase-14 T2 slice landed the live sustained follow from this slice's recs.
+Fresh Ghidra reads this session (program `/FIFA96.EXE`, scripts disabled)
+re-verified §1/§3 first-hand before any code change:
+
+1. **The first arm** (`disassemble_bytes 0x71DF4..0x71F30`, 81 insns;
+   fresh): `0x71DF8 EDX=[0x1577CA]` / `0x71E03 JZ` bail; `0x71E0B EAX=EDX;
+   0x71E0D EDX=[EDX+4]; 0x71E10 CMP dword[EDX],0x18D8; 0x71E16 JNZ 0x71EF0`;
+   `0x71E1C CMP dword[EAX+0x20],0; JZ`; `0x71E26 EAX=[0x1577EE]; SAR 16;
+   CMP EAX,0xF0; JLE`; `0x71E4E [0x1577C0] = sext(byte[slot+0x20]) * 0xF`,
+   `0x71E69 [0x1577C2] = sext(byte[slot+0x21]) * 0xF`; the clamps read the
+   **alias words** `0x71E77 dword[0x1577BE]>>16` = `word[0x1577C0]` and
+   `0x71EA3 dword[0x1577C0]>>16` = `word[0x1577C2]` (matching §3.1's alias
+   note); `0x71EE5 word[0x1577BE] = distance(vel)` (CALL `0x8DC68`). The
+   engine port (`fifa96_camera.c:525-533` = `clamp(dirs*15, +-15)` + speed;
+   `match_run.c:3128-3147` = the call-site gates) is byte-exact.
+2. **The call-site gates** (`disassemble_bytes 0x739C0..0x73B6F`, 97 insns;
+   fresh): `0x739BB DL=byte[0x157821]`; `0x739C6 TEST DL,DL` (gate 1);
+   `0x739CE CMP word[0x1577BE],0` (gate 2); `0x739DC EAX=[0x1577EE]>>16 > 0x10`
+   (gate 3); `0x739ED/0x739F6` the two rate bytes (`0x73B5B` follow when both
+   zero, else the `0x73A03` interpolation arm); `0x73B5B..0x73B69` the
+   tracked/has-slot pair; `0x73B6B CALL 0x71DF4`. The engine's `follow_speed`
+   staging is confirmed by the walk tail (`0x73CA7 EDX=[0x1577C0];
+   0x73CAD EAX=[0x1577BE]; SAR 16` -> `0x73CB8 word[0x1577BE] = AX` = the
+   after-gate recompute) — the gate reads the pre-tail value the engine
+   captures as `follow_speed` (`camera.c:83/147`).
+3. **The window/lockout mechanism** (`disassemble_bytes 0x70A30..0x70A9F`):
+   `0x70A3F EAX=[0x15781E]>>24 = byte[0x157821]; 0x70A47 CMP 0x64; JGE`
+   (cap) and `0x70A65 INC byte[0x157821]`; the setter's clear is
+   `0x70153 MOV byte[0x157821],AH` with `AH=0` (`0x70144 XOR AH,AH`) inside
+   `FUN_000700F4`. Both already ported (`camera.c:892-893`, `camera.c:863`).
+4. **The row-04 half-line natives** (recs 1-2 consumers; fresh):
+   `0x7EDD8 CMP dword[0x157750],0x50; JLE` (the admission is the **camera
+   Y** dword, not the ball record); `0x7EE83 ECX=[0x1577CA]; TEST; JZ;
+   CMP EBP,ECX; JZ;` then `0x7EE95 EDX=[ECX]` (the tracked record's owner)
+   and `0x7EE9D CMP AL,[EDX+0x826]` (the tracked owner's side byte) — the
+   `ball_track_side` source is the tracked record, not the controlled actor.
+
+**What landed.**
+
+* **(c) rec 1 + rec 2** (`fifa96_match_handlers.c`, row-04 staging):
+  `s.ball_height = (int16_t)mr->render.camera.pos_y` (the FU-75 §1.6
+  `ball.y` stand-in retired; **FU171-L3 closed**) and
+  `s.is_ball_track`/`s.ball_track_side` from `camera.tracked` with the
+  controlled fallback only on `TRACKED_NONE` (**FU171-L2 closed**).
+  Discriminators (RED first, mutation-RED re-verified):
+  `test_row04_live_pan_arms_camera` now stages the camera cell with `ball.y`
+  zero (fails pre-re-stage), the new
+  `test_row04_tracked_gate_suppresses_half_line` (the far-arm/event-build
+  tracked gate; the near-arm coda is *not* tracked-gated and still installs
+  5 — pinned) and the new handler
+  `test_action_04_ball_track_side_from_tracked` (the RNG draw witness for
+  the side compare). Live ripple: the long-ball claim chain now claims at
+  `camY == 0` (the native admission) — the pre-re-stage chain ran the claim
+  at `camY >= 0x70` only because the stand-in read `ball.y == 0` — and
+  `test_view_pose_feed_arms_camera`'s corner/id expectation moved to the
+  native claimant's side (sit 3/id 9).
+* **(b) FU171-L1 closed** (`tests/test_engine_match_frame.c`,
+  `test_live_long_ball_mode40_band2_follow` extended): from the receive
+  event the granted-frame path runs the sustained window — per frame the
+  follow re-seeds `vel = dirs x 15` and `pos_x` advances by `vel*delta`
+  while `pan_counter == 0`; the window is **52 granted frames** for the k=7
+  `0x100` event at the pinned `0x70` camera Y (F2 = 59, F4 = 118,
+  F6 = 59 - ramp(0x90) = 14 -> (118 - 14)/2, matching §3.3's ~51 at
+  camY 0x80), the first pan step increments `pan_counter` and
+  `fifa96_match_run_camera_follow` returns 0 across the lockout, and a new
+  setter call (+ the caller's `0x71D27` bind) re-opens it. Mutation-RED:
+  disabling `0x70A65` breaks the window (the decay frame's velocity assert).
+* **Goldens/census**: M1 `09b726b7…` / M2 `5f7e7692…` byte-identical (no
+  re-pin — the tape does not run the row-04 claim); `make check` 109/109;
+  census 24/80 unchanged.
+
+**Legs after T2.**
+
+* **FU168-L5 / FU171-L4 stand (the camera-Y producer).** The sustained route
+  is now proven from the event live; the remaining gap is a *naturally
+  arising* event in open play. Verdict: not cheap — the row-1E keeper-claim
+  release is dispatch-dead (R11-L4: rows 1A/1B unported, the stage-5 anim
+  bridge R11-L1), the throw-in stage-3 cut is restart-driven and transplanting
+  it re-anchors the whole chain on the restart camera (the kick chain's
+  context collapses; the cut itself stays handler-proven by
+  `test_live_throw_in_camera_y_cut`), and the camera-height arc needs an
+  existing event (`event_param != 0`) before it can raise `[0x157750]`. The
+  kick frame's camera Y therefore stays the pinned stand-in in the chain
+  (disclosed at the (4d) comment).
+* **FU171-L5/L6 unchanged** (the three register-staged setter callers; the
+  row-05 claim setter).
+* **FU171-L7 (new) — the remaining `[0x157750]` stand-in sites.** The
+  same-cell re-stage landed for row-04 only (the brief's scope). The other
+  engine sites still stage `mr->entities.ball.y` for the native camera-Y
+  cell: row-05 (`handlers.c` `c.ball_height`), row-06, row-08 and the record
+  machine's chase gate (`match_run.c` `s.chase.camera`). Each must be
+  re-staged from `camera.pos_y` with its own live-chain assertions (row-05's
+  `0x7F4B0`/`0x7F4D0` reads, row-08's `0x81157`, the chase gate's
+  `0x7CCD8 < 0x30`) and the tape checked for movement.

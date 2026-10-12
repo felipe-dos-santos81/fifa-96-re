@@ -360,6 +360,46 @@ bodies: kickoff players + ball drawn (`docs/screens/p14-t1-kickoff.png`,
 0-0/00:00) and a KICK burst starts the clock with moving records
 (`p14-t1-live-play.png`, 00:03; the ball leaves the fixed view — the
 R2-L4/T2 follow leg, unchanged).
+**Phase-14 T2 (2026-10-12) closes the phase-13 "starved follow" ceiling
+headlessly and re-stages the row-04 coupling (FU-168/FU-171; wired 24/80 and
+README 30% unchanged — no new rows).** Three pieces: (1) **the follow-rate arm
+re-verified first-hand** (`FUN_00071DF4` 0x71DF4..0x71F30 fresh: the tracked
+`[0x1577CA]` + class `[[rec]+4][0] == 0x18D8` + slot + `[0x1577EE]>>16 >
+0xF0` gates -> `vel = clamp(slot dirs x 15, +-15)` with the alias-word clamps;
+the call site 0x739C6..0x73B6B and the walk-tail speed store 0x73CB8
+confirming the `follow_speed` split) — the port is exact, no code change;
+(2) **the coupling recs** (FU-171 §7): the row-04 snapshot now stages
+`s.ball_height` from `camera.pos_y` (the FU-75 §1.6 `ball.y` stand-in
+retired — FU171-L3 closed) and `is_ball_track`/`ball_track_side` from
+`camera.tracked` (the controlled comparison survives only as the
+`TRACKED_NONE` fallback — FU171-L2 closed), with mutation-RED discriminators
+(the re-staged `test_row04_live_pan_arms_camera`, the new
+`test_row04_tracked_gate_suppresses_half_line` and
+`test_action_04_ball_track_side_from_tracked`); the native ripple is real —
+the long-ball claim now happens at camY 0 (the 0x7EDD8 admission reads the
+live camera Y) and the pose-feed situation expectation moved to the native
+claimant's side; (3) **the sustained window + pan-counter lockout pinned
+live** (FU171-L1 closed): the extended ISO
+`test_live_long_ball_mode40_band2_follow` walks granted frames from the
+receive event — while `pan_counter == 0` the every-frame follow re-seeds
+`vel = dirs x 15` and `pos_x` advances by `vel*delta`; the window is exactly
+**52 granted frames** for the k=7 `0x100` event at the pinned `0x70` camera Y
+(F2 = 59, F4 = 118, F6 = 14; the FU-171 §3.3 arithmetic), the first pan step
+(0x70A65) increments the counter and locks the follow out, and a new setter
+call re-opens it (mutation-RED: disabling the increment breaks the window).
+The remaining gap to a naturally-arising live follow is the open-play
+camera-Y producer (**FU168-L5 / FU171-L4**: the keeper release is
+dispatch-dead R11-L4, the throw-in cut is restart-driven and re-anchors the
+chain — T3 — and the arc needs an existing event); the other `[0x157750]`
+`ball.y` stand-in sites are the new **FU171-L7**. **M1/M2 byte-exact**
+(`09b726b7…`/`5f7e7692…`, no re-pin); `make check` 109/109 (sanitized,
+strict). The `p14-t2-*` smoke (`DISPLAY=:1`) reaches the live match —
+front-end menu, panel, kickoff (0-0/00:00), the KICK burst with the clock
+running and the records moving (`p14-t2-kickoff.png`, `p14-t2-live-play.png`,
+00:05), the walk (`p14-t2-walk.png`, 00:08) and a long-ball press
+(`p14-t2-long-ball.png`, 00:12) — with **no whole-scene pan visible** (the
+fixed near-field view), so the gate lands as deepest provable + legs, with
+the sustained follow proven in the ISO rider.
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

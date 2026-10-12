@@ -640,3 +640,27 @@ and tests). Points against this slice's own text:
 4. **FU168-L1 (the descriptor term)** is 0 in the port as the slice
    predicted; **FU168-L6** (the pool `place_offset_*` never written live) is
    moot for this arm — the direct `fifa96_match_dir_x/_z` read was taken.
+
+## T2 status (2026-10-12, phase-14 T2 — append-only)
+
+The phase-14 T2 coupling slice feeds this arm's live inputs from the cells
+§5/§7.3 name, and re-states the precondition leg:
+
+1. **FU168-L5 stands (the mid-band camera-Y producer).** The T2 attempt at a
+   live producer confirms the recon verdict: the keeper-claim release is
+   dispatch-dead (FU-163 §5 / R11-L4), the throw-in stage-3 cut is
+   restart-driven (its handler proof is the landed
+   `test_live_throw_in_camera_y_cut`; re-anchoring the open-play kick chain on
+   the cut's relocated camera collapses the chain — T3's restart work), and
+   the `0x10F3C4` arc needs an existing event (`FUN_00070B94` returns 0 when
+   the event height/limit are 0). The ISO chain therefore keeps the kick
+   frame's `camera.pos_y = 0x70` pin (disclosed); the stage-2 arm's own live
+   window (the ~1-2 granted frames between the stage-1 anim install and the
+   f2 aux-0x0E jump arming, FU168-L4) is unchanged.
+2. **The §7.2 recs' neighbouring staging closed** (FU-171 §7 recs 1-2, T2):
+   the row-04 snapshot now stages `s.ball_height` from `mr->render.camera.pos_y`
+   (the same native `dword[0x157750]` this arm reads at `0x82820`) and
+   `s.is_ball_track`/`s.ball_track_side` from `mr->render.camera.tracked`
+   (the same `[0x1577CA]` this arm reads at `0x82806`). See FU-171's T2
+   status for the discriminators and the FU171-L7 residual sites.
+3. **FU168-L1/L2/L6/L7 unchanged**; no arm byte re-read this slice.

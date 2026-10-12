@@ -1900,7 +1900,8 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   id = mr.slot.entity;
   assert(id == 9);
   rec = &mr.entities.team[0].records[9];
-  /* (2) walk four frames and raise the camera Y through the producer. */
+  /* (2) walk four frames and raise the camera Y through the producer (the
+   * band-2 gate proof for the kick below). */
   {
     fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
     assert(fifa96_match_run_input(&mr, &up, 1) == 0);
@@ -1910,6 +1911,12 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   for (int i = 0; i < 40 && mr.render.camera.pos_y < 0x70; i++) one_granted_frame(&mr);
   assert(mr.render.camera.pos_y >= 0x70);          /* the live arc */
   assert(mr.render.camera.event_param == 0x90);    /* still the staged event */
+  /* (2b) restore the open-play camera state (Y 0) for the claim: after
+   * FU-171 §7 rec 1 the row-04 half-line admission (0x7EDD8) reads the live
+   * camera Y, and it is admitted only while `[0x157750] <= 0x50`. The Y raise
+   * above was the producer proof; the claim itself is a camY-0 chain. */
+  assert(fifa96_camera_init(&mr.render.camera, mr.render.camera.pos_x, 0,
+                            mr.render.camera.pos_z) == FIFA96_OK);
   /* (3) the long-ball request through the live input rows. */
   assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
   one_granted_frame(&mr);
@@ -1922,7 +1929,7 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   one_granted_frame(&mr);
   assert(mr.entities.team[0].timer7cb == (uint32_t)id);
   assert(mr.entities.team[0].timer820 == 0x3C);
-  /* (4) walk to the claim inside the request window. */
+  /* (4) walk to the claim inside the request window (camY == 0). */
   {
     fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
     assert(fifa96_match_run_input(&mr, &up, 1) == 0);
@@ -1931,13 +1938,29 @@ static void test_live_long_ball_mode40_band2_follow(void) {
     one_granted_frame(&mr);
   assert(mr.entities.ball.carrier == id);
   assert(rec->code == 5u);
+  /* (4c) isolate the claim record: at camY 0 every other record's row-04
+   * half-line admission is open too, and their events/merge requests move the
+   * control slot (native behavior; the pre-re-stage chain ran the claim at
+   * camY >= 0x70 so their admission was closed by the `ball.y` stand-in). The
+   * fixture keeps only the claimed record live for the kick sequence. */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 9u)) mr.entities.team[t].records[i].skip_9a = 1;
+  mr.slot.entity = id;                 /* the claimed record owns the pad */
+  /* (4d) FU168-L5 (T2, open leg): the natural open-play camera-Y producer.
+   * The band-2 kick needs `[0x157750] >= 0x70` at the kick frame; the native
+   * producers are the restart/keeper cuts (the throw-in stage-3 cut is
+   * handler-proven by `test_live_throw_in_camera_y_cut`, but transplanting it
+   * here re-anchors the chain on the restart camera — T3's chain) and the
+   * arc, which needs an existing event. Until one lands, the kick frame's
+   * camera Y stays the pinned stand-in (per-attempt below). */
   /* (5/6) the band boundary and the mode-0x40 kick. The first attempt after
    * a held direction leaves the slot hold-mask dirty (the released word is
    * swallowed); the NULL grant cleans it. */
   assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
   one_granted_frame(&mr);
   for (int attempt = 0; attempt < 6; attempt++) {
-    mr.render.camera.event_param = 0;      /* the pinned-Y staging */
+    mr.render.camera.event_param = 0;      /* the pinned-Y staging (FU168-L5) */
     mr.render.camera.pos_y = 0x70;
     mr.entities.ball.pair.code = 0;
     {
@@ -1965,6 +1988,65 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   assert(fifa96_match_run_camera_follow(&mr) == 1);
   assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
   assert(mr.render.camera.speed != 0);
+  /* (9) FU-171 §3.3 / §7 rec 4 (T2, FU171-L1): the sustained window and the
+   * pan-counter lockout through the every-frame path. The receive arm's setter
+   * cleared `[0x157821]` (0x70153, camera.c:863), opening the follow window;
+   * the call-site gate 1 (0x739C6) keeps it open until the first pan step
+   * (FUN_000709D0 0x70A65) increments the counter (0x70A3F caps it at 100),
+   * which locks `fifa96_match_run_camera_follow` out until the next setter
+   * call. Per granted frame while open: the follow re-seeds the velocity from
+   * the tracked record's slot dirs x15 (the rate arm, 0x71E4E..0x71EE5) and
+   * the integrator advances pos_x by vel*delta; the pan step's ramp then
+   * leaves a different velocity. The other records' per-record BF20 chase
+   * events are isolated (native per-record behavior would re-arm the event
+   * legitimately; the window itself is the subject). */
+  {
+    int window = 0;
+    int32_t prev_pos_x = mr.render.camera.pos_x;
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        if (!(t == 0u && i == 9u)) mr.entities.team[t].records[i].skip_9a = 1;
+    assert(mr.render.camera.pan_counter == 0);
+    assert((int16_t)mr.render.camera.event_param == 0x100);
+    while (mr.render.camera.pan_counter == 0 && window < 120) {
+      rec->dir_x = 1;                     /* the dispatch may rewrite the pool */
+      rec->dir_z = 0;
+      one_granted_frame(&mr);
+      window++;
+      if (mr.render.camera.pan_counter == 0) {
+        assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
+        assert(mr.render.camera.pos_x ==
+               prev_pos_x + 15 * (int32_t)mr.state.frame_delta);
+        prev_pos_x = mr.render.camera.pos_x;
+      }
+    }
+    /* The derived window for the k=7 0x100 event at the pinned 0x70 camera Y:
+     * F2 = ramp(0x100) = 0x94 - T[0x150] = 59, F4 = 2*F2 = 118,
+     * F6 = F2 - ramp(0x100 - 0x70 = 0x90) = 59 - 45 = 14; the pan step fires
+     * on the first frame with timer > F4 and timer advances by delta 2, so
+     * the window is (118 - 14)/2 = 52 granted frames. */
+    assert(window == 52);
+    assert(mr.render.camera.pan_counter == 1);
+    /* the lockout: the call-site gate 1 refuses until a new setter call. */
+    assert(fifa96_match_run_camera_follow(&mr) == 0);
+    for (int i = 0; i < 5; i++) {
+      one_granted_frame(&mr);
+      assert(mr.render.camera.pan_counter >= 1);
+      assert(fifa96_match_run_camera_follow(&mr) == 0);
+    }
+    /* a new event re-opens the window (the setter's 0x70153 clear; the
+     * tracked bind is the caller's 0x71D27 store after the reset, exactly as
+     * the receive arm / row-04 arm bind). */
+    assert(fifa96_camera_event_set(&mr.render.camera, 0x100, 0x100, 0x100, 0) ==
+           FIFA96_OK);
+    assert(fifa96_camera_set_tracked(&mr.render.camera, id) == FIFA96_OK);
+    assert(mr.render.camera.pan_counter == 0);
+    rec->dir_x = 1;
+    rec->dir_z = 0;
+    one_granted_frame(&mr);
+    assert(mr.render.camera.pan_counter == 0);
+    assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
+  }
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -4295,11 +4377,16 @@ static void test_view_pose_feed_arms_camera(void) {
   assert(mr.goal_armed == 1);
   assert(mr.goal_snap_x == -83 && mr.goal_snap_y == 0 && mr.goal_snap_z == 3631);
   assert(mr.goal_zone == 0);
-  /* FU-149 P1: the corner/goal-kick arm fires (cond true -> sit 4, side
-   * 0 ^ 1 = 1) and the byte-1 (Practise) session queues the side-1
-   * restart id 0. */
+  /* FU-149 P1: the corner/goal-kick arm fires (sit = 3 + cond, side =
+   * ball ^ 1) and the byte-1 (Practise) session queues the restart id. The
+   * ball side is the derived stand-in (the pool controlled actor, then the
+   * carrier; the native `[0x1577CA]` team byte is unported). FU-171 §7 rec 1
+   * (T2): the row-04 half-line admission now reads the live camera Y, so the
+   * settle frame's camY-0 claims survive (team 1) and the posed camera Y
+   * (320 > 0x50) closes the frame's own half-line; cond = ((+snap z) ==
+   * (ball == 1)) = 0 -> sit 3 (the corner arm), side = 1 ^ 1 = 0 -> id 9. */
   assert(mr.situation_pending == 1);
-  assert(mr.situation_id == 0u);
+  assert(mr.situation_id == 9u);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -4382,7 +4469,14 @@ static void test_row04_live_pan_arms_camera(void) {
   e->actor_type = 16;                  /* 0x10F334/3C offsets (21,88)<<5 seed */
   e->anim_id = 0;                      /* row byte != 0x13 -> the event arm */
   e->timer81 = 0;
-  mr.entities.ball.y = 0x20;           /* <= 0x50, != 0 -> the type-table seed */
+  /* FU-171 §7 rec 1 (T2): the native `dword[0x157750]` the row-04 half-line
+   * reads (0x7EDD8/0x7EFFA) is the CAMERA Y, not the ball record. Stage the
+   * camera cell and leave the old `ball.y` stand-in at zero so this fixture
+   * discriminates the re-stage (pre-re-stage the row reads `ball.y` = 0 ->
+   * the slot/vel seed arm yields nothing at |camera.z| > 0xA20 and no event
+   * fires). */
+  mr.render.camera.pos_y = 0x20;       /* <= 0x50, != 0 -> the type-table seed */
+  mr.entities.ball.y = 0;              /* the retired stand-in */
   /* M2 phase-10 T2: with the L4.1 walk + the BF20 camera-event tail live, a
    * later record's tail event could rebind the camera-tracked cell; isolate
    * the fixture to the row-04 record (native `+0x9A`). */
@@ -4406,6 +4500,62 @@ static void test_row04_live_pan_arms_camera(void) {
 
   one_granted_frame(&mr);
   assert(mr.score[0] == 1 && mr.score[1] == 0);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU-171 §7 rec 2 (T2): the row-04 far arm gates on `[0x1577CA]` — the
+ * camera-tracked record — not on the controlled actor (`id == controlled`).
+ * Same staged scenario as `test_row04_live_pan_arms_camera`, but the record
+ * IS the camera's tracked entity, so the native 0x7EDA0 far-arm return
+ * (`CMP EBP,[0x1577CA]; JZ`) suppresses the half-line event: no camera
+ * velocity seed, no 0x71D27 rebind, no row coda. Before the re-stage the
+ * `id == controlled` stand-in missed the tracked cell and the event fired
+ * (the pre-fix RED). */
+static void test_row04_tracked_gate_suppresses_half_line(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  mr.session_gate_14c32a = 1;
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(mr.situation_pending == 0);
+  assert(mr.slot.entity != id);
+
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 4, 0) == 1);
+  e->active = 1;
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;
+  e->target_x = 0;
+  e->target_z = 0xB00;
+  e->actor_type = 16;
+  e->anim_id = 0;
+  e->timer81 = 0;
+  /* stage both candidate cells so this fixture discriminates ONLY the tracked
+   * re-stage (whichever cell the row reads, the event would otherwise fire). */
+  mr.render.camera.pos_y = 0x20;
+  mr.entities.ball.y = 0x20;
+  mr.render.camera.tracked = id;       /* the far-arm 0x7EDA0 gate */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 1u && i == 4u)) mr.entities.team[t].records[i].skip_9a = 1;
+
+  one_granted_frame(&mr);
+  assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.event_param == 0);
+  assert(mr.render.camera.tracked == id);   /* no rebind needed */
+  /* The 0x7EDA0/0x7EFEE tracked gates cover the FAR arm and the event build,
+   * not the near-arm coda: the row still installs code 5 while the camera
+   * event (and its tracked rebind) is suppressed. */
+  assert(e->code == 5u);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -5147,6 +5297,7 @@ int main(void) {
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();
+  test_row04_tracked_gate_suppresses_half_line();
   test_row04_arm_a_track_reload();
   test_natural_goal_end_to_end();
   test_natural_goal_fallback_arm();

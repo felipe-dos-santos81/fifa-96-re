@@ -2557,7 +2557,18 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.opp_target_index = match_row04_index(opp, mr->entities.team[opp].target);
   s.opp_7c7_index = FIFA96_OUTFIELD_ROW04_NONE;   /* [opp+0x7C7] unported (OL-72) */
   s.is_carrier = id == mr->entities.ball.carrier ? 1u : 0u;   /* [0x158777] stand-in */
-  s.is_ball_track = id == controlled ? 1u : 0u;               /* [0x1577CA] stand-in */
+  /* FU-171 §7 rec 2 (T2/FU171-L2): the native half-line gates 0x7EDA0/0x7EE83/
+   * 0x7EFEE all read `[0x1577CA]` — the camera-tracked record — not the
+   * controlled actor. Live now that `fifa96_camera_set_tracked` maintains the
+   * cell (0x71D27); the controlled comparison stays only as the TRACKED_NONE
+   * fallback. */
+  {
+    int32_t tracked_id = mr->render.camera.tracked;
+    if (tracked_id != FIFA96_CAMERA_TRACKED_NONE)
+      s.is_ball_track = tracked_id == id ? 1u : 0u;
+    else
+      s.is_ball_track = id == controlled ? 1u : 0u;
+  }
   /* FU-147 S1: the BF20 lane block maintains `[team+0x7C7]`; the pool stores
    * it as the team-relative index. */
   s.is_team_7c7 = (mr->entities.team[team].tracker7c7 >= 0 &&
@@ -2579,8 +2590,11 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.score_word[0] = (int16_t)mr->score[0];
   s.score_word[1] = (int16_t)mr->score[1];
   s.side_flip = 0;                  /* [0x157ABE] producer unported (OL-72) */
-  s.ball_height = mr->entities.ball.y;   /* [0x157750] ball-record stand-in
-                                          * (FU-75 §1.6; leg 15.b) */
+  /* FU-171 §7 rec 1 (T2/FU171-L3): native `dword[0x157750]` is the camera
+   * triple's Y (the 0x7EDD8 admission and the 0x7EFFA seed switch), the same
+   * cell the BF20 tail and the kick ctx already stage from `camera.pos_y`;
+   * the FU-75 §1.6 ball-record stand-in is retired. */
+  s.ball_height = (int16_t)mr->render.camera.pos_y;
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
   s.camera_z = mr->render.camera.pos_z;
@@ -2604,11 +2618,19 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.predictor_x = mr->render.camera.pos_x;  /* 0x71B9C(4) stand-in (OL-74) */
   s.predictor_y = mr->render.camera.pos_y;
   s.predictor_z = mr->render.camera.pos_z;
-  s.ball_track_side = controlled >= 0
-                          ? mr->entities
-                                .team[(uint32_t)controlled / FIFA96_MATCH_ENTITY_RECORDS]
-                                .side
-                          : 0;
+  /* FU-171 §7 rec 2 (T2): the sound arm's `[tracked_owner+0x826]` compare
+   * (0x7EE95/0x7EE9D) is the tracked record's team side; TRACKED_NONE keeps
+   * the controlled stand-in. */
+  {
+    int32_t tracked_id = mr->render.camera.tracked;
+    int32_t side_id = tracked_id != FIFA96_CAMERA_TRACKED_NONE ? tracked_id
+                                                               : controlled;
+    s.ball_track_side = side_id >= 0
+                            ? mr->entities
+                                  .team[(uint32_t)side_id / FIFA96_MATCH_ENTITY_RECORDS]
+                                  .side
+                            : 0;
+  }
   s.type_off_x = match_kick_dir_x;
   s.type_off_z = match_kick_dir_z;
   s.mates = mates;
@@ -3403,7 +3425,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x0B, fifa96_match_action_0B,
      "FU-169 §3 (phase-14 T1): row 0B duel body ported (0x81908..0x81C71, fresh first-hand): arm 0 (index gate, the point pos+dir<<5, the nearest opponent, the strict (0x20,0x70) band, the speed/facing {0x0C,0x59} choice, the 0x79B6C snap+face, the anim install on self, ran, stage->1), arm 1 (the +0x3D frame gate, nearest, found active, band <= 0x60, the [0x14C32A] session gate, the +0x7D7 duel counter, the kind-2 registrar, the +0x8E type copy, the action-0x0C install on the found record, stage->2) + the same-dispatch arm-2 snap/+0x44 reset; the ring-post [[rec+4]]==0x18DE (FU169-L3), the events/sinks/0x8ED40 (FU169-L2), the installer tails and the arm-0 fall-through inertness are documented in the body"},
     {0x0C, fifa96_match_action_0C,
-     "FU-169 §2 (phase-14 T1): row 0C contact body ported (head 0x81C90..0x81CD4 + stage 0 0x81CDC..0x81DC5, fresh first-hand): timer89 += delta, the pos_y==0 target copy, the active reset, A = [0x15888F], the A anim-0x59/frame>=2 gate, the 0x795B4 lead band (A.pos + 2*A.vel) >= 0x30 -> the +0x7CF stumble counter, the anim-0x5E install on A, the self reset; the <0x30 and alternate-gate foul branches call fifa96_match_run_contact (the disclosed kind-1 re-register) after the 0x81E13 B velocity write; stages 1..6 (0x81F4E..0x8251B) stay FU169-L4 legs"},
+     "FU-169 §2 (phase-14 T1): row 0C contact body ported (head 0x81C90..0x81CD4 + stage 0 0x81CDC..0x81DC5, fresh first-hand): timer89 += delta, the pos_y==0 target copy, the active reset, A = [0x15888F], the A anim-0x59/frame>=2 gate, the 0x795B4 lead band (A.pos + 2*A.vel) >= 0x30 -> the +0x7CF stumble counter, the anim-0x5E install on A, the self reset; the <0x30 and alternate-gate foul branches call fifa96_match_run_contact (the disclosed kind-1 re-register) after the 0x81E13 B velocity write; stages 1..6 (0x81F4E..0x8250B) stay FU169-L4 legs"},
     {0x0D, NULL,
      "FU-137 §6: FU-136 row 0D: not ported (partial); FU-82 4-arm 0x8250C + FU-138 velocity_scale; OL-22"},
     {0x0E, fifa96_match_action_0E,

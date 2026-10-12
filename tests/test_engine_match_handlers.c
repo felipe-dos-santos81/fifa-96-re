@@ -1022,6 +1022,66 @@ static void test_action_04_stages_lane_fields(void) {
   drop_fixture(&f);
 }
 
+/* FU-171 §7 rec 2 (T2): the row-04 half-line sound arm's side compare reads
+ * `[0x1577CA]` — the camera-tracked record's owner side byte — not the
+ * controlled actor's side. Fresh bytes 0x7EE83..0x7EEA3: `ECX = [0x1577CA]`;
+ * skip when ECX == 0 or rec == ECX; `AL = [rec_owner+0x826]` vs
+ * `[tracked_owner+0x826]`; draw only on equality. The arm's only engine
+ * observable is its `fifa96_rng_step` draw (its 0x974F0/0x651F0 sinks have no
+ * consumer), so this test counts RNG movement across one row-04 dispatch:
+ * with the tracked record on the OTHER team from the row record there is no
+ * draw; tracked on the record's own team (and the TRACKED_NONE controlled
+ * fallback) witness that the arm can still fire. Pre-re-stage the
+ * `id == controlled` side stand-in drew in the other-team case (the RED). */
+static void test_action_04_ball_track_side_from_tracked(void) {
+  struct fixture f;
+  struct fifa96_rng before;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;                 /* team 0, index 0 */
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 1;                  /* slot_word6 0 -> no backup arm */
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.anim_id = 0;                   /* row byte != 0x13 */
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[1].side = 1;
+  f.mr.entities.controlled = 2;              /* team-0 mate: present, not self */
+  f.mr.entities.team[0].records[0].lane_x = 0x20;   /* native word +0x6B */
+  f.mr.entities.team[0].records[0].lane_z = 0x100;  /* native word +0x6D */
+  f.mr.entities.team[0].records[0].cam_dz6f = 0x100;/* native word +0x6F */
+  f.mr.entities.team[0].records[0].bound = 0x30;    /* native word +0x77 */
+  f.mr.render.camera.pos_y = 0;              /* ball_height <= 0x50 */
+
+  /* tracked on the other team: the side compare refuses (no draw). */
+  f.mr.render.camera.tracked = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 3;
+  before = f.mr.rng;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(memcmp(&before, &f.mr.rng, sizeof before) == 0);
+
+  /* tracked on the record's own team: the arm draws. */
+  f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = 3;
+  before = f.mr.rng;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(memcmp(&before, &f.mr.rng, sizeof before) != 0);
+
+  /* TRACKED_NONE: the controlled stand-in keeps the witness firing. */
+  f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  before = f.mr.rng;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(memcmp(&before, &f.mr.rng, sizeof before) != 0);
+  drop_fixture(&f);
+}
+
 /* FU-147 S1: the row-1E stage-3 span tail (0x75A40..0x75B6F, first-hand
  * this slice): at the stage-3 span with `+0x9B == 0` the native resets the
  * record (`0x7DAB4`), calls situation 0xB (`0x8A938`, phase -> 2) and installs
@@ -2531,6 +2591,7 @@ int main(void) {
   test_action_05_claim_dirs_and_stages();
   test_action_04_and_08_wired();
   test_action_04_stages_lane_fields();
+  test_action_04_ball_track_side_from_tracked();
   test_action_1E_stage3_possession_flip();
   test_action_1E_machine_release_chain();
   test_action_1D_runs_closedown();

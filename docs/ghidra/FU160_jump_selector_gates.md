@@ -584,3 +584,21 @@ initially used B's face (invisible while both are 0); the fix round corrected
 it and made `test_action_0c_stage0_gates_and_foul_path` stage A's face
 `0x100` vs B's `0` (mutation-RED verified). Cross-ref: FU-169's T1 fix-round
 status.
+
+---
+
+## Erratum — FU160-L4 closed (append-only, 2026-10-12, phase-14 T2)
+
+**The leg FU160-L4 ("the `0x82820..0x82A9C` stage-2 else camera-follow/slot
+arm") is CLOSED.** The block landed with the phase-14 T1 row-0x0E port
+(`match_sp_pan_arm`, `fifa96_match_handlers.c`), whose contract was fully
+re-derived first-hand in FU-167 §6 / FU-168 §§2-6 (the strict
+`0x20 < camY < 0x70` and `lane_x < 0x60` gates, the focus write, the seed
+vector, the `0x71C94` event + `[0x1577CA]` bind, the stage advance), and the
+T1 fix-round status / tests pin it (`test_action_0e_stage2_else_arm_binds_camera`,
+`test_action_0e_stage2_else_arm_gate_retry`, the ISO
+`test_live_row_0e_selector_installs_jump` extension). This section is a
+forward pointer only: FU-160 §4's leg list and the §"New leg FU160-L4"
+paragraphs are historical and are not edited. The live mid-band camera-Y
+precondition remains open as FU168-L5 / FU171-L4 (see FU-168's T2 status and
+FU-171's T2 status).
