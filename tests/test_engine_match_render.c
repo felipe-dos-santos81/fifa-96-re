@@ -359,7 +359,11 @@ static void test_clip_clamped_to_smaller_surface(void) {
  *    with the 0-sentinel entry: the staged world is 23 slots, 24 - sentinel. */
 
 #define SCENE_BLOB0_LEN (16u + 32u * 32u)
-#define SCENE_BLOB_LEN (SCENE_BLOB0_LEN + 16u + 16u * 16u)
+/* phase-13 T2 (FU-158): the ball fixture's two 8x8 frames (distinct colours)
+ * follow the two pose blobs in the same backing arena. */
+#define SCENE_BALL_OFF (SCENE_BLOB0_LEN + 16u + 16u * 16u)
+#define SCENE_BALL_FRAME_LEN (16u + 8u * 8u)
+#define SCENE_BLOB_LEN (SCENE_BALL_OFF + 2u * SCENE_BALL_FRAME_LEN)
 
 /* Pinned from the first verified run: the staged frame-0 32x32 solid-0x22
  * sprite covers the derived (142,102) 37x37 rect (the existing fixture's
@@ -374,7 +378,8 @@ struct scene_fixture {
   uint8_t blob[SCENE_BLOB_LEN];
   int32_t off0[2];
   int32_t off1[4];
-  struct fifa96_render_bank banks[4];
+  int32_t off_ball[4];
+  struct fifa96_render_bank banks[5];
   uint8_t frames[16 * 5];
 };
 
@@ -404,6 +409,24 @@ static void scene_fixture_init(struct scene_fixture *f) {
   e1[8] = 8;
   e1[10] = 8;
 
+  /* phase-13 T2 (FU-158 §8.3): the staged ball-bank stand-in — two 8x8 frames
+   * with distinct colours (0x44 frame 0, 0x55 frame 1), selected through
+   * render.ball_roll like the native GAMEART0 ball.fsh. */
+  uint8_t *eb0 = f->blob + SCENE_BALL_OFF;
+  uint8_t *eb1 = eb0 + SCENE_BALL_FRAME_LEN;
+  memset(eb0, 0x44, SCENE_BALL_FRAME_LEN);
+  memset(eb0, 0x00, 16);
+  eb0[4] = 8;
+  eb0[6] = 8;
+  eb0[8] = 4;
+  eb0[10] = 4;
+  memset(eb1, 0x55, SCENE_BALL_FRAME_LEN);
+  memset(eb1, 0x00, 16);
+  eb1[4] = 8;
+  eb1[6] = 8;
+  eb1[8] = 4;
+  eb1[10] = 4;
+
   f->off0[0] = 0;
   f->off0[1] = 0;
   f->off1[0] = 0;
@@ -425,6 +448,15 @@ static void scene_fixture_init(struct scene_fixture *f) {
   f->banks[3] = f->banks[0];
   f->banks[2].count = 2;   /* the ball's rows can advance frame 0 -> 1 */
   f->banks[3].count = 2;
+  /* phase-13 T2: the ball bank (index 4) the dedicated draw sources. */
+  f->off_ball[0] = 0;
+  f->off_ball[1] = 0;
+  f->off_ball[2] = (int32_t)SCENE_BALL_FRAME_LEN;
+  f->off_ball[3] = 0;
+  f->banks[4].base = eb0;
+  f->banks[4].offsets = f->off_ball;
+  f->banks[4].count = 2;
+  f->banks[4].step = 1;
 
   for (unsigned i = 0; i < 16; i++) {
     f->frames[i * 5 + 0] = 0x50;
@@ -437,7 +469,7 @@ static void scene_fixture_init(struct scene_fixture *f) {
   struct fifa96_match_run_render *r = &f->mr.render;
   r->frames = f->frames;
   r->banks = f->banks;
-  r->bank_count = 4;
+  r->bank_count = 5;
   r->sprite_data = f->blob;
   r->sprite_data_len = (uint32_t)sizeof f->blob;
   r->enabled = 1;
@@ -638,6 +670,111 @@ static void test_ball_machine_moves_ball_slot_pixels(void) {
   assert(drawn_count(f.s, 0) > 0);                 /* the ball is still drawn */
   assert(fifa96_surface_hash(f.s) != parked_hash);
   assert(drawn_count(f.s, 0) != parked_drawn);
+  fifa96_surface_destroy(f.s);
+}
+
+/* phase-13 T2 (FU-158 §6/§8.3): the ball slot's dedicated draw. With the
+ * GAMEART0 ball bank captured (`render.ball_bank`), slot 22 draws that bank's
+ * roll-selected frame at its own FU-85 projection instead of resolving the
+ * FU-84 row-3 PLAYART pose; the presenter's sanitizer (0x5739D: frame >= count
+ * -> frame 0) covers an out-of-range roll. */
+static void test_ball_slot_draws_ball_bank_frame(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      e->pos_x = 0;
+      e->pos_y = 0;
+      e->pos_z = -0x1000;   /* behind the camera: culled */
+      e->target_x = 0;
+      e->target_y = 0;
+      e->target_z = -0x1000;
+      e->skip_9a = 1;
+    }
+  }
+  f.mr.entities.ball.x = 0;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.ball.z = 0x200;
+  f.mr.entities.ball.target_x = 0;   /* park the machine (target := record) */
+  f.mr.entities.ball.target_y = 0;
+  f.mr.entities.ball.target_z = 0x200;
+  f.mr.render.ball_bank = 4;
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.ball_roll == 0);   /* parked ball: no composer advance */
+
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x44);   /* ball bank frame 0 */
+
+  /* the roll byte selects the frame (the native presenter's `byte & 0xF`) */
+  f.mr.render.ball_roll = 1;
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x55);   /* frame 1 */
+
+  /* the sanitizer: roll >= count draws frame 0, and never the pose colour */
+  f.mr.render.ball_roll = 2;
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x44);
+  assert(drawn_count(f.s, 0) > 0);
+
+  /* the 0xFF fallback keeps the synthetic fixtures on the FU-84 path */
+  f.mr.render.ball_bank = FIFA96_MATCH_RUN_BALL_BANK_NONE;
+  fifa96_surface_clear(f.s, 0);
+  assert(fifa96_match_run_render(&f.mr, f.s) == 0);
+  assert(f.s->indexed[120 * 320 + 160] == 0x22);   /* the row-3 pose again */
+  fifa96_surface_destroy(f.s);
+}
+
+/* phase-13 T2 (FU-158 §4.3/§8.2): the composer roll byte. The native 0x36F4F
+ * arm advances `[0x155C4E]`'s low nibble +1 per composer frame while the
+ * camera rate words are non-zero (the L158.2 stand-in here is ball motion);
+ * the presenter's out-of-range sanitizer clears the nibble, so the drawn
+ * frame cycles through the bank count continuously (count 2: 1, 0, 1, 0...). */
+static void test_ball_roll_advances_with_ball_motion(void) {
+  struct scene_fixture f;
+  scene_fixture_init(&f);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &f.mr.entities.team[t].records[i];
+      e->pos_x = 0;
+      e->pos_y = 0;
+      e->pos_z = -0x1000;
+      e->target_x = 0;
+      e->target_y = 0;
+      e->target_z = -0x1000;
+      e->skip_9a = 1;
+    }
+  }
+  f.mr.state.phase = 0;                    /* park the phase-2 lead */
+  f.mr.entities.ball.x = 0;
+  f.mr.entities.ball.y = 0;
+  f.mr.entities.ball.z = 0x200;
+  f.mr.entities.ball.target_x = 0;
+  f.mr.entities.ball.target_y = 0;
+  f.mr.entities.ball.target_z = 0x200;
+  f.mr.entities.ball.head_gate = 0;
+  f.mr.render.ball_bank = 4;
+
+  drive_granted(&f.mr, 1);
+  assert(f.mr.render.ball_roll == 0);      /* parked: no advance */
+
+  f.mr.state.phase = 2;                    /* the camera-derived lead moves it */
+  int moving = 0;
+  uint8_t expect = 0;
+  for (int i = 0; i < 6; i++) {
+    drive_granted(&f.mr, 1);
+    if (f.mr.entities.ball.vel_x != 0 || f.mr.entities.ball.vel_z != 0) {
+      moving++;
+      /* +1 per moving frame with the presenter sanitizer applied (bank count
+       * 2), so the low nibble cycles 1, 0, 1, 0 ... */
+      expect = (uint8_t)((expect + 1u) & 0x0Fu);
+      if (expect >= 2u) expect = 0u;
+    }
+    assert((f.mr.render.ball_roll & 0x0Fu) == expect);
+  }
+  assert(moving >= 2);   /* the phase-2 lead product is exercised, not vacuous */
   fifa96_surface_destroy(f.s);
 }
 
@@ -1784,6 +1921,8 @@ int main(void) {
   test_scene_stages_pool_entities();
   test_ball_record_draws_ball_slot();
   test_ball_machine_moves_ball_slot_pixels();
+  test_ball_slot_draws_ball_bank_frame();
+  test_ball_roll_advances_with_ball_motion();
   test_entity_animates_over_frames();
   test_live_anim_inputs_drive_bank_row();
   test_anim_id_staging_round_trip();

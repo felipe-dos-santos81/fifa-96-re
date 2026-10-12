@@ -226,6 +226,41 @@ airborne route needs; the live row selector is T1-L1/T3). Goldens unmoved
 the sampled walk windows show no whole-scene pan translation; one window
 shows a hard camera re-place close-up — the `0 -> 0x90` slide's primary
 evidence is the ISO assert.
+**Phase-13 T2 (2026-10-11) lands the ball-slot art (FU-158, T2-L1's visible
+half): slot 22 draws the real ball sprites.** The render captures the
+GAMEART0 `ball.fsh` bank by BIGF name at staging (`render.ball_bank == 128`
+= the 91 PLAYART slots + entry 37; first-hand ISO `fifa96_play` `ball.fsh`
+8 frames 16x16) and draws its frame at slot 22's FU-85 clean x/y/scale
+through the existing sprite blitter, bypassing `fifa96_render_resolve` for
+that slot (`match_run_anim_rows`, PLAYART and the resolver untouched; the
+FU-84 row-3 install stays the first-hand record). The frame comes from the
+composer roll byte `render.ball_roll`: the exact native `[0x155C4E]` byte op
+(`lo+1` OR'd into the high nibble — the fresh `0x36F4F..0x36F83` bytes
+correct the slice's `& 0xF` sketch), advanced once per granted frame while
+the ball moves (the disclosed stand-in for the native camera-rate gate,
+L158.2), with the presenter's sanitizer (`0x5739D`: frame >= count -> 0 and
+the low nibble cleared) applied at the drawn-frame-equivalent composer site.
+No `ball.fsh` keeps the `0xFF` sentinel and the old resolve for synthetic
+fixtures. RED-first unit coverage
+(`test_ball_slot_draws_ball_bank_frame`: bank frame vs pose pixel, roll
+selection, sanitizer, fallback; `test_ball_roll_advances_with_ball_motion`:
+parked = no advance, +1 per moving frame with the count-2 cycle asserted per
+frame) plus the ISO staging pin and the M2 frame-9 `ball_bank == 128`
+stratum. **M2 re-pinned to v13** with the written reason + frame diff — the
+transcript stays 85 lines, lines 1..8 byte-identical, 77 hash-only lines
+9..85 differ with zero `state=` diffs (first differing frame 9
+`ab8bded120648826` -> `40270bb4a15d2302`: the on-canvas ball now drawn as
+`ball.fsh` frame 0 instead of the `run.fsh` pose; later lines differ through
+the null backend's chained FNV-1a) — new M2 sha `5f7e7692…`; **M1 unmoved**
+`09b726b7…`. `make check` 108/108 sanitized; wired 21/80 (README title
+26%). The fresh `p13-t2-*` smoke shows the gate: the kickoff view draws an
+unambiguous soccer ball (`docs/screens/p13-t2-ball-crop.png`, 4x); post-kick
+the ball leaves the fixed view within ~1 s (the phase-2 lead; no live follow
+— R2-L4), so the roll frames do not land in the stills (the unit sequence
+and the v13 re-pin are the roll's runtime evidence). Legs: L158.1
+(native entity-pass pose suppression, DOSBox-X), L158.2 (sanitizer
+write-back site + motion stand-in), L158.3/L158.4 unchanged, new L158.5
+(the presenter's `[0x109000]` scale / `FUN_00057278` screen-pair source).
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),

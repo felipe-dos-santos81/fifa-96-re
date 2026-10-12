@@ -1031,6 +1031,44 @@
  *      first-hand) instead of aborting in the helper's live-slot assert.
  *      ISO-present behavior is unchanged (the gate is always true there).
  *
+ * --- v13 (M2 phase-13 T2): the ball-slot art — THE RE-PIN --------------------
+ *
+ * v13 is the phase-13 T2 landing (FU-158 §6/§8): the pitch ball's slot 22 no
+ * longer resolves the FU-84 row-3 PLAYART pose. The render now draws the
+ * dedicated GAMEART0 `ball.fsh` bank (captured by BIGF name at staging:
+ * `render.ball_bank == 128` = 91 PLAYART slots + entry 37, 8 frames 16x16) with
+ * the frame from the composer roll byte (`render.ball_roll`, the native
+ * `[0x155C4E]` low nibble: +1 per granted frame while the ball moves — the
+ * L158.2 camera-rate stand-in — with the presenter sanitizer `0x5739D`
+ * mapping a frame >= the bank count to 0 and clearing the nibble). The FU-84
+ * row-3 appear install and the staged `anim_id`/`frame` stay the first-hand
+ * record; only the drawn source changed. `ball_bank` is 0xFF (absent) without
+ * a pitch container carrying `ball.fsh`, so the synthetic fixtures keep the
+ * FU-84 resolve.
+ *
+ * Frame diff (against the committed v12 golden, `diff`/`cmp` measured, ISO
+ * present): the transcript is 85 lines in both; lines 1..8 are byte-identical
+ * (the pre-grant frames 6..8 draw the empty render list), and **77 lines
+ * (9..85) all differ in the `hash=` field only — zero `state=` suffix diffs**.
+ * Frame 9 is the first differing line (golden `ab8bded120648826` -> actual
+ * `40270bb4a15d2302`): the first granted frame with the ball slot on canvas
+ * (clean x' 156.66), now stamped with `ball.fsh` frame 0 instead of the
+ * `run.fsh` pose. Every later line differs through the null backend's chained
+ * FNV-1a `present_hash` (`platform_null.c`), including the post-park samples
+ * whose ball draws no pixels (the clean projection is laterally off canvas).
+ *
+ * What v13 re-pins at the sequence points: the T2-L1 art stratum (frame 9)
+ * now also pins the captured source bank, `ball_bank == 128` — so the ISO tape
+ * proves the dedicated draw's art identity, not only its placement; the staged
+ * `ball_slot_anim == 3` / `ball_slot_frame == 0` pins stay (the reset's row-3
+ * install, no longer the drawn sprite).
+ *
+ * Golden decision (v13): **re-pin with the written reason + frame diff above**
+ * — the intended visible-quality upgrade (FU-158 / plan T2), not a regression.
+ * Regenerated with the ISO present
+ * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
+ * (`09b726b7…`); new M2 sha `5f7e7692…` (85 lines).
+ *
  * Step cadence: step_ns = 10 ms, so the null backend advances the engine clock
  * exactly one 100 Hz PIT tick per step; the engine polls once per step, so the
  * 12-entry key tape lands one entry per step (entry index = engine step - 1).
@@ -1398,6 +1436,7 @@ struct m2_result {
   int32_t ball_early_sx;     /* its clean screen x (16.16) at frame 9 */
   uint8_t ball_slot_anim;    /* render.entities[22].stage.anim_id at frame 9 */
   uint8_t ball_slot_frame;   /* render.entities[22].stage.frame at frame 9 */
+  uint8_t ball_bank;         /* render.ball_bank at frame 9 (128 = ball.fsh) */
   int follow_on_tape;        /* fifa96_match_run_camera_follow(mr) at m 58 */
   int jumps_active;          /* pool records with live jump state at m 58 */
   /* v3/v5 drawing evidence (M2 visible-match Task 1 / OL-T11-8 + full-gameplay
@@ -2205,13 +2244,16 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
          * ball slot's clean projection ON canvas (the stand-in yaw 0 measured
          * x' 480, off the right edge; the T2 pin). The staged T2-L1 art
          * identity is recorded: the ball's row-3 appear install (anim_id 3)
-         * resolves through the render's documented synthetic per-row frame
-         * table, so the drawn sprite is a playart pose until the real
-         * 0x10E200-family tables land (leg T2-L1; the placement half is what
-         * this stratum pins). */
+         * stays the first-hand FU-84 record, while the drawn sprite is the
+         * captured GAMEART0 `ball.fsh` bank (phase-13 T2: the dedicated
+         * FUN_000572E8 draw at slot 22's projection; the pre-T2 narrative's
+         * "playart pose until 0x10E200 lands" is superseded by the re-pin
+         * section above). */
         res->ball_early_drawable = m2_slot_clean_screen(e, 22u, &res->ball_early_sx);
         res->ball_slot_anim = (uint8_t)e->match_run.render.entities[22u].stage.anim_id;
         res->ball_slot_frame = (uint8_t)e->match_run.render.entities[22u].stage.frame;
+        /* phase-13 T2 (FU-158): the dedicated draw's captured source bank. */
+        res->ball_bank = e->match_run.render.ball_bank;
         /* v4 (OL-T11-6 acceptance): the indexed canvas is RGB-visible — at
          * least one non-background pixel maps through the installed surface
          * palette to a non-black RGB triplet, so the palette is applied to
@@ -2512,6 +2554,9 @@ int main(void) {
     assert(res.ball_early_sx == 10266855);
     assert(res.ball_slot_anim == 3u);
     assert(res.ball_slot_frame == 0u);
+    /* phase-13 T2 (FU-158 §5/§8.1): the staged GAMEART0 `ball.fsh` bank is the
+     * dedicated draw's source (91 PLAYART slots + entry 37). */
+    assert(res.ball_bank == 128u);
   }
   assert(res.mask_final == M2_WIRED_MASK);               /* wired-row dispatch set */
   assert(st.presents == (uint64_t)res.steps);

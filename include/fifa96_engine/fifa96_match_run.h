@@ -48,6 +48,14 @@ struct fifa96_surface;
  * the render arrays; the engine keeps the same staging size. */
 #define FIFA96_MATCH_RUN_RENDER_SLOTS 23
 
+/* FU-158 §8.1 (phase-13 T2): the dedicated ball draw's bank capture. The
+ * native presenter FUN_000572E8 draws the GAMEART0 `ball.fsh` bank (BIGF entry
+ * 37; engine bank index = the PLAYART 91-slot offset + 37 = 128) with the
+ * frame from the composer roll byte. `ball_bank` is `FIFA96_MATCH_RUN_BALL_
+ * BANK_NONE` when the staged pitch container carries no `ball.fsh` (the
+ * no-ISO/synthetic-fixture path keeps the FU-84 resolve). */
+#define FIFA96_MATCH_RUN_BALL_BANK_NONE 0xFFu
+
 /* OL-T11-7 HUD: the staged team-name seam's buffer (the native FUN_00017748
  * filters into a 10-byte local; the engine keeps a little headroom). */
 #define FIFA96_MATCH_HUD_NAME_MAX 16
@@ -328,6 +336,15 @@ struct fifa96_match_run_render {
   const uint8_t *frames;                    /* FU-84 frame records (5 B each) */
   const struct fifa96_render_bank *banks;
   uint32_t bank_count;
+  /* FU-158 §8.1/§8.2 (phase-13 T2): the ball slot's dedicated art state. The
+   * native composer maintains the byte [0x155C4E]: the low nibble is the
+   * GAMEART0 `ball.fsh` frame index, advanced +1 per frame while the camera
+   * rate words 0x1577C0/0x1577C2 are non-zero (the engine stand-in is ball
+   * motion — FU-158 L158.2), and the presenter sanitizes a frame >= the bank
+   * count to 0 (0x5739D), clearing the low nibble. `ball_bank` is captured by
+   * BIGF name at staging (0xFF = absent). */
+  uint8_t ball_bank;
+  uint8_t ball_roll;
   const struct fifa96_render_bank *fixed60;
   const struct fifa96_render_bank *fixed61;
   const uint8_t *mirror;                    /* FU-85 §1.3 0x10F2E7 table */

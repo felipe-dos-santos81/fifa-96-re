@@ -301,3 +301,79 @@ census), `/tmp/opencode/r6banks.c` (live engine bank map), `build/fifa96_play` a
 `tests/golden/gameart0.pvi`. Scratch only; not committed.
 Carried docs: FU-84 §3.1/§4, FU-85 §1/§2/§4, FU-86 §1/§2/§4, FU-89 §3.2, FU-71 §4,
 FU-148 §16, FU-152 §2.5, FU-154 §9, plan R6.
+
+## 9. Implementation status (M2 phase-13 T2, 2026-10-11)
+
+T2 implemented the §6/§8 recommendation (T2-L1: slot 22 draws the real ball
+art). Every native window quoted below was re-verified first-hand before
+coding (fresh `disassemble_bytes`/`read_memory`/`fifa96_play` this task).
+
+* **The bank capture (step 1).** `fifa96_match_run_stage` now matches the
+  pitch container's BIGF name `ball.fsh` beside `PALsys.fsh`/`Frames.fsh`/
+  `clockfnt.fsh`/`playfnt.fsh` and commits
+  `render.ball_bank = player.count + entry` on success (first-hand: GAMEART0
+  `auto`/`sprite --name ball.fsh`/`--entry 37` = 60 entries, entry 37
+  `ball.fsh` 8 frames 16x16 — reproduced this task — and PLAYART = 91
+  entries, so the engine bank index is 128). No `ball.fsh` (or an index past
+  the byte bank domain) keeps the `0xFF` sentinel and the FU-84 resolve; the
+  ISO staging test pins both (`test_engine_match_staging.c`).
+* **The roll byte (step 2).** `match_run_scene_stage` advances
+  `render.ball_roll` once per granted frame with the exact native byte op from
+  `0x36F4F..0x36F83` (first-hand bytes this task): `AL = (byte & 0xF) + 1`
+  OR'd into the high nibble (`MOV AL,[0x155C4E]; AND AL,0xF; MOV BL,[0x155C4E];
+  AND BL,0xF0; INC EAX; OR BH,AL` — the carry lands in bit 4, **not** a plain
+  `(lo+1) & 0xF`; §8 step 2's sketch is corrected here), gated by the ball
+  record's motion as the disclosed stand-in for the native camera rate words
+  `0x1577C0`/`C2` (L158.2). The presenter's out-of-range sanitizer
+  (`0x57382..0x573A9`, first-hand this task: `frame = byte & 0xF;
+  if (frame >= [0x108FEC]) { byte &= 0xF0; frame = 0; }` — the native write-
+  back) is applied in the composer right after the advance: the drawn-frame
+  sequence then matches the native drawn sequence (continuous 0..count-1
+  cycling) when the ball is drawn every frame; the native clears at draw time
+  only (culled windows may differ — carried under L158.2).
+* **The dedicated draw (step 3).** `fifa96_match_run_render`'s walk draws
+  `r->banks[r->ball_bank]` frame `ball_roll & 0xF` (sanitized to 0 when
+  >= the bank count) through `fifa96_render_bank_at` + the existing
+  `match_run_draw_sprite` at slot 22's FU-85 clean x/y/scale, bypassing
+  `fifa96_render_resolve` for that slot; direction is not folded (native
+  semantics). The value-0 sentinel branch stays the skip (`:4084`), per §6.
+  The presenter's own blit scale cell `[0x109000]` and screen-pair source
+  (`FUN_00057278` -> `FUN_0009B664`, §4.2) are unported: the port uses the
+  slot's FU-85 projection scale as the derived stand-in (new leg **L158.5**).
+* **No table edits.** `match_run_anim_rows` (row 3), the PLAYART staging and
+  the resolver are untouched; the FU-84 row-3 install remains the first-hand
+  record of what the pose path means.
+* **Tests (RED first).**
+  `tests/test_engine_match_render.c::test_ball_slot_draws_ball_bank_frame`
+  (the draw sources the captured bank; roll selects the frame; the sanitizer
+  and the 0xFF fallback) and `::test_ball_roll_advances_with_ball_motion`
+  (parked = no advance; +1 per moving frame with the count-2 sanitize cycle
+  asserted per frame) — both RED against the pre-fix port (observed asserts:
+  centre pixel 0x22 -> 0x44; roll 0 vs expected 1). The ISO staging test pins
+  `ball_bank == 128` (and the GAMEFLD1 re-stage falling back to the sentinel);
+  the M2 tape's frame-9 stratum pins `ball_bank == 128` too.
+* **Goldens: M2 re-pinned to v13 with the written reason + frame diff** (the
+  intended visible-quality upgrade; `tests/test_engine_m2.c` v13 section, 85
+  lines, lines 1..8 identical, 77 hash-only lines 9..85 differ, zero `state=`
+  diffs; first differing line frame 9 `ab8bded120648826` ->
+  `40270bb4a15d2302`; new M2 sha `5f7e7692…`). **M1 unmoved** `09b726b7…`
+  (byte-exact `cmp`). `make check` 108/108 (sanitized); wired census unchanged
+  at 21/80 (no action row touched).
+* **Smoke (`DISPLAY=:1`, fresh `p13-t2-*`; honest).** The live SDL run reaches
+  the match and the kickoff view draws the ball **as a soccer ball** — the
+  `ball.fsh` sprite is unambiguous in the crop
+  (`docs/screens/p13-t2-ball-crop.png`, 4x); the previous pose art is gone.
+  After the kick the ball leaves the fixed view within ~1 s (the phase-2
+  lead/ kick moves it; no live follow — R2-L4), so the roll frames do not land
+  in the stills: the roll's runtime evidence is the unit test's per-frame
+  sequence and the M2 v13 re-pin. Captures
+  `docs/screens/p13-t2-{frontend,kickoff,live-play,ball-crop}.png`.
+* **Legs.** L158.1 (native entity-pass slot-22 pose suppression — DOSBox-X)
+  unchanged: the pose is no longer *drawn* by the port, but the native retail
+  cull question is still open. L158.2 now also carries the presenter
+  sanitizer's draw-time write-back versus the composer-site emulation and the
+  ball-motion stand-in for the camera-rate gate. L158.3 unchanged (trail ring,
+  `FUN_00057440`, frame-0 quad, `ball2.qfs`). L158.4 unchanged
+  (`[0x109A78]`/bit 0x40). **New L158.5**: the ball presenter's own blit scale
+  `[0x109000]` and the `FUN_00057278` screen-pair source (the port draws
+  through the slot's FU-85 projection).

@@ -242,6 +242,14 @@ static void test_stage_derived_pair_with_iso(void) {
   assert(r->banks[91u + 35u].count == 4u);
   assert(r->banks[91u + 35u].step == 2);
 
+  /* phase-13 T2 (FU-158 §5/§8.1): the dedicated ball draw's bank is captured
+   * by BIGF name — GAMEART0 entry 37 `ball.fsh` (8 frames, 16x16) at the
+   * player-container offset: 91 PLAYART slots + 37 = 128. */
+  assert(r->ball_bank == 128u);
+  assert(r->banks[r->ball_bank].base != NULL);
+  assert(r->banks[r->ball_bank].count == 8u);
+  assert(r->ball_roll == 0u);
+
   /* OL-T11-6: the derived match palette is staged from the pitch container's
    * PALsys.fsh entry (GAMEART0 entry 46; native resource slot 0x32, frame 2)
    * and must equal the pure extraction over the staged bank. */
@@ -343,6 +351,9 @@ static void test_stage_derived_pair_with_iso(void) {
   assert(f.mr.render.palette_ready == 0);
   assert(f.mr.render.hud_bar_ready == 0);
   assert(f.mr.render.hud_font_ready[0] == 0 && f.mr.render.hud_font_ready[1] == 0);
+  /* GAMEFLD1 carries no ball.fsh, so the capture falls back to the 0xFF
+   * "absent" sentinel (the synthetic-fixture path). */
+  assert(f.mr.render.ball_bank == FIFA96_MATCH_RUN_BALL_BANK_NONE);
   assert(fifa96_match_run_render(&f.mr, f.s) == 0);
 
   fixture_drop(&f);

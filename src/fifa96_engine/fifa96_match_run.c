@@ -1401,6 +1401,25 @@ static void match_run_scene_stage(struct fifa96_match_run *mr) {
   ball->stage.hidden = 0;
   r->entity_count = slot + 1;
 
+  /* FU-158 §4.3/§8.2 (phase-13 T2): the composer's ball roll byte. The native
+   * arm (FUN_00036C70 0x36F4F..0x36F83) advances `[0x155C4E]`'s low nibble +1
+   * per composer frame while the camera rate words 0x1577C0/0x1577C2 are
+   * non-zero; the engine's stand-in for those words (the T1/R2-L4 live-camera
+   * leg) is the ball record's motion (FU-158 L158.2). The +1 is the exact
+   * native byte op: `AL = (byte & 0xF) + 1` OR'd into the high nibble, so the
+   * carry lands in bit 4. The presenter's out-of-range sanitizer (0x5739D: a
+   * frame >= the bank count draws frame 0 and clears the low nibble) is
+   * applied here — the drawn-frame-equivalent site; natively it runs at draw
+   * time (L158.2). */
+  if (mr->entities.ball.vel_x != 0 || mr->entities.ball.vel_z != 0) {
+    uint8_t lo = (uint8_t)((r->ball_roll & 0x0Fu) + 1u);
+    r->ball_roll = (uint8_t)((r->ball_roll & 0xF0u) | lo);
+  }
+  if (r->ball_bank != FIFA96_MATCH_RUN_BALL_BANK_NONE &&
+      r->ball_bank < r->bank_count &&
+      (uint32_t)(r->ball_roll & 0x0Fu) >= r->banks[r->ball_bank].count)
+    r->ball_roll &= 0xF0u;
+
   if (!r->frames) return;
   for (uint32_t i = 0; i < r->entity_count; i++) {
     struct fifa96_match_run_entity *e = &r->entities[i];
@@ -1541,6 +1560,9 @@ static void fifa96_match_run_reset_render(struct fifa96_match_run *mr) {
   (void)fifa96_camera_init(&r->camera, 0, 0, 0);
   (void)fifa96_window_init(&r->window, 0, 0);
   (void)fifa96_match_display_init(&r->display, 0);
+  /* FU-158 §8.1 (phase-13 T2): no ball bank until a pitch container stages
+   * one (the FU-84 resolve is the fallback). */
+  r->ball_bank = FIFA96_MATCH_RUN_BALL_BANK_NONE;
   /* FU-154 §5.1 (M2 phase-12 T2): seed the view orientation from the native
    * camera-0 statics (the projection matrix consumes r->yaw/r->pitch at the
    * render call); the prior zero stand-in left the phase-2 ball lead off
@@ -1622,6 +1644,14 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
 #define MATCH_RUN_PALETTE_APPEND_B_LEN 0x4Eu
 #define MATCH_RUN_PALETTE_COUNT 256u
 
+/* FU-158 §5/§8.1 (phase-13 T2): the dedicated ball draw's bank. The native
+ * presenter FUN_000572E8 preloads resource slot 0x29 = the 0x107370 name
+ * table's entry 41 "ball" (FU-152 §2.5) and draws it through GAMEART0 — the
+ * retail entry 37 `ball.fsh` (8 frames, 16x16; first-hand `fifa96_play`
+ * `--name ball.fsh`/`--entry 37` this task). Captured by BIGF name here so the
+ * render's ball slot sources it at the player-container offset. */
+#define MATCH_RUN_BALL_BANK "ball.fsh"
+
 static int match_run_formation_seed(struct fifa96_match_run *mr) {
   struct fifa96_scene_formation formation;
   const char *name;
@@ -1677,6 +1707,8 @@ static void match_run_release_stage(struct fifa96_match_run *mr) {
   mr->render.frames = NULL;
   mr->render.banks = NULL;
   mr->render.bank_count = 0;
+  mr->render.ball_bank = FIFA96_MATCH_RUN_BALL_BANK_NONE;
+  mr->render.ball_roll = 0;
   mr->render.sprite_data = NULL;
   mr->render.sprite_data_len = 0;
   mr->render.enabled = 0;
@@ -4107,10 +4139,28 @@ int fifa96_match_run_render(struct fifa96_match_run *mr, struct fifa96_surface *
     int32_t direction =
         (7 - (int32_t)((uint16_t)((uint32_t)angles[slot] - 0x1000u) >> 13)) & 7;
     fifa96_render_frame frame;
-    err = fifa96_render_resolve(r->entities[slot].stage.anim_id, r->entities[slot].stage.frame,
-                                direction, r->frames, r->entities[slot].bank_index, r->banks,
-                                r->bank_count, r->fixed60, r->fixed61, r->mirror, &frame);
-    if (err != FIFA96_OK) return (int)err;
+    if (slot == (uint32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS) &&
+        r->ball_bank != FIFA96_MATCH_RUN_BALL_BANK_NONE &&
+        r->ball_bank < r->bank_count) {
+      /* FU-158 §6/§8.3 (phase-13 T2): the ball slot's dedicated draw
+       * (FUN_000572E8). The native presenter blits the captured GAMEART0
+       * `ball.fsh` bank's frame `[0x155C4E] & 0xF` — sanitized to frame 0 when
+       * it is >= the bank count (0x5739D) — at the ball's projected screen
+       * pair, direction deliberately unfolded (no mirror). The engine draws it
+       * at slot 22's FU-85 clean x/y/scale instead of resolving the FU-84
+       * row-3 art; the presenter's own scale cell `[0x109000]` is unported
+       * (leg L158.5). */
+      memset(&frame, 0, sizeof frame);
+      int32_t ball_frame = (int32_t)(r->ball_roll & 0x0Fu);
+      if ((uint32_t)ball_frame >= r->banks[r->ball_bank].count) ball_frame = 0;
+      frame.sprite = fifa96_render_bank_at(&r->banks[r->ball_bank], ball_frame);
+    } else {
+      err = fifa96_render_resolve(r->entities[slot].stage.anim_id,
+                                  r->entities[slot].stage.frame, direction, r->frames,
+                                  r->entities[slot].bank_index, r->banks, r->bank_count,
+                                  r->fixed60, r->fixed61, r->mirror, &frame);
+      if (err != FIFA96_OK) return (int)err;
+    }
     if (!frame.sprite || (uintptr_t)frame.sprite < (uintptr_t)r->sprite_data) continue;
     fifa96_sprite_frame sprite;
     err = fifa96_sprite_frame_parse(&sprite_bank,
@@ -4267,6 +4317,7 @@ struct match_stage_set {
   int32_t frames_index;  /* BIGF entry named Frames.fsh, -1 when absent */
   int32_t clockfont_index; /* BIGF entry named clockfnt.fsh, -1 when absent */
   int32_t playfont_index;  /* BIGF entry named playfnt.fsh, -1 when absent */
+  int32_t ball_index;      /* BIGF entry named ball.fsh, -1 when absent (T2) */
 };
 
 /* The native by-name lookup (FUN_000A81A5) lowercases ASCII, so the staged
@@ -4409,6 +4460,7 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
   set->frames_index = -1;
   set->clockfont_index = -1;
   set->playfont_index = -1;
+  set->ball_index = -1;
   uint8_t *container = NULL;
   size_t container_len = 0;
   if (match_stage_container(file, file_len, &container, &container_len) != 0) return -1;
@@ -4431,6 +4483,8 @@ static int match_stage_set_build(struct match_stage_set *set, const uint8_t *fil
       set->clockfont_index = (int32_t)i;
     if (name && match_run_name_eq(name, MATCH_RUN_HUD_FONT_ZOOM_BANK))
       set->playfont_index = (int32_t)i;
+    if (name && match_run_name_eq(name, MATCH_RUN_BALL_BANK))
+      set->ball_index = (int32_t)i;
     uint8_t *bank = NULL;
     uint32_t bank_len = 0;
     uint32_t bank_count = 0;
@@ -4646,6 +4700,16 @@ int fifa96_match_run_stage(struct fifa96_match_run *mr, const struct fifa96_surf
   r->frames = frames;
   r->banks = banks;
   r->bank_count = total;
+  /* FU-158 §8.1 (phase-13 T2): capture the GAMEART0 `ball.fsh` bank (the
+   * dedicated draw's source) at the player-container offset; a pitch container
+   * without the entry (or an index past the byte bank domain) keeps the 0xFF
+   * "absent" sentinel and the FU-84 resolve. */
+  r->ball_bank = FIFA96_MATCH_RUN_BALL_BANK_NONE;
+  if (pitch.ball_index >= 0) {
+    uint32_t ball_slot = player.count + (uint32_t)pitch.ball_index;
+    if (ball_slot <= 0xFFu) r->ball_bank = (uint8_t)ball_slot;
+  }
+  r->ball_roll = 0;
   r->fixed60 = NULL;   /* runtime-populated records, not ISO assets (FU-85 leg 8) */
   r->fixed61 = NULL;
   r->mirror = NULL;    /* 0x10F2E7 is executable data, not on the ISO (FU-85 §1.3) */
