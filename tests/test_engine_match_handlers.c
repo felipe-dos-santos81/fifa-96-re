@@ -370,6 +370,58 @@ static void test_action_10_runs_throw_in_body(void) {
   drop_fixture(&f);
 }
 
+/* FU-157 §4.2/§5 (T1): the throw-in stage-3 camera cut restores the native
+ * `[0x157750] = 0x80`. Native 0x85911..0x85919 (`MOV EAX,0x80`; the record
+ * position MOVSD x3; `MOV [0x00157750],EAX`) then 0x85950/0x85958 pushes the
+ * just-written 0x80 as the FUN_000700F4 Y (CALL 0x700F4 at 0x8596B), so the
+ * cut is FUN_000700F4(rec.pos_x + type<<6, 0x80, rec.pos_z + type<<6, 0). The
+ * Y > 0 wakes the BF20 record-event tail gate (0x7C81B `dword[0x157750] != 0`,
+ * match_run.c:589) and puts a grounded taker's height-table band
+ * `d = [0x157750] - rec.pos_y` at 0x80 >= 0x38 (the airborne kick-route
+ * predicate, 0x1102FE / fifa96_action_handlers.c:113-115) — the bootstrap the
+ * live follow needs (T3 carries the live row selector). */
+static void test_live_throw_in_camera_y_cut(void) {
+  struct fixture f;
+  make_fixture(&f);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &f.mr.entities.team[0].records[i];
+    e->active = 1;
+    e->pos_x = (int32_t)(i * 0x100);
+    e->pos_z = 0;
+    e->target_x = e->pos_x;
+  }
+  f.mr.record.entity_id = 1;               /* team 0, index 1 */
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x10;
+  f.mr.record.frame = 4;                   /* the +0x3D animation-frame gate */
+  f.mr.record.delta = 0x80;                /* the whole-frame [0x157A64] */
+  f.mr.record.stage92 = 0;
+  f.mr.state.phase = 3u;                   /* the throw-in phase gate */
+  f.mr.session_gate_14c32a = 1;            /* live session */
+  f.mr.goal_snap_x = 0x100;
+  f.mr.goal_snap_y = 0;
+  f.mr.goal_snap_z = 0x400;
+
+  /* stage 0 placement -> 1 setup -> 2 probe wait */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  /* the second dispatch crosses the stage-3 cut: the camera is placed at the
+   * record position + the type-0 offset (0, 64) with the native Y = 0x80. */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.render.camera.pos_y == 0x80);
+  assert(f.mr.render.camera.pos_x == 0x110);
+  assert(f.mr.render.camera.pos_z == 0x440);
+  /* the BF20 tail gate's height operand (0x7C81B) is the camera Y: nonzero. */
+  assert(f.mr.render.camera.pos_y != 0);
+  /* the height-table band d = [0x157750] - rec.pos_y >= 0x38 (a grounded
+   * taker: rec.pos_y = 0), the airborne-kick route precondition. */
+  {
+    int32_t d = (int32_t)f.mr.render.camera.pos_y - (int32_t)f.mr.record.pos_y;
+    assert(d >= 0x38);
+  }
+  drop_fixture(&f);
+}
+
 /* FU-149 L13 (T1): the corner taker row 0x11. Stage 0 waits the 0x3C timer,
  * stage 1 runs the FUN_0007D360 corner probe (±0x710,0,±0xB00) ±0x50 and
  * anchors the record there, stages 2..4 advance/setup, stage 5's probe waits
@@ -1974,6 +2026,7 @@ int main(void) {
   test_action_02_restart_and_phase2_arms();
   test_action_1E_runs_claim_place();
   test_action_10_runs_throw_in_body();
+  test_live_throw_in_camera_y_cut();
   test_action_11_runs_corner_body();
   test_action_12_runs_free_kick_body();
   test_action_13_runs_penalty_body();

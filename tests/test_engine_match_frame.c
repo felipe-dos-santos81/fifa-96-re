@@ -2000,6 +2000,87 @@ static void test_live_pass_kick_runs_receive_arm(void) {
   drop_fixture(f);
 }
 
+/* FU-157 §3.4/§5 (T1, R5's measured claim pan): the natural live chain —
+ * kickoff -> KICK -> phase 2 -> the long-ball request -> walk UP to the claim —
+ * fires the row-04 half-line event (outfield.c:686..703: the `has_slot`,
+ * `ball_height == 0` arm seeds `slot_dir_x << 6`, event_code 0x1D),
+ * `fifa96_camera_event_set` seeds the pan (the idle-height arm F8 = 0xC, so
+ * `vel_x = 64/12 = 5`) and binds `tracked = 9` (0x71D27); the FUN_000736AC
+ * integrator then pans `pos_x 0 -> 0x90` with the pan-step decay
+ * 5 -> 3 -> 2 -> 1 -> 0 (pan_counter != 0, so FUN_00070544's slow path with
+ * `k = pan_rate_lo = 24`: `vel = 24*vel/0x20`). One-shot, not a follow (R5).
+ * Measured first-hand at HEAD by the t1probe scratch run and the R5 probes. */
+static void test_live_claim_pan_row04_half_line(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  int32_t id;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 300 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  id = mr.slot.entity;
+  assert(id == 9);
+  rec = &mr.entities.team[0].records[9];
+  {
+    fifa96_platform_key lb = {FIFA96_ENGINE_KEY_LONG_BALL, 1};
+    assert(fifa96_match_run_input(&mr, &lb, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 60 && mr.entities.ball.carrier != id; i++)
+    one_granted_frame(&mr);
+  /* the claim frame carries the row-04 half-line event: the pan seed is the
+   * slot dir << 6 over the idle divisor 0xC (== 5 for dir_x 1), the event is
+   * the idle-height call and 0x71D27 bound the record as tracked. */
+  assert(mr.entities.ball.carrier == id);
+  assert(rec->dir_x == 1 && rec->dir_z == 0);
+  assert(mr.render.camera.vel_x == (int16_t)((rec->dir_x << 6) / 0xC));
+  assert(mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.event_param == 0);
+  assert(mr.render.camera.tracked == id);
+  /* the integrator pan: pos_x walks monotonically to the measured 0x90 stop
+   * with the pan-step decay 5 -> 3 -> 2 -> 1 -> 0. */
+  {
+    static const int16_t decay[5] = {5, 3, 2, 1, 0};
+    int16_t expected = (int16_t)((rec->dir_x << 6) / 0xC);
+    int32_t prev_pos = mr.render.camera.pos_x;
+    int step = 0;
+    assert(expected == decay[0]);
+    for (int i = 0; i < 40; i++) {
+      one_granted_frame(&mr);
+      if (mr.render.camera.vel_x != expected) {
+        step++;
+        assert(step < 5);
+        expected = mr.render.camera.vel_x;
+        assert(expected == decay[step]);
+      }
+      assert(mr.render.camera.pos_x >= prev_pos);
+      prev_pos = mr.render.camera.pos_x;
+    }
+    assert(step == 4);                              /* the whole decay ran */
+    assert(mr.render.camera.vel_x == 0);
+    assert(mr.render.camera.pos_x == 0x90);         /* the measured stop */
+    assert((int16_t)mr.render.camera.speed == 0);
+  }
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-147 S1: the per-frame driver runs the shared mover for every dispatched
  * record (native FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5; the
  * pool loop keeps the +0x9A skip) and the BF20 lane block
@@ -4498,6 +4579,7 @@ int main(void) {
   test_live_airborne_long_ball_seed_then_band2_follow();
   test_live_long_ball_mode40_band2_follow();
   test_live_pass_kick_runs_receive_arm();
+  test_live_claim_pan_row04_half_line();
   test_live_ball_record_produced_in_open_play();
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();

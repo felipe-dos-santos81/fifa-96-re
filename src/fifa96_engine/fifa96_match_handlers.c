@@ -1464,7 +1464,11 @@ static int fifa96_match_action_10(struct fifa96_match_run *mr) {
       uint32_t dir_idx = (uint32_t)r->actor_type & 0x1Fu;
       int32_t dx = (int32_t)match_kick_dir_x[dir_idx] << 6;
       int32_t dz = (int32_t)match_kick_dir_z[dir_idx] << 6;
-      (void)fifa96_camera_init(&mr->render.camera, r->pos_x + dx, 0,
+      /* FU-157 §4.2/§5 (T1): the native cut writes `[0x157750] := 0x80`
+       * (0x85911/0x85919) and hands the just-written value to FUN_000700F4
+       * as its Y (0x85950/0x85958; CALL at 0x8596B), so the place is
+       * (rec.x + dx, 0x80, rec.z + dz) — the Y is preserved, not zero. */
+      (void)fifa96_camera_init(&mr->render.camera, r->pos_x + dx, 0x80,
                                r->pos_z + dz);
     }
     /* 0x85966..0x85CA1: the dropped 0x8DCD4 clamp/folds/0x79C50/0x92820/

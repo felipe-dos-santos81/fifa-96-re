@@ -516,3 +516,66 @@ long-ball release staged `pair.code == 1`, `flags == 0x10`, `ack == 0`.
 Carried docs: FU-96 §4/§7, FU-148 §12/§13/§15, FU-152 §2.8/2.9, FU-153
 §4-5/§10-11, FU-154 §2-5/§9, FU-156 §2-3/§5, FU-149 §1.6 stage table,
 FU-70 §slot `+0x23`.
+
+---
+
+## 9. Implementation status (M2 phase-13 T1, 2026-10-11)
+
+T1 implemented the two bounded pieces of the §5 recommendation; the airborne
+integration stays with T3/T1-L1. Every native window quoted below was
+re-verified first-hand before coding (fresh `disassemble_bytes` this task).
+
+* **The claim pan is asserted live (step 1).** New ISO test
+  `tests/test_engine_match_frame.c::test_live_claim_pan_row04_half_line`
+  drives the measured chain (kickoff -> KICK -> phase 2 -> the long-ball
+  request -> walk UP to the claim) and pins: at the claim frame
+  `camera.vel_x == (slot dir_x << 6)/0xC == 5`, `vel_z == 0`,
+  `event_param == 0`, `tracked == 9`; then over 40 granted frames
+  `camera.pos_x` walks monotonically `0 -> 0x90` with the pan-step decay
+  `5 -> 3 -> 2 -> 1 -> 0`. Sensitivity was RED-verified by a scratch mutation
+  of the row-04 event wiring (`fifa96_match_handlers.c:2431`
+  `if (0 && out.events != 0 && out.event_code != 0)`, reverted): the test
+  fails on the `vel_x` assert (assertion aborts, exit 134).
+* **The throw-in stage-3 Y cut restored (step 2).** `fifa96_match_action_10`
+  stage 3 (`fifa96_match_handlers.c:1467` region) now places the camera
+  `(rec.pos_x + dx, 0x80, rec.pos_z + dz)` — the native `[0x157750] := 0x80`
+  (first-hand this task: `0x85911 MOV EAX,0x80`; `0x85916..0x85918` the
+  record-position MOVSD x3; `0x85919 MOV [0x00157750],EAX`; `0x85950/0x85958`
+  `PUSH [0x157750]`; `0x8596B CALL 0x700F4`), where dx/dz are the ported
+  `match_kick_dir_x/z[type]<<6`. New unit test
+  `tests/test_engine_match_handlers.c::test_live_throw_in_camera_y_cut`
+  drives the real action-row dispatch to stage 3 and asserts
+  `camera.pos_y == 0x80`, `(pos_x, pos_z) == (0x110, 0x440)`, the BF20 tail
+  gate's height operand nonzero (`0x7C81B`, `match_run.c:589`), and the
+  height-table band `d = 0x80 - rec.pos_y >= 0x38` (the airborne-kick route
+  precondition, `fifa96_action_handlers.c:113-115`). RED first (the assert
+  `pos_y == 0x80` failed against the pre-fix port which passed `0`), GREEN
+  after.
+* **Re-verified native windows (this task).** `0x7ED89..0x7EDE3` (the row-04
+  half-line gate: `0x7ED89 EAX=0x40`; `0x7ED99 SUB EAX,EBX` (timer81);
+  `0x7ED9B CMP AX,CX` (lane) `JGE 0x7EDCE`; `0x7EDB2 CMP EAX,0x90`;
+  `0x7EDD8 CMP dword[0x157750],0x50` `JLE 0x7EE4B`) — the §3.2 quote holds.
+  `0x85904..0x85970` — the §4.2 quote holds (the Y pushed is the
+  just-written 0x80; the 4th argument PUSH 0 at `0x85927` = flag 0).
+* **Post-T3 extension path (unchanged from §5 step 3).** With the Y producer
+  live after any throw-in: a jumping record's kick takes the height-table
+  code-4 row (`d = 0x80 - rec.pos_y >= 0x38`), the mode-0x40 draw stages
+  `traj 0x90..0xE0`/`0x100`, the receive arm sets `event_param > 0xF0` +
+  `tracked`, and `fifa96_match_run_camera_follow` drives the sustained pan —
+  gated on T1-L1/T3's live row selector (the hand-off this doc's R5-L2
+  names). No live grounded kick's band is changed by this slice (only the
+  throw-in cut).
+* **Goldens: no re-pin** (the tape stages no throw-in; the claim pan is
+  live-only). M1 byte-exact `09b726b7…`; M2 byte-exact `2759dace…`;
+  `make check` 108/108 (sanitized); wired census unchanged at 21/80.
+* **Smoke (`DISPLAY=:1`, fresh `p13-t1-*`; honest).** The live SDL run
+  reaches the match and phase 2 (the HUD clock ticks on the held-Z kickoff
+  kick; quick taps can be missed), and the pad drives the controlled record
+  (walk-window blob displacement). The sampled walk windows show **no
+  whole-scene translation** (a standing record's screen column stays fixed
+  within +-15 px over multi-second windows while other blobs move), so the
+  `0 -> 0x90` claim pan is not isolated on screen; one sampled window shows
+  a hard camera re-place to a player close-up (clock 00:19), consistent with
+  a restart cut but not instrumented. The ISO test above is the primary pan
+  evidence; captures
+  `docs/screens/p13-t1-{frontend,kickoff,live-play,walk,camera-cut}.png`.

@@ -206,6 +206,26 @@ starts the clock and empties the slot through the roll, holding UP moves the
 controlled record (scene AE 2636; clock 00:02..00:15) and the camera does not
 re-centre (no visible follow; legs T1-L3/R2-L4). `make check` 108/108 under
 the sanitized engine; wired 21/80 (README title 26%).
+**Phase-13 T1 (2026-10-11) lands the live camera place/pan producers
+(FU-157 §5 steps 1-2):** the measured claim pan is now asserted live — the
+new ISO chain `test_live_claim_pan_row04_half_line` drives kickoff -> KICK ->
+phase 2 -> the long-ball request -> walk UP to the claim and pins the row-04
+half-line event seed (`vel_x = (slot dir_x << 6)/0xC = 5`), `tracked = 9`,
+`event_param = 0` and the FUN_000736AC pan `pos_x 0 -> 0x90` with the
+pan-step decay `5 -> 3 -> 2 -> 1 -> 0` (sensitivity RED-verified by a
+reverted scratch mutation of the event wiring) — and the throw-in stage-3
+camera cut restores the native `[0x157750] = 0x80` (`0x85911/0x85919`; the
+`FUN_000700F4` Y at `0x85950/0x85958`), pinned by the new unit test
+`test_live_throw_in_camera_y_cut` (`pos_y == 0x80`, the BF20 tail-gate
+operand nonzero, the height-table band `d >= 0x38`; RED before, GREEN
+after). The follow itself stays T3-gated (the restored Y is the bootstrap the
+airborne route needs; the live row selector is T1-L1/T3). Goldens unmoved
+(M1/M2 byte-exact; live-only paths); `make check` 108/108 sanitized; wired
+21/80 (README title 26%). The honest `p13-t1-*` smoke reaches phase 2
+(clock ticks on the held-Z kickoff kick) and moves the controlled record, but
+the sampled walk windows show no whole-scene pan translation; one window
+shows a hard camera re-place close-up — the `0 -> 0x90` slide's primary
+evidence is the ISO assert.
 Kicking the ball stays blocked
 interactively as a *gameplay* outcome: the roll-window slot draw is
 presentation (the phase-12 T2 camera-derived lead + the seeded native view),
