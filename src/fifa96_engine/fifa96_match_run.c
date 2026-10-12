@@ -1012,7 +1012,7 @@ int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
   e->anim_id = (uint8_t)id;
   e->frame = frame;
   e->row44 = (uint8_t)(row.flags & 0x01u);            /* 0x6E6CC */
-  e->aux_seen = 0xFFFFu;                              /* force the +0x36 re-arm */
+  e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;    /* force the +0x36 re-arm */
   slot = (uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS + e->index;
   if (slot < FIFA96_MATCH_RUN_RENDER_SLOTS)
     mr->render.entities[slot].anim_timer = 0;         /* word[+0x32] = 0 */
@@ -1050,7 +1050,7 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
   e->anim_id = next;
   e->frame = (uint8_t)frame;
   e->row44 = (uint8_t)(next_row.flags & 0x01u);
-  e->aux_seen = 0xFFFFu;
+  e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;
   return FIFA96_OK;
 }
 
@@ -1143,7 +1143,9 @@ static void match_run_record_impulse(struct fifa96_match_run_record *r, int shif
  * NOT `word[+0x81]`: `dword[+0x81] >> 16` is the word at `+0x83` (the trap);
  * the decayed countdown `word[+0x81]` is a different cell (`0x7CA5C`
  * `CMP word[EAX+0x81],0` / `0x7CA78` zeroes it). `ramp(0x10) = 15` (crest 16)
- * and `ramp(0x18) = 18` are the live bases. */
+ * and `ramp(0x18) = 18` are the live bases. Returns `aux` with each fired
+ * one-shot arm's byte consumed (0x0E/0x3A; FU-161 §5.4) — the caller writes
+ * the return back to `r->aux_word`. */
 static uint16_t match_run_record_jump_arm(struct fifa96_match_run_record *r,
                                           uint16_t aux) {
   uint16_t word = aux;
@@ -1396,7 +1398,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
    * frame) resolve edge and the one-shot arms clear their own byte, so the
    * engine reads `e->aux_word`, not the raw frame aux every tick. The action
    * handler may have installed a row through the helper (which sets
-   * `aux_seen = 0xFFFF`), so the edge check runs after the dispatch. */
+   * `aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE`), so the edge check runs
+   * after the dispatch. */
   {
     uint16_t seen = (uint16_t)(((uint16_t)e->anim_id << 8) | e->frame);
     if (seen != e->aux_seen) {                    /* the +0x36 resolve edge */

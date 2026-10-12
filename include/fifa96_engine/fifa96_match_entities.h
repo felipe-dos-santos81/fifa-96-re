@@ -50,6 +50,11 @@
 /* Unset entity pointer (the native NULL), used by every selection field. */
 #define FIFA96_MATCH_ENTITY_NONE (-1)
 
+/* The `aux_seen` re-arm sentinel: `anim_id` stays < 0x70, so 0xFFFF can
+ * never equal a live `(anim_id << 8) | frame` key (row install/successor
+ * force the next resolve edge to re-arm). */
+#define FIFA96_MATCH_ENTITY_AUX_SEEN_NONE 0xFFFFu
+
 /* One derived native record (stride 0xB2). The native `[rec+0]` team
  * back-pointer is `team`; `index` is the record's position in its team block
  * (record 0 follows the keeper machine, FU-67 §3.2). */
@@ -86,7 +91,8 @@ struct fifa96_match_entity {
                              * The FUN_0006E8E8 dispatch consumes its two bytes
                              * as two passes; one-shot arms clear their own
                              * byte (FU-161 §5.4). Re-armed on the (anim_id,
-                             * frame) resolve edge; `aux_seen` 0xFFFF forces a
+                             * frame) resolve edge; `aux_seen =
+                             * FIFA96_MATCH_ENTITY_AUX_SEEN_NONE` forces a
                              * re-arm (row install). */
   uint16_t aux_seen;        /* derived: (anim_id << 8) | frame of the last
                              * aux resolve */

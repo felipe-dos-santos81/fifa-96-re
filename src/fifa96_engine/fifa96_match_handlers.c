@@ -1229,6 +1229,16 @@ static struct fifa96_match_entity *match_sp_entity(struct fifa96_match_run *mr,
               .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
 }
 
+/* The shared camera stand-in triple (`[0x15779x]`): row 0x0E's stage-0/1
+ * hatches both copy it (native per-hatch `MOV` triples at `0x8276A..` and
+ * `0x827B1..`); named so the two arms cannot drift. */
+static void match_target_from_camera(const struct fifa96_match_run *mr,
+                                     struct fifa96_match_run_record *r) {
+  r->target_x = mr->render.camera.pos_x;
+  r->target_y = mr->render.camera.pos_y;
+  r->target_z = mr->render.camera.pos_z;
+}
+
 /* Row 0x0E `0x82710..0x82ACF` (FU-160 §2, fresh `disassemble_bytes` this
  * task; FU-137 table entry 14): the **live jump selector** — the installed
  * entity's code is drained into the pool by the row-23 tackle arm
@@ -1281,9 +1291,7 @@ static int fifa96_match_action_0E(struct fifa96_match_run *mr) {
       match_row_reset(mr, e);
       return FIFA96_OK;
     }
-    r->target_x = mr->render.camera.pos_x;           /* 0x8276A FUN_00071B9C */
-    r->target_y = mr->render.camera.pos_y;
-    r->target_z = mr->render.camera.pos_z;
+    match_target_from_camera(mr, r);                 /* 0x8276A FUN_00071B9C */
     {
       fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
       fifa96_arm_vec to = { r->target_x, r->target_y, r->target_z };
@@ -1296,9 +1304,7 @@ static int fifa96_match_action_0E(struct fifa96_match_run *mr) {
     r->stage92 = 1u;                                 /* 0x827AB */
   }
   if (r->stage92 == 1u) {                            /* 0x827B1 */
-    r->target_x = mr->render.camera.pos_x;           /* [0x157794] stand-in */
-    r->target_y = mr->render.camera.pos_y;
-    r->target_z = mr->render.camera.pos_z;
+    match_target_from_camera(mr, r);                 /* [0x157794] stand-in */
     e->timer93 = 0x10;                               /* 0x827BE FUN_00079B58 */
     if (r->timer89 < 0x0C) return FIFA96_OK;         /* 0x827C3/0x827CA */
     if (fifa96_match_run_record_anim_install(mr, e, 0x12, 0) != FIFA96_OK)
