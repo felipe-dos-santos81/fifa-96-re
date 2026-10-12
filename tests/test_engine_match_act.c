@@ -124,15 +124,27 @@ static void test_tick_timer_and_completion(void) {
   assert(fifa96_match_act_tick(NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* Row 0x17 is NOT counted: its table slot is NULL (no engine installer — the
+ * rows-27/29/2C precedent; see the handlers.h declaration / FU181-L1), so the
+ * dispatcher returns UNSUPPORTED while the ported body stays reachable by
+ * direct call (the tests below). */
+static void test_row_17_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_action_table[0x17].fn == NULL);
+  assert(fifa96_match_dispatch_action(&mr, 0x17u) == -FIFA96_ERR_UNSUPPORTED);
+}
+
 /* The FU-181 §2 row-0x17 phase gate: a non-0xB phase takes the `0x849A1`
- * FUN_0007DAB4 reset tail; phase 0xB runs the stage walk. */
+ * FUN_0007DAB4 reset tail; phase 0xB runs the stage walk. The body is called
+ * directly (the slot is NULL). */
 static void test_row_17_phase_gate_resets(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   mr.record.entity_id = 1;                    /* team 0 record 1 */
   mr.state.phase = 4u;                        /* != 0xB */
   mr.entities.team[0].records[1].code = 7;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[1].code == 0u);    /* reset installed 0 */
   assert(mr.entities.team[0].records[1].timer89 == 0);
 }
@@ -151,7 +163,7 @@ static void test_row_17_stage_walk(void) {
   /* stage 0, pos_z <= 0 -> target z = -0x50 */
   mr.record.stage92 = 0;
   mr.record.pos_z = 0;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.target_x == -0x680);
   assert(mr.record.target_y == 0);
   assert(mr.record.target_z == -0x50);
@@ -160,30 +172,30 @@ static void test_row_17_stage_walk(void) {
   /* positive pos_z -> +0x50 */
   mr.record.stage92 = 0;
   mr.record.pos_z = 3;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.target_z == 0x50);
   /* stage 1: the timer waits to 0x3C */
   mr.record.stage92 = 1;
   mr.record.timer89 = 0;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.stage92 == 1u && mr.record.timer89 == 2);
   mr.record.timer89 = 0x3C - 2;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);  /* stage1->2->3 */
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);  /* stage1->2->3 */
   assert(mr.record.stage92 == 3u);
   assert(mr.record.timer89 == 0);
   assert(mr.record.pos_x == -0x860);          /* the stage-2 +0x59 write */
   assert(mr.record.pos_y == 0 && mr.record.pos_z == 0);
   /* stage 3: wait then reset */
   mr.record.timer89 = 0;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.stage92 == 3u && mr.record.timer89 == 2);
   mr.record.timer89 = 0x3C - 2;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[1].code == 0u);   /* 0x849A1 reset */
   /* stage > 3: the 0x8476D JA epilogue, no reset */
   mr.record.stage92 = 4;
   mr.entities.team[0].records[1].code = 9;
-  assert(fifa96_match_dispatch_action(&mr, 0x17u) == FIFA96_OK);
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[1].code == 9u);
   assert(mr.record.stage92 == 4u);
 }
@@ -193,6 +205,7 @@ int main(void) {
   test_dispatch_installs_and_latches();
   test_dispatch_invoke_runs_handler();
   test_tick_timer_and_completion();
+  test_row_17_not_counted();
   test_row_17_phase_gate_resets();
   test_row_17_stage_walk();
   puts("test_engine_match_act OK");

@@ -352,8 +352,11 @@ seam (FU-175) as step 1:
    `0x84720` 4-arm stage walk (stage 0 target `-0x680`/±`0x50` by the
    position-z sign and `+0x92`++; stage 1 wait `+0x89 >= 0x3C`; stage 2 the
    `+0x59 := 0xFFFFF7A0 (-0x860)` write; stage 3 wait then reset) and the
-   `0x8476D JA` abort-free epilogue. Slot `fifa96_match_action_table[0x17]`
-   is set. The formation matrices, `0x8DCD4`/`0x8C758`/`0x6E598`/`0x45001`/
+   `0x8476D JA` abort-free epilogue. The action-table slot
+   `fifa96_match_action_table[0x17]` stays **NULL** — a ported body with no
+   engine installer is not counted (the rows-27/29/2C precedent); the body is
+   exported and tested directly (FU181-L1). The formation matrices,
+   `0x8DCD4`/`0x8C758`/`0x6E598`/`0x45001`/
    `0x4728C`/`0x4C324` and `0x10F370`/`0x1587FC` stay FU181-L4 legs.
 3. **Act-4 producer** — *not* landed as a live producer; the honest finding is
    that act 4 stage 0's row-0x17 install is gated on a formation-matrix
@@ -364,13 +367,14 @@ seam (FU-175) as step 1:
    and row 0x17 has **no live producer this session** — the FU181-L1 dormancy.
    Wiring act 4 through the seam (`fifa96_match_act_dispatch`) is the seam's
    job and is ready; the `0x8AB08..0x8AB62` sit-2..4 formation-order gate
-   (FU-149 L12) is the missing invoker. Row 0x17 is therefore **wired but
-   armed-path dormant** — the same honesty class as the FU-149 taker rows.
+   (FU-149 L12) is the missing invoker. Row 0x17 is therefore **not counted**
+   (its table slot stays NULL — the rows-27/29/2C precedent), pending act 4 +
+   the sit-2..4 arm; the body is kept reachable/tested.
 4. **Act 8 / act 9** — act 9 (phase 0x1F, `0x88F4C`) landed via FU-175 §7
    rank 1 (the first honest phase row). Act 8 (phase 0x1E) stays open.
 
 **Tape: byte-identical** (M1 `09b726b7…`, M2 `7b4b241a…` v14; no re-pin).
-**Census:** 24/80 → 26/80 (25 action + 1 phase) = 32%.
+**Census:** 24/80 → 25/80 (24 action + 1 phase) = 31%.
 
 The §4 dual-identity hazard (FU165-L9) is not exercised in the engine: phase
 0x1F is reached only through the global act tick, never the per-record

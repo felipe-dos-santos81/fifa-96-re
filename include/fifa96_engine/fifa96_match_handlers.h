@@ -77,3 +77,15 @@ int fifa96_match_dispatch_action(struct fifa96_match_run *mr, uint8_t code);
  * `[rec+0x1C](rec, rec+0x4D)`); this seam passes only `mr` today. Task 10
  * (plan C10) may extend the handler typedef when it adds the record walk. */
 int fifa96_match_dispatch_phase(struct fifa96_match_run *mr, uint8_t phase);
+
+/* The ported action row-0x17 body (FU-181 §2): the line-up walk
+ * `0x84730..0x849AF`. Its action-table slot (`fifa96_match_action_table[0x17]`)
+ * is **NULL** — the row is not counted — because no engine path installs it:
+ * the only static installer is act-4 stage 0 (`0x89740`, invoke-now), whose
+ * invoker (the `FUN_0008A938` sit-2..4 formation-order gate `0x8AB08..0x8AB62`,
+ * FU-149 L12) and the formation matrices are unported (FU181-L1). This is the
+ * rows-27/29/2C precedent (a ported body with no engine installer stays
+ * unwired and uncounted); the body is exported so it is tested directly and
+ * ready for the act-4 seam. Returns FIFA96_OK, -FIFA96_ERR_INVALID (NULL `mr`
+ * or an unset `mr->record.entity_id`). */
+int fifa96_match_action_17(struct fifa96_match_run *mr);

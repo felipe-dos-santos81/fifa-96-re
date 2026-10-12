@@ -3426,8 +3426,10 @@ static int fifa96_match_action_0C(struct fifa96_match_run *mr) {
  * (`0x8476D CMP AL,3; JA 0x849A6`). The row's only producer is act-4 stage 0
  * (`0x89740`, invoke-now), which the engine cannot reach until the
  * `FUN_0008A938` sit-2..4 formation-order gate `0x8AB08..0x8AB62` (FU-149 L12)
- * lands (FU181-L1): row 0x17 is wired but its armed path is dormant. */
-static int fifa96_match_action_17(struct fifa96_match_run *mr) {
+ * lands (FU181-L1): the action-table slot stays NULL (the rows-27/29/2C
+ * precedent — a ported body with no engine installer is not counted) and the
+ * body is reachable by direct call / the future act-4 seam. */
+int fifa96_match_action_17(struct fifa96_match_run *mr) {
   static const uint8_t gates[1] = {0x0Bu};
   struct fifa96_match_run_record *r = &mr->record;
   struct fifa96_match_team *team;
@@ -3539,8 +3541,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x14, NULL, "FU-137 §6: FU-136 row 14: not ported (partial); scatter_celebration helpers; OL-9"},
     {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
     {0x16, NULL, "FU-137 §6: FU-136 row 16: not ported (partial); sequence_marker/rng_event; OL-9"},
-    {0x17, fifa96_match_action_17,
-     "FU-181 §2 (phase-15 T1): row 17 ported over the action-stage helpers (0x84730..0x849AF: the 0x84743 phase-0xB gate, the 0x84720 4-arm stage table, the -0x680/±0x50 facing walk and the 0x849A1 0x7DAB4 reset); the formation-matrix/0x8DCD4/0x8C758/0x6E598/0x45001/0x4728C/0x4C324 sinks stay FU181-L4; the only producer (act-4 stage 0, 0x89740) is gated by the sit-2..4 formation-order arm 0x8AB08..0x8AB62 (FU-149 L12) -> wired, armed path dormant (FU181-L1)"},
+    {0x17, NULL,
+     "FU-181 §2 (phase-15 T1): row 17 body ported (fifa96_match_action_17, 0x84730..0x849AF: the 0x84743 phase-0xB gate, the 0x84720 4-arm stage table, the -0x680/±0x50 facing walk and the 0x849A1 0x7DAB4 reset); NOT counted — no engine installer: the only producer act-4 stage 0 (0x89740) is behind the unported sit-2..4 formation-order arm 0x8AB08..0x8AB62 (FU-149 L12) and the unported formation matrices; the rows-27/29/2C precedent (ported body, entry unresolved); FU181-L1; OL-9; -UNSUPPORTED"},
     {0x18, fifa96_match_action_18,
      "FU-139 §10/FU-137: row 18 ported (0x849B0..0x84AE1 machine; 0x4C324 bind, 0x8DB6C NSEARCH + 0x786A0 SWAP, 0x7DAB4 reset) over the pool; install arm 0x8A32F; anim row byte and bind globals OL-68"},
     {0x19, NULL, "FU-140 §2/§3: row 19 not ported (partial); keeper_hold_* + FU-140 fallback; OL-33"},

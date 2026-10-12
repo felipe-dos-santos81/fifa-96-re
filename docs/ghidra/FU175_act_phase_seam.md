@@ -507,11 +507,12 @@ per-record walk.
 act-9 tick reproduces the exact FU-170 §7 cadence (the same-frame arm+tick
 leaves `mr.act.timer == 2`), which is why the v14 strata held.
 
-**Census.** +1 action row (0x17, the FU-181 row) and +1 phase row (0x1F) →
-the action+phase census moves 24/80 → 26/80 (25 action + 1 phase) = **32%**
-(README title recomputed in the same commit). The action row 0x17 is wired but
-its armed path is dormant (its only producer, act-4 stage 0, is behind the
-unported sit-2..4 formation-order arm; FU181-L1).
+**Census.** +1 phase row (0x1F) → the action+phase census moves 24/80 →
+25/80 (24 action + 1 phase) = **31%** (README title recomputed in the same
+commit). The action row 0x17 has a **ported body but is not counted** — the
+rows-27/29/2C precedent: no engine installer, since its only producer, act-4
+stage 0, is behind the unported sit-2..4 formation-order arm; the table slot
+stays NULL (FU181-L1).
 
 **Legs.** FU175-L1 (the per-record `[rec+0x1C]` caller) stays open; FU175-L3
 (the singleton) is now realised by the shared `mr->act` slot — no current

@@ -501,10 +501,11 @@ targets in the FU docs.
 `fifa96_match_dispatch_phase` its first live caller and absorbing the FU-170 §7
 ad-hoc act-9 singleton. The phase table gains its first honest row — phase
 `0x1F` (= act 9 handler `0x88F4C`), reached each granted frame by the live
-sit-0xC act-9 producer — and action row `0x17` (the line-up walk, FU-181) is
-wired (its producer act 4 stays behind the unported formation-order arm, so it
-is wired but armed-path dormant). M1/M2 stayed byte-identical (no tape re-pin);
-the derived action+phase census moved 24/80 → 26/80 (**32%**).
+sit-0xC act-9 producer — while action row `0x17` (the line-up walk, FU-181)
+gains a ported body but is **not counted** (no engine installer: its producer
+act 4 stays behind the unported formation-order arm — the rows-27/29/2C
+precedent). M1/M2 stayed byte-identical (no tape re-pin); the derived
+action+phase census moved 24/80 → 25/80 (**31%**).
 
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
