@@ -602,3 +602,40 @@ Fresh-byte corrections and implementation notes (appended errata):
    it non-deterministic), so the chain's coverage is the unit dispatch chain
    at the exact `fifa96_match_dispatch_action` seam the frame loop calls;
    the live pad smoke stays with FU169-L5/L6 and T4's acceptance.
+
+## T1 fix round 1 (2026-10-12 — append-only)
+
+The task review found two must-fixes in the landed `fifa96_match_action_0C`
+port; both are corrected with fresh bytes re-read this session:
+
+1. **The foul-path velocity uses A's facing** (the FU-160 §1.1 phrasing
+   erratum; quoted correction appended there). Fresh: `0x81DFE MOV
+   EAX,[0x15888F]` (A) -> `0x81E13 MOV EAX,[EAX+0x7B]; SAR 0x10` =
+   `word[A+0x7D]`, and `0x81E49` re-loads A for the `+0x100` term; the
+   magnitude stays B's (`0x81E36 MOV EBX,[EBP+0x6F]`). The port now computes
+   `mul16(B.speed71, sine(A.face7d))` / `sine(A.face7d + 0x100)`;
+   `test_action_0c_stage0_gates_and_foul_path` stages A's face `0x100` vs B's
+   `0` (mutation-RED verified: reverting to B's face fails `vel73 == 8`).
+2. **The foul tail (`0x81ED5..0x81F48`) is now ported** — it runs on every
+   foul exit (the `0x81ECD` clear and the `0x81ECB` jump both land there):
+   `byte[B+0x98] = 1` (`0x81ED5`), one `0x92AC8` draw -> `(AL & 3) != 0 ?
+   row 0x0D : row 0x52` installed on B (`0x81EEC..0x81F01`), `ran = 1`
+   (`0x81F2F`), `timer89 = 0` (`0x81F3C`) and the **stage 0 -> 1** advance
+   (`0x81F48`) — without it B re-fouled every frame. The whistle
+   `0x974DC(0x1F)` (`0x81F06`) and the `[team+0x7B2]==B` `0x8DDE0` re-pick
+   (`0x81F10..0x81F2F`) are the new **FU169-L9** leg; the native's
+   fall-through into the (leg) stage-1 arm after the advance is noted in the
+   body. The cited re-call range is corrected to `0x81E8A..0x81ED4` (the
+   `0x81ED5` byte is the tail's `MOV`, not the `0x81EBF` `0x8A43C` call).
+   `test_action_0c_stage0_gates_and_foul_path` pins the tail
+   (`skip_98`/`anim 0x0D|0x52`/`ran`/`timer89`/`stage 1`; mutation-RED
+   verified by removing the advance).
+3. **FU169-L4's range re-verified after the port**: the stage table `0x81C74`
+   (fresh `read_memory`) puts stages 1..6 at `0x81F4E/0x81FA7/0x8244B/
+   0x8247D/0x824CD/0x824F2` with the shared `RET` at `0x8250B`; the doc's
+   earlier `0x81F4E..0x8251B` over-runs into the next body's prologue
+   (`0x8251C`). The engine comment now cites `0x81F4E..0x8250B`; the L4 leg
+   (the stage arms + the retry exit) is otherwise unchanged. Because the foul
+   tail now advances B to stage 1, the unported stage-1 arm means B waits
+   there instead of re-fouling — the intended bounded behavior, carried by
+   L4.

@@ -2105,6 +2105,20 @@ the build also produces the windowed `fifa96` target (`make game`).
     view — the R2-L4/T2 follow leg, unchanged). The duel/0x5E chain's runtime
     evidence is the dispatch-chain tests (the pad producer needs the
     PASS+LONG_BALL bits and a band/RNG window).
+  - **Fix round 1 (2026-10-12, review).** Two must-fixes in the 0x0C port:
+    (i) the foul-path velocity's sine input is **A's** face (`0x81DFE` loads A
+    into EAX, `0x81E13` reads `word[A+0x7D]`; the magnitude `0x81E36` is B's
+    `speed71`) — FU-160 §1.1's "EBP's facing-relative +0x73/+0x75 words"
+    erratum appended there; the test stages A face `0x100` vs B `0` (mutation
+    RED-verified); (ii) the foul tail `0x81ED5..0x81F48` is ported —
+    `byte[B+0x98] = 1`, one RNG draw -> anim row 0x0D/0x52 on B, `ran`,
+    `timer89 = 0` and the **stage 0 -> 1** advance (otherwise B re-fouled
+    every frame); the whistle `0x974DC(0x1F)` + the `0x8DDE0` re-pick are the
+    new leg FU169-L9. The re-call cite is corrected to `0x81E8A..0x81ED4` and
+    FU169-L4's stage range re-verified as `0x81F4E..0x8250B` (the doc's
+    `..0x8251B` over-runs into the next body). The retry test gained the
+    discriminating completing half (arm-disabled mutation RED-verified).
+    `make check` 109/109; M1/M2 byte-exact; census 24/80 unchanged.
 - **M2 phase-7 P4 (presentation residual, FU-152; 2026-10-09).** Landed from
   the frozen FU-152 slice (`fifa96_match_run_render` rows R1/R2/R3 + the R5
   dormancy pin, the camera handler bodies, the FU-71 residual helpers, the

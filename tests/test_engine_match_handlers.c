@@ -2240,6 +2240,22 @@ static void test_action_0e_stage2_else_arm_gate_retry(void) {
   assert(f.mr.record.stage92 == 3u);
   assert(cam->pos_x == 0x300 && cam->pos_z == 0x200);
   assert(cam->tracked == FIFA96_CAMERA_TRACKED_NONE);
+
+  /* the gate restored -> the arm completes. This closing half is the
+   * discriminating assertion: with the else arm absent every dispatch above
+   * and this one would leave stage 2 / the focus / the bind untouched. */
+  f.mr.record.jump_base = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.timer89 = 5;
+  cam->pos_y = 0x40;
+  e->lane_x = 0x20;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0E) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  assert(f.mr.record.timer89 == 0);
+  assert(cam->tracked == 1);                    /* the [0x1577CA] bind */
+  assert(cam->pos_x == 0x300);                  /* dir_x[0] = 0 */
+  assert(cam->pos_z == 0x200 + 0x40);           /* dir_z[0] = 1 */
+  assert(cam->event_param != 0);
   drop_fixture(&f);
 }
 
@@ -2357,34 +2373,49 @@ static void test_action_0c_stage0_gates_and_foul_path(void) {
   f.mr.record.face7d = 0;
   f.mr.record.delta = 2;
 
-  /* frame < 2 -> the retry tail (no reset, no stage change) */
+  /* frame < 2 -> the retry tail (no reset, no stage change, no tail) */
   a->frame = 1u;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0u && b->anim_id != 0x5Eu);
   a->frame = 2u;
 
-  /* band < 0x30 -> the foul path: the row != 0x11 velocity write on B
-   * (0x81E13..0x81E87) then the 0x81E8A re-call registration */
+  /* band < 0x30 -> the foul path. The velocity write uses A's facing, not
+   * B's (0x81DFE loads A into EAX, 0x81E13 reads word[A+0x7D]; the magnitude
+   * 0x81E36 is B's speed71): A face 0x100 vs B face 0 discriminates the two
+   * sources (sine(0x100) = 0x10000, sine(0x200) = 0). */
   assert(fifa96_entity_sine(0x100) == 0x10000);
+  assert(fifa96_entity_sine(0x200) == 0);
+  a->face7d = 0x100;
+  assert(f.mr.record.face7d == 0);
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
-  assert(f.mr.record.vel73 == 0);                       /* mul16(8, sine(0)) */
-  assert((int16_t)f.mr.record.vel75 == 8);              /* mul16(8, sine(0x100)) */
-  assert(f.mr.referee.contact_kind == 1u);              /* the disclosed re-register */
+  assert((int16_t)f.mr.record.vel73 == 8);   /* mul16(8, sine(A face 0x100)) */
+  assert((int16_t)f.mr.record.vel75 == 0);   /* mul16(8, sine(A face +0x100)) */
+  assert(f.mr.referee.contact_kind == 1u);   /* the disclosed re-register */
   assert(f.mr.referee.rec_first == 1 && f.mr.referee.rec_second == 12);
-  assert(f.mr.record.stage92 == 0u && b->anim_id != 0x5Eu);
+  /* the 0x81ED5..0x81F48 foul tail: the +0x98 latch, the anim row 0x0D/0x52
+   * draw on B, ran, timer89 = 0 and the stage 0 -> 1 advance */
+  assert(b->skip_98 == 1u);
+  assert(b->anim_id == 0x0Du || b->anim_id == 0x52u);
+  assert(f.mr.record.ran == 1u);
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 1u);
+  assert(b->anim_id != 0x5Eu);
 
   /* the alternate gate: A in row 0x11 frame 2 -> the foul path without the
    * velocity write (the 0x81E11 JZ skips 0x81E13) */
   a->anim_id = 0x11u;
   a->frame = 2u;
+  f.mr.record.stage92 = 0;                   /* the tail advanced; re-arm stage 0 */
+  f.mr.record.ran = 0;
   f.mr.record.vel73 = 0x1234;
   f.mr.record.vel75 = 0x2345;
   f.mr.referee.contact_kind = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
   assert(f.mr.record.vel73 == 0x1234 && f.mr.record.vel75 == 0x2345);
   assert(f.mr.referee.contact_kind == 1u);
-  /* ... row 0x11 frame 1 -> retry */
+  /* ... row 0x11 frame 1 -> retry (no contact, no tail) */
   a->frame = 1u;
+  f.mr.record.stage92 = 0;
   f.mr.referee.contact_kind = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
   assert(f.mr.referee.contact_kind == 0u);
@@ -2393,11 +2424,14 @@ static void test_action_0c_stage0_gates_and_foul_path(void) {
   /* ... any other row: frame 2 -> retry, frame 3 -> the foul path */
   a->anim_id = 0x00u;
   a->frame = 2u;
+  f.mr.record.stage92 = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
   assert(f.mr.referee.contact_kind == 0u);
   a->frame = 3u;
+  f.mr.record.stage92 = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x0C) == FIFA96_OK);
   assert(f.mr.referee.contact_kind == 1u);
+  assert(f.mr.record.stage92 == 1u);
   drop_fixture(&f);
 }
 

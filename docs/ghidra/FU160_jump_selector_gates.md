@@ -561,3 +561,26 @@ cell conflation, not a recorded stand-in; §4 rec #1 already names the arm the
 `+0x85` arm separately (RED-verified against the pre-fix read). No new leg:
 the `[0x1577CA]` cell is modeled (its three writers, FU-152 §2.9);
 FU160-L4 (the else camera-follow arm) is unchanged.
+
+---
+
+## Errata — phase-14 T1 foul-path phrasing (append-only, 2026-10-12)
+
+**FU-160 §1.1's "EBP's facing-relative `+0x73`/`+0x75` words" is ambiguous and
+misled the T1 port.** Quoted from §1.1:
+
+> The foul path itself (`0x81DFE..0x81F0B`, fresh) is the FU-150 re-call
+> contract the engine already ports: EBP's facing-relative `+0x73`/`+0x75`
+> words from the `0x114E04` fold (`0x81E13..0x81E86`), ...
+
+Fresh bytes this session resolve it: the **words** are EBP's (the challenged
+record B: `0x81E36 MOV EBX,[EBP+0x6F]; SAR 0x10` = B's `speed71`, the product
+destination `0x81E45/0x81E86 MOV word[EBP+0x73/0x75],AX`), but the **facing**
+argument is **A's** — `0x81DFE MOV EAX,[0x15888F]` (A) enters the arm and
+`0x81E13 MOV EAX,[EAX+0x7B]; SAR 0x10` reads `word[A+0x7D]` (again at
+`0x81E49` for the `+0x100` term). So
+`vel73/75 = mul16(B.speed71, sine(A.face7d / A.face7d + 0x100))`. The T1 port
+initially used B's face (invisible while both are 0); the fix round corrected
+it and made `test_action_0c_stage0_gates_and_foul_path` stage A's face
+`0x100` vs B's `0` (mutation-RED verified). Cross-ref: FU-169's T1 fix-round
+status.
