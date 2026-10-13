@@ -1846,6 +1846,22 @@ int fifa96_match_run_translation_install(struct fifa96_match_run *mr, uint32_t e
 int fifa96_match_run_set_formation(struct fifa96_match_run *mr, uint32_t side,
                                    uint8_t id);
 
+/* FU-199 §7.2 / FU-200 §1/§2 (M2 phase-18 T1): the match-begin OL-13 metadata
+ * producer — the engine mirror of the native `FUN_0006D920` bind
+ * (`FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920`). It loads
+ * the formation id's `.fmt` family (`352pl`/`352pk`/`freekick` for id 0) from
+ * the GAMEART0 bank into the run-owned `mr->meta_owner` and stages every
+ * record's `phase_meta`/`phase_meta10`/`phase_meta14` with the native strides
+ * (`idx*0x256` bytes, `idx*2` dwords, `idx*0x256` dwords; `idx = active`).
+ * `fifa96_match_run_begin` calls it as the last begin step (after the derived
+ * front-end screen install). **Atomic:** it first clears the pool and any prior
+ * owner, then copies every side; the record pointers are staged only once every
+ * side has loaded, so an error (`mr->formation[side] > 4`, a missing/short
+ * `.fmt` entry, no assets) leaves every pointer NULL — never a pointer into
+ * freed memory. Soft-fails (all pointers NULL) with no assets/ISO. Returns 1
+ * when bound, 0 otherwise. Exposed for direct unit testing of the error path. */
+int fifa96_match_run_record_meta_bind(struct fifa96_match_run *mr);
+
 /* Resolve the post-period screen chain (FU-64 §6): OVER -> POST
  * (`resolve_over`, the `[0x5FFC]=3` period resolution), POST -> EXIT (the
  * leave staging `[0x5FFC]=4`), then, when EXIT is current, run the existing

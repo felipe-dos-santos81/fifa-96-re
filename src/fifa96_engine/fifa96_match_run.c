@@ -1989,11 +1989,6 @@ static void match_run_release_meta(struct fifa96_match_run *mr) {
   mr->meta_owner = NULL;
 }
 
-/* FU-199 §7.2 (M2 phase-18 T1): the match-begin OL-13 metadata producer,
- * defined next to `match_stage_container` (which it reuses); forward-declared
- * for the `fifa96_match_run_begin` call. */
-static int match_run_record_meta_bind(struct fifa96_match_run *mr);
-
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -2377,7 +2372,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * for the per-record phase bodies (rows 0x02/0x03/0x04/0x06/0x07/0x08/0x09/
    * 0x15). Soft-fails (pointers stay NULL) with no assets/ISO or a missing
    * family entry — the pre-T1 gated no-op. */
-  (void)match_run_record_meta_bind(mr);
+  (void)fifa96_match_run_record_meta_bind(mr);
   return 0;
 }
 
@@ -5097,7 +5092,7 @@ static int match_run_meta_copy(const struct fifa96_bigf_info *info, const char *
   return -1;
 }
 
-static int match_run_record_meta_bind(struct fifa96_match_run *mr) {
+int fifa96_match_run_record_meta_bind(struct fifa96_match_run *mr) {
   uint8_t *bytes = NULL;
   size_t len = 0;
   uint8_t *container = NULL;
@@ -5114,6 +5109,7 @@ static int match_run_record_meta_bind(struct fifa96_match_run *mr) {
   if (fifa96_bigf_parse(container, container_len, &info) != FIFA96_OK) goto out;
   owner = calloc(FIFA96_MATCH_ENTITY_TEAMS, MATCH_RUN_META_SIDE_BYTES);
   if (!owner) goto out;
+  /* Phase 1: copy every side's `.fmt` family into the owner (no pool writes). */
   for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
     uint8_t *pl = owner + (size_t)side * MATCH_RUN_META_SIDE_BYTES;
     uint8_t *pk = pl + MATCH_RUN_META_PL_PAD;
@@ -5124,6 +5120,16 @@ static int match_run_record_meta_bind(struct fifa96_match_run *mr) {
     if (match_run_meta_copy(&info, family[0], pl, MATCH_RUN_META_PL_BYTES) != 0) goto out;
     if (match_run_meta_copy(&info, family[1], pk, MATCH_RUN_META_PK_BYTES) != 0) goto out;
     if (match_run_meta_copy(&info, family[2], fk, MATCH_RUN_META_FK_BYTES) != 0) goto out;
+  }
+  /* Phase 2 (atomic): only once every side copied successfully stage the
+   * per-record pointers and hand the owner to the run. A `goto out` before this
+   * loop has written no pool pointer, so `free(owner)` cannot strand a
+   * `phase_meta*` into freed memory (the `match_run_release_meta` above already
+   * cleared the pool). */
+  for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
+    uint8_t *pl = owner + (size_t)side * MATCH_RUN_META_SIDE_BYTES;
+    uint8_t *pk = pl + MATCH_RUN_META_PL_PAD;
+    uint8_t *fk = pk + MATCH_RUN_META_PK_BYTES;
     (void)fifa96_match_entities_bind_record_meta(&mr->entities, side,
                                                  (const int8_t *)pl,
                                                  (const int32_t *)pk,

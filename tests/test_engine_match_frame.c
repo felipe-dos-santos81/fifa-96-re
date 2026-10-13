@@ -5397,6 +5397,41 @@ static void test_record_meta_bind_live(void) {
   drop_fixture(f);
 }
 
+/* FU-199 §7.2 (M2 phase-18 T1, fix round 1): the bind is atomic on its error
+ * path. A re-bind with an invalid side-1 formation id (`> 4`) must fail
+ * *before* staging any pointer, so no record retains a `phase_meta*` into the
+ * freed owner (the partial-bind use-after-free). A subsequent valid re-bind
+ * restores the pointers. Skips without the ISO. */
+static void test_record_meta_bind_error_path(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.entities.team[0].records[0].phase_meta != NULL);
+  /* Side 1 has an id past the 5-id table: the load must fail and, being atomic,
+   * leave *every* record pointer NULL (side 0's staged pointers would otherwise
+   * dangle into the freed owner). */
+  mr.formation[1] = 5u;
+  assert(fifa96_match_run_record_meta_bind(&mr) == 0);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      const struct fifa96_match_entity *e = &mr.entities.team[t].records[i];
+      assert(e->phase_meta == NULL);
+      assert(e->phase_meta10 == NULL);
+      assert(e->phase_meta14 == NULL);
+    }
+  }
+  /* A valid re-bind stages the pointers again over both teams. */
+  mr.formation[1] = 0u;
+  assert(fifa96_match_run_record_meta_bind(&mr) == 1);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    assert(mr.entities.team[t].records[0].phase_meta != NULL);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-148 §4.2 (S4): the per-entity translation install through the pool seam.
  * With a staged pool (partition of a caller buffer), the non-kit path copies
  * the entity slot verbatim (0xCE980's 0x40 dwords); the kit path
@@ -5534,6 +5569,7 @@ int main(void) {
   test_ball_receive_skip_rule();
   test_formation_producer();
   test_record_meta_bind_live();
+  test_record_meta_bind_error_path();
   test_translation_install();
   puts("test_engine_match_frame OK");
   return 0;
