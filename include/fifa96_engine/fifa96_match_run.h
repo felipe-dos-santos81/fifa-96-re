@@ -620,6 +620,17 @@ struct fifa96_match_run {
    * stay unported legs (FU213-L1/L7). This is T1's exposed flag for T2's
    * situation-8 gate / the act-0xC-0xB route. */
   uint8_t global_157ac0;
+  /* FU-210 §6.1/§8 L3 (M2 phase-19 T3): the native actor-record pointer
+   * `[0x1587D4]` the phase-0x1D arm-0 coupled installer (`0x899A2`) targets —
+   * `FUN_0007D9A4(rec = [0x1587D4], code = 0x20, stage = 0, invoke = 0)`. The
+   * native producer is the sit-8 arm's `[0x1587CC + side*4] -> [0x1587D4]` bind
+   * (`0x8AE4B`), whose referenced-record identity is an open leg (FU-145 /
+   * FU210-L3 / FU194-L8) — so no live engine source writes this cell. It holds
+   * the engine pool id (`team*RECORDS + index`) or -1 (FIFA96_MATCH_ENTITY_NONE);
+   * init/begin stage it NONE, so on the live path the arm-0 install is a null
+   * no-op and action row 0x20 stays uncounted (the FU210-L5 leg). A unit fixture
+   * sets it to exercise the ported installer. */
+  int32_t actor_1587d4;
   /* FU-151 P3 (keeper machines): the process cells the row-1E/1D machines
    * carry across frames — the 0x15774C/50/54 camera focus (the FU-147 leg-13
    * render-camera stand-in: the engine keeps its own derived cell so the

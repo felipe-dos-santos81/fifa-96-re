@@ -618,3 +618,25 @@ body `0x84EEC` (FU209-L3, T3), the arm-8 selection block (FU209-L4), the arm-9
 `[0x157AC0]` write-back (FU209-L5) and the arm-2 contact gate (FU209-L6). Census
 `+1` (phase `0x1D`) → `52/80 = 65%`; FU209-L1 (the act-7 producer inert) is
 resolved for the `global_157ac2 == 4` arm, the bit-8 arm stays FU208-L1.
+
+---
+
+## Landing (M2 phase-19 T3, 2026-10-13)
+
+T3 ports the arm-0 coupled install and the coupled row-`0x20` body.
+
+* **FU209-L2 (the arm-0 coupled install is unported) — the row-`0x20` install
+  LANDS.** `fifa96_match_action_phase_1D` arm 0 now runs the `0x899A2`
+  equivalent (`fifa96_match_entities_install(actor, phase, 0x20, 0)`, deferred,
+  gated on the new `mr->actor_1587d4` cell). The target `[0x1587D4]` cell's
+  producer (`0x8AE4B` `[0x1587CC + side*4] -> [0x1587D4]`) remains the
+  **FU210-L3** leg; the 0x899CD ball row-`0x1F` install and the `0x7A028` reset
+  stay FU194-L7/L8 legs.
+* **FU209-L3 (the row-`0x20` body `0x84EEC`) — PORTED.** `fifa96_match_action_20`
+  (the 7 arms; the §3.2 arm-0 render writes `pos_x/y/z` + anim `0x26`) lands; the
+  body is exported for direct unit testing.
+* **Row `0x20` stays NULL/uncounted (FU210-L5).** With `mr->actor_1587d4` `NONE`
+  on the live path no record carries code `0x20`; the row cannot dispatch.
+* **FU209-L4/L5/L6 remain legs** (the arm-8 selection block; the arm-9
+  `[0x157AC0]` write-back; the arm-2 contact gate). Census unchanged `52/80`.
+  No prior section rewritten.

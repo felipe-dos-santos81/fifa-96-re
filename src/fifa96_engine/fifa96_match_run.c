@@ -2033,6 +2033,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
+  mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->global_5882a = 0;
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster process
    * cells ([0x157A4C]/[0x157C5C]/[0x157C5D]/[0x157C54..5B]/the predictor
@@ -2152,6 +2153,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
+  mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster cells. */
   mr->global_157a4c = 0;
@@ -6094,9 +6096,24 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
         (void)fifa96_match_entities_install(&mr->entities.team[t].records[0],
                                             mr->state.phase, 0x19u, 0);
-      /* 0x899A2 (the coupled row-0x20 installer on the actor record [0x1587D4]),
-       * 0x899CD (the ball-record row-0x1F install) and 0x7A028 (the referee
-       * block reset) are FU194-L7/L8 legs. */
+      /* 0x899A2 (the coupled row-0x20 install on the actor record [0x1587D4]):
+       * the native `FUN_0007D9A4(rec, 0x20, 0, 0)` (deferred, stage 0, invoke
+       * 0). The target cell's producer — the sit-8 arm's `[0x1587CC+side*4] ->
+       * [0x1587D4]` bind (`0x8AE4B`) — is unported (FU210-L3/FU194-L8), so
+       * `mr->actor_1587d4` stays NONE on the live path and this install is a
+       * null no-op: no record carries code 0x20, so action row 0x20 stays
+       * uncounted (the FU210-L5 leg). A unit fixture sets the cell to exercise
+       * the ported install. 0x899CD (the ball-record row-0x1F install) and
+       * 0x7A028 (the referee block reset) stay FU194-L7/L8 legs. */
+      if (mr->actor_1587d4 >= 0 &&
+          mr->actor_1587d4 <
+              (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
+        struct fifa96_match_entity *actor =
+            &mr->entities
+                 .team[(uint32_t)mr->actor_1587d4 / FIFA96_MATCH_ENTITY_RECORDS]
+                 .records[(uint32_t)mr->actor_1587d4 % FIFA96_MATCH_ENTITY_RECORDS];
+        (void)fifa96_match_entities_install(actor, mr->state.phase, 0x20u, 0u);
+      }
       mr->act.timer = 0;                           /* 0x899D7 */
       mr->act.stage = 1u;                          /* 0x899ED */
       return FIFA96_OK;

@@ -1196,3 +1196,35 @@ M2 `441415fc…` byte-identical (`cmp` clean — the tape reaches no
 `global_157ac2 == 4` completion, so the sit-8 branch is dormant on it). **Census:**
 README title `65%`; ENGINE.md census `52/80` (dispatch `27 UNSUP / 52 OK / 1
 NOTF`, sum 80); AGENTS.md census note swept `51/80 → 63%` → `52/80 → 65%`.
+
+## M2 phase-19 T3 — the action row-0x20 body + the phase-0x1D arm-0 installer (FU-210)
+
+**The row-0x20 body and its coupled phase-0x1D arm-0 installer are ported, but
+row `0x20` stays a leg (uncounted) — census `52/80 = 65%` unchanged.** T3 lands
+`fifa96_match_action_20` (the native `0x84EEC..0x85213` 7-arm CS table `0x84ED0`:
+arm 0 = the `0x73E08` commit + the `0x79B6C` place `pos_x/pos_y/pos_z` + the
+`0x8CFAC` anim `0x26`; arm 3 = the control-slot predicate; arm 4 = the `0x7B9C4`
+mode-`0x40` kick `pos_x/pos_z` + anim; arm 5 = the `0x79B1C` snap; arm 6 = the
+`0x7DAB4` reset) and the phase-`0x1D` arm-0 coupled installer `0x899A2`
+(`FUN_0007D9A4([0x1587D4], 0x20, 0, 0)`, deferred), gated on the new
+`mr->actor_1587d4` cell. **The verdict is a leg, not a count:** the installer's
+target — the native actor record `[0x1587D4]` — has **no live producer** (the
+sit-8 arm's `[0x1587CC + side*4] -> [0x1587D4]` bind `0x8AE4B` is unported,
+FU145 / **FU210-L3** / FU194-L8), so `mr->actor_1587d4` stays `NONE` on the live
+path and no record ever carries code `0x20`; the row cannot dispatch, so per the
+binding census rule and the rows-27/29/2C precedent it stays `NULL`/uncounted
+(**FU210-L5**). The body is exported (`fifa96_match_handlers.h`) for direct unit
+testing and the installer is fixtured (a test that drives phase `0x1D` to arm 0
+with the cell set and asserts row `0x20` installed). **FU189-L1** (the installer
+hunt) is RESOLVED — the installer is the phase-`0x1D` arm 0; the **FU210-L1**
+helper ports and the **FU210-L2** ball-record place stay legs; the new
+`mr->actor_1587d4` cell's producer is the **FU210-L3** leg.
+
+**TDD:** RED/GREEN for the body (direct-call arms 0/2/3/4/5/6, the pos/anim
+writes pinned) and the installer (arm-0 install + the live-path no-op) separately;
+mutation-RED (a wrong `-0xF0` place offset; a missing arm-0 install) each abort
+the new tests. **Determinism:** `make check` **110/110** (sanitized); M1
+`09b726b7…` unmoved; M2 `441415fc…` byte-identical (`cmp` clean — the tape
+reaches no sit-8, and the `actor_1587d4` cell defaults NONE). **Census:**
+unchanged `52/80 = 65%` (32 action + 20 phase; dispatch `27 UNSUP / 52 OK / 1
+NOTF`, sum 80); README title `65%`; AGENTS.md census note unchanged.

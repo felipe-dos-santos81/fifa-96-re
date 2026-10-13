@@ -1126,6 +1126,27 @@ the build also produces the windowed `fifa96` target (`make game`).
   `global_157ac2 == 4` completion), M1 `09b726b7…` unmoved; dispatch
   `27 UNSUP / 52 OK / 1 NOTF` (sum 80); README title `65%`; AGENTS.md census note
   swept.
+- **M2 phase-19 T3 (FU-210) — the action row-`0x20` body + the phase-`0x1D`
+  arm-0 installer: row `0x20` stays a leg, census `52/80 = 65%` (unchanged).**
+  The row-`0x20` body `0x84EEC..0x85213` (the 7-arm CS table `0x84ED0`) is now
+  ported as `fifa96_match_action_20` (arm 0 = the `0x73E08` commit + the
+  `0x79B6C` place `pos_x/y/z` + the `0x8CFAC` anim `0x26`; arm 3 = the control
+  slot predicate; arm 4 = the `0x7B9C4` mode-`0x40` kick `pos_x/pos_z` + anim;
+  arm 5 = the `0x79B1C` snap; arm 6 = the `0x7DAB4` reset; arms 1/2 advance),
+  and the phase-`0x1D` arm-0 coupled installer `0x899A2`
+  (`FUN_0007D9A4([0x1587D4], 0x20, 0, 0)`, deferred) is ported — gated on the
+  new `mr->actor_1587d4` cell. But the installer **target** is the native actor
+  record `[0x1587D4]`, whose producer (the sit-8 arm's `[0x1587CC + side*4] ->
+  [0x1587D4]` bind `0x8AE4B`) is unported (**FU210-L3** / FU194-L8): the cell
+  stays NONE live, so no record ever carries code `0x20` and the row **cannot
+  dispatch** — it stays `NULL`/uncounted (the rows-27/29/2C precedent; body
+  exported for direct unit testing, installer fixtured). The row-`0x20` evidence
+  now cites FU-210; the **FU210-L1** helper ports, the **FU210-L2** ball-record
+  place and the **FU210-L3** actor-cell producer stay legs; FU189-L1 (the
+  installer hunt) is RESOLVED. **Tape:** M2 `441415fc…` byte-identical (the tape
+  reaches no sit-8 / no code-`0x20` record, and the cell defaults NONE), M1
+  `09b726b7…` unmoved; dispatch `27 UNSUP / 52 OK / 1 NOTF` (sum 80); README
+  title `65%`; AGENTS.md census note unchanged.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

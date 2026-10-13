@@ -416,3 +416,40 @@ FU-205 (§2/§3/§4/§6), FU-206 (§1/§4/§5), ENGINE.md census line, AGENTS.md
 
 No writes beyond this slice file; no rename/label/comment/function/script/project
 save; no git.
+
+---
+
+## Landing (M2 phase-19 T3, 2026-10-13)
+
+T3 ports the row-`0x20` body and its coupled phase-`0x1D` arm-0 installer, but
+row `0x20` **stays a leg (uncounted)** — FU210-L5 holds.
+
+* **The body `0x84EEC` is PORTED** as `fifa96_match_action_20`
+  (`src/fifa96_engine/fifa96_match_handlers.c`): the prologue
+  (`[0x157A83]` re-assert when `+0x92 < 3`, `+0x89 += delta`, the 7-arm
+  dispatch) and the arms — 0 (the `0x73E08` commit + the `0x79B6C` place
+  `pos_x/y/z` + the `0x8CFAC` anim `0x26`), 1/2 (the wait/advance), 3 (the
+  control-slot predicate), 4 (the `0x7B9C4` mode-`0x40` kick `pos_x/pos_z` +
+  anim via `0x7A490`), 5 (the `0x79B1C` snap + `+0x44` ack), 6 (the `0x7DAB4`
+  reset). The §3 render writes are pinned (arm 0 pos+anim; arm 4 pos+anim;
+  `hidden` `+0x9A` unwritten). The §8 legs remain legs: **FU210-L1** (the
+  `0x73DC4`/`0x700F4` ball-camera stage, the `0x4BEC8`/`0x7A028` gates, the
+  `0x8F188` event, the `0x4C324`/`0x4C374` sinks, the `[0x14C11x]` input words),
+  **FU210-L2** (the ball-record place at `(0, 0xB10)`; the 11-stride `0x8CFAC`
+  walk).
+* **The coupled arm-0 installer `0x899A2` is PORTED**
+  (`fifa96_match_run.c`, `fifa96_match_action_phase_1D` arm 0):
+  `fifa96_match_entities_install(actor, phase, 0x20, 0)` (the `FUN_0007D9A4`
+  equivalent), deferred/stage-0, gated on the new `mr->actor_1587d4` cell. The
+  0x899CD ball row-`0x1F` install and the `0x7A028` reset stay FU194-L7/L8 legs.
+* **The row stays NULL/uncounted.** The installer target `[0x1587D4]` has no
+  live producer (`0x8AE4B` `[0x1587CC + side*4] -> [0x1587D4]`; the referenced
+  record's identity is the FU-145 / **FU210-L3** open leg), so `mr->actor_1587d4`
+  stays `NONE` and no record carries code `0x20` — the row cannot dispatch. Per
+  the binding census rule and the rows-27/29/2C precedent the slot stays `NULL`
+  (the body is exported for direct unit testing; the installer is fixtured).
+  **FU210-L5 is unchanged** (row `0x20` uncounted until the actor-cell producer
+  + the sit-8 route land). FU189-L1 (the installer hunt) is RESOLVED.
+* **M2 verdict:** byte-identical (`441415fc…`; the tape reaches no sit-8 and the
+  cell defaults `NONE`); M1 `09b726b7…` unmoved. Census unchanged `52/80 = 65%`.
+  No prior section rewritten.

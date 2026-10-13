@@ -566,6 +566,31 @@ static void test_phase_1D_terminal(void) {
   assert(mr.global_157a4c == 0u);     /* [0x157A4C]=0 */
 }
 
+/* FU-210 §6.1/§8 L3 (M2 phase-19 T3): the phase-0x1D arm-0 coupled installer
+ * (`0x899A2`). The native target is the actor record `[0x1587D4]`
+ * (`FUN_0007D9A4(rec, 0x20, 0, 0)`, deferred); its producer — the sit-8 arm's
+ * `[0x1587CC+side*4] -> [0x1587D4]` bind `0x8AE4B` — is unported (FU210-L3),
+ * so `mr->actor_1587d4` stays NONE live. A fixture sets the cell to prove the
+ * ported install: arm 0 installs code 0x20 (deferred, stage 0) on the actor.
+ * Mutation-RED: dropping the install leaves the actor's code at 0. */
+static void test_phase_1D_arm0_installs_row_20(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.actor_1587d4 = 1;             /* team 0, record 1 (fixtures the unported producer) */
+  mr.act.id = 7;
+  mr.act.stage = 0;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.entities.team[0].records[1].code == 0x20u);  /* 0x899A2 FUN_0007D9A4(rec,0x20,0,0) */
+  assert(mr.entities.team[0].records[1].stage92 == 0u);  /* deferred stage 0 */
+  /* the live path leaves the cell NONE (the sit-8 actor bind is unported): no
+   * record ever carries 0x20. Mutation-RED on the leg. */
+  fifa96_match_run_init(&mr);
+  mr.act.id = 7;
+  mr.act.stage = 0;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.entities.team[0].records[1].code != 0x20u);
+}
+
 /* Phase 0x1E / act 8 (FU-194 §4/§6.2): the body is NOT wired; the dispatcher
  * returns UNSUPPORTED while the body stays reachable by direct call. */
 static void test_phase_1E_not_counted(void) {
@@ -807,6 +832,7 @@ int main(void) {
   test_phase_1D_install_frame();
   test_phase_1D_wait_whistle();
   test_phase_1D_terminal();
+  test_phase_1D_arm0_installs_row_20();
   test_phase_1E_not_counted();
   test_phase_1E_sweep_selects();
   test_phase_1E_sweep_completes();

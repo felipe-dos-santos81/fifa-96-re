@@ -952,23 +952,118 @@ static void test_action_29_unwired_entry(void) {
   drop_fixture(&f);
 }
 
-/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5); updated M2 phase-19 T2: the
+/* FU-210 §2/§3/§4 (M2 phase-19 T3): the action row-0x20 body `0x84EEC` arms,
+ * direct-call (the slot stays NULL — the coupled installer's actor cell
+ * `[0x1587D4]` has no live producer, FU210-L3/L5). Prologue: the `[0x157A83]`
+ * re-assert when `+0x92 < 3` and the `+0x89 += delta`. Arm 0 (`0x84F5C`): the
+ * `0x73E08` commit, target := the `0x15774C` focus (the engine camera stand-in),
+ * `z -= 0xF0`, the `0x79B6C` place (pos + anim), the `0x8CFAC` anim 0x26 ->
+ * stage 1/timer 0. Arm 3 (`0x85153`): no-slot `+0x89 > 0x78` wait. Arm 4
+ * (`0x85197`): `lane>>16 > 0x40` gate, else the `0x7B9C4` kick (pos + anim) ->
+ * stage 5. Arm 5 (`0x851E1`): the `0x79B1C` snap + `+0x44` ack. Arm 6
+ * (`0x85206`): the `0x7DAB4` reset. Mutation-RED: a wrong arm write / a missing
+ * gate aborts the assertions. */
+static void test_action_20_body_arms(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.record.entity_id = 1;               /* team 0, index 1 */
+  f.mr.record.active = 1;
+  f.mr.record.code = 0x20;
+  f.mr.record.delta = 2;
+  f.mr.record.stage92 = 0;
+  f.mr.render.camera.pos_x = 0x100;
+  f.mr.render.camera.pos_y = 0x50;
+  f.mr.render.camera.pos_z = 0xB00;
+
+  /* arm 0 (0x84F5C): place pos at the camera focus (z-0xF0) + anim 0x26. */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.controlled == 1);          /* 0x84F25/0x84F5C [0x157A83] */
+  assert(f.mr.record.stage92 == 1u);            /* 0x85050 */
+  assert(f.mr.record.timer89 == 0);             /* 0x8503E */
+  assert(f.mr.record.pos_x == 0x100);           /* 0x79B6C place = target */
+  assert(f.mr.record.pos_y == 0);
+  assert(f.mr.record.pos_z == 0xB00 - 0xF0);    /* 0x84FA7 z -= 0xF0 */
+  assert(f.mr.record.target_x == 0x100);
+  assert(f.mr.record.target_z == 0xB00 - 0xF0);
+  assert(f.mr.record.anim_id == 0x26u);         /* 0x8CFAC anim 0x26 */
+
+  /* arm 4 (0x85197): lane>>16 > 0x40 -> epilogue, no advance. */
+  f.mr.record.stage92 = 4;
+  f.mr.record.lane = (int32_t)0x41 << 16;
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 4u);            /* held at the 0x851A2 gate */
+
+  /* arm 4 advance: lane>>16 <= 0x40 -> the 0x7B9C4 kick -> stage 5/timer 0. */
+  f.mr.record.lane = 0;
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 5u);            /* 0x851D7 */
+  assert(f.mr.record.timer89 == 0);
+
+  /* arm 5 (0x851E1): snap; +0x44 clear -> wait at stage 5. */
+  f.mr.record.row44 = 0;
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 5u);
+  assert(f.mr.record.target_x == f.mr.record.pos_x);
+
+  /* arm 5 advance: +0x44 set -> stage 6. */
+  f.mr.record.row44 = 1;
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 6u);            /* 0x851FB */
+
+  /* arm 6 (0x85206): the 0x7DAB4 reset (stage 0xFF). */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 0xFFu);         /* 0x7DABA */
+
+  /* arm 2 (0x8512E): the head add then +0x89 < 0x3C waits; >= 0x3C -> stage 3. */
+  f.mr.record.stage92 = 2;
+  f.mr.record.timer89 = 0x3C - 4;               /* +delta 2 -> 0x3A < 0x3C: wait */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 2u);
+  f.mr.record.timer89 = 0x3C - 2;               /* +delta 2 -> 0x3C: advance */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+
+  /* arm 3 (0x85153): no slot, +0x89 <= 0x78 waits; > 0x78 -> stage 4. */
+  f.mr.record.has_slot = 0;
+  f.mr.record.timer89 = 0x78 - 2;               /* +delta 2 -> 0x78: wait */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 3u);
+  f.mr.record.timer89 = 0x78;                   /* +delta 2 -> 0x7A > 0x78: advance */
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 4u);
+
+  /* stage > 6: the 0x84F47 JA epilogue (only the head timer add stands). */
+  f.mr.record.stage92 = 7;
+  f.mr.record.timer89 = 0;
+  assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 7u && f.mr.record.timer89 == 2);
+
+  assert(fifa96_match_action_20(NULL) == -FIFA96_ERR_INVALID);
+  drop_fixture(&f);
+}
+
+/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5); updated M2 phase-19 T2/T3: the
  * row-0x20 installer hunt. The installer exists — fresh `0x899a2` = `MOV
  * EDX,0x20; MOV EAX,[ESP+8]; CALL 0x7D9A4` (bytes `ba20000000`/`e8f43fffff`) —
  * inside the phase-0x1D handler `0x89868`, whose sole reference is the
  * phase-table slot `0x110808` (`[0x1D]`, fresh get_xrefs_to = 1), i.e. the
- * act-7 route. Action row 0x20's body `0x84EEC` stays unported, so the row
- * remains `fn == NULL` / uncounted (leg **FU189-L1**, owner T3/FU-210). As of
- * T2 the phase-0x1D slot itself is REGISTERED and producer-live (the sit-8
- * route), so the phase dispatch now resolves. */
+ * act-7 route. T3 (FU-210) ports the row-0x20 body `0x84EEC` and the coupled
+ * arm-0 installer, but the installer's target — the actor record `[0x1587D4]`
+ * — has no live producer (the sit-8 `[0x1587CC+side*4]` bind `0x8AE4B` is
+ * unported, FU210-L3), so `mr->actor_1587d4` stays NONE live and no record
+ * carries code 0x20. The row therefore stays `fn == NULL` / uncounted (leg
+ * **FU189-L1 / FU210-L5**, the rows-27/29/2C precedent); the body is exported
+ * for direct unit testing. As of T2 the phase-0x1D slot is REGISTERED and
+ * producer-live (the sit-8 route), so the phase dispatch resolves. */
 static void test_action_20_installer_leg_phase_1d_live(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x20];
   make_fixture(&f);
   assert(row->fn == NULL);
-  assert(strstr(row->evidence, "FU-189") != NULL);
+  assert(strstr(row->evidence, "FU-210") != NULL);
   assert(strstr(row->evidence, "FU189-L1") != NULL);
-  assert(strstr(row->evidence, "0x899a2") != NULL);
+  assert(strstr(row->evidence, "FU210-L5") != NULL);
+  assert(strstr(row->evidence, "0x899A2") != NULL);
   assert(action_expect[0x20] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x20) == UNSUP);
   /* T2: the phase-0x1D route (act 7) is now registered + producer-live. */
@@ -3858,6 +3953,7 @@ int main(void) {
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();
   test_action_20_installer_leg_phase_1d_live();
+  test_action_20_body_arms();
   test_action_25_no_installer_leg();
   test_action_03_direct_leg_body();
   test_phase_02_source_pair_scales();
