@@ -873,13 +873,15 @@ under the strict "engine reaches it" test, so the three phase-table slots stay
 direct unit testing with the producer remainder as numbered legs. Ported bodies
 (`src/fifa96_engine/fifa96_match_run.c`): `fifa96_match_action_phase_1D` (the
 act-7 10-arm set-piece timeline `0x89868`: head `timer += frame_delta`; stage 0
-clears `[0x15882A]`, writes phase 0x10 and installs action row 0x19 on both
-teams' records; stage 1 fires the `0x974DC(0x1E)` whistle + `[0x15882A] = 1` at
-`state.tick_total >= 0x78`; stage 9 the terminal clears the act slot +
-`[0x157A4C]`); `fifa96_match_action_phase_1E` (the act-8 restart sweep `0x8A798`:
-stage 0 resets the walk cursor; stage 1 sweeps team 0 records 0..10 then team 1
-and selects the code-`0xC`/`+0x99`/`!+0x9A` record; stage 2 clears the act slot
-and re-dispatches the stored situation/side, then `store_15882b = 0xFF`). **The
+clears `[0x15882A]`, writes phase 0x10 and installs action row 0x19 on the
+**team base** (`records[0]`, once per team — the native `0x8990A` CALL sits
+outside the 11-record ESI loop); stage 1 fires the `0x974DC(0x1E)` whistle +
+`[0x15882A] = 1` at `state.tick_total >= 0x78`; stage 9 the terminal clears the
+act slot + `[0x157A4C]`); `fifa96_match_action_phase_1E` (the act-8 restart sweep
+`0x8A798`: stage 0 resets the walk cursor; stage 1 sweeps team 0 records 0..10
+then team 1, clears `act8_selected` before every gate test (`0x8A814`) and
+selects the code-`0xC`/`+0x99`/`!+0x9A` record; stage 2 clears the act slot and
+re-dispatches the stored situation/side, then `store_15882b = 0xFF`). **The
 coupled `0x1D` + row-`0x20` unit:** arm 0 of `0x89868` carries the row-0x20
 installer `0x899A2`, but the route needs the act-7 producer (situation 8) and the
 engine reaches situation 8 only through the T2 `fifa96_match_run_period_setup` +

@@ -522,8 +522,9 @@ static void test_phase_1D_install_frame(void) {
   assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
   assert(mr.global_5882a == 0u);                                /* 0x898B4 */
   assert(mr.state.phase == 0x10u);                              /* 0x898CF.. */
-  assert(mr.entities.team[0].records[0].code == 0x19u);         /* 0x8990A */
-  assert(mr.entities.team[1].records[10].code == 0x19u);
+  assert(mr.entities.team[0].records[0].code == 0x19u);         /* 0x8990A team base */
+  assert(mr.entities.team[1].records[0].code == 0x19u);
+  assert(mr.entities.team[0].records[1].code == 0x00u);         /* NOT fanned out (the native CALL is outside the ESI loop) */
   assert(mr.act.stage == 1u && mr.act.timer == 0);              /* 0x899ED/0x899D7 */
   assert(fifa96_match_action_phase_1D(NULL) == -FIFA96_ERR_INVALID);
 }
@@ -575,8 +576,10 @@ static void test_phase_1E_not_counted(void) {
 
 /* Phase 0x1E stage 0 -> 1 (0x8A7B2/0x8A7D6): reset the walk cursor and sweep
  * one record per call. A record with `code [rec+0x91] == 0xC`, `[rec+0x99] != 0`
- * and `[rec+0x9A] == 0` is selected (0x8A831). Mutation-RED: a missing selection
- * leaves act8_selected NULL. */
+ * and `[rec+0x9A] == 0` is selected (0x8A831); the selection cell is cleared
+ * before every gate test (0x8A814), so a non-matching record AFTER a match
+ * clears it again. Mutation-RED: a missing selection leaves act8_selected NULL;
+ * a missing per-record clear leaves the previous match stuck. */
 static void test_phase_1E_sweep_selects(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -593,6 +596,9 @@ static void test_phase_1E_sweep_selects(void) {
   assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 2 */
   assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 3 -> select */
   assert(mr.act8_selected == &mr.entities.team[0].records[3]);
+  /* the next (non-matching) record clears the cell (0x8A814) */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 4 -> clear */
+  assert(mr.act8_selected == NULL);
   assert(fifa96_match_action_phase_1E(NULL) == -FIFA96_ERR_INVALID);
 }
 

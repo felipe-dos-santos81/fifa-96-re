@@ -1494,8 +1494,9 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
  * row-0x20 slot is producer-live and both stay NULL (leg FU194-L1/L8). Derived
  * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
  * (0x898B4) clears `[0x15882A]` (0x898B4), writes phase 0x10 when
- * `state.phase != 0x10` (0x898B6..0x898DD), installs action row 0x19 on both
- * teams' records (0x89903/0x8990A), timer=0, stage->1; stage 1 (0x899EE) fires
+ * `state.phase != 0x10` (0x898B6..0x898DD), installs action row 0x19 on the
+ * **team base** (`records[0]`, once per team — the native `0x8990A` CALL sits
+ * outside the 11-record ESI loop), timer=0, stage->1; stage 1 (0x899EE) fires
  * the whistle `0x974DC(0x1E)` and sets `[0x15882A] = 1` once the shared timeline
  * reaches 0x78 (`state.tick_total`); stage 9 (0x89E6E) is the terminal (no
  * situation re-dispatch): clear the act slot and `[0x157A4C]`. The coupled
@@ -1512,12 +1513,13 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
  * (`fifa96_match_phase_table[0x1E]`) is **NULL** — the row is not counted —
  * because the engine already models the act-8 fallback as a *compressed*
  * stored-situation re-dispatch (`fifa96_match_run_set_piece` BX!=0,
- * `match_run.c`), so registering the full sweep would de-compress a tape-visible
- * derivation (FU194-L2). Head: **no** timer add (the native head reads the stage
- * directly, 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor
+ * `match_run.c:2931-2944`), so registering the full sweep would de-compress a
+ * tape-visible derivation (FU194-L2). Head: **no** timer add (the native head
+ * reads the stage directly, 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor
  * (`act8_team`/`act8_record`) and falls into stage 1; stage 1 (0x8A7D6) sweeps
- * one record per call — team 0 records 0..10 then team 1 — and when a record's
- * code `[rec+0x91] == 0xC` with `byte[rec+0x99] != 0` and `byte[rec+0x9A] == 0`
+ * one record per call — team 0 records 0..10 then team 1 — clears
+ * `act8_selected` before every gate test (0x8A814), and when a record's code
+ * `[rec+0x91] == 0xC` with `byte[rec+0x99] != 0` and `byte[rec+0x9A] == 0`
  * stores it in `act8_selected` (0x8A831; the `0x4C374` `[0x157A68]` clear is the
  * FU194-L3 erratum leg), advancing to stage 2 after both teams; stage 2
  * (0x8A895) clears the act slot and re-dispatches the stored situation/side

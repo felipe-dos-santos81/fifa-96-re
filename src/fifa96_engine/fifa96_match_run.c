@@ -5795,16 +5795,19 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
   switch (mr->act.stage) {
     case 0u:   /* arm 0 (0x898B4): the install frame */
       mr->global_5882a = 0u;                       /* 0x898B4 clear [0x15882A] */
+      /* 0x898B4 also clears [0x157AB1] — an unported process flag with no engine
+       * cell (FU-145 L4 / FU-189 §3); leg (OL-13). */
       if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
         (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
       }
-      /* 0x89903/0x8990A: install action row 0x19 on both teams' records (the
-       * derived 0x7D9A4 subset; the anim 0x26 0x6E598 sink and the
-       * inactive-record row-3 arm are FU194-L7 legs). */
+      /* 0x89903/0x8990A: install action row 0x19 on the team base (EBP) once
+       * per team. The native `CALL 0x7D9A4` sits OUTSIDE the 11-record ESI
+       * loop (whose only install is row 3 on inactive records — FU194-L7 leg);
+       * the engine convention maps a native team-base install to records[0]
+       * (the phase-8/9 arm, `fifa96_match_run_phase_arm`). */
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
-          (void)fifa96_match_entities_install(&mr->entities.team[t].records[i],
-                                              mr->state.phase, 0x19u, 0);
+        (void)fifa96_match_entities_install(&mr->entities.team[t].records[0],
+                                            mr->state.phase, 0x19u, 0);
       /* 0x899A2 (the coupled row-0x20 installer on the actor record [0x1587D4]),
        * 0x899CD (the ball-record row-0x1F install) and 0x7A028 (the referee
        * block reset) are FU194-L7/L8 legs. */
@@ -5869,6 +5872,7 @@ int fifa96_match_action_phase_1E(struct fifa96_match_run *mr) {
     i = mr->act8_record;
     if (i < FIFA96_MATCH_ENTITY_RECORDS) {
       rec = &mr->entities.team[t].records[i];
+      mr->act8_selected = NULL;                    /* 0x8A814: clear before every gate test */
       if (rec->code == 0x0Cu && rec->skip_99 != 0u && rec->skip_9a == 0u) {
         mr->act8_selected = rec;                   /* [0x1587F0] = rec (0x8A831) */
         /* MOV EAX,0x19; CALL 0x4C374 = the word[0x157A68] clear (FU194-L3

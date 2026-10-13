@@ -537,3 +537,17 @@ table; action rows 4611/4619). Docs cross-cited: FU-137 §6, FU-149 L6, FU-175
 (§1/§2/§5/§7), FU-181, FU-183, FU-187, FU-188 (§2/§3/§5/§6/§10), FU-189
 (§1/§3/§4/§10), FU-190 (§1/§6.2/§9). No writes beyond this slice file and the
 workspace report; no rename/label/comment/function/script/project save; no git.
+
+---
+
+**Erratum (T5 fix round 1, 2026-10-12).** The engine line citations for the
+act-8 compression block drifted as T1–T4 grew `fifa96_match_run.c`: the block
+cited here as `match_run.c:2809..2821` (this slice's §4.3, §6.2, §6.3, §7 L2) is
+now the `if (bx != 0u)` arm of `fifa96_match_run_set_piece` at
+**`match_run.c:2931-2944`** (the `store_15882b`/`store_15882c` write, the phase-0
+write and the BX=0 re-dispatch). The citation was correct when this slice was
+taken; only the line numbers moved. Also (T5 review): the phase-`0x1D` arm-0
+row-0x19 install `0x8990A` is on the **team base `EBP`, once per team**, outside
+the 11-record ESI loop (whose only install is row 3 on inactive records) — §3.2's
+diagram already draws it that way; the port now matches (one install per team on
+`records[0]`).
