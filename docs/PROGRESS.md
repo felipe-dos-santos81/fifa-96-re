@@ -826,6 +826,43 @@ add, the `0x6E004` `<< 5` scale, the `0x6E05C` position copy); the
 **110/110**; README title `60%`; census **48/80 = 60%**, dispatch
 `31 UNSUP / 48 OK / 1 NOTF` (sum 80).
 
+**Phase-17 T4 (2026-10-12) — the act-tail cohort `0x17`/`0x1A`/`0x1C`: the
+three bodies ported, `+0` counted (census unchanged `48/80 = 60%`)** (this
+slice). Per Ruling R8, FU-193 finds each native producer statically
+(`0x8ABCF`; `0x8AB57`+`0x88EE8`; `0x8A789`) but proves none live under the
+strict "engine reaches it" test, so the three phase-table slots stay
+**NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are exported for
+direct unit testing with the producer remainder as numbered legs. Ported bodies
+(`src/fifa96_engine/fifa96_match_run.c`, the act-tail family with
+`0x18`/`0x19`/`0x20`): `fifa96_match_action_phase_17` (act-1 kickoff entry
+`0x88DC8`: head `timer += frame_delta`, stage 0 clears `[0x15882A]` + runs the
+derived kickoff entry, stage 1 hands off to act 4 on `[0x157A4C] != 1 && a
+residual mismatch` else the `word[0x15881A] >= 0x78` gate sets `[0x15882A] = 1`
+and clears the slot); `fifa96_match_action_phase_1A` (the act-4 formation-order
+walk `0x89620`: the `formation_current != formation_order` walk gated on
+`formation_order_ok`, the phase-0xB write + action-row-0x17 install, and the
+`0x897AE` end-block re-dispatch of `store_15881e`/`store_158820`);
+`fifa96_match_action_phase_1C` (the act-6 pre-restart timeline `0x89110`, a thin
+alias of the already-ported `fifa96_ref_offside_sequence_step` in the
+phase-0x19 FU187-L3 style). **Legs:** `0x17`'s sit-1 arm `0x8ABCF` has no live
+driver and the book's live act-1 is the **ad-hoc** `fifa96_match_run_kickoff_entry`
++ the frame-body `global_5882a` arm, so wiring the row would **double-run** the
+kickoff (**FU193-L1/L2**); `0x1A` has no act-4 producer — the T2 sit-2..4 arm is
+gated dormant on the unported desired-order matrix (`formation_order_ok` stays
+0, FU197-L4) and the act-1 stage-1 hand-off is itself unwired (**FU193-L3**);
+`0x1C` has no act-6 dispatcher and the existing driver is the offside machine,
+so the row would double-run it (**FU193-L4**); `0x1A`'s stage-1
+`[rec+0x8E]`→`[0x110680]` gate and the `FUN_0007D9A4` invoke-now
+(**FU193-L8/FU197-L6**); `0x17`'s head guard (the goal-log words
+`[0x157AC5]`/`[0x157AC7]` + `[0x157AC2]`) and presentation sinks (**FU193-L7**).
+New `test_engine_match_act` pins (`test_phase_17_*`, `test_phase_1A_*`,
+`test_phase_1C_*`, the `*_not_counted` NULL pins) with mutation-RED
+discriminators verified per body (the `0x17` stage advance, the `0x1A`
+action-row install, the `0x1C` stage alias); `test_engine_m2`'s
+`run_census_riders` pins the three NULL slots. **Tape-inert (R8):** M1
+`09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin, `cmp`-verified);
+`make check` **110/110**; README title `60%`; census unchanged **48/80 = 60%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

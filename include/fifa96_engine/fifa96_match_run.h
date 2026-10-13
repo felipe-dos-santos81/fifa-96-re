@@ -1418,6 +1418,60 @@ int fifa96_match_action_phase_19(struct fifa96_match_run *mr);
  * FU188-L2 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL. */
 int fifa96_match_action_phase_20(struct fifa96_match_run *mr);
 
+/* FU-193 §2/§6.1 (M2 phase-17 T4): the phase-0x17 / act-1 row body — the
+ * kickoff / phase-1 entry (native `0x88DC8`, ends `0x88F39`). Its phase-table
+ * slot (`fifa96_match_phase_table[0x17]`) is **NULL** — the row is not counted —
+ * because (a) its sole producer `0x8ABCF` (the `FUN_0008A938` sit-1 arm) has no
+ * live engine driver (leg FU193-L1), and (b) the engine's live act-1 behaviour
+ * is the ad-hoc `fifa96_match_run_kickoff_entry` + the frame-body `global_5882a`
+ * arm (`match_run.c`), so wiring the row would double-run the kickoff (leg
+ * FU193-L2). This is the rows-27/29/2C precedent (a ported body with no live
+ * producer stays unwired and uncounted). Derived stages: head
+ * `mr->act.timer += frame_delta` (0x88DD7); stage 0 clears `[0x15882A]`
+ * (0x88E56) and runs the derived kickoff entry (the `FUN_000740A0(1)` phase-1
+ * write), timer=0, stage->1; stage 1 hands off to act 4 (0x88EE8) when the
+ * goal-side flag `[0x157A4C] != 1` and a residual formation mismatch exists,
+ * else the shared timeline gate `word[0x15881A] >= 0x78` (derived
+ * `state.tick_total`) sets `[0x15882A] = 1` and clears the act slot. The head
+ * guard (`0x88DFC` goal-log words `[0x157AC5]`/`[0x157AC7]` + `[0x157AC2]`)
+ * and the `0x4C374`/`0x700F4`/`0x73E28`/`0x73E08`/`0x4C324`/`0x4C31C` sinks are
+ * FU193-L7 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_17(struct fifa96_match_run *mr);
+
+/* FU-193 §3/§6.2 + FU-197 §6/§9.4 (M2 phase-17 T4): the phase-0x1A / act-4 row
+ * body — the formation-order / line-up walk (native `0x89620`, ends `0x897F1`).
+ * Its phase-table slot (`fifa96_match_phase_table[0x1A]`) is **NULL** — the row
+ * is not counted — because the engine has no act-4 producer: the T2 sit-2..4 arm
+ * is gated dormant on the unported desired-order matrix (`formation_order_ok`
+ * stays 0, FU197-L4) and the act-1 stage-1 hand-off is itself unwired (FU193-L3).
+ * Derived stages: head `mr->act.timer += frame_delta` (0x89629); stage 0 walks
+ * the records for the first `formation_current != formation_order` mismatch
+ * (occupied `skip_9a` records accept the current order, 0x896D7), and on an
+ * active record writes phase 0xB (0x8972F) and installs action row 0x17
+ * (0x89740), timer=0, stage->1; the end block (0x897AE) clears the act slot and
+ * re-dispatches the stored situation/side (`store_15881e`/`store_158820`, BX=1).
+ * Stage 1's gate (`[rec+0x8E]` -> `[0x110680]`, the `word[0x15881A] > 0xF0`
+ * timeline) is derived on `state.tick_total`; the `FUN_0007D9A4` invoke-now and
+ * the `0x8F188`/`0x4C374`/`0x4C31C` sinks stay FU197-L6 legs. The walk is gated
+ * on `mr->formation_order_ok` (0 live = dormant no-op; a fake install is
+ * forbidden). Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1A(struct fifa96_match_run *mr);
+
+/* FU-193 §4/§6.3 (M2 phase-17 T4): the phase-0x1C / act-6 row body — the
+ * pre-restart timeline (native `0x89110`, ends `0x89213`). Its phase-table slot
+ * (`fifa96_match_phase_table[0x1C]`) is **NULL** — the row is not counted —
+ * because no engine source dispatches act 6 (FU193-L4); the existing driver is
+ * the offside machine (`fifa96_match_run_offside_reception` ->
+ * `fifa96_ref_offside_sequence_step`), so wiring the row would double-run it.
+ * The native handler is already ported as `fifa96_ref_offside_sequence_step`
+ * (FU-150/FU-165); this body aliases the act slot's stage/timer to the referee
+ * state (the phase-0x19 FU187-L3 pattern), runs the 3-stage step (stage 0 writes
+ * phase 0xA + whistle, stages 1/2 wait on `0x4BEC8`, stage 2 re-dispatches
+ * situation 9 on the opponent), clears the act slot on the terminal and applies
+ * the requests through `match_run_ref_apply`. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
+
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the
  * triple sits inside the mouth band: `0xB10 <= |z|_w < 0xB90`,

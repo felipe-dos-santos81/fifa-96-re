@@ -5622,6 +5622,147 @@ int fifa96_match_action_phase_20(struct fifa96_match_run *mr) {
   return (int)fifa96_match_run_situation(mr, 1u);
 }
 
+/* FU-193 §2/§6.1 (M2 phase-17 T4): the phase-0x17 / act-1 row body — the
+ * native kickoff / phase-1 entry `0x88DC8`. Its slot stays NULL/uncounted (the
+ * producer `0x8ABCF` has no live driver, and the live kickoff is the ad-hoc
+ * `fifa96_match_run_kickoff_entry` + `global_5882a` arm; the FU193-L1/L2 legs).
+ * Body: head `[0x158818] += [0x157A64]`; stage 0 clears `[0x15882A]` and runs
+ * the derived kickoff entry (the phase-1 write), timer 0, stage++; stage 1 hands
+ * off to act 4 (0x88EE8) on `[0x157A4C] != 1 && a residual mismatch`, else at
+ * the derived `state.tick_total >= 0x78` sets `[0x15882A] = 1` and clears the
+ * slot. The head guard (goal-log words `[0x157AC5]`/`[0x157AC7]` + `[0x157AC2]`)
+ * and the presentation sinks are FU193-L7 legs. */
+int fifa96_match_action_phase_17(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);  /* 0x88DD7 */
+  if (mr->act.stage == 0u) {
+    /* 0x88E56 clear the kickoff gate, then the FUN_000740A0(1) phase-1 write +
+     * placement commit (the derived kickoff entry); timer = 0, stage++ (0x88EAA/
+     * 0x88EB1). */
+    mr->global_5882a = 0u;
+    (void)fifa96_match_run_kickoff_entry(mr);
+    mr->act.timer = 0;
+    mr->act.stage = 1u;
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 1u) {
+    /* 0x88EBC..0x88EE8: the formation hand-off to act 4 (invoke-now) when the
+     * goal-side flag [0x157A4C] != 1 and a residual mismatch exists. */
+    if (mr->global_157a4c != 1u &&
+        (mr->formation_mismatch[0] != 0u || mr->formation_mismatch[1] != 0u))
+      return fifa96_match_act_dispatch(mr, 4, 0, 1);
+    /* 0x88EF3: the shared timeline gate word[0x15881A] >= 0x78 (the alias
+     * [0x158816]>>16; the engine's whole-delta `state.tick_total`). */
+    if ((int32_t)mr->state.tick_total >= 0x78) {
+      mr->global_5882a = 1u;                 /* 0x88F07 */
+      mr->act.id = 0;                        /* 0x88F14 */
+      mr->act.stage = 0;                     /* 0x88F24 */
+      mr->act.timer = 0;                     /* 0x88F0D */
+    }
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;   /* stage > 1: the 0x88E46 -> 0x88F2A tail */
+}
+
+/* FU-193 §3 / FU-197 §6 (M2 phase-17 T4): the phase-0x1A tail (0x897AE) — clear
+ * the act slot and re-dispatch the stored situation/side with BX=1. */
+static int match_run_phase_1A_end(struct fifa96_match_run *mr) {
+  mr->act.timer = 0;                                       /* 0x897BD */
+  mr->act.id = 0;                                          /* 0x897C4 */
+  mr->act.stage = 0;                                       /* 0x897CA */
+  return (int)fifa96_match_run_set_piece(mr, mr->store_15881e,
+                                         mr->store_158820, 1u);  /* 0x897E3 */
+}
+
+/* FU-193 §3/§6.2 + FU-197 §6/§9.4 (M2 phase-17 T4): the phase-0x1A / act-4 row
+ * body — the native formation-order / line-up walk `0x89620`. Its slot stays
+ * NULL/uncounted (no act-4 producer: the T2 arm is gated dormant on the
+ * unported desired-order matrix, FU197-L4; FU193-L3). Stage 0 walks the records
+ * for the first current/desired mismatch, accepts the current order on an
+ * occupied record, else writes phase 0xB and installs action row 0x17 on the
+ * active record; the end block re-dispatches the stored situation. The walk is
+ * gated on `mr->formation_order_ok`. */
+int fifa96_match_action_phase_1A(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);  /* 0x89629 */
+  if (mr->act.stage == 0u) {
+    int32_t s;
+    if (mr->formation_order_ok == 0u) return FIFA96_OK;    /* dormant (FU197-L4) */
+    /* 0x89655..0x8965c: side select = (byte[0x157B8E] == 0); 0x8966A: decrement
+     * that side's residual counter. */
+    s = (mr->formation_mismatch[0] == 0u) ? 1 : 0;
+    if (mr->formation_mismatch[(uint32_t)s] != 0u)
+      mr->formation_mismatch[(uint32_t)s]--;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      uint32_t ds;
+      struct fifa96_match_entity *rec;
+      if (mr->formation_current[s][i] == mr->formation_order[s][i]) continue;
+      /* 0x896B5 CALL 0x741B4: the display side (side ^ [0x157ABE]) & 1. */
+      ds = ((uint32_t)s ^ mr->side_swap) & 1u;
+      rec = &mr->entities.team[ds].records[i];
+      if (rec->skip_9a != 0u) {
+        /* 0x896D1/0x896D7: the record is occupied -> accept the current order
+         * for the slot, then the end block. */
+        mr->formation_order[s][i] = mr->formation_current[s][i];
+        break;
+      }
+      /* 0x896E2 install: write phase 0xB on the record's team side (0x8972F),
+       * then install action row 0x17 (0x89740; the generic invoke-now has no
+       * engine port, FU197-L6); timer = 0, stage++ (0x89747/0x8974E). */
+      if (rec->team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
+      mr->phase_machine.side_controlled =
+          (uint8_t)mr->entities.team[rec->team].side;       /* [[rec]+0x826] */
+      (void)match_run_write_phase(mr, 0x0Bu);
+      (void)fifa96_match_run_phase_arm(mr, 0x0Bu);
+      (void)fifa96_match_entities_install(rec, 0x0Bu, 0x17u, 0u);
+      mr->act.timer = 0;
+      mr->act.stage = 1u;
+      return FIFA96_OK;
+    }
+    /* 0x89763 ESI == 0xB: the loop exhausted (or the occupied branch) -> the
+     * end block. */
+    return match_run_phase_1A_end(mr);
+  }
+  if (mr->act.stage == 1u) {
+    /* 0x89775: the installed-record table gate ([rec+0x8E] -> [0x110680] & 1,
+     * FU193-L8 leg) and the word[0x15881A] > 0xF0 timeline gate (derived on
+     * `state.tick_total`); on pass, the end block. */
+    if ((int32_t)mr->state.tick_total <= 0xF0) return FIFA96_OK;
+    return match_run_phase_1A_end(mr);
+  }
+  return FIFA96_OK;   /* stage > 1: the 0x89650 -> 0x897E8 epilogue */
+}
+
+/* FU-193 §4/§6.3 (M2 phase-17 T4): the phase-0x1C / act-6 row body — the native
+ * pre-restart timeline `0x89110`. Its slot stays NULL/uncounted (no act-6
+ * producer; the offside machine is the existing driver — a double-model,
+ * FU193-L4). The native handler is already ported as
+ * `fifa96_ref_offside_sequence_step`; this body aliases the act slot's
+ * stage/timer to the referee state around the step (the phase-0x19 FU187-L3
+ * pattern) so the head add runs exactly once, clears the act slot on the
+ * terminal, and applies the requests (phase 0xA + whistle on stage 0; the
+ * situation-9 re-dispatch on stage 2) through `match_run_ref_apply`. */
+int fifa96_match_action_phase_1C(struct fifa96_match_run *mr) {
+  struct fifa96_ref_sequence_out out;
+  int rc;
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->referee.stage = mr->act.stage;               /* the act slot is the authority */
+  mr->referee.timer = (uint16_t)mr->act.timer;
+  mr->referee.delta = mr->state.frame_delta;
+  rc = fifa96_ref_offside_sequence_step(&mr->referee, &out);
+  if (rc < 0) return rc;
+  mr->act.stage = mr->referee.stage;               /* mirror the advanced stage back */
+  mr->act.timer = (int16_t)mr->referee.timer;
+  if (out.done != 0u) {                            /* native 0x891CC/0x891E8/0x891EE */
+    mr->act.id = 0;
+    mr->act.stage = 0;
+    mr->act.timer = 0;
+  }
+  rc = match_run_ref_apply(mr, &out);
+  if (rc != 0) return rc;
+  return FIFA96_OK;
+}
+
 int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
                              int32_t rec_a, int32_t rec_b, const int32_t point[3]) {
   struct fifa96_ref_record fouler;

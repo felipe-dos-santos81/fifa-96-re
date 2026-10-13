@@ -301,6 +301,185 @@ static void test_row_17_stage_walk(void) {
   assert(mr.record.stage92 == 4u);
 }
 
+/* ===== FU-193 (M2 phase-17 T4): the act-tail cohort 0x17/0x1A/0x1C =========
+ *
+ * The three native act-tail handlers `0x88DC8` (phase 0x17 / act 1),
+ * `0x89620` (phase 0x1A / act 4) and `0x89110` (phase 0x1C / act 6) are ported
+ * as bounded derived bodies but stay UNCOUNTED (their phase-table slots are
+ * NULL): FU-193 finds each producer statically (`0x8ABCF`; `0x8AB57`+`0x88EE8`;
+ * `0x8A789`) but none is live under the strict "engine reaches it" test, so per
+ * Ruling R8 the rows land as bodies + numbered legs (FU193-L1..L4) and the
+ * census is unchanged (the rows-27/29/2C precedent). phase 0x17 is additionally
+ * a double-model of the derived kickoff (`fifa96_match_run_kickoff_entry` +
+ * the frame-body `global_5882a` arm, FU193-L2) and phase 0x1C of the ported
+ * offside machine (`fifa96_ref_offside_sequence_step`, FU193-L4). */
+
+/* Phase 0x17 / act 1 (FU-193 §2): the body is NOT wired; the dispatcher returns
+ * UNSUPPORTED while the body stays reachable by direct call. */
+static void test_phase_17_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x17].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x17u) == -FIFA96_ERR_UNSUPPORTED);
+}
+
+/* Phase 0x17 stage 0 (0x88E4B): clear the [0x15882A] kickoff gate (0x88E56),
+ * run the derived kickoff entry (the FUN_000740A0(1) phase-1 write), timer = 0
+ * and stage -> 1 (0x88EAA/0x88EB1). */
+static void test_phase_17_kickoff_stage0(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 1;
+  mr.act.stage = 0;
+  mr.global_5882a = 1u;
+  assert(fifa96_match_action_phase_17(&mr) == FIFA96_OK);
+  assert(mr.global_5882a == 0u);      /* 0x88E56 */
+  assert(mr.state.phase == 1u);       /* the kickoff phase-1 entry */
+  assert(mr.act.stage == 1u);         /* 0x88EB1 */
+  assert(mr.act.timer == 0);          /* 0x88EAA */
+  assert(fifa96_match_action_phase_17(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x17 stage 1 (0x88EBC): the formation hand-off to act 4 (0x88EE8,
+ * invoke-now) when the goal-side flag [0x157A4C] != 1 and a residual formation
+ * mismatch exists. Mutation-RED: without the fall-through the act slot stays 1. */
+static void test_phase_17_stage1_handoff(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 1;
+  mr.act.stage = 1;
+  mr.global_157a4c = 0u;               /* != 1 -> hand-off permitted */
+  mr.formation_mismatch[0] = 1u;
+  assert(fifa96_match_action_phase_17(&mr) == FIFA96_OK);
+  assert(mr.act.id == 4);              /* the 0x88EE8 hand-off installed act 4 */
+}
+
+/* Phase 0x17 stage 1 (0x88EF3): the shared timeline gate word[0x15881A] >= 0x78
+ * (the derived `state.tick_total`) sets [0x15882A] = 1 and clears the act slot;
+ * below the gate the head add stands and the slot is untouched. */
+static void test_phase_17_stage1_timer(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 1;
+  mr.act.stage = 1;
+  mr.act.timer = 10;
+  mr.global_157a4c = 1u;               /* the goal-side flag suppresses the hand-off */
+  mr.state.tick_total = 0x40u;         /* < 0x78 */
+  assert(fifa96_match_action_phase_17(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 12);          /* head add stands (no reset on the JL path) */
+  assert(mr.global_5882a == 0u && mr.act.id == 1u);
+  mr.state.tick_total = 0x78u;
+  assert(fifa96_match_action_phase_17(&mr) == FIFA96_OK);
+  assert(mr.global_5882a == 1u);       /* 0x88F07 */
+  assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0);
+}
+
+/* Phase 0x1A / act 4 (FU-193 §3 / FU-197 §6): the formation-order walk. Its slot
+ * is NULL (uncounted — the 0x14C360/0x157BD2 matrices have no engine producer,
+ * FU197-L4, so the T2 arm is dormant; the phase-0x1A row would double-run it). */
+static void test_phase_1A_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1A].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Au) == -FIFA96_ERR_UNSUPPORTED);
+}
+
+/* Phase 0x1A stage 0, dormant: with the desired-order matrix unported
+ * (`formation_order_ok == 0`) the head add runs but the walk installs nothing
+ * (the honest default; a fake install would be forbidden). */
+static void test_phase_1A_dormant(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 4;
+  mr.act.stage = 0;
+  mr.formation_order_ok = 0u;
+  assert(fifa96_match_action_phase_1A(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 2);           /* 0x89629 head add */
+  assert(mr.act.stage == 0u);          /* dormant: no walk */
+  assert(mr.state.phase == 0u);        /* no phase-0xB write */
+  assert(fifa96_match_action_phase_1A(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1A stage 0 install (0x896E2): the first mismatching active record
+ * takes the phase-0xB write (0x8972F) and the action-row-0x17 install (0x89740),
+ * timer = 0 and stage -> 1. Mutation-RED: skipping the install leaves the phase
+ * at 0 and the record code 0. */
+static void test_phase_1A_install(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 4;
+  mr.act.stage = 0;
+  mr.formation_order_ok = 1u;
+  mr.formation_current[0][2] = 5;      /* current != desired at record 2 */
+  mr.formation_order[0][2] = 7;
+  mr.formation_mismatch[0] = 1u;       /* side select s = (mismatch[0]==0)?1:0 = 0 */
+  assert(fifa96_match_action_phase_1A(&mr) == FIFA96_OK);
+  assert(mr.formation_mismatch[0] == 0u);              /* 0x8966A decrement */
+  assert(mr.state.phase == 0x0Bu);                     /* 0x8972F */
+  assert(mr.entities.team[0].records[2].code == 0x17u);/* 0x89740 */
+  assert(mr.act.stage == 1u && mr.act.timer == 0);     /* 0x89747/0x8974E */
+}
+
+/* Phase 0x1A stage 1 terminal (0x897AE): clear the act slot and re-dispatch the
+ * stored situation/side (the 0x8AB45/0x8AB50 cells) with BX=1. Mutation-RED: a
+ * missing re-dispatch leaves the act slot cleared and the phase unwritten. */
+static void test_phase_1A_end_block(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 4;
+  mr.act.stage = 1;
+  mr.state.tick_total = 0x100u;        /* > 0xF0 (the word[0x15881A] gate) */
+  mr.store_15881e = 9u;                /* the stored situation */
+  mr.store_158820 = 0u;                /* the stored side */
+  assert(fifa96_match_action_phase_1A(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2u);             /* the sit-9 re-dispatch installed act 2 */
+  assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
+}
+
+/* Phase 0x1C / act 6 (FU-193 §4): the pre-restart timeline. Its slot is NULL
+ * (uncounted — no act-6 producer; the offside machine is the existing driver,
+ * a double-model, FU193-L4). The body wraps the already-ported
+ * `fifa96_ref_offside_sequence_step` (the native 0x89110). */
+static void test_phase_1C_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1C].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Cu) == -FIFA96_ERR_UNSUPPORTED);
+}
+
+/* Phase 0x1C stage 0 (0x89142): write phase 0xA (0x89156), whistle (0x974DC) and
+ * stage -> 1 (0x89185). Mutation-RED: without the alias the stage never advances
+ * and the phase stays unwritten. */
+static void test_phase_1C_stage0(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 6;
+  mr.act.stage = 0;
+  assert(fifa96_match_action_phase_1C(&mr) == FIFA96_OK);
+  assert(mr.state.phase == 0x0Au);     /* 0x89156 */
+  assert(mr.act.stage == 1u);          /* 0x89185 */
+  assert(mr.act.timer == 0);
+  assert(mr.ref_whistle == 0x1Eu);     /* the 0x974DC(0x1E) whistle */
+  assert(fifa96_match_action_phase_1C(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1C stage 2 terminal (0x891C0): clear the act slot and re-dispatch
+ * situation 9 on the opponent (0x8920A). Mutation-RED: a missing terminal leaves
+ * the act slot installed and the phase unwritten. */
+static void test_phase_1C_terminal(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 6;
+  mr.act.stage = 2;
+  assert(fifa96_match_action_phase_1C(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2u);             /* the sit-9 re-dispatch installed act 2 */
+  assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
+}
+
 int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
@@ -315,6 +494,17 @@ int main(void) {
   test_row_17_not_counted();
   test_row_17_phase_gate_resets();
   test_row_17_stage_walk();
+  test_phase_17_not_counted();
+  test_phase_17_kickoff_stage0();
+  test_phase_17_stage1_handoff();
+  test_phase_17_stage1_timer();
+  test_phase_1A_not_counted();
+  test_phase_1A_dormant();
+  test_phase_1A_install();
+  test_phase_1A_end_block();
+  test_phase_1C_not_counted();
+  test_phase_1C_stage0();
+  test_phase_1C_terminal();
   puts("test_engine_match_act OK");
   return 0;
 }

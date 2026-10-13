@@ -636,6 +636,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   Census `35/80 → **48/80 = 60%**` (`floor(100 × 48/80) = 60`); dispatch
   `31 UNSUP / 48 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35 =
   17 OK + 17 UNSUP + 1 NOTF); README title `60%` — all consistent.
+- **M2 phase-17 T4 (FU-193) — the act-tail cohort `0x17`/`0x1A`/`0x1C`: the
+  three bodies ported, `+0` counted (census unchanged `48/80 = 60%`).** Per
+  Ruling R8, FU-193 finds each native producer statically but proves none is
+  live under the strict "engine reaches it" test, so the three phase-table slots
+  stay **NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are
+  exported for direct unit testing with the producer remainder as numbered legs.
+  Ported bodies (`src/fifa96_engine/fifa96_match_run.c`, the act-tail family
+  with `0x18`/`0x19`/`0x20`): `fifa96_match_action_phase_17` (the act-1
+  kickoff/phase-1 entry `0x88DC8`: head `timer += frame_delta`; stage 0 clears
+  `[0x15882A]` + runs the derived kickoff entry, stage++; stage 1 hands off to
+  act 4 `0x88EE8` on `[0x157A4C] != 1 && a residual mismatch`, else the
+  `word[0x15881A] >= 0x78` gate sets `[0x15882A] = 1` and clears the slot);
+  `fifa96_match_action_phase_1A` (the act-4 formation-order walk `0x89620`:
+  the `formation_current != formation_order` walk gated on
+  `mr->formation_order_ok`, the phase-0xB write + action-row-0x17 install
+  `0x89740`, and the `0x897AE` end-block re-dispatch of
+  `store_15881e`/`store_158820`); `fifa96_match_action_phase_1C` (the act-6
+  pre-restart timeline `0x89110`, a thin alias of the already-ported
+  `fifa96_ref_offside_sequence_step` in the phase-0x19 FU187-L3 style). **The
+  producer legs:** `0x17` — the sit-1 arm `0x8ABCF` has no live driver, and the
+  engine's live act-1 behaviour is the **ad-hoc** `fifa96_match_run_kickoff_entry`
+  + the frame-body `global_5882a` arm, so wiring the row would **double-run** the
+  kickoff (**FU193-L1/L2**); `0x1A` — no act-4 row/producer: the T2 sit-2..4 arm
+  is gated dormant on the unported desired-order matrix
+  (`formation_order_ok` stays 0, FU197-L4) and the act-1 stage-1 hand-off is
+  itself unwired (**FU193-L3**); `0x1C` — no engine source dispatches act 6, and
+  the existing driver is the offside machine
+  (`fifa96_match_run_offside_reception` → `fifa96_ref_offside_sequence_step`), so
+  the row would double-run it (**FU193-L4**). Other legs: `0x1A`'s phase-0x1A
+  stage-1 `[rec+0x8E]`→`[0x110680]` gate and the `FUN_0007D9A4` invoke-now
+  (**FU193-L8/FU197-L6**); `0x17`'s head guard (the goal-log words
+  `[0x157AC5]`/`[0x157AC7]` + `[0x157AC2]`) and presentation sinks (**FU193-L7**).
+  **Tape-inert (R8):** M1 `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no
+  re-pin)** — the three slots are NULL, so nothing dispatches. Tests:
+  `tests/test_engine_match_act.c` (`test_phase_17_*`, `test_phase_1A_*`,
+  `test_phase_1C_*`, the `*_not_counted` NULL pins); mutation-RED
+  discriminators verified per body (the `0x17` stage advance, the `0x1A`
+  action-row install, the `0x1C` stage alias). `test_engine_m2`'s
+  `run_census_riders` pins the three NULL slots. Census unchanged `48/80 = 60%`
+  (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title `60%` — all consistent.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

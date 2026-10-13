@@ -2797,6 +2797,9 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x20].fn == NULL);  /* T4: ported, situation-0 producer absent (FU188-L1) */
+    assert(fifa96_match_phase_table[0x17].fn == NULL);  /* T4: ported, act-1 producer absent + double-model (FU193-L1/L2) */
+    assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
+    assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
     assert(fifa96_match_action_table[0x16].fn != NULL); /* T4: fouled-player face-the-ball (counted) */
     assert(fifa96_match_action_table[0x24].fn == NULL); /* T4: ported, phase-0x20 producer absent (FU188-L1) */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */
