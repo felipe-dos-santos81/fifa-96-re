@@ -5025,6 +5025,14 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
     r->target_z = mr->render.camera.pos_z;
     r->target_z -= 0xF0;                                /* 0x84FA7..0x84FAF */
     match_sp_anchor(r, r->target_x, 0, r->target_z);    /* 0x84FB7 FUN_00079B6C */
+    /* T4 (FU-220 §3.2 arm 0 / §4(a), native 0x84FBC..0x84FDB): the actor
+     * team's ball-record place [ball+0x4D]=0, [ball+0x55]=0xB10 then
+     * 0x79B6C -> ball pos (0, 0, 0xB10). The engine maps the reachable pos
+     * subset onto the ball surface; the ball-record anim/frame (+0x28/+0x3D)
+     * and the 0x8CFAC walks have no engine cell and stay FU220-L1/L2 legs. */
+    mr->entities.ball.x = 0;
+    mr->entities.ball.y = 0;
+    mr->entities.ball.z = 0xB10;
     /* 0x84FE0..0x84FF4: the 0x7876C merge request (the native [rec+0x20] slot +
      * [[rec]+0x828] gate is unported; the derived request fires for a
      * slot-bound record). */

@@ -994,6 +994,12 @@ static void test_action_20_body_arms(void) {
   assert(f.mr.record.target_z == 0xB00 - 0xF0);
   assert(f.mr.record.anim_id == 0x26u);         /* 0x8CFAC anim 0x26 */
 
+  /* T4 (FU-220 §3.2 arm 0 / §4(a)): the arm-0 ball-record place maps onto the
+   * engine ball surface: (0, 0, 0xB10). */
+  assert(f.mr.entities.ball.x == 0);
+  assert(f.mr.entities.ball.y == 0);
+  assert(f.mr.entities.ball.z == 0xB10);
+
   /* arm 4 (0x85197): lane>>16 > 0x40 -> epilogue, no advance. */
   f.mr.record.stage92 = 4;
   f.mr.record.lane = (int32_t)0x41 << 16;
