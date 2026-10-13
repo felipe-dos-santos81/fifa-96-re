@@ -1367,7 +1367,7 @@
  *      never-written row) and the INT3 slot (`0x16`) are no-ops, a non-NULL row
  *      (`0x00`) writes. Mutation-RED: wiring the NULL row `0x10` aborts it.
  *   3. The census shape + the gated-row set (T1–T6): the exact wired counts
- *      (`31` action + `18` phase = `49/80 = 61%`) and the seven
+ *      (`31` action + `17` phase = `48/80 = 60%`) and the seven
  *      dispatched-but-gated rows `0x03`/`0x04`/`0x06`/`0x07`/`0x08`/`0x09`/
  *      `0x15` are non-NULL **and** metadata-gated no-ops (a fresh record with
  *      NULL metadata is untouched). Mutation-RED: dropping a wired row aborts
@@ -2831,9 +2831,9 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 49/80 = 61% (31 action + the phase rows
+   *    the handler unit tests. 48/80 = 60% (31 action + the phase rows
    *    0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the phase-17 T3 per-record
-   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15 +
+   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15 +
    *    the phase-17 T6 act-0xB row 0x21). */
   {
     unsigned action_wired = 0, phase_wired = 0;
@@ -2841,12 +2841,12 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 18u);  /* 49/80 = 61% */
+    assert(action_wired == 31u && phase_wired == 17u);  /* 48/80 = 60% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
     assert(fifa96_match_phase_table[0x02].fn != NULL);  /* phase-17 T1: the 0x6DCC8 per-record row */
-    /* phase-17 T3: the per-record cohort (shared reset 0x6DE34 rows 00/0A/0D/0F;
+    /* phase-17 T3: the per-record cohort (shared reset 0x6DE34 rows 00/0A/0F;
      * 0x6DE44 rows 03/04/07; 0x6DD9C row 06; 0x6DD6C rows 08/09; 0x6E05C row 05;
      * 0x6DF4C row 0C; the shared 0x6DCC8 row 15). */
     assert(fifa96_match_phase_table[0x00].fn != NULL);
@@ -2859,7 +2859,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x09].fn != NULL);
     assert(fifa96_match_phase_table[0x0A].fn != NULL);
     assert(fifa96_match_phase_table[0x0C].fn != NULL);
-    assert(fifa96_match_phase_table[0x0D].fn != NULL);
+    assert(fifa96_match_phase_table[0x0D].fn == NULL);  /* final-review C1: never live-written (situation-7 producer FU-146 unported) */
     assert(fifa96_match_phase_table[0x0F].fn != NULL);
     assert(fifa96_match_phase_table[0x15].fn != NULL);
     /* the not-written / double-wire / RNG rows stay NULL (T3). */
@@ -3206,7 +3206,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 18u);    /* 49/80 = 61% */
+    assert(action_wired == 31u && phase_wired == 17u);    /* 48/80 = 60% */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);

@@ -4793,8 +4793,8 @@ int fifa96_match_phase_0C(struct fifa96_match_run *mr) {
  * `0x1105EA` 2-stride signed-byte table at `EBX = active-1` scaled `<< 5`, with
  * `target[2]` negated when `[team+0x826] != 0`, and `target[1] = 0`. The table
  * bytes are a fresh `read_memory 0x1105E0` of the LE image (FU-192 §2.6). Row
- * `0x10` is never written by an engine source (the 9 `match_run_write_phase`
- * call sites, FU-191 §10), so its slot stays NULL: an un-dispatched count would
+ * `0x10` is never written by a live engine source (the 11 `match_run_write_phase`
+ * call sites, FU-191 §10 / final-review M6), so its slot stays NULL: an un-dispatched count would
  * be fake (the rows-27/29/2C precedent). DERIVED HARDENING (leg FU192-L1): the
  * native indexes the `0x1105EA` table blindly (`active` is the record ordinal
  * 0..10, so `k = active-1 ∈ [-1, 9]` and the native reads out of the table for
@@ -5076,17 +5076,17 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x0A, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0A = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x0B, NULL,
-     "FU-192 §1 (phase-17 T3): phase 0B = the shared reset 0x6DE34, but phase 0x0B is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §10), so wiring it would be an un-dispatched/fake count; the slot stays NULL; the rows-27/29/2C precedent; OL-13"},
+     "FU-192 §1 (phase-17 T3): phase 0B = the shared reset 0x6DE34, but phase 0x0B is never written by a live engine source (the 11 match_run_write_phase call sites, FU-191 §10 / final-review M6; the sole writer sits inside the unwired row 0x1A body), so wiring it would be an un-dispatched/fake count; the slot stays NULL; the rows-27/29/2C precedent; OL-13"},
     {0x0C, fifa96_match_phase_0C,
      "FU-192 §2.5 (phase-17 T3): phase 0C = the ported native 0x6DF4C (0x6DF4C..0x6E001), the stateful restart-line timer ([rec+0x89] += [0x157A64] every call, then the 0x780/0xCC0 target writes past the 0x3C gate with the |word[rec+0x69]| < 0x20 refinement). The [rec+4]/0x157A38 table, the [rec+0x8A] angle term and the 0x8DCD4 metric are FU192-L1. Off-tape: tape-neutral"},
-    {0x0D, fifa96_match_phase_00,
-     "FU-192 §2.1 (phase-17 T3): phase 0D = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
+    {0x0D, NULL,
+     "FU-192 §2.1 + final-review C1 (M2 phase-17): phase 0D = the shared reset 0x6DE34 (same body as row 00), but the row stays NULL/uncounted — its only engine writer is `match_run_write_phase(mr, out.phase)` with `out.phase == 0x0D` from `fifa96_action_phase_situations[7]` (`fifa96_action_handlers.c:1141`, i.e. `set_piece(mr, 7, ...)`), and no live caller dispatches situation 7 (the only passes-7 sites are the direct test calls in tests/test_engine_match_frame.c, on the gate-open queue route, which writes no phase), so the per-record walk never dispatches the row; a wired count would be un-dispatched/fake (the rows-0B/0E/10 precedent). Owner leg FU-146 (the unported situation-7 screen producer); OL-13"},
     {0x0E, NULL,
      "FU-192 §1 (phase-17 T3): phase 0E = the shared reset 0x6DE34, but phase 0x0E is never written by an engine source (FU-191 §10); the slot stays NULL to avoid an un-dispatched/fake count; OL-13"},
     {0x0F, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0F = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x10, NULL,
-     "FU-192 §2.6 (phase-17 T3): phase 10 = the native 0x6E004 (the 0x1105EA variant table) is PORTED (fifa96_match_phase_10) but NOT counted: phase 0x10 is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §10), so a wired row would never dispatch (the rows-27/29/2C precedent). The body is exported for direct unit testing; OL-13"},
+     "FU-192 §2.6 (phase-17 T3): phase 10 = the native 0x6E004 (the 0x1105EA variant table) is PORTED (fifa96_match_phase_10) but NOT counted: phase 0x10 is never written by a live engine source (the 11 match_run_write_phase call sites, FU-191 §10 / final-review M6; the sole writer sits inside the unwired row 0x1D body), so a wired row would never dispatch (the rows-27/29/2C precedent). The body is exported for direct unit testing; OL-13"},
     {0x11, NULL,
      "FU-192 §2.8/L6 (phase-17 T3): phase 11 = the native 0x6E1C8 (8-byte shim: EBX=-1, EDX=&rec+0x4D, falls into 0x6E1D0); under the walk ABI it is identical to rows 01/12 (the formation placement), so it is not wired (the R10 'do not double-wire'; FU192-L6/L7); OL-13"},
     {0x12, NULL,

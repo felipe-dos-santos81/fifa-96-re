@@ -5,8 +5,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-49/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21
-and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15), the
+48/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21
+and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -261,9 +261,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **49/80 rows wired** (31 action + the phase rows
+- Action dispatch (FU-137): **48/80 rows wired** (31 action + the phase rows
   `0x02`/`0x18`/`0x19`/`0x1F`/`0x21` and the phase-17 T3 per-record cohort
-  `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0D`/`0x0F`/`0x15`)
+  `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
@@ -493,13 +493,21 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU191-L3). **The walk is per-phase** — it dispatches whichever non-NULL row it
   is handed, gated on `fn != NULL`. **On the live engine it dispatches only
   phase `0x02`**, because that is the sole phase that is both written by
-  `match_run_write_phase` and non-NULL: the write arguments are confined to the
-  game-phase family `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xD,0xF,0x11,0x13,0x14,0x15}`
-  (all `< 0x16`; verified over the 9 call sites + the
+  `match_run_write_phase` and non-NULL. **The engine-reach set** (the phases a
+  live `match_run_write_phase` call can write, derived from the live call sites,
+  not the table's possibility) is the game-phase family
+  `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xF,0x11,0x13,0x14,0x15}`
+  (all `< 0x16`; verified over the 11 call sites + the
   `fifa96_action_phase_situation`/`fifa96_action_phase_period_end`/`fifa96_ref_sequence`
-  sources), and only `0x02` of those has a non-NULL `fifa96_match_phase_table`
-  row — the act-tail rows `0x18/0x19/0x1F/0x20` are never written by this
-  function. The divergence from the native unconditional `FUN_0008DCD4` distance
+  sources) — `0x0D` is a possible argument (via `fifa96_action_phase_situations[7]`
+  = `set_piece(mr, 7, …)`) but no live caller dispatches situation 7, and
+  `0x0B`/`0x0E`/`0x10` likewise have no live writer (the only `0x0B`/`0x10` writers
+  sit inside the unwired rows `0x1A`/`0x1D`); only `0x02` of the reach set has a
+  non-NULL `fifa96_match_phase_table` row at T1 — the act-tail rows
+  `0x18/0x19/0x1F/0x20` are never written by this function. *(The reach set is
+  cited identically in FU-175 §7B and FU-195 §5; the final-review C1
+  reconciliation below removes `0x0D` from the per-record count.)*
+  The divergence from the native unconditional `FUN_0008DCD4` distance
   write is **FU191-L2**, recorded not hidden. **Brief deviation (recorded):** the
   T1 brief said "replace the global `fifa96_match_dispatch_phase` call with the
   native per-record walk", but there is no `fifa96_match_dispatch_phase` caller
@@ -580,10 +588,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   The `test_engine_m2` `run_phase17_t2_riders` pins the dormancy; M1 `09b726b7…`
   and M2 `7b4b241a…` stay **byte-exact (no re-pin)**.
 - **M2 phase-17 T3 (FU-192) — the per-record phase handlers `0x00–0x15`: seven
-  distinct bodies ported; 13 per-record rows wired/counted (census `35/80 →
-  48/80 = 60%`).** The remaining bodies of the per-record phase family are
+  distinct bodies ported; 12 per-record rows wired/counted (census `35/80 →
+  47/80 = 58%`).** The remaining bodies of the per-record phase family are
   ported over the T1 walk cursor (`fifa96_match_phase_00` = the shared `0x6DE34`
-  reset `target := position`, rows `00/0A/0D/0F`; `fifa96_match_phase_04` =
+  reset `target := position`, rows `00/0A/0F`; `fifa96_match_phase_04` =
   `0x6DE44` (rows `03/04/07`), the `word[0x1577D6/D8+side*4]` side-selected
   placement scaling the `[rec+0x14]` dword pair `W+(W>>2)` / `D+(D>>4)`,
   side-flipped; `fifa96_match_phase_06` = `0x6DD9C` (row `06`), the
@@ -595,22 +603,22 @@ the build also produces the windowed `fifa96` target (`make game`).
   stateful `[rec+0x89] += [0x157A64]` restart-line timer with the `0x780`/`0xCC0`
   target writes past the `0x3C` gate; `fifa96_match_phase_10` = `0x6E004` (row
   `10`), the `0x1105EA` variant table). The shared T1 body `0x6DCC8` also fills
-  row `0x15` (T1 deliberately deferred it). **Gated-count caveat (read the 60%
-  with this):** 7 of the 13 newly-wired rows are live **dispatched-but-gated
+  row `0x15` (T1 deliberately deferred it). **Gated-count caveat (read the 58%
+  with this):** 7 of the 12 newly-wired rows are live **dispatched-but-gated
   no-ops** — `0x03`/`0x04`/`0x07` (`0x6DE44`, `[rec+0x14]` NULL,
   `fifa96_match_handlers.c:4668`), `0x06` (`0x6DD9C`, `[rec+0x10]` NULL, `:4729`),
   and `0x08`/`0x09` (`0x6DD6C`) + `0x15` (the shared `0x6DCC8`) via the NULL
   `phase_meta` (`:4594`/`:4603`/`:4748`). Their phases *are* engine-written and
   their rows *are* dispatched (so they count under the repo's own definition —
   the FU-177 §7 / T1-phase-`0x02` convention), but the ported bodies perform the
-  native work only when a fixture supplies the unported input; the remaining 6
-  (`0x00` reset, `0x05`, `0x0A`/`0x0D`/`0x0F` reset aliases, `0x0C`) do their
+  native work only when a fixture supplies the unported input; the remaining 5
+  (`0x00` reset, `0x05`, `0x0A`/`0x0F` reset aliases, `0x0C`) do their
   work with no input gate. **Tape-inert (R10):** M1
   `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no re-pin)** — the on-tape
   rows (`0x00` reset, `0x04` the gated `0x6DE44`, `0x15` the shared `0x6DCC8`)
   are render-invisible (targets are render-invisible, FU-191 §10; the metadata
   bodies are NULL-gated no-ops), and the off-tape engine-written rows
-  (`0x03/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F`) never dispatch on the
+  (`0x03/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F`) never dispatch on the
   tape. **Legs:** `0x6E244` (rows `0x13/0x14`) is not wired — it consumes the
   PRNG `0x92AC8` twice per active record and its `0x10F364/0x10F368` producer is
   the unported `FUN_0008D098` case-0x13/0x14 scatter (**FU192-L2**); rows
@@ -618,9 +626,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   wired — the placement is already realized by the seeding path
   (`fifa96_match_entities_seed_formation`) and wiring the phase row would
   double-run it (R10 "do not double-wire"; **FU192-L6/L7**); rows
-  `0x0B`/`0x0E`/`0x10` stay NULL because no engine source writes those phases
+  `0x0B`/`0x0D`/`0x0E`/`0x10` stay NULL because no live engine source writes those phases
   (a wired row would be an un-dispatched/fake count, the rows-27/29/2C
-  precedent). The `[rec+0x10]`/`[rec+0x14]` OL-13 metadata pointers
+  precedent; `0x0D`'s sole argument, situation 7, has no live dispatcher — the
+  final-review C1 leg, owner FU-146). The `[rec+0x10]`/`[rec+0x14]` OL-13 metadata pointers
   (**FU192-L1**) and the `0x6DE44` DX<0 cell-map arm `0x6D870`/`0x15774C`
   (**FU192-L3**) remain legs. One characterization shift (recorded): wiring the
   reset row `0x0A` makes the native `FUN_000740A0` walk reset the records'
@@ -633,11 +642,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   the `0x6DE44` `W>>2`, the `0x6DD9C` ±0x60 bias, the `0x6DD6C` `0xBC`, the
   `0x6DF4C` timer add, the `0x6E004` `<< 5` scale and the `0x6E05C` position
   copy. The `test_engine_m2` `run_phase17_t3_riders` pins the cohort dormancy.
-  Census `35/80 → **48/80 = 60%**` (`floor(100 × 48/80) = 60`); dispatch
-  `31 UNSUP / 48 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35 =
-  17 OK + 17 UNSUP + 1 NOTF); README title `60%` — all consistent.
+  Census `35/80 → **47/80 = 58%**` (`floor(100 × 47/80) = 58`); dispatch
+  `32 UNSUP / 47 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35 =
+  16 OK + 18 UNSUP + 1 NOTF); README title `58%` — all consistent.
+  *(errata, phase-17 final review C1: the `48/80 = 60%` this line replaced
+  counted phase `0x0D`, over-counted by one — the row has no live writer.)*
 - **M2 phase-17 T4 (FU-193) — the act-tail cohort `0x17`/`0x1A`/`0x1C`: the
-  three bodies ported, `+0` counted (census unchanged `48/80 = 60%`).** Per
+  three bodies ported, `+0` counted (census unchanged `47/80 = 58%`).** Per
   Ruling R8, FU-193 finds each native producer statically but proves none is
   live under the strict "engine reaches it" test, so the three phase-table slots
   stay **NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are
@@ -674,11 +685,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_phase_1C_*`, the `*_not_counted` NULL pins); mutation-RED
   discriminators verified per body (the `0x17` stage advance, the `0x1A`
   action-row install, the `0x1C` stage alias). `test_engine_m2`'s
-  `run_census_riders` pins the three NULL slots. Census unchanged `48/80 = 60%`
-  (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title `60%` — all consistent.
+  `run_census_riders` pins the three NULL slots. Census unchanged `47/80 = 58%`
+  (dispatch `32 UNSUP / 47 OK / 1 NOTF`); README title `58%` — all consistent.
 - **M2 phase-17 T5 (FU-194) — the act-tail cohort `0x1D`/`0x1E`/`0x20`
   (act 7/8/0xA): the two new bodies ported (`0x1D`/`0x1E`; `0x20` was already
-  ported, FU-188), `+0` counted (census unchanged `48/80 = 60%`).** Per Ruling
+  ported, FU-188), `+0` counted (census unchanged `47/80 = 58%`).** Per Ruling
   R8, FU-194 finds each native producer statically (sit 8 → act 7; the
   `FUN_0008A938` BX!=0 fallback → act 8; sit 0 → act 0xA) but proves none is live
   under the strict "engine reaches it" test, so the three phase-table slots stay
@@ -716,10 +727,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   the `*_not_counted` NULL pins); mutation-RED discriminators verified per body
   (the `0x1D` stage advance and terminal, the `0x1E` selection and terminal).
   `test_engine_m2`'s `run_census_riders` pins the two new NULL slots. Census
-  unchanged `48/80 = 60%` (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title
-  `60%` — all consistent.
+  unchanged `47/80 = 58%` (dispatch `32 UNSUP / 47 OK / 1 NOTF`); README title
+  `58%` — all consistent.
 - **M2 phase-17 T6 (FU-195) — the act-tail cohort `0x21`/`0x22` + the `0x1B`
-  verdict: phase `0x21` wired/counted, `+1` (`48/80 → 49/80 = 61%`).** The two
+  verdict: phase `0x21` wired/counted, `+1` (`47/80 → 48/80 = 60%`).** The two
   act-tail handlers `0x8B874` (phase `0x21` / act 0xB, the native
   extra-time-CLEAR period-end timer) and `0x8B900` (phase `0x22` / act 0xC, the
   extra-time-SET three-stage analogue) are ported (`fifa96_match_action_phase_21`
@@ -753,13 +764,13 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_phase_1B_leg_no_invoker` pin); mutation-RED discriminators verified (the
   `0x21` stage-1 act-slot clear, the `phase_drive` dispatch, the `0x22` stage-1
   timer reset). `test_engine_m2`'s `run_census_riders` pins the wired `0x21`, the
-  NULL `0x22`/`0x1B`. Census `48/80 → **49/80 = 61%**`
-  (`floor(100 × 49/80) = 61`); dispatch `30 UNSUP / 49 OK / 1 NOTF` (sum 80;
-  action 45 = 31 OK + 14 UNSUP, phase 35 = 18 OK + 16 UNSUP + 1 NOTF); README
-  title `61%` — all consistent.
+  NULL `0x22`/`0x1B`. Census `47/80 → **48/80 = 60%**`
+  (`floor(100 × 48/80) = 60`); dispatch `31 UNSUP / 48 OK / 1 NOTF` (sum 80;
+  action 45 = 31 OK + 14 UNSUP, phase 35 = 17 OK + 17 UNSUP + 1 NOTF); README
+  title `60%` — all consistent.
 - **M2 phase-17 T7 (acceptance) — the tape is v17 (byte-identical), the
   phase/act-seam riders folded in, the smoke recorded, the census reconciled
-  (`49/80 = 61%`).** **Tape decision: v17 strata, no re-pin.** Every phase-17
+  (`48/80 = 60%`).** **Tape decision: v17 strata, no re-pin.** Every phase-17
   landing is install-live, producer-gated off, or tape-dormant, so no presented
   frame moved: M1 `09b726b7…` is unmoved and M2 is held at the v16 bytes
   `7b4b241a…` (792 lines, `cmp` clean against
@@ -777,7 +788,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   non-skipped record routed to the staged record — a silent re-seam, a
   double-run or a store slip aborts), the **per-record walk pin** (only
   non-NULL rows dispatch), the **census shape + gated-row set** (`31` action +
-  `18` phase = `49/80 = 61%`; the seven dispatched-but-gated no-op rows
+  `17` phase = `48/80 = 60%`; the seven dispatched-but-gated no-op rows
   `0x03/0x04/0x06/0x07/0x08/0x09/0x15` are metadata-gated), **phase `0x21`'s
   dispatch**, and the **leg pins** (row `03` NULL/FU177-L1, `0x22`/`0x1B` NULL,
   `0x13/0x14` NULL). Mutation-RED: the per-rider mutations are recorded in the
@@ -799,9 +810,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   install-live/gated/tape-dormant, so **no visible delta is claimed**. The SDL
   exit leaks 1942 B (dbus/nvidia-GL under `SDL_CreateWindowAndRenderer`,
   `platform_sdl3.c:78`) — **pre-existing host-library noise**, not an engine
-  leak. **Census: `49/80 = 61%`** (`floor(100 × 49/80) = 61`); dispatch
-  `30 UNSUP / 49 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35
-  = 18 OK + 16 UNSUP + 1 NOTF); README title `61%` — all consistent.
+  leak. **Census: `48/80 = 60%`** (`floor(100 × 48/80) = 60`); dispatch
+  `31 UNSUP / 48 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35
+  = 17 OK + 17 UNSUP + 1 NOTF); README title `60%` — all consistent.
   **Remaining legs (owners; derivations live in the FU slice named).** The
   per-record seam remainder **FU191-L1..L6** (incl. the `FUN_0008DCD4` distance
   triple **FU191-L2** and the record-threaded ABI **FU191-L3**); the
@@ -820,6 +831,31 @@ the build also produces the windowed `fifa96` target (`make game`).
   **OL-65** (the row-0x22 angle-input gate). Every phase-16/17 FU leg is
   unchanged from its slice; this bullet is the owner register, not a
   re-derivation.
+- **M2 phase-17 final review (C1) — the per-record census over-counted phase
+  `0x0D`; corrected to `48/80 = 60%`.** Phase-table row `0x0D` was wired
+  (`fifa96_match_phase_00`) and counted by T3, but the phase has **no live engine
+  writer**: its only writer is `match_run_write_phase(mr, out.phase)` with
+  `out.phase == 0x0D` from `fifa96_action_phase_situations[7]`
+  (`fifa96_action_handlers.c:1141`, i.e. `set_piece(mr, 7, …)`), and no live
+  caller in `src/`/`tools/` passes situation 7 — the only passes-7 sites are the
+  direct test calls in `tests/test_engine_match_frame.c` (gate-open queue route,
+  which writes no phase). The per-record walk therefore never dispatches the row,
+  so it belongs with the never-live-written `0x0B`/`0x0E`/`0x10` (`NULL`), not the
+  counted class. **Fix:** `fifa96_match_phase_table[0x0D].fn = NULL` (body/evidence
+  comment retained; owner leg **FU-146**, the unported situation-7 screen
+  producer). **Recomputed census** (the pre-correction `48`/`49` totals are quoted
+  in the T3–T7 errata parentheticals, kept verbatim): T3 `35/80 → 47/80 = 58%`
+  (12 per-record rows: 5 ungated + 7 gated); T4/T5 unchanged `47/80 = 58%`; T6
+  `47/80 → 48/80 = 60%`; T7 `48/80 = 60%`. Dispatch `31 UNSUP / 48 OK / 1 NOTF`
+  (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35 = 17 OK + 17 UNSUP + 1 NOTF).
+  The `tests/test_engine_m2.c` census riders (`phase_wired == 17`) and
+  `tests/test_engine_match_handlers.c`'s `phase_expect[0x0D] = UNSUP` pin the
+  correction. **Tape:** M1 `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no
+  re-pin, `cmp`-verified)** — the row was never dispatched, so removing it moves
+  nothing. **M6:** the T1 bullet's `match_run_write_phase` call-site count is
+  corrected `9 → 11` (the two added writers sit in the unwired rows
+  `0x1A`/`0x1D`). **I1:** one engine-reach set is stated (the T1 bullet above,
+  cross-cited in FU-175 §7B/FU-195 §5) and excludes `0x0D`/`0x0B`/`0x0E`/`0x10`.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

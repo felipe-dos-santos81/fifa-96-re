@@ -397,7 +397,11 @@ The whole placement family (phases 0x00..0x15) is reachable only through the
 written by the 27 `FUN_000740A0` sites (fresh `get_xrefs_to 0x740A0` = 27;
 argument table *cross-cited* FU-143 §3.1) are
 `{0,1,2,3,4,5,8,9,0xA,0xB,0xC,0xD,0xF,0x10,0x11,0x13,0x14,0x15}` — so those
-placement rows are the honest per-record targets. Rows 0x06/0x07 (phase 6/7)
+placement rows are the *native* per-record targets. *(Distinct and narrower: the
+**engine-reach** set — the phases a live `match_run_write_phase` call can write —
+is `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xF,0x11,0x13,0x14,0x15}`; it excludes the
+native-only `0xB`/`0x10` and the never-live-dispatched situation-7 phase `0xD`.
+Stated once in `docs/ENGINE.md` phase-17 T1 — final-review I1.)* Rows 0x06/0x07 (phase 6/7)
 also appear via the set-piece/keeper writes. **None is ported (OL-13, FU-137
 §6.2)** and the walk needs the entity/record surfaces (OL-1/OL-5), so this is
 strictly after the act-indexed wave.

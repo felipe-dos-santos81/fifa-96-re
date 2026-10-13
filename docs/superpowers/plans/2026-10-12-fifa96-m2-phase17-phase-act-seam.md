@@ -133,4 +133,22 @@ R39–R46 run **concurrently** (the user-directed speed-up surface). Each is rea
 
 ## Landing notes (post-execution)
 
-_(filled in at close-out)_
+**Closed 2026-10-12 (final review wave).** All eight recon slices (FU-191…FU-198)
+and T1–T7 landed on `main`; final count **48/80 = 60%** (31 action + 17 phase),
+`make check` **110/110**, M1 `09b726b7…` and M2 `7b4b241a…` byte-identical
+(no re-pin). The one final-review critical (C1): phase row `0x0D` was wired and
+counted but has **no live engine writer** — its sole writer is
+`match_run_write_phase(mr, out.phase)` with `out.phase == 0x0D` from
+`fifa96_action_phase_situations[7]` (`set_piece(mr, 7, …)`), and no live caller
+dispatches situation 7 (the only passes-7 sites are direct test calls on the
+gate-open queue route, which writes no phase). `fifa96_match_phase_table[0x0D].fn`
+is therefore `NULL` (owner leg FU-146, the unported situation-7 screen producer),
+which drops the count from the over-counted 49 to 48. The census is reconciled
+across README/ENGINE/PROGRESS/tests (T3 `47/80 = 58%`, T4/T5 `47/80`, T6
+`47→48`, T7 `48/80 = 60%`; `phase_wired == 17`; `phase_expect[0x0D] = UNSUP`).
+Other folded minors: **M6** call-site count `9 → 11`; **I1** one engine-reach set
+`{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xF,0x11,0x13,0x14,0x15}` (excludes
+`0x0D`/`0x0B`/`0x0E`/`0x10`) stated in the ENGINE T1 bullet and cross-cited in
+FU-175 §7B/FU-195 §5; **M1** `AGENTS.md` title percentage synced to `48/80 → 60%`.
+The reminder for the owning review: no tape re-pin was needed because the row was
+never dispatched.

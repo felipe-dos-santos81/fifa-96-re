@@ -262,7 +262,11 @@ shows a pure-reset body: `XOR EDX,EDX; XOR AH,AH; MOV [0x158818],DX;
 MOV [0x158828],AH; XOR EDX,EDX; MOV [0x158829],AH; MOV [0x158808],EDX; RET`
 (id/stage/timer/handler all zeroed, no `FUN_000740A0`). And no `FUN_000740A0`
 site writes phase `0x1B` (the written set is `{0,1,2,3,4,5,8,9,0xA,0xB,0xC,0xD,
-0xF,0x10,0x11,0x13,0x14,0x15}`, *cross-cited* FU-175 §7B; independently, the act
+0xF,0x10,0x11,0x13,0x14,0x15}`, *cross-cited* FU-175 §7B; the **engine-reach**
+set (the phases a live `match_run_write_phase` call can write) is distinct and
+narrower — `{0,1,2,3,4,5,6,7,8,9,0xA,0xC,0xF,0x11,0x13,0x14,0x15}`, excluding the
+native-only `0xB`/`0x10` and the never-live-dispatched situation-7 phase `0xD` —
+stated once in `docs/ENGINE.md` phase-17 T1 (final-review I1); independently, the act
 domain `{0..0xC}` cannot select phase `0x1B` unless a caller passes `EAX=5`),
 so the per-record walker cannot reach it either.
 
