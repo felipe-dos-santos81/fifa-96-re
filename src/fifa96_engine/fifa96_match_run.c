@@ -2523,6 +2523,15 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
     rc = match_run_write_phase(mr, out.phase);
     if (rc != 0) return rc;
   }
+  /* FU-195 §4/§6.1 (M2 phase-17 T6): the native FUN_0008B9CC tail (0x8BAE7
+   * CALL 0x000888FC) always invokes the act selector after the phase write:
+   * BX=1 (invoke-now), DL=0 (stage 0). Under the engine's selector-0 default
+   * `out.act` is 0x0B (extra-time clear), so this installs act 0xB and runs the
+   * phase-0x21 body — the T6 counted row. (The native is unconditional on
+   * LAB_0008bac6; the derived dispatch is likewise outside the phase-write
+   * conditional.) */
+  rc = fifa96_match_act_dispatch(mr, out.act, 0u, 1);
+  if (rc < 0) return rc;
   return 1;
 }
 
@@ -5902,6 +5911,78 @@ int fifa96_match_action_phase_1E(struct fifa96_match_run *mr) {
     return rc;
   }
   return FIFA96_OK;
+}
+
+/* FU-195 §2/§6.1 (M2 phase-17 T6): the phase-0x21 / act-0xB row body — the
+ * native extra-time-CLEAR period-end timer `0x8B874` (act slot `0x1107EC[0xB]`).
+ * This is the ONE counted row of T6 (the producer `0x8BAE7` is live via
+ * `phase_drive` -> `out.act = 0x0B` -> `fifa96_match_act_dispatch`). Raw disasm
+ * (no Ghidra function: table-only target): head `word[0x158818] +=
+ * word[0x157A64]` (`0x8B884`); stage 0 `0x8B89E` fires the `0x974DC(0x1E)`
+ * event, resets the timer (`0x8B8B2`) and advances (`0x8B8B9`); stage 1
+ * `0x8B8C3` waits on `word[0x15881A] >= 0x3C` (alias trap `[0x158816]>>16`; the
+ * derived model gates on the act timer, FU195-L4), then fires the event and
+ * clears the act slot (`0x8B8DE..0x8B8F3`); stage > 1 is the `0x8B89A` POP/RET
+ * no-op. The `0x974DC(0x1E)` audio sink is staged as `mr->ref_whistle` (the
+ * sibling phase-1C/1D convention; the ring-push/audio-handle remainder is
+ * FU195-L3). No record, no phase write. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_21(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x8B884 */
+  if (mr->act.stage == 0u) {                       /* 0x8B89E */
+    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    mr->act.timer = 0;                             /* 0x8B8B2 */
+    mr->act.stage = 1u;                            /* 0x8B8B9 */
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 1u) {                       /* 0x8B8C3 */
+    if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
+    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    mr->act.id = 0;                                /* 0x8B8ED [0x158808]/[0x158828] */
+    mr->act.stage = 0;                             /* 0x8B8F3 */
+    mr->act.timer = 0;                             /* 0x8B8DE */
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;                                /* stage > 1: 0x8B89A POP/RET */
+}
+
+/* FU-195 §3/§6.1/§7 (M2 phase-17 T6): the phase-0x22 / act-0xC row body — the
+ * native extra-time-SET analogue `0x8B900` (act slot `0x1107EC[0xC]`), the
+ * three-stage form of `phase_21`. Its slot stays NULL — producer-dormant: the
+ * native invoker `0x8BAE7` fires act 0xC only when `[0x157AC0] != 0`, whose
+ * engine producer is unported and which `phase_drive` hardwires to 0 (leg
+ * FU195-L2). Raw disasm: head `word[0x158818] += word[0x157A64]` (`0x8B911`);
+ * stage 0 (`0x8B92E`) event + timer 0 + stage 1; stage 1 (`0x8B95C`) waits on
+ * `word[0x15881A] >= 0x3C` (derived: the act timer, FU195-L4), then event +
+ * timer 0 + stage 2; stage 2 (`0x8B98F`) waits the same gate, then event and
+ * clears the act slot (`0x8B9AA..0x8B9BF`); stage > 2 is the `0x8B929` RET.
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_22(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x8B911 */
+  if (mr->act.stage == 0u) {                       /* 0x8B92E */
+    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    mr->act.timer = 0;                             /* 0x8B951 */
+    mr->act.stage = 1u;
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 1u) {                       /* 0x8B95C */
+    if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
+    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    mr->act.timer = 0;                             /* 0x8B98E */
+    mr->act.stage = 2u;
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 2u) {                       /* 0x8B98F */
+    if (mr->act.timer < 0x3C) return FIFA96_OK;    /* the word[0x15881A] gate (FU195-L4) */
+    mr->ref_whistle = 0x1Eu;                       /* 0x974DC(0x1E) */
+    mr->act.timer = 0;                             /* 0x8B9AA */
+    mr->act.id = 0;                                /* 0x8B9B3 */
+    mr->act.stage = 0;                             /* 0x8B9BF */
+    return FIFA96_OK;
+  }
+  return FIFA96_OK;                                /* stage > 2: 0x8B929 RET */
 }
 
 int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,

@@ -1528,6 +1528,40 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
  * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1E(struct fifa96_match_run *mr);
 
+/* FU-195 §2/§6.1 (M2 phase-17 T6): the phase-0x21 / act-0xB row body — the
+ * native extra-time-CLEAR period-end timer (`0x8B874`, act slot `0x1107EC[0xB]`,
+ * the FU165-L9 dual identity). This is the ONE counted row of T6: its producer
+ * `FUN_0008B9CC` (`0x8BAE7 CALL 0x000888FC(0xB,0,BX=1)`) is mirrored live by
+ * `fifa96_match_run_phase_drive` -> `fifa96_action_phase_period_end` (which
+ * yields `out.act = 0x0B` under the selector-0 default) -> the new act-selector
+ * dispatch, so wiring `fifa96_match_phase_table[0x21]` is an honest +1. Derived
+ * stages (raw disasm; the body is a table-only target with no Ghidra function):
+ * head `mr->act.timer += frame_delta` (`0x8B884`, `word[0x158818] +=
+ * word[0x157A64]`); stage 0 (`0x8B89E`) fires the `0x974DC(0x1E)` audio event,
+ * resets the timer and advances to stage 1; stage 1 (`0x8B8C3`) waits on the
+ * `word[0x15881A] >= 0x3C` gate (derived: the act timer, FU195-L4), then fires
+ * the event and clears the act slot (handler/id/stage/timer); stage > 1 is the
+ * native `0x8B89A` POP/RET no-op. The body touches only the act slot and the
+ * `0x1E` sink (staged as `mr->ref_whistle`, the sibling phase-1C/1D convention;
+ * the ring-push/audio-handle remainder is FU195-L3) — no record, no phase write,
+ * so it is render-invisible. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL
+ * `mr`. */
+int fifa96_match_action_phase_21(struct fifa96_match_run *mr);
+
+/* FU-195 §3/§6.1/§7 (M2 phase-17 T6): the phase-0x22 / act-0xC row body — the
+ * native extra-time-SET analogue (`0x8B900`, act slot `0x1107EC[0xC]`). Its
+ * phase-table slot (`fifa96_match_phase_table[0x22]`) is **NULL** — the row is
+ * NOT counted — because it is producer-dormant: the native invoker `0x8BAE7`
+ * fires act 0xC only when the extra-time flag `[0x157AC0] != 0`, whose engine
+ * producer is unported; `fifa96_match_run_phase_drive` passes `extra_time = 0u`
+ * (`match_run.c`), so `out.act` is always `0x0B` (leg FU195-L2). The body is the
+ * three-stage form of `phase_21` (same head; stages 0/1/2 each gated on the
+ * derived timer `>= 0x3C` after a reset; the terminal stage 2 clears the act
+ * slot), exported for direct unit testing (the FU-185/FU-188/FU-193
+ * "ported body, no live installer" precedent). Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_22(struct fifa96_match_run *mr);
+
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the
  * triple sits inside the mouth band: `0xB10 <= |z|_w < 0xB90`,

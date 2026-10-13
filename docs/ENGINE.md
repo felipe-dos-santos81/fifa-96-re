@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-48/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F
+49/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -261,8 +261,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **48/80 rows wired** (31 action + the phase rows
-  `0x02`/`0x18`/`0x19`/`0x1F` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **49/80 rows wired** (31 action + the phase rows
+  `0x02`/`0x18`/`0x19`/`0x1F`/`0x21` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0D`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -718,6 +718,45 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_engine_m2`'s `run_census_riders` pins the two new NULL slots. Census
   unchanged `48/80 = 60%` (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title
   `60%` — all consistent.
+- **M2 phase-17 T6 (FU-195) — the act-tail cohort `0x21`/`0x22` + the `0x1B`
+  verdict: phase `0x21` wired/counted, `+1` (`48/80 → 49/80 = 61%`).** The two
+  act-tail handlers `0x8B874` (phase `0x21` / act 0xB, the native
+  extra-time-CLEAR period-end timer) and `0x8B900` (phase `0x22` / act 0xC, the
+  extra-time-SET three-stage analogue) are ported (`fifa96_match_action_phase_21`
+  / `_22`, raw `disassemble_bytes`; both are table-only targets with no Ghidra
+  function). **phase `0x21` is the one counted row:** its producer
+  `FUN_0008B9CC`'s tail (`0x8BAE7 CALL 0x000888FC(0xB,0,BX=1)`) is mirrored
+  live — T6 adds the native act-selector invocation to
+  `fifa96_match_run_phase_drive` (after the phase write, the `LAB_0008bac6`
+  position), so the derived chooser (`fifa96_action_phase_period_end`,
+  `out.act = 0x0B` under the selector-0 default) drives
+  `fifa96_match_act_dispatch` → the phase-`0x21` body invoke-now. Body: head
+  `timer += frame_delta` (`0x8B884`); stage 0 (`0x8B89E`) fires the
+  `0x974DC(0x1E)` event (staged `ref_whistle`, the sibling phase-1C/1D
+  convention), timer 0, stage 1; stage 1 (`0x8B8C3`) waits the derived
+  `timer >= 0x3C` (`word[0x15881A]` gate, **FU195-L4**) then fires the event
+  and clears the act slot (`0x8B8DE..0x8B8F3`); stage > 1 no-op. Render-invisible
+  (act slot + audio sink only). **phase `0x22` is producer-dormant** — ported but
+  its slot stays NULL: the native invoker fires act 0xC only when the extra-time
+  flag `[0x157AC0] != 0`, whose engine producer is unported and `phase_drive`
+  passes as `extra_time = 0u`, so `out.act` is always `0x0B` (**leg FU195-L2**).
+  **phase `0x1B` / act 5 stays a leg** (**FU195-L1**, owner **FU175-L2**): the
+  fresh 11-xref `0x888FC` census finds no `EAX=5` site, no indirect/data
+  reference, and no `FUN_000740A0` phase-`0x1B` writer — a negative census, no
+  invoker invented. The `0x974DC(0x1E)` audio ring-push/audio-handle remainder
+  (**FU195-L3**) and the `0x974DC` sink stay legs. **Tape-inert:** M1
+  `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no re-pin)** — `cmp`-verified;
+  the phase-`0x21` row fires only on a period completion, which the golden
+  fixtures never stage, and its writes are render-invisible. Tests:
+  `tests/test_engine_match_act.c` (`test_phase_21_*`, the producer-live
+  `test_phase_21_producer_live_via_phase_drive`, `test_phase_22_body_direct`, the
+  `test_phase_1B_leg_no_invoker` pin); mutation-RED discriminators verified (the
+  `0x21` stage-1 act-slot clear, the `phase_drive` dispatch, the `0x22` stage-1
+  timer reset). `test_engine_m2`'s `run_census_riders` pins the wired `0x21`, the
+  NULL `0x22`/`0x1B`. Census `48/80 → **49/80 = 61%**`
+  (`floor(100 × 49/80) = 61`); dispatch `30 UNSUP / 49 OK / 1 NOTF` (sum 80;
+  action 45 = 31 OK + 14 UNSUP, phase 35 = 18 OK + 16 UNSUP + 1 NOTF); README
+  title `61%` — all consistent.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

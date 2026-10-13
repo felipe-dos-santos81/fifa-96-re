@@ -633,6 +633,148 @@ static void test_phase_1E_terminal(void) {
   assert(mr.store_15882b == 0xFFu);   /* 0x8A8D3 */
 }
 
+/* ===== FU-195 (M2 phase-17 T6): the act-tail cohort 0x21/0x22 + the 0x1B leg
+ *
+ * The two native act-tail handlers `0x8B874` (phase 0x21 / act 0xB, the
+ * extra-time-CLEAR period-end timer) and `0x8B900` (phase 0x22 / act 0xC, the
+ * extra-time-SET analogue) are ported as derived bodies. phase 0x21 is the one
+ * counted row: its producer `FUN_0008B9CC` (`0x8BAE7`) is mirrored live by
+ * `fifa96_match_run_phase_drive` -> `fifa96_action_phase_period_end`
+ * (`out.act = 0x0B`) -> the new act-selector dispatch, so wiring the row is an
+ * honest +1. phase 0x22 is producer-dormant (the extra-time flag `[0x157AC0]` is
+ * hardwired off: `phase_drive` passes `extra_time = 0`), so its slot stays NULL
+ * (leg FU195-L2). phase 0x1B / act 5 has no invoker (the fresh 11-xref
+ * `0x888FC` census finds no `EAX=5` site), so it stays a leg (owner FU175-L2).
+ * Both bodies touch only the act slot + the `0x974DC(0x1E)` audio sink
+ * (`ref_whistle`), so they are render-invisible (tape-neutral). */
+
+/* Phase 0x21 stage 0 (0x8B89E): fire the 0x1E event, timer = 0, stage -> 1. */
+static void test_phase_21_stage0_advance(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 0x0B;
+  mr.act.stage = 0;
+  mr.act.timer = 0;
+  assert(fifa96_match_action_phase_21(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == 0x1Eu);      /* 0x974DC(0x1E) */
+  assert(mr.act.stage == 1u);           /* 0x8B8B9 */
+  assert(mr.act.timer == 0);            /* 0x8B8B2 stage-0 reset */
+  assert(mr.act.id == 0x0Bu);           /* still installed */
+}
+
+/* Phase 0x21 stage 1 (0x8B8C3): below the 0x3C gate the head add stands and the
+ * slot is untouched; at/above it fires the 0x1E event and clears the act slot
+ * (id/stage/timer). Mutation-RED: without the clear the slot stays installed. */
+static void test_phase_21_stage1_gate_clear(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 0x0B;
+  mr.act.stage = 1;
+  mr.act.timer = 10;
+  assert(fifa96_match_action_phase_21(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 12);           /* head add stands (JL path) */
+  assert(mr.ref_whistle == 0u && mr.act.id == 0x0Bu);
+  mr.act.timer = 0x3C - 2;
+  assert(fifa96_match_action_phase_21(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == 0x1Eu);      /* 0x974DC(0x1E) */
+  assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0u);
+}
+
+/* Phase 0x21 stage > 1: the native 0x8B89A POP/RET no-op. */
+static void test_phase_21_stage2_noop(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 0x0B;
+  mr.act.stage = 2;
+  mr.act.timer = 5;
+  assert(fifa96_match_action_phase_21(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 7);            /* head add stands */
+  assert(mr.act.id == 0x0Bu && mr.act.stage == 2u);
+  assert(mr.ref_whistle == 0u);
+  assert(fifa96_match_action_phase_21(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x21 is COUNTED: its phase-table slot is wired (the one +1 this task). */
+static void test_phase_21_registered(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x21].fn == fifa96_match_action_phase_21);
+  assert(fifa96_match_dispatch_phase(&mr, 0x21) == FIFA96_OK);
+  assert(mr.act.stage == 1u);           /* stage 0 ran via the dispatch */
+  assert(fifa96_match_dispatch_phase(NULL, 0x21) == -FIFA96_ERR_INVALID);
+}
+
+/* The producer-live route (the census claim): `phase_drive` on a completed
+ * period runs the derived `FUN_0008B9CC` chooser (`out.act = 0x0B`) and then
+ * the new act-selector dispatch, which installs act 0xB and runs the phase-0x21
+ * stage 0 — the native `0x8BAE7 CALL 0x888FC(0xB,0,BX=1)`. Mutation-RED:
+ * without the dispatch the act slot stays uninstalled and the phase-0x21 body
+ * never runs. */
+static void test_phase_21_producer_live_via_phase_drive(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.state.period = 1;                  /* a completed period for the chooser */
+  mr.state.phase = 2;                   /* class 1 */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x0Cu);      /* derived chooser (period < 4) */
+  assert(mr.act.id == 0x0Bu);           /* the 0x8BAE7 dispatch installed act B */
+  assert(mr.act.stage == 1u);           /* phase-0x21 stage 0 ran invoke-now */
+  assert(mr.ref_whistle == 0x1Eu);      /* the 0x974DC(0x1E) event */
+}
+
+/* Phase 0x22 / act 0xC (FU-195 §3): three stages, each gated on the derived
+ * timer >= 0x3C after a reset; the terminal stage 2 clears the act slot. Its
+ * phase-table slot stays NULL — producer-dormant (leg FU195-L2). The body is
+ * driven directly. Mutation-RED: skipping a stage's timer reset makes the next
+ * gate pass immediately (the stage assertions below fail). */
+static void test_phase_22_body_direct(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x22].fn == NULL);      /* uncounted (FU195-L2) */
+  assert(fifa96_match_dispatch_phase(&mr, 0x22) == -FIFA96_ERR_UNSUPPORTED);
+  mr.state.frame_delta = 2;
+  mr.act.id = 0x0C;
+  mr.act.stage = 0;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == 0x1Eu);      /* stage-0 event */
+  assert(mr.act.stage == 1u && mr.act.timer == 0u);
+  /* stage 1: below the gate hold; at the gate -> event + stage 2 */
+  mr.act.timer = 10;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 12 && mr.act.stage == 1u);
+  mr.act.timer = 0x3C - 2;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u && mr.act.timer == 0u);
+  /* stage 2: below the gate hold; at the gate -> event + clear slot */
+  mr.act.timer = 10;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0x0Cu && mr.act.stage == 2u && mr.act.timer == 12);
+  mr.act.timer = 0x3C - 2;
+  assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0u);
+  assert(fifa96_match_action_phase_22(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1B / act 5 (FU195-L1, owner FU175-L2): NO invoker — the fresh
+ * 11-xref `0x888FC` census finds no EAX=5 site — so the slot stays NULL/uncounted
+ * and no invoker is invented. The act-5 domain is valid (<= 0xC) but resolves to
+ * the unwired phase 0x1B. */
+static void test_phase_1B_leg_no_invoker(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1B].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1B) == -FIFA96_ERR_UNSUPPORTED);
+  /* act 5 installs but invokes nothing (its phase 0x1B row is NULL) */
+  assert(fifa96_match_act_dispatch(&mr, 5, 0, 1) == FIFA96_OK);
+  assert(mr.act.id == 5);
+  assert(mr.state.phase == 0u);         /* no handler ran */
+}
+
 int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
@@ -666,6 +808,13 @@ int main(void) {
   test_phase_1E_sweep_selects();
   test_phase_1E_sweep_completes();
   test_phase_1E_terminal();
+  test_phase_21_stage0_advance();
+  test_phase_21_stage1_gate_clear();
+  test_phase_21_stage2_noop();
+  test_phase_21_registered();
+  test_phase_21_producer_live_via_phase_drive();
+  test_phase_22_body_direct();
+  test_phase_1B_leg_no_invoker();
   puts("test_engine_match_act OK");
   return 0;
 }

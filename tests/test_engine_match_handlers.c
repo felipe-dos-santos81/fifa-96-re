@@ -99,13 +99,14 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
 };
 
 /* FU-137 §6 phase classification: phase 0x16 is the native table's zero entry
- * (loader INT3 stub) with no handler body by design → NOT_FOUND; the other 34
- * rows are classified-but-unported → UNSUPPORTED. */
+ * (loader INT3 stub) with no handler body by design → NOT_FOUND; the wired rows
+ * dispatch OK; the rest are classified-but-unported → UNSUPPORTED. The T6 row
+ * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 1E */ UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP,
+    /* 1E */ UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,   /* 0x21 = T6 act-0xB (FU-195) */
 };
 
 struct fixture {

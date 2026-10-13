@@ -2755,18 +2755,19 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
  * exist for. Pure C state, ISO-independent (runs in both the ISO and no-asset
  * tape modes). */
 static void run_census_riders(void) {
-  /* 1. The census shape (T1–T5): the exact wired counts and the phase-15/16
+  /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 48/80 = 60% (31 action + the phase rows
+   *    the handler unit tests. 49/80 = 61% (31 action + the phase rows
    *    0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the phase-17 T3 per-record
-   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15). */
+   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15 +
+   *    the phase-17 T6 act-0xB row 0x21). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 17u);  /* 48/80 = 60% */
+    assert(action_wired == 31u && phase_wired == 18u);  /* 49/80 = 61% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -2802,6 +2803,9 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
     assert(fifa96_match_phase_table[0x1D].fn == NULL);  /* T5: ported, act-7 producer (sit 8) gated off + coupled row 0x20 (FU194-L1/L8) */
     assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* T5: ported, act-8 compression kept (FU194-L2) */
+    assert(fifa96_match_phase_table[0x21].fn != NULL);  /* T6: act-0xB extra-time-clear, producer-live via phase_drive (FU-195 §6.1) */
+    assert(fifa96_match_phase_table[0x22].fn == NULL);  /* T6: ported, act-0xC extra-time-set producer-dormant (FU195-L2) */
+    assert(fifa96_match_phase_table[0x1B].fn == NULL);  /* T6: act-5 no invoker (FU195-L1, owner FU175-L2) */
     assert(fifa96_match_action_table[0x16].fn != NULL); /* T4: fouled-player face-the-ball (counted) */
     assert(fifa96_match_action_table[0x24].fn == NULL); /* T4: ported, phase-0x20 producer absent (FU188-L1) */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */

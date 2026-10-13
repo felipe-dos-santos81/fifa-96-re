@@ -900,6 +900,39 @@ two new NULL slots. **Tape-inert (R8):** M1 `09b726b7…` + M2 `7b4b241a…`
 **byte-identical** (no re-pin, `cmp`-verified); `make check` **110/110**; README
 title `60%`; census unchanged **48/80 = 60%**.
 
+**Phase-17 T6 (2026-10-12) — the act-tail cohort `0x21`/`0x22` + the `0x1B`
+verdict: phase `0x21` wired/counted, `+1` (`48/80 → 49/80 = 61%`)** (this
+slice). The two act-tail handlers `0x8B874` (phase `0x21` / act 0xB, the native
+extra-time-CLEAR period-end timer) and `0x8B900` (phase `0x22` / act 0xC, the
+extra-time-SET analogue) are ported as derived bodies (`fifa96_match_action_phase_21`
+/ `_22`, raw `disassemble_bytes`; both table-only targets with no Ghidra
+function). **phase `0x21` is the one counted row:** its producer
+`FUN_0008B9CC`'s tail (`0x8BAE7 CALL 0x888FC(0xB,0,BX=1)`) is mirrored live —
+T6 adds the native act-selector invocation to `fifa96_match_run_phase_drive`
+(after the phase write, the `LAB_0008bac6` position), so the derived chooser
+(`out.act = 0x0B` under the selector-0 default) drives
+`fifa96_match_act_dispatch` → the phase-`0x21` body invoke-now (stage 0 fires
+the `0x974DC(0x1E)` event staged as `ref_whistle`, timer 0, stage 1; stage 1
+waits the derived `timer >= 0x3C` and clears the act slot; stage > 1 no-op).
+**phase `0x22` is producer-dormant:** ported but its slot stays **NULL** — the
+native invoker fires act 0xC only when the extra-time flag `[0x157AC0] != 0`,
+whose engine producer is unported and `phase_drive` passes as `extra_time = 0u`
+(**FU195-L2**). **phase `0x1B` / act 5 stays a leg** (**FU195-L1**, owner
+**FU175-L2**): a fresh 11-xref `0x888FC` census finds no `EAX=5` invoker, no
+indirect/data reference, and no `FUN_000740A0` phase-`0x1B` writer — a negative
+census, no invoker invented. The `0x974DC(0x1E)` audio ring-push/audio-handle
+remainder stays **FU195-L3**; the `word[0x15881A]` gate producer stays
+**FU195-L4**. New `test_engine_match_act` pins (`test_phase_21_*`, the
+producer-live `test_phase_21_producer_live_via_phase_drive`,
+`test_phase_22_body_direct`, the `test_phase_1B_leg_no_invoker` pin) with
+mutation-RED discriminators verified (the `0x21` stage-1 act-slot clear, the
+`phase_drive` dispatch, the `0x22` stage-1 timer reset); `test_engine_m2`'s
+`run_census_riders` pins the wired `0x21` and the NULL `0x22`/`0x1B`.
+**Tape-inert:** M1 `09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin,
+`cmp`-verified — the `0x21` row fires only on a period completion the golden
+fixtures never stage); `make check` **110/110**; README title `61%`; census
+**49/80 = 61%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
