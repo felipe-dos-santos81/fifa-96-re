@@ -14,8 +14,11 @@ formation/record placement (OL-T11-8: `352ko.fmt` seated from
 `/ART/GAMEART0.PVI` at begin, so player records receive real positions and
 draw), the derived kickoff phase-1 entry (OL-84: begin lands
 `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`), the derived `FUN_0008D098` state-1
-kickoff arm + wired action row 01 (M2 playable-match Task 2: a begun run
-reaches the live phase 2 naturally via situation 0xB), the derived native
+kickoff arm + wired action row 01 (M2 playable-match Task 2: the derived chain
+reaches phase 2 via situation 0xB; **M2 phase-18 T3 correction — the live
+situation-0 kickoff cutscene now pre-empts it, so a begun run holds in the
+cutscene and no longer reaches phase 2 naturally; the native act-1 route
+(phase `0x17`) is unported, leg FU202-L2/FU203-L2**), the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
 indexed draw is RGB under SDL3 — FU-144), the derived match HUD (OL-T11-7:
@@ -965,13 +968,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   (its situation-8 route needs the unported extra-time flag + the actor-record
   producer; **leg FU205-L2**); phase `0x1E` stays `NULL` (the compressed act-8
   fallback, FU194-L2). The extra-time flag `[0x157AC0]` (OL-85) has **no live
-  engine cell** — **leg FU202-L1** (not faked). **Tests:** the situation
+  engine cell** — **leg FU202-L1** (not faked); its situation-8 gate/producer is
+  nevertheless **fixtured** by the pre-existing
+  `test_engine_match_handlers::test_period_setup_mode1_extra_time_sit8`
+  (`input_range & 0x100`) and `test_period_setup_mode0_extra_time_sit8`
+  (`global_157ac2 == 4`) — the brief's "extra-time writer fixtured" gate item,
+  satisfied by those fixtures (the flag writer itself stays the FU202-L1 leg).
+  **Tests:** the situation
   producer pin `test_engine_match_handlers::test_situation_producer_live_at_begin`
   (armed act `0xA` after `begin`), `test_engine_match_act::test_phase_20_body_direct`
   (the wired slot runs the 22-record install) and the wired-slot row-`0x24`
   dispatch; the M2 census riders (`action_wired == 32 && phase_wired == 18`,
   `phase_expect[0x20] == OK`, `action_expect[0x24] == OK`) pin the count. The
-  derived-kickoff fixtures (`test_kickoff_enters_phase2_naturally`,
+  derived-kickoff fixtures (`test_kickoff_enters_phase2_when_cutscene_isolated`,
   `test_natural_phase2_never_scores`, the record-machine live tests) now **clear
   the armed act** to isolate the derived path from the live situation-0
   cutscene. README title `62%`; dispatch `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
@@ -1167,8 +1176,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`fifa96_match_phase_machine_kickoff`), the wired action row 01 turns the
   derived act-1 producer (`global_5882a` at `tick_total >= 0x78`) into the
   situation-0xB -> `0x8AEF6` -> `0x8AF02` phase-2 write, and
-  `test_engine_match_frame::test_kickoff_enters_phase2_naturally` pins a begun
-  run reaching the live phase 2 with no forcing (FU-143 §11). The 0x13/0x14
+  `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
+  pinned a begun run reaching the live phase 2 with no forcing (FU-143 §11).
+  **M2 phase-18 T3 correction:** the live situation-0 kickoff cutscene now
+  pre-empts this derived chain, so a begun run **holds in the cutscene and does
+  not reach phase 2 naturally**; the fixture reaches phase 2 only with the armed
+  act cleared (the native act-1 route is unported, leg FU202-L2/FU203-L2). The 0x13/0x14
   forced window **stays** because the natural chain is not frame-for-frame
   identical to it (the forced window drives the FU-142a 26/28/2A arm staging
   and its `state=19/20` lines; measured mismatch, v3-era: hashes identical
@@ -1751,7 +1764,7 @@ the build also produces the windowed `fifa96` target (`make game`).
     FIFA96_OK` flip, `test_machine_forced_decision_installs_on_slot_record`,
     `test_machine_no_edge_arm_copies_camera_target`,
     `test_held_key_moves_live_controlled_record` (ISO-gated), and the
-    row-02-reactive fixture updates (`test_kickoff_enters_phase2_naturally`
+    row-02-reactive fixture updates (`test_kickoff_enters_phase2_when_cutscene_isolated`
     now pins the slot handoff onto record 2; the pad-kick and natural-goal
     fixtures stage the live role state the applied forced decision requires).
   - **Goldens: no re-pin.** M1 byte-identical (`cmp` clean, M1 immovable); M2
@@ -3644,10 +3657,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`fifa96_match_action_01`) walks the native stage machine and its
   situation-0xB call runs `fifa96_match_run_situation` (`0x8AEF6` ->
   `0x8AF02` = phase 2), and `fifa96_match_run_frame` arms the derived act-1
-  producer `mr.global_5882a` at `state.tick_total >= 0x78`. A begun run
-  therefore reaches the live phase 2 naturally (pinned by
-  `test_engine_match_frame::test_kickoff_enters_phase2_naturally`; FU-143
-  §11). The remaining situation-0xB producers (rows 02/0x10..0x13, the
+  producer `mr.global_5882a` at `state.tick_total >= 0x78`. **M2 phase-18 T3
+  correction:** the live situation-0 kickoff cutscene now installs code `0x24`
+  on the pool and **pre-empts this derived chain**, so a begun run **holds in
+  the cutscene and does not reach phase 2 naturally**; the native act-1 route
+  (situation 1 -> act 1 -> phase `0x17`) that would re-establish the kickoff is
+  **unported** (leg FU202-L2/FU203-L2), so the derived chain is exercised only
+  with the armed act cleared
+  (`test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`;
+  FU-143 §11). The remaining situation-0xB producers (rows 02/0x10..0x13, the
   keeper/restart bodies, the computed act-8 call) and row 01's
   camera/event/ball-stage sinks stay open legs (`OL-84` narrowed).
   The extra-time flag producer (`OL-85`, re-verified at `0x8B2AC`/`0x8B2C1`)

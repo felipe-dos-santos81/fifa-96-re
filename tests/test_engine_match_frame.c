@@ -588,7 +588,7 @@ static void one_granted_frame(struct fifa96_match_run *mr);
  * `FUN_0007876C` merge put the live FU-70 slot on that taker, so row 01 stage
  * 1 takes the native `word[slot+6] & 0x70` arm (0x7DCE9..0x7DCF6) — the test
  * supplies the button press/release the native kickoff waits for. */
-static void test_kickoff_enters_phase2_naturally(void) {
+static void test_kickoff_enters_phase2_when_cutscene_isolated(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -859,7 +859,7 @@ static void test_natural_phase2_never_scores(void) {
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   /* M2 phase-18 T3: isolate the derived kickoff chain from the live situation-0
    * act (whose phase-0x20 code-0x24 install pre-empts it; see
-   * test_kickoff_enters_phase2_naturally / leg FU203-L2). */
+   * test_kickoff_enters_phase2_when_cutscene_isolated / leg FU203-L2). */
   mr.act.id = 0;
   /* M2 interactive Task 1: the bound slot makes row 01 stage 1 wait for the
    * `word[slot+6] & 0x70` release word, so pass it with a KICK press/release
@@ -5590,7 +5590,7 @@ int main(void) {
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
   test_phase_drive_begun_end_resets_phase();
-  test_kickoff_enters_phase2_naturally();
+  test_kickoff_enters_phase2_when_cutscene_isolated();
   test_situation0_kickoff_installs_code24();
   test_score_event_wired_run_path();
   test_goal_situation_dispatch_is_not_the_writer();

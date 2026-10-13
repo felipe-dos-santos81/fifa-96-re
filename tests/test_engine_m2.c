@@ -2784,7 +2784,7 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
  * sample must keep the score pair and the FUN_00093944 writer cells fresh (the
  * T3 negative: no goal invoker is reachable from the ported state), and row 01
  * must be in the dispatch set at the transition. This is the tape-level
- * counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_naturally`
+ * counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
  * and the permanent form of the FU-143 §11.5 mismatch-evidence replay. */
 static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   struct fifa96_platform_null_config pcfg;
