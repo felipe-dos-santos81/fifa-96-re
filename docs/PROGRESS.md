@@ -1396,3 +1396,35 @@ FU210-L3), **FU214-L4** (the phase-`0x10` row; owner FU-214).
 mutations + failing outputs in the T6 report). **Determinism:** M1 `09b726b7…`
 unmoved; M2 `441415fc…` byte-identical (`cmp` clean); `make check` **110/110**
 (sanitized). **Census:** `53/80 = 66%`; README title `66%`; no golden re-pin.
+
+## M2 phase-20 T2 — the phase-`0x10` registration (FU-222)
+
+**The phase-`0x10` row is registered and COUNTED (`+1`, census `53/80 → 54/80 =
+67%`).** The phase-`0x1D` stage-0 arm's `FUN_000740A0(0x10)` writer (`0x898DD`;
+port `match_run.c:6090-6091`) is live once phase-20 T1's invoke-now cadence lands,
+and the phase-`0x1D` row is itself counted (phase-19 T2), so the sit-8 dispatch
+opens `match_run_write_phase`'s walk gate (`match_run.c:2522`) and
+`fifa96_match_phase_10` (`handlers.c:4806`) dispatches per non-skipped record. The
+slot was `NULL` under a now-false "never written / sole writer sits inside the
+unwired row 0x1D body" comment; the flip corrects the slot entry **and** the body
+doc comment (FU-222-L6, the same commit). This closes **FU214-L4/FU222-L2**.
+
+**Tape decision: no re-pin (the phase-15/19 strata precedent).** The body writes
+only the render-invisible target triple and phase `0x1D` is extra-time-dormant on
+the scripted tape (no completed period reaches the sit-8 `global_157ac2 == 4`
+gate), so **M2 is byte-identical** at `441415fc…` (`cmp` clean); M1 `09b726b7…`
+unmoved. The golden file was **not** touched. Any *unexplained* drift is a
+regression to investigate, never a re-pin.
+
+**TDD:** the RED gate is the census pin (`phase_wired == 22u`) + the slot identity
+(`fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10`) across
+`run_census_riders`/`run_phase17_riders`, the handler `phase_expect[0x10]`
+(`UNSUP → OK`) + the `test_phase_10_variant_table` walk-dispatch assertion, and
+the live behavioural rider in `run_phase19_riders` block 4 (`active == 0` → the
+`(0x3C0, 0, 0x840)` default). GREEN: `make check` **110/110** (sanitized).
+
+**Census recomputed:** `54 OK = 32 action + 22 phase`; the `0x16` INT3 slot is
+the one `NOTF`; dispatch `25 UNSUP / 54 OK / 1 NOTF` (sum 80);
+`floor(100 × 54/80) = 67`. README title `67%`, `docs/ENGINE.md` status +
+Action-dispatch bullets `54/80`, and `AGENTS.md:90` are consistent — **no
+inflation**.

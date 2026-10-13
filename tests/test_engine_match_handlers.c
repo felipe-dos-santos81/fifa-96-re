@@ -101,12 +101,13 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
 /* FU-137 §6 phase classification: phase 0x16 is the native table's zero entry
  * (loader INT3 stub) with no handler body by design → NOT_FOUND; the wired rows
  * dispatch OK; the rest are classified-but-unported → UNSUPPORTED. The T6 row
- * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1) and the T4 row
+ * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1), the T4 row
  * 0x22 (act-0xC extra-time-SET) is wired/counted (FU-211; the live extra-time
- * flag producer T1/FU-213 installs act 0xC). */
+ * flag producer T1/FU-213 installs act 0xC), and the M2 phase-20 T2 row 0x10 is
+ * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6094`). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
     /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195); 0x22 = T4 act-0xC ET-set (FU-211) */
 };
@@ -1491,10 +1492,12 @@ static void test_phase_10_variant_table(void) {
   e = &f.mr.entities.team[0].records[6];
   e->team = 0;
   f.mr.entities.team[0].side = 0;
-  /* row 0x10 is not written by an engine source, so its slot is NULL and the
-   * dispatcher is UNSUPPORTED (the census guard); the exported body is driven
-   * directly through the walk cursor. */
-  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x10, e, -1) == -FIFA96_ERR_UNSUPPORTED);
+  /* T2/FU-222: row 0x10 is now registered (the live phase-0x1D arm-0 writer
+   * opens the walk gate `match_run.c:2522`), so the dispatcher runs the body —
+   * records[6] active==6 -> v[5]=(-5,-5) << 5 = (-160,-160). The exported body
+   * is then driven directly through the walk cursor for the active variants. */
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x10, e, -1) == FIFA96_OK);
+  assert(e->target_x == -160 && e->target_z == -160);
   f.mr.phase_walk_rec = e;
   f.mr.phase_walk_active = 1u;
   e->active = 0;

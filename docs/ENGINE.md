@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-53/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
+54/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,8 +265,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **53/80 rows wired** (32 action + the phase rows
-  `0x02`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **54/80 rows wired** (32 action + the phase rows
+  `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4

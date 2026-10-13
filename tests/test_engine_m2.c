@@ -3003,10 +3003,10 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 53/80 = 66% (32 action = the 31 baseline + the
-   *    phase-18 T3 row 0x24; 21 phase = the 17 baseline + the phase-18 T3 phase
+   *    the handler unit tests. 54/80 = 67% (32 action = the 31 baseline + the
+   *    phase-18 T3 row 0x24; 22 phase = the 17 baseline + the phase-18 T3 phase
    *    0x20 + the phase-18 T4 phase 0x17 + the phase-19 T2 phase 0x1D + the
-   *    phase-19 T4 phase 0x22; the phase
+   *    phase-19 T4 phase 0x22 + the phase-20 T2 phase 0x10; the phase
    *    rows 0x18/0x19/0x1F + the
    *    phase-17 T1 row 0x02 + the phase-17 T3 per-record rows 0x00/0x03/0x04/
    *    0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15 + the phase-17 T6 act-0xB
@@ -3017,7 +3017,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 21u);  /* 53/80 = 66% (T2: +phase 0x1D; T4: +phase 0x22) */
+    assert(action_wired == 32u && phase_wired == 22u);  /* 54/80 = 67% (T2: +phase 0x10) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -3042,7 +3042,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x01].fn == NULL);  /* formation placement (L7) */
     assert(fifa96_match_phase_table[0x0B].fn == NULL);  /* never written */
     assert(fifa96_match_phase_table[0x0E].fn == NULL);  /* never written */
-    assert(fifa96_match_phase_table[0x10].fn == NULL);  /* never written (body ported) */
+    assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: write live via row 0x1D arm 0 (FU-222) */
     assert(fifa96_match_phase_table[0x11].fn == NULL);  /* 0x6E1D0 shim (L6) */
     assert(fifa96_match_phase_table[0x12].fn == NULL);  /* formation + never written */
     assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
@@ -3299,7 +3299,9 @@ static void run_phase17_t3_riders(void) {
     assert(fifa96_match_dispatch_phase_record(&mr, 0x15u, e, -1) == FIFA96_OK);
     assert(e->target_x == 7 && e->target_y == 8 && e->target_z == 9);
   }
-  /* 3. The RNG/formation rows stay NULL: the walk dispatches nothing. */
+  /* 3. The RNG/formation rows stay NULL: the walk dispatches nothing. (T2:
+   *    phase 0x10 is no longer in this set — its live row-0x1D arm-0 writer is
+   *    now registered.) */
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
@@ -3307,7 +3309,7 @@ static void run_phase17_t3_riders(void) {
     assert(fifa96_match_phase_table[0x14].fn == NULL);
     assert(fifa96_match_phase_table[0x01].fn == NULL);
     assert(fifa96_match_phase_table[0x11].fn == NULL);
-    assert(fifa96_match_phase_table[0x10].fn == NULL);
+    assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: registered */
   }
 }
 
@@ -3353,8 +3355,9 @@ static void run_phase17_riders(void) {
     assert(e0->target_x == 7 && e0->target_z == 9);
   }
   /* 2. The per-record walk pin (T1/FU-191): the walk dispatches only the
-   *    engine-written phases whose rows are non-NULL — a NULL row (`0x10`) and
-   *    the INT3 slot (`0x16`) are no-ops; a non-NULL row (`0x00`) writes. */
+   *    engine-written phases whose rows are non-NULL — a NULL row (`0x0E`)
+   *    and the INT3 slot (`0x16`) are no-ops; a non-NULL row (`0x00`, and
+   *    T2's now-registered `0x10`) writes. */
   {
     struct fifa96_match_run mr;
     struct fifa96_match_entity *e;
@@ -3363,12 +3366,17 @@ static void run_phase17_riders(void) {
     e->pos_x = 0x77; e->pos_y = 0x88; e->pos_z = -0x99;
     e->target_x = 1; e->target_y = 2; e->target_z = 3;
     assert(fifa96_match_phase_table[0x00].fn != NULL);
-    assert(fifa96_match_phase_table[0x10].fn == NULL);    /* never-written row */
+    assert(fifa96_match_phase_table[0x0E].fn == NULL);    /* never written (engine source) */
+    assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);  /* T2: registered */
     assert(fifa96_match_phase_table[0x16].fn == NULL);    /* the INT3 slot */
-    assert(fifa96_match_run_record_phase_walk(&mr, 0x10u, 0u) == FIFA96_OK);
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x0Eu, 0u) == FIFA96_OK);
     assert(e->target_x == 1 && e->target_y == 2 && e->target_z == 3);
     assert(fifa96_match_run_record_phase_walk(&mr, 0x16u, 0u) == FIFA96_OK);
     assert(e->target_x == 1 && e->target_y == 2 && e->target_z == 3);
+    /* T2/FU-222: the phase-0x10 walk now dispatches the variant body — records[2]
+     * active==2 -> v[1]=(-4,-2) << 5 = (-128,-64) (FU-192 §2.6). */
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x10u, 0u) == FIFA96_OK);
+    assert(e->target_x == -128 && e->target_y == 0 && e->target_z == -64);
     assert(fifa96_match_run_record_phase_walk(&mr, 0x00u, 0u) == FIFA96_OK);
     assert(e->target_x == 0x77 && e->target_y == 0x88 && e->target_z == -0x99);
   }
@@ -3384,7 +3392,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 21u);    /* 53/80 = 66% (T2: +phase 0x1D; T4: +phase 0x22) */
+    assert(action_wired == 32u && phase_wired == 22u);    /* 54/80 = 67% (T2: +phase 0x10) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -3653,6 +3661,14 @@ static void run_phase19_riders(void) {
     for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
       for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
         assert(mr.entities.team[t].records[i].code != 0x20u);
+    /* T2: the phase-0x10 row now dispatches on the live sit-8 arm-0 write.
+     * The walk runs fifa96_match_phase_10 per non-skipped record; active==0
+     * selects the (0x3C0, 0, 0x840) default (FU-192 §2.6). */
+    assert(fifa96_match_phase_table[0x10].fn == fifa96_match_phase_10);
+    assert(mr.entities.team[0].records[0].active == 0u);
+    assert(mr.entities.team[0].records[0].target_x == 0x3C0 &&
+           mr.entities.team[0].records[0].target_y == 0 &&
+           mr.entities.team[0].records[0].target_z == 0x840);
     /* arm 1 runs at the clock tail; tick_total < 0x78 leaves it waiting. */
     mr.state.frame_delta = 2;
     mr.global_5882a = 1u;                            /* the arm-1 [0x15882A] set target */
