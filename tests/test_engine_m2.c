@@ -3003,8 +3003,8 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 54/80 = 67% (32 action = the 31 baseline + the
-   *    phase-18 T3 row 0x24; 22 phase = the 17 baseline + the phase-18 T3 phase
+   *    the handler unit tests. 55/80 = 68% (33 action = the 31 baseline + the
+   *    phase-18 T3 row 0x24 + the phase-20 T3 row 0x20; 22 phase = the 17 baseline + the phase-18 T3 phase
    *    0x20 + the phase-18 T4 phase 0x17 + the phase-19 T2 phase 0x1D + the
    *    phase-19 T4 phase 0x22 + the phase-20 T2 phase 0x10; the phase
    *    rows 0x18/0x19/0x1F + the
@@ -3017,7 +3017,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 22u);  /* 54/80 = 67% (T2: +phase 0x10) */
+    assert(action_wired == 33u && phase_wired == 22u);  /* 55/80 = 68% (T3: +action 0x20) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -3392,7 +3392,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 22u);    /* 54/80 = 67% (T2: +phase 0x10) */
+    assert(action_wired == 33u && phase_wired == 22u);    /* 55/80 = 68% (T3: +action 0x20) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -3632,13 +3632,13 @@ static void run_phase19_riders(void) {
     assert(mr.global_157ac2 == 3u);
     assert(mr.act.id == 0x0Bu);             /* no sit-8 below the index-4 gate */
   }
-  /* 4. The PHASE-SLOT dereference (T2/FU-209 + T3/FU-210): the registered
+  /* 4. The PHASE-SLOT dereference (T2/FU-209 + T3/FU-210/FU-217): the registered
    *    phase-0x1D slot's arm 0 writes phase 0x10 and installs action row 0x19 on
    *    both team bases; the coupled row-0x20 install (0x899A2) is gated on the
-   *    actor cell, NONE on the live path (the FU210-L3 unported producer), so no
-   *    record carries code 0x20. A NULLed slot early-returns the act tick and
-   *    aborts `state.phase == 0x10`; the actor-cell fixture proves the coupled
-   *    install (a wrong gate leaves the actor's code at 0). */
+   *    actor cell, which the sit-8 re-init (T3/FU-217) now binds live, so the
+   *    bound actor record carries code 0x20. A NULLed slot early-returns the act
+   *    tick and aborts `state.phase == 0x10`; the actor-cell fixture proves the
+   *    coupled install (a wrong gate leaves the actor's code at 0). */
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
@@ -3657,10 +3657,16 @@ static void run_phase19_riders(void) {
     assert(mr.global_5882a == 0u);                   /* 0x898B4 clear */
     assert(mr.entities.team[0].records[0].code == 0x19u);  /* 0x89903 install */
     assert(mr.entities.team[1].records[0].code == 0x19u);  /* 0x8990A install */
-    /* the live actor cell is NONE: the coupled 0x899A2 install is a no-op. */
-    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
-        assert(mr.entities.team[t].records[i].code != 0x20u);
+    /* T3/FU-217: the sit-8 arm's [0x1587CC+side*4] -> [0x1587D4] bind is now
+     * LIVE (the RNG side is 0), so the coupled 0x899A2 install lands code 0x20
+     * on the bound actor: the first free outfield record in the native scan
+     * order from start index 0xA (team 0, record 10). */
+    assert(mr.global_157a4c == 1u);                          /* 0x8AE2A */
+    assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
+    assert(mr.actor_1587cc[1] == (int32_t)(1u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
+    assert(mr.actor_1587d4 == mr.actor_1587cc[0]);           /* side 0 */
+    assert(mr.entities.team[0].records[10].code == 0x20u);   /* 0x899A2 install */
+    assert(mr.entities.team[0].records[10].stage92 == 0u);   /* deferred stage 0 */
     /* T2: the phase-0x10 row now dispatches on the live sit-8 arm-0 write.
      * The walk runs fifa96_match_phase_10 per non-skipped record; active==0
      * selects the (0x3C0, 0, 0x840) default (FU-192 §2.6). */
@@ -3675,8 +3681,9 @@ static void run_phase19_riders(void) {
     assert(fifa96_match_act_tick(&mr) == FIFA96_OK); /* act 7 -> phase 0x1D arm 1 */
     assert(mr.act.stage == 1u);                      /* arm 1 waits (tick_total < 0x78) */
 
-    /* the actor-cell fixture (the unported sit-8 `[0x1587D4]` producer, FU210-L3):
-     * arm 0 installs code 0x20 on that actor (team 0, record 1). */
+    /* the actor-cell fixture (an independent installer-path check; the sit-8
+     * `[0x1587D4]` producer is now live via T3/FU-217): arm 0 installs code 0x20
+     * on the hand-set actor (team 0, record 1). */
     fifa96_match_run_init(&mr);
     mr.actor_1587d4 = 1;                             /* team 0, record 1 */
     mr.act.id = 7;
@@ -3684,6 +3691,50 @@ static void run_phase19_riders(void) {
     assert(fifa96_match_dispatch_phase(&mr, 0x1Du) == FIFA96_OK);
     assert(mr.entities.team[0].records[1].code == 0x20u);  /* 0x899A2 install */
     assert(mr.entities.team[0].records[1].stage92 == 0u);  /* deferred stage 0 */
+  }
+  /* 5. The SIT-8 ACTOR BIND (T3/FU-217): a real period-4 completion runs the
+   *    sit-8 re-init on the dispatch frame (before act 7's invoke-now), binding
+   *    the per-side free-record cells and the active side's actor; the coupled
+   *    0x899A2 install then lands code 0x20 on that actor. Mutation-RED:
+   *    removing the re-init block leaves global_157a4c == 0, actor_1587d4 == -1
+   *    and no record with code 0x20. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    /* the native FUN_000897F4(side, 0xA) scan order is 10, 1, 2, …, 9; a fresh
+     * pool is all-free, so the first free record is index 10 of each team. */
+    mr.state.period = 4;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u; mr.score[1] = 1u;      /* tie: no ET chooser, sit-8 fires */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157a4c == 1u);          /* 0x8AE2A */
+    assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
+    assert(mr.actor_1587cc[1] == (int32_t)(1u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
+    assert(mr.actor_1587d4 == mr.actor_1587cc[0]);   /* side 0 (the RNG side) */
+    /* T1 invoke-now: arm 0 ran in phase_drive -> the coupled 0x899A2 install. */
+    assert(mr.entities.team[0].records[10].code == 0x20u);
+    assert(mr.entities.team[0].records[10].stage92 == 0u);
+
+    /* the scan WRAPS: with record 10 occupied the order (10, 1, …) lands the
+     * bind on record 1. Pins the native wrap (0x89830) + the skip_9a==0 gate; a
+     * wrong start (1) or a no-wrap scan picks index 2. */
+    fifa96_match_run_init(&mr);
+    mr.entities.team[0].records[10].skip_9a = 1u;
+    mr.entities.team[1].records[10].skip_9a = 1u;
+    mr.state.period = 4;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u; mr.score[1] = 1u;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157a4c == 1u);
+    assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 1u));
+    assert(mr.actor_1587cc[1] == (int32_t)(1u * FIFA96_MATCH_ENTITY_RECORDS + 1u));
+    assert(mr.actor_1587d4 == mr.actor_1587cc[0]);
+    assert(mr.entities.team[0].records[1].code == 0x20u);
+    assert(mr.entities.team[0].records[10].code != 0x20u);  /* the skip gate */
   }
 }
 

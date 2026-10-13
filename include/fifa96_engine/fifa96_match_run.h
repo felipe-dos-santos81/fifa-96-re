@@ -620,17 +620,24 @@ struct fifa96_match_run {
    * stay unported legs (FU213-L1/L7). This is T1's exposed flag for T2's
    * situation-8 gate / the act-0xC-0xB route. */
   uint8_t global_157ac0;
-  /* FU-210 §6.1/§8 L3 (M2 phase-19 T3): the native actor-record pointer
-   * `[0x1587D4]` the phase-0x1D arm-0 coupled installer (`0x899A2`) targets —
-   * `FUN_0007D9A4(rec = [0x1587D4], code = 0x20, stage = 0, invoke = 0)`. The
-   * native producer is the sit-8 arm's `[0x1587CC + side*4] -> [0x1587D4]` bind
-   * (`0x8AE4B`), whose referenced-record identity is an open leg (FU-145 /
-   * FU210-L3 / FU194-L8) — so no live engine source writes this cell. It holds
-   * the engine pool id (`team*RECORDS + index`) or -1 (FIFA96_MATCH_ENTITY_NONE);
-   * init/begin stage it NONE, so on the live path the arm-0 install is a null
-   * no-op and action row 0x20 stays uncounted (the FU210-L5 leg). A unit fixture
-   * sets it to exercise the ported installer. */
+  /* FU-210 §6.1/§8 L3 + FU-217 §3 (M2 phase-19 T3 → phase-20 T3): the native
+   * actor-record pointer `[0x1587D4]` the phase-0x1D arm-0 coupled installer
+   * (`0x899A2`) targets — `FUN_0007D9A4(rec = [0x1587D4], code = 0x20, stage =
+   * 0, invoke = 0)`. The native producer is the sit-8 arm's `[0x1587CC +
+   * side*4] -> [0x1587D4]` bind (`0x8AE4B`), which now LANDS LIVE (T3: the
+   * `match_run_free_record` selector + the `set_piece` sit-8 re-init; FU210-L3 /
+   * FU217-L1 resolve). It holds the engine pool id (`team*RECORDS + index`) or
+   * -1 (FIFA96_MATCH_ENTITY_NONE); init/begin stage it NONE. On the live path
+   * the sit-8 re-init binds a real free outfield record, so the arm-0 install
+   * fires and action row 0x20 is COUNTED. */
   int32_t actor_1587d4;
+  /* FU-217 §3.2/§8 (M2 phase-20 T3): the per-side source table
+   * `[0x1587CC]` (side 0) / `[0x1587D0]` (side 1) the sit-8 arm's bind
+   * (`0x8AE30`/`0x8AE3F` `FUN_000897F4(side, 0xA)`) writes, and from which
+   * `[0x1587D4]` is copied (`0x8AE4B`/`0x8AE54`). Each holds the pool id
+   * (`team*RECORDS + index`) or FIFA96_MATCH_ENTITY_NONE. Write-only until the
+   * arm-8 no-winner rebind (`0x89DCF`, leg FU217-L2) lands. */
+  int32_t actor_1587cc[2];
   /* FU-151 P3 (keeper machines): the process cells the row-1E/1D machines
    * carry across frames — the 0x15774C/50/54 camera focus (the FU-147 leg-13
    * render-camera stand-in: the engine keeps its own derived cell so the

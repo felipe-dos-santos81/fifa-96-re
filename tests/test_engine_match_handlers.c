@@ -89,12 +89,16 @@
  * FU-139 §10 (Task 12) wires the possession/tackle rows 18/21/23
  * (`fifa96_match_action_18`/`_21`/`_23` bind the duel/receive/tackle machines
  * plus the new NSEARCH/SWAP/bind resolution arms), so their expectations flip
- * to FIFA96_OK and the resolution/claim/target tests run over the pool. */
+ * to FIFA96_OK and the resolution/claim/target tests run over the pool. M2
+ * phase-20 T3 (FU-217) flips row 20 to FIFA96_OK: the coupled arm-0 installer's
+ * target cell `[0x1587D4]` now has a live producer (the sit-8 `[0x1587CC+side*4]
+ * -> [0x1587D4]` bind ported as `match_run_free_record` + the `set_piece`
+ * re-init), so the already-ported body is genuinely dispatched. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,
+    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -1061,31 +1065,29 @@ static void test_action_20_body_arms(void) {
   drop_fixture(&f);
 }
 
-/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5); updated M2 phase-19 T2/T3: the
- * row-0x20 installer hunt. The installer exists — fresh `0x899a2` = `MOV
- * EDX,0x20; MOV EAX,[ESP+8]; CALL 0x7D9A4` (bytes `ba20000000`/`e8f43fffff`) —
- * inside the phase-0x1D handler `0x89868`, whose sole reference is the
- * phase-table slot `0x110808` (`[0x1D]`, fresh get_xrefs_to = 1), i.e. the
- * act-7 route. T3 (FU-210) ports the row-0x20 body `0x84EEC` and the coupled
- * arm-0 installer, but the installer's target — the actor record `[0x1587D4]`
- * — has no live producer (the sit-8 `[0x1587CC+side*4]` bind `0x8AE4B` is
- * unported, FU210-L3), so `mr->actor_1587d4` stays NONE live and no record
- * carries code 0x20. The row therefore stays `fn == NULL` / uncounted (leg
- * **FU189-L1 / FU210-L5**, the rows-27/29/2C precedent); the body is exported
- * for direct unit testing. As of T2 the phase-0x1D slot is REGISTERED and
- * producer-live (the sit-8 route), so the phase dispatch resolves. */
+/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5); resolved M2 phase-19 T3 →
+ * phase-20 T3: the row-0x20 installer hunt. The installer exists — fresh
+ * `0x899a2` = `MOV EDX,0x20; MOV EAX,[ESP+8]; CALL 0x7D9A4` (bytes
+ * `ba20000000`/`e8f43fffff`) — inside the phase-0x1D handler `0x89868`, whose
+ * sole reference is the phase-table slot `0x110808` (`[0x1D]`, fresh
+ * get_xrefs_to = 1), i.e. the act-7 route. T3 (FU-210) ported the row-0x20 body
+ * `0x84EEC` and the coupled arm-0 installer; M2 phase-20 T3 (FU-217) ports its
+ * target cell's producer — the sit-8 `[0x1587CC+side*4] -> [0x1587D4]` bind
+ * (`0x8AE4B`) as `match_run_free_record` + the `set_piece` re-init — so
+ * `mr->actor_1587d4` is a live free outfield record and the row is COUNTED
+ * (`fn == fifa96_match_action_20`, dispatch OK). FU189-L1/FU210-L5 resolve. The
+ * phase-0x1D slot is REGISTERED and producer-live (T2). */
 static void test_action_20_installer_leg_phase_1d_live(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x20];
   make_fixture(&f);
-  assert(row->fn == NULL);
+  assert(row->fn == fifa96_match_action_20);
   assert(strstr(row->evidence, "FU-210") != NULL);
-  assert(strstr(row->evidence, "FU189-L1") != NULL);
-  assert(strstr(row->evidence, "FU210-L5") != NULL);
+  assert(strstr(row->evidence, "FU-217") != NULL);
   assert(strstr(row->evidence, "0x899A2") != NULL);
-  assert(action_expect[0x20] == UNSUP);
-  assert(fifa96_match_dispatch_action(&f.mr, 0x20) == UNSUP);
-  /* T2: the phase-0x1D route (act 7) is now registered + producer-live. */
+  assert(action_expect[0x20] == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x20) == FIFA96_OK);
+  /* the phase-0x1D route (act 7) is registered + producer-live (T2). */
   assert(fifa96_match_phase_table[0x1D].fn == fifa96_match_action_phase_1D);
   assert(fifa96_match_dispatch_phase(&f.mr, 0x1D) == FIFA96_OK);
   drop_fixture(&f);

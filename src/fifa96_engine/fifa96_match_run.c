@@ -2034,6 +2034,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
+  mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
+  mr->actor_1587cc[1] = FIFA96_MATCH_ENTITY_NONE;
   mr->global_5882a = 0;
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster process
    * cells ([0x157A4C]/[0x157C5C]/[0x157C5D]/[0x157C54..5B]/the predictor
@@ -2154,6 +2156,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
+  mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
+  mr->actor_1587cc[1] = FIFA96_MATCH_ENTITY_NONE;
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster cells. */
   mr->global_157a4c = 0;
@@ -2710,6 +2714,25 @@ static int32_t match_run_phase_pick(const struct fifa96_match_run *mr, uint32_t 
   return index >= 0 ? (int32_t)index : 0;
 }
 
+/* FU-217 §3.2/§8 (M2 phase-20 T3): the native FUN_000897F4 free-record
+ * selector (0x897F4..0x8983C). Scans the team's records in the wrap order
+ * start, start+1, …, 10, 1, …, start-1 (index 0 is never scanned), returning
+ * the pool id (team*RECORDS + index) of the first record with skip_9a == 0,
+ * or FIFA96_MATCH_ENTITY_NONE if none is free. `start` clamps to 1..10 (the
+ * native 0x897FC: 0 or >= 0xB -> 1). */
+static int32_t match_run_free_record(const struct fifa96_match_run *mr,
+                                     uint32_t team, int start) {
+  if (team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_MATCH_ENTITY_NONE;
+  if (start < 1 || start > 10) start = 1;
+  for (int n = 0; n < 10; n++) {
+    int index = start + n;
+    if (index > 10) index -= 10;                 /* wrap 11 -> 1 (0x89830 JMP 0x897FC) */
+    if (mr->entities.team[team].records[index].skip_9a == 0u)
+      return (int32_t)(team * FIFA96_MATCH_ENTITY_RECORDS + (uint32_t)index);
+  }
+  return FIFA96_MATCH_ENTITY_NONE;               /* native loops forever; engine sentinels */
+}
+
 int fifa96_match_run_phase_arm(struct fifa96_match_run *mr, uint8_t phase) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (phase != 3u && phase != 4u && phase != 5u && phase != 6u && phase != 7u &&
@@ -3133,6 +3156,19 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
     }
   }
   if (situation == 6u) return match_run_goal_fallback(mr, side);
+  /* FU-217 §3.1/§8 (M2 phase-20 T3): the sit-8 re-init/actor bind
+   * (0x8AE08..0x8AE54), guarded by byte[0x157A4C] != 1. Native binds both
+   * per-side cells then the active side's record into [0x1587D4], and runs
+   * act 7 invoke-now. Runs only on the direct path (the queue arm 0x8AA60
+   * never touches the cell); the `[0x157AAF] = side` store (0x8AE23) has no
+   * engine cell — a leg (FU217-L5). */
+  if (situation == 8u && mr->global_157a4c != 1u) {
+    mr->global_157a4c = 1u;                                   /* 0x8AE2A */
+    mr->actor_1587cc[0] = match_run_free_record(mr, 0u, 0xA);  /* 0x8AE30 */
+    mr->actor_1587cc[1] = match_run_free_record(mr, 1u, 0xA);  /* 0x8AE3F */
+    mr->actor_1587d4 =
+        mr->actor_1587cc[(side < 2u) ? side : 0u];             /* 0x8AE4B/0x8AE54 */
+  }
   return match_run_situation_side(mr, situation, side, 1);
 }
 
@@ -6104,12 +6140,14 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
       /* 0x899A2 (the coupled row-0x20 install on the actor record [0x1587D4]):
        * the native `FUN_0007D9A4(rec, 0x20, 0, 0)` (deferred, stage 0, invoke
        * 0). The target cell's producer — the sit-8 arm's `[0x1587CC+side*4] ->
-       * [0x1587D4]` bind (`0x8AE4B`) — is unported (FU210-L3/FU194-L8), so
-       * `mr->actor_1587d4` stays NONE on the live path and this install is a
-       * null no-op: no record carries code 0x20, so action row 0x20 stays
-       * uncounted (the FU210-L5 leg). A unit fixture sets the cell to exercise
-       * the ported install. 0x899CD (the ball-record row-0x1F install) and
-       * 0x7A028 (the referee block reset) stay FU194-L7/L8 legs. */
+       * [0x1587D4]` bind (`0x8AE4B`) — now LANDS LIVE (FU-217/T3: the
+       * `match_run_free_record` selector + the `set_piece` sit-8 re-init, which
+       * runs before act 7's invoke-now dispatch on the same frame), so
+       * `mr->actor_1587d4` is a real free outfield record and this install
+       * fires: code 0x20 lands on the actor and action row 0x20 is COUNTED.
+       * The `actor_1587d4` gate is kept (a NONE cell — the pre-bind path — is a
+       * null no-op). 0x899CD (the ball-record row-0x1F install) and 0x7A028
+       * (the referee block reset) stay FU194-L7/L8 legs. */
       if (mr->actor_1587d4 >= 0 &&
           mr->actor_1587d4 <
               (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {

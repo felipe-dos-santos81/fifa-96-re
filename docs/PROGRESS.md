@@ -1428,3 +1428,41 @@ the one `NOTF`; dispatch `25 UNSUP / 54 OK / 1 NOTF` (sum 80);
 `floor(100 × 54/80) = 67`. README title `67%`, `docs/ENGINE.md` status +
 Action-dispatch bullets `54/80`, and `AGENTS.md:90` are consistent — **no
 inflation**.
+
+## M2 phase-20 T3 — the sit-8 actor-cell bind + action row `0x20` (FU-217)
+
+**The `[0x1587D4]` actor cell is bound live and action row `0x20` is COUNTED
+(`+1` action, census `54/80 → 55/80 = 68%`).** FU-217 (`docs/ghidra/
+FU217_actor_cell_producer.md`) derives the producer: the sit-8 arm
+`0x8AE08..0x8AE54` of `FUN_0008A938`, guarded by `byte[0x157A4C] != 1`, stores
+the first non-occupied outfield record of each side (`FUN_000897F4(side, 0xA)`)
+into the per-side cells `[0x1587CC]`/`[0x1587D0]` and the active side's into
+`[0x1587D4]`, then runs act 7 invoke-now. The port adds
+`match_run_free_record` (`match_run.c`, the native scan order
+`start, …, 10, 1, …, start-1`, index 0 never scanned), the sit-8 re-init block in
+`fifa96_match_run_set_piece`'s direct path (before the terminal
+`match_run_situation_side`, so it precedes act 7's invoke-now dispatch on the same
+frame), the per-side `actor_1587cc[2]` cells (spec §3.3, write-only until the
+arm-8 no-winner rebind leg FU217-L2), and flips
+`fifa96_match_handlers.c`'s `{0x20, NULL, …}` slot to `fifa96_match_action_20`
+(its body was already ported). This closes **FU210-L3/FU217-L1/L2**.
+
+**Tape decision: no re-pin.** The M2 tape reaches no `[0x157AC2] == 4`
+period-4 completion, so sit 8 never fires, the re-init never runs and the cell
+never moves — **M2 is byte-identical** at `441415fc…`; M1 `09b726b7…` unmoved.
+The golden files were **not** touched.
+
+**TDD:** the RED gate is the census pin (`action_wired == 33u`) across
+`run_census_riders`/`run_phase17_riders`, the row-`0x20` slot identity, and the
+new sit-8 bind rider in `run_phase19_riders` block 5 (a real period-4 completion
+→ `global_157a4c == 1`, `actor_1587d4 ==` the first free record of the RNG side
+in the native scan order, and the coupled `code == 0x20` install on that actor;
+plus a wrap variant with record 10 occupied → record 1). Mutation-RED: removing
+the re-init block leaves `global_157a4c == 0`/`actor_1587d4 == -1`/no code
+`0x20`. GREEN: `make check` **110/110** (sanitized).
+
+**Census recomputed:** `55 OK = 33 action + 22 phase`; the `0x16` INT3 slot is
+the one `NOTF`; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80);
+`floor(100 × 55/80) = 68`. README title `68%`, `docs/ENGINE.md` status +
+Action-dispatch bullets `55/80`, and `AGENTS.md:90` are consistent — **no
+inflation**.
