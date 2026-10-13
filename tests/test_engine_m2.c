@@ -124,7 +124,11 @@
  *      tape keeps its m 1/m 21/m 41 phases (see the forcing inventory below)
  *      because the natural chain is not frame-for-frame identical to the
  *      forced extra-time window (FU-143 §11.5; first hash divergence at
- *      golden line 49, natural phase 2 at presented frame 410);
+ *      golden line 49, natural phase 2 at presented frame 410). *(M2 phase-18
+ *      T3/T4: superseded — the live situation-0 cutscene pre-empted this derived
+ *      chain, and T4 re-based the probe onto the native act-1 route; the probe
+ *      now observes the act-1 arming at step 1679 and phase 2 at step 1802 —
+ *      see `run_natural_probe` and the phase-18 T4 status.)*
  *   3. negative score state (OL-87/88/89, T3): at m 62, before the direct
  *      score step, the score pair and the FUN_00093944 writer cells are
  *      asserted fresh, and the natural probe asserts the same through the
@@ -1453,12 +1457,14 @@
  * cannot satisfy "the placed records draw". */
 #define M2_HUD_BAND_TOP 190
 
-/* v4 natural-phase-2 probe bounds: the natural chain lands phase 2 at
- * presented frame ~410 (~121 granted frames, the 0x78 + 0x3C + 0x78 timers),
- * so 600 engine steps from the match start is ample, and 60 sampled steps
- * after the transition pin the negative score state inside phase 2. */
+/* v4 natural-phase-2 probe bounds. The `kick_step` bound (600 steps from the
+ * match start; `M2_NATURAL_PHASE2_CAP`) pins the first live row-0x24 dispatch
+ * of the situation-0 cutscene, which begins within a few granted frames. M2
+ * phase-18 T4: the natural phase 2 now follows the phase-0x20 cutscene's
+ * `0x3E8` stage-1 wait (~500 granted frames) plus the act-1 kickoff chain, so
+ * the post-kick window (`M2_NATURAL_POST_STEPS`) covers that whole span. */
 #define M2_NATURAL_PHASE2_CAP 600
-#define M2_NATURAL_POST_STEPS 60
+#define M2_NATURAL_POST_STEPS 1990
 
 /* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
@@ -1540,9 +1546,11 @@
  * navigation, then the match input. M2 interactive Task 1 (G1) holds RIGHT
  * across the early grants so the pad-driven row-00 target reaches the FU-77
  * mover and the controlled taker moves; a KICK press/release keeps the
- * "kick reaches the model, no wired consumer" evidence, and a second KICK
- * press/release at granted frame 60 supplies the natural probe's stage-1 slot
- * release word (`word[slot+6] & 0x70`). One entry is consumed per engine step;
+ * "kick reaches the model, no wired consumer" evidence, and KICK
+ * presses/releases supply the natural probe's stage-1 slot release word
+ * (`word[slot+6] & 0x70`) at both the pre-T3 kickoff (the [206..212] block)
+ * and the post-cutscene act-1 kickoff (the [1794..1799] block, M2 phase-18 T4).
+ * One entry is consumed per engine step;
  * indices 0..4 land on the front-end steps 1..5 (index 4's panel confirm
  * starts the match), index 5 is the first match poll (step 6). */
 static const fifa96_platform_key M2_KEYS[] = {
@@ -1700,6 +1708,20 @@ static const fifa96_platform_key M2_KEYS[] = {
     [210] = {FIFA96_ENGINE_KEY_KICK, 1},
     [211] = {FIFA96_ENGINE_KEY_KICK, 1},
     [212] = {FIFA96_ENGINE_KEY_KICK, 0},
+    /* M2 phase-18 T4 (FU-203): the phase-0x20 cutscene's stage-1 wait is
+     * `0x3E8` act-timer units (~500 granted frames), so the native kickoff
+     * (situation 1 -> act 1 -> phase 0x17) lands far later than the [206..212]
+     * release above (tuned for the pre-T3 derived kickoff). This second
+     * press/release supplies the FU-70 slot release the act-1 kickoff taker
+     * (row 01 stage 1) waits for, so the natural chain reaches the live phase 2.
+     * These entries sit well past the scripted tape's forced window (the tape
+     * self-terminates ~792 frames), so the golden transcript is unaffected. */
+    [1794] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [1795] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [1796] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [1797] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [1798] = {FIFA96_ENGINE_KEY_KICK, 1},
+    [1799] = {FIFA96_ENGINE_KEY_KICK, 0},
 };
 #define M2_KEYS_LEN (sizeof M2_KEYS / sizeof M2_KEYS[0])
 
@@ -1809,16 +1831,18 @@ struct m2_result {
   uint8_t staged_anim_id;    /* render.entities[11].stage.anim_id at frame 9 */
 };
 
-/* v4 + M2 phase-18 T3 natural-probe observations (no match directives). The
+/* v4 + M2 phase-18 T3/T4 natural-probe observations (no match directives). The
  * situation-0 kickoff cutscene (situation 0 -> act 0xA -> phase 0x20 ->
- * code 0x24 -> row 0x24) now runs on the natural chain, so the probe tracks the
- * first live row-0x24 dispatch instead of the v4 phase-2 jump: the native
- * match-init cutscene defers the derived phase-2 chain behind the unported
- * act-1 route (leg FU203-L2), so no natural phase 2 is observed in the window. */
+ * code 0x24 -> row 0x24) runs on the natural chain; the probe tracks the first
+ * live row-0x24 dispatch. M2 phase-18 T4: the phase-0x20 stage-2 terminal then
+ * re-dispatches situation 1 -> act 1 -> phase 0x17 (the native kickoff), so the
+ * probe also tracks the act-1 arming (`act1_step`) and the natural phase 2
+ * (`phase2_step`) the kickoff chain reaches once the pad release is supplied. */
 struct m2_natural {
   int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
   int kick_step;             /* first engine step where the situation-0 row-0x24 dispatched */
-  int phase2_step;           /* first engine step sampled at live phase 2 (-1: act-1 route unported) */
+  int act1_step;             /* first engine step where act 1 was armed (the situation-1 re-dispatch) */
+  int phase2_step;           /* first engine step sampled at live phase 2 (-1: never reached) */
   uint64_t dispatched_at_kick;   /* dispatch mask when the kickoff row was observed */
   uint8_t phase_at_kick;         /* live phase at the kickoff observation */
 };
@@ -2775,16 +2799,16 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   fifa96_platform_destroy(plat);
 }
 
-/* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance): the
- * same scripted key tape and platform cadence as run_tape, but with NO match
- * directives. The engine's derived kickoff chain must reach the live phase 2
- * by itself: the begin state-1 arm stages action 1 (row 01) on the controlled
- * taker, the producer fires `global_5882a` at tick_total >= 0x78, row 01 walks
- * its stage machine and the situation-0xB call writes phase 2. Every live
+/* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
+ * by M2 phase-18 T4): the same scripted key tape and platform cadence as
+ * run_tape, but with NO match directives. The engine's native chain must reach
+ * the live phase 2 by itself: the match-init situation-0 cutscene runs (act 0xA
+ * -> phase 0x20 -> code 0x24 -> row 0x24), then its stage-2 terminal
+ * re-dispatches situation 1 -> act 1 -> the phase-0x17 kickoff (row 01 is
+ * staged on the taker), and the situation-0xB call writes phase 2. Every live
  * sample must keep the score pair and the FUN_00093944 writer cells fresh (the
- * T3 negative: no goal invoker is reachable from the ported state), and row 01
- * must be in the dispatch set at the transition. This is the tape-level
- * counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
+ * T3 negative: no goal invoker is reachable from the ported state). This is the
+ * tape-level counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
  * and the permanent form of the FU-143 §11.5 mismatch-evidence replay. */
 static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   struct fifa96_platform_null_config pcfg;
@@ -2808,6 +2832,7 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   memset(nat, 0, sizeof *nat);
   nat->match_start_step = -1;
   nat->kick_step = -1;
+  nat->act1_step = -1;
   nat->phase2_step = -1;
   int steps = 0;
   int post = 0;
@@ -2832,6 +2857,11 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
              e->match_run.score_last_event == 0);
       if (e->match_run.state.phase == 2u && nat->phase2_step < 0)
         nat->phase2_step = steps;
+      /* M2 phase-18 T4 (FU-203): the phase-0x20 stage-2 terminal re-dispatches
+       * situation 1, arming act 1 (the native act-1 route). The arm is held
+       * across the clock-tail tick that runs the phase-0x17 kickoff. */
+      if (nat->act1_step < 0 && e->match_run.act.id == 1)
+        nat->act1_step = steps;
       if (nat->kick_step < 0 &&
           (e->match_run.dispatched_ok & (1ull << 0x24)) != 0u) {
         nat->kick_step = steps;
@@ -2849,11 +2879,15 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   assert(nat->kick_step - nat->match_start_step <= M2_NATURAL_PHASE2_CAP);
   assert((nat->dispatched_at_kick & (1ull << 0x24)) != 0u);
   assert(nat->phase_at_kick == FIFA96_MATCH_RUN_KICKOFF_PHASE);
-  /* The native kickoff phase-1 entry is the act-1 route (situation 1 -> act 1),
-   * reached only after the phase-0x20 `0x3E8` cutscene wait and unported in the
-   * engine (FU203-L2/FU202-L2), so the v4 natural phase-2 chain is not reached
-   * in this window (the leg, not a fabricated phase 2). */
-  assert(nat->phase2_step < 0);
+  /* M2 phase-18 T4 (FU-203): the native kickoff phase-1 entry is the act-1
+   * route (the phase-0x20 terminal's situation-1 re-dispatch -> act 1 -> phase
+   * 0x17; the sit-1 producer 0x8ABCF). The probe observes the act-1 arming and
+   * the live phase 2 the kickoff chain reaches, so the natural chain is
+   * complete (no leg). Mutation-RED: an un-registered phase 0x17 (or a NULL
+   * situation-1 row) leaves `act1_step` set but phase 2 unreached. */
+  assert(nat->act1_step > nat->match_start_step);
+  assert(nat->phase2_step > 0);
+  assert(nat->phase2_step > nat->act1_step);
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
 }
@@ -2868,18 +2902,19 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 50/80 = 62% (32 action = the 31 baseline + the
-   *    phase-18 T3 row 0x24; 18 phase = the 17 baseline + the phase-18 T3 phase
-   *    0x20; the phase rows 0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the
-   *    phase-17 T3 per-record rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/
-   *    0x0A/0x0C/0x0F/0x15 + the phase-17 T6 act-0xB row 0x21). */
+   *    the handler unit tests. 51/80 = 63% (32 action = the 31 baseline + the
+   *    phase-18 T3 row 0x24; 19 phase = the 17 baseline + the phase-18 T3 phase
+   *    0x20 + the phase-18 T4 phase 0x17; the phase rows 0x18/0x19/0x1F + the
+   *    phase-17 T1 row 0x02 + the phase-17 T3 per-record rows 0x00/0x03/0x04/
+   *    0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15 + the phase-17 T6 act-0xB
+   *    row 0x21). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 18u);  /* 50/80 = 62% */
+    assert(action_wired == 32u && phase_wired == 19u);  /* 51/80 = 63% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -2910,7 +2945,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x20].fn != NULL);  /* T3: situation-0 producer live (FU202) */
-    assert(fifa96_match_phase_table[0x17].fn == NULL);  /* T3: the native act-1 route is unported (FU203-L2/FU202-L2); the derived kickoff stays */
+    assert(fifa96_match_phase_table[0x17].fn != NULL);  /* T4: the native act-1 route is live (the phase-0x20 terminal -> sit 1 -> act 1; FU-203) */
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
     assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
     assert(fifa96_match_phase_table[0x1D].fn == NULL);  /* T5: ported, act-7 producer (sit 8) gated off + coupled row 0x20 (FU194-L1/L8) */
@@ -3246,7 +3281,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 18u);    /* 50/80 = 62% */
+    assert(action_wired == 32u && phase_wired == 19u);    /* 51/80 = 63% */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -3334,17 +3369,17 @@ int main(void) {
   struct m2_result res;
   run_tape(with_iso, transcript, M2_TRANSCRIPT_CAP, &tlen, &st, &res);
 
-  /* M2 phase-18 T3 acceptance (both modes): the natural chain runs the
+  /* M2 phase-18 T3/T4 acceptance (both modes): the natural chain runs the
    * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
-   * no goal; the derived phase-2 chain is deferred behind the unported act-1
-   * route (leg FU203-L2). Status to stderr keeps stdout the byte-exact
-   * transcript. */
+   * no goal, then the act-1 route (situation 1 -> act 1 -> phase 0x17) and the
+   * live phase 2. Status to stderr keeps stdout the byte-exact transcript. */
   struct m2_natural nat;
   run_natural_probe(with_iso, &nat);
   fprintf(stderr,
           "test_engine_m2 natural probe: situation-0 kickoff at step %d (match "
-          "start %d), row 0x24 dispatched, phase-2 deferred (FU203-L2), score 0-0\n",
-          nat.kick_step, nat.match_start_step);
+          "start %d), row 0x24 dispatched, act-1 route at step %d, phase 2 at "
+          "step %d, score 0-0\n",
+          nat.kick_step, nat.match_start_step, nat.act1_step, nat.phase2_step);
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);

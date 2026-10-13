@@ -101,7 +101,17 @@ struct fifa96_surface;
  * commit, the native order), the wired action row 01 supplies the situation
  * 0xB call, and the derived act-1 stage-1 producer sets `mr->global_5882a` at
  * `state.tick_total >= 0x78` so a begun run reaches the live phase 2 on its
- * own (see fifa96_match_run_frame and FU-143 §11). */
+ * own (see fifa96_match_run_frame and FU-143 §11).
+ *
+ * M2 phase-18 T4 (FU-203): the native act-1 route is now live. `begin` no
+ * longer calls this entry directly — it enters through
+ * `fifa96_match_act_dispatch(mr, 1, 0, 1)` (which runs the phase-0x17 body
+ * stage 0 = this entry), and the phase-`0x20` cutscene terminal re-dispatches
+ * situation 1 -> act 1 -> phase `0x17` after the `0x3E8` wait. `0x110794[0x17]
+ * == 0x1107EC[1] == 0x88DC8` (the phase/act dual identity; `get_xrefs_to
+ * 0x88DC8` = 1). The frame-body `global_5882a` arm is retained as the derived
+ * stage-1 remainder (idempotent with the phase-`0x17` stage-1 arm; leg
+ * FU203-L2). */
 #define FIFA96_MATCH_RUN_KICKOFF_PHASE 1u
 
 /* Engine-side staging record: the FU-85 §4 entity triple/anim/frame/hidden plus
@@ -643,10 +653,12 @@ struct fifa96_match_run {
   /* M2 playable-match Task 2 / OL-84 residual: the native `[0x5882A]` kickoff
    * gate, the flag the act-1 (phase-0x17 handler FUN_00088DC8) stage 1 sets at
    * the shared timeline timer `[0x58818] >= 0x78` (`0x88EF3..0x88F07`) and
-   * action row 01 stage 0 gates on (`0x7DC6B`). `fifa96_match_run_frame`
-   * derives the producer from `state.tick_total` (the same whole-delta
-   * accumulation, `[0x58818] += [0x57A64]`) while the phase is 1; init/begin
-   * clear it. */
+   * action row 01 stage 0 gates on (`0x7DC6B`). M2 phase-18 T4 (FU-203): the
+   * phase-0x17 row is now registered, so its stage-1 arm is the live producer;
+   * `fifa96_match_run_frame` still derives it from `state.tick_total` (the same
+   * whole-delta accumulation, `[0x58818] += [0x57A64]`) while the phase is 1 —
+   * the retained derived stage-1 remainder (idempotent; leg FU203-L2).
+   * init/begin clear it. */
   uint8_t global_5882a;
   /* M2 phase-15 T1 / FU-175: the native singleton act slot `FUN_000888FC`
    * installs (`id = byte[0x158828]`, `stage = byte[0x158829]`, `timer =
@@ -1328,7 +1340,11 @@ int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team);
  * the arm's slot-merge request. begin calls it between the formation seed/slot
  * bind and the `FUN_00073E08` placement commit, matching the native order; the
  * row-0x14 celebration release calls it to continue past a goal (native
- * `0x87C71`). Returns FIFA96_OK or -FIFA96_ERR_INVALID (NULL). */
+ * `0x87C71`). M2 phase-18 T4 (FU-203): `begin` no longer calls it directly — it
+ * enters through `fifa96_match_act_dispatch(mr, 1, 0, 1)` (the phase-0x17 body
+ * stage 0 runs this entry); the row-0x14 release still calls it directly (the
+ * derived release is not an act-1 dispatch). Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID (NULL). */
 int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr);
 
 /* ===== FU-150 P2 — fouls / referee / offside =============================== */
@@ -1448,15 +1464,17 @@ int fifa96_match_action_phase_19(struct fifa96_match_run *mr);
  * FU188-L2 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL. */
 int fifa96_match_action_phase_20(struct fifa96_match_run *mr);
 
-/* FU-193 §2/§6.1 (M2 phase-17 T4): the phase-0x17 / act-1 row body — the
- * kickoff / phase-1 entry (native `0x88DC8`, ends `0x88F39`). Its phase-table
- * slot (`fifa96_match_phase_table[0x17]`) is **NULL** — the row is not counted —
- * because (a) its sole producer `0x8ABCF` (the `FUN_0008A938` sit-1 arm) has no
- * live engine driver (leg FU193-L1), and (b) the engine's live act-1 behaviour
- * is the ad-hoc `fifa96_match_run_kickoff_entry` + the frame-body `global_5882a`
- * arm (`match_run.c`), so wiring the row would double-run the kickoff (leg
- * FU193-L2). This is the rows-27/29/2C precedent (a ported body with no live
- * producer stays unwired and uncounted). Derived stages: head
+/* FU-193 §2/§6.1 (M2 phase-17 T4) + FU-203 (M2 phase-18 T4): the phase-0x17 /
+ * act-1 row body — the kickoff / phase-1 entry (native `0x88DC8`, ends
+ * `0x88F39`). Its phase-table slot (`fifa96_match_phase_table[0x17]`) is
+ * **WIRED and counted** (M2 phase-18 T4): the producer is live — the phase-0x20
+ * body's stage-2 terminal re-dispatches situation 1 (`0x8B85D`), the loader row
+ * arms act 1, and the clock tail runs this body. The begin kickoff is
+ * re-expressed through the same route (`fifa96_match_act_dispatch(mr, 1, 0, 1)`),
+ * so the ad-hoc direct call is retired. `0x110794[0x17] == 0x1107EC[1] ==
+ * 0x88DC8` (the phase/act dual identity; the sit-1 producer `0x8ABCF`). NOTE:
+ * this PHASE row 0x17 is distinct from ACTION row 0x17 (the act-4 formation-arm
+ * installer, NULL/leg) — FU-203 §2.4. Derived stages: head
  * `mr->act.timer += frame_delta` (0x88DD7); stage 0 clears `[0x15882A]`
  * (0x88E56) and runs the derived kickoff entry (the `FUN_000740A0(1)` phase-1
  * write), timer=0, stage->1; stage 1 hands off to act 4 (0x88EE8) when the

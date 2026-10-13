@@ -414,3 +414,58 @@ Docs cross-cited: FU-193 (§1..§8), FU-175 (§1/§2/§7), FU-188 (§6), FU-197 
 FU-187 (§5), FU-150, FU-165. `docs/ENGINE.md` (the phase-17 T4 act-tail status;
 the "fouls / offside (live)" table; the phase table rows `0x17`/`0x1A`/`0x1C`
 NULL). No writes beyond this slice file and the wave report.
+
+---
+
+## Addendum — T4 landing status (2026-10-12, additive)
+
+This addendum records the **M2 phase-18 T4** landing against §5's rec 1
+(phase `0x17`); it does not rewrite any section above. The R51 recon's
+producer-live verdicts were taken **pre-T3**; the T3 landing (the phase-`0x20`
+situation-0 terminal live) changed scenario (1)'s premise for row `0x17` only.
+
+- **Row `0x17` (act 1) is now producer-LIVE and counted (`+1`).** R51's reason
+  (1) for "not live" — *"situation 1 has no live engine driver … the only
+  dispatch is the phase-`0x20` terminal, whose row is NULL and whose producer
+  (situation 0) is undispatched"* — was **discharged by T3**: the situation-0
+  producer is live (the re-placed `begin` arm), the phase-`0x20` row is
+  registered, and its stage-2 terminal re-dispatches situation 1
+  (`0x8B85D`). T4 **registers phase `0x17`**
+  (`fifa96_match_table[0x17] = fifa96_match_action_phase_17`) and observes the
+  route live: the clock-tail `fifa96_match_act_tick` maps act 1 → phase `0x17`
+  and runs the sit-1 producer's handler. Fresh this session:
+  `get_xrefs_to 0x88DC8 = 1` (from `0x1107F0 = 0x110794[0x17] == 0x1107EC[1]`)
+  confirms the act-1 entry is reached **only** through the dual-identity
+  phase/act slot (no direct match-start call), so wiring the phase row *is*
+  wiring the act-1 route.
+- **The ad-hoc kickoff is RETIRED (re-expressed).** R51 §5 rec 1's *"the ad-hoc
+  model must be retired and re-expressed as `fifa96_match_act_dispatch(mr, 1, 0,
+  1)`"* landed: the begin-time `fifa96_match_run_kickoff_entry(mr)` call is now
+  `fifa96_match_act_dispatch(mr, 1, 0, 1)`. The begin state is observably
+  identical (the phase-`0x17` stage 0 runs the same entry; `global_5882a` is
+  already 0; the begin-tail `fifa96_match_act_init` clears the armed act), so
+  **M2 is byte-identical (`cmp` clean, NO re-pin)**; M1 `09b726b7…` unmoved.
+- **R51's reason (2) — the frame-body `global_5882a` arm — is leg'd, not
+  retired.** R51 §2.3 reason (2) named the ad-hoc `fifa96_match_run_kickoff_entry`
+  **+ the frame-body `global_5882a` arm** (`match_run.c:3908`). The direct entry
+  is retired (above); the frame-body arm is **retained** as the derived stage-1
+  remainder — it is idempotent with the now-live phase-`0x17` stage-1 arm
+  (`0x88F07`) and is still consumed by the isolated-kickoff fixture
+  (`test_kickoff_enters_phase2_when_cutscene_isolated`, which clears the act)
+  and the row-`0x14` celebration release path. Its full retirement is a
+  follow-up → **leg FU203-L2** (refined: the direct-call half is closed).
+- **The T3 phase-2 completion gap is CLOSED.** The natural probe (`test_engine_m2`,
+  no directives) now observes the act-1 arming at engine step **1679** and the
+  **live phase 2 at step 1802** (the phase-`0x20` `0x3E8` cutscene wait ≈ 500
+  granted frames, then situation 1 → act 1 → phase `0x17` → the kickoff taker →
+  situation 0xB). The probe's post-cutscene KICK release (M2_KEYS `[1794..1799]`,
+  past the scripted tape window) supplies the FU-70 slot release the kickoff
+  taker waits for — the native player kick. T3's "holds in the cutscene" posture
+  is superseded.
+- **Row `0x1C` (act 6) stays NULL/uncounted** — §3's verdict is unchanged: the
+  producer rides the **offside** path `FUN_00079D5C` (`AX=3`), whose engine
+  counterpart is the dormant offside machine (`REF_OFFSIDE`); wiring the row
+  would double-model `0x89110` → **leg FU203-L3/L4**. The ported body stays
+  exported for direct unit testing.
+- **Census:** `+1` → `floor(100 × 51/80) = 63%`; dispatch `28 UNSUP / 51 OK /
+  1 NOTF` (sum 80).

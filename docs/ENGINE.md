@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-50/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21, 0x20
+51/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1F, 0x21, 0x20
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -15,10 +15,11 @@ formation/record placement (OL-T11-8: `352ko.fmt` seated from
 draw), the derived kickoff phase-1 entry (OL-84: begin lands
 `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`), the derived `FUN_0008D098` state-1
 kickoff arm + wired action row 01 (M2 playable-match Task 2: the derived chain
-reaches phase 2 via situation 0xB; **M2 phase-18 T3 correction — the live
-situation-0 kickoff cutscene now pre-empts it, so a begun run holds in the
-cutscene and no longer reaches phase 2 naturally; the native act-1 route
-(phase `0x17`) is unported, leg FU202-L2/FU203-L2**), the derived native
+reaches phase 2 via situation 0xB; **M2 phase-18 T3/T4 — the live situation-0
+kickoff cutscene pre-empts the derived chain, but M2 phase-18 T4 registered the
+native act-1 route (phase `0x17`) and retired the derived ad-hoc stage-0 model,
+so a begun run again reaches phase 2 naturally via situation 1 → act 1 → phase
+`0x17` → the kickoff taker → situation 0xB; FU-203**), the derived native
 match palette
 (OL-T11-6: `PALsys.fsh` frame 2 installed onto the presented surface, so the
 indexed draw is RGB under SDL3 — FU-144), the derived match HUD (OL-T11-7:
@@ -264,8 +265,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **50/80 rows wired** (32 action + the phase rows
-  `0x02`/`0x18`/`0x19`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **51/80 rows wired** (32 action + the phase rows
+  `0x02`/`0x17`/`0x18`/`0x19`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -984,6 +985,52 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_natural_phase2_never_scores`, the record-machine live tests) now **clear
   the armed act** to isolate the derived path from the live situation-0
   cutscene. README title `62%`; dispatch `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
+- **M2 phase-18 T4 (FU-203) — the act-1 route live: phase `0x17`
+  wired/counted; M2 byte-identical (no re-pin).** R51/FU-203 §2: the act-1
+  kickoff/phase-1 entry `0x88DC8` has exactly **one** static reference — the
+  phase/act dual-identity slot `0x110794[0x17] == 0x1107EC[1] == 0x88DC8`
+  (fresh `get_xrefs_to 0x88DC8` = **1**, from `0x1107F0`), so the native kickoff
+  is reached **only** through the act-1 route (there is **no** direct
+  match-start call; T3's completion gap). T4 **registers phase `0x17`**
+  (`fifa96_match_handlers.c`, `fifa96_match_action_phase_17`) and **retires the
+  derived ad-hoc stage-0 model**: the begin-time
+  `fifa96_match_run_kickoff_entry(mr)` call is **re-expressed** as
+  `fifa96_match_act_dispatch(mr, 1, 0, 1)` (R51 §5 rec 1), so the kickoff is
+  entered through the act-1 route whose phase-`0x17` body runs
+  `fifa96_match_run_kickoff_entry` at stage 0. **The producer is LIVE:** the
+  phase-`0x20` body's stage-2 terminal re-dispatches situation 1
+  (`fifa96_match_run_situation(mr, 1)`, native `0x8B85D`), the loader row arms
+  act 1 (`match_run_situation_side` → `fifa96_match_act_dispatch(mr, 1, 0, 0)`),
+  and the clock-tail `fifa96_match_act_tick` maps act 1 → phase `0x16+1` and
+  dispatches the now-registered body (the sit-1 arm `0x8ABAB`, the sole producer
+  `0x8ABCF`, census 1). **Counted `+1` → `51/80 = 63%`** (32 action + 19 phase).
+  **Tape:** the registered body fires only after the phase-`0x20` `0x3E8`
+  cutscene wait (~500 granted frames), **past the scripted tape's forced window**
+  (the tape self-terminates ~792 frames), so **M2 is byte-identical (`cmp` clean
+  against the v18 `441415fc…` golden — NO re-pin)**; M1 `09b726b7…` unmoved. The
+  begin re-expression is observably identity: the phase-`0x17` stage 0 runs the
+  same `fifa96_match_run_kickoff_entry`, `global_5882a` is already 0, and the
+  begin-tail `fifa96_match_act_init` clears the armed act (`cmp`-verified). **The
+  T3 gap is closed:** the natural probe (no directives) now observes the act-1
+  arming at engine step **1679** and the **live phase 2 at step 1802**
+  (`test_engine_m2`), the probe's post-cutscene KICK release (M2_KEYS
+  `[1794..1799]`, past the scripted window) supplying the FU-70 slot release the
+  kickoff taker waits for (mirroring the native player kick). **Legs (row
+  `0x1C` stays NULL/uncounted):** the act-6 producer `0x89110` rides the
+  **offside** path `FUN_00079D5C` (`AX=3`), whose engine counterpart is the
+  dormant offside machine (`REF_OFFSIDE`, no live producer) — wiring the row
+  would **double-model** the same body (**FU203-L3/L4**). The frame-body derived
+  `global_5882a` arm (`fifa96_match_run.c:3908`) is **kept** as the derived
+  stage-1 remainder (idempotent with the phase-`0x17` stage-1 arm; the
+  isolated-kickoff fixture + the row-`0x14` release path use it) — **leg
+  FU203-L2** (its full retirement is a follow-up). **Name collision:** PHASE row
+  `0x17` is distinct from ACTION row `0x17` (the act-4 formation-arm installer,
+  `fifa96_match_action_table[0x17]`, NULL/leg) — kept distinct (FU-203 §2.4).
+  README title `63%`; dispatch `28 UNSUP / 51 OK / 1 NOTF` (sum 80). Tests:
+  `test_engine_match_act::test_phase_17_counted` (mutation-RED: a NULL slot →
+  UNSUPPORTED and the phase unwritten), the natural-probe act-1/phase-2
+  observations, and the M2 census riders (`action_wired == 32 && phase_wired ==
+  19`, `phase_expect[0x17] == OK`, `phase_table[0x17] != NULL`).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
@@ -1130,7 +1177,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   | panel DECLINE/CONFIRM → match start | reached | match canvas replaces the front-end; `p9-v9-match-hud.png` (byte-identical to the T5 shot) |
   | RGB palette on the match canvas | reached | `#E044A0` sprite pixels; tape frame-6 palette assertion |
   | match HUD (bar/score/clock) | reached (on screen) | `p9-v9-match-hud.png` (0-0, 00:00); tape frame-6 bar-pixel assertion |
-  | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:02` in `p9-v9-match-clock.png` (byte-identical to the T5 shot); tape v10 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) |
+  | kickoff → phase 2 naturally | reached (on screen) | KICK burst → clock `00:02` in `p9-v9-match-clock.png` (byte-identical to the T5 shot); tape v10 `run_natural_probe` (phase 2 at step 215, row 01 dispatched) *(errata, phase-18 T3/T4: the live situation-0 kickoff cutscene moved the natural phase 2 behind the native act-1 route; `run_natural_probe` now observes phase 2 at step 1802 after the act-1 arming at step 1679 — the phase-18 T3/T4 bullets; the phase-9 measurement is kept verbatim)* |
   | move the controlled player | **reached (M2 phase-9 T1; T4 re-run)** | the ported row 02 (FU-75 L4.6) turns the post-kickoff slot record (team 0 record 9, code 02) into code 4 on its first live phase-2 frame and row 04 writes the slot-dir target; the T4 re-run held **LEFT** for 3 s (`p9-v9-hold-left.png`, byte-identical to the T3 shot): scene-band AE 45902; **UP** (`p9-v9-hold-up.png`): AE 28535; **RIGHT** (`p9-v9-hold-right.png`): scene AE 0 (the yaw/pitch-0 stand-in camera does not draw the negative-z walk; *(errata, phase-12 T2 2026-10-11: that view premise is superseded by the native camera-0 seed — FU-154 §5.1 — the AE pins above stand as measured pre-seed)*). Headless gates: `test_held_key_moves_live_controlled_record` (ISO), `test_machine_forced_decision_installs_on_slot_record`, `test_machine_no_edge_arm_copies_camera_target` |
   | follow-cam / auto-camera (live) | **not visibly following yet (M2 phase-12 T1; honest smoke; `p12-t1-*` 2026-10-11: live motion, no re-centering; T4 re-verified `p12-t4-*`: movement + ball slot on screen, no re-centering; phase-13 T1 `p13-t1-*`: the claim pan is asserted live, the throw-in Y cut restored, no visible follow; phase-14 T2: the sustained window + pan-counter lockout are pinned through the granted-frame path (52 frames per k=7 event), the row-04 camera-Y/tracked coupling is native, and the visible follow still needs the live camera-Y producer (FU168-L5 / FU171-L4) — the `p14-t2-*` smoke is honest)** | the every-frame FUN-00071DF4 call site + first arm, the row-04 pan origin, the `FUN_0007A084` receive arm (wired in `match_kick_run`) and — phase-11 T1 — the `0x157750` camera-height producer (FUN_00070B94 + the integrator store, `fifa96_camera_height`) with the record-event tail gate and kick band on the live cell are ported; the follow arm's `height > 0xF0` step is fixture-proven through the producer (`test_ball_receive_arm_high_ball_chain`) and **the `0x40` long-ball key is live** (the V request -> code-7 stage-1 `is_team_cb` -> mode 0x40: `test_live_long_ball_mode40_band2_follow` proves flags 0x40/band-2/code-4/traj 0x100/receive/follow-1 with the camera Y at the band boundary); **phase-12 T1 (FU-153) ports the live record jump producer** — the FUN_0006E8E8 animation-aux-keyed starter (the verified rows 0x5E/0x12/0x14/0x5C aux arms) + the `FUN_0007BF20 0x7C057..0x7C113` jump arc (`jump_base`/`jump_timer`, the shared `0x10F3C4` arc via `fifa96_camera_arc_height`) over the pool — and the live ISO chains: the airborne height-table code-4 receive sets the camera event to the k=5 exact-hit `0xE0` (`test_live_airborne_long_ball_seed_then_band2_follow`, A) and a second fresh chain crosses band 2 at the exact `0x70` arc sample with `traj/event_param 0x100` and `fifa96_match_run_camera_follow == 1` (B); the recording still cannot run fully live end-to-end: the live camera bootstrap (no ported producer raises `0x157750` off zero; the height table needs `d >= 0x38`) is leg **T1-L3** (phase-13 T1 restored the throw-in stage-3 Y producer, `[0x157750] = 0x80`; the live-selector hand-off stays T1-L1/T3) and the row-07 stage-2 `+0x44` animation ack that blocks the second kick of one possession is leg **T1-L2** (FU-153 §10) — the earlier `p11-t1-*` posture holds (`p12-t1-*`: no re-centering); **phase-14 T2 (FU-171) pins the sustained contract**: the follow rate is the tracked slot dirs x 15 re-set every frame while `[0x1577F0] > 0xF0` and `[0x157821] == 0`, the window closes at the first pan step and re-opens at the next setter call, and the row-04 snapshot stages the native `[0x157750]`/`[0x1577CA]` cells (`camera.pos_y`/`camera.tracked`); the remaining live-Y producer stays FU168-L5 (the keeper release is dispatch-dead R11-L4; the throw-in cut is restart-driven), and the residual `ball.y` stand-in sites are FU171-L7 |
   | kick the ball (gameplay) | **carrier + receive arm live (T2/phase-10 T1, headless); live long-ball kick path landed (phase-11 T1, headless); ball machine landed (phase-11 T2): the record is live, drawn and moving; the on-screen ball landed — the phase-12 T2 native camera-0 view seed projects the slot on canvas (16/16 kick-roll frames in the live ISO pin; M2 v12 re-pinned; the camera place/pan stays the T1/R1 event leg R2-L4, and the slot's sprite content is leg T2-L1)** | the pad kick path is derived and wired first-hand (T3: carrier `+0x91 == 5` → code-1 released row `0x7D110` → install 7 invoke → row 07 kick); the possession/carrier producers are landed (T2: `test_live_carrier_claim_and_kick`) and the PASS kick now runs the `FUN_0007A084` receive arm live (T1: `test_live_pass_kick_runs_receive_arm` — ack/receiver/tracked/controlled/release); phase-11 T1 adds the live `0x40` long-ball request (the V key → FUN_0007CD60) and the mode-0x40 kick chain (`test_live_long_ball_mode40_band2_follow`); **phase-11 T2 (FU-148 §16)** ports the `FUN_0008BAF0` ball machine (L14.8) — the only per-frame ball-record position producer — into `match_run_ball_machine` (the phase-2 camera-derived lead + the metric/heading/velocity-ramp/integration tail), seeds the reset/commit posture and stages the reset's row-3 appearance (PLAYART bank 3). Live, the record moves and the slot resolves/draws (`test_live_ball_record_produced_in_open_play`, `test_ball_machine_moves_ball_slot_pixels`, smoke trace `slot22 … sprite=yes`); **phase-12 T2 (FU-154 §5.1)** seeds the native camera-0 view (yaw 0xBF9C/pitch 200 in `fifa96_match_run_reset_render`), so the camera-derived lead now projects on canvas (the live ISO pin measures 16/16 kick-roll frames, x' 152 -> 4; the tape's m 58/61/72 park samples flip drawable with the lateral bound pinned; M2 re-pinned to v12) — the live camera *place/pan* stays the T1/R1 event coupling (leg R2-L4); **phase-13 T2 (FU-158)** lands the slot's real ball art: the render captures GAMEART0 `ball.fsh` (`render.ball_bank == 128`) and draws it at slot 22's projection with the composer roll byte (`render.ball_roll`, the native `[0x155C4E]` low nibble; ball-motion stand-in for the camera-rate gate, L158.2; presenter sanitizer 0x5739D), so the smoke shows a soccer ball instead of the PLAYART pose (M2 re-pinned to v13); the FU-84 row-3 install stays the first-hand record and the executable per-row tables remain the player-path leg; the ball height (`y`) stays 0 (leg 15.a/15.b unchanged) |

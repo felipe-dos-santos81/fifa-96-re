@@ -2291,8 +2291,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * and the team targets) and the FUN_0007876C merge drain. It runs before the
    * placement commit below, matching the native order (0x88E82 FUN_000740A0
    * precedes 0x88E87 FUN_00073E08; the 0x8D1D1 FUN_00079CCC pick reads the
-   * placement outputs the formation seed set). */
-  (void)fifa96_match_run_kickoff_entry(mr);
+   * placement outputs the formation seed set). M2 phase-18 T4 / FU-203: the
+   * direct ad-hoc call is RETIRED — the kickoff is now entered through the
+   * native act-1 route (register phase 0x17), so `fifa96_match_act_dispatch(1,
+   * 0, 1)` arms act 1 and invokes `fifa96_match_action_phase_17` stage 0 (which
+   * runs `fifa96_match_run_kickoff_entry`). The arm is re-initialised by the
+   * begin-tail `fifa96_match_act_init` below; the observable begin state (phase
+   * 1 + the state-1 arm) is unchanged. Post-cutscene the phase-0x20 terminal
+   * re-dispatches situation 1 -> act 1 -> phase 0x17 (the real match kickoff). */
+  (void)fifa96_match_act_dispatch(mr, 1, 0, 1);
   /* FU-96 leg 5 (M2 interactive T2): the per-record camera place
    * `FUN_00079F3C` runs inside the native `FUN_0008CF60` loop between the
    * phase handler and the `FUN_00079B6C` commit, on the non-controlled team's
@@ -5803,16 +5810,22 @@ int fifa96_match_action_phase_20(struct fifa96_match_run *mr) {
   return (int)fifa96_match_run_situation(mr, 1u);
 }
 
-/* FU-193 §2/§6.1 (M2 phase-17 T4): the phase-0x17 / act-1 row body — the
- * native kickoff / phase-1 entry `0x88DC8`. Its slot stays NULL/uncounted (the
- * producer `0x8ABCF` has no live driver, and the live kickoff is the ad-hoc
- * `fifa96_match_run_kickoff_entry` + `global_5882a` arm; the FU193-L1/L2 legs).
+/* FU-193 §2/§6.1 (M2 phase-17 T4) + FU-203 (M2 phase-18 T4): the phase-0x17 /
+ * act-1 row body — the native kickoff / phase-1 entry `0x88DC8` (the
+ * phase/act dual identity: `0x110794[0x17] == 0x1107EC[1] == 0x88DC8`).
+ * COUNTED (T4): the row is registered and the producer is live — the phase-0x20
+ * body's stage-2 terminal re-dispatches situation 1, arming act 1, and the
+ * clock-tail `fifa96_match_act_tick` dispatches this body. The begin-time
+ * kickoff is entered through the same act-1 route (`fifa96_match_act_dispatch(
+ * mr, 1, 0, 1)`), so the derived ad-hoc call is retired.
  * Body: head `[0x158818] += [0x157A64]`; stage 0 clears `[0x15882A]` and runs
  * the derived kickoff entry (the phase-1 write), timer 0, stage++; stage 1 hands
  * off to act 4 (0x88EE8) on `[0x157A4C] != 1 && a residual mismatch`, else at
  * the derived `state.tick_total >= 0x78` sets `[0x15882A] = 1` and clears the
  * slot. The head guard (goal-log words `[0x157AC5]`/`[0x157AC7]` + `[0x157AC2]`)
- * and the presentation sinks are FU193-L7 legs. */
+ * and the presentation sinks are FU193-L7 legs. NAME COLLISION: this PHASE row
+ * 0x17 is distinct from ACTION row 0x17 (the act-4 formation-arm installer,
+ * `fifa96_match_action_table[0x17]`, NULL/leg) — FU-203 §2.4. */
 int fifa96_match_action_phase_17(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);  /* 0x88DD7 */

@@ -72,10 +72,10 @@ static void test_dispatch_installs_and_latches(void) {
 
 /* invoke=1 runs the installed handler through `fifa96_match_dispatch_phase`
  * (the live caller). Act 9 -> phase 0x1F -> the derived body runs its stage-0
- * clear and advances to the stage-3 wait; an act with no ported phase row
- * (act 1 -> phase 0x17, NULL) invokes nothing. The derived sit-0xC arm keeps
- * the stage-0 phase-0x15 write (FU-170 §7), so the handler body itself does
- * not write the phase. */
+ * clear and advances to the stage-3 wait; act 1 -> phase 0x17 (registered by
+ * M2 phase-18 T4) runs its stage-0 kickoff entry (the phase-1 write). The
+ * derived sit-0xC arm keeps the stage-0 phase-0x15 write (FU-170 §7), so the
+ * handler body itself does not write the phase. */
 static void test_dispatch_invoke_runs_handler(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -85,11 +85,14 @@ static void test_dispatch_invoke_runs_handler(void) {
   assert(mr.global_5882a == 0u);             /* 0x88F9A stage-0 clear */
   assert(mr.act.stage == 3u);                /* stages 1/2 compressed */
   assert(mr.act.id == 9 && mr.act.timer == 2);
-  /* act 1 resolves to phase 0x17, which is not a registered phase row */
+  /* act 1 resolves to phase 0x17, registered by T4 (FU-203): the invoke runs
+   * the phase-0x17 stage-0 kickoff entry (clear the gate + the phase-1 write) */
   fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
   assert(fifa96_match_act_dispatch(&mr, 1, 0, 1) == FIFA96_OK);
   assert(mr.act.id == 1);
-  assert(mr.state.phase == 0u);
+  assert(mr.act.stage == 1u);                /* stage 0 -> 1 (0x88EB1) */
+  assert(mr.state.phase == 1u);              /* the kickoff phase-1 entry */
 }
 
 /* tick is a no-op while no act is installed or the installed act's phase row is
@@ -101,10 +104,12 @@ static void test_tick_timer_and_completion(void) {
   mr.state.frame_delta = 2;
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);     /* id 0 -> no-op */
   assert(mr.act.id == 0 && mr.state.phase == 0u);
-  /* act 1 -> phase 0x17 unported: installs, but the tick does nothing */
+  /* act 1 -> phase 0x17 (registered by T4): installs, and the tick runs the
+   * stage-0 kickoff entry (the phase-1 write) then advances to the stage-1 wait */
   assert(fifa96_match_act_dispatch(&mr, 1, 0, 0) == FIFA96_OK);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
-  assert(mr.act.timer == 0);
+  assert(mr.act.id == 1 && mr.act.stage == 1u);
+  assert(mr.state.phase == 1u);
   /* act 9 -> phase 0x1F: 30 ticks of delta 2 reach 0x3C */
   fifa96_match_run_init(&mr);
   mr.state.frame_delta = 2;
@@ -300,26 +305,28 @@ static void test_row_17_stage_walk(void) {
   assert(mr.record.stage92 == 4u);
 }
 
-/* ===== FU-193 (M2 phase-17 T4): the act-tail cohort 0x17/0x1A/0x1C =========
+/* ===== FU-193 (M2 phase-17 T4) + FU-203 (M2 phase-18 T4): the act-tail
+ * cohort 0x17/0x1A/0x1C =====================================================
  *
  * The three native act-tail handlers `0x88DC8` (phase 0x17 / act 1),
  * `0x89620` (phase 0x1A / act 4) and `0x89110` (phase 0x1C / act 6) are ported
- * as bounded derived bodies but stay UNCOUNTED (their phase-table slots are
- * NULL): FU-193 finds each producer statically (`0x8ABCF`; `0x8AB57`+`0x88EE8`;
- * `0x8A789`) but none is live under the strict "engine reaches it" test, so per
- * Ruling R8 the rows land as bodies + numbered legs (FU193-L1..L4) and the
- * census is unchanged (the rows-27/29/2C precedent). phase 0x17 is additionally
- * a double-model of the derived kickoff (`fifa96_match_run_kickoff_entry` +
- * the frame-body `global_5882a` arm, FU193-L2) and phase 0x1C of the ported
- * offside machine (`fifa96_ref_offside_sequence_step`, FU193-L4). */
+ * as bounded derived bodies. Per Ruling R8 the rows initially landed as bodies
+ * + numbered legs; M2 phase-18 T4 (R51/FU-203) then landed phase 0x17 COUNTED:
+ * its producer is the live phase-0x20 terminal's situation-1 re-dispatch (act 1
+ * -> phase 0x17), and the derived ad-hoc kickoff call is retired (re-expressed
+ * through the act-1 route). Phase 0x1A (act-4 formation arm, FU-201/R49) and
+ * phase 0x1C (act-6 = the offside machine, a double-model, FU193-L4) stay
+ * NULL/uncounted. */
 
-/* Phase 0x17 / act 1 (FU-193 §2): the body is NOT wired; the dispatcher returns
- * UNSUPPORTED while the body stays reachable by direct call. */
-static void test_phase_17_not_counted(void) {
+/* Phase 0x17 / act 1 (FU-193 §2 + FU-203): the slot is REGISTERED and counted
+ * (M2 phase-18 T4). Mutation-RED: a NULL slot returns UNSUPPORTED and leaves
+ * the phase unwritten. */
+static void test_phase_17_counted(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x17].fn == NULL);
-  assert(fifa96_match_dispatch_phase(&mr, 0x17u) == -FIFA96_ERR_UNSUPPORTED);
+  assert(fifa96_match_phase_table[0x17].fn == fifa96_match_action_phase_17);
+  assert(fifa96_match_dispatch_phase(&mr, 0x17u) == FIFA96_OK);
+  assert(mr.state.phase == 1u);       /* the stage-0 kickoff phase-1 entry */
 }
 
 /* Phase 0x17 stage 0 (0x88E4B): clear the [0x15882A] kickoff gate (0x88E56),
@@ -788,7 +795,7 @@ int main(void) {
   test_row_17_not_counted();
   test_row_17_phase_gate_resets();
   test_row_17_stage_walk();
-  test_phase_17_not_counted();
+  test_phase_17_counted();
   test_phase_17_kickoff_stage0();
   test_phase_17_stage1_handoff();
   test_phase_17_stage1_timer();

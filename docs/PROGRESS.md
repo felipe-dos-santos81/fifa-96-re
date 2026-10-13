@@ -1047,6 +1047,42 @@ kickoff/live-record fixtures now clear the armed act to isolate the derived path
 from the live cutscene. `make check` **110/110**; README title `62%`; dispatch
 `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
 
+**Phase-18 T4 (2026-10-12) — the act-1 route live: phase `0x17` wired/counted;
+M2 byte-identical (no re-pin) (`+1`, census `50/80 → 51/80 = 63%`)** (this
+slice, R51/FU-203). T3 left the match holding in the situation-0 kickoff
+cutscene because the native **act-1 route** was unported. R51/FU-203 §2 shows
+the act-1 kickoff/phase-1 entry `0x88DC8` has exactly **one** static reference —
+the phase/act dual-identity slot `0x110794[0x17] == 0x1107EC[1]` (fresh
+`get_xrefs_to 0x88DC8` = 1) — so the native kickoff is reached only through the
+act-1 route (no direct match-start call). T4 **registers phase `0x17`**
+(`fifa96_match_action_phase_17`) and **retires the derived ad-hoc stage-0
+model**: the begin `fifa96_match_run_kickoff_entry(mr)` call is re-expressed as
+`fifa96_match_act_dispatch(mr, 1, 0, 1)` (R51 §5 rec 1). **The producer is
+live:** the phase-`0x20` body's stage-2 terminal re-dispatches situation 1
+(native `0x8B85D`) → the loader row arms act 1 → the clock-tail
+`fifa96_match_act_tick` dispatches the now-registered phase-`0x17` body (the
+sit-1 arm `0x8ABAB`, sole producer `0x8ABCF`). **Wired/counted: phase `0x17`
+(`+1`).** **Tape:** the registered body fires only after the phase-`0x20`
+`0x3E8` cutscene wait (~500 granted frames), **past the scripted tape's forced
+window** (the tape self-terminates ~792 frames), so **M2 is byte-identical
+(`cmp` clean against the v18 `441415fc…` golden — NO re-pin)**; the begin
+re-expression is observably identity (same `kickoff_entry`, `global_5882a`
+already 0, the act cleared by `fifa96_match_act_init`). **M1 `09b726b7…`
+unmoved.** **The T3 gap is closed:** the natural probe (no directives) now
+observes the act-1 arming at engine step **1679** and the **live phase 2 at step
+1802** — the probe's post-cutscene KICK release (M2_KEYS `[1794..1799]`, past
+the scripted window) supplies the FU-70 slot release the kickoff taker waits
+for. **Legs:** row `0x1C` (act 6) stays `NULL/uncounted` — its producer rides
+the **offside** path `FUN_00079D5C` (`AX=3`), whose engine counterpart is the
+dormant offside machine (`REF_OFFSIDE`), so wiring the row would **double-model**
+`0x89110` (**FU203-L3/L4**); the frame-body derived `global_5882a` arm
+(`fifa96_match_run.c:3908`) is **kept** as the derived stage-1 remainder
+(idempotent with the phase-`0x17` stage-1 arm; the isolated-kickoff fixture +
+the row-`0x14` release path use it, **leg FU203-L2**). **Name collision:** PHASE
+row `0x17` is distinct from ACTION row `0x17` (the act-4 formation-arm
+installer) — kept distinct. `make check` **110/110**; README title `63%`;
+dispatch `28 UNSUP / 51 OK / 1 NOTF` (sum 80).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
