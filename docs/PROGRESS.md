@@ -756,7 +756,7 @@ slice). Ports the native situation producers the engine lacked as
 phase 0x11 + act 0xA), `mode == 0` is the `FUN_00088860` period-end arm
 (phase-0xC gated: situation 8 on the extra-time period index with the RNG side
 0x888C8, else situation 1 on the controlled side 0x888F2), plus the common
-extra-time gate (0x4B0F6 `(input_range[0]|input_range[1]) & 0x0100` → situation
+extra-time gate (0x4B0CB `(input_range[0]|input_range[1]) & 0x0100` → situation
 8 + period index 4). Situation 0xB was already producer-live (row 01). The live
 `begin` path is gated (`period_setup_live` defaults 0) because situation 0
 fires phase 0x20/act 0xA and situation 8 fires phase 0x1D/act 7, whose bodies
@@ -932,6 +932,41 @@ mutation-RED discriminators verified (the `0x21` stage-1 act-slot clear, the
 `cmp`-verified — the `0x21` row fires only on a period completion the golden
 fixtures never stage); `make check` **110/110**; README title `61%`; census
 **49/80 = 61%**.
+
+**Phase-17 T7 (2026-10-12, acceptance) — the tape is v17 (byte-identical, no
+re-pin), the phase/act-seam riders folded in, the smoke recorded, the census
+reconciled (`49/80 = 61%`).** Every phase-17 landing is install-live,
+producer-gated off, or tape-dormant, so no presented frame moved: M1
+`09b726b7…` is unmoved and M2 is held at the v16 bytes `7b4b241a…` (792 lines,
+`cmp` clean against `tests/golden/engine/m2-frames.txt`). The v17 label records
+the phase's acceptance strata at the acceptance layer (the phase-15 v14→v15
+precedent labels the acceptance layer, not the tape bytes); the one frame-body
+touch — T1's native per-record walk — landed with nothing new dispatched, so it
+provably cannot move the tape. `tests/test_engine_m2.c` gains the v17 provenance
+block and the acceptance riders (`run_phase17_riders`): the **seam rider** (the
+per-record `[rec+0x1C]` seam is walk-only, one dispatch per non-skipped record
+routed to the staged record — a silent re-seam, a double-run or a store slip
+aborts), the **walk pin** (only non-NULL rows dispatch), the **census shape +
+gated-row set** (the seven dispatched-but-gated no-op rows `0x03`/`0x04`/`0x06`/
+`0x07`/`0x08`/`0x09`/`0x15` are metadata-gated), **phase `0x21`'s dispatch**,
+and the **leg pins** (row `03` NULL/FU177-L1, `0x22`/`0x1B` NULL, `0x13`/`0x14`
+NULL). Every rider is mutation-RED (the double-run, the store slip, the re-seam,
+wiring a never-written row, dropping a wired row, dropping the `0x21` stage
+advance and wiring a leg row each abort the acceptance tape at their own
+assert; the per-rider mutations are in the T7 report). Review minors folded
+(docs/comments only): the extra-time-gate cite `0x4B0F6` → `0x4B0CB` (T2); the
+T3 caveat's inline source anchors; the `phase_1D` doc-comment "both teams'
+records" → the fixed team base `records[0]` (T5); the `[0x157AB1]` leg cite →
+FU-89 §11 (T5); and a dated additive erratum on FU195-L3. **Smoke** (`DISPLAY=:1`,
+`make game`): intro (`docs/screens/p17-t7-intro.png`) → front-end
+(`docs/screens/p17-t7-frontend.png`) → match (`docs/screens/p17-t7-match.png`,
+the dark pitch + two placed players + ball + `0-0` HUD) draw; no visible delta
+is claimed (install-live/gated/tape-dormant). `make check` **110/110**; README
+title `61%`; census **49/80 = 61%**, dispatch `30 UNSUP / 49 OK / 1 NOTF`
+(sum 80). Remaining frontier items are registered with their owners in the
+`docs/ENGINE.md` T7 bullet (FU177-L1, FU178-L1, FU181-L1, FU188-L1,
+FU191-L1..L6, FU192-L1..L3, FU193-L1..L8, FU194-L1..L9, FU195-L2/L3/L4,
+FU196-L1..L8, FU197-L1..L4, FU198-L1..L6, OL-13, OL-65).
 
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never

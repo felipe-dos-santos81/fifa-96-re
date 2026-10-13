@@ -415,3 +415,15 @@ FU-137 (§6, OL-13), FU-143 (§4), FU-175 (§1/§2/§3/§7/§10, FU175-L2/L5/L6)
 FU-182 (§4), FU-185 (§2/§10), FU-188 (§2/§6), FU-190 (§1/§4/§5/§9, FU190-L6);
 the phase-16/17 plans; AGENTS.md census rule. No writes beyond this slice file
 and the workspace report.
+
+---
+
+**Erratum (T6 landing / T7 acceptance, 2026-10-12).** §8 leg **FU195-L3** says
+the `0x974DC(0x1E)` audio sink is "staged as a no-op in the derived bodies", but
+the landed T6 bodies (`fifa96_match_action_phase_21`/`_22`) stage the event as
+`mr->ref_whistle = 0x1E` — the sibling phase-1C/1D convention for the same
+native event, which §6.1's own recipe ("stage 0 -> `0x974DC(0x1E)` event")
+already anticipates. The port is faithful to §6.1; §8.3's "no-op" phrasing is
+the stale text (the unported remainder — the `FUN_00064EC0` ring push +
+`FUN_00065CC0` audio handle — stays FU195-L3). Recorded here as a quoted errata
+per the repo convention (prior sections are not rewritten).

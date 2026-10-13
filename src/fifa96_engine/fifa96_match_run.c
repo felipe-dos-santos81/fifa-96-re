@@ -2983,7 +2983,7 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
  * (0x4B0A5). `mode == 0` is the `FUN_00088860` period-end arm (0x4B064): gated
  * on phase 0xC, on the extra-time period index dispatch situation 8 with the
  * RNG side (0x888C8), else situation 1 on the controlled side (0x888F2). Both
- * modes then apply the extra-time gate (0x4B0F6, `TEST AH,1`). Producer-only:
+ * modes then apply the extra-time gate (0x4B0CB, `TEST AH,1`). Producer-only:
  * no table slot, no row install (R45/R9). See the header for the leg set and
  * the live-begin gate (`period_setup_live`). */
 int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode) {
@@ -3013,7 +3013,7 @@ int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode) {
       }
     }
   }
-  /* 0x4B0F6..0x4B0E0: the both-team FUN_0008C418 refresh (FU196-L2 leg) then
+  /* 0x4B0CB..0x4B0E0: the both-team FUN_0008C418 refresh (FU196-L2 leg) then
    * the extra-time gate — bit 8 of the OR of the two input/range words
    * (the 0x4B0CB `TEST AH,1`; bit semantics FU196-L1). */
   if ((mr->input_range[0] | mr->input_range[1]) & 0x0100u) {
@@ -5790,7 +5790,8 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr) {
  * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
  * (0x898B4) clears `[0x15882A]`, writes phase 0x10 when `state.phase != 0x10`
  * (0x898B6..0x898DD — the FU194-L9 phase write), installs action row 0x19 on
- * both teams' records (0x89903/0x8990A), timer=0 stage->1; stage 1 (0x899EE)
+ * the team base (`records[0]`, once per team — 0x89903/0x8990A), timer=0
+ * stage->1; stage 1 (0x899EE)
  * fires the `0x974DC(0x1E)` whistle and sets `[0x15882A] = 1` once the shared
  * timeline reaches 0x78 (derived `state.tick_total`); stage 9 (0x89E6E) is the
  * terminal (no situation re-dispatch): clear the act slot and `[0x157A4C]`.
@@ -5805,7 +5806,7 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
     case 0u:   /* arm 0 (0x898B4): the install frame */
       mr->global_5882a = 0u;                       /* 0x898B4 clear [0x15882A] */
       /* 0x898B4 also clears [0x157AB1] — an unported process flag with no engine
-       * cell (FU-145 L4 / FU-189 §3); leg (OL-13). */
+       * cell (FU-89 §11 / FU-189 §3); leg (OL-13). */
       if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
         (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
       }

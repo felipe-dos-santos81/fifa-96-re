@@ -551,7 +551,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   0xA), `mode == 0` is the `FUN_00088860` period-end arm (0x4B064: phase-0xC
   gated → situation 8 on the extra-time period index with the RNG side 0x888C8,
   else situation 1 on the controlled side 0x888F2), plus the common extra-time
-  gate (0x4B0F6 `(input_range[0]|input_range[1]) & 0x0100` → situation 8 + the
+  gate (0x4B0CB `(input_range[0]|input_range[1]) & 0x0100` → situation 8 + the
   period index 4). Situation 0xB was already producer-live (row 01). **The live
   `begin` path is gated**: `period_setup_live` defaults 0 (the tape-neutral
   sequence), because situation 0 fires phase 0x20/act 0xA and situation 8 fires
@@ -598,9 +598,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   row `0x15` (T1 deliberately deferred it). **Gated-count caveat (read the 60%
   with this):** 7 of the 13 newly-wired rows are live **dispatched-but-gated
   no-ops** — `0x03`/`0x04`/`0x07` (`0x6DE44`, `[rec+0x14]` NULL,
-  `fifa96_match_handlers.c:4639`), `0x06` (`0x6DD9C`, `[rec+0x10]` NULL, `:4703`),
+  `fifa96_match_handlers.c:4668`), `0x06` (`0x6DD9C`, `[rec+0x10]` NULL, `:4729`),
   and `0x08`/`0x09` (`0x6DD6C`) + `0x15` (the shared `0x6DCC8`) via the NULL
-  `phase_meta` (`:4603`/`:4617`/`:4739`). Their phases *are* engine-written and
+  `phase_meta` (`:4594`/`:4603`/`:4748`). Their phases *are* engine-written and
   their rows *are* dispatched (so they count under the repo's own definition —
   the FU-177 §7 / T1-phase-`0x02` convention), but the ported bodies perform the
   native work only when a fixture supplies the unported input; the remaining 6
@@ -757,6 +757,69 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`floor(100 × 49/80) = 61`); dispatch `30 UNSUP / 49 OK / 1 NOTF` (sum 80;
   action 45 = 31 OK + 14 UNSUP, phase 35 = 18 OK + 16 UNSUP + 1 NOTF); README
   title `61%` — all consistent.
+- **M2 phase-17 T7 (acceptance) — the tape is v17 (byte-identical), the
+  phase/act-seam riders folded in, the smoke recorded, the census reconciled
+  (`49/80 = 61%`).** **Tape decision: v17 strata, no re-pin.** Every phase-17
+  landing is install-live, producer-gated off, or tape-dormant, so no presented
+  frame moved: M1 `09b726b7…` is unmoved and M2 is held at the v16 bytes
+  `7b4b241a…` (792 lines, `cmp` clean against
+  `tests/golden/engine/m2-frames.txt`). The v17 label records that this phase's
+  acceptance strata exist at the acceptance layer (the phase-15 v14→v15
+  precedent labels the acceptance layer, not the tape bytes); holding v16 was
+  the alternative, recorded here as rejected for precedent consistency. The one
+  frame-body touch — T1's native per-record walk — was landed with nothing new
+  dispatched (it dispatches only phase `0x02`, whose body is metadata-gated on
+  the unported `[rec+0xC]`/OL-13 source), so it provably cannot move the tape;
+  action row `03` is ported but leg'd (its live rewrite moved M2 at transcribed
+  frame 29, owner FU177-L1). `tests/test_engine_m2.c` gains the v17 provenance
+  block and the phase-17 acceptance riders (`run_phase17_riders`): the **seam
+  rider** (the per-record `[rec+0x1C]` seam is walk-only, one dispatch per
+  non-skipped record routed to the staged record — a silent re-seam, a
+  double-run or a store slip aborts), the **per-record walk pin** (only
+  non-NULL rows dispatch), the **census shape + gated-row set** (`31` action +
+  `18` phase = `49/80 = 61%`; the seven dispatched-but-gated no-op rows
+  `0x03/0x04/0x06/0x07/0x08/0x09/0x15` are metadata-gated), **phase `0x21`'s
+  dispatch**, and the **leg pins** (row `03` NULL/FU177-L1, `0x22`/`0x1B` NULL,
+  `0x13/0x14` NULL). Mutation-RED: the per-rider mutations are recorded in the
+  phase-17 T7 report (the double-run, the store slip, the re-seam, wiring a
+  never-written row, dropping a wired row, dropping the `0x21` stage advance
+  and wiring a leg row each abort the acceptance tape at their own assert).
+  **Review minors folded (docs/comments only, no behaviour change):** the
+  extra-time-gate cite `0x4B0F6` → `0x4B0CB` (T2); the T3 gated-count caveat's
+  inline source anchors corrected to `fifa96_match_handlers.c:4668`/`:4729`/
+  `:4594`/`:4603`/`:4748`; the `phase_1D` doc-comment "both teams' records" →
+  the fixed team base `records[0]` (T5); the `[0x157AB1]` leg cite → FU-89 §11
+  (T5); and a dated additive erratum on FU195-L3 (its "staged as a no-op" text
+  vs the landed `ref_whistle` code). **Smoke (`DISPLAY=:1`, this host
+  2026-10-12, `make game`):** the window opens and the EA-SPORTS intro
+  (`docs/screens/p17-t7-intro.png`) → the front-end panel
+  (`docs/screens/p17-t7-frontend.png`) → the kickoff match
+  (`docs/screens/p17-t7-match.png`: the dark pitch, two placed players, the
+  ball and the `0-0` HUD/clock) draw; ESC exits. The phase-17 landings are
+  install-live/gated/tape-dormant, so **no visible delta is claimed**. The SDL
+  exit leaks 1942 B (dbus/nvidia-GL under `SDL_CreateWindowAndRenderer`,
+  `platform_sdl3.c:78`) — **pre-existing host-library noise**, not an engine
+  leak. **Census: `49/80 = 61%`** (`floor(100 × 49/80) = 61`); dispatch
+  `30 UNSUP / 49 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35
+  = 18 OK + 16 UNSUP + 1 NOTF); README title `61%` — all consistent.
+  **Remaining legs (owners; derivations live in the FU slice named).** The
+  per-record seam remainder **FU191-L1..L6** (incl. the `FUN_0008DCD4` distance
+  triple **FU191-L2** and the record-threaded ABI **FU191-L3**); the
+  `[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` OL-13 metadata source **FU192-L1**, the
+  `0x6E244` RNG producer **FU192-L2** and the `0x6DE44` cell-map arm
+  **FU192-L3**; the act-tail `0x17`/`0x1A`/`0x1C` producers **FU193-L1..L8**;
+  the act-tail `0x1D`/`0x1E`/`0x20` producers + the coupled row-`0x20`
+  installer **FU194-L1..L9**; **FU195-L2** (`0x22` producer-dormant),
+  **FU195-L3** (the `0x974DC` audio sink) and **FU195-L4** (`0x15881A` gate);
+  the situation producer tails + the bit-8 semantics **FU196-L1..L8**; the
+  act-4 formation arm remainder **FU197-L1..L4**; the per-record cohort
+  envelope + row-03 completion **FU198-L1..L6**; row `03`'s live
+  `[rec+0x1C]` rewrite (owner **FU177-L1**), the row-09 arm-1 installer for row
+  `0x0D` **FU178-L1**, the row-`0x17` installer **FU181-L1** and the
+  situation-0 producer **FU188-L1**; **OL-13** (the loader metadata) and
+  **OL-65** (the row-0x22 angle-input gate). Every phase-16/17 FU leg is
+  unchanged from its slice; this bullet is the owner register, not a
+  re-derivation.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

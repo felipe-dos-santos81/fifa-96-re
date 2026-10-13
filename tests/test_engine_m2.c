@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v16 (spec §5; the
- * M2 phase-16 act-machine-frontier acceptance, T6; the v15 phase-15
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v17 (spec §5; the
+ * M2 phase-17 phase/act-seam acceptance, T7; the v16 phase-16
+ * act-machine-frontier acceptance, T6; the v15 phase-15
  * census-frontier acceptance, T4; the v14 phase-14 restart-chain
  * re-pin, T3, the v13/v12 phase-13/phase-12 re-pins, the M2 phase-11
  * visible-ball acceptance, T3, the v10 phase-10 visible-layer acceptance,
@@ -1312,6 +1313,79 @@
  * moved no presented frame (each task's `cmp` evidence, re-verified at T6); M1
  * unmoved (`09b726b7…`); M2 sha held at `7b4b241a…` (the v15 bytes) with the
  * v16 strata label.
+ *
+ * --- v17 (M2 phase-17 acceptance, T7): the phase/act-seam strata -------------
+ *
+ * v17 is the phase-17 acceptance (the phase/act seam: T1 the native per-record
+ * phase walk `FUN_0008D098` + phase `0x02`, FU-191/FU-198; T2 the situation
+ * producer machine + the act-4 formation arm, FU-196/FU-197; T3 the per-record
+ * phase handlers `0x00–0x15`, FU-192; T4 the act-tail `0x17`/`0x1A`/`0x1C`,
+ * FU-193; T5 the act-tail `0x1D`/`0x1E`/`0x20`, FU-194; T6 the act-tail
+ * `0x21`/`0x22` + the `0x1B` verdict, FU-195). Every phase-17 landing installs
+ * on a live path, is producer-gated off, or is tape-dormant by construction, so
+ * — exactly like the phase-15 v14→v15 and phase-16 v15→v16 precedents — v17 is
+ * a **strata-only label bump**: it adds the phase-17 acceptance riders
+ * (`run_phase17_riders`), the seam/walk/census/leg cross-checks and this
+ * provenance, with **no presented frame moved**. The transcript and golden are
+ * byte-identical to v16 (`cmp` against the committed
+ * `tests/golden/engine/m2-frames.txt` clean, 792 lines, verified with the ISO
+ * present at acceptance); M1 `09b726b7…` unmoved. Holding the v16 label would
+ * also be defensible (the bytes are the same), but the phase-15 precedent
+ * labels the *acceptance layer*, not the tape bytes, and v17 records that this
+ * phase's acceptance strata exist — the honest, precedent-consistent choice.
+ *
+ * Why no frame moved (the honesty of "byte-identical"). The native-walk
+ * conversion is the phase's one frame-body touch, and T1 landed it **with
+ * nothing new dispatched** (the walk dispatches only the phases the frame body
+ * writes whose rows are non-NULL; on the live engine that is phase `0x02`
+ * alone, whose body is metadata-gated on the unported `[rec+0xC]`/OL-13 source
+ * — a no-op). Action row `03` is **ported but leg'd** — its live phase-2
+ * `[rec+0x1C]` target-rewrite chain moved M2 at transcribed frame 29 when
+ * wired, so the slot stays NULL (owner FU177-L1). T2's producers and act-4 arm
+ * are landed **gated inert** (`period_setup_live`/`formation_order_ok` default
+ * 0); T3's per-record bodies are render-invisible on the tape (targets are
+ * render-invisible; the seven metadata-gated rows are NULL-gated no-ops); T4/T5
+ * leave their phase slots NULL (producers not live); T6 wires phase `0x21`,
+ * which fires only on a period completion the golden fixtures never stage and
+ * whose writes are render-invisible (act slot + `ref_whistle`). So no presented
+ * frame moved at any landing; each task's `cmp` is re-verified here.
+ *
+ * What v17 pins at the spec §5 sequence points (`run_phase17_riders`; **every
+ * rider is mutation-RED** — each deliberately-broken mutation aborts at its own
+ * assertion, the per-rider mutations recorded in the phase-17 T7 report):
+ *   1. The seam rider (T1/FU-191): the native per-record `[rec+0x1C]` seam is
+ *      **walk-only** — one dispatch per non-skipped record, routed to the
+ *      *staged* record (never the global act-tail dispatch), honouring the
+ *      `[rec+0x9A]` skip. A silent re-seam onto the global dispatch, a
+ *      double-run, or a `[rec+0x1C]`-store slip aborts here. Mutation-RED: the
+ *      global dispatch made to run the walk aborts item 1's "act-tail dispatch
+ *      does not touch a record" assert; duplicating the walk's dispatch aborts
+ *      its "exactly one delta" assert; staging the wrong record aborts its
+ *      "each record's own position" assert.
+ *   2. The per-record walk pin (T1/FU-191): the walk dispatches **only** the
+ *      engine-written phases whose rows are non-NULL — a NULL row (`0x10`, the
+ *      never-written row) and the INT3 slot (`0x16`) are no-ops, a non-NULL row
+ *      (`0x00`) writes. Mutation-RED: wiring the NULL row `0x10` aborts it.
+ *   3. The census shape + the gated-row set (T1–T6): the exact wired counts
+ *      (`31` action + `18` phase = `49/80 = 61%`) and the seven
+ *      dispatched-but-gated rows `0x03`/`0x04`/`0x06`/`0x07`/`0x08`/`0x09`/
+ *      `0x15` are non-NULL **and** metadata-gated no-ops (a fresh record with
+ *      NULL metadata is untouched). Mutation-RED: dropping a wired row aborts
+ *      the count / the gated-set pin.
+ *   4. phase `0x21`'s dispatch (T6/FU-195): the wired act-0xB phase runs live
+ *      through the act-tail dispatch (stage 0 fires the `0x974DC(0x1E)` event,
+ *      timer 0, stage 1). Mutation-RED: dropping the `0x21` stage-0 advance
+ *      aborts it.
+ *   5. The leg pins: action row `03` NULL (owner FU177-L1, its evidence carries
+ *      the `0x6DCC8`/`FU177-L1` markers; its dispatch is UNSUPPORTED); phase
+ *      `0x22` NULL (FU195-L2), phase `0x1B` NULL (FU195-L1), and the `0x13`/
+ *      `0x14` RNG rows NULL (FU192-L2). Mutation-RED: wiring any leg aborts it.
+ *
+ * Golden decision (v17): **byte-identical, no re-pin** — the phase-17 landings
+ * moved no presented frame (each task's `cmp` evidence, re-verified at T7); M1
+ * unmoved (`09b726b7…`); M2 sha held at `7b4b241a…` (the v16 bytes, 792 lines)
+ * with the v17 strata label. Any drift is a regression to investigate, never a
+ * re-pin.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -3059,6 +3133,127 @@ static void run_phase17_t3_riders(void) {
   }
 }
 
+/* v17 (M2 phase-17 T7): the phase/act-seam acceptance rider cross-checks. Each
+ * is the durable tape/cross-check form of a T1–T6 review pin, reachable at the
+ * acceptance layer; the handler units carry the primaries. Every rider is
+ * mutation-RED — each deliberately-broken mutation aborts at its own assertion
+ * (the per-rider mutations are recorded in the phase-17 T7 report). Pure C
+ * state, ISO-independent, prints nothing, so the transcript is unaffected. */
+static void run_phase17_riders(void) {
+  /* 1. The seam rider (T1/FU-191): the per-record `[rec+0x1C]` seam is
+   *    walk-only — one dispatch per non-skipped record, routed to the *staged*
+   *    record, never the global act-tail dispatch. A silent re-seam, a
+   *    double-run, or a `[rec+0x1C]`-store slip aborts here. */
+  {
+    struct fifa96_match_run mr;
+    struct fifa96_match_entity *e0;
+    struct fifa96_match_entity *e3;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.record.delta = 2;
+    e0 = &mr.entities.team[0].records[0];
+    e3 = &mr.entities.team[0].records[3];
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[0].records[i].skip_9a = 1;
+    e0->skip_9a = 0; e3->skip_9a = 0;
+    e0->pos_x = 0x11; e0->pos_y = 0x22; e0->pos_z = -0x33;
+    e3->pos_x = 0x44; e3->pos_y = 0x55; e3->pos_z = -0x66;
+    /* each staged record gets its OWN position (a store slip crosses the pair);
+     * the +0x9A skip is honoured. */
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x00u, 0u) == FIFA96_OK);
+    assert(e0->target_x == 0x11 && e0->target_y == 0x22 && e0->target_z == -0x33);
+    assert(e3->target_x == 0x44 && e3->target_y == 0x55 && e3->target_z == -0x66);
+    assert(mr.entities.team[0].records[1].target_x == 0);  /* the +0x9A skip */
+    /* the accumulating row adds exactly one delta (a double-run would add two). */
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x0Cu, 0u) == FIFA96_OK);
+    assert(e0->timer89 == 2 && e3->timer89 == 2);
+    /* the per-record rows are walk-only: the act-tail global dispatch of the
+     * same non-NULL phase row does not touch a record (a silent re-seam onto
+     * the global dispatch would mutate it). */
+    e0->target_x = 7; e0->target_z = 9;
+    assert(fifa96_match_dispatch_phase(&mr, 0x00u) == FIFA96_OK);
+    assert(e0->target_x == 7 && e0->target_z == 9);
+  }
+  /* 2. The per-record walk pin (T1/FU-191): the walk dispatches only the
+   *    engine-written phases whose rows are non-NULL — a NULL row (`0x10`) and
+   *    the INT3 slot (`0x16`) are no-ops; a non-NULL row (`0x00`) writes. */
+  {
+    struct fifa96_match_run mr;
+    struct fifa96_match_entity *e;
+    fifa96_match_run_init(&mr);
+    e = &mr.entities.team[0].records[2];
+    e->pos_x = 0x77; e->pos_y = 0x88; e->pos_z = -0x99;
+    e->target_x = 1; e->target_y = 2; e->target_z = 3;
+    assert(fifa96_match_phase_table[0x00].fn != NULL);
+    assert(fifa96_match_phase_table[0x10].fn == NULL);    /* never-written row */
+    assert(fifa96_match_phase_table[0x16].fn == NULL);    /* the INT3 slot */
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x10u, 0u) == FIFA96_OK);
+    assert(e->target_x == 1 && e->target_y == 2 && e->target_z == 3);
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x16u, 0u) == FIFA96_OK);
+    assert(e->target_x == 1 && e->target_y == 2 && e->target_z == 3);
+    assert(fifa96_match_run_record_phase_walk(&mr, 0x00u, 0u) == FIFA96_OK);
+    assert(e->target_x == 0x77 && e->target_y == 0x88 && e->target_z == -0x99);
+  }
+  /* 3. The census shape + the gated-row set (T1–T6): the exact wired counts
+   *    and the seven dispatched-but-gated no-op rows, each a metadata-gated
+   *    no-op with NULL metadata. */
+  {
+    static const uint8_t gated[7] = { 0x03, 0x04, 0x06, 0x07, 0x08, 0x09, 0x15 };
+    struct fifa96_match_run mr;
+    struct fifa96_match_entity *e;
+    unsigned action_wired = 0, phase_wired = 0;
+    for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
+      if (fifa96_match_action_table[i].fn != NULL) action_wired++;
+    for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
+      if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
+    assert(action_wired == 31u && phase_wired == 18u);    /* 49/80 = 61% */
+    for (size_t k = 0; k < sizeof gated; k++)
+      assert(fifa96_match_phase_table[gated[k]].fn != NULL);
+    fifa96_match_run_init(&mr);
+    e = &mr.entities.team[0].records[4];
+    e->team = 0;
+    e->phase_meta = NULL; e->phase_meta10 = NULL; e->phase_meta14 = NULL;
+    for (size_t k = 0; k < sizeof gated; k++) {
+      e->target_x = 5; e->target_y = 6; e->target_z = 7;
+      assert(fifa96_match_run_record_phase_walk(&mr, gated[k], 0u) == FIFA96_OK);
+      assert(e->target_x == 5 && e->target_y == 6 && e->target_z == 7);
+    }
+  }
+  /* 4. phase 0x21's dispatch (T6/FU-195): the wired act-0xB phase runs live
+   *    through the act-tail dispatch (stage 0 fires the event, timer 0,
+   *    stage 1). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.act.id = 0x0B;
+    mr.act.stage = 0;
+    mr.act.timer = 5;
+    mr.state.frame_delta = 2;
+    assert(fifa96_match_dispatch_phase(&mr, 0x21) == FIFA96_OK);
+    assert(mr.act.stage == 1u);           /* 0x8B8B9 */
+    assert(mr.act.timer == 0);            /* 0x8B8B2 */
+    assert(mr.ref_whistle == 0x1Eu);      /* the 0x974DC(0x1E) event */
+  }
+  /* 5. The leg pins (T1/T6): action row 0x03 NULL (owner FU177-L1, its
+   *    evidence carries the 0x6DCC8/FU177-L1 markers; dispatch UNSUPPORTED);
+   *    phase 0x22 NULL (FU195-L2), phase 0x1B NULL (FU195-L1) and the
+   *    0x13/0x14 RNG rows NULL (FU192-L2). */
+  {
+    struct fifa96_match_run mr;
+    const struct fifa96_match_handler *row03 = &fifa96_match_action_table[0x03];
+    fifa96_match_run_init(&mr);
+    assert(row03->fn == NULL);
+    assert(strstr(row03->evidence, "0x6DCC8") != NULL);
+    assert(strstr(row03->evidence, "FU177-L1") != NULL);
+    assert(fifa96_match_dispatch_action(&mr, 0x03u) == -FIFA96_ERR_UNSUPPORTED);
+    assert(fifa96_match_phase_table[0x22].fn == NULL);
+    assert(fifa96_match_dispatch_phase(&mr, 0x22) == -FIFA96_ERR_UNSUPPORTED);
+    assert(fifa96_match_phase_table[0x1B].fn == NULL);
+    assert(fifa96_match_phase_table[0x13].fn == NULL);
+    assert(fifa96_match_phase_table[0x14].fn == NULL);
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -3083,14 +3278,16 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
-  /* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks (both
-   * modes, pure state): the census shape + the T1–T5 regression pins. Run first
-   * so each rider's own mutation aborts at its assert, before the tape consumes
-   * the process; they print nothing, so the transcript is unaffected. */
+  /* v15/v16/v17 (phase-15 T4 → phase-16 T6 → phase-17 T7): the census/seam
+   * rider cross-checks (both modes, pure state): the census shape + the T1–T6
+   * regression pins + the phase-17 seam/walk/census/leg pins. Run first so each
+   * rider's own mutation aborts at its assert, before the tape consumes the
+   * process; they print nothing, so the transcript is unaffected. */
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();
   run_phase17_t3_riders();
+  run_phase17_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
