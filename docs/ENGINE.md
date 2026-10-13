@@ -595,7 +595,17 @@ the build also produces the windowed `fifa96` target (`make game`).
   stateful `[rec+0x89] += [0x157A64]` restart-line timer with the `0x780`/`0xCC0`
   target writes past the `0x3C` gate; `fifa96_match_phase_10` = `0x6E004` (row
   `10`), the `0x1105EA` variant table). The shared T1 body `0x6DCC8` also fills
-  row `0x15` (T1 deliberately deferred it). **Tape-inert (R10):** M1
+  row `0x15` (T1 deliberately deferred it). **Gated-count caveat (read the 60%
+  with this):** 7 of the 13 newly-wired rows are live **dispatched-but-gated
+  no-ops** — `0x03`/`0x04`/`0x07` (`0x6DE44`, `[rec+0x14]` NULL,
+  `fifa96_match_handlers.c:4639`), `0x06` (`0x6DD9C`, `[rec+0x10]` NULL, `:4703`),
+  and `0x08`/`0x09` (`0x6DD6C`) + `0x15` (the shared `0x6DCC8`) via the NULL
+  `phase_meta` (`:4603`/`:4617`/`:4739`). Their phases *are* engine-written and
+  their rows *are* dispatched (so they count under the repo's own definition —
+  the FU-177 §7 / T1-phase-`0x02` convention), but the ported bodies perform the
+  native work only when a fixture supplies the unported input; the remaining 6
+  (`0x00` reset, `0x05`, `0x0A`/`0x0D`/`0x0F` reset aliases, `0x0C`) do their
+  work with no input gate. **Tape-inert (R10):** M1
   `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no re-pin)** — the on-tape
   rows (`0x00` reset, `0x04` the gated `0x6DE44`, `0x15` the shared `0x6DCC8`)
   are render-invisible (targets are render-invisible, FU-191 §10; the metadata

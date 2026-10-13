@@ -4635,7 +4635,12 @@ int fifa96_match_phase_00(struct fifa96_match_run *mr) {
  * `target[0] = ±(W + (W>>2))`, `target[2] = ±(D + (D>>4))` (side-flipped) and
  * `target[1] = 0`. The DX<0 cell-map arm (`0x6D870`/`0x6DCC8`, base
  * `0x15774C`) is FU192-L3. Gated on the unported `[rec+0x14]` (FU192-L1): the
- * live walk stages NULL, so this is a dispatched-but-gated no-op. */
+ * live walk stages NULL, so this is a dispatched-but-gated no-op. NOTE (FU-192
+ * §2.4 is a sketch): the fresh `disassemble_bytes` here refines it — the scale
+ * is `W+(W>>2)` / `D+(D>>4)` (not the sketch's rough "×1.25"/"×1.0625") and the
+ * `[0x157AAF] != side` `+4`-byte branch is now byte-level; the branch is
+ * untested (needs `[rec+0x14]` + the unported side cell) and recorded as a
+ * FU192-L1 leg. */
 int fifa96_match_phase_04(struct fifa96_match_run *mr) {
   struct fifa96_match_entity *rec;
   const int32_t *p;
@@ -4681,7 +4686,11 @@ int fifa96_match_phase_04(struct fifa96_match_run *mr) {
  * `0x114E04` cosine fold, the `0x157AC5`/`0x15881A`/`0x157AB6` cells) is
  * FU192-L1: the native ball record's `[+0]` team pointer has no engine model.
  * The native `0x6E072 JNZ 0x6E1B3` fires whenever `[rec] != [ball]`; staged as
- * the derived position copy. Off-tape: tape-neutral. */
+ * the derived position copy. Off-tape: tape-neutral. NOTE: on the derivable
+ * subset this body is byte-identical to `fifa96_match_phase_00` (`0x6DE34`) —
+ * two distinct native bodies (`0x6E05C`'s ball-relative arm is the unported
+ * part) that coincide here; kept separate so a future arm divergence does not
+ * couple them. */
 int fifa96_match_phase_05(struct fifa96_match_run *mr) {
   struct fifa96_match_entity *rec;
   if (mr == NULL) return -FIFA96_ERR_INVALID;
@@ -4785,8 +4794,12 @@ int fifa96_match_phase_0C(struct fifa96_match_run *mr) {
  * `target[2]` negated when `[team+0x826] != 0`, and `target[1] = 0`. The table
  * bytes are a fresh `read_memory 0x1105E0` of the LE image (FU-192 §2.6). Row
  * `0x10` is never written by an engine source (the 9 `match_run_write_phase`
- * call sites, FU-191 §4), so its slot stays NULL: an un-dispatched count would
- * be fake (the rows-27/29/2C precedent). */
+ * call sites, FU-191 §10), so its slot stays NULL: an un-dispatched count would
+ * be fake (the rows-27/29/2C precedent). DERIVED HARDENING (leg FU192-L1): the
+ * native indexes the `0x1105EA` table blindly (`active` is the record ordinal
+ * 0..10, so `k = active-1 ∈ [-1, 9]` and the native reads out of the table for
+ * the sign-extended `k = -1`); the engine bounds `k` to `[0, 10]` and no-ops
+ * otherwise. The row is unwired, so there is no live impact. */
 int fifa96_match_phase_10(struct fifa96_match_run *mr) {
   static const int8_t variant[11][2] = {
       { -8, -2 }, { -4, -2 }, { 0, -2 }, { 4, -2 }, { 8, -2 }, { -5, -5 },
@@ -5063,21 +5076,21 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x0A, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0A = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x0B, NULL,
-     "FU-192 §1 (phase-17 T3): phase 0B = the shared reset 0x6DE34, but phase 0x0B is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §4), so wiring it would be an un-dispatched/fake count; the slot stays NULL; the rows-27/29/2C precedent; OL-13"},
+     "FU-192 §1 (phase-17 T3): phase 0B = the shared reset 0x6DE34, but phase 0x0B is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §10), so wiring it would be an un-dispatched/fake count; the slot stays NULL; the rows-27/29/2C precedent; OL-13"},
     {0x0C, fifa96_match_phase_0C,
      "FU-192 §2.5 (phase-17 T3): phase 0C = the ported native 0x6DF4C (0x6DF4C..0x6E001), the stateful restart-line timer ([rec+0x89] += [0x157A64] every call, then the 0x780/0xCC0 target writes past the 0x3C gate with the |word[rec+0x69]| < 0x20 refinement). The [rec+4]/0x157A38 table, the [rec+0x8A] angle term and the 0x8DCD4 metric are FU192-L1. Off-tape: tape-neutral"},
     {0x0D, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0D = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x0E, NULL,
-     "FU-192 §1 (phase-17 T3): phase 0E = the shared reset 0x6DE34, but phase 0x0E is never written by an engine source (FU-191 §4); the slot stays NULL to avoid an un-dispatched/fake count; OL-13"},
+     "FU-192 §1 (phase-17 T3): phase 0E = the shared reset 0x6DE34, but phase 0x0E is never written by an engine source (FU-191 §10); the slot stays NULL to avoid an un-dispatched/fake count; OL-13"},
     {0x0F, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0F = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x10, NULL,
-     "FU-192 §2.6 (phase-17 T3): phase 10 = the native 0x6E004 (the 0x1105EA variant table) is PORTED (fifa96_match_phase_10) but NOT counted: phase 0x10 is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §4), so a wired row would never dispatch (the rows-27/29/2C precedent). The body is exported for direct unit testing; OL-13"},
+     "FU-192 §2.6 (phase-17 T3): phase 10 = the native 0x6E004 (the 0x1105EA variant table) is PORTED (fifa96_match_phase_10) but NOT counted: phase 0x10 is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §10), so a wired row would never dispatch (the rows-27/29/2C precedent). The body is exported for direct unit testing; OL-13"},
     {0x11, NULL,
      "FU-192 §2.8/L6 (phase-17 T3): phase 11 = the native 0x6E1C8 (8-byte shim: EBX=-1, EDX=&rec+0x4D, falls into 0x6E1D0); under the walk ABI it is identical to rows 01/12 (the formation placement), so it is not wired (the R10 'do not double-wire'; FU192-L6/L7); OL-13"},
     {0x12, NULL,
-     "FU-192 §2.9 (phase-17 T3): phase 12 = the native 0x6E1D0 (formation placement; see row 01) and phase 0x12 is never written by an engine source (FU-191 §4); not wired (FU192-L6/L7); OL-13"},
+     "FU-192 §2.9 (phase-17 T3): phase 12 = the native 0x6E1D0 (formation placement; see row 01) and phase 0x12 is never written by an engine source (FU-191 §10); not wired (FU192-L6/L7); OL-13"},
     {0x13, NULL,
      "FU-192 §2.10/L2 (phase-17 T3): phase 13 = the native 0x6E244 (0x6E244..0x6E32A), the camera-scatter body. LEGGED (R10): it consumes the PRNG 0x92AC8 twice per active record and reads 0x10F364/0x10F368, whose producer is the unported FUN_0008D098 case-0x13/0x14 scatter; wiring it is not proven tape-inert (owner FU192-L2). The slot stays NULL/uncounted; OL-13"},
     {0x14, NULL,

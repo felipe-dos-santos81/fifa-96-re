@@ -796,7 +796,16 @@ unported pointer), `fifa96_match_phase_06` (`0x6DD9C`, row `06`, the
 position copy), `fifa96_match_phase_0C` (`0x6DF4C`, row `0C`, the stateful
 `timer89 += [0x157A64]` restart-line timer), and `fifa96_match_phase_10`
 (`0x6E004`, row `10`, the `0x1105EA` variant table). The shared T1 body
-`0x6DCC8` also fills row `0x15` (deferred by T1). **Tape-inert (R10):** M1
+`0x6DCC8` also fills row `0x15` (deferred by T1). **Gated-count caveat (read
+the 60% with this):** 7 of the 13 newly-wired rows are live
+**dispatched-but-gated no-ops** — `0x03`/`0x04`/`0x07` (`phase_meta14` NULL),
+`0x06` (`phase_meta10` NULL), and `0x08`/`0x09` (`0x6DD6C`) + `0x15` (the shared
+`0x6DCC8`) via the NULL `phase_meta`. Their phases *are* engine-written and the
+rows *are* dispatched (so they count under the repo's own definition — the
+FU-177 §7 / T1-phase-`0x02` convention), but the ported bodies do the native
+work only when a fixture supplies the unported input; the other 6 (`0x00` reset,
+`0x05`, `0x0A`/`0x0D`/`0x0F` reset aliases, `0x0C`) are ungated.
+**Tape-inert (R10):** M1
 `09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin, `cmp`-verified) —
 the on-tape rows (`0x00`/`0x04`/`0x15`) are render-invisible and the off-tape
 engine-written rows (`0x03/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F`) never
