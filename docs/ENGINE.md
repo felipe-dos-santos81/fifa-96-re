@@ -289,7 +289,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   execute and hand back to phase 2 through the shared situation-0xB entry).
   *(This enumeration is the pre-phase-15 core; the phase-15/16 action rows
   `09`, `0x14`, `0x16`, `0x19`, `0x1B`, `0x1C`, `0x1F` join the wired set in
-  the bullets below — the `31 action` count above is the authority.)*
+  the bullets below — the `32 action` count above is the authority.)*
   Row `17` (M2 phase-15 T1/FU-181: the line-up walk `0x84730..0x849AF`) has a
   **ported body but is not counted** — the rows-27/29/2C precedent (a ported
   body with no engine installer stays unwired and uncounted): its only

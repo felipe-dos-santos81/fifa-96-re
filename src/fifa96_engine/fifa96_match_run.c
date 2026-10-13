@@ -5140,6 +5140,7 @@ int fifa96_match_run_record_meta_bind(struct fifa96_match_run *mr) {
   size_t container_len = 0;
   uint8_t *owner = NULL;
   int bound = 0;
+  if (!mr) return -FIFA96_ERR_INVALID;
   match_run_release_meta(mr);   /* clear the pool + free any prior blobs */
   if (!mr->engine || !mr->engine->assets) return 0;
   if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
