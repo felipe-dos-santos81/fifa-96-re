@@ -514,3 +514,22 @@ the render-read ground truth), FU-213 (§1/§2.3/§2.4/§2.5/§4/§6, the period
 and the chooser), FU-208/FU-209 (the period-end spine). AGENTS.md (the alias rule
 and the census rule). **No writes beyond this slice file**; no
 rename/label/comment/function/script/project save; no git commands.
+
+---
+
+## Erratum (append)
+
+**FU211-L2 is dissolved; FU221-L1 is parked (the phase-20 register).** This
+slice's §3/§9 already record the FU211-L2 dissolution — the phase-`0x22` stage
+gate loads `[0x158816]` and `SAR 0x10`, so by the repo alias rule
+`dword[0x158816]>>16 = word[0x158818]` (**the act timer the body itself
+accumulates**), **not** `word[0x15881A]` (the config-derived period limit); the
+ported `mr->act.timer >= 0x3C` (`fifa96_match_run.c:6273`/`:6280`) is therefore
+**faithful, not a substitute** — FU211-L2 opens no divergence and is closed as a
+non-leg. This slice's §8 records FU221-L1 (the `0x974DC(0x1E)` audio subsystem)
+as a leg. The phase-20 register (`docs/ENGINE.md`, the "M2 phase-20
+(FU-215…FU-222) — the sit-8 completion … residual-leg register" entry) confirms
+both: **FU211-L2 is dissolved** (no leg) and **FU221-L1 stays a leg, parked** —
+the `0x974DC(0x1E)` → `0x155C8C` ring → `FUN_00065CC0`/`FUN_000A7705` voice
+trigger is unported and out of scope, and is **never counted** toward the census.
+Prior sections are not rewritten.

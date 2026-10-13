@@ -451,3 +451,27 @@ FU-210 (§2/§3/§7.3/§8), FU-213, ENGINE.md census line, AGENTS.md.
 
 No writes beyond this slice file; no rename/label/comment/function/script/
 project save; no git.
+
+---
+
+## Erratum (append)
+
+**FU210-L3 / FU194-L8 / FU145-L4 are RESOLVED by the M2 phase-20 T3 bind.**
+This slice's §1 records the producer as derived-but-unported ("**Closes:** FU210-L3
+… FU194-L8 … FU145-L4") and §8 gives the extension point as an exact plan. The T3
+landing (`feat(engine,fu217): the sit-8 actor-cell bind + action row 0x20 —
+55/80 = 68%`) ports it exactly as §8 prescribes: `match_run_free_record` (the
+native `FUN_000897F4` wrap scan `start, …, 10, 1, …, start-1`, index 0 never
+scanned), the sit-8 re-init block in `fifa96_match_run_set_piece`'s **direct**
+path (guarded on `global_157a4c != 1`; the queue path untouched), the per-side
+`actor_1587cc[2]` cells, and the `{0x20, NULL} → fifa96_match_action_20` slot
+flip. The actor cell is now **live** on the extra-time path — a real period-4
+completion binds it and the coupled row-`0x20` install dispatches — so
+**FU210-L3 / FU194-L8 / FU145-L4 are resolved**, not open. **Comment correction
+(no rewrite):** §6.2's "no engine source ever sets `mr->global_157a4c = 1`" is
+now false — the T3 re-init sets it. The remaining legs are **FU217-L1** (the
+`FUN_000897F4` scan exactness + the `+0x9A` occupancy source), **FU217-L2** (the
+phase-`0x1D` arm-8 no-winner rebind `0x89DCF`), **FU217-L3** (the per-side cells'
+consumer) and **FU217-L5** (the `[0x157AAF]` side store — no engine cell) —
+registered with native owners in `docs/ENGINE.md`'s phase-20 leg register. Prior
+sections are not rewritten.

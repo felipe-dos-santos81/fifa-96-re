@@ -1232,6 +1232,61 @@ the build also produces the windowed `fifa96` target (`make game`).
   (§ phase-19 T1/T2/T3/T4/T5) + **FU207-L2, FU208-L1/L8, FU209-L1 (bit-8 arm),
   FU210-L3/L5, FU211-L2/L3, FU212-L1, FU213-L3, FU214-L1/L2** — each with its
   native owner in the T5 register.
+- **M2 phase-20 (FU-215…FU-222) — the sit-8 completion: phase `0x10` + action
+  `0x20` counted, census `53/80 → 55/80 = 68%`; the residual-leg register.**
+  The phase-19 period-end spine ends in the sit-8 route (mode-0 `period_setup`
+  on the `global_157ac2 == 4` roll → situation 8 → act 7 → phase `0x1D`); phase
+  20 closes its top-down tail without fabricating a producer. **T1/FU-219** fixes
+  the act-7 invoke-now cadence (native `0x8AEAE MOV EBX,1` runs the phase-`0x1D`
+  arm 0 on the dispatch frame; the port passed `invoke = 0`, `match_run.c:2890`)
+  — the one-expression fix for FU208-L4 (resolved at FU219-L1). **T2/FU-222**
+  registers the already-ported phase-`0x10` row, whose writer (the phase-`0x1D`
+  stage-0 arm `FUN_000740A0(0x10)` `0x898DD`; port `match_run.c:6090-6091`) is
+  live via the counted phase-`0x1D`, so the walk gate opens and
+  `fifa96_match_phase_10` dispatches → `+1` phase (closes FU214-L4/FU222-L2, at
+  the `53/80 → 54/80 = 67%` commit). **T3/FU-217** derives the actor-cell producer
+  `[0x1587CC + side*4] → [0x1587D4]` (the sit-8 arm `0x8AE08..0x8AE54` of
+  `FUN_0008A938`, guarded by `byte[0x157A4C] != 1`), ports it
+  (`match_run_free_record` + the `set_piece` re-init + the per-side
+  `actor_1587cc[2]` cells) and flips the row-`0x20` slot → `+1` action (closes
+  FU210-L3/FU217-L1/L2; census `55/80 = 68%`). **T4/FU-220** adds the row-`0x20`
+  arm-0 ball-record place projection (native arm 0 writes the actor team's ball
+  record `[[actor]+0x7A6]` at `(0, 0, 0xB10)`; the port maps the reachable `pos`
+  subset onto `mr->entities.ball`). **Tape:** M2 `441415fc…` byte-identical across
+  T1–T4 (the tape reaches no `global_157ac2 == 4` completion, so sit 8 never fires
+  and the row-`0x20` body dispatches 0 times), M1 `09b726b7…` unmoved; dispatch
+  `24 UNSUP / 55 OK / 1 NOTF` (sum 80); README title `68%`. **No fake producer:**
+  the dead bit-8 gate (FU-215 — no instruction sets bit 8 of `word[0x14C1D4]` /
+  `word[0x14C1D6]`; the only builders write bits `{0..7, 9}` or 0) is documented,
+  never synthesized. **FU211-L2 is dissolved** (the phase-`0x22` gate cell is
+  `word[0x158818]`, the act timer, not `word[0x15881A]`; FU221 §3 / FU-170 §4), so
+  the ported `mr->act.timer >= 0x3C` is faithful — no leg. **Residual legs (each
+  with its native owner):** **FU215-L1..L5** — L1 the bit-8 gate's intent vs the
+  bit-9 config mapping (`0x4B0CB TEST AH,1`; owner FU196-L1/FU208-L1); L2 the
+  front-end `[0x157AC2] = 4` producer `FUN_00038630` `0x38990` (owner the front-end
+  setup slice / FU202-L7); L3 `FUN_00088860`'s live caller `0x74244` (no Ghidra
+  function; owner FU196-L6); L4 the M2 tape never arms sit 8 (owner the
+  tape/phase-drive slice); L5 the `0x105270`-family config-block producer chain
+  (owner the input-options slice / FU-148 §12). **FU216-L1/L3** — L1 the unnamed
+  sibling body `0x741C4..0x744CE` (a third range-word reader + bit-8 → sit-8 site
+  `0x74312`; entry/reachability unresolved); L3 the engine's missing analog of that
+  blob. **FU217-L1/L2/L3/L5** — L1 the `FUN_000897F4` scan exactness + the `+0x9A`
+  occupancy source; L2 the phase-`0x1D` arm-8 no-winner rebind `0x89DCF`; L3 the
+  per-side cells' consumer; L5 the `[0x157AAF]` side store (no engine cell).
+  **FU219-L1..L6** — L1 the invoke-now cadence (**LANDED** by T1); L2 the seam
+  act-change latch `0x88908`; L3 the arm-0 per-record byte writes (`+0x9B` / anim /
+  row-3 loop; owner FU194-L7); L4 the native frame-boundary gate `0x4950F`; L5 the
+  arm-9 `[0x157AC0] = 1` write-back (owner FU209-L5); L6 the fall-through-vs-`switch`
+  body shape. **FU220-L1..L6** — L1 the FU210-L2 ball-record place remainder; L2 the
+  two `0x8CFAC` 11-stride anim walks; L3 arm-4 `0x7A490` record write-back
+  (local-copy-only); L4 the arm-0 `0x73E08` block commit; L5 the ball-camera cells
+  `0x15774C/50/54` + input words + `0x4C324`/`0x4C374` sinks; L6 the prologue
+  `stage92` signedness. **FU221-L1** — the `0x974DC(0x1E)` audio subsystem
+  (`0x974DC` → the `0x155C8C` ring → the `FUN_00065CC0`/`FUN_000A7705` voice
+  trigger) is unported and **parked** (out of scope), never counted. **FU208-L8**
+  (the `[0x14C32A]` sit-8 session-gate co-condition; FU218-L3) stays a leg; the
+  FU218 carrier legs fold into FU215-L1 (L1), the landed FU219-L1 (L2) and the
+  landed FU217 bind (L4).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

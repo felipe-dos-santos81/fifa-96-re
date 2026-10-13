@@ -1466,3 +1466,91 @@ the one `NOTF`; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80);
 `floor(100 × 55/80) = 68`. README title `68%`, `docs/ENGINE.md` status +
 Action-dispatch bullets `55/80`, and `AGENTS.md:90` are consistent — **no
 inflation**.
+
+## M2 phase-20 T5 — the sit-8 completion leg register + the appended errata (FU-215…FU-222)
+
+**The phase-20 wave closes the sit-8 tail top-down: two census movers landed in
+their own commits, the act-7 cadence bug is fixed, and the two structurally
+unattainable pieces are recorded honestly — T5 adds only the leg register and the
+appended errata (no code, no census move). Census `55/80 = 68%` (`33 action + 22
+phase`; dispatch `24 UNSUP / 55 OK / 1 NOTF`, sum 80).**
+
+The wave's two census movers are the sit-8 tail's double `+1` (FU-222 §4):
+**T2/FU-222** registered the already-ported phase-`0x10` row (the phase-`0x1D`
+stage-0 arm's `FUN_000740A0(0x10)` writer `0x898DD` is live via the counted
+phase-`0x1D`, so `match_run_write_phase`'s walk gate opens and
+`fifa96_match_phase_10` dispatches → `+1` phase, `53/80 → 54/80 = 67%`; closes
+FU214-L4/FU222-L2), and **T3/FU-217** derived and ported the `[0x1587D4]`
+actor-cell producer (`[0x1587CC + side*4] → [0x1587D4]`, the sit-8 arm
+`0x8AE08..0x8AE54` of `FUN_0008A938`, guarded by `byte[0x157A4C] != 1`) so the
+already-ported row-`0x20` body dispatches → `+1` action (`55/80 = 68%`; closes
+FU210-L3/FU217-L1/L2). Between them, **T1/FU-219** fixed the act-7 invoke-now
+cadence — the native sit-8 arm forces `BX=1` (`0x8AEAE MOV EBX,1`) so the
+phase-`0x1D` **arm 0 runs on the dispatch frame**; the port had passed `invoke =
+0` (`fifa96_match_run.c:2890`), deferring it one granted frame (the one-expression
+FU208-L4 fix). **T4/FU-220** landed the row-`0x20` arm-0 ball-record place
+projection (the native arm 0 writes the actor team's ball record `[[actor]+0x7A6]`
+at `(0, 0, 0xB10)`; the port maps the reachable `pos` subset onto
+`mr->entities.ball`). All four landings are render-invisible and/or dormant on
+the scripted tape: **M2 `441415fc…` byte-identical, M1 `09b726b7…` unmoved.**
+
+**Two honest non-landings.** (1) The **dead bit-8 gate** (FU-215): the sit-8
+disjunct `0x4B0CB TEST AH,0x1` tests bit 8 (`0x100`) of
+`word[0x14C1D4] | word[0x14C1D6]`, but no instruction in the image sets bit 8 —
+the only two range-word writers (`FUN_0001C9BC`, `FUN_00024B00`) set bits
+`{0..7, 9}` or zero, and the indexed struct writers stop at index 0/1. The gate is
+therefore **structurally dead**; it is **documented, never synthesized** (the
+engine's `input_range & 0x100` gate stays 0 — faithful). Live sit 8 is armed
+**only** by the period-index-4 producer `FUN_00088860` `0x888C8`, which the engine
+already models (`phase_drive` → `period_setup(mode 0)`). (2) The **audio
+subsystem** (FU-221-L1): the phase-`0x22` `0x974DC(0x1E)` path pushes onto the
+20-slot ring at `0x155C8C` (`FUN_00064EF0(1,·)`) and pokes the voice trigger
+`FUN_00065CC0` → `FUN_000A7705`; none of it is ported (`plat->audio_submit` has no
+caller, `mr->ref_whistle` is write-only) — **parked** as out of scope, never
+counted. **FU211-L2 is dissolved**, not a leg: the phase-`0x22` stage gate loads
+`[0x158816]` and `SAR 0x10` → `word[0x158818]` (the act timer the body itself
+accumulates), **not** `word[0x15881A]` (the config period-limit); the ported
+`mr->act.timer >= 0x3C` is therefore faithful, a re-propagation of the FU-165
+alias error already falsified by FU-170 §4.
+
+**The residual-leg register (each with its native owner; no fake producer).**
+`docs/ENGINE.md`'s phase-20 leg block names every unported native:
+
+- **FU215-L1..L5** — L1 the bit-8 gate's intent vs the bit-9 config mapping
+  (`0x4B0CB`; owner FU196-L1/FU208-L1); L2 the front-end `[0x157AC2] = 4` producer
+  `FUN_00038630` `0x38990` (owner the front-end setup slice / FU202-L7); L3
+  `FUN_00088860`'s live caller `0x74244` (no Ghidra function; owner FU196-L6); L4
+  the M2 tape never arms sit 8 (owner the tape/phase-drive slice); L5 the
+  `0x105270`-family config-block producer chain (owner the input-options slice /
+  FU-148 §12).
+- **FU216-L1/L3** — L1 the unnamed sibling body `0x741C4..0x744CE` (a third
+  range-word reader + bit-8 → sit-8 site `0x74312`; entry/reachability unresolved);
+  L3 the engine's missing analog of that blob.
+- **FU217-L1/L2/L3/L5** — L1 the `FUN_000897F4` scan exactness + the `+0x9A`
+  occupancy source; L2 the phase-`0x1D` arm-8 no-winner rebind `0x89DCF`; L3 the
+  per-side cells' consumer; L5 the `[0x157AAF]` side store (no engine cell).
+- **FU219-L1..L6** — L1 the invoke-now cadence (**landed** by T1); L2 the seam
+  act-change latch `0x88908`; L3 the arm-0 per-record byte writes (`+0x9B` / anim /
+  row-3 loop; owner FU194-L7); L4 the native frame-boundary gate `0x4950F`; L5 the
+  arm-9 `[0x157AC0] = 1` write-back (owner FU209-L5); L6 the fall-through-vs-`switch`
+  body shape.
+- **FU220-L1..L6** — L1 the FU210-L2 ball-record place remainder; L2 the two
+  `0x8CFAC` 11-stride anim walks; L3 arm-4 `0x7A490` record write-back
+  (local-copy-only); L4 the arm-0 `0x73E08` block commit; L5 the ball-camera cells
+  `0x15774C/50/54` + input words + `0x4C324`/`0x4C374` sinks; L6 the prologue
+  `stage92` signedness.
+- **FU221-L1** — the `0x974DC(0x1E)` audio subsystem (parked).
+- **FU208-L8** — the `[0x14C32A]` sit-8 session-gate co-condition (FU218-L3) stays
+  a leg; the FU218 carrier legs fold into FU215-L1, the landed FU219-L1 and the
+  landed FU217 bind.
+
+**Errata (appended; prior sections are not rewritten).** `FU216_fun_4b02c_rangeword.md`
+gains a quoted erratum restating the "exactly two sit-8 producers" → **three**
+(`0x4B0D9`, `0x888C8`, `0x74312`) count and the wider `[0x157AC2]` writer set
+(`0x88D6A`), with a one-line cross-reference to the ENGINE leg register.
+`FU217_actor_cell_producer.md` records **FU210-L3 / FU194-L8 / FU145-L4 as
+RESOLVED** by the T3 bind (the port's `match_run_free_record` + `set_piece`
+re-init), the engine extension point as landed.
+`FU221_phase22_downstream.md` confirms **FU211-L2 dissolved** and **FU221-L1
+parked**. **TDD:** docs-only (no test/code change); the tree is clean after the
+commit. **Determinism:** no source or golden touched.

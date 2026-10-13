@@ -416,3 +416,18 @@ writers as the reset `0x73F82`, `0x4B0DE`, the rollover `0x8B58A`, the front-end
 `0x38990` and `FUN_0004BA00`. Fresh `get_xrefs_to 0x157AC2` = 56 adds a writer
 **`0x88D6A`** (`FUN_00088940`'s `INC BL; MOV byte[0x157AC2],BL`). The sit-8
 producers read the cell as before; the writer set is wider. (Leg FU216-L5.)
+
+---
+
+## Erratum (append)
+
+**Cross-reference — the two-producer count and the `[0x157AC2]` writer set (the
+§Errata above, restated for the phase-20 register).** The superseded text is
+FU-208 §4's "Situation 8 has exactly **two** native producers … the sit-8 sites
+are `0x4B0D9` and `0x888C8`". Fresh `get_xrefs_to 0x8A938` = 39 shows the count
+is **three** (`0x4B0D9`, `0x888C8`, **`0x74312`** — the third inside the unnamed
+sibling body `0x741C4..0x744CE`), and the `[0x157AC2]` writer set is wider than
+FU-208 §5.1 records (adds **`0x88D6A`**). The engine-side owner of the third site
+is the leg **FU216-L1/L3** in the phase-20 residual-leg register
+(`docs/ENGINE.md`, the "M2 phase-20 (FU-215…FU-222) — the sit-8 completion …
+residual-leg register" entry). Prior sections are not rewritten.
