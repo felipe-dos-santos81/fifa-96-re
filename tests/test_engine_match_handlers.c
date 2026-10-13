@@ -1239,6 +1239,104 @@ static void test_phase_08_wrapper_selects_edge(void) {
   drop_fixture(&f);
 }
 
+/* FU-205 §1 / FU-200 §3-§4 (M2 phase-18 T5): the gated-row gate truth-table.
+ *
+ * The eight dispatched-but-gated per-record rows (`0x02`/`0x03`/`0x04`/`0x06`/
+ * `0x07`/`0x08`/`0x09`/`0x15`, FU-205 §1) collapse onto three bodies, each with
+ * a single semantic gate — the OL-13 metadata pointer NULL early-return:
+ * `phase_meta` `[rec+0xC]` (rows `0x02`/`0x08`/`0x09`/`0x15`), `phase_meta14`
+ * `[rec+0x14]` (rows `0x03`/`0x04`/`0x07`) and `phase_meta10` `[rec+0x10]`
+ * (row `0x06`). The native gate is a structural no-op until the OL-13 bind
+ * (FU-199 §7.2 / FU-200 §1, T1) stages the pointer. The truth-table, pinned
+ * here cell-per-row:
+ *   - asset-absent  (`NULL`): the body is a disciplined no-op — the target
+ *     triple is untouched (the only gate);
+ *   - asset-present (bound): the body runs and (re)writes the target triple;
+ *   - wrong-field   (only the *other* two fields bound): still a no-op — the
+ *     gate is exactly the body's own metadata pointer, not a sibling.
+ * All eight rows are wired (non-NULL `fn`) and counted (`phase_expect` OK). A
+ * dropped/changed gate flips a cell (mutation-RED, see the T5 report). */
+static int gated_row_meta_field(uint8_t row) {
+  switch (row) {
+    case 0x02: case 0x08: case 0x09: case 0x15: return 0;  /* phase_meta */
+    case 0x06: return 1;                                   /* phase_meta10 */
+    default: return 2;                                     /* 0x03/0x04/0x07 */
+  }
+}
+
+static void test_gated_rows_gate_truth_table(void) {
+  static const uint8_t gated_rows[8] = { 0x02, 0x03, 0x04, 0x06,
+                                         0x07, 0x08, 0x09, 0x15 };
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  /* finite non-zero blobs (any non-NULL cell exercises the body). `pl` needs
+   * the row-08 wrapper index `0xBC` (`0xBC*2+1 = 0x179`). */
+  static int8_t pl[0x17A];
+  static int32_t pk[2];
+  static int32_t fk[2];
+  make_fixture(&f);
+  for (size_t i = 0; i < sizeof pl; i++) pl[i] = (int8_t)(1 + (i & 3));
+  pk[0] = (int32_t)(uint32_t)((uint16_t)0x10 | (8u << 16));   /* W=0x10 D=8 */
+  fk[0] = (int32_t)(uint32_t)((uint16_t)0x8 | (0x10u << 16)); /* W=8 D=0x10 */
+  /* stage every team-0 record at active/idx 0 so the blobs' stride-0 cell is
+   * the one read; side 0 == the controlled side (off 0), idx 0 everywhere. */
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *r = &f.mr.entities.team[0].records[i];
+    r->team = 0;
+    r->active = 0;   /* the bind's `idx = (int8)byte[rec+0x8D]` */
+  }
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  f.mr.phase_dir_default[0] = 0;
+  e = &f.mr.entities.team[0].records[2];
+
+  /* every row is wired and counted. */
+  for (size_t r = 0; r < 8; r++) {
+    assert(fifa96_match_phase_table[gated_rows[r]].fn != NULL);
+    assert(phase_expect[gated_rows[r]] == FIFA96_OK);
+  }
+
+  /* cell 1 — asset-absent: NULL metadata -> the gate -> no-op. */
+  e->phase_meta = NULL;
+  e->phase_meta10 = NULL;
+  e->phase_meta14 = NULL;
+  for (size_t r = 0; r < 8; r++) {
+    e->target_x = 0x111; e->target_y = 0x222; e->target_z = 0x333;
+    assert(fifa96_match_dispatch_phase_record(&f.mr, gated_rows[r], e, -1) ==
+           FIFA96_OK);
+    assert(e->target_x == 0x111 && e->target_y == 0x222 && e->target_z == 0x333);
+  }
+
+  /* cell 2 — asset-present: the T1 bind stages the blobs -> the body runs. */
+  assert(fifa96_match_entities_bind_record_meta(&f.mr.entities, 0u, pl, pk, fk) ==
+         FIFA96_OK);
+  for (size_t r = 0; r < 8; r++) {
+    int32_t sx, sy, sz;
+    e->target_x = 0x111; e->target_y = 0x222; e->target_z = 0x333;
+    sx = e->target_x; sy = e->target_y; sz = e->target_z;
+    assert(fifa96_match_dispatch_phase_record(&f.mr, gated_rows[r], e, -1) ==
+           FIFA96_OK);
+    assert(!(e->target_x == sx && e->target_y == sy && e->target_z == sz));
+  }
+
+  /* cell 3 — wrong-field: only the *other* two pointers bound -> still no-op
+   * (the gate is exactly the body's own field). */
+  for (size_t r = 0; r < 8; r++) {
+    int field = gated_row_meta_field(gated_rows[r]);
+    e->phase_meta = pl;
+    e->phase_meta10 = pk;
+    e->phase_meta14 = fk;
+    if (field == 0) e->phase_meta = NULL;
+    else if (field == 1) e->phase_meta10 = NULL;
+    else e->phase_meta14 = NULL;
+    e->target_x = 0x444; e->target_y = 0x555; e->target_z = 0x666;
+    assert(fifa96_match_dispatch_phase_record(&f.mr, gated_rows[r], e, -1) ==
+           FIFA96_OK);
+    assert(e->target_x == 0x444 && e->target_y == 0x555 && e->target_z == 0x666);
+  }
+  drop_fixture(&f);
+}
+
 /* FU-192 §2.5 (phase-17 T3): the stateful 0x6DF4C (row 0C): timer89 += delta
  * on every call; past the 0x3C gate the target is (0x780,·,0), refined to
  * (0xCC0,·,0) when |word[rec+0x69]| < 0x20. */
@@ -3767,6 +3865,7 @@ int main(void) {
   test_phase_04_meta14_scale();
   test_phase_06_meta10_scale();
   test_phase_08_wrapper_selects_edge();
+  test_gated_rows_gate_truth_table();
   test_phase_0C_timer_accumulate_and_gate();
   test_phase_10_variant_table();
   test_phase_05_position_copy();

@@ -1088,6 +1088,34 @@ row `0x17` is distinct from ACTION row `0x17` (the act-4 formation-arm
 installer) — kept distinct. `make check` **110/110**; README title `63%`;
 dispatch `28 UNSUP / 51 OK / 1 NOTF` (sum 80).
 
+**Phase-18 T5 (2026-10-12) — the remaining producer-gated bound: the gated-no-op
+gate truth-table pinned; residual rows stay honest legs; census unchanged
+(`+0`, `51/80 = 63%`); M2 byte-identical (no re-pin)** (this slice, R53/FU-205).
+T5 is verification + legs, **no production code**. The eight
+dispatched-but-gated per-record rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/`0x08`/
+`0x09`/`0x15`) collapse onto three bodies, each with a **single** semantic gate —
+the OL-13 metadata `NULL` early-return (`phase_meta` `[rec+0xC]` rows
+`0x02`/`0x08`/`0x09`/`0x15`; `phase_meta14` `[rec+0x14]` rows `0x03`/`0x04`/
+`0x07`; `phase_meta10` `[rec+0x10]` row `0x06`). `test_engine_match_handlers::
+test_gated_rows_gate_truth_table` pins the truth-table cell-per-row: asset-absent
+(`NULL`) → disciplined no-op; asset-present (the T1 bind) → the body runs;
+wrong-field (only the other two pointers bound) → still no-op, so the gate is
+**exactly** each body's own field. **T3/T4-opened check `+0`:** neither the live
+situation-0 → act `0xA` → phase `0x20` → row `0x24` chain (T3) nor the act-1
+route (T4) installs row `0x0D`/`0x1A`/`0x20` or dispatches phase `0x1D`/`0x1E`;
+the situation-8 producer (phase `0x1D`/row `0x20`) stays extra-time-gated.
+**Stale-reference correction:** the brief's "row `0x24`/phase `0x20` FU188-L1
+frozen" is superseded — T3 made that pair live; the frozen **sit-8** pair is
+phase-`0x1D`/**row `0x20`** (FU205-L2). **Residual legs (no fake producer):** row
+`0x0D` (row-09 arm-1 installer `0x80F61`) **FU178-L1**; row `0x1A` (the unported
+keeper CPU ladder `FUN_00077EAC`; fresh `get_xrefs_to 0x77EAC` = 1 into
+`FUN_000782D0`) **FU186-L5**; the coupled phase-`0x1D`/row-`0x20` pair (`0x899A2`
+`MOV EDX,0x20`; fresh phase slot `0x110808` = `0x89868`) **FU205-L2**; phase
+`0x1E` (act-8 compressed fallback; fresh slot `0x11080C` = `0x8A798`) **FU194-L2**.
+**Tape:** M2 `cmp` clean against the v18 `441415fc…` golden (**NO re-pin**); M1
+`09b726b7…` unmoved. `make check` **110/110**; README title `63%`; dispatch
+`28 UNSUP / 51 OK / 1 NOTF` (sum 80).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

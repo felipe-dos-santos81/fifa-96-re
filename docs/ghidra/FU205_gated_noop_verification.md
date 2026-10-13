@@ -321,3 +321,109 @@ section above.
   action row `0x24` are wired/counted (**+2 → `50/80 = 62%`**, M2 re-pinned to
   `441415fc…`; FU-202 addendum). The two chains are independent: situation 0 is
   live, situation 8 stays dormant.
+
+---
+
+## Addendum — T5 landing status (2026-10-12, additive)
+
+This addendum records the **T5** verdict; it does not rewrite any section above.
+T5 is a verification + legs slice: **no production code**, `+0`.
+
+### T5.1 The gate truth-table — verified and pinned
+
+§1's truth-table is now exercised cell-per-row by
+`tests/test_engine_match_handlers.c::test_gated_rows_gate_truth_table`: for each
+of the eight gated rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/`0x08`/`0x09`/`0x15`)
+
+1. **asset-absent** — the row's metadata pointer `NULL` (plus its siblings): the
+   body is a **disciplined no-op** (the target triple is untouched);
+2. **asset-present** — the pointers staged by the live bind
+   `fifa96_match_entities_bind_record_meta` (T1/FU-199 §7.2): the body **runs**
+   and (re)writes the target triple; and
+3. **wrong-field** — only the *other* two pointers bound, the row's own `NULL`:
+   still a no-op, so the gate is **exactly** the body's own metadata field
+   (`phase_meta` `[rec+0xC]` rows `0x02`/`0x08`/`0x09`/`0x15`; `phase_meta14`
+   `[rec+0x14]` rows `0x03`/`0x04`/`0x07`; `phase_meta10` `[rec+0x10]` row
+   `0x06`) and not a sibling. All eight rows are asserted wired (`fn != NULL`)
+   and counted (`phase_expect == OK`).
+
+The engine gate sites are unchanged and remain the native single disjuncts:
+`handlers.c:4595` (`meta == NULL`), `:4671` (`p == NULL`, `phase_meta14`),
+`:4733` (`p == NULL`, `phase_meta10`) — matching §1's fresh body reads
+(`0x6DCC8` `[rec+0xC]`, `0x6DDE4`… `0x6DE44` `[rec+0x14]`, `0x6DD9C`
+`[rec+0x10]`).
+
+**Evidence (T5):** GREEN — `./build/test_engine_match_handlers` → `OK`; full
+`make check` **110/110**. mutation-RED — in `match_phase_dcc8_apply` replacing
+the gate with a fallback (`if (meta == NULL) meta =
+(const int8_t *)rec->phase_meta10;`) aborts **only** the new truth-table test at
+its wrong-field assertion (`... test_gated_rows_gate_truth_table: Assertion
+'e->target_x == 0x444 && …' failed`); the three pre-existing per-body tests do
+not catch that mutation, so the new cell adds independent coverage. Restored
+byte-identical.
+
+### T5.2 Do T3/T4 open any remaining T5 row? — NO (`+0`)
+
+- **T3** landed the situation-**0** chain (situation 0 → act `0xA` → phase
+  `0x20` → row `0x24`). **T4** landed the act-1 route (situation 1 → act 1 →
+  phase `0x17`). Neither route installs row `0x0D`, row `0x1A` or row `0x20`,
+  nor dispatches phase `0x1D`/`0x1E`.
+- The situation-**8** producer (act 7 → phase `0x1D` → row `0x20`) is still
+  gated: the extra-time flag (`global_157ac2 == 4`, OL-85) and the
+  `input_range & 0x100` extra-time branch (§4 cells 8/9) are the only sit-8
+  gates, and the phase-`0x1D` engine slot stays `NULL`
+  (`fifa96_match_handlers.c:5117`); the row-`0x20` action slot stays `NULL`
+  (`:5030`). The arm-0 `0x899A2` install is still absent (§3 (c)).
+- Fresh first-hand confirmation (this session, `/FIFA96.EXE`): phase slot
+  `0x110808` = `0x89868` (fresh `get_xrefs_to 0x89868` = 1, DATA from
+  `0x110808`); phase slot `0x11080C` = `0x8A798`; action slot `0x110760` =
+  `0x84EEC`; `0x80F61` = `BA 0D 00 00 00` / `0x80F6A CALL 0x7D9A4`; `0x899A2`
+  = `BA 20 00 00 00` / `CALL 0x7D9A4`; `get_xrefs_to 0x77EAC` = 1 (into
+  `FUN_000782D0`). So the coupled phase-`0x1D`/row-`0x20` pair and the row-`0x0D`
+  / row-`0x1A` installers are all still unported → **count nothing**.
+
+### T5.3 Stale-reference correction (erratum to the T5 brief)
+
+The T5 brief's frozen list named **row `0x24`/phase `0x20` = FU188-L1** as
+still frozen. That is **superseded**: T3 wired/counted both (FU-202 addendum /
+§Addendum above; census `50/80 = 62%`). The frozen **sit-8** pair is
+phase-`0x1D`/**row `0x20`** (a different row: `0x20`, not `0x24`), owner
+**FU205-L2**. No consumer of this slice sees a false frozen `0x24`/phase-`0x20`
+claim.
+
+### T5.4 Census
+
+`+0`: action `32` + phase `19` = **`51/80 = 63%`** unchanged (`floor(100 ×
+51/80) = 63`); dispatch `28 UNSUP / 51 OK / 1 NOTF` (sum 80). README title
+`63%` unchanged. Tape: M2 `cmp` clean against the v18 `441415fc…` golden (**no
+re-pin**); M1 `09b726b7…` unmoved.
+
+### T5.5 Residual legs (honest, numbered)
+
+1. **FU178-L1 — row `0x0D`.** Its only installer is row-09 arm 1 `0x80F61`
+   (fresh bytes `BA 0D 00 00 00` / `CALL 0x7D9A4`), inside the unported arm-1
+   stage; the gate producers `[0x15877C]`/`[rec+0x3D]`/`[rec+0x24]`/`[[rec+4]+
+   0x13]` and the arm-1 helpers/sinks (`0x8F188`/`0x8ED40`/`0x92820`/`0x7A490`/
+   `0x8A3FC`) are unported (FU-204 §4). The body exists as
+   `fifa96_action_sequence_0d_step`; wire nothing.
+2. **FU186-L5 — row `0x1A`.** Its only installer is the keeper CPU ladder
+   `FUN_00077EAC` (the three `#x1A` sites `0x78227`/`0x7824F`/`0x78277`; fresh
+   `get_xrefs_to 0x77EAC` = 1 into the unported `FUN_0008D8EC → FUN_000782D0`
+   pre-pass). The body is ported (`fifa96_match_action_1A`) but the entry is
+   unported; the FU-204 §2 ECX→arm map is the eventual port spec. Wire nothing.
+3. **FU205-L2 — the coupled phase-`0x1D`/row-`0x20` pair.** Still requires the
+   live situation-8 producer (the extra-time flag + the `input_range & 0x100`
+   branch) **and** the arm-0 `0x899A2` install + its actor-record `[0x1587D4]`
+   producer. Fresh: `0x899A2` = `MOV EDX,0x20; CALL 0x7D9A4` inside `0x89868`
+   (sole ref the phase slot `0x110808`); the pair stays `NULL`/uncounted. No fake
+   install.
+4. **FU194-L2 — phase `0x1E` (act 8).** The engine already models the act-8
+   fallback as the **compressed** stored-situation re-dispatch
+   (`fifa96_match_run_set_piece` BX≠0); registering the full 22-record sweep
+   would de-compress a tape-visible derivation. Fresh: phase slot `0x11080C` =
+   `0x8A798`. Leave `NULL`.
+5. *(unchanged)* FU205-L1 (the metadata writers) is **closed** by T1:
+   `fifa96_match_entities_bind_record_meta` + `match_run_record_meta_bind`
+   (FU-199 §7.2 / FU-200 §10). FU205-L3/L4 (the `session_gate_14c32a` queue trap;
+   the OL-85 extra-time flag) stand. FU205-L5 (the staged-zero value gates,
+   FU200-L3) stands.

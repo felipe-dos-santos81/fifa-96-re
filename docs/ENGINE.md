@@ -1038,6 +1038,36 @@ the build also produces the windowed `fifa96` target (`make game`).
   UNSUPPORTED and the phase unwritten), the natural-probe act-1/phase-2
   observations, and the M2 census riders (`action_wired == 32 && phase_wired ==
   19`, `phase_expect[0x17] == OK`, `phase_table[0x17] != NULL`).
+- **M2 phase-18 T5 (FU-205) — the remaining producer-gated bound: the gated-no-op
+  gate truth-table pinned; the residual rows stay honest legs; census unchanged
+  `51/80 = 63%` (`+0`); M2 byte-identical (no re-pin).** The eight
+  dispatched-but-gated per-record rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/
+  `0x08`/`0x09`/`0x15`) collapse onto three bodies, each with a **single**
+  semantic gate — the OL-13 metadata `NULL` early-return (`phase_meta` `[rec+0xC]`
+  rows `0x02`/`0x08`/`0x09`/`0x15`; `phase_meta14` `[rec+0x14]` rows `0x03`/
+  `0x04`/`0x07`; `phase_meta10` `[rec+0x10]` row `0x06`, `fifa96_match_handlers.c`
+  `:4595`/`:4671`/`:4733`). T5 pins the truth-table cell-per-row
+  (`test_engine_match_handlers::test_gated_rows_gate_truth_table`): asset-absent
+  (`NULL`) → disciplined no-op (target untouched); asset-present (the T1 bind
+  `fifa96_match_entities_bind_record_meta`) → the body runs (target rewritten);
+  wrong-field (only the *other* two pointers bound) → still no-op, so the gate is
+  exactly each body's own field. **T3/T4-opened check: `+0`** — the live
+  situation-0 → act `0xA` → phase `0x20` → row `0x24` chain (T3) and the act-1
+  route (T4) install neither row `0x0D`/`0x1A`/`0x20` nor dispatch phase
+  `0x1D`/`0x1E`; the situation-8 producer (act 7 → phase `0x1D` → row `0x20`) is
+  still extra-time-gated and the phase-`0x1D` slot stays `NULL`. **Residual
+  frozen rows (honest legs, no fake producer):** row `0x0D` — the row-09 arm-1
+  installer at `0x80F61` (`BA 0D 00 00 00`, `CALL 0x7D9A4` at `0x80F6A`, fresh
+  disassembly), inside the unported row-09 arm 1, **FU178-L1**; row `0x1A` —
+  the unported keeper CPU ladder `FUN_00077EAC` (its three `#x1A` installers;
+  fresh `get_xrefs_to 0x77EAC` = 1 into `FUN_000782D0`), **FU186-L5**; the coupled
+  phase-`0x1D`/row-`0x20` pair (`0x899A2` `MOV EDX,0x20`; fresh phase-slot
+  `0x110808` = `0x89868`), **FU205-L2**; phase `0x1E` (act-8 compressed
+  fallback), **FU194-L2**. *(This supersedes the plan brief's pre-T3 frozen list,
+  which named row `0x24`/phase `0x20` — T3 made that pair live; §Addendum of
+  FU-205 records the correction.)* **Tape:** M2 `cmp` clean against the v18
+  `441415fc…` golden (**NO re-pin**); M1 `09b726b7…` unmoved. Dispatch
+  `28 UNSUP / 51 OK / 1 NOTF` (sum 80).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
