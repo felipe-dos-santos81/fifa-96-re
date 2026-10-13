@@ -208,3 +208,34 @@ the diff is documented line-by-line with the reason — never silently. Any
   **`tests/golden/engine/m2-frames.txt`** — re-pinned at T6.
 - **The recon slices** `docs/ghidra/FU223…FU230` — appended errata only (prior
   sections never rewritten).
+
+## 10. Errata — phase-21 Stage-1 recon (FU223–FU230), 2026-10-13
+
+The Stage-1 recon (`docs/ghidra/FU223…FU230`, approved and frozen) forces three
+corrections to §2/§3/§5/§6 above. Prior sections stand as written; these errata
+are the binding authority for the Stage-2 producer plan.
+
+- **E1 (§2/§3/§6) — the extra-time route requires a *differing* regulation-end
+  score, not a tie.** The shipped native sets the OL-85 flag `[0x157AC0]` on a
+  differing reg-end score (`0x8B2AC MOV byte[0x157AC0],1`; fresh, FU-224 §3.1),
+  and on an equal score only via `0x8B2C1` under the unported `[0x14C2EE] != 0`
+  override. Therefore §6's "a 0-0 regulation end is a natural tie" is **not
+  reachable**: a 0-0 end leaves `[0x157AC0]` clear (`act 0xB` / phase `0x0C`,
+  FU-228 §2.2) and never arms ET. The tape extension targets a **narrow lead at
+  the regulation whistle** (a differing reg end), not a tie. (FU230-L2 — the
+  FU224/FU228/FU230 reading is inherited from FU-207, so Stage-2 T1/T3 must
+  confirm the `[0x157AC5]`/`[0x157AC7]` identity and polarity first-hand.)
+- **E2 (§1/§5 T4/§9) — `period_setup_live` is already `1`; T4 has no flip.**
+  `fifa96_match_run.c:2225` sets `mr->period_setup_live = 1` on the begin path
+  (the reset seeds `0` at `:2092`); the flag gates only the match-init
+  `period_setup(mode 1)` (FU-225 §6, FU-226 §3.4). §5 T4's "flip `0 → 1`" is
+  therefore moot; the real T4 work is the chooser stand-in inputs and the
+  per-frame cadence (FU-225 D2–D4).
+- **E3 (§5 T2) — the period length needs no producer.** A live period length is a
+  match-init constant the engine already stages: `[0x15881A]`/`[0x15881C]` from
+  `[0x14C1D1]`, default 2 min → `120`/`40`, byte-exact to
+  `fifa96_match_run.c:2368..2372` (FU-223 §4). §5 T2 is a confirmation + a
+  regression pin, not a producer to port.
+- **E4 (§5 T5/§2) — the end machine is not required for this phase** (the tape
+  stops at ET entry), *conditional* on the ET flag being set at ET entry
+  (FU-228 §4, FU228-L6).
