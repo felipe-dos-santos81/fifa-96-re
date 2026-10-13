@@ -2648,6 +2648,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * disjunct (0x4B0CB `TEST AH,1`) remains the FU208-L1 leg — its range-word
        * writer is unlocated, so it is never faked. */
       if (mr->global_157ac2 == 4u)
+        /* NB: period_setup(mode 0) also zeroes `pass_parity` (`:3148`) as an
+         * unrelated side effect; off-tape, guarded by this index-4 gate. */
         (void)fifa96_match_run_period_setup(mr, 0);
       return 1;
     }
@@ -6130,7 +6132,7 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
       mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
       /* The native [0x157AC0]=1 write (0x89E8C) is not mirrored here; the flag
        * cell now exists (`mr->global_157ac0`, T1/FU-213) — this terminal's
-       * write-back stays the FU194-L7 leg. */
+       * write-back stays the FU209-L5 leg. */
       mr->act.id = 0;                              /* [0x158828] */
       mr->act.stage = 0;                           /* [0x158829] */
       mr->act.timer = 0;                           /* [0x158818] */

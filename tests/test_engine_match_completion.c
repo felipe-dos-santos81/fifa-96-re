@@ -215,6 +215,56 @@ static void test_live_period_end_exits_to_frontend(void) {
   drop_fixture(f);
 }
 
+/* Loop-backed tie-break completion (phase-19 final review, Important 1): the
+ * T1 W2 tie-break raised through the REAL clock. The earlier T2/T4 producer
+ * tests staged `clock_period_ended`/`state.period` by hand; this one rolls the
+ * FU-62 clock for real. A 1 s period completes on the 100th granted frame, so
+ * period 0 -> 1 completes first (the first-half end: no tie-break site), then
+ * period 1 -> 2 completes on the next 100 — the completed index 1 is the
+ * regulation end (W2 0x8B2AC), so a differing score raises the OL-85 flag
+ * `global_157ac0` and the derived chooser installs the extra-time arm (phase
+ * 0x13 / act 0xC), whose registered phase-0x22 slot runs stage 0. The only
+ * staging is the phase-class re-arm between the two periods: the period-end
+ * chooser parks the clock in the class-0 phase 0x0C, and the native kickoff
+ * restart that re-arms the next period (FUN_00088860 / FUN_0004B02C) is the
+ * unported FU-143 §5 / FU213-L2 leg — so this is the strongest loop-backed
+ * form this harness admits (the completion and `state.period` are both produced
+ * by the real `fifa96_match_run_frame` clock, not hand-set). */
+static void test_loopbacked_tiebreak_completion(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_set_period(&mr, 1, 1) == 0);
+  mr.state.phase = 2;                    /* class 1: the clock runs */
+  assert(fifa96_match_run_add_goal(&mr, 0) == 0);   /* the derived score writer: 1-0 */
+
+  /* Period 0 -> 1 by the real frame/clock (100 granted frames). */
+  for (int i = 0; i < TICKS_PER_SECOND; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.period == 1);
+  assert(mr.state.period_seconds == 0);
+  assert(mr.global_157ac0 == 0u);        /* completed index 0 is not a tie-break site */
+  assert(mr.global_157ac2 == 1u);        /* the roll 0x8B58A, live */
+  assert(mr.state.phase == 0x0Cu);       /* the chooser parked the class-0 phase */
+
+  /* Re-arm the clock for the next period (the unported kickoff restart) and roll
+   * period 1 -> 2 for real; the completed index 1 is the regulation end. */
+  mr.state.phase = 2;
+  for (int i = 0; i < TICKS_PER_SECOND; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.period == 2);          /* the real FU-62 roll */
+  assert(mr.state.period_seconds == 0);
+  assert(mr.global_157ac0 == 1u);        /* W2 0x8B2AC, raised by the real clock completion */
+  assert(mr.state.phase == 0x13u);       /* the extra-time chooser arm (live flag read) */
+  assert(mr.act.id == 0x0Cu);            /* act 0xC, not the no-ET arm 0xB */
+  assert(mr.act.stage == 1u);            /* phase-0x22 stage 0 ran invoke-now */
+  assert(mr.ref_whistle == 0x1Eu);       /* the 0x974DC(0x1E) event */
+  assert(mr.global_157ac2 == 2u);        /* the roll reached the regulation-end index */
+
+  drop_fixture(f);
+}
+
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
  * both, add_goal increments one side, invalid sides are rejected without a
  * write, and teardown/begin reset the pair. The original's trigger is the
@@ -256,6 +306,7 @@ int main(void) {
   test_period_end_resolve_returns_to_frontend();
   test_staged_exit_survives_period_end();
   test_live_period_end_exits_to_frontend();
+  test_loopbacked_tiebreak_completion();
   test_score_plumbing();
   puts("test_engine_match_completion OK");
   return 0;

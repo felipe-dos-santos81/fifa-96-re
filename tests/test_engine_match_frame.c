@@ -3526,13 +3526,20 @@ static void test_set_piece_bx_fallback(void) {
  * is ported but unwired) AND the live compressed path never drives the sweep
  * cursor — no fake de-compression. The de-compression leg is FU212-L1.
  * Mutation-RED: registering the phase-`0x1E` slot (`NULL ->
- * fifa96_match_action_phase_1E`) aborts the `fn == NULL` assert; advancing
- * `act8_team`/`act8_record`/`act8_selected` on the `bx != 0` path aborts the
- * cursor asserts. */
+ * fifa96_match_action_phase_1E`) aborts the `fn == NULL` assert; making the
+ * compressed `bx != 0` path advance the sweep cursor aborts the sentinel
+ * asserts (verified by calling the sweep body on that path). */
 static void test_phase_1E_compressed_model_pin(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* the bound: de-compression leg FU212-L1 */
+  /* Pre-seed the sweep cursor with sentinels so the "untouched" asserts below
+   * are falsifiable — on the init-zeroed values they would pass regardless of
+   * the code under test. A de-compressed path that ran the sweep would reset
+   * and then advance them, so a divergence is observable. */
+  mr.act8_team = 3u;                                  /* out of range: a sweep resets it first */
+  mr.act8_record = 7u;
+  mr.act8_selected = &mr.entities.team[0].records[5];
   /* the live compressed `bx != 0` path in-lines the stored-situation re-dispatch
    * (sit 2 -> phase 3 in the same call) ... */
   assert(fifa96_match_run_set_piece(&mr, 2, 1, 1) == 0);
@@ -3541,8 +3548,8 @@ static void test_phase_1E_compressed_model_pin(void) {
   /* ... and never dispatches act 8: the sweep cursor is untouched and no record
    * was selected, so the ~22-frame restart sweep is deliberately NOT taken. */
   assert(mr.act.id != 8u);
-  assert(mr.act8_team == 0u && mr.act8_record == 0u);
-  assert(mr.act8_selected == NULL);
+  assert(mr.act8_team == 3u && mr.act8_record == 7u);
+  assert(mr.act8_selected == &mr.entities.team[0].records[5]);
 }
 
 /* FU-149 §1.5/§2 (first-hand arm table 0x8D040 + `FUN_0008D098` cases):

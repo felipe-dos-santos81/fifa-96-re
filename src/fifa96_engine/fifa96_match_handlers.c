@@ -5007,6 +5007,9 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
   r = &mr->record;
   e = match_sp_entity(mr, NULL, NULL);
   if (e == NULL) return -FIFA96_ERR_INVALID;
+  /* Latent signedness: this (int8_t) test is true for arm-6's stage92 = 0xFF
+   * (-1 < 3), where a native unsigned `< 3` would be false; harmless — row
+   * `0x20` has no live dispatcher, so the arm-6 reset is fixture-only. */
   if ((int8_t)r->stage92 < 3) r->controlled = 1;        /* 0x84F17..0x84F25 */
   r->timer89 += (int16_t)r->delta;                      /* 0x84F2D..0x84F41 */
   stage = r->stage92;

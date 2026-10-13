@@ -3271,7 +3271,7 @@ static void run_phase17_t2_riders(void) {
  * new bodies are ported; the on-tape rows (0x00 reset, 0x04 the gated 0x6DE44,
  * 0x15 the shared 0x6DCC8) dispatch but are render-invisible (targets are
  * render-invisible, and the metadata-gated bodies are no-ops with the unported
- * NULL pointers), so the M2 bytes stay `7b4b241a…`. Pure C state, ISO-
+ * NULL pointers), so the M2 bytes stay `441415fc…`. Pure C state, ISO-
  * independent, prints nothing. */
 static void run_phase17_t3_riders(void) {
   /* 1. The reset row (0x00) copies the position into the target per record. */

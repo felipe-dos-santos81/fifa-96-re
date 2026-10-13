@@ -995,11 +995,27 @@ static void test_action_20_body_arms(void) {
   assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 4u);            /* held at the 0x851A2 gate */
 
-  /* arm 4 advance: lane>>16 <= 0x40 -> the 0x7B9C4 kick -> stage 5/timer 0. */
+  /* arm 4 advance: lane>>16 <= 0x40 -> the 0x7B9C4 mode-0x40 kick -> stage 5/
+   * timer 0. Arm 4's own record write is the target := camera-focus triple
+   * (`0x85197..0x851A0`), and the kick stages the ball block (`0x7B9C4` ->
+   * `fifa96_ball_kick_target`, the ported kick effect). The native kick's
+   * record `pos_x/pos_z`+anim write-back (`0x7A490`) is the FU210-L1/OL-9 leg
+   * (not implemented by the port), so those fields are deliberately not
+   * asserted here. */
   f.mr.record.lane = 0;
+  f.mr.entities.ball.pair.vector.x = 0;
+  f.mr.entities.ball.pair.vector.height = 0;
+  f.mr.entities.ball.pair.vector.z = 0;
   assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 5u);            /* 0x851D7 */
   assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.target_x == 0x100);        /* 0x85197 target := camera focus */
+  assert(f.mr.record.target_y == 0x50);
+  assert(f.mr.record.target_z == 0xB00);
+  assert(f.mr.entities.ball.pair.vector.x == 1440);      /* the staged 0x7B9C4 kick */
+  assert(f.mr.entities.ball.pair.vector.height == -1426);
+  assert(f.mr.entities.ball.pair.vector.z == 203);
+  assert(f.mr.entities.ball.pair.flags == 0x40u);        /* the latch mode byte */
 
   /* arm 5 (0x851E1): snap; +0x44 clear -> wait at stage 5. */
   f.mr.record.row44 = 0;

@@ -572,3 +572,32 @@ discipline).
 * **§8 FU213-L3 (unchanged):** the end-of-match word `[0x158822]` /
   `FUN_0008BAF0` stays unported — T4 deliberately did not land it.
 * **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…` byte-identical.
+
+---
+
+## 11. Errata — phase-19 final whole-branch review (Important 1): the loop-backed
+tie-break completion
+
+Written 2026-10-13 at the final-review fix round. Prior sections are **not**
+rewritten (AGENTS.md errata discipline).
+
+* **The W2 tie-break completion is now loop-asserted, not only staged.** The
+  T2/T4 producer tests (`tests/test_engine_match_act.c` `test_phase_21_*` /
+  `test_phase_22_*`; `tests/test_engine_m2.c::run_phase19_riders`) and the FU-143
+  wiring comments consumed a *hand-staged* `clock_period_ended`/`state.period`.
+  `tests/test_engine_match_completion.c::test_loopbacked_tiebreak_completion`
+  now rolls the real FU-62 clock: a 1 s period completes on the 100th granted
+  frame, so period `0 -> 1` completes first (completed index 0, no tie-break
+  site), then — after the class-0 phase-`0x0C` park is re-armed to class 1 —
+  period `1 -> 2` completes with a differing score (set via
+  `fifa96_match_run_add_goal`), raising `mr->global_157ac0` (W2 `0x8B2AC`) and
+  installing phase `0x13` / act `0xC` through the real `fifa96_match_run_frame`
+  `clock_period_ended` staging. Mutation-RED (verified): dropping the real
+  staging (`mr->clock_period_ended = 0`) aborts that test at its first
+  completion while the staged T2/T4 tests still pass — proof the new test is
+  loop-backed where the staged ones are not.
+* **Residual leg (recorded, not faked):** the class re-arm between the two real
+  rolls stands in for the unported kickoff restart (`FUN_00088860` /
+  `FUN_0004B02C`, FU-143 §5 / FU213-L2) — the period-end chooser parks the clock
+  in the class-0 phase `0x0C`, and no ported path re-arms the next period. This
+  is the same FU213-L2 leg named in §8.2.
