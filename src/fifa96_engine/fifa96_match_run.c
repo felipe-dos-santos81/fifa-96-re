@@ -3182,8 +3182,10 @@ int fifa96_match_run_goal_scan(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   /* 0x8B623..0x8B643: phase 2/0x10 and armed. The native period-4 branch
    * (0x8B60D..0x8B621) joins the tail without the scan only on the
-   * extra-time path ([0x157AC0] != 0); the engine carries extra_time 0
-   * (FU-143 OL-85), so the skip is unreachable and unmodelled (leg L8). */
+   * extra-time path ([0x157AC0] != 0); since T1/FU-213 the flag is live
+   * (`mr->global_157ac0`) and the period-4 skip is modelled in
+   * `fifa96_match_run_phase_drive`, but this scan itself is unchanged (the
+   * ET-skip branch is not taken here — leg L8). */
   if (mr->state.phase != 2u && mr->state.phase != 0x10u) return 0;
   if (!mr->goal_armed) return 0;
   /* 0x8896B..0x88983: |snapshot z| (full 32-bit magnitude; the native NEG
@@ -6097,7 +6099,9 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
       return FIFA96_OK;
     case 9u:  /* arm 9 (0x89E6E): the terminal (no situation re-dispatch) */
       mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
-      /* [0x157AC0]=1 has no engine cell (FU194-L7 leg). */
+      /* The native [0x157AC0]=1 write (0x89E8C) is not mirrored here; the flag
+       * cell now exists (`mr->global_157ac0`, T1/FU-213) — this terminal's
+       * write-back stays the FU194-L7 leg. */
       mr->act.id = 0;                              /* [0x158828] */
       mr->act.stage = 0;                           /* [0x158829] */
       mr->act.timer = 0;                           /* [0x158818] */
@@ -6179,7 +6183,9 @@ int fifa96_match_action_phase_1E(struct fifa96_match_run *mr) {
 /* FU-195 §2/§6.1 (M2 phase-17 T6): the phase-0x21 / act-0xB row body — the
  * native extra-time-CLEAR period-end timer `0x8B874` (act slot `0x1107EC[0xB]`).
  * This is the ONE counted row of T6 (the producer `0x8BAE7` is live via
- * `phase_drive` -> `out.act = 0x0B` -> `fifa96_match_act_dispatch`). Raw disasm
+ * `phase_drive` -> `out.act = 0x0B` when the extra-time flag is clear; the flag
+ * is live since T1/FU-213, so `out.act` may instead be `0x0C` on the
+ * extra-time arm) -> `fifa96_match_act_dispatch`). Raw disasm
  * (no Ghidra function: table-only target): head `word[0x158818] +=
  * word[0x157A64]` (`0x8B884`); stage 0 `0x8B89E` fires the `0x974DC(0x1E)`
  * event, resets the timer (`0x8B8B2`) and advances (`0x8B8B9`); stage 1
@@ -6210,12 +6216,15 @@ int fifa96_match_action_phase_21(struct fifa96_match_run *mr) {
   return FIFA96_OK;                                /* stage > 1: 0x8B89A POP/RET */
 }
 
-/* FU-195 §3/§6.1/§7 (M2 phase-17 T6): the phase-0x22 / act-0xC row body — the
+/* FU-195 §3/§6.1/§7 (M2 phase-17 T6; updated by M2 phase-19 T1/FU-213): the
+ * phase-0x22 / act-0xC row body — the
  * native extra-time-SET analogue `0x8B900` (act slot `0x1107EC[0xC]`), the
- * three-stage form of `phase_21`. Its slot stays NULL — producer-dormant: the
- * native invoker `0x8BAE7` fires act 0xC only when `[0x157AC0] != 0`, whose
- * engine producer is unported and which `phase_drive` hardwires to 0 (leg
- * FU195-L2). Raw disasm: head `word[0x158818] += word[0x157A64]` (`0x8B911`);
+ * three-stage form of `phase_21`. Its slot stays NULL — but no longer because
+ * of a missing producer: the OL-85 flag `[0x157AC0]` producer LANDED in T1
+ * (`mr->global_157ac0`, passed live by `phase_drive`, so the chooser can yield
+ * act 0xC; the former producer-dormancy leg FU195-L2 is RESOLVED). The body is
+ * not dispatched because the phase-0x22 table slot is registered by a later
+ * task (T4). Raw disasm: head `word[0x158818] += word[0x157A64]` (`0x8B911`);
  * stage 0 (`0x8B92E`) event + timer 0 + stage 1; stage 1 (`0x8B95C`) waits on
  * `word[0x15881A] >= 0x3C` (derived: the act timer, FU195-L4), then event +
  * timer 0 + stage 2; stage 2 (`0x8B98F`) waits the same gate, then event and

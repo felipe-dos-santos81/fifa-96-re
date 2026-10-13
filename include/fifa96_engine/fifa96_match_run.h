@@ -1188,11 +1188,13 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  *    mirrors `phase_machine.state`/`phase` (the native `[0x157A4D]` switch
  *    byte is the high byte of the `[0x157A4A]` phase dword).
  *
- * Under the selector-0/no-extra-time default (`extra_time` clear, period < 4)
- * the chooser derives phase 0x0C on the controlled side and act 0xB
- * (`0x8BAA7..0x8BABE`, `0x8BADB..0x8BAE7`); the native then invokes the act
- * selector, but the act handler body, the phase-0xC machine `FUN_0008BAF0`,
- * the extra-time flag `[0x157AC0]` producer and the
+ * With the extra-time flag clear (period < 4) the chooser derives phase 0x0C on
+ * the controlled side and act 0xB (`0x8BAA7..0x8BABE`, `0x8BADB..0x8BAE7`);
+ * with the flag set it derives act 0xC / phase 0x13-0x14 (FU-213 §3). The
+ * native then invokes the act selector. Since T1 (FU-213) the flag
+ * `[0x157AC0]` producer (`mr->global_157ac0`) is LIVE — the score tie-break on a
+ * completion plus the W5 mid-extra-time set — so the chooser receives it; the
+ * act handler body, the phase-0xC machine `FUN_0008BAF0` and the
  * `FUN_0004B02C(0)`/`FUN_00088860` reset path stay unported (FU-143 §4/§5
  * legs), so the engine lifecycle owns the exit and the 0x0C -> 0 reset is the
  * run_end teardown (`fifa96_match_state_init`).
@@ -1587,7 +1589,8 @@ int fifa96_match_action_phase_1E(struct fifa96_match_run *mr);
  * the FU165-L9 dual identity). This is the ONE counted row of T6: its producer
  * `FUN_0008B9CC` (`0x8BAE7 CALL 0x000888FC(0xB,0,BX=1)`) is mirrored live by
  * `fifa96_match_run_phase_drive` -> `fifa96_action_phase_period_end` (which
- * yields `out.act = 0x0B` under the selector-0 default) -> the new act-selector
+ * yields `out.act = 0x0B` when the extra-time flag is clear; the flag is live
+ * since T1/FU-213) -> the act-selector
  * dispatch, so wiring `fifa96_match_phase_table[0x21]` is an honest +1. Derived
  * stages (raw disasm; the body is a table-only target with no Ghidra function):
  * head `mr->act.timer += frame_delta` (`0x8B884`, `word[0x158818] +=
@@ -1602,13 +1605,16 @@ int fifa96_match_action_phase_1E(struct fifa96_match_run *mr);
  * `mr`. */
 int fifa96_match_action_phase_21(struct fifa96_match_run *mr);
 
-/* FU-195 §3/§6.1/§7 (M2 phase-17 T6): the phase-0x22 / act-0xC row body — the
+/* FU-195 §3/§6.1/§7 (M2 phase-17 T6; updated by M2 phase-19 T1/FU-213): the
+ * phase-0x22 / act-0xC row body — the
  * native extra-time-SET analogue (`0x8B900`, act slot `0x1107EC[0xC]`). Its
- * phase-table slot (`fifa96_match_phase_table[0x22]`) is **NULL** — the row is
- * NOT counted — because it is producer-dormant: the native invoker `0x8BAE7`
- * fires act 0xC only when the extra-time flag `[0x157AC0] != 0`, whose engine
- * producer is unported; `fifa96_match_run_phase_drive` passes `extra_time = 0u`
- * (`match_run.c`), so `out.act` is always `0x0B` (leg FU195-L2). The body is the
+ * phase-table slot (`fifa96_match_phase_table[0x22]`) is still **NULL** — the
+ * row is NOT counted — but the reason is now the slot, not the producer: the
+ * OL-85 extra-time flag `[0x157AC0]` producer LANDED in T1 (`mr->global_157ac0`;
+ * `fifa96_match_run_phase_drive` passes the live flag, so the chooser can yield
+ * `out.act = 0x0C`), resolving the former producer-dormancy leg **FU195-L2**;
+ * the body is not dispatched because the phase-0x22 table slot is registered by
+ * a later task (T4). The body is the
  * three-stage form of `phase_21` (same head; stages 0/1/2 each gated on the
  * derived timer `>= 0x3C` after a reset; the terminal stage 2 clears the act
  * slot), exported for direct unit testing (the FU-185/FU-188/FU-193
