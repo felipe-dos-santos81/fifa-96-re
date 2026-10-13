@@ -110,6 +110,45 @@ int fifa96_match_dispatch_phase_record(struct fifa96_match_run *mr, uint8_t phas
  * dispatched-but-gated). Returns FIFA96_OK, or -FIFA96_ERR_INVALID (NULL `mr`). */
 int fifa96_match_phase_02(struct fifa96_match_run *mr);
 
+/* FU-192 §2.1–§2.7 (M2 phase-17 T3): the remaining distinct per-record phase
+ * bodies of the `0x00–0x15` family, each reading the walk cursor
+ * (`mr->phase_walk_rec`) and writing the target triple, exactly as the native
+ * `FUN_0008D098` calls them (EAX=rec / EDX=&rec[0x4D]). All return FIFA96_OK,
+ * or -FIFA96_ERR_INVALID for a NULL `mr`; outside the walk (no cursor) they are
+ * no-ops. The per-row wiring (which native rows are counted) is in the phase
+ * table evidence. */
+/* `0x6DE34` — the shared reset/hold (rows `00 0A 0D 0F`): `target := position`
+ * (3× MOVSD, FU-192 §2.1). */
+int fifa96_match_phase_00(struct fifa96_match_run *mr);
+/* `0x6DE44` — rows `03 04 07` (FU-192 §2.4): the `word[0x1577D6/D8+side*4]`
+ * side-selected placement. The DX≥0 arm scales the `[rec+0x14]` dword pair
+ * (`W + (W>>2)` / `D + (D>>4)`, side-flipped) — gated on the unported
+ * `[rec+0x14]` (FU192-L1); the DX<0 cell-map arm (`0x6D870`/`0x15774C`) is
+ * FU192-L3. */
+int fifa96_match_phase_04(struct fifa96_match_run *mr);
+/* `0x6E05C` — row `05` (FU-192 §2.7): the ball-relative line. The derivable
+ * arm is the `target := rec position` copy; the ball/`0x8DC68`/`0x114E04` arm
+ * is FU192-L1 (the ball team is unmodelled). */
+int fifa96_match_phase_05(struct fifa96_match_run *mr);
+/* `0x6DD9C` — row `06` (FU-192 §2.3): scales the `[rec+0x10]` dword pair by
+ * ×1.25 / ×1.0625 with the `[0x157754]`-sign index and the ±0x60 z bias;
+ * gated on the unported `[rec+0x10]` (FU192-L1). */
+int fifa96_match_phase_06(struct fifa96_match_run *mr);
+/* `0x6DD6C` — rows `08 09` (FU-192 §2.2): the thin wrapper over `0x6DCC8`,
+ * selecting the direction index `0xBC` (same side as `[0x157AAC]>>24`) or
+ * `0x6F` (other side). */
+int fifa96_match_phase_08(struct fifa96_match_run *mr);
+/* `0x6DF4C` — row `0C` (FU-192 §2.5): the stateful restart-line timer,
+ * `timer89 += [0x157A64]`, then the `0x780`/`0xCC0` target writes past the
+ * `0x3C` gate; the `[rec+4]`/`0x157A38`/`[rec+0x8A]`/`0x8DCD4` cells are
+ * FU192-L1. */
+int fifa96_match_phase_0C(struct fifa96_match_run *mr);
+/* `0x6E004` — row `10` (FU-192 §2.6): the pure `0x1105EA` variant table
+ * (`(int8)byte << 5`, z negated by side) or the `active == 0` `0x3C0`/`0x840`
+ * default. Row `0x10` is not written by any engine source, so its slot stays
+ * NULL (an un-dispatched row would be a fake count). */
+int fifa96_match_phase_10(struct fifa96_match_run *mr);
+
 /* FU-177 §2/§3/§7 + FU-198 §5.3 (M2 phase-17 T1): the ported action row-03 body
  * `0x7E1A4..0x7E524` — the hold/clamp placement over the FU-138 helpers
  * (`fifa96_action_locomotion_hold`/`clamp_placement`/`placement_counter`/

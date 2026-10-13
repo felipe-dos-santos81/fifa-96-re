@@ -782,6 +782,41 @@ sorter and the arm gate, with mutation-RED discriminators (the extra-time mask
 `09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin, verified with
 `cmp`); census unchanged **35/80 = 43%** (T2 counts nothing, R9).
 
+**Phase-17 T3 (2026-10-12) — the per-record phase handlers `0x00–0x15`: seven
+distinct bodies ported, 13 per-record rows wired/counted (`35/80 → 48/80 =
+60%`)** (this slice). FU-192's remaining per-record bodies are ported over the
+T1 walk cursor: `fifa96_match_phase_00` (the shared `0x6DE34` reset
+`target := position`, rows `00/0A/0D/0F`), `fifa96_match_phase_04` (`0x6DE44`,
+rows `03/04/07` — the erratum body the brief's family list omitted — scaling the
+`[rec+0x14]` dword pair `W+(W>>2)`/`D+(D>>4)` side-flipped, gated on the
+unported pointer), `fifa96_match_phase_06` (`0x6DD9C`, row `06`, the
+`[rec+0x10]` ×1.25/×1.0625 scale with the ±0x60 z bias), `fifa96_match_phase_08`
+(the `0x6DD6C` wrapper, rows `08/09`, selecting the `0x6DCC8` index
+`0xBC`/`0x6F`), `fifa96_match_phase_05` (`0x6E05C`, row `05`, the derivable
+position copy), `fifa96_match_phase_0C` (`0x6DF4C`, row `0C`, the stateful
+`timer89 += [0x157A64]` restart-line timer), and `fifa96_match_phase_10`
+(`0x6E004`, row `10`, the `0x1105EA` variant table). The shared T1 body
+`0x6DCC8` also fills row `0x15` (deferred by T1). **Tape-inert (R10):** M1
+`09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin, `cmp`-verified) —
+the on-tape rows (`0x00`/`0x04`/`0x15`) are render-invisible and the off-tape
+engine-written rows (`0x03/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F`) never
+dispatch on the tape. **Legs:** `0x6E244` (`0x13/0x14`, RNG + unported
+`0x10F364/0x10F368` producer, **FU192-L2**); `0x6E1D0`/`0x6E1C8`
+(`0x01/0x11/0x12`, the formation placement already realized by the seed — no
+double-wire, **FU192-L6/L7**); `0x0B`/`0x0E`/`0x10` stay NULL (never written);
+the OL-13 `[rec+0x10]`/`[rec+0x14]` pointers (**FU192-L1**) and the `0x6DE44`
+DX<0 cell-map arm (**FU192-L3**). One recorded characterization shift: wiring
+the reset row `0x0A` resets the records' targets on the phase-0x0A writes (the
+native walk), so `test_engine_match_frame`'s offside chain's phase-7 nearest
+pick now installs on the opponent-side record 2 (`target == 13`), the
+native-faithful nearest. New `test_engine_match_handlers` pins (`p17-t3`) cover
+each body with mutation-RED discriminators (the `0x6DE34` y-copy, the `0x6DE44`
+`W>>2`, the `0x6DD9C` ±0x60 bias, the `0x6DD6C` `0xBC`, the `0x6DF4C` timer
+add, the `0x6E004` `<< 5` scale, the `0x6E05C` position copy); the
+`test_engine_m2` `run_phase17_t3_riders` pins the cohort dormancy. `make check`
+**110/110**; README title `60%`; census **48/80 = 60%**, dispatch
+`31 UNSUP / 48 OK / 1 NOTF` (sum 80).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

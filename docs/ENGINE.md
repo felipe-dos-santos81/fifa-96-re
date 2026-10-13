@@ -5,7 +5,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-35/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19 and 0x1F), the
+48/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F
+and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
 animation inputs, the derived kickoff ball placement, the resource-loaded
@@ -260,8 +261,10 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **35/80 rows wired** (31 action + the phase rows
-  `0x02`/`0x18`/`0x19`/`0x1F`) — `00`, `01`, `02` (M2
+- Action dispatch (FU-137): **48/80 rows wired** (31 action + the phase rows
+  `0x02`/`0x18`/`0x19`/`0x1F` and the phase-17 T3 per-record cohort
+  `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0D`/`0x0F`/`0x15`)
+  — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
   invoke drives the live held-key movement), `05` (M2 phase-9 T2/FU-142
   OL-63: the carrier row's claim/control/dir/stage landing, so a live code-5
@@ -576,6 +579,53 @@ the build also produces the windowed `fifa96` target (`make game`).
   discriminators: the extra-time mask `0x0100` and the `formation_order_ok` gate.
   The `test_engine_m2` `run_phase17_t2_riders` pins the dormancy; M1 `09b726b7…`
   and M2 `7b4b241a…` stay **byte-exact (no re-pin)**.
+- **M2 phase-17 T3 (FU-192) — the per-record phase handlers `0x00–0x15`: seven
+  distinct bodies ported; 13 per-record rows wired/counted (census `35/80 →
+  48/80 = 60%`).** The remaining bodies of the per-record phase family are
+  ported over the T1 walk cursor (`fifa96_match_phase_00` = the shared `0x6DE34`
+  reset `target := position`, rows `00/0A/0D/0F`; `fifa96_match_phase_04` =
+  `0x6DE44` (rows `03/04/07`), the `word[0x1577D6/D8+side*4]` side-selected
+  placement scaling the `[rec+0x14]` dword pair `W+(W>>2)` / `D+(D>>4)`,
+  side-flipped; `fifa96_match_phase_06` = `0x6DD9C` (row `06`), the
+  `[rec+0x10]` ×1.25/×1.0625 scale with the `[0x157754]`-sign index and the
+  ±0x60 z bias; `fifa96_match_phase_08` = the `0x6DD6C` wrapper (rows `08/09`)
+  selecting the shared `0x6DCC8` index `0xBC`(same side)/`0x6F`(other);
+  `fifa96_match_phase_05` = `0x6E05C` (row `05`), the derivable
+  `target := position` arm; `fifa96_match_phase_0C` = `0x6DF4C` (row `0C`), the
+  stateful `[rec+0x89] += [0x157A64]` restart-line timer with the `0x780`/`0xCC0`
+  target writes past the `0x3C` gate; `fifa96_match_phase_10` = `0x6E004` (row
+  `10`), the `0x1105EA` variant table). The shared T1 body `0x6DCC8` also fills
+  row `0x15` (T1 deliberately deferred it). **Tape-inert (R10):** M1
+  `09b726b7…` and M2 `7b4b241a…` stay **byte-exact (no re-pin)** — the on-tape
+  rows (`0x00` reset, `0x04` the gated `0x6DE44`, `0x15` the shared `0x6DCC8`)
+  are render-invisible (targets are render-invisible, FU-191 §10; the metadata
+  bodies are NULL-gated no-ops), and the off-tape engine-written rows
+  (`0x03/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F`) never dispatch on the
+  tape. **Legs:** `0x6E244` (rows `0x13/0x14`) is not wired — it consumes the
+  PRNG `0x92AC8` twice per active record and its `0x10F364/0x10F368` producer is
+  the unported `FUN_0008D098` case-0x13/0x14 scatter (**FU192-L2**); rows
+  `0x01`/`0x11`/`0x12` (`0x6E1D0`/`0x6E1C8`, the formation placement) are not
+  wired — the placement is already realized by the seeding path
+  (`fifa96_match_entities_seed_formation`) and wiring the phase row would
+  double-run it (R10 "do not double-wire"; **FU192-L6/L7**); rows
+  `0x0B`/`0x0E`/`0x10` stay NULL because no engine source writes those phases
+  (a wired row would be an un-dispatched/fake count, the rows-27/29/2C
+  precedent). The `[rec+0x10]`/`[rec+0x14]` OL-13 metadata pointers
+  (**FU192-L1**) and the `0x6DE44` DX<0 cell-map arm `0x6D870`/`0x15774C`
+  (**FU192-L3**) remain legs. One characterization shift (recorded): wiring the
+  reset row `0x0A` makes the native `FUN_000740A0` walk reset the records'
+  targets on the phase-0x0A writes, so the phase-7 nearest pick (which stands in
+  for the phase-handler placement output) sees the reset positions —
+  `test_engine_match_frame`'s offside chain now installs the FK on the
+  opponent-side record 2 (`target == 13`), the native-faithful nearest (the
+  pre-T3 expectation assumed un-reset zero targets). `tests/test_engine_match_handlers.c`
+  pins each body (`p17-t3`); mutation-RED discriminators: the `0x6DE34` y-copy,
+  the `0x6DE44` `W>>2`, the `0x6DD9C` ±0x60 bias, the `0x6DD6C` `0xBC`, the
+  `0x6DF4C` timer add, the `0x6E004` `<< 5` scale and the `0x6E05C` position
+  copy. The `test_engine_m2` `run_phase17_t3_riders` pins the cohort dormancy.
+  Census `35/80 → **48/80 = 60%**` (`floor(100 × 48/80) = 60`); dispatch
+  `31 UNSUP / 48 OK / 1 NOTF` (sum 80; action 45 = 31 OK + 14 UNSUP, phase 35 =
+  17 OK + 17 UNSUP + 1 NOTF); README title `60%` — all consistent.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

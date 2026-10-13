@@ -3867,8 +3867,14 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.state.phase == 7u);                  /* kind 3 forces free kick */
   assert(mr.act.id == 0);
   assert(mr.ref_speech == 0x2Au);
-  assert(mr.entities.team[1].records[1].code == 0x12u);  /* FK on the fouled side */
-  assert(mr.entities.team[1].target == 12);
+  /* phase-17 T3: the native per-record walk now runs the phase-0x0A handler
+   * (0x6DE34, `target := position`) on the 0x0A writes, so the phase-7
+   * nearest pick (which stands in for the phase-handler placement output) sees
+   * the reset positions — the opponent-side record 2 at (0, 0x3C0) is the
+   * strict nearest to the incident (0, 0x3C0). */
+  assert(mr.entities.team[1].records[2].code == 0x12u);  /* FK on the fouled side */
+  assert(mr.entities.team[1].records[2].target_x == 0);
+  assert(mr.entities.team[1].target == 13);
 
   /* gates: settings off, suppression timer, the camera mirror gate */
   fifa96_match_run_init(&mr);

@@ -102,9 +102,9 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
  * (loader INT3 stub) with no handler body by design → NOT_FOUND; the other 34
  * rows are classified-but-unported → UNSUPPORTED. */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
-    /* 00 */ UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 0A */ UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 14 */ UNSUP, UNSUP, NOTF,  UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
+    /* 14 */ UNSUP, FIFA96_OK, NOTF,  UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 1E */ UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP,
 };
 
@@ -1127,6 +1127,191 @@ static void test_record_phase_walk_scans_and_skips(void) {
   assert(fifa96_match_run_record_phase_walk(NULL, 0x02u, 0u) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_run_record_phase_walk(&f.mr, 0x23u, 0u) == -FIFA96_ERR_INVALID);
   assert(fifa96_match_run_record_phase_walk(&f.mr, 0x02u, 2u) == -FIFA96_ERR_INVALID);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.1 (phase-17 T3): the shared reset/hold 0x6DE34 (rows 00/0A/0D/0F).
+ * `target := position` (3x MOVSD). The walk cursor stages the record; a
+ * cursor-less dispatch (the act-tail path) is a no-op. */
+static void test_phase_00_reset_copies_position(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[5];
+  e->team = 0;
+  e->pos_x = 0x100; e->pos_y = 0x200; e->pos_z = -0x300;
+  e->target_x = 1; e->target_y = 2; e->target_z = 3;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x00, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 && e->target_y == 0x200 && e->target_z == -0x300);
+  /* the cursor-less dispatch never runs a per-record body */
+  e->target_x = 0x77;
+  assert(fifa96_match_dispatch_phase(&f.mr, 0x00) == FIFA96_OK);
+  assert(e->target_x == 0x77);
+  /* an alias row (0x0A) shares the body */
+  e->target_x = 1;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x0A, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.4 (phase-17 T3): the 0x6DE44 body (rows 03/04/07). The DX>=0 arm
+ * scales the [rec+0x14] dword pair: W + (W>>2), D + (D>>4), side-flipped; the
+ * unported [rec+0x14] (NULL) is the OL-13 gate. */
+static void test_phase_04_meta14_scale(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  static const int32_t meta[2] = { (int32_t)(uint32_t)((uint16_t)(-8) | (16u << 16)),
+                                   (int32_t)0x11223344u };
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[2];
+  e->team = 0;
+  e->phase_meta14 = meta;
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == -10);   /* W=-8 -> -8 + (-8>>2) */
+  assert(e->target_z == 17);    /* D=16 -> 16 + 1 */
+  assert(e->target_y == 0);
+  /* side 1 (and side_controlled 1, so the +4 offset does not fire) negates both */
+  f.mr.entities.team[0].side = 1;
+  f.mr.phase_machine.side_controlled = 1;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == 10 && e->target_z == -17);
+  /* the OL-13 gate: NULL -> untouched */
+  e->target_x = 0x5; e->target_z = 0x6;
+  e->phase_meta14 = NULL;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x5 && e->target_z == 0x6);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.3 (phase-17 T3): the 0x6DD9C body (row 06). W*1.25 / D*1.0625 with
+ * the [0x157754]-sign index (staged 0) and the +0x60 z bias; the unported
+ * [rec+0x10] is the OL-13 gate. */
+static void test_phase_06_meta10_scale(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  static const int32_t meta[2] = { (int32_t)(uint32_t)((uint16_t)(-8) | (32u << 16)), 0 };
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[1];
+  e->team = 0;
+  e->phase_meta10 = meta;
+  f.mr.entities.team[0].side = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x06, e, -1) == FIFA96_OK);
+  assert(e->target_x == -10);            /* W=-8 + (W>>2) */
+  assert(e->target_z == 34 + 0x60);      /* D=32 + 2, [0x157754]<=0 -> +0x60 */
+  assert(e->target_y == 0);
+  e->target_x = 0x9;
+  e->phase_meta10 = NULL;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x06, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x9);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.2 (phase-17 T3): the 0x6DD6C wrapper (rows 08/09): idx = 0xBC when
+ * the record side equals the controlled side, else 0x6F, then the shared
+ * 0x6DCC8 core. */
+static void test_phase_08_wrapper_selects_edge(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  static int8_t pair[0x17A];
+  make_fixture(&f);
+  pair[0xBC * 2] = 2;  pair[0xBC * 2 + 1] = 3;
+  pair[0x6F * 2] = 10; pair[0x6F * 2 + 1] = 11;
+  e = &f.mr.entities.team[0].records[0];
+  e->team = 0;
+  e->phase_meta = pair;
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x08, e, -1) == FIFA96_OK);
+  assert(e->target_x == 2 * 0x26 && e->target_z == 3 * 0x21);
+  /* side != controlled -> idx 0x6F, side 1 negates both */
+  f.mr.entities.team[0].side = 1;
+  f.mr.phase_machine.side_controlled = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x08, e, -1) == FIFA96_OK);
+  assert(e->target_x == -(10 * 0x26) && e->target_z == -(11 * 0x21));
+  /* row 09 shares the body */
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x09, e, -1) == FIFA96_OK);
+  assert(e->target_x == 2 * 0x26 && e->target_z == 3 * 0x21);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.5 (phase-17 T3): the stateful 0x6DF4C (row 0C): timer89 += delta
+ * on every call; past the 0x3C gate the target is (0x780,·,0), refined to
+ * (0xCC0,·,0) when |word[rec+0x69]| < 0x20. */
+static void test_phase_0C_timer_accumulate_and_gate(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[3];
+  e->team = 0;
+  e->timer89 = 0x30;
+  e->lane = 0x40;                       /* |word| >= 0x20 -> the 0x780 arm */
+  f.mr.record.delta = 0x10;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x0C, e, -1) == FIFA96_OK);
+  assert(e->timer89 == 0x40);
+  assert(e->target_x == 0x780 && e->target_z == 0);
+  /* below the gate: accumulate only, target untouched */
+  e->timer89 = 0;
+  e->target_x = 0x55;
+  f.mr.record.delta = 4;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x0C, e, -1) == FIFA96_OK);
+  assert(e->timer89 == 4 && e->target_x == 0x55);
+  /* the small-lane refinement */
+  e->timer89 = 0x3C;
+  e->lane = 0x10;
+  f.mr.record.delta = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x0C, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0xCC0 && e->target_z == 0);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.6 (phase-17 T3): the 0x6E004 variant table (row 10; ported but not
+ * wired — phase 0x10 is never written by an engine source). active == 0 is the
+ * (0x3C0,·,0x840) default; else table[active-1] << 5, z negated by side. */
+static void test_phase_10_variant_table(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[6];
+  e->team = 0;
+  f.mr.entities.team[0].side = 0;
+  /* row 0x10 is not written by an engine source, so its slot is NULL and the
+   * dispatcher is UNSUPPORTED (the census guard); the exported body is driven
+   * directly through the walk cursor. */
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x10, e, -1) == -FIFA96_ERR_UNSUPPORTED);
+  f.mr.phase_walk_rec = e;
+  f.mr.phase_walk_active = 1u;
+  e->active = 0;
+  assert(fifa96_match_phase_10(&f.mr) == FIFA96_OK);
+  assert(e->target_x == 0x3C0 && e->target_z == 0x840 && e->target_y == 0);
+  e->active = 1;                        /* table[0] = (-8,-2) -> (-256,-64) */
+  assert(fifa96_match_phase_10(&f.mr) == FIFA96_OK);
+  assert(e->target_x == -256 && e->target_z == -64);
+  e->active = 6;                        /* table[5] = (-5,-5) -> (-160,-160) */
+  assert(fifa96_match_phase_10(&f.mr) == FIFA96_OK);
+  assert(e->target_x == -160 && e->target_z == -160);
+  f.mr.entities.team[0].side = 1;       /* side negates z only */
+  assert(fifa96_match_phase_10(&f.mr) == FIFA96_OK);
+  assert(e->target_x == -160 && e->target_z == 160);
+  f.mr.phase_walk_active = 0u;
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.7 (phase-17 T3): the derivable 0x6E05C arm (row 05):
+ * `target := rec position`. */
+static void test_phase_05_position_copy(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[7];
+  e->team = 0;
+  e->pos_x = 0x10; e->pos_y = 0x20; e->pos_z = 0x30;
+  e->target_x = 1; e->target_y = 2; e->target_z = 3;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x10 && e->target_y == 0x20 && e->target_z == 0x30);
   drop_fixture(&f);
 }
 
@@ -3573,6 +3758,13 @@ int main(void) {
   test_action_03_direct_leg_body();
   test_phase_02_source_pair_scales();
   test_record_phase_walk_scans_and_skips();
+  test_phase_00_reset_copies_position();
+  test_phase_04_meta14_scale();
+  test_phase_06_meta10_scale();
+  test_phase_08_wrapper_selects_edge();
+  test_phase_0C_timer_accumulate_and_gate();
+  test_phase_10_variant_table();
+  test_phase_05_position_copy();
   test_action_0d_arm1_installer_leg();
   test_dead_2b_evidence();
   test_action_05_wired_carrier();

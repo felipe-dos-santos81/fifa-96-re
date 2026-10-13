@@ -4570,30 +4570,249 @@ static void match_row_phase_call(struct fifa96_match_run *mr,
  * 0x10; else EBX = MOVSX BX`; `EAX += EBX*2`; `target[0] = MOVSX byte[EAX] *
  * 0x26`; `target[2] = MOVSX byte[EAX+1] * 0x21`; both negated when
  * `byte[[rec]+0x826] != 0`; `target[1] = 0`. */
-int fifa96_match_phase_02(struct fifa96_match_run *mr) {
-  struct fifa96_match_entity *rec;
+/* FU-192 §2.2 (M2 phase-17 T3): the shared `0x6DCC8` core, factored so the
+ * `0x6DD6C` wrapper (rows 08/09) can reuse it with an explicit direction index.
+ * `edge < 0` selects the per-side default (`word[0x1577DE + side*4] >> 16`);
+ * otherwise the explicit index. The `[rec+0xC]` metadata is the OL-13 gate
+ * (FU192-L1). */
+static void match_phase_dcc8_apply(struct fifa96_match_run *mr,
+                                   struct fifa96_match_entity *rec, int32_t edge) {
   const int8_t *meta;
   uint32_t tt;
   int32_t side;
   int32_t idx;
   int32_t tx;
   int32_t tz;
+  tt = rec->team;                                       /* native [rec] = team */
+  if (tt >= FIFA96_MATCH_ENTITY_TEAMS) return;
+  side = (int32_t)mr->entities.team[tt].side;           /* [team+0x826] */
+  if (edge < 0)
+    idx = mr->phase_dir_default[(uint32_t)side & 1u];   /* word[0x1577DE+side*4]>>16 */
+  else
+    idx = edge;                                          /* MOVSX BX */
+  meta = rec->phase_meta;                               /* native [rec+0xC] */
+  if (meta == NULL) return;                             /* OL-13 unported -> gated */
+  tx = (int32_t)(int16_t)((int16_t)(int8_t)meta[idx * 2] * (int16_t)0x26);
+  tz = (int32_t)(int16_t)((int16_t)(int8_t)meta[idx * 2 + 1] * (int16_t)0x21);
+  if (side != 0) { tx = -tx; tz = -tz; }
+  rec->target_x = tx;
+  rec->target_y = 0;
+  rec->target_z = tz;
+}
+
+int fifa96_match_phase_02(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
   if (mr == NULL) return -FIFA96_ERR_INVALID;
   if (mr->phase_walk_active == 0u) return FIFA96_OK;   /* not the walk's caller */
   rec = mr->phase_walk_rec;
   if (rec == NULL) return FIFA96_OK;
-  tt = rec->team;                                       /* native [rec] = team */
-  if (tt >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
-  side = (int32_t)mr->entities.team[tt].side;           /* [team+0x826] */
-  if (mr->phase_walk_edge < 0)
-    idx = mr->phase_dir_default[(uint32_t)side & 1u];   /* word[0x1577DE+side*4]>>16 */
-  else
-    idx = mr->phase_walk_edge;                          /* MOVSX BX */
-  meta = rec->phase_meta;                               /* native [rec+0xC] */
-  if (meta == NULL) return FIFA96_OK;                   /* OL-13 unported -> gated */
-  tx = (int32_t)(int16_t)((int16_t)(int8_t)meta[idx * 2] * (int16_t)0x26);
-  tz = (int32_t)(int16_t)((int16_t)(int8_t)meta[idx * 2 + 1] * (int16_t)0x21);
+  match_phase_dcc8_apply(mr, rec, mr->phase_walk_edge);
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.1 (M2 phase-17 T3): `0x6DE34..0x6DE40` — the shared reset/hold.
+ * `LEA ESI,[EAX+0x59]; MOVSD; MOVSD; MOVSD` copies the record position triple
+ * (`+0x59/+0x5D/+0x61`) into the target triple (`EDX` = `+0x4D`). Pure: no
+ * globals, no state (FU-83 held-position copy). */
+int fifa96_match_phase_00(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  rec->target_x = rec->pos_x;
+  rec->target_y = rec->pos_y;
+  rec->target_z = rec->pos_z;
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.4 (M2 phase-17 T3): `0x6DE44..0x6DF4A` — rows `03 04 07`. The
+ * per-side selector `word[0x1577D8 + gside*4]` (gside = `[0x157AAC]>>24`, the
+ * engine's `phase_machine.side_controlled`; the runtime cell is unported,
+ * staged 0 → the DX>=0 arm). The DX>=0 arm reads the `[rec+0x14]` dword pair at
+ * index `word[0x1577D6 + gside*4] >> 16` and, when the controlled-side byte
+ * `[0x157AAF]` differs from the record side, +4 bytes, then writes
+ * `target[0] = ±(W + (W>>2))`, `target[2] = ±(D + (D>>4))` (side-flipped) and
+ * `target[1] = 0`. The DX<0 cell-map arm (`0x6D870`/`0x6DCC8`, base
+ * `0x15774C`) is FU192-L3. Gated on the unported `[rec+0x14]` (FU192-L1): the
+ * live walk stages NULL, so this is a dispatched-but-gated no-op. */
+int fifa96_match_phase_04(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  const int32_t *p;
+  static const int32_t sel_1577d6[2] = { 0, 0 };  /* word[0x1577D6+gside*4] (unported) */
+  static const int32_t sel_1577d8[2] = { 0, 0 };  /* word[0x1577D8+gside*4] (unported) */
+  int32_t side;
+  int32_t gside;
+  int32_t idx;
+  int32_t off;
+  int32_t dw;
+  int32_t w;
+  int32_t d;
+  int32_t tx;
+  int32_t tz;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  if (rec->team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
+  side = (int32_t)mr->entities.team[rec->team].side;      /* [team+0x826] */
+  gside = (int32_t)mr->phase_machine.side_controlled;     /* [0x157AAC]>>24 */
+  if ((int16_t)(uint16_t)sel_1577d8[(uint32_t)gside & 1u] < 0)
+    return FIFA96_OK;                                     /* DX<0 arm: leg FU192-L3 */
+  idx = (int32_t)(sel_1577d6[(uint32_t)gside & 1u] >> 16);
+  p = rec->phase_meta14;                                  /* native [rec+0x14] */
+  if (p == NULL) return FIFA96_OK;                        /* OL-13 gate FU192-L1 */
+  off = ((int8_t)mr->phase_machine.side_controlled != (int8_t)side) ? 1 : 0;
+  dw = p[idx * 2 + off];                                  /* 0x6DE9A/0x6DEAE */
+  w = (int32_t)(int16_t)(uint16_t)dw;
+  d = (int32_t)(int16_t)(uint16_t)((uint32_t)dw >> 16);
+  tx = w + (w >> 2);
+  tz = d + (d >> 4);
   if (side != 0) { tx = -tx; tz = -tz; }
+  rec->target_x = tx;
+  rec->target_y = 0;
+  rec->target_z = tz;
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.7 (M2 phase-17 T3): `0x6E05C..0x6E1C5` — row `05`. The derivable
+ * arm is the `0x6E1B3` fall-through `MOVSD ×3`: `target := rec position`. The
+ * ball-relative arm (`[0x157A9F]` ball-team compare, the `0x8DC68` metric, the
+ * `0x114E04` cosine fold, the `0x157AC5`/`0x15881A`/`0x157AB6` cells) is
+ * FU192-L1: the native ball record's `[+0]` team pointer has no engine model.
+ * The native `0x6E072 JNZ 0x6E1B3` fires whenever `[rec] != [ball]`; staged as
+ * the derived position copy. Off-tape: tape-neutral. */
+int fifa96_match_phase_05(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  rec->target_x = rec->pos_x;
+  rec->target_y = rec->pos_y;
+  rec->target_z = rec->pos_z;
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.3 (M2 phase-17 T3): `0x6DD9C..0x6DE31` — row `06`. Index
+ * `([0x157754] > 0)` for side 0 / `([0x157754] < 0)` for side 1 (the runtime
+ * cell is unported, staged 0 → index 0), reads the `[rec+0x10]` dword pair at
+ * `p[idx]`: `target[0] = ±(W + (W>>2))`, `target[2] = ±(D + (D>>4))` with the
+ * `[0x157754]`-sign `±0x60` z bias, `target[1] = 0`. Gated on the unported
+ * `[rec+0x10]` (FU192-L1). */
+int fifa96_match_phase_06(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  const int32_t *p;
+  static const int32_t cell_157754 = 0;   /* [0x157754] (unported runtime cell) */
+  int32_t side;
+  int32_t idx;
+  int32_t dw;
+  int32_t w;
+  int32_t d;
+  int32_t tx;
+  int32_t tz;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  if (rec->team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
+  side = (int32_t)mr->entities.team[rec->team].side;
+  p = rec->phase_meta10;                  /* native [rec+0x10] */
+  if (p == NULL) return FIFA96_OK;        /* OL-13 gate FU192-L1 */
+  idx = (side != 0) ? (cell_157754 < 0 ? 1 : 0) : (cell_157754 > 0 ? 1 : 0);
+  dw = p[idx];
+  w = (int32_t)(int16_t)(uint16_t)dw;
+  d = (int32_t)(int16_t)(uint16_t)((uint32_t)dw >> 16);
+  tx = w + (w >> 2);
+  tz = d + (d >> 4);
+  if (side != 0) { tx = -tx; tz = -tz; }
+  if (cell_157754 > 0) tz -= 0x60; else tz += 0x60;   /* 0x6DE15 */
+  rec->target_x = tx;
+  rec->target_y = 0;
+  rec->target_z = tz;
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.2 (M2 phase-17 T3): `0x6DD6C..0x6DD98` — rows `08 09`. The thin
+ * wrapper: `idx = ([team+0x826] == [0x157AAC]>>24) ? 0xBC : 0x6F`, then
+ * `0x6DCC8(rec, target, idx)` (the shared `match_phase_dcc8_apply`). */
+int fifa96_match_phase_08(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  int32_t side;
+  int32_t gside;
+  int32_t idx;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  if (rec->team >= FIFA96_MATCH_ENTITY_TEAMS) return FIFA96_OK;
+  side = (int32_t)mr->entities.team[rec->team].side;
+  gside = (int32_t)mr->phase_machine.side_controlled;   /* [0x157AAC]>>24 */
+  idx = (side == gside) ? 0xBC : 0x6F;                  /* 0x6DD80..0x6DD8E */
+  match_phase_dcc8_apply(mr, rec, idx);
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.5 (M2 phase-17 T3): `0x6DF4C..0x6E001` — row `0C`, the stateful
+ * restart-line timer. `[rec+0x89] += [0x157A64]` on every call; past the
+ * `0x3C` gate the target becomes `(0x780, ·, 0)`, refined to `(0xCC0, ·, 0)`
+ * when `|word[rec+0x69]| < 0x20`. The table/timer7b (`[rec+4]`→`[+0xA]`,
+ * `0x157A38`), the angle term (`[rec+0x8A]`) and the `0x8DCD4` metric are
+ * FU192-L1 (unported). Off-tape: tape-neutral. */
+int fifa96_match_phase_0C(struct fifa96_match_run *mr) {
+  struct fifa96_match_entity *rec;
+  int32_t lane_word;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  rec->timer89 += (int32_t)(uint16_t)mr->record.delta;  /* 0x6DF55..0x6DF63 */
+  if (rec->timer89 < 0x3C) return FIFA96_OK;            /* 0x6DF69 JL */
+  rec->target_x = 0x780;                                /* 0x6DF8F */
+  rec->target_z = 0;                                    /* 0x6DF95 + angle*0 */
+  lane_word = (int32_t)(int16_t)(uint16_t)rec->lane;    /* native word[rec+0x69] */
+  if (lane_word < 0) lane_word = -lane_word;            /* 0x6DFD5..0x6DFEA */
+  if (lane_word < 0x20) {                               /* 0x6DFEC JL */
+    rec->target_x = 0xCC0;                              /* 0x6DFF1 */
+    rec->target_z = 0;
+  }
+  return FIFA96_OK;
+}
+
+/* FU-192 §2.6 (M2 phase-17 T3): `0x6E004..0x6E05B` — row `10`. `BL =
+ * [rec+0x8D]`; `active == 0` → the `(0x3C0, 0, 0x840)` default; else the
+ * `0x1105EA` 2-stride signed-byte table at `EBX = active-1` scaled `<< 5`, with
+ * `target[2]` negated when `[team+0x826] != 0`, and `target[1] = 0`. The table
+ * bytes are a fresh `read_memory 0x1105E0` of the LE image (FU-192 §2.6). Row
+ * `0x10` is never written by an engine source (the 9 `match_run_write_phase`
+ * call sites, FU-191 §4), so its slot stays NULL: an un-dispatched count would
+ * be fake (the rows-27/29/2C precedent). */
+int fifa96_match_phase_10(struct fifa96_match_run *mr) {
+  static const int8_t variant[11][2] = {
+      { -8, -2 }, { -4, -2 }, { 0, -2 }, { 4, -2 }, { 8, -2 }, { -5, -5 },
+      { 0, -5 }, { 5, -5 }, { -3, -7 }, { 2, -7 }, { -16, 0 } };
+  struct fifa96_match_entity *rec;
+  int32_t active;
+  int32_t k;
+  int32_t tx;
+  int32_t tz;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->phase_walk_active == 0u) return FIFA96_OK;
+  rec = mr->phase_walk_rec;
+  if (rec == NULL) return FIFA96_OK;
+  active = (int32_t)(int8_t)rec->active;                /* BL = [rec+0x8D] */
+  if (active == 0) {
+    tx = 0x3C0;                                         /* 0x6E046 */
+    tz = 0x840;
+  } else {
+    k = active - 1;                                     /* MOVSX BX,BL; DEC */
+    if (k < 0 || k > 10) return FIFA96_OK;
+    tx = (int32_t)variant[k][0] * 32;                   /* SAR 0x18; SHL 5 */
+    tz = (int32_t)variant[k][1] * 32;
+    if (rec->team < FIFA96_MATCH_ENTITY_TEAMS &&
+        mr->entities.team[rec->team].side != 0u)
+      tz = -tz;                                         /* 0x6E036..0x6E041 */
+  }
   rec->target_x = tx;
   rec->target_y = 0;
   rec->target_z = tz;
@@ -4821,29 +5040,50 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
 };
 
 const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_ROWS] = {
-    {0x00, NULL, "FU-137 §6: FU-136 phase 00: not ported; FU-83 held-position copy; OL-13"},
-    {0x01, NULL, "FU-137 §6: FU-136 phase 01: not ported (partial); fifa96_action_phase_cell; OL-13"},
+    {0x00, fifa96_match_phase_00,
+     "FU-192 §2.1 (phase-17 T3): phase 00 = the ported native 0x6DE34 (0x6DE34..0x6DE40), the shared reset/hold `target := position` (3x MOVSD from +0x59/+0x5D/+0x61). Also rows 0x0A/0x0D/0x0F (same body); 0x0B/0x0E share it but are never written by an engine source, so they stay NULL (an un-dispatched count would be fake). COUNTED after the on-tape cmp pin (phase 0x00 = the tape's 304-frame window, R10); the write is render-invisible on the tape (targets are render-invisible, FU-191 §10)"},
+    {0x01, NULL,
+     "FU-192 §2.9/L7 (phase-17 T3): phase 01 = the native 0x6E1D0 (`fifa96_scene_formation_place`), already realized by the seeding path (fifa96_match_entities_seed_formation, FU-89 §11); wiring the phase row would double-run the formation placement (R10 'do not double-wire', FU192-L7). The slot stays NULL/uncounted; the [rec+8] formation blob is not persisted in the pool; OL-13"},
     {0x02, fifa96_match_phase_02,
      "FU-191 §6 + FU-198 §5.1 (phase-17 T1): phase 02 = the ported native FUN_0006DCC8 (0x6DCC8..0x6DD3B): reads [rec+0xC] (modelled as fifa96_match_entity.phase_meta), indexes the direction-byte pair by the walk's EBX=-1 (the per-side default word[0x1577DE+side*4]>>16) or an explicit index, and writes target_x = byte0*±0x26 / target_y=0 / target_z = byte1*±0x21 (side-flipped by [team+0x826]). The [rec+0xC] OL-13 source is unported (FU192-L1), so an unset phase_meta is a documented dispatched-but-gated no-op (FU-177 §7); phase 0x15 shares the body (FU-136 phase rows)"},
-    {0x03, NULL, "FU-137 §6: FU-136 phase 03: not ported (partial); fifa96_action_phase_slot; OL-13"},
-    {0x04, NULL, "FU-137 §6: FU-136 phase 04: not ported (partial); same body as phase 03; OL-13"},
-    {0x05, NULL, "FU-137 §6: FU-136 phase 05: not ported; FU-83 distance line; OL-13"},
-    {0x06, NULL, "FU-137 §6: FU-136 phase 06: not ported (partial); phase_ball_entry/ball_line; OL-13"},
-    {0x07, NULL, "FU-137 §6: FU-136 phase 07: not ported (partial); same body as phase 03; OL-13"},
-    {0x08, NULL, "FU-137 §6: FU-136 phase 08: not ported (partial); wrapper -> 0x6DCC8; phase_cell; OL-13"},
-    {0x09, NULL, "FU-137 §6: FU-136 phase 09: not ported (partial); same as phase 08; OL-13"},
-    {0x0A, NULL, "FU-137 §6: FU-136 phase 0A: not ported; same body as phase 00; OL-13"},
-    {0x0B, NULL, "FU-137 §6: FU-136 phase 0B: not ported; same body as phase 00; OL-13"},
-    {0x0C, NULL, "FU-137 §6: FU-136 phase 0C: not ported (partial); phase_line_timer/restart_line; OL-13"},
-    {0x0D, NULL, "FU-137 §6: FU-136 phase 0D: not ported; same body as phase 00; OL-13"},
-    {0x0E, NULL, "FU-137 §6: FU-136 phase 0E: not ported; same body as phase 00; OL-13"},
-    {0x0F, NULL, "FU-137 §6: FU-136 phase 0F: not ported; same body as phase 00; OL-13"},
-    {0x10, NULL, "FU-137 §6: FU-136 phase 10: not ported; FU-83 variant tables 0x105E7/0x105E8; OL-13"},
-    {0x11, NULL, "FU-137 §6: FU-136 phase 11: not ported (partial); falls into 0x6E1D0; OL-13"},
-    {0x12, NULL, "FU-137 §6: FU-136 phase 12: not ported (partial); same as phase 01; OL-13"},
-    {0x13, NULL, "FU-137 §6: FU-136 phase 13: not ported; FU-83 camera-bound scatter; OL-13"},
-    {0x14, NULL, "FU-137 §6: FU-136 phase 14: not ported; same as phase 13; OL-13"},
-    {0x15, NULL, "FU-137 §6: FU-136 phase 15: not ported (partial); same as phase 02; OL-13"},
+    {0x03, fifa96_match_phase_04,
+     "FU-192 §2.4 (phase-17 T3): phase 03 = the ported native 0x6DE44 (0x6DE44..0x6DF4A); rows 03/04/07 share it (FU-192 erratum: the brief's family list omitted this body). The DX>=0 arm scales the [rec+0x14] dword pair (W+(W>>2) / D+(D>>4), side-flipped); the DX<0 cell-map arm (0x6D870/0x15774C) is FU192-L3. Gated on the unported [rec+0x14] (FU192-L1). Off-tape (row 03): tape-neutral"},
+    {0x04, fifa96_match_phase_04,
+     "FU-192 §2.4 (phase-17 T3): phase 04 = the native 0x6DE44 (same as row 03). ON-TAPE (303 frames, R10): COUNTED after the cmp pin; the body is dispatched-but-gated on the unported [rec+0x14] (FU192-L1), so the walk is a no-op on the tape (the FU-177 §7 precedent)"},
+    {0x05, fifa96_match_phase_05,
+     "FU-192 §2.7 (phase-17 T3): phase 05 = the ported native 0x6E05C (0x6E05C..0x6E1C5). The derivable arm is the 0x6E1B3 `target := rec position` copy; the ball-relative arm ([0x157A9F] ball-team compare, 0x8DC68 metric, 0x114E04 fold, 0x157AC5/0x15881A/0x157AB6) is FU192-L1 (the ball record's [+0] team pointer is unmodelled). Off-tape: tape-neutral"},
+    {0x06, fifa96_match_phase_06,
+     "FU-192 §2.3 (phase-17 T3): phase 06 = the ported native 0x6DD9C (0x6DD9C..0x6DE31): scales the [rec+0x10] dword pair by ×1.25/×1.0625 (W+(W>>2) / D+(D>>4)) with the [0x157754]-sign index and the ±0x60 z bias, side-flipped. Gated on the unported [rec+0x10] (FU192-L1); the [0x157754] runtime cell is staged 0. Off-tape: tape-neutral"},
+    {0x07, fifa96_match_phase_04,
+     "FU-192 §2.4 (phase-17 T3): phase 07 = the native 0x6DE44 (same as rows 03/04); FU-177's hot path. Off-tape (row 07): tape-neutral"},
+    {0x08, fifa96_match_phase_08,
+     "FU-192 §2.2 (phase-17 T3): phase 08 = the ported native 0x6DD6C (0x6DD6C..0x6DD98), the thin wrapper over 0x6DCC8 selecting idx 0xBC/0x6F by the [0x157AAC]>>24 controlled side. Rows 08/09 share it. Off-tape: tape-neutral"},
+    {0x09, fifa96_match_phase_08,
+     "FU-192 §2.2 (phase-17 T3): phase 09 = the native 0x6DD6C (same as row 08). Off-tape: tape-neutral"},
+    {0x0A, fifa96_match_phase_00,
+     "FU-192 §2.1 (phase-17 T3): phase 0A = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
+    {0x0B, NULL,
+     "FU-192 §1 (phase-17 T3): phase 0B = the shared reset 0x6DE34, but phase 0x0B is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §4), so wiring it would be an un-dispatched/fake count; the slot stays NULL; the rows-27/29/2C precedent; OL-13"},
+    {0x0C, fifa96_match_phase_0C,
+     "FU-192 §2.5 (phase-17 T3): phase 0C = the ported native 0x6DF4C (0x6DF4C..0x6E001), the stateful restart-line timer ([rec+0x89] += [0x157A64] every call, then the 0x780/0xCC0 target writes past the 0x3C gate with the |word[rec+0x69]| < 0x20 refinement). The [rec+4]/0x157A38 table, the [rec+0x8A] angle term and the 0x8DCD4 metric are FU192-L1. Off-tape: tape-neutral"},
+    {0x0D, fifa96_match_phase_00,
+     "FU-192 §2.1 (phase-17 T3): phase 0D = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
+    {0x0E, NULL,
+     "FU-192 §1 (phase-17 T3): phase 0E = the shared reset 0x6DE34, but phase 0x0E is never written by an engine source (FU-191 §4); the slot stays NULL to avoid an un-dispatched/fake count; OL-13"},
+    {0x0F, fifa96_match_phase_00,
+     "FU-192 §2.1 (phase-17 T3): phase 0F = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
+    {0x10, NULL,
+     "FU-192 §2.6 (phase-17 T3): phase 10 = the native 0x6E004 (the 0x1105EA variant table) is PORTED (fifa96_match_phase_10) but NOT counted: phase 0x10 is never written by an engine source (the 9 match_run_write_phase call sites, FU-191 §4), so a wired row would never dispatch (the rows-27/29/2C precedent). The body is exported for direct unit testing; OL-13"},
+    {0x11, NULL,
+     "FU-192 §2.8/L6 (phase-17 T3): phase 11 = the native 0x6E1C8 (8-byte shim: EBX=-1, EDX=&rec+0x4D, falls into 0x6E1D0); under the walk ABI it is identical to rows 01/12 (the formation placement), so it is not wired (the R10 'do not double-wire'; FU192-L6/L7); OL-13"},
+    {0x12, NULL,
+     "FU-192 §2.9 (phase-17 T3): phase 12 = the native 0x6E1D0 (formation placement; see row 01) and phase 0x12 is never written by an engine source (FU-191 §4); not wired (FU192-L6/L7); OL-13"},
+    {0x13, NULL,
+     "FU-192 §2.10/L2 (phase-17 T3): phase 13 = the native 0x6E244 (0x6E244..0x6E32A), the camera-scatter body. LEGGED (R10): it consumes the PRNG 0x92AC8 twice per active record and reads 0x10F364/0x10F368, whose producer is the unported FUN_0008D098 case-0x13/0x14 scatter; wiring it is not proven tape-inert (owner FU192-L2). The slot stays NULL/uncounted; OL-13"},
+    {0x14, NULL,
+     "FU-192 §2.10/L2 (phase-17 T3): phase 14 = the native 0x6E244 (same as row 13). LEGGED (R10, on-tape 40 frames): the RNG consumption + the unported 0x10F364/0x10F368 producer (FU192-L2). The slot stays NULL/uncounted; OL-13"},
+    {0x15, fifa96_match_phase_02,
+     "FU-192 §2.11/R1 (phase-17 T3): phase 15 shares the T1 body 0x6DCC8 (0x110794[0x15] = 0x6DCC8). Wired by T3 after the writer-path cmp pin (T1 deliberately deferred it, ENGINE.md phase-17 T1): ON-TAPE (100 frames); dispatched-but-gated on the unported [rec+0xC] (FU192-L1), so the walk is a no-op on the tape"},
     {FIFA96_MATCH_PHASE_INT3_SLOT, NULL,
      "FU-137 §1.2: native 0x110794[0x16]=0 loader INT3 stub; no body by design; NOT_FOUND"},
     {0x17, NULL, "FU-137 §6: FU-136 phase 17: not ported; FU-83 timeline; OL-13"},

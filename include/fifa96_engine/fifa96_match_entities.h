@@ -170,6 +170,14 @@ struct fifa96_match_entity {
    * §7 / the phase-16 row-0x16 W9 precedent). A fixture stages a byte pair to
    * exercise the body's arithmetic directly. `NULL` always means "unported". */
   const int8_t *phase_meta;  /* native [rec+0xC] */
+  /* FU-192 §2.3/§2.4 (M2 phase-17 T3): the per-record metadata pointers the
+   * phase bodies `0x6DD9C` (row 06) and `0x6DE44` (rows 03/04/07) index. The
+   * native sources are the OL-13 loader metadata (R44/T2, FU192-L1); the pool
+   * has no producer, so the live walk leaves both NULL and their bodies are
+   * dispatched-but-gated no-ops. A fixture stages a value to exercise the
+   * bodies' arithmetic directly. `NULL` always means "unported". */
+  const int32_t *phase_meta10; /* native [rec+0x10] (row 06, dword pairs) */
+  const int32_t *phase_meta14; /* native [rec+0x14] (rows 03/04/07, dword pairs) */
 };
 
 struct fifa96_match_team {

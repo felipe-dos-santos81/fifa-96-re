@@ -1291,7 +1291,8 @@
  * What v16 pins at the spec §5 sequence points:
  *   1. The census shape (T1–T5): the acceptance cross-check `run_census_riders`
  *      asserts the exact wired counts (31 action + the phase rows
- *      0x18/0x19/0x1F = the v16 base; phase-17 T1 adds row 0x02 → 35/80 = 43%)
+ *      0x18/0x19/0x1F = the v16 base; phase-17 T1 adds row 0x02 → 35/80 = 43%;
+ *      phase-17 T3 adds the per-record cohort → 48/80 = 60%, recorded errata)
  *      and every phase-16 slot (0x14/0x16/0x1C
  *      wired; 0x03/0x0D/0x17/0x1A/0x22/0x24 NULL), so a silent re-wire, an
  *      un-census or a slot flip fails the tape, not only the handler unit
@@ -2756,19 +2757,45 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T5): the exact wired counts and the phase-15/16
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 35/80 = 43% (31 action + the phase rows
-   *    0x18/0x19/0x1F + the phase-17 T1 row 0x02). */
+   *    the handler unit tests. 48/80 = 60% (31 action + the phase rows
+   *    0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the phase-17 T3 per-record
+   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0D/0x0F/0x15). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 4u);   /* 35/80 = 43% */
+    assert(action_wired == 31u && phase_wired == 17u);  /* 48/80 = 60% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
     assert(fifa96_match_phase_table[0x02].fn != NULL);  /* phase-17 T1: the 0x6DCC8 per-record row */
+    /* phase-17 T3: the per-record cohort (shared reset 0x6DE34 rows 00/0A/0D/0F;
+     * 0x6DE44 rows 03/04/07; 0x6DD9C row 06; 0x6DD6C rows 08/09; 0x6E05C row 05;
+     * 0x6DF4C row 0C; the shared 0x6DCC8 row 15). */
+    assert(fifa96_match_phase_table[0x00].fn != NULL);
+    assert(fifa96_match_phase_table[0x03].fn != NULL);
+    assert(fifa96_match_phase_table[0x04].fn != NULL);
+    assert(fifa96_match_phase_table[0x05].fn != NULL);
+    assert(fifa96_match_phase_table[0x06].fn != NULL);
+    assert(fifa96_match_phase_table[0x07].fn != NULL);
+    assert(fifa96_match_phase_table[0x08].fn != NULL);
+    assert(fifa96_match_phase_table[0x09].fn != NULL);
+    assert(fifa96_match_phase_table[0x0A].fn != NULL);
+    assert(fifa96_match_phase_table[0x0C].fn != NULL);
+    assert(fifa96_match_phase_table[0x0D].fn != NULL);
+    assert(fifa96_match_phase_table[0x0F].fn != NULL);
+    assert(fifa96_match_phase_table[0x15].fn != NULL);
+    /* the not-written / double-wire / RNG rows stay NULL (T3). */
+    assert(fifa96_match_phase_table[0x01].fn == NULL);  /* formation placement (L7) */
+    assert(fifa96_match_phase_table[0x0B].fn == NULL);  /* never written */
+    assert(fifa96_match_phase_table[0x0E].fn == NULL);  /* never written */
+    assert(fifa96_match_phase_table[0x10].fn == NULL);  /* never written (body ported) */
+    assert(fifa96_match_phase_table[0x11].fn == NULL);  /* 0x6E1D0 shim (L6) */
+    assert(fifa96_match_phase_table[0x12].fn == NULL);  /* formation + never written */
+    assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
+    assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x20].fn == NULL);  /* T4: ported, situation-0 producer absent (FU188-L1) */
     assert(fifa96_match_action_table[0x16].fn != NULL); /* T4: fouled-player face-the-ball (counted) */
     assert(fifa96_match_action_table[0x24].fn == NULL); /* T4: ported, phase-0x20 producer absent (FU188-L1) */
@@ -2979,6 +3006,50 @@ static void run_phase17_t2_riders(void) {
   }
 }
 
+/* v17 (M2 phase-17 T3): the per-record phase-cohort dormancy pin. The seven
+ * new bodies are ported; the on-tape rows (0x00 reset, 0x04 the gated 0x6DE44,
+ * 0x15 the shared 0x6DCC8) dispatch but are render-invisible (targets are
+ * render-invisible, and the metadata-gated bodies are no-ops with the unported
+ * NULL pointers), so the M2 bytes stay `7b4b241a…`. Pure C state, ISO-
+ * independent, prints nothing. */
+static void run_phase17_t3_riders(void) {
+  /* 1. The reset row (0x00) copies the position into the target per record. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    struct fifa96_match_entity *e = &mr.entities.team[0].records[3];
+    e->team = 0;
+    e->pos_x = 0x111; e->pos_y = 0x222; e->pos_z = -0x333;
+    e->target_x = 0; e->target_y = 0; e->target_z = 0;
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x00u, e, -1) == FIFA96_OK);
+    assert(e->target_x == 0x111 && e->target_y == 0x222 && e->target_z == -0x333);
+  }
+  /* 2. The on-tape gated bodies (0x02/0x04/0x15) are dispatched-but-gated
+   *    with the unported NULL metadata: the target is untouched. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    struct fifa96_match_entity *e = &mr.entities.team[0].records[1];
+    e->team = 0;
+    e->target_x = 7; e->target_y = 8; e->target_z = 9;
+    e->phase_meta = NULL; e->phase_meta14 = NULL;
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x02u, e, -1) == FIFA96_OK);
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x04u, e, -1) == FIFA96_OK);
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x15u, e, -1) == FIFA96_OK);
+    assert(e->target_x == 7 && e->target_y == 8 && e->target_z == 9);
+  }
+  /* 3. The RNG/formation rows stay NULL: the walk dispatches nothing. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_phase_table[0x13].fn == NULL);
+    assert(fifa96_match_phase_table[0x14].fn == NULL);
+    assert(fifa96_match_phase_table[0x01].fn == NULL);
+    assert(fifa96_match_phase_table[0x11].fn == NULL);
+    assert(fifa96_match_phase_table[0x10].fn == NULL);
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -3010,6 +3081,7 @@ int main(void) {
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();
+  run_phase17_t3_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
