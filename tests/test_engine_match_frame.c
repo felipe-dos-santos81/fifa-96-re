@@ -663,6 +663,42 @@ static void test_phase_drive_situation8_selects_act7(void) {
   assert(mr.act.stage == 1u);          /* arm 0 ran + advanced on the dispatch frame */
 }
 
+/* FU-224 §4.3 (M2 phase-21 T3): the disclosed match-config-default stand-in for
+ * the two live cells whose front-end producers are unreachable — 0x38990
+ * ([0x157AC2] := 4) and 0x389A4 ([0x157AC0] := 1). Both are reached only through
+ * FUN_00038630 case 0x13 <- FUN_00039054 (gated on [0x105FFC] in {5,7}) <-
+ * FUN_000493A0, and the ported front-end models neither [0x105FFC] nor
+ * DAT_0014B018, so they stay unported legs (FU224-L1/L2). The faithful engine
+ * form is the native BSS default: `fifa96_match_run_init`/`_begin` stage both
+ * cells zero and let the in-match clock roll + score tie-break produce them.
+ * No producer is faked. Mutation-RED: seeding a non-zero stand-in aborts. */
+static void test_roll_flag_staged_zero(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(mr.global_157ac2 == 0u);   /* [0x157AC2], FU-224 §1.1 (FE 0x38990 unreachable) */
+  assert(mr.global_157ac0 == 0u);   /* [0x157AC0], FU-224 §1.1 (FE 0x389A4 unreachable) */
+}
+
+/* FU-224 §3.1/§3.2 (M2 phase-21 T3): on a staged extra-time-2 completion
+ * (`state.period = 4`; completed index 3) with DIFFERING scores, the live clock
+ * raises the OL-85 flag [0x157AC0] (W4 0x8B3A2) and the period-index roll
+ * [0x157AC2] := state.period (0x8B58A) lands on 4. Mutation-RED: a wrong roll
+ * (or dropping W4) fails the two assertions. The tied counterpart (flag stays
+ * clear at period 4) is the existing test_phase_drive_situation8_selects_act7. */
+static void test_phase_drive_roll4_flag_differing(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 4;                 /* completed index 3; past half-time */
+  mr.state.phase = 2;                  /* class 1: the clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;                    /* differing -> W4 raises the flag */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac2 == 4u);      /* the roll (match_run.c:2643) */
+  assert(mr.global_157ac0 == 1u);      /* the OL-85 flag (match_run.c:2618, differing) */
+}
+
 /* FU-209 §6.4 / FU-219 (M2 phase-19 T2): the registered phase-0x1D slot runs the
  * ported act-7 body end-to-end on a live situation-8. The selection installs act
  * 7 and, per FU-219 (the native `0x8AEAE MOV EBX,1`), invokes it now — arm 0 runs
@@ -5742,6 +5778,8 @@ int main(void) {
   test_phase_drive_extra_time_tiebreak();
   test_phase_drive_period4_skip_and_w5();
   test_phase_drive_situation8_selects_act7();
+  test_roll_flag_staged_zero();
+  test_phase_drive_roll4_flag_differing();
   test_situation8_dispatches_phase_1d_body();
   test_phase_drive_begun_end_resets_phase();
   test_kickoff_enters_phase2_when_cutscene_isolated();
