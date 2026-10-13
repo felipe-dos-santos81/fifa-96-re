@@ -888,6 +888,11 @@ struct fifa96_match_run {
   uint64_t dispatched_ok;
   struct fifa96_match_run_render render;         /* Task 15 presentation state */
   void *stage_owner;                             /* Task 2 staging arena (owned) */
+  /* FU-199 §7.2 (M2 phase-18 T1): the owned decoded `.fmt` family blobs the
+   * OL-13 metadata bind keeps alive for the run — the record `phase_meta`/
+   * `phase_meta10`/`phase_meta14` pointers index into it. Freed by end (and by
+   * a re-bind); assigned NULL by init (init accepts uninitialized memory). */
+  void *meta_owner;
 };
 
 /* Zero-init a run: lifecycle, pace, match state (clock and score pair), input

@@ -480,3 +480,51 @@ FU-175, FU-177 §2/§3/§7, FU-181, FU-183, FU-190, FU-191 §6, FU-192 §1/§3/�
 FU-193..FU-198. AGENTS.md census rule. The alias traps
 (`[0x157A49]>>24` = `[0x157A4C]`; `[0x14C1E4]` = `(&0x14302A)[team*0x49]`) are
 applied. No writes beyond this slice file and the workspace report.
+
+---
+
+## 11. Status (M2 phase-18 T1, 2026-10-12) — landed
+
+The §7.2 rec is landed. **The engine metadata representation** is
+`fifa96_match_entities_bind_record_meta` (`include/fifa96_engine/
+fifa96_match_entities.h` + `.c`): per record of a team it stages
+`phase_meta`/`phase_meta10`/`phase_meta14` (`[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]`)
+at `idx = (int8_t)byte[rec+0x8D]` (the pool `active`) with the native strides
+`idx*0x256` bytes / `idx*2` dwords (native 8 bytes) / `idx*0x256` dwords (native
+`0x958` bytes); a NULL blob clears the pointer (the native gate). **The loader**
+is `match_run_record_meta_bind` (`src/fifa96_engine/fifa96_match_run.c`): it
+decodes the GAMEART0 bank (`match_stage_container` + `fifa96_bigf_parse`), finds
+the formation id's `.fmt` family by name (`match_formation_family`: for id 0
+`352pl.fmt`/`352pk.fmt`/`freekick.fmt`; fresh `read_memory 0x107370`/`0x101A30`
+this wave — every 6-name group is {ko,pl,pk,ps,freekick,sp}, slot 4 the shared
+`0x101A50` "freekick"), copies the blobs into `mr->meta_owner` (the pool-handled
+owner) and calls the bind. It soft-fails (pointers stay NULL) with no assets/ISO
+or a missing family entry — the pre-T1 gated no-op.
+
+**Placement (erratum to §7.2).** The bind is the **last** begin step, **after**
+the derived front-end screen install (`fifa96_match_run_screen_install`). The
+native `FUN_0007412C → FUN_0008CE78 → FUN_0006D9C4 → FUN_0006D920` bind belongs
+to the match begin, while the engine models the front-end match-screen install
+(`FUN_00092D8C`, which writes phase 0x15, FU-170 §7) as a begin step. Binding
+after it keeps that derived front-end walk metadata-free (the native front-end
+precedes the bind). §7.2's "alongside `match_run_formation_seed`" placement
+(before the derived screen install) would let that derived phase-0x15 write run
+the walk with the metadata bound — a derived-ordering artifact, not a native
+effect (measured: it moved the whole M2 transcript from frame 12; the corrected
+placement is byte-identical).
+
+**Tape (§8).** The landed bind is **M2 byte-identical** (`7b4b241a…`, 792 lines,
+`cmp` clean); **no re-pin**. The on-tape rows DO run — the `0x6DCC8` body was
+measured firing at frames 209/766 (phase 2) and 363 (phase 0x15) — yet the
+presented frames are unchanged, so §8's "NOT dormant" concern is resolved by
+measurement: those target writes are render-invisible on this tape. M1
+`09b726b7…` unmoved. **Census: `48/80 = 60%`** — the eight rows
+(`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/`0x08`/`0x09`/`0x15`) were already
+wired/counted; T1 makes them perform their native work (fidelity, not a count).
+**Legs:** FU199-L1..L7 stand; the residual half is FU200-L3 (the
+`0x1577DE`/`0x157754`/`0x1577D6/D8` index selectors, staged 0).
+
+Provenance (this status): engine source read first-hand
+(`fifa96_match_entities.{c,h}`, `fifa96_match_run.{c,h}`, `fifa96_scene.{c,h}`);
+the blob bytes from the first-hand GAMEART0.PVI decode; the Ghidra MCP
+`read_memory 0x107370`/`0x101A30` above. No `/FIFA96.EXE` writes.

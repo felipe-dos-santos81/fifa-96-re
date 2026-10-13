@@ -168,21 +168,26 @@ struct fifa96_match_entity {
   int32_t place_x, place_y, place_z;
   int8_t place_offset_x; /* caller-supplied 0x10F334[type8] */
   int8_t place_offset_z; /* caller-supplied 0x10F33C[type8] */
-  /* FU-191 §6 / FU-192 §3 (M2 phase-17 T1): the native record `[rec+0xC]` —
-   * the per-record direction-byte pair the phase handler `0x6DCC8` (phase rows
-   * `0x02`/`0x15`) indexes and scales (FU-198 §5.1). The native pointer is
-   * staged by `FUN_0006D920` from `FUN_0004C384(anim*6+1) + [rec+0x8D]>>24 *
-   * 0x256`; that loader metadata source is unported (OL-13 / FU192-L1), so the
-   * live walk leaves this NULL and `0x6DCC8` is dispatched-but-gated (FU-177
-   * §7 / the phase-16 row-0x16 W9 precedent). A fixture stages a byte pair to
-   * exercise the body's arithmetic directly. `NULL` always means "unported". */
+  /* FU-191 §6 / FU-192 §3 + FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the
+   * native record `[rec+0xC]` — the per-record direction-byte pair the phase
+   * handler `0x6DCC8` (phase rows `0x02`/`0x15`) indexes and scales (FU-198
+   * §5.1). The native pointer is staged at match begin by `FUN_0006D920` (via
+   * `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4`) from
+   * `FUN_0004C384(form*6+1) + (int8)byte[rec+0x8D] * 0x256`, keyed by the
+   * formation id. The engine now stages it live via
+   * `fifa96_match_entities_bind_record_meta` (the `match_run_record_meta_bind`
+   * caller); an unset pointer (no assets, or an unbound record) still makes the
+   * body a documented dispatched-but-gated no-op (FU-177 §7). A fixture may
+   * stage a byte pair to exercise the arithmetic directly. `NULL` means
+   * "unbound". */
   const int8_t *phase_meta;  /* native [rec+0xC] */
-  /* FU-192 §2.3/§2.4 (M2 phase-17 T3): the per-record metadata pointers the
-   * phase bodies `0x6DD9C` (row 06) and `0x6DE44` (rows 03/04/07) index. The
-   * native sources are the OL-13 loader metadata (R44/T2, FU192-L1); the pool
-   * has no producer, so the live walk leaves both NULL and their bodies are
-   * dispatched-but-gated no-ops. A fixture stages a value to exercise the
-   * bodies' arithmetic directly. `NULL` always means "unported". */
+  /* FU-192 §2.3/§2.4 + FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the
+   * per-record metadata pointers the phase bodies `0x6DD9C` (row 06) and
+   * `0x6DE44` (rows 03/04/07) index. The native sources are the OL-13 `.fmt`
+   * family (`FUN_0004C384(form*6+2)` stride 8 and `FUN_0004C384(form*6+4)`
+   * stride 0x958); the engine stages both live through the same
+   * `fifa96_match_entities_bind_record_meta` bind. An unset pointer is the
+   * documented gate. `NULL` means "unbound". */
   const int32_t *phase_meta10; /* native [rec+0x10] (row 06, dword pairs) */
   const int32_t *phase_meta14; /* native [rec+0x14] (rows 03/04/07, dword pairs) */
 };
@@ -487,6 +492,24 @@ const char *fifa96_match_formation_fmt_name(uint8_t id);
 int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
                                          const fifa96_scene_formation *formation,
                                          uint8_t controlled_side);
+
+/* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the per-record OL-13 metadata bind
+ * — the engine mirror of the native `FUN_0006D920` (entered at match begin by
+ * `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920`). For every
+ * record of `team` it stages the three resource pointers keyed by the record's
+ * active index `idx = (int8_t)byte[rec+0x8D]` (the pool's `active`):
+ *   `[rec+0xC]`  = `pl + idx*0x256`  (the `form*6+1` `.fmt` blob, 598 B/record)
+ *   `[rec+0x10]` = `pk + idx*2`      (the `form*6+2` blob, 2 dwords/record,
+ *                                    native stride 8 bytes)
+ *   `[rec+0x14]` = `fk + idx*0x256`  (the `form*6+4` freekick blob, 2392 B
+ *                                    = 0x958/4 dwords, per record)
+ * A NULL blob leaves that pointer NULL (the native body's structural gate).
+ * `pl` is a byte pair (`const int8_t *`); `pk`/`fk` are dword-pair blocks, so
+ * their typed strides are 2 and 0x256 dwords. NULL `pool` or `team >= 2` ->
+ * -FIFA96_ERR_INVALID; otherwise FIFA96_OK. */
+int fifa96_match_entities_bind_record_meta(struct fifa96_match_entities *pool,
+                                           uint32_t team, const int8_t *pl,
+                                           const int32_t *pk, const int32_t *fk);
 
 /* The derived kickoff placement pass, reproducing `FUN_00088DC8` stage 0 ->
  * `FUN_00073E08`:

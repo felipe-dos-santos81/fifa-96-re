@@ -957,6 +957,54 @@ static void test_seed_formation_targets(void) {
   assert(fifa96_match_entities_seed_formation(&pool, NULL, 0) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the per-record OL-13 metadata bind
+ * (`FUN_0006D920` mirror). Each record's three pointers are staged by
+ * `idx = (int8)byte[rec+0x8D]` (the pool `active`): `[rec+0xC]` (phase_meta)
+ * stride 0x256 bytes, `[rec+0x10]` (phase_meta10) stride 2 dwords (native 8
+ * bytes) and `[rec+0x14]` (phase_meta14) stride 0x256 dwords (native 0x958
+ * bytes). A NULL blob clears its pointer (the native gate); an out-of-range
+ * team / NULL pool is rejected. */
+static void test_bind_record_meta_strides(void) {
+  struct fifa96_match_entities pool;
+  static int8_t pl[FIFA96_MATCH_ENTITY_RECORDS * 0x256];
+  static int32_t pk[FIFA96_MATCH_ENTITY_RECORDS * 2];
+  static int32_t fk[FIFA96_MATCH_ENTITY_RECORDS * 0x256];
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  pl[0] = 11;
+  pl[0x256] = 22;
+  pk[0] = 0x11223344;
+  pk[2] = 0x55667788;
+  fk[0] = (int32_t)0xAABBCCDDu;
+  fk[0x256] = 0x01020304;
+  assert(fifa96_match_entities_bind_record_meta(&pool, TEAM0, pl, pk, fk) == FIFA96_OK);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &pool.team[TEAM0].records[i];
+    assert(e->phase_meta == pl + i * 0x256);
+    assert(e->phase_meta10 == pk + i * 2);
+    assert(e->phase_meta14 == fk + i * 0x256);
+  }
+  /* the native per-record read lands the bound bytes/dwords */
+  assert(pool.team[TEAM0].records[0].phase_meta[0] == 11);
+  assert(pool.team[TEAM0].records[1].phase_meta[0] == 22);
+  assert(pool.team[TEAM0].records[0].phase_meta10[0] == 0x11223344);
+  assert(pool.team[TEAM0].records[1].phase_meta10[0] == 0x55667788);
+  assert((uint32_t)pool.team[TEAM0].records[0].phase_meta14[0] == 0xAABBCCDDu);
+  assert(pool.team[TEAM0].records[1].phase_meta14[0] == 0x01020304);
+  /* only the named team is bound */
+  assert(pool.team[TEAM1].records[0].phase_meta == NULL);
+  assert(pool.team[TEAM1].records[0].phase_meta14 == NULL);
+  /* NULL blobs clear the pointers (the gate); guards */
+  assert(fifa96_match_entities_bind_record_meta(&pool, TEAM0, NULL, NULL, NULL) ==
+         FIFA96_OK);
+  assert(pool.team[TEAM0].records[3].phase_meta == NULL);
+  assert(pool.team[TEAM0].records[3].phase_meta10 == NULL);
+  assert(pool.team[TEAM0].records[3].phase_meta14 == NULL);
+  assert(fifa96_match_entities_bind_record_meta(NULL, TEAM0, pl, pk, fk) ==
+         -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_bind_record_meta(&pool, 2u, pl, pk, fk) ==
+         -FIFA96_ERR_INVALID);
+}
+
 /* ISO fixture: the real GAMEART0.PVI contains `352ko.fmt` as its first BIGF
  * entry; the loader must parse it and the seed must reproduce the first-hand
  * kickoff positions. Skips without the ISO (the house convention). */
@@ -1170,6 +1218,7 @@ int main(void) {
   test_ball_state_roundtrip();
   test_place_commits_target();
   test_seed_formation_targets();
+  test_bind_record_meta_strides();
   test_formation_iso_fixture();
   test_kickoff_place_commits_records_and_ball();
   test_kickoff_place_face_and_selector();

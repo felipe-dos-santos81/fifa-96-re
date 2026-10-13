@@ -1971,6 +1971,29 @@ static void match_run_release_stage(struct fifa96_match_run *mr) {
   mr->render.palette_ready = 0;
 }
 
+/* FU-199 §7.2 (M2 phase-18 T1): drop the OL-13 metadata — clear every record's
+ * `phase_meta`/`phase_meta10`/`phase_meta14` (so a stale pointer never outlives
+ * its owner) and free the owned `.fmt` family blobs. Idempotent; the pool must
+ * be initialized (begin/end call it only after fifa96_match_entities_init). */
+static void match_run_release_meta(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
+      e->phase_meta = NULL;
+      e->phase_meta10 = NULL;
+      e->phase_meta14 = NULL;
+    }
+  }
+  free(mr->meta_owner);
+  mr->meta_owner = NULL;
+}
+
+/* FU-199 §7.2 (M2 phase-18 T1): the match-begin OL-13 metadata producer,
+ * defined next to `match_stage_container` (which it reuses); forward-declared
+ * for the `fifa96_match_run_begin` call. */
+static int match_run_record_meta_bind(struct fifa96_match_run *mr);
+
 void fifa96_match_run_init(struct fifa96_match_run *mr) {
   if (!mr) return;
   fifa96_match_lifecycle_init(&mr->lc);
@@ -2003,6 +2026,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->steps = 0;
   mr->running = 0;
   mr->stage_owner = NULL;
+  mr->meta_owner = NULL;   /* FU-199 §7.2: no OL-13 metadata loaded yet */
   memset(&mr->record, 0, sizeof mr->record);
   memset(&mr->celebration, 0, sizeof mr->celebration); /* FU-184 row-0x14 scatter */
   (void)fifa96_match_entities_init(&mr->entities);
@@ -2345,6 +2369,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     mr->phase_machine.state = pm_state_before;
     mr->phase_machine.phase = pm_phase_before;
   }
+  /* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the OL-13 metadata bind — the
+   * native `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920`
+   * producer. Stages each record's `[rec+0xC]/[rec+0x10]/[rec+0x14]` pointers
+   * into the formation id's `.fmt` family (the `352pl`/`352pk`/`freekick` blobs
+   * of GAMEART0, FU-199 §5.1 / FU-200 §2), opening the `phase_meta` NULL gate
+   * for the per-record phase bodies (rows 0x02/0x03/0x04/0x06/0x07/0x08/0x09/
+   * 0x15). Soft-fails (pointers stay NULL) with no assets/ISO or a missing
+   * family entry — the pre-T1 gated no-op. */
+  (void)match_run_record_meta_bind(mr);
   return 0;
 }
 
@@ -4013,6 +4046,7 @@ int fifa96_match_run_end(struct fifa96_match_run *mr) {
   int rc = fifa96_match_lifecycle_end(&mr->lc, &mr->pace);
   struct fifa96_engine *eng = mr->engine;
   match_run_release_stage(mr);
+  match_run_release_meta(mr);   /* FU-199 §7.2: drop the owned `.fmt` blobs */
   mr->running = 0;
   if (eng) {
     if (eng->match == mr) eng->match = NULL;
@@ -5007,6 +5041,102 @@ static int match_stage_container(const uint8_t *file, size_t file_len, uint8_t *
     return 0;
   }
   return -1;
+}
+
+/* FU-199 §5.1 / §7.2 + FU-200 §1/§2 (M2 phase-18 T1): the OL-13 metadata bind.
+ *
+ * The native match begin `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 ->
+ * FUN_0006D920` stages each record's `[rec+0x8/+0xC/+0x10/+0x14]` from the
+ * formation id's `.fmt` family: `FUN_0004C384(form*6 + {0,1,2,4})`, the loaded
+ * GAMEART0 resource pointers. `FUN_0004A6BC` fills `DAT_0014BFC0` by
+ * `sprintf("%s.fmt", table[k])` over the 0x107370 loader name table (fresh
+ * `read_memory 0x107370`/`0x101A30` this slice: every 6-name group is
+ * {ko,pl,pk,ps,freekick,sp}, and slot 4 is the shared `0x101A50` "freekick").
+ * So the writer reads the ko/pl/pk/freekick files; only the three non-ko blobs
+ * feed the pooled `phase_meta`/`phase_meta10`/`phase_meta14` fields (the ko
+ * file is the by-value formation seed's). */
+#define MATCH_RUN_META_PL_STRIDE 0x256u   /* 598 B/record -> [rec+0xC] */
+#define MATCH_RUN_META_PK_STRIDE 8u       /* 2 dwords/record -> [rec+0x10] */
+#define MATCH_RUN_META_FK_STRIDE 0x958u   /* 2392 B/record -> [rec+0x14] */
+#define MATCH_RUN_META_PL_BYTES \
+  (FIFA96_MATCH_ENTITY_RECORDS * MATCH_RUN_META_PL_STRIDE)
+/* The pk segment is dword-addressed (phase_meta10 is `const int32_t *`), so
+ * pad the byte segment to a 4-byte boundary (11*0x256 = 6578 -> 6580). */
+#define MATCH_RUN_META_PL_PAD ((MATCH_RUN_META_PL_BYTES + 3u) & ~3u)
+#define MATCH_RUN_META_PK_BYTES \
+  (FIFA96_MATCH_ENTITY_RECORDS * MATCH_RUN_META_PK_STRIDE)
+#define MATCH_RUN_META_FK_BYTES \
+  (FIFA96_MATCH_ENTITY_RECORDS * MATCH_RUN_META_FK_STRIDE)
+#define MATCH_RUN_META_SIDE_BYTES \
+  (MATCH_RUN_META_PL_PAD + MATCH_RUN_META_PK_BYTES + MATCH_RUN_META_FK_BYTES)
+
+/* The 0x107370 `.fmt` family names (slots 1, 2, 4) per formation id. */
+static const char *const match_formation_family[5][3] = {
+    {"352pl.fmt", "352pk.fmt", "freekick.fmt"},
+    {"442pl.fmt", "442pk.fmt", "freekick.fmt"},
+    {"swpl.fmt", "swpk.fmt", "freekick.fmt"},
+    {"424pl.fmt", "424pk.fmt", "freekick.fmt"},
+    {"433pl.fmt", "433pk.fmt", "freekick.fmt"},
+};
+
+/* Copy the leading `need` bytes of the named BIGF entry into `dst`. Returns 0 on
+ * success, -1 when the entry is absent or shorter than `need`. */
+static int match_run_meta_copy(const struct fifa96_bigf_info *info, const char *name,
+                               uint8_t *dst, size_t need) {
+  for (size_t i = 0; i < info->count; i++) {
+    uint32_t off = 0;
+    uint32_t size = 0;
+    const char *entry = NULL;
+    if (fifa96_bigf_record(info, i, &off, &size, &entry) != FIFA96_OK) return -1;
+    if (entry && strcmp(entry, name) == 0) {
+      if (size < need) return -1;
+      memcpy(dst, info->src + off, need);
+      return 0;
+    }
+  }
+  return -1;
+}
+
+static int match_run_record_meta_bind(struct fifa96_match_run *mr) {
+  uint8_t *bytes = NULL;
+  size_t len = 0;
+  uint8_t *container = NULL;
+  size_t container_len = 0;
+  uint8_t *owner = NULL;
+  int bound = 0;
+  match_run_release_meta(mr);   /* clear the pool + free any prior blobs */
+  if (!mr->engine || !mr->engine->assets) return 0;
+  if (fifa96_asset_read(mr->engine->assets, MATCH_RUN_FORMATION_BANK, &bytes, &len) !=
+      FIFA96_OK)
+    return 0;
+  if (match_stage_container(bytes, len, &container, &container_len) != 0) goto out;
+  struct fifa96_bigf_info info;
+  if (fifa96_bigf_parse(container, container_len, &info) != FIFA96_OK) goto out;
+  owner = calloc(FIFA96_MATCH_ENTITY_TEAMS, MATCH_RUN_META_SIDE_BYTES);
+  if (!owner) goto out;
+  for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
+    uint8_t *pl = owner + (size_t)side * MATCH_RUN_META_SIDE_BYTES;
+    uint8_t *pk = pl + MATCH_RUN_META_PL_PAD;
+    uint8_t *fk = pk + MATCH_RUN_META_PK_BYTES;
+    uint8_t id = mr->formation[side];   /* native (int8)byte[[team+0x7AE]] */
+    if (id > 4u) goto out;              /* hardened (native has no range check) */
+    const char *const *family = match_formation_family[id];
+    if (match_run_meta_copy(&info, family[0], pl, MATCH_RUN_META_PL_BYTES) != 0) goto out;
+    if (match_run_meta_copy(&info, family[1], pk, MATCH_RUN_META_PK_BYTES) != 0) goto out;
+    if (match_run_meta_copy(&info, family[2], fk, MATCH_RUN_META_FK_BYTES) != 0) goto out;
+    (void)fifa96_match_entities_bind_record_meta(&mr->entities, side,
+                                                 (const int8_t *)pl,
+                                                 (const int32_t *)pk,
+                                                 (const int32_t *)fk);
+  }
+  mr->meta_owner = owner;   /* hand the blobs to the run */
+  owner = NULL;
+  bound = 1;
+out:
+  free(owner);
+  free(container);
+  fifa96_asset_free(bytes);
+  return bound;
 }
 
 /* Decode one BIGF entry to a SHPI image. `entry_len` is the entry's bounded

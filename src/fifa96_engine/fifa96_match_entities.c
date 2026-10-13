@@ -360,6 +360,28 @@ int fifa96_match_entities_seed_formation(struct fifa96_match_entities *pool,
   return FIFA96_OK;
 }
 
+/* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the per-record OL-13 metadata bind
+ * (`FUN_0006D920` mirror). The native writes `[rec+0x8/+0xC/+0x10/+0x14]` from
+ * `FUN_0004C384(form*6 + {0,1,2,4}) + idx*stride` with
+ * `idx = (int8)byte[rec+0x8D]`; the pool models only the three non-`[rec+8]`
+ * pointers (`phase_meta`/`phase_meta10`/`phase_meta14`), so this stages those
+ * three. Strides: 0x256 bytes (598) for the `pl` byte blob, 8 bytes (2 dwords)
+ * for the `pk` blob and 0x958 bytes (0x256 dwords) for the `fk` blob. A NULL
+ * blob clears the pointer (the native gate). */
+int fifa96_match_entities_bind_record_meta(struct fifa96_match_entities *pool,
+                                           uint32_t team, const int8_t *pl,
+                                           const int32_t *pk, const int32_t *fk) {
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    struct fifa96_match_entity *e = &pool->team[team].records[i];
+    int32_t idx = (int32_t)(int8_t)e->active;      /* native MOVSX byte[rec+0x8D] */
+    e->phase_meta = pl ? pl + idx * 0x256 : NULL;
+    e->phase_meta10 = pk ? pk + idx * 2 : NULL;    /* 8 bytes = 2 dwords */
+    e->phase_meta14 = fk ? fk + idx * 0x256 : NULL; /* 0x958 bytes / 4 */
+  }
+  return FIFA96_OK;
+}
+
 /* FU-148 §3 (S4): the formation layout table 0x11033A (5 rows x 0x1D,
  * first-hand read_memory): row byte 0 = the id, then 4 x 7-byte blocks
  * {role, count, slots[5]} (0xFF padding). */

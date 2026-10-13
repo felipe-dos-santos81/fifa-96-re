@@ -2558,6 +2558,27 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
         for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
           assert(e->match_run.entities.team[t].records[i].active == (uint8_t)i);
+      /* v18 (M2 phase-18 T1): the OL-13 metadata bind landed at begin — every
+       * record carries the `[rec+0xC]/[rec+0x10]/[rec+0x14]` pointers into the
+       * formation id's `.fmt` family (FU-199 §7.2 / FU-200 §1), with the native
+       * per-record strides idx*0x256 (bytes), idx*2 (dwords) and idx*0x256
+       * (dwords, native 0x958 bytes). The pointers being non-NULL opens the
+       * phase-body gates (rows 0x02/0x03/0x04/0x06/0x07/0x08/0x09/0x15). ISO
+       * only: without the GAMEART0 assets the bind soft-fails and the pointers
+       * stay NULL (the pre-T1 gated no-op). */
+      if (with_iso) {
+        for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+          const struct fifa96_match_entity *r0 = &e->match_run.entities.team[t].records[0];
+          assert(r0->phase_meta != NULL && r0->phase_meta10 != NULL && r0->phase_meta14 != NULL);
+          for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+            const struct fifa96_match_entity *ri =
+                &e->match_run.entities.team[t].records[i];
+            assert(ri->phase_meta - r0->phase_meta == i * 0x256);
+            assert(ri->phase_meta10 - r0->phase_meta10 == i * 2);
+            assert(ri->phase_meta14 - r0->phase_meta14 == i * 0x256);
+          }
+        }
+      }
       /* v6 (S3/FU-146): begin installed the goal-screen consumer machine at
        * the derived leg 0/mode 0 with the session gate seeded 0 (FU-166/R14:
        * the settled ordinary-match value; byte 1 is the Practise session). */

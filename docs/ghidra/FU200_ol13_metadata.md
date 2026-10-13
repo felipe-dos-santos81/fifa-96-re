@@ -447,3 +447,41 @@ observations, 140..160 the v4.1 target-integration provenance). Docs cross-cited
 FU-89, FU-177, FU-190, FU-191, FU-192, FU-198; AGENTS.md census rule.
 
 No writes beyond this slice file and the workspace report.
+
+---
+
+## 10. Status (M2 phase-18 T1, 2026-10-12) — landed
+
+The writer `FUN_0006D920`'s pointer bind (§1/§2) is landed:
+`fifa96_match_entities_bind_record_meta` + `match_run_record_meta_bind`
+(FU-199 §11). The three non-`[rec+8]` pointers are staged from the real `.fmt`
+family (`352pl`/`352pk`/`freekick` for id 0). The gate is **not** removed — it
+stays the native NULL check (`handlers.c:4594`/`:4669`/`:4730`); the live path
+now supplies the pointer, so the eight rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/
+`0x08`/`0x09`/`0x15`) perform their native work when the assets load, and stay
+gated without them.
+
+- **FU200-L1 — resolved.** The pointer data is now loaded (the `.fmt` family
+  from GAMEART0 into `mr->meta_owner`); the bind is the loader-complete half.
+- **FU200-L2 — closed by measurement (for the M2 tape).** The on-tape rows
+  (`0x02`/`0x04`/`0x15`) DO execute with metadata (the `0x6DCC8` body measured
+  at frames 209/766/363), yet the M2 replay is **byte-identical** (`cmp` clean,
+  `7b4b241a…`) — the target write is render-invisible on the M2 tape, so **no
+  re-pin**. §6's "not proven render-invisible" is resolved: it *is* inert here.
+- **FU200-L3 — stays a leg.** The `[0x1577DE]`/`[0x157754]`/`[0x1577D6]`/
+  `[0x1577D8]` index selectors are staged 0 (§3.5), so the bodies run at
+  sub-index 0 (`idx = 0`), not necessarily the native default. This is the
+  remaining second half.
+- **FU200-L4/L6/L7 stand** (the `0x6D870` cell-map arm; the `form*6+3` slot; the
+  `0x6D9C4` `[rec+0x90]` role byte). FU200-L5 (the phase-2 walk surface) stands.
+
+**Census unchanged: `48/80 = 60%`** (the eight rows were already wired/counted;
+this slice makes them perform their native work). Tests:
+`test_engine_match_entities::test_bind_record_meta_strides` (non-ISO strides/
+index), `test_engine_match_frame::test_record_meta_bind_live` (ISO, first-hand
+blob readback) and the M2 v18 metadata rider; mutation-RED = a wrong `pk` stride
+and a disabled bind each abort their test.
+
+Provenance (this status): engine source first-hand; the decoded GAMEART0.PVI
+entry names/sizes (`352pl.fmt` 6578 = 11×0x256, `352pk.fmt` 88 = 11×8,
+`freekick.fmt` 26312 = 11×0x958); no `/FIFA96.EXE` writes.

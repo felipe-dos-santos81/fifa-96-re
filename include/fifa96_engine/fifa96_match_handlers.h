@@ -105,9 +105,12 @@ int fifa96_match_dispatch_phase_record(struct fifa96_match_run *mr, uint8_t phas
  * `word[0x1577DE + side*4] >> 16`; else `edge`), and writes the target triple
  * `rec+0x4D/+0x51/+0x55` = `(int16)(byte0 * +-0x26)`, `0`, `(int16)(byte1 *
  * +-0x21)`, sign-flipped when `[team+0x826] != 0` (FU-198 §5.1). The `[rec+0xC]`
- * source is the OL-13 loader metadata (unported, FU192-L1): an unset
- * `phase_meta` makes this a documented no-op on the live path (FU-177 §7
- * dispatched-but-gated). Returns FIFA96_OK, or -FIFA96_ERR_INVALID (NULL `mr`). */
+ * source is the OL-13 `.fmt` metadata; since FU-199 §7.2 / FU-200 §1 (M2
+ * phase-18 T1) the match-begin bind `fifa96_match_entities_bind_record_meta`
+ * stages it live, so the body does its native work on the live path. An unset
+ * `phase_meta` (no assets, or an unbound record) still makes this a documented
+ * no-op (FU-177 §7 dispatched-but-gated). Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID (NULL `mr`). */
 int fifa96_match_phase_02(struct fifa96_match_run *mr);
 
 /* FU-192 §2.1–§2.7 (M2 phase-17 T3): the remaining distinct per-record phase

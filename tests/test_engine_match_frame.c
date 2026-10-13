@@ -5362,6 +5362,41 @@ static void test_formation_producer(void) {
   assert(fifa96_match_formation_layout(0, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-199 §7.2 / FU-200 §1/§2 (M2 phase-18 T1): the match-begin OL-13 metadata
+ * bind. With the ISO the formation id 0 `.fmt` family loads from GAMEART0 and
+ * every record's `phase_meta`/`phase_meta10`/`phase_meta14` point at the
+ * 352pl/352pk/freekick blobs at the native per-record strides; the first-hand
+ * blob bytes are read back through the bound pointers. Skips without the ISO. */
+static void test_record_meta_bind_live(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  if (!t1_iso_available()) return;
+  f = make_fixture_iso(10000000ull);
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    const struct fifa96_match_entity *r0 = &mr.entities.team[t].records[0];
+    assert(r0->phase_meta != NULL);
+    assert(r0->phase_meta10 != NULL);
+    assert(r0->phase_meta14 != NULL);
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      const struct fifa96_match_entity *ri = &mr.entities.team[t].records[i];
+      assert(ri->phase_meta - r0->phase_meta == i * 0x256);
+      assert(ri->phase_meta10 - r0->phase_meta10 == i * 2);
+      assert(ri->phase_meta14 - r0->phase_meta14 == i * 0x256);
+    }
+  }
+  /* The id-0 bound blobs (first-hand GAMEART0.PVI decoded entries): 352pl.fmt
+   * starts `00 ae ...`, 352pk.fmt `00 00 a5 f5 ...`, freekick.fmt
+   * `c0 ff c0 f5 ...` — read back through record 0's native pointers. */
+  assert(mr.entities.team[0].records[0].phase_meta[0] == 0x00);
+  assert(mr.entities.team[0].records[0].phase_meta[1] == (int8_t)0xAE);
+  assert((uint32_t)mr.entities.team[0].records[0].phase_meta10[0] == 0xF5A50000u);
+  assert((uint32_t)mr.entities.team[0].records[0].phase_meta14[0] == 0xF5C0FFC0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-148 §4.2 (S4): the per-entity translation install through the pool seam.
  * With a staged pool (partition of a caller buffer), the non-kit path copies
  * the entity slot verbatim (0xCE980's 0x40 dwords); the kit path
@@ -5498,6 +5533,7 @@ int main(void) {
   test_ball_receive_low_ball_no_follow();
   test_ball_receive_skip_rule();
   test_formation_producer();
+  test_record_meta_bind_live();
   test_translation_install();
   puts("test_engine_match_frame OK");
   return 0;

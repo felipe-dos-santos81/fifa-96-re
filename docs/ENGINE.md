@@ -856,6 +856,48 @@ the build also produces the windowed `fifa96` target (`make game`).
   corrected `9 → 11` (the two added writers sit in the unwired rows
   `0x1A`/`0x1D`). **I1:** one engine-reach set is stated (the T1 bullet above,
   cross-cited in FU-175 §7B/FU-195 §5) and excludes `0x0D`/`0x0B`/`0x0E`/`0x10`.
+- **M2 phase-18 T1 (FU-199/FU-200) — the OL-13 metadata bind landed; M2
+  byte-identical (no re-pin); census unchanged.** The per-record OL-13 metadata
+  pointers `[rec+0xC]`/`[rec+0x10]`/`[rec+0x14]` are now produced on the live
+  path — the engine mirror of the native `FUN_0006D920` (entered at match begin
+  `FUN_0007412C → FUN_0008CE78 → FUN_0006D9C4 → FUN_0006D920`, FU-199 §5/FU-200
+  §1). **Representation:** `fifa96_match_entities_bind_record_meta`
+  (`fifa96_match_entities.c`) stages every record's `phase_meta`/`phase_meta10`/
+  `phase_meta14` at `idx = (int8_t)byte[rec+0x8D]` (the pool `active`) with the
+  native strides `idx*0x256` bytes / `idx*2` dwords / `idx*0x256` dwords. **The
+  loader:** `match_run_record_meta_bind` (`fifa96_match_run.c`) decodes the
+  GAMEART0 bank and copies the formation id's `.fmt` family
+  (`352pl`/`352pk`/`freekick` for id 0 — the `0x107370` loader names, every
+  6-name group {ko,pl,pk,ps,freekick,sp}) into the run-owned `mr->meta_owner`; it
+  soft-fails (pointers NULL) with no assets/ISO. **Placement:** the **last**
+  begin step, **after** the derived front-end screen install — the native bind
+  belongs to the match begin, while the engine models the front-end
+  `FUN_00092D8C` install (which writes phase 0x15) as a begin step, so binding
+  after it keeps that derived walk metadata-free (the `match_run_formation_seed`
+  placement would have let the derived phase-0x15 write run the walk with the
+  metadata bound — an artifact that moved the whole M2 transcript from frame 12).
+  **The gate is not removed:** the native NULL check
+  (`handlers.c:4594`/`:4669`/`:4730`) stays; the live path now supplies the
+  pointer, so the eight per-record rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/
+  `0x08`/`0x09`/`0x15`) perform their native work when the assets load, and stay
+  gated without them. **Tape:** the on-tape rows DO execute (the `0x6DCC8` body
+  measured at frames 209/766 (phase 2) and 363 (phase 0x15)) yet the M2 replay
+  is **byte-identical** (`7b4b241a…`, 792 lines, `cmp` clean) — the target write
+  is render-invisible on this tape, so **no re-pin** (FU200-L2 closed for the
+  tape by measurement). M1 `09b726b7…` unmoved. **Census `48/80 = 60%`
+  unchanged** — the eight rows were already wired/counted; T1 makes them perform
+  their native work (fidelity, not a count). **Legs:** the
+  `0x1577DE`/`0x157754`/`0x1577D6/D8` index selectors are staged 0
+  (**FU200-L3** — the body runs at sub-index 0, not necessarily the native
+  default), the `0x6D870` cell-map arm (**FU200-L4**), the `form*6+3` slot
+  (**FU200-L6**), the `0x6D9C4` `[rec+0x90]` role byte (**FU200-L7**); FU-199's
+  loader-content legs FU199-L1/L7 stand. **Tests:**
+  `test_engine_match_entities::test_bind_record_meta_strides` (non-ISO
+  stride/index bind), `test_engine_match_frame::test_record_meta_bind_live`
+  (ISO; first-hand blob readback `352pl`/`352pk`/`freekick`) and the M2 v18
+  metadata rider; mutation-RED = a wrong `pk` stride and a disabled bind each
+  abort their test. The `test_engine_m2_noiso` rider stays green (the bind
+  soft-fails without assets → pointers NULL → the rider is ISO-guarded).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
