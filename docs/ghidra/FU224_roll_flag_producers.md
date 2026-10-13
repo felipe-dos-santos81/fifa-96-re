@@ -75,7 +75,7 @@ The two cells are **not adjacent** — the clock struct interleaves them (fresh
 | `0x157AC1` | seconds accumulator (byte) | | `0x8AFAC ADD byte[0x157AC1],DL`; reset `0x73F01` |
 | `0x157AC2` | period index (byte) | | `0x8B58A`, `0x8B61B`, `0x38990`, `0x73F82` |
 | `0x157AC3` | byte (companion, FU207-L4) | | reset `0x73F5E` |
-| `0x157AC5` / `0x157AC7` | score words (side 0 / side 1) | | `0x8B295`/`0x8B39F` (the differ test) |
+| `0x157AC5` / `0x157AC7` | score words (side 0 / side 1) | | load `0x8B295`/`0x8B387`; the differ test `CMP AX,DX` at `0x8B2A7`/`0x8B399` |
 
 Reference counts (fresh `get_xrefs_to`): **`[0x157AC2]` = 56**, **`[0x157AC0]` =
 19**; a program-wide `search_instructions` on the operand `157ac2` returns
@@ -204,7 +204,11 @@ It selects a per-period block through a jump table **indexed by `[0x157AC2]`**
 3f b3 08 00` → `{0x8B1DD, 0x8B22F, 0x8B2E9, 0x8B33F}`; the gate is fresh
 `0x8B1C3 MOV AL,[0x157AC2]; CMP AL,0x3; JA skip; JMP [EAX*4+0x8AF28]`):
 
-* **index 1 block** → `0x8B295` (fresh `disassemble_bytes 0x8B290`, 40 B):
+* **index 1 block** → jump-table entry `0x8B22F` (fresh `read_memory 0x8AF28`
+  (16 B) = `dd b1 08 00 | 2f b2 08 00 | e9 b2 08 00 | 3f b3 08 00` →
+  `{0x8B1DD, 0x8B22F, 0x8B2E9, 0x8B33F}`); `0x8B295` is an **interior sub-block**
+  of that entry reached via `0x8B249 JZ 0x8B295` (fresh
+  `disassemble_bytes 0x8B290`, 40 B):
 
   ```
   0x8B295 MOV AX,[0x157AC5] ; MOV DX,[0x157AC7] ; MOV ECX,1 ; CMP AX,DX ; JZ 0x8B2B8
@@ -230,6 +234,14 @@ So W2/W4 raise the flag on a **regulation (index 1)** or **extra-time-2 (index 3
 completion with **differing `[0x157AC5]`/`[0x157AC7]`**; W3 is the equal-score
 escape via the `[0x14C2EE]` override; W5 is the per-frame mid-extra-time set. All
 four are the **in-match** producers the engine already mirrors (§4).
+
+**Cross-cite caveat (I3 / FU230-L2):** the `[0x157AC5]`/`[0x157AC7]` =
+side-0/side-1 score-cell **identity** is *inherited* from **FU-207 §3.2**, not
+independently established in this slice — only the writer bytes and the differ
+test are re-read first-hand here (`0x8B295`/`0x8B387` loads, `0x8B2A7`/`0x8B399`
+`CMP AX,DX`, `0x8B2AA JZ`, `0x8B2AC MOV byte[0x157AC0],1`). The tie→ET reading is
+likewise a single-source inheritance; **Stage-2 T1/T3 must confirm the cell
+identity and the differ polarity first-hand** (FU230-L2).
 
 ### 3.2 The roll — when the index reaches 4
 

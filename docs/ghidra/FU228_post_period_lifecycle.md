@@ -320,7 +320,8 @@ Per the approved spec (`docs/superpowers/specs/2026-10-13-fifa96-m2-phase21-live
 * **half-time** (completed index 0): the chooser writes phase `0x0C` and act
   `0xB`; the native does **not** match-over (the frame loop's AX==1 path takes
   the `< 2` half-time block at `0x4B1D2`).
-* **tied regulation end → ET entry** (completed index 1, flag set): the chooser
+* **tied regulation end → ET entry** (completed index 1 — flag set is CONDITIONAL,
+  see FU228-L6): the chooser
   writes phase `0x13`/`0x14` and act `0xC`; `FUN_0008BAF0` takes the
   `0x8BCC8` branch (`[0x157AC0] != 0` → phase `0x13`), so **`[0x158822]` is
   never written** and the frame loop never enters the match-over screen.

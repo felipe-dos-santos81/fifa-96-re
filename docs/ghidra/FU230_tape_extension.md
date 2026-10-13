@@ -75,7 +75,7 @@ tape would cut the held-LEFT window and cannot reproduce the golden.
 CONFIRM/DECLINE/RIGHT/LEFT/KICK (`:1708-1875`). `step_ns = 10 ms` means the
 engine polls once per step, so **entry index = engine step − 1**
 (`:1146-1148`); the accepted run self-terminates at step 792, so the explicit
-entries at 206..212 (index ≥ 205) and 1794..1799 are never reached on the
+entries at 206..212 (index ≥ 206) and 1794..1799 are never reached on the
 accepted transcript and exist only for the natural probe
 (`run_natural_probe` replays `M2_KEYS` with the directives disabled).
 
@@ -425,12 +425,22 @@ golden.
    deterministic schedule (`period_seconds`, the class-2 aux growth in the
    phase-0/4 windows) is not resolved by static read; the T1 probe owns it.
    Owner: **spec §5 T1**.
-2. **FU230-L2 — the tie→ET premise is contradicted by the native.** The brief's
-   "0-0 tie → extra-time entry" is inconsistent with the OL-85 writer W2
-   (`0x8B2AC`, *differ* only; FU-207 §3.2; `fifa96_match_run.c:2618`). A 0-0
-   tie needs the equal-score override `[0x14C2EE]` (W3 `0x8B2C1`, **unported**,
-   FU213-L1) staged as a disclosed stand-in, or the tape must keep a differing
-   reg-end. Owner: **T3/T4 (FU-224/FU-225)** — must resolve before T6.
+2. **FU230-L2 — the tie→ET premise is contradicted by the native — and the
+   reading is INHERITED.** The brief's "0-0 tie → extra-time entry" is
+   inconsistent with the OL-85 writer W2 (`0x8B2AC`, *differ* only). **This
+   reading is inherited / cross-cited from a single source, FU-207 §3.2** — the
+   writer path `0x8B2A7 CMP AX,DX` / `0x8B2AA JZ` / `0x8B2AC MOV
+   byte[0x157AC0],1` is re-read first-hand in FU-224 §3.1, but the
+   `[0x157AC5]`/`[0x157AC7]` score-cell **identity and polarity** are still
+   FU-207's, not independently corroborated here. **Stage-2 T1/T3 must confirm the
+   `[0x157AC5]`/`[0x157AC7]` identity and polarity first-hand.** A literal tied /
+   0-0 regulation end therefore reaches extra time **only** through the unported
+   equal-score override `[0x14C2EE]` (W3 `0x8B2C1`; FU213-L1) staged as a
+   disclosed stand-in, or the tape must keep a differing reg-end. **Recorded as an
+   explicit spec-conflict erratum** (the spec's literal "tied / 0-0 → extra-time"
+   is unreachable without the unported override), to be carried to Stage 2 — the
+   spec is **not** edited here. Owner: **T3/T4 (FU-224/FU-225)** — must resolve
+   before T6.
 3. **FU230-L3 — additivity depends on the m 41 `set_period(1,1)` staying.**
    (Cross-slice FU223.) Owner: **T2 (FU-223) + T6**.
 4. **FU230-L4 — `M2_STEP_CAP`/`M2_TRANSCRIPT_CAP` may need raising** if a

@@ -239,12 +239,20 @@ the single-team **Practise** launcher, `0` for every other mode (agrees
   is tested **inside** `FUN_0008A938`, **after** the `0x888B5` RNG draw of §1.1 —
   so the draw is consumed regardless of the gate, and the gate then chooses
   direct (`==0`, arm `0x8AE08` runs) vs queue (`!=0`, table-1 latch only).
-* **Period-end caller** `0x74244` (fresh `disassemble_bytes 0x74218`, 64 B):
+* **Period-end caller `0x74244` — a DEAD TWIN, not the live invocation** (fresh
+  `disassemble_bytes 0x74218`, 64 B):
   `0x74237 CMP byte[0x14C32A],0 / 0x7423E JNZ 0x742E3 / 0x74244 CALL 0x88860`.
   When the gate is `!= 0` the caller **skips `FUN_00088860` entirely** (so on the
   `0x74244` path the `0x888B5` draw is *not* consumed). When `== 0` the caller
   runs the period-end body → the draw fires. `0x74237` is a fresh READ at
   `get_xrefs_to 0x14C32A`; the skip target `0x742E3` is the caller's joint tail.
+  **Scope (FU225-L1):** this `0x74244` caller sits in the enclosing function
+  `0x741C4`, which is **statically unreferenced** (fresh `get_xrefs_to 0x741C4` =
+  0) — a dead twin of `FUN_0004B02C`. The **live** `FUN_00088860` call site is
+  `0x4B08E` (inside `FUN_0004B02C`, fresh `get_xrefs_to 0x88860` = `{0x4B08E,
+  0x74244}`), reached `FUN_000493A0 → FUN_0004B02C(mode 0)`, and it carries **no**
+  `[0x14C32A]` gate. So the `[0x14C32A]==0` caller gate here is a **dead-twin-only**
+  property; the live route reaches `FUN_00088860` ungated (FU225-L1 / §5.1).
 
 ### 3.3 The live value at a fresh match begin — `0`
 
@@ -302,14 +310,18 @@ code, so the current golden stays `441415fc…`.
 
 ## 5. Engine parity notes
 
-### 5.1 The caller-level gate (`0x74237`) is not modelled at the mode-0 call site
+### 5.1 The caller-level gate (`0x74237`) is a DEAD-TWIN property (FU225-L1)
 
 The engine's `phase_drive` calls `period_setup(mr, 0)` on `global_157ac2 == 4`
 **without** a session-gate guard (`fifa96_match_run.c:2654..2657`), so it consumes
-the `0x888B5` draw regardless of `session_gate_14c32a`; the native `0x74244`
-caller skips the whole body (draw included) when `[0x14C32A] != 0` (§3.2). **Live
-they agree** (the live gate is `0`), so this is a residual parity delta only for
-the unmodelled **mode-4 Practise** session (`FU-218-L3`) — leg **FU226-L2**.
+the `0x888B5` draw regardless of `session_gate_14c32a`. The native `0x74244`
+caller only skips the whole body (draw included) when `[0x14C32A] != 0` (§3.2) —
+but that caller is the **statically-unreferenced twin** `0x741C4` (fresh
+`get_xrefs_to 0x741C4` = 0; **FU225-L1**); the **live** call site `0x4B08E`
+(`FUN_0004B02C`, via `FUN_000493A0`) carries **no** `[0x14C32A]` gate. The engine
+therefore matches the **live** site, and the `0x74237` gate is a dead-twin-only
+artifact. The only residual is the unmodelled **mode-4 Practise** dispatcher-queue
+session (`FU-218-L3`) — leg **FU226-L2**.
 
 ### 5.2 The act-7 invoke cadence is already fixed
 
@@ -319,7 +331,7 @@ The native sit-8 arm invokes act 7 **now** (`0x8AEAE MOV EBX,1`);
 the FU-219 fix). So **FU208-L4 / FU217-L6 are resolved in the current source**; no
 re-pin, no cadence leg remains here.
 
-### 5.3 `period_setup_live` is still `0`
+### 5.3 `period_setup_live` is `1` (the begin path already activates it)
 
 `fifa96_match_run.c:2092`/`:2225` — set to `1` at match begin
 (`:2225`) but the phase-21 spec §1 notes the live switch is `T4`'s to flip. The
@@ -352,15 +364,19 @@ sit-8 RNG draw is on an already-counted route (phase `0x1D`/row `0x20`). M1
    runtime resource-table value is **not resolved here**. This does **not** affect
    the engine verdict (the engine seeds the constant `0` regardless); it is a
    *native-parity* leg. Owner: FU-141 / FU-142d (the RNG derivation).
-2. **FU226-L2 — the `0x74237` caller-level session gate at the engine mode-0
-   call.** Native `0x74244` is gated `[0x14C32A] == 0` (skip when `!= 0`); the
+2. **FU226-L2 — the dead-twin `0x74237` caller-level session gate.** Native
+   `0x74244` is gated `[0x14C32A] == 0` (skip when `!= 0`) — but `0x74244` is the
+   call site inside the **statically-unreferenced twin** `0x741C4` (fresh
+   `get_xrefs_to 0x741C4` = 0; **FU225-L1**), while the **live** `FUN_00088860`
+   call site `0x4B08E` (`FUN_0004B02C`, via `FUN_000493A0`) is **ungated**. The
    engine's `phase_drive` mode-0 call (`fifa96_match_run.c:2654..2657`) is
-   unguarded, so the `0x888B5` draw is consumed even under the unmodelled mode-4
-   Practise session. Live (`gate == 0`) they agree. Owner: FU-196 (the
+   likewise unguarded, so it matches the **live** site. The residual is only the
+   unmodelled mode-4 Practise dispatcher-queue session. Owner: FU-196 (the
    `phase_drive` producer slice) / FU-218-L3.
 3. **FU226-L3 — the mode-4 Practise session is unmodelled (carries FU218-L3).**
    The engine has no `session_gate_14c32a = 1` writer, so the queue path
-   (`0x8AA60`, the sit-8 latch id `0xA`) and the `0x74237` skip are never
+   (`0x8AA60`, the sit-8 latch id `0xA`) and the dead-twin `0x74237` skip
+   (`FU225-L1`; the live `0x4B08E` call is ungated) are never
    exercised. Not a missing producer — the native has no in-match writer either
    (§3.1) — only an unmodelled session. Owner: FU-146 S3 / FU-149 L4.
 4. **FU226-L4 — the engine RNG transcription is cited, not byte-diffed.** The

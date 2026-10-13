@@ -25,6 +25,14 @@ engine mirror (`fifa96_match_run_phase_drive` + `fifa96_action_phase_period_end`
 (4) verdict + legs. Extends **FU-196 §3**, **FU-213**, **FU-215** (esp. L3),
 FU-216, FU-208/209.
 
+**Premise correction (spec §1/§9).** The spec's baseline premise — that
+`period_setup_live` *defaults to `0`* and **T4 flips `0 → 1`** (spec §1 lines
+32–36; §9 line 200) — is **stale at the spec baseline**: the live `begin` path
+already sets it `1` (`src/fifa96_engine/fifa96_match_run.c:2225`, fresh
+first-hand; `:2092` seeds `0` in `reset` but `begin` overrides it). So T4's stated
+"flip" is **moot**; the real T4 work is the chooser stand-in inputs (**D2–D4**,
+§5.3) and the tape reach, not the switch (see §6).
+
 **Answer in one line.** The brief's premise is **conflated and its live-caller
 attribution is wrong**: `FUN_00088860` is *not* the mirror-source of
 `fifa96_action_phase_period_end` (that mirror, per its own header, is

@@ -27,7 +27,9 @@ FU-203 (§1/§2 + addendum), FU-208, FU-215.
 
 **Answer in one line.** The half-time (period-transition) kickoff is the **else**
 arm of `FUN_00088860`'s period-index branch: at a **phase-`0xC` period end**
-(`0x88863`, gated by the caller on `[0x14C32A] == 0`, `0x7423E`) the routine tests
+(`0x88863`; reached via the live `0x4B08E` caller — the `0x74244` caller is a
+`FU225-L1` dead twin — with the operative gate being the **dispatcher's**
+`[0x14C32A] == 0` direct arm `0x8A957 JZ 0x8AA7B`) the routine tests
 the period index `[0x157AC2]` at `0x888B0 CMP EAX,4` / `0x888B3 JNZ 0x888E2`;
 `!= 4` → `set_piece(1, [0x157AAB]>>24, BX 0)` at **`0x888F2`**. The dispatcher
 `FUN_0008A938` takes its **direct path** (`0x8AA7B`, BX==0 → `0x8AAA8`) and, with
@@ -58,7 +60,7 @@ Fresh `disassemble_bytes 0x88860` (220 B) and `disassemble_function 0x88860`
 0x88863 MOV EAX,[0x00157A4A]            ; bytes a1 4a 7a 15 00
 0x88868 SAR EAX,0x18                    ; EAX = byte [0x157A4D] (the live phase)
 0x8886B CMP EAX,0xC
-0x8886E JNZ 0x000888F7                  ; NOT a period end -> early RET
+0x8886E JNZ 0x000888F7                  ; NOT a period end -> shared tail return
 0x88874 CALL 0x0007417C                 ; (period-end sink)
 0x88879 MOV AL,[0x00157AAE]
 0x8887E MOV [0x00157AAF],AL             ; side store
@@ -104,18 +106,22 @@ Two further fresh asymmetries between the arms, both in this routine:
 
 `FUN_00088860` has **2 callers** (fresh `get_xrefs_to 0x88860` = **2**):
 `0x4B08E` (inside `FUN_0004B02C`'s `param_1 == 0` arm) and **`0x74244`** (the
-period-end family body). The `0x74244` call is gated on `[0x14C32A] == 0` — fresh
-`disassemble_bytes 0x74220` (64 B):
+period-end family body). **`0x74244` is `FU225-L1`-unreachable**: it sits in the
+enclosing function `0x741C4`, a near-twin of `FUN_0004B02C` that is **statically
+unreferenced** (fresh `get_xrefs_to 0x741C4` = 0). The **live** invocation is the
+*other* caller, `0x4B08E`, reached `FUN_000493A0 → FUN_0004B02C(mode 0) → 0x4B08E
+→ FUN_00088860`, and it carries **no** `[0x14C32A]` gate. The gate below is only on
+the dead twin — fresh `disassemble_bytes 0x74220` (64 B):
 
 ```
-0x74237 CMP byte[0x0014C32A],0x0
+0x74237 CMP byte[0x0014C32A],0x0    ; dead-twin-only gate (FU225-L1)
 0x7423E JNZ 0x000742E3
-0x74244 CALL 0x00088860            ; the period-end invocation (owner leg FU196-L6)
+0x74244 CALL 0x00088860             ; NOT the live invocation (dead twin 0x741C4)
 ```
 
 `0x74244` has **no Ghidra function** (fresh `get_function_by_address 0x74244` =
-*"No function found"*) — the period-end family body is disassembly-only, exactly
-as FU-196 §3.2 / FU196-L6 record.
+*"No function found"*) — the dead-twin body is disassembly-only, exactly as
+FU-196 §3.2 / FU196-L6 record; corrected by FU225-L1.
 
 ### 1.2 The period-index cell `[0x157AC2]`
 
@@ -152,7 +158,7 @@ Fresh `disassemble_bytes 0x8A938` (200 B), `0x8AA60` (420 B)
 0x8A940 MOV word[ESP],DX                ; [ESP] = side
 0x8A944 TEST AX,AX / JZ 0x8AA7B         ; sit 0 -> direct
 0x8A94E CMP EAX,0xB / JZ 0x8AA7B        ; sit 0xB -> direct
-0x8A957 CMP byte[0x14C32A],0 / JZ 0x8AA7B   ; session gate CLOSED -> direct
+0x8A957 CMP byte[0x14C32A],0 / JZ 0x8AA7B   ; session gate OPEN (==0, ordinary) -> direct
 0x8A964 CMP dword[0x15B6C0],0 / JNZ 0x8AA7B ; pending -> direct
 0x8A97F SUB ECX,2                       ; (queue path only) CX = situation-2
 0x8A982 MOV [0x15B6B8],EAX
@@ -286,20 +292,24 @@ The chain from a period end to the phase-`0x17` body, with the gate at each step
 
 | # | gate | site (fresh) | condition | selects |
 |---|---|---|---|---|
-| P1 | caller session gate | `0x74237 CMP byte[0x14C32A],0` / `0x7423E JNZ 0x742E3` | `[0x14C32A] == 0` | allows `0x74244 CALL 0x88860` |
+| P1 | caller session gate (**DEAD TWIN**, `FU225-L1`-unreachable) | `0x74237 CMP byte[0x14C32A],0` / `0x7423E JNZ 0x742E3` | `[0x14C32A] == 0` | allows `0x74244 CALL 0x88860` — **not the live path** (`0x74244` is in the statically-unreferenced twin `0x741C4`; the live call `0x4B08E` is ungated) |
 | P2 | period-end phase | `0x88863 MOV EAX,[0x157A4A] / SAR 0x18 / CMP EAX,0xC / JNZ 0x888F7` | `[0x157A4A]>>24 == 0xC` (byte `0x157A4D`) | the whole body |
 | P3 | **extra-time discriminator** | `0x888B0 CMP EAX,4` / `0x888B3 JNZ 0x888E2` | `[0x157AC2] != 4` | the sit-1 else arm `0x888E2` |
-| P4 | dispatcher direct path | `0x8A957 JZ 0x8AA7B` (satisfied by P1) / `0x8A964 JNZ 0x8AA7B` | `[0x14C32A]==0` OR `[0x15B6C0]!=0` | `0x8AA7B` (else → queue `0x8AA60`, latch `0xA`, RET) |
+| P4 | dispatcher direct path (**the operative live gate**) | `0x8A957 CMP byte[0x14C32A],0 / JZ 0x8AA7B` / `0x8A964 JNZ 0x8AA7B` | `[0x14C32A]==0` OR `[0x15B6C0]!=0` | `0x8AA7B` (else → queue `0x8AA60`, latch `0xA`, RET) |
 | P5 | direct BX test | `0x8AA7B TEST BX,BX / JZ 0x8AAA8` (`0x888ED XOR EBX,EBX`) | `BX == 0` | situation routing (not the act-8 replay) |
 | P6 | sit-1 selector | `0x8AAA8 CMP CX,1 / JBE 0x8AABF` | `CX == 1` (situation 1) | the sit-1 arm |
 | P7 | act-1 head guard | `0x88DFC`..`0x88E0C` | `[0x157AC5]==[0x157AC7]` OR `[0x157AC2] < 2` | proceeds (half-time: index 1 < 2 → always) |
 
-Once P1–P4 hold, the sit-1 arm's exit to its act-1 call is **unconditional** (§2.2
-— every arm branch lands on the tail `0x8AB63`, and `CX==1` forces table-2 `[1]`).
-The **operative live precondition** is therefore **P1** (`[0x14C32A] == 0`), which
-itself satisfies P4; P2 must also hold (the period must be at the phase-`0xC`
-completion screen), and P3 must be false (index `!= 4`). P7 is automatically
-satisfied for the half-time case (`[0x157AC2] < 2`).
+Once the live gates hold, the sit-1 arm's exit to its act-1 call is
+**unconditional** (§2.2 — every arm branch lands on the tail `0x8AB63`, and
+`CX==1` forces table-2 `[1]`). The **operative live precondition** is therefore
+**P4** — the dispatcher's own direct arm (`0x8A957 CMP byte[0x14C32A],0 / JZ
+0x8AA7B`), i.e. `[0x14C32A] == 0` (or a non-queued `[0x15B6C0] != 0`) — **not**
+the twin caller gate **P1**, which is `FU225-L1`-unreachable (the dead twin
+`0x741C4`; the live `0x4B08E` invocation is ungated, FU225 §3.4). P2 must also
+hold (the period must be at the phase-`0xC` completion screen), and P3 must be
+false (index `!= 4`). P7 is automatically satisfied for the half-time case
+(`[0x157AC2] < 2`).
 
 Two supporting fresh facts:
 
@@ -386,8 +396,11 @@ The comment at `:2650` states it explicitly: *"the non-extra-time sit-1 else-arm
 by the lifecycle; not this slice)"*. So on the live tape the **else** arm
 (`:3205..3208`) is **unreachable**: `period_setup(mode 0)` is never entered with
 `global_157ac2 != 4`. The half-time (sit-1) period-transition route is therefore
-**not live in the engine** — the native `0x74244 CALL 0x88860` runs on **every**
-period end, but the port only mirrors the `== 4` case.
+**not live in the engine** — the live `FUN_00088860` invocation (`0x4B08E`, reached
+`FUN_000493A0 → FUN_0004B02C(mode 0)`, called every frame) runs its body at each
+phase-`0xC` period end and takes the else arm when `[0x157AC2] != 4`; the port only
+mirrors the `== 4` case. (The `0x74244` caller cited above is `FU225-L1`-
+unreachable; only `0x4B08E` is the live invocation.)
 
 **Consequence for the phase-21 spine.** Playing a half-time (period 1 → 2)
 completion is a **producer-wiring** task, not a body task: on the non-4
@@ -433,13 +446,15 @@ edited by this recon slice.
    per-site `EAX` census of all 39 was taken here (the "exactly two sit-1
    producers" claim is cross-cited, not proven). Owner: the situation-machine
    slice (FU-196).
-4. **FU227-L4 — the `0x74244` period-end family body has no Ghidra function.**
-   The live period-end invocation of `FUN_00088860` (`0x74244 CALL`) is
-   disassembly-only (fresh `get_function_by_address 0x74244` = none); its full
-   body and the `0x74237` session gate's own producer are unported.
-   Owner: FU196-L6.
+4. **FU227-L4 — the `0x74244` period-end family body has no Ghidra function —
+   and is `FU225-L1`-unreachable.** `0x74244` sits in the statically-unreferenced
+   twin `0x741C4` (fresh `get_xrefs_to 0x741C4` = 0), so it is **not** the live
+   period-end invocation; the live caller is `0x4B08E` (inside `FUN_0004B02C`,
+   reached from `FUN_000493A0`), which carries **no** `[0x14C32A]` gate. The
+   twin's body and its `0x74237` gate producer are unported (and need not be).
+   Owner: FU196-L6 / FU225-L1.
 5. **FU227-L5 — the live value of `[0x14C32A]` at a period end.** The operative
-   precondition (P1/P4) is `[0x14C32A] == 0`; whether the session gate is open at
+   precondition (**P4**) is `[0x14C32A] == 0`; whether the session gate is open at
    a half-time completion on a live run is a **runtime** fact (fresh
    `get_xrefs_to 0x14C32A` = 60 refs, many writers) not settled statically here.
    Owner: the session/lifecycle slice.
