@@ -439,3 +439,58 @@ rule. The `+0x100000` LE-image rule and the alias traps
 (`[0x157A49]>>24 = [0x157A4C]`; `[0x158816]>>16 = [0x15881A]`; `[[rec]+0x8E]>>24
 = [rec+0x91]`) are applied. No writes beyond this slice file and the workspace
 report.
+
+---
+
+## 10. Landing status — phase-18 T2 (2026-10-12)
+
+**Verdict adopted; the slice landed as a docs-only T2 (no engine code).** The
+plan's "un-gate the arm iff R49 proves it live" resolves to **R49 does not prove
+it live (§6)**, so per Ruling R15 the T2 deliverable is the honest leg record.
+No engine behaviour changed.
+
+**First-hand re-determination (this session, fresh `/FIFA96.EXE`)** — the
+question T2 owns: *does the engine have any match-begin consumer of the desired
+`0x14C360` matrix beyond the existing reset?*
+
+* The desired-order fill is a **front-end menu** producer: fresh
+  `get_xrefs_to 0x11620` = **5** (`FUN_00011b7c` ×2, `FUN_00024b00` ×3), all
+  front-end (§3.2 re-confirmed).
+* The reset `FUN_00073EE0` is the only bulk current writer; fresh
+  `get_xrefs_to 0x73EE0` = **3** (`FUN_00074034`, `FUN_0004b020`, `0x7428E`),
+  i.e. match-begin/referee, and it copies desired→current (§3.3 re-confirmed).
+* The act-4 arm bytes `0x8AB08..0x8AB62` re-read **byte-for-byte**
+  (`b8a4881500 e8621e0000 … e8a0ddffff … c3`, the two `0x8C974` sorts + the
+  `[0x157A4C]`/`[0x157B8E]`/`[0x157B8F]` gate + the `0x888FC(4,0,1)` invoke).
+* The phase-`0x1A` handler `0x89620`: fresh `get_xrefs_to 0x89620` = **1**
+  (DATA from `0x1107FC` = `0x110794 + 0x1A*4`, the phase slot) — no engine
+  producer.
+* **Engine side (first-hand source):** the only match-begin engine formation
+  consumer is `match_run_formation_seed` (`fifa96_match_run.c:1911`), which
+  reads the `.fmt` **placement blob** (`fifa96_scene_formation_load` →
+  `fifa96_match_entities_seed_formation`), **not** the `0x14C360`
+  descriptor-pointer **order matrix**. The engine's only `formation_order`
+  consumers are the gated sorter/the gated arm/the gated phase-`0x1A` body — so
+  there is **no** match-begin consumer of the desired matrix, and the reset copy
+  itself is not modelled.
+
+**Outcome: the order matrices are a staged leg (FU201-L4) — no engine code.**
+Filling `formation_order` + `formation_current` (the front-end values) is
+tape-inert (R47) *and* does not un-gate the arm (§6): un-gating on the fill alone
+is a no-op (current copied) or a fake producer (current zeroed). Adding the fill
+with no consumer would be dead code; the honest record is the leg.
+
+**Leg posture set (unchanged in the tables):** action row `0x17` stays
+`{0x17, NULL, …}` (`fifa96_match_handlers.c:5012`) and phase `0x1A` stays
+`{0x1A, NULL, …}` (`:5111`) — both **NULL/uncounted (+0)**; the `form` doc
+strings now carry the §6 verdict. The act-4 arm, both `FUN_0008C974` sorts, the
+phase-`0x1A` body and the row-`0x17` body remain ported-but-gated.
+
+**Census:** unchanged **48/80 = 60%** (31 action + 17 phase). **Tape:** M1
+`09b726b7…` and M2 `7b4b241a…` **byte-identical** (no presented frame touched;
+docs-only). **Tests:** the existing `action_expect[0x17]`/`phase_expect[0x1A]`
+(`UNSUP`) pins already assert the leg posture and still hold.
+
+**Owners carried:** FU201-L1 (the runtime non-permutation divergence producer —
+the arm's true trigger; carries FU197-L1), FU201-L4 (the setup's engine landing),
+FU201-L6 (invoke-now has no generic engine port), FU181-L1 (row `0x17` entry).

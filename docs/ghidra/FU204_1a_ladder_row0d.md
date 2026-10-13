@@ -461,3 +461,33 @@ Docs cross-cited: FU-175 (§1/§4/§7), FU-178 (§4.1/§7/L1/L6/L7), FU-180
 (§2/§3/§4/§6/§10), FU-189 (§3/§10), FU-193 (§3/§5/§6), FU-196 (§3/§4/§5), FU-197
 (§2/§4/§6/§7/§9), FU-190 (§9). No writes beyond this slice file and the
 workspace report.
+
+---
+
+## 10. Erratum (phase-18 T2 / R49, 2026-10-12) — the act-4 producer does **not** flip live under R47
+
+**Corrected (quoted).** This slice's Part B verdict (§3) says the act-4 producer
+"becomes live under **R47** ... then **R49/T2** lands the arm"; the §6 table
+marks the act-4 producer row "R47 (formation setup) = **YES — the matrix fill
+un-gates the arm**"; and the §7 T2 recommendation says "Wire **row `0x17`**
+through the act-4 arm ... that is R47's un-gate". **All three are superseded.**
+
+R49/FU-201 §4/§6 (fresh, read-only) proves the arm gate
+`[0x157A4C] != 1 && ([0x157B8E] | [0x157B8F]) != 0` is a **permutation
+residual**: `FUN_0008C974` selection-sorts the current order `0x157BD2` onto the
+desired `0x14C360` and counts the positions it cannot reconcile, and the
+match-init reset `FUN_00073EE0` copies desired→current. Therefore a faithful
+desired-order fill leaves `current == desired` and the residual **0** — the fill
+is *necessary but not sufficient* to trip the arm. Un-gating
+`formation_order_ok` on the fill alone is a **no-op** (current copied) or, with
+current left zeroed, a **fabricated residual / fake producer** (R45). The genuine
+trigger is a runtime **non-permutation** of current vs desired (the
+substitution/line-up-divergence transient, FU201-L1), which no native routine in
+the fresh write census performs and no engine source emits.
+
+**Consequence under R47/T2:** row `0x17` and phase `0x1A` stay **NULL/uncounted
+(`+0`)** — honest numbered legs (FU201-L1/L4/L6, FU181-L1); no fake producer is
+installed. The rest of this slice's T2/T3/T5 recs **stand**: row `0x1A`'s only
+installer is the unported `FUN_00077EAC` ladder (§2.6, FU186-L5); row `0x0D`'s
+only installer is row-09 arm 1 (§4.3, FU178-L1); the row-`0x24`/phase-`0x20`
+pair flips live only under **R50 → T3** (§5), not here.

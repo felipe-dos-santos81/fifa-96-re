@@ -1879,7 +1879,11 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
  * 3 `424ko.fmt`, 4 `433ko.fmt`; FU-148 §3 leg: the FUN_00011620 team-record
  * producer). Slot 0's file is a BIGF entry of the match art container
  * `/ART/GAMEART0.PVI` (first-hand directory: entry 0; the engine already
- * stages the same file). The seed is a soft failure: no ISO/asset/entry leaves
+ * stages the same file). This is the engine's **only** match-begin formation
+ * consumer; it reads the `.fmt` **placement blob** — distinct from the
+ * `0x14C360` descriptor-pointer **order matrix** (FU-201 §3.2/§6), which has no
+ * match-begin engine consumer, so the order matrices stay a staged leg
+ * (FU201-L4). The seed is a soft failure: no ISO/asset/entry leaves
  * the zero targets the pre-T1 path had. The controlled side is the
  * `[0x157AAC]>>24` mirror (BSS 0). */
 #define MATCH_RUN_FORMATION_BANK "/ART/GAMEART0.PVI"
@@ -2081,9 +2085,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
   mr->sp_157821 = 0;
-  /* FU-196/FU-197 (M2 phase-17 T2): the producer gates default off and the
-   * act-4 formation state is the zero stand-in (the desired-order producer is
-   * unported, FU197-L4). */
+  /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): the producer gates
+   * default off and the act-4 formation state is the zero stand-in — the order
+   * matrices are a staged leg (FU201-L4: no match-begin engine consumer; the
+   * arm's trigger is a runtime non-permutation, FU201-L1). */
   mr->period_setup_live = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
@@ -2207,8 +2212,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
   mr->sp_157821 = 0;
-  /* FU-196/FU-197 (M2 phase-17 T2): a fresh match drops the producer gates
-   * (the tape-neutral sequence) and the act-4 formation state. */
+  /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): a fresh match drops
+   * the producer gates (the tape-neutral sequence) and the act-4 formation
+   * state (the order matrices are a staged leg, FU201-L4). */
   mr->period_setup_live = 0;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
@@ -2896,10 +2902,13 @@ int fifa96_match_run_goal_queue(struct fifa96_match_run *mr, uint8_t side) {
  * `[0x157B8E + side]` (`0x8CB1C..0x8CB5E`). The residual is 0 for a valid
  * permutation and nonzero only when a desired entry cannot be matched (FU197
  * §4.4). Gated on `mr->formation_order_ok`: the native desired-order producer
- * is the formation/line-up setup `FUN_00011620`/`FUN_00012010` (FU197-L4), which
- * the engine does not model, so the live default 0 makes this a no-op — wiring
- * the zero stand-in live would compute a residual 0 and act as a fake producer
- * (R45). The companion arrays (`0x157B90` bytes / `0x157BA6` words), the
+ * is the front-end menu roster builder `FUN_00011620`/`FUN_00012010` (FU-199/
+ * FU-201 §3.2), which the engine does not model, so the live default 0 makes
+ * this a no-op. FU-201 §6 (R49) proves un-gating on a faithful fill alone is
+ * still a no-op (the reset copies desired→current, residual 0) or, with current
+ * left zeroed, a fake producer (R45) — the arm's real trigger is a runtime
+ * non-permutation (FU201-L1). The companion arrays (`0x157B90` bytes /
+ * `0x157BA6` words), the
  * `0x8C758` entity re-link and the `0x4728C` placement-commit sink stay
  * FU197-L2 legs; the exact no-match arm is FU197-L1. */
 int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team) {
@@ -2988,8 +2997,13 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
    * (phase 0x1A). The engine's desired-order producer is unported (FU197-L4),
    * so `formation_order_ok` is 0 live and the arm is provably dormant — the
    * table-2 row runs instead (the sit-1 twin 0x8AABF..0x8AB06 stays FU-149
-   * L12). Situation 6 keeps its score fallback (0x8AC28); situation 3 counts
-   * before the write. */
+   * L12). FU-201 §6 (R49) pins that the dormancy is not merely "unported":
+   * the arm gate is a **permutation residual** (`FUN_0008C974` sorts current
+   * onto desired) and the reset `FUN_00073EE0` copies desired→current, so even
+   * a faithful fill leaves the residual 0 — un-gating would be a no-op or, with
+   * current zeroed, a fabricated residual. The genuine trigger (FU201-L1) has
+   * no writer. Situation 6 keeps its score fallback (0x8AC28); situation 3
+   * counts before the write. */
   if ((situation == 2u || situation == 3u || situation == 4u) &&
       mr->formation_order_ok) {
     (void)fifa96_match_run_formation_sort(mr, 0u);   /* 0x8AB0D */
@@ -5827,10 +5841,13 @@ static int match_run_phase_1A_end(struct fifa96_match_run *mr) {
                                          mr->store_158820, 1u);  /* 0x897E3 */
 }
 
-/* FU-193 §3/§6.2 + FU-197 §6/§9.4 (M2 phase-17 T4): the phase-0x1A / act-4 row
+/* FU-193 §3/§6.2 + FU-197 §6/§9.4 + FU-201 §6 (M2 phase-17 T4 / phase-18 T2):
+ * the phase-0x1A / act-4 row
  * body — the native formation-order / line-up walk `0x89620`. Its slot stays
- * NULL/uncounted (no act-4 producer: the T2 arm is gated dormant on the
- * unported desired-order matrix, FU197-L4; FU193-L3). Stage 0 walks the records
+ * NULL/uncounted (no act-4 producer: FU-201 §6/R49 proves the T2 arm is not live
+ * even under a faithful matrix fill — the permutation residual after the
+ * desired→current reset copy is 0, and the real trigger is a runtime
+ * non-permutation, FU201-L1; FU193-L3). Stage 0 walks the records
  * for the first current/desired mismatch, accepts the current order on an
  * occupied record, else writes phase 0xB and installs action row 0x17 on the
  * active record; the end block re-dispatches the stored situation. The walk is
@@ -5840,7 +5857,7 @@ int fifa96_match_action_phase_1A(struct fifa96_match_run *mr) {
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);  /* 0x89629 */
   if (mr->act.stage == 0u) {
     int32_t s;
-    if (mr->formation_order_ok == 0u) return FIFA96_OK;    /* dormant (FU197-L4) */
+    if (mr->formation_order_ok == 0u) return FIFA96_OK;    /* dormant (FU201-L4) */
     /* 0x89655..0x8965c: side select = (byte[0x157B8E] == 0); 0x8966A: decrement
      * that side's residual counter. */
     s = (mr->formation_mismatch[0] == 0u) ? 1 : 0;

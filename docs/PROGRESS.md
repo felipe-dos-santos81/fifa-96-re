@@ -995,6 +995,29 @@ stated in `docs/ENGINE.md` phase-17 T1 and cross-cited FU-175 §7B/FU-195 §5; t
 call-site count is corrected `9 → 11` (M6). `make check` **110/110**; README
 title `60%`.
 
+**Phase-18 T2 (2026-10-12) — the order matrix + the act-4 formation arm
+(rows `0x17`/`0x1A`): honest legs, docs-only, `+0` (census unchanged
+`48/80 = 60%`)** (this slice). R49/FU-201 proves the sit-2..4 act-4 arm
+(`0x8AB08..0x8AB62`) is **not live even under a faithful desired-order fill**:
+the gate `[0x157B8E]/[0x157B8F]` is a **permutation residual** (`FUN_0008C974`
+selection-sorts the current order `0x157BD2` onto the desired `0x14C360`) and the
+match-init reset `FUN_00073EE0` copies desired→current, so after the reset
+`current == desired` and the residual is 0; un-gating `formation_order_ok` on
+R47's fill alone is a no-op (current copied) or a fabricated residual / fake
+producer (current zeroed). The genuine trigger is a runtime **non-permutation**
+(**FU201-L1**) with no writer, so **T2 adds no engine code** (Ruling R15):
+action row `0x17` and phase `0x1A` stay `NULL/uncounted (+0)`, and the `form`
+doc strings carry the verdict. **The desired-order matrices are a staged leg
+(FU201-L4)** — fresh this slice, the fill is a front-end menu producer
+(`FUN_00011620`, 5 front-end callers) and the engine has **no match-begin
+consumer of the desired matrix** (its begin formation consumer,
+`match_run_formation_seed`, reads the `.fmt` placement blob). Scope correction
+(R49): action row `0x1A` (`0x7662C`, the keeper chain) is not the act-4 arm
+(FU-204 §10 erratum). **Tape:** M1 `09b726b7…` + M2 `7b4b241a…` **byte-identical**
+(no presented frame touched; `cmp`-verified). The existing
+`action_expect[0x17]`/`phase_expect[0x1A]` (`UNSUP`) pins assert the posture and
+hold. `make check` **110/110**; README title `60%`.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

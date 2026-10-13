@@ -898,6 +898,43 @@ the build also produces the windowed `fifa96` target (`make game`).
   metadata rider; mutation-RED = a wrong `pk` stride and a disabled bind each
   abort their test. The `test_engine_m2_noiso` rider stays green (the bind
   soft-fails without assets → pointers NULL → the rider is ISO-guarded).
+- **M2 phase-18 T2 (FU-201/FU-204) — the order-matrix + act-4 formation arm:
+  honest legs, docs-only, `+0` (census unchanged `48/80 = 60%`).** R49/FU-201
+  proves the sit-2..4 act-4 arm (`0x8AB08..0x8AB62`) is **not live even under a
+  faithful desired-order fill**: its gate `[0x157B8E]/[0x157B8F]` is a
+  **permutation residual** (`FUN_0008C974` selection-sorts the current order
+  `0x157BD2` onto the desired `0x14C360` and counts the unreconciled positions)
+  and the match-init reset `FUN_00073EE0` copies desired→current — so after the
+  reset `current == desired` and the residual is **0**. Un-gating
+  `formation_order_ok` on R47's fill alone is a **no-op** (current copied) or,
+  with current left zeroed, a **fabricated residual / fake producer** (R45). The
+  genuine trigger is a runtime **non-permutation** of current vs desired
+  (**FU201-L1**, the substitution/line-up divergence; carries FU197-L1) which no
+  native routine in the fresh write census performs and no engine source emits.
+  **T2 therefore does NOT un-gate the arm and adds no engine code** (per Ruling
+  R15): action row `0x17` stays `{0x17, NULL, …}`
+  (`fifa96_match_handlers.c:5012`) and phase `0x1A` stays `{0x1A, NULL, …}`
+  (`:5111`) — both **NULL/uncounted (+0)**; the `form` doc strings
+  (`include/fifa96_engine/fifa96_match_run.h:794..810`, the sorter `:1296`, the
+  arm, the phase-`0x1A` bodies) now carry the §6 verdict. **The desired-order
+  matrices are a staged leg (FU201-L4):** fresh this slice, the fill is a
+  **front-end menu** producer (`FUN_00011620` has 5 front-end callers) and the
+  engine has **no match-begin consumer of the desired matrix** — its only
+  match-begin formation consumer, `match_run_formation_seed`
+  (`fifa96_match_run.c:1911`), reads the `.fmt` **placement blob**, not the
+  `0x14C360` descriptor-pointer order matrix; the reset copy is not modelled
+  either, and the engine's only `formation_order` consumers are the gated
+  sorter/arm/phase-`0x1A`. Scope correction (R49): action row `0x1A`
+  (`0x7662C`, the keeper chain) is **not** the act-4 arm — the act-4 producer is
+  phase `0x1A` (`0x89620`); FU-204 §10 carries the erratum. **Tape:** M1
+  `09b726b7…` and M2 `7b4b241a…` **byte-identical** (no presented frame
+  touched; `cmp`-verified — docs-only). **Tests:** the existing
+  `action_expect[0x17]`/`phase_expect[0x1A]` (`UNSUP`) pins assert the leg
+  posture and still hold; no test added (no code). **Legs:** FU201-L1 (the
+  divergence producer), FU201-L4 (the setup's engine landing), FU201-L6
+  (invoke-now has no generic engine port), FU181-L1 (row `0x17` entry); FU-204's
+  `0x1A` ladder (FU186-L5), row-`0x0D` (FU178-L1) and the R50 `0x24`/`0x20` pair
+  stand. README title `60%`; dispatch `31 UNSUP / 48 OK / 1 NOTF` — consistent.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

@@ -797,13 +797,23 @@ struct fifa96_match_run {
    * current order `0x157BD2 + side*0x2C + i*4` (the `FUN_00073EE0` reset copies
    * the desired order into it, FU-197 §5.3); `formation_mismatch[side]` is the
    * `FUN_0008C974` residual `[0x157B8E + side]`; `formation_order_ok` gates the
-   * whole arm. The native desired-order producer is the formation/line-up setup
-   * `FUN_00011620`/`FUN_00011978`/`FUN_00012010` (menu callers), which the
-   * engine does not model (FU197-L4); so `formation_order_ok` stays 0 (the
-   * matrices are the zero stand-in) and the arm is provably dormant on the tape
-   * — the sort would compare equal arrays and store a residual 0, which must
-   * NOT be wired live (a fake producer, R45/FU-197 §8). Init/begin zero the
-   * state and clear the gate. */
+   * whole arm. FU-201 §3/§6 (R49) pins the verdict: the native desired-order
+   * producer is the **front-end menu** roster builder
+   * `FUN_00011620`/`FUN_00011978`/`FUN_00012010` (five front-end callers,
+   * fresh), and the match-init reset `FUN_00073EE0` copies desired→current. The
+   * arm's gate `[0x157B8E]/[0x157B8F]` is a **permutation residual** from
+   * `FUN_0008C974`, so immediately after the reset `current == desired` and the
+   * residual is 0: the fill is **necessary but not sufficient** to trip the arm.
+   * Un-gating `formation_order_ok` on the fill alone would be either a **no-op**
+   * (current copied) or a **fake producer** (current left zeroed — sorting the
+   * zero stand-in manufactures a residual). The genuine trigger is a runtime
+   * **non-permutation** of current vs desired (FU201-L1 / FU197-L1) that no
+   * native or engine writer emits on the tape. So `formation_order_ok` stays 0
+   * and the matrices are a **staged leg** (FU201-L4: the engine has no
+   * match-begin consumer of the desired matrix — its begin formation consumer
+   * `match_run_formation_seed` reads the `.fmt` layout blob, not this
+   * descriptor-pointer order matrix). Init/begin zero the state and clear the
+   * gate. */
   int32_t formation_order[FIFA96_MATCH_ENTITY_TEAMS][FIFA96_MATCH_ENTITY_RECORDS];
   int32_t formation_current[FIFA96_MATCH_ENTITY_TEAMS][FIFA96_MATCH_ENTITY_RECORDS];
   uint8_t formation_mismatch[FIFA96_MATCH_ENTITY_TEAMS];
@@ -1299,11 +1309,12 @@ int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode);
  * sorts `formation_current[side]` to match `formation_order[side]` (the
  * `0x8C9A6..0x8CAF8` loop), and stores the post-sort residual into
  * `formation_mismatch[side]` (the `0x8CB1C..0x8CB5E` count). Gated on
- * `mr->formation_order_ok`: 0 (the live default, FU197-L4) is a no-op, because
- * the desired matrix has no producer and sorting the zero stand-in is a fake
- * (R45). The companion `0x157B90` bytes / `0x157BA6` words, the `0x8C758`
- * entity re-link and the `0x4728C` placement-commit sink stay FU197-L2 legs.
- * Returns 0, or -FIFA96_ERR_INVALID (NULL or team > 1). */
+ * `mr->formation_order_ok`: 0 (the live default) is a no-op, because the
+ * desired matrix's front-end producer plus the reset copy leave
+ * `current == desired` (residual 0) and sorting the zero stand-in is a fake
+ * (FU201 §4/§6, R49). The companion `0x157B90` bytes / `0x157BA6` words, the
+ * `0x8C758` entity re-link and the `0x4728C` placement-commit sink stay
+ * FU197-L2 legs. Returns 0, or -FIFA96_ERR_INVALID (NULL or team > 1). */
 int fifa96_match_run_formation_sort(struct fifa96_match_run *mr, uint32_t team);
 
 /* FU-184 §5/§7 T2-2 (phase-16 T2): the shared kickoff phase entry, factored
@@ -1458,8 +1469,13 @@ int fifa96_match_action_phase_17(struct fifa96_match_run *mr);
  * body — the formation-order / line-up walk (native `0x89620`, ends `0x897F1`).
  * Its phase-table slot (`fifa96_match_phase_table[0x1A]`) is **NULL** — the row
  * is not counted — because the engine has no act-4 producer: the T2 sit-2..4 arm
- * is gated dormant on the unported desired-order matrix (`formation_order_ok`
- * stays 0, FU197-L4) and the act-1 stage-1 hand-off is itself unwired (FU193-L3).
+ * is gated dormant on the desired-order matrix and the act-1 stage-1 hand-off is
+ * itself unwired (FU193-L3). FU-201 §6 (R49) proves the arm is not live even
+ * under a faithful matrix fill: the fill + the `FUN_00073EE0` reset copy leave
+ * `current == desired` (a permutation residual of 0), and the genuine trigger is
+ * a runtime non-permutation (FU201-L1) with no writer; un-gating on the fill
+ * alone would be a no-op or a fake producer. So the row stays a **staged leg**
+ * (FU201-L4).
  * Derived stages: head `mr->act.timer += frame_delta` (0x89629); stage 0 walks
  * the records for the first `formation_current != formation_order` mismatch
  * (occupied `skip_9a` records accept the current order, 0x896D7), and on an
