@@ -93,6 +93,38 @@ static void test_begin_installs_derived_periods(void) {
   drop_fixture(f);
 }
 
+/* FU-223 (phase-21 T2, spec §5 T2 + errata E3): the live period length is the
+ * match-init constant the engine already stages — there is no producer to port.
+ * The native clock reads [0x15881A] (regular periods 0/1) / [0x15881C] (extra
+ * periods 2/3), both = [0x14C1D1] minutes x 0x3C/0x14 (FU-223 §2.4); the writers
+ * are FUN_0003749C 0x375E4/0x375ED (settings translator, FU-68), FUN_000886D4
+ * 0x88710/0x88730 (match-start re-derive) and FUN_0004B508 0x4B514/0x4B51B (the
+ * 60/30 reset override, gated [0x1072F8]!=0). The default half (table flat
+ * 0x37170[settings[0x0E]=0] = 2 min) derives 2*0x3C = 120 s and 2*0x14 = 40 s,
+ * exactly what begin installs for selector 0 (fifa96_match_run.c:2368..2372).
+ * Pin the literal numerics — not just the header macros — so a silent constant
+ * change cannot pass this test. */
+static void test_period_length_pin(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.state.period_length == 120u);   /* [0x15881A]: [0x14C1D1] 2 min * 0x3C */
+  assert(mr.state.extra_length == 40u);     /* [0x15881C]: [0x14C1D1] 2 min * 0x14 */
+  assert(mr.config.period_length == 120);   /* FU-68 hand-off, same derive (unwired) */
+  assert(mr.config.extra_length == 40);
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  /* The native FUN_0004B508 60/30 reset override (selector != 0; FU-223 §2.2). */
+  assert(fifa96_match_run_begin(&mr, f.engine, 1) == 0);
+  assert(mr.state.period_length == 60u);
+  assert(mr.state.extra_length == 30u);
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  drop_fixture(f);
+}
+
 /* A live set_period writes both derived fields exactly; resolve while the
  * screen is still ACTIVE is a no-op (nothing to resolve yet). */
 static void test_set_period_and_active_resolve(void) {
@@ -302,6 +334,7 @@ static void test_score_plumbing(void) {
 int main(void) {
   test_not_running_state_errors();
   test_begin_installs_derived_periods();
+  test_period_length_pin();
   test_set_period_and_active_resolve();
   test_period_end_resolve_returns_to_frontend();
   test_staged_exit_survives_period_end();
