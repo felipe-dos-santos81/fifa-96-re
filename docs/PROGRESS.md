@@ -1145,3 +1145,18 @@ T1–T5 numbered legs + **FU206-L1..L5** (see the landing notes / the T6 report)
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
+
+*(errata, two-axis review fix wave — M2 phase-18.)* A Standards+Spec review of
+the phase-18 diff landed five fixes with no census move (`51/80 = 63%` unchanged;
+M1 `09b726b7…` and M2 `441415fc…` byte-identical, `cmp` clean; `make check`
+110/110). **F4** re-placed the OL-13 metadata bind to the **native** order —
+fresh `/FIFA96.EXE` `disassemble_function 0x92E2C` pins `begin(0x74034) ->
+bind(0x7417C) -> handler(0x92EF7, writes phase 0x15)`, so the bind precedes the
+derived screen install (erratum to FU-199 §11; the "moved from frame 12" claim
+does not reproduce at the current code state and needs no re-pin). **F5** made
+the bind **per-field, per-side** (one short `.fmt` no longer disables both sides;
+new RED/GREEN `test_record_meta_bind_per_side`). **F1** collapsed the
+`mr.act.id = 0` test idiom to one `begin_isolated(mr, eng)` seam. **F2** clears
+the record metadata through the pool API. **F3** documents the
+`-FIFA96_ERR_INVALID` path. See FU-199 §12 and the plan's review-fix-wave
+section. The phase-18 T1 narrative above is kept verbatim.

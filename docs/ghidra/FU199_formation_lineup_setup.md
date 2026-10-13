@@ -528,3 +528,63 @@ Provenance (this status): engine source read first-hand
 (`fifa96_match_entities.{c,h}`, `fifa96_match_run.{c,h}`, `fifa96_scene.{c,h}`);
 the blob bytes from the first-hand GAMEART0.PVI decode; the Ghidra MCP
 `read_memory 0x107370`/`0x101A30` above. No `/FIFA96.EXE` writes.
+
+---
+
+## 12. Addendum — two-axis review corrections (native bind order + per-side gate)
+
+This addendum records the M2 phase-18 two-axis-review fixes; it rewrites no
+section above (§11's text is kept verbatim and corrected here as quoted
+errata). All Ghidra evidence is fresh `/FIFA96.EXE` (scripts disabled) unless
+marked *cross-cited*; the alias traps are applied. No `/FIFA96.EXE` writes.
+
+### 12.1 The bind is placed before the screen-install handler (erratum to §11)
+
+Fresh `disassemble_function 0x92E2C` (this session) shows the native call order
+inside the match-screen installer's continuation:
+
+```
+0x92E45 CALL 0x74034   ; the match begin FUN_00074034 (contains the seed FUN_0008D098)
+0x92E4A CALL 0x7417C   ; FUN_0007412C (the OL-13 bind) + the slot bind FUN_00078824
+ ... resets ...
+0x92EF7 CALL [0x15B6D4] ; the leg-specific screen handler -> writes phase 0x15
+```
+
+and `FUN_00092D8C` calls `FUN_00092E2C` at `0x92E1F` (fresh `get_xrefs_to
+0x92E2C` = **1**, from `FUN_00092D8C`). So the **phase-0x15 write runs after the
+bind**, and the metadata must be bound when it runs.
+
+> **Erratum (to §11).** §11 placed the bind **last, after the derived screen
+> install** and argued the derived phase-0x15 walk "precedes the bind". Fresh
+> bytes falsify that premise: the phase-0x15-producing handler is invoked at
+> `0x92EF7`, **after** the bind call at `0x92E4A`. The correct native order is
+> `begin(0x74034) -> bind(0x7417C) -> handler(0x92EF7)`, i.e. the bind belongs
+> **before** the derived screen install. `match_run_record_meta_bind` is
+> re-placed to immediately after `match_run_formation_seed` and before
+> `match_run_slot_bind` (native `FUN_0007417C` = bind then slot bind).
+
+**Measurement.** The native-order placement is **M2 byte-identical**
+(`441415fc…`, 792 lines, `cmp` clean) on the v18 tape. The phase-0x15 target
+write is render-invisible on this tape, so §11's "moved the whole M2 transcript
+from frame 12" does **not** reproduce at the current code state (that measurement
+predates the T3/T4 begin rework). **No re-pin; no artifact leg.**
+
+### 12.2 The bind is per-field, per-side (erratum to the atomicity note)
+
+The loader `match_run_record_meta_bind` no longer aborts the whole family on a
+single short/absent `.fmt` entry. Freshly restructured: each side's three blobs
+(`pl`/`pk`/`fk`) copy independently, and a failed copy stages `NULL` for **that
+field only** (the `fifa96_match_entities_bind_record_meta` NULL-blob gate), so a
+side-0 failure cannot clear side 1 and vice versa. This matches the native's
+per-side call structure (`FUN_0007412C` issues two independent `FUN_0008CE78`
+calls, one per team) and keeps each FU-205 gated row's gate **exactly its own
+field**. `match_run_release_meta` drops its hand-walk of
+`pool.team[t].records[i]` and clears through the pool API per team. The
+owner-lifetime argument is preserved: the owner is retained iff any field bound,
+so no pointer ever dangles into freed memory.
+
+### 12.3 Legs
+
+FU199-L1..L7 stand. No new leg. (The removed "atomic" hardening is superseded by
+the per-field/per-side model, which is at least as safe — a retained owner is
+never freed while referenced.)

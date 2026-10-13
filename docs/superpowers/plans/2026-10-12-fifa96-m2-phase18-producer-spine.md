@@ -225,3 +225,40 @@ regression to investigate, never a re-pin.
 clean, tree clean). Spec authority unchanged:
 `docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`.
 
+
+## Two-axis review fix wave (post-acceptance)
+
+A Standards+Spec review of the phase-18 diff (base `2a29245`, HEAD `fbec920`)
+landed five fixes; the disclosed legs and rulings stand.
+
+- **F1 (test seam).** The `mr.act.id = 0` isolation idiom (63 sites in
+  `tests/test_engine_match_frame.c`) collapses to one fixture helper
+  `begin_isolated(mr, eng)` (begin + clear the armed act); the redundant second
+  assignment in `test_kickoff_enters_phase2_when_cutscene_isolated` is deleted.
+  Behaviour identical; M2 unmoved.
+- **F2 (pool API).** `match_run_release_meta` clears the record metadata through
+  `fifa96_match_entities_bind_record_meta` per team instead of hand-walking the
+  pool's record array.
+- **F3 (header doc).** `fifa96_match_run_record_meta_bind`'s doc now records the
+  `-FIFA96_ERR_INVALID` (NULL `mr`) return path.
+- **F4 (native bind order) — the T1 landing note above is corrected.** Fresh
+  first-hand `/FIFA96.EXE` (`disassemble_function 0x92E2C`): the native order is
+  `begin(FUN_00074034) -> bind(FUN_0007417C) -> handler(0x92EF7, writes phase
+  0x15)`, so the bind belongs **before** the derived screen install (erratum to
+  FU-199 §11's "precedes the bind"). The bind is re-placed to the native position
+  (after `match_run_formation_seed`, before `match_run_slot_bind`) and is **M2
+  byte-identical** (`441415fc…`, `cmp` clean) — the phase-0x15 target write is
+  render-invisible on this tape, so the old "moved from frame 12" does not
+  reproduce; **no re-pin, no artifact leg**. The T1 landing note's "placed as the
+  **last** begin step" and "fix round 1 made the bind **atomic**" are superseded
+  by this wave (FU-199 §12).
+- **F5 (per-side gate).** `match_run_record_meta_bind` is now per-field,
+  per-side: a short/absent `.fmt` on one side clears only that side's own field's
+  pointer, so each FU-205 gated row's gate is its own field. New RED/GREEN
+  `test_record_meta_bind_per_side` (side-1 failure ⇒ side-0's rows still run);
+  the old all-or-nothing behaviour aborts it (mutation-RED).
+- **Rulings left.** Spec-a (the desired-order matrices / `FUN_00011620` / the
+  situation-8 pair), Spec-b (the dormant act-4 arm), and Standards-1 (the
+  `docs/ENGINE.md` in-place narrative edits — false current-state corrections)
+  stand. **Census unchanged `51/80 = 63%`; M1 `09b726b7…` and M2 `441415fc…`
+  byte-identical; `make check` 110/110.**

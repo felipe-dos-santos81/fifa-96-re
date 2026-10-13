@@ -128,6 +128,18 @@ static void drop_fixture(struct fixture f) {
   fifa96_engine_destroy(f.engine);
   fifa96_platform_destroy(f.plat);
 }
+/* M2 phase-18 T3/T4 (FU-202 §6 rec (b) / FU203-L2): begin a fresh run and
+ * isolate it from the now-LIVE situation-0 kickoff chain. The live `begin` arms
+ * the native situation-0 act 0xA (the re-placed match-init producer); its
+ * phase-0x20 body installs code 0x24 on the pool on the first granted frame,
+ * pre-empting the derived kickoff chain these fixtures exercise. Clearing the
+ * armed act here lets the derived path run — the native kickoff is the act-1
+ * route (FU203-L2), reached after the unported phase-0x20 `0x3E8` cutscene wait.
+ * One seam, so the isolation idiom is not copy-pasted per fixture. */
+static void begin_isolated(struct fifa96_match_run *mr, struct fifa96_engine *eng) {
+  assert(fifa96_match_run_begin(mr, eng, 0) == 0);
+  mr->act.id = 0;
+}
 
 /* M2 phase-9 T1: the live held-key movement is only reachable with the
  * formation-seeded kickoff (the ISO `352ko.fmt` seed places the second kickoff
@@ -174,8 +186,7 @@ static void test_engine_step_drives_frame_body(void) {
   mr.phase_machine.state = 0x13;      /* begin must reset the FU-142a machine */
   mr.phase_machine.arm2a_overflow = 1;
 
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.state.total_seconds == 0);   /* fresh match clock */
   /* The stale pre-begin mirror (0x13) is reset by begin and then carries the
    * derived kickoff entry (T2/OL-84): phase_machine.state == phase 1. */
@@ -216,8 +227,7 @@ static void test_begun_period_end_marks_over(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
 
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.lc.active == 1);
   assert(mr.lc.registered == 1);
   mr.state.phase = 2;
@@ -540,8 +550,7 @@ static void test_phase_drive_begun_end_resets_phase(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
 
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.state.phase = 2;
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
@@ -592,16 +601,7 @@ static void test_kickoff_enters_phase2_when_cutscene_isolated(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
-  /* M2 phase-18 T3: the live `begin` now arms the native situation-0 act 0xA
-   * (the match-init producer), whose phase-0x20 body installs code 0x24 on the
-   * pool on the first granted frame — pre-empting this DERIVED kickoff chain.
-   * The native kickoff phase-1 entry is the act-1 route (situation 1 -> act 1),
-   * reached after the phase-0x20 `0x3E8` cutscene wait and unported in the
-   * engine (leg FU203-L2/FU202-L2). Clear the live situation arm here so this
-   * test isolates the derived chain (the path the row-0x14 release also uses). */
-  mr.act.id = 0;
+  begin_isolated(&mr, f.engine);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE); /* derived entry */
   assert(mr.state.prev_phase == 0u);
   assert(mr.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
@@ -735,8 +735,7 @@ static void test_score_event_wired_run_path(void) {
   assert(mr.score_sound_midi == 0);
   assert(mr.score_display_event == 0);
 
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(mr.score_sound_device == 0 && mr.score_display_event == 0);
 
@@ -812,8 +811,7 @@ static void test_goal_situation_dispatch_is_not_the_writer(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.score[0] == 0 && mr.score[1] == 0);
   assert(mr.score_last_side == -1 && mr.score_tracked_side == 1);
   assert(mr.score_max_diff == 0 && mr.score_last_event == 0);
@@ -856,11 +854,7 @@ static void test_natural_phase2_never_scores(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  /* M2 phase-18 T3: isolate the derived kickoff chain from the live situation-0
-   * act (whose phase-0x20 code-0x24 install pre-empts it; see
-   * test_kickoff_enters_phase2_when_cutscene_isolated / leg FU203-L2). */
-  mr.act.id = 0;
+  begin_isolated(&mr, f.engine);
   /* M2 interactive Task 1: the bound slot makes row 01 stage 1 wait for the
    * `word[slot+6] & 0x70` release word, so pass it with a KICK press/release
    * after the 60-frame act-1 producer window. */
@@ -988,8 +982,7 @@ static void test_pad_drives_controlled_locomotion(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_run mr2;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
 
   {
     int32_t taker = mr.entities.team[0].target;
@@ -1028,8 +1021,7 @@ static void test_pad_drives_controlled_locomotion(void) {
 
   /* Control: the same begun run with no pad leaves the record still. */
   fifa96_match_run_init(&mr2);
-  assert(fifa96_match_run_begin(&mr2, f.engine, 0) == 0);
-  mr2.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr2, f.engine);
   {
     int32_t taker = mr2.entities.team[0].target;
     assert(mr2.slot.entity == taker);
@@ -1068,8 +1060,7 @@ static void test_pad_kick_release_runs_kick_row(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* M2 phase-10 T2: with the L4.1 unbound walk live, every outfield record
    * runs the forced/chase tail, so the team-target/control roles can move on
    * their own (an AI record's row 04 legitimately claims control/ball).
@@ -1535,8 +1526,7 @@ static void test_held_key_moves_live_controlled_record(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   {
@@ -1572,8 +1562,7 @@ static void test_held_key_moves_live_controlled_record(void) {
    * still. */
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -1743,8 +1732,7 @@ static void test_live_ball_record_produced_in_open_play(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* M2 phase-12 T2: stage the derived art pair exactly as the ISO bridge does
    * at match start (fifa96_match_bridge_from_frontend) so the scene composer
    * stages the live slots — the render's real input for the on-canvas
@@ -1829,8 +1817,7 @@ static void test_live_carrier_claim_and_kick(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
   {
@@ -1939,8 +1926,7 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -2112,8 +2098,7 @@ static void test_live_pass_kick_runs_receive_arm(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -2182,8 +2167,7 @@ static void test_live_claim_pan_row04_half_line(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -2259,8 +2243,7 @@ static void test_ai_record_mover_and_lane_track(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.slot.entity != id);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
@@ -2347,8 +2330,7 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
   /* ===== A: the live airborne seed. ===== */
   for (int pump = 0; pump < 64 && seed_ok == 0; pump++) {
     uint16_t dump;
-    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-    mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&mr, f.engine);
     for (int i = 0; i < pump; i++)
       assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
     for (int i = 0; i < 61; i++) one_granted_frame(&mr);
@@ -2446,8 +2428,7 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
   /* ===== B: the live band-2 crossing + follow. ===== */
   for (int pump = 0; pump < 64 && cross_ok == 0; pump++) {
     uint16_t dump;
-    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-    mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&mr, f.engine);
     for (int i = 0; i < pump; i++)
       assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
     for (int i = 0; i < 61; i++) one_granted_frame(&mr);
@@ -2535,8 +2516,7 @@ static void test_record_jump_arc_starter(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   /* T3: staged through the bounded FUN_0006E598 store core. */
@@ -2584,8 +2564,7 @@ static void test_record_jump_arm_aux_3a_base_literal(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   /* the live path: the row-0x5C frame-2 install stages the native aux word */
@@ -2616,8 +2595,7 @@ static void test_record_anim_install_row44(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
 
@@ -2697,8 +2675,7 @@ static void test_record_jump_case_0f_snap_frame3(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
 
@@ -2754,8 +2731,7 @@ static void test_live_row_0e_selector_installs_jump(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* stage the match art pair so the scene stage advances the anim frames
    * (the bridge does this in the engine path; the direct-run fixture must
    * call it explicitly) */
@@ -2833,8 +2809,7 @@ static void test_record_jump_impulsion(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
 
@@ -2869,8 +2844,7 @@ static void test_record_jump_sustained_and_freeze(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   e->type = 2;                       /* dir (1,0) */
@@ -2911,8 +2885,7 @@ static void test_record_jump_grounded_step(void) {
   struct fifa96_match_entity *e;
   int32_t start_x;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   e->type = 2;                       /* dir (1,0) -> +0x20 x */
@@ -2944,8 +2917,7 @@ static void test_live_jump_impulsion_carry_and_stop(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(fifa96_match_run_stage(&mr, f.engine->surface,
                                 "/ART/PLAYART.PVI", "/ART/GAMEART0.PVI") == FIFA96_OK);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
@@ -2992,8 +2964,7 @@ static void test_row1e_claim_reaches_pool(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 5;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[5];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
   assert(e->has_ball == 0);
@@ -3020,8 +2991,7 @@ static void test_row1e_stage3_possession_flip(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[5];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
   e->stage92 = 3;                       /* the stage-3 span dispatch */
@@ -3218,8 +3188,7 @@ static void test_goal_scan_queue_and_fallback(void) {
     struct fixture f = make_fixture(10000000ull);
     struct fifa96_match_run fb;
     fifa96_match_run_init(&fb);
-    assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
-    fb.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&fb, f.engine);
     assert(fb.session_gate_14c32a == 0);            /* begin seeds the settled
                                                      * ordinary-match value
                                                      * (FU-166/R14) */
@@ -3569,8 +3538,7 @@ static void test_corner_counter_side_swap(void) {
     fb.corner_count[0] = 3;
     fb.corner_count[1] = 4;
     fb.side_swap = 7;
-    assert(fifa96_match_run_begin(&fb, f.engine, 0) == 0);
-    fb.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&fb, f.engine);
     assert(fb.corner_count[0] == 0u && fb.corner_count[1] == 0u);
     assert(fb.side_swap == 0u);
     assert(fifa96_match_run_end(&fb) == 0);
@@ -4062,8 +4030,7 @@ static void test_goal_chain_pan_fixture(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.session_gate_14c32a == 0);    /* begin seeds the settled
                                            * ordinary-match value (FU-166) */
   /* FU-166/R14: the queue -> scheduler -> post/score chain under test is the
@@ -4119,8 +4086,7 @@ static void test_goal_consumer_chain_fixture(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
@@ -4164,8 +4130,7 @@ static void test_restart_chain_fixture(void) {
   struct fifa96_match_run mr;
   int taker = -1;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.session_gate_14c32a = 1;   /* the byte-1 family the tape stages */
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
@@ -4296,8 +4261,7 @@ static void test_jump_arm_f3_freeze_and_f0_landing(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
 
@@ -4337,8 +4301,7 @@ static void test_screen_install_state(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(mr.screen_leg == -1);            /* init: no handler installed */
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.screen_leg == 0 && mr.screen_mode == 0);
   assert(mr.screen_period_frames == 900u);   /* mode 0 leg 0 = 15 s * 60 */
   assert(mr.situation_pending == 1);         /* the installer latch 0x92DCD */
@@ -4377,8 +4340,7 @@ static void test_screen_schedule_ids(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* the screen-over rollover: leg 0 -> id 8 */
   mr.screen_timer = (uint16_t)(mr.screen_period_frames + 1u);
   assert(fifa96_match_run_screen_schedule(&mr) == 0);
@@ -4462,8 +4424,7 @@ static void test_screen_post_id_tables(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.screen_leg == 0);
   mr.global_5882a = 1;                    /* the kickoff-complete gate */
   mr.state.phase = 2;
@@ -4482,8 +4443,7 @@ static void test_screen_post_id_tables(void) {
 
   /* leg 2: queued id 6 -> side 1 (0x94088 table) */
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(fifa96_match_run_screen_install(&mr, 2, 0, 0) == 0);
   mr.state.phase = 2;
   assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle: step 1 -> 3 */
@@ -4510,8 +4470,7 @@ static void test_screen_leg5_unbounded_id_map(void) {
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
-    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-    mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&mr, f.engine);
     assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
     mr.state.phase = 2;
     assert(fifa96_match_run_screen_step(&mr) == 0); /* settle at the post step */
@@ -4530,8 +4489,7 @@ static void test_screen_leg5_unbounded_id_map(void) {
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
-    assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-    mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&mr, f.engine);
     assert(fifa96_match_run_screen_install(&mr, 5, 0, 0) == 0);
     mr.state.phase = 2;
     assert(fifa96_match_run_screen_step(&mr) == 0); /* settle again */
@@ -4556,8 +4514,7 @@ static void test_screen_step_probe_post(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(fifa96_match_run_screen_install(&mr, 2, 0, 0) == 0);
   mr.state.phase = 2;
   assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle at the post step */
@@ -4581,8 +4538,7 @@ static void test_screen_advance_ring(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.global_5882a = 1;
   mr.state.phase = 2;
   assert(fifa96_match_run_screen_step(&mr) == 0);   /* settle: step 1 -> 4 */
@@ -4626,8 +4582,7 @@ static void test_view_pose_feed_arms_camera(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* FU-166/R14: the queued-arm expectation below is the byte-1 session
    * family; stage it explicitly (the engine's ordinary-match default is 0). */
   mr.session_gate_14c32a = 1;
@@ -4679,8 +4634,7 @@ static void test_camera_pan_event_chain(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   mr.state.phase = 2;
   mr.state.period_length = 90;
@@ -4720,8 +4674,7 @@ static void test_row04_live_pan_arms_camera(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.session_gate_14c32a = 1;   /* FU-166: stage the byte-1 family under test */
   mr.state.phase = 2;
   mr.state.period_length = 90;
@@ -4791,8 +4744,7 @@ static void test_row04_tracked_gate_suppresses_half_line(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.session_gate_14c32a = 1;
   mr.state.phase = 2;
   mr.state.period_length = 90;
@@ -4846,8 +4798,7 @@ static void test_row04_arm_a_track_reload(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.state.phase = 2;
   mr.state.period_length = 90;
   mr.global_5882a = 1;
@@ -4904,8 +4855,7 @@ static void test_natural_goal_end_to_end(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* FU-166/R14: the end-to-end chain under test (table-1 queue id 5 ->
    * scheduler -> post -> score) is the native **byte-1 (Practise) session**
    * family; stage it explicitly (the engine's ordinary-match default is the
@@ -5001,8 +4951,7 @@ static void test_natural_goal_fallback_arm(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;                /* M2 phase-18 T3: isolate the derived kickoff chain (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -5071,8 +5020,7 @@ static void test_tracked_side_pick(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(mr.score_tracked_side == -1);          /* init: no handler installed */
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   /* begin installs leg 0 / mode 0 / side 0 -> the flags-zero image default 1 */
   assert(mr.score_tracked_side == 1);
   assert(mr.tracked_flag[0] == 0 && mr.tracked_flag[1] == 0);
@@ -5099,8 +5047,7 @@ static void test_tracked_side_pick(void) {
     struct fifa96_match_run mr2;
     fifa96_match_run_init(&mr2);
     mr2.input_cfg[0] = 2;
-    assert(fifa96_match_run_begin(&mr2, f.engine, 0) == 0);
-    mr2.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&mr2, f.engine);
     assert(mr2.input_range[0] == 4 && mr2.input_range[1] == 0);
     assert(((mr2.input_range[0] | mr2.input_range[1]) & 4u) != 0u);
     assert(fifa96_match_run_end(&mr2) == 0);
@@ -5123,8 +5070,7 @@ static void test_auto_camera_follows_tracked_slot(void) {
   struct fifa96_match_entity *e;
   int32_t id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   e = &mr.entities.team[1].records[4];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
   e->has_slot = 1;
@@ -5214,8 +5160,7 @@ static void test_ball_receive_arm_high_ball_chain(void) {
   fifa96_ball_pair_vector vec;
   int32_t actor_id = 9;                 /* team 0 record 9 */
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.state.phase = 2;                   /* the 0x7A2F6 phase gate passes */
   /* A quiet team block: every record far from the origin and unexcluded,
    * then one near candidate (record 7) for the receiver pick. */
@@ -5295,8 +5240,7 @@ static void test_ball_receive_low_ball_no_follow(void) {
   struct fifa96_match_run mr;
   fifa96_ball_pair_vector vec;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.state.phase = 2;
   mr.entities.team[0].records[9].has_slot = 1;
   mr.entities.team[0].records[9].dir_x = 1;
@@ -5363,8 +5307,7 @@ static void test_ball_receive_skip_rule(void) {
   struct fifa96_match_run mr;
   fifa96_ball_pair_vector vec;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   mr.state.phase = 2;
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     struct fifa96_match_entity *e = &mr.entities.team[0].records[i];
@@ -5421,8 +5364,7 @@ static void test_formation_producer(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(mr.formation[0] == 0 && mr.formation[1] == 0);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   assert(mr.formation[0] == 0 && mr.formation[1] == 0);
   assert(fifa96_match_run_set_formation(&mr, 0, 1) == 0);
   assert(mr.formation[0] == 1);
@@ -5469,8 +5411,7 @@ static void test_record_meta_bind_live(void) {
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
     const struct fifa96_match_entity *r0 = &mr.entities.team[t].records[0];
     assert(r0->phase_meta != NULL);
@@ -5494,34 +5435,58 @@ static void test_record_meta_bind_live(void) {
   drop_fixture(f);
 }
 
-/* FU-199 §7.2 (M2 phase-18 T1, fix round 1): the bind is atomic on its error
- * path. A re-bind with an invalid side-1 formation id (`> 4`) must fail
- * *before* staging any pointer, so no record retains a `phase_meta*` into the
- * freed owner (the partial-bind use-after-free). A subsequent valid re-bind
- * restores the pointers. Skips without the ISO. */
-static void test_record_meta_bind_error_path(void) {
+/* FU-199 §7.2 / FU-205 §1 (M2 phase-18 T1; two-axis review): the bind is
+ * PER-SIDE (and per-field, through the pool NULL-blob gate). A side-1 failure
+ * (here an id past the 5-id table — the same per-side path an absent/short
+ * `.fmt` takes) must clear only side 1's pointers; side 0's rows keep running.
+ * The previous atomic all-or-nothing bind cleared *every* pointer, silently
+ * disabling the whole row family. Also pins the NULL-`mr` guard. Skips without
+ * the ISO. */
+static void test_record_meta_bind_per_side(void) {
   struct fixture f;
   struct fifa96_match_run mr;
   if (!t1_iso_available()) return;
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
+  assert(fifa96_match_run_record_meta_bind(NULL) == -FIFA96_ERR_INVALID);
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.phase_machine.side_controlled = 0;
+  mr.phase_dir_default[0] = 0;
   assert(mr.entities.team[0].records[0].phase_meta != NULL);
-  /* Side 1 has an id past the 5-id table: the load must fail and, being atomic,
-   * leave *every* record pointer NULL (side 0's staged pointers would otherwise
-   * dangle into the freed owner). */
+  assert(mr.entities.team[1].records[0].phase_meta != NULL);
+
+  /* Side 1 has an id past the 5-id table: only side 1's pointers clear. */
   mr.formation[1] = 5u;
-  assert(fifa96_match_run_record_meta_bind(&mr) == 0);
-  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
-    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-      const struct fifa96_match_entity *e = &mr.entities.team[t].records[i];
-      assert(e->phase_meta == NULL);
-      assert(e->phase_meta10 == NULL);
-      assert(e->phase_meta14 == NULL);
-    }
+  assert(fifa96_match_run_record_meta_bind(&mr) == 1);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+    const struct fifa96_match_entity *s0 = &mr.entities.team[0].records[i];
+    const struct fifa96_match_entity *s1 = &mr.entities.team[1].records[i];
+    assert(s0->phase_meta != NULL && s0->phase_meta10 != NULL &&
+           s0->phase_meta14 != NULL);
+    assert(s1->phase_meta == NULL && s1->phase_meta10 == NULL &&
+           s1->phase_meta14 == NULL);
   }
-  /* A valid re-bind stages the pointers again over both teams. */
+  /* Side 0's gated row (phase 0x02) still runs; side 1's is a disciplined
+   * no-op — each row's gate reflects exactly its own field's blob. */
+  {
+    struct fifa96_match_entity *e0 = &mr.entities.team[0].records[2];
+    struct fifa96_match_entity *e1 = &mr.entities.team[1].records[2];
+    e0->team = 0;
+    e0->target_x = 1;
+    e0->target_y = 2;
+    e0->target_z = 3;
+    e1->team = 1;
+    e1->target_x = 1;
+    e1->target_y = 2;
+    e1->target_z = 3;
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x02u, e0, -1) == FIFA96_OK);
+    assert(!(e0->target_x == 1 && e0->target_y == 2 && e0->target_z == 3));
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x02u, e1, -1) == FIFA96_OK);
+    assert(e1->target_x == 1 && e1->target_y == 2 && e1->target_z == 3);
+  }
+  /* A valid re-bind restores both sides. */
   mr.formation[1] = 0u;
   assert(fifa96_match_run_record_meta_bind(&mr) == 1);
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
@@ -5540,8 +5505,7 @@ static void test_translation_install(void) {
   struct fifa96_match_run mr;
   static uint8_t pool[0x3000];
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
-  mr.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+  begin_isolated(&mr, f.engine);
   for (size_t i = 0; i < sizeof pool; i++) pool[i] = (uint8_t)(i * 7u);
   assert(fifa96_palette_pool_partition(pool, sizeof pool, &mr.render.palette_pool) ==
          FIFA96_OK);
@@ -5567,8 +5531,7 @@ static void test_translation_install(void) {
     /* a fresh live run without a staged pool: the pool identity is leg 11 */
     struct fifa96_match_run bare;
     fifa96_match_run_init(&bare);
-    assert(fifa96_match_run_begin(&bare, f.engine, 0) == 0);
-    bare.act.id = 0;   /* M2 phase-18 T3: isolate from the live situation-0 kickoff (leg FU203-L2) */
+    begin_isolated(&bare, f.engine);
     assert(fifa96_match_run_translation_install(&bare, 0) == -FIFA96_ERR_STATE);
     assert(fifa96_match_run_end(&bare) == 0);
   }
@@ -5670,7 +5633,7 @@ int main(void) {
   test_ball_receive_skip_rule();
   test_formation_producer();
   test_record_meta_bind_live();
-  test_record_meta_bind_error_path();
+  test_record_meta_bind_per_side();
   test_translation_install();
   puts("test_engine_match_frame OK");
   return 0;

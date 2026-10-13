@@ -427,3 +427,27 @@ re-pin**); M1 `09b726b7…` unmoved.
    (FU-199 §7.2 / FU-200 §10). FU205-L3/L4 (the `session_gate_14c32a` queue trap;
    the OL-85 extra-time flag) stand. FU205-L5 (the staged-zero value gates,
    FU200-L3) stands.
+
+---
+
+## Addendum — two-axis review corrections (per-side gate + native bind order)
+
+This additive addendum records the M2 phase-18 review fixes; §§1–T5.5 above are
+kept verbatim.
+
+- **The loader bind is per-field, per-side (§T5.1 corollary).** The T5.1 claim
+  "the gate is **exactly** each body's own metadata field … and not a sibling"
+  holds **per side**: `match_run_record_meta_bind` now copies each side's three
+  `.fmt` blobs independently, so a short/absent file (or an out-of-range id) on
+  one side clears only that side's own field's pointer. The earlier
+  all-or-nothing bind cleared **both** sides on one short file — silently
+  disabling all eight rows even for the side whose blobs loaded. The
+  `test_record_meta_bind_per_side` RED/GREEN (ISO-gated) pins it: a side-1
+  failure leaves side 0's phase-`0x02` row running and side 1's a disciplined
+  no-op; the old atomic behaviour aborts it (mutation-RED).
+- **The bind placement is native (§3 unrelated).** Fresh
+  `disassemble_function 0x92E2C` pins `begin(0x74034) -> bind(0x7417C) ->
+  handler(0x92EF7, writes phase 0x15)`, so the bind precedes the derived screen
+  install; FU-199 §12 carries the erratum and the byte-identical M2 measurement.
+- **Census unchanged** (`51/80 = 63%`); M2 `441415fc…` and M1 `09b726b7…`
+  byte-identical (`cmp` clean).

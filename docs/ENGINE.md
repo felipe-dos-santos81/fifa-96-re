@@ -873,13 +873,23 @@ the build also produces the windowed `fifa96` target (`make game`).
   GAMEART0 bank and copies the formation id's `.fmt` family
   (`352pl`/`352pk`/`freekick` for id 0 — the `0x107370` loader names, every
   6-name group {ko,pl,pk,ps,freekick,sp}) into the run-owned `mr->meta_owner`; it
-  soft-fails (pointers NULL) with no assets/ISO. **Placement:** the **last**
-  begin step, **after** the derived front-end screen install — the native bind
-  belongs to the match begin, while the engine models the front-end
-  `FUN_00092D8C` install (which writes phase 0x15) as a begin step, so binding
-  after it keeps that derived walk metadata-free (the `match_run_formation_seed`
-  placement would have let the derived phase-0x15 write run the walk with the
-  metadata bound — an artifact that moved the whole M2 transcript from frame 12).
+   soft-fails (pointers NULL) with no assets/ISO. **Placement (errata, two-axis
+   review):** the native position — immediately after the formation seed and
+   **before** the derived slot bind and the screen-install handler. Fresh
+   `disassemble_function` this review: `FUN_00092e2c` runs the match begin
+   `FUN_00074034` (the phase-cell seed), then the bind `FUN_0007417c`
+   (`FUN_0007412C` + the slot bind `FUN_00078824`), then the screen handler
+   `0x92EF7 CALL [0x15B6D4]` that writes phase 0x15 — so the phase-0x15 write
+   legitimately sees the bound metadata. The slice had placed the bind **last**,
+   after the screen install, on the premise that the derived phase-0x15 walk
+   preceded the bind; the review re-measured the native position
+   **byte-identical** (`441415fc…`, `cmp` clean — the target write is
+   render-invisible on this tape), so **no re-pin** and no artifact leg. **The
+   bind is per-field, per-side:** the loader copies each side's three `.fmt`
+   blobs independently, so a short/absent file (or an out-of-range id) clears
+   only that side's own field's pointer — never a sibling field or the other side
+   (the earlier all-or-nothing bind silently disabled all eight rows on one bad
+   file).
   **The gate is not removed:** the native NULL check
   (`handlers.c:4594`/`:4669`/`:4730`) stays; the live path now supplies the
   pointer, so the eight per-record rows (`0x02`/`0x03`/`0x04`/`0x06`/`0x07`/

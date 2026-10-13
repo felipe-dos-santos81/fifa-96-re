@@ -1981,14 +1981,10 @@ static void match_run_release_stage(struct fifa96_match_run *mr) {
  * be initialized (begin/end call it only after fifa96_match_entities_init). */
 static void match_run_release_meta(struct fifa96_match_run *mr) {
   if (!mr) return;
-  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
-    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
-      struct fifa96_match_entity *e = &mr->entities.team[t].records[i];
-      e->phase_meta = NULL;
-      e->phase_meta10 = NULL;
-      e->phase_meta14 = NULL;
-    }
-  }
+  /* Per-team through the pool API (a NULL blob clears the pointers), not a
+   * hand-walk of the pool's record array — the pool owns that layout. */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    (void)fifa96_match_entities_bind_record_meta(&mr->entities, t, NULL, NULL, NULL);
   free(mr->meta_owner);
   mr->meta_owner = NULL;
 }
@@ -2272,6 +2268,24 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
   int formation_seeded = match_run_formation_seed(mr);
+  /* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1; re-placed native-order by the
+   * two-axis review): the OL-13 metadata bind — the native
+   * `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920` producer.
+   * Native order (fresh `disassemble_function`): `FUN_00092e2c` runs the match
+   * begin `FUN_00074034` (which contains the phase-cell seed
+   * `FUN_0008D098`), THEN the bind `FUN_0007417c` (`FUN_0007412C` + the slot
+   * bind `FUN_00078824`), THEN the screen handler `0x92EF7 CALL [0x15B6D4]`
+   * that writes phase 0x15. So the bind precedes both the derived slot bind and
+   * the screen-install handler; the phase-0x15 write legitimately sees the
+   * bound metadata (it is NOT the pre-bind front-end head). Stages each record's
+   * `[rec+0xC]/[rec+0x10]/[rec+0x14]` into the formation id's `.fmt` family
+   * (the `352pl`/`352pk`/`freekick` blobs of GAMEART0, FU-199 §5.1/FU-200 §2),
+   * opening the `phase_meta` NULL gate for the per-record phase bodies (rows
+   * 0x02/0x03/0x04/0x06/0x07/0x08/0x09/0x15). Soft-fails (pointers stay NULL)
+   * with no assets/ISO or a missing family entry. Per-field: a missing/short
+   * `.fmt` blob clears only its own pointer, per side (the FU-205 gate is each
+   * body's own field). */
+  (void)fifa96_match_run_record_meta_bind(mr);
   /* M2 interactive Task 1: the derived setup slot bind (`FUN_00078824` ->
    * `FUN_000785E0`) runs before the kickoff state-1 arm, whose `FUN_0007876C`
    * merge moves the bound slot onto the taker (the arm's own `0x8D243` call). */
@@ -2397,15 +2411,6 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     mr->phase_machine.state = pm_state_before;
     mr->phase_machine.phase = pm_phase_before;
   }
-  /* FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the OL-13 metadata bind — the
-   * native `FUN_0007412C -> FUN_0008CE78 -> FUN_0006D9C4 -> FUN_0006D920`
-   * producer. Stages each record's `[rec+0xC]/[rec+0x10]/[rec+0x14]` pointers
-   * into the formation id's `.fmt` family (the `352pl`/`352pk`/`freekick` blobs
-   * of GAMEART0, FU-199 §5.1 / FU-200 §2), opening the `phase_meta` NULL gate
-   * for the per-record phase bodies (rows 0x02/0x03/0x04/0x06/0x07/0x08/0x09/
-   * 0x15). Soft-fails (pointers stay NULL) with no assets/ISO or a missing
-   * family entry — the pre-T1 gated no-op. */
-  (void)fifa96_match_run_record_meta_bind(mr);
   return 0;
 }
 
@@ -5151,35 +5156,39 @@ int fifa96_match_run_record_meta_bind(struct fifa96_match_run *mr) {
   if (fifa96_bigf_parse(container, container_len, &info) != FIFA96_OK) goto out;
   owner = calloc(FIFA96_MATCH_ENTITY_TEAMS, MATCH_RUN_META_SIDE_BYTES);
   if (!owner) goto out;
-  /* Phase 1: copy every side's `.fmt` family into the owner (no pool writes). */
+  /* Per-field, per-side: copy each side's `.fmt` family independently and stage
+   * whichever blobs loaded. A missing/short entry (or an out-of-range id)
+   * clears only that field's pointer (the `fifa96_match_entities_bind_record_meta`
+   * NULL-blob gate), never a sibling field or the other side — so each row's
+   * `phase_meta*` gate is exactly its own `.fmt` blob (the FU-205 truth-table),
+   * not a whole-family all-or-nothing. The owner is handed to the run (kept
+   * alive) as soon as any field binds, and freed only when nothing bound (the
+   * pool was already cleared above), so no pointer ever dangles into freed
+   * memory. */
   for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
     uint8_t *pl = owner + (size_t)side * MATCH_RUN_META_SIDE_BYTES;
     uint8_t *pk = pl + MATCH_RUN_META_PL_PAD;
     uint8_t *fk = pk + MATCH_RUN_META_PK_BYTES;
+    const int8_t *plp = NULL;
+    const int32_t *pkp = NULL;
+    const int32_t *fkp = NULL;
     uint8_t id = mr->formation[side];   /* native (int8)byte[[team+0x7AE]] */
-    if (id > 4u) goto out;              /* hardened (native has no range check) */
-    const char *const *family = match_formation_family[id];
-    if (match_run_meta_copy(&info, family[0], pl, MATCH_RUN_META_PL_BYTES) != 0) goto out;
-    if (match_run_meta_copy(&info, family[1], pk, MATCH_RUN_META_PK_BYTES) != 0) goto out;
-    if (match_run_meta_copy(&info, family[2], fk, MATCH_RUN_META_FK_BYTES) != 0) goto out;
+    if (id <= 4u) {                     /* hardened (native has no range check) */
+      const char *const *family = match_formation_family[id];
+      if (match_run_meta_copy(&info, family[0], pl, MATCH_RUN_META_PL_BYTES) == 0)
+        plp = (const int8_t *)pl;
+      if (match_run_meta_copy(&info, family[1], pk, MATCH_RUN_META_PK_BYTES) == 0)
+        pkp = (const int32_t *)pk;
+      if (match_run_meta_copy(&info, family[2], fk, MATCH_RUN_META_FK_BYTES) == 0)
+        fkp = (const int32_t *)fk;
+    }
+    (void)fifa96_match_entities_bind_record_meta(&mr->entities, side, plp, pkp, fkp);
+    if (plp || pkp || fkp) bound = 1;
   }
-  /* Phase 2 (atomic): only once every side copied successfully stage the
-   * per-record pointers and hand the owner to the run. A `goto out` before this
-   * loop has written no pool pointer, so `free(owner)` cannot strand a
-   * `phase_meta*` into freed memory (the `match_run_release_meta` above already
-   * cleared the pool). */
-  for (uint32_t side = 0; side < FIFA96_MATCH_ENTITY_TEAMS; side++) {
-    uint8_t *pl = owner + (size_t)side * MATCH_RUN_META_SIDE_BYTES;
-    uint8_t *pk = pl + MATCH_RUN_META_PL_PAD;
-    uint8_t *fk = pk + MATCH_RUN_META_PK_BYTES;
-    (void)fifa96_match_entities_bind_record_meta(&mr->entities, side,
-                                                 (const int8_t *)pl,
-                                                 (const int32_t *)pk,
-                                                 (const int32_t *)fk);
+  if (bound) {
+    mr->meta_owner = owner;   /* hand the blobs to the run */
+    owner = NULL;
   }
-  mr->meta_owner = owner;   /* hand the blobs to the run */
-  owner = NULL;
-  bound = 1;
 out:
   free(owner);
   free(container);
