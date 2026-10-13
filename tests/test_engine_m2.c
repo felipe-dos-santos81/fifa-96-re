@@ -3937,7 +3937,7 @@ static void run_phase19_riders(void) {
  * tail dormant, so the bit-8 gate never raises the index and assert 1 aborts. */
 static void run_phase21_riders(void) {
   /* 1. CADENCE (FU225-L5 / D10): the mode-0 common tail runs on a plain
-   *    (non-completion) frame; the bit-8 gate (fifa96_match_run.c:3214) is the
+   *    (non-completion) frame; the bit-8 gate (fifa96_match_run.c:3218) is the
    *    observable — with the per-frame call the index rolls to 4. */
   {
     struct fifa96_match_run mr;
@@ -3947,15 +3947,30 @@ static void run_phase21_riders(void) {
     assert(fifa96_match_run_phase_drive(&mr) == 0);
     assert(mr.global_157ac2 == 4u);
   }
-  /* 2. STAND-INS (FU-225 D2-D4): the zero stand-ins yield the derived chooser
-   *    arm (extra_time + period>=4 + d8<=d9 -> edx 1 -> phase 0x13/act 0xC).
-   *    Mutation-RED: an inverted d8/d9 compare or probe order aborts. */
+  /* 2. STAND-INS (FU-225 D2-D4): the VALUE PIN — the zero stand-ins yield the
+   *    derived chooser arm (extra_time + period>=4 + d8<=d9 -> edx 1 -> phase
+   *    0x13/act 0xC/side 0). This is NOT mutation-RED for the d8/d9 compare:
+   *    with the all-zero stand-ins (d8==d9==0, side_abe==side_abf==0, probe
+   *    zero) edx∈{0,1} agree, so the `<=` vs `<`/`>` flip leaves it unchanged.
+   *    Block 3 supplies the genuine mutate-RED discriminator. */
   {
     fifa96_action_phase_period_end_out o;
     uint8_t probe[4] = { 0u, 0u, 0u, 0u };
     assert(fifa96_action_phase_period_end(4u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
                                           probe, &o) == FIFA96_OK);
     assert(o.phase == 0x13u && o.act == 0x0Cu && o.side == 0u);
+  }
+  /* 3. DISCRIMINATOR (genuine mutation-RED, FU-225 D3): a NON-ZERO d8 > d9
+   *    selects the OTHER edx arm (edx 0; `:1187` `(int8)d8 <= (int8)d9` is
+   *    false), which the non-zero probe[0] upgrades to phase 0x14. Inverting the
+   *    compare (`<=` -> `>`, the complement) flips edx to 1 -> probe[1]==0 ->
+   *    phase 0x13, so the 0x14 assertion aborts. */
+  {
+    fifa96_action_phase_period_end_out o;
+    uint8_t probe[4] = { 1u, 0u, 0u, 0u };
+    assert(fifa96_action_phase_period_end(4u, 1u, 0u, 0u, 0u, 0u, 0u, 1u, 0u,
+                                          probe, &o) == FIFA96_OK);
+    assert(o.phase == 0x14u && o.act == 0x0Cu && o.side == 0u);
   }
 }
 

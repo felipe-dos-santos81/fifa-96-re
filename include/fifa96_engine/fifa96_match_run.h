@@ -1215,14 +1215,18 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * native then invokes the act selector. Since T1 (FU-213) the flag
  * `[0x157AC0]` producer (`mr->global_157ac0`) is LIVE — the score tie-break on a
  * completion plus the W5 mid-extra-time set — so the chooser receives it; the
- * act handler body, the phase-0xC machine `FUN_0008BAF0` and the
- * `FUN_0004B02C(0)`/`FUN_00088860` reset path stay unported (FU-143 §4/§5
- * legs), so the engine lifecycle owns the exit and the 0x0C -> 0 reset is the
- * run_end teardown (`fifa96_match_state_init`).
+ * act handler body and the phase-0xC machine `FUN_0008BAF0` stay unported
+ * (FU-143 §4/§5 legs). The `FUN_0004B02C(0)` period-end producer
+ * (`fifa96_match_run_period_setup(mr, 0)`, native `FUN_00088860`) now runs at
+ * the TOP of every `phase_drive` — the native every-frame cadence (M2 phase-21
+ * T4, FU225-L5/D10); its `state.phase == 0x0C` and `global_157ac2 == 4`
+ * self-gates select sit-1/sit-8 and may write a phase outside the chooser path.
+ * The engine lifecycle owns the exit and the 0x0C -> 0 reset is the run_end
+ * teardown (`fifa96_match_state_init`).
  *
- * No phase write happens for a class-0 phase, without a staged completion, or
- * when the chooser derives `FIFA96_ACTION_PHASE_NONE`. Returns 1 when the
- * derived chooser ran (a phase is written only when its output is not
+ * The chooser path writes no phase for a class-0 phase, without a staged
+ * completion, or when the chooser derives `FIFA96_ACTION_PHASE_NONE`. Returns 1
+ * when the derived chooser ran (a phase is written only when its output is not
  * `FIFA96_ACTION_PHASE_NONE`), 0 otherwise, -FIFA96_ERR_INVALID (NULL), or a
  * -fifa96_err_t from the drivers. */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);

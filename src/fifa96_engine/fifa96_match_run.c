@@ -2648,7 +2648,7 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * `state.period`. This is the live producer T2's situation-8 gate reads. */
       mr->global_157ac2 = mr->state.period;
       /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2) + FU-225 §4/D10 (M2 phase-21
-       * T4): the situation-8 selector. The roll (`:2643`, native 0x8B58A) lands
+       * T4): the situation-8 selector. The roll (`:2649`, native 0x8B58A) lands
        * the index on 4 (native `[0x157AC2] == 4`, the extra-time period); the
        * mode-0 period-end producer (native `FUN_00088860` 0x888C8; its
        * `state.phase == 0x0C` gate the native co-condition) then selects
