@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v19 (spec §5; the
- * M2 phase-19 period-end-spine acceptance, T6; the v18 M2 phase-18
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v20 (spec §5; the
+ * M2 phase-20 sit-8-completion acceptance, T6; the v19 M2 phase-19
+ * period-end-spine acceptance, T6; the v18 M2 phase-18
  * producer-spine acceptance, T6; the v17 phase-17 phase/act-seam
  * acceptance, T7; the v16 phase-16
  * act-machine-frontier acceptance, T6; the v15 phase-15
@@ -1488,6 +1489,55 @@
  *
  * Golden decision (v19): **strata-only, byte-identical, no re-pin** — the
  * phase-19 producer landings moved no presented frame; M2 stays `441415fc…`,
+ * M1 `09b726b7…` unmoved. Any *unexplained* drift is a regression to
+ * investigate, never a re-pin.
+ *
+ * --- v20 (M2 phase-20 acceptance, T6): the sit-8-completion strata -----------
+ *
+ * v20 is the phase-20 acceptance — the sit-8 completion, the two census rows
+ * that close the phase-19 sit-8 chain end to end (T1 the act-7 invoke-now
+ * cadence so the phase-`0x1D` arm 0 runs on the dispatch frame, FU-219; T2 the
+ * phase-`0x10` registration — the writer the arm-0 `FUN_000740A0(0x10)` reaches,
+ * FU-222; T3 the sit-8 `[0x1587CC+side*4] → [0x1587D4]` actor-cell bind + the
+ * coupled action row `0x20` flip, FU-217; T4 the row-`0x20` arm-0 ball-record
+ * place parity, FU-220; T5 the leg register + the appended errata,
+ * FU-215…FU-222). Like the phase-15 v14→v15 and phase-19 v18→v19 precedents,
+ * **every phase-20 landing is tape-inert**: the cadence fix fires only on the
+ * dormant sit-8 route (act 7 never runs on the scripted tape), the phase-`0x10`
+ * writer and the coupled row-`0x20` install both gate on the sit-8 actor, and
+ * the ball place lands only inside the row-`0x20` body — so M2 is
+ * **byte-identical** at `441415fc…` (`cmp` clean) across T1–T5. This is
+ * therefore a **strata-only label bump**: it adds this provenance block and
+ * re-labels the acceptance layer **v20** — **no golden re-pin**. M1 `09b726b7…`
+ * never moved. Any *unexplained* drift is a regression to investigate, never a
+ * re-pin.
+ *
+ * The phase-20 rider classes (**every one is mutation-RED** — each
+ * deliberately-broken mutation aborts at its own assertion, the mutations
+ * recorded in the phase-20 T6 report). The acceptance layer reuses the durable
+ * v18/v19 rider blocks rather than duplicating them (the handler primaries live
+ * in `test_engine_match_handlers.c` / `test_engine_match_frame.c`):
+ *   1. The CADENCE (T1/FU-219): the sit-8 dispatch runs act 7 invoke-now, so the
+ *      phase-`0x1D` arm 0 writes phase `0x10` on the dispatch frame. Reverting
+ *      `match_run_situation_side`'s invoke-now to the act-2-only form leaves the
+ *      phase at `0x1D` and aborts `run_phase19_riders` (block 3/4).
+ *   2. The PHASE-`0x10` registration (T2/FU-222): the slot is wired and the walk
+ *      dispatches per non-skipped record (`active == 0` → the `(0x3C0, 0, 0x840)`
+ *      default). A NULLed phase-`0x10` slot drops `phase_wired` to 21 and aborts
+ *      `run_census_riders`; reverting the arm-0 phase write aborts
+ *      `run_phase19_riders` block 4.
+ *   3. The SIT-8 BIND (T3/FU-217): the sit-8 re-init binds `global_157a4c` +
+ *      the per-side `actor_1587cc[]` cells and the active side's `actor_1587d4`,
+ *      so the coupled row-`0x20` install lands code `0x20` on a real free
+ *      outfield record (the wrap variant included). Dropping the re-init leaves
+ *      `global_157a4c == 0` / `actor_1587d4 == NONE` and no code-`0x20` record,
+ *      aborting `run_phase19_riders` blocks 4/5.
+ *   4. The BALL PLACE (T4/FU-220): the row-`0x20` arm 0 maps the native
+ *      ball-record place onto the engine ball surface `(0, 0, 0xB10)`.
+ *      Dropping it aborts `test_action_20_body_arms` (`test_engine_match_handlers.c`).
+ *
+ * Golden decision (v20): **strata-only, byte-identical, no re-pin** — the
+ * phase-20 completion landings moved no presented frame; M2 stays `441415fc…`,
  * M1 `09b726b7…` unmoved. Any *unexplained* drift is a regression to
  * investigate, never a re-pin.
  */
@@ -3762,14 +3812,17 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
-  /* v15/v16/v17/v18/v19 (phase-15 T4 → phase-16 T6 → phase-17 T7 → phase-18 T6
-   * → phase-19 T6): the census/seam rider cross-checks (both modes, pure state):
-   * the census shape + the T1–T6 regression pins + the phase-17
-   * seam/walk/census/leg pins + the phase-18 producer riders (re-gate /
-   * double-run / metadata-slip) + the phase-19 period-end-spine producer riders
-   * (re-gate / tie-break / selector-slip / phase-slot). Run first so each
-   * rider's own mutation aborts at its assert, before the tape consumes the
-   * process; they print nothing, so the transcript is unaffected. */
+  /* v15/v16/v17/v18/v19/v20 (phase-15 T4 → phase-16 T6 → phase-17 T7 →
+   * phase-18 T6 → phase-19 T6 → phase-20 T6): the census/seam rider
+   * cross-checks (both modes, pure state): the census shape + the T1–T6
+   * regression pins + the phase-17 seam/walk/census/leg pins + the phase-18
+   * producer riders (re-gate / double-run / metadata-slip) + the phase-19
+   * period-end-spine producer riders (re-gate / tie-break / selector-slip /
+   * phase-slot), whose blocks 3/4/5 carry the phase-20 cadence (T1/FU-219),
+   * phase-`0x10` (T2/FU-222) and sit-8-bind (T3/FU-217) rider classes (the
+   * row-`0x20` ball place lives in `test_action_20_body_arms`). Run first so
+   * each rider's own mutation aborts at its assert, before the tape consumes
+   * the process; they print nothing, so the transcript is unaffected. */
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();

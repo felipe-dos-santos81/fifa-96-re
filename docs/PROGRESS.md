@@ -1554,3 +1554,79 @@ re-init), the engine extension point as landed.
 `FU221_phase22_downstream.md` confirms **FU211-L2 dissolved** and **FU221-L1
 parked**. **TDD:** docs-only (no test/code change); the tree is clean after the
 commit. **Determinism:** no source or golden touched.
+
+## M2 phase-20 T6 — acceptance: the tape strata v20 + the sit-8-completion rider classes (FU-214)
+
+**The acceptance layer closes the phase-20 sit-8 completion: the tape strata is
+re-labelled `v20` (strata-only, no re-pin) and the four phase-20 mutation classes
+are confirmed present and mutation-RED; census unchanged `55/80 = 68%`.**
+`tests/test_engine_m2.c` gains the v20 provenance block (and the file-header/main
+bumps). The four rider classes are **not duplicated** — T1/T3 already landed them
+at the durable v18/v19 acceptance layer, and this task confirms each aborts at
+its own assertion:
+
+- **The cadence (T1/FU-219)** — `match_run_situation_side`'s act-7 invoke-now, so
+  the phase-`0x1D` arm 0 writes phase `0x10` on the dispatch frame (rider block 3,
+  `run_phase19_riders`). Mutation-RED: reverting `(out.act == 2u || out.act ==
+  7u) ? 1 : 0` → `out.act == 2u ? 1 : 0` (`match_run.c:2915`) aborts
+  `test_engine_m2.c:3619 run_phase19_riders: mr.state.phase == 0x10u`.
+- **The phase-`0x10` registration (T2/FU-222)** — the registered slot + the
+  per-record walk dispatch (census pin + rider block 4). Mutation-RED: NULLing the
+  slot (`handlers.c:5221` `{0x10, fifa96_match_phase_10, …}` → `{0x10, NULL, …}`)
+  drops `phase_wired` to 21 and aborts `test_engine_m2.c:3020 run_census_riders:
+  action_wired == 33u && phase_wired == 22u`; reverting the arm-0 phase write
+  aborts rider block 4's `mr.state.phase == 0x10`.
+- **The sit-8 bind (T3/FU-217)** — the re-init binding `global_157a4c` + the
+  per-side `actor_1587cc[]` cells + the active side's `actor_1587d4`, so the
+  coupled row-`0x20` install lands code `0x20` on a free outfield record (rider
+  blocks 4/5, with the wrap variant). Mutation-RED: `mr->global_157a4c = 1u` →
+  `0u` (`match_run.c:3166`) aborts `test_engine_m2.c:3664 run_phase19_riders:
+  mr.global_157a4c == 1u`.
+- **The ball place (T4/FU-220)** — the row-`0x20` arm-0 ball-record place onto
+  the engine ball surface `(0, 0, 0xB10)`. Mutation-RED: `mr->entities.ball.z =
+  0xB10` → `0u` (`handlers.c:5035`) aborts
+  `test_engine_match_handlers.c:1001 test_action_20_body_arms: f.mr.entities.ball.z
+  == 0xB10`.
+
+**Tape decision: strata-only label bump, no re-pin (the phase-15 v14→v15 /
+phase-19 v18→v19 precedent).** Every phase-20 landing is tape-inert (the cadence
+fix fires only on the dormant sit-8 route; the phase-`0x10` writer and the coupled
+row-`0x20` install both gate on the sit-8 actor; the ball place lands only inside
+the row-`0x20` body), so **M2 is byte-identical** at
+`441415fc423b05b2957f0a0bd51efa44f7f4651b4f8c07fcd6fb5ed6a8da9506` (`cmp` clean)
+across T1–T5; M1
+`09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` unmoved. The
+golden file was **not** touched. Any *unexplained* drift is a regression to
+investigate, never a re-pin.
+
+**Smoke (honest).** `make game` under `DISPLAY=:1` (SDL3 and
+`game/FIFAPCCD96.iso` both present) opened the 960×720 “FIFA 96” window, booted the
+ISO and reached the match: the intro-RETURN front-end frame is **byte-identical**
+(ImageMagick AE = 0) to the committed `docs/screens/p9-v9-frontend.png`, and the
+panel BACKSPACE→RETURN bridge draws the live match HUD/pitch (the frame tracks the
+phase-8/9 `match-hud` record; the residual ~1 % of pixels is the live clock and
+player motion — a second live capture differs from the first by the same order).
+No `docs/screens/*` file moved or was added; the phase-20 landings are
+render-invisible, so a fresh capture shows **no phase-20 pixel**. The `fifa96`
+binary exposes no stdout frame counter, so the honest deterministic frame record
+is the headless `test_engine_m2` transcript (byte-identical `441415fc…`). The run
+was terminated with `SIGTERM` after capture; LeakSanitizer reported 1942 bytes in
+3 allocations, all inside `libdbus-1` via SDL3/X11 GL — external, not
+engine-owned (the ESC-quit path is the normal exit).
+
+**Census recomputed:** `55 OK = 33 action + 22 phase`; the `0x16` INT3 slot is
+the one `NOTF`; dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80);
+`floor(100 × 55/80) = 68`. README title `68%`, `docs/ENGINE.md` status +
+Action-dispatch bullets `55/80`, and `AGENTS.md` are consistent — **no inflation**
+(the phase-20 wave's two movers `0x10`/`0x20` were counted in their own commits;
+T6 adds no census row).
+
+**Remaining legs (each with its native owner, per the T5 register):**
+**FU215-L1..L5**, **FU216-L1/L3**, **FU217-L1/L2/L3/L5**, **FU219-L2..L6** (L1
+landed), **FU220-L1..L6**, **FU221-L1** (parked), **FU208-L8** — the phase-20 leg
+block in `docs/ENGINE.md` names each native locus; no fake producer was added.
+
+**TDD:** the v20 label is doc/label-only; each of the four rider classes is
+mutation-RED (the mutations + failing outputs above, re-verified first-hand in
+this task). **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…`
+byte-identical (`cmp` clean); `make check` **110/110** (sanitized).

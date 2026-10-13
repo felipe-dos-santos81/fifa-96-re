@@ -1287,6 +1287,35 @@ the build also produces the windowed `fifa96` target (`make game`).
   (the `[0x14C32A]` sit-8 session-gate co-condition; FU218-L3) stays a leg; the
   FU218 carrier legs fold into FU215-L1 (L1), the landed FU219-L1 (L2) and the
   landed FU217 bind (L4).
+- **M2 phase-20 T6 (FU-214) — acceptance: the tape strata v20 + the
+  sit-8-completion rider classes; census unchanged `55/80 = 68%`.**
+  `tests/test_engine_m2.c` is re-labelled **v20** (the phase-20 sit-8-completion
+  strata). **Tape decision: strata-only label bump, no re-pin** (the phase-15
+  v14→v15 / phase-19 v18→v19 precedent). Every phase-20 landing is tape-inert —
+  the T1/FU-219 cadence fix fires only on the dormant sit-8 route, the T2/FU-222
+  phase-`0x10` writer and the T3/FU-217 coupled row-`0x20` install both gate on
+  the sit-8 actor, and the T4/FU-220 ball place lands only inside the row-`0x20`
+  body — so M2 is **byte-identical** at `441415fc…` (`cmp` clean) across T1–T5,
+  M1 `09b726b7…` unmoved. The golden was **not** touched. Any *unexplained* drift
+  is a regression to investigate, never a re-pin. **Rider classes (not
+  duplicated; T1/T3 landed them at the v18/v19 layer; every one mutation-RED,
+  re-verified first-hand in this task):** (1) the **cadence** — reverting the
+  act-7 invoke-now (`match_run.c:2915`) aborts `run_phase19_riders` (block 3,
+  `mr.state.phase == 0x10`); (2) the **phase-`0x10` registration** — NULLing the
+  slot drops `phase_wired` and aborts `run_census_riders` (`:3020`), reverting the
+  arm-0 phase write aborts block 4; (3) the **sit-8 bind** — setting
+  `global_157a4c = 0` (`match_run.c:3166`) aborts `run_phase19_riders` (block 4,
+  `:3664`); (4) the **ball place** — dropping `ball.z = 0xB10` (`handlers.c:5035`)
+  aborts `test_action_20_body_arms` (`test_engine_match_handlers.c:1001`).
+  **Smoke (honest):** `make game` under `DISPLAY=:1` opened the 960×720 window,
+  booted the ISO and reached the match — the post-intro front-end frame is
+  byte-identical (AE = 0) to `docs/screens/p9-v9-frontend.png` and the live match
+  tracks the phase-8/9 HUD record; no `docs/screens/*` moved (the landings are
+  render-invisible). **Census recomputed:** `55 OK = 33 action + 22 phase`;
+  dispatch `24 UNSUP / 55 OK / 1 NOTF` (sum 80); `floor(100 × 55/80) = 68`.
+  `make check` **110/110**. Remaining legs: the phase-20 leg register above
+  (**FU215-L1..L5, FU216-L1/L3, FU217-L1/L2/L3/L5, FU219-L2..L6, FU220-L1..L6,
+  FU221-L1** parked, **FU208-L8**) — each with its native owner.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
