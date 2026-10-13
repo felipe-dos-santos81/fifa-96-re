@@ -1046,6 +1046,11 @@ kickoff chain and the derived ad-hoc `fifa96_match_run_kickoff_entry` is
 kickoff/live-record fixtures now clear the armed act to isolate the derived path
 from the live cutscene. `make check` **110/110**; README title `62%`; dispatch
 `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
+*(errata, M2 phase-18 T4: the act-1 route is now **live** — phase `0x17` is
+registered and counted, the derived ad-hoc begin kickoff is re-expressed through
+it, and a begun run again reaches phase 2 naturally; the current dispatch is
+`28 UNSUP / 51 OK / 1 NOTF`, README title `63%`. The T3 text above is kept
+verbatim — see the phase-18 T4 section.)*
 
 **Phase-18 T4 (2026-10-12) — the act-1 route live: phase `0x17` wired/counted;
 M2 byte-identical (no re-pin) (`+1`, census `50/80 → 51/80 = 63%`)** (this

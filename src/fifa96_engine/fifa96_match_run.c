@@ -2382,9 +2382,15 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
      * any tick (FU-202 §3A: the producer was dead). The phase cells are
      * restored below (the derived front-end install ordering), so the derived
      * kickoff-phase value is kept while the native act arm survives. The
-     * ad-hoc `fifa96_match_run_kickoff_entry` (the derived act-1 stage-0
-     * stand-in; the native act-1 route is unported, leg FU203-L2/FU202-L2)
-     * stays at its begin position and produces no part of the code-0x24 move. */
+     * kickoff is entered through the now-LIVE native act-1 route (M2 phase-18
+     * T4 / FU-203: the phase-0x20 stage-2 re-dispatch -> situation 1 -> act 1 ->
+     * phase 0x17). The begin kickoff is a `fifa96_match_act_dispatch(mr,1,0,1)`
+     * re-expression of that same route (up at `:2302`), not an ad-hoc
+     * `fifa96_match_run_kickoff_entry` stand-in; its phase-0x17 body stage 0
+     * runs `fifa96_match_run_kickoff_entry`, and it produces no part of the
+     * code-0x24 move. The retained frame-body `global_5882a` arm (`:3921`) is the
+     * remaining derived stage-1 remainder — **leg FU203-L2** (idempotent with
+     * the phase-0x17 stage-1 arm; no double-run). */
     if (mr->period_setup_live) (void)fifa96_match_run_period_setup(mr, 1);
     mr->state.phase = phase_before;
     mr->state.prev_phase = prev_before;

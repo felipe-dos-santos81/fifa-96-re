@@ -965,7 +965,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   **act-1 route** (situation 1 → act 1 → phase `0x17`) is **unported** — the
   situation-0 cutscene pre-empts the derived kickoff chain, so the phase-`0x17`
   row/body stays `NULL/uncounted` (**leg FU203-L2/FU202-L2**, the phase-2
-  natural-chain gap). The coupled phase-`0x1D`/row-`0x20` pair is **not wired**
+  natural-chain gap). *(errata, M2 phase-18 T4: the act-1 route is now **live**
+  — phase `0x17` is registered and counted, the derived ad-hoc begin kickoff is
+  re-expressed through it, and a begun run again reaches phase 2 naturally; the
+  section above is the T3 record, kept verbatim — see the phase-18 T4 bullet.)*
+  The coupled phase-`0x1D`/row-`0x20` pair is **not wired**
   (its situation-8 route needs the unported extra-time flag + the actor-record
   producer; **leg FU205-L2**); phase `0x1E` stays `NULL` (the compressed act-8
   fallback, FU194-L2). The extra-time flag `[0x157AC0]` (OL-85) has **no live
@@ -985,6 +989,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_natural_phase2_never_scores`, the record-machine live tests) now **clear
   the armed act** to isolate the derived path from the live situation-0
   cutscene. README title `62%`; dispatch `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
+  *(errata, M2 phase-18 T4: the current dispatch is `28 UNSUP / 51 OK / 1 NOTF`,
+  README title `63%` — see the phase-18 T4 bullet; the T3 figures are kept
+  verbatim.)*
 - **M2 phase-18 T4 (FU-203) — the act-1 route live: phase `0x17`
   wired/counted; M2 byte-identical (no re-pin).** R51/FU-203 §2: the act-1
   kickoff/phase-1 entry `0x88DC8` has exactly **one** static reference — the
@@ -1228,7 +1235,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   **M2 phase-18 T3 correction:** the live situation-0 kickoff cutscene now
   pre-empts this derived chain, so a begun run **holds in the cutscene and does
   not reach phase 2 naturally**; the fixture reaches phase 2 only with the armed
-  act cleared (the native act-1 route is unported, leg FU202-L2/FU203-L2). The 0x13/0x14
+  act cleared (the native act-1 route is unported, leg FU202-L2/FU203-L2).
+  *(errata, M2 phase-18 T4: the act-1 route is now **live** — a begun run again
+  reaches the live phase 2 naturally via the phase-`0x20` stage-2 re-dispatch →
+  situation 1 → act 1 → phase `0x17`; the T3 text above is kept verbatim — see
+  the phase-18 T4 bullet.)* The 0x13/0x14
   forced window **stays** because the natural chain is not frame-for-frame
   identical to it (the forced window drives the FU-142a 26/28/2A arm staging
   and its `state=19/20` lines; measured mismatch, v3-era: hashes identical
@@ -3712,7 +3723,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   **unported** (leg FU202-L2/FU203-L2), so the derived chain is exercised only
   with the armed act cleared
   (`test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`;
-  FU-143 §11). The remaining situation-0xB producers (rows 02/0x10..0x13, the
+  FU-143 §11). *(errata, M2 phase-18 T4: the act-1 route is now **live** — a
+  begun run again reaches phase 2 naturally via the phase-`0x20` stage-2
+  re-dispatch → situation 1 → act 1 → phase `0x17`; the T3 text above is kept
+  verbatim — see the phase-18 T4 bullet. The retained frame-body `global_5882a`
+  arm is the remaining leg FU203-L2.)* The remaining situation-0xB producers (rows 02/0x10..0x13, the
   keeper/restart bodies, the computed act-8 call) and row 01's
   camera/event/ball-stage sinks stay open legs (`OL-84` narrowed).
   The extra-time flag producer (`OL-85`, re-verified at `0x8B2AC`/`0x8B2C1`)
