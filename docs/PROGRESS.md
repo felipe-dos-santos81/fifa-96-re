@@ -1228,3 +1228,42 @@ the new tests. **Determinism:** `make check` **110/110** (sanitized); M1
 reaches no sit-8, and the `actor_1587d4` cell defaults NONE). **Census:**
 unchanged `52/80 = 65%` (32 action + 20 phase; dispatch `27 UNSUP / 52 OK / 1
 NOTF`, sum 80); README title `65%`; AGENTS.md census note unchanged.
+
+## M2 phase-19 T4 — the phase-0x22 / act-0xC registration + the end-of-match leg (FU-211)
+
+**Phase `0x22` is producer-live and COUNTED (`+1`, census `52/80 → 53/80 = 66%`).**
+T4 registers the phase-table slot (`{0x22, NULL}` → `fifa96_match_action_phase_22`)
+for the already-ported act-0xC extra-time-SET three-stage timer (native `0x8B900`;
+the `0x110794[0x22] == 0x1107EC[0xC]` FU165-L9 dual identity). The producer is the
+T1/FU-213 OL-85 flag `mr->global_157ac0`: a regulation-end (completed index 1) or
+ET-2 (completed index 3) completion with differing scores raises it (W2 `0x8B2AC`
+/ W4 `0x8B3A2`; W5 `0x8B5CD` is the mid-ET set), the derived `FUN_0008B9CC`
+chooser (`fifa96_action_phase_period_end`) returns `out.act = 0x0C` on the
+extra-time arm, and `fifa96_match_run_phase_drive` dispatches it
+(`0x8BAE7 CALL 0x888FC(0xC,0,BX=1)`) — the act-to-phase `0x16 + act` map reaches
+the registered row. The live-path fixture drives `phase_drive` end to end (the
+flag set by W2 → chooser act 0xC → phase-0x22 stage 0 fires the `0x974DC(0x1E)`
+event). The body is render-invisible (act slot + audio sink staged as
+`ref_whistle`; no record, no phase write) and, per FU-211 §3, does not write
+`[0x157AC0]`.
+
+**The end-of-match word `[0x158822]` / `FUN_0008BAF0` is leg'd (FU213-L3).** The
+phase-indexed end machine has no faithful engine mapping without porting
+`FUN_0008BAF0` (379 insns) and the `[0x158822]` consumers; the engine lifecycle
+owns exits (`match_run.c`), and the brief scopes the word conservatively — a
+producer without the machine would be a fake. The audio ring-push/audio-handle
+remainder (`FU211-L3`) and the `word[0x15881A]` cell producer (`FU211-L2`) stay
+legs.
+
+**TDD:** RED (the slot was NULL: `test_phase_22_registered` aborted on the
+`fn == fifa96_match_action_phase_22` assert; `test_phase_rows_dispatch_per_classification`
+aborted with `phase_expect[0x22]` OK vs the returned UNSUP) → GREEN (register the
+slot). Two mutation-RED: (A) a broken stage-0 event (`ref_whistle = 0x1D`) aborts
+`test_phase_22_body_direct`; (B) a wrong phase-drive act literal (`0x0B` in place
+of `out.act`) aborts only `test_phase_22_producer_live_via_phase_drive`, proving
+the live-path fixture is non-vacuous.
+**Determinism:** `make check` **110/110** (sanitized); M1 `09b726b7…` unmoved; M2
+`441415fc…` byte-identical (`cmp` clean — the tape reaches no extra-time
+completion, and the row is render-invisible regardless). **Census:** README title
+`66%`; ENGINE.md census `53/80` (dispatch `26 UNSUP / 53 OK / 1 NOTF`, sum 80);
+AGENTS.md census note swept `52/80 → 65%` → `53/80 → 66%`.

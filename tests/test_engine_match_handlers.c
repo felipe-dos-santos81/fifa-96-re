@@ -101,12 +101,14 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
 /* FU-137 §6 phase classification: phase 0x16 is the native table's zero entry
  * (loader INT3 stub) with no handler body by design → NOT_FOUND; the wired rows
  * dispatch OK; the rest are classified-but-unported → UNSUPPORTED. The T6 row
- * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1). */
+ * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1) and the T4 row
+ * 0x22 (act-0xC extra-time-SET) is wired/counted (FU-211; the live extra-time
+ * flag producer T1/FU-213 installs act 0xC). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
-    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195) */
+    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T6 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195); 0x22 = T4 act-0xC ET-set (FU-211) */
 };
 
 struct fixture {

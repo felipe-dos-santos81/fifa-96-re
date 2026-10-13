@@ -6248,12 +6248,11 @@ int fifa96_match_action_phase_21(struct fifa96_match_run *mr) {
 /* FU-195 §3/§6.1/§7 (M2 phase-17 T6; updated by M2 phase-19 T1/FU-213): the
  * phase-0x22 / act-0xC row body — the
  * native extra-time-SET analogue `0x8B900` (act slot `0x1107EC[0xC]`), the
- * three-stage form of `phase_21`. Its slot stays NULL — but no longer because
- * of a missing producer: the OL-85 flag `[0x157AC0]` producer LANDED in T1
- * (`mr->global_157ac0`, passed live by `phase_drive`, so the chooser can yield
- * act 0xC; the former producer-dormancy leg FU195-L2 is RESOLVED). The body is
- * not dispatched because the phase-0x22 table slot is registered by a later
- * task (T4). Raw disasm: head `word[0x158818] += word[0x157A64]` (`0x8B911`);
+ * three-stage form of `phase_21`. Three-way live since T4/FU-211: the OL-85 flag
+ * `[0x157AC0]` producer LANDED in T1 (`mr->global_157ac0`, passed live by
+ * `phase_drive`, so the chooser yields act 0xC; the former producer-dormancy leg
+ * FU195-L2 is RESOLVED) and T4 registers the phase-0x22 table slot
+ * (`fifa96_match_handlers.c`), so the act dispatch reaches this body. Raw disasm: head `word[0x158818] += word[0x157A64]` (`0x8B911`);
  * stage 0 (`0x8B92E`) event + timer 0 + stage 1; stage 1 (`0x8B95C`) waits on
  * `word[0x15881A] >= 0x3C` (derived: the act timer, FU195-L4), then event +
  * timer 0 + stage 2; stage 2 (`0x8B98F`) waits the same gate, then event and

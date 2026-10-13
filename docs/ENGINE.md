@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-52/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20
+53/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,8 +265,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **52/80 rows wired** (32 action + the phase rows
-  `0x02`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **53/80 rows wired** (32 action + the phase rows
+  `0x02`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -1147,6 +1147,28 @@ the build also produces the windowed `fifa96` target (`make game`).
   reaches no sit-8 / no code-`0x20` record, and the cell defaults NONE), M1
   `09b726b7…` unmoved; dispatch `27 UNSUP / 52 OK / 1 NOTF` (sum 80); README
   title `65%`; AGENTS.md census note unchanged.
+- **M2 phase-19 T4 (FU-211) — the phase-`0x22` / act-`0xC` registration: phase
+  `0x22` COUNTED, census `52/80 → 53/80 = 66%`.** The already-ported act-`0xC`
+  extra-time-SET three-stage timer body (`fifa96_match_action_phase_22`, native
+  `0x8B900`; the `0x110794[0x22] == 0x1107EC[0xC]` FU165-L9 dual identity) is now
+  registered (`fifa96_match_handlers.c` `{0x22, NULL}` →
+  `fifa96_match_action_phase_22`). Its producer is LIVE: the T1/FU-213 OL-85 flag
+  `mr->global_157ac0` drives the derived `FUN_0008B9CC` chooser
+  (`fifa96_action_phase_period_end`) to `out.act = 0x0C` on the extra-time arm
+  (W2 `0x8B2AC`/W4 `0x8B3A2` set the flag on a regulation-end / ET-2 completion
+  with differing scores; W5 `0x8B5CD` is the mid-ET set), and
+  `fifa96_match_run_phase_drive` dispatches it (`0x8BAE7 CALL 0x888FC(0xC,0,BX=1)`),
+  whose act-to-phase-`0x16 + act` map reaches this row. The body is
+  render-invisible (the act slot + the `0x974DC(0x1E)` audio sink staged as
+  `ref_whistle`; no record, no phase write, and it does not write `[0x157AC0]` —
+  FU-211 §3). The end-of-match word `[0x158822]` / `FUN_0008BAF0` stays the
+  **FU213-L3** leg (the engine lifecycle owns exits; no faithful mapping without
+  the unported end machine), the audio ring-push/audio-handle remainder is
+  **FU211-L3/FU195-L3** and the `word[0x15881A]` cell producer is
+  **FU211-L2/FU195-L4**. **Tape:** M2 `441415fc…` byte-identical (the tape reaches
+  no extra-time completion, and the body is render-invisible regardless), M1
+  `09b726b7…` unmoved; dispatch `26 UNSUP / 53 OK / 1 NOTF` (sum 80); README title
+  `66%`; AGENTS.md census note swept.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

@@ -663,13 +663,14 @@ static void test_phase_1E_terminal(void) {
  *
  * The two native act-tail handlers `0x8B874` (phase 0x21 / act 0xB, the
  * extra-time-CLEAR period-end timer) and `0x8B900` (phase 0x22 / act 0xC, the
- * extra-time-SET analogue) are ported as derived bodies. phase 0x21 is the one
- * counted row: its producer `FUN_0008B9CC` (`0x8BAE7`) is mirrored live by
+ * extra-time-SET analogue) are ported as derived bodies. phase 0x21 and phase
+ * 0x22 are the two counted rows: their producer `FUN_0008B9CC` (`0x8BAE7`) is mirrored live by
  * `fifa96_match_run_phase_drive` -> `fifa96_action_phase_period_end`
- * (`out.act = 0x0B`) -> the new act-selector dispatch, so wiring the row is an
- * honest +1. phase 0x22's extra-time flag `[0x157AC0]` is LIVE since T1/FU-213
- * (`mr->global_157ac0`; the hardwired `extra_time = 0` is gone), but its phase
- * slot stays NULL pending T4's registration (FU214-L4). phase 0x1B / act 5 has
+ * (`out.act = 0x0B` clear / `0x0C` set) -> the act-selector dispatch, so wiring
+ * each row is an honest +1. phase 0x22's extra-time flag `[0x157AC0]` is LIVE
+ * since T1/FU-213 (`mr->global_157ac0`; the hardwired `extra_time = 0` is gone),
+ * so T4 registers the phase-0x22 slot (FU-211 §6.1; the T4 live-path test below
+ * drives it end-to-end). phase 0x1B / act 5 has
  * no invoker (the fresh 11-xref
  * `0x888FC` census finds no `EAX=5` site), so it stays a leg (owner FU175-L2).
  * Both bodies touch only the act slot + the `0x974DC(0x1E)` audio sink
@@ -754,17 +755,17 @@ static void test_phase_21_producer_live_via_phase_drive(void) {
   assert(mr.ref_whistle == 0x1Eu);      /* the 0x974DC(0x1E) event */
 }
 
-/* Phase 0x22 / act 0xC (FU-195 §3): three stages, each gated on the derived
- * timer >= 0x3C after a reset; the terminal stage 2 clears the act slot. Its
- * phase-table slot stays NULL — the extra-time flag producer is live since
- * T1/FU-213, but the registration is T4's (FU214-L4). The body is
- * driven directly. Mutation-RED: skipping a stage's timer reset makes the next
- * gate pass immediately (the stage assertions below fail). */
+/* Phase 0x22 / act 0xC (FU-195 §3, FU-211 §2): three stages, each gated on the
+ * derived timer >= 0x3C after a reset; the terminal stage 2 clears the act slot.
+ * Counted by T4: the OL-85 extra-time flag producer is live since T1/FU-213
+ * (`mr->global_157ac0`), so a regulation-end completion with differing scores
+ * installs act 0xC through `phase_drive`, and the registered phase-0x22 slot
+ * dispatches. The body is also driven directly here. Mutation-RED: skipping a
+ * stage's timer reset makes the next gate pass immediately (the stage
+ * assertions below fail). */
 static void test_phase_22_body_direct(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x22].fn == NULL);      /* uncounted pending T4 (FU214-L4) */
-  assert(fifa96_match_dispatch_phase(&mr, 0x22) == -FIFA96_ERR_UNSUPPORTED);
   mr.state.frame_delta = 2;
   mr.act.id = 0x0C;
   mr.act.stage = 0;
@@ -786,6 +787,47 @@ static void test_phase_22_body_direct(void) {
   assert(fifa96_match_action_phase_22(&mr) == FIFA96_OK);
   assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0u);
   assert(fifa96_match_action_phase_22(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x22 is COUNTED (T4/FU-211 §6.1): the phase-table slot is wired to the
+ * already-ported body, so `fifa96_match_dispatch_phase(0x22)` resolves and runs
+ * stage 0 (the act-0xC install is the live `0x8BAE7` route). */
+static void test_phase_22_registered(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x22].fn == fifa96_match_action_phase_22);
+  mr.act.id = 0x0C;
+  assert(fifa96_match_dispatch_phase(&mr, 0x22) == FIFA96_OK);
+  assert(mr.act.stage == 1u);           /* stage 0 ran via the dispatch */
+  assert(mr.ref_whistle == 0x1Eu);      /* the 0x974DC(0x1E) event */
+  assert(fifa96_match_dispatch_phase(NULL, 0x22) == -FIFA96_ERR_INVALID);
+}
+
+/* The producer-live route (the census claim, FU-211 §5 + T1/FU-213): a live
+ * regulation-end completion with DIFFERING scores raises the OL-85 flag
+ * (`global_157ac0`, W2 0x8B2AC) and the derived FUN_0008B9CC chooser installs
+ * the extra-time arm — `out.act = 0x0C` — which `phase_drive` dispatches
+ * (`0x8BAE7 CALL 0x888FC(0xC,0,BX=1)`). With the phase-0x22 slot registered the
+ * body runs invoke-now (stage 0 fires the 0x1E event). Mutation-RED: with the
+ * slot NULL the act dispatch early-returns at fifa96_match_act.c:51, so
+ * `act.stage` stays 0 and `ref_whistle` stays 0 (the assertions below fail). */
+static void test_phase_22_producer_live_via_phase_drive(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.state.period = 2;                  /* the FU-62 library rolled 1 -> 2 */
+  mr.state.phase = 2;                   /* class 1: the clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;                     /* differing -> W2 raises the flag */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 1u);       /* the live OL-85 flag */
+  assert(mr.state.phase == 0x13u);      /* the extra-time chooser arm */
+  assert(mr.act.id == 0x0Cu);           /* act 0xC installed */
+  assert(mr.act.stage == 1u);           /* phase-0x22 stage 0 ran invoke-now */
+  assert(mr.ref_whistle == 0x1Eu);      /* the 0x974DC(0x1E) event */
+  assert(mr.global_157ac2 == 2u);       /* the roll 0x8B58A */
 }
 
 /* Phase 0x1B / act 5 (FU195-L1, owner FU175-L2): NO invoker — the fresh
@@ -843,6 +885,8 @@ int main(void) {
   test_phase_21_registered();
   test_phase_21_producer_live_via_phase_drive();
   test_phase_22_body_direct();
+  test_phase_22_registered();
+  test_phase_22_producer_live_via_phase_drive();
   test_phase_1B_leg_no_invoker();
   puts("test_engine_match_act OK");
   return 0;
