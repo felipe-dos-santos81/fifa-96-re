@@ -1195,6 +1195,43 @@ the build also produces the windowed `fifa96` target (`make game`).
   is RESOLVED** by T4 (not re-legged). No fake producer. **Tape:** M2 `441415fc…`
   byte-identical (no presented frame moves), M1 `09b726b7…` unmoved; dispatch
   `26 UNSUP / 53 OK / 1 NOTF` (sum 80); README title `66%`; no golden re-pin.
+- **M2 phase-19 T6 (FU-214) — acceptance: the tape strata v19 + the
+  period-end-spine producer riders; census unchanged `53/80 = 66%`.**
+  `tests/test_engine_m2.c` is re-labelled **v19** (the phase-19
+  period-end-spine acceptance strata). **Tape decision: strata-only label bump,
+  no re-pin** (the phase-15 v14→v15 precedent). The phase-19 landings moved **no
+  presented frame** at any point — every producer completes only past the
+  scripted tape's path (no period-end completion reaches the roll's
+  `global_157ac2 == 4` sit-8 gate; the coupled row-`0x20` actor-cell producer is
+  unported) and the registered phase-`0x1D` / `0x22` bodies are render-invisible
+  (a phase write, an act slot, row-`0x19`/`0x20` installs on off-tape records,
+  the `0x974DC(0x1E)` audio sink) — so M2 is **byte-identical** at `441415fc…`
+  (`cmp` clean) across T1–T5, M1 `09b726b7…` unmoved. The golden was **not**
+  touched. Any *unexplained* drift is a regression to investigate, never a
+  re-pin. **Producer riders (`run_phase19_riders`; every rider mutation-RED):**
+  (1) the **silent re-gate** — the live `global_157ac0` flag drives the chooser,
+  a differing-score regulation-end completion installs the extra-time arm (phase
+  `0x13`, act `0xC`) and the registered phase-`0x22` slot runs (a reverted
+  hardwired-`0u` chooser input aborts here); (2) the **wrong tie-break** — the
+  T1 flag is raised only on a differing-score completion at the regulation end
+  (index 1) or the ET-2 end (index 3), a tie / the first-half completion leaves
+  it clear (an inverted difference test or a dropped index constraint aborts
+  here); (3) the **selector slip** — the roll's index-4 gate drives the mode-0
+  situation-8 selector → act 7 (a gate off the index-4 roll leaves act `0xB` and
+  aborts here); (4) the **phase-slot dereference** — the registered phase-`0x1D`
+  slot's arm 0 writes phase `0x10` + installs row `0x19`, and the coupled
+  row-`0x20` install is gated on the actor cell, NONE live (a NULLed slot aborts
+  `run_census_riders`; a dropped arm-0 phase write aborts this rider). **Census
+  recomputed against R62/FU-214:** `53 OK = 32 action + 21 phase`; dispatch
+  `26 UNSUP / 53 OK / 1 NOTF` (sum 80); `floor(100 × 53/80) = 66`. **Smoke:** the
+  phase-19 landings are render-invisible and display-gated; the honest headless
+  smoke (the null-backend M2 tape, byte-identical `441415fc…`) plus the
+  `make game` build/boot posture is recorded (see the T6 report); no
+  `docs/screens/*` frame moved (the phase-19 producers are off the windowed
+  path). `make check` **110/110**. Remaining legs: the T1–T5 numbered legs
+  (§ phase-19 T1/T2/T3/T4/T5) + **FU207-L2, FU208-L1/L8, FU209-L1 (bit-8 arm),
+  FU210-L3/L5, FU211-L2/L3, FU212-L1, FU213-L3, FU214-L1/L2** — each with its
+  native owner in the T5 register.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

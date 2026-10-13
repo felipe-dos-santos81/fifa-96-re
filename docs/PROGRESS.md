@@ -1324,3 +1324,75 @@ slot) aborts `test_phase_1E_compressed_model_pin`. **Determinism:** `make check`
 (`cmp` clean — no row wired, no presented frame moves). **Census:** unchanged
 `53/80 = 66%` (32 action + 21 phase; dispatch `26 UNSUP / 53 OK / 1 NOTF`, sum
 80); README title `66%`; no golden re-pin.
+
+## M2 phase-19 T6 — acceptance: the tape strata v19 + the period-end-spine producer riders (FU-214)
+
+**The acceptance layer closes the period-end spine: the tape strata is re-labelled
+`v19` (strata-only, no re-pin) and the producers are pinned by four mutation-RED
+riders; census unchanged `53/80 = 66%`.** `tests/test_engine_m2.c` gains
+`run_phase19_riders` (the durable acceptance-layer cross-check; the handler
+primaries live in `test_engine_match_frame.c` / `test_engine_match_act.c` /
+`test_engine_match_handlers.c`) and the v19 provenance block. The riders protect
+four silent-regression classes:
+
+- **The silent producer re-gate** — the live OL-85 flag `mr->global_157ac0`
+  (T1/FU-213) drives the chooser; a differing-score regulation-end completion
+  installs the extra-time arm (phase `0x13`, act `0xC`) and the registered
+  phase-`0x22` slot (T4/FU-211) runs stage 0. Mutation-RED: reverting the chooser
+  input to the old hardwired `0u` selects the no-ET arm and aborts
+  `mr.state.phase == 0x13`.
+- **The wrong tie-break** — the flag is raised only on a differing-score
+  completion at the regulation end (completed index 1) or the ET-2 end (index 3);
+  a tie and the first-half completion (index 0) leave it clear. Mutation-RED:
+  dropping the completed-index constraint raises the flag on the first-half
+  completion and aborts `mr.global_157ac0 == 0`.
+- **The selector slip** — the roll's index-4 gate drives the mode-0 situation-8
+  selector → act 7 (deferred, stage 0). Mutation-RED: moving the gate to
+  `global_157ac2 == 3` leaves the chooser's act `0xB` and aborts `mr.act.id == 7`.
+- **The phase-slot dereference** — the registered phase-`0x1D` slot's arm 0 writes
+  phase `0x10`, clears `[0x15882A]` and installs row `0x19` on both team bases;
+  the coupled row-`0x20` install (`0x899A2`) is gated on the actor cell, NONE on
+  the live path (the unported sit-8 bind, FU210-L3), so no record carries code
+  `0x20`. Mutation-RED: a NULLed slot aborts `run_census_riders`; a dropped arm-0
+  phase write aborts `mr.state.phase == 0x10`.
+
+**Tape decision: strata-only label bump, no re-pin (the phase-15 v14→v15
+precedent).** The phase-19 producers complete only past the scripted tape's path
+(no completed period reaches the roll's `global_157ac2 == 4` sit-8 gate; the
+coupled row-`0x20` actor-cell producer is unported) and the registered
+phase-`0x1D`/`0x22` bodies are render-invisible, so **M2 is byte-identical** at
+`441415fc…` (`cmp` clean) across T1–T5; M1 `09b726b7…` unmoved. The golden file
+was **not** touched. Any *unexplained* drift is a regression to investigate,
+never a re-pin.
+
+**Smoke (honest):** the phase-19 landings are render-invisible and the SDL3
+windowed path is display-gated; the headless/null-backend M2 tape is the honest
+smoke (byte-identical `441415fc…`, the `test_engine_m2` stdout transcript) and no
+`docs/screens/*` frame moved — a fresh `make game` capture would show no phase-19
+pixel (the producers are off the windowed path). The `make game` build/boot
+posture is unchanged since the phase-18 T6 note (see the T6 report for the exact
+host/env record).
+
+**Census recomputed against R62/FU-214:** `53 OK = 32 action + 21 phase`; the
+`0x16` INT3 slot is the one `NOTF`; dispatch `26 UNSUP / 53 OK / 1 NOTF`
+(sum 80); `floor(100 × 53/80) = 66`. README title `66%`, `docs/ENGINE.md`
+status + Action-dispatch bullets `53/80`, and `AGENTS.md:90` are consistent —
+**no inflation** (the phase-19 wave adds no census row: T2 `0x1D` + T4 `0x22`
+were counted in their own commits; row `0x20` stays a leg).
+
+**Remaining legs (each with its native owner, per the T5 register):**
+**FU207-L2** (the front-end OL-85 match-init producer `0x389A4`; owner FU-207),
+**FU208-L1** + **FU214-L2** (the bit-8 sit-8 range-word writer gap; owner FU-208 /
+FU196-L1), **FU208-L8** (the sit-8 session-gate co-condition `[0x14C32A]`; owner
+FU-208), **FU209-L1** (the bit-8 act-7 arm; the index-4 arm resolved by T2),
+**FU210-L3/L5** (the row-`0x20` actor-cell producer; owner FU-210), **FU211-L2/L3**
+(the `word[0x15881A]` cell + the audio ring-push; owner FU-211/FU195),
+**FU212-L1** (the phase-`0x1E` de-compression; owner FU-212; reference FU194-L2),
+**FU213-L3** (the end-of-match word `[0x158822]` / `FUN_0008BAF0`; owner FU-213),
+**FU214-L1** (the cohort producer dependency — partly resolved; `0x20` blocked by
+FU210-L3), **FU214-L4** (the phase-`0x10` row; owner FU-214).
+
+**TDD:** `run_phase19_riders` GREEN; each of the four riders mutation-RED (the
+mutations + failing outputs in the T6 report). **Determinism:** M1 `09b726b7…`
+unmoved; M2 `441415fc…` byte-identical (`cmp` clean); `make check` **110/110**
+(sanitized). **Census:** `53/80 = 66%`; README title `66%`; no golden re-pin.

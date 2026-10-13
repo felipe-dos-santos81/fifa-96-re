@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v18 (spec §5; the
- * M2 phase-18 producer-spine acceptance, T6; the v17 phase-17 phase/act-seam
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v19 (spec §5; the
+ * M2 phase-19 period-end-spine acceptance, T6; the v18 M2 phase-18
+ * producer-spine acceptance, T6; the v17 phase-17 phase/act-seam
  * acceptance, T7; the v16 phase-16
  * act-machine-frontier acceptance, T6; the v15 phase-15
  * census-frontier acceptance, T4; the v14 phase-14 restart-chain
@@ -1441,6 +1442,54 @@
  * reason + frame diff; T4/T5/T6 moved no presented frame. M1 `09b726b7…`
  * unmoved. Any *unexplained* drift is a regression to investigate, never a
  * re-pin.
+ *
+ * --- v19 (M2 phase-19 acceptance, T6): the period-end-spine strata -----------
+ *
+ * v19 is the phase-19 acceptance (the period-end spine: T1 the live period/clock
+ * producer — the OL-85 extra-time flag cell + the score tie-break + the
+ * period-index roll, FU-213/FU-207; T2 the situation-8 selection + the
+ * phase-`0x1D` slot, FU-208/FU-209; T3 the action row-`0x20` body + the
+ * phase-`0x1D` arm-0 coupled installer, FU-210; T4 the phase-`0x22` / act-`0xC`
+ * registration + the end-of-match leg, FU-211; T5 the phase-`0x1E` honest bound
+ * + the residual-leg register, FU-212/FU-214). **Unlike the phase-18 spine (one
+ * earned T3 re-pin), the phase-19 spine moved no presented frame at any point**:
+ * every phase-19 producer completes only past the scripted tape's path (no
+ * period-end completion reaches the roll's index-4 sit-8 gate, and the coupled
+ * row-`0x20` actor-cell producer is unported), and the registered phase-`0x1D` /
+ * `0x22` bodies are render-invisible (a phase write, an act slot, row-`0x19` /
+ * `0x20` installs on off-tape records, the `0x974DC(0x1E)` audio sink) — so M2
+ * is **byte-identical** at `441415fc…` (`cmp` clean) across T1–T5. This is
+ * therefore a **strata-only label bump** (the phase-15 v14→v15 precedent): it
+ * adds the phase-19 riders + this provenance block and re-labels the acceptance
+ * layer **v19** — **no golden re-pin**. M1 `09b726b7…` never moved. Any
+ * *unexplained* drift is a regression to investigate, never a re-pin.
+ *
+ * The producer riders (v19; `run_phase19_riders`; **every rider is
+ * mutation-RED** — each deliberately-broken mutation aborts at its own
+ * assertion, the mutations recorded in the phase-19 T6 report):
+ *   1. The silent RE-GATE (T1/FU-213 + T4/FU-211): the live `global_157ac0`
+ *      flag drives the chooser; a differing-score regulation-end completion
+ *      installs the extra-time arm (phase `0x13`, act `0xC`) and the registered
+ *      phase-`0x22` slot runs. Reverting the chooser input to the hardwired `0u`
+ *      selects the no-ET arm (phase `0x0C`, act `0xB`) and aborts here.
+ *   2. The wrong TIE-BREAK (T1/FU-213): the flag is raised only on a
+ *      differing-score completion at the regulation end (index 1) or the ET-2
+ *      end (index 3); a tie, or the first-half completion (index 0), leaves it
+ *      clear. Inverting the difference test, or dropping the completed-index
+ *      constraint, aborts here.
+ *   3. The SELECTOR SLIP (T2/FU-208/209): the roll's index-4 gate drives the
+ *      mode-0 situation-8 selector -> act 7; a gate off the index-4 roll leaves
+ *      the chooser's act `0xB` and aborts here.
+ *   4. The PHASE-SLOT dereference (T2/FU-209 + T3/FU-210): the registered
+ *      phase-`0x1D` slot's arm 0 writes phase `0x10` and installs row `0x19`;
+ *      the coupled row-`0x20` install is gated on the actor cell (NONE live). A
+ *      NULLed slot aborts `run_census_riders`; a dropped arm-0 phase write (or a
+ *      wrong actor gate) aborts this rider.
+ *
+ * Golden decision (v19): **strata-only, byte-identical, no re-pin** — the
+ * phase-19 producer landings moved no presented frame; M2 stays `441415fc…`,
+ * M1 `09b726b7…` unmoved. Any *unexplained* drift is a regression to
+ * investigate, never a re-pin.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1451,6 +1500,7 @@
 
 #include "fifa96_engine/fifa96_engine.h"
 #include "fifa96_engine/fifa96_keys.h"
+#include "fifa96_engine/fifa96_match_act.h"
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_match_handlers.h"
 #include "fifa96_engine/fifa96_match_run.h"
@@ -3470,6 +3520,154 @@ static void run_phase18_riders(void) {
   }
 }
 
+/* v19 (M2 phase-19 T6): the period-end-spine producer riders — the acceptance
+ * layer's protection against a silent producer regression. The tape reaches no
+ * period-end completion (the golden stays `441415fc…`), so the phase-19
+ * producers are pinned as the durable state-level cross-check the phase-17/18
+ * riders established (the handler primaries live in
+ * `test_engine_match_frame.c` / `test_engine_match_act.c`). Four mutation
+ * classes must abort:
+ *  - a silent RE-GATE (the live `global_157ac0` flag dropped from the chooser
+ *    input — the hardwired-`0` the phase-19 wave removed);
+ *  - a wrong TIE-BREAK (the T1 score-difference gate mis-indexed or inverted);
+ *  - a SELECTOR SLIP (the T2 situation-8 gate off the index-4 roll);
+ *  - a PHASE-SLOT dereference (the T2 phase-`0x1D` slot reverted to NULL, or the
+ *    coupled T3 row-`0x20` actor install gated wrong).
+ * Each block is mutation-RED (the per-block mutations are recorded in the
+ * phase-19 T6 report). Pure C state, ISO-independent, prints nothing, so the
+ * transcript is unaffected. */
+static void run_phase19_riders(void) {
+  /* 1. The silent RE-GATE (T1/FU-213 + T4/FU-211): a differing-score
+   *    regulation-end completion raises the OL-85 flag (W2 0x8B2AC) and the
+   *    chooser consumes the LIVE flag -> the extra-time arm (phase 0x13, act
+   *    0xC), whose registered phase-0x22 slot runs stage 0. Reverting the
+   *    chooser input to the hardwired `0u` selects the no-ET arm (phase 0x0C,
+   *    act 0xB) and aborts `state.phase == 0x13` first. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.state.period = 2;                    /* completed index 1 (regulation) */
+    mr.state.phase = 2;                     /* class 1: the clock runs */
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 0u;                       /* differing -> the flag is raised */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac0 == 1u);         /* the live OL-85 flag */
+    assert(mr.state.phase == 0x13u);        /* the extra-time chooser arm (live flag read) */
+    assert(mr.act.id == 0x0Cu);             /* act 0xC, not the no-ET arm 0xB */
+    assert(mr.act.stage == 1u);             /* phase-0x22 stage 0 ran invoke-now */
+    assert(mr.ref_whistle == 0x1Eu);        /* the 0x974DC(0x1E) event */
+  }
+  /* 2. The wrong TIE-BREAK (T1/FU-213): the flag is raised only on a
+   *    differing-score completion at the regulation end (completed index 1;
+   *    W2) or the extra-time-2 end (index 3; W4). A tie keeps it clear; the
+   *    first-half completion (index 0) is not a tie-break site. Inverting the
+   *    difference test or dropping the index constraint aborts here. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.period = 2;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;                       /* tied: the flag stays clear */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac0 == 0u);         /* the tie keeps extra time off */
+    assert(mr.state.phase == 0x0Cu);        /* the no-ET chooser arm */
+    assert(mr.act.id == 0x0Bu);             /* act 0xB */
+    assert(mr.global_157ac2 == 2u);         /* the roll 0x8B58A */
+
+    fifa96_match_run_init(&mr);
+    mr.state.period = 1;                    /* the first-half completion (index 0) */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 0u;                       /* differing, but index 0 is no site */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac0 == 0u);         /* only W2/W4 (completed index 1/3) */
+    assert(mr.state.phase == 0x0Cu);
+    assert(mr.global_157ac2 == 1u);         /* the roll */
+  }
+  /* 3. The SELECTOR SLIP (T2/FU-208/209): the T1 roll landing the index on 4
+   *    (native `[0x157AC2] == 4`) drives the mode-0 situation-8 selector ->
+   *    act 7 (deferred, stage 0). A gate off the index-4 roll (`>=`, `==3`,
+   *    `==5`) leaves the chooser's act 0xB and aborts `act.id == 7`. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.period = 4;                    /* the FU-62 library rolled 3 -> 4 */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;                       /* tied: the chooser stays no-ET (0xB) */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac2 == 4u);         /* the T1 roll reaches the sit-8 gate */
+    assert(mr.global_157ac0 == 0u);
+    assert(mr.state.phase == 0x0Cu);        /* the completed 3 < 4 no-ET arm */
+    assert(mr.act.id == 7);                 /* sit 8 overrode the chooser's act 0xB */
+    assert(mr.act.stage == 0u);             /* the deferred sit-8 install */
+
+    /* the gate is exactly the index-4 roll: an index-3 roll leaves the act. */
+    fifa96_match_run_init(&mr);
+    mr.state.period = 3;                    /* completed index 2 -> roll 3 */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 0u;
+    mr.score[1] = 0u;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac2 == 3u);
+    assert(mr.act.id == 0x0Bu);             /* no sit-8 below the index-4 gate */
+  }
+  /* 4. The PHASE-SLOT dereference (T2/FU-209 + T3/FU-210): the registered
+   *    phase-0x1D slot's arm 0 writes phase 0x10 and installs action row 0x19 on
+   *    both team bases; the coupled row-0x20 install (0x899A2) is gated on the
+   *    actor cell, NONE on the live path (the FU210-L3 unported producer), so no
+   *    record carries code 0x20. A NULLed slot early-returns the act tick and
+   *    aborts `state.phase == 0x10`; the actor-cell fixture proves the coupled
+   *    install (a wrong gate leaves the actor's code at 0). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_phase_table[0x1D].fn == fifa96_match_action_phase_1D);
+    mr.state.period = 4;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.act.id == 7 && mr.act.stage == 0u);   /* the sit-8 install */
+    mr.state.frame_delta = 2;
+    mr.global_5882a = 1u;                            /* the arm-0 [0x15882A] clear target */
+    assert(fifa96_match_act_tick(&mr) == FIFA96_OK); /* act 7 -> phase 0x1D */
+    assert(mr.state.phase == 0x10u);                 /* 0x898DD arm-0 phase write */
+    assert(mr.global_5882a == 0u);                   /* 0x898B4 clear */
+    assert(mr.act.stage == 1u);                      /* arm-0 advance (0x899ED) */
+    assert(mr.entities.team[0].records[0].code == 0x19u);  /* 0x89903 install */
+    assert(mr.entities.team[1].records[0].code == 0x19u);  /* 0x8990A install */
+    /* the live actor cell is NONE: the coupled 0x899A2 install is a no-op. */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        assert(mr.entities.team[t].records[i].code != 0x20u);
+
+    /* the actor-cell fixture (the unported sit-8 `[0x1587D4]` producer, FU210-L3):
+     * arm 0 installs code 0x20 on that actor (team 0, record 1). */
+    fifa96_match_run_init(&mr);
+    mr.actor_1587d4 = 1;                             /* team 0, record 1 */
+    mr.act.id = 7;
+    mr.act.stage = 0;
+    assert(fifa96_match_dispatch_phase(&mr, 0x1Du) == FIFA96_OK);
+    assert(mr.entities.team[0].records[1].code == 0x20u);  /* 0x899A2 install */
+    assert(mr.entities.team[0].records[1].stage92 == 0u);  /* deferred stage 0 */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -3494,18 +3692,21 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
-  /* v15/v16/v17/v18 (phase-15 T4 → phase-16 T6 → phase-17 T7 → phase-18 T6):
-   * the census/seam rider cross-checks (both modes, pure state): the census
-   * shape + the T1–T6 regression pins + the phase-17 seam/walk/census/leg pins +
-   * the phase-18 producer riders (re-gate / double-run / metadata-slip). Run
-   * first so each rider's own mutation aborts at its assert, before the tape
-   * consumes the process; they print nothing, so the transcript is unaffected. */
+  /* v15/v16/v17/v18/v19 (phase-15 T4 → phase-16 T6 → phase-17 T7 → phase-18 T6
+   * → phase-19 T6): the census/seam rider cross-checks (both modes, pure state):
+   * the census shape + the T1–T6 regression pins + the phase-17
+   * seam/walk/census/leg pins + the phase-18 producer riders (re-gate /
+   * double-run / metadata-slip) + the phase-19 period-end-spine producer riders
+   * (re-gate / tie-break / selector-slip / phase-slot). Run first so each
+   * rider's own mutation aborts at its assert, before the tape consumes the
+   * process; they print nothing, so the transcript is unaffected. */
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();
   run_phase17_t3_riders();
   run_phase17_riders();
   run_phase18_riders();
+  run_phase19_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
