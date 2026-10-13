@@ -4798,7 +4798,7 @@ int fifa96_match_phase_0C(struct fifa96_match_run *mr) {
  * bytes are a fresh `read_memory 0x1105E0` of the LE image (FU-192 §2.6).
  * REGISTERED/COUNTED (M2 phase-20 T2, FU-222 §3.1/§6): the writer is live — the
  * phase-0x1D stage-0 arm's `FUN_000740A0(0x10)` (0x898DD; port
- * `match_run.c:6094`) — and the phase-0x1D row is counted (phase-19 T2), so the
+ * `match_run.c:6130`) — and the phase-0x1D row is counted (phase-19 T2), so the
  * sit-8 route dispatches this per-record walk; closes FU214-L4/FU222-L2.
  * DERIVED HARDENING (leg FU192-L1): the
  * native indexes the `0x1105EA` table blindly (`active` is the record ordinal
@@ -5219,7 +5219,7 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x0F, fifa96_match_phase_00,
      "FU-192 §2.1 (phase-17 T3): phase 0F = the shared reset 0x6DE34 (same body as row 00). Off-tape: tape-neutral"},
     {0x10, fifa96_match_phase_10,
-     "FU-192 §2.6 (phase-17 T3) + FU-222 §3.1/§6 (M2 phase-20 T2): phase 10 = the native 0x6E004 (the 0x1105EA variant table) PORTED as fifa96_match_phase_10. COUNTED: the writer is live — the phase-0x1D stage-0 arm's FUN_000740A0(0x10) (0x898DD; port match_run.c:6090-6091) — and the phase-0x1D row is counted (phase-19 T2), so the sit-8 route dispatches this row's per-record walk. Closes FU214-L4/FU222-L2; tape-inert (phase 0x1D is extra-time-dormant on M2, the body writes only the render-invisible target triple). The 0x1105EA table is a fresh read_memory; DERIVED HARDENING (FU192-L1): the engine bounds k to [0,10]. OL-13"},
+     "FU-192 §2.6 (phase-17 T3) + FU-222 §3.1/§6 (M2 phase-20 T2): phase 10 = the native 0x6E004 (the 0x1105EA variant table) PORTED as fifa96_match_phase_10. COUNTED: the writer is live — the phase-0x1D stage-0 arm's FUN_000740A0(0x10) (0x898DD; port match_run.c:6130) — and the phase-0x1D row is counted (phase-19 T2), so the sit-8 route dispatches this row's per-record walk. Closes FU214-L4/FU222-L2; tape-inert (phase 0x1D is extra-time-dormant on M2, the body writes only the render-invisible target triple). The 0x1105EA table is a fresh read_memory; DERIVED HARDENING (FU192-L1): the engine bounds k to [0,10]. OL-13"},
     {0x11, NULL,
      "FU-192 §2.8/L6 (phase-17 T3): phase 11 = the native 0x6E1C8 (8-byte shim: EBX=-1, EDX=&rec+0x4D, falls into 0x6E1D0); under the walk ABI it is identical to rows 01/12 (the formation placement), so it is not wired (the R10 'do not double-wire'; FU192-L6/L7); OL-13"},
     {0x12, NULL,

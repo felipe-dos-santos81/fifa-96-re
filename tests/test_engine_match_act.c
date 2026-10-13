@@ -496,7 +496,8 @@ static void test_phase_1C_terminal(void) {
  * (see `test_engine_match_frame.c`). Phase 0x1E stays UNCOUNTED (slot NULL): the
  * engine models the act-8 fallback as a *compressed* stored-situation
  * re-dispatch (FU194-L2). Phase 0x1D was one coupled unit with action row 0x20
- * (arm 0 carries the row-0x20 installer `0x899a2`), which stays NULL (T3). */
+ * (arm 0 carries the row-0x20 installer `0x899a2`), which is now wired (M2
+ * phase-20 T3/T4, FU-217/FU-220). */
 
 /* Phase 0x1D / act 7 (FU-194 §3/§6.1 + T2/FU-208/209): the slot is REGISTERED;
  * the dispatcher resolves and the body runs (arm 0). */
@@ -566,13 +567,14 @@ static void test_phase_1D_terminal(void) {
   assert(mr.global_157a4c == 0u);     /* [0x157A4C]=0 */
 }
 
-/* FU-210 §6.1/§8 L3 (M2 phase-19 T3): the phase-0x1D arm-0 coupled installer
- * (`0x899A2`). The native target is the actor record `[0x1587D4]`
- * (`FUN_0007D9A4(rec, 0x20, 0, 0)`, deferred); its producer — the sit-8 arm's
- * `[0x1587CC+side*4] -> [0x1587D4]` bind `0x8AE4B` — is unported (FU210-L3),
- * so `mr->actor_1587d4` stays NONE live. A fixture sets the cell to prove the
- * ported install: arm 0 installs code 0x20 (deferred, stage 0) on the actor.
- * Mutation-RED: dropping the install leaves the actor's code at 0. */
+/* FU-210 §6.1/§8 L3 (M2 phase-19 T3; bind landed M2 phase-20 T3, FU-217): the
+ * phase-0x1D arm-0 coupled installer (`0x899A2`). The native target is the actor
+ * record `[0x1587D4]` (`FUN_0007D9A4(rec, 0x20, 0, 0)`, deferred); its producer
+ * — the sit-8 arm's `[0x1587CC+side*4] -> [0x1587D4]` bind `0x8AE4B` — is now
+ * landed live (match_run_free_record + the set_piece re-init), but this fixture
+ * sets the cell directly to exercise the ported install (bypassing set_piece):
+ * arm 0 installs code 0x20 (deferred, stage 0) on the actor. Mutation-RED:
+ * dropping the install leaves the actor's code at 0. */
 static void test_phase_1D_arm0_installs_row_20(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -582,8 +584,8 @@ static void test_phase_1D_arm0_installs_row_20(void) {
   assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[1].code == 0x20u);  /* 0x899A2 FUN_0007D9A4(rec,0x20,0,0) */
   assert(mr.entities.team[0].records[1].stage92 == 0u);  /* deferred stage 0 */
-  /* the live path leaves the cell NONE (the sit-8 actor bind is unported): no
-   * record ever carries 0x20. Mutation-RED on the leg. */
+  /* without the sit-8 bind the cell stays NONE: no record ever carries 0x20.
+   * Mutation-RED on the direct-call path. */
   fifa96_match_run_init(&mr);
   mr.act.id = 7;
   mr.act.stage = 0;

@@ -1401,7 +1401,7 @@ unmoved; M2 `441415fc…` byte-identical (`cmp` clean); `make check` **110/110**
 
 **The phase-`0x10` row is registered and COUNTED (`+1`, census `53/80 → 54/80 =
 67%`).** The phase-`0x1D` stage-0 arm's `FUN_000740A0(0x10)` writer (`0x898DD`;
-port `match_run.c:6090-6091`) is live once phase-20 T1's invoke-now cadence lands,
+port `match_run.c:6130`) is live once phase-20 T1's invoke-now cadence lands,
 and the phase-`0x1D` row is itself counted (phase-19 T2), so the sit-8 dispatch
 opens `match_run_write_phase`'s walk gate (`match_run.c:2522`) and
 `fifa96_match_phase_10` (`handlers.c:4806`) dispatches per non-skipped record. The

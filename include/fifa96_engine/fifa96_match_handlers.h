@@ -229,20 +229,20 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr);
  * for an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_24(struct fifa96_match_run *mr);
 
-/* The ported action row-0x20 body (FU-210 §2/§3/§4, M2 phase-19 T3): the
- * actor-record "ball-camera / restart-commit transition" `0x84EEC..0x85213`
- * (the 7-arm CS table `0x84ED0`). Its action-table slot
- * (`fifa96_match_action_table[0x20]`) is **NULL** — the row is not counted —
- * because the coupled installer's target (the native actor record `[0x1587D4]`,
- * reached by the phase-0x1D arm-0 `0x899A2` = `FUN_0007D9A4([0x1587D4], 0x20,
- * 0, 0)`) has no live producer: the sit-8 arm's `[0x1587CC + side*4] ->
- * [0x1587D4]` bind (`0x8AE4B`) is unported (FU-145 / FU210-L3 / FU194-L8). So
- * on the live path `mr->actor_1587d4` stays NONE and no record ever carries code
- * 0x20 — the row cannot dispatch (the FU210-L5 leg). This is the rows-27/29/2C
- * precedent (a ported body with no live engine installer stays unwired and
- * uncounted); the body is exported so it is tested directly and ready for the
- * sit-8 actor-bind producer. Render writes: arm 0 `pos_x/y/z` + `anim_id`
- * (`0x79B6C`/`0x8CFAC`); arm 4 `pos_x/pos_z` + `anim_id`/`frame` (`0x7B9C4` ->
- * `0x7A490`); `hidden` (`+0x9A`) is not written. Returns FIFA96_OK, or
- * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
+/* The ported action row-0x20 body (FU-210 §2/§3/§4, M2 phase-19 T3; wired +
+ * COUNTED in M2 phase-20 T3, FU-217/FU-220): the actor-record "ball-camera /
+ * restart-commit transition" `0x84EEC..0x85213` (the 7-arm CS table `0x84ED0`).
+ * Its action-table slot (`fifa96_match_action_table[0x20]`) is **wired** to
+ * `fifa96_match_action_20` — the row is **COUNTED** (`55/80 = 68%`) — because
+ * the coupled installer's target (the native actor record `[0x1587D4]`, reached
+ * by the phase-0x1D arm-0 `0x899A2` = `FUN_0007D9A4([0x1587D4], 0x20, 0, 0)`)
+ * now has a live producer: the sit-8 arm's `[0x1587CC + side*4] ->
+ * [0x1587D4]` bind (`0x8AE4B`) is **landed live** as `match_run_free_record` +
+ * the `set_piece` sit-8 re-init (T3/FU-217). The arm-0 ball-record place is the
+ * T4/FU-220 projection; the remainder — the ball-record anim/frame, the
+ * `0x8CFAC` walks, arm-4 `0x7A490`, the block commit and the camera cells —
+ * stays the FU220-L1…L5 legs. Tape-dormant. Render writes: arm 0 `pos_x/y/z` +
+ * `anim_id` (`0x79B6C`/`0x8CFAC`); arm 4 `pos_x/pos_z` + `anim_id`/`frame`
+ * (`0x7B9C4` -> `0x7A490`); `hidden` (`+0x9A`) is not written. Returns
+ * FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_20(struct fifa96_match_run *mr);

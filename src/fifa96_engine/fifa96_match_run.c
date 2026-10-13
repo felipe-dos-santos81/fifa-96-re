@@ -2908,10 +2908,10 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
   }
   if (out.act != FIFA96_ACTION_PHASE_NONE) {
     /* Act 2 is invoke-now (the stage-0 hand-off runs on this call); act 9 (and
-     * every other act) installs only, its invoke deferred to the clock tail.
-     * Act 7 is likewise invoke-now (FU-219: native `0x8AEAE MOV EBX,1` → the
-     * seam `0x88937 CALL dword[0x158808]` runs the phase-`0x1D` arm 0 on the
-     * dispatch frame); the clock-tail tick then advances it. */
+     * every act other than 2 and 7) installs only, its invoke deferred to the
+     * clock tail. Act 7 is likewise invoke-now (FU-219: native `0x8AEAE MOV
+     * EBX,1` → the seam `0x88937 CALL dword[0x158808]` runs the phase-`0x1D`
+     * arm 0 on the dispatch frame); the clock-tail tick then advances it. */
     rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage,
                                                  (out.act == 2u || out.act == 7u) ? 1 : 0);
     if (rc != 0) return (int)rc;

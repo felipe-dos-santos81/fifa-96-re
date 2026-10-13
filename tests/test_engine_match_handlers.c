@@ -108,7 +108,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
  * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1), the T4 row
  * 0x22 (act-0xC extra-time-SET) is wired/counted (FU-211; the live extra-time
  * flag producer T1/FU-213 installs act 0xC), and the M2 phase-20 T2 row 0x10 is
- * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6094`). */
+ * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6130`). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP,
@@ -959,9 +959,10 @@ static void test_action_29_unwired_entry(void) {
   drop_fixture(&f);
 }
 
-/* FU-210 §2/§3/§4 (M2 phase-19 T3): the action row-0x20 body `0x84EEC` arms,
- * direct-call (the slot stays NULL — the coupled installer's actor cell
- * `[0x1587D4]` has no live producer, FU210-L3/L5). Prologue: the `[0x157A83]`
+/* FU-210 §2/§3/§4 (M2 phase-19 T3; wired M2 phase-20 T3, FU-217): the action
+ * row-0x20 body `0x84EEC` arms, direct-call (the slot is now wired and
+ * COUNTED; its actor cell `[0x1587D4]` producer is landed, FU-217; this direct
+ * call bypasses set_piece). Prologue: the `[0x157A83]`
  * re-assert when `+0x92 < 3` and the `+0x89 += delta`. Arm 0 (`0x84F5C`): the
  * `0x73E08` commit, target := the `0x15774C` focus (the engine camera stand-in),
  * `z -= 0xF0`, the `0x79B6C` place (pos + anim), the `0x8CFAC` anim 0x26 ->
