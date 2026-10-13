@@ -1998,6 +1998,16 @@ struct m2_natural {
   uint8_t phase_at_kick;         /* live phase at the kickoff observation */
 };
 
+/* v21 (M2 phase-21 T1): the period-end probe observation — the measured FU-62
+ * completion step and the characterization T5/T6 consume. The probe records
+ * (never asserts) whether the run currently ends at that completion, because
+ * T5 changes the post-period lifecycle. */
+struct m2_period_end {
+  uint64_t completion_step;      /* engine step where the FU-62 clock completed */
+  uint8_t mode_at_completion;    /* engine mode sampled after the completion step */
+  uint8_t exited_at_completion;  /* the match left MATCH at the completion step */
+};
+
 static int file_exists(const char *path) {
   FILE *f = fopen(path, "rb");
   if (!f) return 0;
@@ -2625,10 +2635,17 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
 
 /* Boots the engine, replays the tape with the match directives, and appends
  * one transcript line per presented frame. The per-step invariants (one
- * present, nonzero hash, frame ordinals +1) hold in both modes. */
-static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len,
-                     struct fifa96_platform_null_stats *out_stats,
-                     struct m2_result *res) {
+ * present, nonzero hash, frame ordinals +1) hold in both modes.
+ *
+ * v21 (M2 phase-21 T1): the shared scenario runner. `run_tape` is the
+ * committed v20 replay (stops `M2_POST_RESTART_FRAMES` past the restart, the
+ * golden's stop window); `run_scenario_capture` runs the same scenario with
+ * `run_to_period_end` set, stopping at the first FU-62 period completion (the
+ * T1 feasibility extension). Both share this one transcript-capture body so
+ * the committed 792-line prefix is produced by the identical code path. */
+static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out_len,
+                         struct fifa96_platform_null_stats *out_stats,
+                         struct m2_result *res, int run_to_period_end) {
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
   pcfg.tape = M2_KEYS;
@@ -2933,8 +2950,18 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
         res->restart_pending = e->match_run.situation_pending;
       }
     }
-    if (res->restart_step > 0 &&
-        steps - res->restart_step >= M2_POST_RESTART_FRAMES) break;
+    if (run_to_period_end) {
+      /* v21 (M2 phase-21 T1): stop at the first FU-62 period completion. The
+       * completion is a one-shot inside the frame body (phase_drive consumes
+       * `clock_period_ended` in the same step), so the durable observable that
+       * survives the step is the period-index roll `global_157ac2` latched from
+       * `state.period` (fifa96_match_run.c:2643). The producer is render
+       * independent, so the completion step is mode-invariant. */
+      if (res->match_start_step > 0 && e->match_run.global_157ac2 != 0u) break;
+    } else if (res->restart_step > 0 &&
+               steps - res->restart_step >= M2_POST_RESTART_FRAMES) {
+      break;
+    }
   }
   assert(steps < M2_STEP_CAP);               /* the sequence ends by itself */
   res->steps = steps;
@@ -2948,6 +2975,32 @@ static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len
   *out_len = used;
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
+}
+
+/* v21 (M2 phase-21 T1): the committed v20 replay — the shared scenario body
+ * with the v20 stop window (`M2_POST_RESTART_FRAMES` past the restart). The
+ * golden's producer. */
+static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len,
+                     struct fifa96_platform_null_stats *out_stats,
+                     struct m2_result *res) {
+  run_scenario(with_iso, transcript, cap, out_len, out_stats, res, 0);
+}
+
+/* v21 (M2 phase-21 T1): the transcript-neutral capture of the extended
+ * scenario — the same null config/directive path as `run_tape`, but run to the
+ * first FU-62 period completion (the feasibility extension). Returns a
+ * malloc'd, NUL-terminated transcript and never writes the golden or stdout,
+ * so the ≥3-replay determinism gate can diff it byte-for-byte. The ISO is
+ * auto-detected exactly as `main` does, so the capture's committed prefix is
+ * the same code path as `run_tape`. */
+static char *run_scenario_capture(size_t *out_len) {
+  char *transcript = malloc(M2_TRANSCRIPT_CAP);
+  assert(transcript != NULL);
+  struct fifa96_platform_null_stats st;
+  struct m2_result res;
+  run_scenario(file_exists(M2_ISO_PATH), transcript, M2_TRANSCRIPT_CAP, out_len,
+               &st, &res, 1);
+  return transcript;
 }
 
 /* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
@@ -3041,6 +3094,85 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   assert(nat->phase2_step > nat->act1_step);
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
+}
+
+/* v21 (M2 phase-21 T1): the period-end feasibility probe — transcript-neutral.
+ * Extends the scripted run past the v20 stop so the FU-62 clock reaches its
+ * limit, and records what the run does NOW (the producer spine is still gated).
+ * Writes nothing to stdout; never touches the golden. Returns the measured
+ * completion step and fills `out` (when non-NULL) with the characterization.
+ *
+ * Controller ruling (overrides the plan sketch): the probe RECORDS the exit
+ * characterization and STOPS at the first completion frame. It does not assert
+ * `exited_at_completion == 1`, because the later T5 slice changes the
+ * post-period `mark_over` lifecycle; a hard assert here would break the suite
+ * after T5. The spec §5 T1 asks for a characterization, which the recorded
+ * fields satisfy.
+ *
+ * Completion detection: the FU-62 completion is a one-shot consumed by
+ * `fifa96_match_run_phase_drive` inside the same frame body (it clears
+ * `mr->clock_period_ended`), and the same step's `fifa96_match_run_step`
+ * resolves the lifecycle and clears `eng->match`. The durable observable that
+ * survives the step — and remains valid after T5, even if the run no longer
+ * exits — is the period-index roll `mr->global_157ac2`, latched from
+ * `state.period` on a completion (fifa96_match_run.c:2643). */
+static uint64_t run_period_end_probe(struct m2_period_end *out) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.tape = M2_KEYS;
+  pcfg.tape_len = M2_KEYS_LEN;
+  pcfg.step_ns = 10000000ull;
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  struct m2_result res;
+  memset(&res, 0, sizeof res);
+  res.match_start_step = -1;
+  res.exit_step = -1;
+  res.goal_step = -1;
+  res.phase15_step = -1;
+  res.phase4_step = -1;
+  res.restart_step = -1;
+  res.gate_step = -1;
+
+  struct m2_period_end pe;
+  memset(&pe, 0, sizeof pe);
+  uint64_t steps = 0;
+  while (steps < M2_STEP_CAP) {
+    uint64_t next = steps + 1;
+    if (res.match_start_step > 0) m2_directives(e, (int)next, res.match_start_step, &res);
+    assert(fifa96_engine_step(e) == 0);
+    steps++;
+    if (res.match_start_step < 0 && e->mode == FIFA96_ENGINE_MODE_MATCH)
+      res.match_start_step = (int)steps;
+    if (pe.completion_step == 0 && e->match_run.global_157ac2 != 0u) {
+      pe.completion_step = steps;
+      pe.mode_at_completion = (uint8_t)e->mode;
+      pe.exited_at_completion = (uint8_t)(e->mode != FIFA96_ENGINE_MODE_MATCH);
+      break;   /* stop at the first completion frame */
+    }
+  }
+  assert(pe.completion_step != 0);            /* the FU-62 period completes */
+  assert(res.match_start_step == 5);
+  fprintf(stderr,
+          "test_engine_m2 period-end probe: completion at engine step %" PRIu64
+          " (match-relative m %" PRIu64 "), mode at completion %u, exited %u "
+          "(characterization: the run currently ends at the first completion)\n",
+          pe.completion_step, pe.completion_step - (uint64_t)res.match_start_step,
+          (unsigned)pe.mode_at_completion, (unsigned)pe.exited_at_completion);
+  if (out) *out = pe;
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+  return pe.completion_step;
 }
 
 /* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks — the
@@ -3836,6 +3968,27 @@ int main(void) {
   struct m2_result res;
   run_tape(with_iso, transcript, M2_TRANSCRIPT_CAP, &tlen, &st, &res);
 
+  /* v21 (M2 phase-21 T1): the determinism gate — the extended scenario (the
+   * same null/backend directive path run to the first period completion) is
+   * byte-stable over 3 replays (spec §5 T1), and the extension is purely
+   * additive: the committed v20 transcript is a byte-exact prefix of the
+   * extended capture (no re-pin; the golden is untouched). */
+  {
+    char *r[3];
+    size_t n[3];
+    for (int i = 0; i < 3; i++) r[i] = run_scenario_capture(&n[i]);
+    assert(n[0] == n[1] && n[1] == n[2]);
+    assert(memcmp(r[0], r[1], n[0]) == 0);
+    assert(memcmp(r[1], r[2], n[0]) == 0);
+    assert(n[0] >= tlen);
+    assert(memcmp(r[0], transcript, tlen) == 0);
+    fprintf(stderr,
+            "test_engine_m2 determinism gate: 3 replays byte-stable (%zu bytes "
+            "each); v20 prefix %zu bytes unchanged\n",
+            n[0], tlen);
+    for (int i = 0; i < 3; i++) free(r[i]);
+  }
+
   /* M2 phase-18 T3/T4 acceptance (both modes): the natural chain runs the
    * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
    * no goal, then the act-1 route (situation 1 -> act 1 -> phase 0x17) and the
@@ -3847,6 +4000,12 @@ int main(void) {
           "start %d), row 0x24 dispatched, act-1 route at step %d, phase 2 at "
           "step %d, score 0-0\n",
           nat.kick_step, nat.match_start_step, nat.act1_step, nat.phase2_step);
+
+  /* v21 (M2 phase-21 T1): the period-end feasibility probe (transcript-neutral)
+   * — extends the scripted run to the first FU-62 completion and records what
+   * the run does now, with the producer spine still gated. No re-pin. */
+  struct m2_period_end pend;
+  (void)run_period_end_probe(&pend);
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
