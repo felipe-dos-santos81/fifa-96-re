@@ -105,8 +105,8 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195) */
+    /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
+    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195) */
 };
 
 struct fixture {
@@ -952,16 +952,16 @@ static void test_action_29_unwired_entry(void) {
   drop_fixture(&f);
 }
 
-/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5): the row-0x20 installer hunt.
- * The installer exists — fresh `0x899a2` = `MOV EDX,0x20; MOV EAX,[ESP+8];
- * CALL 0x7D9A4` (bytes `ba20000000`/`e8f43fffff`) — inside the phase-0x1D
- * handler `0x89868`, but `0x89868`'s sole reference is the phase-table slot
- * `0x110808` (`[0x1D]`, fresh get_xrefs_to = 1), i.e. the act-7 route
- * (act `a` -> phase `0x16+a`). No engine source dispatches situation 8 (the
- * act-7 producer; the dispatched set is 1/2/3/6/9/0xB/0xC), so the phase-0x1D
- * route is absent and the installer never fires. The row stays `fn == NULL` /
- * uncounted (leg **FU189-L1**, owner: the phase-0x1D route). */
-static void test_action_20_phase_1d_gated_leg(void) {
+/* FU-189 §1/§3/§6 + FU-190 §6.2 (phase-16 T5); updated M2 phase-19 T2: the
+ * row-0x20 installer hunt. The installer exists — fresh `0x899a2` = `MOV
+ * EDX,0x20; MOV EAX,[ESP+8]; CALL 0x7D9A4` (bytes `ba20000000`/`e8f43fffff`) —
+ * inside the phase-0x1D handler `0x89868`, whose sole reference is the
+ * phase-table slot `0x110808` (`[0x1D]`, fresh get_xrefs_to = 1), i.e. the
+ * act-7 route. Action row 0x20's body `0x84EEC` stays unported, so the row
+ * remains `fn == NULL` / uncounted (leg **FU189-L1**, owner T3/FU-210). As of
+ * T2 the phase-0x1D slot itself is REGISTERED and producer-live (the sit-8
+ * route), so the phase dispatch now resolves. */
+static void test_action_20_installer_leg_phase_1d_live(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x20];
   make_fixture(&f);
@@ -971,8 +971,9 @@ static void test_action_20_phase_1d_gated_leg(void) {
   assert(strstr(row->evidence, "0x899a2") != NULL);
   assert(action_expect[0x20] == UNSUP);
   assert(fifa96_match_dispatch_action(&f.mr, 0x20) == UNSUP);
-  /* the phase-0x1D route (act 7) is not producer-live: its slot is NULL. */
-  assert(fifa96_match_dispatch_phase(&f.mr, 0x1D) == UNSUP);
+  /* T2: the phase-0x1D route (act 7) is now registered + producer-live. */
+  assert(fifa96_match_phase_table[0x1D].fn == fifa96_match_action_phase_1D);
+  assert(fifa96_match_dispatch_phase(&f.mr, 0x1D) == FIFA96_OK);
   drop_fixture(&f);
 }
 
@@ -3856,7 +3857,7 @@ int main(void) {
   test_action_27_unwired_entry();
   test_action_2C_unwired_entry();
   test_action_29_unwired_entry();
-  test_action_20_phase_1d_gated_leg();
+  test_action_20_installer_leg_phase_1d_live();
   test_action_25_no_installer_leg();
   test_action_03_direct_leg_body();
   test_phase_02_source_pair_scales();

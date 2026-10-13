@@ -489,28 +489,23 @@ static void test_phase_1C_terminal(void) {
 /* ===== FU-194 (M2 phase-17 T5): the act-tail cohort 0x1D/0x1E/0x20 ========
  *
  * The two native act-tail handlers `0x89868` (phase 0x1D / act 7) and `0x8A798`
- * (phase 0x1E / act 8) are ported as bounded derived bodies but stay UNCOUNTED
- * (their phase-table slots are NULL): FU-194 finds each producer statically
- * (sit 8 -> act 7; the `FUN_0008A938` BX!=0 fallback -> act 8) but neither is
- * live under the strict "engine reaches it" test, so per Ruling R8 the rows land
- * as bodies + numbered legs (FU194-L1..L9) and the census is unchanged (the
- * rows-27/29/2C precedent). Phase 0x1D is one coupled unit with action row 0x20
- * (arm 0 carries the row-0x20 installer `0x899a2`): both stay NULL because the
- * act-7 producer (situation 8) is reached only through the T2
- * `fifa96_match_run_period_setup` + `period_setup_live`, which is gated off
- * (R9 / FU196-L8, FU194-L1/L8). Phase 0x1E is the full restart sweep the engine
- * already models as a *compressed* stored-situation re-dispatch, so registering
- * it would de-compress a tape-visible derivation (FU194-L2). Phase 0x20 (act
- * 0xA, `0x8B688`) is the already-ported body (`fifa96_match_action_phase_20`,
- * FU-188 §10) whose sit-0 producer is likewise absent (FU188-L1). */
+ * (phase 0x1E / act 8) are ported as bounded derived bodies. As of M2 phase-19
+ * T2, phase 0x1D is REGISTERED and COUNTED: the T1 period-index roll
+ * (`mr->global_157ac2 == 4`) drives the mode-0 sit-8 selector in `phase_drive`,
+ * which installs act 7, and the live clock-tail act tick dispatches this body
+ * (see `test_engine_match_frame.c`). Phase 0x1E stays UNCOUNTED (slot NULL): the
+ * engine models the act-8 fallback as a *compressed* stored-situation
+ * re-dispatch (FU194-L2). Phase 0x1D was one coupled unit with action row 0x20
+ * (arm 0 carries the row-0x20 installer `0x899a2`), which stays NULL (T3). */
 
-/* Phase 0x1D / act 7 (FU-194 §3/§6.1): the body is NOT wired; the dispatcher
- * returns UNSUPPORTED while the body stays reachable by direct call. */
-static void test_phase_1D_not_counted(void) {
+/* Phase 0x1D / act 7 (FU-194 §3/§6.1 + T2/FU-208/209): the slot is REGISTERED;
+ * the dispatcher resolves and the body runs (arm 0). */
+static void test_phase_1D_registered(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x1D].fn == NULL);
-  assert(fifa96_match_dispatch_phase(&mr, 0x1Du) == -FIFA96_ERR_UNSUPPORTED);
+  assert(fifa96_match_phase_table[0x1D].fn == fifa96_match_action_phase_1D);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Du) == FIFA96_OK);
+  assert(mr.act.stage == 1u);          /* arm 0 ran via the dispatch */
 }
 
 /* Phase 0x1D stage 0 (0x898B4): clear the [0x15882A] gate (0x898B4), write
@@ -647,9 +642,10 @@ static void test_phase_1E_terminal(void) {
  * counted row: its producer `FUN_0008B9CC` (`0x8BAE7`) is mirrored live by
  * `fifa96_match_run_phase_drive` -> `fifa96_action_phase_period_end`
  * (`out.act = 0x0B`) -> the new act-selector dispatch, so wiring the row is an
- * honest +1. phase 0x22 is producer-dormant (the extra-time flag `[0x157AC0]` is
- * hardwired off: `phase_drive` passes `extra_time = 0`), so its slot stays NULL
- * (leg FU195-L2). phase 0x1B / act 5 has no invoker (the fresh 11-xref
+ * honest +1. phase 0x22's extra-time flag `[0x157AC0]` is LIVE since T1/FU-213
+ * (`mr->global_157ac0`; the hardwired `extra_time = 0` is gone), but its phase
+ * slot stays NULL pending T4's registration (FU214-L4). phase 0x1B / act 5 has
+ * no invoker (the fresh 11-xref
  * `0x888FC` census finds no `EAX=5` site), so it stays a leg (owner FU175-L2).
  * Both bodies touch only the act slot + the `0x974DC(0x1E)` audio sink
  * (`ref_whistle`), so they are render-invisible (tape-neutral). */
@@ -735,13 +731,14 @@ static void test_phase_21_producer_live_via_phase_drive(void) {
 
 /* Phase 0x22 / act 0xC (FU-195 §3): three stages, each gated on the derived
  * timer >= 0x3C after a reset; the terminal stage 2 clears the act slot. Its
- * phase-table slot stays NULL — producer-dormant (leg FU195-L2). The body is
+ * phase-table slot stays NULL — the extra-time flag producer is live since
+ * T1/FU-213, but the registration is T4's (FU214-L4). The body is
  * driven directly. Mutation-RED: skipping a stage's timer reset makes the next
  * gate pass immediately (the stage assertions below fail). */
 static void test_phase_22_body_direct(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x22].fn == NULL);      /* uncounted (FU195-L2) */
+  assert(fifa96_match_phase_table[0x22].fn == NULL);      /* uncounted pending T4 (FU214-L4) */
   assert(fifa96_match_dispatch_phase(&mr, 0x22) == -FIFA96_ERR_UNSUPPORTED);
   mr.state.frame_delta = 2;
   mr.act.id = 0x0C;
@@ -806,7 +803,7 @@ int main(void) {
   test_phase_1C_not_counted();
   test_phase_1C_stage0();
   test_phase_1C_terminal();
-  test_phase_1D_not_counted();
+  test_phase_1D_registered();
   test_phase_1D_install_frame();
   test_phase_1D_wait_whistle();
   test_phase_1D_terminal();

@@ -1160,3 +1160,39 @@ new RED/GREEN `test_record_meta_bind_per_side`). **F1** collapsed the
 the record metadata through the pool API. **F3** documents the
 `-FIFA96_ERR_INVALID` path. See FU-199 §12 and the plan's review-fix-wave
 section. The phase-18 T1 narrative above is kept verbatim.
+
+## M2 phase-19 T2 — the situation-8 selection + the phase-0x1D slot (FU-208/FU-209)
+
+**The situation-8 route is producer-live and phase `0x1D` is COUNTED (`+1`,
+census `51/80 → 52/80 = 65%`).** T2 wires the T1/FU-213 period-index roll
+(`mr->global_157ac2`) to the situation-8 selector: when a live clock completion
+rolls the index onto 4 (the native `[0x157AC2] == 4` extra-time period) and the
+completed period left the phase-0xC screen, `fifa96_match_run_phase_drive` runs
+the mode-0 period-end producer (native `FUN_00088860` `0x888C8`; its own
+`state.phase == 0x0C` gate is the native co-condition) → situation 8 →
+`match_run_situation_side` → act 7. The phase-`0x1D` table slot is registered
+(`fifa96_match_handlers.c`, `{0x1D, NULL}` → `fifa96_match_action_phase_1D`), so
+the clock-tail `fifa96_match_act_tick` maps act 7 → phase `0x1D` and dispatches
+the ported body (arm 0 clears `[0x15882A]`, writes phase `0x10` and installs
+action row 0x19 on the team-base records). The sit-1 else-arm of the mode-0
+producer stays a fixtured branch (the live period-end screen transition is owned
+by the lifecycle — guarding the new call on the T1 gate keeps it off the live
+completion, so M2 does not move).
+
+**Legs (never faked):** the bit-8 disjunct (`0x4B0CB TEST AH,1`, the other
+sit-8 producer) stays **FU208-L1** — its range-word writer is unlocated; the
+coupled action row-0x20 body/installer (`0x899A2`, FU194-L7/L8, T3), the
+phase-0x10 row registration (FU214-L4), the act-7 invoke-now cadence (FU208-L4)
+and the arm-9 `[0x157AC0]` write-back (FU209-L5) stay legs. FU208-L2 (the NULL
+phase-0x1D slot) is RESOLVED; FU208-L3 (the extra-time producer) is resolved for
+the `global_157ac2 == 4` arm via the T1 roll (the bit-8 arm remains FU208-L1);
+FU213-L2 (the mode-0 live caller) is resolved for the sit-8 path.
+
+**TDD:** RED/GREEN for the selector and the slot registration separately (the
+end-to-end body exercised via a live `phase_drive` completion); two mutation-RED
+(a wrong selector gate; an un-registered slot) each abort the new tests.
+**Determinism:** `make check` **110/110** (sanitized); M1 `09b726b7…` unmoved;
+M2 `441415fc…` byte-identical (`cmp` clean — the tape reaches no
+`global_157ac2 == 4` completion, so the sit-8 branch is dormant on it). **Census:**
+README title `65%`; ENGINE.md census `52/80` (dispatch `27 UNSUP / 52 OK / 1
+NOTF`, sum 80); AGENTS.md census note swept `51/80 → 63%` → `52/80 → 65%`.

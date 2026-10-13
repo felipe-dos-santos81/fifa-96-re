@@ -483,3 +483,28 @@ unported) stands. (Leg FU208-L3.)
 `[0x157AC2] == 4` + the bit-8 extra-time request. `[0x157AC0]` remains the
 keystone for the companion cohort rows (act `0xC`/phase `0x22`, and the
 phase-`0x1D` terminal write-back `0x89E8C`). (Leg FU208-L5-adjacent; §5.)
+
+---
+
+## Landing (M2 phase-19 T2, 2026-10-13)
+
+T2 implements the sit-8 selector's `[0x157AC2] == 4` arm and registers the
+phase-`0x1D` slot, so the routing derived here is now engine-live.
+
+* **FU208-L2 (the engine phase-0x1D slot is NULL) — RESOLVED.**
+  `fifa96_match_handlers.c` `{0x1D, NULL}` → `fifa96_match_action_phase_1D`
+  (`fifa96_match_run.c`).
+* **FU208-L3 (the extra-time producer) — RESOLVED for the `[0x157AC2] == 4`
+  arm.** The T1/FU-213 period-index roll (`fifa96_match_run_phase_drive`,
+  `mr->global_157ac2 = state.period`) reaches 4 at an extra-time-entering
+  completion; `phase_drive` then runs the mode-0 period-end producer
+  `fifa96_match_run_period_setup(mr, 0)` (native `FUN_00088860` `0x888C8`),
+  whose `state.phase == 0x0C && global_157ac2 == 4` gate selects situation 8.
+* **FU208-L1 (the bit-8 vs bit-9 range-word gap) — OPEN, not faked.** No located
+  writer sets bit 8; the disjunct stays a leg.
+* **§6.2 (3)/(4) remain legs:** the coupled row-`0x20` body/installer (`0x899A2`,
+  FU194-L7/L8) is T3; the act-7 invoke-now cadence is **FU208-L4**.
+
+Census `+1` (phase `0x1D`) → `52/80 = 65%`; M1 `09b726b7…` and M2 `441415fc…`
+byte-identical (the tape reaches no `global_157ac2 == 4` completion). No prior
+section rewritten.

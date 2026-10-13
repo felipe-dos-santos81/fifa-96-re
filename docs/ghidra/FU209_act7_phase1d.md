@@ -602,3 +602,19 @@ indexing: the record loop's `+0x14C`/`+0x14D` reads/clears at `ESI = records[i-1
 address `records[i]`'s bytes, so the loop covers `records[1..10]` (not
 `records[1..10]` off-by-one); the base `0x8990A` covers `records[0]`. No prior
 section is rewritten.
+
+---
+
+## Landing (M2 phase-19 T2, 2026-10-13)
+
+The phase-`0x1D` slot is REGISTERED (`fifa96_match_handlers.c`, `{0x1D, NULL}` →
+`fifa96_match_action_phase_1D`), so the act-7 route derived here now dispatches
+the body from the clock-tail act seam. §6.2 ("does the act-7 body run? — No") is
+superseded for the `[0x157AC2] == 4` entry: the T1/FU-213 period-index roll feeds
+the mode-0 sit-8 selector in `fifa96_match_run_phase_drive`, and the body's arm 0
+runs (phase-0x10 write + row-0x19 team-base install). The remaining §6.4 landings
+are still legs: the arm-0 coupled row-`0x20` install (FU209-L2, T3), the row-`0x20`
+body `0x84EEC` (FU209-L3, T3), the arm-8 selection block (FU209-L4), the arm-9
+`[0x157AC0]` write-back (FU209-L5) and the arm-2 contact gate (FU209-L6). Census
+`+1` (phase `0x1D`) → `52/80 = 65%`; FU209-L1 (the act-7 producer inert) is
+resolved for the `global_157ac2 == 4` arm, the bit-8 arm stays FU208-L1.

@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-51/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1F, 0x21, 0x20
+52/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,8 +265,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **51/80 rows wired** (32 action + the phase rows
-  `0x02`/`0x17`/`0x18`/`0x19`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **52/80 rows wired** (32 action + the phase rows
+  `0x02`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -1108,6 +1108,24 @@ the build also produces the windowed `fifa96` target (`make game`).
   (the M2 golden's only move is the directive-forced cutscene at `begin`, and
   no visual/menu change landed). `make check` **110/110**. Remaining legs: the
   T1–T5 numbered legs (§ phase-18 T1/T2/T3/T4/T5) + **FU206-L1..L5**.
+- **M2 phase-19 T2 (FU-208/FU-209) — the situation-8 selection + the phase-`0x1D`
+  slot: phase `0x1D` counted, census `51/80 → 52/80 = 65%`.** The T1/FU-213
+  period-index roll (`mr->global_157ac2`) now feeds the situation-8 selector:
+  `fifa96_match_run_phase_drive` runs the mode-0 period-end producer
+  (`fifa96_match_run_period_setup(mr, 0)`, native `FUN_00088860` `0x888C8`) once
+  the rolled index reaches 4, whose `state.phase == 0x0C && global_157ac2 == 4`
+  gate selects situation 8 → act 7; the registered phase-`0x1D` slot
+  (`fifa96_match_handlers.c` `{0x1D, NULL}` → `fifa96_match_action_phase_1D`)
+  then dispatches the ported body through the clock-tail act tick (arm 0 clears
+  `[0x15882A]`, writes phase `0x10` and installs action row 0x19). Legs (not
+  faked): the bit-8 sit-8 disjunct (`0x4B0CB`, **FU208-L1**; no located range-word
+  writer), the coupled action row-0x20 body/installer (FU194-L7/L8, T3), the
+  phase-`0x10` row (FU214-L4), the act-7 invoke-now cadence (**FU208-L4**) and the
+  arm-9 `[0x157AC0]` write-back (FU209-L5); FU208-L2 (the NULL phase-`0x1D` slot)
+  is RESOLVED. **Tape:** M2 `441415fc…` byte-identical (the tape reaches no
+  `global_157ac2 == 4` completion), M1 `09b726b7…` unmoved; dispatch
+  `27 UNSUP / 52 OK / 1 NOTF` (sum 80); README title `65%`; AGENTS.md census note
+  swept.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

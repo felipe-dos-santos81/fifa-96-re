@@ -2635,6 +2635,18 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * cell (`global_157ac2`) follows the FU-62 library's already-advanced
        * `state.period`. This is the live producer T2's situation-8 gate reads. */
       mr->global_157ac2 = mr->state.period;
+      /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2): the situation-8 selector. Once
+       * the roll lands the index on 4 (the native `[0x157AC2] == 4` extra-time
+       * period) and the completed period left the phase-0xC screen, the mode-0
+       * period-end producer (native `FUN_00088860` 0x888C8; its own
+       * `state.phase == 0x0C` gate is the native co-condition) selects situation
+       * 8 -> act 7 -> phase 0x1D. Guarded on the T1 gate so the non-extra-time
+       * sit-1 else-arm (0x888F2) stays a fixtured branch (the live period-end
+       * screen transition is owned by the lifecycle; not this slice). The bit-8
+       * disjunct (0x4B0CB `TEST AH,1`) remains the FU208-L1 leg — its range-word
+       * writer is unlocated, so it is never faked. */
+      if (mr->global_157ac2 == 4u)
+        (void)fifa96_match_run_period_setup(mr, 0);
       return 1;
     }
     /* FU-213 §2.6: the no-completion tail (0x8B590). W5 (0x8B5CD) raises the
@@ -6044,13 +6056,13 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
-/* FU-194 §3/§6.1 (M2 phase-17 T5): the phase-0x1D / act-7 row body — the native
- * 10-arm set-piece timeline `0x89868` (arms `0x898B4..0x89EAF`). Its phase-table
- * slot stays NULL/uncounted: the row is one coupled unit with action row 0x20
- * (arm 0 carries the row-0x20 installer `0x899A2`), but the route needs the
- * act-7 producer (situation 8) and the engine reaches situation 8 only through
- * the T2 `fifa96_match_run_period_setup` + `period_setup_live`, which is gated
- * off (R9 / FU196-L8) — so neither slot is producer-live (FU194-L1/L8). Derived
+/* FU-194 §3/§6.1 (M2 phase-17 T5) + FU-208/FU-209 §6.4 (M2 phase-19 T2): the
+ * phase-0x1D / act-7 row body — the native 10-arm set-piece timeline `0x89868`
+ * (arms `0x898B4..0x89EAF`). Its phase-table slot is REGISTERED and COUNTED as
+ * of T2: the T1 period-index roll (`global_157ac2 == 4`) drives the mode-0
+ * sit-8 selector in `phase_drive`, and the clock-tail act tick dispatches this
+ * body. The row is one coupled unit with action row 0x20 (arm 0 carries the
+ * row-0x20 installer `0x899A2`), which stays a leg. Derived
  * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
  * (0x898B4) clears `[0x15882A]`, writes phase 0x10 when `state.phase != 0x10`
  * (0x898B6..0x898DD — the FU194-L9 phase write), installs action row 0x19 on

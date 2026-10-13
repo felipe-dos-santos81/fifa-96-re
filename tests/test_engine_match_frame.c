@@ -638,6 +638,59 @@ static void test_phase_drive_period4_skip_and_w5(void) {
   assert(mr.global_157ac2 == 0u);
 }
 
+/* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2): the situation-8 selection. When the
+ * T1 period-index roll lands the index on 4 (the native `[0x157AC2] == 4`
+ * extra-time period) and the completed period left the phase-0xC screen, the
+ * mode-0 period-end producer (native `FUN_00088860` 0x888C8) selects situation 8
+ * -> act 7 (the match re-init). The bit-8 disjunct (0x4B0CB TEST AH,1) stays the
+ * FU208-L1 leg (no located writer). Mutation-RED: dropping the selector (or
+ * mis-gating it off the roll) leaves act 0xB (the chooser's act), so the
+ * `act.id == 7` assertion fails. */
+static void test_phase_drive_situation8_selects_act7(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 4;                 /* the FU-62 library rolled 3 -> 4 */
+  mr.state.phase = 2;                  /* class 1: the clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;                    /* tied -> no ET flag -> chooser phase 0xC */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac2 == 4u);      /* the T1 roll reaches the sit-8 gate */
+  assert(mr.global_157ac0 == 0u);      /* tied: the OL-85 flag stays clear */
+  assert(mr.state.phase == 0x0Cu);     /* the no-ET chooser arm (completed 3 < 4) */
+  assert(mr.act.id == 7);              /* sit 8 selected -> act 7 */
+  assert(mr.act.stage == 0u);
+}
+
+/* FU-209 §6.4 (M2 phase-19 T2): the registered phase-0x1D slot runs the ported
+ * act-7 body end-to-end on a live situation-8. The selection installs act 7
+ * (deferred, the 0x8AEAE invoke cadence is the FU208-L4 leg); the live clock-tail
+ * `fifa96_match_run_act_tick` then maps act 7 -> phase 0x1D and dispatches the
+ * body, whose arm 0 writes phase 0x10 (0x898DD) and installs action row 0x19 on
+ * both teams' record 0 (0x89903/0x8990A). Mutation-RED: a NULL phase-0x1D slot
+ * makes the tick early-return at fifa96_match_act.c:63, so the stage/phase/record
+ * assertions fail. */
+static void test_situation8_dispatches_phase_1d_body(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1D].fn == fifa96_match_action_phase_1D);
+  mr.state.period = 4;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.act.id == 7);                       /* sit 8 -> act 7 installed */
+  assert(mr.act.stage == 0u);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* act 7 -> phase 0x1D */
+  assert(mr.act.stage == 1u);                   /* arm 0 advanced (0x899ED) */
+  assert(mr.state.phase == 0x10u);              /* arm-0 phase-0x10 write (0x898DD) */
+  assert(mr.entities.team[0].records[0].code == 0x19u);  /* arm-0 row-0x19 install */
+  assert(mr.entities.team[1].records[0].code == 0x19u);
+}
+
 /* The begun-run 2 -> 0x0C -> 0 sequence: the derived write lands on the
  * completing frame (0x0C observable before the lifecycle resolve), and the
  * run_end teardown resets the match state to the native reset phase 0
@@ -5651,6 +5704,8 @@ int main(void) {
   test_phase_drive_class_gate();
   test_phase_drive_extra_time_tiebreak();
   test_phase_drive_period4_skip_and_w5();
+  test_phase_drive_situation8_selects_act7();
+  test_situation8_dispatches_phase_1d_body();
   test_phase_drive_begun_end_resets_phase();
   test_kickoff_enters_phase2_when_cutscene_isolated();
   test_situation0_kickoff_installs_code24();

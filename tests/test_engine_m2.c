@@ -591,7 +591,8 @@
  * declared: the derived kickoff chain (state-1 arm + row 01, M2 playable-match
  * Task 2 / FU-143 §11) reaches phase 2 naturally but not frame-for-frame
  * against the forced extra-time window (mismatch evidence above), and the
- * extra-time flag producer (OL-85) is unported.
+ * extra-time flag producer (OL-85) was unported at v3 (LIVE since phase-19
+ * T1/FU-213: `mr->global_157ac0`).
  *
  * C3-OL2 score step (playability Task 4): the run's derived writer replaces the
  * direct `fifa96_match_run_add_goal`. Phase-9 T3 landed the native
@@ -1383,7 +1384,8 @@
  *      aborts it.
  *   5. The leg pins: action row `03` NULL (owner FU177-L1, its evidence carries
  *      the `0x6DCC8`/`FU177-L1` markers; its dispatch is UNSUPPORTED); phase
- *      `0x22` NULL (FU195-L2), phase `0x1B` NULL (FU195-L1), and the `0x13`/
+ *      `0x22` NULL (pending T4 registration; FU214-L4 — the flag producer is
+ *      LIVE since T1/FU-213), phase `0x1B` NULL (FU195-L1), and the `0x13`/
  *      `0x14` RNG rows NULL (FU192-L2). Mutation-RED: wiring any leg aborts it.
  *
  * Golden decision (v17): **byte-identical, no re-pin** — the phase-17 landings
@@ -2949,9 +2951,10 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 51/80 = 63% (32 action = the 31 baseline + the
-   *    phase-18 T3 row 0x24; 19 phase = the 17 baseline + the phase-18 T3 phase
-   *    0x20 + the phase-18 T4 phase 0x17; the phase rows 0x18/0x19/0x1F + the
+   *    the handler unit tests. 52/80 = 65% (32 action = the 31 baseline + the
+   *    phase-18 T3 row 0x24; 20 phase = the 17 baseline + the phase-18 T3 phase
+   *    0x20 + the phase-18 T4 phase 0x17 + the phase-19 T2 phase 0x1D; the phase
+   *    rows 0x18/0x19/0x1F + the
    *    phase-17 T1 row 0x02 + the phase-17 T3 per-record rows 0x00/0x03/0x04/
    *    0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15 + the phase-17 T6 act-0xB
    *    row 0x21). */
@@ -2961,7 +2964,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 19u);  /* 51/80 = 63% */
+    assert(action_wired == 32u && phase_wired == 20u);  /* 52/80 = 65% (T2: +phase 0x1D) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -2995,13 +2998,13 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x17].fn != NULL);  /* T4: the native act-1 route is live (the phase-0x20 terminal -> sit 1 -> act 1; FU-203) */
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
     assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
-    assert(fifa96_match_phase_table[0x1D].fn == NULL);  /* T5: ported, act-7 producer (sit 8) gated off + coupled row 0x20 (FU194-L1/L8) */
+    assert(fifa96_match_phase_table[0x1D].fn != NULL);  /* T2 (FU-208/209): phase 0x1D COUNTED — sit-8 (global_157ac2==4) -> act 7 -> phase 0x1D, producer-live via phase_drive */
     assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* T5: ported, act-8 compression kept (FU194-L2) */
     assert(fifa96_match_phase_table[0x21].fn != NULL);  /* T6: act-0xB extra-time-clear, producer-live via phase_drive (FU-195 §6.1) */
-    assert(fifa96_match_phase_table[0x22].fn == NULL);  /* T6: ported, act-0xC extra-time-set producer-dormant (FU195-L2) */
+    assert(fifa96_match_phase_table[0x22].fn == NULL);  /* T6: ported, act-0xC extra-time-set, slot NULL pending T4 registration (FU214-L4) */
     assert(fifa96_match_phase_table[0x1B].fn == NULL);  /* T6: act-5 no invoker (FU195-L1, owner FU175-L2) */
     assert(fifa96_match_action_table[0x24].fn != NULL); /* T3: phase-0x20 code-0x24 installer live (FU202) */
-    /* T3: phase 0x20 + action 0x24 are wired (see above); the coupled 0x1D/0x20 pair stays NULL (FU205-L2) */
+    /* T3: phase 0x20 + action 0x24 are wired (see above); the coupled action row 0x20 stays NULL (FU205-L2/T3) */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */
     assert(fifa96_match_action_table[0x22].fn == NULL); /* T2: ported, ungated (FU185-L6) */
     assert(fifa96_match_action_table[0x1F].fn != NULL); /* T2: keeper dive */
@@ -3328,7 +3331,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 32u && phase_wired == 19u);    /* 51/80 = 63% */
+    assert(action_wired == 32u && phase_wired == 20u);    /* 52/80 = 65% (T2: +phase 0x1D) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -3358,8 +3361,8 @@ static void run_phase17_riders(void) {
   }
   /* 5. The leg pins (T1/T6): action row 0x03 NULL (owner FU177-L1, its
    *    evidence carries the 0x6DCC8/FU177-L1 markers; dispatch UNSUPPORTED);
-   *    phase 0x22 NULL (FU195-L2), phase 0x1B NULL (FU195-L1) and the
-   *    0x13/0x14 RNG rows NULL (FU192-L2). */
+   *    phase 0x22 NULL (pending T4 registration; FU214-L4), phase 0x1B NULL
+   *    (FU195-L1) and the 0x13/0x14 RNG rows NULL (FU192-L2). */
   {
     struct fifa96_match_run mr;
     const struct fifa96_match_handler *row03 = &fifa96_match_action_table[0x03];
