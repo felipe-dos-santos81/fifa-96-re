@@ -149,18 +149,25 @@ static void test_set_period_and_active_resolve(void) {
 /* Boundary completion: a 1 s period ends on the 30th granted frame (the 100th
  * pace tick); the frame body marks the lifecycle OVER, then resolve drives
  * OVER -> POST -> EXIT per FU-64 and the existing run_end path (teardown +
- * register cancel + post-exit) returns the engine to FRONTEND. */
+ * register cancel + post-exit) returns the engine to FRONTEND.
+ *
+ * v21 (M2 phase-21 T5, FU-228 §4.2 / FU228-L4): the exit positive is now a
+ * PAST-half-time completion — the half-time completion continues. The clock is
+ * seeded at period 1 so the completion rolls `global_157ac2` to 2 (>= 2) with a
+ * tied score (the OL-85 flag stays clear), so the end word is decided and
+ * `mark_over` fires (`fifa96_match_run.c` FU-228 §4.2 gate). */
 static void test_period_end_resolve_returns_to_frontend(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(fifa96_match_run_set_period(&mr, 1, 1) == 0);
+  mr.state.period = 1;
   mr.state.phase = 2;
 
   for (int i = 0; i < TICKS_PER_SECOND; i++)
     assert(fifa96_match_run_frame(&mr) >= 0);
-  assert(mr.state.period == 1);
+  assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
@@ -188,13 +195,17 @@ static void test_period_end_resolve_returns_to_frontend(void) {
  * clock advance before run_step consumes exit staging, so a period end landing
  * on the same tick as a staged request_exit must not clobber EXIT->OVER. The
  * 100th tick is the coincident boundary; the period still rolls, but EXIT
- * survives and the next run step ends the match. */
+ * survives and the next run step ends the match. v21 (M2 phase-21 T5): the
+ * completion is seeded PAST half-time (clock at period 1) so it is one that
+ * WOULD mark_over — the guard is exercised, not vacuous (a half-time completion
+ * never marks over now). */
 static void test_staged_exit_survives_period_end(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
   assert(fifa96_match_run_set_period(&mr, 1, 1) == 0);
+  mr.state.period = 1;
   mr.state.phase = 2;
 
   for (int i = 0; i < TICKS_PER_SECOND - 1; i++)
@@ -204,7 +215,7 @@ static void test_staged_exit_survives_period_end(void) {
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_EXIT);
 
   assert(fifa96_match_run_frame(&mr) >= 0);          /* the boundary tick */
-  assert(mr.state.period == 1);                      /* the period still rolled */
+  assert(mr.state.period == 2);                      /* the period still rolled */
   assert(mr.state.total_seconds == 1);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_EXIT);  /* guard: EXIT wins over mark_over */
 
@@ -231,6 +242,10 @@ static void test_live_period_end_exits_to_frontend(void) {
   assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
   assert(f.engine->match == &f.engine->match_run);
   assert(fifa96_match_run_set_period(&f.engine->match_run, 1, 1) == 0);
+  /* v21 (M2 phase-21 T5, FU-228 §4.2): seed the clock PAST half-time so the
+   * forced completion rolls `global_157ac2` to 2 and exits (a half-time
+   * completion now continues instead of leaving MATCH). */
+  f.engine->match_run.state.period = 1;
   f.engine->match_run.state.phase = 2;   /* class 1: the clock always runs */
 
   int steps = 0;
@@ -279,6 +294,7 @@ static void test_loopbacked_tiebreak_completion(void) {
   assert(mr.global_157ac0 == 0u);        /* completed index 0 is not a tie-break site */
   assert(mr.global_157ac2 == 1u);        /* the roll 0x8B58A, live */
   assert(mr.state.phase == 0x0Cu);       /* the chooser parked the class-0 phase */
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* v21 T5: half-time continues */
 
   /* Re-arm the clock for the next period (the unported kickoff restart) and roll
    * period 1 -> 2 for real; the completed index 1 is the regulation end. */
@@ -293,8 +309,86 @@ static void test_loopbacked_tiebreak_completion(void) {
   assert(mr.act.stage == 1u);            /* phase-0x22 stage 0 ran invoke-now */
   assert(mr.ref_whistle == 0x1Eu);       /* the 0x974DC(0x1E) event */
   assert(mr.global_157ac2 == 2u);        /* the roll reached the regulation-end index */
+  /* v21 T5 (FU-228 §4.2 / FU228-L6): the flag-set extra-time entry does NOT end
+   * the match — the end word stays 0, so `mark_over` is skipped. */
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 
   drop_fixture(f);
+}
+
+/* v21 (M2 phase-21 T5, FU-227 §5 / FU-228 §4.2): the half-time (first)
+ * completion CONTINUES the match — it runs the sit-1 route live instead of
+ * marking the lifecycle OVER. The sit-1 arm installs act 1 (invoke deferred)
+ * on the next granted frame's top-of-call mode-0 producer (T4/FU225-L5
+ * one-frame cadence), and the same frame's clock-tail act tick runs the
+ * phase-0x17 body stage 0 (`fifa96_match_run_kickoff_entry`) writing the phase-1
+ * kickoff. Mutation-RED: re-gating the T4 per-frame mode-0 producer (the
+ * top-of-phase_drive `fifa96_match_run_period_setup(mr, 0)`,
+ * fifa96_match_run.c:2597) leaves the sit-1 arm dormant -> act.id stays 0x0B and
+ * state.phase stays 0x0C -> the phase == 1 assert aborts. */
+static void test_half_time_completion_runs_sit1_kickoff(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_set_period(&mr, 1, 1) == 0);
+  mr.state.phase = 2;                    /* class 1: the clock runs */
+
+  for (int i = 0; i < TICKS_PER_SECOND; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.period == 1u);         /* the half-time completion (0 -> 1) */
+  assert(mr.global_157ac2 == 1u);        /* the roll 0x8B58A, half-time */
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* v21 T5: no exit */
+
+  /* The sit-1 arm + the phase-0x17 kickoff run on the next granted frame. */
+  for (int i = 0; i < 6 && mr.state.phase != FIFA96_MATCH_RUN_KICKOFF_PHASE; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);  /* == 1u */
+  assert(mr.state.prev_phase == 0x0Cu);  /* the 0x0C -> 1 kickoff write */
+  assert(mr.act.id == 1u);               /* the sit-1 arm installed act 1 */
+
+  drop_fixture(f);
+}
+
+/* v21 (M2 phase-21 T5, FU-228 §4.2 / FU228-L4): the lifecycle `mark_over` fires
+ * only on a PAST-half-time, end-word-decided completion — a phase-0x0C completion
+ * that rolls `global_157ac2 >= 2` with the extra-time flag `global_157ac0` clear.
+ * (a) a half-time completion (index 1, flag clear) CONTINUES; (b) a
+ * past-half-time flag-clear completion EXITS. Mutation-RED: the raw
+ * `period_ended` gate fires `mark_over` at (a) -> the ACTIVE assert aborts; a
+ * missing `past_half_time` bound fires at neither. */
+static void test_mark_over_only_past_half_time(void) {
+  /* (a) half-time (index 1, flag clear): no exit. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 2;
+    mr.state.period_length = 1;
+    mr.state.extra_length = 1;
+    for (int i = 0; i < TICKS_PER_SECOND; i++)
+      assert(fifa96_match_run_frame(&mr) >= 0);
+    assert(mr.state.period == 1u);       /* the completion rolled 0 -> 1 */
+    assert(mr.global_157ac2 == 1u);      /* not past half-time */
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+  }
+  /* (b) past-half-time + flag clear + end decided: exit (OVER). The clock is
+   * seeded at period 1 so the completion rolls the index to 2; the tied 0-0
+   * score keeps the OL-85 flag clear, so the end word is decided. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.period = 1;
+    mr.state.phase = 2;
+    mr.state.period_length = 1;
+    mr.state.extra_length = 1;
+    assert(mr.global_157ac0 == 0u);      /* tied: the flag stays clear */
+    for (int i = 0; i < TICKS_PER_SECOND; i++)
+      assert(fifa96_match_run_frame(&mr) >= 0);
+    assert(mr.state.period == 2u);
+    assert(mr.global_157ac2 == 2u);      /* past half-time */
+    assert(mr.state.phase == 0x0Cu);     /* the end-word screen */
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+  }
 }
 
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
@@ -340,6 +434,8 @@ int main(void) {
   test_staged_exit_survives_period_end();
   test_live_period_end_exits_to_frontend();
   test_loopbacked_tiebreak_completion();
+  test_half_time_completion_runs_sit1_kickoff();
+  test_mark_over_only_past_half_time();
   test_score_plumbing();
   puts("test_engine_match_completion OK");
   return 0;

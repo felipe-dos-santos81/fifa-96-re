@@ -76,12 +76,17 @@ static void test_300_grants_ten_seconds_no_drift(void) {
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
 }
 
-/* The library boundary: a 1 s first period ends on the 30th granted frame
- * (the 100th pace tick here); the frame body must mark the lifecycle over. */
+/* The library boundary: a 1 s PAST-half-time period ends on the 30th granted
+ * frame (the 100th pace tick here); the frame body must mark the lifecycle over.
+ * v21 (M2 phase-21 T5, FU-228 §4.2): the clock is seeded at period 1 so the
+ * completion rolls `global_157ac2` to 2 (>= 2) with a tied score (flag clear) —
+ * the end word is decided, so `mark_over` fires. A half-time completion now
+ * continues (see test_phase_drive_reaches_period_end). */
 static void test_period_end_marks_lifecycle_over(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+  mr.state.period = 1;
   mr.state.phase = 2;
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
@@ -91,7 +96,7 @@ static void test_period_end_marks_lifecycle_over(void) {
   }
 
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
-  assert(mr.state.period == 1);
+  assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
   assert(mr.pace.pending == 30);
@@ -221,7 +226,9 @@ static void test_engine_step_drives_frame_body(void) {
  * driven through a direct frame-body call: an engine step would now resolve
  * the OVER in the same step (G1 live exit, pinned by
  * test_engine_match_completion::test_live_period_end_exits_to_frontend), and
- * this test's contract is the frame body's mark_over itself. */
+ * this test's contract is the frame body's mark_over itself. v21 (M2 phase-21
+ * T5, FU-228 §4.2): the clock is seeded PAST half-time (period 1) so this
+ * completion is one that marks over (a half-time completion now continues). */
 static void test_begun_period_end_marks_over(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -230,6 +237,7 @@ static void test_begun_period_end_marks_over(void) {
   begin_isolated(&mr, f.engine);
   assert(mr.lc.active == 1);
   assert(mr.lc.registered == 1);
+  mr.state.period = 1;
   mr.state.phase = 2;
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
@@ -242,7 +250,7 @@ static void test_begun_period_end_marks_over(void) {
   assert(mr.ticks == 99);                  /* 99 trampoline hits; direct call has no tick */
   assert(mr.steps == 99);
   assert(mr.pace.pending == 30);
-  assert(mr.state.period == 1);
+  assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER); /* mark_over, begun run */
@@ -475,7 +483,12 @@ static void test_action_28_repack_round_trips_fields(void) {
  * (fifa96_match_state.c) is staged by the frame body, and the driver runs the
  * derived FUN_0008B9CC chooser (extra_time clear, period < 4 -> phase 0x0C on
  * the controlled side, act 0xB). `prev_phase` records the 2 -> 0x0C write.
- * A further frame must not re-fire: 0x0C is class 0 (clock stopped). */
+ * A further frame must not re-fire: 0x0C is class 0 (clock stopped).
+ *
+ * v21 (M2 phase-21 T5, FU-228 §4.2): this is a HALF-TIME completion (index 1), so
+ * the lifecycle does NOT exit — it continues (`mr.lc.screen` stays ACTIVE). The
+ * sit-1 arm and the phase-0x17 kickoff land on a later granted frame, not this
+ * completion frame (the T4/FU225-L5 one-frame cadence). */
 static void test_phase_drive_reaches_period_end(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -490,7 +503,7 @@ static void test_phase_drive_reaches_period_end(void) {
   assert(mr.state.period_seconds == 0);
   assert(mr.state.phase == 0x0Cu);          /* derived chooser, not forced */
   assert(mr.state.prev_phase == 2u);
-  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* v21 T5: half-time continues */
 
   assert(fifa96_match_run_frame(&mr) >= 0);
   assert(mr.state.phase == 0x0Cu);          /* class 0: no second write */
@@ -594,6 +607,33 @@ static void test_phase_drive_extra_time_tiebreak(void) {
   assert(mr.global_157ac0 == 0u);       /* only W2/W4 (index 1/3) */
   assert(mr.state.phase == 0x0Cu);
   assert(mr.global_157ac2 == 1u);       /* the roll */
+}
+
+/* v21 (M2 phase-21 T5, FU-227 §5 / FU-228 §4.2): the half-time (first)
+ * completion selects the sit-1 arm (act 1, install-only) on the next frame's
+ * top-of-call mode-0 producer (T4/FU225-L5 one-frame cadence). The chooser first
+ * parks the class-0 phase 0x0C and installs act 0xB; the sit-1 arm then
+ * re-dispatches situation 1 -> act 1. Mutation-RED: re-gating the T4 per-frame
+ * mode-0 producer (the top-of-phase_drive `fifa96_match_run_period_setup(mr, 0)`,
+ * fifa96_match_run.c:2597) leaves act.id == 0x0B. */
+static void test_phase_drive_half_time_selects_act1(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 1;                 /* the FU-62 library rolled 0 -> 1 */
+  mr.state.phase = 2;                  /* class 1: the clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.clock_period_ended = 1;
+
+  assert(fifa96_match_run_phase_drive(&mr) == 1);   /* the completion frame */
+  assert(mr.global_157ac2 == 1u);      /* the roll 0x8B58A, half-time */
+  assert(mr.state.phase == 0x0Cu);     /* the chooser parked the class-0 phase */
+  assert(mr.act.id == 0x0Bu);          /* the chooser's act before the sit-1 arm */
+
+  /* The sit-1 arm runs on the next frame's top-of-call mode-0 producer. */
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
+  assert(mr.act.id == 1u);             /* situation 1 -> act 1 (install-only) */
+  assert(mr.act.stage == 0u);
+  assert(mr.state.phase == 0x0Cu);     /* the phase-1 kickoff write is the act tick's job */
 }
 
 /* FU-213 §2.6 (M2 phase-19 T1): the period-index tail. The mid-extra-time W5
@@ -740,13 +780,17 @@ static void test_situation8_dispatches_phase_1d_body(void) {
 /* The begun-run 2 -> 0x0C -> 0 sequence: the derived write lands on the
  * completing frame (0x0C observable before the lifecycle resolve), and the
  * run_end teardown resets the match state to the native reset phase 0
- * (FUN_00073E28's derived surface, fifa96_match_state_init). */
+ * (FUN_00073E28's derived surface, fifa96_match_state_init). v21 (M2 phase-21
+ * T5, FU-228 §4.2): the clock is seeded PAST half-time (period 1) so the
+ * completion is one that marks the lifecycle OVER (a half-time completion now
+ * continues and would never resolve). */
 static void test_phase_drive_begun_end_resets_phase(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
 
   begin_isolated(&mr, f.engine);
+  mr.state.period = 1;
   mr.state.phase = 2;
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
@@ -5784,6 +5828,7 @@ int main(void) {
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
   test_phase_drive_extra_time_tiebreak();
+  test_phase_drive_half_time_selects_act1();
   test_phase_drive_period4_skip_and_w5();
   test_phase_drive_situation8_selects_act7();
   test_roll_flag_staged_zero();

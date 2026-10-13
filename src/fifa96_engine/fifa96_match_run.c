@@ -4162,12 +4162,25 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * Task 12-14 fixtures keep an unstaged scene. */
     if (mr->render.enabled) match_run_scene_stage(mr);
   }
-  if (period_ended && !fifa96_match_lifecycle_should_exit(&mr->lc)) {
-    /* Ordering guard: the frame body runs in the clock advance before
-     * run_step consumes the exit staging, so a period end coinciding with a
-     * staged request_exit must not clobber EXIT->OVER (a staged EXIT wins). */
-    rc = fifa96_match_lifecycle_mark_over(&mr->lc);
-    if (rc != 0) return rc;
+  /* FU-228 §4.2 / errata E4 (M2 phase-21 T5, FU228-L4): the native `mark_over`
+   * fires only when the end word is decided AND the period index is past
+   * half-time (`0x4B1C6 CMP [0x157AC2],2`; `mark_over` at `0x4B244`). The end
+   * word is set on a phase-0x0C screen with the extra-time flag [0x157AC0]
+   * CLEAR (`0x8BCBF`/`0x8BCD9`); a flag-set extra-time entry does not end
+   * (FU228-L6). Derived from the live cells — `mr->global_157ac2` is the roll
+   * (native 0x8B58A) and `mr->global_157ac0` the OL-85 flag — not the raw
+   * `period_ended`, so the first (half-time) completion continues. No
+   * `[0x158822]` cell is added; `FUN_0008BAF0` is not ported. The ordering
+   * guard is retained: a staged request_exit must not be clobbered by
+   * EXIT->OVER (a staged EXIT wins). */
+  {
+    int past_half_time = (mr->global_157ac2 >= 2u);
+    int end_word_decided = (mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u);
+    if (period_ended && past_half_time && end_word_decided &&
+        !fifa96_match_lifecycle_should_exit(&mr->lc)) {
+      rc = fifa96_match_lifecycle_mark_over(&mr->lc);
+      if (rc != 0) return rc;
+    }
   }
   return granted != 0;
 }
