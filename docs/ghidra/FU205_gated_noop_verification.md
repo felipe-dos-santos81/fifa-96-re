@@ -302,3 +302,22 @@ FU-175, FU-191, FU-198, FU-183. `docs/ENGINE.md` (`:8-10`, `:264-265`, `:564-566
 
 No writes beyond this slice file and the workspace report; no rename/label/comment
 /function/script/project save; no git.
+
+---
+
+## Addendum — T3 landing status (2026-10-12, additive)
+
+This addendum records the **T3** verdict against §3; it does not rewrite any
+section above.
+
+- **§3's "does R50's live wiring make the row-`0x20` installer fire?" — still
+  NO.** T3 did **not** register phase `0x1D` or the row `0x20`; the pair stays
+  `NULL/uncounted` (**leg FU205-L2**), because the route needs the unported
+  extra-time flag (OL-85, FU202-L1) **and** the arm-0 `0x899A2` actor-record
+  producer (`[0x1587D4]`, no engine cell). No fake install.
+- **What T3 DID land (the sibling situation-0 chain):** the match-init situation
+  **0** → act `0xA` → phase `0x20` → code `0x24` → row `0x24` chain is now live
+  (the producer re-placed after the begin-tail act reset), and phase `0x20` +
+  action row `0x24` are wired/counted (**+2 → `50/80 = 62%`**, M2 re-pinned to
+  `441415fc…`; FU-202 addendum). The two chains are independent: situation 0 is
+  live, situation 8 stays dormant.

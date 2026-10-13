@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-48/80 dispatch rows wired (31 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21
+50/80 dispatch rows wired (32 action + the wired phase rows 0x02, 0x18, 0x19, 0x1F, 0x21, 0x20
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -261,8 +261,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **48/80 rows wired** (31 action + the phase rows
-  `0x02`/`0x18`/`0x19`/`0x1F`/`0x21` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **50/80 rows wired** (32 action + the phase rows
+  `0x02`/`0x18`/`0x19`/`0x1F`/`0x21`/`0x20` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -935,6 +935,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   (invoke-now has no generic engine port), FU181-L1 (row `0x17` entry); FU-204's
   `0x1A` ladder (FU186-L5), row-`0x0D` (FU178-L1) and the R50 `0x24`/`0x20` pair
   stand. README title `60%`; dispatch `31 UNSUP / 48 OK / 1 NOTF` — consistent.
+- **M2 phase-18 T3 (FU-202) — the native situation machine live + the
+  phase-`0x20`/row-`0x24` pair wired/counted; M2 re-pinned (`+2`).** The native
+  match-init producer `FUN_000493A0 → FUN_0004B02C(1)` (0x4B095, situation 0 at
+  `0x4B0A5` → the sit-0 arm `0x8AB8E` invokes act `0xA` at `0x8B688`) is now
+  **live on `begin`**: its call is **re-placed** to run *after* the begin-tail
+  `fifa96_match_act_init` (which had cleared the armed act before any tick —
+  FU-202 §3A, the old `:2244` gate was dead). T3 re-derives that the producer's
+  armed act `0xA` then **survives into the first granted frame's clock-tail act
+  tick** (`fifa96_match_act_tick`), which runs the now-registered phase-`0x20`
+  body; its stage 0 installs code `0x24` on all 22 records and the now-registered
+  action row `0x24` (`fifa96_match_action_24`) dispatches on the pool. **The two
+  slots are wired/counted:** phase `0x20` (`fifa96_match_handlers.c:5123`,
+  `fifa96_match_action_phase_20`) and action row `0x24` (`:5038`,
+  `fifa96_match_action_24`) — **`+2` → `50/80 = 62%`** (32 action + 18 phase).
+  **Tape (Ruling R15):** the row-`0x24` stage-0 `pos_x = 0x9F0` write is
+  render-consumed (`match_run_scene_stage` reads `pos_x`), so **M2 re-pins**
+  (`7b4b241a…` v17 → `441415fc…` v18, 792 lines; the frame diff is **frames
+  12..792, hash-only — every `state=` suffix is unchanged**, `cmp`/diff
+  measured). Isolated move-proof: disabling the re-placed producer stops the
+  row-`0x24` dispatch (`mask_final` loses bit `0x24`), so the move is the native
+  situation-0 chain, **not** the derived kickoff. **M1 `09b726b7…` unmoved.**
+  **Retained/leg'd:** the derived ad-hoc `fifa96_match_run_kickoff_entry` stays
+  at its begin position (the derived act-1 stage-0 stand-in) because the native
+  **act-1 route** (situation 1 → act 1 → phase `0x17`) is **unported** — the
+  situation-0 cutscene pre-empts the derived kickoff chain, so the phase-`0x17`
+  row/body stays `NULL/uncounted` (**leg FU203-L2/FU202-L2**, the phase-2
+  natural-chain gap). The coupled phase-`0x1D`/row-`0x20` pair is **not wired**
+  (its situation-8 route needs the unported extra-time flag + the actor-record
+  producer; **leg FU205-L2**); phase `0x1E` stays `NULL` (the compressed act-8
+  fallback, FU194-L2). The extra-time flag `[0x157AC0]` (OL-85) has **no live
+  engine cell** — **leg FU202-L1** (not faked). **Tests:** the situation
+  producer pin `test_engine_match_handlers::test_situation_producer_live_at_begin`
+  (armed act `0xA` after `begin`), `test_engine_match_act::test_phase_20_body_direct`
+  (the wired slot runs the 22-record install) and the wired-slot row-`0x24`
+  dispatch; the M2 census riders (`action_wired == 32 && phase_wired == 18`,
+  `phase_expect[0x20] == OK`, `action_expect[0x24] == OK`) pin the count. The
+  derived-kickoff fixtures (`test_kickoff_enters_phase2_naturally`,
+  `test_natural_phase2_never_scores`, the record-machine live tests) now **clear
+  the armed act** to isolate the derived path from the live situation-0
+  cutscene. README title `62%`; dispatch `29 UNSUP / 50 OK / 1 NOTF` (sum 80).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

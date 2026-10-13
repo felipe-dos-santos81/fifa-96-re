@@ -2212,10 +2212,13 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
   mr->sp_157821 = 0;
-  /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): a fresh match drops
-   * the producer gates (the tape-neutral sequence) and the act-4 formation
-   * state (the order matrices are a staged leg, FU201-L4). */
-  mr->period_setup_live = 0;
+  /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2) / FU-202 §6 rec (b)
+   * (M2 phase-18 T3): a fresh match ACTIVATES the native situation producer —
+   * the live `begin` path runs `fifa96_match_run_period_setup(mode 1)` after the
+   * begin-tail act-slot reset (native `FUN_000493A0 -> FUN_0004B02C(1)`,
+   * 0x4B095). The act-4 formation state stays the zero stand-in (the order
+   * matrices are a staged leg, FU201-L4). */
+  mr->period_setup_live = 1;
   mr->formation_order_ok = 0;
   memset(mr->formation_order, 0, sizeof mr->formation_order);
   memset(mr->formation_current, 0, sizeof mr->formation_current);
@@ -2259,14 +2262,12 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * words and bits are rebuilt here and in that setter. */
   (void)fifa96_input_range_words(mr->input_cfg, 0, mr->input_range);
   match_run_input_bits_update(mr);
-  /* FU-196 §4 T2 rec 2 (M2 phase-17 T2): the native match-init producer
-   * `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) dispatches situation 0 after
-   * the range words are built. Its phase-0x20 (act 0xA) and phase-0x11 bodies
-   * are NULL until T5, so dispatching it live can move the M2 tape (FU196-L8).
-   * Landed gated: `period_setup_live` defaults 0 (the tape-neutral sequence);
-   * wire live only with T5's phase-0x20/0x1D bodies. The exact placement among
-   * begin's derived steps is a recorded assumption (FU196-L2). */
-  if (mr->period_setup_live) (void)fifa96_match_run_period_setup(mr, 1);
+  /* FU-202 §6 rec (b) (M2 phase-18 T3): the native match-init situation
+   * producer `FUN_000493A0 -> FUN_0004B02C(1)` (0x4B095, situation 0 at
+   * 0x4B0A5) now runs AFTER the begin-tail act-slot reset (below) so the armed
+   * act 0xA survives into the first granted frame's clock-tail act tick. Its
+   * old position here (before `kickoff_entry`) was dead: the begin-tail
+   * `fifa96_match_act_init` cleared the arm before any tick (FU-202 §3A). */
   /* FU-89 §11 / OL-T11-8: seed the records' targets from the resource-loaded
    * formation before the commit (the native `FUN_0008D098` phase-cell order at
    * `FUN_000740A0`, then `FUN_00073E08`). Soft-fails to zero targets. */
@@ -2365,6 +2366,19 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     (void)fifa96_match_run_screen_install(mr, 0, 0, 0);
     (void)fifa96_match_act_init(&mr->act);
     mr->act9_gate = 0;
+    /* FU-202 §6 rec (b) (M2 phase-18 T3): the native match-init situation
+     * producer `FUN_000493A0 -> FUN_0004B02C(1)` (0x4B095, situation 0 at
+     * 0x4B0A5) is RE-PLACED to run AFTER the act-slot reset so the armed act
+     * 0xA survives into the first granted frame's clock-tail act tick (the
+     * phase-0x20 body then installs code 0x24). At its old pre-kickoff
+     * position the begin-tail `fifa96_match_act_init` cleared the arm before
+     * any tick (FU-202 §3A: the producer was dead). The phase cells are
+     * restored below (the derived front-end install ordering), so the derived
+     * kickoff-phase value is kept while the native act arm survives. The
+     * ad-hoc `fifa96_match_run_kickoff_entry` (the derived act-1 stage-0
+     * stand-in; the native act-1 route is unported, leg FU203-L2/FU202-L2)
+     * stays at its begin position and produces no part of the code-0x24 move. */
+    if (mr->period_setup_live) (void)fifa96_match_run_period_setup(mr, 1);
     mr->state.phase = phase_before;
     mr->state.prev_phase = prev_before;
     mr->phase_machine.state = pm_state_before;

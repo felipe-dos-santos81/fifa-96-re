@@ -205,18 +205,17 @@ static void test_phase_19_act_owns_foul(void) {
   assert(mr.act.id == 3 && mr.act.stage == 2u);
 }
 
-/* FU-188 §2/§6 (phase-16 T4): phase 0x20 is ported but its slot is NULL
- * (uncounted — the sole producer is situation 0, absent from every engine
- * caller). The body is driven directly: stage 0 installs code 0x24 on both
- * teams' 11 records and advances; the NULL slot returns UNSUPPORTED. */
+/* FU-188 §2/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): phase 0x20 is
+ * ported and its slot is now WIRED (counted) — the sole producer situation 0 is
+ * live via the re-placed match-init producer. The body is also driven directly:
+ * stage 0 installs code 0x24 on both teams' 11 records and advances. */
 static void test_phase_20_body_direct(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x20].fn == NULL);   /* uncounted */
-  assert(fifa96_match_dispatch_phase(&mr, 0x20) == -FIFA96_ERR_UNSUPPORTED);
+  assert(fifa96_match_phase_table[0x20].fn != NULL);   /* counted (T3) */
   mr.act.id = 0x0A;
   mr.act.stage = 0;
-  assert(fifa96_match_action_phase_20(&mr) == FIFA96_OK);
+  assert(fifa96_match_dispatch_phase(&mr, 0x20) == FIFA96_OK);
   assert(mr.entities.team[0].records[0].code == 0x24u);   /* the 22-record install */
   assert(mr.entities.team[0].records[10].code == 0x24u);
   assert(mr.entities.team[1].records[0].code == 0x24u);

@@ -115,6 +115,10 @@ static void test_held_key_is_a_state_sample(void) {
     struct fifa96_match_run *mr = &e->match_run;
     int32_t id = mr->slot.entity;
     int32_t start_z;
+    /* M2 phase-18 T3: clear the live situation-0 act so the phase-0x20 body's
+     * code-0x24 install (the native kickoff cutscene) does not pre-empt the
+     * row-00 pad-locomotion path this test isolates. */
+    mr->act.id = 0;
     assert(id >= 0 && id < (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
     assert(fifa96_match_entities_install(&mr->entities.team[0].records[id],
                                          (uint8_t)mr->state.phase, 0, 0) == 1);

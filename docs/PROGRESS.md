@@ -1018,6 +1018,35 @@ consumer of the desired matrix** (its begin formation consumer,
 `action_expect[0x17]`/`phase_expect[0x1A]` (`UNSUP`) pins assert the posture and
 hold. `make check` **110/110**; README title `60%`.
 
+**Phase-18 T3 (2026-10-12) — the native situation machine live + the
+phase-`0x20`/row-`0x24` pair wired/counted; M2 re-pinned (`+2`, census
+`48/80 → 50/80 = 62%`)** (this slice). Ruling R15 option B / R50's rec (b): the
+native match-init producer `FUN_000493A0 → FUN_0004B02C(1)` (0x4B095) dispatches
+situation 0 (`0x4B0A5`) → the sit-0 arm `0x8AB8E` invokes act `0xA` (phase
+`0x20`, `0x8B688`). The engine **re-places** the producer call to run *after*
+the begin-tail `fifa96_match_act_init` (the old `begin:2244` gate was dead — the
+act reset cleared the armed act `0xA` before any tick, FU-202 §3A), so the arm
+**survives into the first granted frame's clock-tail act tick** and runs the
+now-registered phase-`0x20` body; its stage 0 installs code `0x24` on all 22
+records and the now-registered row `0x24` (`fifa96_match_action_24`) dispatches,
+writing the render-consumed `pos_x = 0x9F0`. **Wired/counted: phase `0x20` +
+action row `0x24` (`+2`).** **Tape:** M2 **re-pins** (`7b4b241a…` v17 →
+`441415fc…` v18, 792 lines; the frame diff is **frames 12..792, hash-only — all
+`state=` suffixes unchanged**, `cmp`/diff-measured) because the row-`0x24`
+`pos_x` write is render-read. The move is proven the **native** situation-0
+effect: disabling the re-placed producer stops the row-`0x24` dispatch. **M1
+`09b726b7…` unmoved.** **Legs:** the native **act-1 route** (situation 1 → act 1
+→ phase `0x17`) is unported, so the situation-0 cutscene pre-empts the derived
+kickoff chain and the derived ad-hoc `fifa96_match_run_kickoff_entry` is
+**retained** at begin (phase `0x17` stays `NULL/uncounted`, **FU203-L2/FU202-L2**
+— the phase-2 natural-chain gap); the coupled phase-`0x1D`/row-`0x20` pair stays
+`NULL` (needs the unported extra-time flag + the actor-record producer,
+**FU205-L2**); phase `0x1E` stays `NULL` (FU194-L2); the extra-time flag
+`[0x157AC0]` (OL-85) has no engine cell (**FU202-L1**, not faked). The derived
+kickoff/live-record fixtures now clear the armed act to isolate the derived path
+from the live cutscene. `make check` **110/110**; README title `62%`; dispatch
+`29 UNSUP / 50 OK / 1 NOTF` (sum 80).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

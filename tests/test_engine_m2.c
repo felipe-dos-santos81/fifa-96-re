@@ -1497,7 +1497,7 @@
   ((1ull << 0x00) | (1ull << 0x01) | (1ull << 0x02) | (1ull << 0x04) |      \
    (1ull << 0x05) | (1ull << 0x07) | (1ull << 0x08) | (1ull << 0x0F) |      \
    (1ull << 0x18) | (1ull << 0x19) | (1ull << 0x21) | (1ull << 0x23) |      \
-   (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
+   (1ull << 0x24) | (1ull << 0x26) | (1ull << 0x28) | (1ull << 0x2A))
 /* v15 (phase-15 T2, FU-179): row 0x19 joins the observed set — the row-04
  * carrier install `0x7E866`/`0x7E8C1` stages code 0x19 on the tape and, now
  * that the body is ported, the dispatch records FIFA96_OK. The body is a pure
@@ -1809,12 +1809,18 @@ struct m2_result {
   uint8_t staged_anim_id;    /* render.entities[11].stage.anim_id at frame 9 */
 };
 
-/* v4 natural-phase-2 probe observations (no match directives). */
+/* v4 + M2 phase-18 T3 natural-probe observations (no match directives). The
+ * situation-0 kickoff cutscene (situation 0 -> act 0xA -> phase 0x20 ->
+ * code 0x24 -> row 0x24) now runs on the natural chain, so the probe tracks the
+ * first live row-0x24 dispatch instead of the v4 phase-2 jump: the native
+ * match-init cutscene defers the derived phase-2 chain behind the unported
+ * act-1 route (leg FU203-L2), so no natural phase 2 is observed in the window. */
 struct m2_natural {
   int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
-  int phase2_step;           /* first engine step sampled at live phase 2 */
-  uint64_t dispatched_at_phase2; /* dispatch mask when phase 2 was observed */
-  uint8_t phase_machine_at_phase2; /* FU-142a mirror at the transition (2) */
+  int kick_step;             /* first engine step where the situation-0 row-0x24 dispatched */
+  int phase2_step;           /* first engine step sampled at live phase 2 (-1: act-1 route unported) */
+  uint64_t dispatched_at_kick;   /* dispatch mask when the kickoff row was observed */
+  uint8_t phase_at_kick;         /* live phase at the kickoff observation */
 };
 
 static int file_exists(const char *path) {
@@ -2801,6 +2807,7 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 
   memset(nat, 0, sizeof *nat);
   nat->match_start_step = -1;
+  nat->kick_step = -1;
   nat->phase2_step = -1;
   int steps = 0;
   int post = 0;
@@ -2823,21 +2830,30 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
              e->match_run.score_tracked_side == 1);
       assert(e->match_run.score_max_diff == 0 &&
              e->match_run.score_last_event == 0);
-      if (e->match_run.state.phase == 2u) {
-        if (nat->phase2_step < 0) {
-          nat->phase2_step = steps;
-          nat->dispatched_at_phase2 = e->match_run.dispatched_ok;
-          nat->phase_machine_at_phase2 = e->match_run.phase_machine.state;
-        }
-        if (++post >= M2_NATURAL_POST_STEPS) break;
+      if (e->match_run.state.phase == 2u && nat->phase2_step < 0)
+        nat->phase2_step = steps;
+      if (nat->kick_step < 0 &&
+          (e->match_run.dispatched_ok & (1ull << 0x24)) != 0u) {
+        nat->kick_step = steps;
+        nat->dispatched_at_kick = e->match_run.dispatched_ok;
+        nat->phase_at_kick = e->match_run.state.phase;
       }
+      if (nat->kick_step >= 0 && ++post >= M2_NATURAL_POST_STEPS) break;
     }
   }
   assert(nat->match_start_step == 5);
-  assert(nat->phase2_step > nat->match_start_step);
-  assert(nat->phase2_step - nat->match_start_step <= M2_NATURAL_PHASE2_CAP);
-  assert((nat->dispatched_at_phase2 & M2_KICKOFF_ROWS_MASK) != 0u);
-  assert(nat->phase_machine_at_phase2 == 2u);
+  /* M2 phase-18 T3: the situation-0 kickoff cutscene runs on the natural chain
+   * (the match-init producer dispatches situation 0 -> act 0xA -> phase 0x20,
+   * whose body installs code 0x24 on the pool, and row 0x24 dispatches). */
+  assert(nat->kick_step > nat->match_start_step);
+  assert(nat->kick_step - nat->match_start_step <= M2_NATURAL_PHASE2_CAP);
+  assert((nat->dispatched_at_kick & (1ull << 0x24)) != 0u);
+  assert(nat->phase_at_kick == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  /* The native kickoff phase-1 entry is the act-1 route (situation 1 -> act 1),
+   * reached only after the phase-0x20 `0x3E8` cutscene wait and unported in the
+   * engine (FU203-L2/FU202-L2), so the v4 natural phase-2 chain is not reached
+   * in this window (the leg, not a fabricated phase 2). */
+  assert(nat->phase2_step < 0);
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
 }
@@ -2852,17 +2868,18 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 48/80 = 60% (31 action + the phase rows
-   *    0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the phase-17 T3 per-record
-   *    rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15 +
-   *    the phase-17 T6 act-0xB row 0x21). */
+   *    the handler unit tests. 50/80 = 62% (32 action = the 31 baseline + the
+   *    phase-18 T3 row 0x24; 18 phase = the 17 baseline + the phase-18 T3 phase
+   *    0x20; the phase rows 0x18/0x19/0x1F + the phase-17 T1 row 0x02 + the
+   *    phase-17 T3 per-record rows 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/
+   *    0x0A/0x0C/0x0F/0x15 + the phase-17 T6 act-0xB row 0x21). */
   {
     unsigned action_wired = 0, phase_wired = 0;
     for (uint32_t i = 0; i < FIFA96_MATCH_ACTION_ROWS; i++)
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 17u);  /* 48/80 = 60% */
+    assert(action_wired == 32u && phase_wired == 18u);  /* 50/80 = 62% */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -2892,8 +2909,8 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x12].fn == NULL);  /* formation + never written */
     assert(fifa96_match_phase_table[0x13].fn == NULL);  /* 0x6E244 RNG (L2) */
     assert(fifa96_match_phase_table[0x14].fn == NULL);  /* 0x6E244 RNG (L2) */
-    assert(fifa96_match_phase_table[0x20].fn == NULL);  /* T4: ported, situation-0 producer absent (FU188-L1) */
-    assert(fifa96_match_phase_table[0x17].fn == NULL);  /* T4: ported, act-1 producer absent + double-model (FU193-L1/L2) */
+    assert(fifa96_match_phase_table[0x20].fn != NULL);  /* T3: situation-0 producer live (FU202) */
+    assert(fifa96_match_phase_table[0x17].fn == NULL);  /* T3: the native act-1 route is unported (FU203-L2/FU202-L2); the derived kickoff stays */
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
     assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
     assert(fifa96_match_phase_table[0x1D].fn == NULL);  /* T5: ported, act-7 producer (sit 8) gated off + coupled row 0x20 (FU194-L1/L8) */
@@ -2901,8 +2918,8 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x21].fn != NULL);  /* T6: act-0xB extra-time-clear, producer-live via phase_drive (FU-195 §6.1) */
     assert(fifa96_match_phase_table[0x22].fn == NULL);  /* T6: ported, act-0xC extra-time-set producer-dormant (FU195-L2) */
     assert(fifa96_match_phase_table[0x1B].fn == NULL);  /* T6: act-5 no invoker (FU195-L1, owner FU175-L2) */
-    assert(fifa96_match_action_table[0x16].fn != NULL); /* T4: fouled-player face-the-ball (counted) */
-    assert(fifa96_match_action_table[0x24].fn == NULL); /* T4: ported, phase-0x20 producer absent (FU188-L1) */
+    assert(fifa96_match_action_table[0x24].fn != NULL); /* T3: phase-0x20 code-0x24 installer live (FU202) */
+    /* T3: phase 0x20 + action 0x24 are wired (see above); the coupled 0x1D/0x20 pair stays NULL (FU205-L2) */
     assert(fifa96_match_action_table[0x14].fn != NULL); /* T2: celebration/scatter */
     assert(fifa96_match_action_table[0x22].fn == NULL); /* T2: ported, ungated (FU185-L6) */
     assert(fifa96_match_action_table[0x1F].fn != NULL); /* T2: keeper dive */
@@ -3073,18 +3090,20 @@ static void run_phase16_riders(void) {
   }
 }
 
-/* v17 (M2 phase-17 T2): the producer-machine dormancy pins. The FU-196
- * situation producer and the FU-197 act-4 formation arm are landed gated: the
- * live tape keeps the tape-neutral sequence (`period_setup_live` 0,
- * `formation_order_ok` 0), so nothing new dispatches and the M2 bytes stay
- * `7b4b241a…` (FU196-L8 / FU-197 §8 R45). Pure C state, ISO-independent, prints
- * nothing, so the transcript is unaffected. */
+/* v17 (M2 phase-17 T2) + M2 phase-18 T3: the producer-machine pins. The FU-197
+ * act-4 formation arm is landed gated (`formation_order_ok` 0). The FU-196
+ * situation producer is now LIVE on a begun run (`begin` sets
+ * `period_setup_live` 1 and runs the producer after the begin-tail act reset —
+ * the native situation-0 kickoff; the M2 bytes re-pin to the code-0x24 move,
+ * FU-202 §6 rec (b)). `fifa96_match_run_init` still leaves the gate 0. Pure C
+ * state, ISO-independent, prints nothing, so the transcript is unaffected. */
 static void run_phase17_t2_riders(void) {
-  /* 1. The producer gates default off: a silent activation would move the tape. */
+  /* 1. The init default: `init` alone leaves the situation producer gate off
+   *    (the live `begin` path is what activates it; §2 pins the live effect). */
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
-    assert(mr.period_setup_live == 0u);
+    assert(mr.period_setup_live == 0u);   /* init default; begin sets it 1 */
     assert(mr.formation_order_ok == 0u);
     assert(mr.formation_mismatch[0] == 0u && mr.formation_mismatch[1] == 0u);
   }
@@ -3227,7 +3246,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 31u && phase_wired == 17u);    /* 48/80 = 60% */
+    assert(action_wired == 32u && phase_wired == 18u);    /* 50/80 = 62% */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);
@@ -3315,15 +3334,17 @@ int main(void) {
   struct m2_result res;
   run_tape(with_iso, transcript, M2_TRANSCRIPT_CAP, &tlen, &st, &res);
 
-  /* v4 acceptance (both modes): the natural kickoff chain reaches phase 2 with
-   * no directives and no goal (see run_natural_probe). Status to stderr keeps
-   * stdout the byte-exact transcript. */
+  /* M2 phase-18 T3 acceptance (both modes): the natural chain runs the
+   * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
+   * no goal; the derived phase-2 chain is deferred behind the unported act-1
+   * route (leg FU203-L2). Status to stderr keeps stdout the byte-exact
+   * transcript. */
   struct m2_natural nat;
   run_natural_probe(with_iso, &nat);
   fprintf(stderr,
-          "test_engine_m2 natural probe: live phase 2 at step %d (match start "
-          "%d), row 01 dispatched, score 0-0\n",
-          nat.phase2_step, nat.match_start_step);
+          "test_engine_m2 natural probe: situation-0 kickoff at step %d (match "
+          "start %d), row 0x24 dispatched, phase-2 deferred (FU203-L2), score 0-0\n",
+          nat.kick_step, nat.match_start_step);
 
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
@@ -3438,15 +3459,18 @@ int main(void) {
   assert((res.mask_kick & M2_KICKOFF_ROWS_MASK) != 0u);
   assert((res.mask_kick & M2_STAGED_ROWS_MASK) == 0u);
   assert((res.mask_kick_next & M2_STAGED_ROWS_MASK) == 0u);
-  /* Nothing outside row 00, row 01, row 02 and the arm-installed kickoff codes
-   * dispatched on those grants either. M2 phase-9 T1 adds row 02: the begin
-   * state-1 arm's second kickoff pick carries code 2 and its `phase != 2`
-   * reset path dispatches on the first granted 0x13 frame. */
+  /* Nothing outside row 00, row 01, row 02, the situation-0 kickoff row 0x24
+   * and the arm-installed kickoff codes dispatched on those grants either. M2
+   * phase-9 T1 adds row 02: the begin state-1 arm's second kickoff pick carries
+   * code 2 and its `phase != 2` reset path dispatches on the first granted 0x13
+   * frame. M2 phase-18 T3 adds row 0x24: the live situation-0 kickoff installs
+   * code 0x24 on the pool (FU202). */
   assert((res.mask_kick & ~((1ull << 0x00) | (1ull << 0x02) | (1ull << 0x19) |
-                            M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
+                            (1ull << 0x24) | M2_KICKOFF_ROWS_MASK |
+                            M2_ARM_ROWS_MASK)) == 0u);
   assert((res.mask_kick_next &
-          ~((1ull << 0x00) | (1ull << 0x02) | (1ull << 0x19) | M2_KICKOFF_ROWS_MASK |
-            M2_ARM_ROWS_MASK)) == 0u);
+          ~((1ull << 0x00) | (1ull << 0x02) | (1ull << 0x19) | (1ull << 0x24) |
+            M2_KICKOFF_ROWS_MASK | M2_ARM_ROWS_MASK)) == 0u);
   /* v2: the T5 kickoff placement is live at begin. */
   assert(res.ball_x == FIFA96_MATCH_ENTITY_KICKOFF_BALL_X);
   assert(res.ball_y == 0 && res.ball_z == 0);

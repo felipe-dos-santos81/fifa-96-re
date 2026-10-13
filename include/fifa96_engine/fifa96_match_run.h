@@ -780,16 +780,19 @@ struct fifa96_match_run {
    * L11, unported), so begin/init seed the BSS default 0 and the requeue arm
    * is dormant unless a caller stages it. */
   uint8_t sp_157821;
-  /* FU-196 §3/§4 (M2 phase-17 T2): the situation-producer machine. The native
-   * match-init `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) and the period-end
+  /* FU-196 §3/§4 (M2 phase-17 T2) + FU-202 §6 rec (b) (M2 phase-18 T3): the
+   * situation-producer machine. The native match-init
+   * `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) and the period-end
    * `FUN_0004B02C(0)` (0x4950A) + `FUN_00088860` (0x88860) are the sole native
    * producers of situations 0/8 (FU-196 §3.1/§3.2); the engine had none.
    * `fifa96_match_run_period_setup` ports `FUN_0004B02C`. Its live `begin`
-   * wiring is gated by `period_setup_live` (0 = the tape-neutral sequence):
-   * situation 0 fires act 0xA (phase 0x20) and situation 8 fires act 7 (phase
-   * 0x1D), whose bodies are NULL until T5, so dispatching them at begin today
-   * can move the M2 tape (FU196 §4 T2 rec 2 / FU196-L8). Wire live only with
-   * T5's phase-0x20/0x1D bodies. Init/begin clear it. */
+   * wiring is gated by `period_setup_live`: T3 sets it **1** on `begin` and runs
+   * the mode-1 producer *after* the begin-tail act-slot reset, so the situation-0
+   * act 0xA survives into the first granted frame (phase 0x20 installs code 0x24;
+   * FU-202 §6 rec (b)). `fifa96_match_run_init` leaves it 0 (the standalone
+   * default). Situation 8 fires act 7 (phase 0x1D), whose body/slot stay NULL
+   * (the coupled row-0x20 installer needs the unported actor-record producer;
+   * FU205-L2). */
   uint8_t period_setup_live;
   /* FU-197 §2/§5 (M2 phase-17 T2): the act-4 sit-2..4 formation-order arm's
    * state. `formation_order[side][i]` mirrors the desired line-up matrix

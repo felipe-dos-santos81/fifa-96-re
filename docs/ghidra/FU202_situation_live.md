@@ -440,3 +440,31 @@ begin-tail `act_init` `:2341`; `:2438..2472` the phase write / kickoff entry;
 §10 (OL-85), FU-188 §5/§6/§10, FU-189 §3/§10, FU-194 §3/§4/§6, FU-195 §4/§6/§7,
 FU-196 (§1/§3/§4/§5/§6 L8), FU-198 §1. No writes beyond this slice file and the
 workspace report; no rename/label/comment/function/script/project save; no git.
+
+---
+
+## Addendum — T3 landing status (2026-10-12, additive)
+
+This addendum records the **T3** landing against §6's rec (b); it does not
+rewrite any section above.
+
+- **The rec-(b) re-placement landed.** The match-init producer call is
+  **re-placed** to run after the begin-tail `fifa96_match_act_init` (the §3A
+  dead-gate fix), so the situation-0 act `0xA` survives into the first granted
+  frame's clock-tail act tick. Phase `0x20` (`fifa96_action_phase_20`) and
+  action row `0x24` (`fifa96_match_action_24`) are **registered/wired and
+  counted**; the row-`0x24` stage-0 `pos_x = 0x9F0` write is render-read, so
+  **M2 re-pins** (`7b4b241a…` → `441415fc…`, frames 12..792 hash-only, every
+  `state=` suffix unchanged). **Census `+2` → `50/80 = 62%`**.
+- **The ad-hoc kickoff_entry is RETAINED, not retired.** §6's "(b) … and retire
+  the ad-hoc `kickoff_entry`" is **not fully realisable in T3**: the native
+  kickoff phase-1 entry is the act-1 route (situation 1 → act 1 → phase `0x17`),
+  which fires only at the phase-`0x20` terminal (~`0x3E8` frames) and is
+  **unported**. Retiring the derived kickoff without it leaves the match stuck in
+  the cutscene (no natural phase 2). T3 therefore keeps the derived
+  `fifa96_match_run_kickoff_entry` (the derived act-1 stage-0 stand-in) and
+  leaves phase `0x17` `NULL/uncounted` → **leg FU203-L2/FU202-L2**. The move is
+  **not** a double-run of the ad-hoc arm: disabling the re-placed producer stops
+  the row-`0x24` dispatch (isolated `mask_final` proof).
+- **OL-85 (`[0x157AC0]`) stays leg FU202-L1** — no live engine cell; not faked.
+  The coupled phase-`0x1D`/row-`0x20` pair stays `NULL` (FU205-L2).

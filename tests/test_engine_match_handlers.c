@@ -94,7 +94,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP,
+    /* 1E */ FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -106,7 +106,7 @@ static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
-    /* 1E */ UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,   /* 0x21 = T6 act-0xB (FU-195) */
+    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195) */
 };
 
 struct fixture {
@@ -3215,20 +3215,20 @@ static void test_action_16_stage2_reset(void) {
   drop_fixture(&f);
 }
 
-/* Row 0x24 (FU-188 §4): the ported/uncounted lane/anim body. Stage 0 seeds
+/* Row 0x24 (FU-188 §4) + FU-202 §6 rec (b) (M2 phase-18 T3): the WIRED/COUNTED
+ * lane/anim body (its installer is the live phase-0x20 stage 0). Stage 0 seeds
  * pos_x = 0x9F0, zeroes the movement words and commits target_x = 0x7E0, then
- * advances to stage 1 (the distance gate); the action-table slot stays NULL. */
+ * advances to stage 1 (the distance gate). */
 static void test_action_24_runs_body(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_action_table[0x24].fn == NULL);   /* uncounted */
-  assert(fifa96_match_dispatch_action(&mr, 0x24u) == -FIFA96_ERR_UNSUPPORTED);
+  assert(fifa96_match_action_table[0x24].fn != NULL);   /* counted (T3) */
   mr.record.entity_id = 0;
   mr.record.stage92 = 0;
   mr.record.active = 1;
   mr.record.side = 0;
   mr.record.player_e = 0;
-  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x24u) == FIFA96_OK);   /* the wired slot runs the body */
   assert(mr.record.pos_x == 0x9F0);             /* 0x8657A */
   assert(mr.record.speed71 == 0);               /* 0x865A8 */
   assert(mr.record.target_x == 0x7E0);          /* 0x86617 */
@@ -3718,13 +3718,17 @@ static void test_formation_arm_dormant_until_matrices(void) {
   drop_fixture(&f);
 }
 
-/* FU-196 §4 T2 rec 2 / FU-197 §5: the producer gates default off on a begun
- * run (the M2 tape-neutral sequence). */
-static void test_producer_gates_default_off(void) {
+/* FU-202 §6 rec (b) (M2 phase-18 T3): the native situation producer is LIVE on
+ * a begun run — `begin` re-places `fifa96_match_run_period_setup(mode 1)`
+ * after the begin-tail act-slot reset, so the situation-0 act 0xA is armed
+ * into the first granted frame (the tape moves by the native code-0x24,
+ * row-0x24 `pos_x` effect). The act-4 formation state stays staged (FU201-L4). */
+static void test_situation_producer_live_at_begin(void) {
   struct fixture f;
   make_fixture(&f);
-  assert(f.mr.period_setup_live == 0u);
-  assert(f.mr.formation_order_ok == 0u);
+  assert(f.mr.period_setup_live == 1u);   /* the live begin activates the producer */
+  assert(f.mr.act.id == 0x0Au);           /* the armed situation-0 act (0x8AB8E) */
+  assert(f.mr.formation_order_ok == 0u);  /* the order matrices stay a staged leg */
   assert(f.mr.formation_mismatch[0] == 0u && f.mr.formation_mismatch[1] == 0u);
   drop_fixture(&f);
 }
@@ -3815,7 +3819,7 @@ int main(void) {
   test_period_setup_null_invalid();
   test_formation_sort_orders_and_counts();
   test_formation_arm_dormant_until_matrices();
-  test_producer_gates_default_off();
+  test_situation_producer_live_at_begin();
   puts("test_engine_match_handlers OK");
   return 0;
 }
