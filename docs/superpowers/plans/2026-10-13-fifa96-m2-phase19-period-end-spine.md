@@ -19,7 +19,7 @@
 - **Wired census rule (AGENTS.md):** a row counts only when a ported path **installs + dispatches** it. Registering a table slot whose producer never fires does **not** count. Keep README title + the `docs/ENGINE.md` census line (title + dispatch sum-to-80) + `docs/PROGRESS.md` consistent in the same commit.
 - Evidence floor: first-hand bytes/addresses; **fresh `get_xrefs_to` for census claims**; `/FIFA96.EXE` (case-sensitive); +0x100000 rule; **alias traps** (`dword[addr]>>16` = word at `addr+2`; `>>24` = byte at `addr+3`); verify CALL bytes before trusting a call target.
 - **Determinism — the spine:** null backend source of truth; **M1 never moves**; M2 starts at the v18 bytes `441415fc…`. **Tape posture is case-by-case:** each task classifies its producer's tape-reachability first-hand and records the verdict; a landing that provably moves a presented frame *and* is native-faithful re-pins M2 with the written reason + frame diff; otherwise the producer lands gated/dormant and M2 stays byte-identical (the wave's verdict: **none of this cohort moves M2**). **Any unexplained presented-frame move is a regression to investigate, not a re-pin.**
-- No fakes; unreachable → numbered legs (the wave already logged FU207-L1, FU208-L1/L8, FU209-L1, FU213-L1/L2, FU214-L1/L2); ISO-gated tests skip without the ISO.
+- No fakes; unreachable → numbered legs (the wave already logged FU207-L2, FU208-L1/L8, FU209-L1, FU213-L1/L2, FU214-L1/L2); ISO-gated tests skip without the ISO.
 - Commits `feat/fix/docs/test`; implementers commit and push per dispatch; controller verifies (`make check` + tape `cmp` + tree clean).
 
 ---
@@ -70,7 +70,7 @@ Eight parallel read-only agents. Verdicts (each is a numbered leg where the prod
 ### Task 5: T5 — the phase-0x1E honest bound + the residual legs (from R60/R62/FU-212/FU-214)
 
 **Files:** `src/fifa96_engine/fifa96_match_handlers.c` (the phase-`0x1E` slot decision), tests + FU-212/FU-214 status + `docs/ENGINE.md` (legs) + `docs/PROGRESS.md`.
-**Produces:** phase `0x1E`/act 8 keeps its compressed model (R60: the faithful 22-record sweep is a timing-only delta, no M2 move — **not** wired this phase, logged as the de-compression leg with owner FU212); every cohort row the tasks could not prove live is recorded as an honest numbered leg with its native owner (FU207-L1, FU208-L1/L8, FU209-L1, FU211-L1, FU213-L1/L2, FU214-L1/L2). No fake producer.
+**Produces:** phase `0x1E`/act 8 keeps its compressed model (R60: the faithful 22-record sweep is a timing-only delta, no M2 move — **not** wired this phase, logged as the de-compression leg with owner FU212); every cohort row the tasks could not prove live is recorded as an honest numbered leg with its native owner (FU207-L2, FU208-L1/L8, FU209-L1, FU213-L1/L2, FU214-L1/L2). No fake producer.
 **Gate T5:** the compressed-model pin + the leg register; tape byte-identical. Census recompute only if a count moved.
 - [ ] RED/pin test → implement → GREEN → gate → census/PROGRESS update → commit `docs(engine,fu212): phase-0x1E honest bound + residual legs`.
 
