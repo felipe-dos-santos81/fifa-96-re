@@ -541,6 +541,103 @@ static void test_phase_drive_class_gate(void) {
   assert(fifa96_match_run_phase_drive(NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-213 §2.4/§2.5 (M2 phase-19 T1): the live per-frame clock's period
+ * completion drives the extra-time decision. The score tie-break (native W2
+ * 0x8B2AC at the regulation end / W4 0x8B3A2 at the extra-time-2 end) sets the
+ * OL-85 flag `[0x157AC0]` only when the completed period ends with DIFFERING
+ * scores; the chooser `fifa96_action_phase_period_end` then receives the LIVE
+ * `extra_time` (replacing the hardwired `0u`) and installs the extra-time arm
+ * (act 0xC, phase 0x13/0x14) instead of the no-extra-time arm (act 0xB, phase
+ * 0x0C). The roll (native 0x8B58A) advances `global_157ac2` with `state.period`.
+ * A tied or non-regulation completion leaves the flag clear. */
+static void test_phase_drive_extra_time_tiebreak(void) {
+  struct fifa96_match_run mr;
+
+  /* (a) differing scores at the regulation end (completed index 1) -> flag set
+   *     and the ET chooser arm (phase 0x13, act 0x0C). */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 2;                  /* the FU-62 library rolled 1 -> 2 */
+  mr.state.phase = 2;                   /* class 1: clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 1u);       /* W2 0x8B2AC: scores differ */
+  assert(mr.state.phase == 0x13u);      /* the live extra_time chooser arm */
+  assert(mr.act.id == 0x0Cu);           /* act 0xC (the ET act) */
+  assert(mr.global_157ac2 == 2u);       /* the roll 0x8B58A */
+
+  /* (b) tied scores at the regulation end -> flag clear, no-extra-time arm. */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 2;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 0u);       /* the tie keeps extra time off */
+  assert(mr.state.phase == 0x0Cu);      /* the no-ET chooser arm */
+  assert(mr.act.id == 0x0Bu);           /* act 0xB */
+  assert(mr.global_157ac2 == 2u);
+
+  /* (c) the first-half completion (index 0) is not a tie-break site. */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 1;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 0u);       /* only W2/W4 (index 1/3) */
+  assert(mr.state.phase == 0x0Cu);
+  assert(mr.global_157ac2 == 1u);       /* the roll */
+}
+
+/* FU-213 §2.6 (M2 phase-19 T1): the period-index tail. The mid-extra-time W5
+ * set (0x8B5CD) raises the flag per-frame while the period index is 2 or 3, the
+ * scores differ and the flag is clear; the period-4 skip (0x8B608) runs the
+ * chooser and rolls the index to 5 (0x8B61B) when the index is 4 with the flag
+ * set. Both are on the no-completion tail. */
+static void test_phase_drive_period4_skip_and_w5(void) {
+  struct fifa96_match_run mr;
+
+  /* the period-4 skip: no completion, index 4, flag set -> chooser + index 5. */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 4;
+  mr.state.phase = 2;                   /* class 1: the tail runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157ac0 = 1u;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x13u);      /* the chooser (extra_time read live) */
+  assert(mr.state.period == 5u);        /* 0x8B61B INC */
+  assert(mr.global_157ac2 == 5u);
+
+  /* the mid-extra-time W5 set: no completion, index 2, scores differ -> flag. */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 2;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 0u;
+  mr.score[1] = 1u;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 1u);       /* W5 0x8B5CD */
+  assert(mr.state.phase == 0x13u);
+
+  /* an index-3 tied frame stays dormant (no W5, no skip). */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 3;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
+  assert(mr.global_157ac0 == 0u);
+  assert(mr.global_157ac2 == 0u);
+}
+
 /* The begun-run 2 -> 0x0C -> 0 sequence: the derived write lands on the
  * completing frame (0x0C observable before the lifecycle resolve), and the
  * run_end teardown resets the match state to the native reset phase 0
@@ -5552,6 +5649,8 @@ int main(void) {
   test_action_2A_repack_round_trips_fields();
   test_phase_drive_reaches_period_end();
   test_phase_drive_class_gate();
+  test_phase_drive_extra_time_tiebreak();
+  test_phase_drive_period4_skip_and_w5();
   test_phase_drive_begun_end_resets_phase();
   test_kickoff_enters_phase2_when_cutscene_isolated();
   test_situation0_kickoff_installs_code24();

@@ -608,6 +608,18 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* FU-213 §2.4/§2.5 (M2 phase-19 T1): the OL-85 extra-time flag, the native
+   * `[0x157AC0]` boolean byte (FU-207 §1). The live clock's period completion
+   * raises it when the completed regulation (W2 0x8B2AC) or extra-time-2 (W4
+   * 0x8B3A2) period ends with DIFFERING scores, and per-frame mid-extra-time
+   * while the period index is 2 or 3 (W5 0x8B5CD). The chooser
+   * `fifa96_action_phase_period_end` reads it to select the extra-time arm
+   * (act 0xC / phase 0x13-0x14) over the no-extra-time arm (act 0xB / phase
+   * 0x0C). Staged 0 (the `[0x157AC0]` BSS default); the front-end writer W6
+   * (0x389A4) and the equal-score override W3 (`[0x14C2EE]`, no engine cell)
+   * stay unported legs (FU213-L1/L7). This is T1's exposed flag for T2's
+   * situation-8 gate / the act-0xC-0xB route. */
+  uint8_t global_157ac0;
   /* FU-151 P3 (keeper machines): the process cells the row-1E/1D machines
    * carry across frames — the 0x15774C/50/54 camera focus (the FU-147 leg-13
    * render-camera stand-in: the engine keeps its own derived cell so the

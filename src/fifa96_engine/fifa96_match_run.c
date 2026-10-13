@@ -2032,6 +2032,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
   mr->global_5882a = 0;
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster process
    * cells ([0x157A4C]/[0x157C5C]/[0x157C5D]/[0x157C54..5B]/the predictor
@@ -2150,6 +2151,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
   mr->global_5882a = 0;                /* fresh kickoff gate (OL-84 residual) */
   /* M2 phase-15 T2 (FU-176/FU-179/FU-180): fresh keeper-cluster cells. */
   mr->global_157a4c = 0;
@@ -2561,6 +2563,18 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr) {
  * machine FUN_0008BAF0 and the FUN_0004B02C(0)/FUN_00088860 kickoff reset stay
  * unported (FU-143 §4/§5), so the engine lifecycle owns the exit; the
  * 0x0C -> 0 reset is the run_end teardown. */
+/* FU-213 §2.4/§2.5/§7 (M2 phase-19 T1): the comment above is SUPERSEDED in
+ * part, not rewritten. The chooser no longer receives the hardwired
+ * `extra_time = 0u`: the score tie-break now produces the native OL-85 flag
+ * `[0x157AC0]` (`mr->global_157ac0`) on a regulation (index 1) or extra-time-2
+ * (index 3) completion with differing scores (§2.4 W2/W4), plus the mid-extra-
+ * time W5 set (§2.6), and the live flag is threaded into the chooser so the
+ * extra-time arm (act 0xC / phase 0x13-0x14) is selected when it is set. The
+ * period-index roll (`mr->global_157ac2 = mr->state.period`, the native
+ * 0x8B58A) and the period-4 skip (0x8B608 -> index 5) also run here. The
+ * chooser's side/d8/d9/probe inputs remain the derived defaults (OL-74/OL-75);
+ * the equal-score override `[0x14C2EE]`, the front-end writer `0x389A4` and
+ * the no-extra-time latch `[0x10F378]` stay unported legs (FU213-L1/L7). */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
   const fifa96_action_phase_row_desc *row;
   fifa96_action_phase_period_end_out out;
@@ -2577,28 +2591,80 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
   /* Class gate: only class 1 (always) and class 2 (halt gate clear) can
    * complete a period; class 0 stops the clock. */
   if (row->clock_class != 1u && row->clock_class != 2u) return 0;
-  if (!ended) return 0;
-  if (mr->state.period == 0u) return 0;   /* no completed period to choose */
   side = mr->phase_machine.side_controlled;
-  rc = fifa96_action_phase_period_end((uint8_t)(mr->state.period - 1u), 0u,
-                                      mr->score[side & 1u],
-                                      mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u, 0u,
-                                      probe, &out);
-  if (rc != FIFA96_OK) return rc;
-  if (out.phase != FIFA96_ACTION_PHASE_NONE) {
-    rc = match_run_write_phase(mr, out.phase);
-    if (rc != 0) return rc;
+  {
+    int differ =
+        mr->score[side & 1u] != mr->score[(side ^ 1u) & 1u];
+    if (ended) {
+      uint8_t completed;
+      if (mr->state.period == 0u) return 0;   /* no completed period to choose */
+      /* The completed (old) period index: the FU-62 library already advanced
+       * `state.period`; the native chooser sees [0x157AC2] before its 0x8B58A
+       * increment. */
+      completed = (uint8_t)(mr->state.period - 1u);
+      /* FU-213 §2.4 (M2 phase-19 T1): the score tie-break. When the completed
+       * period is the regulation end (index 1; W2 0x8B2AC) or the extra-time-2
+       * end (index 3; W4 0x8B3A2) AND the score pair [0x157AC5]/[0x157AC7]
+       * differs, the OL-85 flag [0x157AC0] is raised. W3's equal-score override
+       * escape ([0x14C2EE], no engine cell) and the W6 front-end writer stay
+       * unported legs (FU213-L1/L7); the equal-score else-arm is the
+       * [0x10F378] no-extra-time latch, likewise unported. */
+      if ((completed == 1u || completed == 3u) && differ)
+        mr->global_157ac0 = 1u;
+      /* FU-213 §3: the chooser receives the LIVE extra_time flag (replacing the
+       * former hardwired 0u), so the extra-time arm (act 0xC / phase 0x13-0x14)
+       * is selected when the flag is set. */
+      rc = fifa96_action_phase_period_end(completed, mr->global_157ac0,
+                                          mr->score[side & 1u],
+                                          mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u,
+                                          0u, probe, &out);
+      if (rc != FIFA96_OK) return rc;
+      if (out.phase != FIFA96_ACTION_PHASE_NONE) {
+        rc = match_run_write_phase(mr, out.phase);
+        if (rc != 0) return rc;
+      }
+      /* FU-195 §4/§6.1 (M2 phase-17 T6): the native FUN_0008B9CC tail (0x8BAE7
+       * CALL 0x000888FC) always invokes the act selector after the phase write:
+       * BX=1 (invoke-now), DL=0 (stage 0). `out.act` is 0x0B (extra-time clear)
+       * or 0x0C (extra-time set). (The native is unconditional on
+       * LAB_0008bac6; the derived dispatch is outside the phase-write
+       * conditional.) */
+      rc = fifa96_match_act_dispatch(mr, out.act, 0u, 1);
+      if (rc < 0) return rc;
+      /* FU-213 §2.5 (0x8B58A): the period-index roll — the engine's [0x157AC2]
+       * cell (`global_157ac2`) follows the FU-62 library's already-advanced
+       * `state.period`. This is the live producer T2's situation-8 gate reads. */
+      mr->global_157ac2 = mr->state.period;
+      return 1;
+    }
+    /* FU-213 §2.6: the no-completion tail (0x8B590). W5 (0x8B5CD) raises the
+     * flag per-frame while the period index is 2 or 3, the scores differ and
+     * the flag is clear; the period-4 skip (0x8B608) runs the chooser with the
+     * index at 4 and the flag set. */
+    if (mr->state.period >= 2u && mr->state.period < 4u && differ &&
+        mr->global_157ac0 == 0u) {
+      mr->global_157ac0 = 1u;
+    } else if (mr->state.period != 4u || mr->global_157ac0 == 0u) {
+      return 0;
+    }
+    rc = fifa96_action_phase_period_end((uint8_t)mr->state.period,
+                                        mr->global_157ac0,
+                                        mr->score[side & 1u],
+                                        mr->score[(side ^ 1u) & 1u], side, 0u, 0u, 0u,
+                                        0u, probe, &out);
+    if (rc != FIFA96_OK) return rc;
+    if (out.phase != FIFA96_ACTION_PHASE_NONE) {
+      rc = match_run_write_phase(mr, out.phase);
+      if (rc != 0) return rc;
+    }
+    rc = fifa96_match_act_dispatch(mr, out.act, 0u, 1);
+    if (rc < 0) return rc;
+    if (mr->state.period == 4u) {          /* 0x8B61B INC: period index := 5 */
+      mr->state.period = 5u;
+      mr->global_157ac2 = 5u;
+    }
+    return 1;
   }
-  /* FU-195 §4/§6.1 (M2 phase-17 T6): the native FUN_0008B9CC tail (0x8BAE7
-   * CALL 0x000888FC) always invokes the act selector after the phase write:
-   * BX=1 (invoke-now), DL=0 (stage 0). Under the engine's selector-0 default
-   * `out.act` is 0x0B (extra-time clear), so this installs act 0xB and runs the
-   * phase-0x21 body — the T6 counted row. (The native is unconditional on
-   * LAB_0008bac6; the derived dispatch is likewise outside the phase-write
-   * conditional.) */
-  rc = fifa96_match_act_dispatch(mr, out.act, 0u, 1);
-  if (rc < 0) return rc;
-  return 1;
 }
 
 /* ===== FU-149 P1 — set pieces & restarts ================================== */
