@@ -80,6 +80,13 @@ struct fifa96_match_entity {
   uint8_t carrier;          /* +0x9F bit 0 */
   uint8_t has_ball;         /* +0x9B */
   uint8_t skip_98;          /* +0x98 exclusion */
+  /* FU-194 §4.1 (M2 phase-17 T5): the native `byte[rec+0x99]` — the second
+   * term of the act-8 (phase-0x1E) restart-sweep selection gate
+   * (`code [rec+0x91] == 0xC` AND `+0x99 != 0` AND `+0x9A == 0`, the fresh
+   * `0x8A81F`/`0x8A828` compares). The engine had no cell for it; init/begin
+   * zero it (the native producer is unported, FU194-L2). Read only by the
+   * unwired `fifa96_match_action_phase_1E` body. */
+  uint8_t skip_99;          /* +0x99 */
   uint8_t skip_9a;          /* +0x9A exclusion (occupied record) */
   uint8_t row44;            /* native +0x44 (animation/event ack byte; the
                              * keeper stage gates read it; FU-159 §4.1/T3: the

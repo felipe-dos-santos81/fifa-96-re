@@ -480,6 +480,153 @@ static void test_phase_1C_terminal(void) {
   assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
 }
 
+/* ===== FU-194 (M2 phase-17 T5): the act-tail cohort 0x1D/0x1E/0x20 ========
+ *
+ * The two native act-tail handlers `0x89868` (phase 0x1D / act 7) and `0x8A798`
+ * (phase 0x1E / act 8) are ported as bounded derived bodies but stay UNCOUNTED
+ * (their phase-table slots are NULL): FU-194 finds each producer statically
+ * (sit 8 -> act 7; the `FUN_0008A938` BX!=0 fallback -> act 8) but neither is
+ * live under the strict "engine reaches it" test, so per Ruling R8 the rows land
+ * as bodies + numbered legs (FU194-L1..L9) and the census is unchanged (the
+ * rows-27/29/2C precedent). Phase 0x1D is one coupled unit with action row 0x20
+ * (arm 0 carries the row-0x20 installer `0x899a2`): both stay NULL because the
+ * act-7 producer (situation 8) is reached only through the T2
+ * `fifa96_match_run_period_setup` + `period_setup_live`, which is gated off
+ * (R9 / FU196-L8, FU194-L1/L8). Phase 0x1E is the full restart sweep the engine
+ * already models as a *compressed* stored-situation re-dispatch, so registering
+ * it would de-compress a tape-visible derivation (FU194-L2). Phase 0x20 (act
+ * 0xA, `0x8B688`) is the already-ported body (`fifa96_match_action_phase_20`,
+ * FU-188 §10) whose sit-0 producer is likewise absent (FU188-L1). */
+
+/* Phase 0x1D / act 7 (FU-194 §3/§6.1): the body is NOT wired; the dispatcher
+ * returns UNSUPPORTED while the body stays reachable by direct call. */
+static void test_phase_1D_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1D].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Du) == -FIFA96_ERR_UNSUPPORTED);
+}
+
+/* Phase 0x1D stage 0 (0x898B4): clear the [0x15882A] gate (0x898B4), write
+ * phase 0x10 when state.phase != 0x10 (0x898B6..0x898DD), install action row
+ * 0x19 on both teams' records (0x89903/0x8990A), timer = 0 and stage -> 1
+ * (0x899D7/0x899ED). Mutation-RED: without the stage advance the slot stays at
+ * stage 0. */
+static void test_phase_1D_install_frame(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 7;
+  mr.act.stage = 0;
+  mr.global_5882a = 1u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.global_5882a == 0u);                                /* 0x898B4 */
+  assert(mr.state.phase == 0x10u);                              /* 0x898CF.. */
+  assert(mr.entities.team[0].records[0].code == 0x19u);         /* 0x8990A */
+  assert(mr.entities.team[1].records[10].code == 0x19u);
+  assert(mr.act.stage == 1u && mr.act.timer == 0);              /* 0x899ED/0x899D7 */
+  assert(fifa96_match_action_phase_1D(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1D stage 1 (0x899EE): the shared-timeline wait. Below the derived
+ * `state.tick_total >= 0x78` gate the head add stands and the slot is
+ * untouched; at/above it the whistle 0x1E fires and [0x15882A] = 1, timer = 0,
+ * stage -> 2. Mutation-RED: a missing gate set leaves global_5882a 0. */
+static void test_phase_1D_wait_whistle(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.frame_delta = 2;
+  mr.act.id = 7;
+  mr.act.stage = 1;
+  mr.act.timer = 10;
+  mr.state.tick_total = 0x40u;        /* < 0x78: hold */
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.timer == 12);         /* head add stands */
+  assert(mr.ref_whistle == 0u && mr.global_5882a == 0u && mr.act.stage == 1u);
+  mr.state.tick_total = 0x78u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.ref_whistle == 0x1Eu);    /* 0x974DC(0x1E) */
+  assert(mr.global_5882a == 1u);      /* [0x15882A]=1 */
+  assert(mr.act.stage == 2u && mr.act.timer == 0);
+}
+
+/* Phase 0x1D stage 9 (0x89E6E): the terminal (no situation re-dispatch) clears
+ * the act slot ([0x158828]/[0x158808]/[0x158829]) and [0x157A4C]. Mutation-RED:
+ * a missing terminal leaves the act slot installed. */
+static void test_phase_1D_terminal(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 7;
+  mr.act.stage = 9;
+  mr.global_157a4c = 1u;
+  assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0);
+  assert(mr.global_157a4c == 0u);     /* [0x157A4C]=0 */
+}
+
+/* Phase 0x1E / act 8 (FU-194 §4/§6.2): the body is NOT wired; the dispatcher
+ * returns UNSUPPORTED while the body stays reachable by direct call. */
+static void test_phase_1E_not_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_phase_table[0x1E].fn == NULL);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Eu) == -FIFA96_ERR_UNSUPPORTED);
+}
+
+/* Phase 0x1E stage 0 -> 1 (0x8A7B2/0x8A7D6): reset the walk cursor and sweep
+ * one record per call. A record with `code [rec+0x91] == 0xC`, `[rec+0x99] != 0`
+ * and `[rec+0x9A] == 0` is selected (0x8A831). Mutation-RED: a missing selection
+ * leaves act8_selected NULL. */
+static void test_phase_1E_sweep_selects(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 8;
+  mr.act.stage = 0;
+  mr.entities.team[0].records[3].code = 0x0Cu;  /* 0x8A809 */
+  mr.entities.team[0].records[3].skip_99 = 1u;  /* 0x8A81F */
+  mr.entities.team[0].records[3].skip_9a = 0u;  /* 0x8A828 */
+  /* stage 0 resets the cursor and falls through into stage 1 in the same call */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act8_team == 0u && mr.act8_record == 1u);   /* walked record 0 */
+  assert(mr.act8_selected == NULL);
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 1 */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 2 */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* record 3 -> select */
+  assert(mr.act8_selected == &mr.entities.team[0].records[3]);
+  assert(fifa96_match_action_phase_1E(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* Phase 0x1E stage 1 completion (0x8A857..0x8A88B): past team 1 record 10 the
+ * sweep advances to stage 2 (timer = 0). Mutation-RED: a missing completion
+ * leaves the stage at 1. */
+static void test_phase_1E_sweep_completes(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 8;
+  mr.act.stage = 1;
+  mr.act8_team = 1u;
+  mr.act8_record = 10u;
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act8_team == 2u && mr.act8_record == 0u);
+  assert(mr.act.stage == 2u && mr.act.timer == 0);      /* 0x8A87A..0x8A88B */
+}
+
+/* Phase 0x1E stage 2 terminal (0x8A895): clear the act slot and re-dispatch the
+ * stored situation/side (`store_15882b`/`store_15882c`, BX=0) then clear
+ * `store_15882b` (0x8A8D3). Mutation-RED: a missing re-dispatch leaves the
+ * stored situation uncleared. */
+static void test_phase_1E_terminal(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.act.id = 8;
+  mr.act.stage = 2;
+  mr.store_15882b = 3u;               /* the stored situation (0x8A8C3) */
+  mr.store_15882c = 0u;               /* the stored side (0x8A8BD) */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0);
+  assert(mr.store_15882b == 0xFFu);   /* 0x8A8D3 */
+}
+
 int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
@@ -505,6 +652,14 @@ int main(void) {
   test_phase_1C_not_counted();
   test_phase_1C_stage0();
   test_phase_1C_terminal();
+  test_phase_1D_not_counted();
+  test_phase_1D_install_frame();
+  test_phase_1D_wait_whistle();
+  test_phase_1D_terminal();
+  test_phase_1E_not_counted();
+  test_phase_1E_sweep_selects();
+  test_phase_1E_sweep_completes();
+  test_phase_1E_terminal();
   puts("test_engine_match_act OK");
   return 0;
 }

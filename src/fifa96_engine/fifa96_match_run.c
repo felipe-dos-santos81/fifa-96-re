@@ -2073,6 +2073,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->formation_mismatch[1] = 0;
   mr->store_158820 = 0;
   mr->store_15881e = 0;
+  /* FU-194 (M2 phase-17 T5): a fresh run has no act-8 sweep in flight. */
+  mr->act8_team = 0;
+  mr->act8_record = 0;
+  mr->act8_selected = NULL;
   /* FU-148 S4: the native [0x14C1E4]/[0x14C1E5] BSS default is 0. */
   mr->formation[0] = 0;
   mr->formation[1] = 0;
@@ -2194,6 +2198,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->formation_mismatch[1] = 0;
   mr->store_158820 = 0;
   mr->store_15881e = 0;
+  /* FU-194 (M2 phase-17 T5): a fresh match drops any act-8 sweep cursor. */
+  mr->act8_team = 0;
+  mr->act8_record = 0;
+  mr->act8_selected = NULL;
   /* FU-148 S4: a fresh match restarts at the BSS formation default 0 (the
    * native FUN_00011620 team-record producer is leg). */
   mr->formation[0] = 0;
@@ -5760,6 +5768,135 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr) {
   }
   rc = match_run_ref_apply(mr, &out);
   if (rc != 0) return rc;
+  return FIFA96_OK;
+}
+
+/* FU-194 §3/§6.1 (M2 phase-17 T5): the phase-0x1D / act-7 row body — the native
+ * 10-arm set-piece timeline `0x89868` (arms `0x898B4..0x89EAF`). Its phase-table
+ * slot stays NULL/uncounted: the row is one coupled unit with action row 0x20
+ * (arm 0 carries the row-0x20 installer `0x899A2`), but the route needs the
+ * act-7 producer (situation 8) and the engine reaches situation 8 only through
+ * the T2 `fifa96_match_run_period_setup` + `period_setup_live`, which is gated
+ * off (R9 / FU196-L8) — so neither slot is producer-live (FU194-L1/L8). Derived
+ * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
+ * (0x898B4) clears `[0x15882A]`, writes phase 0x10 when `state.phase != 0x10`
+ * (0x898B6..0x898DD — the FU194-L9 phase write), installs action row 0x19 on
+ * both teams' records (0x89903/0x8990A), timer=0 stage->1; stage 1 (0x899EE)
+ * fires the `0x974DC(0x1E)` whistle and sets `[0x15882A] = 1` once the shared
+ * timeline reaches 0x78 (derived `state.tick_total`); stage 9 (0x89E6E) is the
+ * terminal (no situation re-dispatch): clear the act slot and `[0x157A4C]`.
+ * The coupled row-0x20 installer, the ball row-0x1F install (0x899CD) and the
+ * `0x7A028` reset are FU194-L7/L8 legs (the actor `[0x1587D4]`/ball-record
+ * producers have no engine cell; a fake install is forbidden); arms 2..8 stay
+ * FU194-L3/L7 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x89882/0x89899 */
+  switch (mr->act.stage) {
+    case 0u:   /* arm 0 (0x898B4): the install frame */
+      mr->global_5882a = 0u;                       /* 0x898B4 clear [0x15882A] */
+      if (mr->state.phase != 0x10u) {              /* 0x898B6 CMP [0x157A4A]>>24,0x10 */
+        (void)match_run_write_phase(mr, 0x10u);    /* 0x898CF..0x898DD FUN_000740A0(0x10) */
+      }
+      /* 0x89903/0x8990A: install action row 0x19 on both teams' records (the
+       * derived 0x7D9A4 subset; the anim 0x26 0x6E598 sink and the
+       * inactive-record row-3 arm are FU194-L7 legs). */
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          (void)fifa96_match_entities_install(&mr->entities.team[t].records[i],
+                                              mr->state.phase, 0x19u, 0);
+      /* 0x899A2 (the coupled row-0x20 installer on the actor record [0x1587D4]),
+       * 0x899CD (the ball-record row-0x1F install) and 0x7A028 (the referee
+       * block reset) are FU194-L7/L8 legs. */
+      mr->act.timer = 0;                           /* 0x899D7 */
+      mr->act.stage = 1u;                          /* 0x899ED */
+      return FIFA96_OK;
+    case 1u:  /* arm 1 (0x899EE): the wait -> whistle + [0x15882A]=1 */
+      /* The native gates read word[rec+0x65] (unported record cells, FU194-L7)
+       * and the shared timeline word[0x15881A] (derived state.tick_total). */
+      if ((int32_t)mr->state.tick_total < 0x78) return FIFA96_OK;
+      mr->ref_whistle = 0x1Eu;                     /* 0x974DC(0x1E) */
+      mr->global_5882a = 1u;                       /* [0x15882A]=1 */
+      mr->act.timer = 0;
+      mr->act.stage = 2u;
+      return FIFA96_OK;
+    case 9u:  /* arm 9 (0x89E6E): the terminal (no situation re-dispatch) */
+      mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
+      /* [0x157AC0]=1 has no engine cell (FU194-L7 leg). */
+      mr->act.id = 0;                              /* [0x158828] */
+      mr->act.stage = 0;                           /* [0x158829] */
+      mr->act.timer = 0;                           /* [0x158818] */
+      return FIFA96_OK;
+    default:
+      /* arms 2..8: the sinks (0x651F0/0x974F0/0x45001/0x4BEC8/0x4C374) and the
+       * arm-8 selection block (0x89BB6..0x89E6D) are unported; FU194-L3/L7. */
+      return FIFA96_OK;
+  }
+}
+
+/* FU-194 §4/§6.2 (M2 phase-17 T5): the phase-0x1E / act-8 row body — the native
+ * 2-team x 11-record restart sweep `0x8A798` (stages 0/1/2). Its phase-table
+ * slot stays NULL/uncounted: the engine already models the act-8 fallback as a
+ * *compressed* stored-situation re-dispatch (`fifa96_match_run_set_piece`, BX!=0),
+ * so registering the full sweep would de-compress a tape-visible derivation
+ * (FU194-L2). Head: no timer add (the native head reads the stage directly,
+ * 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor and falls into stage 1;
+ * stage 1 (0x8A7D6) sweeps one record per call and, on a record with
+ * `code [rec+0x91] == 0xC`, `byte[rec+0x99] != 0`, `byte[rec+0x9A] == 0`,
+ * stores it in `act8_selected` (0x8A831) — the `0x4C374` `[0x157A68]` clear is
+ * the FU194-L3 erratum leg — advancing to stage 2 after both teams; stage 2
+ * (0x8A895) clears the act slot and re-dispatches the stored situation/side
+ * (`store_15882b`/`store_15882c`, BX=0) then clears `store_15882b`. The
+ * `0x4BEC8` wait gates are derived ready (the referee leg-10 precedent).
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1E(struct fifa96_match_run *mr) {
+  if (!mr) return -FIFA96_ERR_INVALID;
+  if (mr->act.stage == 0u) {                       /* 0x8A7B2: reset + fall through */
+    mr->act8_team = 0u;                            /* byte[0x15882E] */
+    mr->act8_record = 0u;                          /* byte[0x15882F] */
+    mr->act.timer = 0;                             /* word[0x158818]=0 */
+    mr->act.stage = 1u;
+  }
+  if (mr->act.stage == 1u) {                       /* 0x8A7D6: the record sweep */
+    uint32_t t, i;
+    struct fifa96_match_entity *rec;
+    if (mr->act8_team >= FIFA96_MATCH_ENTITY_TEAMS) {
+      mr->act.timer = 0;
+      mr->act.stage = 2u;                          /* 0x8A87A..0x8A88B */
+      return FIFA96_OK;
+    }
+    t = mr->act8_team;
+    i = mr->act8_record;
+    if (i < FIFA96_MATCH_ENTITY_RECORDS) {
+      rec = &mr->entities.team[t].records[i];
+      if (rec->code == 0x0Cu && rec->skip_99 != 0u && rec->skip_9a == 0u) {
+        mr->act8_selected = rec;                   /* [0x1587F0] = rec (0x8A831) */
+        /* MOV EAX,0x19; CALL 0x4C374 = the word[0x157A68] clear (FU194-L3
+         * erratum); no engine cell -> leg. */
+      }
+      mr->act8_record = (uint8_t)(i + 1u);         /* 0x8A840 */
+      if (mr->act8_record < FIFA96_MATCH_ENTITY_RECORDS) return FIFA96_OK;
+    }
+    mr->act8_team = (uint8_t)(t + 1u);             /* 0x8A857 */
+    mr->act8_record = 0u;
+    if (mr->act8_team <= 1u) return FIFA96_OK;     /* 0x8A878 JLE */
+    mr->act.timer = 0;
+    mr->act.stage = 2u;                            /* 0x8A87A..0x8A88B */
+    return FIFA96_OK;
+  }
+  if (mr->act.stage == 2u) {                       /* 0x8A895: the terminal */
+    uint8_t side = mr->store_15882c;               /* 0x8A8BD byte[0x15882C] */
+    uint8_t sit = mr->store_15882b;                /* 0x8A8C3 byte[0x15882B] */
+    int rc;
+    mr->act.timer = 0;                             /* 0x8A89F */
+    mr->act.id = 0;                                /* 0x8A8AB [0x158808]=0 */
+    mr->act.stage = 0;                             /* 0x8A8B1 [0x158829]=0 */
+    /* 0x8A8B7 byte[0x158828]=0 (the act id, same as id=0); 0x8A8CE the
+     * stored-situation re-dispatch (BX=0); 0x8A8D3 store_15882b = 0xFF. */
+    rc = fifa96_match_run_set_piece(mr, sit, side, 0u);
+    mr->store_15882b = 0xFFu;
+    return rc;
+  }
   return FIFA96_OK;
 }
 

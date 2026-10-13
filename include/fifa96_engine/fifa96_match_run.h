@@ -750,6 +750,17 @@ struct fifa96_match_run {
   uint8_t side_swap;
   uint8_t store_15882b;
   uint8_t store_15882c;
+  /* FU-194 §4.1/§4.2 (M2 phase-17 T5): the act-8 (phase-0x1E) restart-sweep
+   * cursor. The native walk indices are `byte[0x15882E]` (team, `act8_team`)
+   * and `byte[0x15882F]` (record, `act8_record`); `[0x1587F0]`
+   * (`act8_selected`, NULL = none) is the selected code-0xC record the stage-1
+   * sweep stores (0x8A831). Three distinct cells from the stored situation/side
+   * (`store_15882b`/`store_15882c`, §4.2). The native producer of the walk is
+   * the unported act-8 timeline; the engine zeroes them (FU194-L2). Read only by
+   * the unwired `fifa96_match_action_phase_1E` body. */
+  uint8_t act8_team;
+  uint8_t act8_record;
+  struct fifa96_match_entity *act8_selected;
   int32_t incident_x;
   int32_t incident_z;
   /* FU-149 L13 (T1 taker rows): the throw/corner staging cells the 0x10/0x11/
@@ -1471,6 +1482,49 @@ int fifa96_match_action_phase_1A(struct fifa96_match_run *mr);
  * the requests through `match_run_ref_apply`. Returns FIFA96_OK, or
  * -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
+
+/* FU-194 §3/§6.1 (M2 phase-17 T5): the phase-0x1D / act-7 row body — the native
+ * 10-arm set-piece timeline `0x89868`. Its phase-table slot
+ * (`fifa96_match_phase_table[0x1D]`) is **NULL** — the row is not counted — and
+ * it forms one coupled unit with action row 0x20 (FU-194 §6.1): arm 0 carries
+ * the row-0x20 installer `0x899A2` (`MOV EDX,0x20; CALL 0x7D9A4`, deferred),
+ * but the route needs the act-7 producer (situation 8), which the engine reaches
+ * only through the T2 `fifa96_match_run_period_setup` (+ `period_setup_live`),
+ * which is **gated off** (R9 / FU196-L8) — so neither the phase-0x1D nor the
+ * row-0x20 slot is producer-live and both stay NULL (leg FU194-L1/L8). Derived
+ * stages: head `mr->act.timer += frame_delta` (0x89882/0x89899); stage 0
+ * (0x898B4) clears `[0x15882A]` (0x898B4), writes phase 0x10 when
+ * `state.phase != 0x10` (0x898B6..0x898DD), installs action row 0x19 on both
+ * teams' records (0x89903/0x8990A), timer=0, stage->1; stage 1 (0x899EE) fires
+ * the whistle `0x974DC(0x1E)` and sets `[0x15882A] = 1` once the shared timeline
+ * reaches 0x78 (`state.tick_total`); stage 9 (0x89E6E) is the terminal (no
+ * situation re-dispatch): clear the act slot and `[0x157A4C]`. The coupled
+ * row-0x20 installer, the ball row-0x1F install (0x899CD) and the `0x7A028`
+ * reset are FU194-L8/L7 legs (the actor `[0x1587D4]` / ball-record producers are
+ * unported; a fake install is forbidden); arms 2..8 (the
+ * `0x651F0`/`0x974F0`/`0x45001`/`0x4BEC8`/`0x4C374` sinks and the arm-8
+ * selection block `0x89BB6..0x89E6D`) stay FU194-L3/L7 legs. Returns FIFA96_OK,
+ * or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
+
+/* FU-194 §4/§6.2 (M2 phase-17 T5): the phase-0x1E / act-8 row body — the native
+ * 2-team x 11-record restart sweep `0x8A798`. Its phase-table slot
+ * (`fifa96_match_phase_table[0x1E]`) is **NULL** — the row is not counted —
+ * because the engine already models the act-8 fallback as a *compressed*
+ * stored-situation re-dispatch (`fifa96_match_run_set_piece` BX!=0,
+ * `match_run.c`), so registering the full sweep would de-compress a tape-visible
+ * derivation (FU194-L2). Head: **no** timer add (the native head reads the stage
+ * directly, 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor
+ * (`act8_team`/`act8_record`) and falls into stage 1; stage 1 (0x8A7D6) sweeps
+ * one record per call — team 0 records 0..10 then team 1 — and when a record's
+ * code `[rec+0x91] == 0xC` with `byte[rec+0x99] != 0` and `byte[rec+0x9A] == 0`
+ * stores it in `act8_selected` (0x8A831; the `0x4C374` `[0x157A68]` clear is the
+ * FU194-L3 erratum leg), advancing to stage 2 after both teams; stage 2
+ * (0x8A895) clears the act slot and re-dispatches the stored situation/side
+ * (`store_15882b`/`store_15882c`, BX=0) then clears `store_15882b`. The
+ * `0x4BEC8` wait gates are derived ready (the referee leg-10 precedent).
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+int fifa96_match_action_phase_1E(struct fifa96_match_run *mr);
 
 /* FU-145 §1.4 (S2): the goal-mouth classifier `FUN_00070074`
  * (`0x70074..0x700F1`, 47 insns; first-hand this slice). Returns 1 iff the

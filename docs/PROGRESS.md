@@ -863,6 +863,41 @@ action-row install, the `0x1C` stage alias); `test_engine_m2`'s
 `09b726b7…` + M2 `7b4b241a…` **byte-identical** (no re-pin, `cmp`-verified);
 `make check` **110/110**; README title `60%`; census unchanged **48/80 = 60%**.
 
+**Phase-17 T5 (2026-10-12) — the act-tail cohort `0x1D`/`0x1E`/`0x20`
+(act 7/8/0xA): the two new bodies ported (`0x1D`/`0x1E`; `0x20` already ported at
+FU-188), `+0` counted (census unchanged `48/80 = 60%`)** (this slice). Per Ruling
+R8, FU-194 finds each native producer statically (sit 8 → act 7; the
+`FUN_0008A938` BX!=0 fallback → act 8; sit 0 → act 0xA) but proves none live
+under the strict "engine reaches it" test, so the three phase-table slots stay
+**NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are exported for
+direct unit testing with the producer remainder as numbered legs. Ported bodies
+(`src/fifa96_engine/fifa96_match_run.c`): `fifa96_match_action_phase_1D` (the
+act-7 10-arm set-piece timeline `0x89868`: head `timer += frame_delta`; stage 0
+clears `[0x15882A]`, writes phase 0x10 and installs action row 0x19 on both
+teams' records; stage 1 fires the `0x974DC(0x1E)` whistle + `[0x15882A] = 1` at
+`state.tick_total >= 0x78`; stage 9 the terminal clears the act slot +
+`[0x157A4C]`); `fifa96_match_action_phase_1E` (the act-8 restart sweep `0x8A798`:
+stage 0 resets the walk cursor; stage 1 sweeps team 0 records 0..10 then team 1
+and selects the code-`0xC`/`+0x99`/`!+0x9A` record; stage 2 clears the act slot
+and re-dispatches the stored situation/side, then `store_15882b = 0xFF`). **The
+coupled `0x1D` + row-`0x20` unit:** arm 0 of `0x89868` carries the row-0x20
+installer `0x899A2`, but the route needs the act-7 producer (situation 8) and the
+engine reaches situation 8 only through the T2 `fifa96_match_run_period_setup` +
+`period_setup_live`, which is **gated off** (R9 / FU196-L8) — so **neither** slot
+is producer-live and both stay NULL/uncounted (**FU194-L1/L8**). Phase `0x1E`
+stays NULL because the engine already models the act-8 fallback as a *compressed*
+stored-situation re-dispatch, so registering the full sweep would de-compress a
+tape-visible derivation (**FU194-L2**); phase `0x20` stays NULL (sit-0 producer
+absent, FU188-L1). Erratum honoured: `0x4C374` is a `word[0x157A68]` clear (it
+ignores EAX), not the FU-188 §5.1 / FU-189 §3.4 "install code EAX" reading
+(**FU194-L3**). New `test_engine_match_act` pins (`test_phase_1D_*`,
+`test_phase_1E_*`, the `*_not_counted` NULL pins) with mutation-RED
+discriminators verified per body (the `0x1D` stage advance and terminal, the
+`0x1E` selection and terminal); `test_engine_m2`'s `run_census_riders` pins the
+two new NULL slots. **Tape-inert (R8):** M1 `09b726b7…` + M2 `7b4b241a…`
+**byte-identical** (no re-pin, `cmp`-verified); `make check` **110/110**; README
+title `60%`; census unchanged **48/80 = 60%**.
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.

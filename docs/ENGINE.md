@@ -676,6 +676,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   action-row install, the `0x1C` stage alias). `test_engine_m2`'s
   `run_census_riders` pins the three NULL slots. Census unchanged `48/80 = 60%`
   (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title `60%` — all consistent.
+- **M2 phase-17 T5 (FU-194) — the act-tail cohort `0x1D`/`0x1E`/`0x20`
+  (act 7/8/0xA): the two new bodies ported (`0x1D`/`0x1E`; `0x20` was already
+  ported, FU-188), `+0` counted (census unchanged `48/80 = 60%`).** Per Ruling
+  R8, FU-194 finds each native producer statically (sit 8 → act 7; the
+  `FUN_0008A938` BX!=0 fallback → act 8; sit 0 → act 0xA) but proves none is live
+  under the strict "engine reaches it" test, so the three phase-table slots stay
+  **NULL/uncounted** (the rows-27/29/2C precedent) and the bodies are exported
+  for direct unit testing with the producer remainder as numbered legs. Ported
+  bodies (`src/fifa96_engine/fifa96_match_run.c`):
+  `fifa96_match_action_phase_1D` (the act-7 10-arm set-piece timeline `0x89868`:
+  head `timer += frame_delta`; stage 0 clears `[0x15882A]`, writes phase 0x10 and
+  installs action row 0x19 on both teams' records; stage 1 fires the whistle
+  `0x974DC(0x1E)` + `[0x15882A] = 1` at `state.tick_total >= 0x78`; stage 9 the
+  terminal clears the act slot + `[0x157A4C]`); `fifa96_match_action_phase_1E`
+  (the act-8 restart sweep `0x8A798`: stage 0 resets the walk cursor
+  `act8_team`/`act8_record`; stage 1 sweeps team 0 records 0..10 then team 1 and
+  selects the code-`0xC`/`+0x99`/`!+0x9A` record into `act8_selected`; stage 2
+  clears the act slot and re-dispatches the stored situation/side, then
+  `store_15882b = 0xFF`). **The coupled `0x1D` + row-`0x20` unit:** arm 0 of
+  `0x89868` carries the row-0x20 installer `0x899A2`, but the route needs the
+  act-7 producer (situation 8) and the engine reaches situation 8 only through
+  the T2 `fifa96_match_run_period_setup` + `period_setup_live`, which is **gated
+  off** (R9 / FU196-L8) — so **neither** slot is producer-live and both stay
+  NULL/uncounted (**FU194-L1/L8**). Phase `0x1E` stays NULL because the engine
+  already models the act-8 fallback as a *compressed* stored-situation
+  re-dispatch, so registering the full sweep would de-compress a tape-visible
+  derivation (**FU194-L2**). Phase `0x20` stays NULL (sit-0 producer absent,
+  FU188-L1). Erratum honoured: `0x4C374` is a `word[0x157A68]` clear (it ignores
+  EAX), not the FU-188 §5.1 / FU-189 §3.4 "install code EAX" reading
+  (**FU194-L3**). Other legs: the coupled row-0x20 installer + the ball row-0x1F
+  install (`0x899CD`) + the `0x7A028` reset (**FU194-L7/L8**); the arm-8
+  selection block `0x89BB6..0x89E6D` (**FU194-L7**); the arm-0 phase-0x10 write
+  (**FU194-L9**). **Tape-inert (R8):** M1 `09b726b7…` and M2 `7b4b241a…` stay
+  **byte-exact (no re-pin)** — the three slots are NULL, so nothing dispatches.
+  Tests: `tests/test_engine_match_act.c` (`test_phase_1D_*`, `test_phase_1E_*`,
+  the `*_not_counted` NULL pins); mutation-RED discriminators verified per body
+  (the `0x1D` stage advance and terminal, the `0x1E` selection and terminal).
+  `test_engine_m2`'s `run_census_riders` pins the two new NULL slots. Census
+  unchanged `48/80 = 60%` (dispatch `31 UNSUP / 48 OK / 1 NOTF`); README title
+  `60%` — all consistent.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
