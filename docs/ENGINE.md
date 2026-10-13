@@ -1068,6 +1068,36 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU-205 records the correction.)* **Tape:** M2 `cmp` clean against the v18
   `441415fc…` golden (**NO re-pin**); M1 `09b726b7…` unmoved. Dispatch
   `28 UNSUP / 51 OK / 1 NOTF` (sum 80).
+- **M2 phase-18 T6 (FU-206) — acceptance: the tape strata v18 + the producer
+  riders; census unchanged `51/80 = 63%`.** `tests/test_engine_m2.c` is
+  re-labelled **v18** (the phase-18 producer-spine acceptance strata; the
+  phase-18 T3 re-pin documented, no further re-pin). **Tape decision:** M2 was
+  **re-pinned once** at T3 (`7b4b241a… → 441415fc…`; frame 12 first diff,
+  781/792 lines **hash-only**, 0 `state=` suffix diffs — the situation-0
+  cutscene's render-consumed row-`0x24` `pos_x` write, the earned T3 move per
+  FU-202 §6 rec (b)); T4/T5/T6 moved **no** presented frame — M2 is
+  **byte-identical** at `441415fc…` (`cmp` clean), M1 `09b726b7…` unmoved. Any
+  *unexplained* drift is a regression to investigate, never a re-pin. **Producer
+  riders (`run_phase18_riders`; every rider mutation-RED):** (1) the **silent
+  re-gate** — the phase-`0x20`/row-`0x24` slots are installed *and* the
+  phase-`0x20` stage-0 body installs code `0x24` on all 22 records (a NULLed
+  slot aborts here / `run_census_riders`; a broken install chain aborts here);
+  (2) the **double-run** — the begin kickoff is entered through the live act-1
+  route, one entry writes `prev_phase 0` (a re-instated derived
+  `fifa96_match_run_kickoff_entry` beside the route moves `prev_phase` to 1 and
+  aborts `run_tape`'s begin `prev_phase == 0`); (3) the **metadata slip** — the
+  T1 bind opens the per-record gate (a bound record's body rewrites the target;
+  an unbound record is a no-op), so an undone bind aborts here and at
+  `run_tape`'s ISO bind assert. **Census reconciled against R54/FU-206**
+  (fresh first-hand re-verification: action `32` + phase `19` = `51/80 = 63%`;
+  dispatch `28 UNSUP / 51 OK / 1 NOTF`, sum 80; the two tables
+  `0x1106E0`/`0x110794` + the installer xref census are byte-identical to
+  FU-198/FU-190). **Smoke:** the windowed SDL3 engine's build/boot posture is
+  unchanged since the T4 smoke (§ below); no new PNG artifact is warranted — the
+  phase-18 landings moved no *live* pixels that a fresh capture would show
+  (the M2 golden's only move is the directive-forced cutscene at `begin`, and
+  no visual/menu change landed). `make check` **110/110**. Remaining legs: the
+  T1–T5 numbered legs (§ phase-18 T1/T2/T3/T4/T5) + **FU206-L1..L5**.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

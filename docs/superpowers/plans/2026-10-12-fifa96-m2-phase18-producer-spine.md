@@ -125,3 +125,103 @@ R47–R54 run **concurrently** (the user-directed speed-up surface). Each is rea
 ## Landing notes (post-execution)
 
 _Filled at acceptance (T6)._
+
+**Outcome:** the phase-18 spine landed **producer-live** (not the plan's
+literal producers — see the R14/R15 deviations). Census **`48/80 = 60%` →
+`51/80 = 63%`** (`+3`: action row `0x24` + phase rows `0x20` and `0x17`); the
+FU-198 §4 absolute ceiling (`66/80 = 82%`) was not reached and is not asserted
+(the plan's "no hand-set number" rule). `make check` **110/110** (ASan/UBSan,
+`-Wall -Wextra -Werror`); README title + `docs/ENGINE.md` title + the dispatch
+sum-to-80 line + `docs/PROGRESS.md` + `AGENTS.md:90` all consistent at `51/80 =
+63%` (`28 UNSUP / 51 OK / 1 NOTF`, sum 80).
+
+**Landed vs planned (per task):**
+
+- **T1 (FU-199/FU-200) — the OL-13 metadata bind.** Planned (R15) as the
+  `FUN_0006D920` port; **landed**: `fifa96_match_entities_bind_record_meta` + the
+  `match_run_record_meta_bind` loader, placed as the **last** begin step (a
+  documented FU-199 §7.2 erratum — the native bind precedes the derived screen
+  install, so a pre-install placement moved the tape from frame 12). The 8
+  gated rows now perform native work; **census unchanged** (they were already
+  counted). Tape byte-identical at `7b4b241a…`; fix round 1 made the bind
+  **atomic** (the partial-bind UAF).
+- **T2 (FU-201/FU-204) — the order matrix + act-4 arm.** Planned as a
+  matrix/arm port; **landed docs-only**: R49/R15 proved the arm is a permutation
+  residual (un-gating on the fill alone is a no-op or a **fake producer**), so
+  rows `0x17`/phase `0x1A` stay NULL/uncounted (**+0**) and the matrices are a
+  staged leg (**FU201-L4**). FU-204's "act-4 flips live under R47" corrected as a
+  quoted erratum.
+- **T3 (FU-202) — the situation-machine live wiring + extra-time.** Planned
+  gated (+0, option A) then re-ruled to the structural rework (R15 option B,
+  user-accepted); **landed `+2`**: `period_setup_live` runs the match-init
+  situation-0 producer after the begin-tail act reset, so situation 0 → act `0xA`
+  → phase `0x20` → row `0x24` become live; **M2 re-pinned once**
+  (`7b4b241a… → 441415fc…`, the earned cutscene move). The extra-time flag
+  (OL-85) found no engine writer → leg **FU202-L1**. Fix round 1: the stale
+  "reaches phase 2 naturally" claims corrected + the misleading test name.
+- **T4 (FU-203) — the act-tail Tier-A producers.** Re-ruled (R19) to attempt the
+  act-1 route after T3's cutscene gap surfaced; **landed `+1`**: phase `0x17`
+  registered (the native act-1 route), the begin derived kickoff **re-expressed**
+  as `fifa96_match_act_dispatch(mr,1,0,1)`; the natural probe again reaches phase
+  2 (step 1802). Row `0x1C` (act-6/offside) leg'd **FU203-L3/L4**; M2 stayed
+  `441415fc…` (the body fires past the scripted window). Fix round 1: the
+  stale act-1-unported comment + the T3-section errata pointers.
+- **T5 (FU-205) — the remaining producer-gated bound.** **Landed `+0`**
+  (verification + legs): the gated-row gate truth-table pinned
+  (`test_gated_rows_gate_truth_table`); the residual frozen rows leg'd (row
+  `0x0D` FU178-L1, row `0x1A` FU186-L5, phase-`0x1D`/row-`0x20` FU205-L2, phase
+  `0x1E` FU194-L2); the pre-T3 "row `0x24`/phase `0x20` frozen" note corrected.
+- **T6 (FU-206) — acceptance.** **Landed**: the **v18** strata label +
+  `run_phase18_riders` (the three silent-producer protections, each
+  mutation-RED); the census recomputation against R54's fresh audit; the
+  `AGENTS.md:90` sweep; the honest smoke record; the leg inventory; this landing
+  notes section. Tape decision: the T3 re-pin documented, **no further re-pin**;
+  M1 unmoved.
+
+**Tape posture (case-by-case, the plan's determinism rule).** Exactly one
+presented-frame move in the whole spine — T3's situation-0 kickoff cutscene
+installs code `0x24` on all 22 records at `begin`, and row `0x24`'s `pos_x =
+0x9F0` is render-consumed (`match_run_scene_stage` reads `pos_x`). That move is
+**native-faithful** (FU-202 §6 rec (b): the re-placed `FUN_0004B02C(1)`
+producer), so the controller authorised the single M2 re-pin
+(`7b4b241a… → 441415fc…`; frame 12 first diff, 781/792 lines hash-only, **0
+`state=` suffix diffs**) with the written reason + frame diff. T1/T2/T4/T5/T6
+moved no presented frame (the phase-`0x17` body fires only past the scripted
+tape's forced window; the T1 bind and the T5 verification are render-invisible by
+measurement). **M1 `09b726b7…` never moved.** Any unexplained drift is a
+regression to investigate, never a re-pin.
+
+**Deviations from the plan (recorded, not hidden):**
+
+- **R14/R15** — the plan's keystone premise (`FUN_00011620` writes the OL-13
+  metadata) is falsified (it is the front-end menu roster builder); the bind is
+  `FUN_0006D920`. The user chose **option B** (the honest phase A + the
+  structural situation-machine rework) re-scoping T1/T2/T3.
+- **R19** — T3 landed the situation-0 cutscene but left the match holding in the
+  cutscene (the act-1 route unported); T4 was therefore re-scoped to close the
+  gap (restoring natural phase 2). **R20** — T4 closed it, superseding T3's R17
+  re-baseline.
+- **T3/T4 partial rework** — the ad-hoc derived kickoff was **re-placed** (T3)
+  then **re-expressed** (T4), not fully retired; the frame-body derived
+  `global_5882a` arm is retained idempotently (leg **FU203-L2**).
+- **T3's 50-site test isolation** — the now-live situation-0 machine pre-empts
+  the derived kickoff chain on any granted frame, so the derived-path fixtures
+  clear the armed act; documented per-site, no production behaviour change.
+
+**Remaining legs (numbered, with owners) — no fake producer:**
+
+| leg | subject | owner |
+|---|---|---|
+| FU199-L1 / FU200-L3 / FU200-L4 / FU200-L6 / FU200-L7 / FU199-L7 | the `.fmt` blob field semantics; the index selectors `[0x1577DE]`/…; the `0x6DE44` DX<0 cell map; the `form*6+3` slot; the `[rec+0x90]` role byte | T1 |
+| FU201-L1 / FU201-L4 | the runtime non-permutation trigger (no writer); the desired-order matrix fill | T2 |
+| FU202-L1 / FU202-L2 / FU202-L3 | the OL-85 extra-time flag writer (no engine cell); the native act-1 route (closed by T4 — FU203-L2 remains); the act-`0xA` invoke-now cadence | T3 |
+| FU203-L2 / FU203-L3 / FU203-L4 | the frame-body derived `global_5882a` arm (idempotent, kept); the act-6/offside contact chain (row `0x1C`, double-model) | T4 |
+| FU205-L2 / FU188-L2 | the coupled phase-`0x1D`/row-`0x20` pair (extra-time flag + arm-0 `0x1587D4`); the phase-`0x20` `0x3E8` wait sink | T3/T5 |
+| FU194-L2 | phase `0x1E` (act-8 compressed fallback; leave NULL) | T5 |
+| FU178-L1 / FU186-L5 / FU175-L2 | row `0x0D` (row-09 arm-1 installer `0x80F61`); row `0x1A` (the keeper CPU ladder `FUN_00077EAC`); phase `0x1B` (no invoker) | T5 |
+| FU206-L1..L5 | the phase-`0x20`/row-`0x24` coupling is the one true tape risk (§5); the action-side ceiling > FU-198's 66; the 7 blocked phase rows; the row-`0x17` T2/T4 double-count risk; the per-record reach set | R54/T6 |
+
+**Final review:** one fix wave max; clean (`make check` 110/110, tape `cmp`
+clean, tree clean). Spec authority unchanged:
+`docs/superpowers/specs/2026-10-07-fifa96-m2-match-design.md`.
+

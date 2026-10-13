@@ -343,4 +343,44 @@ FU-188, FU-189, FU-190, FU-191, FU-192, FU-193, FU-194, FU-195, FU-196, FU-197,
 FU-198; the phase-18 plan; the SDD ledger; AGENTS.md census rule. No writes
 beyond this slice file and the workspace report.
 
+---
+
+## Addendum — T6 acceptance (phase-18 landing record)
+
+This addendum records the phase-18 acceptance against this slice's audit
+(T6/FU-206); the sections above are R54's contemporaneous recon and are kept
+verbatim.
+
+**Reconciled census.** The audit's `48/80` baseline held at the wave; the
+phase-18 landings moved it to **`51/80 = 63%`**: action `31 → 32` (T3 row
+`0x24`), phase `17 → 19` (T3 phase `0x20`, T4 phase `0x17`). Dispatch `48 OK /
+31 UNSUP / 1 NOTF` → **`51 OK / 28 UNSUP / 1 NOTF`** (sum 80). The §1 machinery
+(the two tables `0x1106E0`/`0x110794`, the `0x7D9A4` installer xref count, the
+act table `0x1107EC`) is byte-identical to FU-190/FU-198 (re-verified first-hand
+in the R54 session). README title + `docs/ENGINE.md` title + the dispatch
+sum-to-80 line + `docs/PROGRESS.md` + `AGENTS.md:90` are consistent at `63%`.
+
+**The §5 register, resolved.** PR-1 (Cluster 1) landed **dormant** as predicted
+(the T1 bind is render-invisible; action row `03` stays NULL). PR-2/PR-6
+(Cluster 2) landed **VISIBLE** — the earned T3 re-pin (`7b4b241a… → 441415fc…`).
+PR-3 (extra-time) dormant/leg. PR-4 (Cluster 3, act-1) was **wrongly** assessed
+"VISIBLE (double-run)" in §5: T4 proved the double-run is avoided by retiring the
+derived call (the live act-1 route reads the same `fifa96_match_run_kickoff_entry`
+through the phase-`0x17` body), and the registered body fires **past the scripted
+window** → M2 byte-identical. PR-5 dormant/leg. PR-7..PR-13 dormant/leg.
+
+**The §6 legs — owners at acceptance.** FU206-L1 (the phase-`0x20`/row-`0x24`
+tape risk) is **closed by T3**: the chain fires live on a begun run and the tape
+was `cmp`-pinned before the authorised re-pin. FU206-L2 (the action-side ceiling
+> FU-198's 66) stands (the plan asserts no new number). FU206-L3 (the 7 blocked
+phase rows) stands. FU206-L4 (the row-`0x17` T2/T4 double-count risk) resolved by
+R11/T4 — the **PHASE** row `0x17` is the counted one; the **ACTION** row `0x17`
+stays NULL (**FU-181/FU-201**). FU206-L5 (the per-record reach set) stands.
+
+**Provenance (T6).** `tests/test_engine_m2.c` (the v18 label + `run_phase18_riders`
++ the tape `cmp`); `docs/ENGINE.md` (the phase-18 T6 bullet);
+`docs/PROGRESS.md` (the phase-18 T6 section); `AGENTS.md:90`; the plan's landing
+notes. No writes to `/FIFA96.EXE` or the ISO.
+
+
 

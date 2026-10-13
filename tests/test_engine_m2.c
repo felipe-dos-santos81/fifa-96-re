@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v17 (spec §5; the
- * M2 phase-17 phase/act-seam acceptance, T7; the v16 phase-16
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v18 (spec §5; the
+ * M2 phase-18 producer-spine acceptance, T6; the v17 phase-17 phase/act-seam
+ * acceptance, T7; the v16 phase-16
  * act-machine-frontier acceptance, T6; the v15 phase-15
  * census-frontier acceptance, T4; the v14 phase-14 restart-chain
  * re-pin, T3, the v13/v12 phase-13/phase-12 re-pins, the M2 phase-11
@@ -1389,6 +1390,52 @@
  * moved no presented frame (each task's `cmp` evidence, re-verified at T7); M1
  * unmoved (`09b726b7…`); M2 sha held at `7b4b241a…` (the v16 bytes, 792 lines)
  * with the v17 strata label. Any drift is a regression to investigate, never a
+ * re-pin.
+ *
+ * --- v18 (M2 phase-18 acceptance, T6): the producer-spine strata -------------
+ *
+ * v18 is the phase-18 acceptance (the producer spine: T1 the OL-13 metadata bind
+ * `FUN_0006D920`, FU-199/FU-200; T2 the order-matrix + act-4 arm honest legs,
+ * FU-201/FU-204; T3 the native situation machine live — situation 0 → phase
+ * `0x20` + row `0x24`, FU-202; T4 the act-1 route live — phase `0x17`, FU-203;
+ * T5 the gated-no-op verification + the residual legs, FU-205). Unlike the
+ * phase-15/16/17 strata-only labels, the phase-18 spine **did** move a presented
+ * frame: T3's situation-0 kickoff cutscene installs code `0x24` (row `0x24`'s
+ * `pos_x = 0x9F0`, render-consumed) on all 22 records at `begin`, so M2 was
+ * **re-pinned once** (`7b4b241a… → 441415fc…`; frame 12 first diff, 781/792
+ * lines **hash-only**, **0 `state=` suffix diffs**) with the written reason +
+ * frame diff in the T3 record (`docs/ENGINE.md` phase-18 T3, FU-202 §6 rec (b)).
+ * T4 (the act-1 route) and T5 (verification) moved no presented frame — the
+ * registered phase-`0x17` body fires only past the scripted tape's forced window
+ * (the phase-`0x20` `0x3E8` cutscene wait, ~500 granted frames; the tape
+ * self-terminates ~792), so M2 is **byte-identical** at `441415fc…` throughout
+ * T4/T5. M1 `09b726b7…` never moved. Holding the v17 label would be defensible
+ * for the T4/T5-only bytes, but the phase-15 precedent labels the *acceptance
+ * layer*, and v18 records the whole phase-18 spine (including the earned T3
+ * re-pin).
+ *
+ * The producer riders (v18; `run_phase18_riders`; **every rider is
+ * mutation-RED** — each deliberately-broken mutation aborts at its own
+ * assertion, the mutations recorded in the phase-18 T6 report):
+ *   1. The silent RE-GATE (T3/FU-202): the phase-`0x20` and row-`0x24` slots are
+ *      installed AND the phase-`0x20` stage-0 body installs code `0x24` on every
+ *      pool record. Mutation-RED: NULLing either slot aborts (here /
+ *      `run_census_riders`); breaking the install chain aborts here.
+ *   2. The DOUBLE-RUN (T4/FU-203): the begin kickoff is entered through the live
+ *      act-1 route; ONE entry writes the kickoff phase with `prev_phase == 0`.
+ *      A re-instated derived `fifa96_match_run_kickoff_entry` beside the route
+ *      moves `prev_phase` to 1 — `run_tape` pins begin's `prev_phase == 0`.
+ *      Mutation-RED: re-instating the direct call aborts `run_tape`; a
+ *      `match_run_write_phase` prev_phase slip aborts this rider.
+ *   3. The METADATA SLIP (T1/FU-199): the T1 bind stages the OL-13 blobs and the
+ *      per-record gate opens (a bound record's body rewrites the target); an
+ *      unbound record is a disciplined no-op. Mutation-RED: undoing the bind
+ *      aborts here (and `run_tape`'s ISO bind assert); a bind no-op aborts here.
+ *
+ * Golden decision (v18): **re-pinned once at T3 (the earned cutscene move), then
+ * byte-identical** — the T3 re-pin (`7b4b241a… → 441415fc…`) carries its written
+ * reason + frame diff; T4/T5/T6 moved no presented frame. M1 `09b726b7…`
+ * unmoved. Any *unexplained* drift is a regression to investigate, never a
  * re-pin.
  */
 #include <assert.h>
@@ -3329,6 +3376,96 @@ static void run_phase17_riders(void) {
   }
 }
 
+/* v18 (M2 phase-18 T6): the phase-18 producer riders — the silent-producer
+ * protections at the acceptance layer. Three mutation classes must abort:
+ *  - a silent RE-GATE (the phase-`0x20`/row-`0x24` slot reverted to NULL, or
+ *    the phase-`0x20` stage-0 code-`0x24` install chain broken);
+ *  - a DOUBLE-RUN (the retired derived kickoff re-instated beside the live
+ *    act-1 route) — the single-route `prev_phase` contract;
+ *  - a METADATA SLIP (the OL-13 bind undone) — the per-record gate.
+ * The begin-path primaries live in `run_tape` (the `prev_phase == 0` and the
+ * metadata-bind asserts) and `run_natural_probe` (the situation-0 kickoff + the
+ * act-1 route); the handler primaries in `test_engine_match_handlers.c`
+ * (`test_gated_rows_gate_truth_table`). This is the durable state-level
+ * cross-check. Every block is mutation-RED (the per-block mutations are
+ * recorded in the phase-18 T6 report). Pure C state, ISO-independent, prints
+ * nothing, so the transcript is unaffected. */
+static void run_phase18_riders(void) {
+  /* 1. The situation-0 producer chain (T3/FU-202; silent re-gate): the
+   *    phase-`0x20` and row-`0x24` slots are installed AND the phase-`0x20`
+   *    stage-0 body installs code `0x24` on every pool record. A reverted slot
+   *    aborts here (and `run_census_riders`); a broken install chain aborts
+   *    here (before `run_tape`'s directive mask). */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_phase_table[0x20].fn == fifa96_match_action_phase_20);
+    assert(fifa96_match_action_table[0x24].fn == fifa96_match_action_24);
+    mr.state.frame_delta = 2;
+    /* the match-init producer (FU-202 §6 rec (b)): situation 0 -> act 0xA. */
+    assert(fifa96_match_run_period_setup(&mr, 1) == 0);
+    assert(mr.act.id == 0x0Au);
+    mr.act.stage = 0;
+    mr.act.timer = 0;
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        mr.entities.team[t].records[i].code = 0;
+    assert(fifa96_match_dispatch_phase(&mr, 0x20u) == FIFA96_OK); /* 0x8B688 */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        assert(mr.entities.team[t].records[i].code == 0x24u);     /* 0x8B6FE install */
+  }
+  /* 2. The single-route kickoff contract (T4/FU-203; double-run): the begin
+   *    kickoff is entered through the live act-1 route; ONE entry writes the
+   *    kickoff phase with `prev_phase 0`. A re-instated derived
+   *    `fifa96_match_run_kickoff_entry` beside the route moves `prev_phase` to
+   *    1 (the double-run signature) — `run_tape` pins begin's `prev_phase == 0`.
+   *    Mutation-RED: re-instating the direct call aborts `run_tape`; a
+   *    `match_run_write_phase` prev_phase slip aborts this block. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_act_dispatch(&mr, 1, 0, 1) == FIFA96_OK); /* the act-1 route */
+    assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+    assert(mr.state.prev_phase == 0);                 /* the single-route contract */
+    assert(mr.act.stage == 1u);                       /* phase-0x17 stage 0 advance */
+    /* the double-run signature: a second kickoff entry moves prev_phase to 1. */
+    assert(fifa96_match_run_kickoff_entry(&mr) == 0);
+    assert(mr.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+    assert(mr.state.prev_phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+  }
+  /* 3. The OL-13 metadata gate (T1/FU-199; metadata slip): the asset-absent
+   *    record is a disciplined no-op; the T1 bind stages the blobs and the body
+   *    runs (target rewritten). Mutation-RED: undoing the bind aborts here (and
+   *    `run_tape`'s ISO bind assert); a bind no-op aborts here. */
+  {
+    static int8_t pl[0x17A];
+    static int32_t pk[2];
+    static int32_t fk[2];
+    struct fifa96_match_run mr;
+    struct fifa96_match_entity *e;
+    for (size_t i = 0; i < sizeof pl; i++) pl[i] = (int8_t)(1 + (i & 3));
+    pk[0] = (int32_t)(uint32_t)((uint16_t)0x10 | (8u << 16));    /* W=0x10 D=8 */
+    fk[0] = (int32_t)(uint32_t)((uint16_t)0x8 | (0x10u << 16));  /* W=8 D=0x10 */
+    fifa96_match_run_init(&mr);
+    mr.entities.team[0].side = 0;
+    mr.phase_machine.side_controlled = 0;
+    mr.phase_dir_default[0] = 0;
+    e = &mr.entities.team[0].records[2];
+    e->team = 0;
+    e->active = 0;                                    /* idx = byte[rec+0x8D] */
+    e->phase_meta = NULL; e->phase_meta10 = NULL; e->phase_meta14 = NULL;
+    e->target_x = 1; e->target_y = 2; e->target_z = 3;
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x02u, e, -1) == FIFA96_OK);
+    assert(e->target_x == 1 && e->target_y == 2 && e->target_z == 3); /* asset-absent */
+    assert(fifa96_match_entities_bind_record_meta(&mr.entities, 0u, pl, pk, fk) ==
+           FIFA96_OK);
+    e->target_x = 1; e->target_y = 2; e->target_z = 3;
+    assert(fifa96_match_dispatch_phase_record(&mr, 0x02u, e, -1) == FIFA96_OK);
+    assert(!(e->target_x == 1 && e->target_y == 2 && e->target_z == 3)); /* asset-present */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -3353,16 +3490,18 @@ int main(void) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
 
-  /* v15/v16/v17 (phase-15 T4 → phase-16 T6 → phase-17 T7): the census/seam
-   * rider cross-checks (both modes, pure state): the census shape + the T1–T6
-   * regression pins + the phase-17 seam/walk/census/leg pins. Run first so each
-   * rider's own mutation aborts at its assert, before the tape consumes the
-   * process; they print nothing, so the transcript is unaffected. */
+  /* v15/v16/v17/v18 (phase-15 T4 → phase-16 T6 → phase-17 T7 → phase-18 T6):
+   * the census/seam rider cross-checks (both modes, pure state): the census
+   * shape + the T1–T6 regression pins + the phase-17 seam/walk/census/leg pins +
+   * the phase-18 producer riders (re-gate / double-run / metadata-slip). Run
+   * first so each rider's own mutation aborts at its assert, before the tape
+   * consumes the process; they print nothing, so the transcript is unaffected. */
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();
   run_phase17_t3_riders();
   run_phase17_riders();
+  run_phase18_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;

@@ -1116,6 +1116,32 @@ keeper CPU ladder `FUN_00077EAC`; fresh `get_xrefs_to 0x77EAC` = 1 into
 `09b726b7…` unmoved. `make check` **110/110**; README title `63%`; dispatch
 `28 UNSUP / 51 OK / 1 NOTF` (sum 80).
 
+**Phase-18 T6 (2026-10-12) — acceptance: the tape strata v18 + the producer
+riders; census unchanged (`+0`, `51/80 = 63%`); M2 byte-identical** (this slice,
+R54/FU-206). `tests/test_engine_m2.c` is re-labelled **v18** (the phase-18
+producer-spine acceptance strata). **Tape decision:** the phase-18 spine's one
+presented-frame move is T3's situation-0 cutscene (row-`0x24` `pos_x`, render-read
+— the earned re-pin `7b4b241a… → 441415fc…`, frame 12 first diff, 781/792 lines
+hash-only, 0 `state=` diffs); T4/T5/T6 moved no presented frame, so M2 is
+byte-identical at `441415fc…` (**no further re-pin**); M1 `09b726b7…` unmoved.
+**Producer riders (`run_phase18_riders`, every block mutation-RED):** the silent
+**re-gate** (phase-`0x20`/row-`0x24` slots installed + the phase-`0x20` stage-0
+code-`0x24` install chain on all 22 records), the **double-run** (the begin kickoff
+enters through the live act-1 route, one entry writes `prev_phase 0`; a
+re-instated derived `fifa96_match_run_kickoff_entry` moves `prev_phase` to 1 and
+aborts `run_tape`'s begin `prev_phase == 0`), and the **metadata slip** (the T1
+bind opens the per-record gate; an undone bind aborts the rider and `run_tape`'s
+ISO bind assert). **Census reconciled against R54/FU-206** (fresh first-hand:
+action `32` + phase `19` = `51/80 = 63%`; dispatch `28 UNSUP / 51 OK / 1 NOTF`;
+the `0x1106E0`/`0x110794` tables + the installer xref census byte-identical to
+FU-198/FU-190); the census-record note `AGENTS.md:90` swept `48/80 → 60%` →
+`51/80 → 63%`. **Smoke:** the windowed SDL3 engine still builds and boots under
+`DISPLAY=:1` (`./build/fifa96 game/FIFAPCCD96.iso`, survived the 12s timeout with
+only external SDL3/X11/GL/dbus teardown leaks on the kill path — no engine
+crash); no new PNG artifact is warranted (no visual/menu change landed; the T4
+smoke remains representative). `make check` **110/110**. Remaining legs: the
+T1–T5 numbered legs + **FU206-L1..L5** (see the landing notes / the T6 report).
+
 Progress is slice-by-slice: each slice has a plan, bounded evidence, a
 reviewed write set, and appended map rows — prior map sections are never
 rewritten; corrections land as quoted errata in later sections.
