@@ -341,3 +341,43 @@ No census change and no engine change: `51/80 = 63%` and the README/ENGINE/PROGR
 titles stand unchanged. No writes beyond this slice file; no
 rename/label/comment/function/script/project save; `/FIFA96.EXE` and the ISO
 untouched; no git commands.
+
+---
+
+## 8. Landing note (M2 phase-19 T5) — the residual-leg register
+
+Phase-19 T1–T4 landed the front half of this audit's cohort (the extra-time
+producer, the sit-8 selector + phase `0x1D`, the row-`0x20` body/installer, phase
+`0x22`). T5 registers what remains open — each with its **native owner** — and
+confirms the audit's honest ceiling was not over-reached. **No row is wired by
+T5: census `53/80 = 66%` unchanged** (`26 UNSUP / 53 OK / 1 NOTF`, sum 80).
+
+### 8.1 The phase-`0x1E` bound (this audit's FU214-L5)
+
+Upheld: the phase-`0x1E` slot stays `NULL`. FU-212 §6/§9 proves the faithful
+22-record restart sweep is a **timing-only** delta (render-invisible; dormant on
+M2), so the engine keeps its compressed act-8 model and the model is **pinned**
+(`tests/test_engine_match_frame.c::test_phase_1E_compressed_model_pin`; mutation-
+RED: registering the slot aborts the pin). De-compression owner **FU212-L1** /
+FU194-L2. M2 `441415fc…` byte-identical, M1 `09b726b7…` unmoved.
+
+### 8.2 The residual-leg register (native owners kept)
+
+| leg | status at T5 | native owner / remainder |
+|---|---|---|
+| **FU207-L1** — OL-85 flag's front-end producer | **partly resolved** | the in-match **cell + writer** landed in T1/FU-213 (`mr->global_157ac0`); the **front-end competition match-init producer `0x389A4`** (`FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU207-L2/FU202-L7) is still unported. Owner FU-207. |
+| **FU208-L1** — bit-8 sit-8 range-word writer gap | **OPEN** | the sit-8 gate's bit 8 (`0x4B0CB TEST AH,0x1`) still has no located writer (the two builders write bit 9 `0x200` or 0). Owner FU-208 / FU196-L1. |
+| **FU208-L8** — sit-8 session-gate co-condition | **OPEN** | the engine's `session_gate_14c32a` is seeded 0 with no derived producer, so the live direct-path reachability of sit 8 is unproven (FU-166/R14). Owner FU-208. |
+| **FU209-L1** — act-7 producer inert path | **resolved for the `global_157ac2 == 4` arm** | T2/FU-208 made the roll live (see FU209 §10); the **bit-8 arm stays FU208-L1**. |
+| **FU211-L1** — phase `0x22` off registration alone | **RESOLVED** | T4 registered the slot on a live-path fixture (FU211 §10). Do **not** re-leg. |
+| **FU213-L1** — `[0x157AC0]` cell/producer | **resolved** | T1 landed the cell (`mr->global_157ac0`) + the W2/W4/W5 in-match producers; the **front-end producer stays FU207-L2**. |
+| **FU213-L2** — `period_setup(mode 0)` live re-arm | **resolved for the sit-8 path** | T2 calls the mode-0 producer from `phase_drive` on the `global_157ac2 == 4` gate. |
+| **FU214-L1** — cohort's producer dependency | **partly resolved** | producer landed (T1); `0x1D`+`0x22` counted (T2/T4). Remainder — action `0x20` — still blocked by the actor-cell producer (**FU210-L3**). |
+| **FU214-L2** — bit-8 vs bit-9 range word | **OPEN** | sibling of **FU208-L1** (unchanged). |
+| **FU214-L3** — row-`0x20` body | **resolved** | body + coupled installer ported by T3/FU-210; the row stays `NULL` on FU210-L3/L5. |
+| **FU214-L4** — phase `0x10` contingent | **OPEN** | owner: the phase-`0x1D` landing (its arm-0 writer). |
+| **FU214-L7** — the two cells distinct | **stands** | `[0x157AC2]` (sit-8 selector) vs `[0x157AC0]` (OL-85 flag); the attribution correction is honoured by T1/T2/T4. |
+
+No fake producer: every OPEN row above is un-dispatched on the live path and
+carries no `NULL → fn` flip for a count.
+

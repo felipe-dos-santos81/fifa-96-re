@@ -3002,7 +3002,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_phase_table[0x1A].fn == NULL);  /* T4: ported, no act-4 producer (FU193-L3) */
     assert(fifa96_match_phase_table[0x1C].fn == NULL);  /* T4: ported, no act-6 producer + offside double-model (FU193-L4) */
     assert(fifa96_match_phase_table[0x1D].fn != NULL);  /* T2 (FU-208/209): phase 0x1D COUNTED — sit-8 (global_157ac2==4) -> act 7 -> phase 0x1D, producer-live via phase_drive */
-    assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* T5: ported, act-8 compression kept (FU194-L2) */
+    assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* T5: ported, act-8 compression kept + pinned (FU212/FU194-L2) */
     assert(fifa96_match_phase_table[0x21].fn != NULL);  /* T6: act-0xB extra-time-clear, producer-live via phase_drive (FU-195 §6.1) */
     assert(fifa96_match_phase_table[0x22].fn != NULL);  /* T4 (FU-211): phase 0x22 COUNTED — the live OL-85 flag (T1/FU-213) installs act 0xC via phase_drive, whose act dispatch reaches the phase-0x22 slot */
     assert(fifa96_match_phase_table[0x1B].fn == NULL);  /* T6: act-5 no invoker (FU195-L1, owner FU175-L2) */

@@ -1169,6 +1169,32 @@ the build also produces the windowed `fifa96` target (`make game`).
   no extra-time completion, and the body is render-invisible regardless), M1
   `09b726b7…` unmoved; dispatch `26 UNSUP / 53 OK / 1 NOTF` (sum 80); README title
   `66%`; AGENTS.md census note swept.
+- **M2 phase-19 T5 (FU-212/FU-214) — the phase-`0x1E` honest bound + the
+  residual-leg register: census unchanged `53/80 = 66%` (no row wired).** The
+  phase-`0x1E` / act-8 restart sweep (native `0x8A798`) keeps the engine's
+  **compressed** model and is **not** wired this phase. FU-212 §6 (fresh
+  first-hand) proves the faithful 22-record sweep is a **timing-only** delta: it
+  is render-invisible (stores a selected pointer into `[0x1587F0]`, clears
+  `word[0x157A68]`; it never rewrites a code) and the M2 tape never enters the
+  compressed `set_piece(bx != 0)` path (the golden carries no `state=3`), so
+  de-compressing would move no presented frame — the slot stays `NULL` and the
+  model is **pinned** (`tests/test_engine_match_frame.c::
+  test_phase_1E_compressed_model_pin`; the `run_census_riders` +
+  `test_phase_1E_not_counted` NULL pins stand; mutation-RED: registering the slot
+  aborts the pin). The **de-compression leg is FU212-L1** (owner FU-212; reference
+  FU194-L2). The cohort's residual legs are registered, each with its native
+  owner: **FU207-L1** (the OL-85 flag's front-end match-init producer `0x389A4`
+  — the in-match cell landed in T1; owner FU-207), **FU208-L1** + **FU214-L2**
+  (the bit-8 sit-8 range-word writer gap — no located writer), **FU208-L8** (the
+  sit-8 session-gate co-condition `[0x14C32A]`), **FU209-L1** (the act-7 producer
+  inert path — resolved for the `global_157ac2 == 4` arm by T2, the bit-8 arm
+  stays FU208-L1), **FU213-L1** (the `[0x157AC0]` cell/producer — resolved by T1,
+  the front-end stays FU207-L2), **FU213-L2** (`period_setup(mode 0)` live re-arm
+  — resolved for the sit-8 path by T2), **FU214-L1** (the cohort's producer
+  dependency — partly resolved; action `0x20` still blocked by FU210-L3). **FU211-L1
+  is RESOLVED** by T4 (not re-legged). No fake producer. **Tape:** M2 `441415fc…`
+  byte-identical (no presented frame moves), M1 `09b726b7…` unmoved; dispatch
+  `26 UNSUP / 53 OK / 1 NOTF` (sum 80); README title `66%`; no golden re-pin.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

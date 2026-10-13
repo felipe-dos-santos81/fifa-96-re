@@ -1267,3 +1267,60 @@ the live-path fixture is non-vacuous.
 completion, and the row is render-invisible regardless). **Census:** README title
 `66%`; ENGINE.md census `53/80` (dispatch `26 UNSUP / 53 OK / 1 NOTF`, sum 80);
 AGENTS.md census note swept `52/80 → 65%` → `53/80 → 66%`.
+
+## M2 phase-19 T5 — the phase-0x1E honest bound + the residual-leg register (FU-212/FU-214)
+
+**The phase-`0x1E` / act-8 restart sweep keeps the engine's compressed model and is
+NOT wired this phase — census `53/80 = 66%` unchanged (no row wired).** FU-212 §6
+(fresh first-hand) proves the faithful 22-record sweep (`0x8A798`; stage 0 reset →
+one record per granted frame → the stage-2 stored-situation re-dispatch) is a
+**timing-only** delta: it is render-invisible (it stores a selected pointer into
+`[0x1587F0]` and clears `word[0x157A68]`; per the FU-212-E1 erratum `0x4C374`
+ignores its `EAX=0x19`, so no record's code is rewritten), and the M2 tape never
+enters the compressed `set_piece(bx != 0)` path (the golden carries no `state=3`).
+So de-compressing would move no presented frame — the slot stays `NULL` and the
+bound is **pinned**: `tests/test_engine_match_frame.c::
+test_phase_1E_compressed_model_pin` asserts the compressed in-frame re-dispatch
+(`set_piece(2,1,1)` → phase 3, `store_15882b == 0xFF`) **and** that the live path
+never drives the sweep (`fifa96_match_phase_table[0x1E].fn == NULL`, the
+`act8_team`/`act8_record`/`act8_selected` cursor untouched). Mutation-RED:
+registering the slot (`NULL → fifa96_match_action_phase_1E`) aborts the pin. The
+**de-compression is the FU212-L1 leg** (owner FU-212; reference FU194-L2) — do not
+wire the sweep.
+
+**The residual-leg register (each with its native owner).** The cohort's
+unproven rows are recorded as honest numbered legs, no fake producer:
+
+- **FU207-L1** — the OL-85 flag's front-end match-init producer `0x389A4` (via
+  `FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU207-L2/FU202-L7). The in-match
+  **cell + writer** landed in T1/FU-213 (`mr->global_157ac0`); the front-end
+  producer stays unported. Owner FU-207.
+- **FU208-L1** — the bit-8 sit-8 range-word writer gap (the sit-8 gate tests bit 8
+  `0x4B0CB TEST AH,0x1`; the only builders write bit 9 `0x200` or 0). Owner FU-208
+  / FU196-L1.
+- **FU208-L8** — the sit-8 session-gate co-condition `[0x14C32A]`: the engine's
+  `session_gate_14c32a` is seeded 0 with no derived producer, so the live
+  direct-path reachability of sit 8 is unproven (FU-166/R14). Owner FU-208.
+- **FU209-L1** — the act-7 producer inert path: **resolved for the
+  `global_157ac2 == 4` arm** by T2/FU-208; the bit-8 arm stays FU208-L1.
+- **FU213-L1** — the `[0x157AC0]` cell/producer: **resolved** by T1 (cell +
+  W2/W4/W5 in-match producers); the front-end stays FU207-L2.
+- **FU213-L2** — `fifa96_match_run_period_setup(mode 0)` live re-arm: **resolved
+  for the sit-8 path** by T2 (the mode-0 producer is called from `phase_drive` on
+  the `global_157ac2 == 4` gate).
+- **FU214-L1** — the cohort's producer dependency: **partly resolved** (the
+  producer landed; `0x1D`+`0x22` counted by T2/T4); action `0x20` remains blocked
+  by the actor-cell producer **FU210-L3**.
+- **FU214-L2** — the bit-8 vs bit-9 range-word gap: **OPEN** (sibling of
+  FU208-L1).
+
+**FU211-L1 is RESOLVED** by T4 (FU-211 §10) and is not re-legged.
+**FU214-L5** (phase `0x1E` as the sole cohort re-pin risk) is upheld — the slot
+stays `NULL`, the model pinned.
+
+**TDD:** the pin test added + GREEN; mutation-RED (registering the phase-`0x1E`
+slot) aborts `test_phase_1E_compressed_model_pin`. **Determinism:** `make check`
+**110/110** (sanitized); M1 `09b726b7…` unmoved; M2 `441415fc…` byte-identical
+(`cmp` clean — no row wired, no presented frame moves). **Census:** unchanged
+`53/80 = 66%` (32 action + 21 phase; dispatch `26 UNSUP / 53 OK / 1 NOTF`, sum
+80); README title `66%`; no golden re-pin.

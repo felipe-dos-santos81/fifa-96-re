@@ -488,3 +488,39 @@ skip_9a); `tests/test_engine_m2.c` (1549..1590 the masks; 1930..1936
 census). Docs cross-cited: FU-149 L6, FU-175 §2/§5, FU-188, FU-189, FU-194
 (§4/§6.2/L2/L3), FU-206 §5 (PR-9). No writes beyond this slice file; no
 rename/label/comment/function/script/project save; no git.
+
+---
+
+## 9. Landing note (M2 phase-19 T5) — the compressed model kept + pinned
+
+**Scope.** Phase-19 T5 consumed this slice's de-compression verdict (§6) and made
+it binding: the phase-`0x1E` slot **stays `NULL`** (the compressed model is
+deliberate), and the faithful 22-record restart sweep is recorded as the
+**de-compression leg** rather than wired. No production behaviour changed and no
+golden frame moved; the census is untouched (`53/80 = 66%`, no row wired).
+
+* **The bound is pinned.** `tests/test_engine_match_frame.c::
+  test_phase_1E_compressed_model_pin` asserts (a) the compressed `set_piece
+  (bx != 0)` branch in-lines the stored-situation re-dispatch in the same frame
+  (`set_piece(2,1,1)` → phase 3, `store_15882b == 0xFF`) **and** (b) that the
+  live path never drives the sweep: `fifa96_match_phase_table[0x1E].fn == NULL`
+  and the walk cursor/selection (`act8_team`/`act8_record`/`act8_selected`) stay
+  untouched, with `mr.act.id != 8`. The pre-existing `run_census_riders` and
+  `test_phase_1E_not_counted` slot-NULL pins are unchanged. **Mutation-RED:**
+  registering the slot (`NULL → fifa96_match_action_phase_1E`) aborts the
+  `fn == NULL` assert (verified; reverted).
+* **§6.4 upheld — no re-pin.** The tape is dormant on the compressed `bx != 0`
+  path (§6.2; its golden carries no `state=3`), so M2 stays `441415fc…`
+  byte-identical and M1 `09b726b7…` unmoved. A later landing that registers the
+  slot forces only the test/census riders (`phase_wired 21→22`), never the golden.
+* **Owner.** The de-compression is **FU212-L1** (the non-tape equivalence is
+  unproven; §7 item 1), with the legacy reference **FU194-L2**. The engine's
+  phase-`0x1E` row evidence (`src/fifa96_engine/fifa96_match_handlers.c`, the
+  `{0x1E, NULL, …}` row) now cites this slice and FU194-L2 and restates the
+  bound.
+* **Erratum (FU-212-E1) restated.** The sweep does **not** rewrite a record's
+  code (`0x4C374` ignores its `EAX=0x19`, §4); its whole per-record effect is the
+  pointer store into `[0x1587F0]` plus the `word[0x157A68]` clear. The engine
+  correctly models no code rewrite, so the compression and the sweep differ only
+  in timing (§6.1).
+
