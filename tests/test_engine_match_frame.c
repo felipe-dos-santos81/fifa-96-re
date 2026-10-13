@@ -658,18 +658,19 @@ static void test_phase_drive_situation8_selects_act7(void) {
   assert(fifa96_match_run_phase_drive(&mr) == 1);
   assert(mr.global_157ac2 == 4u);      /* the T1 roll reaches the sit-8 gate */
   assert(mr.global_157ac0 == 0u);      /* tied: the OL-85 flag stays clear */
-  assert(mr.state.phase == 0x0Cu);     /* the no-ET chooser arm (completed 3 < 4) */
+  assert(mr.state.phase == 0x10u);     /* FU-219 invoke-now: arm 0 wrote phase 0x10 */
   assert(mr.act.id == 7);              /* sit 8 selected -> act 7 */
-  assert(mr.act.stage == 0u);
+  assert(mr.act.stage == 1u);          /* arm 0 ran + advanced on the dispatch frame */
 }
 
-/* FU-209 §6.4 (M2 phase-19 T2): the registered phase-0x1D slot runs the ported
- * act-7 body end-to-end on a live situation-8. The selection installs act 7
- * (deferred, the 0x8AEAE invoke cadence is the FU208-L4 leg); the live clock-tail
- * `fifa96_match_run_act_tick` then maps act 7 -> phase 0x1D and dispatches the
- * body, whose arm 0 writes phase 0x10 (0x898DD) and installs action row 0x19 on
- * both teams' record 0 (0x89903/0x8990A). Mutation-RED: a NULL phase-0x1D slot
- * makes the tick early-return at fifa96_match_act.c:63, so the stage/phase/record
+/* FU-209 §6.4 / FU-219 (M2 phase-19 T2): the registered phase-0x1D slot runs the
+ * ported act-7 body end-to-end on a live situation-8. The selection installs act
+ * 7 and, per FU-219 (the native `0x8AEAE MOV EBX,1`), invokes it now — arm 0 runs
+ * on the dispatch frame inside `phase_drive`, writing phase 0x10 (0x898DD) and
+ * installing action row 0x19 on both teams' record 0 (0x89903/0x8990A); the live
+ * clock-tail `fifa96_match_run_act_tick` then maps act 7 -> phase 0x1D arm 1,
+ * which waits (tick_total < 0x78). Mutation-RED: a NULL phase-0x1D slot makes
+ * the tick early-return at fifa96_match_act.c:63, so the stage/phase/record
  * assertions fail. */
 static void test_situation8_dispatches_phase_1d_body(void) {
   struct fifa96_match_run mr;
@@ -682,13 +683,14 @@ static void test_situation8_dispatches_phase_1d_body(void) {
   mr.score[1] = 1u;
   mr.clock_period_ended = 1;
   assert(fifa96_match_run_phase_drive(&mr) == 1);
+  /* FU-219 invoke-now: arm 0 ran on the sit-8 dispatch (inside phase_drive). */
   assert(mr.act.id == 7);                       /* sit 8 -> act 7 installed */
-  assert(mr.act.stage == 0u);
-  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* act 7 -> phase 0x1D */
-  assert(mr.act.stage == 1u);                   /* arm 0 advanced (0x899ED) */
+  assert(mr.act.stage == 1u);                   /* arm 0 ran + advanced (0x899ED) */
   assert(mr.state.phase == 0x10u);              /* arm-0 phase-0x10 write (0x898DD) */
   assert(mr.entities.team[0].records[0].code == 0x19u);  /* arm-0 row-0x19 install */
   assert(mr.entities.team[1].records[0].code == 0x19u);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* act 7 -> phase 0x1D arm 1 */
+  assert(mr.act.stage == 1u);                   /* arm 1 waits (tick_total < 0x78) */
 }
 
 /* The begun-run 2 -> 0x0C -> 0 sequence: the derived write lands on the

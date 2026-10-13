@@ -3594,7 +3594,7 @@ static void run_phase19_riders(void) {
   }
   /* 3. The SELECTOR SLIP (T2/FU-208/209): the T1 roll landing the index on 4
    *    (native `[0x157AC2] == 4`) drives the mode-0 situation-8 selector ->
-   *    act 7 (deferred, stage 0). A gate off the index-4 roll (`>=`, `==3`,
+   *    act 7 (invoke-now, stage 1). A gate off the index-4 roll (`>=`, `==3`,
    *    `==5`) leaves the chooser's act 0xB and aborts `act.id == 7`. */
   {
     struct fifa96_match_run mr;
@@ -3608,9 +3608,9 @@ static void run_phase19_riders(void) {
     assert(fifa96_match_run_phase_drive(&mr) == 1);
     assert(mr.global_157ac2 == 4u);         /* the T1 roll reaches the sit-8 gate */
     assert(mr.global_157ac0 == 0u);
-    assert(mr.state.phase == 0x0Cu);        /* the completed 3 < 4 no-ET arm */
+    assert(mr.state.phase == 0x10u);        /* arm 0 wrote phase 0x10 (0x898DD) */
     assert(mr.act.id == 7);                 /* sit 8 overrode the chooser's act 0xB */
-    assert(mr.act.stage == 0u);             /* the deferred sit-8 install */
+    assert(mr.act.stage == 1u);             /* invoke-now: arm 0 ran on the dispatch (FU-219) */
 
     /* the gate is exactly the index-4 roll: an index-3 roll leaves the act. */
     fifa96_match_run_init(&mr);
@@ -3642,19 +3642,22 @@ static void run_phase19_riders(void) {
     mr.score[1] = 1u;
     mr.clock_period_ended = 1;
     assert(fifa96_match_run_phase_drive(&mr) == 1);
-    assert(mr.act.id == 7 && mr.act.stage == 0u);   /* the sit-8 install */
-    mr.state.frame_delta = 2;
-    mr.global_5882a = 1u;                            /* the arm-0 [0x15882A] clear target */
-    assert(fifa96_match_act_tick(&mr) == FIFA96_OK); /* act 7 -> phase 0x1D */
+    /* FU-219 invoke-now: arm 0 ran on the sit-8 dispatch (inside phase_drive),
+     * not at the tick. */
+    assert(mr.act.id == 7 && mr.act.stage == 1u);    /* arm 0 ran + advanced */
     assert(mr.state.phase == 0x10u);                 /* 0x898DD arm-0 phase write */
     assert(mr.global_5882a == 0u);                   /* 0x898B4 clear */
-    assert(mr.act.stage == 1u);                      /* arm-0 advance (0x899ED) */
     assert(mr.entities.team[0].records[0].code == 0x19u);  /* 0x89903 install */
     assert(mr.entities.team[1].records[0].code == 0x19u);  /* 0x8990A install */
     /* the live actor cell is NONE: the coupled 0x899A2 install is a no-op. */
     for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
       for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
         assert(mr.entities.team[t].records[i].code != 0x20u);
+    /* arm 1 runs at the clock tail; tick_total < 0x78 leaves it waiting. */
+    mr.state.frame_delta = 2;
+    mr.global_5882a = 1u;                            /* the arm-1 [0x15882A] set target */
+    assert(fifa96_match_act_tick(&mr) == FIFA96_OK); /* act 7 -> phase 0x1D arm 1 */
+    assert(mr.act.stage == 1u);                      /* arm 1 waits (tick_total < 0x78) */
 
     /* the actor-cell fixture (the unported sit-8 `[0x1587D4]` producer, FU210-L3):
      * arm 0 installs code 0x20 on that actor (team 0, record 1). */
