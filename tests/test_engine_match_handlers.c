@@ -108,7 +108,7 @@ static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, UNSUP, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
-    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T6 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195); 0x22 = T4 act-0xC ET-set (FU-211) */
+    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195); 0x22 = T4 act-0xC ET-set (FU-211) */
 };
 
 struct fixture {

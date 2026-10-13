@@ -544,3 +544,31 @@ act seam), FU-195 §3/§4, FU-196, FU-202 §4, FU-205, FU-206 §4 Tier-1/§5 PR-
 FU-207 (OL-85), FU-208 (situation 8), FU-209 (act 7 / phase 0x1D), FU-211
 (phase 0x22 / act 0xC). AGENTS.md census rule. **No writes beyond this slice
 file**; no rename/label/comment/function/script/project save; no git commands.
+
+---
+
+## 10. Errata / landing note — M2 phase-19 (T1/FU-213 + T2/T4)
+
+Written 2026-10-13 at the phase-19 landings. Prior sections are **not** rewritten;
+the affected text is quoted and the correction recorded here (AGENTS.md errata
+discipline).
+
+* **§8 FU213-L1 (quoted):** *"the `[0x157AC0]` extra-time flag has no engine cell
+  or producer. Fresh: `extra_time` is hardwired `0u` at
+  `fifa96_match_run.c:2583`; the flag's four harness set-sites … are unported."* —
+  **RESOLVED (T1).** The cell exists (`mr->global_157ac0`); the hardwired `0u` is
+  replaced by W2 `0x8B2AC` / W4 `0x8B3A2` (completed regulation-end / ET-2,
+  differing scores) plus the W5 `0x8B5CD` mid-ET set, threaded live into
+  `fifa96_action_phase_period_end`. The equal-score override `[0x14C2EE]` and the
+  no-extra-time latch `[0x10F378]` remain unported (FU213-L7/L1 residual).
+* **§6 table, the `extra_time` row (quoted):** *"the `[0x157AC0]` argument
+  (`extra_time`) | **hardwired `0u`** | `fifa96_match_run.c:2583`"* — superseded:
+  the argument is the live `mr->global_157ac0`.
+* **§8 FU213-L1 tail (quoted):** *"Do **not** count phase `0x22`/`0x1D` off
+  registration alone (no hand-set census)."* — honoured: phase `0x1D` was counted
+  in T2 and phase `0x22` in T4, each with a live-path `phase_drive` fixture
+  proving dispatch, not registration alone (see FU-211 §10 for the `0x22`
+  landing).
+* **§8 FU213-L3 (unchanged):** the end-of-match word `[0x158822]` /
+  `FUN_0008BAF0` stays unported — T4 deliberately did not land it.
+* **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…` byte-identical.

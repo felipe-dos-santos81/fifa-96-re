@@ -422,3 +422,44 @@ identity), FU-175 (§1/§2, the act/clock seam), FU-190, FU-195 (§2/§3/§4/§5
 FU195-L2/L3/L4 — the errata target), FU-196, FU-202, FU-206 (§4 Tier 1 #3, §5
 PR-3, the render-read ground truth). AGENTS.md census rule. **No writes beyond
 this slice file.**
+
+---
+
+## 10. Errata / landing note — M2 phase-19 (T1/FU-213 + T4/FU-211)
+
+Written 2026-10-13 at the phase-19 T1/T4 landings. Prior sections are **not**
+rewritten; the affected text is quoted and the correction recorded here
+(AGENTS.md errata discipline).
+
+* **§7 FU211-L1 (quoted):** *"phase `0x22` is reachable only via act `0xC`,
+  which is producer-dormant. Registering `fifa96_match_phase_table[0x22]` alone
+  neither dispatches nor moves M2; the honest census `+1` requires the
+  `[0x157AC0]` extra-time producer (step 3). Do **not** count the row off
+  registration alone (no hand-set census)."* — **RESOLVED.** The `[0x157AC0]`
+  producer landed in **T1/FU-213** (`mr->global_157ac0`;
+  `fifa96_match_run_phase_drive` sets W2 `0x8B2AC` / W4 `0x8B3A2` on a completed
+  regulation-end / ET-2 with differing scores, plus the W5 `0x8B5CD` mid-ET set,
+  and passes the live flag into `fifa96_action_phase_period_end`, replacing the
+  former hardwired `0u`). **T4** registers the phase-table slot `0x22` →
+  `fifa96_match_action_phase_22` (`src/fifa96_engine/fifa96_match_handlers.c`), so
+  the act-`0xC` install (the `0x8BAE7 CALL 0x888FC(0xC,0,BX=1)` mirror) reaches
+  the row. The row is **COUNTED** (`52/80 → 53/80 = 66%`) on the same live-path
+  standard used for T2's phase `0x1D` — a `phase_drive` fixture that exercises the
+  live producer and observes the body's dispatch, **not** registration alone. A
+  dedicated live-path test (`test_phase_22_producer_live_via_phase_drive`,
+  `tests/test_engine_match_act.c`) proves the dispatch; a registered-but-
+  unreachable slot would otherwise stay `NULL`/uncounted (the row-`0x20`
+  precedent).
+* **§5 "Census" (quoted):** *"Registering row `0x22` would read `52/80 = 65%`,
+  but only honestly if the OL-85 producer leg also lands…"* — the condition is
+  met (T1 landed the producer, T4 registered the row); the implementer recomputed
+  `floor(100 × 53/80) = 66`.
+* **§7 FU211-L2 / L3 (unchanged):** the `word[0x15881A]` cell producer and the
+  `0x974DC(0x1E)` audio ring-push/audio-handle stay legs (now cited as FU211-L2/L3
+  in the row evidence).
+* **FU213-L3 (unchanged):** the end-of-match word `[0x158822]` / `FUN_0008BAF0`
+  was deliberately **not** landed in T4 — no faithful mapping without the unported
+  end machine (the engine lifecycle owns exits) — so it stays a leg.
+* **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…` byte-identical (the row
+  is render-invisible — act slot + audio sink only — and the M2 tape reaches no
+  extra-time completion).
