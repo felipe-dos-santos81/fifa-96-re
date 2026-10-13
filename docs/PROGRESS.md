@@ -1291,10 +1291,10 @@ wire the sweep.
 **The residual-leg register (each with its native owner).** The cohort's
 unproven rows are recorded as honest numbered legs, no fake producer:
 
-- **FU207-L1** — the OL-85 flag's front-end match-init producer `0x389A4` (via
-  `FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU207-L2/FU202-L7). The in-match
-  **cell + writer** landed in T1/FU-213 (`mr->global_157ac0`); the front-end
-  producer stays unported. Owner FU-207.
+- **FU207-L2** — the OL-85 flag's front-end match-init producer `0x389A4` (via
+  `FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU202-L7). The in-match
+  **cell + writer** (the **FU207-L1** leg) landed in T1/FU-213
+  (`mr->global_157ac0`); the front-end producer stays unported. Owner FU-207.
 - **FU208-L1** — the bit-8 sit-8 range-word writer gap (the sit-8 gate tests bit 8
   `0x4B0CB TEST AH,0x1`; the only builders write bit 9 `0x200` or 0). Owner FU-208
   / FU196-L1.

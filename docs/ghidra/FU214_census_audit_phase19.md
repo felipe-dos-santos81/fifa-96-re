@@ -365,7 +365,7 @@ FU194-L2. M2 `441415fc…` byte-identical, M1 `09b726b7…` unmoved.
 
 | leg | status at T5 | native owner / remainder |
 |---|---|---|
-| **FU207-L1** — OL-85 flag's front-end producer | **partly resolved** | the in-match **cell + writer** landed in T1/FU-213 (`mr->global_157ac0`); the **front-end competition match-init producer `0x389A4`** (`FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU207-L2/FU202-L7) is still unported. Owner FU-207. |
+| **FU207-L2** — OL-85 flag's front-end producer (the **FU207-L1** cell leg was resolved by T1) | **partly resolved** | the in-match **cell + writer** landed in T1/FU-213 (`mr->global_157ac0`); the **front-end competition match-init producer `0x389A4`** (`FUN_00038630 ← FUN_00039054 ← FUN_000493a0`, FU207-L2/FU202-L7) is still unported. Owner FU-207. |
 | **FU208-L1** — bit-8 sit-8 range-word writer gap | **OPEN** | the sit-8 gate's bit 8 (`0x4B0CB TEST AH,0x1`) still has no located writer (the two builders write bit 9 `0x200` or 0). Owner FU-208 / FU196-L1. |
 | **FU208-L8** — sit-8 session-gate co-condition | **OPEN** | the engine's `session_gate_14c32a` is seeded 0 with no derived producer, so the live direct-path reachability of sit 8 is unproven (FU-166/R14). Owner FU-208. |
 | **FU209-L1** — act-7 producer inert path | **resolved for the `global_157ac2 == 4` arm** | T2/FU-208 made the roll live (see FU209 §10); the **bit-8 arm stays FU208-L1**. |

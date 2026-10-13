@@ -1183,8 +1183,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   `test_phase_1E_not_counted` NULL pins stand; mutation-RED: registering the slot
   aborts the pin). The **de-compression leg is FU212-L1** (owner FU-212; reference
   FU194-L2). The cohort's residual legs are registered, each with its native
-  owner: **FU207-L1** (the OL-85 flag's front-end match-init producer `0x389A4`
-  — the in-match cell landed in T1; owner FU-207), **FU208-L1** + **FU214-L2**
+  owner: **FU207-L2** (the OL-85 flag's front-end match-init producer `0x389A4`;
+  the **FU207-L1** flag *cell* was resolved by T1 — owner FU-207), **FU208-L1** + **FU214-L2**
   (the bit-8 sit-8 range-word writer gap — no located writer), **FU208-L8** (the
   sit-8 session-gate co-condition `[0x14C32A]`), **FU209-L1** (the act-7 producer
   inert path — resolved for the `global_157ac2 == 4` arm by T2, the bit-8 arm
