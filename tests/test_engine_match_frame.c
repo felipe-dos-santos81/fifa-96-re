@@ -656,6 +656,11 @@ static void test_phase_drive_situation8_selects_act7(void) {
   mr.score[1] = 1u;                    /* tied -> no ET flag -> chooser phase 0xC */
   mr.clock_period_ended = 1;
   assert(fifa96_match_run_phase_drive(&mr) == 1);
+  /* T4/FU225-L5 (M2 phase-21): the mode-0 producer runs at the TOP of every
+   * phase_drive now; on this completion frame the pre-roll phase was not yet
+   * 0x0C, so the sit-8 selection lands on the NEXT frame's top call (the native
+   * one-frame cadence). */
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
   assert(mr.global_157ac2 == 4u);      /* the T1 roll reaches the sit-8 gate */
   assert(mr.global_157ac0 == 0u);      /* tied: the OL-85 flag stays clear */
   assert(mr.state.phase == 0x10u);     /* FU-219 invoke-now: arm 0 wrote phase 0x10 */
@@ -719,6 +724,9 @@ static void test_situation8_dispatches_phase_1d_body(void) {
   mr.score[1] = 1u;
   mr.clock_period_ended = 1;
   assert(fifa96_match_run_phase_drive(&mr) == 1);
+  /* T4/FU225-L5 (M2 phase-21): the sit-8 selection lands on the next frame's
+   * top-of-call mode-0 producer (the native one-frame cadence). */
+  assert(fifa96_match_run_phase_drive(&mr) == 0);
   /* FU-219 invoke-now: arm 0 ran on the sit-8 dispatch (inside phase_drive). */
   assert(mr.act.id == 7);                       /* sit 8 -> act 7 installed */
   assert(mr.act.stage == 1u);                   /* arm 0 ran + advanced (0x899ED) */

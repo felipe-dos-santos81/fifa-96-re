@@ -3796,6 +3796,11 @@ static void run_phase19_riders(void) {
     mr.score[1] = 1u;                       /* tied: the chooser stays no-ET (0xB) */
     mr.clock_period_ended = 1;
     assert(fifa96_match_run_phase_drive(&mr) == 1);
+    /* T4/FU225-L5 (phase-21): the mode-0 producer runs at the TOP of every
+     * phase_drive now, so on this completion frame the pre-roll phase was not
+     * yet 0x0C — the sit-8 selection lands on the NEXT frame's top call (the
+     * native one-frame cadence). */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
     assert(mr.global_157ac2 == 4u);         /* the T1 roll reaches the sit-8 gate */
     assert(mr.global_157ac0 == 0u);
     assert(mr.state.phase == 0x10u);        /* arm 0 wrote phase 0x10 (0x898DD) */
@@ -3832,6 +3837,9 @@ static void run_phase19_riders(void) {
     mr.score[1] = 1u;
     mr.clock_period_ended = 1;
     assert(fifa96_match_run_phase_drive(&mr) == 1);
+    /* T4/FU225-L5 (phase-21): the sit-8 selection lands on the next frame's
+     * top-of-call mode-0 producer (the native one-frame cadence). */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
     /* FU-219 invoke-now: arm 0 ran on the sit-8 dispatch (inside phase_drive),
      * not at the tick. */
     assert(mr.act.id == 7 && mr.act.stage == 1u);    /* arm 0 ran + advanced */
@@ -3891,6 +3899,8 @@ static void run_phase19_riders(void) {
     mr.score[0] = 1u; mr.score[1] = 1u;      /* tie: no ET chooser, sit-8 fires */
     mr.clock_period_ended = 1;
     assert(fifa96_match_run_phase_drive(&mr) == 1);
+    /* T4/FU225-L5 (phase-21): the sit-8 bind lands on the next frame's top-call. */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
     assert(mr.global_157a4c == 1u);          /* 0x8AE2A */
     assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
     assert(mr.actor_1587cc[1] == (int32_t)(1u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
@@ -3911,12 +3921,41 @@ static void run_phase19_riders(void) {
     mr.score[0] = 1u; mr.score[1] = 1u;
     mr.clock_period_ended = 1;
     assert(fifa96_match_run_phase_drive(&mr) == 1);
+    /* T4/FU225-L5 (phase-21): the sit-8 bind lands on the next frame's top-call. */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
     assert(mr.global_157a4c == 1u);
     assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 1u));
     assert(mr.actor_1587cc[1] == (int32_t)(1u * FIFA96_MATCH_ENTITY_RECORDS + 1u));
     assert(mr.actor_1587d4 == mr.actor_1587cc[0]);
     assert(mr.entities.team[0].records[1].code == 0x20u);
     assert(mr.entities.team[0].records[10].code != 0x20u);  /* the skip gate */
+  }
+}
+
+/* v21 (M2 phase-21 T4): the mode-0 per-frame cadence + the chooser stand-ins.
+ * Mutation-RED: reverting the per-frame mode-0 call (FU-225 D10) leaves the
+ * tail dormant, so the bit-8 gate never raises the index and assert 1 aborts. */
+static void run_phase21_riders(void) {
+  /* 1. CADENCE (FU225-L5 / D10): the mode-0 common tail runs on a plain
+   *    (non-completion) frame; the bit-8 gate (fifa96_match_run.c:3214) is the
+   *    observable — with the per-frame call the index rolls to 4. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 2;                 /* class 1, no completion */
+    mr.input_range[0] = 0x0100u;        /* the 0x4B0CB TEST AH,1 condition */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
+    assert(mr.global_157ac2 == 4u);
+  }
+  /* 2. STAND-INS (FU-225 D2-D4): the zero stand-ins yield the derived chooser
+   *    arm (extra_time + period>=4 + d8<=d9 -> edx 1 -> phase 0x13/act 0xC).
+   *    Mutation-RED: an inverted d8/d9 compare or probe order aborts. */
+  {
+    fifa96_action_phase_period_end_out o;
+    uint8_t probe[4] = { 0u, 0u, 0u, 0u };
+    assert(fifa96_action_phase_period_end(4u, 1u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
+                                          probe, &o) == FIFA96_OK);
+    assert(o.phase == 0x13u && o.act == 0x0Cu && o.side == 0u);
   }
 }
 
@@ -3962,6 +4001,7 @@ int main(void) {
   run_phase17_riders();
   run_phase18_riders();
   run_phase19_riders();
+  run_phase21_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;

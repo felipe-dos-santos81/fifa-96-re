@@ -2589,6 +2589,12 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
   uint8_t ended;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
+  /* FU-225 §4 / D10 (T4): the native `FUN_0004B02C(mode 0)` runs EVERY frame
+   * (FUN_000493A0 loop 0x4950A), before the clock; its own gates
+   * (state.phase == 0x0C, global_157ac2 == 4) select the sit-1/sit-8 arm.
+   * Hoisting it here is the per-frame cadence; the index-4 completion call
+   * below is removed as redundant (native-faithful, one call per frame). */
+  (void)fifa96_match_run_period_setup(mr, 0);
   /* One-shot: the staged completion belongs to the latest granted frame. */
   ended = mr->clock_period_ended;
   mr->clock_period_ended = 0;
@@ -2641,20 +2647,18 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
        * cell (`global_157ac2`) follows the FU-62 library's already-advanced
        * `state.period`. This is the live producer T2's situation-8 gate reads. */
       mr->global_157ac2 = mr->state.period;
-      /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2): the situation-8 selector. Once
-       * the roll lands the index on 4 (the native `[0x157AC2] == 4` extra-time
-       * period) and the completed period left the phase-0xC screen, the mode-0
-       * period-end producer (native `FUN_00088860` 0x888C8; its own
-       * `state.phase == 0x0C` gate is the native co-condition) selects situation
-       * 8 -> act 7 -> phase 0x1D. Guarded on the T1 gate so the non-extra-time
-       * sit-1 else-arm (0x888F2) stays a fixtured branch (the live period-end
-       * screen transition is owned by the lifecycle; not this slice). The bit-8
-       * disjunct (0x4B0CB `TEST AH,1`) remains the FU208-L1 leg — its range-word
-       * writer is unlocated, so it is never faked. */
-      if (mr->global_157ac2 == 4u)
-        /* NB: period_setup(mode 0) also zeroes `pass_parity` (`:3148`) as an
-         * unrelated side effect; off-tape, guarded by this index-4 gate. */
-        (void)fifa96_match_run_period_setup(mr, 0);
+      /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2) + FU-225 §4/D10 (M2 phase-21
+       * T4): the situation-8 selector. The roll (`:2643`, native 0x8B58A) lands
+       * the index on 4 (native `[0x157AC2] == 4`, the extra-time period); the
+       * mode-0 period-end producer (native `FUN_00088860` 0x888C8; its
+       * `state.phase == 0x0C` gate the native co-condition) then selects
+       * situation 8 -> act 7 -> phase 0x1D, else the sit-1 arm (0x888F2). That
+       * producer now runs at the TOP of phase_drive every frame (the native
+       * cadence, FU225-L5): on this completion frame the pre-roll phase was not
+       * yet 0x0C, so the selection lands on the NEXT frame's top call, where the
+       * sit-1 else-arm is likewise reachable. The bit-8 disjunct (0x4B0CB
+       * `TEST AH,1`) remains the FU208-L1 leg — its range-word writer is
+       * unlocated, so it is never faked. */
       return 1;
     }
     /* FU-213 §2.6: the no-completion tail (0x8B590). W5 (0x8B5CD) raises the
