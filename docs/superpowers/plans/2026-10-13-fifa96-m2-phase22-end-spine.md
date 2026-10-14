@@ -188,25 +188,36 @@ git commit -m "feat(engine): the FUN_0008BAF0 end machine -> the end word cell"
 ```c
 static void test_mark_over_on_end_word(void) {
   struct fixture f; make_fixture(&f);
-  /* half-time: phase 0x0C + flag-clear but the word was blocked (FU-234-L7) */
-  f.mr.state.phase = 0x0Cu; f.mr.global_157ac0 = 0u; f.mr.global_157ac2 = 2u;
+  /* FU-232 §4.3: over iff word==1 AND period>=2 AND !(period==4 && ET-flag). */
+  f.mr.global_157ac2 = 2u; f.mr.global_157ac0 = 0u;
+  f.mr.end_word_158822 = 1u;
+  assert(fifa96_match_run_should_mark_over(&f.mr) == 1);   /* regulation-over, period 2/3 */
+  f.mr.global_157ac2 = 4u;
+  assert(fifa96_match_run_should_mark_over(&f.mr) == 1);   /* period 4, flag clear */
+  f.mr.global_157ac0 = 1u;
+  assert(fifa96_match_run_should_mark_over(&f.mr) == 0);   /* period 4, flag set -> no over */
+  f.mr.global_157ac2 = 2u; f.mr.global_157ac0 = 0u;
+  f.mr.end_word_158822 = 2u;
+  assert(fifa96_match_run_should_mark_over(&f.mr) == 0);   /* ET-over = consume (FU-232 §3) */
   f.mr.end_word_158822 = 0u;
   assert(fifa96_match_run_should_mark_over(&f.mr) == 0);
-  /* extra-time-over */
-  f.mr.end_word_158822 = 2u;
-  assert(fifa96_match_run_should_mark_over(&f.mr) == 1);
   drop_fixture(&f);
 }
 ```
 
 - [ ] **Step 2: Run — expect fail.**
-- [ ] **Step 3: Implement** — replace the proxy with the end-word read, keeping the `global_157ac2 >= 2u` half-time guard and the phase-21 `idx4 && global_157ac0` skip:
+- [ ] **Step 3: Implement** — replace the proxy with the FU-232 §4.3 over-condition, and add the word-2 consume:
 ```c
-/* FU-232 §4.2: the lifecycle trigger is the end word, not the derived proxy. */
+/* FU-232 §4.3: the native over-condition -- word 1 (regulation-over) with
+ * period>=2, except period 4 while the extra-time flag is set. Word 2 (the
+ * ET-over) is a consume (FU-232 §3): it clears the word and the loop resumes,
+ * so it does NOT mark over. */
 int fifa96_match_run_should_mark_over(const fifa96_match_run *mr) {
-  return (mr->end_word_158822 != 0u && mr->global_157ac2 >= 2u);
+  return (mr->end_word_158822 == 1u && mr->global_157ac2 >= 2u &&
+          !(mr->global_157ac2 == 4u && mr->global_157ac0 != 0u));
 }
 ```
+In the frame body, when `mr->end_word_158822 == 2u` (the ET-over), **clear it** (`mr->end_word_158822 = 0u`) — the native consume at `0x4B29B` (FU-232 §3); no screen. Route the `mark_over` tail through `fifa96_match_run_should_mark_over` and drop the old `end_word_decided` proxy (and the now-false comment), so there is one source of truth.
 - [ ] **Step 4: Run — expect pass.** `ctest --test-dir build -R test_engine_match_completion --output-on-failure`
 - [ ] **Step 5: Commit.**
 ```bash
@@ -216,7 +227,9 @@ git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 
 ---
 
-### Task 4: The match-over screen dwell + the front-end return
+### Task 4: The terminal dwell, the match-over screen, and the front-end return
+
+> **Execution order (controller ruling, phase-22 T3↔T4):** this task runs **before Task 3**. T3's re-point depends on the phase-`0xC` **terminal dwell** landed here (the end word only stages once `act.timer >= 0x78`). Order: T1 → T2 → **T4** → T3 → T5 → T6.
 
 **Authority:** FU-235 §4 (D1: the `0x960` dwell is the `word[0x158818]` timer, the bound is `> 0x168`), FU-234 §4.2/§4.3 (the return), FU-239 §5. D1 = **model it** (a phase-`0xC` dwell on `mr->act.timer`); the `0x960`/`0x780` "camera" is a ball lead (legs L14.8.a), not a sink.
 
@@ -230,7 +243,7 @@ git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 
 - [ ] **Step 1: Failing tests** — (a) `mark_over` is held while the timer `<= 0x168` after the word is set, and fires past it; (b) `run_end` lands in `FIFA96_ENGINE_MODE_FRONTEND`.
 - [ ] **Step 2: Run — expect fail.**
-- [ ] **Step 3: Implement** — (a) the **ET-entry dwell + the live re-arm** (moved here from T1, the T1↔T4 ruling): keep the chooser writing phase `0x13` (the entry screen, preserving the v21 prefix); when the entry dwell elapses (a gate ≥ the v21 20-frame window of `state=19`; the exact native bound is a leg), call `fifa96_match_run_period_over_rearm(mr)` so the ET half enters phase `2`; then (b) wrap the `mark_over` call with the dwell gate (`mr->end_word_158822 != 0u && mr->act.timer > 0x168u`); keep `run_end`→FRONTEND (`:4241`).
+- [ ] **Step 3: Implement** — (a) the **phase-`0xC` terminal dwell** (the T3↔T4 unblock): while the flag-clear terminal holds phase `0x0C`, accrue `mr->act.timer` to `>= 0x78` — this is what lets the end word stage (`fifa96_match_run.c:4191-4194`); it is FU-235 §4's D1 ("model it: a phase-`0xC` dwell on `mr->act.timer`"); (b) the **ET-entry dwell + the live re-arm** (moved here from T1): keep the chooser writing phase `0x13` (preserving the v21 prefix); when the entry dwell elapses (a gate ≥ the v21 20-frame `state=19` window; the exact native bound is a leg), call `fifa96_match_run_period_over_rearm(mr)` so the ET half enters phase `2`; (c) the **match-over screen dwell + the return** — hold the `OVER` screen (`mr->act.timer > 0x168`, FU-235 §4) before `run_end`→FRONTEND (`:4241`).
 - [ ] **Step 4: Run — expect pass.** `ctest --test-dir build -R 'test_engine_match_frame|test_engine_match_completion' --output-on-failure`
 - [ ] **Step 5: Commit.**
 ```bash
