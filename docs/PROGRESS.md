@@ -2006,3 +2006,47 @@ stay `NULL`/uncounted — each with a numbered leg and a named native owner, no
 fake installer, no fake producer. Smoke: the row-07/row-22 wire is
 install-live/tape-dormant, so no visible delta is expected (see the Task 5
 report for the recorded reach/waiver).
+
+## M2 phase-26a — the camera/ball visibility: the honest Layer-2 waiver (FU-264/FU-272)
+
+**No visible anchor this phase — the honest Layer-2 waiver (spec §7.1, D1); the
+camera/follow chain stays a numbered leg. Census holds `59/80 = 73%` (`36 action
++ 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…` byte-identical; no re-pin.** The
+phase-26a plan
+(`docs/superpowers/plans/2026-10-14-fifa96-m2-phase26a-camera-ball-visibility.md`)
+was to port the missing live open-play camera-Y producer so the follow/pan could
+go live. The T1 gate proved **no candidate bootstraps `[0x157750]` live**; T2a
+then proved the only sound producer — the keeper stage-5 release (`camY := 0x50`,
+FU264 §2.1) — is **dispatch-dead behind R11-L4** and **phase-scale**, so per spec
+§7.1 the phase records the waiver and routes the leg onward. No camera code
+landed.
+
+The arc and the follow are ported (`fifa96_camera_height`, the `FUN_000736AC`
+pan step, the `FUN_00071DF4` follow), but they are **event-starved**: no live
+producer drives the event height into the `> 0xF0` follow gate and the row-0E
+`0x20 < camY < 0x70` pan window. The one sound producer, the keeper stage-5
+release (`fifa96_match_action_1E`, `handlers.c:521-530`, `camera.pos_y = 0x50`),
+sits inside row `0x1E`, which the engine only installs via the **situation-5 →
+phase-9 → row-`0x1E`** chain; the native situation-5 emitters are the keeper rows
+`0x1A`/`0x1B` (`0x76B1C`/`0x77707`), and neither is dispatched on any live engine
+path. Their installer is the unported **keeper CPU chain**
+(`FUN_0008D8EC` → `FUN_000782D0` → `FUN_00077EAC`), together with the
+phase-6/row-`0x1F` chain and the claim-anim bridge (`FUN_0006E598`, R11-L1) —
+i.e. an entire keeper-AI machine, not "a handful of producers".
+
+**R11-L4 routes onward** — to phase-26b (the keeper cluster the phase-26 spec
+already assigns the `FU-151` rows `1D`/`1E` live producers to) or a dedicated
+phase. R11-L4 is the **enabling leg for the eventual visible anchor**: when it
+lands, the keeper stage-5 release installs row `0x1E` live, posts
+`camera.pos_y = 0x50`, and the follow/pan can surface. The RED-first reach-test
+spec that must fail on this baseline (`camera.pos_y == 0`) is carried in
+`docs/ghidra/FU272_r11l4_derivation.md` §4.2. The derivation is promoted
+canonical as **FU-272** (`docs/ghidra/FU272_r11l4_derivation.md`); its evidence
+table, numbered legs **T2a-L1..L6** and doc-errata candidates hold the detail.
+
+**Nothing regressed.** The camera/follow chain remains the numbered legs
+**FU264-L1/L2** (the arc is ported; the live camera-Y producer is the leg); the
+phase wired no row, so the census is unchanged at `59/80 = 73%`
+(`action_wired == 36u` / `phase_wired == 23u`) and **`README.md` /
+`AGENTS.md:90` / `tests/test_engine_m2.c` are untouched**. `make check`
+**110/110**; M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (cmp-verified).
