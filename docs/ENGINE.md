@@ -1517,6 +1517,87 @@ the build also produces the windowed `fifa96` target (`make game`).
   **FU259-L3** (the natural-tape row-07 geometry — whether an unforced match
   yields `entity_angle(cam−opp_pos) ≈ opp->face7d` within `0x55` with a code-6,
   no-slot, `<0xD0` opponent; carried forward from FU247-L1).
+- **M2 phase-25 leg register (FU-256…FU-263) — the census close-out's
+  residual-leg register: the 8 frozen recon slices, each leg with its native
+  owner; census holds `59/80 = 73%`.** The phase-25 wave (`docs/ghidra/
+  FU256…FU263`) re-derived the producer frontier behind every unwired row and
+  proved no further honest wire remains (the sole survivor, OL-65, landed as
+  FU-259 above). Every other candidate is an **honest numbered leg with a named
+  native owner** — appended here; prior sections never rewritten. **Row `0x0D` /
+  the row-09 arm-1 chain (FU-256 §8):** **FU256-L1** — the row-09 arm 1 body
+  `0x80BFB..0x80FCB` unported (carries the sole `0x0D` installer `0x80F61` and
+  the `0x0C` installer `0x80EFA`; owner **FU178-L1**); **FU256-L2** — the
+  `0x0D`-install-enabling producers `[[rec+4]+0x16]` and `[rec+0x24]` (no
+  producer located; owner **FU204-L2**); **FU256-L3** — the `[rec+0x3D]==2`
+  frame condition (owner **OL-80 / FU-141**); **FU256-L4** — the arm-1
+  helpers/sinks `0x8F188`/`0x8ED40`/`0x92820`/`0x7A490`/`0x8A3FC` (owner
+  **FU180-L8 / FU204-L4**); **FU256-L5** — the row-`0D` body sinks `0x702F8`/
+  `0x6E598`/`0x79C50` (owner **FU180-L8**); **FU256-L6** — the native
+  `[rec+0x24]` producer reachability (owner the pairing/possession cluster,
+  FU-139/FU-142 class). **Row `0x1A` (FU-257 §5):** **FU257-L1** — the CPU
+  ladder `FUN_00077EAC` (`0x77EAC..0x782CD`, the `0x1A` installer; owner the
+  keeper-ladder slice); **FU257-L2** — `FUN_000782D0` record-0 tail (owner the
+  keeper-ladder slice); **FU257-L3** — the `FUN_0008D8EC` driver pre-pass
+  callers (owner the frame-chain slice); **FU257-L4** — the `FUN_000765C4`
+  tracked-teammate predicate (owner the keeper-chain slice); **FU257-L5** — the
+  `[0x157C2C]` direction machine + movement/event block and stages 1–4 (owner
+  the keeper-chain slice); **FU257-L6** — the `[0x157C5D]` consumer wiring
+  (owner the keeper-ladder slice); **FU257-L7** — the tape question (an earned
+  re-pin iff a ported ladder installs `0x1A` on M2; owner the ladder slice that
+  lands L1/L2); **FU257-L8** — `FUN_0009E420` constant-code getter (ruled out
+  as an installer; owner **none — closeable**). **Row `0x03` / the
+  `[rec+0x1C]=0x6DCC8` chain (FU-258 §6), tape-visible:** **FU258-L1** — the
+  exact frame-29 mover field (carries **FU246-L1**; owner **FU177-L1 /
+  controller**); **FU258-L2** — why frame 29 (owner **FU177-L1**); **FU258-L3** —
+  the doc erratum misattribution (**RESOLVED** by the T3 errata sweep `d32e3c3`,
+  the quoted `ENGINE.md` phase-17 T3 erratum); **FU258-L4** — the `[rec+0x1C]`
+  `EBX=-1` third argument (owner the row-03 rewrite chain); **FU258-L5** — the
+  OL-13 re-stage remainder (carries **FU249-L1**; owner the FU197-L2
+  order-routine producer). **The installer domain (FU-260 §7):** **FU260-L1** —
+  rows `27`/`29`/`2C` installer-absence over the ECX-inclusive census (owner
+  **FU-142f / the cluster-G close-out**; rows stay `NULL`); **FU260-L2** — row
+  `2B` dead entry `0x87738 = RET` (owner **FU-142 §1.1**; OL-15 confirmed);
+  **FU260-L3** — row `0A` installer reachability `0x7CDD8` xref-less (owner the
+  row-0A body cluster / FU-75 OL; OL-14 confirmed); **FU260-L4** — the bounded
+  `rec+0x91` writer census (owner **FU-260 / FU-142f**); **FU260-L5** — the
+  other unwired rows `03`/`0D`/`17`/`1A`/`22` (owner each row's FU doc —
+  FU177-L1, FU178/180, FU201/FU248, FU186-L5, FU185-L6). **The phase slots
+  (FU-261 §5):** **FU261-L1** — the `FUN_0008A938` table-1 (`0x8A8E0`) /
+  table-2 (`0x8A904`) arm→phase semantics (owner the `FUN_0008A938` phase-walk
+  slice); **FU261-L2** — the three variable-situation call sites `0x895AC`/
+  `0x897E3`/`0x8A8CE` (owner **FU143-OL-72**); **FU261-L3** — the
+  `seed_formation` vs the native phase-`01`/`11`/`12` walk (`0x6E1D0`)
+  equivalence (render-invisible on M2; owner **FU-261**); **FU261-L4** — whether
+  `0x6E1C8` (row 11) carries a meaning distinct from the `0x6E1D0`
+  fall-through (owner **FU-261**); **FU261-L5** — the `[0x157A4D]` non-setter
+  writers `FUN_00073E28`/`FUN_00073D10` (both write 0; owner **FU-261**);
+  **FU261-L6** — the sharpened sit-7 census (**RESOLVED** as the ENGINE.md
+  situation-7 note correction `d32e3c3`; owner leg **FU-146**). **The phase
+  slots (FU-262 §6):** **FU262-L1** — the phase-`0x13`/`0x14` body `0x6E244`
+  unported + the RNG tape-inertness gate (owner **FU-192 / FU-240**);
+  **FU262-L2** — the phase-`0x14` NUMBER write not live (`probe[2]/[3]` cells
+  hardwired `{0,0,0,0}`; errata **FU240-L1 corrected**; owner **FU-240 /
+  FU-213**); **FU262-L3** — the phase-`0x1A`/act-4 producers present but
+  dormant (`0x88EE8`/`0x8AB57`; owner **FU-201 / FU-193 / FU-244**);
+  **FU262-L4** — phase `0x1B`/act 5 has no producer at all (owner **FU-195**);
+  **FU262-L5** — the phase-`0x1C`/act-6 producer `0x8A789` unported as the row
+  (owner **FU-193 / R8**); **FU262-L6** — the FU-239 collapsed arm (the engine
+  omits the native `0x8BD95` score-equality guard + per-phase second gates;
+  owner **FU-239 / FU-237**); **FU262-L7** — the clock-class table `0x1106AD`
+  (`0x13`/`0x14`/`0x1B` class 0; no action). **The formation-arm errata
+  (FU-263 §4):** **FU263-L1** — the FU247 OL-65 erratum promotion (**RESOLVED**
+  `d32e3c3`; owner the FU247 doc owner / OL-65); **FU263-L2** — the OL-83
+  unification + reader-list correction (**OPEN**; owner the FU-142/OL-83
+  Stage-2 fidelity task; the `fifa96_match_run.h:503` site owed); **FU263-L3** —
+  the `ENGINE.md` stale handler line-refs (**RESOLVED** `d32e3c3`; owner the
+  controller at reconciliation); **FU263-L4** — the FU-84 §1 reroll erratum
+  promotion (**RESOLVED** `d32e3c3`; owner the FU-84 doc owner / the anim
+  task); **FU263-L5** — the `FU201-L1` owner annotation (**RESOLVED** `d32e3c3`;
+  owner the FU201 doc owner). **Tape:** no golden re-pin (the register is
+  doc-only); M2 `b281a9b2…` and M1 `09b726b7…` byte-identical; `make check`
+  **110/110**. **The honest ceiling:** the row `0D`/`1A`/`03`/`0A`/`17`/`1B`
+  and the phase-`0x13`/`0x14`/`0x1A`/`0x1C` slots stay `NULL`/uncounted — no
+  fake installer, no fake producer.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

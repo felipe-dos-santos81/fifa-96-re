@@ -1951,3 +1951,58 @@ recomputed:** `59 OK = 36 action + 23 phase`; `floor(100 × 59/80) = 73`; README
 title `73%`; `action_wired == 36u` / `phase_wired == 23u` pins
 (`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
 synced. `make check` **110/110**.
+
+### M2 phase-25 close-out — the leg register (FU-256…FU-263)
+
+**Census holds `59/80 = 73%`; the leg register closes the phase (doc-only).** The
+phase-25 wave (`FU256…FU263`) re-derived the producer frontier behind every
+unwired row. The only honest wire was OL-65 (the row-07 staging fix → action
+`0x22`; Task 2/`dd2e047`); every other candidate is frozen as a **numbered leg
+with a named native owner** in the `docs/ENGINE.md` residual-leg register
+(appended, prior sections never rewritten):
+
+- **FU256-L1..L6** — the row-09 arm-1 chain behind action row `0D` (the arm-1
+  body `0x80BFB..0x80FCB` unported; the `0x0D`-install-enabling producers
+  `[[rec+4]+0x16]`/`[rec+0x24]` unlocated; the `[rec+0x3D]==2` frame condition;
+  the arm-1 helpers/sinks; the row-`0D` body sinks; the `[rec+0x24]` producer
+  reachability). Row stays `NULL`; owners FU178-L1 / FU204-L2 / OL-80·FU-141 /
+  FU180-L8·FU204-L4 / the pairing-possession cluster.
+- **FU257-L1..L8** — action row `0x1A`'s CPU ladder `FUN_00077EAC` (its only
+  installer), `FUN_000782D0`, the `FUN_0008D8EC` pre-pass callers, the
+  `FUN_000765C4` predicate, the `[0x157C2C]` machine/stages, the `[0x157C5D]`
+  consumer, the tape question, and the ruled-out `FUN_0009E420`. Row stays
+  `NULL` (the rows-27/29/2C precedent); owners the keeper/frame-chain slices.
+- **FU258-L1..L5** — action row `03`'s tape-visible frame-29 mover (carries
+  FU246-L1): the exact field, the frame-29 timing, the doc misattribution
+  (**resolved**, `d32e3c3`), the `[rec+0x1C]` `EBX=-1` argument, the OL-13
+  re-stage remainder. Owners FU177-L1 / the row-03 rewrite chain / FU197-L2.
+- **FU260-L1..L5** — the ECX-inclusive installer-domain census: rows
+  `27`/`29`/`2C` installer-absence (FU-142f confirmed), row `2B` dead entry
+  (OL-15), row `0A` `0x7CDD8` xref-less (OL-14), the bounded `rec+0x91` writer
+  census, and the other unwired rows. Owners FU-142f / FU-142 §1.1 / the row-0A
+  cluster / the per-row FU docs.
+- **FU261-L1..L6** — the phase slots `0x10`/`0x13`/`0x14`/`0x17` band: the
+  `FUN_0008A938` table semantics, the three variable-situation call sites, the
+  `seed_formation`-vs-walk equivalence (render-invisible on M2), the `0x6E1C8`
+  question, the `[0x157A4D]` zero-writers, and the sit-7 census (**resolved**,
+  `d32e3c3`). Owner leg FU-146.
+- **FU262-L1..L7** — the phase slots `0x13`/`0x14`/`0x1A`/`0x1B`/`0x1C` band:
+  the unported `0x6E244` body + RNG gate, the dormant phase-`0x14` NUMBER write
+  (errata FU240-L1 corrected), the dormant `0x1A`/act-4 producers, the absent
+  `0x1B`/act-5 producer, the unported `0x1C`/act-6 producer, the FU-239
+  collapsed end arm (the omitted `0x8BD95` guard), and the clock-class table.
+  Owners FU-192/240, FU-201/193/244, FU-195, FU-193/R8, FU-239/237.
+- **FU263-L1..L5** — the formation-arm errata: L1/L3/L4/L5 **resolved** by the
+  T3 errata sweep (`d32e3c3`); L2 (the OL-83 `record.type` unification + the
+  reader-list correction, incl. the owed `fifa96_match_run.h:503` site) stays
+  **open** for the Stage-2 fidelity task.
+- **FU259-L1/L2** — closed by Task 2/`dd2e047`; **FU259-L3** (the natural-tape
+  row-07 geometry) remains the one carried residual.
+
+**Acceptance:** `make check` **110/110** (sanitized); M1 `09b726b7…` and M2
+`b281a9b2…` byte-identical (no re-pin). **The honest ceiling:** the rows
+`0D`/`1A`/`03`/`0A`/`17`/`1B` and the phase-`0x13`/`0x14`/`0x1A`/`0x1C` slots
+stay `NULL`/uncounted — each with a numbered leg and a named native owner, no
+fake installer, no fake producer. Smoke: the row-07/row-22 wire is
+install-live/tape-dormant, so no visible delta is expected (see the Task 5
+report for the recorded reach/waiver).
