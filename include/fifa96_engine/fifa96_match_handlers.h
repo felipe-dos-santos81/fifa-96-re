@@ -184,19 +184,32 @@ int fifa96_match_action_03(struct fifa96_match_run *mr);
 int fifa96_match_action_17(struct fifa96_match_run *mr);
 
 /* The ported action row-0x22 body (FU-185 §2/§6): the sequence/press machine
- * `0x8539C..0x85481`. Its action-table slot
- * (`fifa96_match_action_table[0x22]`) is **NULL** — the row is not counted —
- * because its only installer (the wired row-07 `0x816DF` invoke-now on the
- * opponent team target) is structurally ungated in-engine: FU185-L6 (first-
- * hand) shows the gate's opponent `word[+0x6F]`/`word[+0x7D]` angle inputs are
- * unmodeled (OL-65, staged 0), so `fifa96_entity_angle(lane_z, 0)` always
- * yields `+-0x100` and the folded diff against `opp_face_word == 0` can never
- * be `< 0x55` — `out.opponent_invoke` never fires. This is the rows-27/29/2C
- * precedent (a ported body with no reachable engine installer stays unwired and
- * uncounted); the body is exported so it is tested directly and ready for the
- * phase when OL-65 lands. **Ruling W8** (phase-16 T2 review): the slot stays
- * NULL / the row uncounted — this supersedes controller Ruling W3's count, whose
- * premise (FU-185 §7's "the strict test passes") is refuted by FU185-L6.
+ * `0x8539C..0x85481`. Its action-table slot (`fifa96_match_action_table[0x22]`)
+ * is **wired** and the row is **COUNTED** (census `58/80 → 59/80 = 73%`) as of
+ * M2 phase-25 (FU-259): the OL-65 gate staging landed — the row-07
+ * `match_kick_from_record` now re-sources the opponent `word[+0x6F]`
+ * (`opp->cam_dz6f`) and `word[+0x7D]` (`opp->face7d`), so the `0x816CC` fold
+ * `entity_angle(word[+0x6D], word[+0x6F]) - word[+0x7D]` is satisfiable and the
+ * wired row-07 `0x816DF` invoke-now fires, installing `0x22` on the opponent
+ * team target (install+dispatch witnessed by
+ * `test_action_07_ol65_invoke_installs_row_22`).
+ *
+ * ERRATA (phase-25, FU-259): the quoted paragraph below is the superseded
+ * phase-16 T2 reasoning, kept for the record. It was correct while OL-65 was
+ * open (the two angle cells were staged 0, so the fold could never be `< 0x55`);
+ * FU-259 §2.4 closes OL-65, so its "slot stays NULL / row uncounted" conclusion
+ * no longer holds.
+ *   [SUPERSEDED] Its action-table slot was NULL — the row was not counted —
+ *   because its only installer (the wired row-07 `0x816DF` invoke-now on the
+ *   opponent team target) was structurally ungated in-engine: FU185-L6
+ *   (first-hand) showed the gate's opponent `word[+0x6F]`/`word[+0x7D]` angle
+ *   inputs were unmodeled (OL-65, staged 0), so
+ *   `fifa96_entity_angle(lane_z, 0)` always yielded `+-0x100` and the folded
+ *   diff against `opp_face_word == 0` could never be `< 0x55` —
+ *   `out.opponent_invoke` never fired (the rows-27/29/2C precedent, a ported
+ *   body with no reachable engine installer). **Ruling W8** (phase-16 T2
+ *   review) held the slot NULL / the row uncounted, superseding Ruling W3's
+ *   count.
  * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range
  * `mr->record.entity_id`. */
 int fifa96_match_action_22(struct fifa96_match_run *mr);
