@@ -1615,6 +1615,89 @@
  * completions is past the ET entry the acceptance stops at. The reachable
  * extra-time entry is the differing reg-end completion; `main`'s
  * `et_phase == 0x13` anchor records it.
+ *
+ * --- v22 (M2 phase-22 T5): the end-spine acceptance tape — THE RE-PIN -------
+ *
+ * v22 is the phase-22 acceptance — the live end spine made tape-live
+ * (FU-231…FU-239, T1–T4b). v21 stopped 20 frames past the extra-time ENTRY;
+ * the phase theme is the full end spine, so v22 plays the two live extra-time
+ * halves and the ET-over terminal (the `[0x158822]` end word, FU-228 §2.2 /
+ * FU-231 §3). The two-terminal ruling (phase-22b recon g3/g5/g7):
+ *   - the ET path (this tape) reaches the ET-over CONSUME — the frame body
+ *     stages word `2` and the native AX==2 arm consumes it in the SAME frame
+ *     (FU-232 §3; FU-232-L6 closed by g3), so the run holds at phase `0x13`
+ *     with no front-end return (the native `0x13/0x14 -> phase 2` route is the
+ *     unported **FU239-L1** leg). The anchor is therefore the terminal STEP +
+ *     `fifa96_match_run_end_word() == 2`, NOT the `end_word_158822` cell (which
+ *     is 0 at every boundary: the same-frame stage+consume, T4b-L1);
+ *   - the regulation-over (`word 1` -> the OVER screen -> the front-end return)
+ *     needs the extra-time flag CLEAR (a not-differing regulation end), so it
+ *     is OFF this forced-ET tape (whose regulation end is the differing 1-0)
+ *     and is covered by the second scenario `run_regulation_over_probe` below
+ *     (FU238-L3 / FU-236).
+ *
+ * THE RE-PIN REASON. The tape now presents frames past the v21 stop (line
+ * 2522), so the golden is re-pinned with the written reason + frame diff below
+ * (AGENTS.md golden rule). The M1 golden (`09b726b7…`) is unmoved.
+ *
+ * Measured schedule (FU230-L1: the directive `m`/tail are MEASURED on the
+ * landed T4b engine, never invented; the FU-239 Reading-B model runs the live
+ * ET halves in the class-1 play phase `2`, NOT the FU-238 design's phase
+ * `0x14` / `0x13`, so the anchors pin the measured period/phase; FU239-L1).
+ * With the ISO present:
+ *   - the ET entry (v21): the differing reg-end completion at engine step 2502
+ *     (chooser phase `0x13` / act `0xC`, roll 2).
+ *   - the ET-entry act-`0xC` screen clears (~step 2699); the period-over re-arm
+ *     (the index-`{2,3}` bound, T4b) lands the live ET first half in phase `2`
+ *     (step 2702, period 2).
+ *   - the ET first half completes (period 2 -> 3) at step 3402 (phase `0x13`
+ *     / act `0xC`); the re-arm lands the live ET second half in phase `2`
+ *     (step 3602, period 3).
+ *   - `M2_M_ET_HALF2` (m 4298, engine step 4302): the ET-half-2 COMPLETION —
+ *     the period 3 -> 4 roll; the bounded re-arm does NOT fire (index 4), so
+ *     the chooser-written phase `0x13` / act `0xC` persists as the ET-over
+ *     dwell (period 4, `global_157ac2 == 4`).
+ *   - `M2_M_ET_TERMINAL` (m 6498, engine step 6502): the ET-over TERMINAL — the
+ *     phase-`0x13` dwell accrued `word[0x158818]` (`mr.act.timer`) past `0x4B0`
+ *     (`0x8BCFE`, T4b's dwell extension), so `fifa96_match_run_end_word` returns
+ *     `2`. The `[0x158822]` cell is 0 (same-frame consume, T4b-L1).
+ *   - `M2_M_ET_OVER` (m 6499, engine step 6503): the ET-over CONSUME/resume —
+ *     word `2` is not a match-over (no `[0x105FFC]` screen write), so the run
+ *     stays in MATCH with the screen ACTIVE.
+ *   - `M2_M_RETURN` (m 6508, engine step 6512): the post-terminal HOLD — the
+ *     forced-ET tape does NOT return to the front-end (FU239-L1); the anchor
+ *     pins the hold (still mode MATCH).
+ *   - the tape stops `M2_POST_RETURN_FRAMES` (20) past the terminal -> engine
+ *     step 6522.
+ *
+ * Measured frame diff (against the committed v21 golden, `cmp`/`diff` with the
+ * ISO present): the transcript grows 2522 -> 6522 lines; the first 2522 lines
+ * are byte-identical (`head -2522 new | cmp - old` clean, 112487 bytes; `diff`
+ * shows only `2522a2523,6522`) and the first appended line is 2523. The
+ * appended lines run the two live ET halves (`state=2/1-0`), the ET-over dwell /
+ * terminal / post-terminal hold (`state=19/1-0`) and the ET-half completion
+ * screens (`state=19/1-0`); no pre-2522 line changes `state=` or `hash=` (the
+ * `cut -d' ' -f3-` and `-f2` isolations show only the appended block), and no
+ * NEW state stratum appears (the appended lines are `2/1-0` and `19/1-0`, both
+ * already in v21). The intended live continuation, not a regression.
+ *
+ * Golden decision (v22): **re-pinned with the written reason + frame diff
+ * above.** Regenerated with the ISO present
+ * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
+ * (`09b726b7…`); old M2 sha
+ * `0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0`
+ * (v21, 2522 lines) -> new M2 sha
+ * `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a`
+ * (v22, 6522 lines). The cross-dep FU-223 (period length): the explicit
+ * `set_period(1,1)` staging (m 41) is kept, so the ET-half completion schedule
+ * is fixed; the live-length producer is proved by fixture (FU-238 §2.5).
+ *
+ * The phase-22 riders: `run_regulation_over_probe` (below) exercises the
+ * word-1 regulation-over chain (staged word 1 -> the OVER screen -> the
+ * front-end return) on a seeded flag-clear regulation terminal — the off-tape
+ * second terminal. The ET-over terminal is pinned on the tape by
+ * `M2_M_ET_TERMINAL`; `run_phase22_riders` (the phase-22 T6 slice) adds the
+ * mutation-RED rider classes. `M2_M_ET_ENTRY` stays an intermediate anchor.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1643,9 +1726,14 @@
 /* v21 (M2 phase-21 T6, FU230-L4): the extended tape plays through two live
  * FU-62 period completions (half-time + the regulation end) and runs a tail
  * past the second, so it exceeds the old 2000-step cap. The measured length is
- * the v21 golden's line count (see the provenance block below). */
-#define M2_STEP_CAP 4000
-#define M2_TRANSCRIPT_CAP (1u << 20)
+ * the v21 golden's line count (see the provenance block below).
+ * v22 (M2 phase-22 T5, FU-238 §2.2.4): the tape now plays both live extra-time
+ * halves and the ET-over terminal, so it exceeds the v21 4000-step cap. The
+ * measured stop is the ET-over terminal + `M2_POST_RETURN_FRAMES` = engine step
+ * 6522 (see the v22 provenance block); 12000 is the FU-238 §2.2.4 headroom, and
+ * the transcript cap is raised to `1u << 24` for the extra lines. */
+#define M2_STEP_CAP 12000
+#define M2_TRANSCRIPT_CAP (1u << 24)
 
 /* Match-relative directive steps (1 = the first match frame, engine step 6):
  *   m 1  first-half kickoff forcing: phase 0x13 over the derived phase-1
@@ -1684,6 +1772,31 @@
 #define M2_M_HALF_OPEN 841
 #define M2_M_HALF_TIME 845
 #define M2_M_ET_ENTRY 2498
+/* v22 (M2 phase-22 T5, FU-238 §2.2.1 / FU-239): the end-spine directives. The
+ * exact `m` values are MEASURED on the landed T4b engine (FU238-L1: never
+ * invented); the v22 provenance block records the measured schedule. NB the
+ * engine's live extra-time halves run in the class-1 play phase `2` (the
+ * FU-239 Reading-B model), NOT the FU-238 design's phase `0x14`, so the anchors
+ * pin the measured period/phase rather than the design's phase cell (FU239-L1).
+ *   m 4298 `M2_M_ET_HALF2`: the ET-half-2 completion (engine step 4302) — the
+ *         period 3 -> 4 roll parks the ET-over dwell in phase `0x13`.
+ *   m 6498 `M2_M_ET_TERMINAL`: the ET-over terminal (engine step 6502) — the
+ *         dwell crosses `word[0x158818] > 0x4B0` and
+ *         `fifa96_match_run_end_word` returns `2`. The `[0x158822]` cell is `0`
+ *         at every boundary (the frame body stages word `2` and consumes it in
+ *         the same frame, T4b-L1), so the anchor is the terminal STEP + the
+ *         end-word function, NOT the cell.
+ *   m 6499 `M2_M_ET_OVER`: the ET-over consume/resume (engine step 6503) — word
+ *         `2` is consumed and the frame loop resumes (no match-over screen; the
+ *         forced-ET tape is the differing reg-end, FU-232-L6).
+ *   m 6508 `M2_M_RETURN`: the post-terminal hold (engine step 6512) — the forced
+ *         ET tape does NOT return to the front-end (FU239-L1); this anchor pins
+ *         the hold (still mode MATCH). The front-end return is exercised
+ *         off-tape by `run_regulation_over_probe` (the word-1 regulation route). */
+#define M2_M_ET_HALF2 4298
+#define M2_M_ET_TERMINAL 6498
+#define M2_M_ET_OVER 6499
+#define M2_M_RETURN 6508
 
 /* v14 (phase-14 T3): post-restart frames recorded before the tape stops. The
  * v13 tape recorded `M2_POST_GOAL_FRAMES` (20) post-goal frames and stopped at
@@ -1703,6 +1816,14 @@
  * `M2_POST_RESTART_FRAMES` past the goal restart) so the two live period
  * completions play. */
 #define M2_POST_PERIOD_END_FRAMES 20
+
+/* v22 (M2 phase-22 T5, FU-238 §2.2.2): the tail the tape records past the
+ * ET-over terminal before it stops — the v14 `M2_POST_RESTART_FRAMES`
+ * convention applied to the end spine. This replaces the v21
+ * `M2_POST_PERIOD_END_FRAMES` stop (20 past the ET-ENTRY anchor): the ET entry
+ * (`M2_M_ET_ENTRY`) stays an intermediate anchor, and the tape now plays both
+ * ET halves and the ET-over terminal before stopping 20 frames later. */
+#define M2_POST_RETURN_FRAMES 20
 
 /* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
  * bar's y = y1 - Frames-frame-4-height - 2 = 240 - 41 - 2 = 197 (FU-148
@@ -2042,6 +2163,17 @@ struct m2_result {
   uint64_t et_step;          /* engine step the ET-entry directive sampled */
   uint64_t et_entry_step;    /* engine step of the differing reg-end completion */
   uint8_t et_phase;          /* state.phase at the ET entry (the ET chooser arm) */
+  /* v22 (M2 phase-22 T5, FU-238 §2.2.3 / FU-239): the end-spine anchors. The
+   * ET-half-2 completion, the ET-over terminal (the end-word function, not the
+   * `[0x158822]` cell — T4b-L1), the ET-over consume/resume, and the front-end
+   * return. On the forced-ET tape `return_step` stays 0 (no return, FU239-L1);
+   * `run_regulation_over_probe` sets it for the off-tape word-1 route. */
+  uint64_t et_half2_step;      /* engine step of the ET-half-2 completion (period 4) */
+  uint64_t et_terminal_step;   /* engine step the ET-over terminal fired (end word 2) */
+  uint64_t et_over_step;       /* engine step the ET-over was consumed/resumed */
+  uint64_t return_step;        /* engine step of the front-end return (probe only) */
+  uint8_t et_terminal_phase;   /* state.phase at the ET-over terminal (= 0x13) */
+  uint8_t end_word_terminal;   /* the end word the terminal staged (= 2) */
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
   /* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the FUN_0008BAF0
@@ -2782,6 +2914,58 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     res->et_step = (uint64_t)next;
     res->et_entry_step = (uint64_t)(next - 1);  /* the completion step */
     res->et_phase = mr->state.phase;
+  } else if (m == M2_M_ET_HALF2) {
+    /* v22 (M2 T5, FU-239): the ET-half-2 completion. The FU-62 clock completed
+     * the second extra-time half (period 3 -> 4) with the differing 1-0 still
+     * on the board, so the chooser re-parked the ET-over dwell (phase 0x13 /
+     * act 0xC) and did NOT re-enter a play phase (T4b's index-`{2,3}` bound).
+     * The engine's live ET halves run in phase `2` (FU-239 Reading-B), so this
+     * is the period-4 / phase-0x13 state the FU-238 design's "ET-half-2
+     * arrival" becomes (the design's phase 0x14 is the native class-0 screen;
+     * FU239-L1). Mutation-RED: an un-bounded re-arm leaves phase 2 here. */
+    assert(mr->state.period == 4u);
+    assert(mr->global_157ac2 == 4u);            /* the period 3 -> 4 roll */
+    assert(mr->state.phase == 0x13u);           /* the ET-over dwell, not phase 2 */
+    assert(mr->act.id == 0x0Cu);                /* the chooser's act-0xC screen */
+    res->et_half2_step = (uint64_t)(next - 1);  /* the completion step (4302) */
+  } else if (m == M2_M_ET_TERMINAL) {
+    /* v22 (M2 T5, FU-231 §3 / FU-239): the ET-over terminal. The phase-0x13
+     * dwell accrued `word[0x158818]` (`mr->act.timer`) past `0x4B0`, so the
+     * end machine's ET arm returns word 2. The `[0x158822]` cell is 0 at the
+     * boundary — the frame body stages word 2 and consumes it (the native AX==2
+     * arm) within the same frame (T4b-L1 / FU-232 §3) — so the anchor is the
+     * terminal STEP + the end-word function, and `end_word_terminal` is 2.
+     * Mutation-RED: a dwell capped below 0x4B0 never returns 2 here. */
+    assert(fifa96_match_run_end_word(mr) == 2u);
+    assert(mr->end_word_158822 == 0u);          /* the same-frame consume (T4b-L1) */
+    assert(mr->state.phase == 0x13u);
+    assert(mr->act.timer > 0x4B0);
+    res->et_terminal_step = (uint64_t)(next - 1);   /* 6502 */
+    res->et_terminal_phase = mr->state.phase;
+    res->end_word_terminal = 2u;
+  } else if (m == M2_M_ET_OVER) {
+    /* v22 (M2 T5, FU-232 §3; FU-232-L6 closed by g3): the ET-over consume and
+     * the frame-loop resume. Word 2 is not a match-over (the native AX==2 arm
+     * writes no `[0x5FFC]` screen and clears the word), so the run stays in
+     * MATCH with the screen ACTIVE and the frame body resumes next frame. The
+     * forced-ET tape (the differing 1-0 reg-end) therefore has NO over screen;
+     * that is the word-1 regulation route, exercised off-tape by
+     * `run_regulation_over_probe`. Mutation-RED: treating word 2 as a
+     * match-over would set the OVER screen here. */
+    assert(fifa96_match_run_should_mark_over(mr) == 0);
+    assert(mr->lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* no ET-over screen */
+    assert(mr->end_word_158822 == 0u);                    /* consumed (resume) */
+    res->et_over_step = (uint64_t)(next - 1);             /* 6503 */
+  } else if (m == M2_M_RETURN) {
+    /* v22 (M2 T5, FU239-L1): the post-terminal hold. The forced-ET tape does
+     * NOT reach the front-end return — the ET-over consume routes to no
+     * `[0x105FFC]` (FU-232-L6 / g3), and the native `0x13/0x14 -> phase 2`
+     * route is the unported FU239-L1 leg — so the run holds in MATCH at phase
+     * 0x13. Mutation-RED: a spurious return would abort here. The word-1
+     * regulation route (which DOES return) is covered by
+     * `run_regulation_over_probe`. */
+    assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
+    assert(mr->state.phase == 0x13u);
   }
 }
 
@@ -3102,15 +3286,18 @@ static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out
         res->restart_pending = e->match_run.situation_pending;
       }
     }
-    /* v21 (M2 phase-21 T6, FU-230 §2.2.1): the completion window. The v20 stop
-     * (`M2_POST_RESTART_FRAMES` past the goal restart) is replaced so the tape
-     * keeps running through the two live FU-62 period completions and stops
-     * `M2_POST_PERIOD_END_FRAMES` past the ET-entry anchor (the differing
-     * reg-end -> extra-time arm). If the anchor is never reached the hard bound
-     * (`M2_STEP_CAP`) ends the loop and the post-loop assert reports it
-     * (spec §5 T1 STOP-and-report). */
-    if (res->et_entry_step > 0 &&
-        (uint64_t)steps - res->et_entry_step >= M2_POST_PERIOD_END_FRAMES) {
+    /* v22 (M2 phase-22 T5, FU-238 §2.2.2 / FU-239): the end-spine stop. The
+     * v21 stop (`M2_POST_PERIOD_END_FRAMES` past the ET-ENTRY anchor) is
+     * replaced so the tape plays both live extra-time halves and stops
+     * `M2_POST_RETURN_FRAMES` past the ET-over TERMINAL (the end-word function
+     * returning 2 — the `[0x158822]` cell is a same-frame transient, T4b-L1).
+     * The ET entry stays an intermediate anchor. The forced-ET tape does not
+     * return to the front-end (FU239-L1), so the window is terminal-relative
+     * (not the FU-238 design's return-relative break). If the terminal is never
+     * reached the hard bound (`M2_STEP_CAP`) ends the loop and the post-loop
+     * assert reports it (spec §5 T1 STOP-and-report). */
+    if (res->et_terminal_step > 0 &&
+        (uint64_t)steps - res->et_terminal_step >= M2_POST_RETURN_FRAMES) {
       break;
     }
   }
@@ -3325,6 +3512,103 @@ static uint64_t run_period_end_probe(struct m2_period_end *out) {
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
   return pe.completion_step;
+}
+
+/* v22 (M2 phase-22 T5, FU-236 / FU-239): the off-tape word-1 regulation-over
+ * scenario. The forced-ET acceptance tape's regulation end is the differing
+ * 1-0, so its chooser takes the extra-time arm and the word-1 regulation route
+ * is unreachable there (FU238-L3; FU-232 §4.3). This probe drives the same
+ * engine boot, starts the selector-0 run directly, and SEEDS the regulation
+ * terminal with the extra-time flag CLEAR (a not-differing regulation end):
+ * phase `0x0C`, `global_157ac0 = 0`, `global_157ac2 = 2` (past half-time), no
+ * act, tied score (so the W5 mid-ET flag setter is a no-op). The end machine
+ * then stages word `1` (the flag-clear phase-0x0C terminal, FU-231 §3 /
+ * `0x8BCD9`), the frame loop's `mark_over` fires once the dwell passes `0x168`
+ * (FU-232 §4.3) -> the OVER screen (`[0x105FFC]=2`) -> `fifa96_match_run_step`
+ * drives OVER -> POST -> EXIT -> `run_end`, which flips the engine mode to
+ * FRONTEND (FU-234 §3 / g7). Records the staged word, the OVER step, and the
+ * front-end return. Transcript-neutral (stderr only). */
+static void run_regulation_over_probe(struct m2_result *res) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;
+  /* No key tape: this probe starts the run directly (fifa96_match_run_begin)
+   * and drives the frame body + lifecycle step itself, so the front-end poll
+   * path is never taken. */
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = file_exists(M2_ISO_PATH) ? M2_ISO_PATH : NULL;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  struct fifa96_match_run *mr = &e->match_run;
+  assert(fifa96_match_run_begin(mr, e, 0) == 0);
+  assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
+
+  /* The regulation terminal, flag CLEAR (the not-differing end): phase 0x0C,
+   * past half-time, no act, tied score — the FU-236 §2.2 word-1 gate. */
+  mr->state.period = 2u;
+  mr->state.phase = 0x0Cu;
+  mr->global_157ac2 = 2u;
+  mr->global_157ac0 = 0u;
+  mr->act.id = 0;
+  mr->act.timer = 0;
+  mr->end_word_158822 = 0u;
+  mr->score[0] = 0u;
+  mr->score[1] = 0u;
+
+  memset(res, 0, sizeof *res);
+  res->match_start_step = 1;
+  res->exit_step = -1;
+
+  uint64_t steps = 0;
+  int word1_step = -1, over_step = -1;
+  uint64_t return_step = 0;
+  /* Drive the frame body and the lifecycle step as distinct phases (the unit
+   * convention) so the OVER boundary is observable: the engine's own dispatch
+   * would resolve OVER in the same step, hiding it. One frame = one granted
+   * frame (the FU-62 clock), so the dwell accrues deterministically. */
+  while (steps < 8000) {
+    assert(fifa96_match_run_frame(mr) >= 0);   /* the 100 Hz frame body */
+    steps++;
+    if (word1_step < 0 && mr->end_word_158822 == 1u) word1_step = (int)steps;
+    if (over_step < 0 && mr->lc.screen == FIFA96_MATCH_SCREEN_OVER) {
+      over_step = (int)steps;
+      assert(fifa96_match_run_should_mark_over(mr) == 1);  /* FU-232 §4.3 */
+    }
+    assert(fifa96_match_run_step(mr) >= 0);    /* the lifecycle dispatch */
+    steps++;
+    if (e->mode != FIFA96_ENGINE_MODE_MATCH) { return_step = steps; break; }
+  }
+  /* The word-1 chain: word 1 staged -> the OVER screen -> the front-end
+   * return. Mutation-RED: dropping the flag gate (or the word-1 terminal)
+   * leaves the word 0 and the run never overs. */
+  assert(word1_step > 0);
+  assert(over_step > 0);
+  assert(return_step > 0);
+  assert(e->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(e->match == NULL);
+  assert(mr->lc.screen == FIFA96_MATCH_SCREEN_EXIT);              /* the teardown */
+  assert(mr->lc.target == FIFA96_MATCH_LIFECYCLE_RESUME);         /* post-exit */
+  res->end_word_terminal = 1u;                          /* the word-1 terminal */
+  res->et_terminal_step = (uint64_t)word1_step;         /* the word-1 staging step */
+  res->et_over_step = (uint64_t)over_step;              /* the OVER screen step */
+  res->exit_step = (int)return_step;                    /* the front-end return */
+  res->return_step = return_step;
+  fprintf(stderr,
+          "test_engine_m2 regulation-over probe: word 1 staged at step %d, OVER "
+          "screen at step %d, front-end return at step %" PRIu64
+          " (mode FRONTEND)\n",
+          word1_step, over_step, return_step);
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
 }
 
 /* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks — the
@@ -4337,6 +4621,15 @@ int main(void) {
   struct m2_period_end pend;
   (void)run_period_end_probe(&pend);
 
+  /* v22 (M2 phase-22 T5, FU-236 / FU-238-L3): the off-tape word-1
+   * regulation-over probe (transcript-neutral). The forced-ET acceptance tape
+   * cannot reach the word-1 route (its regulation end is the differing 1-0, so
+   * its chooser takes the extra-time arm); this probe drives a seeded
+   * flag-clear regulation terminal to the OVER screen and the front-end
+   * return. */
+  struct m2_result regover;
+  run_regulation_over_probe(&regover);
+
   /* Structural acceptance (both modes): the spec §5 sequence replayed. */
   assert(res.match_start_step == 5);
   /* M2 phase-10 T3: the golden pins the goal frames — the forced mechanics
@@ -4345,8 +4638,21 @@ int main(void) {
    * post-goal phase-0 hold. v14 (phase-14 T3): the tape no longer stops at
    * the hold — it runs the derived restart chain to completion and records
    * M2_POST_RESTART_FRAMES past it; no period-end exit exists on this path
-   * (the v14 provenance block above), so res.exit_step stays -1. */
+   * (the v14 provenance block above), so res.exit_step stays -1. v22
+   * (M2 phase-22 T5): the forced-ET tape is unchanged here — the ET-over
+   * consume routes to no front-end return (the native `0x13/0x14 -> phase 2`
+   * route is the unported FU239-L1 leg), so the run holds in MATCH and
+   * res.exit_step stays -1. The front-end return is exercised off-tape by
+   * `run_regulation_over_probe` below (the word-1 regulation route). */
   assert(res.exit_step < 0);
+  /* v22 (M2 phase-22 T5, FU-236): the word-1 regulation-over chain (the probe,
+   * the off-tape second terminal): the flag-clear phase-0x0C terminal stages
+   * word 1 -> the OVER screen -> the front-end return. */
+  assert(regover.end_word_terminal == 1u);                    /* the word-1 terminal */
+  assert(regover.et_terminal_step > 0);                       /* word 1 staged */
+  assert(regover.et_over_step > regover.et_terminal_step);    /* the OVER screen follows */
+  assert(regover.exit_step > 0);                              /* the front-end return */
+  assert(regover.return_step > regover.et_over_step);
   /* v11 (phase-11 acceptance, T3) ball-machine stratum, re-derived by v12:
    * sampled in the m 58/m 61/m 72 blocks. The machine is live on the tape and
    * the record moves; the long-ball chain (T1) and the machine fixtures (T2)
@@ -4414,13 +4720,28 @@ int main(void) {
   assert(res.restart_screen_step == 4u);      /* the POST idle */
   assert(res.restart_pending == 0u);
   /* v21 (M2 phase-21 T6, FU-230 §2.2.3): the live period-end anchors. The tape
-   * runs through both FU-62 period completions and stops
-   * `M2_POST_PERIOD_END_FRAMES` past the ET-entry anchor. */
+   * runs through both FU-62 period completions. */
   assert(res.half_step > (uint64_t)res.restart_step);   /* half-time after the goal restart */
   assert(res.et_entry_step > res.half_step);            /* the reg-end completion follows half-time */
   assert(res.et_step == res.et_entry_step + 1u);        /* the sampling step trails the completion */
   assert(res.et_phase == 0x13u);                        /* the extra-time chooser arm */
-  assert(res.steps - (int)res.et_entry_step == M2_POST_PERIOD_END_FRAMES);
+  /* v22 (M2 phase-22 T5, FU-238 §2.2.3 / FU-239): the end-spine anchors. The
+   * tape plays both live extra-time halves then the ET-over terminal, and stops
+   * `M2_POST_RETURN_FRAMES` past the terminal. The terminal is the end-word
+   * function (word 2), not the `[0x158822]` cell (a same-frame transient,
+   * T4b-L1); the consume/resume confirms word 2 is not a match-over (no over
+   * screen on this forced-ET tape). The front-end return is off-tape
+   * (`run_regulation_over_probe`), so the tape's `exit_step` stays -1. */
+  assert(res.et_half2_step > res.et_entry_step);        /* the ET-half-2 completion */
+  assert(res.et_half2_step == 4302u);                   /* the measured period-3 -> 4 roll */
+  assert(res.et_terminal_step > res.et_half2_step);     /* the ET-over terminal */
+  assert(res.et_terminal_step == 6502u);                /* the measured word-2 terminal step */
+  assert(res.et_terminal_phase == 0x13u);               /* the phase-0x13 ET-over dwell */
+  assert(res.end_word_terminal == 2u);                  /* the ET-over word */
+  assert(res.et_over_step > res.et_terminal_step);      /* the consume/resume follows */
+  assert(res.et_over_step == 6503u);
+  assert(res.return_step == 0u);                        /* no return on the tape (FU239-L1) */
+  assert(res.steps - (int)res.et_terminal_step == M2_POST_RETURN_FRAMES);
   /* v15 (phase-15 T4): the phase-15 tape-level stratum — action row 0x19 is
    * dispatched by the tape (the row-04 carrier install `0x7E866`/`0x7E8C1`
    * stages code 0x19; the ported body records FIFA96_OK and is frame-neutral at
@@ -4531,17 +4852,21 @@ int main(void) {
    * hold with the 1-0 pair), the post-goal hold and the v14 restart windows
    * (0x15 = 21, 4) into the resumed 1-0 phase 2. v21 (T6): the live period
    * ends — the half-time chooser arm (0x0C = 12) and the sit-1 kickoff
-   * (phase 1), then the extra-time chooser arm (0x13 = 19) at the ET entry. */
+   * (phase 1), then the extra-time chooser arm (0x13 = 19) at the ET entry.
+   * v22 (T5): the appended end spine re-runs the live ET halves (phase 2 =
+   * state 2) and the ET-over dwell / terminal / hold (phase 0x13 = state 19);
+   * no NEW stratum — both are already asserted here (the appended lines are
+   * `state=2/1-0` and `state=19/1-0`). */
   assert(strstr(transcript, " state=19/") != NULL);
   assert(strstr(transcript, " state=20/") != NULL);
   assert(strstr(transcript, " state=2/0-0\n") != NULL);
   assert(strstr(transcript, " state=0/1-0\n") != NULL);
   assert(strstr(transcript, " state=21/1-0\n") != NULL);   /* the act-9 window */
   assert(strstr(transcript, " state=4/1-0\n") != NULL);    /* the corner window */
-  assert(strstr(transcript, " state=2/1-0\n") != NULL);    /* the resumed play */
+  assert(strstr(transcript, " state=2/1-0\n") != NULL);    /* the resumed play + the ET halves */
   assert(strstr(transcript, " state=12/1-0\n") != NULL);   /* v21: the half-time chooser arm */
   assert(strstr(transcript, " state=1/1-0\n") != NULL);    /* v21: the sit-1 half-time kickoff */
-  assert(strstr(transcript, " state=19/1-0\n") != NULL);   /* v21: the extra-time chooser arm (ET entry) */
+  assert(strstr(transcript, " state=19/1-0\n") != NULL);   /* v21: the ET entry + v22: the ET-over dwell */
   assert(fwrite(transcript, 1, tlen, stdout) == tlen);
 
   if (!with_iso) {
@@ -4558,28 +4883,28 @@ int main(void) {
     free(transcript);
     return 1;
   }
-  /* v21 (M2 phase-21 T6, FU-230 §3.3 rider class 7): the additivity gate — the
-   * automated form of `head -792 new | cmp - old` over the committed v20
-   * 792-line prefix. The live-tape extension grew the golden 792 -> 2522 lines
-   * by appending only, so the first 792 lines must stay byte-identical. This
-   * asserts that as a real in-test gate (not the provenance prose alone) and
-   * edits no golden byte; 792 lines = 34820 bytes (the v21 provenance block).
-   * It precedes the whole-transcript compare so an additivity break reports the
-   * offending line directly. */
+  /* v21 (M2 phase-21 T6, FU-230 §3.3 rider class 7) / v22 (M2 phase-22 T5,
+   * FU-238 §2.5): the additivity gate — the automated form of `head -2522 new |
+   * cmp - old` over the committed v21 2522-line prefix. The live-tape extension
+   * grew the golden 2522 -> 6522 lines by appending only, so the first 2522
+   * lines must stay byte-identical. This asserts that as a real in-test gate
+   * (not the provenance prose alone) and edits no golden byte; 2522 lines =
+   * 112487 bytes (the v21 golden). It precedes the whole-transcript compare so
+   * an additivity break reports the offending line directly. */
   {
     size_t prefix = 0;
     int lines = 0;
-    while (lines < 792 && prefix < glen) {
+    while (lines < 2522 && prefix < glen) {
       if (golden[prefix] == '\n') lines++;
       prefix++;
     }
-    assert(lines == 792);        /* the golden still carries the v20 prefix */
+    assert(lines == 2522);       /* the golden still carries the v21 prefix */
     if (tlen < prefix || memcmp(transcript, golden, prefix) != 0) {
       size_t at = 0;
       while (at < prefix && at < tlen && transcript[at] == golden[at]) at++;
       report_diff(transcript, tlen, golden, glen, at);
       fprintf(stderr,
-              "test_engine_m2 FAIL: additivity — the first 792 lines differ "
+              "test_engine_m2 FAIL: additivity — the first 2522 lines differ "
               "from %s\n",
               M2_GOLDEN_PATH);
       free(golden);
