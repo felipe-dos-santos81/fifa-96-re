@@ -38,16 +38,17 @@ and route **R11-L4 to a later phase** (the keeper cluster, 26b).
 
 ### 1.1 The situation dispatcher `FUN_0008A938` — the head and the queue arm
 
-Fresh `disassemble_bytes 0x8A960` (128 B):
+Fresh `disassemble_bytes 0x8A960` (128 B; the first instruction boundary is `0x8A964`):
 
 ```
 0x8A964  CMP dword[0x0015b6c0],0x0        ; a situation already pending?
 0x8A96B  JNZ 0x8AA7B                       ; yes -> DIRECT path
 0x8A971  MOV ESI,[ESP]                     ; the side word
 0x8A974  TEST SI,SI ; SETZ AL ; AND EAX,0xff
-0x8A982  MOV [0x0015b6b8],EAX              ; the sit_side_pending store
 0x8A97F  SUB ECX,0x2                       ; ECX = situation ; index = situation - 2
+0x8A982  MOV [0x0015b6b8],EAX              ; the sit_side_pending store
 0x8A987  CMP CX,0x8 ; JA 0x8AA60            ; index > 8 -> the default arm (id 0xA)
+0x8A991  XOR EAX,EAX ; MOV AX,CX           ; zero-extend the index (situation - 2)
 0x8A996  JMP dword CS:[EAX*4 + 0x8A8E0]     ; <-- table-1 (the QUEUE table)
 ```
 

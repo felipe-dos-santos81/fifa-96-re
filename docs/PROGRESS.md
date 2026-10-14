@@ -2016,17 +2016,18 @@ phase-26a plan
 (`docs/superpowers/plans/2026-10-14-fifa96-m2-phase26a-camera-ball-visibility.md`)
 was to port the missing live open-play camera-Y producer so the follow/pan could
 go live. The T1 gate proved **no candidate bootstraps `[0x157750]` live**; T2a
-then proved the only sound producer — the keeper stage-5 release (`camY := 0x50`,
-FU264 §2.1) — is **dispatch-dead behind R11-L4** and **phase-scale**, so per spec
-§7.1 the phase records the waiver and routes the leg onward. No camera code
-landed.
+then proved the only sound event-raising producer for the follow/pan window — the
+keeper stage-5 release (`camY := 0x50`, FU264 §2.1) — is **dispatch-dead behind
+R11-L4** and **phase-scale**, so per spec §7.1 the phase records the waiver and
+routes the leg onward. No camera code landed.
 
 The arc and the follow are ported (`fifa96_camera_height`, the `FUN_000736AC`
 pan step, the `FUN_00071DF4` follow), but they are **event-starved**: no live
 producer drives the event height into the `> 0xF0` follow gate and the row-0E
-`0x20 < camY < 0x70` pan window. The one sound producer, the keeper stage-5
-release (`fifa96_match_action_1E`, `handlers.c:521-530`, `camera.pos_y = 0x50`),
-sits inside row `0x1E`, which the engine only installs via the **situation-5 →
+`0x20 < camY < 0x70` pan window. The only sound event-raising producer for the
+follow/pan window, the keeper stage-5 release (`fifa96_match_action_1E`,
+`handlers.c:521-530`, `camera.pos_y = 0x50`), sits inside row `0x1E`, which the
+engine only installs via the **situation-5 →
 phase-9 → row-`0x1E`** chain; the native situation-5 emitters are the keeper rows
 `0x1A`/`0x1B` (`0x76B1C`/`0x77707`), and neither is dispatched on any live engine
 path. Their installer is the unported **keeper CPU chain**
@@ -2045,8 +2046,15 @@ canonical as **FU-272** (`docs/ghidra/FU272_r11l4_derivation.md`); its evidence
 table, numbered legs **T2a-L1..L6** and doc-errata candidates hold the detail.
 
 **Nothing regressed.** The camera/follow chain remains the numbered legs
-**FU264-L1/L2** (the arc is ported; the live camera-Y producer is the leg); the
+**FU264-L1/L2** (the arc itself is ported; FU264-L1 is the live producer and
+FU264-L2 the event bootstrap — both carried); the
 phase wired no row, so the census is unchanged at `59/80 = 73%`
 (`action_wired == 36u` / `phase_wired == 23u`) and **`README.md` /
 `AGENTS.md:90` / `tests/test_engine_m2.c` are untouched**. `make check`
 **110/110**; M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (cmp-verified).
+
+**The camera leg register closes as `FU264-L1..L5`** (canonical in
+`docs/ghidra/FU264_camera_y_producer.md`): this close-out names **L1** (the live
+producer) and **L2** (the event bootstrap), and **L3–L5 are unchanged** (still
+open, carried verbatim) — the plan's Task-5 leg append covers all five legs, not
+just the two.
