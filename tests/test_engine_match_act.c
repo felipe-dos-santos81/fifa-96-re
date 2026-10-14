@@ -884,6 +884,53 @@ static void test_row_25_body_direct(void) {
   assert(fifa96_match_dispatch_action(NULL, 0x25u) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-243 §4.3/§6 (M2 phase-23 T3): row 0x15 is the phase-5 celebration sibling
+ * of row 0x14 — the same `0x8D433` arm installs code 0x15 on records 1..10 of
+ * the goal team (FU-243-L2's "arm not ported" claim is stale: the port lives in
+ * `fifa96_match_run_phase_arm`'s `phase == 5` block). Only the body `0x87CD0`
+ * was unported. Mutation-RED: a NULL slot returns UNSUPPORTED, so the dispatch
+ * assertion below fails. */
+static void test_action_15_dispatches(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_action_table[0x15].fn != NULL);
+  assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(NULL, 0x15u) == -FIFA96_ERR_INVALID);
+}
+
+/* The ported row-0x15 body (`0x87CD0`, the 4-arm table `0x87CC0`). The phase-5
+ * gate (`0x87CDB..0x87CE6`) resets on any other phase; at phase 5 the stage
+ * walk runs. A fresh record is stage 0, inactive: the stage-0 `[rec+0x8D] == 0`
+ * gate resets. An active stage-0 record arms `scratch_ae = 0x3C`, clears the
+ * timer and advances to stage 1. Mutation-RED: dropping the stage advance
+ * leaves `stage92` at 0. */
+static void test_action_15_body_direct(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 1;              /* team 0 record 1 */
+  mr.record.delta = 2;
+  /* phase != 5 -> the reset tail (the record's code returns to 0) */
+  mr.state.phase = 4u;
+  mr.entities.team[0].records[1].code = 7u;
+  assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+  assert(mr.entities.team[0].records[1].code == 0u);
+  /* phase 5, stage 0, inactive -> reset */
+  mr.state.phase = 5u;
+  mr.record.stage92 = 0u;
+  mr.record.active = 0u;
+  mr.entities.team[0].records[1].code = 7u;
+  assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+  assert(mr.entities.team[0].records[1].code == 0u);
+  /* phase 5, stage 0, active -> arm scratch_ae, clear timer, advance to 1 */
+  mr.record.stage92 = 0u;
+  mr.record.active = 1u;
+  mr.record.timer89 = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+  assert(mr.record.timer89 == 0);
+  assert(mr.record.scratch_ae == 0x3C);
+  assert(mr.record.stage92 == 1u);
+}
+
 int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
@@ -929,6 +976,8 @@ int main(void) {
   test_phase_1B_leg_no_invoker();
   test_row_25_counted();
   test_row_25_body_direct();
+  test_action_15_dispatches();
+  test_action_15_body_direct();
   puts("test_engine_match_act OK");
   return 0;
 }

@@ -5281,6 +5281,170 @@ int fifa96_match_action_25(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== FU-243 §4.3/§6 (M2 phase-23 T3): row 0x15 — the phase-5 celebration
+ * sibling ====================================================================
+ *
+ * The native row-0x15 body `0x87CD0..0x880AE` (fresh `disassemble_bytes` this
+ * slice), a 4-arm CS table `0x87CC0` = `{0x87D6F, 0x87DA8, 0x87F4A, 0x87FF5}`
+ * selected by the record stage byte `+0x92` (`mr->record.stage92`; a stage > 3
+ * takes the `0x880A5` epilogue). This is the teammate side of the phase-5
+ * celebration: the shared arm `0x8D433` installs code `0x15` on records 1..10
+ * of the goal team and code `0x14` (the row-14 actor body) on the scorer.
+ *
+ * INSTALLER: the `0x8D433` phase-5 arm is ALREADY ported (FU-173 §4.2 /
+ * FU-184): `fifa96_match_run_phase_arm`'s `phase == 5` block
+ * (`fifa96_arm_install_multi(t, 1, 10, 0x15, -1)` + the `team->target` +
+ * `install(...,0x14,0)` pair). FU-243-L2's "the `0x8D433` arm itself is not
+ * ported" verdict is STALE — that recon inspected only
+ * `fifa96_match_phase_machine_step` (states 1/0x13/0x14), not the separate
+ * `fifa96_match_run_phase_arm` port. Only the row-0x15 BODY was missing, so
+ * (the row-14 precedent: same live installer) the row is now wired.
+ *
+ * Prologue (`0x87CDB..0x87D54`): the phase-5 gate (`[0x157A4A]>>24 != 5` ->
+ * the `0x7DAB4` reset); `timer89 += (uint16)[0x157A64]`; the "selected" record
+ * `[0x157A49]>>24 == 1 ? [0x1587D4] : [0x157A9F]` (the engine pool-id cells
+ * `actor_1587d4` / `goal_record`); the per-record phase handler
+ * `[rec+0x1C](rec, &rec[0x4D], -1)` via `fifa96_match_dispatch_phase_record`;
+ * and the `0x741B4`/`0x651F0` side-keyed sinks (FU243-L4 leg).
+ *  - arm 0 (`0x87D6F`): `[rec+0x8D] == 0` -> reset; else `scratch_ae = 0x3C`,
+ *    `timer89 = 0`, stage -> 1.
+ *  - arm 1 (`0x87DA8`): idx = `[0x158720]`; `idx == 3` (or the unported
+ *    `[0x1587B8+idx] == 0x67` id-table hit, FU243-L4) draws `0x92AC8 % 0x78 +
+ *    0x3C`, clears the timer and advances to stage 2. Otherwise the current
+ *    anim code `byte[[rec+0x28]]` (`anim_id`) in {0,0x62..0x65} with
+ *    `timer89 > scratch_ae` draws `% 0x78`, sets `scratch_ae`, copies the
+ *    selected position to the target and installs anim 1 (`0x6E598(rec,1,0)`);
+ *    the radius-0xC0 `[rec+0x8A]` fold is the FU243-L4 leg (the write is
+ *    dropped, not faked). The arm always ends with the `0x79C50` face toward
+ *    the selected record.
+ *  - arm 2 (`0x87F4A`): `timer89 < scratch_ae` -> the face only; else the
+ *    `0x8DCD4` metric, `distance >= 0x3C0` -> tail, then (the anim-differs-from
+ *    `[0x1587BB]` install is a FU243-L4 leg: the id table is unported, so no
+ *    install is invented) `timer89 = 0`, stage -> 3.
+ *  - arm 3 (`0x87FF5`): copy the selected position to the target (the leg
+ *    fold), then `[0x158720] == 0` -> the `0x7DAB4` reset.
+ * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for a NULL `mr`/out-of-range
+ * `mr->record.entity_id`. */
+static struct fifa96_match_entity *match_row15_selected(struct fifa96_match_run *mr) {
+  int32_t id = mr->global_157a4c == 1u ? mr->actor_1587d4 : mr->goal_record;
+  if (id < 0 ||
+      id >= (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+    return NULL;
+  return &mr->entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS]
+              .records[(uint32_t)id % FIFA96_MATCH_ENTITY_RECORDS];
+}
+
+/* `0x87F17`/`0x87F58`: the `0x79C50` face toward the selected record (the arm
+ * tail shared by stage 1 and the stage-2 not-yet-elapsed branch). */
+static void match_row15_face(struct fifa96_match_run_record *r,
+                             const struct fifa96_match_entity *sel) {
+  fifa96_arm_vec from;
+  fifa96_arm_vec to;
+  uint8_t octant;
+  if (sel == NULL) return;
+  from.x = r->pos_x; from.y = r->pos_y; from.z = r->pos_z;
+  to.x = sel->pos_x; to.y = sel->pos_y; to.z = sel->pos_z;
+  octant = r->type;
+  if (fifa96_arm_face(&from, &to, &octant) == FIFA96_OK) r->type = octant;
+}
+
+int fifa96_match_action_15(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_entity *sel;
+  uint8_t stage;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  r = &mr->record;
+  e = match_sp_entity(mr, NULL, NULL);
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  if (mr->state.phase != 5u) {                    /* 0x87CDB..0x87CE6 */
+    match_row_reset(mr, e);
+    return FIFA96_OK;
+  }
+  r->timer89 += (uint16_t)r->delta;               /* 0x87CEE..0x87D04 */
+  sel = match_row15_selected(mr);                 /* 0x87D0A..0x87D1B */
+  (void)fifa96_match_dispatch_phase_record(mr, mr->state.phase, e, -1); /* 0x87D29 */
+  /* 0x87D2C..0x87D4F: the 0x741B4/0x651F0 side-keyed sinks (FU243-L4). */
+  stage = r->stage92;
+  if (stage > 3u) return FIFA96_OK;               /* 0x87D54 JA 0x880A5 */
+  if (stage == 0u) {                              /* arm 0 (0x87D6F) */
+    if (r->active == 0u) {                        /* 0x87D6F JZ 0x8809E */
+      match_row_reset(mr, e);
+      return FIFA96_OK;
+    }
+    r->scratch_ae = 0x3C;                         /* 0x87D7C */
+    r->timer89 = 0;                               /* 0x87D8C */
+    r->stage92 = 1u;                              /* 0x87D96 INC CL */
+    return FIFA96_OK;
+  }
+  if (stage == 1u) {                              /* arm 1 (0x87DA8) */
+    int32_t idx = mr->celebration.idx;
+    if (idx == 3) {                               /* 0x87DAD JZ 0x87DC6 */
+      uint16_t draw = 0;
+      (void)fifa96_rng_step(&mr->rng, &draw);
+      r->scratch_ae = (int32_t)(draw % 0x78u) + 0x3C;   /* 0x87DD7 DIV 0x78 */
+      r->timer89 = 0;                             /* 0x87DDE */
+      r->stage92 = 2u;                            /* 0x87DF1 INC BL */
+      return FIFA96_OK;
+    }
+    /* 0x87DB2..0x87DC4: `idx > 0 && byte[0x1587B8+idx] == 0x67` is the FU243-L4
+     * unported id-table leg (never taken; a fake table read is forbidden). */
+    if (r->anim_id == 0u ||                       /* 0x87E09..0x87E2B */
+        (r->anim_id >= 0x62u && r->anim_id <= 0x65u)) {
+      if (r->timer89 > r->scratch_ae) {           /* 0x87E31..0x87E3D */
+        uint16_t draw = 0;
+        (void)fifa96_rng_step(&mr->rng, &draw);
+        r->scratch_ae = (int32_t)(draw % 0x78u);  /* 0x87E54 DIV 0x78 */
+        if (sel != NULL) {
+          r->target_x = sel->pos_x;               /* 0x87E6B MOVSD x3 */
+          r->target_y = sel->pos_y;
+          r->target_z = sel->pos_z;
+          /* 0x87E6E..0x87EF6: the radius-0xC0 [rec+0x8A] fold is the FU243-L4
+           * leg; the target copy above is the derivable subset. */
+        }
+        if (fifa96_match_run_record_anim_install(mr, e, 1, 0) == FIFA96_OK) {
+          r->anim_id = e->anim_id;                /* 0x87F12 CALL 0x6E598 */
+          r->frame = e->frame;
+          r->row44 = e->row44;
+        }
+      }
+    }
+    match_row15_face(r, sel);                     /* 0x87F17 CALL 0x79C50 */
+    return FIFA96_OK;
+  }
+  if (stage == 2u) {                              /* arm 2 (0x87F4A) */
+    if (r->timer89 < r->scratch_ae) {             /* 0x87F56 JL */
+      match_row15_face(r, sel);                   /* 0x87F58 */
+      return FIFA96_OK;
+    }
+    if (sel != NULL) {
+      fifa96_arm_vec from;
+      fifa96_arm_vec to;
+      int32_t dz = 0;
+      from.x = r->pos_x; from.y = r->pos_y; from.z = r->pos_z;
+      to.x = sel->pos_x; to.y = sel->pos_y; to.z = sel->pos_z;
+      (void)fifa96_arm_dist_stage(&from, &to, &r->distance, &dz); /* 0x87F97 */
+      if ((int16_t)r->distance >= 0x3C0) return FIFA96_OK;          /* 0x87FA8 */
+    }
+    /* 0x87FAE..0x87FCE: `byte[[rec+0x28]] != byte[0x1587BB]` -> install the
+     * unported `[0x1587BB]` id is the FU243-L4 leg (no install invented). */
+    r->timer89 = 0;                               /* 0x87FD9 */
+    r->stage92 = 3u;                              /* 0x87FE3 INC DL */
+    return FIFA96_OK;
+  }
+  /* arm 3 (0x87FF5): copy the selected position to the target; the radius-0xC0
+   * [rec+0x8A] fold is the FU243-L4 leg. */
+  if (sel != NULL) {
+    r->target_x = sel->pos_x;                     /* 0x87FFF MOVSD x3 */
+    r->target_y = sel->pos_y;
+    r->target_z = sel->pos_z;
+  }
+  if (mr->celebration.idx == 0) {                 /* 0x88091..0x8809C JNZ */
+    match_row_reset(mr, e);                       /* 0x8809E CALL 0x7DAB4 */
+  }
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -5323,7 +5487,14 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-149 L13/T1: row 13 ported (penalty taker, 0x84B00..0x84EEB, gate {2,6}, table 0x84AE4 7 arms): spot focus + commit (0x84BAD), spot aim distance gate (0x84C48), opponent/slot gate (0x84CBA), lane gate (0x84DF4), penalty strike mode 0x40 (0x84E26), ball-ack gate + resolution (0x84E61), +0x44 reset; the 0x4C114 input words, 0x78A84/0x78AA4 slot bodies and the 0x20-edge hand-off are FU-149 L13 legs"},
     {0x14, fifa96_match_action_14,
      "FU-184 §4/§7 (phase-16 T2): row 14 celebration/scatter body ported (0x8784C..0x87CBC, 3 stages): head timer89 += delta; stage 0 = the 5-point fifa96_action_sequence_scatter_celebration + the 6-slot buffer (points[5] = the clamped points[4], FU184-L1) + the arm block (target/metric/face); stage 1 = the arm walk with the distance<0x20 / timer>0x4B0 / idx3>0x12C / idx4>0xB4 advance and the 0x87BE9 stage-- re-entry; stage 2 = match_row_reset + the release (camera reset + fifa96_match_run_kickoff_entry 0x87C71 + the 0x73E08 placement commit) unless side==1 (0x87C1A, FU184-L6). Installer live (phase-5 goal arm match_run.c:2494); legs: the ball-record anim (FU184-L7), the 0x10F344 id tables/anim post (FU184-L1 sibling), the 0x45001 input gate (FU184-L3), the head sinks (FU184-L4) and the release tails (FU184-L5)"},
-    {0x15, NULL, "FU-137 §6: FU-136 row 15: not ported; head mis-decoded, stub bucket; OL-14"},
+    {0x15, fifa96_match_action_15,
+     "FU-243 §4.3/§6 (M2 phase-23 T3): row 15 = the phase-5 celebration sibling of row 0x14. "
+     "body 0x87CD0..0x880AE ported (4-arm CS table 0x87CC0 {0x87D6F,0x87DA8,0x87F4A,0x87FF5}). "
+     "COUNTED: the shared 0x8D433 phase-5 arm (installs 0x15 on records 1..10 of the goal team + 0x14 "
+     "on the scorer) is ALREADY ported at fifa96_match_run_phase_arm (phase == 5), so FU-243-L2's "
+     "'arm not ported' / FU-136/OL-14 'head mis-decoded, stub bucket' verdicts are STALE. "
+     "Legs: the radius-0xC0 [rec+0x8A] fold, the [0x1587B8]/[0x1587BB] id tables and the "
+     "0x741B4/0x651F0 sinks are FU243-L4. Tape-dormant. OL-9"},
     {0x16, fifa96_match_action_16,
      "FU-187 §1/§2 (phase-16 T4): row 16 fouled-player face-the-ball ported (fifa96_match_action_16, 0x84630..0x8471C, 3 stages): stage 0 copies pos -> target then waits on the object code `[0x158866] == 0x48` (mr->referee.referee_object_code; FU187-L1 polarity leg), stage 1 the 0x795B4 band toward the ball + the 0x92AC8 anim pick (0x6A/0x55) + 0x6E598 install + 0x79C50 face, stage 2 the +0x44 -> 0x7DAB4 reset. PRODUCER LIVE: the phase-0x19 handler's stage-0 install (`0x8A0A0 EDX=0x16`) via the act-3 seam (match_run.c:contact -> fifa96_match_act_dispatch(3,0,1) -> phase 0x19 -> match_run_ref_apply install 0x16). The band out-args (FU187-L2), the anim/face sinks (FU187-L4) and the `[0x158866]` identity (FU187-L1) are legs"},
     {0x17, NULL,

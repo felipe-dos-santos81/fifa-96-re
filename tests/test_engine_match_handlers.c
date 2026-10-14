@@ -93,11 +93,14 @@
  * phase-20 T3 (FU-217) flips row 20 to FIFA96_OK: the coupled arm-0 installer's
  * target cell `[0x1587D4]` now has a live producer (the sit-8 `[0x1587CC+side*4]
  * -> [0x1587D4]` bind ported as `match_run_free_record` + the `set_piece`
- * re-init), so the already-ported body is genuinely dispatched. */
+ * re-init), so the already-ported body is genuinely dispatched. M2 phase-23 T3
+ * (FU-243) flips row 0x15 to FIFA96_OK: the shared 0x8D433 phase-5 celebration
+ * arm is already ported at `fifa96_match_run_phase_arm`, and the row-15 body
+ * `0x87CD0` lands as `fifa96_match_action_15`. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 14 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x15 = M2 phase-23 T3: the phase-5 celebration sibling is wired (FU-243) */
     /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };

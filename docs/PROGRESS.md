@@ -1843,3 +1843,32 @@ corrected here) is the doc leg. **Census recomputed:** `56 OK = 34 action + 22
 phase`; dispatch `23 UNSUP / 56 OK / 1 NOTF` (sum 80); `floor(100 × 56/80) = 70`;
 README title `70%`; `action_wired == 34u` pins (`test_engine_m2.c`). `make check`
 green.
+
+## M2 phase-23 T3 — row 15 (the phase-5 celebration sibling, FU-243)
+
+**Census `56/80 = 70%` → `57/80 = 71%` (`35 action + 22 phase`).** FU-243 §4.3/§6
+re-derives the row-15 installer: the **shared `0x8D433` phase-5 arm**
+(`FUN_0008CEB8(rec, 1, 10, 0x15, -1)` on records 1..10 of the goal team, plus the
+actor `0x14` install) — the celebration sibling of row 0x14. This arm is **already
+ported** at `fifa96_match_run_phase_arm`'s `phase == 5` block (FU-173 §4.2 /
+FU-184), so **FU-243-L2's "the `0x8D433` arm itself is not ported" verdict is
+STALE** — that recon inspected only `fifa96_match_phase_machine_step`, whose states
+are `1`/`0x13`/`0x14`, not the separate `fifa96_match_run_phase_arm` port. The
+FU-136/OL-14 "head mis-decoded, stub bucket" label (FU-243 §4.3: `0x87CD0`
+decodes cleanly) is superseded.
+
+T3 ports the body `0x87CD0..0x880AE` (the 4-arm CS table `0x87CC0`
+`{0x87D6F, 0x87DA8, 0x87F4A, 0x87FF5}`) as `fifa96_match_action_15` and wires its
+action-table slot — the row is **COUNTED** (an honest +1, on the row-14 precedent:
+the same live installer, a body with numbered legs). Tape-dormant: no M2 frame
+dispatches row 15, so `b281a9b2…` is unmoved and M1 `09b726b7…` is untouched. TDD:
+the dispatch test was RED (NULL slot → `-FIFA96_ERR_UNSUPPORTED`) before the port,
+GREEN after.
+
+**Residual legs (FU243-L4):** the radius-`0xC0` `[rec+0x8A]` fold, the
+`[0x1587B8]`/`[0x1587BB]` id tables and the `0x741B4`/`0x651F0` side-keyed sinks —
+the fold/id writes are dropped (not faked). The row-15 action-table evidence string
+(`fifa96_match_handlers.c`) is corrected here. **Census recomputed:** `57 OK = 35
+action + 22 phase`; `floor(100 × 57/80) = 71`; README title `71%`; `action_wired ==
+35u` pins (`test_engine_m2.c`); `AGENTS.md:90` and the headers' census surfaces
+synced. `make check` green.

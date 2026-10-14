@@ -3649,9 +3649,9 @@ static void run_regulation_over_probe(struct m2_result *res) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 56/80 = 70% (34 action = the 31 baseline + the
+   *    the handler unit tests. 57/80 = 71% (35 action = the 31 baseline + the
    *    phase-18 T3 row 0x24 + the phase-20 T3 row 0x20 + the phase-23 T2 row
-   *    0x25; 22 phase = the 17 baseline + the phase-18 T3 phase
+   *    0x25 + the phase-23 T3 row 0x15; 22 phase = the 17 baseline + the phase-18 T3 phase
    *    0x20 + the phase-18 T4 phase 0x17 + the phase-19 T2 phase 0x1D + the
    *    phase-19 T4 phase 0x22 + the phase-20 T2 phase 0x10; the phase
    *    rows 0x18/0x19/0x1F + the
@@ -3664,7 +3664,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 34u && phase_wired == 22u);  /* 56/80 = 70% (phase-23 T2: +action 0x25) */
+    assert(action_wired == 35u && phase_wired == 22u);  /* 57/80 = 71% (phase-23 T3: +action 0x15) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -4039,7 +4039,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 34u && phase_wired == 22u);    /* 56/80 = 70% (phase-23 T2: +action 0x25) */
+    assert(action_wired == 35u && phase_wired == 22u);    /* 57/80 = 71% (phase-23 T3: +action 0x15) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);

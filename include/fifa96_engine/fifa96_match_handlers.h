@@ -233,7 +233,7 @@ int fifa96_match_action_24(struct fifa96_match_run *mr);
  * COUNTED in M2 phase-20 T3, FU-217/FU-220): the actor-record "ball-camera /
  * restart-commit transition" `0x84EEC..0x85213` (the 7-arm CS table `0x84ED0`).
  * Its action-table slot (`fifa96_match_action_table[0x20]`) is **wired** to
- * `fifa96_match_action_20` — the row is **COUNTED** (`56/80 = 70%`) — because
+ * `fifa96_match_action_20` — the row is **COUNTED** (`57/80 = 71%`) — because
  * the coupled installer's target (the native actor record `[0x1587D4]`, reached
  * by the phase-0x1D arm-0 `0x899A2` = `FUN_0007D9A4([0x1587D4], 0x20, 0, 0)`)
  * now has a live producer: the sit-8 arm's `[0x1587CC + side*4] ->
@@ -266,3 +266,18 @@ int fifa96_match_action_20(struct fifa96_match_run *mr);
  * (FU184-L3/L4 siblings). Tape-dormant. Returns FIFA96_OK, or
  * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_25(struct fifa96_match_run *mr);
+
+/* The ported action row-0x15 body (FU-243 §4.3/§6, M2 phase-23 T3): the phase-5
+ * celebration sibling of row 0x14 — the teammates' gather-and-face machine
+ * `0x87CD0..0x880AE` (the 4-arm CS table `0x87CC0`). Its action-table slot
+ * (`fifa96_match_action_table[0x15]`) is **wired** to `fifa96_match_action_15`
+ * — the row is **COUNTED** — because the installer is the shared `0x8D433`
+ * phase-5 arm (`FUN_0008CEB8(rec, 1, 10, 0x15, -1)` + the actor `0x14` install),
+ * which is **already ported** at `fifa96_match_run_phase_arm`'s `phase == 5`
+ * block (FU-173 §4.2 / FU-184; the FU-243-L2 "arm not ported" claim is stale —
+ * that recon inspected only `fifa96_match_phase_machine_step`, states
+ * 1/0x13/0x14). The body's unported sub-parts — the radius-`0xC0` `[rec+0x8A]`
+ * fold, the `[0x1587B8]`/`[0x1587BB]` id tables and the `0x741B4`/`0x651F0`
+ * sinks — stay numbered legs (FU243-L4). Tape-dormant. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
+int fifa96_match_action_15(struct fifa96_match_run *mr);
