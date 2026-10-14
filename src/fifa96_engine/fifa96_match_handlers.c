@@ -5527,7 +5527,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + target commit, stage 1 the ball gates + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 release). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5), the 0x79C50 threshold arithmetic, the `0x8EEC0`/`0x67800`/`0x8EEB4` gates and the `0x6E1D0` release (FU188-L3) stay legs; OL-9"},
     {0x25, fifa96_match_action_25,
      "FU-243 §4.2/§6 (phase-23 T2): row 25 body 0x880CC ported (FU-82 7-arm table 0x880B0). "
-     "COUNTED: the installer 0x8D79F/0x8D7AD (MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "
+     "COUNTED: the installer 0x8D79D/0x8D7AD (PUSH -1 / MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "
      "live FUN_0008D098 path, already modelled by fifa96_match_phase_machine_step (code = ac5!=ac7 ? 0x25 : 3). "
      "The prior 'row 25 has NO static installer' (FU189-L2) is REFUTED (the EDX/immediate-only scan missed the "
      "ECX-carried code, FU-242 §2). Sinks/legs per FU-243 §5; OL-9, FU243-L4"},

@@ -524,3 +524,20 @@ golden frame moved; the census is untouched (`53/80 = 66%`, no row wired).
   correctly models no code rewrite, so the compression and the sweep differ only
   in timing (§6.1).
 
+---
+
+## 10. Erratum (M2 phase-23 T5, 2026-10-14) — the §6 golden anchor is stale
+
+§6 (and the §8/§9 landing notes) cite the golden
+`tests/golden/engine/m2-frames.txt` as sha `441415fc…`, **792 lines**, and its
+per-frame census (`0x13` 20, `0x14` 20, `state=2` 40). That anchor is from the
+v19-era golden. The **current** golden is v22: **6522 lines**, sha
+`b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (quoted from
+`docs/ghidra/FU247_exclusions_and_tape.md` §4.1, first-hand). Fresh counts:
+`0x01` **953** frames, `0x13` **2640**, `0x14` **20**.
+
+The load-bearing §6 conclusion is **unchanged**: the golden carries **no
+`state=3`**, so the `bx != 0` restart-sweep path is never entered on the M2 tape
+and the de-compression (§6) moves no presented frame (M2 byte-identical; M1
+immutable). Only the cited anchor's length/sha are corrected.
+

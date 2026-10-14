@@ -410,3 +410,29 @@ reads; 2425..2504 the phase arm), `tests/golden/engine/m2-frames.txt` (the
 FU-175, FU-177 §1/§2/§3, FU-190 §1/§6.2, FU-191 §9/§10.
 
 No writes beyond this slice file and the workspace report.
+
+---
+
+## 8. Erratum (M2 phase-23 T5, 2026-10-14) — the §4 tape counts are stale
+
+The §4 tape-dormancy census ran over the older **792-line** golden; it is
+superseded by the fresh v22 golden. Quoted from
+`docs/ghidra/FU247_exclusions_and_tape.md` §4.2 (first-hand):
+
+> **FU192 §4 quote:** *"phase `0x13` (19) frames 6..25; phase `0x14` (20) frames
+> 26..45 … `0x01 0x03 … 0x11 0x12` … never [on the tape]."* **Stale.** That
+> census ran over the older **792-line** golden (`test_engine_m2.c:1340` cites
+> "792 lines"). The fresh v22 golden (6522 lines) visits `0x01` for **953**
+> frames, `0x13` for **2640** (not 20), and `0x0C` for 4 (also new). The
+> double-wire verdict is **unchanged** (`0x01`/`0x11`/`0x12` still excluded), but
+> the *tape-term* consequence is stronger: wiring phase `0x01` would put the
+> formation re-placement onto **953 on-tape frames**, not zero.
+>
+> * **Spec §1/§2/§5 "phase `0x14`'s 40 frames"** (and FU192's `0x13` = 20
+>   frames): fresh = `0x14` **20** frames, `0x13` **2640** frames. The A-mover
+>   tape risk for `0x13`/`0x14` (FU240/FU192-L2) must be sized against **2660**
+>   on-tape frames, not 60.
+
+The §4 conclusion that phase rows `0x01`/`0x11`/`0x12` stay excluded is
+**unchanged**; only the frame counts move. Fresh v22 golden = 6522 lines, sha
+`b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a`.

@@ -381,3 +381,34 @@ Docs cross-cited: FU-142 (`§2`, `§1.1`, `OL-46`, `OL-48`), FU-189 (`§4`, `§6
 (`§1.9`), FU-76 (`§2.29`), FU-82 (`§1`).
 No writes beyond this slice and the workspace report; no git; ISO/`game/hdd/`
 untouched.
+
+---
+
+## 8. Erratum (M2 phase-23 T5, 2026-10-14) — FU243-L2 is stale
+
+The §4.3 reachability caveat and the §5 FU243-L2 leg state that the phase-5
+install arm `0x8D433` is **not ported** ("the engine ports only states
+`1`/`0x13`/`0x14` of `FUN_0008D098`, so the `0x8D433` arm itself is **not**
+ported"). **This is stale.** The arm is already ported — as the `phase == 5`
+block of `fifa96_match_run_phase_arm` (`src/fifa96_engine/fifa96_match_run.c`,
+landed FU-173 T3 / FU-184):
+
+```c
+if (mr->goal_record >= 0 && team->side == mr->goal_record_side) {
+  int32_t idx = mr->goal_record % FIFA96_MATCH_ENTITY_RECORDS;
+  (void)fifa96_match_arm_install_multi(&mr->entities, t, 1, 10, 0x15, -1);
+  team->target = mr->goal_record;
+  (void)fifa96_match_entities_install(&team->records[idx], phase, 0x14u, 0);
+} else if (mr->goal_record >= 0) {
+  (void)fifa96_match_arm_install_multi(&mr->entities, t, 0, 10, 0, -1);
+}
+```
+
+This matches the native `0x8D433..0x8D4A1` structure (`0x8D44B MOV ECX,0x15` /
+`MOV EBX,0xa` / `MOV EDX,0x1` / `CALL 0x8CEB8`, the `0x8D461` actor install
+`0x14`). §4.3's L2 was reached by inspecting only
+`fifa96_match_phase_machine_step` (states `1`/`0x13`/`0x14`) and missed the
+separate `fifa96_match_run_phase_arm` port. Row 14 is already counted on exactly
+this installer, so row 15 — the arm's teammate side — is wireable on the same
+basis. **Row 15 is now COUNTED** (M2 phase-23 T3): the body `0x87CD0` was ported
+and the action-table slot wired. FU243-L2 closes.

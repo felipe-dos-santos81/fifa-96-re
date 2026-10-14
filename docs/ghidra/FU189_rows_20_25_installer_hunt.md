@@ -379,3 +379,26 @@ Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit; scripts disabled):
 (the action/phase tables), `fifa96_match_run.c` (`match_run_situation_side`),
 `fifa96_action_handlers.c` (`fifa96_action_phase_situations[0x0D]`). No writes
 beyond this slice file and the workspace report.
+
+---
+
+## 12. Erratum (M2 phase-23 T5, 2026-10-14) — FU189-L2 REFUTED
+
+The §4 verdict ("**no static installer for action code 0x25**", FU189-L2) and
+the §6 row-25 `NULL` recommendation it justified are **superseded**. Quoted from
+`docs/ghidra/FU243_no_installer_cluster.md` §4.2 (phase-23 recon, 2026-10-14):
+
+> **Verdict: FU189-L2 REFUTED.** Row 25 has a static installer (`0x8D79D`/
+> `0x8D7AD`) that the `fifa96_match_handlers.c:5171` evidence string and FU-189
+> §4/§7 deny; the installer is already ported (FU-142a Task 2). The FU-142f/OL-48
+> census (rows 27/29/2C) is unaffected — `0x25` is inside its `{0x00..0x26}` set.
+
+The §4 bounded `MOV EDX/DX,0x25` scan is faithfully reproduced but **not
+exhaustive**: `FUN_0007D9A4`'s code parameter is `DX`, and the shared helper
+`FUN_0008CEB8` receives the code in **`CX`** and forwards it to `DX`. Fresh
+`disassemble_bytes 0x8D79D`: `0x8d79d PUSH -0x1`; `0x8d79f MOV ECX,0x25`;
+`0x8d7ad CALL 0x8ceb8` — an installer invocation of code `0x25`. The engine
+already ports it in `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 :
+3`). **Row 25 is now COUNTED** (M2 phase-23 T2): the body `0x880CC` was ported
+and the action-table slot wired, so the `0x25` installer is live via the ported
+phase machine. Legacy OL-9 / FU243-L1 close with this erratum.

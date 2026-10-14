@@ -471,3 +471,28 @@ installer family) stand.
   whose premise (FU-185 §7's "the strict test passes") is refuted by FU185-L6,
   exactly as T1 refuted the row-0x17 arm. Ruling W8 is the attribution for the
   census decision (recorded here in git, not only the SDD ledger).
+
+---
+
+## 11. Erratum (M2 phase-23 T5, 2026-10-14) — the FU185-L6 angle-input map
+
+The §10/§11 FU185-L6 statement that the *second* angle input is `word[+0x6F]`
+and that `+0x6F`/`+0x7D` are **unmodeled** producers is refined. Quoted from
+`docs/ghidra/FU247_exclusions_and_tape.md` §2.3 (fresh re-derivation):
+
+> **Erratum/refinement of FU185-L6's input map (new, first-hand).** FU185-L6 (and
+> the ENGINE.md/`fifa96_match_handlers.h:192-194` restatements) name
+> `word[+0x6F]` as the *second* angle input. The fresh disassembly shows the
+> second input is `word[+0x6D]` (`0x8169F`/`0x816A5`), and the *third* native
+> term is `word[+0x7D]` (`0x816B0`). No `+0x6F` read exists anywhere in
+> `0x8164B..0x816E4`. Moreover all three native inputs **are** pool fields —
+> `entity->lane_x` (+0x6B), `entity->lane_z` (+0x6D), `entity->face7d` (+0x7D)
+> (`fifa96_match_entities.h:134,151`). So the gate's deadness is caused by the
+> kick-struct **staging** (`opp_angle_x` mis-sourced from `lane_z`, and
+> `opp_angle_z`/`opp_face_word` hardcoded 0), not by an absent `+0x6F` producer.
+
+The outcome is unchanged: the row-07 `opponent_invoke` gate never fires
+in-engine today (FU185-L6 / OL-65 stand). The correction is the *cause* — the
+three native inputs (`word[+0x6B]`/`[+0x6D]`/`[+0x7D]`) are all pool-modelled;
+the gap is the kick-struct staging. The differential re-sourcing question is
+FU247-L1.
