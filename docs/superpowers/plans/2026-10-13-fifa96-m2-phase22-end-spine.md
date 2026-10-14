@@ -92,7 +92,7 @@ void fifa96_match_run_period_over_rearm(fifa96_match_run *mr) {
      staging frames to the play phase; the exact route is FU239-L1. */
 }
 ```
-Wire the ET entry: at the ET chooser (`phase_drive`, ~`:2633-2641`) where the engine currently writes phase `0x13`, after the act-`0xC` entry screen (one frame, T4) call `fifa96_match_run_period_over_rearm(mr)` instead of parking; keep the half-time call site unchanged but route it through the same helper.
+**No live wiring in T1 (controller ruling, the T1↔T4 conflict):** add the helper + the characterization test **only**. Do **not** modify `phase_drive` or the half-time call site — a live re-arm at the ET chooser fires at engine step 2502 and changes M2 transcript frames 2503–2522 (`state=19`→`state=2`), breaking T5's byte-identical v21 prefix and the ET-entry riders (`tests/test_engine_m2.c:2780`, `:3900`). **T4 owns the ET-entry screen dwell + the live re-arm call**, which fires only after the dwell (step > 2522).
 
 - [ ] **Step 4: Run the test — expect pass.**
 
@@ -230,7 +230,7 @@ git commit -m "feat(engine): the mark_over tail keyed to the end word (FU-232)"
 
 - [ ] **Step 1: Failing tests** — (a) `mark_over` is held while the timer `<= 0x168` after the word is set, and fires past it; (b) `run_end` lands in `FIFA96_ENGINE_MODE_FRONTEND`.
 - [ ] **Step 2: Run — expect fail.**
-- [ ] **Step 3: Implement** — wrap the `mark_over` call with the dwell gate (`mr->end_word_158822 != 0u && mr->act.timer > 0x168u`); keep `run_end`→FRONTEND (`:4241`).
+- [ ] **Step 3: Implement** — (a) the **ET-entry dwell + the live re-arm** (moved here from T1, the T1↔T4 ruling): keep the chooser writing phase `0x13` (the entry screen, preserving the v21 prefix); when the entry dwell elapses (a gate ≥ the v21 20-frame window of `state=19`; the exact native bound is a leg), call `fifa96_match_run_period_over_rearm(mr)` so the ET half enters phase `2`; then (b) wrap the `mark_over` call with the dwell gate (`mr->end_word_158822 != 0u && mr->act.timer > 0x168u`); keep `run_end`→FRONTEND (`:4241`).
 - [ ] **Step 4: Run — expect pass.** `ctest --test-dir build -R 'test_engine_match_frame|test_engine_match_completion' --output-on-failure`
 - [ ] **Step 5: Commit.**
 ```bash
