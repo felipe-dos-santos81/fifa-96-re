@@ -3227,6 +3227,19 @@ int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode) {
   return 0;
 }
 
+/* FU-239 §1: the period-over re-arm dispatcher (native FUN_0004B02C(mode 0) ->
+ * FUN_00088860). Gate: phase 0x0C. Discriminator: dword[0x157AC2]==4 -> the
+ * extra-time half (sit-8, act 7, row 0x1D); else the half-time half (sit-1,
+ * act 1, row 0x17). The live half then runs in class-1 phase 2 (FU-239 §3). */
+void fifa96_match_run_period_over_rearm(struct fifa96_match_run *mr) {
+  if (!mr) return;
+  mr->state.phase = 2u;          /* sit-8/sit-1 both reach the class-1 play phase 2 */
+  mr->state.period_seconds = 0u;
+  /* 0x8ABCF/0x8AEBA install act 1/7; the kickoff restart writes phase 1/0x10
+     (class 0) then phase 2 (0x8AEFA MOV EAX,2). The engine collapses the
+     staging frames to the play phase; the exact route is FU239-L1. */
+}
+
 /* FU-145 L4 / FU-149 §1.3: the `[0x1577CA]` ball-record team-byte source is
  * unported; the derived stand-in is the pool controlled actor ([0x157A83],
  * the row-04 convention), then the ball carrier, else side 0. */

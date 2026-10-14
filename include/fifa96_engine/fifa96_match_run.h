@@ -1357,6 +1357,20 @@ int fifa96_match_run_record_phase_walk(struct fifa96_match_run *mr, uint8_t phas
  * NULL. The live `begin` caller is gated by `mr->period_setup_live`. */
 int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode);
 
+/* FU-239 §1/§3 (M2 phase-22 T1): the period-over re-arm dispatcher — the native
+ * `FUN_0004B02C(mode 0)` -> `FUN_00088860` chain that re-arms the next half out
+ * of the class-0 period-end park. `FUN_00088860`'s gate is the current phase
+ * `0x0C` (`0x8886B`); the discriminator `0x888B0 CMP [0x157AC2],4` selects the
+ * extra-time arm (sit-8, act 7, row `0x1D`, `0x888C8`) when the period index is
+ * 4, else the half-time arm (sit-1, act 1, row `0x17`, `0x888F2`). Both act
+ * bodies write a class-0 kickoff staging phase (`1` / `0x10`) and the raw
+ * kickoff restart then reaches the class-1 **play phase `2`** (`0x8AEFA MOV
+ * EAX,2`; the only class-1 phase with any static writer, FU-239 §3). The engine
+ * collapses the staging frames to the play phase; the exact `0x13/0x14 -> 2`
+ * route is the unprovable leg **FU239-L1** (never faked). Sets `phase = 2` and
+ * `period_seconds = 0`; NULL is a no-op. */
+void fifa96_match_run_period_over_rearm(struct fifa96_match_run *mr);
+
 /* FU-197 §4/§9 item 2 (M2 phase-17 T2): the `FUN_0008C974` formation-order
  * sorter + residual counter for one team. Computes the display side index
  * `(team.side ^ side_swap) & 1` (the `0x741B4` 0x8C98B..0x8C998), selection-

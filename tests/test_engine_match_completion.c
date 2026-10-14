@@ -391,6 +391,33 @@ static void test_mark_over_only_past_half_time(void) {
   }
 }
 
+/* FU-239 §3 (M2 phase-22 T1): the extra-time half is class-1 phase 2 and must
+ * clock. The period-over re-arm (native FUN_0004B02C(mode 0) -> FUN_00088860,
+ * sit-8 on the extra-time period index) collapses the kickoff staging into the
+ * live class-1 play phase 2; the FU-62 clock -- already faithful, `extra_length`
+ * for periods 2/3 (fifa96_match_state.c:63-65) -- then completes the ET half
+ * (period 2 -> 3). Mutation-RED: leaving the ET half parked in the class-0 phase
+ * 0x13 (the pre-T1 park) never accrues `extra_length`, so the period-3 roll and
+ * the phase == 2 assert both fail. The clock itself is untouched (the fix is the
+ * re-arm, not the clock). */
+static void test_extra_time_half_completes(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(fifa96_match_run_set_period(&mr, 1, 1) == 0);
+  mr.state.period = 2u;                        /* the first extra-time half */
+  fifa96_match_run_period_over_rearm(&mr);     /* the ET (sit-8) arm */
+  assert(mr.state.phase == 2u);                /* class 1 -- the live ET phase (FU-239 §3) */
+  assert(fifa96_match_state_phase_class(mr.state.phase) == 1u);
+  /* The FU-62 clock: 100 granted frames == 1 s at the 0x200 step. */
+  for (int i = 0; i < TICKS_PER_SECOND; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.period == 3u);               /* the ET half completed (extra_length) */
+  assert(mr.state.period_seconds == 0u);
+  drop_fixture(f);
+}
+
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
  * both, add_goal increments one side, invalid sides are rejected without a
  * write, and teardown/begin reset the pair. The original's trigger is the
@@ -435,6 +462,7 @@ int main(void) {
   test_live_period_end_exits_to_frontend();
   test_loopbacked_tiebreak_completion();
   test_half_time_completion_runs_sit1_kickoff();
+  test_extra_time_half_completes();
   test_mark_over_only_past_half_time();
   test_score_plumbing();
   puts("test_engine_match_completion OK");
