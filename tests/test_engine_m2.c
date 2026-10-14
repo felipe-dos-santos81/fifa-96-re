@@ -1,5 +1,6 @@
-/* tests/test_engine_m2.c — M2-B headless acceptance tape v20 (spec §5; the
- * M2 phase-20 sit-8-completion acceptance, T6; the v19 M2 phase-19
+/* tests/test_engine_m2.c — M2-B headless acceptance tape v21 (spec §5; the
+ * M2 phase-21 live period-end acceptance, T6; the v20 phase-20
+ * sit-8-completion acceptance, T6; the v19 M2 phase-19
  * period-end-spine acceptance, T6; the v18 M2 phase-18
  * producer-spine acceptance, T6; the v17 phase-17 phase/act-seam
  * acceptance, T7; the v16 phase-16
@@ -1540,6 +1541,79 @@
  * phase-20 completion landings moved no presented frame; M2 stays `441415fc…`,
  * M1 `09b726b7…` unmoved. Any *unexplained* drift is a regression to
  * investigate, never a re-pin.
+ *
+ * --- v21 (M2 phase-21 T6): the live period-end tape — THE RE-PIN -------------
+ *
+ * v21 is the phase-21 acceptance — the live period-end spine made tape-live
+ * (FU-223…FU-230, T1-T6). T4 wired the per-frame mode-0 producer cadence and T5
+ * re-pointed the `mark_over` lifecycle, so the committed v20 tape no longer
+ * stops at the goal restart: the scripted run drives the FU-62 clock through
+ * TWO live period completions — period 0 -> 1 (half-time) and period 1 -> 2
+ * (regulation end -> extra-time arm) — and the tape stops at extra-time entry
+ * (the spec §2 non-goal: no full ET match). This is the phase-14 T3 v13->v14
+ * precedent's re-pin form.
+ *
+ * THE RE-PIN REASON. The tape now presents frames past line 792, so the golden
+ * is re-pinned with the written reason + frame diff below (AGENTS.md golden
+ * rule). The M1 golden (`09b726b7…`) is unmoved.
+ *
+ * Measured schedule (FU230-L1: the directive `m`/tail are MEASURED on the
+ * landed T4/T5 code, never invented). With the ISO present:
+ *   - period-0 completion: engine step 845 (match-relative m 840); the
+ *     completion writes phase 0x0C / act 0xB and rolls `global_157ac2 = 1`; the
+ *     extra-time flag `global_157ac0` stays clear (completed index 0 is not a
+ *     tie-break site, FU-213 §2.4).
+ *   - M2_M_HALF_OPEN (m 841, engine step 846): the post-completion frame. The
+ *     period-end route's native caller requires the ordinary-match session gate
+ *     OPEN (`[0x14C32A] == 0`, FU-227 §2.1/§2.2); the goal scenario staged the
+ *     Practise session (m 1) for its queue/scheduler chain, so the tape opens
+ *     the gate here — the sit-1 else-arm then runs the half-time kickoff.
+ *   - M2_M_HALF_TIME (m 845, engine step 850): the sit-1 arrival — act 1
+ *     installed and the phase-0x17 body wrote the live kickoff phase 1
+ *     (`FIFA96_MATCH_RUN_KICKOFF_PHASE`).
+ *   - period-1 completion (reg end -> ET): engine step 2502; the completed
+ *     index 1 with differing scores (1-0) raised the OL-85 flag (W2 0x8B2AC),
+ *     the chooser consumed the LIVE flag -> phase 0x13 / act 0xC (the
+ *     extra-time arm), and the roll landed on 2.
+ *   - M2_M_ET_ENTRY (m 2498, engine step 2503 reading step 2502): asserts the
+ *     live flag, the roll, the phase-0x13 chooser arm and act 0xC.
+ *   - the completion window then runs M2_POST_PERIOD_END_FRAMES (20) past the
+ *     anchor -> engine step 2522.
+ *
+ * Measured frame diff (against the committed v20 golden, `cmp`/`diff` with the
+ * ISO present): the transcript grows 792 -> 2522 lines; the first 792 lines are
+ * byte-identical (`head -792 new | cmp - old` clean, 34820 bytes; `diff` shows
+ * only `792a793,2522`) and the first appended line is 793. The appended lines
+ * are the resumed 1-0 phase-2 play (793-845, `state=2/1-0`), the half-time
+ * chooser arm (846-849, `state=12/1-0`), the sit-1 half-time kickoff
+ * (850-1802, `state=1/1-0`), the resumed phase-2 play (1803-2502,
+ * `state=2/1-0`) and the extra-time chooser arm (2503-2522, `state=19/1-0`).
+ * No pre-792 line changes `state=` or `hash=` (the `cut -d' ' -f3-` and
+ * `-f2` isolations show only the appended block). The intended live
+ * continuation, not a regression.
+ *
+ * Golden decision (v21): **re-pinned with the written reason + frame diff
+ * above.** Regenerated with the ISO present
+ * (`./build/test_engine_m2 > tests/golden/engine/m2-frames.txt`); M1 unmoved
+ * (`09b726b7…`); old M2 sha
+ * `441415fc423b05b2957f0a0bd51efa44f7f4651b4f8c07fcd6fb5ed6a8da9506`
+ * (v20, 792 lines) -> new M2 sha
+ * `0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0`
+ * (v21, 2522 lines).
+ *
+ * The phase-21 rider classes (FU-230 §3.3, `run_phase21_riders`; every one is
+ * mutation-RED): the half-time sit-1 route, the reg-end -> extra-time arm, the
+ * tie-does-NOT-arm-ET polarity discriminator (errata E1), the period-index roll
+ * to the index-4 sit-8 gate, the ET-entry phase-0x1D slot dereference, the
+ * clock-completion schedule (the `main` half_step/et_step anchors) and the
+ * additivity/determinism gate (the 3-replay `main` check + the `head -792`
+ * prefix). The sit-8 extra-time *kickoff* (`global_157ac2 == 4` -> act 7 ->
+ * phase 0x10) stays off the tape: the native bit-8 `[0x4B0CB]` range-word gate
+ * that raises the index to 4 is DEAD (no instruction sets bit 8; spec §2 "No
+ * dead-gate synthesis", FU-215), and reaching index 4 through successive
+ * completions is past the ET entry the acceptance stops at. The reachable
+ * extra-time entry is the differing reg-end completion; `main`'s
+ * `et_phase == 0x13` anchor records it.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1565,7 +1639,11 @@
 
 #define M2_ISO_PATH "game/FIFAPCCD96.iso"
 #define M2_GOLDEN_PATH "tests/golden/engine/m2-frames.txt"
-#define M2_STEP_CAP 2000
+/* v21 (M2 phase-21 T6, FU230-L4): the extended tape plays through two live
+ * FU-62 period completions (half-time + the regulation end) and runs a tail
+ * past the second, so it exceeds the old 2000-step cap. The measured length is
+ * the v21 golden's line count (see the provenance block below). */
+#define M2_STEP_CAP 4000
 #define M2_TRANSCRIPT_CAP (1u << 20)
 
 /* Match-relative directive steps (1 = the first match frame, engine step 6):
@@ -1590,6 +1668,21 @@
 #define M2_M_LINK 58
 #define M2_M_SCORED 61
 #define M2_M_FINAL 72
+/* v21 (M2 phase-21 T6, FU-230 §2.2 / errata E1): the live period-end directives.
+ * The exact `m` values are measured on the landed T4/T5 code (FU230-L1: never
+ * invented) — see the v21 provenance block for the measured schedule.
+ *   m 841 `M2_M_HALF_OPEN`: the frame after the period-0 completion (engine
+ *         step 846). Opens the ordinary-match session (native `[0x14C32A] = 0`;
+ *         FU-227 §2.1/§2.2: the period-end route's caller requires the session
+ *         gate OPEN) so the sit-1 half-time kickoff runs instead of the
+ *         Practise-session queue the goal scenario staged.
+ *   m 845 `M2_M_HALF_TIME`: the sit-1 half-time kickoff arrival (engine step
+ *         850, phase 1 / act 1); asserts the period-0 roll and the kickoff.
+ *   m 2498 `M2_M_ET_ENTRY`: the DIFFERING reg-end completion (engine step 2503
+ *         reading step 2502) — the extra-time arm entry (period 1 -> 2). */
+#define M2_M_HALF_OPEN 841
+#define M2_M_HALF_TIME 845
+#define M2_M_ET_ENTRY 2498
 
 /* v14 (phase-14 T3): post-restart frames recorded before the tape stops. The
  * v13 tape recorded `M2_POST_GOAL_FRAMES` (20) post-goal frames and stopped at
@@ -1601,6 +1694,14 @@
  * advance fires ~85 granted frames past the v13 stop, so the first 85 lines
  * are byte-identical. */
 #define M2_POST_RESTART_FRAMES 20
+
+/* v21 (M2 phase-21 T6, FU-230 §2.2.1): the tail the tape records past the
+ * ET-entry anchor (the extra-time arm) before it stops — the v14
+ * `M2_POST_RESTART_FRAMES` convention applied to the period-end window. The
+ * completion window replaces the v20 stop (which fired
+ * `M2_POST_RESTART_FRAMES` past the goal restart) so the two live period
+ * completions play. */
+#define M2_POST_PERIOD_END_FRAMES 20
 
 /* OL-T11-7 (v5): the derived HUD band top on the full 320x240 window is the
  * bar's y = y1 - Frames-frame-4-height - 2 = 240 - 41 - 2 = 197 (FU-148
@@ -1932,6 +2033,14 @@ struct m2_result {
   uint8_t phase4_screen_step;   /* screen_step at phase4_step (the PHASE hold) */
   uint8_t restart_screen_step;  /* screen_step at restart_step (POST idle) */
   uint8_t restart_pending;      /* situation_pending at restart_step (= 0) */
+  /* v21 (M2 phase-21 T6): the live period-end anchors (FU-230 §2.2.3). The
+   * half-time kickoff (`half_step`, the sit-1 arrival at phase 1) and the
+   * differing reg-end completion -> extra-time arm (`et_step` / `et_entry_step`
+   * / `et_phase`, the roll-2 flag-set chooser state). */
+  uint64_t half_step;        /* engine step the sit-1 half-time kickoff arrived */
+  uint64_t et_step;          /* engine step the ET-entry directive sampled */
+  uint64_t et_entry_step;    /* engine step of the differing reg-end completion */
+  uint8_t et_phase;          /* state.phase at the ET entry (the ET chooser arm) */
   int32_t ball_x, ball_y, ball_z;  /* T5 kickoff spawn pinned at match start */
   uint8_t start_anim_id;     /* T5 inactive-record selector id at match start */
   /* v11/v12 (phase-11 T3 / phase-12 T2 acceptance): the FUN_0008BAF0
@@ -2630,6 +2739,48 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
       assert(res->ball_final_drawable == 1);
       assert(res->ball_final_sx >= (e->surface->width << 16));
     }
+  } else if (m == M2_M_HALF_OPEN) {
+    /* v21 (M2 T6): the frame the period-0 completion was consumed on. The
+     * completion wrote phase 0x0C / act 0xB and rolled `global_157ac2 = 1`
+     * (the half-time roll); no extra-time flag (the score is still 1-0 but the
+     * completed index 0 is not a tie-break site, FU-213 §2.4). Natively the
+     * period-end route's caller requires the ordinary-match session gate OPEN
+     * (`[0x14C32A] == 0`, FU-227 §2.1/§2.2), so the tape opens it here: the
+     * sit-1 else-arm (`period_setup(mode 0)` -> `0x888F2`, the direct path)
+     * then runs the half-time kickoff. The goal scenario staged the Practise
+     * session (m 1) for its queue/scheduler chain; this is the disclosed switch
+     * to the ordinary match for the period transitions. */
+    assert(mr->state.period == 1u);
+    assert(mr->global_157ac0 == 0u);            /* no differing-reg-end flag yet */
+    assert(mr->global_157ac2 == 1u);            /* the period-0 roll (half-time) */
+    assert(mr->state.phase == 0x0Cu);           /* the completion's chooser arm */
+    assert(mr->act.id == 0x0Bu);                /* the no-ET chooser act */
+    mr->session_gate_14c32a = 0;                /* open the ordinary session (FU-227) */
+  } else if (m == M2_M_HALF_TIME) {
+    /* v21 (M2 T6): the sit-1 half-time kickoff arrival. The sit-1 else-arm
+     * installed act 1 (invoke-now) and the phase-0x17 act-tail row stage 0
+     * wrote the live phase 1 (`FIFA96_MATCH_RUN_KICKOFF_PHASE`, FU-227 §2.4).
+     * Mutation-RED: dropping the sit-1 dispatch (or gating it off) leaves the
+     * phase at 0x0C and aborts here. */
+    assert(mr->global_157ac0 == 0u);
+    assert(mr->global_157ac2 == 1u);            /* the roll is unchanged since the completion */
+    assert(mr->state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);  /* == 1, the sit-1 kickoff */
+    assert(mr->act.id == 1u);                   /* the sit-1 arm installed act 1 */
+    res->half_step = (uint64_t)next;
+  } else if (m == M2_M_ET_ENTRY) {
+    /* v21 (M2 T6): the DIFFERING reg-end completion -> the extra-time arm
+     * (errata E1). The completed index 1 (regulation) with differing scores
+     * raised the OL-85 flag (`W2 0x8B2AC`), the derived chooser consumed the
+     * LIVE flag -> phase 0x13 / act 0xC (the extra-time arm, not the no-ET
+     * 0xB), and the roll landed on 2 (`state.period`). Mutation-RED: reverting
+     * the flag (or the tie-break) selects act 0xB and aborts. */
+    assert(mr->global_157ac0 == 1u);            /* W2 0x8B2AC: the differing reg end */
+    assert(mr->global_157ac2 == 2u);            /* the period 1 -> 2 roll */
+    assert(mr->state.phase == 0x13u);           /* the extra-time chooser arm */
+    assert(mr->act.id == 0x0Cu);                /* act 0xC, not the no-ET arm 0xB */
+    res->et_step = (uint64_t)next;
+    res->et_entry_step = (uint64_t)(next - 1);  /* the completion step */
+    res->et_phase = mr->state.phase;
   }
 }
 
@@ -2637,15 +2788,15 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
  * one transcript line per presented frame. The per-step invariants (one
  * present, nonzero hash, frame ordinals +1) hold in both modes.
  *
- * v21 (M2 phase-21 T1): the shared scenario runner. `run_tape` is the
- * committed v20 replay (stops `M2_POST_RESTART_FRAMES` past the restart, the
- * golden's stop window); `run_scenario_capture` runs the same scenario with
- * `run_to_period_end` set, stopping at the first FU-62 period completion (the
- * T1 feasibility extension). Both share this one transcript-capture body so
- * the committed 792-line prefix is produced by the identical code path. */
+ * v21 (M2 phase-21 T6): the shared scenario runner. `run_tape` is the v21
+ * golden producer; `run_scenario_capture` returns the same transcript for the
+ * ≥3-replay determinism gate. Both share this one transcript-capture body. The
+ * tape now plays through the two live period completions (FU-230 §2.2) and
+ * stops `M2_POST_PERIOD_END_FRAMES` past the ET-entry anchor — the v20 stop
+ * (`M2_POST_RESTART_FRAMES` past the goal restart) is replaced. */
 static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out_len,
                          struct fifa96_platform_null_stats *out_stats,
-                         struct m2_result *res, int run_to_period_end) {
+                         struct m2_result *res) {
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
   pcfg.tape = M2_KEYS;
@@ -2950,16 +3101,15 @@ static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out
         res->restart_pending = e->match_run.situation_pending;
       }
     }
-    if (run_to_period_end) {
-      /* v21 (M2 phase-21 T1): stop at the first FU-62 period completion. The
-       * completion is a one-shot inside the frame body (phase_drive consumes
-       * `clock_period_ended` in the same step), so the durable observable that
-       * survives the step is the period-index roll `global_157ac2` latched from
-       * `state.period` (fifa96_match_run.c:2643). The producer is render
-       * independent, so the completion step is mode-invariant. */
-      if (res->match_start_step > 0 && e->match_run.global_157ac2 != 0u) break;
-    } else if (res->restart_step > 0 &&
-               steps - res->restart_step >= M2_POST_RESTART_FRAMES) {
+    /* v21 (M2 phase-21 T6, FU-230 §2.2.1): the completion window. The v20 stop
+     * (`M2_POST_RESTART_FRAMES` past the goal restart) is replaced so the tape
+     * keeps running through the two live FU-62 period completions and stops
+     * `M2_POST_PERIOD_END_FRAMES` past the ET-entry anchor (the differing
+     * reg-end -> extra-time arm). If the anchor is never reached the hard bound
+     * (`M2_STEP_CAP`) ends the loop and the post-loop assert reports it
+     * (spec §5 T1 STOP-and-report). */
+    if (res->et_entry_step > 0 &&
+        (uint64_t)steps - res->et_entry_step >= M2_POST_PERIOD_END_FRAMES) {
       break;
     }
   }
@@ -2977,29 +3127,28 @@ static void run_scenario(int with_iso, char *transcript, size_t cap, size_t *out
   fifa96_platform_destroy(plat);
 }
 
-/* v21 (M2 phase-21 T1): the committed v20 replay — the shared scenario body
- * with the v20 stop window (`M2_POST_RESTART_FRAMES` past the restart). The
- * golden's producer. */
+/* v21 (M2 phase-21 T6): the v21 golden producer — the shared scenario body
+ * with the completion window (stop `M2_POST_PERIOD_END_FRAMES` past the
+ * ET-entry anchor). */
 static void run_tape(int with_iso, char *transcript, size_t cap, size_t *out_len,
                      struct fifa96_platform_null_stats *out_stats,
                      struct m2_result *res) {
-  run_scenario(with_iso, transcript, cap, out_len, out_stats, res, 0);
+  run_scenario(with_iso, transcript, cap, out_len, out_stats, res);
 }
 
-/* v21 (M2 phase-21 T1): the transcript-neutral capture of the extended
- * scenario — the same null config/directive path as `run_tape`, but run to the
- * first FU-62 period completion (the feasibility extension). Returns a
- * malloc'd, NUL-terminated transcript and never writes the golden or stdout,
- * so the ≥3-replay determinism gate can diff it byte-for-byte. The ISO is
- * auto-detected exactly as `main` does, so the capture's committed prefix is
- * the same code path as `run_tape`. */
+/* v21 (M2 phase-21 T6): the transcript-neutral capture of the extended
+ * scenario — the same null config/directive path as `run_tape`, run to the
+ * ET-entry anchor + tail. Returns a malloc'd, NUL-terminated transcript and
+ * never writes the golden or stdout, so the ≥3-replay determinism gate can diff
+ * it byte-for-byte. The ISO is auto-detected exactly as `main` does, so the
+ * capture is the same code path as the golden producer. */
 static char *run_scenario_capture(size_t *out_len) {
   char *transcript = malloc(M2_TRANSCRIPT_CAP);
   assert(transcript != NULL);
   struct fifa96_platform_null_stats st;
   struct m2_result res;
   run_scenario(file_exists(M2_ISO_PATH), transcript, M2_TRANSCRIPT_CAP, out_len,
-               &st, &res, 1);
+               &st, &res);
   return transcript;
 }
 
@@ -3098,9 +3247,11 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
 
 /* v21 (M2 phase-21 T1): the period-end feasibility probe — transcript-neutral.
  * Extends the scripted run past the v20 stop so the FU-62 clock reaches its
- * limit, and records what the run does NOW (the producer spine is still gated).
- * Writes nothing to stdout; never touches the golden. Returns the measured
- * completion step and fills `out` (when non-NULL) with the characterization.
+ * limit, and records the measured first-completion step and the post-completion
+ * characterization (T6 consumes it: the half-time/ET directives are placed from
+ * the measured schedule, FU230-L1). Writes nothing to stdout; never touches the
+ * golden. Returns the measured completion step and fills `out` (when non-NULL)
+ * with the characterization.
  *
  * Controller ruling (overrides the plan sketch): the probe RECORDS the exit
  * characterization and STOPS at the first completion frame. It does not assert
@@ -3166,7 +3317,7 @@ static uint64_t run_period_end_probe(struct m2_period_end *out) {
   fprintf(stderr,
           "test_engine_m2 period-end probe: completion at engine step %" PRIu64
           " (match-relative m %" PRIu64 "), mode at completion %u, exited %u "
-          "(characterization: the run currently ends at the first completion)\n",
+          "(characterization: the first period completion continues under T5)\n",
           pe.completion_step, pe.completion_step - (uint64_t)res.match_start_step,
           (unsigned)pe.mode_at_completion, (unsigned)pe.exited_at_completion);
   if (out) *out = pe;
@@ -3972,6 +4123,129 @@ static void run_phase21_riders(void) {
                                           probe, &o) == FIFA96_OK);
     assert(o.phase == 0x14u && o.act == 0x0Cu && o.side == 0u);
   }
+  /* v21 (M2 phase-21 T6): the live period-end transition riders (FU-230 §3.3,
+   * classes 1-5). Classes 6 (the clock-completion schedule) and 7
+   * (additivity/determinism) are the `main` half_step/et_step anchors and the
+   * 3-replay gate + the documented `head -792` prefix check (spec §5 T6).
+   * Every block is mutation-RED and pure C state (ISO-independent, prints
+   * nothing). */
+  /* 4. HALF-TIME (T5/FU-227, class 1): the period-0 completion takes the sit-1
+   *    (non-extra-time) else-arm -> act 1 -> the phase-0x17 kickoff writing the
+   *    live phase 1. Mutation-RED: dropping the sit-1 dispatch (or reverting
+   *    the chooser to the ET arm) leaves the phase at 0x0C / act 0xB. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.state.period = 1;                /* the period-0 completion (0 -> 1) */
+    mr.state.phase = 2;                 /* class 1: the clock runs */
+    mr.phase_machine.side_controlled = 0;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac2 == 1u);     /* the half-time roll (0x8B58A) */
+    assert(mr.global_157ac0 == 0u);     /* completed index 0 is not a tie-break site */
+    assert(mr.act.id == 0x0Bu);         /* the no-ET chooser act */
+    assert(mr.state.phase == 0x0Cu);    /* the completion's chooser arm */
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* T5: half-time continues */
+    /* The next frame's top-of-call mode-0 producer runs the sit-1 else-arm ->
+     * act 1 -> (invoke-now) the phase-0x17 body writes the kickoff phase 1. */
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
+    assert(mr.act.id == 1u);            /* the sit-1 arm installed act 1 */
+    /* The phase-0x17 body's kickoff write (phase 1) runs on the act tail; the
+     * tape pins the live phase-1 arrival (M2_M_HALF_TIME) and the T5 unit test
+     * `test_half_time_completion_runs_sit1_kickoff` drives it through the frame
+     * body. Here the sit-1 dispatch itself is pinned. */
+    assert(mr.state.phase == 0x0Cu);    /* the phase write is the act tail's job */
+  }
+  /* 5. REG-END -> ET ARM (T3/FU-213 + T4/FU-225, class 2, errata E1): a
+   *    DIFFERING regulation-end completion raises the OL-85 flag (W2 0x8B2AC)
+   *    and the chooser consumes the LIVE flag -> phase 0x13 / act 0xC; the roll
+   *    lands on 2. Mutation-RED: reverting the flag selects act 0xB/phase 0x0C. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.state.period = 2;                /* completed index 1 (regulation) */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 0u;                   /* differing -> the flag is raised */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac0 == 1u);
+    assert(mr.state.phase == 0x13u);
+    assert(mr.act.id == 0x0Cu);
+    assert(mr.global_157ac2 == 2u);
+  }
+  /* 6. TIE does NOT arm ET (the errata-E1 polarity discriminator, class 3): a
+   *    TIED regulation-end completion leaves the flag clear -> act 0xB / phase
+   *    0x0C. Mutation-RED: inverting `differ` raises the flag and aborts. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.state.period = 2;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;                   /* tied -> the flag stays clear */
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac0 == 0u);
+    assert(mr.state.phase == 0x0Cu);
+    assert(mr.act.id == 0x0Bu);
+    assert(mr.global_157ac2 == 2u);
+  }
+  /* 7. PERIOD-INDEX ROLL -> the index-4 sit-8 gate (T2/T3/FU-208/FU-224, class
+   *    4): the roll on 4 drives the mode-0 situation-8 selector -> act 7 (the
+   *    index-3 roll does not). Mutation-RED: gating off index 4 leaves act 0xB. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.frame_delta = 2;
+    mr.state.period = 4;                /* the FU-62 library rolled 3 -> 4 */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(fifa96_match_run_phase_drive(&mr) == 0);   /* the sit-8 lands next frame */
+    assert(mr.global_157ac2 == 4u);
+    assert(mr.act.id == 7);
+    assert(mr.state.phase == 0x10u);
+    /* the index-3 roll leaves the chooser's act. */
+    fifa96_match_run_init(&mr);
+    mr.state.period = 3;                /* completed index 2 -> roll 3 */
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(mr.global_157ac2 == 3u);
+    assert(mr.act.id == 0x0Bu);
+  }
+  /* 8. ET-ENTRY SLOT dereference (T2/T3/FU-209/FU-210/FU-217, class 5): the
+   *    registered phase-0x1D slot's arm-0 write lands phase 0x10 and the sit-8
+   *    bind couples the row-0x20 install on the bound actor. Mutation-RED: a
+   *    NULLed slot or a dropped arm-0 write leaves the phase at 0x1D. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_phase_table[0x1D].fn != NULL);
+    mr.state.frame_delta = 2;
+    mr.state.period = 4;
+    mr.state.phase = 2;
+    mr.phase_machine.side_controlled = 0;
+    mr.score[0] = 1u;
+    mr.score[1] = 1u;
+    mr.clock_period_ended = 1;
+    assert(fifa96_match_run_phase_drive(&mr) == 1);
+    assert(fifa96_match_run_phase_drive(&mr) == 0);
+    assert(mr.state.phase == 0x10u);          /* the 0x898DD arm-0 phase write */
+    assert(mr.global_157a4c == 1u);           /* the sit-8 actor bind */
+    assert(mr.actor_1587cc[0] == (int32_t)(0u * FIFA96_MATCH_ENTITY_RECORDS + 10u));
+    assert(mr.entities.team[0].records[10].code == 0x20u);  /* 0x899A2 install */
+  }
 }
 
 /* First-difference report so a golden drift points at the offending line. */
@@ -4023,11 +4297,11 @@ int main(void) {
   struct m2_result res;
   run_tape(with_iso, transcript, M2_TRANSCRIPT_CAP, &tlen, &st, &res);
 
-  /* v21 (M2 phase-21 T1): the determinism gate — the extended scenario (the
-   * same null/backend directive path run to the first period completion) is
-   * byte-stable over 3 replays (spec §5 T1), and the extension is purely
-   * additive: the committed v20 transcript is a byte-exact prefix of the
-   * extended capture (no re-pin; the golden is untouched). */
+  /* v21 (M2 phase-21 T6): the determinism gate — the extended scenario (the
+   * live period-end tape, run to the ET-entry anchor + tail) is byte-stable
+   * over 3 replays (spec §5 T1). The replays are the same code path as the
+   * golden producer, so this is the live tape's byte-stability, not only the
+   * committed prefix's. */
   {
     char *r[3];
     size_t n[3];
@@ -4035,12 +4309,12 @@ int main(void) {
     assert(n[0] == n[1] && n[1] == n[2]);
     assert(memcmp(r[0], r[1], n[0]) == 0);
     assert(memcmp(r[1], r[2], n[0]) == 0);
-    assert(n[0] >= tlen);
+    assert(n[0] == tlen);
     assert(memcmp(r[0], transcript, tlen) == 0);
     fprintf(stderr,
             "test_engine_m2 determinism gate: 3 replays byte-stable (%zu bytes "
-            "each); v20 prefix %zu bytes unchanged\n",
-            n[0], tlen);
+            "each); the golden producer matches them\n",
+            n[0]);
     for (int i = 0; i < 3; i++) free(r[i]);
   }
 
@@ -4138,7 +4412,14 @@ int main(void) {
   assert(res.restart_step - res.phase4_step == 303);
   assert(res.restart_screen_step == 4u);      /* the POST idle */
   assert(res.restart_pending == 0u);
-  assert(res.steps - res.restart_step == M2_POST_RESTART_FRAMES);
+  /* v21 (M2 phase-21 T6, FU-230 §2.2.3): the live period-end anchors. The tape
+   * runs through both FU-62 period completions and stops
+   * `M2_POST_PERIOD_END_FRAMES` past the ET-entry anchor. */
+  assert(res.half_step > (uint64_t)res.restart_step);   /* half-time after the goal restart */
+  assert(res.et_entry_step > res.half_step);            /* the reg-end completion follows half-time */
+  assert(res.et_step == res.et_entry_step + 1u);        /* the sampling step trails the completion */
+  assert(res.et_phase == 0x13u);                        /* the extra-time chooser arm */
+  assert(res.steps - (int)res.et_entry_step == M2_POST_PERIOD_END_FRAMES);
   /* v15 (phase-15 T4): the phase-15 tape-level stratum — action row 0x19 is
    * dispatched by the tape (the row-04 carrier install `0x7E866`/`0x7E8C1`
    * stages code 0x19; the ported body records FIFA96_OK and is frame-neutral at
@@ -4247,7 +4528,9 @@ int main(void) {
   /* The state lines pin the forced kickoff phases, the scoreless phase-2
    * frames, the natural goal (the writer frame's post state: the phase-0
    * hold with the 1-0 pair), the post-goal hold and the v14 restart windows
-   * (0x15 = 21, 4) into the resumed 1-0 phase 2. */
+   * (0x15 = 21, 4) into the resumed 1-0 phase 2. v21 (T6): the live period
+   * ends — the half-time chooser arm (0x0C = 12) and the sit-1 kickoff
+   * (phase 1), then the extra-time chooser arm (0x13 = 19) at the ET entry. */
   assert(strstr(transcript, " state=19/") != NULL);
   assert(strstr(transcript, " state=20/") != NULL);
   assert(strstr(transcript, " state=2/0-0\n") != NULL);
@@ -4255,6 +4538,9 @@ int main(void) {
   assert(strstr(transcript, " state=21/1-0\n") != NULL);   /* the act-9 window */
   assert(strstr(transcript, " state=4/1-0\n") != NULL);    /* the corner window */
   assert(strstr(transcript, " state=2/1-0\n") != NULL);    /* the resumed play */
+  assert(strstr(transcript, " state=12/1-0\n") != NULL);   /* v21: the half-time chooser arm */
+  assert(strstr(transcript, " state=1/1-0\n") != NULL);    /* v21: the sit-1 half-time kickoff */
+  assert(strstr(transcript, " state=19/1-0\n") != NULL);   /* v21: the extra-time chooser arm (ET entry) */
   assert(fwrite(transcript, 1, tlen, stdout) == tlen);
 
   if (!with_iso) {

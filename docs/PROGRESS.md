@@ -1630,3 +1630,77 @@ block in `docs/ENGINE.md` names each native locus; no fake producer was added.
 mutation-RED (the mutations + failing outputs above, re-verified first-hand in
 this task). **Determinism:** M1 `09b726b7…` unmoved; M2 `441415fc…`
 byte-identical (`cmp` clean); `make check` **110/110** (sanitized).
+
+## M2 phase-21 T6 — acceptance: the live period-end tape v21 (the re-pin) + the phase-21 rider classes (FU-223…FU-230)
+
+**The acceptance layer closes the live period-end spine: the tape is extended to
+play both FU-62 period completions and the golden is re-pinned `v20 → v21`.**
+T4/FU-225 wired the per-frame mode-0 producer cadence and T5/FU-227/FU-228
+re-pointed the `mark_over` lifecycle, so the committed v20 tape no longer stops
+at the goal restart. The scripted run now drives the clock through **two live
+period completions** — period 0 → 1 (half-time) and period 1 → 2 (regulation
+end → extra-time arm) — and stops at **extra-time entry** (spec §2 non-goal: no
+full ET match).
+
+**Measured schedule (FU230-L1 — MEASURED on the landed T4/T5 code, never
+invented).** With the ISO present: the **period-0 completion** is engine step
+845 (roll `global_157ac2 = 1`; the extra-time flag stays clear — completed index
+0 is not a tie-break site, FU-213 §2.4). `M2_M_HALF_OPEN` (m 841, step 846)
+opens the ordinary-match session (`mr->session_gate_14c32a = 0`): FU-227
+§2.1/§2.2 show the period-end route's native caller requires `[0x14C32A] == 0`,
+and the goal scenario had staged the Practise session (m 1) for its
+queue/scheduler chain, so the tape switches to the ordinary match for the
+transitions. `M2_M_HALF_TIME` (m 845, step 850) pins the **sit-1 half-time
+kickoff** arrival (phase `FIFA96_MATCH_RUN_KICKOFF_PHASE = 1`, act 1). The
+**period-1 completion** (differing, 1-0) is at engine step 2502: the completed
+index 1 with differing scores raised the OL-85 flag (W2 `0x8B2AC`; errata E1 — a
+*differing* reg end, not a tie), the live-flag chooser wrote phase `0x13` /
+dispatched act `0xC` (the extra-time arm), and the roll landed on 2.
+`M2_M_ET_ENTRY` (m 2498, step 2503 reading step 2502) pins it; the completion
+window then runs `M2_POST_PERIOD_END_FRAMES` (20) past the anchor → step 2522.
+
+**The re-pin (written reason + frame diff; the AGENTS.md golden rule).**
+Reason: the tape now presents frames past line 792 (the live continuation, not a
+regression). **Frame diff (ISO present):** the transcript grows **792 → 2522**
+lines; the first 792 lines are **byte-identical** (`head -792 new | cmp - old`
+clean, 34820 bytes; `diff` = `792a793,2522`), first appended line 793. The
+appended region is the resumed 1-0 phase-2 play (793–845, `state=2/1-0`), the
+half-time chooser arm (846–849, `state=12/1-0`), the sit-1 half-time kickoff
+(850–1802, `state=1/1-0`), the resumed phase-2 play (1803–2502, `state=2/1-0`)
+and the extra-time chooser arm (2503–2522, `state=19/1-0`). No pre-792 line
+changes `state=` or `hash=` (the `cut -d' ' -f3-`/`-f2` isolations show only the
+appended block). Old M2
+`441415fc423b05b2957f0a0bd51efa44f7f4651b4f8c07fcd6fb5ed6a8da9506` (v20, 792) →
+new M2
+`0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0` (v21, 2522);
+M1 `09b726b7a7510facffef7883926e55b44f69f8d61385eb3baa0c269c8006a2cd` unmoved
+(`cmp` clean).
+
+**Rider classes (every one mutation-RED, `run_phase21_riders`).** (1) the
+half-time sit-1 route (period-0 completion → act 1); (2) the reg-end → ET arm
+(differing → flag → act `0xC` / phase `0x13`); (3) the **tie does NOT arm ET**
+polarity discriminator (errata E1 — a tied reg end leaves the flag clear → act
+`0xB` / phase `0x0C`); (4) the period-index roll to the **index-4 sit-8 gate**
+(act 7 / phase `0x10`; the index-3 roll does not); (5) the ET-entry
+phase-`0x1D` slot dereference + the sit-8 actor bind; (6) the clock-completion
+schedule (the `main` `half_step`/`et_step` anchors); (7) additivity/determinism
+(the 3-replay byte-stability gate + the `head -792` prefix). The sit-8 ET
+*kickoff* (`global_157ac2 == 4` → act 7 → phase `0x10`) stays **off** the tape:
+the native bit-8 `[0x4B0CB]` range-word gate that raises the index to 4 is
+**dead** (no instruction sets bit 8; spec §2 “No dead-gate synthesis”, FU-215) —
+the reachable extra-time entry is the differing reg-end completion.
+
+**Smoke (honest).** `make game` under `DISPLAY=:1` (SDL3 + `game/FIFAPCCD96.iso`
+present) opened the windowed engine, booted the ISO and drew the
+intro/front-end for 12 s with no crash; the `SIGTERM` shutdown LeakSanitizer
+report (184 B) is inside `libdbus-1` via SDL3/X11 GL — external, not
+engine-owned. This host has no scripted interaction for the windowed build, so
+the **live clock → completions reach is proven by the headless v21 tape**
+(`test_engine_m2`, byte-stable over 3 replays).
+
+**Census recomputed:** `55 OK = 33 action + 22 phase`; dispatch
+`24 UNSUP / 55 OK / 1 NOTF` (sum 80); `floor(100 × 55/80) = 68` — **unchanged**;
+README title `68%`, `docs/ENGINE.md` status + action-dispatch bullets and
+`AGENTS.md` stay consistent (T6 wires no new row). `make check` **110/110**
+(sanitized). **Determinism:** M1 `09b726b7…` unmoved; M2 re-pinned to
+`0b87fd18…` (v21, 2522 lines).

@@ -1316,6 +1316,44 @@ the build also produces the windowed `fifa96` target (`make game`).
   `make check` **110/110**. Remaining legs: the phase-20 leg register above
   (**FU215-L1..L5, FU216-L1/L3, FU217-L1/L2/L3/L5, FU219-L2..L6, FU220-L1..L6,
   FU221-L1** parked, **FU208-L8**) — each with its native owner.
+- **M2 phase-21 T6 (FU-223…FU-230) — acceptance: the live period-end tape v21
+  (the re-pin) + the phase-21 rider classes; census unchanged `55/80 = 68%`.**
+  `tests/test_engine_m2.c` is re-labelled **v21** and the golden is
+  **re-pinned** (the phase-14 T3 v13→v14 form; the written reason + frame diff
+  live in the v21 provenance block and the phase-21 T6 report). T4/FU-225 wired
+  the per-frame mode-0 producer and T5/FU-227/FU-228 re-pointed the `mark_over`
+  lifecycle, so the committed v20 tape no longer stops at the goal restart: the
+  scripted run drives the FU-62 clock through **two live period completions** —
+  period 0 → 1 (half-time) and period 1 → 2 (regulation end → extra-time arm) —
+  and stops at **extra-time entry** (spec §2 non-goal: no full ET match).
+  Measured schedule (FU230-L1; never invented): the period-0 completion at
+  engine step 845 (roll `global_157ac2 = 1`); `M2_M_HALF_OPEN` (m 841) opens the
+  ordinary-match session (`[0x14C32A] = 0`, FU-227 §2.1/§2.2 — the period-end
+  route's caller requires it) so the sit-1 half-time kickoff runs;
+  `M2_M_HALF_TIME` (m 845) pins the phase-1 kickoff arrival; the period-1
+  (differing, 1-0) completion at engine step 2502 raises the OL-85 flag
+  (W2 `0x8B2AC`; errata E1: a differing reg end, not a tie) → phase `0x13` /
+  act `0xC` / roll 2; `M2_M_ET_ENTRY` (m 2498) pins the extra-time entry.
+  **Frame diff:** lines 1..792 byte-identical (`head -792 new | cmp - old`
+  clean, 34820 bytes; `diff` = `792a793,2522`), first appended line 793; N =
+  **2522** lines. Old M2 `441415fc…` (792) → new M2
+  `0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0` (2522);
+  M1 `09b726b7…` unmoved. **Rider classes (every one mutation-RED,
+  `run_phase21_riders`):** the half-time sit-1 route, the reg-end → ET arm, the
+  tie-does-NOT-arm-ET polarity discriminator (errata E1), the roll → the
+  index-4 sit-8 gate, the ET-entry phase-`0x1D` slot dereference, the
+  clock-completion schedule (the `main` `half_step`/`et_step` anchors), and
+  additivity/determinism (the 3-replay gate + the `head -792` prefix). The
+  sit-8 extra-time *kickoff* (`global_157ac2 == 4` → act 7 → phase `0x10`)
+  stays off the tape: the native bit-8 `[0x4B0CB]` range-word gate that raises
+  the index to 4 is **dead** (no instruction sets bit 8; spec §2 "No dead-gate
+  synthesis", FU-215); `main`'s `et_phase == 0x13` records the reachable
+  extra-time entry. `make check` **110/110**. **Smoke (honest):** `make game`
+  under `DISPLAY=:1` opened the windowed SDL3 engine, booted the ISO and drew
+  the intro/front-end for 12 s with no crash (the SIGTERM shutdown
+  LeakSanitizer report is from `libdbus`/`libnvidia-glcore`/SDL3, not the
+  engine); the **live clock → completions reach is proven headless** by the v21
+  tape (`test_engine_m2`, byte-stable over 3 replays).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
