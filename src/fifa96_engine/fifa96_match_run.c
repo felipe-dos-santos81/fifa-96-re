@@ -4209,11 +4209,19 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * native route `0x13/0x14 -> 0x0C -> sit-8 -> phase 2` is FU239-L1 (the
      * situation dispatch is indirect); the dwell bound is that act-`0xC`
      * screen completion, > the v21 20-frame window. Gated on the live ET-entry
-     * state (`global_157ac0 == 1`, `global_157ac2 >= 2` — the differing
-     * regulation end's roll), so a bare phase-`0x13`/`0x14` state (the forced
-     * kickoff window) does not re-arm. */
+     * state (`global_157ac0 == 1`, the differing regulation end's roll).
+     * M2 phase-22 T4b (FU-239 / g8 §3.1): the index term is the ET-play window
+     * `{2,3}`, NOT `>= 2`. The native re-arms once per ET half (at the ET entry
+     * index 2 and the ET-half-1 -> ET-half-2 boundary index 3; `0x8B58A`), but
+     * at the ET-half-2 COMPLETION (index 4) the chooser parks phase
+     * `0x13`/`0x14` and the native takes the post-ET terminal (the end machine
+     * `word[0x158822]=2`), never another re-arm. The un-bounded `>= 2` stayed
+     * true as `global_157ac2` climbed 2->3->4->5, so the re-arm re-fired after
+     * every half and the run held at `period=5, phase=2`. A bare phase-
+     * `0x13`/`0x14` state (the forced kickoff window) still does not re-arm. */
     if ((mr->state.phase == 0x13u || mr->state.phase == 0x14u) &&
-        mr->act.id == 0 && mr->global_157ac0 == 1u && mr->global_157ac2 >= 2u)
+        mr->act.id == 0 && mr->global_157ac0 == 1u &&
+        (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u))
       fifa96_match_run_period_over_rearm(mr);
     /* FU-145 S2 (0x8B63E): the native clock tail FUN_0008AF38 calls the goal
      * scanner FUN_00088940 after the period-end handling; the derived scan
@@ -4233,8 +4241,15 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * by the frame delta (`0x8BC0A CMP dword[0x158808],0 ; JNZ 0x8BC20` skips
      * the accumulate when an act is installed). The accrued timer is what lets
      * the staged end word reach `>= 0x78` and the `mark_over` screen dwell
-     * past `0x168` below. */
-    if (mr->state.phase == 0x0Cu && mr->act.id == 0)
+     * past `0x168` below. M2 phase-22 T4b (FU-231 §3 / g2 §1, native `0x8BCFE`):
+     * the SAME cell is accrued by the end machine's phase-`0x13`/`0x14` arm
+     * (`0x8BCFE MOV AX,[0x157A64] ; 0x8BD04 ADD word[0x158818],AX`, gated the
+     * same way on no act) — the ET-over dwell. Extending the gate to `0x13`/
+     * `0x14` is what lets `act.timer` pass `0x4B0` so the ET-over word `2`
+     * stages (`fifa96_match_run_end_word`). Without it the ET path caps at the
+     * act-`0xC` reset (~0xD6) and the ET-over is unreachable. */
+    if ((mr->state.phase == 0x0Cu || mr->state.phase == 0x13u ||
+         mr->state.phase == 0x14u) && mr->act.id == 0)
       mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);
     /* FU-231 §3 (M2 phase-22 T2): the FUN_0008BAF0 end machine — the native
      * clock-tail call at `0x8B664` (after the period/goal block, before the

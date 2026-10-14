@@ -5883,6 +5883,31 @@ static void test_end_word_staging_gate(void) {
     assert(granted == 1);
     assert(mr.end_word_158822 == 1u);  /* the flag-clear terminal stages 1 */
   }
+  /* (c) ET-over (M2 phase-22 T4b): phase 0x13 at index 4 with the dwell met
+   * stages word 2 and consumes it in the same granted frame (native
+   * `0x8BD8A`/`0x8BDD4` set, `0x4B29B` clear; FU-232 §3). The ET-over is a
+   * transient consume, NOT a match-over: the over screen is untouched. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.period = 4u;
+    mr.state.phase = 0x13u;      /* the chooser's ET-over screen */
+    mr.global_157ac0 = 1u;       /* the live extra-time flag */
+    mr.global_157ac2 = 4u;       /* post-ET-half-2: no re-arm (T4b bound) */
+    mr.act.id = 0;               /* no act: the phase-0x13 dwell accrues */
+    mr.act.timer = 0x4B1;        /* the ET-over dwell is already met (> 0x4B0) */
+    int granted = 0;
+    for (int i = 0; i < 10 && !granted; i++) {
+      int rc = fifa96_match_run_frame(&mr);
+      assert(rc >= 0);
+      granted = rc;
+    }
+    assert(granted == 1);
+    assert(mr.end_word_158822 == 0u);                    /* staged 2, consumed */
+    assert(fifa96_match_run_end_word(&mr) == 2u);        /* the ET-over condition holds */
+    assert(mr.state.phase == 0x13u);                     /* not re-armed to 2 */
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* no over screen */
+  }
 }
 
 int main(void) {

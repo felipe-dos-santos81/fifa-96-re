@@ -569,6 +569,86 @@ static void test_et_entry_dwell_rearm(void) {
   assert(fifa96_match_state_phase_class(mr.state.phase) == 1u);
 }
 
+/* v22 (M2 phase-22 T4b, FU-239 / g8 §3.1): the re-arm index bound. The native
+ * per-ET-half re-arm fires at the ET-play window (indices 2 and 3, `0x8B58A`);
+ * at the ET-half-2 COMPLETION (index 4) the chooser parks phase `0x13`/`0x14`
+ * and the native takes the post-ET terminal, NOT another re-arm. Mutation-RED:
+ * the un-bounded `>= 2u` guard re-arms phase 2 here. */
+static void test_et_rearm_index_bound(void) {
+  struct fifa96_match_run mr;
+
+  /* (a) index 3 (the ET-half-1 -> ET-half-2 boundary): the re-arm fires. */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 3u;
+  mr.state.period_length = 90;
+  mr.state.extra_length = 90;
+  mr.state.phase = 0x13u;
+  mr.global_157ac0 = 1u;
+  mr.global_157ac2 = 3u;
+  mr.act.id = 0;                 /* the act-0xC screen has cleared */
+  for (int i = 0; i < 20 && mr.state.phase == 0x13u; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.phase == 2u);  /* the live ET half (FU-239 §3) */
+
+  /* (b) index 4 (the ET-half-2 completion): NO re-arm — the phase-0x13/0x14
+   * ET-over screen persists (native g8 §3.1: index 4 is the post-ET terminal). */
+  fifa96_match_run_init(&mr);
+  mr.state.period = 4u;
+  mr.state.period_length = 90;
+  mr.state.extra_length = 90;
+  mr.state.phase = 0x13u;
+  mr.global_157ac0 = 1u;
+  mr.global_157ac2 = 4u;
+  mr.act.id = 0;
+  for (int i = 0; i < 20; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+    assert(mr.state.phase == 0x13u);   /* NOT re-armed to the play phase 2 */
+  }
+}
+
+/* v22 (M2 phase-22 T4b, FU-231 §3 / FU-232 §3 / g2 §1 / g4 §2b): the ET-over
+ * terminal is live-reachable. At the ET-half-2 completion (index 4) the bounded
+ * re-arm leaves the chooser-written phase `0x13` in place; the end machine then
+ * accrues the dwell timer `word[0x158818]` (`mr.act.timer`, native `0x8BCFE`,
+ * gated on no act) past `0x4B0`, so `fifa96_match_run_end_word` returns `2`; the
+ * frame body stages word `2` and the ET-over consume (`0x4B29B`) clears it —
+ * the native transient one-frame consume (FU-232 §3, FU-232-L6 closed by g3).
+ * Mutation-RED: (a) the un-bounded guard re-arms phase 2; (b) the dwell accrues
+ * only in phase `0x0C`, so `act.timer` caps below `0x4B0` and the word never
+ * stages. */
+static void test_et_over_terminal_reached(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 4u;          /* the ET-half-2 completion index (0x8B58A) */
+  mr.state.period_length = 90;
+  mr.state.extra_length = 90;
+  mr.state.phase = 0x13u;        /* the chooser's ET-over screen */
+  mr.global_157ac0 = 1u;         /* the live extra-time flag */
+  mr.global_157ac2 = 4u;         /* post-ET-half-2 */
+  mr.act.id = 0;                 /* the act-0xC entry screen has cleared */
+  mr.act.timer = 0;
+
+  /* Drive the frame loop until the ET-over dwell passes 0x4B0 (native). */
+  int i = 0;
+  for (; i < 3000; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+    if (mr.act.timer > 0x4B0) break;
+  }
+  assert(i < 3000);
+  /* the run reached the ET-over terminal, not the period-5 / phase-2 hold. */
+  assert(mr.act.timer > 0x4B0);                 /* the dwell accrued (0x8BCFE) */
+  assert(mr.state.phase == 0x13u);              /* NOT re-armed to phase 2 */
+  assert(fifa96_match_run_end_word(&mr) == 2u); /* the ET-over condition is live */
+  assert(mr.end_word_158822 == 0u);             /* staged 2, consumed (0x4B29B) */
+
+  /* The ET-over is self-terminating and writes no screen (FU-232-L6): the loop
+   * resumes with the over screen untouched. */
+  for (int j = 0; j < 10; j++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+  assert(mr.end_word_158822 == 0u);
+}
+
 /* v22 (M2 phase-22 T4, FU-234 §4.2/§4.3): the run's return to the front-end.
  * `fifa96_match_run_end` maps the native leave/teardown
  * (`[0x105FFC]=4`/`[0x107304]=3`) to the mode switch
@@ -636,6 +716,8 @@ int main(void) {
   test_end_word_et_over_consumed();
   test_mark_over_screen_dwell();
   test_et_entry_dwell_rearm();
+  test_et_rearm_index_bound();
+  test_et_over_terminal_reached();
   test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();
