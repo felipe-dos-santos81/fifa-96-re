@@ -979,10 +979,18 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
        * `s->type = r->code`). */
       s->opp_type = opp->code;
       s->opp_has_slot = opp->has_slot;
-      s->opp_lane_word = opp->lane_x;    /* +0x6B (<0xD0 gate) */
-      s->opp_angle_x = opp->lane_z;      /* dword[+0x6D]>>16 = word[+0x6D] */
-      s->opp_angle_z = 0;                /* word[+0x6F] unmodeled (OL-65) */
-      s->opp_face_word = 0;              /* +0x7D facing word unmodeled (OL-65) */
+      s->opp_lane_word = opp->lane_x;    /* word[+0x6B] (<0xD0 gate) */
+      /* `opp->lane_z`/`cam_dz6f`/`face7d` are the live native words +0x6D /
+       * +0x6F / +0x7D (OL-65 closure, FU-259): the row-07 post-kick gate
+       * `0x816CC` folds `entity_angle(word[+0x6D], word[+0x6F]) - word[+0x7D]`
+       * and fires iff the result is < 0x55. The prior staging hardcoded the
+       * last two to 0, which made the fold unsatisfiable (`entity_angle(x,0)`
+       * is +-0x100 against `face7d == 0`). The alias-trap arithmetic in the old
+       * comment (`dword[+0x6D]>>16`) is wrong: the field is the native
+       * word[+0x6D] itself, not an aliased high half. */
+      s->opp_angle_x = opp->lane_z;      /* native word[+0x6D] (cam-minus-pos x) */
+      s->opp_angle_z = opp->cam_dz6f;    /* native word[+0x6F] (OL-65, FU-259) */
+      s->opp_face_word = opp->face7d;    /* native word[+0x7D] facing (OL-65, FU-259) */
     }
   }
   s->camera_x = mr->render.camera.pos_x;
@@ -5519,8 +5527,20 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-210 §2/§3/§4 (M2 phase-20 T3): row 20 = the actor-record ball-camera/restart-commit transition (body 0x84EEC..0x85213, the 7-arm CS table 0x84ED0; installer 0x899A2 = FUN_0007D9A4([0x1587D4], 0x20, 0, 0), arm 0 of the phase-0x1D handler 0x89868). COUNTED: the actor cell's producer (the sit-8 arm's [0x1587CC+side*4] -> [0x1587D4] bind 0x8AE4B, ported as match_run_free_record + the set_piece re-init, FU-217) is live, so the phased installer dispatches the row on a real period-4 completion. FU210-L3/FU217-L1 resolve; the ball-record place (FU210-L2/FU220-L1), the 0x8CFAC walks, the arm-4 0x7A490 write-back and the block/camera sinks stay legs. Tape-dormant. OL-9"},
     {0x21, fifa96_match_action_21,
      "FU-139 §10/FU-137: row 21 ported (0x85214..0x8539B machine; camera copy, 0x8DE8C nearest + 0x4A anim arm, 0x7DAB4 reset, team-target ball 4/receiver) over the pool; install arms 0x7D046 (and row-05 0x7F791/0x7F7B6); +0x44 and anim record writes OL-68/OL-52"},
-    {0x22, NULL,
-     "FU-185 §2/§10 (phase-16 T2): row 22 sequence/press body ported (fifa96_match_action_22, 0x8539C..0x85481) but NOT counted (the rows-27/29/2C precedent — a ported body with no reachable engine installer stays unwired). Its only installer is the wired row-07 0x816DF invoke-now on the opponent team target, but the gate is structurally ungated in-engine: FU185-L6 (first-hand) shows the opponent word[+0x6F]/word[+0x7D] angle inputs are unmodeled (OL-65, staged 0), so fifa96_entity_angle(lane_z, 0) always yields +-0x100 and the folded diff against opp_face_word==0 can never be < 0x55 — a brute-force sweep proves out.opponent_invoke never fires. Uncounted until OL-65 lands; the body is exported for direct unit testing (declared in fifa96_match_handlers.h). OL-65"},
+    {0x22, fifa96_match_action_22,
+     "FU-185 §2/§10 (phase-16 T2) + FU-259 (M2 phase-25): row 22 sequence/press body ported "
+     "(fifa96_match_action_22, 0x8539C..0x85481). COUNTED (OL-65 closure): FU185-L6 showed the "
+     "row-07 0x816DF invoke-now gate was structurally ungated in-engine because the opponent "
+     "word[+0x6F]/word[+0x7D] angle inputs were staged 0 (fifa96_entity_angle(lane_z,0) yields "
+     "+-0x100 against opp_face_word==0, so the folded diff could never be < 0x55). FU-259 §2.4 "
+     "resolves OL-65 with the two-line staging fix (opp_angle_z := opp->cam_dz6f = native "
+     "word[+0x6F]; opp_face_word := opp->face7d = native +0x7D), so the gate is the geometrically "
+     "satisfiable record->camera-vs-facing comparison the native 0x816CC/0x816CF tests. The "
+     "install + dispatch chain is then end-to-end: row-07 invoke-now -> match_kick_invoke_opponent "
+     "-> fifa96_match_entities_install(opp, 0x22) -> this slot. Install+dispatch witnessed by "
+     "test_action_07_ol65_invoke_installs_row_22 (fix provider) and test_action_22_runs_body "
+     "(body); the m2 golden is byte-identical (FU259-L1 acceptance, cmp). The body is also "
+     "exported for direct unit testing (declared in fifa96_match_handlers.h). FU259-L2 closed. OL-65"},
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, fifa96_match_action_24,

@@ -1911,3 +1911,43 @@ recomputed:** `58 OK = 35 action + 23 phase`; `floor(100 × 58/80) = 72`; README
 title `72%`; `action_wired == 35u` / `phase_wired == 23u` pins
 (`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
 synced. `make check` **110/110**.
+
+## M2 phase-25 — the OL-65 row-07 staging fix + action row `0x22` (FU-259)
+
+**Census `58/80 = 72%` → `59/80 = 73%` (`36 action + 23 phase`).** FU-259 §2.4
+closes OL-65 with the exact two-line fix in `fifa96_match_handlers.c`
+(`match_kick_from_record`): the row-07 opponent staging now re-sources the live
+pool cells `opp->cam_dz6f` (native `word[+0x6F]`) and `opp->face7d` (native
+`word[+0x7D]`) instead of hardcoding both to `0`. `opp->lane_z` (native
+`word[+0x6D]`) stays; its misleading `dword[+0x6D]>>16` alias comment is corrected
+(the field is the word itself, not an aliased high half).
+
+The row-07 post-kick gate (`0x816CC CMP EAX,0x55` / `0x816CF JGE`) folds
+`entity_angle(word[+0x6D], word[+0x6F]) − word[+0x7D]` and fires the `0x816DF`
+invoke-now iff the result is `< 0x55`. The old `0/0` staging made it
+unsatisfiable (`entity_angle(x,0)` is `±0x100` against `face7d == 0`), so
+**FU185-L6's "structurally ungated in-engine" verdict is STALE** and the row-22
+"NOT counted (the rows-27/29/2C precedent)" evidence string is superseded. With
+the gate live, row-07 fires `match_kick_invoke_opponent` →
+`fifa96_match_entities_install(opp, 0x22)`, and the action-table slot
+`{0x22, fifa96_match_action_22}` is registered (FU259-L2 closed), so the installed
+row dispatches.
+
+TDD: `test_action_07_ol65_invoke_installs_row_22` was **RED** before the fix
+(`assert(opp->code == 0x22)` failed — the gate never fired); **GREEN** after. The
+mutation-RED rider is exercised on both re-sourced fields (zeroing either makes
+the fixture fold `0x80 >= 0x55`, aborting the install assertion).
+
+**Tape-dormant (FU259-L1 accepted):** `./build/test_engine_m2 | cmp -
+tests/golden/engine/m2-frames.txt` is byte-identical — M2 `b281a9b2…` and M1
+`09b726b7…` unmoved. The two re-sourced cells are consumed only by the row-07
+post-kick gate, so the tape's staged row-07 kick does not reach `diff < 0x55` with
+live cells.
+
+**Residual legs:** **FU259-L3** (the natural-tape row-07 geometry — whether an
+unforced match yields `entity_angle(cam−opp_pos) ≈ opp->face7d` within `0x55` with
+a code-6, no-slot, `<0xD0` opponent; carried forward from FU247-L1). **Census
+recomputed:** `59 OK = 36 action + 23 phase`; `floor(100 × 59/80) = 73`; README
+title `73%`; `action_wired == 36u` / `phase_wired == 23u` pins
+(`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
+synced. `make check` **110/110**.

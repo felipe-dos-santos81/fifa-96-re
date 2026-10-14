@@ -105,7 +105,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x15 = M2 phase-23 T3: the phase-5 celebration sibling is wired (FU-243) */
-    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED */
+    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED; 0x22 = M2 phase-25 (FU-259): the OL-65 staging fix fires the row-07 0x816DF invoke-now, so the ported body's slot is wired and row 0x22 dispatches (install+dispatch witnessed) */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -2193,6 +2193,67 @@ static void test_action_07_decision_uses_code_byte(void) {
   drop_fixture(&f);
 }
 
+/* OL-65 / FU-259 (M2 phase-25): the two-line row-07 gate staging fix
+ * (`opp_angle_z := opp->cam_dz6f`, `opp_face_word := opp->face7d`) makes the
+ * native `0x816CC` fold satisfiable, so the wired row-07 post-kick `0x816DF`
+ * invoke-now fires and installs action `0x22` on the opponent team target
+ * (`match_kick_invoke_opponent`). With the slot registered
+ * (`{0x22, fifa96_match_action_22}`) the installed row then dispatches. Before
+ * the fix the two fields are staged 0, so `entity_angle(lane_z,0)` yields
+ * `+-0x100` against `face7d == 0` and the folded diff can never drop below
+ * `0x55` — the opponent keeps code 6 and the install assertion below fails. */
+static void test_action_07_ol65_invoke_installs_row_22(void) {
+  struct fixture f;
+  const int32_t opp_id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS; /* team-1 rec 0 */
+  make_fixture(&f);
+  struct fifa96_match_entity *opp = &f.mr.entities.team[1].records[0];
+
+  /* The acting record: a phase-2 row-07 stage-1 kick (the FU-259 §4.3 route;
+   * the default staged ball row gives traj 6 < 0x30, staged != 0). */
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.stage92 = 1;
+  f.mr.record.has_slot = 1;
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.actor_type = 1;
+  f.mr.record.active = 0;
+
+  /* The opponent team target: a code-6 no-slot record whose live angle cells
+   * satisfy the gate — `entity_angle(lane_z, cam_dz6f) == face7d`, so the
+   * folded diff is 0 < 0x55. Both cells are discriminating: with either
+   * re-sourced field mutated back to 0 the fold becomes 0x80 >= 0x55 (the
+   * mutation-RED rider). `entity_angle(1,1) == 0x80`. */
+  f.mr.entities.team[1].target = opp_id;
+  opp->code = 6;
+  opp->has_slot = 0;
+  opp->lane_x = 0;          /* word[+0x6B] < 0xD0 */
+  opp->lane_z = 1;          /* word[+0x6D] */
+  opp->cam_dz6f = 1;        /* word[+0x6F] */
+  opp->face7d = 0x80;       /* entity_angle(1, 1) == 0x80 */
+
+  assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
+
+  /* The invoke fired: the opponent record now carries the installed code. */
+  assert(opp->code == 0x22);
+
+  /* The slot is wired and the installed row dispatches: stage the run record
+   * as the per-record dispatcher does for the installed record, then run the
+   * row-22 body through the action table. */
+  assert(fifa96_match_action_table[0x22].fn == fifa96_match_action_22);
+  f.mr.record.entity_id = opp_id;
+  f.mr.record.code = 0x22;
+  f.mr.record.stage92 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.ran = 0;
+  f.mr.state.phase = 2;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
+  assert(f.mr.record.ran == 1);        /* the row-22 body executed */
+  assert(f.mr.record.stage92 == 1);
+  drop_fixture(&f);
+}
+
 /* FU-139 §9 (Task 11): the wired row-0F machine stage 0 (the 0x8DCD4 nudge,
  * the 0x79B6C re-anchor and the anim request) and the stage-1 reload. */
 static void test_action_0F_runs_body(void) {
@@ -4021,6 +4082,7 @@ int main(void) {
   test_action_1D_runs_closedown();
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
+  test_action_07_ol65_invoke_installs_row_22();
   test_action_0F_runs_body();
   test_action_18_runs_body();
   test_action_21_runs_body();

@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-58/80 dispatch rows wired (35 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
+59/80 dispatch rows wired (36 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,7 +265,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **58/80 rows wired** (35 action + the phase rows
+- Action dispatch (FU-137): **59/80 rows wired** (36 action + the phase rows
   `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1E`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
@@ -1467,6 +1467,31 @@ the build also produces the windowed `fifa96` target (`make game`).
   selection predicate), **FU241-L5** (the stage-2 re-dispatch target), **FU241-L6**
   (the `0x8A8E0` BX==0 table), **FU241-L7** (the stale FU-212 golden anchor).
   `make check` **110/110**.
+- **M2 phase-25 (FU-259) — the OL-65 row-07 gate staging fix wires action
+  `0x22`; census `58/80 → 59/80 = 73%`.** FU-259 §2.4 closes OL-65 with the
+  exact two-line fix in `fifa96_match_handlers.c:983-993`: the row-07
+  `match_kick_from_record` opponent staging now re-sources the live pool cells
+  `opp->cam_dz6f` (native `word[+0x6F]`) and `opp->face7d` (native `word[+0x7D]`)
+  instead of hardcoding both to 0 (`opp->lane_z` = native `word[+0x6D]` is
+  unchanged; its wrong `dword[+0x6D]>>16` alias comment is corrected — the field
+  is the word itself). The row-07 post-kick gate (`0x816CC CMP EAX,0x55 / 0x816CF
+  JGE`) folds `entity_angle(word[+0x6D], word[+0x6F]) − word[+0x7D]` and fires iff
+  `< 0x55`; the old `0/0` staging made it unsatisfiable (`entity_angle(x,0)` is
+  `±0x100` against `face7d == 0`), so FU185-L6's "structurally ungated in-engine"
+  verdict is now stale. With the gate live, row-07's `0x816DF` invoke-now fires
+  `match_kick_invoke_opponent` → `fifa96_match_entities_install(opp, 0x22)`; the
+  action-table slot `{0x22, fifa96_match_action_22}` is registered (FU259-L2
+  closed), so the installed row dispatches. **Install+dispatch witnessed** by
+  `test_action_07_ol65_invoke_installs_row_22` (the fix provider; mutation-RED on
+  either re-sourced field aborts it) plus `test_action_22_runs_body` (the body)
+  and the census rider (`test_engine_m2.c`). **Tape-dormant**, FU259-L1
+  accepted: `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt`
+  byte-identical — M2 `b281a9b2…` and M1 `09b726b7…` unmoved (the two re-sourced
+  cells are consumed only by the row-07 post-kick gate, so the tape's staged
+  row-07 kick does not reach `diff < 0x55` with live cells). **Residual legs:**
+  **FU259-L3** (the natural-tape row-07 geometry — whether an unforced match
+  yields `entity_angle(cam−opp_pos) ≈ opp->face7d` within `0x55` with a code-6,
+  no-slot, `<0xD0` opponent; carried forward from FU247-L1).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
