@@ -5833,6 +5833,19 @@ static void test_translation_install(void) {
   drop_fixture(f);
 }
 
+/* v22 (M2 phase-22 review, Fix 1): the staging-gate terminal seed shared by the
+ * index-1 / index-2 blocks of `test_end_word_staging_gate`: the flag-clear
+ * phase-0xC terminal with the sit-1 arm installed and the FU-235 dwell met;
+ * `ac2` is the past-half-time index under test (the write is gated on `>= 2`). */
+static void seed_phase0c_staging(struct fifa96_match_run *mr, unsigned ac2) {
+  fifa96_match_run_init(mr);
+  mr->state.phase = 0x0Cu;     /* the flag-clear phase-0xC terminal state */
+  mr->global_157ac0 = 0u;      /* flag clear: the terminal is present */
+  mr->global_157ac2 = ac2;     /* the past-half-time index under test */
+  mr->act.id = 1;              /* the sit-1 arm: the re-dispatch is a no-op */
+  mr->act.timer = 0x78;        /* the FU-235 dwell is met */
+}
+
 /* FU-231 §3 / FU-234-L7 (M2 phase-22 T2 fix): the frame-body end-word STAGING
  * gate. The clock-tail staging (the FUN_0008BAF0 call at `0x8B664`, right after
  * the ball machine) writes `end_word_158822` only when the consumer's
@@ -5850,12 +5863,7 @@ static void test_end_word_staging_gate(void) {
   /* (a) half-time: index 1 -> the index term blocks the write. */
   {
     struct fifa96_match_run mr;
-    fifa96_match_run_init(&mr);
-    mr.state.phase = 0x0Cu;      /* the flag-clear phase-0xC terminal state */
-    mr.global_157ac0 = 0u;       /* flag clear: the terminal is present */
-    mr.global_157ac2 = 1u;       /* HALF-TIME: not past */
-    mr.act.id = 1;               /* the sit-1 arm: the re-dispatch is a no-op */
-    mr.act.timer = 0x78;         /* the FU-235 dwell is met */
+    seed_phase0c_staging(&mr, 1u);   /* HALF-TIME: not past */
     int granted = 0;
     for (int i = 0; i < 10 && !granted; i++) {
       int rc = fifa96_match_run_frame(&mr);
@@ -5868,12 +5876,7 @@ static void test_end_word_staging_gate(void) {
   /* (b) post-half-time: index 2 -> the flag-clear terminal stages word 1. */
   {
     struct fifa96_match_run mr;
-    fifa96_match_run_init(&mr);
-    mr.state.phase = 0x0Cu;
-    mr.global_157ac0 = 0u;
-    mr.global_157ac2 = 2u;       /* PAST half-time */
-    mr.act.id = 1;
-    mr.act.timer = 0x78;
+    seed_phase0c_staging(&mr, 2u);   /* PAST half-time */
     int granted = 0;
     for (int i = 0; i < 10 && !granted; i++) {
       int rc = fifa96_match_run_frame(&mr);

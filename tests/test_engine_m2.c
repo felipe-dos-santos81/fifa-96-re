@@ -3514,6 +3514,50 @@ static uint64_t run_period_end_probe(struct m2_period_end *out) {
   return pe.completion_step;
 }
 
+/* v22 (M2 phase-22 review, Fix 1): the null-platform + `fifa96_engine_boot` +
+ * selector-0 `fifa96_match_run_begin` seed shared by the phase-22 terminal
+ * probes/riders (`run_regulation_over_probe`, `run_phase22_riders` classes 4/5).
+ * One fixture so the identical boot+begin is not copy-pasted; `with_iso`
+ * preserves each caller's exact config (the probe loads the ISO when present,
+ * the riders do not). */
+struct m2_match_fixture {
+  fifa96_platform *plat;
+  struct fifa96_engine *e;
+  struct fifa96_match_run *mr;
+};
+
+static struct m2_match_fixture m2_boot_match_run(int with_iso) {
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  pcfg.step_ns = 10000000ull;
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = with_iso ? M2_ISO_PATH : NULL;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  struct fifa96_match_run *mr = &e->match_run;
+  assert(fifa96_match_run_begin(mr, e, 0) == 0);
+
+  struct m2_match_fixture f;
+  f.plat = plat;
+  f.e = e;
+  f.mr = mr;
+  return f;
+}
+
+static void m2_drop_match_fixture(struct m2_match_fixture f) {
+  fifa96_engine_destroy(f.e);
+  fifa96_platform_destroy(f.plat);
+}
+
 /* v22 (M2 phase-22 T5, FU-236 / FU-239): the off-tape word-1 regulation-over
  * scenario. The forced-ET acceptance tape's regulation end is the differing
  * 1-0, so its chooser takes the extra-time arm and the word-1 regulation route
@@ -3529,27 +3573,12 @@ static uint64_t run_period_end_probe(struct m2_period_end *out) {
  * FRONTEND (FU-234 §3 / g7). Records the staged word, the OVER step, and the
  * front-end return. Transcript-neutral (stderr only). */
 static void run_regulation_over_probe(struct m2_result *res) {
-  struct fifa96_platform_null_config pcfg;
-  memset(&pcfg, 0, sizeof pcfg);
-  pcfg.step_ns = 10000000ull;
   /* No key tape: this probe starts the run directly (fifa96_match_run_begin)
    * and drives the frame body + lifecycle step itself, so the front-end poll
-   * path is never taken. */
-  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
-  assert(plat != NULL);
-
-  struct fifa96_engine_config ecfg;
-  memset(&ecfg, 0, sizeof ecfg);
-  ecfg.iso_path = file_exists(M2_ISO_PATH) ? M2_ISO_PATH : NULL;
-  ecfg.width = 320;
-  ecfg.height = 240;
-  ecfg.headless = 1;
-  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
-  assert(e != NULL);
-  assert(fifa96_engine_boot(e) == 0);
-
-  struct fifa96_match_run *mr = &e->match_run;
-  assert(fifa96_match_run_begin(mr, e, 0) == 0);
+   * path is never taken. Fix 1: the shared boot+begin fixture. */
+  struct m2_match_fixture fx = m2_boot_match_run(file_exists(M2_ISO_PATH));
+  struct fifa96_engine *e = fx.e;
+  struct fifa96_match_run *mr = fx.mr;
   assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
 
   /* The regulation terminal, flag CLEAR (the not-differing end): phase 0x0C,
@@ -3607,8 +3636,7 @@ static void run_regulation_over_probe(struct m2_result *res) {
           "screen at step %d, front-end return at step %" PRIu64
           " (mode FRONTEND)\n",
           word1_step, over_step, return_step);
-  fifa96_engine_destroy(e);
-  fifa96_platform_destroy(plat);
+  m2_drop_match_fixture(fx);
 }
 
 /* v15/v16 (phase-15 T4 → phase-16 T6): the census rider cross-checks — the
@@ -4610,21 +4638,9 @@ static void run_phase22_riders(void) {
    *    parking the class-0 phase `0x13`, whose clock is halted) leaves the ET
    *    half unclocked and the `period == 3` assert aborts. */
   {
-    struct fifa96_platform_null_config pcfg;
-    memset(&pcfg, 0, sizeof pcfg);
-    pcfg.step_ns = 10000000ull;         /* one granted frame per 100 Hz tick */
-    fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
-    assert(plat != NULL);
-    struct fifa96_engine_config ecfg;
-    memset(&ecfg, 0, sizeof ecfg);
-    ecfg.width = 320;
-    ecfg.height = 240;
-    ecfg.headless = 1;
-    struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
-    assert(e != NULL);
-    assert(fifa96_engine_boot(e) == 0);
-    struct fifa96_match_run *mr = &e->match_run;
-    assert(fifa96_match_run_begin(mr, e, 0) == 0);
+    /* Fix 1: the shared boot+begin fixture (the riders do not load the ISO). */
+    struct m2_match_fixture fx = m2_boot_match_run(0);
+    struct fifa96_match_run *mr = fx.mr;
     assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
     mr->state.period = 2u;              /* the first extra-time half */
     fifa96_match_run_period_over_rearm(mr);   /* the sit-8 re-arm */
@@ -4634,8 +4650,7 @@ static void run_phase22_riders(void) {
       assert(fifa96_match_run_frame(mr) >= 0);
     assert(mr->state.period == 3u);     /* the ET half completed (extra_length) */
     assert(mr->state.period_seconds == 0u);
-    fifa96_engine_destroy(e);
-    fifa96_platform_destroy(plat);
+    m2_drop_match_fixture(fx);
   }
   /* 5. FRONT-END RETURN — T5/FU-234 §3. The lifecycle resolve chain
    *    (OVER -> POST -> EXIT -> `fifa96_match_run_end`) returns the engine to the
@@ -4647,21 +4662,10 @@ static void run_phase22_riders(void) {
    *    resolve exit branch (no `run_end`) leaves `mode == MATCH`, `match == mr`
    *    and `running == 1` -> this block's asserts abort. */
   {
-    struct fifa96_platform_null_config pcfg;
-    memset(&pcfg, 0, sizeof pcfg);
-    pcfg.step_ns = 10000000ull;
-    fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
-    assert(plat != NULL);
-    struct fifa96_engine_config ecfg;
-    memset(&ecfg, 0, sizeof ecfg);
-    ecfg.width = 320;
-    ecfg.height = 240;
-    ecfg.headless = 1;
-    struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
-    assert(e != NULL);
-    assert(fifa96_engine_boot(e) == 0);
-    struct fifa96_match_run *mr = &e->match_run;
-    assert(fifa96_match_run_begin(mr, e, 0) == 0);
+    /* Fix 1: the shared boot+begin fixture (the riders do not load the ISO). */
+    struct m2_match_fixture fx = m2_boot_match_run(0);
+    struct fifa96_engine *e = fx.e;
+    struct fifa96_match_run *mr = fx.mr;
     assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
     assert(e->match == mr);
     mr->lc.screen = FIFA96_MATCH_SCREEN_OVER;   /* a staged OVER screen */
@@ -4669,8 +4673,7 @@ static void run_phase22_riders(void) {
     assert(e->mode == FIFA96_ENGINE_MODE_FRONTEND);
     assert(e->match == NULL);
     assert(mr->running == 0);
-    fifa96_engine_destroy(e);
-    fifa96_platform_destroy(plat);
+    m2_drop_match_fixture(fx);
   }
   /* 6. SCREEN TIMING GATE — T4/T5/FU-235 §1. The `mark_over` tail holds the
    *    phase-0x0C terminal until the end timer `act.timer > 0x168` (the native

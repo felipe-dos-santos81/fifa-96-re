@@ -51,6 +51,22 @@ static void drop_fixture(struct fixture f) {
   fifa96_platform_destroy(f.plat);
 }
 
+/* v22 (M2 phase-22 review, Fix 1): the extra-time terminal seed shared by the
+ * T4/T4b ET state fixtures (`test_et_entry_dwell_rearm`,
+ * `test_et_rearm_index_bound`, `test_et_over_terminal_reached`): the class-0 ET
+ * phase `0x13` with the extra-time flag set and the 90 s ET periods. `period`
+ * also sets the past-half-time index (`global_157ac2 == period`); callers set
+ * the act slot (`act.id`/`act.timer`). */
+static void seed_et_terminal(struct fifa96_match_run *mr, unsigned period) {
+  fifa96_match_run_init(mr);
+  mr->state.period = period;
+  mr->state.period_length = 90;
+  mr->state.extra_length = 90;
+  mr->state.phase = 0x13u;     /* the ET-entry/over screen (the chooser's arm) */
+  mr->global_157ac0 = 1u;      /* the extra-time flag (the differing reg end) */
+  mr->global_157ac2 = period;
+}
+
 /* Argument contract: NULL -> INVALID everywhere; a run that is not live
  * (before begin, after end) -> STATE for set_period/resolve/add_goal. */
 static void test_not_running_state_errors(void) {
@@ -546,13 +562,7 @@ static void test_mark_over_screen_dwell(void) {
  * FU-239 §3). Mutation-RED: dropping the re-arm leaves phase `0x13`. */
 static void test_et_entry_dwell_rearm(void) {
   struct fifa96_match_run mr;
-  fifa96_match_run_init(&mr);
-  mr.state.period = 2u;
-  mr.state.period_length = 90;
-  mr.state.extra_length = 90;
-  mr.state.phase = 0x13u;      /* the ET-entry screen (the chooser's arm) */
-  mr.global_157ac0 = 1u;       /* the extra-time flag (the differing reg end) */
-  mr.global_157ac2 = 2u;
+  seed_et_terminal(&mr, 2u);
   mr.act.id = 0x0Cu;           /* the act-0xC entry screen is installed */
 
   /* (a) the entry screen holds while the act-0xC screen runs. */
@@ -578,13 +588,7 @@ static void test_et_rearm_index_bound(void) {
   struct fifa96_match_run mr;
 
   /* (a) index 3 (the ET-half-1 -> ET-half-2 boundary): the re-arm fires. */
-  fifa96_match_run_init(&mr);
-  mr.state.period = 3u;
-  mr.state.period_length = 90;
-  mr.state.extra_length = 90;
-  mr.state.phase = 0x13u;
-  mr.global_157ac0 = 1u;
-  mr.global_157ac2 = 3u;
+  seed_et_terminal(&mr, 3u);
   mr.act.id = 0;                 /* the act-0xC screen has cleared */
   for (int i = 0; i < 20 && mr.state.phase == 0x13u; i++)
     assert(fifa96_match_run_frame(&mr) >= 0);
@@ -592,13 +596,7 @@ static void test_et_rearm_index_bound(void) {
 
   /* (b) index 4 (the ET-half-2 completion): NO re-arm — the phase-0x13/0x14
    * ET-over screen persists (native g8 §3.1: index 4 is the post-ET terminal). */
-  fifa96_match_run_init(&mr);
-  mr.state.period = 4u;
-  mr.state.period_length = 90;
-  mr.state.extra_length = 90;
-  mr.state.phase = 0x13u;
-  mr.global_157ac0 = 1u;
-  mr.global_157ac2 = 4u;
+  seed_et_terminal(&mr, 4u);
   mr.act.id = 0;
   for (int i = 0; i < 20; i++) {
     assert(fifa96_match_run_frame(&mr) >= 0);
@@ -618,13 +616,7 @@ static void test_et_rearm_index_bound(void) {
  * stages. */
 static void test_et_over_terminal_reached(void) {
   struct fifa96_match_run mr;
-  fifa96_match_run_init(&mr);
-  mr.state.period = 4u;          /* the ET-half-2 completion index (0x8B58A) */
-  mr.state.period_length = 90;
-  mr.state.extra_length = 90;
-  mr.state.phase = 0x13u;        /* the chooser's ET-over screen */
-  mr.global_157ac0 = 1u;         /* the live extra-time flag */
-  mr.global_157ac2 = 4u;         /* post-ET-half-2 */
+  seed_et_terminal(&mr, 4u);
   mr.act.id = 0;                 /* the act-0xC entry screen has cleared */
   mr.act.timer = 0;
 
