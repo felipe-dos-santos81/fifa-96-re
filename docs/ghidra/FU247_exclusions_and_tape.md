@@ -427,3 +427,32 @@ Direct input to the Stage-2 producer plan's tape/census close-out task
 classes (§4.4) define the tape-touch (T(k+1)) and per-row (T2..Tk) acceptance;
 the census pins (`tests/test_engine_m2.c:3666`/`:4041`) close out at
 `floor(100 × 55/80) = 68` unless the wave's other slices wire rows.
+
+---
+
+## 9. Errata (quoted — prior sections not rewritten)
+
+> **FU247 §2.3 "Erratum/refinement of FU185-L6's input map" (lines 153-166) and
+> `FU247-L1` (lines 367-375) are themselves wrong — a second `dword[x]>>16` alias
+> trap (`FU250` §5.1).** §2.3 reads: *"the second input is `word[+0x6D]`
+> (`0x8169F`/`0x816A5`), and the *third* native term is `word[+0x7D]`
+> (`0x816B0`). No `+0x6F` read exists anywhere in `0x8164B..0x816E4` …"*, and the
+> §2.2 table labels `0x816A5 SAR EDX,0x10` as *"z = word `+0x6D`"* / `0x816A8
+> SAR EAX,0x10` as *"x = word `+0x6B`"*. **Corrected (fresh; `FU250`
+> §5.1/§5.2):** `0x8169F MOV EDX,dword[ESI+0x6D]` and `0x816A2 MOV
+> EAX,dword[ESI+0x6B]` are **dword** loads; the `SAR 0x10` (`0x816A5`/`0x816A8`)
+> selects the high word of each, so the row-07 angle gate reads
+> `fold10(entity_angle(word[+0x6D], word[+0x6F]) − word[+0x7D]) < 0x55` —
+> `word[+0x6D]` from `dword[+0x6B]>>16` (`0x816A2`/`0x816A8`) and `word[+0x6F]`
+> from `dword[+0x6D]>>16` (`0x8169F`/`0x816A5`), minus `word[+0x7D]` (`0x816B0`).
+> There is indeed **no literal `+0x6F` operand**, but the read target is
+> `word[+0x6F]` via the alias — exactly the trap AGENTS.md warns about.
+> Consequently **`FU185-L6`'s map (`+0x6D`/`+0x6F`/`+0x7D`) stands**;
+> `fifa96_action_handlers.h:918-919` is correct; and `opp_angle_x = opp->lane_z`
+> is correct (not "mis-sourced"). The gate's deadness was caused only by the two
+> hardcoded zeros (`opp_angle_z`/`opp_face_word`) in the kick-struct staging; that
+> staging was fixed by the later OL-65 closure (FU-259; `s->opp_angle_z :=
+> opp->cam_dz6f`, `s->opp_face_word := opp->face7d`) and action `0x22` is now
+> wired/counted (`fifa96_match_handlers.c:5530`) — subsequent to this read-only
+> slice and **not** a rewrite of it. The §2.4/§7 verdicts are unaffected.
+> Source: `FU250` §5.1/§5.2 (`FU250-L1`); AGENTS alias traps; `FU263` Erratum 1.

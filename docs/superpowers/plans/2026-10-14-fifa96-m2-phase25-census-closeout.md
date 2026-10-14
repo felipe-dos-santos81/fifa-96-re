@@ -194,3 +194,16 @@ git commit -m "docs(fu263): the phase-25 leg-register close-out"
 ## Handoff
 
 Hand to `superpowers:subagent-driven-development`: T1 is a verification gate (no code); T2 is the one code task (RED-first + the M2 gate); T3–T5 are doc/register tasks. If T2's M2 gate fails, the phase is errata + leg-register only (the honest ceiling holds at 58/80).
+
+---
+
+## Errata (post-landing, append-only — prior text not rewritten)
+
+- **Task 3 Step 5's replacement handler slots `:5012/:5111 → :5500/:5603` are
+  stale.** At HEAD (after T2's row-`0x22` wire, commit `dd2e047`), the fresh
+  table (`grep -nE '\{0x17, NULL|\{0x1A, NULL' src/fifa96_engine/fifa96_match_handlers.c`)
+  puts **action row `0x17` at `:5508`** and **phase `0x1A` at `:5623`**
+  (`:5603` is now `{0x10, fifa96_match_phase_10,`). The Step-5 line above is kept
+  verbatim; the correction is recorded in `docs/ENGINE.md` (phase-18 T2 errata)
+  and `FU263` §6.
+

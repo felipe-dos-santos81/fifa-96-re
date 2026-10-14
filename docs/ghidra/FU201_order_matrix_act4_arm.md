@@ -494,3 +494,22 @@ docs-only). **Tests:** the existing `action_expect[0x17]`/`phase_expect[0x1A]`
 **Owners carried:** FU201-L1 (the runtime non-permutation divergence producer —
 the arm's true trigger; carries FU197-L1), FU201-L4 (the setup's engine landing),
 FU201-L6 (invoke-now has no generic engine port), FU181-L1 (row `0x17` entry).
+
+---
+
+## Errata (quoted — prior sections not rewritten)
+
+> **FU201 §8 leg `FU201-L1` and the "Owners carried" line — the owner is now
+> named.** §8 leg 1 ends *"**Owner: a dynamic-trace leg; the R47 setup does not
+> settle it.** (Carries FU197-L1.)"*, and the closing "Owners carried" line
+> repeats owner-less `FU201-L1`. **Corrected (fresh; `FU248` §4.2/§4.3 + `FU263`
+> Erratum 5):** the only desired/current divergence candidate is
+> **`FUN_00041494` (`0x41494`) case 5** — the in-match substitution swap writing
+> `0x14C360` (desired) at `0x41B12`/`0x41B5F`/`0x41B91` and **never** `0x157BD2`
+> (current) — with any straddling divergence reconciled inside the same flow by
+> the case-7 `FUN_0008EAB8`/`FUN_0009343C` pass; the equalising bookends are the
+> reset `FUN_00073EE0` (desired→current copy + counter zero) and the sorter
+> `FUN_0008C974`. `FU201-L1` therefore becomes a **dynamic-trace leg with a named
+> native owner** (`FUN_00041494` case 5), not owner-less. The leg's `+0` posture
+> and the "R47's fill is necessary but not sufficient" conclusion are unchanged.
+> Source: `FU248` §4.2/§4.3 (`FU248-L1` = `FU201-L1`); `FU263` Erratum 5.

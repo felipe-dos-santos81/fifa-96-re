@@ -382,3 +382,24 @@ re-pin. The `[rec+0x1C]` seam is **landed**; the phase-`0x02`/`0x15` gate is
 **already live/counted**; action row `03` stays a numbered leg (tape-visible,
 FU177-L1). Promote to `docs/ghidra/FU249_ol13_metadata.md`; hand FU249-L1 to the
 FU197-L2 order-routine producer and FU249-L2/L3 to the loader-content frontier.
+
+---
+
+## 10. Errata (quoted — prior sections not rewritten)
+
+> **FU249 §5 (action row `03`) — the frame-29 misattribution (carries
+> `FU258-L3`).** §5 reads *"wiring the slot moved M2 at transcribed frame 29
+> (controller R7)"* alongside §4's *"row-03 `[rec+0x1C]` = `0x6DCC8` rewrite"*,
+> which attributes the move to the **phase-2** `[rec+0x1C] = 0x6DCC8`
+> target-rewrite chain. **Corrected (fresh; `FU258` §4.2/§4.3):** the frame-29
+> mover is action row `03`'s **`phase-0x13/0x14` special arm** (`0x7E1CE`); at
+> the transcribed frame 29 the global phase byte `0x157A4D` is `0x14` (fresh:
+> the M2 golden `frame=29 hash=0b6b04786993a386 state=20/0-0`), so the special
+> arm fires and `RET`s at `0x7E223` **before** the slot gate and the idle core,
+> and `0x110794[0x14] = 0x6E244`, not `0x6DCC8`. `0x6DCC8` (phase
+> `0x02`/`0x15`) **cannot** run at frame 29. The phase-2 hot path is real but
+> fires in the phase-2 window; the two phrasings name the **install** window
+> (phase 2) and the **dispatch** window (phase `0x14`). The §5 verdict (row `03`
+> stays a leg) and the §6 census ruling (`+0`) are unchanged. The same quoted
+> erratum lands in `docs/ENGINE.md` phase-17 T1 and the row-03 handler-string.
+> Source: `FU258` §4.3/§6.3 (`FU258-L3`); `FU263` Erratum 5 / Leg `FU263-L3`.

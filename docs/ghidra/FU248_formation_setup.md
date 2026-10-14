@@ -377,3 +377,20 @@ FU-149 L12, ENGINE.md (:558..593, :915..951). AGENTS.md census rule. The
 `+0x100000` LE-image rule and the alias traps (`[0x157A49]>>24 = [0x157A4C]`;
 `dword[ESP+0x1e]>>16 = [ESP+0x20]`) are applied. No writes beyond this slice file
 and the workspace report.
+
+---
+
+## Errata (quoted — prior sections not rewritten)
+
+> **FU248 §5 (lines 288/291) and §7 provenance (lines 370-371) — the handler
+> line-refs `:5500`/`:5573`/`:5603` are stale at HEAD (caught during the Task-3
+> errata sweep, `FU263` §6).** Fresh (`grep -nE '\{0x17, NULL|\{0x1A,
+> NULL|\{0x0B, NULL' src/fifa96_engine/fifa96_match_handlers.c`): action row
+> `0x17` is **`:5508`** (not `:5500`), phase `0x0B` is **`:5593`** (not `:5573`)
+> and phase `0x1A` is **`:5623`** (not `:5603`; `:5603` is now `{0x10,
+> fifa96_match_phase_10,`). The numbers were correct at this slice's time; the
+> row-`0x22` wire (commit `dd2e047`) inserted lines before and between the two
+> handler tables, shifting them. The corrected refs are recorded in
+> `docs/ENGINE.md` (phase-18 T2 errata) and `FU263` §6. The §5/§7 verdicts
+> (`0x17`/`0x1A`/`0x0B` NULL/uncounted, +0) are unchanged. Append-only; prior
+> sections not rewritten.

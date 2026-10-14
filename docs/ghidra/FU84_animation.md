@@ -540,3 +540,21 @@ change. Port write set: `include/fifa96_loader/fifa96_animation.h`,
 `src/fifa96_loader/fifa96_animation.c`, `tests/test_animation.c`,
 `CMakeLists.txt` (one library/test block). `game/FIFAPCCD96.iso` untouched;
 `fifa96.rep/**` churn not staged.
+
+---
+
+## Errata (quoted — prior sections not rewritten)
+
+> **FU-84 §1 (`0x6E598` keep/reroll) — the RNG result is *not* discarded.** §1
+> (lines 97-100) reads: *"… advances the RNG stream and **re-selects the current
+> id** (the RNG result is discarded); with no current row it also advances the
+> stream and selects row 0."* **Corrected (fresh; `FU254` §3/§9):** `0x6E659
+> CALL 0x92AC8; EAX = rng & 3; JMP CS:[EAX*4 + 0x6E588]`, and the fresh
+> `read_memory 0x6E588` table `{0x6E675, 0x6E679, 0x6E680, 0x6E675}` sets
+> `EDX = {0, 0x62, 0x65, 0}` for `rng & 3 = {0,1,2,3}`. The RNG result **is** the
+> rerolled id, so the keep/reroll arm is a **non-zero-anim producer** (ids
+> `0x62`/`0x65`). `FU-142 §OL-52`'s *"`RNG & 3 -> {0,0x62,0x65}`"* is consistent
+> and is extended with `case 3 -> 0`. The engine's derived fallback 0 diverges
+> (`FU254-L2`). The §1 method note about the `0x6E724` RNG tail stays open
+> (`FU254` §9, second bullet). Source: `FU254` §3/§9 (`FU254-L2`); `FU263`
+> Erratum 4.

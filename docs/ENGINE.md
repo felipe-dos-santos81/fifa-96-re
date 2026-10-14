@@ -554,7 +554,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   `tests/test_engine_match_handlers.c` pins the seam (the `0x6DCC8` arithmetic
   incl. the side flip and the OL-13 gate), the walk (scan + skip + NULL-row
   gate) and the row-03 direct body; mutation-RED discriminators: the `0x26`
-  scale and the `0x9A` skip.
+  scale and the `0x9A` skip. *(errata, M2 phase-25 W25-8 / FU-258 / FU-261 /
+  FU-263: (i) the frame-29 attribution above is corrected — the mover is action
+  row `03`'s `phase-0x13/0x14` special arm (`0x7E1CE`), **not** the phase-2
+  `[rec+0x1C] = 0x6DCC8` hot path: at the transcribed frame 29 the global phase
+  byte `0x157A4D` is `0x14` (fresh: the M2 golden `frame=29 … state=20/0-0`),
+  the special arm `RET`s before the slot gate, and `0x110794[0x14] = 0x6E244`
+  (`0x6DCC8` is phase `0x02`/`0x15` only) — so `0x6DCC8` cannot run at frame 29;
+  the two phrasings name the install window and the dispatch window (FU258
+  §4.3). (ii) The situation-7 reach note above is sharpened: the correct
+  phrasing is *"situation 7's two native producers lie in unported action arms"*
+  (row `0x1A` `0x76a90`, row `0x1B` stage-2 wide `0x77589`), not *"no live
+  caller / no native producer"* (FU261 §3.2/§4, `FU261-L6`). The old text is kept
+  verbatim.)*
 - **M2 phase-17 T2 (FU-196/FU-197) — the situation producer machine + the
   act-4 formation arm, both landed gated (census unchanged `35/80 = 43%`).**
   The native situation producers the engine lacked are ported as
@@ -949,6 +961,19 @@ the build also produces the windowed `fifa96` target (`make game`).
   (invoke-now has no generic engine port), FU181-L1 (row `0x17` entry); FU-204's
   `0x1A` ladder (FU186-L5), row-`0x0D` (FU178-L1) and the R50 `0x24`/`0x20` pair
   stand. README title `60%`; dispatch `31 UNSUP / 48 OK / 1 NOTF` — consistent.
+  *(errata, M2 phase-25 W25-8 / FU-263: (i) the handler line-refs above are
+  stale — the fresh action table (verified at HEAD `dad8665`) puts action row
+  `0x17` at `fifa96_match_handlers.c:5508` and phase `0x1A` at `:5623`, not
+  `:5012`/`:5111` (the `:5500`/`:5603` first recorded by FU248 §5 / FU263 §1.5
+  were themselves pre-Task-2 and are superseded — `:5603` is now
+  `{0x10, fifa96_match_phase_10,`); (ii) the M2 golden sha is
+  `b281a9b2…` (v22, 6522 lines; FU247 §4.1 / FU258 baseline), not `7b4b241a…`;
+  (iii) `FU201-L1`'s candidate owner is now named — `FUN_00041494` (`0x41494`)
+  case 5, the in-match substitution swap `0x41B12`/`0x41B5F`/`0x41B91`
+  (desired-only, reconciled in the same flow by the case-7
+  `FUN_0008EAB8`/`FUN_0009343C`), so the leg is a dynamic-trace leg with a named
+  native owner (FU248 §4.2/§4.3; FU263 Erratum 5). The old text is kept
+  verbatim.)*
 - **M2 phase-18 T3 (FU-202) — the native situation machine live + the
   phase-`0x20`/row-`0x24` pair wired/counted; M2 re-pinned (`+2`).** The native
   match-init producer `FUN_000493A0 → FUN_0004B02C(1)` (0x4B095, situation 0 at
@@ -4062,7 +4087,21 @@ the build also produces the windowed `fifa96` target (`make game`).
   04/06/07/18 read `record.actor_type` for the native `+0x8E` byte while rows
   08/28/2A write `record.type`, so a row-08 face write is invisible to the
   rows that natively share the byte — a latent wired-row divergence to
-  reconcile in a follow-up (FU-142 §6/K.6.7).
+  reconcile in a follow-up (FU-142 §6/K.6.7). *(errata, M2 phase-25 W25-8 /
+  FU-263: the reader over-list above is corrected — row `18` does **not** read
+  `+0x8E` (fresh FU253 §2.4/§3.3: `0x849B0..0x84AE1` touches only `+0x28`,
+  `+0x65`, `+0x63`, `+0x89`, `+0x92`, `+0x9A`, `+0x7B` — no `+0x8E` and no
+  `+0x8B` access); the wired `actor_type` readers are rows `04`/`06`/`07` (+ the
+  shared kick binder and rows `0B`/`21`). And the ruling is **unify**: `type`
+  and `actor_type` denote the **same** native byte `+0x8E` (the pool's
+  `byte[rec+0x8E]` idiom vs the `dword[rec+0x8B]>>24` idiom), so unify on
+  `record.type` and retire the `actor_type` alias — a Stage-2 fidelity fix, no
+  wire, no census change (FU253 §3.3 `FU253-L3` + FU252 §5.1 `FU252-L4`, ≥9
+  `+0x8E` writer functions). **Deferred (Stage-2, OL-83, owed):** the second
+  over-list site — `include/fifa96_engine/fifa96_match_run.h:503` (the comment
+  *"the row-04/06/07/18 readers use `actor_type`, OL-83"*) — carries the
+  identical row-18 over-list and is owed to that same Stage-2 fidelity task; it
+  is **not** touched here (no code change). The old text is kept verbatim.)*
 - **OL-63 row 05:** the carrier machine stages 0-3 and the ball staging tail are
   ported and the row is **wired (M2 phase-9 T2)** — the claim
   (`0x7F1FF`), the team-target bind, control set/clear, dir bytes, merge

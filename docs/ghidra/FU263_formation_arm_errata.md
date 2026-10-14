@@ -305,3 +305,31 @@ Docs read/handled: `docs/ghidra/FU248_formation_setup.md`,
 `docs/ENGINE.md` (`:918-951`, `:4032-4059`); AGENTS.md (alias traps, census
 rule, errata-never-rewrite). No writes beyond this draft and the report; no
 rename/label/comment/function/script/project save; no git; no subagents.
+
+---
+
+## 6. Errata (quoted — prior sections not rewritten)
+
+> **FU263 §1.5 / §2 / §5 and Leg `FU263-L3` — the replacement handler line-refs
+> `:5500`/`:5603` are themselves stale (caught at Task-3 landing).** §1.5 (lines
+> 118-124) reads *"the fresh table puts them at `:5500`/`:5603` (`FU248` §5)"*;
+> §2 (line 32) *"(`fifa96_match_handlers.c:5500`, fresh read)"*; §5 leg `FU263-L3`
+> repeats `:5500`/`:5603`. Fresh at HEAD (post-Task-2, `fifa96_match_handlers.c`
+> `:5508`/`:5623`, `grep -nE '\{0x17, NULL|\{0x1A, NULL'`): **action row `0x17`
+> is `:5508`** (not `:5500`) and **phase `0x1A` is `:5623`** (not `:5603`;
+> `:5603` is now `{0x10, fifa96_match_phase_10,`). The `:5500`/`:5603` numbers
+> were pre-Task-2 and shifted when the row-`0x22` wire (commit `dd2e047`) inserted
+> lines before and between the two tables. The correction is recorded in
+> `docs/ENGINE.md` (the phase-18 T2 errata parenthetical, now `:5508`/`:5623`).
+> The same stale pair also appears (same class, now superseded) at:
+> `FU248_formation_setup.md` §5 (lines 288/291) and §7 provenance (lines
+> 370-371, where phase `0x0B` is now `:5593`, not `:5573`), and
+> `docs/superpowers/plans/2026-10-14-fifa96-m2-phase25-census-closeout.md`
+> Task-3 §Step 5 (line 142). Append-only; prior sections not rewritten.
+
+> **Leg `FU263-L2` — the row-18 over-list's second site is deferred, not
+> dropped.** `include/fifa96_engine/fifa96_match_run.h:503` carries the
+> identical *"row-04/06/07/18 readers use `actor_type`"* over-list (correct to
+> `04/06/07`); it is recorded as a **deferred Stage-2 OL-83 owed item** (a
+> one-field fidelity fix: `type8 = record.type`, retire `actor_type`). No code
+> changed by this sweep.
