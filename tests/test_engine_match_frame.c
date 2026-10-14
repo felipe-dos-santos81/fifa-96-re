@@ -5045,7 +5045,7 @@ static void test_row04_live_pan_arms_camera(void) {
   e->pos_z = 0xB00;                    /* at the camera: lane/angle gates pass */
   e->target_x = 0;
   e->target_z = 0xB00;
-  e->actor_type = 16;                  /* 0x10F334/3C offsets (21,88)<<5 seed */
+  e->type = 16;                  /* 0x10F334/3C offsets (21,88)<<5 seed */
   e->anim_id = 0;                      /* row byte != 0x13 -> the event arm */
   e->timer81 = 0;
   /* FU-171 §7 rec 1 (T2): the native `dword[0x157750]` the row-04 half-line
@@ -5115,7 +5115,7 @@ static void test_row04_tracked_gate_suppresses_half_line(void) {
   e->pos_z = 0xB00;
   e->target_x = 0;
   e->target_z = 0xB00;
-  e->actor_type = 16;
+  e->type = 16;
   e->anim_id = 0;
   e->timer81 = 0;
   /* stage both candidate cells so this fixture discriminates ONLY the tracked
@@ -5167,7 +5167,7 @@ static void test_row04_arm_a_track_reload(void) {
   e->pos_z = 0xB00;
   e->target_x = 0;
   e->target_z = 0xB00;
-  e->actor_type = 16;
+  e->type = 16;
   e->anim_id = 0x13;                   /* arm A: event_track_reload */
   e->timer81 = 0;
   mr.entities.ball.y = 0x20;
@@ -5247,7 +5247,7 @@ static void test_natural_goal_end_to_end(void) {
   e->pos_z = 0xB00;
   e->target_x = 0;
   e->target_z = 0xB00;
-  e->actor_type = 16;
+  e->type = 16;
   e->anim_id = 0;
   e->timer81 = 0;
   e->has_slot = 1;                     /* [rec+0x20] != 0 -> the 0x7F035 arm */
@@ -5336,7 +5336,7 @@ static void test_natural_goal_fallback_arm(void) {
   e->pos_z = 0xB00;
   e->target_x = 0;
   e->target_z = 0xB00;
-  e->actor_type = 16;
+  e->type = 16;
   e->anim_id = 0;
   e->timer81 = 0;
   e->has_slot = 1;

@@ -467,13 +467,9 @@ struct fifa96_match_run_record {
   int8_t place_offset_z;    /* caller-supplied 0x10F33C[type8] (FU-140) */
   uint8_t place_valid;      /* row 1E: the placement triple is live (FU-141) */
   uint8_t ran;         /* native +0x9E, set by the action-00 body */
-  /* FU-139 §9 (Task 11): the current pool record identity and its +0x8B
-   * actor-type byte, staged so rows 07/0F can resolve the team candidates and
-   * the kick direction table. */
+  /* FU-139 §9 (Task 11): the current pool record identity, staged so rows
+   * 07/0F can resolve the team candidates and the kick direction table. */
   int32_t entity_id;   /* team*11 + index, or NONE */
-  uint8_t actor_type;  /* native +0x8B>>24 = the +0x8E byte; staged from the
-                        * pool, which never writes it (OL-83: rows 04/06/07/18
-                        * read it while rows 28/2A/0F/07/08 persist `type`) */
   uint8_t row44;       /* native +0x44 animation/event ack byte (FU-151: the
                         * row-1E stage 0/2/8 and row-1D stage 0/4 gates read
                         * it; FU-159/T3: produced from the current anim row's
@@ -498,9 +494,9 @@ struct fifa96_match_run_record {
    * resolved [team+0x831] chosen-record position and the five process globals
    * the body reads (their native producers are unported, OL-56). */
   int32_t vel_x, vel_z;     /* native +0x71/+0x73 (arm-2 zero writes) */
-  uint8_t type;             /* native +0x8E byte = `[rec+0x8B] >> 24` (the
-                             * 0x79C50 face octant rows 28/0F/08 write; the
-                             * row-04/06/07/18 readers use `actor_type`, OL-83) */
+  uint8_t type;             /* native +0x8E byte: the one face octant the
+                             * 0x79C50 rows (28/2A/0F/08) write and every
+                             * +0x8E reader consumes (OL-83 unified) */
   uint8_t side;             /* team +0x826 side (arm-0 negation gate) */
   uint8_t flag830;          /* team +0x830 (arm-1 gate) */
   uint8_t chosen_ok;        /* derived: team+0x831 resolved to a pool record */

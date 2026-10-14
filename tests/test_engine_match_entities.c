@@ -121,7 +121,6 @@ static void test_record_fields_roundtrip(void) {
   e->timer7b = 4;
   e->timer79 = 6;
   e->type = 5;
-  e->actor_type = 2;
   e->stage = 3;
   e->stage92 = 0x12;
   e->has_ball = 1;

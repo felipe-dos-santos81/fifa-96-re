@@ -1313,7 +1313,6 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
     r->distance = distance;
   }
   r->type = e->type;
-  r->actor_type = e->actor_type;
   /* FU-159 §4.1 (T3): +0x44 is the current anim row's flags bit 0, produced
    * by every row install (0x6E6CC); deriving it from the live `anim_id` is
    * equivalent (anim_id only changes at install/successor) and replaces the

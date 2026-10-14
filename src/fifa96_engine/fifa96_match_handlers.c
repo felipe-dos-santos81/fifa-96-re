@@ -903,7 +903,7 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->phase = (uint8_t)mr->state.phase;
   s->stage92 = r->stage92;
   s->active = r->active;
-  s->type8 = r->actor_type;
+  s->type8 = r->type;  /* native +0x8E (OL-83: the one face octant) */
   s->type = r->code;   /* native +0x91: the 0x110680/0x7C990 gate byte (K.5.3) */
   s->target_x = r->target_x;   /* the machine writes only when it owns one */
   s->target_y = r->target_y;
@@ -1690,9 +1690,9 @@ static int fifa96_match_action_10(struct fifa96_match_run *mr) {
       /* FU-162 §3.3.A (T3 fix): the native indexes the 0x10F334/0x10F33C byte
        * tables with the **live face octant** `byte[rec+0x8E]` (fresh
        * `0x8591e MOV EAX,[EBP+0x8b]; SAR EAX,0x18` — the `+0x8E` byte, the
-       * port's `record.type`), not `r->actor_type` (native `+0x8B`), which no
-       * code writes (OL-83). The port masks to the 32-entry derived tables
-       * (hardening divergence). */
+       * port's `record.type`). OL-83 unifies every `+0x8E` reader on this one
+       * byte; the former `actor_type` alias is retired. The port masks to the
+       * 32-entry derived tables (hardening divergence). */
       uint32_t dir_idx = (uint32_t)r->type & 0x1Fu;
       /* The native `SHL EDX,6` shifts the sign-extended dword (two's
        * complement); the unsigned shift keeps that exact 32-bit wrap without
@@ -2346,7 +2346,7 @@ static int fifa96_match_action_21(struct fifa96_match_run *mr) {
       id >= 0 && id == mr->entities.team[team].target ? 1u : 0u;
   r.phase = (uint8_t)mr->state.phase;
   r.tracked = id >= 0 && id == mr->entities.controlled ? 1u : 0u;
-  r.type8 = mr->record.actor_type;
+  r.type8 = mr->record.type;   /* native +0x8E (OL-83) */
   r.pos_x = mr->record.pos_x;
   r.pos_z = mr->record.pos_z;
   for (i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
@@ -2539,7 +2539,7 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.has_slot = r->has_slot;
   s.byte99 = 0;                     /* +0x99 producer unported (OL-72) */
   s.byte9d = 0;                     /* +0x9D producer unported (OL-72) */
-  s.type8 = r->actor_type;          /* native byte +0x8E */
+  s.type8 = r->type;                /* native byte +0x8E (OL-83) */
   s.code = r->code;                 /* native byte +0x91 (the dispatched code) */
   s.row_byte = r->anim_id;          /* byte[[rec+0x28]] live row id (OL-80) */
   s.desc_e = 0;                     /* rec[+4][+0xE] (roster descriptor, OL-72) */
@@ -2784,9 +2784,7 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
                  mr->slot.released != 0)
                     ? 1u
                     : 0u;  /* native word[slot+6]: the FU-70 released word */
-  c.type8 = r->actor_type;             /* native byte +0x8E; the pool
-                                        * actor_type writer is unported
-                                        * (always 0, OL-83) */
+  c.type8 = r->type;                   /* native byte +0x8E (OL-83) */
   c.code = r->code;
   c.event_flag44 = r->row44;           /* native +0x44 */
   c.is_team_target = id == team->target ? 1u : 0u;
@@ -3009,7 +3007,7 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
   s.slot_dir_x = mr->record.dir_x;
   s.slot_dir_z = mr->record.dir_z;
   s.side = mr->entities.team[team].side;
-  s.type8 = mr->record.actor_type;
+  s.type8 = mr->record.type;              /* native +0x8E (OL-83) */
   s.row_byte = mr->record.anim_id;        /* [[rec+0x28]] live id (OL-80) */
   s.byte99 = 0;                           /* +0x99 (OL-69) */
   s.byte9d = 0;                           /* +0x9D (OL-69) */
@@ -5463,7 +5461,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x03, NULL,
      "FU-177 §2/§3/§7 + FU-198 §5.3 (phase-17 T1): row 03 hold/clamp body 0x7E1A4..0x7E524 ported (fifa96_match_action_03, over the FU-138 helpers fifa96_action_locomotion_hold/clamp_placement/placement_counter/phase1_clamp + fifa96_match_entities_camera_place for 0x79F3C) but NOT counted: the TAPE-VISIBLE mover is the phase-0x13/0x14 special arm (0x7E1CE) — NOT the phase-2 [rec+0x1C] = 0x6DCC8 chain (FU258 §4.3 erratum: at transcribed frame 29 the global phase 0x157A4D is 0x14, so 0x110794[0x14] = 0x6E244 runs and 0x6DCC8 cannot) — wiring the slot moved M2 at transcribed frame 29 (the forced code-3 record's row-03 body runs in the phase-2 window), so per controller R7 the row legs (owner FU177-L1) and the slot stays NULL/uncounted; the body is exported for direct unit testing. The per-record [rec+0x1C] seam (FU175-L1) is landed by T1 (fifa96_match_dispatch_phase_record + the walk cursor); remaining legs: the FUN_0008C418 team bound block (the phase-2 clamp inputs), FUN_00079C20 (slot branch B), FUN_00079B58 (+0x93, inlined on the special arm), the phase-0x13/0x14 special arm's remaining sub-parts (its target/metric are derived), the phase-7 0x158747 wall scan, the phase-8/0xC tails (FU177-L1..L6) and the OL-13 [rec+0xC] metadata (FU192-L1). OL-19"},
     {0x04, fifa96_match_action_04,
-     "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72; the +0x8E record.type/actor_type split OL-83"},
+     "FU-142 App. K.5/FU-137 §6.1 (Task 1/OL-70): row 04 ported (fifa96_outfield_row04_step, 0x7E7C8..0x7F141) over the pool; the carrier/ranked-pick/forced/chase installs 4/0x19/0xF/0xE/0xB/7/6/5 and the target/timer/team writes are bound; the 0x7CA54 input-row machine stays a separate unwired seam; unmodeled record/team bytes, track words and sinks OL-65/OL-67/OL-72; the +0x8E readers now unify on record.type (OL-83 closed)"},
     {0x05, fifa96_match_action_05,
      "FU-139 §8/§5 + M2 phase-9 T2/OL-63: row 05 carrier machine ported (0x7F194..0x7F665 stages 0-3) + staging tail 0x7A8D1..0x7AA2F; wired: the 0x7F1FF [0x158724] claim + the 0x158728..0x15872F block, team-target bind, capped timer, camera target, stage-0 control/dir gates, the 0x7876C merge and stages 1-3 (snap/face/hand-off) over the pool; stage-0 tail 0x7F3A1..0x7F57B + FUN_0007F7E0 fallback stay OL-63 legs (named requests); sinks 0x92820/0x6E598 OL-27/OL-52"},
     {0x06, fifa96_match_action_06,
@@ -5471,7 +5469,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x07, fifa96_match_action_07,
      "FU-139 §9/FU-137 §5.2: row 07 ported (0x814B0..0x81737 machine; 0x7B9C4 kick path) over the pool; defender 0x0E/opponent 0x22/ball 4 requests; descriptor bytes and predictor OL-65/OL-66"},
     {0x08, fifa96_match_action_08,
-     "FU-142 App. K.6/FU-137 §6.1 (Task 2/OL-70a): row 08 ported (fifa96_outfield_row08_step, 0x81068..0x814AF) over the pool; the stage-0 camera/face, the +0x3D-gated projection scan, the 0x79B1C snap and the process-byte writes are bound; row 08 installs no code; unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82; the +0x8E record.type/actor_type split OL-83"},
+     "FU-142 App. K.6/FU-137 §6.1 (Task 2/OL-70a): row 08 ported (fifa96_outfield_row08_step, 0x81068..0x814AF) over the pool; the stage-0 camera/face, the +0x3D-gated projection scan, the 0x79B1C snap and the process-byte writes are bound; row 08 installs no code; unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82; the +0x8E readers now unify on record.type (OL-83 closed)"},
     {0x09, fifa96_match_action_09,
      "FU-178 §3/§8 (phase-15 T3): row 09 stage-0 ported (fifa96_match_action_09, 0x80A00..0x80BFA arm 0 of table 0x809F0): the phase==2 gate (0x80A0B, else 0x7DAB4 reset), the stage>3 tail (0x80A2A), the arm-0 clear branch (reset + detach [team+0x7B2]/[team+0x7B6]) and the arm-0 set branch (the 0x79C50 ball-relative face, the two 0x114E04 sine folds via fifa96_entity_sine x 0x795A4, the min(+0x69>>17,0x30) speed, the +0x59/+0x61 accumulate, the +0x73/+0x75 velocity and 0x8DC68 speed, the +0x4D target copy, the 0x6E598 anim 0x11 install, +0x9E/[0x15877C]/+0x89/+0x92); arms 1/2/3 (stages 1-3, incl. the 0x0C/0x0D installs) are FU178-L1 (mr->match09_leg_stage records the unported stage); the 0x1577C0/C2 lead words, word[+0x79] and [0x15877C] have unported producers (OL-82); installer live (pad release 0x7CFB2 + wired row-06 RNG arm 0x807C1)"},
     {0x0A, NULL, "FU-137 §6: FU-136 row 0A: not ported; installer 0x7CDD8 has no xrefs; OL-14"},

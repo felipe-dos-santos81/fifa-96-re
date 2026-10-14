@@ -437,8 +437,7 @@ static void test_live_throw_in_camera_y_cut(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u);
   /* the stage-3 cut loops over the eight face octants: the record's live face
-   * octant (`type`, native +0x8E) selects the 0x10F334/0x10F33C offsets; the
-   * staged `actor_type` (native +0x8B) must be ignored. */
+   * octant (`type`, native +0x8E) selects the 0x10F334/0x10F33C offsets. */
   for (int oct = 0; oct < 8; oct++) {
     f.mr.record.stage92 = 2;
     f.mr.record.timer89 = 0x100;           /* crosses the 0x78 probe timer */
@@ -446,7 +445,6 @@ static void test_live_throw_in_camera_y_cut(void) {
     f.mr.record.pos_x = 0x110;
     f.mr.record.pos_z = 0x400;
     f.mr.record.type = (uint8_t)oct;
-    f.mr.record.actor_type = (uint8_t)((oct + 3) & 7);   /* must be ignored */
     assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
     assert(f.mr.render.camera.pos_y == 0x80);
     assert(f.mr.render.camera.pos_x == 0x110 + expected_x[oct] * 0x40);
@@ -2130,7 +2128,6 @@ static void test_action_07_runs_body(void) {
   /* stage 1: the slot word 0 (has_slot) selects mode 0, the kick runs on the
    * staged ball block, then the latch advances. */
   f.mr.record.stage92 = 1;
-  f.mr.record.actor_type = 1;
   f.mr.record.has_slot = 1;
   f.mr.record.target_x = 0x321;   /* the stage-1 kick path must carry it */
   assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
@@ -2217,7 +2214,6 @@ static void test_action_07_ol65_invoke_installs_row_22(void) {
   f.mr.record.timer81 = 0;
   f.mr.record.timer89 = 0;
   f.mr.record.delta = 0;
-  f.mr.record.actor_type = 1;
   f.mr.record.active = 0;
 
   /* The opponent team target: a code-6 no-slot record whose live angle cells
@@ -4031,6 +4027,41 @@ static void test_situation_producer_live_at_begin(void) {
   drop_fixture(&f);
 }
 
+/* OL-83 (M2 phase-25): the `+0x8E` face-octant readers must consume the
+ * record's live `type`, not the retired `actor_type` alias (the run record's
+ * staged copy of a pool byte the engine never writes, always 0). Row 07
+ * stage 0 resolves `target = camera + type_off[type8] << 4` when the slot
+ * carries word 0x60 (`fifa96_action_kick_stage_target`, `match_kick_from_record`'s
+ * `s->type8` reader): staging `type = 1` selects `match_kick_dir_{x,z}[1] =
+ * (1,1)`, so the resolved target is camera + 0x10. Pre-OL-83 the reader sees
+ * `actor_type` 0 -> `match_kick_dir_{x,z}[0] = (0,1)` -> `target_x` stays at the
+ * camera x. */
+static void test_ol83_type8_readers_see_record_type(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.has_slot = 1;
+  f.mr.record.lane = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.type = 1;                 /* the live +0x8E octant */
+  f.mr.record.code = 7;                 /* the +0x91 kick gate byte (K.5.3) */
+  f.mr.slot.entity = 0;                 /* the record owns the slot */
+  f.mr.slot.released = 0x60;            /* the stage-target resolved arm */
+  f.mr.render.camera.pos_x = 0x100;
+  f.mr.render.camera.pos_y = 0;
+  f.mr.render.camera.pos_z = 0x200;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
+  /* match_kick_dir_x[1] = match_kick_dir_z[1] = 1 -> <<4 = 0x10. */
+  assert(f.mr.record.target_x == 0x110);
+  assert(f.mr.record.target_z == 0x210);
+  drop_fixture(&f);
+}
+
 int main(void) {
   test_tables_are_fully_classified();
   test_action_rows_dispatch_per_classification();
@@ -4083,6 +4114,7 @@ int main(void) {
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
   test_action_07_ol65_invoke_installs_row_22();
+  test_ol83_type8_readers_see_record_type();
   test_action_0F_runs_body();
   test_action_18_runs_body();
   test_action_21_runs_body();

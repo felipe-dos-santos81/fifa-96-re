@@ -73,9 +73,9 @@ struct fifa96_match_entity {
                              * driver `FUN_0008E008` advances it (OL-80). */
   uint8_t stage;            /* +0x8F >> 24 */
   uint8_t stage92;          /* +0x92 stage latch (reset 0xFF, FU-137 §4.3) */
-  uint8_t type;             /* native byte +0x8E (the face octant; the
-                             * `dword[+0x8E] >> 24` alias selects +0x91) */
-  uint8_t actor_type;       /* +0x8B >> 24 */
+  uint8_t type;             /* native byte +0x8E: the one face octant (OL-83;
+                             * the former `actor_type` alias — `dword[+0x8B]>>
+                             * 24` — named the same byte and is retired) */
   uint8_t ran;              /* +0x9E, set by row 00, cleared by the installer */
   uint8_t carrier;          /* +0x9F bit 0 */
   uint8_t has_ball;         /* +0x9B */
