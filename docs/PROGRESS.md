@@ -1802,3 +1802,16 @@ arm; the `0x13`-vs-`0x14` pick is the unpinned FU237-L1. Recorded as the leg
 **FU239-L5** in `fifa96_match_run_end_word` and the ENGINE.md leg list; the
 model is deliberately **not** changed (adding the guard would hold the tape's 1-0
 terminal). No golden re-pin, no census change.
+
+**Smoke (honest; whole-branch review, 2026-10-14).** `make game` under
+`DISPLAY=:1` (SDL3 + `game/FIFAPCCD96.iso` present) opened the 960×720 windowed
+engine, booted the ISO, and drew the EA-SPORTS intro
+(`docs/screens/p22-smoke-intro.png`), reached the front-end menu on RETURN
+(`docs/screens/p22-smoke-frontend.png`), and entered the live match kickoff (the
+HUD bar, score 0-0, clock `00:00`, `docs/screens/p22-smoke-match.png`) with no
+engine-owned crash. The sanitized `SIGTERM` shutdown reports a 1942 B
+LeakSanitizer leak in 3 allocations, all inside `libdbus-1` reached via SDL3/X11
+GL (`sdl3_init`) — external, not engine-owned. This host has no scripted
+interaction for the windowed build, so the **end-spine reach** (the live ET
+halves, the ET-over terminal, the return) is proven by the headless v22 tape
+(`test_engine_m2`, byte-stable over 3 replays), not by the smoke.

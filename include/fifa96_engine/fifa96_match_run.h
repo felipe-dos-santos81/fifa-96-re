@@ -1385,8 +1385,10 @@ void fifa96_match_run_period_over_rearm(struct fifa96_match_run *mr);
  * `[0x158822]` as a pure function of the run's phase/flag/timer:
  *  - `1` = regulation-over: the flag-clear phase-`0xC` terminal (`0x8BCBF CMP
  *    byte[0x157AC0],0` / `0x8BCD9 MOV word[0x158822],1`);
- *  - `2` = extra-time-over: the phase-`0x13`/`0x14` dwell with the end timer
- *    `word[0x158818] > 0x4B0` (`0x8BD52`/`0x8BDA4`, the ET-half timeline). The
+ *  - `2` = extra-time-over: the phase-`0x13`/`0x14` arm's dwell with the end
+ *    timer `word[0x158818] > 0x4B0` (the arm's `CMP EAX,0x4B0` at
+ *    `0x8BD52`/`0x8BDA4`; the `word[0x158822]=2` write is
+ *    `0x8BD8A`/`0x8BDD4`, latched at `0x8BDDD`). The
  *    native `CMP EAX,0x4B0 ; JG` is a SIGNED compare of the sign-extended word
  *    (`MOV EAX,[0x158816] ; SAR EAX,0x10`), so `mr->act.timer` is compared
  *    signed;

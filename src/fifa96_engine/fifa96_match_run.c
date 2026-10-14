@@ -4053,7 +4053,9 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
 
 /* FU-231 §3: the FUN_0008BAF0 end machine. word 1 = regulation-over (the
  * flag-clear phase-0xC terminal, 0x8BCD9); word 2 = extra-time-over (the
- * phase-0x13/0x14 dwell past word[0x158818]>0x4B0, 0x8BD8A/0x8BDD4); 0 = none.
+ * phase-0x13/0x14 arm's dwell past `word[0x158818] > 0x4B0` — the arm's `CMP
+ * EAX,0x4B0` at 0x8BD52/0x8BDA4; the `word[0x158822]=2` write is
+ * 0x8BD8A/0x8BDD4, latched at 0x8BDDD); 0 = none.
  * The no-ET screen 0x37F54 ([0x105FFC]=5) has no engine cell -> FU-231 leg.
  * The `[0x158818]` gate is a SIGNED word compare (native `MOV EAX,[0x158816] ;
  * SAR EAX,0x10 ; CMP EAX,0x4B0 ; JG`), so `mr->act.timer` (int16_t) is compared

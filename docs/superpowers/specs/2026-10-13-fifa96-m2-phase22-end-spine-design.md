@@ -190,3 +190,26 @@ Any *unexplained* drift is a regression to investigate, never a re-pin.
   raise the caps as needed (FU230-L4 precedent).
 - **Penalty shootout:** deferred to **phase-23** (a separate subsystem); this phase
   records the shootout entry point as a numbered leg (FU237).
+
+## 11. Errata (append-only; the phase-22 review, 2026-10-13/14)
+
+Prior sections (§1–§10) are **not** rewritten; the corrections land here.
+
+- **(a) The tape reaches only the ET-over consume.** The forced-ET acceptance tape
+  plays the live extra-time halves to the ET-over **consume** (`word 2`, the
+  same-frame resume, no over-screen — FU-232-L6) and stops there. The **OVER
+  screen** and the **front-end return** are **not** on the forced-ET tape; they are
+  asserted **off-tape** by `run_regulation_over_probe` (`tests/test_engine_m2.c`),
+  the **D2** scope exercised through the word-`1` regulation-over route
+  (controller-ruled 2026-10-13).
+- **(b) T4's "phase-`0x13`/`0x14` rows" is superseded.** §5 T4 ("the extra-time
+  halves live … the phase-`0x13`/`0x14` rows + the terminal") is superseded by
+  FU-239: the phase rows stay **NULL** (the **FU233-L1** leg) and the live
+  extra-time half is the **class-1 play phase `2`** (the only class-1 phase with a
+  static writer), reached by the period-over re-arm.
+- **(c) The plan added T1, T4 and T4b beyond §5's T-list.** FU-238 §2.3's premise
+  (the ET half running in the class-0 phases `0x13`/`0x14`) **failed the §5 T1
+  feasibility gate**; FU-239 re-derived the ET half as phase `2`. The plan
+  therefore added **T1** (the period-over re-arm helper), **T4** (the terminal
+  dwell) and **T4b** (the re-arm index bound `{2,3}`, not `>= 2`) beyond the §5
+  T-list.

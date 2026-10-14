@@ -1394,6 +1394,12 @@ the build also produces the windowed `fifa96` target (`make game`).
   FU-238 §2.3 → **FU-239** (the ET half is phase `2`; `0x13`/`0x14` is the
   ET-over screen; the phase-`0xC` gate is `0x168`, not the `0x4B0` dwell);
   **FU-213 §11** → FU-239 §1 (`FUN_00088860` is the dispatcher, not the re-arm).
+  **Anchor reconciliation (append-only; the arm-vs-write-vs-latch roles):** the
+  ET-over dwell is the arm's `CMP EAX,0x4B0` at `0x8BD52` (phase `0x14`) /
+  `0x8BDA4` (phase `0x13`); the `word[0x158822]=2` write is `0x8BD8A` (phase
+  `0x14`) / `0x8BDD4` (phase `0x13`); the `[0x10F360]` latch is `0x8BDDD`. The
+  T4b cite `0x8BD5A`/`0x8BDAC` above is the arm's inner `CMP` byte, superseded by
+  the arm-entry cite `0x8BD52`/`0x8BDA4`.
   `make check` **110/110**. **Residual legs:** **FU239-L1** (the exact
   `0x13 → 0x0C → sit-8 → phase 2` route — the situation dispatch is indirect),
   **FU239-L3** (`[0x157AC2]=4` vs the tape's forced ET), **FU-231** (the
