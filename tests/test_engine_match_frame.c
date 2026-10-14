@@ -5813,6 +5813,58 @@ static void test_translation_install(void) {
   drop_fixture(f);
 }
 
+/* FU-231 §3 / FU-234-L7 (M2 phase-22 T2 fix): the frame-body end-word STAGING
+ * gate. The clock-tail staging (the FUN_0008BAF0 call at `0x8B664`, right after
+ * the ball machine) writes `end_word_158822` only when the consumer's
+ * past-half-time index holds (`global_157ac2 >= 2u`, the `0x4B1C6 CMP
+ * [0x157AC2],2` absorber) AND the FU-235 dwell holds (`act.timer` =
+ * `word[0x158818] >= 0x78`). A live phase-`0xC` terminal is seeded: the act
+ * slot already resolves to the sit-1 arm (act 1), so the every-frame
+ * `period_setup` re-dispatch is the native latch no-op (`FUN_000888FC 0x88906`)
+ * and the seeded dwell survives to the staging. (a) half-time (index 1): the
+ * word must stay 0 even with the dwell met and a flag-clear terminal present —
+ * the early-fire lock FU-234-L7 exists to prevent. (b) post-half-time (index 2):
+ * the same state stages word 1. Mutation-RED: dropping the `global_157ac2 >= 2u`
+ * term fires the word at (a). */
+static void test_end_word_staging_gate(void) {
+  /* (a) half-time: index 1 -> the index term blocks the write. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 0x0Cu;      /* the flag-clear phase-0xC terminal state */
+    mr.global_157ac0 = 0u;       /* flag clear: the terminal is present */
+    mr.global_157ac2 = 1u;       /* HALF-TIME: not past */
+    mr.act.id = 1;               /* the sit-1 arm: the re-dispatch is a no-op */
+    mr.act.timer = 0x78;         /* the FU-235 dwell is met */
+    int granted = 0;
+    for (int i = 0; i < 10 && !granted; i++) {
+      int rc = fifa96_match_run_frame(&mr);
+      assert(rc >= 0);
+      granted = rc;
+    }
+    assert(granted == 1);              /* the staging ran inside a granted frame */
+    assert(mr.end_word_158822 == 0u);  /* the index term blocks the write */
+  }
+  /* (b) post-half-time: index 2 -> the flag-clear terminal stages word 1. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 0x0Cu;
+    mr.global_157ac0 = 0u;
+    mr.global_157ac2 = 2u;       /* PAST half-time */
+    mr.act.id = 1;
+    mr.act.timer = 0x78;
+    int granted = 0;
+    for (int i = 0; i < 10 && !granted; i++) {
+      int rc = fifa96_match_run_frame(&mr);
+      assert(rc >= 0);
+      granted = rc;
+    }
+    assert(granted == 1);
+    assert(mr.end_word_158822 == 1u);  /* the flag-clear terminal stages 1 */
+  }
+}
+
 int main(void) {
   test_init_resets_state();
   test_300_grants_ten_seconds_no_drift();
@@ -5918,6 +5970,7 @@ int main(void) {
   test_record_meta_bind_live();
   test_record_meta_bind_per_side();
   test_translation_install();
+  test_end_word_staging_gate();
   puts("test_engine_match_frame OK");
   return 0;
 }
