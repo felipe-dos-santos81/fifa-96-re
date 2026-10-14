@@ -909,13 +909,22 @@ static void test_row_25_body_direct(void) {
  * the goal team (FU-243-L2's "arm not ported" claim is stale: the port lives in
  * `fifa96_match_run_phase_arm`'s `phase == 5` block). Only the body `0x87CD0`
  * was unported. Mutation-RED: a NULL slot returns UNSUPPORTED, so the dispatch
- * assertion below fails. */
+ * assertion below fails. The behavioural path is exercised here too (not a
+ * slot-existence-only check, T5 strengthening): the live phase-5 active stage-0
+ * record arms `scratch_ae = 0x3C` and advances to stage 1, so a slot that merely
+ * returned FIFA96_OK would leave `stage92` at 0. */
 static void test_action_15_dispatches(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_action_table[0x15].fn != NULL);
   assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(NULL, 0x15u) == -FIFA96_ERR_INVALID);
+  mr.record.entity_id = 1;              /* team 0 record 1 */
+  mr.state.phase = 5u;                  /* the live phase-5 celebration arm */
+  mr.record.stage92 = 0u;
+  mr.record.active = 1u;
+  assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+  assert(mr.record.scratch_ae == 0x3C && mr.record.stage92 == 1u);
 }
 
 /* The ported row-0x15 body (`0x87CD0`, the 4-arm table `0x87CC0`). The phase-5

@@ -96,7 +96,11 @@
  * re-init), so the already-ported body is genuinely dispatched. M2 phase-23 T3
  * (FU-243) flips row 0x15 to FIFA96_OK: the shared 0x8D433 phase-5 celebration
  * arm is already ported at `fifa96_match_run_phase_arm`, and the row-15 body
- * `0x87CD0` lands as `fifa96_match_action_15`. */
+ * `0x87CD0` lands as `fifa96_match_action_15`. M2 phase-23 T2 (FU-243) flips row
+ * 0x25 to FIFA96_OK: the FU189-L2 "no static installer" verdict is REFUTED (the
+ * ECX-carried installer `0x8D79D`/`0x8D7AD` is already modelled by
+ * `fifa96_match_phase_machine_step`), so the ported body `0x880CC` is genuinely
+ * dispatched. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,

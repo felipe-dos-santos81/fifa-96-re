@@ -3636,17 +3636,32 @@ static void test_set_piece_bx_fallback(void) {
   assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* terminal */
   assert(mr.state.phase == 3u);                    /* the deferred sit-2 arm */
   assert(mr.store_15882b == 0xFFu);                /* 0x8A8D3 */
-  /* sit 3: the phase-0 write precedes the deferred corner arm (prev_phase) */
+  /* sit 3: the phase-0 write precedes the deferred corner arm; drive the sweep
+   * to its stage-2 terminal so the deferred sit-3 arm (phase 4 + the corner
+   * increment) lands, as the sit-2 block above does. */
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
   assert(fifa96_match_run_set_piece(&mr, 3, 1, 1) == 0);
   assert(mr.state.phase == 0u && mr.state.prev_phase == 2u);
   assert(mr.corner_count[1] == 0u);                /* deferred, not in-frame */
   assert(mr.store_15882c == 1u && mr.store_15882b == 3u && mr.act.id == 8u);
-  /* keeper restart through the fallback: the sit-5 -> phase-9 arm is deferred */
+  for (k = 0; k < 21; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u && mr.store_15882b == 3u);  /* still held */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* terminal */
+  assert(mr.state.phase == 4u);                    /* the deferred sit-3 corner arm */
+  assert(mr.corner_count[1] == 1u);                /* the corner increment (0x8ABFF) */
+  assert(mr.store_15882b == 0xFFu);                /* 0x8A8D3 */
+  /* keeper restart through the fallback: drive to the terminal so the deferred
+   * sit-5 arm (phase 9) lands. */
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_set_piece(&mr, 5, 0, 1) == 0);
   assert(mr.state.phase == 0u && mr.store_15882b == 5u && mr.act.id == 8u);
+  for (k = 0; k < 21; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* terminal */
+  assert(mr.state.phase == 9u);                    /* the deferred sit-5 keeper arm */
+  assert(mr.store_15882b == 0xFFu);                /* 0x8A8D3 */
 }
 
 /* FU-241 §6 (M2 phase-23 T4): the phase-0x1E de-compression pin. The engine now

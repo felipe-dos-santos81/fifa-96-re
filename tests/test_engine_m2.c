@@ -4704,6 +4704,76 @@ static void run_phase22_riders(void) {
   }
 }
 
+/* v23 (M2 phase-23 T5, FU-243/FU-241): the census-ceiling mutation-RED rider
+ * classes — the three wires that close the phase (the action rows 0x25 and 0x15
+ * and the phase-0x1E re-route). Every block is a genuine mutation-RED check at
+ * the dispatch layer (disable the guarded code and its assert aborts) and pure
+ * state (ISO-independent, prints nothing, so the tape transcript is unaffected).
+ * Authority: FU-243 §4.2/§6 (row 25), FU-243 §4.3/§6 (row 15), FU-241 §6.3
+ * (+phase 0x1E). The heavy per-row body checks live in
+ * test_engine_match_act.c; these are the durable dispatch-layer cross-checks. */
+static void run_phase23_riders(void) {
+  /* 1. ROW 0x25 (the ECX-path installer refutation, T2/FU-243) — the row is
+   *    COUNTED and its body runs at the dispatch layer. A fresh record is stage
+   *    0, timer 0: arm 0's head adds the frame delta to timer89 (`0x880DC`).
+   *    Mutation-RED: neutering the row-25 body (an early `FIFA96_OK`) leaves
+   *    timer89 at 0 -> the `timer89 == 2` assert aborts; a NULL slot would
+   *    return `-FIFA96_ERR_UNSUPPORTED` and the first dispatch assert aborts. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_action_table[0x25].fn != NULL);
+    mr.record.entity_id = 1;            /* team 0 record 1 */
+    mr.record.delta = 2;
+    assert(fifa96_match_dispatch_action(&mr, 0x25u) == FIFA96_OK);
+    assert(mr.record.timer89 == 2);     /* 0x880DC head add */
+    assert(mr.record.stage92 == 0u);    /* arm 0 waits below 0x3C */
+  }
+  /* 2. ROW 0x15 (the phase-5 celebration sibling, T3/FU-243) — the row is
+   *    COUNTED and its body runs at the dispatch layer. At phase 5, stage 0,
+   *    active: arm 0 arms scratch_ae = 0x3C, clears the timer and advances to
+   *    stage 1 (`0x87D7C`). Mutation-RED: neutering the row-15 body leaves
+   *    stage92 at 0 (and scratch_ae unset) -> the `stage92 == 1` assert aborts;
+   *    a NULL slot returns `-FIFA96_ERR_UNSUPPORTED`. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_action_table[0x15].fn != NULL);
+    mr.record.entity_id = 1;            /* team 0 record 1 */
+    mr.record.delta = 2;
+    mr.state.phase = 5u;                /* the phase-5 celebration arm */
+    mr.record.stage92 = 0u;
+    mr.record.active = 1u;
+    assert(fifa96_match_dispatch_action(&mr, 0x15u) == FIFA96_OK);
+    assert(mr.record.scratch_ae == 0x3C);   /* 0x87D7C */
+    assert(mr.record.timer89 == 0);         /* 0x87D8C */
+    assert(mr.record.stage92 == 1u);        /* 0x87D96 INC CL */
+  }
+  /* 3. PHASE 0x1E (the act-8 restart-sweep de-compression, T4/FU-241) — the slot
+   *    is REGISTERED/COUNTED and the body runs at the dispatch layer (stage 0
+   *    resets the cursor and falls through into stage 1, sweeping record (0,0)).
+   *    The `set_piece` BX!=0 re-route is the wire: it dispatches act 8
+   *    invoke-now (`0x8AAA3`), whose clock-tail tick reaches this row.
+   *    Mutation-RED: unregistering the slot (reverting to NULL) makes
+   *    `dispatch_phase(0x1E)` return `-FIFA96_ERR_UNSUPPORTED` and the first
+   *    dispatch assert aborts; reverting the re-route to the compressed in-frame
+   *    `set_piece` leaves the act-8 slot un-dispatched -> the re-route assert
+   *    aborts. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_phase_table[0x1E].fn == fifa96_match_action_phase_1E);
+    assert(fifa96_match_dispatch_phase(&mr, 0x1Eu) == FIFA96_OK);
+    assert(mr.act8_team == 0u && mr.act8_record == 1u);  /* stage 0 -> 1 swept one */
+    /* the re-route: `set_piece` BX!=0 -> act 8 invoke-now -> the phase-0x1E row */
+    fifa96_match_run_init(&mr);
+    assert(fifa96_match_run_set_piece(&mr, 2, 1, 1) == 0);
+    assert(mr.act.id == 8u && mr.act.stage == 1u);   /* the re-route reached the sweep */
+    assert(mr.state.phase == 0u);                     /* 0x740A0 */
+    assert(mr.store_15882b == 2u);                    /* the stored situation */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -4752,6 +4822,9 @@ int main(void) {
   run_phase19_riders();
   run_phase21_riders();
   run_phase22_riders();
+  /* v23 (phase-23 T5): the census-ceiling mutation-RED riders (the row-0x25 /
+   * row-0x15 bodies + the phase-0x1E re-route). */
+  run_phase23_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;
