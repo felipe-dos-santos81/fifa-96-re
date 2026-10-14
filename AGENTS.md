@@ -87,7 +87,7 @@ derived from one binary (`FIFA96.EXE`):
 
 - The README title percentage is **derived, never hand-tuned**:
   `floor(100 × wired / total)` over the match-action dispatch census — the
-  "N/M action rows wired" headline in `docs/ENGINE.md` (currently 55/80 → 68%).
+  "N/M action rows wired" headline in `docs/ENGINE.md` (currently 56/80 → 70%).
 - Whenever a task changes the wired count (new rows wired, or a re-count of
   the census), recompute it and update the README title **in the same
   commit**, keeping it consistent with the ENGINE.md census line.

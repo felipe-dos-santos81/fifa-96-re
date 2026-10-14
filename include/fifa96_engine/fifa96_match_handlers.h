@@ -233,7 +233,7 @@ int fifa96_match_action_24(struct fifa96_match_run *mr);
  * COUNTED in M2 phase-20 T3, FU-217/FU-220): the actor-record "ball-camera /
  * restart-commit transition" `0x84EEC..0x85213` (the 7-arm CS table `0x84ED0`).
  * Its action-table slot (`fifa96_match_action_table[0x20]`) is **wired** to
- * `fifa96_match_action_20` — the row is **COUNTED** (`55/80 = 68%`) — because
+ * `fifa96_match_action_20` — the row is **COUNTED** (`56/80 = 70%`) — because
  * the coupled installer's target (the native actor record `[0x1587D4]`, reached
  * by the phase-0x1D arm-0 `0x899A2` = `FUN_0007D9A4([0x1587D4], 0x20, 0, 0)`)
  * now has a live producer: the sit-8 arm's `[0x1587CC + side*4] ->
