@@ -1606,9 +1606,10 @@
  * tie-does-NOT-arm-ET polarity discriminator (errata E1), the period-index roll
  * to the index-4 sit-8 gate, the ET-entry phase-0x1D slot dereference, the
  * clock-completion schedule (the `main` half_step/et_step anchors) and the
- * additivity/determinism gate (the 3-replay `main` check + the `head -792`
- * prefix). The sit-8 extra-time *kickoff* (`global_157ac2 == 4` -> act 7 ->
- * phase 0x10) stays off the tape: the native bit-8 `[0x4B0CB]` range-word gate
+ * additivity/determinism gate (the 3-replay `main` check + the in-test
+ * `head -792` prefix assertion). The sit-8 extra-time *kickoff*
+ * (`global_157ac2 == 4` -> act 7 -> phase 0x10) stays off the tape: the native bit-8
+ * `[0x4B0CB]` range-word gate
  * that raises the index to 4 is DEAD (no instruction sets bit 8; spec §2 "No
  * dead-gate synthesis", FU-215), and reaching index 4 through successive
  * completions is past the ET entry the acceptance stops at. The reachable
@@ -2740,8 +2741,8 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
       assert(res->ball_final_sx >= (e->surface->width << 16));
     }
   } else if (m == M2_M_HALF_OPEN) {
-    /* v21 (M2 T6): the frame the period-0 completion was consumed on. The
-     * completion wrote phase 0x0C / act 0xB and rolled `global_157ac2 = 1`
+    /* v21 (M2 T6): the post-completion frame that opens the ordinary session.
+     * The completion wrote phase 0x0C / act 0xB and rolled `global_157ac2 = 1`
      * (the half-time roll); no extra-time flag (the score is still 1-0 but the
      * completed index 0 is not a tie-break site, FU-213 §2.4). Natively the
      * period-end route's caller requires the ordinary-match session gate OPEN
@@ -4126,7 +4127,7 @@ static void run_phase21_riders(void) {
   /* v21 (M2 phase-21 T6): the live period-end transition riders (FU-230 §3.3,
    * classes 1-5). Classes 6 (the clock-completion schedule) and 7
    * (additivity/determinism) are the `main` half_step/et_step anchors and the
-   * 3-replay gate + the documented `head -792` prefix check (spec §5 T6).
+   * 3-replay gate + the in-test `head -792` prefix assertion (spec §5 T6).
    * Every block is mutation-RED and pure C state (ISO-independent, prints
    * nothing). */
   /* 4. HALF-TIME (T5/FU-227, class 1): the period-0 completion takes the sit-1
@@ -4556,6 +4557,35 @@ int main(void) {
     fprintf(stderr, "test_engine_m2: cannot read golden %s\n", M2_GOLDEN_PATH);
     free(transcript);
     return 1;
+  }
+  /* v21 (M2 phase-21 T6, FU-230 §3.3 rider class 7): the additivity gate — the
+   * automated form of `head -792 new | cmp - old` over the committed v20
+   * 792-line prefix. The live-tape extension grew the golden 792 -> 2522 lines
+   * by appending only, so the first 792 lines must stay byte-identical. This
+   * asserts that as a real in-test gate (not the provenance prose alone) and
+   * edits no golden byte; 792 lines = 34820 bytes (the v21 provenance block).
+   * It precedes the whole-transcript compare so an additivity break reports the
+   * offending line directly. */
+  {
+    size_t prefix = 0;
+    int lines = 0;
+    while (lines < 792 && prefix < glen) {
+      if (golden[prefix] == '\n') lines++;
+      prefix++;
+    }
+    assert(lines == 792);        /* the golden still carries the v20 prefix */
+    if (tlen < prefix || memcmp(transcript, golden, prefix) != 0) {
+      size_t at = 0;
+      while (at < prefix && at < tlen && transcript[at] == golden[at]) at++;
+      report_diff(transcript, tlen, golden, glen, at);
+      fprintf(stderr,
+              "test_engine_m2 FAIL: additivity — the first 792 lines differ "
+              "from %s\n",
+              M2_GOLDEN_PATH);
+      free(golden);
+      free(transcript);
+      return 1;
+    }
   }
   if (tlen != glen || memcmp(transcript, golden, tlen) != 0) {
     size_t at = 0;

@@ -2593,7 +2593,11 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
    * (FUN_000493A0 loop 0x4950A), before the clock; its own gates
    * (state.phase == 0x0C, global_157ac2 == 4) select the sit-1/sit-8 arm.
    * Hoisting it here is the per-frame cadence; the index-4 completion call
-   * below is removed as redundant (native-faithful, one call per frame). */
+   * below is removed as redundant (native-faithful, one call per frame).
+   * NB (FU-225 D6/D10): the shared prefix 0x4B038 also clears `pass_parity`
+   * ([0x157A4F]) on EVERY call now — that pervasive clear is intended and
+   * native-faithful (the prefix is part of the every-frame FUN_0004B02C
+   * body), not drift. */
   (void)fifa96_match_run_period_setup(mr, 0);
   /* One-shot: the staged completion belongs to the latest granted frame. */
   ended = mr->clock_period_ended;
@@ -4170,8 +4174,11 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * (FU228-L6). Derived from the live cells — `mr->global_157ac2` is the roll
    * (native 0x8B58A) and `mr->global_157ac0` the OL-85 flag — not the raw
    * `period_ended`, so the first (half-time) completion continues. No
-   * `[0x158822]` cell is added; `FUN_0008BAF0` is not ported. The ordering
-   * guard is retained: a staged request_exit must not be clobbered by
+   * `[0x158822]` cell is added; `FUN_0008BAF0` is not ported. NB (errata E4,
+   * FU-228 W-d): `end_word_decided` is a derived proxy for `[0x158822]` and
+   * intentionally EXCLUDES the `==2` extra-time-over event (`0x8BD8A`/
+   * `0x8BDD4`) — that exclusion is by record, not drift (FU228-L4 leg). The
+   * ordering guard is retained: a staged request_exit must not be clobbered by
    * EXIT->OVER (a staged EXIT wins). */
   {
     int past_half_time = (mr->global_157ac2 >= 2u);
