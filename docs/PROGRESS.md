@@ -1787,4 +1787,18 @@ re-pinned to `b281a9b2…` (v22, 6522 lines). **Residual legs:** FU239-L1 (the
 exact `0x13 → 0x0C → sit-8 → phase 2` route), FU239-L3 (`[0x157AC2]=4` vs the
 tape's forced ET), FU-231 (the `[0x105FFC]=5` arm has no engine cell),
 FU-234-L6 (the return's clean pinnability — resolved off-tape by the probe),
-FU-233-L1/L5, FU-237-L1.
+FU-233-L1/L5, FU-237-L1, FU239-L5 (the phase-`0x13` score-equality leg; below).
+
+**Fix (whole-branch review, 2026-10-14) — FU239-L5, the phase-`0x13`
+score-equality leg.** The native ET-over arm splits on phase: the `0x13` arm
+**alone** carries a score-equality guard (`0x8BD95 MOV AX,[0x157AC5]; 0x8BD9B
+CMP AX,[0x157AC7]; 0x8BDA2 JNZ hold` — scores must be equal; the `0x14` arm,
+`0x8BD52`, has no score test). Verified first-hand and cited in FU-239 §5 /
+FU-233 §3 / `t4b-recon/g2-phase-1314-dwell.md:155-164`. The engine collapses
+`0x13`/`0x14` into one arm and applies no score test, so the forced-ET tape's
+ET-over **terminal is a Reading-B model reach** — reached via the collapsed arm
+with **differing** scores (phase `0x13`, 1-0), not strictly the native `0x14`
+arm; the `0x13`-vs-`0x14` pick is the unpinned FU237-L1. Recorded as the leg
+**FU239-L5** in `fifa96_match_run_end_word` and the ENGINE.md leg list; the
+model is deliberately **not** changed (adding the guard would hold the tape's 1-0
+terminal). No golden re-pin, no census change.

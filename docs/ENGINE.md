@@ -1398,7 +1398,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   `0x13 → 0x0C → sit-8 → phase 2` route — the situation dispatch is indirect),
   **FU239-L3** (`[0x157AC2]=4` vs the tape's forced ET), **FU-231** (the
   `[0x105FFC]=5` arm has no engine cell), **FU-234-L6** (the return's clean
-  pinnability — resolved off-tape by the probe), **FU-233-L1/L5**, **FU-237-L1**.
+  pinnability — resolved off-tape by the probe), **FU-233-L1/L5**, **FU-237-L1**,
+  **FU239-L5** (the engine collapses `0x13`/`0x14` and omits the native
+  phase-`0x13` score-equality guard `0x8BD95` (`[0x157AC5]==[0x157AC7]`), so the
+  differing-score ET-over is a **Reading-B model reach** via the collapsed arm —
+  owner FU-237/FU-239).
   No phase row wired; census `55/80 = 68%` unchanged.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5

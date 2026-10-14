@@ -4061,6 +4061,17 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
 uint16_t fifa96_match_run_end_word(const struct fifa96_match_run *mr) {
   if (!mr) return 0u;
   if (mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u) return 1u;
+  /* FU239-L5 (owner FU-237 / FU-239): the native phase-`0x13` arm ALONE carries
+   * a score-equality guard — `0x8BD95 MOV AX,[0x157AC5] ; 0x8BD9B CMP AX,
+   * word[0x157AC7] ; 0x8BDA2 JNZ 0x8BDE7` (hold) — first-hand here (FU-239 §5;
+   * FU-233 §3; t4b-recon/g2-phase-1314-dwell.md:155-164). The phase-`0x14` arm
+   * (`0x8BD52`) has NO such test. The engine collapses `0x13`/`0x14` into this
+   * single arm and applies no score test, so an ET-over reached with differing
+   * scores — the forced-ET tape's terminal (phase `0x13`, score 1-0) — is a
+   * **Reading-B model reach**: the `0x13`-vs-`0x14` pick is the unpinned
+   * FU237-L1, so the engine's differing-score ET-over is reached via the
+   * collapsed arm, NOT strictly the native `0x14` arm. Recorded as a leg, not
+   * re-modelled (adding the guard would hold the tape's 1-0 terminal). */
   if ((mr->state.phase == 0x13u || mr->state.phase == 0x14u) &&
       mr->act.timer > 0x4B0) return 2u;
   return 0u;
