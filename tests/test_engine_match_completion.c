@@ -456,6 +456,54 @@ static void test_end_word_arms(void) {
   assert(fifa96_match_run_end_word(&mr) == 0u);
 }
 
+/* FU-232 §4.1/§4.3 (M2 phase-22 T3): the frame-loop over-condition,
+ * single-sourced in `fifa96_match_run_should_mark_over`. Over iff the end word
+ * is `1` AND the period index `>= 2`, except index `4` with the extra-time flag
+ * set (`0x4B237`). Word `2` (the ET-over) is a consume (FU-232 §3), NOT a
+ * match-over, so it must return 0. */
+static void test_mark_over_on_end_word(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  /* FU-232 §4.3: over iff word==1 AND period>=2 AND !(period==4 && ET-flag). */
+  mr.global_157ac2 = 2u;
+  mr.global_157ac0 = 0u;
+  mr.end_word_158822 = 1u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 1);   /* regulation-over, period 2/3 */
+  mr.global_157ac2 = 4u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 1);   /* period 4, flag clear */
+  mr.global_157ac0 = 1u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 0);   /* period 4, flag set -> no over */
+  mr.global_157ac2 = 2u;
+  mr.global_157ac0 = 0u;
+  mr.end_word_158822 = 2u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 0);   /* ET-over = consume (FU-232 §3) */
+  mr.end_word_158822 = 0u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 0);
+  /* the half-time index is below the 2 gate even with the word set. */
+  mr.global_157ac2 = 1u;
+  mr.end_word_158822 = 1u;
+  assert(fifa96_match_run_should_mark_over(&mr) == 0);
+  assert(fifa96_match_run_should_mark_over(NULL) == 0);
+}
+
+/* FU-232 §3 (M2 phase-22 T3): the word-`2` ET-over is a CONSUME. The frame body
+ * clears the staged word (`0x4B297 MOV word[0x158822],SI`) and writes no
+ * `[0x5FFC]` screen, so the run continues. Mutation-RED: dropping the consume
+ * leaves the word at 2. */
+static void test_end_word_et_over_consumed(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2u;                 /* class 1: the clock runs, no terminal */
+  mr.state.period_length = 90;
+  mr.global_157ac2 = 2u;               /* past half-time: would let word 1 fire */
+  mr.global_157ac0 = 0u;
+  mr.end_word_158822 = 2u;             /* the staged ET-over word */
+  for (int i = 0; i < 10 && mr.end_word_158822 != 0u; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.end_word_158822 == 0u);                    /* the consume (FU-232 §3) */
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);  /* no screen on word 2 */
+}
+
 /* v22 (M2 phase-22 T4, FU-235 §1.2/§4): the match-over SCREEN dwell. With the
  * end word staged, `mark_over` is HELD while the phase-0xC end/act timer
  * `word[0x158818]` (`mr.act.timer`) is <= 0x168 and fires once it passes — the
@@ -584,6 +632,8 @@ int main(void) {
   test_half_time_completion_runs_sit1_kickoff();
   test_extra_time_half_completes();
   test_end_word_arms();
+  test_mark_over_on_end_word();
+  test_end_word_et_over_consumed();
   test_mark_over_screen_dwell();
   test_et_entry_dwell_rearm();
   test_run_end_lands_frontend();

@@ -1398,6 +1398,19 @@ void fifa96_match_run_period_over_rearm(struct fifa96_match_run *mr);
  * never the raw `period_ended`. */
 uint16_t fifa96_match_run_end_word(const struct fifa96_match_run *mr);
 
+/* FU-232 §4.1/§4.3 (M2 phase-22 T3): the native frame-loop over-condition of
+ * the end-word consumer `FUN_0004B100`. `mark_over` (`[0x5FFC]=2`, the
+ * `0x4B244 MOV EAX,2 ; CALL 0x36BC0` site) fires iff the end word
+ * `word[0x158822]` is `1` (regulation terminal) AND the period index
+ * `byte[0x157AC2]` is `>= 2`, except at index `4` with the extra-time flag
+ * `byte[0x157AC0] != 0` (`0x4B237 CMP byte[0x157AC0],0 ; JNZ` -> no write). Word
+ * `2` (the ET-over arm at `0x4B257`) is NOT a match-over — FU-232 §3: it writes
+ * no `[0x5FFC]` screen and clears the word (`0x4B297 MOV word[0x158822],SI`), so
+ * this returns 0 for it and the frame loop consumes the word instead. A pure
+ * reader over the live cells; NULL -> 0. This is the single source of truth for
+ * the `fifa96_match_run_frame` tail. */
+int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr);
+
 /* FU-197 §4/§9 item 2 (M2 phase-17 T2): the `FUN_0008C974` formation-order
  * sorter + residual counter for one team. Computes the display side index
  * `(team.side ^ side_swap) & 1` (the `0x741B4` 0x8C98B..0x8C998), selection-

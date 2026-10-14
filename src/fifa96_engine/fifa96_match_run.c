@@ -4066,6 +4066,20 @@ uint16_t fifa96_match_run_end_word(const struct fifa96_match_run *mr) {
   return 0u;
 }
 
+/* FU-232 §4.1/§4.3: the native over-condition of the frame-loop consumer
+ * `FUN_0004B100`. `mark_over` (`[0x5FFC]=2`, `0x4B244 MOV EAX,2 ; CALL
+ * 0x36BC0`) fires iff the end word `word[0x158822]` is `1` AND the period index
+ * `byte[0x157AC2] >= 2` (`0x4B1C6 CMP EAX,2 ; JGE`), except at index `4` with
+ * the extra-time flag `byte[0x157AC0] != 0` (`0x4B237 CMP byte[0x157AC0],0 ;
+ * JNZ 0x4B2DF` -> no write). Word `2` (the ET-over arm `0x4B257`) is a transient
+ * consume, not a match-over (FU-232 §3): it clears the word (`0x4B297 MOV
+ * word[0x158822],SI`) and writes no screen, so it returns 0 here. Pure over the
+ * live cells; NULL -> 0. */
+int fifa96_match_run_should_mark_over(const struct fifa96_match_run *mr) {
+  return mr != NULL && mr->end_word_158822 == 1u && mr->global_157ac2 >= 2u &&
+         !(mr->global_157ac2 == 4u && mr->global_157ac0 != 0u);
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -4234,6 +4248,13 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
         mr->act.timer >= 0x78) {
       mr->end_word_158822 = fifa96_match_run_end_word(mr);
     }
+    /* FU-232 §3 (M2 phase-22 T3): the ET-over consume. `word[0x158822]==2` is
+     * not a match-over — the native `AX==2` arm (`0x4B257`) writes no `[0x5FFC]`
+     * screen and clears the word (`0x4B297 XOR ESI,ESI ; MOV word[0x158822],SI`),
+     * so the frame loop resumes. The frame that stages the ET-over consumes it
+     * here. */
+    if (mr->end_word_158822 == 2u)
+      mr->end_word_158822 = 0u;
     /* M2 phase-15 T1 / FU-175 §2: the native act tick — the clock tail's
      * `0x8B669 CMP dword[0x158808],0 / 0x8B670 JZ / 0x8B672 CALL
      * dword[0x158808]` — runs after the ball machine (`0x8B664 CALL 0x8BAF0`)
@@ -4250,37 +4271,27 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * Task 12-14 fixtures keep an unstaged scene. */
     if (mr->render.enabled) match_run_scene_stage(mr);
   }
-  /* FU-228 §4.2 / errata E4 (M2 phase-21 T5, FU228-L4): the native `mark_over`
-   * fires only when the end word is decided AND the period index is past
-   * half-time (`0x4B1C6 CMP [0x157AC2],2`; `mark_over` at `0x4B244`). The end
-   * word is set on a phase-0x0C screen with the extra-time flag [0x157AC0]
-   * CLEAR (`0x8BCBF`/`0x8BCD9`); a flag-set extra-time entry does not end
-   * (FU228-L6). Derived from the live cells — `mr->global_157ac2` is the roll
-   * (native 0x8B58A) and `mr->global_157ac0` the OL-85 flag — not the raw
-   * `period_ended`, so the first (half-time) completion continues. No
-   * `[0x158822]` cell is added; `FUN_0008BAF0` is not ported. NB (errata E4,
-   * FU-228 W-d): `end_word_decided` is a derived proxy for `[0x158822]` and
-   * intentionally EXCLUDES the `==2` extra-time-over event (`0x8BD8A`/
-   * `0x8BDD4`) — that exclusion is by record, not drift (FU228-L4 leg). The
-   * ordering guard is retained: a staged request_exit must not be clobbered by
-   * EXIT->OVER (a staged EXIT wins).
-   * M2 phase-22 T4 (FU-235 §1.2/§4): the tail now also requires the phase-`0xC`
+  /* FU-232 §4.1/§4.3 (M2 phase-22 T3): the native frame-loop `mark_over` tail.
+   * The trigger is the end-word consumer's exact condition — word 1
+   * (regulation-over) with the period index `>= 2`, except index 4 while the
+   * extra-time flag is set (`0x4B244`, `0x4B237`) — single-sourced in
+   * `fifa96_match_run_should_mark_over`, which supersedes the phase-21
+   * `end_word_decided` proxy (errata E4 / FU228-L4). That proxy keyed off
+   * `state.phase == 0x0C && flag clear` rather than the word, so it could mark
+   * over a state whose `end_word_158822` was not `1`; the word is what the T2
+   * end-machine staging above writes (FU-231 §3) and this tail reads.
+   * Word 2 is consumed in the frame body (FU-232 §3) and never reaches here.
+   * M2 phase-22 T4 (FU-235 §1.2/§4): the tail also requires the phase-`0xC`
    * terminal dwell (`mr->act.timer` = `word[0x158818] > 0x168`, the native
    * no-input terminal gate `0x8BCAC`) — the OVER screen is held through the
    * dwell, and `period_ended` is dropped because the dwell keeps the terminal
    * phase `0x0C` across frames (it is no longer a one-frame completion event).
-   * The half-time phase-`0x0C` flash is still excluded (`past_half_time`). The
-   * staged end word (T2, `mr->end_word_158822`) is consumed once it is `1`; T3
-   * collapses the remaining phase-21 `end_word_decided` proxy into it. */
-  {
-    int past_half_time = (mr->global_157ac2 >= 2u);
-    int end_word_decided = (mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u);
-    int over_decided = end_word_decided || (mr->end_word_158822 == 1u);
-    if (past_half_time && over_decided && mr->act.timer > 0x168 &&
-        !fifa96_match_lifecycle_should_exit(&mr->lc)) {
-      rc = fifa96_match_lifecycle_mark_over(&mr->lc);
-      if (rc != 0) return rc;
-    }
+   * Ordering guard (phase-21 final review): a staged `request_exit` must not be
+   * clobbered by EXIT->OVER (a staged EXIT wins). */
+  if (fifa96_match_run_should_mark_over(mr) && mr->act.timer > 0x168 &&
+      !fifa96_match_lifecycle_should_exit(&mr->lc)) {
+    rc = fifa96_match_lifecycle_mark_over(&mr->lc);
+    if (rc != 0) return rc;
   }
   return granted != 0;
 }
