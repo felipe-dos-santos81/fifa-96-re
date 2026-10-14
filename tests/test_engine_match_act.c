@@ -847,6 +847,43 @@ static void test_phase_1B_leg_no_invoker(void) {
   assert(mr.state.phase == 0u);         /* no handler ran */
 }
 
+/* FU-243 §4.2/§6 (M2 phase-23 T2): row 0x25 is COUNTED. The prior FU189-L2
+ * "row 25 has NO static installer" verdict is REFUTED — the ECX-carried bulk
+ * installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 -> FUN_0008CEB8`) installs code
+ * 0x25 on the live `FUN_0008D098` path and is already modelled by
+ * `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 : 3`). Only the
+ * body `0x880CC` (the FU-82 7-arm table `0x880B0`) was unported. Mutation-RED:
+ * a NULL slot returns UNSUPPORTED and the dispatch assertion fails. */
+static void test_row_25_counted(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_action_table[0x25].fn != NULL);
+  assert(fifa96_match_dispatch_action(&mr, 0x25u) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(NULL, 0x25u) == -FIFA96_ERR_INVALID);
+}
+
+/* The ported row-25 body (`0x880CC`, 7-arm table `0x880B0`) is driven directly
+ * (the slot is wired). A fresh record is stage 0, timer 0, inactive: arm 0's
+ * `timer89 >= 0x3C` gate holds, so the body returns without advancing. At a
+ * passed timer with an inactive record, arm 0 builds the five-point stats
+ * scatter (7 RNG draws), arms the first point and advances to stage 1. */
+static void test_row_25_body_direct(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 1;             /* team 0 record 1 */
+  mr.record.delta = 2;
+  assert(fifa96_match_dispatch_action(&mr, 0x25u) == FIFA96_OK);
+  assert(mr.record.timer89 == 2);
+  assert(mr.record.stage92 == 0u);     /* arm 0 waits below 0x3C */
+  /* pass the arm-0 gate: the inactive scatter branch arms + advances to 1 */
+  mr.record.timer89 = 0x3C - 2;
+  assert(fifa96_match_dispatch_action(&mr, 0x25u) == FIFA96_OK);
+  assert(mr.record.stage92 == 1u);
+  assert(mr.record.timer89 == 0);
+  assert(mr.celebration.idx == 0);
+  assert(fifa96_match_dispatch_action(NULL, 0x25u) == -FIFA96_ERR_INVALID);
+}
+
 int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
@@ -890,6 +927,8 @@ int main(void) {
   test_phase_22_registered();
   test_phase_22_producer_live_via_phase_drive();
   test_phase_1B_leg_no_invoker();
+  test_row_25_counted();
+  test_row_25_body_direct();
   puts("test_engine_match_act OK");
   return 0;
 }

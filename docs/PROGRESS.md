@@ -1815,3 +1815,31 @@ GL (`sdl3_init`) — external, not engine-owned. This host has no scripted
 interaction for the windowed build, so the **end-spine reach** (the live ET
 halves, the ET-over terminal, the return) is proven by the headless v22 tape
 (`test_engine_m2`, byte-stable over 3 replays), not by the smoke.
+
+## M2 phase-23 (FU-242…FU-243) — the census/ceiling correction
+
+**T2 (2026-10-14) — wire action row 25 (the ECX-path installer refutation).**
+The phase theme is the installer census: FU-242 §2 shows the action-table
+installer's parametric bulk path `FUN_0008CEB8(rec,i0,i1,code,skip)` carries the
+code in **`ECX`** (`B9`), which the `MOV EDX/DX,code` literal scan the prior
+verdicts used cannot see. FU-243 §4.2/§6 re-derives the row-25 installer
+`0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4`,
+`[0x157AC5] != [0x157AC7] ? 0x25 : 3`, the `FUN_0008D098` situation-0x13 arm) and
+**REFUTES FU189-L2** ("row 25 has NO static installer"); the installer is already
+modelled by `fifa96_match_phase_machine_step`. T2 ports the body
+`0x880CC..0x886AF` (FU-82 §3.10, the 7-arm CS table `0x880B0`) as
+`fifa96_match_action_25` and wires its action-table slot — the row is **COUNTED**
+(an honest +1). Tape-dormant: no M2 frame dispatches row 25, so `b281a9b2…` is
+unmoved and M1 `09b726b7…` is untouched. TDD: the dispatch test was RED (NULL slot
+→ `-FIFA96_ERR_UNSUPPORTED`) before the port, GREEN after.
+
+**Residual legs:** **FU243-L4** (the active head block `0x88106..0x881D2`, gated
+on the unported team base position and `[rec+0x8B]` angle cell), the `0x8776C`
+id-init and the `[0x587B8+idx]`/`[0x587BB]`/`[0x587BC]` anim compares (unported id
+tables, FU184-L1 sibling), the `0x974F0`/`0x36200`/`0x4C324` sinks and the
+`0x45001` input gate (FU184-L3/L4 siblings); **FU243-L1** (the FU-189 row-25
+evidence string / FU189-L2 errata — the `fifa96_match_handlers.c` row-25 string is
+corrected here) is the doc leg. **Census recomputed:** `56 OK = 34 action + 22
+phase`; dispatch `23 UNSUP / 56 OK / 1 NOTF` (sum 80); `floor(100 × 56/80) = 70`;
+README title `70%`; `action_wired == 34u` pins (`test_engine_m2.c`). `make check`
+green.

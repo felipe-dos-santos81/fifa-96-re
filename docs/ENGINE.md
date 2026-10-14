@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-55/80 dispatch rows wired (33 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
+56/80 dispatch rows wired (34 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,7 +265,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **55/80 rows wired** (33 action + the phase rows
+- Action dispatch (FU-137): **56/80 rows wired** (34 action + the phase rows
   `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
@@ -1410,6 +1410,28 @@ the build also produces the windowed `fifa96` target (`make game`).
   differing-score ET-over is a **Reading-B model reach** via the collapsed arm —
   owner FU-237/FU-239).
   No phase row wired; census `55/80 = 68%` unchanged.
+- **M2 phase-23 (FU-242…FU-243) — the census/ceiling correction: the row-25
+  ECX-path installer refutation; census `55/80 → 56/80 = 70%`.** The phase theme
+  is the **installer census** (spec §2): FU-242 §2 proves the action-table
+  installer's parametric bulk path `FUN_0008CEB8(rec,i0,i1,code,skip)` carries
+  the code in **`ECX`** (`B9`), invisible to the `MOV EDX/DX,code` literal scan
+  the prior verdicts used. **T2/FU-243 §4.2/§6** re-derives the row-25 installer
+  `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4`,
+  `[0x157AC5] != [0x157AC7] ? 0x25 : 3` on the `FUN_0008D098` situation-0x13
+  arm) and **REFUTES FU189-L2** ("row 25 has NO static installer"); the installer
+  is already modelled by `fifa96_match_phase_machine_step`. T2 ports the body
+  `0x880CC..0x886AF` (the FU-82 §3.10 stats sequence, 7-arm CS table `0x880B0`)
+  as `fifa96_match_action_25` and wires its action-table slot — the row is
+  **COUNTED** (an honest +1; the `{0x00..0x26} ∪ {0x28,0x2A}` installer domain
+  always contained `0x25`). Tape-dormant (no `M2` frame dispatches it; `b281a9b2…`
+  unmoved). **Residual legs:** **FU243-L4** (the row-25 active head block
+  `0x88106..0x881D2` — the `target := [team+0x59]` copy + the radius-`0xC0`
+  `0x114E04` sine fold + the `0x8DCD4`/`0x79C50` payload, gated on the unported
+  team base position and `[rec+0x8B]` angle cell), the `0x8776C` id-init and the
+  `[0x587B8+idx]`/`[0x587BB]`/`[0x587BC]` anim compares (unported id tables,
+  FU184-L1 sibling), the `0x974F0`/`0x36200`/`0x4C324` sinks and the `0x45001`
+  input gate (FU184-L3/L4 siblings). The FU-189 row-25 evidence string / FU189-L2
+  errata is the FU243-L1 leg (owner: a `docs(fu189)` errata).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

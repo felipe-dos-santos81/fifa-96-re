@@ -98,7 +98,7 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED */
+    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
 
@@ -1100,22 +1100,22 @@ static void test_action_20_installer_leg_phase_1d_live(void) {
   drop_fixture(&f);
 }
 
-/* FU-189 §4/§6 + FU-190 §6.2 (phase-16 T5): the row-0x25 installer hunt — a
- * bounded exhaustive negative. No static `FUN_0007D9A4` site passes 0x25 (the
- * three `MOV EDX/DX,0x25` encodings `BA25000000`/`66BA2500`/`C7C225000000`;
- * the only default-space `0x7xxxx` hit `0x7E460` is the `0x6E598` anim sink),
- * so no installer exists and the row stays `fn == NULL` / uncounted; no
- * installer is invented (leg **FU189-L2**). */
-static void test_action_25_no_installer_leg(void) {
+/* FU-243 §4.2/§6 (M2 phase-23 T2): the row-0x25 installer hunt is REFUTED —
+ * the ECX-carried bulk installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 ->
+ * FUN_0008CEB8 -> FUN_0007D9A4`, the `FUN_0008D098` situation-0x13 arm) installs
+ * code 0x25 on the live path; the prior FU189-L2 "no static installer" verdict
+ * (a `MOV EDX/DX,0x25`-only scan) missed the ECX-carried code (FU-242 §2). The
+ * body 0x880CC is ported and the slot wired, so the row is COUNTED. */
+static void test_action_25_counted_refutation(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x25];
   make_fixture(&f);
-  assert(row->fn == NULL);
-  assert(strstr(row->evidence, "FU-189") != NULL);
-  assert(strstr(row->evidence, "FU189-L2") != NULL);
-  assert(strstr(row->evidence, "0x7E460") != NULL);
-  assert(action_expect[0x25] == UNSUP);
-  assert(fifa96_match_dispatch_action(&f.mr, 0x25) == UNSUP);
+  assert(row->fn != NULL);
+  assert(strstr(row->evidence, "FU-243") != NULL);
+  assert(strstr(row->evidence, "REFUTED") != NULL);
+  assert(strstr(row->evidence, "0x8D7AD") != NULL);
+  assert(action_expect[0x25] == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x25) == FIFA96_OK);
   drop_fixture(&f);
 }
 
@@ -3984,7 +3984,7 @@ int main(void) {
   test_action_29_unwired_entry();
   test_action_20_installer_leg_phase_1d_live();
   test_action_20_body_arms();
-  test_action_25_no_installer_leg();
+  test_action_25_counted_refutation();
   test_action_03_direct_leg_body();
   test_phase_02_source_pair_scales();
   test_record_phase_walk_scans_and_skips();

@@ -246,3 +246,23 @@ int fifa96_match_action_24(struct fifa96_match_run *mr);
  * (`0x7B9C4` -> `0x7A490`); `hidden` (`+0x9A`) is not written. Returns
  * FIFA96_OK, or -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_20(struct fifa96_match_run *mr);
+
+/* The ported action row-0x25 body (FU-243 §4.2/§6, M2 phase-23 T2; FU-82
+ * §3.10): the stats sequence `0x880CC..0x886AF` (the 7-arm CS table `0x880B0`).
+ * Its action-table slot (`fifa96_match_action_table[0x25]`) is **wired** to
+ * `fifa96_match_action_25` — the row is **COUNTED** — because the installer is
+ * **live**: the ECX-carried bulk installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25
+ * -> FUN_0008CEB8 -> FUN_0007D9A4`) sits on the `FUN_0008D098` situation-0x13
+ * path and is already modelled by `fifa96_match_phase_machine_step`
+ * (`code = ac5!=ac7 ? 0x25 : 3`). The prior FU189-L2 "row 25 has NO static
+ * installer" verdict (a `MOV EDX/DX,0x25`-only scan) is REFUTED by FU-242 §2 /
+ * FU-243 §4.2: the installer's code travels in `ECX`, which that scan cannot
+ * see. The active head block (`0x88106..0x881D2`: `target := [team+0x59]` + the
+ * radius-`0xC0` `0x114E04` fold, the `0x8DCD4` metric + `0x79C50` face) is the
+ * leg FU243-L4 (no engine team base position / `[rec+0x8B]` angle cell); the
+ * `0x8776C` id-init and the `[0x587B8+idx]`/`[0x587BB]`/`[0x587BC]` anim
+ * compares are legs (unported id tables, FU184-L1 sibling), the `0x974F0`/
+ * `0x36200`/`0x4C324` sinks and the `0x45001` input gate are legs
+ * (FU184-L3/L4 siblings). Tape-dormant. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
+int fifa96_match_action_25(struct fifa96_match_run *mr);

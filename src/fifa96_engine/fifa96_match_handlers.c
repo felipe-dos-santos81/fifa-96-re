@@ -5094,6 +5094,193 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* ===== FU-243 §4.2 (M2 phase-23 T2): row 0x25 — the stats sequence =========
+ *
+ * The native row-0x25 body `0x880CC..0x886AF` (FU-82 §3.10; fresh
+ * `disassemble_bytes` this slice), a 7-arm machine over the record stage byte
+ * `+0x92` (`mr->record.stage92`) selected by the CS jump table `0x880B0` =
+ * `{0x881ED, 0x8847E, 0x88568, 0x8859B, 0x885FE, 0x88645, 0x88699}` (entry EAX
+ * = record; a stage > 6 takes the `0x886A9` POP/RET tail). The body is entered
+ * by the ECX-carried bulk installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 ->
+ * FUN_0008CEB8 -> FUN_0007D9A4`), already modelled by
+ * `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 : 3`); the prior
+ * FU189-L2 "no static installer" verdict is REFUTED (FU-243 §4.2/§6).
+ *
+ * Head (`0x880D0..0x881D2`): `timer89 += (uint16)delta`; the `0x974F0(0x9C4)`
+ * sound sink, the `[0x157AA3] = [rec]` (team) write and the `0x36200(2)`
+ * camera sink are legs (row-14 convention, FU184-L4 sibling). When active
+ * (`byte[+0x8D] != 0`) the native writes `target := [team+0x59]` plus a
+ * circular radius-`0xC0` offset folded from the `[rec+0x8A]>>24` angle through
+ * the `0x114E04` sine table, then the `0x8DCD4` metric + `0x79C50` face. The
+ * team base position and the `[rec+0x8B]` angle cell are unported (the engine
+ * `fifa96_match_team` carries no `+0x59` triple), so this active head block is
+ * the numbered leg FU243-L4 and writes nothing (arms 0/1 recompute their own
+ * target/metric/face via `match_celebration_arm`).
+ *  - arm 0 (`0x881ED`): `timer89 < 0x3C` waits. Active: the current anim byte
+ *    (`mr->record.anim_id`) in {0x15,0x03} skips, else the `0x92AC8` parity
+ *    picks 0x15/0x03 (`0x6E598` install); then `[0x158720] == 3` loads
+ *    `[rec+0xAE] = (rng & 0x7F) + 0x20` and jumps to stage 3. Inactive: the
+ *    seven-draw `0x92AC8` stats scatter (`fifa96_action_sequence_scatter_stats`,
+ *    the `0x8827B..0x883E0` block), the pre-clamp `points[4]` 6-slot copy
+ *    (FU184-L1 sibling), the `0x8776C` id-init (leg; its `[0x158720]=0` reset
+ *    is mirrored), the arm target/metric/face (`match_celebration_arm`), then
+ *    the `[0x587B8+idx]` anim compare (leg, unported id tables) and advance.
+ *  - arm 1 (`0x8847E`): the `0x45001` input gate (dormant leg, FU184-L3
+ *    sibling) advances early; else the arm target/metric/face then the
+ *    distance/timer/idx advance (`+0x65 < 0x20`, `+0x89 > 0x708`, idx 3 > 0x258,
+ *    idx 4 > 0x12C); `idx++` and either the re-entry arm block (idx < 5) or the
+ *    stage advance (idx >= 5).
+ *  - arm 2 (`0x88568`): the `0x7DAB4` reset; when now inactive the `0x4C324`
+ *    ball reset (leg) and `[0x158720] = 0` (`mr->celebration.idx`).
+ *  - arm 3 (`0x8859B`): wait `timer89 > [rec+0xAE]` or `+0x65 > 0x60`, the
+ *    `[0x587BB]` anim compare (leg), advance.
+ *  - arm 4 (`0x885FE`): only when `[0x158720] == 4`; reloads
+ *    `[rec+0xAE] = (rng & 0x7F) + 0x20`, advances.
+ *  - arm 5 (`0x88645`): wait `timer89 > [rec+0xAE]`, the `[0x587BC]` anim
+ *    compare (leg), advance.
+ *  - arm 6 (`0x88699`): when `[0x158720] == 0`, the `0x7DAB4` reset.
+ * The `[rec+0xAE]` countdown reuses the native `+0xAE` cell
+ * (`mr->record.scratch_ae`, FU-142d row 28). Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for a NULL `mr`/out-of-range `mr->record.entity_id`. */
+int fifa96_match_action_25(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r;
+  struct fifa96_match_entity *e;
+  uint8_t stage;
+  if (mr == NULL) return -FIFA96_ERR_INVALID;
+  r = &mr->record;
+  e = match_sp_entity(mr, NULL, NULL);
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  /* head `0x880D4..0x88101`: timer89 += (zero-extended) delta; the
+   * `0x974F0(0x9C4)` sound, `[0x157AA3] = [rec]` (team) and `0x36200(2)`
+   * camera sinks are legs (FU243-L4). The active `0x88106..0x881D2` block
+   * (target := [team+0x59] + the radius-0xC0 `0x114E04` fold, then the
+   * `0x8DCD4` metric + `0x79C50` face) is FU243-L4 (no team base position). */
+  r->timer89 += (uint16_t)r->delta;                 /* 0x880DC..0x880E9 */
+  stage = r->stage92;
+  if (stage > 6u) return FIFA96_OK;                 /* 0x881D8 JA 0x886A9 */
+  if (stage == 0u) {                                /* arm 0 (0x881ED) */
+    if (r->timer89 < 0x3C) return FIFA96_OK;        /* 0x881F4 JL 0x886A9 */
+    if (r->active == 0u) {                          /* 0x88201 JZ 0x8827B */
+      fifa96_action_vec3 base;
+      uint32_t rng7[7];
+      uint32_t i;
+      int32_t dir_x = 1;
+      int32_t dir_z;
+      base.x = r->pos_x;                            /* 0x88280 MOVSD x3 */
+      base.y = r->pos_y;
+      base.z = r->pos_z;
+      dir_z = r->pos_z > 0 ? -1 : 1;                /* 0x88286..0x88299 */
+      if (mr->global_157a4c == 1u) dir_x = 0;       /* 0x8829B..0x882A8 */
+      for (i = 0; i < 7u; i++) {                    /* seven 0x92AC8 draws */
+        uint16_t draw = 0;
+        (void)fifa96_rng_step(&mr->rng, &draw);
+        rng7[i] = draw;
+      }
+      (void)fifa96_action_sequence_scatter_stats(&base, dir_x, dir_z, rng7,
+                                                 mr->celebration.points);
+      /* The native copies the pre-clamp points[4] to the 6th slot before the
+       * clamp loop (`0x88398`); the ported helper clamps in place, so the 6th
+       * slot carries the clamped points[4] (the FU184-L1 divergence). */
+      mr->celebration.points[5] = mr->celebration.points[4];
+      /* The `0x8776C` id-init resets `[0x158720] = 0` (`0x87770`); its id
+       * tables are unported, so only the reset is mirrored (leg). */
+      mr->celebration.idx = 0;
+      match_celebration_arm(mr, r);                 /* 0x883EC..0x8842B */
+      /* 0x88430: the `[0x587B8+idx]` anim compare/post is a leg (unported id
+       * tables). */
+      r->timer89 = 0;                               /* 0x88465 */
+      r->stage92 = 1u;                              /* 0x8846F INC BH */
+      return FIFA96_OK;
+    }
+    /* active (0x88207): the current anim byte in {0x15,0x03} skips, else the
+     * RNG parity installs 0x15/0x03 (`0x6E598`). */
+    if (r->anim_id != 0x15u && r->anim_id != 3u) {
+      uint16_t draw = 0;
+      int32_t anim;
+      (void)fifa96_rng_step(&mr->rng, &draw);
+      anim = (draw & 1u) != 0u ? 0x15 : 3;          /* 0x8822B..0x88236 */
+      if (fifa96_match_run_record_anim_install(mr, e, anim, 0) == FIFA96_OK) {
+        r->anim_id = e->anim_id;                    /* 0x88240 CALL 0x6E598 */
+        r->frame = e->frame;
+        r->row44 = e->row44;
+      }
+    }
+    if (mr->celebration.idx != 3) return FIFA96_OK; /* 0x88245 JNZ 0x886A9 */
+    r->timer89 = 0;                                 /* 0x88252 */
+    {
+      uint16_t draw = 0;
+      (void)fifa96_rng_step(&mr->rng, &draw);
+      r->stage92 = 3u;                              /* 0x88264 */
+      r->scratch_ae = (int32_t)(draw & 0x7Fu) + 0x20; /* 0x8826E [+0xAE] */
+    }
+    return FIFA96_OK;
+  }
+  if (stage == 1u) {                                /* arm 1 (0x8847E) */
+    int32_t idx;
+    int32_t advance;
+    /* `0x8847E..0x88485`: `FUN_00045001()` (the unported `[0x1067EC] & 0xF0`
+     * input gate, FU184-L3 sibling) is always false in-engine (leg). */
+    match_celebration_arm(mr, r);                   /* 0x884A6..0x884E0 */
+    idx = mr->celebration.idx;
+    advance = (r->distance < 0x20) ||               /* 0x884E5 word[+0x65] */
+              (r->timer89 > 0x708);                 /* 0x884F6 */
+    if (!advance) {                                 /* 0x884FE..0x88526 */
+      if (idx == 3) advance = (r->timer89 > 0x258);
+      else if (idx == 4) advance = (r->timer89 > 0x12C);
+      else advance = 0;
+    }
+    if (!advance) return FIFA96_OK;                 /* 0x886A9 tail (stay) */
+    idx++;                                          /* 0x8852C..0x88533 */
+    mr->celebration.idx = idx;
+    if (idx >= 5) {                                 /* 0x88539 JGE 0x88549 */
+      r->timer89 = 0;                               /* 0x8854F */
+      r->stage92 = 2u;                              /* 0x8855B INC AH */
+      return FIFA96_OK;
+    }
+    /* `0x8853E..0x88544 DEC stage; JMP 0x883E7`: re-enter the arm block with
+     * the new idx, reset the timer; the shared `0x8845F` tail re-increments the
+     * stage, so the stage is unchanged. */
+    match_celebration_arm(mr, r);                   /* 0x883E7 re-entry */
+    r->timer89 = 0;
+    return FIFA96_OK;
+  }
+  if (stage == 2u) {                                /* arm 2 (0x88568) */
+    match_row_reset(mr, e);                         /* 0x8856A CALL 0x7DAB4 */
+    if (r->active != 0u) return FIFA96_OK;          /* 0x88576 JNZ 0x886A9 */
+    /* `0x8857C..0x8858F`: the `0x4C324` ball reset is a leg; `[0x158720] = 0`
+     * (`0x88589`). */
+    mr->celebration.idx = 0;
+    return FIFA96_OK;
+  }
+  if (stage == 3u) {                                /* arm 3 (0x8859B) */
+    if (r->timer89 > r->scratch_ae) return FIFA96_OK; /* 0x885A7 JG 0x886A9 */
+    if (r->distance > 0x60) return FIFA96_OK;       /* 0x885AD word[+0x65] */
+    /* 0x885BC: the `[0x587BB]` anim compare/post is a leg. */
+    r->timer89 = 0;                                 /* 0x885E5 */
+    r->stage92 += 1u;                               /* 0x885F1 INC CL */
+    return FIFA96_OK;
+  }
+  if (stage == 4u) {                                /* arm 4 (0x885FE) */
+    uint16_t draw = 0;
+    if (mr->celebration.idx != 4) return FIFA96_OK; /* 0x88605 JNZ 0x886A9 */
+    r->timer89 = 0;                                 /* 0x8860B/0x8861A */
+    (void)fifa96_rng_step(&mr->rng, &draw);         /* 0x88615 */
+    r->scratch_ae = (int32_t)(draw & 0x7Fu) + 0x20; /* 0x88632 [+0xAE] */
+    r->stage92 += 1u;                               /* 0x88638 INC BL */
+    return FIFA96_OK;
+  }
+  if (stage == 5u) {                                /* arm 5 (0x88645) */
+    if (r->timer89 > r->scratch_ae) return FIFA96_OK; /* 0x88651 JG 0x886A9 */
+    /* 0x88653: the `[0x587BC]` anim compare/post is a leg. */
+    r->timer89 = 0;                                 /* 0x88680 */
+    r->stage92 += 1u;                               /* 0x8868C INC DH */
+    return FIFA96_OK;
+  }
+  /* arm 6 (0x88699): `[0x158720] == 0` -> the 0x7DAB4 reset. */
+  if (mr->celebration.idx == 0) match_row_reset(mr, e);
+  return FIFA96_OK;
+}
+
 const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_ROWS] = {
     {0x00, fifa96_match_action_00,
      "FU-138 §4/FU-141: row 00 ported over the entity pool; install/ran drained by the pool installer"},
@@ -5167,8 +5354,12 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, fifa96_match_action_24,
      "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + target commit, stage 1 the ball gates + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 release). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5), the 0x79C50 threshold arithmetic, the `0x8EEC0`/`0x67800`/`0x8EEB4` gates and the `0x6E1D0` release (FU188-L3) stay legs; OL-9"},
-    {0x25, NULL,
-     "FU-189 §4/§6 + FU-190 §6.2 (phase-16 T5): row 25 has NO static installer — the bounded exhaustive literal scan (MOV EDX/DX,0x25 in the three encodings BA25000000/66BA2500/C7C225000000) finds no FUN_0007D9A4 site. The only default-space 0x7xxxx MOV EDX,0x25 (0x7E460) is the 0x6E598 anim sink; 0x1f527/0x22033/0xa9b41 feed other calls; the .image hits are overlay false positives. No installer exists (leg FU189-L2), so the row stays NULL/uncounted and no installer is invented; body 0x880CC (FU-82 7-arm table 0x880B0) not ported; OL-9"},
+    {0x25, fifa96_match_action_25,
+     "FU-243 §4.2/§6 (phase-23 T2): row 25 body 0x880CC ported (FU-82 7-arm table 0x880B0). "
+     "COUNTED: the installer 0x8D79F/0x8D7AD (MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "
+     "live FUN_0008D098 path, already modelled by fifa96_match_phase_machine_step (code = ac5!=ac7 ? 0x25 : 3). "
+     "The prior 'row 25 has NO static installer' (FU189-L2) is REFUTED (the EDX/immediate-only scan missed the "
+     "ECX-carried code, FU-242 §2). Sinks/legs per FU-243 §5; OL-9, FU243-L4"},
     {0x26, fifa96_match_action_26,
      "FU-142b §C/FU-137 §5.2: row 26 ported (0x866F4..0x8681C + 0x8DCD4) over the pool; arm 0x8D74D; stage92/timer7b/lane repacked"},
     {0x27, NULL,
