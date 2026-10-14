@@ -1354,6 +1354,52 @@ the build also produces the windowed `fifa96` target (`make game`).
   LeakSanitizer report is from `libdbus`/`libnvidia-glcore`/SDL3, not the
   engine); the **live clock → completions reach is proven headless** by the v21
   tape (`test_engine_m2`, byte-stable over 3 replays).
+- **M2 phase-22 (FU-231…FU-239) — the end spine (extra time → match over): the
+  live extra-time halves, the ET-over terminal + the return; the M2 tape is
+  re-pinned v21 → v22; census unchanged `55/80 = 68%`.** The phase theme is the
+  **full end spine** (spec §2): the tape now plays both live extra-time halves
+  and the end-of-match terminal, then stops. **The model correction (FU-239; the
+  phase-22b unblock):** the ET half does **not** run in the class-0 phases
+  `0x13`/`0x14` (their clock is halted) — it runs in the **class-1 play phase
+  `2`** (the only class-1 phase in the `0x1106AD` table with any static writer),
+  reached by the period-over re-arm (`fifa96_match_run_period_over_rearm`, T1;
+  FU-239 §1/§3); `0x13`/`0x14` are the **ET-over screen dwell**. **T1/FU-239**
+  lands the re-arm helper + the ET-half clock proof. **T2/FU-231** ports the
+  `FUN_0008BAF0` end machine as the end word `[0x158822]` (word `1` = regulation
+  over, word `2` = ET over). **T3/FU-232** re-points the frame-loop `mark_over`
+  (word `1` **and** period index `>= 2`, minus the index-4/ET-flag skip; word `2`
+  is a transient consume — **FU-232-L6 CLOSED**). **T4/FU-235** adds the
+  phase-`0xC` terminal dwell + the match-over screen (`act.timer > 0x168`, native
+  `0x8BCAC`) and the ET-entry dwell + the live re-arm. **T4b/FU-233·FU-237**
+  bound the re-arm to the ET window `{2,3}` (not `>= 2`) and add the ET-over
+  dwell (`act.timer > 0x4B0`, native `0x8BD5A`/`0x8BDAC`). **T5** extends the
+  tape + re-pins. **T6** this acceptance. **The re-pin (T5, written reason +
+  frame diff):** lines 1..2522 byte-identical (`head -2522 new | cmp - old`
+  clean, 112487 bytes; `diff` = `2522a2523,6522`), first appended line 2523;
+  N = **6522** lines; old M2
+  `0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0` (2522) →
+  new M2
+  `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (6522);
+  M1 `09b726b7…` unmoved. **Two terminals:** the forced-ET tape reaches the
+  ET-over **consume** (word `2`, same-frame resume; no over-screen, FU-232-L6);
+  the word-`1` regulation-over (OVER screen → front-end return) is off the
+  forced-ET tape and covered by `run_regulation_over_probe`. **Rider classes
+  (every one mutation-RED, `run_phase22_riders`):** the word-`1` regulation over
+  (the flag-clear phase-`0xC` terminal), the word-`2` ET-over terminal
+  (`> 0x4B0`), the frame-loop consumer (`>= 2`), the live ET half (phase `2`
+  clocks to the completion at `extra_length`), the front-end return (`run_end`
+  detach + the FRONTEND flip), the screen timing gate (`> 0x168`), and
+  additivity/determinism (the 3-replay byte-stability gate + the in-test
+  `head -2522` prefix assertion). **Errata landed (append-only):** FU-233 §3 /
+  FU-238 §2.3 → **FU-239** (the ET half is phase `2`; `0x13`/`0x14` is the
+  ET-over screen; the phase-`0xC` gate is `0x168`, not the `0x4B0` dwell);
+  **FU-213 §11** → FU-239 §1 (`FUN_00088860` is the dispatcher, not the re-arm).
+  `make check` **110/110**. **Residual legs:** **FU239-L1** (the exact
+  `0x13 → 0x0C → sit-8 → phase 2` route — the situation dispatch is indirect),
+  **FU239-L3** (`[0x157AC2]=4` vs the tape's forced ET), **FU-231** (the
+  `[0x105FFC]=5` arm has no engine cell), **FU-234-L6** (the return's clean
+  pinnability — resolved off-tape by the probe), **FU-233-L1/L5**, **FU-237-L1**.
+  No phase row wired; census `55/80 = 68%` unchanged.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

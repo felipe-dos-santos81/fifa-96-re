@@ -521,3 +521,30 @@ owns the body, FU-237 the decision) — unported (FU213-L3). Key live
 precondition: the ET-half screen phase `0x13`/`0x14` is **class `0`** (clock
 stopped), so the ET half ticks only in a class-`1` phase. No census move;
 FU233-L1..L6 are the residual legs.
+
+---
+
+## 7. Errata — phase-22 Stage-2 (FU-239; append-only, prior sections not rewritten)
+
+Written 2026-10-14 at the phase-22 close-out (Task 6). Prior sections are **not**
+rewritten (AGENTS.md errata discipline); the corrections are quoted cross-refs.
+
+* **§3 ("How an ET half completes and what it writes") is corrected by FU-239
+  §3-§4.** The ET half does **not** complete like a regulation half *within the
+  phase-`0x13`/`0x14` rows*: `0x13`/`0x14` are **class `0`** (the clock is
+  halted), so the live ET half cannot tick there. The live ET half is the
+  **class-1 phase `2`** — the only class-1 phase in the `0x1106AD` class table
+  with any static writer (the situation-`0xB` arm `0x8AEFA MOV EAX,2`), reached
+  by the period-over re-arm `FUN_0004B02C(mode 0) → FUN_00088860 → sit-8 →
+  FUN_0008A938` (FU-239 §1-§3). The `0x13`/`0x14` phases are the **ET-over
+  screen dwell** (FU-239 §4), not the playing half. §1's clock route
+  (`extra_length` for periods `2`/`3`) stands; only the live half's *phase* is
+  corrected. (Landed as `fifa96_match_run_period_over_rearm`, M2 phase-22 T1;
+  the live clock proven by `test_extra_time_half_completes`.)
+* **§3.2 / the Landing note's ET-over terminal is confirmed, with the dwell
+  threshold precise (the `g2` erratum).** `word[0x158822] := 2` fires from the
+  `0x13`/`0x14` dwell at `word[0x158818] > 0x4B0` (`0x8BD5A`/`0x8BDAC`), **not**
+  at the phase-`0xC` cell's `0x168` (`0x8BCAC`) — the two are distinct cells
+  (FU239 §4-§5; `t4b-recon/g2-phase-1314-dwell.md` §2). The terminal itself
+  (`0x8BD8A` phase `0x14`, `0x8BDD4` phase `0x13` + equal score, latch
+  `[0x10F360]`) is FU-239 §5.

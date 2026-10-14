@@ -4533,6 +4533,172 @@ static void run_phase21_riders(void) {
   }
 }
 
+/* v22 (M2 phase-22 T6, FU-238 §3.3): the end-spine mutation-RED rider classes.
+ * The phase-22 final-review regression pins for the whole end spine. Every block
+ * is a genuine mutation-RED check (disable the guarded code and its assert
+ * aborts) and pure state (ISO-independent, prints nothing, so the tape
+ * transcript is unaffected). Classes 1-6 are the in-function riders; class 7
+ * (the additivity/determinism gate) is the `main` half — the 3-replay
+ * byte-stability gate and the in-test `head -2522` prefix assertion (the
+ * automated `head -2522 new | cmp - old`, strengthened to the v21 2522-line
+ * prefix by T5). Class 7 is invoked at `main`, not here, mirroring
+ * `run_phase21_riders`' own honest split (`:4411-4416`).
+ *
+ * Authority: FU-238 §3.3 (the seven classes) with the underlying decisions per
+ * block — FU-231 §3 / FU-236 (word 1), FU-233 §3 / FU-239 §4-§5 (word 2),
+ * FU-232 §4.1/§4.3 (the consumer), FU-239 §1/§3 (the live ET half),
+ * FU-234 §3 (the return), FU-235 §1 (the screen timing gate). Each block's
+ * mutation says exactly which guard, when reverted, aborts the assert. */
+static void run_phase22_riders(void) {
+  /* 1. REGULATION-OVER END WORD (word 1) — T2/FU-231 + FU-236. The flag-clear
+   *    phase-0x0C terminal is the regulation over (`0x8BCD9`); the end-machine
+   *    reader yields word 1. Mutation-RED: the `global_157ac0` flag gate is the
+   *    discriminator — inverting it (`== 0` -> `!= 0`) makes the flag-clear
+   *    terminal yield 0 and the word-1 assert aborts. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 0x0Cu;
+    mr.global_157ac0 = 0u;              /* the flag-clear regulation terminal */
+    assert(fifa96_match_run_end_word(&mr) == 1u);
+    mr.global_157ac0 = 1u;              /* flag set: not the word-1 route */
+    assert(fifa96_match_run_end_word(&mr) == 0u);
+  }
+  /* 2. ET-OVER TERMINAL (word 2) — T2/T4/FU-231/FU-233/FU-239 §4-§5. The
+   *    phase-0x13/0x14 dwell writes word 2 once `word[0x158818] > 0x4B0` (the
+   *    same cell as `mr->act.timer`, a SIGNED compare). Mutation-RED: the
+   *    compare is strict — relaxing `>` to `>=` fires at 0x4B0 and the word-0
+   *    assert aborts; dropping the terminal write leaves the word 0. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 0x13u;
+    mr.act.timer = 0x4B0;               /* exactly at the gate: not yet over */
+    assert(fifa96_match_run_end_word(&mr) == 0u);
+    mr.act.timer = 0x4B1;               /* past the 0x4B0 dwell -> word 2 */
+    assert(fifa96_match_run_end_word(&mr) == 2u);
+    mr.state.phase = 0x14u;             /* the phase-0x14 arm fires the same terminal */
+    assert(fifa96_match_run_end_word(&mr) == 2u);
+  }
+  /* 3. FRAME-LOOP CONSUMER — T3/FU-232 §4.1/§4.3. `mark_over` fires iff the end
+   *    word is 1 AND the period index `>= 2`, except index 4 with the ET flag set;
+   *    word 2 is a consume (`0x4B257`), never an over. Mutation-RED: tightening
+   *    the `>= 2` bound to `>= 3` overs not at the half-time completion (index 1,
+   *    correctly 0) but misses the index-2 regulation over -> the `== 1` assert
+   *    aborts; dropping the word==1 check overs on word 2; dropping the index-4/
+   *    flag skip overs the post-ET sit-8 re-kickoff. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.end_word_158822 = 1u;
+    mr.global_157ac2 = 1u;              /* half-time: NOT past half-time */
+    assert(fifa96_match_run_should_mark_over(&mr) == 0);
+    mr.global_157ac2 = 2u;              /* past half-time -> the regulation over */
+    assert(fifa96_match_run_should_mark_over(&mr) == 1);
+    mr.end_word_158822 = 2u;            /* word 2 is the ET-over consume, not an over */
+    assert(fifa96_match_run_should_mark_over(&mr) == 0);
+    mr.end_word_158822 = 1u;
+    mr.global_157ac2 = 4u;
+    mr.global_157ac0 = 1u;              /* index 4 + ET flag -> sit-8 kickoff, no over */
+    assert(fifa96_match_run_should_mark_over(&mr) == 0);
+    mr.global_157ac0 = 0u;              /* index 4, flag clear -> the regulation over */
+    assert(fifa96_match_run_should_mark_over(&mr) == 1);
+  }
+  /* 4. ET HALVES LIVE — T1/T4/FU-239 §1/§3. The ET half runs in the class-1
+   *    play phase `2` (the sit-8 re-arm), so the FU-62 clock completes it at
+   *    `extra_length` (period 2 -> 3). Mutation-RED: dropping the re-arm (or
+   *    parking the class-0 phase `0x13`, whose clock is halted) leaves the ET
+   *    half unclocked and the `period == 3` assert aborts. */
+  {
+    struct fifa96_platform_null_config pcfg;
+    memset(&pcfg, 0, sizeof pcfg);
+    pcfg.step_ns = 10000000ull;         /* one granted frame per 100 Hz tick */
+    fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+    assert(plat != NULL);
+    struct fifa96_engine_config ecfg;
+    memset(&ecfg, 0, sizeof ecfg);
+    ecfg.width = 320;
+    ecfg.height = 240;
+    ecfg.headless = 1;
+    struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+    assert(e != NULL);
+    assert(fifa96_engine_boot(e) == 0);
+    struct fifa96_match_run *mr = &e->match_run;
+    assert(fifa96_match_run_begin(mr, e, 0) == 0);
+    assert(fifa96_match_run_set_period(mr, 1, 1) == 0);
+    mr->state.period = 2u;              /* the first extra-time half */
+    fifa96_match_run_period_over_rearm(mr);   /* the sit-8 re-arm */
+    assert(mr->state.phase == 2u);      /* the class-1 live ET play phase */
+    assert(fifa96_match_state_phase_class(mr->state.phase) == 1u);
+    for (int i = 0; i < 100; i++)       /* 100 granted frames == 1 s at 0x200 */
+      assert(fifa96_match_run_frame(mr) >= 0);
+    assert(mr->state.period == 3u);     /* the ET half completed (extra_length) */
+    assert(mr->state.period_seconds == 0u);
+    fifa96_engine_destroy(e);
+    fifa96_platform_destroy(plat);
+  }
+  /* 5. FRONT-END RETURN — T5/FU-234 §3. The lifecycle resolve chain
+   *    (OVER -> POST -> EXIT -> `fifa96_match_run_end`) returns the engine to the
+   *    front-end: `run_end` detaches the run (`eng->match = NULL`, `running = 0`)
+   *    and the FRONTEND mode is set (by `run_end` and, redundantly, by the
+   *    registered backend `post_exit` callback `fifa96_match_run_post_exit`,
+   *    `fifa96_match_run.c:1781` — so the mode flip is doubly written and the
+   *    detach is the strictly-guarded observable). Mutation-RED: dropping the
+   *    resolve exit branch (no `run_end`) leaves `mode == MATCH`, `match == mr`
+   *    and `running == 1` -> this block's asserts abort. */
+  {
+    struct fifa96_platform_null_config pcfg;
+    memset(&pcfg, 0, sizeof pcfg);
+    pcfg.step_ns = 10000000ull;
+    fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+    assert(plat != NULL);
+    struct fifa96_engine_config ecfg;
+    memset(&ecfg, 0, sizeof ecfg);
+    ecfg.width = 320;
+    ecfg.height = 240;
+    ecfg.headless = 1;
+    struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+    assert(e != NULL);
+    assert(fifa96_engine_boot(e) == 0);
+    struct fifa96_match_run *mr = &e->match_run;
+    assert(fifa96_match_run_begin(mr, e, 0) == 0);
+    assert(e->mode == FIFA96_ENGINE_MODE_MATCH);
+    assert(e->match == mr);
+    mr->lc.screen = FIFA96_MATCH_SCREEN_OVER;   /* a staged OVER screen */
+    assert(fifa96_match_run_step(mr) >= 0);     /* OVER -> POST -> EXIT -> run_end */
+    assert(e->mode == FIFA96_ENGINE_MODE_FRONTEND);
+    assert(e->match == NULL);
+    assert(mr->running == 0);
+    fifa96_engine_destroy(e);
+    fifa96_platform_destroy(plat);
+  }
+  /* 6. SCREEN TIMING GATE — T4/T5/FU-235 §1. The `mark_over` tail holds the
+   *    phase-0x0C terminal until the end timer `act.timer > 0x168` (the native
+   *    no-input gate `0x8BCAC`, 360 ticks), then fires OVER. Mutation-RED:
+   *    relaxing/removing the `> 0x168` gate fires OVER while the timer is still
+   *    small -> the `act.timer > 0x168` (and `f > 1`) asserts abort. */
+  {
+    struct fifa96_match_run mr;
+    fifa96_match_run_init(&mr);
+    mr.state.phase = 0x0Cu;
+    mr.state.prev_phase = 2u;
+    mr.state.period = 2u;
+    mr.global_157ac2 = 2u;              /* past half-time */
+    mr.global_157ac0 = 0u;              /* flag clear: the regulation terminal */
+    mr.end_word_158822 = 1u;            /* the word-1 terminal is staged */
+    mr.act.id = 0;                      /* no act: the phase-0x0C block accrues the timer */
+    mr.act.timer = 0;                   /* below the gate: HELD */
+    uint64_t f = 0;
+    while (mr.lc.screen != FIFA96_MATCH_SCREEN_OVER && f < 8000u) {
+      assert(fifa96_match_run_frame(&mr) >= 0);
+      f++;
+    }
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+    assert(mr.act.timer > 0x168);       /* fired past the terminal gate, never early */
+    assert(f > 1u);                     /* the hold: the over is NOT on the first frame */
+  }
+}
+
 /* First-difference report so a golden drift points at the offending line. */
 static void report_diff(const char *got, size_t got_len, const char *want, size_t want_len,
                         size_t at) {
@@ -4565,9 +4731,13 @@ int main(void) {
    * period-end-spine producer riders (re-gate / tie-break / selector-slip /
    * phase-slot), whose blocks 3/4/5 carry the phase-20 cadence (T1/FU-219),
    * phase-`0x10` (T2/FU-222) and sit-8-bind (T3/FU-217) rider classes (the
-   * row-`0x20` ball place lives in `test_action_20_body_arms`). Run first so
-   * each rider's own mutation aborts at its assert, before the tape consumes
-   * the process; they print nothing, so the transcript is unaffected. */
+   * row-`0x20` ball place lives in `test_action_20_body_arms`). v22 (phase-22
+   * T6) adds `run_phase22_riders` — the end-spine mutation-RED classes (the
+   * word-1 regulation over, the word-2 ET-over terminal, the frame-loop
+   * consumer, the live ET half, the front-end return, the screen timing gate).
+   * Run first so each rider's own mutation aborts at its assert, before the
+   * tape consumes the process; they print nothing, so the transcript is
+   * unaffected. */
   run_census_riders();
   run_phase16_riders();
   run_phase17_t2_riders();
@@ -4576,6 +4746,7 @@ int main(void) {
   run_phase18_riders();
   run_phase19_riders();
   run_phase21_riders();
+  run_phase22_riders();
 
   size_t tlen = 0;
   struct fifa96_platform_null_stats st;

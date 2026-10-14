@@ -511,3 +511,38 @@ seven mutation-RED rider classes, and the required code-edit inventory — and i
 records the two cross-cited ET-native items (the ET-half phases / terminal phase,
 FU238-L2) as the terminal slices' to confirm before T6. No engine change, no test
 change, no golden change, no census move.
+
+---
+
+## 9. Errata — phase-22 Stage-2 (FU-239; append-only, prior sections not rewritten)
+
+Written 2026-10-14 at the phase-22 close-out (Task 6). Prior sections are **not**
+rewritten (AGENTS.md errata discipline); the corrections are quoted cross-refs.
+
+* **§2.3 ("The frame picture") is corrected by FU-239 §3-§5.** The text "the ET
+  halves then each complete like the regulation halves: a class-1 play window …
+  bounded by the class-0 phase-`0x13`/`0x14` kickoff phases" is **half right**:
+  the class-1 window is real, but it is the **phase `2`** re-arm (FU-239 §3), and
+  the class-0 `0x13`/`0x14` phases are the **ET-over screen dwell**
+  (`word[0x158818] > 0x4B0 → word[0x158822]=2`), not a per-half kickoff boundary
+  (FU-239 §4). The scheduled terminal therefore fires from the `0x13`/`0x14`
+  dwell after the ET-half-2 completion (the T4b-measured engine step 6502), not
+  from a `0x0C` pattern.
+* **§2.3's "the `word[0x158818] > 0x78` screen gate / the `0x960` camera hold
+  (FU-235)" conflates two cells (the `g2` erratum).** The **phase-`0xC`**
+  terminal gate is `word[0x158818] > 0x168` (native `0x8BCAC`, 360 ticks — the
+  engine `mark_over` dwell); the **ET-half** dwell threshold is
+  `word[0x158818] > 0x4B0` (native `0x8BD5A`/`0x8BDAC`). FU-235 §1 already
+  separates them; §2.3's single `0x78` figure is the ET-block entry gate, not
+  the terminal threshold.
+* **FU-232-L6 is CLOSED** (the phase-loop lifecycle consumer is self-terminating
+  at the ET-over; FU-239 §4 / `t4b-recon/g3-etover-resume.md`). FU-232 §3's open
+  leg — "what resumes after the ET-over consume" — is answered: the
+  `FUN_0004B100` `AX==2` arm clears `word[0x158822]` (`0x4B29B`) and `RET`s
+  (`0x4B2A8`), writing **no** `[0x105FFC]` screen; fresh `get_xrefs_to 0x158822`
+  = 10, and the only readers are the head guard `0x4B106` and the clock tail
+  `0x8B678`. The ET-over is a transient consume (**no over-screen**); the frame
+  loop resumes the frame body. Landed as the same-frame consume
+  (`fifa96_match_run.c:4271-4272`). The word-`1` regulation-over (which does show
+  the OVER screen) is the off-tape route (§2.6), covered by
+  `run_regulation_over_probe`.

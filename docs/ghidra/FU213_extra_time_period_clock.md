@@ -601,3 +601,23 @@ rewritten (AGENTS.md errata discipline).
   `FUN_0004B02C`, FU-143 §5 / FU213-L2) — the period-end chooser parks the clock
   in the class-0 phase `0x0C`, and no ported path re-arms the next period. This
   is the same FU213-L2 leg named in §8.2.
+
+---
+
+## 12. Errata — phase-22 Stage-2 (FU-239 §1; append-only, prior sections not rewritten)
+
+Written 2026-10-14 at the phase-22 close-out (Task 6). Prior sections are **not**
+rewritten (AGENTS.md errata discipline); the correction is a quoted cross-ref.
+
+* **§11 (and §8.2's FU213-L2) — `FUN_00088860` is NOT the re-arm; it is the
+  phase-`0xC`-gated situation dispatcher.** Fresh disassembly (FU-239 §1) shows
+  `FUN_00088860` (`0x88860..0x888FA`) writes only `[0x157AAF] := [0x157AAE]`
+  (`0x8887E`, bytes `a2 af 7a 15 00`) and **no** phase/period/clock cell; its
+  body gates on the current phase (`0x8886B CMP EAX,0xC`) and discriminates on
+  the period index (`0x888B0 CMP [0x157AC2],4 ; 0x888B3 JNZ` → sit-1/sit-8).
+  Fresh `get_xrefs_to 0x88860` = 2 (`0x4B08E` in `FUN_0004B02C`, and `0x74244`
+  in the unnamed `0x741C4` dispatch). The re-arm itself is **`FUN_0004B02C`
+  (mode 0)** (`0x4B02C..0x4B0FE`), which also clears `word[0x158822] := 0` at
+  period-over (`0x4B0E7`). The `0x0C → sit-8 → phase 2` route is FU-239 §1/§3
+  (the target phase `2` is derived from the class table; the exact indirect route
+  is **FU239-L1**, an explicit leg, not asserted here).

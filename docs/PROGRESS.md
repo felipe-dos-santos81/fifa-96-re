@@ -1704,3 +1704,87 @@ README title `68%`, `docs/ENGINE.md` status + action-dispatch bullets and
 `AGENTS.md` stay consistent (T6 wires no new row). `make check` **110/110**
 (sanitized). **Determinism:** M1 `09b726b7…` unmoved; M2 re-pinned to
 `0b87fd18…` (v21, 2522 lines).
+
+## M2 phase-22 — the end spine (extra time → match over): the live ET halves, the ET-over terminal, the return (FU-231…FU-239)
+
+**The phase closes the full end spine: the M2 tape now plays both live
+extra-time halves and the end-of-match terminal, and is re-pinned `v21 → v22`.**
+The spec §2/§7.4 tie→shootout premise is **corrected** (FU-237: shootout OUT —
+the tie walks to extra time, not a shootout); the phase rides the *extra-time*
+end, not a shootout. No phase row is wired — census `55/80 = 68%` unchanged.
+
+**The model correction (FU-239; the phase-22b unblock — the phase's central
+finding).** The pre-phase model parked the ET half in the class-0 phases
+`0x13`/`0x14`, whose clock is **halted** — the exact reason the T1 feasibility
+probe stalled at ET entry. The native live ET half runs in the **class-1 play
+phase `2`** (the only class-1 phase in the `0x1106AD` class table with any static
+writer), reached by the period-over re-arm `FUN_0004B02C(mode 0) → FUN_00088860
+→ sit-8 → FUN_0008A938` (FU-239 §1/§3). `0x13`/`0x14` are the **ET-over screen
+dwell** (`word[0x158818] > 0x4B0 → word[0x158822]=2`), not the playing half. The
+target phase `2` is *derived* (class-0 cannot clock); the exact indirect route is
+the leg **FU239-L1**.
+
+**Tasks (SDD; T1→T6 + the T4b reorder).**
+- **T1/FU-239** — `fifa96_match_run_period_over_rearm` (the re-arm helper, phase
+  → `2`) + the ET-half clock characterization (`test_extra_time_half_completes`).
+  The live wiring was deferred to T4 (a per-frame re-arm at the chooser would
+  break the v21 2522-prefix).
+- **T2/FU-231** — the `FUN_0008BAF0` end machine as the end word `[0x158822]`
+  (word `1` = regulation over `0x8BCD9`; word `2` = ET over `0x8BD8A`/`0x8BDD4`).
+- **T3/FU-232** — the frame-loop `mark_over` re-point: word `1` **and** period
+  index `>= 2`, minus the index-4/ET-flag skip; word `2` is a **transient
+  consume** (no over-screen) — **FU-232-L6 CLOSED** (`t4b-recon/g3`).
+- **T4/FU-235** — the phase-`0xC` terminal dwell + the match-over screen
+  (`act.timer > 0x168`, native `0x8BCAC`) and the ET-entry dwell + the live
+  re-arm.
+- **T4b/FU-233·FU-237** — the re-arm bound `{2,3}` (not `>= 2`, which over-fired
+  to the `period 5 / phase 2` hold) + the ET-over dwell (`act.timer > 0x4B0`).
+- **T5** — the tape extension + the re-pin.
+- **T6** — this acceptance (the mutation-RED riders + the errata + the records).
+
+**The tape (T5; the re-pin, written reason + frame diff).** The forced-ET tape
+drives the FU-62 clock periods `2`/`3` at `extra_length` through the re-arm
+schedule — ET entry 2502, ET-half-1 completion 3402, ET-half-2 completion 4302,
+the ET-over terminal 6502 — and stops `M2_POST_RETURN_FRAMES` past the terminal.
+**Frame diff:** lines 1..2522 **byte-identical** (`head -2522 new | cmp - old`
+clean, 112487 bytes; `diff` = `2522a2523,6522`), first appended line 2523; N =
+**6522** lines. Old M2 `0b87fd18ad41948c8294a6cc46e40af02c8bfe5e92d708e09c3a1a2103c947c0`
+→ new M2 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a` (6522);
+M1 `09b726b7…` unmoved. **Two terminals (controller ruling):** the forced-ET tape
+reaches only the **ET-over consume** (word `2`, same-frame resume; no
+over-screen, FU-232-L6); the **word-1 regulation-over** (OVER screen → front-end
+return) is off the forced-ET tape (its regulation end is the differing 1-0) and
+is covered by `run_regulation_over_probe`.
+
+**T6 acceptance — the mutation-RED riders (`run_phase22_riders`).** Seven
+classes, each a genuine mutation-RED check (verified by disabling the guarded
+code; the assert aborts): (1) the word-`1` regulation over (invert the
+`global_157ac0` gate → `end_word == 1u` aborts); (2) the word-`2` ET-over
+terminal (relax `> 0x4B0` to `>= 0x4B0` → the word-0 assert aborts); (3) the
+frame-loop consumer (tighten `>= 2` to `>= 3` → the index-2 `should_mark_over ==
+1` aborts); (4) the live ET half (park class-0 `0x13` → the `phase == 2` assert
+aborts); (5) the front-end return (drop the resolve exit branch / the `run_end`
+detach / `running = 0` → the FRONTEND / `match == NULL` / `running == 0` asserts
+abort); (6) the screen timing gate (relax `> 0x168` → the `act.timer > 0x168`
+assert aborts); (7) additivity/determinism (the `main` 3-replay byte-stability
+gate + the in-test `head -2522` prefix assertion — a pre-2522 drift or a replay
+mismatch aborts). Classes 1-6 are pure state (ISO-independent, print nothing);
+class 7 is the `main` half.
+
+**Errata (append-only; quoted cross-refs, prior sections not rewritten).**
+FU-233 §3 / FU-238 §2.3 → **FU-239** (the ET half is phase `2`; `0x13`/`0x14` is
+the ET-over screen; the phase-`0xC` terminal gate is `0x168`, not the `0x4B0`
+dwell — the `g2` erratum); **FU-213 §11** → **FU-239 §1** (`FUN_00088860` is the
+phase-`0xC` situation dispatcher, not the re-arm — the re-arm is
+`FUN_0004B02C(mode 0)`); **FU-232-L6 CLOSED** (the ET-over consume is
+self-terminating, no over-screen).
+
+**Census recomputed:** `55 OK = 33 action + 22 phase`; dispatch
+`24 UNSUP / 55 OK / 1 NOTF` (sum 80); `floor(100 × 55/80) = 68` — **unchanged**;
+README title `68%`, `docs/ENGINE.md` phase-22 bullet stay consistent (no row
+wired). `make check` **110/110** (sanitized); M1 `09b726b7…` unmoved; M2
+re-pinned to `b281a9b2…` (v22, 6522 lines). **Residual legs:** FU239-L1 (the
+exact `0x13 → 0x0C → sit-8 → phase 2` route), FU239-L3 (`[0x157AC2]=4` vs the
+tape's forced ET), FU-231 (the `[0x105FFC]=5` arm has no engine cell),
+FU-234-L6 (the return's clean pinnability — resolved off-tape by the probe),
+FU-233-L1/L5, FU-237-L1.
