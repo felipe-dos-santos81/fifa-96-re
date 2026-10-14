@@ -3426,7 +3426,8 @@ static void test_goal_scan_queue_and_fallback(void) {
   mr.goal_armed = 1;
   mr.goal_snap_z = 0xB20;                           /* throw-in band: sit 2 */
   assert(fifa96_match_run_goal_scan(&mr) == 1);
-  assert(mr.state.phase == 3u);                     /* BX=1 fallback: phase 0 -> phase 3 */
+  assert(mr.state.phase == 0u);                     /* FU-241 de-compressed: phase-0 write, act 8 armed */
+  assert(mr.act.id == 8u);                          /* the BX=1 fallback dispatches act 8 now */
   assert(mr.situation_pending == 0);
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
@@ -3482,6 +3483,17 @@ static void test_goal_scan_queue_and_fallback(void) {
     assert(fifa96_match_run_end(&fb) == 0);
     drop_fixture(f);
   }
+}
+
+/* FU-241 (M2 phase-23 T4): the BX=1 set-piece fallback now dispatches act 8,
+ * whose phase-0x1E restart sweep defers the stored-situation re-dispatch to its
+ * stage-2 terminal. After the invoke-now has reset the cursor and swept record
+ * (0,0), drive the remaining 22 granted frames (21 stage-1 grants + the terminal)
+ * so the deferred arm runs. */
+static void match_frame_act8_sweep(struct fifa96_match_run *mr) {
+  int k;
+  for (k = 0; k < 22; k++)
+    assert(fifa96_match_action_phase_1E(mr) == FIFA96_OK);
 }
 
 /* FU-145 S2 / 0x740F6: a phase-2 write clears the pan arm
@@ -3600,66 +3612,68 @@ static void test_set_piece_queue_ids(void) {
   assert(fifa96_match_run_set_piece(&mr, 2, 2, 0) == -FIFA96_ERR_INVALID);
 }
 
-/* FU-149 §1.1/§3 item 2: the BX!=0 fallback (0x8AA80..0x8AAA3): phase
- * `FUN_000740A0(0, 0)`, the act-8 replay bytes `[0x15882C] = side` /
- * `[0x15882B] = situation`, then act 8's tail (0x8A8A5..0x8A8DE, byte-exact)
- * re-dispatches the stored situation/side with BX=0 and writes
- * `[0x15882B] = 0xFF`. The port compresses the act-8 timeline (leg L6) to the
- * re-dispatch point, so the table-2 row lands on the same call. */
+/* FU-149 §1.1/§3 item 2 + FU-241 §6.3 (M2 phase-23 T4): the BX!=0 fallback
+ * (0x8AA80..0x8AAA3) is DE-COMPRESSED. The native writes phase
+ * `FUN_000740A0(0, 0)`, stores `[0x15882C] = side` / `[0x15882B] = situation`,
+ * then invokes act 8 (`CALL 0x888FC(8,0,BX=1)`); the engine now dispatches the
+ * act-8 phase-0x1E sweep invoke-now (stage 0 -> 1, one record) instead of the
+ * in-frame `set_piece` re-dispatch. The stored situation/side re-dispatch and
+ * the `[0x15882B] = 0xFF` clear are deferred to the sweep's stage-2 terminal. */
 static void test_set_piece_bx_fallback(void) {
   struct fifa96_match_run mr;
+  int k;
   fifa96_match_run_init(&mr);
   assert(fifa96_match_run_set_piece(&mr, 2, 1, 1) == 0);
-  assert(mr.state.phase == 3u);                    /* sit 2 -> phase 3 */
-  assert(mr.store_15882c == 1u && mr.store_15882b == 0xFFu);
-  /* the phase-0 write precedes the re-dispatch (observable via prev_phase) */
+  assert(mr.state.phase == 0u);                    /* 0x740A0 phase-0 write */
+  assert(mr.store_15882c == 1u && mr.store_15882b == 2u);
+  assert(mr.act.id == 8u && mr.act.stage == 1u);   /* act 8 invoked, one record swept */
+  assert(mr.act8_team == 0u && mr.act8_record == 1u);
+  /* drive the remaining 21 stage-1 grants then the stage-2 terminal: the stored
+   * sit-2 -> phase-3 arm lands then and store_15882b clears (0x8A8D3). */
+  for (k = 0; k < 21; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act.stage == 2u && mr.store_15882b == 2u);  /* still held */
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* terminal */
+  assert(mr.state.phase == 3u);                    /* the deferred sit-2 arm */
+  assert(mr.store_15882b == 0xFFu);                /* 0x8A8D3 */
+  /* sit 3: the phase-0 write precedes the deferred corner arm (prev_phase) */
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
   assert(fifa96_match_run_set_piece(&mr, 3, 1, 1) == 0);
-  assert(mr.state.phase == 4u && mr.state.prev_phase == 0u);
-  assert(mr.corner_count[1] == 1u);                /* counted with the stored side */
-  assert(mr.store_15882b == 0xFFu);
-  /* keeper restart through the fallback: sit 5 -> phase 9 + keeper 0x1E */
+  assert(mr.state.phase == 0u && mr.state.prev_phase == 2u);
+  assert(mr.corner_count[1] == 0u);                /* deferred, not in-frame */
+  assert(mr.store_15882c == 1u && mr.store_15882b == 3u && mr.act.id == 8u);
+  /* keeper restart through the fallback: the sit-5 -> phase-9 arm is deferred */
   fifa96_match_run_init(&mr);
-  match_frame_stage_restarts(&mr);
   assert(fifa96_match_run_set_piece(&mr, 5, 0, 1) == 0);
-  assert(mr.state.phase == 9u);
-  assert(mr.entities.team[0].records[0].code == 0x1Eu);
+  assert(mr.state.phase == 0u && mr.store_15882b == 5u && mr.act.id == 8u);
 }
 
-/* FU-212 §6 (M2 phase-19 T5): the phase-0x1E compressed-model pin. The engine
- * keeps the COMPRESSED act-8 model — the `set_piece` `bx != 0` branch in-lines
- * the stored-situation re-dispatch in the same frame; the faithful 22-record
- * restart sweep (native 0x8A798) is deferred ~22 granted frames and is
- * render-invisible + dormant on the M2 tape (FU-212 §6). This pin asserts the
- * deliberate bound: the phase-`0x1E` slot stays NULL (`fifa96_match_action_phase_1E`
- * is ported but unwired) AND the live compressed path never drives the sweep
- * cursor — no fake de-compression. The de-compression leg is FU212-L1.
- * Mutation-RED: registering the phase-`0x1E` slot (`NULL ->
- * fifa96_match_action_phase_1E`) aborts the `fn == NULL` assert; making the
- * compressed `bx != 0` path advance the sweep cursor aborts the sentinel
- * asserts (verified by calling the sweep body on that path). */
-static void test_phase_1E_compressed_model_pin(void) {
+/* FU-241 §6 (M2 phase-23 T4): the phase-0x1E de-compression pin. The engine now
+ * registers the phase-`0x1E` slot and the `set_piece` `bx != 0` branch dispatches
+ * act 8 invoke-now (`fifa96_match_act_dispatch(mr, 8, 0, 1)`), which resets the
+ * sweep cursor and sweeps one record; the stored-situation re-dispatch is
+ * deferred ~22 granted frames to the sweep's stage-2 terminal. The faithful
+ * sweep is render-invisible and dormant on the M2 tape (FU-241 §6.1/§6.2), so no
+ * presented frame moves. Mutation-RED: a NULL slot or a compressed in-frame
+ * re-dispatch aborts the `fn`/phase/act asserts below. */
+static void test_phase_1E_decompressed_pin(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x1E].fn == NULL);  /* the bound: de-compression leg FU212-L1 */
-  /* Pre-seed the sweep cursor with sentinels so the "untouched" asserts below
-   * are falsifiable — on the init-zeroed values they would pass regardless of
-   * the code under test. A de-compressed path that ran the sweep would reset
-   * and then advance them, so a divergence is observable. */
-  mr.act8_team = 3u;                                  /* out of range: a sweep resets it first */
+  assert(fifa96_match_phase_table[0x1E].fn == fifa96_match_action_phase_1E);
+  /* Pre-seed the sweep cursor with sentinels so the reset is falsifiable — the
+   * de-compressed path runs stage 0 and overwrites them. */
+  mr.act8_team = 3u;
   mr.act8_record = 7u;
   mr.act8_selected = &mr.entities.team[0].records[5];
-  /* the live compressed `bx != 0` path in-lines the stored-situation re-dispatch
-   * (sit 2 -> phase 3 in the same call) ... */
+  /* the de-compressed `bx != 0` path: phase 0, store side/situation, dispatch act
+   * 8 invoke-now (native 0x8AA80..0x8AAA3 -> CALL 0x888FC(8,0,BX=1)). */
   assert(fifa96_match_run_set_piece(&mr, 2, 1, 1) == 0);
-  assert(mr.state.phase == 3u);
-  assert(mr.store_15882b == 0xFFu);
-  /* ... and never dispatches act 8: the sweep cursor is untouched and no record
-   * was selected, so the ~22-frame restart sweep is deliberately NOT taken. */
-  assert(mr.act.id != 8u);
-  assert(mr.act8_team == 3u && mr.act8_record == 7u);
-  assert(mr.act8_selected == &mr.entities.team[0].records[5]);
+  assert(mr.state.phase == 0u);                        /* 0x740A0 */
+  assert(mr.store_15882c == 1u && mr.store_15882b == 2u);
+  assert(mr.act.id == 8u && mr.act.stage == 1u);       /* act 8 installed + swept one */
+  assert(mr.act8_team == 0u && mr.act8_record == 1u);  /* stage 0 reset, stage 1 advanced */
+  assert(mr.act8_selected == NULL);                    /* record 0 fails the select predicate */
 }
 
 /* FU-149 §1.5/§2 (first-hand arm table 0x8D040 + `FUN_0008D098` cases):
@@ -3722,21 +3736,28 @@ static void test_set_piece_phase_arm_codes(void) {
 
 
 /* FU-149 L13/T1: the P1-armed taker rows execute and resolve. The dispatcher
- * arms the throw-in (sit 2 BX=1 -> phase 3 + taker 0x10) and the corner
- * (sit 3 -> phase 4 + taker 0x11); the armed record is driven through the
- * dispatch seam with the whole-frame delta staged and the rows hand back to
- * phase 2 through the shared situation-0xB entry with the 0x12C
+ * arms the throw-in (sit 2 BX=1 -> act 8 -> the deferred phase 3 + taker 0x10)
+ * and the corner (sit 3 -> phase 4 + taker 0x11); the armed record is driven
+ * through the dispatch seam with the whole-frame delta staged and the rows hand
+ * back to phase 2 through the shared situation-0xB entry with the 0x12C
  * offside-suppression timer. */
 static void test_taker_armed_rows_resolve(void) {
   struct fifa96_match_run mr;
+  int k;
   /* throw-in: sit 2 through the BX=1 fallback (the direct path with a pending
-   * situation); the phase-3 arm picks team 0 record 1 */
+   * situation); the phase-3 arm is DEFERRED to the sweep terminal (FU-241), so
+   * drive the 22-record sweep to completion first, then the stored-sit arm
+   * picks team 0 record 1 */
   fifa96_match_run_init(&mr);
   match_frame_stage_restarts(&mr);
   mr.state.phase = 2;
   mr.session_gate_14c32a = 1;
   mr.situation_pending = 1;
   assert(fifa96_match_run_set_piece(&mr, 2, 0, 1) == 0);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);     /* act 8 invoked, phase 0 */
+  for (k = 0; k < 21; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* stage-2 terminal */
   assert(mr.state.phase == 3u);
   assert(mr.entities.team[0].target == 1);
   assert(mr.entities.team[0].records[1].code == 0x10u);
@@ -3875,12 +3896,18 @@ static void test_engine_referee_contact_fk(void) {
   assert(mr.referee.rec_first == 5 && mr.referee.rec_second == 6);
   assert(mr.incident_x == 0x500 && mr.incident_z == 0);
   assert(mr.referee.sequence == FIFA96_REF_SEQ_NONE);
+  assert(mr.act.id == 8);                        /* FU-241: the BX=1 fallback dispatches act 8 */
+  assert(mr.ref_restart_stage == 0u);            /* the act-2 hand-off is deferred */
+  assert(mr.state.phase == 0u);                  /* the phase-0 write */
+  assert(mr.ref_whistle == 0u);                  /* the soft-foul whistle is deferred too */
+  /* FU-241: drive the act-8 sweep to its terminal so the deferred sit-9 -> act-2
+   * hand-off (stage 0) runs, then the act-2 decision step (the act-machine tick):
+   * phase 7 + the FK taker on the controlled team; the terminal clears the slot */
+  match_frame_act8_sweep(&mr);
   assert(mr.act.id == 2);
-  assert(mr.ref_restart_stage == 1u);            /* stage 0 ran immediately */
+  assert(mr.ref_restart_stage == 1u);            /* stage 0 ran at the terminal */
   assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 phase write */
   assert(mr.ref_whistle == 0x1Eu);               /* the soft-foul whistle */
-  /* the act-2 decision step (the act-machine tick): phase 7 + the FK taker on
-   * the controlled team; the terminal clears the act slot */
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);
   assert(mr.act.id == 0);
@@ -3901,6 +3928,8 @@ static void test_engine_referee_contact_fk(void) {
     const int32_t spot[3] = {0x100, 0, -0x800};
     assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
   }
+  assert(mr.act.id == 8 && mr.state.phase == 0u);  /* FU-241: deferred */
+  match_frame_act8_sweep(&mr);
   assert(mr.state.phase == 0x0Au);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 6u);
@@ -3927,6 +3956,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
   match_frame_stage_restarts(&mr);
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  match_frame_act8_sweep(&mr);                 /* FU-241: the deferred sit-9 -> act-2 arm */
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);
   assert(mr.entities.team[1].records[1].code == 0x12u);
@@ -3954,6 +3984,7 @@ static void test_taker_armed_referee_rows_resolve(void) {
     const int32_t spot[3] = {0x100, 0, -0x800};
     assert(fifa96_match_run_contact(&mr, 1, 5, 6, spot) == 1);
   }
+  match_frame_act8_sweep(&mr);                 /* FU-241: the deferred sit-9 -> act-2 arm */
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 6u);
   assert(mr.entities.team[1].records[1].code == 0x13u);
@@ -4003,6 +4034,8 @@ static void test_engine_referee_restart_default_gate_split(void) {
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
   assert(mr.referee.foul_kind == 0u);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);  /* FU-241: deferred */
+  match_frame_act8_sweep(&mr);
   assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 1u);    /* stage 0 ran: whistle + phase 0xA */
   assert(mr.state.phase == 0x0Au);
@@ -4033,6 +4066,8 @@ static void test_engine_referee_restart_default_gate_split(void) {
   match_frame_stage_restarts(&mr);
   match_frame_rng_arm_hard_foul(&mr);
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);  /* FU-241: deferred */
+  match_frame_act8_sweep(&mr);
   mr.referee.foul_kind = 3u;             /* staged: the act-2 gate test */
   assert(mr.act.id == 2);
   assert(mr.state.phase == 0x0Au);
@@ -4109,8 +4144,11 @@ static void test_engine_referee_foul_sequence(void) {
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* stage 4: sum 1 -> 6 */
   assert(mr.act.stage == 6u);
   assert(mr.referee.severity[0][5] == 1u);
-  /* stage 6: situation 0xA -> the act-2 hand-off decides phase 6 in one call */
+  /* stage 6: situation 0xA -> the act-8 sweep (FU-241) then the act-2 hand-off
+   * decides phase 6 */
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);   /* FU-241: delegated to act 8 */
+  match_frame_act8_sweep(&mr);
   assert(mr.act.id == 0u);                       /* the act-2 terminal cleared it */
   assert(mr.state.phase == 6u);
   assert(mr.ref_speech == 0x23u);
@@ -4194,6 +4232,8 @@ static void test_engine_referee_offside_chain(void) {
   assert(fifa96_match_run_referee_step(&mr) == 1);
   assert(mr.referee.stage == 2u);
   assert(fifa96_match_run_referee_step(&mr) == 1);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);   /* FU-241: deferred to act 8 */
+  match_frame_act8_sweep(&mr);
   assert(mr.act.id == 2);
   assert(mr.state.phase == 0x0Au);               /* act-2 stage 0 on return */
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
@@ -4255,7 +4295,10 @@ static void test_scan_restart_arms(void) {
   mr.goal_snap_x = 0;
   mr.goal_snap_z = 0xB20;
   assert(fifa96_match_run_goal_scan(&mr) == 1);
-  assert(mr.state.phase == 3u);                             /* sit 2 -> phase 3 */
+  assert(mr.state.phase == 0u);                             /* FU-241: phase-0 write, act 8 */
+  assert(mr.act.id == 8u);
+  match_frame_act8_sweep(&mr);
+  assert(mr.state.phase == 3u);                             /* the deferred sit-2 arm */
   assert(mr.entities.team[0].records[1].code == 0x10u);     /* ball 1 ^ 1 = 0 */
   assert(mr.corner_count[0] == 0u && mr.corner_count[1] == 0u);
 
@@ -5947,7 +5990,7 @@ int main(void) {
   test_goal_phase2_write_clears_arm();
   test_set_piece_queue_ids();
   test_set_piece_bx_fallback();
-  test_phase_1E_compressed_model_pin();
+  test_phase_1E_decompressed_pin();
   test_set_piece_phase_arm_codes();
   test_taker_armed_rows_resolve();
   test_corner_counter_side_swap();

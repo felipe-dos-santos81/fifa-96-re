@@ -111,12 +111,13 @@ static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
  * 0x21 (act-0xB extra-time-clear) is wired/counted (FU-195 §6.1), the T4 row
  * 0x22 (act-0xC extra-time-SET) is wired/counted (FU-211; the live extra-time
  * flag producer T1/FU-213 installs act 0xC), and the M2 phase-20 T2 row 0x10 is
- * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6130`). */
+ * wired/counted (FU-222; the live phase-0x1D arm-0 writer `match_run.c:6130`).
+ * The M2 phase-23 T4 row 0x1E (act-8 restart sweep) is wired/counted (FU-241). */
 static const int phase_expect[FIFA96_MATCH_PHASE_ROWS] = {
     /* 00 */ FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP,
     /* 14 */ UNSUP, FIFA96_OK, NOTF,  FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, UNSUP, UNSUP, FIFA96_OK,
-    /* 1E */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1D = T2 sit-8/act-7 route (FU-208/209); 0x20 = T3 situation-0 (FU-202); 0x21 = T6 act-0xB (FU-195); 0x22 = T4 act-0xC ET-set (FU-211) */
+    /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x1E = M2 phase-23 T4 act-8 restart sweep (FU-241, de-compressed BX!=0); 0x1F/0x20/0x21/0x22 as before (FU-202/FU-195/FU-211) */
 };
 
 struct fixture {
@@ -369,6 +370,11 @@ static void test_action_10_runs_throw_in_body(void) {
   f.mr.sp_157821 = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);  /* stage 2 */
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  /* FU-241 (phase-23 T4): the stage-4 BX=1 situation-2 re-queue now dispatches
+   * act 8; drive the sweep to its terminal so the deferred phase-3 arm runs */
+  assert(f.mr.act.id == 8u && f.mr.state.phase == 0u);
+  for (int k = 0; k < 22; k++)
+    assert(fifa96_match_action_phase_1E(&f.mr) == FIFA96_OK);
   assert(f.mr.state.phase == 3u);          /* situation 2 -> phase 3 */
   assert(f.mr.entities.team[0].records[8].code == 0x10u);  /* the fresh arm */
   f.mr.sp_157821 = 0;

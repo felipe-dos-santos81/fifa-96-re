@@ -3143,18 +3143,19 @@ int fifa96_match_run_set_piece(struct fifa96_match_run *mr, uint8_t situation,
   }
   /* 0x8AA7B: the direct path. */
   if (bx != 0u) {
-    /* 0x8AA80..0x8AAA3: FUN_000740A0(0, 0) then the act-8 replay bytes, then
-     * act 8's tail (0x8A8A5..0x8A8DE): re-dispatch the stored situation/side
-     * with BX=0 and leave [0x15882B] = 0xFF. The act-8 (phase-0x1E) timeline
-     * stages around the re-dispatch stay unported (FU-149 L6), so the port
-     * compresses them to the re-dispatch call. */
+    /* FU-241 §6.3 (M2 phase-23 T4): 0x8AA80..0x8AAA3 — FUN_000740A0(0, 0), the
+     * stored side/situation, then the act-8 INVOKE-NOW (`0x8AAA3 JMP 0x8AF1A`
+     * -> `CALL 0x888FC` with EAX=8, EBX=1, EDX=0). The engine now de-compresses:
+     * it dispatches act 8, whose phase-0x1E sweep (0x8A798) resets its cursor,
+     * sweeps one record per granted frame for ~22 frames, and only at its
+     * stage-2 terminal (0x8A8CE) re-dispatches the stored situation/side (BX=0)
+     * and clears [0x15882B]. The former in-frame re-dispatch and immediate
+     * [0x15882B]=0xFF are therefore deferred to the sweep terminal. */
     mr->store_15882c = side;
     mr->store_15882b = situation;
     rc = match_run_write_phase(mr, 0u);
     if (rc != 0) return rc;
-    rc = fifa96_match_run_set_piece(mr, mr->store_15882b, mr->store_15882c, 0u);
-    mr->store_15882b = 0xFFu;
-    return rc;
+    return fifa96_match_act_dispatch(mr, 8, 0, 1);
   }
   /* 0x8AAA8..0x8AB7A: the BX==0 table-2 route. The native sit 2..4
    * [0x157B8E]/[0x157B8F] formation-order gate + act-4 arm (0x8AB08..0x8AB62)
@@ -6341,12 +6342,14 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
   }
 }
 
-/* FU-194 §4/§6.2 (M2 phase-17 T5): the phase-0x1E / act-8 row body — the native
- * 2-team x 11-record restart sweep `0x8A798` (stages 0/1/2). Its phase-table
- * slot stays NULL/uncounted: the engine already models the act-8 fallback as a
- * *compressed* stored-situation re-dispatch (`fifa96_match_run_set_piece`, BX!=0),
- * so registering the full sweep would de-compress a tape-visible derivation
- * (FU194-L2). Head: no timer add (the native head reads the stage directly,
+/* FU-241 §6.3 (M2 phase-23 T4; formerly FU-194 §4/§6.2): the phase-0x1E / act-8
+ * row body — the native 2-team x 11-record restart sweep `0x8A798` (stages
+ * 0/1/2). Its phase-table slot is now REGISTERED/COUNTED (the de-compression):
+ * `fifa96_match_run_set_piece`'s BX!=0 branch dispatches act 8 invoke-now, whose
+ * clock-tail tick drives this row; the former compressed in-frame re-dispatch is
+ * retired. FU-241 §6.1/§6.2 proves the sweep render-invisible and dormant on M2
+ * (no state=3), so no presented frame moves. Head: no timer add (the native head
+ * reads the stage directly,
  * 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor and falls into stage 1;
  * stage 1 (0x8A7D6) sweeps one record per call and, on a record with
  * `code [rec+0x91] == 0xC`, `byte[rec+0x99] != 0`, `byte[rec+0x9A] == 0`,

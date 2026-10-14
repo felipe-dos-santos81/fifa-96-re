@@ -1872,3 +1872,42 @@ the fold/id writes are dropped (not faked). The row-15 action-table evidence str
 action + 22 phase`; `floor(100 × 57/80) = 71`; README title `71%`; `action_wired ==
 35u` pins (`test_engine_m2.c`); `AGENTS.md:90` and the headers' census surfaces
 synced. `make check` green.
+
+## M2 phase-23 T4 — phase 0x1E (the restart-sweep de-compression, FU-241)
+
+**Census `57/80 = 71%` → `58/80 = 72%` (`35 action + 23 phase`).** FU-241 §6.3
+lifts the FU-212 compressed act-8 model, which the engine had kept deliberately
+(`fifa96_match_run_set_piece` `BX!=0` in-lined the stored-situation re-dispatch in
+the same frame, and `fifa96_match_phase_table[0x1E]` stayed NULL). The
+re-derivation (§6.1/§6.2, fresh first-hand) proves the faithful 22-record sweep
+`0x8A798` is a **timing-only** delta: it is **render-invisible** — its whole
+per-record effect is a selected-pointer store into `[0x1587F0]` plus the
+`0x4C374` `word[0x157A68]` clear (`0x4C374` ignores its `EAX=0x19`; **no record's
+code is rewritten**, FU194-L3 / the FU-212-E1 erratum) — and **dormant on M2**
+(the golden has no `state=3`, so no tape frame enters the compressed `bx!=0`
+path).
+
+T4 **registers** the phase-`0x1E` slot (`fifa96_match_action_phase_1E`) and
+**re-routes** the `BX!=0` branch to `fifa96_match_act_dispatch(mr, 8, 0, 1)` (the
+native `0x8AAA3 JMP 0x8AF1A CALL 0x888FC(8,0,BX=1)`) after the phase-0 write; the
+immediate `store_15882b = 0xFF` is removed (now the sweep's stage-2 terminal
+`0x8A8D3`). The row is **COUNTED** (an honest +1).
+
+**Tape-inert (cmp-verified):** M2 `b281a9b2…` (6522) and M1 `09b726b7…` are
+**byte-identical**; `./build/test_engine_m1 | cmp - …` and the M2 equivalent both
+pass. The de-compression defers the bx=1-driven stored-situation hand-offs (the
+goal_scan throw-in, the set-piece stage-4 re-queue, the phase-`0x1A`/`0x1C`
+terminals, `ref_apply`, the referee restart decision) by ~22 granted frames; the
+affected unit tests (`test_engine_match_frame.c`, `test_engine_match_act.c`,
+`test_engine_match_handlers.c`) were re-expressed with `match_frame_act8_sweep`
+to drive the sweep to its terminal — no fake in-frame arming.
+
+**Residual legs:** **FU241-L1** (non-tape compression equivalence on the bx=1
+paths above), **FU241-L2** (`word[0x157A68]`; FU194-L4), **FU241-L3** (act-slot
+residency across the sweep), **FU241-L4** (the `+0x99` selection predicate),
+**FU241-L5** (the stage-2 re-dispatch target), **FU241-L6** (the `0x8A8E0` BX==0
+table), **FU241-L7** (the stale FU-212 §6.2 golden anchor). **Census
+recomputed:** `58 OK = 35 action + 23 phase`; `floor(100 × 58/80) = 72`; README
+title `72%`; `action_wired == 35u` / `phase_wired == 23u` pins
+(`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
+synced. `make check` **110/110**.

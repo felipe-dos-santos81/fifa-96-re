@@ -1645,13 +1645,14 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
  * or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
 
-/* FU-194 §4/§6.2 (M2 phase-17 T5): the phase-0x1E / act-8 row body — the native
- * 2-team x 11-record restart sweep `0x8A798`. Its phase-table slot
- * (`fifa96_match_phase_table[0x1E]`) is **NULL** — the row is not counted —
- * because the engine already models the act-8 fallback as a *compressed*
- * stored-situation re-dispatch (`fifa96_match_run_set_piece` BX!=0,
- * `match_run.c:2931-2944`), so registering the full sweep would de-compress a
- * tape-visible derivation (FU194-L2). Head: **no** timer add (the native head
+/* FU-241 §6.3 (M2 phase-23 T4; formerly FU-194 §4/§6.2): the phase-0x1E / act-8
+ * row body — the native 2-team x 11-record restart sweep `0x8A798`. Its
+ * phase-table slot (`fifa96_match_phase_table[0x1E]`) is now REGISTERED/COUNTED
+ * (the de-compression): `fifa96_match_run_set_piece` BX!=0 dispatches act 8
+ * invoke-now instead of the former compressed in-frame re-dispatch, and the
+ * clock-tail tick drives this row. FU-241 §6.1/§6.2 proves the sweep
+ * render-invisible + dormant on M2 (no state=3), so no presented frame moves.
+ * Head: **no** timer add (the native head
  * reads the stage directly, 0x8A79B). Stage 0 (0x8A7B2) resets the walk cursor
  * (`act8_team`/`act8_record`) and falls into stage 1; stage 1 (0x8A7D6) sweeps
  * one record per call — team 0 records 0..10 then team 1 — clears

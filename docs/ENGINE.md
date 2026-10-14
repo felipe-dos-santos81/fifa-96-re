@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-57/80 dispatch rows wired (35 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1F, 0x21, 0x20, 0x22
+58/80 dispatch rows wired (35 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,8 +265,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **57/80 rows wired** (35 action + the phase rows
-  `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **58/80 rows wired** (35 action + the phase rows
+  `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1E`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -1445,6 +1445,28 @@ the build also produces the windowed `fifa96` target (`make game`).
   numbered legs). Tape-dormant (`b281a9b2…` unmoved). **Residual legs:** the
   radius-`0xC0` `[rec+0x8A]` fold, the `[0x1587B8]`/`[0x1587BB]` id tables and the
   `0x741B4`/`0x651F0` sinks are **FU243-L4** (the write is dropped, not faked).
+- **M2 phase-23 T4 (FU-241) — the phase-`0x1E` restart-sweep de-compression;
+  census `57/80 → 58/80 = 72%`.** FU-241 §6.3 lifts the FU-212 compressed act-8
+  model: `fifa96_match_run_set_piece`'s `BX!=0` branch now dispatches act 8
+  invoke-now (`fifa96_match_act_dispatch(mr, 8, 0, 1)`; the native `0x8AAA3 JMP
+  0x8AF1A CALL 0x888FC(8,0,BX=1)`) instead of the in-frame stored-situation
+  re-dispatch, and the phase-`0x1E` slot is registered — the row is **COUNTED**
+  (an honest +1). The 22-record sweep defers the stored-situation/side
+  re-dispatch (`0x8A8CE`) ~22 granted frames to its stage-2 terminal. FU-241
+  §6.1/§6.2 (fresh first-hand) proves it **render-invisible** (stores a selected
+  pointer into `[0x1587F0]`, clears `word[0x157A68]`; never rewrites a record
+  code) and **dormant on M2** (the golden has no `state=3`, so no tape frame
+  enters the `bx!=0` path). **Golden unmoved:** M2 `b281a9b2…` and M1
+  `09b726b7…` byte-identical (cmp-verified). The de-compression defers the
+  bx=1-driven hand-offs (goal_scan throw-in, set-piece stage-4 re-queue,
+  phase-`0x1A`/`0x1C` terminals, ref/foul `ref_apply`, referee restart decision);
+  the affected unit tests were re-expressed to drive the sweep to its terminal.
+  **Residual legs:** **FU241-L1** (non-tape compression equivalence — the
+  deferral on those non-tape paths), **FU241-L2** (`word[0x157A68]`, FU194-L4),
+  **FU241-L3** (act-slot residency across the sweep), **FU241-L4** (the `+0x99`
+  selection predicate), **FU241-L5** (the stage-2 re-dispatch target), **FU241-L6**
+  (the `0x8A8E0` BX==0 table), **FU241-L7** (the stale FU-212 golden anchor).
+  `make check` **110/110**.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

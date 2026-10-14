@@ -430,10 +430,13 @@ static void test_phase_1A_install(void) {
 }
 
 /* Phase 0x1A stage 1 terminal (0x897AE): clear the act slot and re-dispatch the
- * stored situation/side (the 0x8AB45/0x8AB50 cells) with BX=1. Mutation-RED: a
- * missing re-dispatch leaves the act slot cleared and the phase unwritten. */
+ * stored situation/side (the 0x8AB45/0x8AB50 cells) with BX=1. FU-241 (M2
+ * phase-23 T4) de-compresses the BX=1 fallback, so the act slot is now act 8 and
+ * the stored-situation re-dispatch is deferred to the act-8 sweep terminal.
+ * Mutation-RED: a missing re-dispatch leaves the stored situation uncleared. */
 static void test_phase_1A_end_block(void) {
   struct fifa96_match_run mr;
+  int k;
   fifa96_match_run_init(&mr);
   mr.act.id = 4;
   mr.act.stage = 1;
@@ -441,7 +444,13 @@ static void test_phase_1A_end_block(void) {
   mr.store_15881e = 9u;                /* the stored situation */
   mr.store_158820 = 0u;                /* the stored side */
   assert(fifa96_match_action_phase_1A(&mr) == FIFA96_OK);
-  assert(mr.act.id == 2u);             /* the sit-9 re-dispatch installed act 2 */
+  assert(mr.act.id == 8u);             /* FU-241: the BX=1 fallback dispatches act 8 now */
+  assert(mr.state.phase == 0u);        /* the phase-0 write; the sit-9 arm is deferred */
+  /* drive the sweep to its stage-2 terminal: the deferred sit-9 -> act-2 arm lands */
+  for (k = 0; k < 21; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);  /* terminal */
+  assert(mr.act.id == 2u);             /* the deferred sit-9 re-dispatch installed act 2 */
   assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
 }
 
@@ -478,11 +487,18 @@ static void test_phase_1C_stage0(void) {
  * the act slot installed and the phase unwritten. */
 static void test_phase_1C_terminal(void) {
   struct fifa96_match_run mr;
+  int k;
   fifa96_match_run_init(&mr);
   mr.act.id = 6;
   mr.act.stage = 2;
   assert(fifa96_match_action_phase_1C(&mr) == FIFA96_OK);
-  assert(mr.act.id == 2u);             /* the sit-9 re-dispatch installed act 2 */
+  /* FU-241 (phase-23 T4): the BX=1 sit-9 re-dispatch is de-compressed — act 8 is
+   * armed and the sit-9 -> act-2 arm is deferred to the sweep terminal. */
+  assert(mr.act.id == 8u);
+  assert(mr.state.phase == 0u);
+  for (k = 0; k < 22; k++)
+    assert(fifa96_match_action_phase_1E(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2u);             /* the deferred sit-9 re-dispatch installed act 2 */
   assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
 }
 
@@ -493,9 +509,11 @@ static void test_phase_1C_terminal(void) {
  * T2, phase 0x1D is REGISTERED and COUNTED: the T1 period-index roll
  * (`mr->global_157ac2 == 4`) drives the mode-0 sit-8 selector in `phase_drive`,
  * which installs act 7, and the live clock-tail act tick dispatches this body
- * (see `test_engine_match_frame.c`). Phase 0x1E stays UNCOUNTED (slot NULL): the
- * engine models the act-8 fallback as a *compressed* stored-situation
- * re-dispatch (FU194-L2). Phase 0x1D was one coupled unit with action row 0x20
+ * (see `test_engine_match_frame.c`). Phase 0x1E is now REGISTERED and COUNTED
+ * (FU-241 §6.3, M2 phase-23 T4): the `set_piece` BX!=0 fallback is de-compressed
+ * to dispatch act 8 invoke-now, whose clock-tail tick drives the phase-0x1E sweep
+ * (see `test_phase_1E_counted` and the sweep tests below). Phase 0x1D was one
+ * coupled unit with action row 0x20
  * (arm 0 carries the row-0x20 installer `0x899a2`), which is now wired (M2
  * phase-20 T3/T4, FU-217/FU-220). */
 
@@ -593,13 +611,15 @@ static void test_phase_1D_arm0_installs_row_20(void) {
   assert(mr.entities.team[0].records[1].code != 0x20u);
 }
 
-/* Phase 0x1E / act 8 (FU-194 §4/§6.2): the body is NOT wired; the dispatcher
- * returns UNSUPPORTED while the body stays reachable by direct call. */
-static void test_phase_1E_not_counted(void) {
+/* Phase 0x1E / act 8 (FU-241 §6.3, M2 phase-23 T4): the body is now COUNTED —
+ * the phase-table slot is registered (the de-compression), so the dispatcher
+ * reaches the body (stage 0 -> 1 on the first call). */
+static void test_phase_1E_counted(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  assert(fifa96_match_phase_table[0x1E].fn == NULL);
-  assert(fifa96_match_dispatch_phase(&mr, 0x1Eu) == -FIFA96_ERR_UNSUPPORTED);
+  assert(fifa96_match_phase_table[0x1E].fn == fifa96_match_action_phase_1E);
+  assert(fifa96_match_dispatch_phase(&mr, 0x1Eu) == FIFA96_OK);
+  assert(mr.act8_team == 0u && mr.act8_record == 1u);  /* stage 0 -> 1 swept one */
 }
 
 /* Phase 0x1E stage 0 -> 1 (0x8A7B2/0x8A7D6): reset the walk cursor and sweep
@@ -961,7 +981,7 @@ int main(void) {
   test_phase_1D_wait_whistle();
   test_phase_1D_terminal();
   test_phase_1D_arm0_installs_row_20();
-  test_phase_1E_not_counted();
+  test_phase_1E_counted();
   test_phase_1E_sweep_selects();
   test_phase_1E_sweep_completes();
   test_phase_1E_terminal();
