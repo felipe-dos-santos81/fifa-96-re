@@ -253,6 +253,26 @@ git commit -m "feat(engine): the match-over screen dwell + the front-end return 
 
 ---
 
+### Task 4b: The ET re-arm bound + the ET-over dwell (the run reaches the ET-over terminal)
+
+**Authority (phase-22b recon, `t4b-recon/g1..g8`):** at *each* ET-half completion the native chooser writes phase `0x13`/`0x14` + act `0xC` and rolls `[0x157AC2]` (2→3→4); the sit-8 re-arm fires **only post-ET (index 4)** — never during the ET halves (G1/G8). The ET-over terminal is `phase 0x13/0x14` → dwell `word[0x158818] > 0x4B0` → `word[0x158822]=2` + latch `[0x10F360]` (G2). **FU-232-L6 closed (G3):** the ET-over consume is self-terminating — it clears the word (`0x4B29B`) and the loop resumes; no over-screen.
+
+**Files:**
+- Modify: `src/fifa96_engine/fifa96_match_run.c` (`:4215-4217` the re-arm guard; `:4237-4238` the dwell accrual; the comments `:4202-4236`).
+- Test: `tests/test_engine_match_completion.c`, `tests/test_engine_match_frame.c`.
+
+**Interfaces:**
+- Consumes: `fifa96_match_run_period_over_rearm` (T1), `mr->end_word_158822` (T2/T3), the terminal dwell (T4).
+- Produces: after the ET-half-2 (index 3) completion the engine reaches phase `0x13`/`0x14`, the dwell accrues `act.timer > 0x4B0`, word `2` stages → the T3 consume → the resume.
+
+- [ ] **Step 1: Failing test** — the live run reaches the ET-over (`end_word_158822 == 2u` then consumed to `0u`), not the `period 5 / phase 2` hold.
+- [ ] **Step 2: Run — expect fail** (the period-5 hold).
+- [ ] **Step 3: Implement** — (a) bound the guard `global_157ac2 >= 2u` → `(global_157ac2 == 2u || global_157ac2 == 3u)` so the re-arm stops firing after the ET-half-2; (b) extend the dwell accrual to phase `0x13`/`0x14` (native `0x8BCFE`) so `act.timer` passes `0x4B0` and word `2` stages. Keep FU239-L1 (the `0x13/0x14 → phase 2` route) a leg.
+- [ ] **Step 4: Run — expect pass.**
+- [ ] **Step 5: Commit** `fix(engine): the ET re-arm bound + the ET-over dwell (the run reaches the terminal)`.
+
+---
+
 ### Task 5: The M2 tape extension v21→v22 (+ the re-pin)
 
 **Authority:** FU-238 §2.2/§2.5, the fact sheet `t6a`/`t6b`. Additive: the v21 2522-prefix stays byte-identical; expected `N ≈ 3000–4500`.
@@ -262,8 +282,10 @@ git commit -m "feat(engine): the match-over screen dwell + the front-end return 
 - Modify: `tests/golden/engine/m2-frames.txt` (re-pin).
 
 **Interfaces:**
-- Consumes: T1–T4 (the live ET half + the terminal + the return).
+- Consumes: T1–T4b (the live ET half + the terminal + the return).
 - Produces: the v22 golden (a new sha) + `m2_result{et_half2_step, et_terminal_step, et_over_step, return_step}`.
+
+**Two terminals (controller ruling).** The forced-ET tape reaches only the **ET-over consume** (word `2`, then the resume — no over-screen, FU-232-L6). The **regulation-over** (`word 1` → the OVER screen → the front-end return) needs the ET flag **clear** (a not-differing regulation end), so it is **off the forced-ET tape** and is covered by a **second scenario/fixture** (`run_regulation_over_probe`: seed `global_157ac0 = 0` at the regulation terminal, assert `end_word == 1u` → `should_mark_over` → the OVER screen → the FRONTEND return), not the tape.
 
 - [ ] **Step 1: Extend the tape + the stop.** Add the directives `M2_M_ET_HALF2` / `M2_M_ET_TERMINAL` / `M2_M_ET_OVER` / `M2_M_RETURN` + `M2_POST_RETURN_FRAMES 20` (per FU-238 §2.2), and replace the `M2_POST_PERIOD_END_FRAMES`-past-ET-entry stop with the return-window break (t1-facts §3). Raise `M2_STEP_CAP` to the measured `N` and `M2_TRANSCRIPT_CAP` to `1u << 24`.
 - [ ] **Step 2: Record + assert the anchors** — the ET half completes → the terminal (`end_word_158822 == 2u`) → the ET-over → the return (`exit_step > 0`). Flip `assert(res.exit_step < 0)` → `> 0` (`:4349`) and the additivity gate constant `792` → `2522` (`:4561-4589`).
