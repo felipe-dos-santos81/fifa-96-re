@@ -1,7 +1,6 @@
 # W26-1 / FU-264 — the open-play camera-Y producer (the visible anchor)
 
-Draft for phase-26 recon wave W26, task 1 (FU-264). Promotes to
-`docs/ghidra/FU264_camera_y_producer.md`.
+Promoted canonical slice — phase-26 recon wave **W26-1** (FU-264); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**.
 
 Authoritative program **`/FIFA96.EXE`** (Ghidra MCP; explicit case-sensitive
 program argument; scripts disabled; standard tools only). Every address/byte
@@ -40,7 +39,7 @@ natural producer but **dispatch-dead** (R11-L4).
 `[0x157750]` is the shared **camera-Y / ball-height proxy** (the FU-71 triple
 is `0x15774C = x`, `0x157750 = y`, `0x157754 = z`; carried FU-71/FU-97/FU-157
 §1). The engine maps it to `fifa96_camera.pos_y`
-(`src/fifa96_loader/fifa96_camera.h`). It is the same `dword` the kick band
+(`include/fifa96_loader/fifa96_camera.h`). It is the same `dword` the kick band
 (`d = ball_height - height`), the BF20 record-event tail gate, the row-04
 half-line admission, the row-0E pan window and the height-table gate read.
 

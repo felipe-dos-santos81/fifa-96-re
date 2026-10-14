@@ -254,16 +254,16 @@ registered (`handlers.c:5629`); see §2(c)/the erratum.
 | terminal | engine today | ruling |
 |---|---|---|
 | **`0x8A8CE`** | the engine **now de-compresses** the act-8 route (`src/fifa96_engine/fifa96_match_run.c:3144-3157`): the `set_piece` `bx != 0` branch writes phase 0 (`match_run_write_phase(mr, 0u)`), stores `store_15882c/b`, then `return fifa96_match_act_dispatch(mr, 8, 0, 1);` — the native `0x8AAA3 JMP 0x8AF1A CALL 0x888FC(8,0,BX=1)` invoke-now. The phase-`0x1E` slot is **registered/counted**: `fifa96_match_handlers.c:5629 {0x1E, fifa96_match_action_phase_1E, "FU-241 §6.3 (M2 phase-23 T4): … is now COUNTED (+1)"}`; phase `0x1E` is in the **59/80** wired set (`docs/ENGINE.md:8`). `0x8A8CE` = the sweep's **stage-2 terminal**, and the former in-frame re-dispatch + immediate `[0x15882B]=0xFF` are **deferred ~22 granted frames** to it | **LIVE (Layer 1, engine-reach)** — the act-8 sweep is dispatched invoke-now on the live `bx!=0` route; it is render-invisible (stores a pointer + clears `word[0x157A68]`, rewrites no record) and **dormant on M2** (no `state=3`; golden byte-unchanged). Re-scoped residual: FU267-L2 |
-| **`0x8B85D`** | `fifa96_match_action_phase_20` is **registered/counted** (phase-17 T2); its stage-2 terminal re-dispatches situation 1 (`handlers.c` phase-0x17 comment: "native `0x8B85D` … the producer is LIVE") | **LIVE** — the phase-0x20 terminal fires on the live kickoff route (act 1 → phase 0x17), proven headlessly (FU-193/FU-203). This is the **sit-1** producer, not 0xB. |
+| **`0x8B85D`** | `fifa96_match_action_phase_20` is **registered/counted** (FU-188 §2/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3)); its stage-2 terminal re-dispatches situation 1 (`handlers.c` phase-0x17 comment: "native `0x8B85D` … the producer is LIVE") | **LIVE** — the phase-0x20 terminal fires on the live kickoff route (act 1 → phase 0x17), proven headlessly (FU-193/FU-203). This is the **sit-1** producer, not 0xB. |
 
 **Net:** **both** terminal re-dispatches are live — `0x8A8CE` (the act-8 sweep's
 stage-2 terminal, live on the `bx!=0` route after the FU-241 §6.3 de-compression)
 and `0x8B85D` (the act-0xA terminal, sit 1 → the kickoff). The `0x8A8CE` sweep is
 render-invisible and tape-dormant, so no golden/tape change and no census move.
 The earlier "engine compresses / phase-`0x1E` NULL" premise (FU-241 §5.2) is
-**superseded** — see §2c erratum below.
+**superseded** — see §2d erratum below.
 
-### 2(c) erratum — the de-compression is landed (fix round 1)
+### 2(d) erratum — the de-compression is landed (fix round 1)
 
 > The original §2(c) (and `§4.1` item 4 / `FU267-L2`) asserted that the engine
 > **compresses** the act-8 route and that "the phase-`0x1E` slot stays NULL

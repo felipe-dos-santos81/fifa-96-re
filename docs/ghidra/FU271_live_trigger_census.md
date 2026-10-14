@@ -1,7 +1,6 @@
 # W26-8 / FU-271 — the live-trigger census (cross-cutting)
 
-Draft for phase-26 recon wave W26, task 8 (FU-271). Promotes to
-`docs/ghidra/FU271_live_trigger_census.md`.
+Promoted canonical slice — phase-26 recon wave **W26-8** (FU-271); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**.
 
 Authoritative program **`/FIFA96.EXE`** (Ghidra MCP; explicit case-sensitive
 program argument; scripts disabled; standard read tools only). Every
@@ -20,12 +19,12 @@ phase-7 gating cell, the live engine path that raises it, and whether it is
 **interactively reachable (smoke)** vs **granted-frame-only (headless Layer 1)**
 — the map that sizes the Stage-2 plan and anchors the visible acceptance.
 
-**Result in one line.** **Two unconditional per-frame producers** — `[0x157AC0]`
-(the clock period-end `phase_drive`) and the **set-piece scanner** (`goal_scan` →
-sit 2/3/4, live **iff** its `goal_armed` raiser fires, FU271-L6) — **plus** the
-**dispatch-reached row-04 outfield `0x0B` duel** (structurally live but unproven
-end-to-end: **LIVE-LEG**, FU268-L1) are the only phase-7 producers reachable on a
-live engine path; all are **granted-frame/rare-trigger only, none
+**Result in one line.** **Two per-frame producers** — `[0x157AC0]`
+(the clock period-end `phase_drive`, unconditional) and the **set-piece scanner**
+(`goal_scan` → sit 2/3/4, conditional on its `goal_armed` raiser — FU271-L6) —
+**plus** the **dispatch-reached row-04 outfield `0x0B` duel** (structurally live
+but unproven end-to-end: **LIVE-LEG**, FU268-L1) are the only phase-7 producers
+reachable on a live engine path; all are **granted-frame/rare-trigger only, none
 smoke-reachable**. The camera cells `[0x157750]`/`[0x1577CA]` are **starved**
 (ported but no live event), and `ref_machine`/`replay.state`/`overlay.armed`/
 `sub.active`/`ball_row` are **fixture/front-end-only** (no live engine raiser).

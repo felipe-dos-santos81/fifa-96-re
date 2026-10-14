@@ -1,7 +1,6 @@
 # W26-7 / FU-270 — the replay / overlay / sub-strip live producers (FU-152)
 
-Draft for phase-26 recon wave W26, task 7 (FU-270). Promotes to
-`docs/ghidra/FU270_replay_overlay.md`.
+Promoted canonical slice — phase-26 recon wave **W26-7** (FU-270); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**.
 
 Authoritative program **`/FIFA96.EXE`** (Ghidra MCP; explicit case-sensitive
 program argument; scripts disabled; standard read-only tools only). Every

@@ -1,7 +1,6 @@
 # W26-5 / FU-268 — the fouls/offside producers + the extra-time flag
 
-Draft for phase-26 recon wave W26, task 5 (FU-268). Promotes to
-`docs/ghidra/FU268_fouls_offside_extratime.md`.
+Promoted canonical slice — phase-26 recon wave **W26-5** (FU-268); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**.
 
 Authoritative program **`/FIFA96.EXE`** (Ghidra MCP; explicit case-sensitive
 program argument; scripts disabled; standard read-only tools only). Every
