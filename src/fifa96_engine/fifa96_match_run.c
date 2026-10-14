@@ -2571,6 +2571,22 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr) {
  * machine FUN_0008BAF0 and the FUN_0004B02C(0)/FUN_00088860 kickoff reset stay
  * unported (FU-143 §4/§5), so the engine lifecycle owns the exit; the
  * 0x0C -> 0 reset is the run_end teardown. */
+/* FU-235 §1.2/§4 + FU-236 §1.1/§2.2 (M2 phase-22 T4): the phase-0xC
+ * match-over screen dwell. The native phase-0xC block (`FUN_0008BAF0`
+ * `0x8BC01`) holds the screen while the end/act timer `word[0x158818]`
+ * accrues (`0x8BC13`) and writes the end word only at the terminal
+ * (`0x8BCD9`); the period-over re-arm (native `FUN_0004B02C(0)` ->
+ * `FUN_00088860`, the sit-1/sit-8 dispatcher) is withheld while the screen
+ * dwells, so the class-0 phase `0x0C` persists across frames. Active iff the
+ * flag-clear terminal holds phase `0x0C` at the regulation/ET-half indices
+ * (`global_157ac2` 2/3), the regulation match-over screen (FU-236 §2.2). The
+ * half-time phase-`0x0C` flash (`global_157ac2 == 1`) is not a terminal and the
+ * post-extra-time `global_157ac2 == 4` phase-`0x0C` is the sit-8 re-kickoff
+ * (FU-217/FU-208, `0x888C8`) — both are unaffected (no suppression). */
+static int match_run_terminal_dwelling(const struct fifa96_match_run *mr) {
+  return mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u &&
+         (mr->global_157ac2 == 2u || mr->global_157ac2 == 3u);
+}
 /* FU-213 §2.4/§2.5/§7 (M2 phase-19 T1): the comment above is SUPERSEDED in
  * part, not rewritten. The chooser no longer receives the hardwired
  * `extra_time = 0u`: the score tie-break now produces the native OL-85 flag
@@ -2600,7 +2616,8 @@ int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
    * ([0x157A4F]) on EVERY call now — that pervasive clear is intended and
    * native-faithful (the prefix is part of the every-frame FUN_0004B02C
    * body), not drift. */
-  (void)fifa96_match_run_period_setup(mr, 0);
+  if (!match_run_terminal_dwelling(mr))
+    (void)fifa96_match_run_period_setup(mr, 0);
   /* One-shot: the staged completion belongs to the latest granted frame. */
   ended = mr->clock_period_ended;
   mr->clock_period_ended = 0;
@@ -4168,6 +4185,22 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * runs the derived selector-0 chooser (2 -> 0x0C) on this frame. */
     rc = fifa96_match_run_phase_drive(mr);
     if (rc < 0) return rc;
+    /* FU-239 §1/§3/§4 + FU-235 §1.4 (M2 phase-22 T4): the extra-time-entry
+     * screen dwell + the live re-arm. The chooser parks the ET entry in the
+     * class-0 phase `0x13`/`0x14` and installs the act-`0xC` screen (`0x8B900`,
+     * the three-stage timer); the ET-entry screen holds until that screen's
+     * cycle completes (the act slot clears, `0x8B9B3`/`0x8B9BF`), then the
+     * period-over re-arm lands the live half in the class-1 play phase `2`
+     * (FU-239 §3: the only class-1 phase with a static writer). The exact
+     * native route `0x13/0x14 -> 0x0C -> sit-8 -> phase 2` is FU239-L1 (the
+     * situation dispatch is indirect); the dwell bound is that act-`0xC`
+     * screen completion, > the v21 20-frame window. Gated on the live ET-entry
+     * state (`global_157ac0 == 1`, `global_157ac2 >= 2` — the differing
+     * regulation end's roll), so a bare phase-`0x13`/`0x14` state (the forced
+     * kickoff window) does not re-arm. */
+    if ((mr->state.phase == 0x13u || mr->state.phase == 0x14u) &&
+        mr->act.id == 0 && mr->global_157ac0 == 1u && mr->global_157ac2 >= 2u)
+      fifa96_match_run_period_over_rearm(mr);
     /* FU-145 S2 (0x8B63E): the native clock tail FUN_0008AF38 calls the goal
      * scanner FUN_00088940 after the period-end handling; the derived scan
      * carries the phase/armed gate and queues situation 6 (or the wired
@@ -4180,6 +4213,15 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * stages. Runs after the goal scan, before the scene staging, so the
      * frame draws the advanced record. */
     match_run_ball_machine(mr);
+    /* FU-235 §1.1/§4 (0x8BC13, M2 phase-22 T4): the phase-`0xC` terminal
+     * dwell. While the match-over screen holds phase `0x0C` and no act is
+     * installed, the end machine accrues the end/act timer `word[0x158818]`
+     * by the frame delta (`0x8BC0A CMP dword[0x158808],0 ; JNZ 0x8BC20` skips
+     * the accumulate when an act is installed). The accrued timer is what lets
+     * the staged end word reach `>= 0x78` and the `mark_over` screen dwell
+     * past `0x168` below. */
+    if (mr->state.phase == 0x0Cu && mr->act.id == 0)
+      mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta);
     /* FU-231 §3 (M2 phase-22 T2): the FUN_0008BAF0 end machine — the native
      * clock-tail call at `0x8B664` (after the period/goal block, before the
      * act tick at `0x8B669`). Stage the end word `[0x158822]` once. The
@@ -4221,11 +4263,20 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
    * intentionally EXCLUDES the `==2` extra-time-over event (`0x8BD8A`/
    * `0x8BDD4`) — that exclusion is by record, not drift (FU228-L4 leg). The
    * ordering guard is retained: a staged request_exit must not be clobbered by
-   * EXIT->OVER (a staged EXIT wins). */
+   * EXIT->OVER (a staged EXIT wins).
+   * M2 phase-22 T4 (FU-235 §1.2/§4): the tail now also requires the phase-`0xC`
+   * terminal dwell (`mr->act.timer` = `word[0x158818] > 0x168`, the native
+   * no-input terminal gate `0x8BCAC`) — the OVER screen is held through the
+   * dwell, and `period_ended` is dropped because the dwell keeps the terminal
+   * phase `0x0C` across frames (it is no longer a one-frame completion event).
+   * The half-time phase-`0x0C` flash is still excluded (`past_half_time`). The
+   * staged end word (T2, `mr->end_word_158822`) is consumed once it is `1`; T3
+   * collapses the remaining phase-21 `end_word_decided` proxy into it. */
   {
     int past_half_time = (mr->global_157ac2 >= 2u);
     int end_word_decided = (mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u);
-    if (period_ended && past_half_time && end_word_decided &&
+    int over_decided = end_word_decided || (mr->end_word_158822 == 1u);
+    if (past_half_time && over_decided && mr->act.timer > 0x168 &&
         !fifa96_match_lifecycle_should_exit(&mr->lc)) {
       rc = fifa96_match_lifecycle_mark_over(&mr->lc);
       if (rc != 0) return rc;

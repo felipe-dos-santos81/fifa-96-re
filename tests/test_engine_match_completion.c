@@ -16,6 +16,13 @@
  * period exactly. */
 #define TICKS_PER_SECOND 100
 
+/* v22 (M2 phase-22 T4, FU-235 §1.2/§4): after the regulation completion the
+ * phase-0xC match-over screen dwells on the end/act timer `word[0x158818]`
+ * (`mr.act.timer`) and `mark_over` fires only past `0x168` (360). At the
+ * 3-grants-per-10-calls pace and +2 per grant that is ~600 calls plus the
+ * act-0xB entry screen; 2000 is a safe bound. */
+#define DWELL_TICKS 2000
+
 struct fixture {
   fifa96_platform *plat;
   struct fifa96_engine *engine;
@@ -170,7 +177,11 @@ static void test_period_end_resolve_returns_to_frontend(void) {
   assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
+  /* v22 (T4): drive the phase-0xC match-over dwell to the OVER screen. */
+  for (int i = 0; i < DWELL_TICKS && mr.lc.screen != FIFA96_MATCH_SCREEN_OVER; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+  assert(mr.end_word_158822 == 1u);                 /* the staged end word */
   assert(mr.lc.active == 1);
 
   assert(fifa96_match_run_resolve(&mr) == 1);       /* post-exit ran */
@@ -249,11 +260,11 @@ static void test_live_period_end_exits_to_frontend(void) {
   f.engine->match_run.state.phase = 2;   /* class 1: the clock always runs */
 
   int steps = 0;
-  while (f.engine->mode == FIFA96_ENGINE_MODE_MATCH && steps < 3 * TICKS_PER_SECOND) {
+  while (f.engine->mode == FIFA96_ENGINE_MODE_MATCH && steps < 12 * TICKS_PER_SECOND) {
     assert(fifa96_engine_step(f.engine) == 0);
     steps++;
   }
-  assert(steps < 3 * TICKS_PER_SECOND);   /* the loop exits through the engine */
+  assert(steps < 12 * TICKS_PER_SECOND);  /* the loop exits through the engine */
   assert(steps >= TICKS_PER_SECOND);      /* ...after the forced period end */
   assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
   assert(f.engine->match == NULL);
@@ -387,6 +398,9 @@ static void test_mark_over_only_past_half_time(void) {
     assert(mr.state.period == 2u);
     assert(mr.global_157ac2 == 2u);      /* past half-time */
     assert(mr.state.phase == 0x0Cu);     /* the end-word screen */
+    /* v22 (T4): drive the phase-0xC match-over dwell out to OVER. */
+    for (int i = 0; i < DWELL_TICKS && mr.lc.screen != FIFA96_MATCH_SCREEN_OVER; i++)
+      assert(fifa96_match_run_frame(&mr) >= 0);
     assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
   }
 }
@@ -442,6 +456,88 @@ static void test_end_word_arms(void) {
   assert(fifa96_match_run_end_word(&mr) == 0u);
 }
 
+/* v22 (M2 phase-22 T4, FU-235 §1.2/§4): the match-over SCREEN dwell. With the
+ * end word staged, `mark_over` is HELD while the phase-0xC end/act timer
+ * `word[0x158818]` (`mr.act.timer`) is <= 0x168 and fires once it passes — the
+ * native no-input terminal gate (`0x8BCAC CMP EAX,0x168 ; JLE tail`, i.e.
+ * `> 0x168`). Mutation-RED: dropping the `mr->act.timer > 0x168` term fires the
+ * OVER while the timer is still ~0x100 (the held assert aborts); a wrong phase
+ * bound never fires. */
+static void test_mark_over_screen_dwell(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0x0Cu;      /* the phase-0xC match-over screen */
+  mr.state.prev_phase = 2u;
+  mr.state.period = 2u;
+  mr.global_157ac2 = 2u;       /* past half-time (the roll 0x8B58A) */
+  mr.global_157ac0 = 0u;       /* flag clear: the regulation terminal */
+  mr.end_word_158822 = 1u;     /* the end word is set (0x8BCD9) */
+  mr.act.id = 0;               /* no act: the phase-0xC block accrues the timer */
+  mr.act.timer = 0x100;        /* below the terminal gate: HELD */
+
+  /* Held while the end timer is <= 0x168 (the screen is on, not OVER). */
+  for (int i = 0; i < 60; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+    assert(mr.lc.screen == FIFA96_MATCH_SCREEN_ACTIVE);
+  }
+  assert(mr.act.timer <= 0x168);           /* the dwell accrued, still held */
+  assert(mr.end_word_158822 == 1u);        /* the word is staged, not fired */
+
+  /* The frame that passes 0x168 fires the OVER screen. */
+  for (int i = 0; i < DWELL_TICKS && mr.lc.screen != FIFA96_MATCH_SCREEN_OVER; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
+  assert(mr.act.timer > 0x168);            /* fired past the terminal gate */
+}
+
+/* v22 (M2 phase-22 T4, FU-239 §1/§3/§4): the ET-entry screen dwell + the live
+ * re-arm. The chooser parks the ET entry in the class-0 phase `0x13`/`0x14`
+ * and installs the act-`0xC` screen (`0x8B900`); the entry screen holds until
+ * that act clears, then the period-over re-arm lands the live half in the
+ * class-1 play phase `2` (the only class-1 phase with a static writer,
+ * FU-239 §3). Mutation-RED: dropping the re-arm leaves phase `0x13`. */
+static void test_et_entry_dwell_rearm(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.state.period = 2u;
+  mr.state.period_length = 90;
+  mr.state.extra_length = 90;
+  mr.state.phase = 0x13u;      /* the ET-entry screen (the chooser's arm) */
+  mr.global_157ac0 = 1u;       /* the extra-time flag (the differing reg end) */
+  mr.global_157ac2 = 2u;
+  mr.act.id = 0x0Cu;           /* the act-0xC entry screen is installed */
+
+  /* (a) the entry screen holds while the act-0xC screen runs. */
+  for (int i = 0; i < 6; i++) {
+    assert(fifa96_match_run_frame(&mr) >= 0);
+    assert(mr.state.phase == 0x13u);
+  }
+
+  /* (b) the screen completed (the act slot cleared): the re-arm lands phase 2. */
+  mr.act.id = 0;
+  for (int i = 0; i < 6 && mr.state.phase == 0x13u; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
+  assert(mr.state.phase == 2u);            /* the live ET half (FU-239 §3) */
+  assert(fifa96_match_state_phase_class(mr.state.phase) == 1u);
+}
+
+/* v22 (M2 phase-22 T4, FU-234 §4.2/§4.3): the run's return to the front-end.
+ * `fifa96_match_run_end` maps the native leave/teardown
+ * (`[0x105FFC]=4`/`[0x107304]=3`) to the mode switch
+ * (`fifa96_match_run.c:4241`). */
+static void test_run_end_lands_frontend(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_MATCH);
+  assert(fifa96_match_run_end(&mr) == 0);
+  assert(f.engine->mode == FIFA96_ENGINE_MODE_FRONTEND);
+  assert(f.engine->match == NULL);
+  assert(mr.running == 0);
+  drop_fixture(f);
+}
+
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
  * both, add_goal increments one side, invalid sides are rejected without a
  * write, and teardown/begin reset the pair. The original's trigger is the
@@ -488,6 +584,9 @@ int main(void) {
   test_half_time_completion_runs_sit1_kickoff();
   test_extra_time_half_completes();
   test_end_word_arms();
+  test_mark_over_screen_dwell();
+  test_et_entry_dwell_rearm();
+  test_run_end_lands_frontend();
   test_mark_over_only_past_half_time();
   test_score_plumbing();
   puts("test_engine_match_completion OK");

@@ -17,6 +17,14 @@
  * exactly 1000 engine steps: 300/30 = 10 s of match clock. */
 #define STEPS_FOR_10S 1000
 
+/* v22 (M2 phase-22 T4, FU-235 §1.2/§4): the phase-0xC match-over dwell. After
+ * the regulation completion the engine holds the class-0 phase-0x0C screen
+ * while the end/act timer `word[0x158818]` (`mr.act.timer`) accrues; `mark_over`
+ * fires only past `0x168` (360). At the 3-grants-per-10-calls pace and +2 per
+ * grant that is ~600 calls plus the act-0xB entry screen; 2000 is a safe bound
+ * that still trips a mutation (a broken dwell never resolves). */
+#define DWELL_FRAMES 2000
+
 static void test_init_resets_state(void) {
   struct fifa96_match_run mr;
   memset(&mr, 0xAA, sizeof mr);
@@ -91,7 +99,7 @@ static void test_period_end_marks_lifecycle_over(void) {
   mr.state.period_length = 1;
   mr.state.extra_length = 1;
 
-  for (int i = 0; i < 100; i++) {
+  for (int i = 0; i < DWELL_FRAMES; i++) {
     assert(fifa96_match_run_frame(&mr) >= 0);
   }
 
@@ -99,7 +107,11 @@ static void test_period_end_marks_lifecycle_over(void) {
   assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
-  assert(mr.pace.pending == 30);
+  /* v22 (M2 phase-22 T4, FU-235 §1.2/§4): the end word staged and the
+   * match-over screen was held through the phase-0xC terminal dwell. */
+  assert(mr.end_word_158822 == 1u);
+  assert(mr.act.timer > 0x168);
+  assert(mr.global_157ac2 == 2u);
 }
 
 static void test_null_guard(void) {
@@ -253,7 +265,12 @@ static void test_begun_period_end_marks_over(void) {
   assert(mr.state.period == 2);
   assert(mr.state.period_seconds == 0);
   assert(mr.state.total_seconds == 1);
+  /* v22 (M2 phase-22 T4, FU-235 §4): the begin-owned frame body holds the
+   * phase-0xC terminal dwell before `mark_over`; drive it out. */
+  for (int i = 0; i < DWELL_FRAMES && mr.lc.screen != FIFA96_MATCH_SCREEN_OVER; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER); /* mark_over, begun run */
+  assert(mr.end_word_158822 == 1u);                 /* the staged end word (FU-231 §3) */
   assert(mr.lc.active == 1);                        /* not torn down */
   assert(mr.lc.registered == 1);
 
@@ -802,6 +819,9 @@ static void test_phase_drive_begun_end_resets_phase(void) {
   assert(fifa96_match_run_frame(&mr) == 1);      /* 30th grant: period end */
   assert(mr.state.phase == 0x0Cu);               /* derived 2 -> 0x0C */
   assert(mr.state.prev_phase == 2u);
+  /* v22 (T4): the phase-0xC match-over dwell resolves the OVER screen. */
+  for (int i = 0; i < DWELL_FRAMES && mr.lc.screen != FIFA96_MATCH_SCREEN_OVER; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);
   assert(mr.lc.screen == FIFA96_MATCH_SCREEN_OVER);
 
   assert(fifa96_match_run_resolve(&mr) == 1);    /* OVER -> POST -> EXIT -> end */
