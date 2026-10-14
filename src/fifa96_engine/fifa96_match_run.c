@@ -2033,6 +2033,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
+  mr->end_word_158822 = 0;             /* FU-231 T2: no end word yet */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
   mr->actor_1587cc[1] = FIFA96_MATCH_ENTITY_NONE;
@@ -2155,6 +2156,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
+  mr->end_word_158822 = 0;             /* FU-231 T2: fresh end word */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
   mr->actor_1587cc[1] = FIFA96_MATCH_ENTITY_NONE;
@@ -4032,6 +4034,21 @@ static void match_run_ball_machine(struct fifa96_match_run *mr) {
   b->machine_ran = 1;
 }
 
+/* FU-231 §3: the FUN_0008BAF0 end machine. word 1 = regulation-over (the
+ * flag-clear phase-0xC terminal, 0x8BCD9); word 2 = extra-time-over (the
+ * phase-0x13/0x14 dwell past word[0x158818]>0x4B0, 0x8BD8A/0x8BDD4); 0 = none.
+ * The no-ET screen 0x37F54 ([0x105FFC]=5) has no engine cell -> FU-231 leg.
+ * The `[0x158818]` gate is a SIGNED word compare (native `MOV EAX,[0x158816] ;
+ * SAR EAX,0x10 ; CMP EAX,0x4B0 ; JG`), so `mr->act.timer` (int16_t) is compared
+ * signed. */
+uint16_t fifa96_match_run_end_word(const struct fifa96_match_run *mr) {
+  if (!mr) return 0u;
+  if (mr->state.phase == 0x0Cu && mr->global_157ac0 == 0u) return 1u;
+  if ((mr->state.phase == 0x13u || mr->state.phase == 0x14u) &&
+      mr->act.timer > 0x4B0) return 2u;
+  return 0u;
+}
+
 int fifa96_match_run_frame(struct fifa96_match_run *mr) {
   uint32_t pending;
   uint32_t granted;
@@ -4163,6 +4180,18 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * stages. Runs after the goal scan, before the scene staging, so the
      * frame draws the advanced record. */
     match_run_ball_machine(mr);
+    /* FU-231 §3 (M2 phase-22 T2): the FUN_0008BAF0 end machine — the native
+     * clock-tail call at `0x8B664` (after the period/goal block, before the
+     * act tick at `0x8B669`). Stage the end word `[0x158822]` once. The
+     * consumer absorber `0x4B1C6 CMP [0x157AC2],2` (past half-time) and the
+     * FU-235 end-timer dwell (`mr->act.timer` = `word[0x158818]`, `>= 0x78`)
+     * gate the write, so the half-time phase-`0xC` terminal cannot fire the
+     * word early (FU-234-L7: never the raw `period_ended`). The no-ET screen
+     * `0x37F54` (`[0x105FFC]=5`) has no engine cell -> leg FU231-L2. */
+    if (mr->end_word_158822 == 0u && mr->global_157ac2 >= 2u &&
+        mr->act.timer >= 0x78) {
+      mr->end_word_158822 = fifa96_match_run_end_word(mr);
+    }
     /* M2 phase-15 T1 / FU-175 §2: the native act tick — the clock tail's
      * `0x8B669 CMP dword[0x158808],0 / 0x8B670 JZ / 0x8B672 CALL
      * dword[0x158808]` — runs after the ball machine (`0x8B664 CALL 0x8BAF0`)

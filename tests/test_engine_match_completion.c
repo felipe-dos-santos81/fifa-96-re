@@ -418,6 +418,30 @@ static void test_extra_time_half_completes(void) {
   drop_fixture(f);
 }
 
+/* FU-231 §3/§4 (M2 phase-22 T2): the FUN_0008BAF0 end machine, ported as the
+ * `[0x158822]` end word. word 1 = regulation-over (the flag-clear phase-0xC
+ * terminal, 0x8BCD9); word 2 = extra-time-over (the phase-0x13/0x14 dwell past
+ * the timer gate, 0x8BD8A/0x8BDD4); 0 = none. The no-ET screen 0x37F54
+ * ([0x105FFC]=5) has no engine cell -> FU-231 leg. The reader is a pure
+ * function of {phase, global_157ac0, act.timer}; the frame body stages the
+ * cell gated on the past-half-time index and the FU-235 dwell (FU-234-L7). */
+static void test_end_word_arms(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  /* regulation-over: the flag-clear phase-0xC terminal (FU-231 §3 arm 1). */
+  mr.state.phase = 0x0Cu;
+  mr.global_157ac0 = 0u;
+  mr.global_157ac2 = 2u;
+  assert(fifa96_match_run_end_word(&mr) == 1u);
+  /* extra-time-over: the phase-0x13/0x14 dwell past the timer gate (FU-239 §5). */
+  mr.state.phase = 0x14u;
+  mr.act.timer = 0x4B1u;
+  assert(fifa96_match_run_end_word(&mr) == 2u);
+  /* no end word: still 0. */
+  mr.state.phase = 0x02u;
+  assert(fifa96_match_run_end_word(&mr) == 0u);
+}
+
 /* Derived score plumbing: the FU-72 §2.4 per-side goal words. begin zeroes
  * both, add_goal increments one side, invalid sides are rejected without a
  * write, and teardown/begin reset the pair. The original's trigger is the
@@ -463,6 +487,7 @@ int main(void) {
   test_loopbacked_tiebreak_completion();
   test_half_time_completion_runs_sit1_kickoff();
   test_extra_time_half_completes();
+  test_end_word_arms();
   test_mark_over_only_past_half_time();
   test_score_plumbing();
   puts("test_engine_match_completion OK");

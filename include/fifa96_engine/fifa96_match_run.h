@@ -620,6 +620,15 @@ struct fifa96_match_run {
    * stay unported legs (FU213-L1/L7). This is T1's exposed flag for T2's
    * situation-8 gate / the act-0xC-0xB route. */
   uint8_t global_157ac0;
+  /* FU-231 §5 / FU-236 §1.1 (M2 phase-22 T2): the native end word
+   * `[0x158822]` (a 16-bit word; FU234-L2: the harness return `0x8B678 MOV
+   * AX,word[0x158822]`). Set by the ported `FUN_0008BAF0` end machine to `1`
+   * (regulation-over, the flag-clear phase-0xC terminal `0x8BCD9`) or `2`
+   * (extra-time-over, the phase-0x13/0x14 dwell `0x8BD8A`/`0x8BDD4`); `0` =
+   * none. The native match reset `FUN_000886D4` clears it (`0x8871B`), so
+   * init/begin stage `0`. The no-ET screen arm `0x37F54` (`[0x105FFC]=5`) has
+   * no engine cell (FU-231 §5 / leg FU231-L2). */
+  uint16_t end_word_158822;
   /* FU-210 §6.1/§8 L3 + FU-217 §3 (M2 phase-19 T3 → phase-20 T3): the native
    * actor-record pointer `[0x1587D4]` the phase-0x1D arm-0 coupled installer
    * (`0x899A2`) targets — `FUN_0007D9A4(rec = [0x1587D4], code = 0x20, stage =
@@ -1370,6 +1379,24 @@ int fifa96_match_run_period_setup(struct fifa96_match_run *mr, int mode);
  * route is the unprovable leg **FU239-L1** (never faked). Sets `phase = 2` and
  * `period_seconds = 0`; NULL is a no-op. */
 void fifa96_match_run_period_over_rearm(struct fifa96_match_run *mr);
+
+/* FU-231 §3/§6.1 (M2 phase-22 T2): the minimal port of the `FUN_0008BAF0`
+ * end-machine terminal decision, over the live cells. Returns the end word
+ * `[0x158822]` as a pure function of the run's phase/flag/timer:
+ *  - `1` = regulation-over: the flag-clear phase-`0xC` terminal (`0x8BCBF CMP
+ *    byte[0x157AC0],0` / `0x8BCD9 MOV word[0x158822],1`);
+ *  - `2` = extra-time-over: the phase-`0x13`/`0x14` dwell with the end timer
+ *    `word[0x158818] > 0x4B0` (`0x8BD52`/`0x8BDA4`, the ET-half timeline). The
+ *    native `CMP EAX,0x4B0 ; JG` is a SIGNED compare of the sign-extended word
+ *    (`MOV EAX,[0x158816] ; SAR EAX,0x10`), so `mr->act.timer` is compared
+ *    signed;
+ *  - `0` = none.
+ * The phase-`0xC` flag-set arm (`0x8BCC8` -> phase `0x13`) and the no-ET
+ * `[0x105FFC]=5` screen (`0x37F54`) are not end-word values; the latter has no
+ * engine cell (FU-231 §5 / leg FU231-L2). NULL -> 0. The frame body stages the
+ * cell once, gated on the past-half-time index and the FU-235 dwell (FU-234-L7),
+ * never the raw `period_ended`. */
+uint16_t fifa96_match_run_end_word(const struct fifa96_match_run *mr);
 
 /* FU-197 §4/§9 item 2 (M2 phase-17 T2): the `FUN_0008C974` formation-order
  * sorter + residual counter for one team. Computes the display side index
