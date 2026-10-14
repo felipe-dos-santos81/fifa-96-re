@@ -306,6 +306,8 @@ Docs read/handled: `docs/ghidra/FU248_formation_setup.md`,
 rule, errata-never-rewrite). No writes beyond this draft and the report; no
 rename/label/comment/function/script/project save; no git; no subagents.
 
+Annotation (post-Task-3): the `:5500` read-coordinate above is stale — the §6 erratum supersedes it with the fresh `:5508` (prior §5 text not rewritten).
+
 ---
 
 ## 6. Errata (quoted — prior sections not rewritten)

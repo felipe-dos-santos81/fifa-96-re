@@ -1567,10 +1567,11 @@ the build also produces the windowed `fifa96` target (`make game`).
   slice); **FU261-L2** — the three variable-situation call sites `0x895AC`/
   `0x897E3`/`0x8A8CE` (owner **FU143-OL-72**); **FU261-L3** — the
   `seed_formation` vs the native phase-`01`/`11`/`12` walk (`0x6E1D0`)
-  equivalence (render-invisible on M2; owner **FU-261**); **FU261-L4** — whether
-  `0x6E1C8` (row 11) carries a meaning distinct from the `0x6E1D0`
-  fall-through (owner **FU-261**); **FU261-L5** — the `[0x157A4D]` non-setter
-  writers `FUN_00073E28`/`FUN_00073D10` (both write 0; owner **FU-261**);
+  equivalence (render-invisible on M2; owner: FU-261 (inferred)); **FU261-L4** —
+  whether `0x6E1C8` (row 11) carries a meaning distinct from the `0x6E1D0`
+  fall-through (owner: FU-261 (inferred)); **FU261-L5** — the `[0x157A4D]`
+  non-setter writers `FUN_00073E28`/`FUN_00073D10` (both write 0; owner: FU-261
+  (inferred));
   **FU261-L6** — the sharpened sit-7 census (**RESOLVED** as the ENGINE.md
   situation-7 note correction `d32e3c3`; owner leg **FU-146**). **The phase
   slots (FU-262 §6):** **FU262-L1** — the phase-`0x13`/`0x14` body `0x6E244`

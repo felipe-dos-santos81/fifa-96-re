@@ -5538,7 +5538,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "-> fifa96_match_entities_install(opp, 0x22) -> this slot. Install+dispatch witnessed by "
      "test_action_07_ol65_invoke_installs_row_22 (fix provider) and test_action_22_runs_body "
      "(body); the m2 golden is byte-identical (FU259-L1 acceptance, cmp). The body is also "
-     "exported for direct unit testing (declared in fifa96_match_handlers.h). FU259-L2 closed. OL-65"},
+     "exported for direct unit testing (declared in fifa96_match_handlers.h). FU259-L2 closed. OL-65 (closed, FU-259)"},
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, fifa96_match_action_24,

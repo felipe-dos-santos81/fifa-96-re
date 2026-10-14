@@ -2234,19 +2234,31 @@ static void test_action_07_ol65_invoke_installs_row_22(void) {
   /* The invoke fired: the opponent record now carries the installed code. */
   assert(opp->code == 0x22);
 
-  /* The slot is wired and the installed row dispatches: stage the run record
-   * as the per-record dispatcher does for the installed record, then run the
-   * row-22 body through the action table. */
+  /* The slot is wired and the installed row dispatches through the run loop's
+   * per-record selection (`match_run_dispatch_entity` reads the pool record's
+   * code and dispatches `fifa96_match_dispatch_action(mr, e->code)`,
+   * fifa96_match_run.c:1406/1410) rather than a hand-staged row dispatch: this
+   * proves the end-to-end selection. The `dispatched_ok` bit is set only by
+   * that path, so it witnesses the run-loop dispatch of row 0x22. (The
+   * match-init act-0xA phase-0x20 body re-installs code 0x24 on the records
+   * later in the same granted frame, so the row-22 body's own pool writeback is
+   * overwritten; test_action_22_runs_body covers the body itself.) */
   assert(fifa96_match_action_table[0x22].fn == fifa96_match_action_22);
-  f.mr.record.entity_id = opp_id;
-  f.mr.record.code = 0x22;
-  f.mr.record.stage92 = 0;
-  f.mr.record.active = 1;
-  f.mr.record.ran = 0;
+  opp->active = 1;
+  opp->stage92 = 0;
+  opp->ran = 0;
   f.mr.state.phase = 2;
-  assert(fifa96_match_dispatch_action(&f.mr, 0x22) == FIFA96_OK);
-  assert(f.mr.record.ran == 1);        /* the row-22 body executed */
-  assert(f.mr.record.stage92 == 1);
+  f.mr.dispatched_ok &= ~(1ull << 0x22);
+  {
+    int granted = 0;
+    for (int i = 0; i < 16 && !granted; i++) {
+      int rc = fifa96_match_run_frame(&f.mr);
+      assert(rc >= 0);
+      granted = rc == 1;
+    }
+    assert(granted);
+  }
+  assert((f.mr.dispatched_ok & (1ull << 0x22)) != 0u);
   drop_fixture(&f);
 }
 
