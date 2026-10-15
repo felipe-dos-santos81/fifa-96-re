@@ -3716,8 +3716,13 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
  *    ported `fifa96_keeper_reposition_b_finish` (not-controlled -> install
  *    0x19; controlled+CPU -> situation 5; controlled+human -> nothing).
  * The `FUN_00076B28` steering (FU285-L4), the `0x6E598`/sit-7 emit surfaces
- * (FU285-L5/L6) and the record-0 machine / CPU escalation ladder carrying the
- * second installer stay FU180-L3/L4/L5 legs. */
+ * (FU285-L5/L6), the re-place fall-through tail `0x7759c..0x77631`
+ * (**FU285-L8**: the `0x741b4`/`0x651f0` sit dispatch, the `0x8f188` event
+ * posts, the `0x8ed40(EBP,0x19)` actor install and the `0x974dc`/`0x974f0`
+ * sinks; leg-class because its `EDI`/`byte[0x157A4D]` branch depends on the
+ * unported FU285-L1 pan-vector/descriptor state — reached only by fall-through
+ * from `0x774DD`, `get_xrefs_to 0x7759c == 0`) and the record-0 machine / CPU
+ * escalation ladder carrying the second installer stay FU180-L3/L4/L5 legs. */
 /* FU-285 §1 (M2 phase-26c T5): the row-0x1B stage-2-wide `0x774DD` re-place
  * block (reached from the `0x76FF4` `[0x157C5C]` latch clear or the `0x7720E`
  * `[0x157C58]==0` arm, fresh `disassemble_bytes 0x774dd`). It re-places the
@@ -3727,8 +3732,17 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
  * `0x6E598` anim install (its arg = the staged anim + 1, OL-52) and — **the
  * load-bearing bit, FU285-L1** — the **ungated** self-actor write
  * `0x77568 [0x157A83] = EBP` (no phase/side gate), then the sit-7 emit
- * `0x77589 (0x8A938(7, side, 0), FU285-L6)` and falls to the `0x77636`
- * stage-4 head so the emit `0x77707` self-satisfies (`EBP == [0x157A83]`).
+ * `0x77589 (0x8A938(7, side, 0), FU285-L6)`. The native then **falls through
+ * the live `0x7759c..0x77631` tail** — `0x7759c CALL 0x741b4` (the side-index
+ * `0xe`/`0x5`), `0x775b1 CALL 0x651f0` (the sit dispatch), the `0x775b6
+ * [0x157A4A]>>24 == 0x10` / `EDI` branch, `0x775c7 CALL 0x8f188(6,EBP,8)` /
+ * `0x775e5 CALL 0x8f188(2,EBP,0x20)`, `0x775f6 CALL 0x8ed40(EBP,0x19)` (the
+ * actor install `0x19`), then `0x77618 CALL 0x651f0`, `0x77627 CALL 0x974dc(4)`
+ * and `0x77631 CALL 0x974f0(0x5dc)` — before `0x77636`. Its branch hinges on
+ * `EDI` (the unported FU285-L1 pan-vector/descriptor product) and
+ * `byte[0x157A4D]`, so it is **FU285-L8** (leg-class). This port returns and
+ * jumps to the shared `0x77636` stage-4 head, **skipping** that tail. The
+ * `0x77636`-onward emit `0x77707` then self-satisfies (`EBP == [0x157A83]`).
  * `*self_actor` records the `0x77568` write. Returns 1. */
 static int match_1b_replace(struct fifa96_match_run *mr,
                             struct fifa96_match_run_record *r,
