@@ -6594,7 +6594,7 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
     rec.own_distance = best;
     /* the 0x79EEF..0x79F1D record-state gate (the [0x158777] identity is
      * staged 0/unported). */
-    rec.eligible = (own->type != 0x11u && own->code != 0x10u &&
+    rec.eligible = (own->code != 0x11u && own->code != 0x10u &&
                     own->code != 0x1Du && own->code != 0x1Eu)
                        ? 1u
                        : 0u;

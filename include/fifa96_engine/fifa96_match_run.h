@@ -1484,7 +1484,7 @@ int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
  * resolves the own-team nearest (FUN_0008DE8C derived as the pool nearest to
  * the ball triple, skip index 0) and the opponent last defender
  * (FUN_0008DE28 derived as the opponent nearest to (0, ±0xB10)) and stages the
- * record-state gate (type != 0x11, code not in {0x10,0x1D,0x1E}).
+ * record-state gate (code != 0x11, code not in {0x10,0x1D,0x1E}).
  *
  * Behind the phase/suppression/settings pre-gates it draws one RNG value (the
  * native FUN_00092AC8 tolerance draw; the native draws it after its geometry

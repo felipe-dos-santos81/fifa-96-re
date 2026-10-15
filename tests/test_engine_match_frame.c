@@ -4294,6 +4294,36 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.referee.offside_suppress == 0x1Eu);
 }
 
+/* FU268-L10: the record-state gate (0x79EF7/0x79F00) reads the native `code`
+ * byte at +0x91, not the 0-7 `type` octant at +0x8E. The own-nearest record
+ * with code == 0x11 is therefore ineligible and the check must not fire; the
+ * same geometry with an eligible code fires (the control). */
+static void test_engine_offside_l10_reads_code_not_type(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_ref_metric metric;
+  uint8_t offside = 0xAA;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c2f2 = 1;                     /* offside enabled */
+  mr.session_gate_14c32a = 1;
+  mr.situation_pending = 1;
+  match_frame_stage_offside(&mr);
+  /* the own-nearest record 1: code == 0x11 with a valid octant type */
+  mr.entities.team[0].records[1].type = 0u;
+  mr.entities.team[0].records[1].code = 0x11u;
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  metric.tol2 = 0;
+  metric.side_gate = 1;
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0, 0, &offside) == 0);
+  assert(offside == 0u);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  /* control: an eligible code (0x12) on the same record fires the check */
+  mr.entities.team[0].records[1].code = 0x12u;
+  (void)fifa96_rng_seed(&mr.rng, 0);
+  assert(fifa96_match_run_offside_reception(&mr, 3, &metric, 0, 0, &offside) == 1);
+  assert(offside == 1u);
+}
+
 /* FU-149 §1.3 (first-hand scanner arms 0x88B53..0x88C0E): the clock-tail
  * scan's throw-in (|snap z| <= 0xB20 -> sit 2, BX=1) and corner/goal-kick
  * (|snap z| > 0xB20, zone 0 -> sit 3 + ((snap z < 0) == (ball team == 1)),
@@ -6015,6 +6045,7 @@ int main(void) {
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();
   test_engine_referee_offside_chain();
+  test_engine_offside_l10_reads_code_not_type();
   test_scan_restart_arms();
   test_goal_chain_pan_fixture();
   test_goal_consumer_chain_fixture();
