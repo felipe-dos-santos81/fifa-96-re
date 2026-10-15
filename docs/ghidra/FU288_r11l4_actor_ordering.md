@@ -149,12 +149,25 @@ two gate immediates**.
 The **actor-install for the keeper route** is the **row-`0x1B` head write at
 `0x76DBF`** (with its **row-`0x1A` sibling at `0x7665C`**), both gated
 `phase==0xD && side==controlled`. The ladder install is **not** an actor-install
-— it installs the *row*, not the actor, and only while `[0x157A83]==0`. A second
-row-`0x1B` actor-write exists at `0x77568` (stage-2, before `CALL 0x6E598`),
-which re-asserts `[0x157A83]=rec` on the same controlled-side record. It **can
-fire only on the same frame as the head** (both inside the phase-`0xD` dispatch;
-the head gate has already passed for that record), i.e. **later** than the
-phase-`2` ladder install.
+— it installs the *row*, not the actor, and only while `[0x157A83]==0`. The
+disjoint-phase observation (`phase==2` ladder vs `phase==0xD` head write, §2.1)
+applies to this **head** write only.
+
+A second row-`0x1B` actor-write exists at `0x77568` (stage-2, before
+`CALL 0x6E598`). It is **ungated**, but it is **mutually exclusive** with the
+head write within one dispatch: the stage-2 arm entry
+`0x76FC7→0x76FD5 CMP EBP,[0x157A83]; JZ 0x77636` (fresh bytes `3b2d837a1500` /
+`0f8455060000`) diverts to the stage-4 head `0x77636` whenever `EBP==[0x157A83]`,
+so the wide block — and hence `0x77568` — is reached **only when `EBP !=
+[0x157A83]`**, i.e. only when the head did **not** set this record as the actor.
+Thus **head-pass** (gated `phase==0xD && side`) jumps to `0x77636` and **skips**
+`0x77568`; **head-fail** runs the wide block and `0x77568` **self-sets**
+`[0x157A83]=rec`. The two writes never both fire on one dispatch.
+
+The self-set then falls through
+`0x77568 → 0x77631 → 0x77636 → 0x776C1 → 0x776D8/0x776DE` (where
+`EBP==[0x157A83]` is now satisfied) `→ 0x77707` (`e82c320100` → `0x8A938`, the
+sit-5 emit), and this emit carries **no phase gate**.
 
 ## 3. The engine approximation (reconciled)
 
@@ -173,7 +186,7 @@ phase-`2` ladder install.
   human_side, …)`; `fifa96_keeper.c:255-260` returns `notify_code=5` when
   `is_controlled && human_side==0`; the tail (`:3787`) emits via
   `fifa96_match_run_situation(mr, notify_code)`.
-- Rows `0x1B`/`0x1C`/`0x1D`/`0x1E`/`0x1F` are **wired** (`:5519`/`:5522`/`:5524`/`:5526`/`:5528`);
+- Rows `0x1B`/`0x1C`/`0x1D`/`0x1E`/`0x1F` are **wired** (`:5519`/`:5521`/`:5523`/`:5525`/`:5527`);
   row `0x1A` is **NULL/uncounted** (`:5517`). The installers: row-`0x1F`
   no-slot dive (`:3611`), phase-6 arm (`match_run.c:2838-2851`), phase-8/9 arm
   (`match_run.c:2854-2861`).
@@ -284,7 +297,7 @@ per-site `disassemble_bytes`. No write from the MCP tool; read-only.
 | engine `actor_is_rec` OR bridge | `fifa96_match_handlers.c:3733` |
 | engine head set `r->controlled`; stage-4 `fifa96_keeper_reposition_b_finish` → notify 5 | `handlers.c:3724`, `:3762`, `:3781-3787`; `fifa96_keeper.c:252-263` |
 | engine emit route `fifa96_match_run_situation(mr,5)` side=0/bx=0 | `match_run.c:2949-2951` |
-| rows `0x1A` NULL / `0x1B`/`0x1C`/`0x1D`/`0x1E`/`0x1F` wired | `fifa96_match_handlers.c:5517/5519/5522/5524/5526/5528` |
+| rows `0x1A` NULL / `0x1B`/`0x1C`/`0x1D`/`0x1E`/`0x1F` wired | `fifa96_match_handlers.c:5517/5519/5521/5523/5525/5527` |
 | engine installer phase-6 arm → row `0x1F` | `match_run.c:2838-2851` |
 | phase-8/9 arm → `0x1E`/`0x1D` on rec 0 | `match_run.c:2854-2861` |
 | census 59/80; README `73%` | `docs/ENGINE.md:8`/`:268`; `README.md:1` |

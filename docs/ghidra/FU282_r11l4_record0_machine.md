@@ -43,7 +43,7 @@ Then the target-code selection (fresh, `EAX` = the target code):
 
 | path | condition | target |
 |---|---|---|
-| `0x784fe JZ`→`0x78503 XOR EAX,EAX` | `word[EBP+0x81] != 0` (the `+0x81` timer live) | **`0x0`** |
+| `0x78501 JZ`→`0x78507 XOR EAX,EAX` | `word[EBP+0x81] != 0` (the `+0x81` timer live) | **`0x0`** |
 | `0x78513 JNZ 0x78553` | `phase != 2` | **`0x19`** |
 | `0x7851e JNZ 0x78553` | `rec != [[rec]+0x7b2]` (not the ball owner) | **`0x19`** |
 | `0x78539 JZ 0x78553` | owner's related record `[[[rec]]+0x7a6]→[+0x7b2]` exists **and** its `[+0x91]==5` | **`0x19`** |
@@ -60,7 +60,7 @@ Then the same-code guard and install:
 0x78576  CALL 0x7d9a4          ; e829540000 -> FUN_0007D9A4(rec, target, 0, 0)
 ```
 
-**Pin (fresh):** `0x78553 = b8 19 00 00 00` (MOV EAX,0x19); `0x7854c = b8 04 00 00 00` (MOV EAX,0x4); `0x78576 = e8 29 54 00 00` → rel32 `+0x5429` → `0x7D9A4`. Fresh `decompile_function 0x7D9A4` gives signature `(int *rec, short code, undefined1 staged, short invoke)` and the tail `if (param_4 != 0) (*(code*)rec[6])(rec);` — so the record-0 call is **`FUN_0007D9A4(rec, code, EBX=0, ECX=0)` = deferred, NO invoke-now** (fresh register state EAX=EBP, EDX=target, EBX=0, ECX=0). **Erratum to FU273 §1.3:** that section wrote the record-0 install as `FUN_0007D9A4(rec, code, 0, 1)`; the fresh bytes show `ECX=0` (no invoke) and the `1` belongs to the *separate* `[0x157AB2]` global latch, not the invoke argument. The ladder arms' `ECX=1` invoke does not apply here.
+**Pin (fresh):** `0x78553 = b8 19 00 00 00` (MOV EAX,0x19); `0x7854c = b8 04 00 00 00` (MOV EAX,0x4); `0x78576 = e8 29 54 00 00` → rel32 `+0x5429` → `0x7D9A4`. Fresh `decompile_function 0x7D9A4` gives signature `(int *rec, short code, undefined1 staged, short invoke)` and the tail `if (param_4 != 0) (*(code*)rec[6])(rec);` — so the record-0 call is **`FUN_0007D9A4(rec, code, EBX=0, ECX=0)` = deferred, NO invoke-now** (fresh register state EAX=EBP, EDX=target, EBX=0, ECX=0). **Clarification of FU273 (not an erratum of §1.3):** the record-0 install is deferred — `XOR ECX,ECX` (`0x7856A`) / `XOR EBX,EBX` (`0x78574`) = no invoke-now — while FU273's `(rec, code, 0, 1)` invoke-now text is the §1.4 **ladder arms**, which use `ECX=1`. The `1` in the record-0 path belongs to the *separate* `[0x157AB2]` global latch, not the invoke argument.
 
 ### 1.4 The ladder call gate (`0x7857b..0x785a2`, fresh bytes)
 

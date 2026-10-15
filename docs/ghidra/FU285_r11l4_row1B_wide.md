@@ -102,7 +102,7 @@ Fresh `disassemble_function 0x76B28` (body `0x76B28..0x76D11`, 155 insns).
 `EAX=rec`, `EBX`/`EDX` = the half-extents (`0x60`/`0xA0` at the row-`0x1B` call
 `0x76FA2`). It writes: `[rec+0x83] = [rec+0x51] - EBX + 0x20` (clamped ≤0x60) and
 `[rec+0x85]` (`0x702F8`); `word[ESP] = [rec+0x65] - EDX + 0x20` (clamped `[0x10,0x70]`);
-folds the position via the `0x114E04` sine table + `0x795A4` into `[rec+0x4D]/[rec+0x55]`;
+folds the position via the `0x114E04` linear ramp table + `0x795A4` into `[rec+0x4D]/[rec+0x55]`;
 the `0x795B4` band helper over `([rec+0x65],[rec+0x4D],[rec+0x59])`; the directional
 `[rec+0x85]` block → `[rec+0x73]/[rec+0x75]`; `CALL 0x8DC68 → [rec+0x71]`.
 Fresh `get_xrefs_to 0x76B28` = **2**: `0x76FA2` (row `0x1B` stage 0) and `0x779B4`
