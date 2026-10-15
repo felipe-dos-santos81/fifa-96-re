@@ -3349,22 +3349,32 @@ static void test_row1e_claim_place_pause_and_offsets(void) {
  * (`fifa96_keeper_reposition_b_finish` -> notify 5), situation 5 selects phase
  * 9, and the phase-9 arm installs row `0x1E` on the team's keeper. The claim
  * machine then walks stages 0..4; the stage-4 outlet resolves event `0x45` and
- * (via the R11-L1 `FUN_0006E598` bridge) stage 5 must cut the release
- * `camY := 0x50` and bind the keeper as the camera-tracked record.
+ * (via the R11-L1 `FUN_0006E598` bridge) stage 5 cuts the release
+ * `camY := 0x50` and binds the keeper as the camera-tracked record.
  *
- * Baseline: the bridge is absent, so `anim_row` never becomes `0x45` from the
- * claim and the stage-5 release never arms — `camera.pos_y` stays off `0x50`.
- * This is the RED gate Task 9 turns green. It is committed DISABLED
- * (skip-guarded, the `test_engine_m2_noiso` idiom) so `make check` stays green
- * for the intermediate tasks; run it with `FIFA96_REACH_L4=1` to exercise it. */
+ * This is the phase's Layer-1 landing (Task 9 turns the T1 RED gate green).
+ *
+ * Three disclosed staging points (the T3 review carries):
+ *  (i)  same-dispatch frame-zero divergence — the stage-4 anim install runs the
+ *       native `FUN_0006E490` clamp with frame 0, so `rec+0x3D` is zeroed and
+ *       the SAME-dispatch stage-5 `frame < 3` gate exits exactly as the native.
+ *       The release therefore needs the frame to advance; the test asserts the
+ *       frame reads 0 at the outlet and then stages it (below).
+ *  (iv) the frame advance is a STAGED input — the engine's per-tick frame
+ *       machine reads `render.frames`, absent in this isolated fixture, so the
+ *       fixture stages `keeper->frame = 3` to pass the native `frame < 3` gate.
+ *
+ * The release writes the persistent cell `[0x157750]` (`keeper_cam_y`) and the
+ * FU-71 camera triple. The release frame stages no `place`, so the frame body's
+ * placement drain (`match_run.c` `match_run_entity_drain` -> `fifa96_camera_init`
+ * at :1566) does not re-run this frame and `render.camera.pos_y` still holds
+ * `0x50` at the frame end (asserted); the persistent `keeper_cam_y == 0x50` is
+ * asserted alongside as the load-bearing cell. */
 static void test_keeper_l4_release_reach(void) {
-  if (getenv("FIFA96_REACH_L4") == NULL) {
-    fprintf(stderr, "SKIP keeper L4 release reach (disabled until Task 9)\n");
-    return;
-  }
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   struct fifa96_match_entity *keeper;
+  int reached_outlet = 0;
   int released = 0;
 
   fifa96_match_run_init(&mr);
@@ -3386,15 +3396,35 @@ static void test_keeper_l4_release_reach(void) {
   assert(mr.state.phase == 9u);                   /* situation 5 -> phase 9 */
   assert(keeper->code == 0x1Eu);                  /* row 0x1E installed on the keeper */
 
-  /* The claim walks stages 0..5; the release cuts `camera.pos_y := 0x50` once
-   * the R11-L1 bridge selects anim row `0x45` at the stage-4 outlet. */
-  for (int i = 0; i < 150 && !released; i++) {
+  /* The claim walks stages 0..4; the stage-4 outlet resolves anim row `0x45`
+   * through the R11-L1 bridge. At that same dispatch stage 5 runs the
+   * `frame < 3` gate against the just-zeroed frame and exits (carry (i)). */
+  for (int i = 0; i < 150 && !reached_outlet; i++) {
     one_granted_frame(&mr);
-    released = (mr.render.camera.pos_y == 0x50);
+    reached_outlet = (keeper->stage92 == 5u && keeper->anim_id == 0x45u);
   }
-  assert(released == 1);                          /* RED at baseline: no bridge */
+  assert(reached_outlet == 1);                    /* RED at baseline: no bridge */
+  assert(keeper->frame == 0u);                    /* the FUN_0006E490 frame-zero */
+
+  /* Carry (iv): stage the frame past the native `frame < 3` gate. */
+  keeper->frame = 3u;
+  one_granted_frame(&mr);                          /* stage 5 -> 6 -> 7 -> 8 */
+  released = (mr.keeper_cam_y == 0x50);
+  assert(released == 1);                          /* the stage-5 release fired */
+
+  /* The release triple: the persistent `[0x157750]` and the FU-71 camera. */
+  assert(mr.keeper_cam_y == 0x50);
+  assert(mr.render.camera.pos_y == 0x50);
+  /* Carry (iii): the bridge writes the pool entity (the anim install) and
+   * `record.anim_id`; the persistent pool entity carries `0x45`. */
   assert(keeper->anim_id == 0x45u);               /* the claim's selected row */
   assert(mr.render.camera.tracked != 0);          /* the keeper bound as tracked */
+
+  /* The row-0E stage-2 gate (`0x82828..0x82834`, the live camY band
+   * `0x20 < [0x157750] < 0x70`): the released camera Y admits the pan arm on
+   * the next granted frame (the band the row-0x0E follow consumer reads). */
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_y > 0x20 && mr.render.camera.pos_y < 0x70);
 
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
