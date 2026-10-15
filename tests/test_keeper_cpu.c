@@ -105,9 +105,13 @@ static void test_prepass_gates_are_phase2_only(void) {
 /* ── Task 7 (FU282): the `FUN_000782D0` record-0 machine skeleton ────────── */
 
 static uint32_t kc_ladder_runs;
-static void kc_ladder_stub(void *ctx) {
+static int kc_ladder_stub(void *ctx, const struct fifa96_keeper_cpu_record *rec,
+                          struct fifa96_keeper_cpu_ladder_out *out) {
   (void)ctx;
+  (void)rec;
+  (void)out;
   kc_ladder_runs++;
+  return FIFA96_OK;
 }
 
 static struct fifa96_keeper_cpu_record kc_rec_zero(void) {
@@ -283,12 +287,190 @@ static void test_keeper_cpu_ladder_gate(void) {
   assert(cpu.interlock_157c5d == 0);
 }
 
+/* A ladder record with every head gate open (byte +0x91 == 0x19, all skip
+ * cells clear); only `stage` (CX) varies. */
+static struct fifa96_keeper_cpu_record kc_ladder_open(uint8_t stage) {
+  struct fifa96_keeper_cpu_record r = kc_rec_zero();
+  r.code = 0x19;
+  r.stage = stage;
+  return r;
+}
+
+/* FU283 §4 — the `0x77E98` switch: `CX-1 ∈ 0..4` selects the arm, and the three
+ * `0x1A` arms stamp `[0x157C2C]` 0x2C/0x2D/0x2E. Every arm installs
+ * `FUN_0007D9A4(rec, code, 0, ECX=1)` — invoke-now. */
+static void test_keeper_cpu_ladder_five_arms(void) {
+  static const uint8_t stamps[3] = {0x2Cu, 0x2Du, 0x2Eu}; /* CX 1/2/3 */
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_ladder_out out;
+  for (uint8_t cx = 1; cx <= 3; cx++) {
+    rec = kc_ladder_open(cx);
+    memset(&out, 0, sizeof out);
+    assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+    assert(out.ran == 1);
+    assert(out.install == 1 && out.install_code == 0x1Au);   /* 0x78227/4f/77 */
+    assert(out.invoke_now == 1);                             /* 0x78222/4a/72 */
+    assert(out.stamp_157c2c == stamps[cx - 1u]);             /* 0x78230/58/7e */
+    assert(out.copy_pos == 0);
+  }
+  /* CX 4 -> the `0x78294` arm installs row 0x1B, no stamp. */
+  rec = kc_ladder_open(4);
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.install == 1 && out.install_code == 0x1Bu && out.invoke_now == 1);
+  assert(out.stamp_157c2c == 0);
+  /* CX 5 -> the `0x782B1` arm installs row 0x1C (falls into the 0x782BB tail). */
+  rec = kc_ladder_open(5);
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.install == 1 && out.install_code == 0x1Cu && out.invoke_now == 1);
+  assert(out.stamp_157c2c == 0);
+}
+
+/* FU283 §6 — `FUN_000765C4` (`0x765C4`): 1 iff the tracked record is present,
+ * on the same side, and (its `byte +0x91 == 5` or `[0x158740]>>24 != 4`). */
+static void test_keeper_cpu_ladder_tracked_predicate(void) {
+  assert(fifa96_keeper_cpu_tracked_predicate(1, 1, 5, 0) == 1);   /* row 5 */
+  assert(fifa96_keeper_cpu_tracked_predicate(1, 1, 0, 0) == 1);   /* global != 4 */
+  assert(fifa96_keeper_cpu_tracked_predicate(1, 1, 4, 4) == 0);   /* both false */
+  assert(fifa96_keeper_cpu_tracked_predicate(0, 1, 5, 0) == 0);   /* absent */
+  assert(fifa96_keeper_cpu_tracked_predicate(1, 0, 5, 0) == 0);   /* other side */
+}
+
+/* FU283 §5 — the `FUN_000765C4 != 0` fall-through installs **code 4** via the
+ * shared tail `0x782BB` (`0x781F6..0x78200`), not a second `0x1B`. */
+static void test_keeper_cpu_ladder_code4_fallthrough(void) {
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_ladder_out out;
+  rec = kc_ladder_open(1);
+  rec.tracked_present = 1;
+  rec.tracked_same_side = 1;
+  rec.tracked_code = 5;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.install == 1 && out.install_code == 0x4u && out.invoke_now == 1);
+  assert(out.stamp_157c2c == 0);                 /* the 0x1A arm is skipped */
+  /* it wins over every stage: CX 4 (would be 0x1B) still installs 4. */
+  rec.stage = 4;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.install_code == 0x4u);
+  /* with the predicate false the switch runs (here back to the CX-4 arm). */
+  rec.tracked_code = 4;
+  rec.global_158740 = 4;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.install == 1 && out.install_code == 0x1Bu);
+}
+
+/* FU283 §1/§2 — the head gates and the actor/side skip: every closed gate exits
+ * to the shared tail `0x782C4` with no install (`ran` marks the selector
+ * reached). */
+static void test_keeper_cpu_ladder_head_gates(void) {
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_ladder_out out;
+  rec = kc_ladder_open(1);
+  rec.code = 0x18;                              /* 0x77EC2: byte +0x91 != 0x19 */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0 && out.install == 0);
+
+  rec = kc_ladder_open(1);
+  rec.prepass_ah2 = 0x2;                        /* 0x77EF0: the [0x14C1D4] AH&2 gate */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0 && out.install == 0);
+
+  rec = kc_ladder_open(1);
+  rec.gate_9a = 1;                              /* 0x77EFD: the +0x9A skip */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0);
+
+  rec = kc_ladder_open(1);
+  rec.is_T = 1;                                 /* 0x77F10: *(param_1[10]) == 'T' */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0);
+
+  rec = kc_ladder_open(1);
+  rec.is_actor = 1;                             /* 0x77F36: rec == [0x157A83] */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0);
+
+  rec = kc_ladder_open(1);
+  rec.actor_present = 1;
+  rec.actor_same_side = 1;                      /* 0x77F51: same-side actor skip */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0);
+  rec.actor_same_side = 0;                      /* other side -> not skipped */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.install_code == 0x1Au);
+
+  /* the +0x81 timer: copy pos (+0x59 -> +0x4D) and return, no install (0x77F20). */
+  rec = kc_ladder_open(1);
+  rec.timer81 = 1;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.copy_pos == 1 && out.ran == 0 && out.install == 0);
+
+  /* stage 0 returns at the selector (0x781E4): ran, no install. */
+  rec = kc_ladder_open(0);
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.install == 0);
+
+  /* stage > 5 fails the DEC/CMP/JA bound (0x78206): no install. */
+  rec = kc_ladder_open(6);
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.install == 0);
+}
+
+/* FU283 §Port shape / Task 8 — the ladder is wired INTO the FU282 seam (the
+ * default is the ported body, replacing the no-op stub). The live stage index
+ * cannot be raised (its selector inputs are unported, FU283-L6), so a 0x19
+ * record reaches the selector with `stage == 0` and installs nothing. */
+static void test_keeper_cpu_ladder_seam(void) {
+  fifa96_keeper_cpu cpu;
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_out out;
+  fifa96_keeper_cpu_init(&cpu);
+  assert(cpu.ladder == fifa96_keeper_cpu_ladder_run);   /* the ported body */
+  cpu.interlock_157c5d = 1;
+  rec = kc_rec_zero();
+  rec.permit = 1;
+  rec.code = 0x18;                              /* the ladder's own head gate closes */
+  rec.ball_owner = 1;
+  rec.phase = 2;
+  assert(fifa96_keeper_cpu_step(&cpu, &rec, &out) == FIFA96_OK);
+  assert(out.ladder == 1);
+  assert(out.ladder_out.ran == 0 && out.ladder_out.install == 0);
+
+  cpu.interlock_157c5d = 1;
+  rec.code = 0x19;
+  rec.ball_owner = 0;                           /* machine target 0x19 == code: suppressed */
+  rec.stage = 0;
+  assert(fifa96_keeper_cpu_step(&cpu, &rec, &out) == FIFA96_OK);
+  assert(out.ladder == 1);
+  assert(out.ladder_out.ran == 1 && out.ladder_out.install == 0);
+  assert(out.install == 0);
+}
+
 int main(void) {
   test_prepass_no_double_dispatch();
   test_prepass_gates_are_phase2_only();
   test_keeper_cpu_head_counter();
   test_keeper_cpu_deferred_install();
   test_keeper_cpu_ladder_gate();
+  test_keeper_cpu_ladder_five_arms();
+  test_keeper_cpu_ladder_tracked_predicate();
+  test_keeper_cpu_ladder_code4_fallthrough();
+  test_keeper_cpu_ladder_head_gates();
+  test_keeper_cpu_ladder_seam();
   puts("test_keeper_cpu OK");
   return 0;
 }
