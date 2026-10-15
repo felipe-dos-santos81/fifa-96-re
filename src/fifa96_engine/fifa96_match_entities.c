@@ -695,7 +695,13 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
   }
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
     struct fifa96_match_entity *e = &t->records[i];
-    if (i == 0) e->timer7b = e->timer79;                     /* 0x782D0 entry */
+    /* FU282 §3: the one `FUN_000782D0` operation the engine models for record 0
+     * is this `word[+0x7B] := word[+0x79]` copy (native 0x7836A/0x78374, not the
+     * `0x782D0` entry the old comment named). The machine's head (0x782D8..), its
+     * install tree (0x784D3..) and its ladder gate (0x7857B..) are the bounded
+     * skeleton in `fifa96_loader/fifa96_keeper_cpu.c`; they stay unported on the
+     * engine path while their producers are staged zero (FU282-L2/L3/L4). */
+    if (i == 0) e->timer7b = e->timer79;
     else if (e->skip_9a != 0) continue;                      /* 0x8DB42 */
     entity_timer_decay(e, frame->delta);
     if (action) {

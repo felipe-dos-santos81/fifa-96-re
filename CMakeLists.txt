@@ -240,6 +240,8 @@ target_link_libraries(test_ball_pairing PRIVATE fifa96_ball_pairing fifa96_entit
                                                 fifa96_arm_helpers)
 add_test(NAME test_ball_pairing COMMAND test_ball_pairing WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_library(fifa96_keeper_cpu src/fifa96_loader/fifa96_keeper_cpu.c)
+
 add_library(fifa96_keeper src/fifa96_loader/fifa96_keeper.c)
 target_link_libraries(fifa96_keeper PRIVATE fifa96_entity_update fifa96_rng)
 add_executable(test_keeper tests/test_keeper.c)
@@ -594,7 +596,7 @@ add_test(NAME test_engine_match_entities COMMAND test_engine_match_entities
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
 add_executable(test_keeper_cpu tests/test_keeper_cpu.c)
-target_link_libraries(test_keeper_cpu PRIVATE fifa96_engine)
+target_link_libraries(test_keeper_cpu PRIVATE fifa96_engine fifa96_keeper_cpu)
 target_include_directories(test_keeper_cpu PRIVATE src)
 target_compile_options(test_keeper_cpu PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
 target_link_options(test_keeper_cpu PRIVATE -fsanitize=address,undefined)
