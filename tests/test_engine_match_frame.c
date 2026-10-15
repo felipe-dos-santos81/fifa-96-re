@@ -4241,7 +4241,12 @@ static void test_taker_armed_referee_rows_resolve(void) {
  * re-entry call;
  * kind != 3 installs row 0x49 at `0x89464` (flags 0x00) and the gate-0 term
  * aborts (`0x894B7`), still armed at stage 3. The engine models the split as
- * `ref_restart_stage = 2`. */
+ * `ref_restart_stage = 2`.
+ *
+ * FU289 (phase-26c Task 2): the stage-3 gate's `kind` is the **contact-kind
+ * cell** `[0x15888C]` (byte `contact_kind`), read at `0x894AD MOV AL,[0x15888c];
+ * CMP EAX,3` — NOT the foul-severity cell `[0x15888D]` (`foul_kind`). The gate
+ * below stages `contact_kind`; case C stages `foul_kind` to pin the contrast. */
 static void test_engine_referee_restart_default_gate_split(void) {
   struct fifa96_match_run mr;
   const int32_t point[3] = {0x500, 0x777, 0};
@@ -4275,9 +4280,10 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.entities.team[1].target != 12);       /* no FK taker */
   assert(mr.entities.team[1].records[1].code != 0x12u);
 
-  /* case B: the hard kind (foul_kind 3, staged — the severity producer is the
-   * FU-150 decide) completes on the re-entry call: the stage-2 split, then
-   * the stage-3 gate passes via the ball row-terminal flag (kind == 3). */
+  /* case B: the FU-289 cell. The stage-3 gate reads the **contact-kind** cell
+   * `[0x15888C]` (`0x894AD`/`0x894DB`); staging `contact_kind = 3` completes on
+   * the re-entry call — the stage-2 split, then the stage-3 gate via the kind-3
+   * term -> phase 7 / row 0x12. */
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
   mr.config.field_4c306 = 1;
@@ -4288,7 +4294,7 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
   assert(mr.act.id == 8u && mr.state.phase == 0u);  /* FU-241: deferred */
   match_frame_act8_sweep(&mr);
-  mr.referee.foul_kind = 3u;             /* staged: the act-2 gate test */
+  mr.referee.contact_kind = 3u;          /* FU-289: the [0x15888C] taker cell */
   assert(mr.act.id == 2);
   assert(mr.state.phase == 0x0Au);
   assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the split */
@@ -4301,6 +4307,35 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.ref_speech == 0x2Au);
   assert(mr.entities.team[1].target == 12);
   assert(mr.entities.team[1].records[1].code == 0x12u);
+
+  /* case C (FU-289 contrast): the WRONG cell. `foul_kind = 3` with
+   * `contact_kind != 3` must NOT complete — the native gate reads `[0x15888C]`,
+   * never the severity cell `[0x15888D]`, so the machine stays armed at stage 2
+   * and installs neither taker row. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.config.field_4c306 = 1;
+  mr.session_gate_14c32a = 0;
+  mr.situation_pending = 1;
+  match_frame_stage_restarts(&mr);
+  match_frame_rng_arm_hard_foul(&mr);
+  assert(fifa96_match_run_contact(&mr, 1, 5, 6, point) == 1);
+  assert(mr.act.id == 8u && mr.state.phase == 0u);  /* FU-241: deferred */
+  match_frame_act8_sweep(&mr);
+  assert(mr.referee.contact_kind == 1u); /* the live row-0x0C re-call kind */
+  mr.referee.foul_kind = 3u;             /* the severity cell: ignored */
+  assert(mr.act.id == 2);
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the split */
+  assert(mr.act.id == 2);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the stage-3 gate holds */
+  assert(mr.act.id == 2);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(mr.ref_speech == 0u);
+  assert(mr.entities.team[1].records[1].code != 0x12u);
 }
 
 /* The settings-0 gate and the 1-in-8 skip: no decision, no machine, no phase. */
@@ -4510,11 +4545,12 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
  * (`0x8944A`), so the stage-3 gate (`0x894A2`) reduces to `contact_kind == 3 ||
  * session != 0` — i.e. `[0x158882] ≡ (contact_kind == 3)` is **already
  * proxied**, and porting it would **not** flip the rows. The next phase needs a
- * live **`contact_kind == 3`** producer. Leg note (pre-existing divergence): the
- * engine's gate reads `foul_kind`/`[0x15888D]` (`run.c:6002`) where the native
- * reads `contact_kind`/`[0x15888C]` (`0x894AB`). Rows 0x12/0x13 therefore stay
- * **LIVE-LEG**; this pins that the LIVE default path reaches act-2 stage 2 and
- * installs neither taker row. */
+ * live **`contact_kind == 3`** producer. FU289 (phase-26c Task 2) closed the
+ * cell divergence: the engine's gate now reads `contact_kind`/`[0x15888C]`
+ * (`run.c:6002/6009`), matching the native `0x894AD`/`0x894DB`. Rows 0x12/0x13
+ * therefore still stay **LIVE-LEG** (the live path emits `contact_kind == 1`);
+ * this pins that the LIVE default path reaches act-2 stage 2 and installs
+ * neither taker row. */
 static void test_foul_taker_held_on_live_default(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;

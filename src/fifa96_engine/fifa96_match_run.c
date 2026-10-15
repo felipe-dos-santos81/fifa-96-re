@@ -5999,14 +5999,14 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->ref_restart_stage = 2u;
     return 1;
   }
-  if (!(mr->referee.foul_kind == 3u || mr->session_gate_14c32a != 0u)) {
+  if (!(mr->referee.contact_kind == 3u || mr->session_gate_14c32a != 0u)) {
     /* the stage-3 gate with `[0x158882] == 0` (kind != 3): 0x894B7 ->
      * 0x89615, still armed (the native re-aborts each driver call). */
     return 1;
   }
   {
     uint8_t phase = 7u;
-    if (mr->referee.foul_kind != 3u) {
+    if (mr->referee.contact_kind != 3u) {
       int32_t ax = mr->incident_x;
       if (ax < 0) ax = -ax;
       if (ax < 0x420) {
