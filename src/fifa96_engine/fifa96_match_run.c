@@ -2084,7 +2084,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   /* FU-149 L13 (T1): the throw/corner staging cells (the native BSS defaults). */
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
-  mr->sp_157821 = 0;
+  /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`
+   * (cleared by reset_render's fifa96_camera_init), not a separate cell. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2): the producer gates
    * default off and the act-4 formation state is the zero stand-in — the order
    * matrices are a staged leg (FU201-L4: no match-begin engine consumer; the
@@ -2216,7 +2217,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   /* FU-149 L13 (T1): a fresh match drops the throw/corner staging cells. */
   mr->sp_flag_158784 = 0;
   mr->sp_delivery = 0;
-  mr->sp_157821 = 0;
+  /* FU274 §1.1: `byte[0x157821]` is the camera's `render.camera.pan_counter`. */
   /* FU-196/FU-197 (M2 phase-17 T2) / FU-201 (phase-18 T2) / FU-202 §6 rec (b)
    * (M2 phase-18 T3): a fresh match ACTIVATES the native situation producer —
    * the live `begin` path runs `fifa96_match_run_period_setup(mode 1)` after the

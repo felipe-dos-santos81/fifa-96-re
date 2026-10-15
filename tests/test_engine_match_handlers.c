@@ -362,8 +362,11 @@ static void test_action_10_runs_throw_in_body(void) {
   assert(f.mr.entities.team[0].target == 2);       /* self skipped by the +0x9A stamp */
   assert(f.mr.entities.team[0].records[2].code == 4u);
 
-  /* the |x| >= 0x720 re-queue: with the [0x157821] gate set, stage 4 loops
-   * through situation 2 (phase 0 -> the table-2 phase 3 + a fresh arm) */
+  /* the |x| >= 0x720 re-queue: the native gate reads the camera pan counter
+   * [0x157821]. The stage-3 camera cut (FUN_000700F4) clears it, so the frame
+   * that first reaches stage 4 exits; the row holds stage 4 and re-checks each
+   * frame. A live pan raises the counter, and the next stage-4 pass re-queues
+   * through situation 2 (phase 0 -> the table-2 phase 3 + a fresh arm). */
   f.mr.state.phase = 3;
   f.mr.record.stage92 = 0;
   f.mr.record.pos_x = 0;
@@ -371,8 +374,10 @@ static void test_action_10_runs_throw_in_body(void) {
   f.mr.record.timer89 = 0;
   f.mr.record.frame = 4;
   f.mr.goal_snap_x = 0x800;                /* |camera x| >= 0x720 at stage 4 */
-  f.mr.sp_157821 = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);  /* stage 2 */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
+  assert(f.mr.record.stage92 == 4u);       /* the gate exited: pan == 0 */
+  f.mr.render.camera.pan_counter = 1;      /* a live pan raised [0x157821] */
   assert(fifa96_match_dispatch_action(&f.mr, 0x10) == FIFA96_OK);
   /* FU-241 (phase-23 T4): the stage-4 BX=1 situation-2 re-queue now dispatches
    * act 8; drive the sweep to its terminal so the deferred phase-3 arm runs */
@@ -381,7 +386,6 @@ static void test_action_10_runs_throw_in_body(void) {
     assert(fifa96_match_action_phase_1E(&f.mr) == FIFA96_OK);
   assert(f.mr.state.phase == 3u);          /* situation 2 -> phase 3 */
   assert(f.mr.entities.team[0].records[8].code == 0x10u);  /* the fresh arm */
-  f.mr.sp_157821 = 0;
 
   /* phase gate: a forced phase resets the row */
   f.mr.state.phase = 5;

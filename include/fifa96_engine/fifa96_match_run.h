@@ -825,11 +825,11 @@ struct fifa96_match_run {
    *    default is 0 and the input-driven `FUN_00083428` rows 1..6 stay legs. */
   uint8_t sp_flag_158784;
   uint8_t sp_delivery;
-  /* `sp_157821` = `byte[0x157821]`, row 0x10's far-ball re-queue gate
-   * (`0x85CE4`); the native writer is the camera/presentation block (FU-149
-   * L11, unported), so begin/init seed the BSS default 0 and the requeue arm
-   * is dormant unless a caller stages it. */
-  uint8_t sp_157821;
+  /* FU274 §1.1: `byte[0x157821]` -- row 0x10's far-ball re-queue gate
+   * (`0x85CE4`) and the keeper predictor's pan gate (`0x739BB`/`0x7489C`) --
+   * is one native cell owned by the camera block: `render.camera.pan_counter`
+   * clears it on reset (`FUN_000700F4`) and increments per pan frame
+   * (`FUN_000709D0`). The former separate `sp_157821` shadow is retired. */
   /* FU-196 §3/§4 (M2 phase-17 T2) + FU-202 §6 rec (b) (M2 phase-18 T3): the
    * situation-producer machine. The native match-init
    * `FUN_000493A0 -> FUN_0004B02C(1)` (0x49415) and the period-end

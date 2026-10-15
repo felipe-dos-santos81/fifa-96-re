@@ -1721,7 +1721,11 @@ static int fifa96_match_action_10(struct fifa96_match_run *mr) {
     bx = mr->render.camera.pos_x;                         /* 0x85CCB [0x15774C] */
     if (bx < 0) bx = -bx;
     if (bx >= 0x720) {                                    /* 0x85CDD..0x85CE2 */
-      if ((int8_t)mr->sp_157821 <= 0) return FIFA96_OK;   /* 0x85CE4..0x85CEB */
+      /* 0x85CE4..0x85CEB: the gate reads the camera pan counter [0x157821] --
+       * the same cell `fifa96_camera.pan_counter` clears on reset
+       * (FUN_000700F4) and increments per pan frame (FUN_000709D0). FU274 §1.1
+       * unifies the former separate `sp_157821` shadow onto this one cell. */
+      if ((int8_t)mr->render.camera.pan_counter <= 0) return FIFA96_OK;
       /* 0x85CF1..0x85D0A: re-queue situation 2 with the record's team side. */
       return fifa96_match_run_set_piece(mr, 2u,
                                         (uint8_t)mr->entities.team[team].side, 1u);
@@ -4046,7 +4050,8 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
   {
     fifa96_keeper_predict pred;
     if (fifa96_keeper_hold_predict(&cam, side, 0, 0, 0, mr->keeper_cam_y,
-                                   mr->sp_157821, bound, &pred) == FIFA96_OK &&
+                                   mr->render.camera.pan_counter, bound, &pred) ==
+            FIFA96_OK &&
         pred.predicted != 0) {
       mr->predict_c44 = pred.scalar;
       mr->predict_c48_x = pred.target.x;

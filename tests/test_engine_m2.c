@@ -462,12 +462,14 @@
  *      codes need `goal_armed`, which the never-panning camera never sets, so
  *      no taker row executes. m 41/m 62 assert the taker mask absent from the
  *      dispatch observation and the new staging cells
- *      (`sp_flag_158784`/`sp_delivery`/`sp_157821`) fresh. The armed path is
- *      fixture-proven: `test_taker_armed_rows_resolve` (the P1 set-piece arm:
- *      throw-in BX=1 fallback -> phase 3 + 0x10; corner -> phase 4 + 0x11;
- *      both resolve) and `test_taker_armed_referee_rows_resolve` (the FU-150
- *      contact chain -> phase 7 + 0x12 / phase 6 + 0x13; both resolve). The
- *      residue is FU-149 §7.3 legs L13.1..L13.7 (below).
+ *      (`sp_flag_158784`/`sp_delivery`) and the camera pan counter
+ *      (`render.camera.pan_counter`, the unified [0x157821] cell) fresh. The
+ *      armed path is fixture-proven: `test_taker_armed_rows_resolve` (the P1
+ *      set-piece arm: throw-in BX=1 fallback -> phase 3 + 0x10; corner ->
+ *      phase 4 + 0x11; both resolve) and
+ *      `test_taker_armed_referee_rows_resolve` (the FU-150 contact chain ->
+ *      phase 7 + 0x12 / phase 6 + 0x13; both resolve). The residue is FU-149
+ *      §7.3 legs L13.1..L13.7 (below).
  *   2. T2 camera live feed (OL-T11-79/FU-148 §12): the row-04 pan origin is
  *      wired live, but the tape is **pan-dormant with probe evidence** — the
  *      tape's code-4 rows dispatch with lane 1460..1592 (> the 0x90 half-line
@@ -2475,8 +2477,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      *  - T3 input-row seam: the held RIGHT staged no kick and the seam never
      *    reached the pair (the tape's KICK edges land at phase 0x13, where the
      *    handler phase gates refuse); the ball pair is still all-zero. */
-    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u &&
-           mr->sp_157821 == 0u);
+    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u);
     assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
     assert(mr->render.camera.pos_x == 0 && mr->render.camera.pos_y == 0 &&
            mr->render.camera.pos_z == 0);
@@ -2854,8 +2855,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.sub.active == 0u);
     assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
     assert(mr->render.ball_row == NULL);
-    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u &&
-           mr->sp_157821 == 0u);
+    assert(mr->sp_flag_158784 == 0u && mr->sp_delivery == 0u);
     assert((mr->dispatched_ok & M2_TAKER_ROWS_MASK) == 0u);
     assert(mr->render.camera_pose.view_mode == 0);
     assert(mr->formation[0] == 0 && mr->formation[1] == 0);
