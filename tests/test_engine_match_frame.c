@@ -3873,6 +3873,92 @@ static void test_throw_in_taker_reachable(void) {
   drop_fixture(f);
 }
 
+/* FU277 §4.1/§4.3 (phase-26b Task 7): the keeper **row 0x1D** live trigger.
+ * The whole sit-4 install chain is already ported and sit-4-capable: the
+ * goal-scan's corner/goal-kick arm (`fifa96_match_run_goal_scan` run.c:3316)
+ * emits `situation = 3u + cond` with `cond = ((goal_snap_z < 0) == (ball == 1))`
+ * (run.c:3315-3317), the direct table-2 sit-4 row writes phase 8 and
+ * `fifa96_match_run_phase_arm` installs code **0x1D** on the controlled team's
+ * record 0 (run.c:2854-2861). The gate is `phase ∈ {2,0x10} && goal_armed &&
+ * goal_zone == 0 && |snap z| > 0xB20` (run.c:3284-3285/:3305/:3293) — its live
+ * producer is the ported armer `fifa96_match_goal_arm`, run from the frame body
+ * only when the camera leaves the bounds (run.c:4205-4207). This drives the
+ * real producer path (never a cell poke): the natural kickoff chain reaches
+ * live phase 2 (the FU274 §3 T6 idiom), then the camera is staged past the goal
+ * line in the OUT-of-mouth band (`|camera z| word >= 0xB90` ⇒ the goal-mouth
+ * classifier returns zone 0) so the scanner takes the goal-kick arm and, with
+ * the sign chosen from the live ball side, emits situation 4. Mutation-RED:
+ * without the out-of-bounds camera staging (or with the armer/scanner mutated)
+ * `goal_armed` never latches and row 0x1D never dispatches. Row 0x1E (the
+ * keeper CPU ladder, R11-L4) is out of scope.
+ *
+ * The row is the *trigger* deliverable (FU277-L1's live half): the install and
+ * the dispatch are proven here. The row's own restart emit (the shared sit-0xB
+ * tail at closedown stage 3, `fifa96_keeper.c:961`) is NOT asserted: the row
+ * machine advances stage 0 -> 1 then holds at stage 1, whose `has_slot != 0`
+ * arm needs a `slot_edge & 0x50` / `slot_pressed & 0x20` input edge that only
+ * the unported keeper slot/CPU path drives (FU277-L6 / R11-L4, out of scope).
+ * The restart *route* needs no new port (FU277 §2.1); its live reach is that
+ * downstream leg, recorded honestly rather than faked. */
+static void test_keeper_1d_goal_kick_reachable(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  int32_t id;
+  uint8_t ball;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  /* the natural kickoff chain -> live phase 2 (row 01 + the KICK release). */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);                         /* live play phase */
+  assert(mr.goal_armed == 0u);
+  /* settle one play frame so the pool's ball side (the scanner's `cond` input)
+   * is live, and pin the negative control: the in-bounds parked camera never
+   * arms the scan and row 0x1D never dispatches. */
+  one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  assert(mr.goal_armed == 0u);
+  assert((mr.dispatched_ok & (1ull << 0x1D)) == 0u);
+
+  /* stage the goal-line excursion the armer reads: beyond the goal line in the
+   * OUT-of-mouth band (`|camera z| word >= 0xB90` -> the classifier's zone 0)
+   * and `|snap z| > 0xB20` (the goal-kick band, not the throw-in band). The
+   * sign is chosen from the live ball side so the scanner's `cond` is 1 and the
+   * emit is situation 4 (goal kick) rather than situation 3 (corner). A parked
+   * camera does not move (the walk gates on speed/event_param == 0). */
+  id = mr.entities.controlled;
+  if (id < 0) id = mr.entities.ball.carrier;
+  ball = (id >= 0 &&
+          id < (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS))
+             ? mr.entities.team[(uint32_t)id / FIFA96_MATCH_ENTITY_RECORDS].side
+             : 0u;
+  mr.render.camera.pos_x = 0;
+  mr.render.camera.pos_z = ball == 1u ? -0xB90 : 0xB90;
+
+  /* one granted frame: the real armer fires (out of bounds) with the snapshot
+   * in the out-of-mouth band, and the scanner emits sit 4 -> the direct table-2
+   * phase-8 arm installs row 0x1D on the controlled team's record 0. */
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1u);         /* the live armer raised the gate */
+  assert(mr.goal_zone == 0u);          /* the excursion is out of the mouth */
+  assert(mr.state.phase == 8u);        /* the sit-4 phase-8 arm landed */
+  assert(mr.entities.team[0].records[0].code == 0x1Du);  /* the keeper row */
+
+  /* the entity chain dispatches the installed keeper row 0x1D. */
+  for (int i = 0; i < 16 && !(mr.dispatched_ok & (1ull << 0x1D)); i++)
+    one_granted_frame(&mr);
+  assert((mr.dispatched_ok & (1ull << 0x1D)) != 0u);  /* row 0x1D ran live */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-149 §1.8 (first-hand 0x8ABF3..0x8AC1C): the sit-3 counter index is
  * `FUN_000741B4(side) = (side ^ byte[0x157ABE]) & 1` — the display/score slot
  * swap, not the raw side. The queue route never counts (0x8A99E RETs before
@@ -6355,6 +6441,7 @@ int main(void) {
   test_set_piece_phase_arm_codes();
   test_taker_armed_rows_resolve();
   test_throw_in_taker_reachable();
+  test_keeper_1d_goal_kick_reachable();
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
   test_engine_referee_restart_default_gate_split();
