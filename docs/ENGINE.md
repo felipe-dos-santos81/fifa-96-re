@@ -1677,8 +1677,9 @@ the build also produces the windowed `fifa96` target (`make game`).
   granted-frame release reach **GREEN** (Layer 1) + the **honest Layer-2 waiver**
   (below). **Errata (quoted):**
   - **FU289** — `[0x158882]` is **NOT** the contact-kind cell; it is a distinct
-    ball-record terminal flag (fresh `get_xrefs_to 0x158882` = 1 READ / 0 WRITE,
-    the `0x894A2` OR-term). The contact-kind cell is **`[0x15888C]`** (`0x894AD
+    ball-record terminal flag (fresh `get_xrefs_to 0x158882` = 1 READ at
+    `0x894A2`; **no direct write xref** — the cell is written **via the helper
+    `FUN_0006E724` at `0x8941D`**, the keep/reroll install). The contact-kind cell is **`[0x15888C]`** (`0x894AD
     MOV AL,[0x0015888c]; CMP EAX,0x3`); its **sole** writer of the value `3` is
     `0x8A772` in `FUN_0008A43C` (the **kind-3 offside arm**, `0x8A735 CMP
     EBX,0x3`), reached only from the offside check `FUN_00079D5C 0x79F2B`. The
@@ -1708,13 +1709,21 @@ the build also produces the windowed `fifa96` target (`make game`).
     The `0x74442` consumer of the written cells is **leg FU281-L5** (ungated).
     *(FU281-L2/L3 resolved as ported: `fifa96_entity_find_nearest` =
     `FUN_0008DE8C`; `fifa96_entity_distance` = `FUN_0008DC68`.)*
-  - **FU283** — `0x114E04` is a **linear ramp table** (fresh `read_memory` =
-    `0x00000000, 0x00000192, 0x00000324, 0x000004B6, …`, step `0x192` = 402),
-    **data not code** (91 DATA xrefs) — it corrects FU273's "`0x114E04` sine"
-    label. The ladder installs five `FUN_0007D9A4(rec, 0x1a/0x1b/0x1c/4, 0, 1)`
-    arms (all `ECX=1` invoke-now); the **live stage index** stays unraised — legs
-    **FU283-L1/L6** (the stage-select inputs `[0x14C1D4]` and the stage tables
-    `0x10E184`/`0x10E1C4`/`0x10E1CE`).
+  - **FU283** — `0x114E04` is the **257-entry sine table** (`0 … 0x10000`),
+    running `0, 402, 804, …` and ending at `0x10000` with *decreasing*
+    increments — the same table `fifa96_ball_pairing.c:217` reads and
+    `fifa96_entity_sine` consumes (moved down as `entity_sine_table[257]`,
+    `fifa96_entity_update.c:27`); **FU273's "`0x114E04` sine" label was
+    correct**. What FU283 genuinely established is that it is a **data table**
+    (91 DATA xrefs, no calls) — a stage-select input, not code. *(Erratum: the
+    close-out's "linear ramp table (0, 402, 804, …)" claim was false — it read
+    only the first, near-linear entries; a pure step-402 ramp would end at
+    `402×256 = 0x19200`, not `0x10000`.)* The ladder installs five
+    `FUN_0007D9A4(rec, 0x1a/0x1b/0x1c/4, 0, 1)` arms (all `ECX=1` invoke-now);
+    the **live stage index** stays unraised — legs **FU283-L1/L6** (the
+    stage-select inputs `[0x14C1D4]` and the stage tables
+    `0x10E184`/`0x10E1C4`/`0x10E1CE`); the table itself stays an **unported
+    leg**.
   - **FU288** — the `[0x157A83]` actor ordering is **resolved** (GO, leg T2b-L1):
     the ladder install is gated `phase==2` (`0x7857B`) and the row-`0x1B`
     (`0x76DBF`) / row-`0x1A` (`0x7665C`) head actor-write is gated

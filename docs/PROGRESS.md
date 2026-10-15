@@ -2197,7 +2197,9 @@ live install+dispatch**, so the census is unmoved (FU288) and no `README.md` /
   each breaking it.
 
 **The quoted errata (appended; prior sections never rewritten):** (1) **FU289**
-— `[0x158882]` is **NOT** the contact-kind cell (1 READ / 0 WRITE); the cell is
+— `[0x158882]` is **NOT** the contact-kind cell (fresh `get_xrefs_to` = 1 READ at
+`0x894A2`; **no direct write xref** — the cell is written **via the helper
+`FUN_0006E724` at `0x8941D`**, the keep/reroll install); the cell is
 **`[0x15888C]`**, sole `3`-writer `0x8A772` (the kind-3 offside arm); the
 engine's wrong-cell read was fixed (T2). (2) **FU284** — row `0x1A` stays **NULL**
 (NO-GO): the sit-5 emit is BX=1 → queue id-7 → FU-146, never phase 9. (3)
@@ -2206,8 +2208,11 @@ row `0x1F` only for the non-controlled team's record 0). (4) **FU281 §2
 erratum** — the pre-pass is **already modelled** by
 `fifa96_match_entities_team_update` (since `9b7abbe8`), **not** unported; a
 standalone pass would double-dispatch; the `0x74442` consumer is **leg
-FU281-L5**. (5) **FU283** — `0x114E04` is a **linear ramp table** (0, 402, 804, …
-step `0x192`), **not** a sine (corrects FU273). (6) **FU288** — the `[0x157A83]`
+FU281-L5**. (5) **FU283** — `0x114E04` is the **257-entry sine table**
+(`0 … 0x10000`, `0, 402, 804, …` ending at `0x10000` with decreasing
+increments); FU273's "sine" label was **correct** — what FU283 really
+established is that it is a **data table** (stage-select input), an unported
+leg. (6) **FU288** — the `[0x157A83]`
 ordering resolved (the install gate is `phase==2`, the actor-write gate is
 `phase==0xD` — **disjoint**); the engine-line citations **drift** with every
 `handlers.c` edit (plan `:5512` → FU288 `:5517` → post-T5 `:5633` for row
@@ -2225,7 +2230,7 @@ errata (carried)** — row `0x1B` **is wired** (`{0x1B, fifa96_match_action_1B}`
 **The leg register (appended, quoted):** **FU285-L8** (the re-place fall-through
 tail `0x7759c..0x77631`, leg-class; depends on the unported L1 descriptor state);
 **FU285-L1/L4/L5/L6/L7**; **FU283-L1/L6** (the stage-select inputs — `0x114E04`
-is a ramp); **FU282-L1..L7**; **FU284-L1..L6**; **FU289-L1** (the live
+is the 257-entry sine table); **FU282-L1..L7**; **FU284-L1..L6**; **FU289-L1** (the live
 `contact_kind==3` raiser). The **R11-L1/L2/L3 bridge is now ported** (T3/T4); the
 ladder is wired-but-unraised **LIVE-LEG**; row `0x1A` NULL.
 
