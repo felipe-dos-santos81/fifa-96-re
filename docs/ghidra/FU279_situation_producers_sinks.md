@@ -1,5 +1,3 @@
-# FU-279 — the situation-0xB producers (the six dormant) + row-01's sinks + the act-8 tail
-
 Promoted canonical slice — phase-26b (FU279); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 7 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its ruling are unchanged by promotion.

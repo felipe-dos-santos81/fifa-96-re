@@ -1,5 +1,3 @@
-# FU-274 — the set-piece / restart live arm (the taker rows `0x10`/`0x12`/`0x13`)
-
 Promoted canonical slice — phase-26b (FU274); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 2 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its ruling are unchanged by promotion.

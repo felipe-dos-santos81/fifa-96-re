@@ -1,5 +1,3 @@
-# FU-275 — the taker-arm residuals, port shapes (FU266 L266-1..14)
-
 Promoted canonical slice — phase-26b (FU275); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 3 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its ruling are unchanged by promotion.

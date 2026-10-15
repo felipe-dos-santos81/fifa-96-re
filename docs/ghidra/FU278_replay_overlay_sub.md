@@ -1,5 +1,3 @@
-# FU-278 — the replay / overlay / sub live caller (period/screen machine)
-
 Promoted canonical slice — phase-26b (FU278); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 6 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its ruling are unchanged by promotion.

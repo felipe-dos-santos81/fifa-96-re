@@ -1,5 +1,3 @@
-# FU-276 — the contact-gate invoker, the offside receive arm, and the L10 byte
-
 Promoted canonical slice — phase-26b (FU276); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 4 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its ruling are unchanged by promotion.

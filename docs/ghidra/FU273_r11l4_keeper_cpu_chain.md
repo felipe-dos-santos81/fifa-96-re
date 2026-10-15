@@ -1,5 +1,3 @@
-# FU-273 — R11-L4, the keeper CPU chain: port shape + GO/NO-GO
-
 Promoted canonical slice — phase-26b (FU273); read-only Ghidra session, authoritative program **`/FIFA96.EXE`**; case-sensitive. No rename/comment/label/function/script/project save.
 
 Phase/Provenance: M2 phase-26b recon-ahead wave `2026-10-14-fifa96-m2-phase26b-recon-ahead`, Task 1 (bounded, read-only derivation), promoted to canonical by the phase-26b close-out. No production code; the derivation and its GO/NO-GO ruling are unchanged by promotion.
@@ -117,7 +115,7 @@ or `0x4`) via `FUN_0007D9A4` — visible at `0x78553 MOV EAX,0x19` /
 in the row-`0x19` keeper-hold body. The **ladder-internal latch `[0x157C5C]`** is
 a *different* cell, written by `FUN_00077EAC` at `0x7802D`
 (`MOV [0x157C5C],AL`, fresh `a25c7c1500`) and `0x780D7`
-(`MOV byte[0x157C5C],BH`, fresh `883d5c7c1500`), and by row-`0x1F` `0x76318`
+(`MOV byte[0x157C5C],BH`, fresh `883d5c7c1500`), and by `FUN_00076130` `0x76318`
 (`MOV byte[0x157C5C],BH`, fresh `883d5c7c1500`) — fresh
 `get_xrefs_to 0x157C5C` = 6. (Erratum to the first draft: the earlier
 "`0x76318`/`0x7802D`/`0x780D7` write `0x157C5D`" was **byte-wrong** — those three
@@ -514,7 +512,7 @@ To be added **when** the R11-L4 producer lands (it must fail on the baseline —
 | `FUN_000765C4` shared by the ladder + row `0x1A` | `get_xrefs_to 0x765C4` = 2 (`0x781EC`, `0x76695`) |
 | `FUN_00076B28` shared by row `0x1B` + row `0x1C` | `get_xrefs_to 0x76B28` = 2 (`0x76FA2`, `0x779B4`) |
 | `[0x157C5D]` = the interlock gate: reader `0x7858E`, clear `0x785A2`, sole setter `0x74707` | `get_xrefs_to 0x157C5D` = 3; `disassemble_bytes 0x7859C`/`0x74700` |
-| `[0x157C5C]` = the ladder/row-`0x1F` latch: `0x7802D`/`0x780D7` (ladder), `0x76318` (row `0x1F`) | `get_xrefs_to 0x157C5C` = 6; `disassemble_bytes 0x78020`/`0x780D0`/`0x76310` |
+| `[0x157C5C]` = the ladder/row-`0x1F` latch: `0x7802D`/`0x780D7` (ladder), `0x76318` (`FUN_00076130`) | `get_xrefs_to 0x157C5C` = 6; `disassemble_bytes 0x78020`/`0x780D0`/`0x76310` |
 | ladder `FUN_000765C4 != 0` fall-through installs **code 4** (`0x781FB MOV EDX,0x4`; `0x78200 JMP 0x782bb`) | `disassemble_bytes 0x781A0`; switch table `read_memory 0x77E98` = `{0x7826D,0x78245,0x7821D,0x78294,0x782B1}` |
 | `[0x157A83]` the actor cell (ref set) | `get_xrefs_to 0x157A83` = 112 |
 | engine rows `0x1A` NULL / `0x1B`/`0x1C` wired | `fifa96_match_handlers.c:5512/5514/5516` |
