@@ -194,3 +194,20 @@ head); FU283-L1 (now advanced by this draft).
 * **FU291-L5 — the table reset `FUN_00024b00` (`0x24b98`).** Zeroes both words
   independently of the ported option-pack builder; relationship to
   `fifa96_input_range_words` unclassified. Owner: FU-148.
+
+## Closures / errata (phase-27 T2)
+
+* **FU291-L2 — ADVANCED (the gate glue wired).** `fifa96_keeper_cpu_record`
+  no longer carries a caller-supplied `prepass_ah2`: the ladder head
+  (`fifa96_keeper_cpu_ladder_run`, `src/fifa96_loader/fifa96_keeper_cpu.c`)
+  now computes the `0x77EE8 AND AH,2` bit live as
+  `(input_range[(side ^ side_swap) & 1] >> 9) & 1`, from new record fields
+  `side_swap` (`[0x157ABE]`) + `input_range[2]` (`[0x14C1D4]`). This is the
+  **zero-δ** bounded win: the gate keeps its only consumer (the keeper-CPU
+  ladder), which is still not wired into the live engine, so no behaviour
+  changes. The pre-existing legs are unchanged: **FU291-L1** (`[0x157ABE]`'s
+  producer `FUN_0007417c` stays unported — the record's `side_swap` is
+  caller-supplied) and **FU291-L3** (the counters' stats screen) remain open.
+  Evidence: `tests/test_keeper_cpu.c`
+  `test_keeper_cpu_prepass_gate_from_input_range` (RED then GREEN); M1 `cmp`
+  byte-identical; M2 `cmp` byte-identical (zero-δ).

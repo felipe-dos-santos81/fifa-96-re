@@ -97,7 +97,13 @@ int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
   /* Head gates (`0x77EB7..0x77F29`): each closed gate jumps to the shared tail
    * `0x782C4` with no install. */
   if (rec->code != 0x19u) return FIFA96_OK;      /* byte +0x91 == 0x19 (0x77EC2) */
-  if (rec->prepass_ah2 != 0) return FIFA96_OK;   /* [0x14C1D4] AH&2 (0x77EF0; FU283-L1) */
+  /* FU291 (phase-27 T2): the `[0x14C1D4]` bit-9 gate, computed live:
+   * `FUN_000741B4` fold (0x77ED9) picks the word, bit 1 of its high byte
+   * (`0x77EE8 AND AH,2`) is the gate. */
+  {
+    uint32_t idx = (uint32_t)((rec->side ^ rec->side_swap) & 1u);
+    if (((rec->input_range[idx] >> 9) & 1u) != 0u) return FIFA96_OK; /* 0x77EF0 */
+  }
   if (rec->gate_9a != 0) return FIFA96_OK;       /* the +0x9A skip (0x77EFD) */
   if (rec->is_T != 0) return FIFA96_OK;          /* *(param_1[10]) == 'T' (0x77F10) */
   if (rec->timer81 != 0) {                       /* the +0x81 timer (0x77F16) */

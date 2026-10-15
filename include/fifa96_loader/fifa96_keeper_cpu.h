@@ -29,8 +29,13 @@ typedef struct fifa96_keeper_cpu_record {
   uint32_t queued20;    /* dword +0x20 (the ladder-gate queued-action cell) */
 
   /* FU283 (Task 8) — the ladder `FUN_00077EAC` inputs (`0x77EB7..0x77F51`). */
-  uint8_t prepass_ah2;       /* `[0x14C1D4][FUN_000741B4(side)] >> 8 & 2` (0x77EDE),
-                              * UNPORTED producer (FU283-L1; the caller supplies it) */
+  uint8_t side_swap;         /* `[0x157ABE]` — the side-swap cell; its producer
+                              * (`FUN_0007417c`, `(byte[0x157AC2]^byte[0x157AC3])&1`)
+                              * is UNPORTED (FU291-L1), the caller supplies the
+                              * available match-state value */
+  uint16_t input_range[2];   /* `[0x14C1D4]` — the per-side word table
+                              * (`fifa96_input_range_words`); the FU291 gate reads
+                              * bit 9 of `input_range[(side ^ side_swap) & 1]` */
   uint8_t gate_9a;           /* byte +0x9A — the skip state (0x77EF6) */
   uint8_t is_T;              /* `*(param_1[10]) == 'T'` (0x77F03) */
   uint8_t actor_present;     /* `[0x157A83] != 0` (0x77F3C) */
@@ -97,8 +102,10 @@ int fifa96_keeper_cpu_step(fifa96_keeper_cpu *cpu,
 /* FU283 §4/§5 — the ported `FUN_00077EAC` body: the head gates, the actor/side
  * skip, the `FUN_000765C4` code-4 fall-through, and the five install arms
  * (CX-1 through `0x77E98`). The stage index `rec->stage` and the unported
- * selector inputs (`prepass_ah2`, `global_158740`) are caller-supplied — the
- * selector machine itself stays an open leg (FU283-L6). */
+ * `global_158740` selector input are caller-supplied — the selector machine
+ * itself stays an open leg (FU283-L6). The `[0x14C1D4]` bit-9 gate is now
+ * computed live from `rec->side ^ rec->side_swap` + `rec->input_range`
+ * (FU291, phase-27 T2). */
 int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
                                  fifa96_keeper_cpu_ladder_out *out);
 

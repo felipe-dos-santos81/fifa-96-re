@@ -376,7 +376,7 @@ static void test_keeper_cpu_ladder_head_gates(void) {
   assert(out.ran == 0 && out.install == 0);
 
   rec = kc_ladder_open(1);
-  rec.prepass_ah2 = 0x2;                        /* 0x77EF0: the [0x14C1D4] AH&2 gate */
+  rec.input_range[0] = 0x200u;                  /* 0x77EF0: the [0x14C1D4] bit-9 gate */
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
   assert(out.ran == 0 && out.install == 0);
@@ -430,6 +430,46 @@ static void test_keeper_cpu_ladder_head_gates(void) {
   assert(out.ran == 1 && out.install == 0);
 }
 
+/* FU291 §Port shape (phase-27 T2) — the ladder head gate is now COMPUTED from
+ * live `input_range` (`[0x14C1D4]`) and `side ^ side_swap` (the `FUN_000741B4`
+ * fold `0x77ED9`), not a caller-supplied flag. The tested bit is **bit 9** of
+ * the selected word (`0x77EE8 AND AH,2`); side/side_swap pick the word. */
+static void test_keeper_cpu_prepass_gate_from_input_range(void) {
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_ladder_out out;
+
+  rec = kc_ladder_open(1);
+  rec.side = 0;
+  rec.side_swap = 0;                            /* idx = (0 ^ 0) & 1 = 0 */
+  rec.input_range[0] = 0x200u;                  /* bit 9 set -> gate closed */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0 && out.install == 0);
+
+  rec.input_range[0] = 0x100u;                  /* bit 8 is NOT the gate bit */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.install == 1);
+
+  rec.side_swap = 1;                            /* idx = 1 -> word 1 selected */
+  rec.input_range[0] = 0x200u;                  /* word 0's bit is now inert */
+  rec.input_range[1] = 0u;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1 && out.install == 1);
+
+  rec.input_range[1] = 0x200u;                  /* word 1's bit 9 closes */
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0 && out.install == 0);
+
+  rec.side = 1;                                 /* idx = (1 ^ 1) & 1 = 0 */
+  rec.input_range[1] = 0u;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 0 && out.install == 0);
+}
+
 /* FU283 §Port shape / Task 8 — the ladder is wired INTO the FU282 seam (the
  * default is the ported body, replacing the no-op stub). The live stage index
  * cannot be raised (its selector inputs are unported, FU283-L6), so a 0x19
@@ -470,6 +510,7 @@ int main(void) {
   test_keeper_cpu_ladder_tracked_predicate();
   test_keeper_cpu_ladder_code4_fallthrough();
   test_keeper_cpu_ladder_head_gates();
+  test_keeper_cpu_prepass_gate_from_input_range();
   test_keeper_cpu_ladder_seam();
   puts("test_keeper_cpu OK");
   return 0;
