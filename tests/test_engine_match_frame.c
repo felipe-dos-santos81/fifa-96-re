@@ -4195,6 +4195,100 @@ static void test_engine_referee_foul_sequence(void) {
   assert(mr.referee.team_count[0] == 8u && mr.act.stage == 6u);
 }
 
+/* FU276-L1 (phase-26b Task 4): the live contact-gate reach proof. The contact
+ * chain row-0x0B arm-1 -> row-0x0C -> `fifa96_match_run_contact` is
+ * producer-wired but no granted-frame test raised it. Here the real pad
+ * `0x7CE38` producer (the `want 0x60` handler `match_run.c:693-700` = native
+ * `0x7CE63..0x7CE93`) installs action 0x0B with invoke on the slot-bound
+ * record; row-0x0B arm 0 (`0x81AFB`) installs the contact anim {0x0C} and arms
+ * stage 1; the next frame's arm 1 (`0x81B1F`..`0x81BEB`) registers contact kind
+ * 2 and installs action 0x0C on the found opponent, whose row-0x0C stage 0
+ * (`match_handlers.c:3329`) re-calls `fifa96_match_run_contact` (the native
+ * block `0x81E8A..0x81ED4`) -> the kind-1 decision dispatches act 3 invoke-now
+ * (phase-0x19 stage 0: whistle, phase 0x0F, install action 0x16 on the fouler).
+ *
+ * The row-0x0B arm-1 gate is the record animation-frame byte `byte[+0x3D]`
+ * (`0x81B1F`); its live producer is the render-gated FU-84 advance
+ * `FUN_0008E008` (`match_run_scene_stage`, run only when `render.enabled`), so
+ * a headless fixture stages the byte between frames exactly as the direct-walk
+ * dual tests do (`test_action_0b_duel_chain_installs_row_5e`,
+ * handlers `:2108` "native +0x3D (producer OL-80/OL-82)"). The gate cell
+ * `ref_machine` is never touched; the contact path routes through the act
+ * machine (FU175-L7 retired the ad-hoc `ref_machine` FOUL route), so the gate
+ * consequence is `act.id == 3` / `state.phase == 0x0F`. */
+static void test_contact_gate_reachable_via_pad_duel(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *fouler;   /* the duel initiator (A) */
+  struct fifa96_match_entity *found;    /* the challenged record (B) */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;                    /* live in-play phase */
+  mr.state.period_length = 90;
+  mr.config.field_4c306 = 2;             /* the fouls master on (0x14C306) */
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  fouler = &mr.entities.team[0].records[4];
+  found = &mr.entities.team[1].records[4];
+  /* A: slot-bound, standing (code 0, type_bits & 1), facing +x, band 0x40 from
+   * B per the direct-walk fixture (`0x300/0x200` vs `0x340/0x200`). */
+  fouler->has_slot = 1;
+  fouler->active = 1;
+  fouler->code = 0;
+  fouler->type = 2;
+  fouler->pos_x = 0x300;
+  fouler->pos_z = 0x200;
+  fouler->anim_id = 0;
+  fouler->frame = 0;
+  /* B: the nearest opponent, active, band 0x40 (in the arm-0 (0x20,0x70) and
+   * arm-1 <= 0x60 windows). */
+  found->active = 1;
+  found->pos_x = 0x340;
+  found->pos_z = 0x200;
+  mr.slot.entity = 4;
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;   /* not the tracked self */
+  mr.entities.team[0].chosen = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  /* isolate the two duel records (native +0x9A pool skip). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!((t == 0u && i == 4u) || (t == 1u && i == 4u)))
+        mr.entities.team[t].records[i].skip_9a = 1;
+
+  /* the pad `want 0x60` press: PASS|LONG_BALL -> mapped 0x60 (the real input
+   * map, `match_run_map_key`) -> the scan dispatch code 0 -> handler 0x7CE38. */
+  {
+    fifa96_platform_key keys[2] = {{FIFA96_ENGINE_KEY_PASS, 1},
+                                   {FIFA96_ENGINE_KEY_LONG_BALL, 1}};
+    assert(fifa96_match_run_input(&mr, keys, 2) == 0);
+  }
+
+  /* granted frame 1: the pad handler installs 0x0B (invoke); row-0x0B arm 0
+   * runs, installs the 0x0C contact anim and arms stage 1. */
+  one_granted_frame(&mr);
+  assert(fouler->code == 0x0Bu);         /* the pad handler's install */
+  assert(fouler->stage92 == 1u);         /* arm 0 armed arm 1 */
+  assert(fouler->anim_id == 0x0Cu);      /* the standing contact anim choice */
+  assert(mr.referee.contact_kind == 0u); /* no contact yet (arm 1 waited) */
+
+  /* the arm-1 frame-byte producer (render-gated headless): stage `byte[+0x3D]`
+   * non-zero so arm 1 (`0x81B1F`) fires next frame. */
+  fouler->frame = 3u;
+
+  /* granted frame 2: arm 1 registers kind 2 + installs row 0x0C on B; B's
+   * row-0x0C stage 0 re-calls `fifa96_match_run_contact` -> kind 1 -> act 3. */
+  one_granted_frame(&mr);
+  assert(mr.referee.rec_first == 4);     /* A = the initiator */
+  assert(mr.referee.rec_second == 15);   /* B = the challenged (team 1 rec 4) */
+  assert(mr.entities.team[0].duel_7d7 == 1u);      /* arm-1 `0x81B83` */
+  assert(mr.referee.contact_kind == 1u); /* `fifa96_match_run_contact` ran */
+  assert(mr.referee.recall_consumed == 1u);        /* past the gate + draw */
+  assert(mr.act.id == 3u);               /* the act-3 foul sequence dispatched */
+  assert(mr.state.phase == 0x0Fu);       /* phase 0x19 stage 0 phase write */
+  assert(fouler->code == 0x16u);         /* install action 0x16 on the fouler */
+  assert(mr.referee.fouls_by_side[0] == 1u);   /* the stage-0 foul counter */
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);   /* the retired route */
+}
+
 /* Stage the offside geometry: the receiver (team 0 record 3) beyond the own
  * nearest (record 1) and the team-1 last defender (record 2), all other
  * records parked far from the ball so the nearest queries are deterministic. */
@@ -6044,6 +6138,7 @@ int main(void) {
   test_taker_armed_referee_rows_resolve();
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();
+  test_contact_gate_reachable_via_pad_duel();
   test_engine_referee_offside_chain();
   test_engine_offside_l10_reads_code_not_type();
   test_scan_restart_arms();
