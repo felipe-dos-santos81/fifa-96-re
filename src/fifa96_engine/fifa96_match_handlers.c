@@ -3703,15 +3703,55 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
  *  - stage 1 (`0x76E3B`): the derivable `+0x51 += 0x20`; the `0x8DCD4`/
  *    `0x79C50`/`0xCD474` metric/face/heading and the `0x114E04` sine rotation
  *    are FU180-L1/L2;
- *  - stage 2 (`0x76FC7` -> `0x77636`): the rush gates; all roads reach
- *    `0x77636`, which either tails on `+0x44==0` or advances to stage 3/4; the
- *    wide body incl. the `0x71C94` call (`0x77423`) is FU180-L1;
+ *  - stage 2 (`0x76FC7` -> `0x77636`): the rush gates + the **wide body**
+ *    (ported, M2 phase-26c T5 / FU-285 §1 — see the gate chain at the stage-2
+ *    block): the `0x76FD5` mutual exclusion, the `0x76FF4` `[0x157C5C]` latch
+ *    re-place (`0x774DD`, incl. the **ungated self-actor** `0x77568`), the
+ *    `0x77423 CALL 0x71C94` pan setter and the `0x774C0` terminal; the deep
+ *    pan-vector/descriptor interpolation (`0x7707D..0x77420`) stays FU285-L1
+ *    (`mr->match1b_wide_leg`); every gate still reaches `0x77636`, which either
+ *    tails on `+0x44==0` or advances to stage 3/4;
  *  - stage 3 (`0x7769F`): the `+0x44` gate then `+0x89=0`, `+0x92++`;
  *  - stage 4 (`0x776C1`): `+0x92=4`, `FUN_0007DAB4`, target=pos, then the
  *    ported `fifa96_keeper_reposition_b_finish` (not-controlled -> install
  *    0x19; controlled+CPU -> situation 5; controlled+human -> nothing).
- * The `FUN_00076B28` steering, the record-0 machine and the CPU escalation
- * ladder carrying the second installer stay FU180-L3/L4/L5. */
+ * The `FUN_00076B28` steering (FU285-L4), the `0x6E598`/sit-7 emit surfaces
+ * (FU285-L5/L6) and the record-0 machine / CPU escalation ladder carrying the
+ * second installer stay FU180-L3/L4/L5 legs. */
+/* FU-285 §1 (M2 phase-26c T5): the row-0x1B stage-2-wide `0x774DD` re-place
+ * block (reached from the `0x76FF4` `[0x157C5C]` latch clear or the `0x7720E`
+ * `[0x157C58]==0` arm, fresh `disassemble_bytes 0x774dd`). It re-places the
+ * per-sector camera (`[0x15774C]/[0x157754]/[0x157750] = pos + the
+ * `0x10F334/3C[sector]<<4`/`+0x38` offsets), sets `[0x157C59]=1` and
+ * `byte[+0x9B]=1`, CALLs `0x700F4` (flag 1 = the place pause), runs the
+ * `0x6E598` anim install (its arg = the staged anim + 1, OL-52) and — **the
+ * load-bearing bit, FU285-L1** — the **ungated** self-actor write
+ * `0x77568 [0x157A83] = EBP` (no phase/side gate), then the sit-7 emit
+ * `0x77589 (0x8A938(7, side, 0), FU285-L6)` and falls to the `0x77636`
+ * stage-4 head so the emit `0x77707` self-satisfies (`EBP == [0x157A83]`).
+ * `*self_actor` records the `0x77568` write. Returns 1. */
+static int match_1b_replace(struct fifa96_match_run *mr,
+                            struct fifa96_match_run_record *r,
+                            uint8_t *self_actor) {
+  int32_t cam_x = r->pos_x + (int32_t)r->place_offset_x * 16;   /* 0x774E6..0x77503 */
+  int32_t cam_z = r->pos_z + (int32_t)r->place_offset_z * 16;
+  int32_t cam_y = r->pos_y + 0x38;                              /* 0x77513..0x7751b */
+  mr->keeper_cam_x = cam_x;                                     /* [0x15774C] */
+  mr->keeper_cam_z = cam_z;                                     /* [0x157754] */
+  mr->keeper_cam_y = cam_y;                                     /* [0x157750] */
+  r->place_x = cam_x;                                           /* 0x77542 CALL 0x700F4 (flag 1) */
+  r->place_y = cam_y;
+  r->place_z = cam_z;
+  r->place_valid = 1;
+  mr->flag_157820 = 1;   /* the flag-1 place pause (0x700F4 writes both cells) */
+  mr->flag_157822 = 1;
+  mr->keeper_latch[5] = 1;                                      /* 0x77536 [0x157C59] = 1 */
+  r->has_ball = 1;                                              /* 0x7753C byte[+0x9B] = 1 */
+  r->controlled = 1;                                            /* 0x77568 the ungated self-actor */
+  *self_actor = 1;
+  return 1;
+}
+
 static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   struct fifa96_match_team *team;
@@ -3781,6 +3821,45 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
     stage = 2u;                                                  /* 0x76FC1 */
   }
   if (stage == 2u) {                                             /* 0x76FC7 */
+    /* FU-285 §1 (M2 phase-26c T5): the stage-2 wide / rush body. Every gate
+     * here diverts to the `0x77636` stage-4 head; the wide route / the
+     * `0x774DD` re-place run before that head. Fresh `disassemble_bytes
+     * 0x76FC7` + `0x77400`:
+     *  - `0x76FC7 byte[0x157C55] != 0 -> 0x77636` (the rush latch);
+     *  - `0x76FD5 CMP EBP,[0x157A83]; JZ 0x77636` — the **mutual exclusion**:
+     *    the head-bound actor diverts STRAIGHT to the stage-4 head, so the
+     *    wide block (hence the `0x77568` self-write and the pan setter) is
+     *    reached ONLY when the head did NOT bind the actor;
+     *  - `0x76FE1 CMP EBP,[0x1577CA]; JZ 0x77636` (the tracked keeper);
+     *  - `0x76FF4 [0x157C5C] != 0 -> clear + JMP 0x774DD` (the re-place);
+     *  - `0x7700E word[+0x6B] > word[+0x77] (JG) -> 0x77636` (the rush gate);
+     *  - `0x7701C [ESP+0xe]>>16` ∈ `[0x34,0x3A]` -> else `0x77636`: the
+     *    `[ESP+0xe]` dword's high word is the `[ESP+0x10]` anim word staged at
+     *    `0x76FFA` from `byte[[rec+0x28]]` (= `record.anim_id`);
+     *  - the pitch bounds / the deep pan-vector interpolation
+     *    (`0x7707D..0x77420`, the `0x8DC50`/`0x8DC68`/`0xCD474` fold + the
+     *    `[[rec+4]+9]` descriptor term) are `FU285-L1` — the reach to the
+     *    `0x71C94` pan setter (`0x77423`) and its `0x71D27 [0x1577CA] = rec`
+     *    bind are ported, the vector construction is not (`match1b_wide_leg`);
+     *  - `0x774C0` terminal: `0x974DC(4)` (sink, FU285-L1) + `[0x157C55]=1`. */
+    if (mr->keeper_latch[1] == 0u) {                             /* 0x76FC7 */
+      if (actor_is_rec == 0u) {                                  /* 0x76FD5 (mutual exclusion) */
+        if (mr->render.camera.tracked != id) {                   /* 0x76FE1 */
+          uint8_t anim = r->anim_id;                             /* 0x76FED byte[[rec+0x28]] */
+          if (mr->global_157c5c != 0u) {                         /* 0x76FF4 */
+            uint8_t self_actor = 0;
+            mr->global_157c5c = 0u;                              /* 0x77003 */
+            (void)match_1b_replace(mr, r, &self_actor);
+            if (self_actor != 0) actor_is_rec = 1;               /* 0x77568 */
+          } else if ((int16_t)e->lane_x <= (int16_t)e->bound &&  /* 0x7700E */
+                     (int16_t)anim >= 0x34 && (int16_t)anim <= 0x3A) {  /* 0x7701C */
+            mr->match1b_wide_leg = 1;                            /* the FU285-L1 interpolation */
+            (void)fifa96_camera_set_tracked(&mr->render.camera, id);  /* 0x77423/0x71D27 */
+            mr->keeper_latch[1] = 1u;                            /* 0x774CC [0x157C55] = 1 */
+          }
+        }
+      }
+    }
     if (r->row44 == 0) { r->stage92 = stage; return FIFA96_OK; }  /* 0x7763A */
     if (mr->global_157a4c != 1u || actor_is_rec == 0)
       stage = 4u;                                                /* 0x7764B/0x77655 -> 0x776C1 */
@@ -5540,7 +5619,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x1A, NULL,
      "FU-186 §2.1/§4.1 (phase-16 T3): row 1A keeper-reposition body ported (fifa96_match_action_1A, 0x7662C.. stage-0 slice: the phase-0xD+[0x157AAC] side bind, the +0x89 timer, the +0x92>4 tail and the fifa96_keeper_reposition_a_gate stage-0 arm + the 0x79B1C snap) but NOT counted: its only installer is the unported FUN_00077EAC CPU ladder (0x78227/0x7824F/0x78277, FU186-L5) on the unported FUN_0008D8EC -> FUN_000782D0 pre-pass; the rows-27/29/2C precedent (ported body, entry unresolved); the [0x157C2C] direction machine + movement/event block + stages 1-4 are FU186-L1; OL-34; -UNSUPPORTED"},
     {0x1B, fifa96_match_action_1B,
-     "FU-180 §2 (phase-15 T2): row 1B reposition/rush bounded body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 (0x76DF6/0x76E3B/0x7769F/0x776C1) and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the 0x14E04 sine rotation, the 0x76B28 steering, the stage-2 wide body (0x71C94) stay FU180-L1/L2/L3; installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
+     "FU-180 §2 (phase-15 T2) + FU-285 §1/§5 (M2 phase-26c T5): row 1B reposition/rush body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the stage-2 wide is now ported (FU-285): the 0x76FD5 mutual exclusion (EBP==[0x157A83] -> 0x77636), the 0x76FF4 [0x157C5C] latch clear -> the 0x774DD re-place (incl. the UNGATED self-actor 0x77568 and the 0x774C0 tail [0x157C55]=1), the 0x77423 CALL 0x71C94 pan setter (0x71D27 [0x1577CA]=rec) and the 0x7700E rush + 0x7701C anim-band gates, so the 0x77707 sit-5 emit is self-satisfying (FU285-L1 narrows FU-273 T2b-L1); the deep pan-vector/descriptor interpolation (0x7707D..0x77420), the 0x14E04 sine rotation and the 0x76B28 steering stay FU285-L1/L4 (FU180-L1/L2/L3); installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
     {0x1C, fifa96_match_action_1C,
      "FU-186 §2.2/§4.1 (phase-16 T3): row 1C keeper-lunge body ported (fifa96_match_action_1C, 0x77728..: head timer89 += delta, stage 0 (ran/timer89=0/keeper_latch[2]=0/stage->1), stage 1 = the 0x8DCD4 metric + the fifa96_keeper_lunge_track on-target pos shift (|angle(distance,target_y)|<0x55) and stage 2 (row44 -> match_row_reset); installer LIVE: the wired row-0x1F stage-3 tail drains fifa96_keeper_input_decide whose both-slot-dirs-zero arm installs 0x1C invoke-now (FUN_00076130 0x76291->0x762A4), so the route executes end-to-end; the 0x79C50 face, the +0x7F heading, the 0x77856 rotated arm (0x114E04 sine + 0x795A4), the 0x6E598 anim, the 0x76B28 steering and the 0x779DE tail stay FU186-L2; the second installer FUN_00077EAC 0x782B6 stays FU186-L5"},
     {0x1D, fifa96_match_action_1D,

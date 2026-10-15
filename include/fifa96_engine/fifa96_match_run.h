@@ -684,6 +684,16 @@ struct fifa96_match_run {
    * `fifa96_match_action_09`, cleared by init; observability for the explicit
    * unported path (never a silent no-op). */
   uint8_t match09_leg_stage;
+  /* M2 phase-26c T5 / FU-285: the row-0x1B stage-2 wide interpolation marker.
+   * 0 = the stage-2 wide interpolation was not reached (or diverted at the
+   * `0x76FD5`/`0x7700E`/`0x7701C` gates); 1 = the body reached the wide route
+   * and the deep pan-vector/descriptor arithmetic (`0x7707D..0x77420`, the
+   * `0x8DC50`/`0x8DC68`/`0xCD474` fold + the `[[rec+4]+9]` descriptor term)
+   * stayed a numbered leg (FU285-L1) — the reach and the `0x71C94` tracked bind
+   * (`0x71D27`) are ported, the vector construction is not. Written by
+   * `fifa96_match_action_1B`; cleared by init/begin (observability, never a
+   * silent no-op). */
+  uint8_t match1b_wide_leg;
   int32_t predict_c44;
   int32_t predict_c48_x;
   int32_t predict_c48_y;

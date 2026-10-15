@@ -3457,6 +3457,126 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
   drop_fixture(&f);
 }
 
+/* ===== M2 phase-26c T5 / FU-285: the row-0x1B stage-2 wide + self-actor =====
+ *
+ * The row-`0x1B` stage-2 body (`0x76FC7..0x77636`) is the `0x76FD5` gate chain
+ * + the wide/rush body + the `0x774DD` re-place. Fresh `/FIFA96.EXE`
+ * (FU285 §1, re-verified this slice):
+ *  - `0x76FC7 MOV DH,[0x157C55]; JNZ 0x77636`;
+ *  - `0x76FD5 CMP EBP,[0x157A83]; JZ 0x77636` — the **mutual exclusion** (the
+ *    head-bound actor diverts straight to the stage-4 head);
+ *  - `0x76FE1 CMP EBP,[0x1577CA]; JZ 0x77636` (the tracked keeper);
+ *  - `0x76FF4 [0x157C5C]! = 0 -> clear + JMP 0x774DD` (the re-place);
+ *  - `0x7700E word[+0x6B] > word[+0x77] -> 0x77636`; `0x7701C` the
+ *    `[ESP+0xe]>>16` band (the anim word `[ESP+0x10]` = `byte[[rec+0x28]]`)
+ *    `[0x34,0x3A]`; the pitch bounds; the `0x77423 CALL 0x71C94` pan setter;
+ *    the `0x774C0` terminal (`0x974DC(4)`, `[0x157C55]=1`).
+ * The `0x774DD` re-place carries the **ungated self-actor** `0x77568
+ * [0x157A83]=EBP` (no phase/side gate) and the sit-7 emit `0x77589`, then
+ * falls to the `0x77636` stage-4 head, so the emit `0x77707` self-satisfies
+ * (FU285-L1 narrows FU-273 T2b-L1). The deep pan-vector/descriptor arithmetic
+ * (`0x7707D..0x77420`) is the FU285-L1 leg (`mr->match1b_wide_leg`). */
+
+/* The wide ROUTE: head not bound (phase != 0x0D), rec != actor and != tracked,
+ * the `[0x157C5C]` latch clear, the rush (`+0x6B <= +0x77`) and band gates pass
+ * -> the `0x71C94` pan setter is reached (`0x71D27 [0x1577CA] = rec`) and the
+ * `0x774C0` terminal sets `[0x157C55] = 1`. The wide route does NOT self-write
+ * the actor, so the emit is NOT reached: the not-controlled finish installs
+ * 0x19. */
+static void test_action_1b_wide_route_binds_pan(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;                 /* the head gate fails -> the wide runs */
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;                /* 0x7763A does not tail out */
+  f.mr.record.anim_id = 0x36;           /* the 0x7701C [0x34,0x3A] band */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.has_ball = 0;
+  f.mr.record.controlled = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.keeper_latch[1] = 0;             /* 0x157C55 clear */
+  f.mr.global_157c5c = 0;               /* the latch clear -> the wide route */
+  e->lane_x = 0;                        /* the 0x7700E rush gate passes */
+  e->bound = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.render.camera.tracked == 0);   /* 0x71D27 the pan setter bind */
+  assert(f.mr.keeper_latch[1] == 1);         /* 0x774CC [0x157C55] = 1 */
+  assert(f.mr.record.controlled == 0);       /* the wide route does not self-write */
+  assert(f.mr.keeper_latch[5] == 0);         /* the 0x774DD re-place did not run */
+  assert(f.mr.match1b_wide_leg == 1);        /* the interpolation is FU285-L1 */
+  assert(f.mr.state.phase == 0);             /* no emit: not-controlled -> 0x19 */
+  assert(e->code == 0x19u);
+  drop_fixture(&f);
+}
+
+/* The `0x774DD` re-place block (reached from the `0x76FF4` latch): with
+ * `[0x157C5C]` set the body clears it, re-places the camera, and runs the
+ * **ungated self-actor** `0x77568 [0x157A83] = EBP` + the sit-7 emit `0x77589`,
+ * then falls to the `0x77636` stage-4 head; the emit `0x77707` then
+ * self-satisfies (`EBP == [0x157A83]`) -> situation 5 -> phase 9. The pan
+ * setter is NOT called on this route. */
+static void test_action_1b_replace_self_actor_reaches_emit(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0;                 /* head fails -> the exclusion is open */
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.record.pos_x = 0x40;
+  f.mr.record.pos_y = 0x10;
+  f.mr.record.pos_z = 0x50;
+  f.mr.record.controlled = 0;
+  f.mr.record.has_ball = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.keeper_latch[1] = 0;
+  f.mr.global_157c5c = 1;               /* the 0x76FF4 latch -> 0x774DD */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.record.controlled == 1);       /* 0x77568 the ungated self-actor */
+  assert(f.mr.global_157c5c == 0);           /* 0x77003 the latch clear */
+  assert(f.mr.keeper_latch[5] == 1);         /* 0x77536 [0x157C59] = 1 */
+  assert(f.mr.record.has_ball == 1);         /* 0x7753C +0x9B = 1 */
+  assert(f.mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);  /* no pan */
+  assert(f.mr.state.phase == 9u);            /* 0x77707 emit -> situation 5 */
+  assert(e->code != 0x19u);                  /* controlled -> no install */
+  drop_fixture(&f);
+}
+
+/* The `0x76FD5` mutual exclusion: the head-bound actor (phase 0x0D + side)
+ * diverts STRAIGHT to the `0x77636` stage-4 head — the whole wide block (the
+ * `[0x157C5C]` latch clear, the `0x774DD` self-actor `0x77568`, the pan setter)
+ * is NOT reached. The emit still fires off the head bind. */
+static void test_action_1b_mutual_exclusion_skips_wide(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 0x0D;              /* the head gate passes */
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  f.mr.record.stage92 = 2;
+  f.mr.record.row44 = 1;
+  f.mr.record.controlled = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  f.mr.keeper_latch[1] = 0;
+  f.mr.global_157c5c = 1;               /* would route to 0x774DD if reached */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(f.mr.record.controlled == 1);       /* the HEAD bind, not 0x77568 */
+  assert(f.mr.global_157c5c == 1);           /* latch NOT cleared: wide skipped */
+  assert(f.mr.keeper_latch[5] == 0);         /* the 0x774DD re-place did not run */
+  assert(f.mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);  /* no pan */
+  assert(f.mr.match1b_wide_leg == 0);        /* the wide interpolation not reached */
+  assert(f.mr.state.phase == 9u);            /* the head-bound emit */
+  assert(e->code != 0x19u);
+  drop_fixture(&f);
+}
+
 /* ===== M2 phase-16 T4 (FU-187/FU-188): rows 0x16 / 0x24 =================== */
 
 /* Row 0x16 (FU-187 §1): the counted 3-stage fouled-player face-the-ball body.
@@ -4150,6 +4270,9 @@ int main(void) {
   test_action_09_clear_branch_detaches();
   test_action_09_unported_stage_marks();
   test_action_1b_stage0_latch_partial_clear();
+  test_action_1b_wide_route_binds_pan();
+  test_action_1b_replace_self_actor_reaches_emit();
+  test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();
   test_action_1c_lunge_arm();
   test_action_1c_live_route();
