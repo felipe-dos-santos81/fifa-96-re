@@ -3430,62 +3430,115 @@ static void test_keeper_l4_release_reach(void) {
   drop_fixture(f);
 }
 
-/* Task 4 enables this */
-/* FU296 §4 (phase-27 T1): the keeper-CPU installer reach — the phase RED gate.
+/* FU296 §4 (phase-27 T4): the staged Layer-1 installer reach.
  *
  * A granted-frame scenario drives the ported record-0 machine's CPU ladder
  * (`fifa96_keeper_cpu.c`, the FU296 Seam A) on a live team-0 keeper record, so
  * the ladder's stage-4 arm installs row `0x1B` invoke-now (`0x78294`/`0x78299`,
  * FU283 §4), the entity's single dispatch runs the wired row-`0x1B` body, the
- * sit-5 emit selects phase 9, and the row-`0x1E` claim reaches the stage-5
- * release that raises the camera (`camera.pos_y != 0`).
+ * sit-5 emit selects phase 9, row `0x1E` dispatches, the claim reaches the
+ * stage-5 release, and the camera is cut to `camera.pos_y == 0x50`.
  *
- * The ladder's stage index `CX` has **no live producer** (FU290/FU296-L5: the
- * four stage-select input families are unported), so the test stages it as a
- * producer input on the keeper record (`keeper->stage = 4`). Every other gate
- * is real engine state: the keeper holds row `0x19` (P5), `skip_9a`/`timer81`
- * clear (P7/P9), it is not the controlled actor (P10), it holds no control slot
- * (P3), and the row-`0x19` interlock `[0x157C5D]` is set (P4, `global_157c5d`).
+ * MULTI-FRAME (the T1 Ruling). The ladder's install gate is `phase == 2` (P2,
+ * FU288 §2.1) while the row-`0x1B` sit-5 emit's HEAD requires `phase == 0xD` —
+ * disjoint phase immediates, so they cannot co-hold in one frame (FU288). The
+ * drive therefore raises the ladder install on a `phase == 2` frame; on that
+ * SAME frame the row-`0x1B` dispatch runs the wide/self-actor re-place path
+ * (FU288 §2.3: `[0x157C5C] != 0` -> `0x774DD`, `0x77568 [0x157A83] = rec`),
+ * whose emit (`0x77707`) carries NO phase gate, so it reaches the sit-5 emit at
+ * phase 2 -> situation 5 -> phase 9 -> row `0x1E`. Subsequent frames walk the
+ * row-`0x1E` claim stages 0..4 to the stage-5 outlet (`anim_row == 0x45`), and
+ * the stage-5 release cuts `camera.pos_y` to `0x50`.
+ *
+ * The phase-0xD HEAD path is NOT engine-reachable from this install: the ported
+ * row-`0x1B` body reverts to row `0x19` at stage 4 whenever the actor is unset
+ * (`fifa96_keeper_reposition_b_finish` not-controlled), so a row installed at
+ * `phase == 2` does not persist to a later `phase == 0xD` frame (FU288-L2 leaves
+ * the native survival open). The wide/self-actor path is the faithful reach
+ * (FU288 §2.3) and is what the brief's Step 1 names.
+ *
+ * Staged producer INPUTS (the plan's rule: staging a producer's input is
+ * legitimate, staging a gate is a fake):
+ *  - P1 `permit` — the `[0x110680][code] & 1` install-permission gate
+ *    (FU282-L5, unported); the caller-supplied channel on the machine view.
+ *  - P13 `rec.stage = 4` — the ladder's stage index `CX` (FU290/FU296-L5, no
+ *    live producer; the T3 `rec.stage = e->stage` bridge).
+ *  - P4 `mr.global_157c5d = 1` — the row-`0x19` interlock `[0x157C5D]`.
+ *  - `mr.global_157c5c = 1` — the FU292 latch `[0x157C5C]`, which the native
+ *    ladder stage-4 sets (FU290, the exact CX computation) but the ported ladder
+ *    omits; it selects the row-`0x1B` `0x774DD` re-place (the self-actor path).
+ *  - `keeper->stage92 = 2` — the row-`0x1B` stage latch (the phase-26c carry
+ *    (iv) precedent; the isolated fixture has no live row-stage producer).
+ *  - `team[0].slot_pool = 0` — the FU-70 slot machine's source pool
+ *    (`0x78789`); the isolated fixture has no live slot source.
+ * Every other gate is real engine state: `phase`, `side_controlled`, the
+ * row-`0x19` hold (`code`), the skip/timer gates (P7/P9), the actor skip
+ * (P10), no queued action (P3) and the single record dispatch.
  *
  * Baseline (phase-26c): the module is unlinked/unwired, so the ladder never
- * runs — `records[0].code` stays `0x19` and `camera.pos_y` stays `0` — RED.
- * This is the phase RED gate Task 4 turns green. It is committed DISABLED
- * (skip-guarded, the `test_engine_m2_noiso` idiom) so `make check` stays green
- * for the intermediate tasks; run it with `FIFA96_REACH_27=1` to exercise it.
- * Task 4 enables this. */
+ * runs — `records[0].code` stays `0x19` and `camera.pos_y` stays `0`. */
 static void test_keeper_installer_reach(void) {
-  if (getenv("FIFA96_REACH_27") == NULL) {
-    fprintf(stderr, "SKIP keeper installer reach (disabled until Task 4)\n");
-    return;
-  }
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   struct fifa96_match_entity *keeper;
+  int reached_outlet = 0;
+  int released = 0;
 
   fifa96_match_run_init(&mr);
   begin_isolated(&mr, f.engine);
   assert(mr.render.camera.pos_y == 0);            /* baseline: event-starved camY */
 
-  /* The keeper record the ladder installs onto: team 0 record 0, holding row
-   * `0x19` with the skip/timer gates clear and no control slot. */
-  mr.state.phase = 2;                              /* the ladder gate phase (P2) */
+  /* The keeper the ladder installs onto: team 0 record 0, holding row `0x19`
+   * with the skip/timer gates clear and no control slot. */
+  mr.state.phase = 2;                              /* P2: the ladder gate phase */
   mr.state.period_length = 90;
   mr.entities.team[0].side = 0;
+  mr.entities.team[0].slot_pool = 0;               /* no live slot source (FU-70) */
   mr.phase_machine.side_controlled = 0;
   mr.global_157a4c = 0;                            /* CPU: the stage-4 tail emits sit-5 */
   mr.global_157c5d = 1;                            /* P4: the row-0x19 interlock */
+  mr.global_157c5c = 1;                            /* FU292 latch -> the 0x774DD re-place */
   keeper = &mr.entities.team[0].records[0];
   keeper->code = 0x19u;                            /* P5: the keeper-hold row */
   keeper->skip_9a = 0u;                            /* P7 */
   keeper->timer81 = 0u;                            /* P9 */
   keeper->has_slot = 0u;                           /* P3 (no queued action) */
   keeper->stage = 4u;                              /* P13: the staged stage-select index */
-  keeper->stage92 = 4u;                            /* the row-0x1B stage-4 tail */
+  keeper->stage92 = 2u;                            /* the row-0x1B stage-2 (wide/re-place) */
+  mr.keeper_cpu.permit = 1;                        /* P1: the install-permission gate */
 
-  one_granted_frame(&mr);                          /* the ladder install + dispatch */
-  assert(mr.entities.team[0].records[0].code == 0x1Bu);  /* the stage-4 install */
+  /* Frame A (phase 2): the ladder installs row 0x1B (invoke-now); the row's
+   * self-actor re-place path reaches the sit-5 emit -> phase 9 -> row 0x1E. */
+  one_granted_frame(&mr);
+  assert(keeper->code == 0x1Eu);                   /* row 0x1E installed on the keeper */
   assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
-  assert(mr.render.camera.pos_y != 0);             /* the camera release reached */
+
+  /* Frames B: the row-0x1E claim walks stages 0..4 to the stage-5 outlet (the
+   * stage-4 anim selection resolves row 0x45). permit=0 so the phase-2/other
+   * install tree does not clobber the claim row. */
+  mr.keeper_cpu.permit = 0;
+  for (int i = 0; i < 400 && !reached_outlet; i++) {
+    one_granted_frame(&mr);
+    reached_outlet = (keeper->stage92 == 5u && keeper->anim_id == 0x45u);
+  }
+  assert(reached_outlet == 1);                     /* the stage-5 outlet (anim 0x45) */
+
+  /* Frame C: stage the frame past the native stage-5 `frame < 3` gate (the
+   * phase-26c carry (iv)) -> the release fires. */
+  keeper->frame = 3u;
+  one_granted_frame(&mr);
+  released = (mr.keeper_cam_y == 0x50);
+  assert(released == 1);                           /* the stage-5 release fired */
+
+  /* The release triple: the persistent `[0x157750]` and the FU-71 camera. */
+  assert(mr.keeper_cam_y == 0x50);
+  assert(mr.render.camera.pos_y == 0x50);
+  assert(keeper->anim_id == 0x45u);                /* the claim's selected row */
+  assert(mr.render.camera.tracked != 0);           /* the keeper bound as tracked */
+
+  /* The row-0E stage-2 gate (the live camY band `0x20 < [0x157750] < 0x70`). */
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_y > 0x20 && mr.render.camera.pos_y < 0x70);
 
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);

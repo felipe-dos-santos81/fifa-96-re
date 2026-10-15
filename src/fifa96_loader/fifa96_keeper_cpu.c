@@ -11,6 +11,7 @@ void fifa96_keeper_cpu_init(fifa96_keeper_cpu *cpu) {
   if (!cpu) return;
   cpu->head_flag = 0;
   cpu->side_xor = 0;
+  cpu->permit = 0;
   cpu->counter_ad0[0] = 0;
   cpu->counter_ad0[1] = 0;
   cpu->counter_acc[0] = 0;

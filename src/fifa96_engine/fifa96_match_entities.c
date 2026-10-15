@@ -724,6 +724,7 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.gate_9a = e->skip_9a;                         /* byte +0x9A */
         kc_rec.stage = e->stage;                             /* CX (FU296-L5) */
         kc_rec.side_swap = frame->keeper_cpu->side_xor;      /* [0x157ABE] */
+        kc_rec.permit = frame->keeper_cpu->permit;           /* P1 (FU282-L5) */
         (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
         if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
         if (kc_out.ladder_out.install)                       /* 0x78599 arms */

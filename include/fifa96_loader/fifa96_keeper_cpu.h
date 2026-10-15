@@ -81,6 +81,11 @@ typedef int (*fifa96_keeper_cpu_ladder_fn)(void *ctx,
 typedef struct fifa96_keeper_cpu {
   uint8_t head_flag;        /* [0x157823] — the one-shot actor flag */
   uint8_t side_xor;         /* [0x157ABE] — the XOR-side cell */
+  uint8_t permit;           /* `[0x110680][code] & 1` (P1, FU282-L5) — the
+                             * install-permission gate. The per-action-code table
+                             * is UNPORTED, so this is a caller-supplied producer
+                             * INPUT (default 0 = the honest live value; the
+                             * staged reach test drives it). */
   uint16_t counter_ad0[2];  /* [0x157AD0 + idx*2] — the actor-side frame counter */
   uint16_t counter_acc[2];  /* [0x157ACC + idx*2] — the complement-side counter */
   uint8_t force_install;    /* [0x157AB2] — the force-install latch */
