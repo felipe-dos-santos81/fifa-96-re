@@ -3430,6 +3430,67 @@ static void test_keeper_l4_release_reach(void) {
   drop_fixture(f);
 }
 
+/* Task 4 enables this */
+/* FU296 §4 (phase-27 T1): the keeper-CPU installer reach — the phase RED gate.
+ *
+ * A granted-frame scenario drives the ported record-0 machine's CPU ladder
+ * (`fifa96_keeper_cpu.c`, the FU296 Seam A) on a live team-0 keeper record, so
+ * the ladder's stage-4 arm installs row `0x1B` invoke-now (`0x78294`/`0x78299`,
+ * FU283 §4), the entity's single dispatch runs the wired row-`0x1B` body, the
+ * sit-5 emit selects phase 9, and the row-`0x1E` claim reaches the stage-5
+ * release that raises the camera (`camera.pos_y != 0`).
+ *
+ * The ladder's stage index `CX` has **no live producer** (FU290/FU296-L5: the
+ * four stage-select input families are unported), so the test stages it as a
+ * producer input on the keeper record (`keeper->stage = 4`). Every other gate
+ * is real engine state: the keeper holds row `0x19` (P5), `skip_9a`/`timer81`
+ * clear (P7/P9), it is not the controlled actor (P10), it holds no control slot
+ * (P3), and the row-`0x19` interlock `[0x157C5D]` is set (P4, `global_157c5d`).
+ *
+ * Baseline (phase-26c): the module is unlinked/unwired, so the ladder never
+ * runs — `records[0].code` stays `0x19` and `camera.pos_y` stays `0` — RED.
+ * This is the phase RED gate Task 4 turns green. It is committed DISABLED
+ * (skip-guarded, the `test_engine_m2_noiso` idiom) so `make check` stays green
+ * for the intermediate tasks; run it with `FIFA96_REACH_27=1` to exercise it.
+ * Task 4 enables this. */
+static void test_keeper_installer_reach(void) {
+  if (getenv("FIFA96_REACH_27") == NULL) {
+    fprintf(stderr, "SKIP keeper installer reach (disabled until Task 4)\n");
+    return;
+  }
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *keeper;
+
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  assert(mr.render.camera.pos_y == 0);            /* baseline: event-starved camY */
+
+  /* The keeper record the ladder installs onto: team 0 record 0, holding row
+   * `0x19` with the skip/timer gates clear and no control slot. */
+  mr.state.phase = 2;                              /* the ladder gate phase (P2) */
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157a4c = 0;                            /* CPU: the stage-4 tail emits sit-5 */
+  mr.global_157c5d = 1;                            /* P4: the row-0x19 interlock */
+  keeper = &mr.entities.team[0].records[0];
+  keeper->code = 0x19u;                            /* P5: the keeper-hold row */
+  keeper->skip_9a = 0u;                            /* P7 */
+  keeper->timer81 = 0u;                            /* P9 */
+  keeper->has_slot = 0u;                           /* P3 (no queued action) */
+  keeper->stage = 4u;                              /* P13: the staged stage-select index */
+  keeper->stage92 = 4u;                            /* the row-0x1B stage-4 tail */
+
+  one_granted_frame(&mr);                          /* the ladder install + dispatch */
+  assert(mr.entities.team[0].records[0].code == 0x1Bu);  /* the stage-4 install */
+  assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
+  assert(mr.render.camera.pos_y != 0);             /* the camera release reached */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-145 S2: the goal-mouth classifier `FUN_00070074` (first-hand
  * /FIFA96.EXE 0x70074, 47 insns). The return is the "no outside bit"
  * boolean: 1 iff z in [0xB10,0xB90), x in [-0xD0,0xD0) and y <= h(z), where
@@ -6708,6 +6769,7 @@ int main(void) {
   test_row1e_claim_anim_bridge();
   test_row1e_claim_place_pause_and_offsets();
   test_keeper_l4_release_reach();
+  test_keeper_installer_reach();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();
