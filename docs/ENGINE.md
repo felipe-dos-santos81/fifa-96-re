@@ -1491,7 +1491,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   **FU241-L3** (act-slot residency across the sweep), **FU241-L4** (the `+0x99`
   selection predicate), **FU241-L5** (the stage-2 re-dispatch target), **FU241-L6**
   (the `0x8A8E0` BX==0 table), **FU241-L7** (the stale FU-212 golden anchor).
-  `make check` **110/110**.
+  `make check` **110/110**. *(errata, M2 phase-26b, 2026-10-14 / FU279 §3(b):
+  **`FU241-L1` is port-closed** — no port remains. The landed act-8 invoke-now +
+  one-sweep-record-per-granted-frame model (terminal on the 23rd call) is
+  **exactly the native cadence**; the seam
+  `fifa96_match_act_dispatch`/`_tick` reproduces `FUN_000888FC` / `0x8B669..`
+  instruction-for-instruction (`FU255` §1/§2, cross-cited). What stays open is a
+  **test-coverage** residual (the non-tape deferral is unexercised by a landed
+  fixture), **not a producer gap** — see leg `FU279-L5`. The residual-leg list
+  above is kept verbatim; only its `FU241-L1` framing is corrected.)*
 - **M2 phase-25 (FU-259) — the OL-65 row-07 gate staging fix wires action
   `0x22`; census `58/80 → 59/80 = 73%`.** FU-259 §2.4 closes OL-65 with the
   exact two-line fix in `fifa96_match_handlers.c:983-993`: the row-07
@@ -1599,6 +1607,46 @@ the build also produces the windowed `fifa96` target (`make game`).
   **110/110**. **The honest ceiling:** the row `0D`/`1A`/`03`/`0A`/`17`/`1B`
   and the phase-`0x13`/`0x14`/`0x1A`/`0x1C` slots stay `NULL`/uncounted — no
   fake installer, no fake producer.
+- **M2 phase-26b leg register (FU273…FU280; 2026-10-14) — the Stage-2 producer
+  close-out: the resolved/forbidden legs (appended; prior sections never
+  rewritten). Census holds `59/80 = 73%` (`36 action + 23 phase`); M1
+  `09b726b7…` and M2 `b281a9b2…` byte-identical (no re-pin).** The wave
+  (`docs/ghidra/FU273…FU280`) froze the remaining phase-7 producer frontier; the
+  Stage-2 plan landed the live arms reachable **without R11-L4** (each
+  tape-dormant, so the census is unmoved) and routed the rest honestly.
+  **Landed:** T2 the `FU268-L10` eligibility-byte fix
+  (`src/fifa96_engine/fifa96_match_run.c:6597`, the `+0x8E`/`type` read → the
+  `+0x91`/`code` read — correctness, no re-pin); T3 the `sp_157821` shadow
+  unified onto the single native cell `camera.pan_counter` (`fifa96_camera.h`,
+  the shadow field deleted); T4 the contact gate **headless-proven reachable**
+  via the real pad `0x7CE38` (`want 0x60`) handler (row-`0x0B` arm-1 →
+  row-`0x0C` → `fifa96_match_run_contact` → act 3); T5 the `0x7A448` offside
+  call ported **into the live receive arm**
+  (`fifa96_match_run_ball_receive`, `field_4c2f2`-gated, dormant);
+  T6 row `0x10` **live** (the real armer `run.c:4205` + scanner, the camera an
+  input) with rows `0x12`/`0x13` an **honest-stop LIVE-LEG**; T7 row `0x1D`
+  **live** (the `goal_scan` sit-4 emit). **This register appends the wave's
+  leg resolution:** **FU274 W26b-L1** (the throw-in precondition) **resolved**
+  (T6 — row `0x10` live through the ported armer/scanner; the camera is an
+  input, not a missing producer); **FU274 W26b-L2** (the foul-adjudicator entry,
+  the row-`0x0C` contact gate) **resolved to LIVE-LEG** (T4 proves the *entry*
+  reachable; the row-`0x04` AI duel stays wired-but-unraised pending the
+  unported descriptor/`+0x9D` family, `fifa96_outfield.c:595`); **FU276-L1**
+  (the live contact invoker) **resolved** by T4 (the pad handler now raises it
+  in a granted-frame test — the FU276 §1.3 "no headless proof raises it" premise
+  is superseded); **FU277-L1** (the row-`0x1D` live trigger) **resolved** by T7
+  (the armer + sit-4 scanner install and dispatch row `0x1D`; `goal_armed` is
+  raised via the same live armer `FUN_0007131C`, i.e. **FU277-L1 ≡ FU269-L2,
+  not R11-L4** — FU280 §1.4); **the `0x12`/`0x13` taker rows** route to the
+  **FU166-L6** leg (the act-2 terminal's unported `[0x158882]` ball-row terminal
+  flag under the settled session gate — the true remaining blocker, T6);
+  **R11-L4** (the keeper CPU chain `FUN_0008D8EC`→`FUN_000782D0`→`FUN_00077EAC`,
+  rows `0x1A`/`0x1B`, the phase-6/`0x1F` chain, the claim bridge) stays **NO-GO /
+  phase-scale** (`FU273`) and **routes onward to phase-26b-ii** as the enabling
+  leg for the camera/pan/follow and the keeper row `0x1E`. The **replay /
+  overlay / sub** leg is recorded separately in the smoke table below (`FU278`
+  §3.3). **Honest ceiling:** no row wired (census unmoved), no faked producer;
+  the `0x12`/`0x13` and `0x1E` legs each carry a named owner.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
@@ -1764,6 +1812,30 @@ the build also produces the windowed `fifa96` target (`make game`).
   (`0x77423`, FU-180-L1) and the row-1C tail (`0x77dc6`, FU-186-L2) — are
   unported, so those two callers are not reached, but not for the stated reason.
   See `docs/ghidra/FU272_r11l4_derivation.md` §6.)*
+  *(errata, phase-26b, 2026-10-14: (a) the **fouls / offside (live)** row above
+  reads "the FU-150 entries have no live producer" — the accurate statement is
+  **producer-wired, unraised** (`FU276` §1.3): the pad handler `0x7CE38`
+  (want 0x60) and the row-`0x04` AI duel each install row `0x0B` with invoke, and
+  the ported chain row-`0x0B` arm-1 → row-`0x0C` → `fifa96_match_run_contact`
+  exists and is unit-proven; what was missing was the headless/tape/smoke raise.
+  Phase-26b T4 supplies exactly that — the contact gate is now
+  **headless-proven reachable** via the pad handler (leg **FU276-L1 resolved**),
+  while the row-`0x04` duel stays an unraised leg pending the unported
+  descriptor/`+0x9D` family (`fifa96_outfield.c:595`). The row is kept verbatim.
+  (b) the **replay / overlay / sub strip (live)** row above is refined from
+  "zero-gated rows with no producers yet" to an explicit **LEG** ruling (**no
+  port**): `replay.state` / `sub.active` / `overlay.armed` are **LEG** (the whole
+  period/screen-machine caller chain is unported — `FU278` §3.3: the per-tick
+  dispatcher `FUN_0004B100` from the match loop `FUN_000493A0` →
+  `FUN_000513EC`/`FUN_00053BB8` → `FUN_00051270` → `FUN_000510DC`, with the mode
+  machine `FUN_00052030` via `FUN_00053A48` as installer) and `ball_row` stays
+  **pinned dormant** (`FU278` §2.4: `[0x14E660]`; `FUN_00056690`'s only caller
+  passes 0). On the port no producer raises the gates — every replay/overlay/sub
+  engine row (`fifa96_match_run_replay_step` `run.c:4624`, `_overlay_arm`
+  `:4756`, `_overlay_timeout_step`, the `_sub_*` setters,
+  `fifa96_match_run_ball_row_reachable`) is referenced only from `tests/`, so any
+  "live" claim would be a fixture-only stand-in. New legs `FU278-L1..L7`; no port
+  this phase.)*
 - `test_engine_m1` pins the 691-frame M1 transcript
   (`tests/golden/engine/m1-frames.txt`).
 - `test_engine_m2` replays spec §5 (boot → skip intro → front-end → start match

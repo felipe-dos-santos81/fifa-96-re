@@ -1906,7 +1906,13 @@ to drive the sweep to its terminal — no fake in-frame arming.
 paths above), **FU241-L2** (`word[0x157A68]`; FU194-L4), **FU241-L3** (act-slot
 residency across the sweep), **FU241-L4** (the `+0x99` selection predicate),
 **FU241-L5** (the stage-2 re-dispatch target), **FU241-L6** (the `0x8A8E0` BX==0
-table), **FU241-L7** (the stale FU-212 §6.2 golden anchor). **Census
+table), **FU241-L7** (the stale FU-212 §6.2 golden anchor). *(errata, M2
+phase-26b, 2026-10-14 / FU279 §3(b): **`FU241-L1` is port-closed** — no port
+remains; the landed act-8 invoke-now + one-sweep-record-per-granted-frame model
+(terminal on the 23rd call) is exactly the native cadence (`FU255` §1/§2,
+cross-cited). What stays open is a **test-coverage** residual (the non-tape
+deferral is unexercised by a landed fixture), not a producer gap — see leg
+`FU279-L5`. The residual-leg list above is kept verbatim.)* **Census
 recomputed:** `58 OK = 35 action + 23 phase`; `floor(100 × 58/80) = 72`; README
 title `72%`; `action_wired == 35u` / `phase_wired == 23u` pins
 (`test_engine_m2.c`); `AGENTS.md:90` and the `docs/ENGINE.md` census surfaces
@@ -2058,3 +2064,71 @@ phase wired no row, so the census is unchanged at `59/80 = 73%`
 producer) and **L2** (the event bootstrap), and **L3–L5 are unchanged** (still
 open, carried verbatim) — the plan's Task-5 leg append covers all five legs, not
 just the two.
+
+## M2 phase-26b — the remaining phase-7 chains: the live arms (FU273…FU280)
+
+**The four remaining chain families land their live arms where reachable without
+R11-L4; R11-L4 routes onward (`FU273` NO-GO). Census holds `59/80 = 73%`
+(`36 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…` byte-identical; no
+re-pin.** The phase-26b recon wave (`docs/ghidra/FU273…FU280`) froze the producer
+frontier behind the four remaining phase-7 families and re-cut the live-trigger
+census. Per the spec's honest-stop rule (§6), the keeper CPU chain (**R11-L4**:
+`FUN_0008D8EC`→`FUN_000782D0`→`FUN_00077EAC`, rows `0x1A`/`0x1B`, the
+phase-6/`0x1F` chain, the claim bridge) was ruled **phase-scale / NO-GO**
+(`FU273`) and **routed to phase-26b-ii** as the enabling leg for the
+camera/pan/follow and the keeper row `0x1E`; the plan therefore landed the live
+arms reachable **without** it. Every landing is tape-dormant, so the census and
+the goldens are unmoved.
+
+**Landed (one producer/fix per chain, each with a headless granted-frame test):**
+
+- **T2 — the `FU268-L10` eligibility-byte fix** (`fifa96_match_run.c:6597`): the
+  live receive arm's offside-eligibility read is the native `+0x91`/`code` byte,
+  not the `+0x8E`/`type` byte (the alias-trap fix). Correctness only — no
+  behaviour change on the tape.
+- **T3 — the `sp_157821` shadow unified** onto the single native cell
+  `camera.pan_counter` (`fifa96_camera.h`); the shadow field is deleted
+  (`FU274` §2.4 — the row-`0x10` gate and the keeper predictor now read the real
+  camera counter).
+- **T4 — the contact gate headless-proven reachable** via the real pad `0x7CE38`
+  (`want 0x60`) handler (row-`0x0B` arm-1 → row-`0x0C` →
+  `fifa96_match_run_contact` → act 3); **FU276-L1 resolved**.
+- **T5 — the `0x7A448` offside call ported into the live receive arm**
+  (`fifa96_match_run_ball_receive`, `field_4c2f2`-gated, dormant by default).
+- **T6 — row `0x10` live** (the real armer + scanner, the camera an input);
+  **rows `0x12`/`0x13` honest-stop LIVE-LEG** (the act-2 terminal needs
+  `foul_kind == 3 || session_gate != 0`; the native completes via the unported
+  `[0x158882]` — leg **FU166-L6**).
+- **T7 — row `0x1D` live** (the `goal_scan` sit-4 emit through the ported armer);
+  row `0x1E` stays the **R11-L4** leg (the keeper CPU ladder).
+
+**The replay / overlay / sub leg (`FU278` §3.3):** `replay.state` / `sub.active` /
+`overlay.armed` are **LEG** — the whole period/screen-machine caller chain
+(`FUN_0004B100` per-tick → the descriptor walkers `FUN_000513EC`/`FUN_00053BB8` →
+the mode machine `FUN_00052030`) is unported, and every engine row
+(`fifa96_match_run_replay_step`, `_overlay_arm`, the `_sub_*` setters,
+`fifa96_match_run_ball_row_reachable`) is referenced only from `tests/`, so any
+"live" claim would be a fixture-only stand-in; `ball_row` (`[0x14E660]`) stays
+**pinned dormant** (`FU278` §2.4). No port — legs `FU278-L1..L7`.
+
+**The errata the wave filed are synced (quoted, never rewritten):** the
+fouls/offside row's "the FU-150 entries have no live producer" is corrected to
+**producer-wired, unraised** (`FU276` §1.3; then T4 supplies the raise); and
+**`FU241-L1` is port-closed** — the landed act-8 invoke-now + one-sweep-record
+model is the native cadence (`FU255` §1/§2); the residue there is **test
+coverage**, not a producer (`FU279` §3(b)).
+
+**The leg register (appended, quoted):** **FU274 W26b-L1 resolved** (row `0x10`
+live); **FU274 W26b-L2 resolved to LIVE-LEG** (the contact *entry* is reachable;
+the row-`0x04` duel stays unraised pending the descriptor/`+0x9D` family);
+**FU276-L1 resolved**; **FU277-L1 resolved** (`goal_armed` is raised via the live
+armer `FUN_0007131C` — **not** R11-L4; `FU280` §1.4); the **`0x12`/`0x13`** rows
+route to **FU166-L6**; **R11-L4** → **phase-26b-ii**. The camera/pan/follow
+chain stays **FU264-L1/L2**.
+
+**Acceptance:** `make check` **110/110** (sanitized, strict); M1 `09b726b7…` and
+M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census recomputed and
+**held** `59/80 = 73%` (`action_wired == 36u` / `phase_wired == 23u`) — no
+`README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit. **The
+honest ceiling:** no faked producer; the `0x12`/`0x13`, `0x1E` and
+replay/overlay legs each carry a named native owner.
