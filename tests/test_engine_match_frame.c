@@ -3814,6 +3814,65 @@ static void test_taker_armed_rows_resolve(void) {
   assert(mr.record.stage92 == 8u);      /* the +0x44 wait after the kick */
 }
 
+/* FU274 §3/§4 (phase-26b Task 6): the live throw-in taker trigger (row 0x10).
+ * The ported scanner (`fifa96_match_run_goal_scan`) and armer
+ * (`fifa96_match_goal_arm`) already reproduce the native arms; the missing
+ * precondition is a live **phase-2 sideline excursion** — `goal_armed &&
+ * phase == 2 && |snap z| <= 0xB20` (native `0x713A6..0x713F7` then `0x88BCC`).
+ * The M2 tape arms only the goal arm (its camera sits beyond the goal line), so
+ * this drives the real producer path: the natural kickoff chain reaches live
+ * phase 2 (row 01 + the KICK release), then the camera is staged out of bounds
+ * on the sideline. The frame body's own armer (the `fifa96_camera_out_of_bounds`
+ * call at `run.c:4205`) raises `goal_armed` from the staged camera, and the
+ * scanner fires sit 2 -> the BX=1 fallback (FU-241: phase-0 write + act-8 sweep);
+ * the sweep's stage-2 terminal runs the deferred phase-3 arm (taker 0x10) and
+ * the entity chain dispatches it. Mutation-RED: without the sideline excursion
+ * (or with the armer/scanner mutated) the taker bit never lands. */
+static void test_throw_in_taker_reachable(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  /* the natural kickoff chain -> live phase 2 (row 01 + the KICK release). */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  assert(mr.goal_armed == 0u);
+  /* the negative control: the parked camera is not out of bounds, so no throw-in
+   * is queued and the taker row never lands. */
+  assert((mr.dispatched_ok & (1ull << 0x10)) == 0u);
+
+  /* stage the sideline excursion (the camera the armer reads): `|camX| > 0x730`
+   * and `|snap z| <= 0xB20` (the throw-in band, not the goal band). A parked
+   * camera does not move (the walk gates on speed/event_param == 0). */
+  mr.render.camera.pos_x = 0x740;
+  mr.render.camera.pos_z = 0;
+
+  /* frame 1: the real armer fires (out-of-bounds) and the scanner fires sit 2
+   * through the BX=1 fallback (phase 0 + act 8); the sweep defers the phase-3
+   * arm ~22 granted frames. */
+  one_granted_frame(&mr);
+  assert(mr.goal_armed == 1u);          /* the live armer raised the gate */
+  assert(mr.goal_snap_x == 0x740 && mr.goal_snap_z == 0);
+  assert(mr.state.phase == 0u);         /* the BX=1 fallback phase write */
+  assert(mr.act.id == 8u);              /* the act-8 sweep invoked */
+  /* drive the act-8 sweep terminal (the deferred sit-2 phase-3 arm) and then
+   * the entity chain that dispatches the installed taker row. */
+  for (int i = 0; i < 80 && !(mr.dispatched_ok & (1ull << 0x10)); i++)
+    one_granted_frame(&mr);
+  assert(mr.state.phase == 3u);         /* the deferred sit-2 arm landed */
+  assert((mr.dispatched_ok & (1ull << 0x10)) != 0u);  /* row 0x10 ran live */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-149 §1.8 (first-hand 0x8ABF3..0x8AC1C): the sit-3 counter index is
  * `FUN_000741B4(side) = (side ^ byte[0x157ABE]) & 1` — the display/score slot
  * swap, not the raw side. The queue route never counts (0x8A99E RETs before
@@ -4287,6 +4346,91 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
   assert(fouler->code == 0x16u);         /* install action 0x16 on the fouler */
   assert(mr.referee.fouls_by_side[0] == 1u);   /* the stage-0 foul counter */
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);   /* the retired route */
+}
+
+/* FU274 §3/§4 + FU166-L6 (phase-26b Task 6): the foul-taker honest-stop. The
+ * ported chain (pad `0x7CE38` -> row 0x0B -> row 0x0C ->
+ * `fifa96_match_run_contact` -> act 3 -> phase 0x19 -> sit 0xA -> act 2) is live
+ * and faithful, and Task 4 proved the contact **entry** reachable. But the act-2
+ * terminal (`match_run_ref_step_restart` stage 2) completes only on
+ * `foul_kind == 3 || session_gate_14c32a != 0`: the settled ordinary-match
+ * session gate is 0 (FU-166/R14) and the row-0x0C re-call emits the literal
+ * contact kind 1 (`run.c:6542`), so `foul_kind` is 0/1/2 and the decision never
+ * completes — the machine holds armed at stage 2. The native completes through
+ * the ball-row terminal flag `[0x158882]` (the `0x8941D` keep/reroll), an
+ * unported leg (FU166-L6). Rows 0x12/0x13 therefore stay **LIVE-LEG**; this
+ * pins that the LIVE default path reaches act-2 stage 2 and installs neither
+ * taker row (a later `[0x158882]` port must flip this). */
+static void test_foul_taker_held_on_live_default(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *fouler;   /* the duel initiator (A) */
+  struct fifa96_match_entity *found;    /* the challenged record (B) */
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  /* the natural kickoff chain -> live phase 2 (row 01 + the KICK release). */
+  for (int i = 0; i < 61; i++) one_granted_frame(&mr);
+  {
+    fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
+    assert(fifa96_match_run_input(&mr, &kick, 1) == 0);
+  }
+  one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  for (int i = 0; i < 6 && mr.state.phase != 2u; i++) one_granted_frame(&mr);
+  assert(mr.state.phase == 2u);
+  assert(mr.session_gate_14c32a == 0u);   /* the settled ordinary-match default */
+  assert(mr.config.field_4c306 == 2u);    /* the live fouls gate (level 2) */
+
+  /* stage the duel geometry and drive the real pad `0x60` contact (the path
+   * Task 4 proved): A = the slot-bound initiator, B = the nearest opponent. */
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  fouler = &mr.entities.team[0].records[4];
+  found = &mr.entities.team[1].records[4];
+  fouler->has_slot = 1;
+  fouler->active = 1;
+  fouler->code = 0;
+  fouler->type = 2;
+  fouler->pos_x = 0x300;
+  fouler->pos_z = 0x200;
+  fouler->anim_id = 0;
+  fouler->frame = 0;
+  found->active = 1;
+  found->pos_x = 0x340;
+  found->pos_z = 0x200;
+  mr.slot.entity = 4;
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[0].chosen = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!((t == 0u && i == 4u) || (t == 1u && i == 4u)))
+        mr.entities.team[t].records[i].skip_9a = 1;
+  {
+    fifa96_platform_key keys[2] = {{FIFA96_ENGINE_KEY_PASS, 1},
+                                   {FIFA96_ENGINE_KEY_LONG_BALL, 1}};
+    assert(fifa96_match_run_input(&mr, keys, 2) == 0);
+  }
+  /* frames 1-2: the pad handler -> row 0x0B -> row 0x0C -> the contact. */
+  one_granted_frame(&mr);
+  fouler->frame = 3u;                     /* the arm-1 `+0x3D` frame-byte gate */
+  one_granted_frame(&mr);
+  assert(mr.referee.contact_kind == 1u);  /* the live contact ran */
+  assert(mr.act.id == 8u && mr.state.phase == 0u);  /* the deferred BX=1 fallback */
+  /* drive the chain: the act-8 sweep -> the deferred sit-9/sit-0xA arm -> act 2
+   * stage 0/1 -> the stage-2 terminal gate, which holds (no live completion). */
+  for (int i = 0; i < 60; i++) one_granted_frame(&mr);
+  assert(mr.act.id == 2u);                /* the act-2 machine, still armed */
+  assert(mr.ref_restart_stage == 2u);     /* the stage-3 split reached, held */
+  assert(mr.state.phase == 0x0Au);        /* no decision phase write */
+  /* the honest-stop: neither foul-taker row is installed on the live default. */
+  assert((mr.dispatched_ok & ((1ull << 0x12) | (1ull << 0x13))) == 0u);
+  assert(mr.entities.team[1].records[1].code != 0x12u);
+  assert(mr.entities.team[1].records[1].code != 0x13u);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
 }
 
 /* Stage the offside geometry: the receiver (team 0 record 3) beyond the own
@@ -6210,6 +6354,7 @@ int main(void) {
   test_phase_1E_decompressed_pin();
   test_set_piece_phase_arm_codes();
   test_taker_armed_rows_resolve();
+  test_throw_in_taker_reachable();
   test_corner_counter_side_swap();
   test_engine_referee_contact_fk();
   test_engine_referee_restart_default_gate_split();
@@ -6217,6 +6362,7 @@ int main(void) {
   test_engine_referee_contact_gates();
   test_engine_referee_foul_sequence();
   test_contact_gate_reachable_via_pad_duel();
+  test_foul_taker_held_on_live_default();
   test_engine_referee_offside_chain();
   test_engine_offside_l10_reads_code_not_type();
   test_offside_reachable_from_live_receive();
