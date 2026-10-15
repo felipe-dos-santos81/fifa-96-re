@@ -494,6 +494,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
     out->place_x = s->cam_x;
     out->place_y = s->cam_y;
     out->place_z = s->cam_z;
+    out->place_pause = 1;                                          /* 0x7559e PUSH 1 */
     s->has_ball = 1;                                               /* 0x755c0 */
     out->claimed = 1;
     out->controlled = 1;                                           /* 0x755cf */
@@ -608,6 +609,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
           out->place_x = s->cam_x;
           out->place_y = s->cam_y;
           out->place_z = s->cam_z;
+          out->place_pause = 1;                                    /* 0x7595f PUSH 1 */
         }
         /* `+0x9B == 0` jumps straight to 0x759ea (0x75930 JZ): no timer/gauge
          * ladder on the slot path. */

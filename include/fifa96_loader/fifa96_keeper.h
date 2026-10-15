@@ -228,6 +228,8 @@ typedef struct fifa96_keeper_claim_out {
   uint8_t controlled;     /* [0x157A83] = rec */
   uint8_t place;          /* 0x700F4 camera place (place_*) */
   int32_t place_x, place_y, place_z;
+  uint8_t place_pause;    /* the 0x700F4 pause flag (both row-1E place sites
+                           * push 1; writes [0x157820]/[0x157822]) */
   uint8_t reset;          /* 0x7DAB4 record reset */
   uint8_t situation_0b;   /* 0x8A938(0xB, side, 0) */
   uint8_t install;        /* 0x7D9A4 code request, 0 = none */

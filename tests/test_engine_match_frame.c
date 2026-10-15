@@ -3303,6 +3303,44 @@ static void test_row1e_claim_anim_bridge(void) {
   drop_fixture(f);
 }
 
+/* FU286 / R11-L2 + R11-L3 (phase-26c T4): the row-0x1E claim head place's
+ * pause flag and the per-sector offset tables. The head place (stage < 3, no
+ * ball) reads `0x10F334/0x10F33C[byte[rec+0x8e]]` (the record's octant) and
+ * calls `FUN_000700F4` with `PUSH 1` (raw `0x7559E`); the native reset writes
+ * `[0x157820] = [0x157822] = flag` (fresh `0x70271..0x7028a`). The engine's
+ * `record.place_offset_x/z` are written from the table pair by the record's
+ * sector (R11-L3) and the pause lands on `flag_157820`/`flag_157822` (R11-L2).
+ * Mutation-RED: without R11-L3 the offsets stay 0 (the place uses the record
+ * pos); without R11-L2 the flag cells stay 0. */
+static void test_row1e_claim_place_pause_and_offsets(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 1;              /* < 3: the head claim place runs */
+  mr.record.has_ball = 0;
+  mr.record.has_slot = 0;
+  mr.record.pos_x = 100;
+  mr.record.pos_y = 20;
+  mr.record.pos_z = 200;
+  mr.record.type = 3;                 /* octant 3: table entry (1, -1) */
+  assert(mr.record.place_offset_x == 0 && mr.record.place_offset_z == 0);
+  assert(mr.flag_157820 == 0 && mr.flag_157822 == 0);
+
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+
+  /* R11-L3: the per-sector table writes the record offsets. */
+  assert(mr.record.place_offset_x == 1);
+  assert(mr.record.place_offset_z == -1);
+  /* the head place applies them (<<4) at the record position */
+  assert(mr.record.place_valid == 1);
+  assert(mr.record.place_x == 100 + 16);   /* dir_x 1 << 4 */
+  assert(mr.record.place_z == 200 - 16);   /* dir_z -1 << 4 */
+
+  /* R11-L2: the `PUSH 1` place pause sets both [0x157820]/[0x157822]. */
+  assert(mr.flag_157820 == 1);
+  assert(mr.flag_157822 == 1);
+}
+
 /* FU273 §4.4 (phase-26c T1): the R11-L4 keeper release reach — the phase RED
  * gate.
  *
@@ -6638,6 +6676,7 @@ int main(void) {
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();
   test_row1e_claim_anim_bridge();
+  test_row1e_claim_place_pause_and_offsets();
   test_keeper_l4_release_reach();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();

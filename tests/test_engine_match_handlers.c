@@ -251,11 +251,12 @@ static void test_action_00_runs_move_step(void) {
 /* FU-140 §4: the wired keeper row 1E runs the fully linear claim/throw
  * placement body (0x7550C..0x755D3, FU-79 §7): the pre-gate slot-merge helper
  * request (`stage < 6 && !has_slot`), then, while `stage < 3` and the record
- * does not hold the ball, the per-type offset placement (native
- * `0x10F334/0x10F33C[type8]`, caller-supplied here), the possession flag
- * (+0x9B) and the actor binding ([0x157A83] = rec). The slot-merge body
- * (FUN_0007876C), the camera-place call (FUN_000700F4) and the actor pointer
- * stay modelled as record requests/flags until the C8/C11 pool and arm ports
+ * does not hold the ball, the per-type offset placement (R11-L3: the native
+ * `0x10F334/0x10F33C[type8]` pair written from the record sector), the
+ * possession flag (+0x9B) and the actor binding ([0x157A83] = rec). The
+ * slot-merge body (FUN_0007876C), the camera-place call (FUN_000700F4) and
+ * the actor pointer stay modelled as record requests/flags until the C8/C11
+ * pool and arm ports
  * land (FU-140 OL-37, carrying OL-16). T2-review erratum: the native `< 6`
  * (`0x7551A`) and `< 3` (`0x7553E`) tests read `MOV EAX,[EAX+0x8F]; SAR
  * EAX,0x18` = byte `+0x92`, so the fixture stages `record.stage92`, not the
@@ -267,16 +268,15 @@ static void test_action_1E_runs_claim_place(void) {
   f.mr.record.pos_x = 100;
   f.mr.record.pos_y = 20;
   f.mr.record.pos_z = 200;
-  f.mr.record.place_offset_x = -3;
-  f.mr.record.place_offset_z = 2;
+  f.mr.record.type = 3;               /* R11-L3: the sector pair (1, -1) */
   assert(f.mr.record.has_slot == 0 && f.mr.record.has_ball == 0);
   assert(f.mr.record.controlled == 0 && f.mr.record.helper_request == 0);
   assert(f.mr.record.place_valid == 0);
 
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
-  assert(f.mr.record.place_x == 52 && f.mr.record.place_y == 76);
-  assert(f.mr.record.place_z == 232);
+  assert(f.mr.record.place_x == 116 && f.mr.record.place_y == 76);
+  assert(f.mr.record.place_z == 184);
   assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
 
@@ -1761,8 +1761,7 @@ static void test_action_1E_machine_release_chain(void) {
   f.mr.record.anim_id = 0x45;       /* OL-80 live row: byte[[rec+0x28]] */
   f.mr.record.frame = 3;
   f.mr.record.row44 = 1;
-  f.mr.record.place_offset_x = 1;
-  f.mr.record.place_offset_z = 2;
+  f.mr.record.type = 1;             /* R11-L3: the sector pair (1, 1) */
   f.mr.state.phase = 1;
   f.mr.phase_machine.state = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
@@ -1779,7 +1778,7 @@ static void test_action_1E_machine_release_chain(void) {
    * ECX 0) and binds the tracked record ([0x1577CA] = rec, 0x71D27). */
   assert(f.mr.render.camera.pos_x == f.mr.record.pos_x + (1 << 6));
   assert(f.mr.render.camera.pos_y == 0x50);
-  assert(f.mr.render.camera.pos_z == f.mr.record.pos_z + (2 << 6));
+  assert(f.mr.render.camera.pos_z == f.mr.record.pos_z + (1 << 6));
   assert(f.mr.render.camera.event_param == 0x50);
   assert(f.mr.render.camera.vel_x == 0 && f.mr.render.camera.vel_z == 0);
   assert(f.mr.render.camera.tracked == f.mr.record.entity_id);

@@ -464,6 +464,12 @@ static void match_keeper_claim_stage(struct fifa96_match_run *mr,
   s->anim_row = mr->record.anim_id;
   s->row44 = mr->record.row44;
   s->vel71_nonzero = mr->record.speed71 != 0 ? 1u : 0u;
+  /* FU286 / R11-L3 (phase-26c T4): the row-1E head place reads the per-sector
+   * sprite offsets `0x10F334/0x10F33C[byte[rec+0x8e]]` (FU163 §4a; the
+   * record's octant is `record.type`). The record offsets have no other writer,
+   * so populate them from the ported table pair before the loader reads them. */
+  mr->record.place_offset_x = fifa96_match_dir_x[(uint32_t)mr->record.type & 7u];
+  mr->record.place_offset_z = fifa96_match_dir_z[(uint32_t)mr->record.type & 7u];
   s->offset_x = mr->record.place_offset_x;
   s->offset_z = mr->record.place_offset_z;
   s->mates = mates;
@@ -493,6 +499,13 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
     mr->record.place_x = out->place_x;
     mr->record.place_y = out->place_y;
     mr->record.place_z = out->place_z;
+    /* FU286 / R11-L2 (phase-26c T4): both row-1E place sites push flag 1; the
+     * native FUN_000700F4 reset writes `[0x157820] = [0x157822] = flag`
+     * (fresh 0x70271..0x7028a). */
+    if (out->place_pause != 0) {
+      mr->flag_157820 = 1;
+      mr->flag_157822 = 1;
+    }
   }
   mr->keeper_cam_x = s->cam_x;
   mr->keeper_cam_y = s->cam_y;
