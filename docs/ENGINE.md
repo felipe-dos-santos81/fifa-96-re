@@ -1660,6 +1660,99 @@ the build also produces the windowed `fifa96` target (`make game`).
   overlay / sub** leg is recorded separately in the smoke table below (`FU278`
   §3.3). **Honest ceiling:** no row wired (census unmoved), no faked producer;
   the `0x12`/`0x13` and `0x1E` legs each carry a named owner.
+- **M2 phase-26c leg register (FU281…FU289; 2026-10-15) — the R11-L4 keeper CPU
+  chain close-out: the quoted errata + the leg register (appended; prior sections
+  never rewritten). Census holds `59/80 = 73%` (`36 action + 23 phase`); M1
+  `09b726b7…` and M2 `b281a9b2…` byte-identical (no re-pin).** The recon wave
+  (`docs/ghidra/FU281…FU289`) froze the keeper-CPU producer frontier; the phase
+  landed the bounded wins + the ported skeleton, and **no task proved a live
+  install+dispatch**, so the census is unmoved (FU288). **Landed:** T2 the FU289
+  contact-cell fix (below); T3/T4 the **R11-L1 claim bridge** + R11-L2/L3
+  (`src/fifa96_loader/fifa96_keeper.c` — the `out->event`→`record.anim_id`
+  consume, the `flag_157820`/`flag_157822` place pause, and the
+  `place_offset_x/z` tables); T5 the row-`0x1B` stage-2 wide/steer + the `0x77423
+  CALL 0x71C94` pan setter + the ungated self-actor `0x77568`→emit (below); T6
+  the pre-pass reconciliation (below); T7 the `FUN_000782D0` record-0 machine
+  skeleton; T8 the `FUN_00077EAC` ladder + the shared predicates; T9 the
+  granted-frame release reach **GREEN** (Layer 1) + the **honest Layer-2 waiver**
+  (below). **Errata (quoted):**
+  - **FU289** — `[0x158882]` is **NOT** the contact-kind cell; it is a distinct
+    ball-record terminal flag (fresh `get_xrefs_to 0x158882` = 1 READ / 0 WRITE,
+    the `0x894A2` OR-term). The contact-kind cell is **`[0x15888C]`** (`0x894AD
+    MOV AL,[0x0015888c]; CMP EAX,0x3`); its **sole** writer of the value `3` is
+    `0x8A772` in `FUN_0008A43C` (the **kind-3 offside arm**, `0x8A735 CMP
+    EBX,0x3`), reached only from the offside check `FUN_00079D5C 0x79F2B`. The
+    engine's act-2 restart gate read the **wrong cell** (`foul_kind`/`[0x15888D]`,
+    `fifa96_match_run.c:6002`) — fixed by T2 to `contact_kind`
+    (`fifa96_match_run.c:6009/6016`). The **live raise** of `contact_kind==3` is
+    **leg FU289-L1** (the offside chain is callerless/settings-gated, FU276-L2/L3);
+    the swap is latent-correctness, not a new live producer.
+  - **FU284** — row `0x1A` stays **NULL/uncounted** (**NO-GO**): the sit-5 emit
+    is `FUN_0008A938(5, side, BX=1)` → **queue id-7 → FU-146**, never phase 9; the
+    row's body is ported (`fifa96_match_action_1A`) but its only installer is the
+    unported ladder (`FU284-L4`), so the slot stays NULL (the rows-27/29/2C
+    precedent). Legs `FU284-L1..L6`.
+  - **FU287** — the **live phase-6 producer** does not close: the phase-6 arm
+    (`FUN_0008D098 0x8D4A2`, reached from `FUN_000740A0`) installs row `0x1F`
+    **only for the non-controlled team's record 0** (`0x8D558`; the controlled
+    team takes the penalty-spot reset code `0x13`), so the producer stays **leg
+    T2b-L2** — the FU-150 chain is structurally live but unproven end-to-end.
+  - **FU281 §2 erratum** — the pre-pass `FUN_0008D8EC` **is ALREADY modelled** by
+    `fifa96_match_entities_team_update` (since commit `9b7abbe8`, 2026-10-07):
+    the counter `+0x82C`, the sector-template select, the nearest `+0x7B2`/`+0x7BA`,
+    the flag `+0x7BE`, the countdown `+0x7CB` and the `0xB2`-stride walk whose
+    single `action(ctx,e)` **is** the native `CALL dword[rec+0x18]` are all
+    present, so FU281 §2's "no engine equivalent of `FUN_0008D8EC`" and "the only
+    modelled fragment is `fifa96_match_entities.c:698`" are **wrong**, and a
+    standalone pre-pass would **double-dispatch**. T6 wired **no** second pass.
+    The `0x74442` consumer of the written cells is **leg FU281-L5** (ungated).
+    *(FU281-L2/L3 resolved as ported: `fifa96_entity_find_nearest` =
+    `FUN_0008DE8C`; `fifa96_entity_distance` = `FUN_0008DC68`.)*
+  - **FU283** — `0x114E04` is a **linear ramp table** (fresh `read_memory` =
+    `0x00000000, 0x00000192, 0x00000324, 0x000004B6, …`, step `0x192` = 402),
+    **data not code** (91 DATA xrefs) — it corrects FU273's "`0x114E04` sine"
+    label. The ladder installs five `FUN_0007D9A4(rec, 0x1a/0x1b/0x1c/4, 0, 1)`
+    arms (all `ECX=1` invoke-now); the **live stage index** stays unraised — legs
+    **FU283-L1/L6** (the stage-select inputs `[0x14C1D4]` and the stage tables
+    `0x10E184`/`0x10E1C4`/`0x10E1CE`).
+  - **FU288** — the `[0x157A83]` actor ordering is **resolved** (GO, leg T2b-L1):
+    the ladder install is gated `phase==2` (`0x7857B`) and the row-`0x1B`
+    (`0x76DBF`) / row-`0x1A` (`0x7665C`) head actor-write is gated
+    `phase==0xD && side==controlled` — **disjoint phase values**, so the install
+    and the actor transition never share a frame, and the head-write→emit pair is
+    the **same** row-`0x1B` dispatch. The engine-line citations **drift** with
+    every `fifa96_match_handlers.c` edit (the plan's `:5512` action table →
+    FU288's `:5517` row-`0x1A` → post-T5 the table begins at `:5575`, row `0x1A`
+    at `:5633`, row `0x1B` at `:5635`): **treat the row names, not the line
+    numbers, as authoritative.**
+  - **FU285/FU288 mutual exclusion** — `0x76FD5 CMP EBP,[0x157A83]; JZ 0x77636`:
+    the head write `0x76DBF` (gated `phase==0xD && side`) and the wide self-actor
+    write `0x77568` (**ungated**) are **mutually exclusive per dispatch** — a
+    head-pass jumps to `0x77636` and skips the wide block; a head-fail runs the
+    wide block and `0x77568` self-sets the actor, so the stage-4 sit-5 emit
+    `0x77707` is reachable **via the wide path** (T5 ports it). Legs **FU285-L1**
+    (the deep `0x7707D..0x77420` pan/descriptor interpolation,
+    `mr->match1b_wide_leg`), **L4/L5/L6/L7**, and **L8** (the re-place
+    fall-through tail `0x7759c..0x77631`, leg-class; depends on the unported L1
+    descriptor state).
+  - **FU282 §1.3-vs-§1.4 clarification** — the record-0 install is **DEFERRED**
+    (`FUN_0007D9A4(rec, code, EBX=0, ECX=0)`, `0x78553`/`0x7854C`/`0x78576`); the
+    `(rec, code, 0, 1)` invoke-now text belongs to the **§1.4 ladder arms**
+    (`ECX=1`). The `0x110680` permit gate (`0x784DC MOV AL,[EAX+0x110680]; AND
+    AL,1; JZ 0x7859E`) **ALSO gates the ladder gate** (`0x784E9 JZ 0x7859E`) — a
+    clarification of §1.4's three-term gate, not a contradiction. Legs
+    `FU282-L1..L7`.
+  - **FU163 §5 errata (carried)** — row `0x1B` **is wired**
+    (`{0x1B, fifa96_match_action_1B}`, `fifa96_match_handlers.c:5635`); **only**
+    row `0x1A` is NULL (`fifa96_match_handlers.c:5633`). The phase-9 arm cite is
+    `fifa96_match_run.c:2853-2861` (the `:2172-2180` cite is **stale**).
+  **The R11-L1/L2/L3 bridge is now ported** (T3/T4); the ladder is
+  wired-but-unraised **LIVE-LEG** (no live stage index can be raised); row `0x1A`
+  is NULL. **Layer-2:** an **honest waiver** (spec §6) — the granted-frame reach
+  test is GREEN (Layer 1), but the visible camera is **NOT** made live (the
+  installer + stage machine remain unported; there is no live installer).
+  **Honest ceiling:** no row wired (census unmoved), no faked producer; every
+  unreachable surface carries a numbered leg with a named native owner.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
