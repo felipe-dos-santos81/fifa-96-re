@@ -40,7 +40,7 @@ itself and consumed downstream (row `0x1A` body), not a stage-select input.
 | `0x157C48` (+`4C`,`50`) | 3×dword | `0x74aaa MOV EDI,0x157c48` then `0x74ab5 MOVSD ×3` (`a5 a5 a5`) from `[ESP+0xC]` — same unrecovered routine | 3-dword 16.16 position `(x,y,z)` | **INPUT** (ladder LEA `0x77f86` → arg to `0x795B4`; `0x781d4/…de` copies it to rec `+0x4D`) |
 | `0x157C4C` | dword | 3rd dword of the `0x157C48` copy (`0x74ab6 MOVSD`, `a5`) | 16.16 Y component; ladder tests `≥ 0x100` | **INPUT** (`0x780e6 read`; `0x781c1 CMP dword[0x157c4c],0x100`) |
 | `0x157C2C` | dword | ladder arms `0x78230 MOV [0x157c2c],ESI(=0x2e)` / `0x78258 ...,EDI(=0x2d)` / `0x7827e ...,EAX(=0x2c)` (`89352c7c1500` family); row-`0x1A` body `0x7674c MOV [0x157c2c],0x5c` (`89352c7c1500`) and `0x767a9 MOV [0x157c2c],EDX` (`89152c7c1500`) | small band/step code ∈ {`0x2c`,`0x2d`,`0x2e`,`0x54`,`0x5c`} | **PRODUCT** (ladder writes it; row-`0x1A` body reads it at `0x766fc`,`0x76757`,`0x767e7`,`0x76960`,`0x76a12`) |
-| `0x157C5C` | byte | ladder `0x7802d MOV [0x157c5c],AL(=0)` (`a25c7c1500`) / `0x780d7 MOV byte[0x157c5c],BH(=1)` (`883d5c7c1500`); `FUN_00076130` `0x76318 MOV byte[0x157c5c],BH`; `0x763ab MOV byte[0x157c5c],DH(=0)` (`88355c7c1500`); row-`0x1A` `0x77003 MOV byte[0x157c5c],DH` | {0,1} boolean latch | **PRODUCT** (ladder writes it; only *reader* is `0x76ff4 MOV BL,[0x157c5c]` — distinguishes the camera-copy vs ball-copy path) |
+| `0x157C5C` | byte | ladder `0x7802d MOV [0x157c5c],AL(=0)` (`a25c7c1500`) / `0x780d7 MOV byte[0x157c5c],BH(=1)` (`883d5c7c1500`); `FUN_00076130` `0x76318 MOV byte[0x157c5c],BH`; `0x763ab MOV byte[0x157c5c],DH(=0)` (`88355c7c1500`); row-`0x1B` `0x77003 MOV byte[0x157c5c],DH` | {0,1} boolean latch | **PRODUCT** (ladder writes it; only *reader* is `0x76ff4 MOV BL,[0x157c5c]` — distinguishes the camera-copy vs ball-copy path) |
 | `0x1577F4` | word | `0x70167 MOV word[0x1577f4],CX(=0)` (`66890df4771500`); `0x7059a MOV [0x1577f4],AX` (`66a3f4771500`, AX = doubled scaled delta); `0x7060c MOV word[0x1577f4],DI(=0xc)` (`66893df4771500`) — init `FUN_000700f4`, recompute `FUN_00070544` | camera-band extent word (0, 0xc fallback, or computed) | **INPUT** (ladder `0x78163`/`0x78180`; also read by `FUN_000736ac`,`0x70544`,`0x77d33`) |
 | `0x1577F8` | word | `0x70187 MOV word[0x1577f8],DI(=0)` (`66893df8771500`); `0x705e8 MOV [0x1577f8],AX` (`66a3f8771500`, AX = `[0x1577f4]-word[0x1577f6]`); `0x70613 MOV word[0x1577f8],DI(=0xc)` (`66893df8771500`) | band top/bottom extent word | **INPUT** (ladder `0x7815b`/`0x7817b`; 20 refs total) |
 | `0x1577BC` | word | `0x707dc MOV [0x1577bc],AX` (`66a3bc771500`, `IMUL`-scaled); `0x701fd MOV word[0x1577bc],DI(=0)` (`66893dbc771500`); `0x71cc9 MOVSW` (`66a5`) | camera-band Z/extent word | **INPUT** (ladder `0x78046`; row-`0x1A` `0x76764`) |
@@ -55,8 +55,8 @@ itself and consumed downstream (row `0x1A` body), not a stage-select input.
   clears it at `0x785A2` (`MOV byte[0x157C5D],CH`). Carried (FU273 §1.3), *not*
   re-verified this pass.
 * **`0x157C5C`** is the *ladder-internal latch* — a **different cell**, written by
-  the ladder (`0x7802D`/`0x780D7`) and `FUN_00076130` (`0x76318`) and the row-`0x1A`
-  body (`0x763AB`/`0x77003`), read only at `0x76FF4`. Fresh `get_xrefs_to 0x157C5C`
+  the ladder (`0x7802D`/`0x780D7`), `FUN_00076130` (`0x76318`/`0x763AB`) and the
+  row-`0x1B` body (`0x77003`), read only at `0x76FF4`. Fresh `get_xrefs_to 0x157C5C`
   = **6**, matching FU273 §1.3. The two must never be conflated.
 
 ## Evidence table (all fresh, `/FIFA96.EXE`, read-only)

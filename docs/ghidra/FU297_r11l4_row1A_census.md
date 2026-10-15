@@ -234,9 +234,10 @@ moved (NO-GO, §4).
 **Carried docs (read, not rewritten):** FU284 §1/§2.3/§4; FU289 (the LIVE-LEG
 ruling pattern); FU273 §1.4/§3.2; FU272 §1.3-1.4.
 
-## 9. Tooling caveat
+## 9. Tooling
 
-* **`get_xrefs_to 0x782D0` returned `0x78599`** (which the disassembly shows is the
-  `CALL 0x77EAC` site), inconsistent with the true caller `FUN_0008D8EC 0x8DB35`
-  (`disassemble_bytes 0x8DB20`). Disassembly is authoritative here; the ladder
-  chain is asserted from the bytes, not the ref-count. Flagged for the MCP bridge.
+* **`get_xrefs_to 0x782D0` = `0x8DB35`** — fresh this session, matching FU296 §1 and
+  the `disassemble_bytes 0x8DB20` caller chain (`FUN_0008D8EC 0x8DB35 CALL 0x782D0`).
+  The earlier draft observation that the tool "returned `0x78599`" is **withdrawn as
+  false**: `0x78599` is the `CALL 0x77EAC` inside `FUN_000782D0`, not an xref to
+  `0x782D0`. No MCP-bridge caveat is needed.

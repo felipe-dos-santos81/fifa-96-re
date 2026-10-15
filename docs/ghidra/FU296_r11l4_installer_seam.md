@@ -110,7 +110,7 @@ must be written back to `mr->global_157c5d`.
 | # | native cell | gate | engine owner / leg |
 |---|---|---|---|
 | P5 | `byte[rec+0x91] == 0x19` (`0x77EC2`) | keeper must be in row `0x19` | OWNED — `entity.code` (entities.h:71). Row `0x19` body is ported + installer live (`fifa96_match_action_19`, handlers table `0x19`). |
-| P6 | `[0x14C1D4][idx] AH&2` (`0x77EF0`, `prepass_ah2`) | per-side prepass table | **LEG FU283-L1** — table unported; caller supplies a real `0`. |
+| P6 | `[0x14C1D4][idx] AH&2` (`0x77EF0`, `prepass_ah2`) | per-side prepass table | **table PORTED** as `fifa96_input_range_words` (`src/fifa96_input.c:86`) → `mr->input_range` (`src/fifa96_match_run.c:484/2271`) incl. the bit-9 gate (`cells[2]/[5]==1 → |=0x200`, `input.c:97-98`); only the `prepass_ah2` **glue** is absent (LEG FU283-L1 / FU291-L2) — caller supplies a real `0`. |
 | P7 | `byte[rec+0x9A] == 0` (`0x77EF6`, `gate_9a`) | skip state | OWNED — `entity.skip_9a` (entities.h:96). |
 | P8 | `*(param_1[10]) == 'T'` (`0x77F03`, `is_T`) | the `+0x28` row-string | **LEG** — the `+0x28` anim-row descriptor is not a modelled cell; effectively `0` while no `'T'` descriptor is bound. |
 | P9 | `word[rec+0x81] == 0` (`0x77F16`, `timer81`) | timer clear | OWNED — `entity.timer81` (entities.h:117). |
@@ -122,7 +122,7 @@ must be written back to `mr->global_157c5d`.
 
 | # | native cell | gate | engine owner / leg |
 |---|---|---|---|
-| P13 | `CX ∈ 1..5` (`rec->stage`, `0x781E1 TEST CX,CX; JZ 0x782C4`) | the selector index | **LEG FU283-L6 — NO LIVE PRODUCER.** The stage machine (`0x77F95..0x781A2`) reads four unported input families: `[0x14C1D4]`, the `0x10E184`/`0x10E1C4`/`0x10E1CE` stage tables, the `[0x157C4C]`/`[0x157C48]`/`[0x157C2C]` latches, and the stage geometry words `[0x1577F4/F8]`/`[0x1577BC]`/`[0x157821]`/`[0x158740]`. |
+| P13 | `CX ∈ 1..5` (`rec->stage`, `0x781E1 TEST CX,CX; JZ 0x782C4`) | the selector index | **LEG FU283-L6 — NO LIVE PRODUCER.** The stage machine (`0x77F95..0x781A2`) reads four input families: `[0x14C1D4]` (table **ported**, only the `prepass_ah2` glue absent), the `0x10E184`/`0x10E1C4`/`0x10E1CE` stage tables, the `[0x157C4C]`/`[0x157C48]`/`[0x157C2C]` latches, and the stage geometry words `[0x1577F4/F8]`/`[0x1577BC]`/`[0x157821]`/`[0x158740]` (the latter three groups still unported). |
 
 **This is the decisive producer.** With the seam wired and P1–P12 forced open but **no live stage
 index**, `rec->stage == 0` and the ladder returns at `0x781E1` — `out.install == 0`. The ladder
@@ -179,9 +179,10 @@ first, and (optionally) the second. Owner: FU296-L4.
 module just needs to be added to the `fifa96_engine` link.
 
 **A faithful self-raised live install: NO-GO.** The ladder's selector index `CX` (P13) has **no live
-producer** — the stage machine's four input families are unported (FU283-L6), so `stage == 0` and
-every arm returns with no install. P1 (`[0x110680]`, FU282-L5) and P6 (`[0x14C1D4]`, FU283-L1) are
-likewise unported. With today's engine cells only a *staged* stage index can raise an install.
+producer** — the stage machine's other input families are unported (FU283-L6), so `stage == 0` and
+every arm returns with no install. P1 (`[0x110680]`, FU282-L5) is
+likewise unported; P6 (`[0x14C1D4]`, FU283-L1) is **ported as a table** but has no live
+`prepass_ah2` glue. With today's engine cells only a *staged* stage index can raise an install.
 
 **A test-staged live install: CONDITIONAL GO.** With Seam A + the bind (§2) and the caller-supplied
 `stage`/`permit`/`prepass_ah2`, the ported ladder installs `0x1B`/`0x1C`/`0x4`, the entity's single
@@ -211,8 +212,10 @@ this draft.
   the primary assertion is `records[0].code == 0x1B` or `camera.pos_y != 0`, and whether the staged
   producers are test-only (zero golden delta) or promoted.
 - **FU296-L5 (owner: FU283-L6).** P13 — the live stage index. The **blocker** for a self-raised live
-  install; four unported input families (`[0x14C1D4]`, `0x10E1xx`, `[0x157C4x]`, the geometry words).
-- **FU296-L6 (owner: FU283-L1).** P6 — `prepass_ah2` (`[0x14C1D4]` `AH&2`); must be a real `0`.
+  install; four input families (`[0x14C1D4]` **ported as a table**, `0x10E1xx`, `[0x157C4x]`, the geometry words).
+- **FU296-L6 (owner: FU283-L1).** P6 — `prepass_ah2` (`[0x14C1D4]` `AH&2`); the
+  `[0x14C1D4]` table is **ported** (`fifa96_input_range_words`, `src/fifa96_input.c:86`),
+  only the `prepass_ah2` glue is absent; it must be a real `0`.
 - **FU296-L7 (owner: FU186-L1).** The `0x1A` ladder arms install a **NULL** engine slot
   (`fifa96_match_action_table[0x1A]`, `handlers.c`); the row body is ported but uncounted, so the
   `0x1A` installs are inert until FU186-L1. Only `0x1B`/`0x1C`/`0x4` reach live bodies today.

@@ -28,7 +28,7 @@ camera-place primitive FU285-L7. Every store below is fresh `read_memory 0x71D07
 | `[0x1577F0]` | word | `66 89 1D F0 77 15 00` | `0x71CD4` | `BX` = height | event height → **low-clamped** to `[0x157750]` (`0x71CE5 66 A3 F0 77 15 00`) → **high-clamped** `0x640` (`0x71CFA`, reads its own just-stored word via `dword[0x1577EE]>>16`) | `camera.event_param` |
 | `[0x1577CA]` | dword | `89 2D CA 77 15 00` | `0x71D27` | `EBP` = rec | tracked event/keeper actor record | `camera.tracked` |
 | `[0x1577CE + side*4]` | dword | `89 2C 85 CE 77 15 00` | `0x71D1D` | `EBP`; `side=byte[[rec]+0x826]` | per-side tracked actor array | **UNMODELED** |
-| `[0x157815]` | byte | `88 15 15 78 15 00` / `C6 05 15 78 15 00 FF` / `A2 15 78 15 00` | `0x71D6A` / `0x71DB1` / `0x71DDC` | `DL`(0x70544 ret) / `0xFF` / `AL`(0x8DD70 heading) | pan-direction byte (`0x10E169` two-dir table or `0x8DD70`) | **UNMODELED** |
+| `[0x157815]` | byte | `88 15 15 78 15 00` / `C6 05 15 78 15 00 FF` / `A2 15 78 15 00` | `0x71D6A` / `0x71DB1` / `0x71DDC` / `0x702e6` | `DL`(0x70544 ret) / `0xFF` / `AL`(0x8DD70 heading) / (4th, `FUN_000700f4`) | pan-direction byte (`0x10E169` two-dir table or `0x8DD70`) | **UNMODELED** |
 | `[0x157822]` | byte | `88 1D 22 78 15 00` | `0x71DE3` | `0` | clear (smoothing) | **leg** |
 | `[0x157820]` | byte | `88 1D 20 78 15 00` | `0x71DE9` | `0` | clear (smoothing) | **leg** |
 | `[0x158777]` | dword | `89 1D 77 87 15 00` | `0x71D0C` | `0` | clear take slot | **leg** |
@@ -44,6 +44,15 @@ the slot dir pair path (`0x71DB1 0xFF` when both `[rec+0x20]+0x20/+0x21` are 0 a
 or the `0x8DD70(heading)` path → `(heading+0x40)&0x3FF >>7` (`0x71DDC`). `CALL 0x70544`
 rel32 at `0x71D65` = `e8 da e7 ff ff` → `0x70544` (verified); `CALL 0x8DD70` rel32
 `e8 a0 bf 01 00` → `0x8DD70`.
+
+> **Erratum — the `[0x1577BC]` reading is unreconciled with FU292.** This draft reads
+> the third word of the `[0x1577B8..0x1577BD]` 6-byte copy (`0x71CC9 MOVSW`,
+> `EDI=0x1577B8`) as `camera.event_step_z`; FU292 §`0x1577BC` reads the **same cell**
+> as a **camera-band Z/extent word** (INPUT) written at `0x707dc`
+> (`66a3bc771500`, `IMUL`-scaled) alongside `0x701fd`. The two readings are **not
+> reconciled here** — the cited write sets differ (this draft: `0x71CC8`/`0x71CC9`;
+> FU292: `0x707dc`/`0x701fd`, with `0x71cc9` as a third). Both are left standing as
+> unreconciled; the label `camera.event_step_z` must not be treated as settled.
 
 ---
 
@@ -95,10 +104,21 @@ The record's middle word `[0x1577BA]` (fresh = **5**, `event_step_x`): WRITE `0x
 | `[0x158777]`, side-record clears | — | **UNMODELED** (FU294-L5) |
 
 Wired call sites: `handlers.c:552`/`:1379`/`:2722` (`fifa96_camera_event_set` +
-`fifa96_camera_set_tracked`), and the row-`0x1B` wide `0x77423 CALL 0x71C94`
-(`handlers.c:3871`, FU285). The `0x71C94` xref set (fresh = **11**: `0x71B8A`, `0x70DD1`,
+`fifa96_camera_set_tracked`), and the row-`0x1B` wide `0x77423` site — **only its
+`0x71D27` bind is wired**, as `fifa96_camera_set_tracked` (`fifa96_match_handlers.c:3871`);
+the `0x71C94` **pan/vector construction** is still the `match1b_wide_leg` stub
+(`fifa96_match_handlers.c:3870`, FU285). The `0x71C94` xref set (fresh = **11**: `0x71B8A`, `0x70DD1`,
 `0x7A219`, `0x6FA62`, `0x75DC4`, `0x77423`, `0x7F4E7`, `0x82A6C`, `0x77DC6`, `0x7EFCF`,
 `0x7F0D1`) matches FU-148 §13.4 / FU-152 carried.
+
+> **Erratum vs FU285 §2 ("None of these are in the engine").** Fresh, the camera
+> triple, `camera.tracked`, `event_step` and `event_param` **are** ported:
+> `fifa96_camera_event_set` (`src/fifa96_loader/fifa96_camera.c:827`) and
+> `fifa96_camera_set_tracked` (`src/fifa96_loader/fifa96_camera.c:56`), wired at
+> `fifa96_match_handlers.c:549/552`, `:1374/1379`, `:2717/2722`, `:3871`. FU285 §2's
+> blanket "None of these are in the engine" is superseded for these four cells (the
+> residual unported cells there — `[0x1577CE+side*4]`, `[0x157815]`, the smoothing
+> family, `[0x158777]`/side-record clears — remain unported, FU294-L1/L2/L3/L5).
 
 ---
 
@@ -107,7 +127,9 @@ Wired call sites: `handlers.c:552`/`:1379`/`:2722` (`fifa96_camera_event_set` +
 **GO — the setter is already ported.** `fifa96_camera_event_set` (the FUN_00071C94 +
 FUN_00070544 subset, FU-148 §12.1) is complete and its tracked-cell write is ported as
 `fifa96_camera_set_tracked` → `camera.tracked`; the row-`0x1B` `0x77423` caller is wired
-(handlers.c:3871). The unported residual is narrow and bounded by the leg list below — the
+**only for its `0x71D27` bind** (`fifa96_camera_set_tracked`, `fifa96_match_handlers.c:3871`)
+— the `0x71C94` **vector construction** is still the `match1b_wide_leg` stub
+(`fifa96_match_handlers.c:3870`). The unported residual is narrow and bounded by the leg list below — the
 per-side array `[0x1577CE+side*4]`, the dir byte `[0x157815]`, the `0x15780C..0x157822`
 smoothing family and the `[0x158777]`/side-record clears. **NO-GO only for those legs**, not
 for the setter core.
@@ -124,7 +146,7 @@ for the setter core.
 | `[0x1577F0]` store/low/high clamp `0x71CD4`/`0x71CE5`/`0x71CFA`, self-read `dword[0x1577EE]>>16` | `disassemble_function`; `read_memory 0x71D07` (229 B) |
 | `[0x1577CA]` store `89 2D CA 77 15 00` @`0x71D27` | `read_memory 0x71D07` |
 | per-side `[0x1577CE+side*4]` `89 2C 85 CE 77 15 00` @`0x71D1D`; `side=byte[[rec]+0x826]` | `read_memory 0x71D07` |
-| dir byte `[0x157815]` writers `0x71D6A`/`0x71DB1`/`0x71DDC`; clears `0x158777`/`0x157822`/`0x157820`; `byte[rec+0x9B]` | `read_memory 0x71D07` |
+| dir byte `[0x157815]` writers `0x71D6A`/`0x71DB1`/`0x71DDC`/`0x702e6`; clears `0x158777`/`0x157822`/`0x157820`; `byte[rec+0x9B]` | `read_memory 0x71D07` |
 | `CALL 0x70544` rel32 `e8 da e7 ff ff`; `CALL 0x8DD70` rel32 `e8 a0 bf 01 00` | `read_memory 0x71D07` |
 | xrefs to `0x71C94` = 11; `0x1577CA` = 88 (3 WRITE); `0x1577B8` = 6; `0x1577BA` = 5; `0x1577CE` = 3; `0x157815` = 6; `0x158777` = 6 | `get_xrefs_to` each |
 | engine mapping / ports / wired call sites | `include/fifa96_loader/fifa96_camera.h:7-69,280-301`; `handlers.c:552,1379,2722,3847-3871` |
@@ -139,8 +161,8 @@ re-verifies); FU-148 §12.1/§13.4; FU-145 §3 / OL-T11-79; FU-152 §2.9.
 * **FU294-L1 — the per-side tracked array `[0x1577CE+side*4]`.** Writer `0x71D1D` (the
   setter); `side = byte[[rec]+0x826]`. Only two other refs (`FUN_0006ffc0 0x70059`,
   `FUN_00088940 0x88AAC`). Unmodeled in `fifa96_camera`. Owner: `fifa96_camera`.
-* **FU294-L2 — the pan-direction byte `[0x157815]`.** Three writers
-  (`0x71D6A`/`0x71DB1`/`0x71DDC`), two readers (`FUN_00071df4 0x71EF0`/`0x71F35`); the
+* **FU294-L2 — the pan-direction byte `[0x157815]`.** Four writers
+  (`0x71D6A`/`0x71DB1`/`0x71DDC`/`0x702e6`), two readers (`FUN_00071df4 0x71EF0`/`0x71F35`); the
   `0x10E169` two-dir table and the `0x8DD70` heading fold. Unmodeled. Owner: OL-T11-79.
 * **FU294-L3 — the smoothing clears `[0x157820]`/`[0x157822]`** (the `0x15780C..0x157822`
   smoothing family) and the `[0x158777]` take-slot clear. Unmodeled. Owner: OL-T11-79.

@@ -84,6 +84,10 @@ indexed-table readers.
   `0x1ca25 OR byte[0x14C1D7],2` for `[0x10529C]==1`); `FUN_00024b00` `0x24b98` —
   a **reset** that zeroes both words (fresh `0x24b8f XOR EBX,EAX` with
   `EBX=EAX` ⇒ 0, then `MOV word[0x14C1D6],DX` / `MOV word[0x14C1D4],BX`, `DX=BX=0`).
+  *The engine port `fifa96_input_range_words` is itself such a writer and does the
+  same bit-9 gate as an **in-function RMW** — `cells[2]==1 → word0 |= 0x200`,
+  `cells[5]==1 → word1 |= 0x200` (`fifa96_input.c:97-98`) — so the native three-site
+  enumeration undercounts those RMW writes.*
 * **Direct readers** (5): `FUN_0004b02c` `0x4b0bc`, `FUN_000736ac` `0x73a07`,
   `FUN_000709d0` `0x70ab1` (the camera pan gate), `FUN_0007131c` `0x718d0`,
   `0x742f5`.

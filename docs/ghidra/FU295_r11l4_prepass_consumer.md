@@ -29,9 +29,11 @@ teams' pre-pass pick cells are non-NULL (EBX = 0 sentinel). The same driver
 `[0x157A83] = [team+0x7B2]` iff the team is the controlled side). Of the 22
 `[0x157A83]` writers (fresh 112 xrefs = 22 WRITE / 90 READ), the keeper-route
 producers are `0x76DBF` (row-`0x1B` head), `0x77568` (row-`0x1B` stage-2 wide
-self-set) and the sibling `0x7665C` (row-`0x1A` head); the head + wide writes are
-**live** in the engine (`r->controlled = 1`, `fifa96_match_handlers.c:3801`/
-`:3764`), the row-`0x1A` head is **not** (row `0x1A` slot NULL).
+self-set), the sibling `0x7665C` (row-`0x1A` head) and `0x76AD8` (the row-`0x1A`
+**body** set→rec site, FU288 §1 #6 — a sibling of the wide self-set `0x77568`); the
+head + wide writes are **live** in the engine (`r->controlled = 1`,
+`fifa96_match_handlers.c:3801`/`:3764`), the row-`0x1A` head/body is **not** (row
+`0x1A` slot NULL).
 
 ---
 
@@ -187,6 +189,11 @@ The keeper route is the ladder install → row-`0x1B` head/wide actor transition
 * **`0x7665C` row-`0x1A` head** (sibling). Fresh `disassemble_bytes 0x76630`:
   `0x7663C CMP EAX,0xD; JNZ …` + `0x76658 CMP EDX,EAX; JNZ …`, then
   `0x7665C MOV [0x157A83],EBP`. **set→rec, keeper sibling head.**
+* **`0x76AD8` row-`0x1A` body** (FU288 §1 #6). The row-`0x1A` **body** (not the
+  head) also lifts the actor: `0x76AD8 MOV [0x157A83],EBP` (bytes
+  `892d837a1500`), a sibling of the wide self-set `0x77568`. It lives in the
+  unported body remainder (FU186-L1; the ported `fifa96_match_action_1A` is
+  head+stage-0 only), so it is **not live**. **set→rec, keeper sibling body.**
 * **`0x8C3BE` reset/pre-pass lift** (`FUN_0008C33C`). Fresh
   `decompile_function 0x8C33C`:
   `if ((ram0x00157aac >> 0x18) == *(byte *)((int)param_1 + 0x826)) DAT_00157a83
@@ -196,9 +203,10 @@ The keeper route is the ladder install → row-`0x1B` head/wide actor transition
   consumer). **set→rec, controlled-side lift.**
 
 The ladder itself (`FUN_00077EAC`, reached from `FUN_000782D0` at `0x78599` under
-the fresh gate `0x7857B CMP EAX,0x2`) installs a *row* via `FUN_0007D9A4`
-(`0x78576`), **not** the actor cell — it is the route's installer, not a
-`[0x157A83]` writer.
+the fresh gate `0x7857B CMP EAX,0x2`) installs a *row* via `FUN_0007D9A4` — the
+arms' `CALL 0x7D9A4` sites are `0x78236`/`0x7825E`/`0x78285`/`0x782A2`/`0x782BF`
+(FU283 §4; **not** `0x78576`, which is the record-0 machine's deferred install) —
+**not** the actor cell: it is the route's installer, not a `[0x157A83]` writer.
 
 ### 2.3 Engine liveness (the mapping)
 
@@ -211,6 +219,7 @@ producer mapping (**fresh** grep/reads of the built tree):
 | `0x76DBF` row-`0x1B` head | `r->controlled = 1`, `fifa96_match_handlers.c:3801`; row `0x1B` wired `:5519` | **LIVE** |
 | `0x77568` row-`0x1B` wide self-set | `r->controlled = 1`, `fifa96_match_handlers.c:3764` (`match_1b_replace`); row `0x1B` wired | **LIVE** |
 | `0x7665C` row-`0x1A` head | `r->controlled = 1`, `fifa96_match_handlers.c:4033` (`fifa96_match_action_1A`) | **NOT live** — row `0x1A` slot `{0x1A, NULL, …}` (`:5517`), installer (ladder) unported |
+| `0x76AD8` row-`0x1A` body | — (row-`0x1A` body remainder unported, FU186-L1; row `0x1A` slot `{0x1A, NULL, …}` `:5517`) | **NOT live** |
 | `0x8C3BE` (`FUN_0008C33C` lift) | port `fifa96_match_entities_reset_lane` (`fifa96_match_entities.c:161`) **omits the actor lift** and has **no caller** in `src/` | **NOT live** |
 
 Related cells: native `[team+0x7B2]` = engine `team->target`
@@ -248,7 +257,7 @@ M1/M2 goldens untouched (**no re-pin**). The `0x74442` driver is unported, so th
 | `0x76DBF` row-`0x1B` head write + `phase==0xD`+side gate | `disassemble_bytes 0x76D28` |
 | `0x7665C` row-`0x1A` head write + same gate | `disassemble_bytes 0x76630` |
 | `0x77568` row-`0x1B` wide write + `0x76FD5` mutual exclusion | `disassemble_bytes 0x77540`/`0x76FC7` |
-| ladder gate `phase==2` (`0x7857B`) + reinstall `0x78576→0x7D9A4` | `disassemble_bytes 0x78570` |
+| ladder gate `phase==2` (`0x7857B`) + arms `CALL 0x7D9A4` (`0x78236`/`0x7825E`/`0x78285`/`0x782A2`/`0x782BF`) | `disassemble_bytes 0x78570`; FU283 §4 |
 | engine head/wide live `r->controlled`, row `0x1B` wired | `fifa96_match_handlers.c:3801`/`:3764`/`:5519` |
 | engine row-`0x1A` head `r->controlled` but slot NULL | `fifa96_match_handlers.c:4033`/`:5517` |
 | engine `FUN_0008C33C` port omits the lift; no caller | `fifa96_match_entities.c:161`; grep `reset_lane` (def only) |

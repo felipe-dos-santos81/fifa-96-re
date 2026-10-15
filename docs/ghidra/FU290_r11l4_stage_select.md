@@ -51,6 +51,14 @@ Stage↔row map (fresh `read_memory 0x77E98` = 20 B `6d…b1 82 07 00`, then pro
 `CX=1→0x7826D`(0x1A,+0x2C=0x2c), `2→0x78245`(0x1A,0x2d), `3→0x7821D`(0x1A,0x2e), `4→0x78294`(0x1B),
 `5→0x782B1`(0x1C). Confirms FU283 §4's CX↔arm map.
 
+> **Erratum vs FU283 §3.** FU283 §3 states the stage block "assign[s] `ECX` ∈
+> {0,1,2,4,5}". Fresh, the only **immediates** are `{0,1,4,5}` — bytes
+> `b9 01000000`@`0x7805B`, `b9 04000000`@`0x780D2`/`0x781BA`, `b9 05000000`@
+> `0x781CD`, `31c9`@`0x781AF`, `89d1`@`0x781DC`. The values `2`/`3` arise **only**
+> through `MOV ECX,EDX`@`0x781DC` (the table byte `A ∈ {1..5}`); they are never
+> immediates, so FU283 §3's set conflates the immediate path with the `A` path
+> (`0x781DC`).
+
 ## Where `0x114E04` and `0x795B4` are used (fresh)
 
 - **`0x795B4`** is called **directly** at `0x77F90` (the ladder). Fresh `get_xrefs_to
@@ -118,8 +126,11 @@ function) — matches FU283 §6.
   latch `[0x157C5C]`** (writers `0x7802D`/`0x780D7`; readers `0x780E6`/`0x780F5`/
   `0x781C1`). Unported. Owner: FU186-L5/L6 (extends FU283-L3).
 * **FU290-L4 — the gate words `[0x157A49]`/`[0x1577BC]`/`[0x1577F4]`/`[0x1577F8]`/
-  `[0x157821]` and the prepass table `[0x14C1D4]`** (`0x77FAD`/`0x78046`/`0x78163`/
-  `0x7812E`/`0x77EDE`). Unported. Owner: FU186-L5 / FU180-L1 (extends FU283-L1/L5).
+  `[0x157821]`** (`0x77FAD`/`0x78046`/`0x78163`/`0x7812E`). Unported. The prepass table
+  `[0x14C1D4]` (`0x77EDE`) is **ported (only the `prepass_ah2` glue is absent)**:
+  `fifa96_input_range_words` (`src/fifa96_input.c:86`) → `mr->input_range`
+  (`src/fifa96_match_run.c:484/2271`), incl. the bit-9 gate (`cells[2]/[5]==1 →
+  |=0x200`, `input.c:97-98`). Owner: FU186-L5 / FU180-L1 (extends FU283-L1/L5).
 * **FU290-L5 — the per-record sub-fields `[[rec+4]+0xB]` and `[[rec+4]+0x10]`** (the
   `2*byte+0x30` and `0x10-byte` terms, `0x78068`/`0x78150`) and the words
   `rec+0x69`/`+0x71`/`+0x73`. Not engine fields. Owner: FU180-L1/L3 (extends FU283-L5).
@@ -137,17 +148,25 @@ function) — matches FU283 §6.
 `[0x157A83]` = `entities.controlled`, and `entity.code` (`+0x91`) — **are** engine
 fields (fresh grep, above).
 
-**Not reachable:** the four stage-select input families have **no engine field** —
+**Not reachable:** three of the four stage-select input families have **no engine
+field** —
 (1) the stage tables `0x10E184`/`0x10E1C4`/`0x10E1CE`; (2) the latch/geometry cells
-`[0x157C4C]`/`[0x157C48]`/`[0x157C44]`/`[0x157C5C]`; (3) the gate words `[0x157A49]`/
-`[0x1577BC]`/`[0x1577F4]`/`[0x1577F8]`/`[0x157821]` and the `[0x14C1D4]` prepass
-table; (4) the per-record sub-fields `[[rec+4]+0xB]`/`[[rec+4]+0x10]`.
+`[0x157C4C]`/`[0x157C48]`/`[0x157C44]`/`[0x157C5C]`; (4) the per-record sub-fields
+`[[rec+4]+0xB]`/`[[rec+4]+0x10]`.
+
+**Family (3) — the `[0x14C1D4]` prepass table — is ported (only the
+`prepass_ah2` glue is absent):** it is `fifa96_input_range_words`
+(`src/fifa96_input.c:86`) → `mr->input_range` (`src/fifa96_match_run.c:484/2271`),
+incl. the bit-9 gate (`cells[2]/[5]==1 → |=0x200`, `input.c:97-98`). The sibling
+gate words `[0x157A49]`/`[0x1577BC]`/`[0x1577F4]`/`[0x1577F8]`/`[0x157821]` remain
+unported.
 
 **Verdict: CONDITIONAL — the *installer* is wireable now; the *stage index* is not.**
 The full `CX` truth table and the row-install dispatch (stages 1/2/3→`0x1A` with
 `[0x157C2C]`=`0x2c/0x2d/0x2e`, 4→`0x1B`, 5→`0x1C`, predicate→`4`; every arm
 `FUN_0007D9A4(rec,code,0,1)`) are now exactly specified and can be ported **as a
-pure function of the seven native input families**. But because families (1)–(4)
-are unported, a **live** `CX` cannot be produced from current engine state — the
+pure function of the seven native input families**. But because the remaining
+stage-select inputs — (1), (2), (4) and family (3)'s gate words — are unported, a
+**live** `CX` cannot be produced from current engine state — the
 stage-select inputs stay unported legs (FU290-L1..L5). This closes FU283-L6 (the
 full machine is now derived) and localises the residual gap to the four families.
