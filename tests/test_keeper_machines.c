@@ -173,7 +173,12 @@ static void test_claim_stage3_slot_paths(void) {
   assert(out.place == 0);             /* the hold-follow is slot-only */
   assert((out.ui & 0x200u) == 0u);    /* 0x4C31C belongs to the slot path */
   assert(out.held_exit == 0);
-  assert(s.stage92 == 8);             /* 3 -> 4 -> ... -> 8 (row44 0 exit) */
+  /* 3 -> 4 -> 5 -> 6: the stage-4 outlet selects row 0x44 (`R11-L1` mirror),
+   * stage 5's `CMP byte[[rec+0x28]],0x45` fails, and the stage-6 `0x44` gate
+   * (5) holds on frame 0. */
+  assert(out.event == 0x44);
+  assert(out.flag_write == 1 && out.flag_157820 == 1 && out.flag_157822 == 1);
+  assert(s.stage92 == 6);
 
   /* slotless, timer89 <= 0x78 and gauge < 0x90: the target.z nudge, no place. */
   s = claim_state();
@@ -282,10 +287,11 @@ static void test_claim_stage4_outlet(void) {
   assert(out.vector_build == 1);      /* latch set -> 0x7B878 (leg) */
   assert(out.clear_vec == 0);
   assert(out.event == 0x44);          /* band 0 < 0x5a0 */
-  /* stage 4 falls through 5/6/7; row44 0 exits at stage 8. */
-  assert(s.stage92 == 8);
-  assert(out.ball_stage == 1 && out.ball_event == 0x01);
-  assert(out.situation_0b == 1);
+  /* The `R11-L1` mirror sets the live row to 0x44, so stage 5 fails the 0x45
+   * gate and stage 6's `0x44` gate (5) holds on frame 0 (native 0x75D24/0x75E00). */
+  assert(s.stage92 == 6);
+  assert(out.flag_write == 1 && out.flag_157820 == 1 && out.flag_157822 == 1);
+  assert(out.ball_stage == 0 && out.situation_0b == 0);
 
   /* no slot: the clear-vector request, band < 0x5a0 -> event 0x44. */
   s = claim_state();
@@ -297,7 +303,7 @@ static void test_claim_stage4_outlet(void) {
   assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
   assert(out.clear_vec == 1);
   assert(out.event == 0x44);
-  assert(s.stage92 == 8);
+  assert(s.stage92 == 6);             /* 5 fails the 0x45 gate; 6 holds at frame 0 */
 
   /* slot + latch clear: 0x8DCD4(pos, reset) with band >= 0x780 -> event 0x45. */
   s = claim_state();
@@ -311,6 +317,10 @@ static void test_claim_stage4_outlet(void) {
   assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
   assert(out.event == 0x45);
   assert((uint16_t)s.vec_band == 0x800);
+  /* the live row mirrors 0x45 (0x75CF7), so stage 5's 0x45 gate passes; the
+   * frame-0 `< 3` gate then holds the stage at 5 (`0x75D39 JL 0x760DF`). */
+  assert(s.anim_row == 0x45);
+  assert(s.stage92 == 5);
 }
 
 static void test_claim_errors(void) {

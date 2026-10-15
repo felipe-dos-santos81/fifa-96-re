@@ -1784,8 +1784,10 @@ static void test_action_1E_machine_release_chain(void) {
   assert(f.mr.render.camera.vel_x == 0 && f.mr.render.camera.vel_z == 0);
   assert(f.mr.render.camera.tracked == f.mr.record.entity_id);
 
-  /* stage 4 with no slot clears the outlet vector and the band selects the
-   * 0x44 event; the chain reaches stage 8 and exits on row44. */
+  /* stage 4 with no slot clears the outlet vector; the deterministic
+   * clear-vector draw selects the `>= 0x780` band (event 0x45). The `R11-L1`
+   * mirror writes that live row, so stage 5's 0x45 gate passes and the frame-0
+   * `< 3` gate holds the stage at 5 (`0x75D39`). */
   f.mr.phase_machine.state = 2;
   f.mr.state.phase = 1;
   f.mr.record.stage92 = 4;
@@ -1797,8 +1799,9 @@ static void test_action_1E_machine_release_chain(void) {
   f.mr.keeper_reset_z = 0;
   f.mr.keeper_latch_157ab2 = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
-  assert(f.mr.record.stage92 == 8);
-  assert(f.mr.record.has_ball == 1);            /* no release at row 0 */
+  assert(f.mr.record.anim_id == 0x45u);         /* the stage-4 selection */
+  assert(f.mr.record.stage92 == 5);             /* held on the frame-0 gate */
+  assert(f.mr.record.has_ball == 1);            /* no release at frame 0 */
   drop_fixture(&f);
 }
 

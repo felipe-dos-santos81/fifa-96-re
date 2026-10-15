@@ -698,6 +698,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
     if ((uint16_t)s->vec_band < 0x5A0u) out->event = 0x44;         /* 0x75ca6 */
     else if ((uint16_t)s->vec_band < 0x780u) out->event = 0x2F;
     else out->event = 0x45;
+    s->anim_row = out->event;   /* 0x75cf7 FUN_0006E598: rec+0x28 := row; byte[row] = id */
     {
       int32_t face = 0;                                            /* 0x75cdc face(vec_dx, vec_dz) */
       (void)fifa96_entity_face(s->vec_dx, s->vec_dz, &face, &s->sector);

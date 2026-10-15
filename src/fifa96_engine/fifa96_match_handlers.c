@@ -511,6 +511,16 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
     mr->flag_157820 = out->flag_157820;
     mr->flag_157822 = out->flag_157822;
   }
+  /* FU286 / R11-L1 (phase-26c T3): the stage-4 anim selection
+   * (`0x75CF7 CALL 0x6E598`, id `{0x44,0x2F,0x45}` from the vec_band tiers)
+   * lands on the staging drain like every other `FUN_0006E598` site. */
+  if (out->event != 0 && e != NULL) {
+    if (fifa96_match_run_record_anim_install(mr, e, out->event, 0) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    mr->record.anim_id = e->anim_id;
+    mr->record.frame = e->frame;
+    mr->record.row44 = e->row44;
+  }
   /* M2 phase-9 T3 (FU-148 §2.1(c) 0x75DC4): the stage-5 release
    * (0x75D17..0x75DD1) cuts the FU-71 camera to the staged release triple
    * (0x15774C/50/54 = pos + 0x10F331/39[type8]<<6, y 0x50), calls

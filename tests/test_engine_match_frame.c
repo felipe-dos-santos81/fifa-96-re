@@ -3268,6 +3268,41 @@ static void test_row1e_stage3_possession_flip(void) {
   drop_fixture(f);
 }
 
+/* FU286 / R11-L1 (phase-26c T3): the claim anim-selection bridge. The row-0x1E
+ * keeper claim selects its stage-4 anim from the residual vec_band tiers
+ * (native `0x75CF7 CALL 0x6E598` writes `rec+0x28`); the `>= 0x780` tier
+ * selects row 0x45, so the same dispatch's stage 5 cuts the release
+ * (`0x75D24 CMP byte[[rec+0x28]],0x45` -> `0x157750 := 0x50`). The bridge
+ * consumes the produced `out->event` into `record.anim_id` (hence the pool
+ * record) and the claim's live row becomes 0x45. Baseline (no bridge): the
+ * live row never becomes 0x45, so stage 5 advances without the release and the
+ * release triple `0x157750` is never written. `mr.keeper_cam_y` is the engine's
+ * `0x157750` stand-in, written only by the stage-5 release block. */
+static void test_row1e_claim_anim_bridge(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  e = &mr.entities.team[1].records[0];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
+  e->stage92 = 4;                   /* the stage-4 outlet dispatch */
+  e->frame = 3;                     /* past the stage-5 `frame < 3` gate */
+  e->has_slot = 1;                  /* slot path -> 0x8DCD4(pos, reset) vector */
+  e->pos_x = 0;
+  e->pos_z = 0;
+  mr.keeper_latch_157ab2 = 0;       /* latch clear -> the reset-vector arm */
+  mr.keeper_reset_x = 0x800;        /* band 0x800 >= 0x780 -> event 0x45 */
+  mr.keeper_reset_y = 0;
+  mr.keeper_reset_z = 0;
+  assert(mr.keeper_cam_y == 0);     /* the release triple is unset at baseline */
+  for (int i = 0; i < 200 && mr.keeper_cam_y != 0x50; i++) one_granted_frame(&mr);
+  assert(mr.keeper_cam_y == 0x50);  /* the stage-5 release arm fired */
+  assert(e->anim_id == 0x45u);      /* the bridge selected row 0x45 */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU273 §4.4 (phase-26c T1): the R11-L4 keeper release reach — the phase RED
  * gate.
  *
@@ -6602,6 +6637,7 @@ int main(void) {
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();
+  test_row1e_claim_anim_bridge();
   test_keeper_l4_release_reach();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
