@@ -2,6 +2,7 @@
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fifa96_engine/fifa96_engine.h"
@@ -3267,6 +3268,65 @@ static void test_row1e_stage3_possession_flip(void) {
   drop_fixture(f);
 }
 
+/* FU273 §4.4 (phase-26c T1): the R11-L4 keeper release reach — the phase RED
+ * gate.
+ *
+ * A granted-frame scenario drives the keeper's row-`0x1B` stage-4 tail on the
+ * controlled side (phase `0xD`, CPU `global_157a4c`), so the sit-5 emit runs
+ * (`fifa96_keeper_reposition_b_finish` -> notify 5), situation 5 selects phase
+ * 9, and the phase-9 arm installs row `0x1E` on the team's keeper. The claim
+ * machine then walks stages 0..4; the stage-4 outlet resolves event `0x45` and
+ * (via the R11-L1 `FUN_0006E598` bridge) stage 5 must cut the release
+ * `camY := 0x50` and bind the keeper as the camera-tracked record.
+ *
+ * Baseline: the bridge is absent, so `anim_row` never becomes `0x45` from the
+ * claim and the stage-5 release never arms — `camera.pos_y` stays off `0x50`.
+ * This is the RED gate Task 9 turns green. It is committed DISABLED
+ * (skip-guarded, the `test_engine_m2_noiso` idiom) so `make check` stays green
+ * for the intermediate tasks; run it with `FIFA96_REACH_L4=1` to exercise it. */
+static void test_keeper_l4_release_reach(void) {
+  if (getenv("FIFA96_REACH_L4") == NULL) {
+    fprintf(stderr, "SKIP keeper L4 release reach (disabled until Task 9)\n");
+    return;
+  }
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *keeper;
+  int released = 0;
+
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  assert(mr.render.camera.pos_y == 0);            /* baseline: event-starved camY */
+
+  /* The keeper (team 1 record 0, entity id 11 so `tracked != 0`) receives row
+   * `0x1B` at its stage-4 tail on the controlled side. */
+  mr.state.phase = 0x0Du;
+  mr.state.period_length = 90;
+  mr.entities.team[1].side = 1;
+  mr.phase_machine.side_controlled = 1;
+  mr.global_157a4c = 0;                           /* CPU: the stage-4 tail notifies 5 */
+  keeper = &mr.entities.team[1].records[0];
+  assert(fifa96_match_entities_install(keeper, 0x0Du, 0x1B, 0) == 1);
+  keeper->stage92 = 4;
+
+  one_granted_frame(&mr);                          /* the sit-5 emit */
+  assert(mr.state.phase == 9u);                   /* situation 5 -> phase 9 */
+  assert(keeper->code == 0x1Eu);                  /* row 0x1E installed on the keeper */
+
+  /* The claim walks stages 0..5; the release cuts `camera.pos_y := 0x50` once
+   * the R11-L1 bridge selects anim row `0x45` at the stage-4 outlet. */
+  for (int i = 0; i < 150 && !released; i++) {
+    one_granted_frame(&mr);
+    released = (mr.render.camera.pos_y == 0x50);
+  }
+  assert(released == 1);                          /* RED at baseline: no bridge */
+  assert(keeper->anim_id == 0x45u);               /* the claim's selected row */
+  assert(mr.render.camera.tracked != 0);          /* the keeper bound as tracked */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-145 S2: the goal-mouth classifier `FUN_00070074` (first-hand
  * /FIFA96.EXE 0x70074, 47 insns). The return is the "no outside bit"
  * boolean: 1 iff z in [0xB10,0xB90), x in [-0xD0,0xD0) and y <= h(z), where
@@ -6506,6 +6566,7 @@ int main(void) {
   test_ai_record_mover_and_lane_track();
   test_row1e_claim_reaches_pool();
   test_row1e_stage3_possession_flip();
+  test_keeper_l4_release_reach();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();
