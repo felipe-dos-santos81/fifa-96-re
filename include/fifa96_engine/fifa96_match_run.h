@@ -678,6 +678,14 @@ struct fifa96_match_run {
   uint8_t global_157c5c;
   uint8_t global_157c5d;
   uint8_t keeper_latch[8];
+  /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` view the
+   * FU-141 walk steps in its `i == 0` branch. Its `interlock_157c5d`/
+   * `latch_157c5c`/`force_install`/`side_xor` cells are bound to the run's
+   * `[0x157C5D]`/`[0x157C5C]`/`[0x157AB2]`/`[0x157ABE]` process cells each
+   * frame (read run -> step -> write run — the machine is a view, not a second
+   * copy). `fifa96_match_run_init`/`_begin` reset it; `fifa96_match_run_frame`
+   * binds and hands it to the walk. */
+  fifa96_keeper_cpu keeper_cpu;
   /* M2 phase-15 T3 / FU-178: the row-09 stage an engine dispatch reached but
    * did not implement (arms 1/2/3 = FU178-L1). 0 = none; 1/2/3 = the unported
    * arm the handler parked at (the native advances/acts there). Written by

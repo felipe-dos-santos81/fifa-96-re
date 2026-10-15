@@ -2044,6 +2044,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157c5c = 0;
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->keeper_latch_157ab2 = 0;         /* FU296: the [0x157AB2] force latch */
+  fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;           /* T3/FU-178: no unported row-09 arm */
   mr->match1b_wide_leg = 0;            /* T5/FU-285: no unported row-1B wide */
   mr->predict_c44 = 0;
@@ -2167,6 +2169,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157c5c = 0;
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
+  mr->keeper_latch_157ab2 = 0;         /* FU296: fresh [0x157AB2] force latch */
+  fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;
   mr->match1b_wide_leg = 0;
 
@@ -4218,9 +4222,20 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * no standalone pre-pass is wired. */
     struct fifa96_match_entities_frame ef;
     match_run_entity_frame(mr, &ef);
+    /* FU296 Seam A: bind the record-0 machine view to the run's process cells
+     * (read run -> step -> write run) and hand it to the walk, which steps it
+     * in the `i == 0` branch before the single record dispatch. */
+    mr->keeper_cpu.interlock_157c5d = mr->global_157c5d;
+    mr->keeper_cpu.latch_157c5c = mr->global_157c5c;
+    mr->keeper_cpu.force_install = mr->keeper_latch_157ab2;
+    mr->keeper_cpu.side_xor = mr->side_swap;
+    ef.keeper_cpu = &mr->keeper_cpu;
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
                                       mr);
     if (rc != FIFA96_OK) return rc;
+    mr->global_157c5d = mr->keeper_cpu.interlock_157c5d;
+    mr->global_157c5c = mr->keeper_cpu.latch_157c5c;
+    mr->keeper_latch_157ab2 = mr->keeper_cpu.force_install;
     match_run_entity_drain(mr);
     /* FU-150 P2: the referee machine (the native phase-body/act invocation
      * runs inside the entity/phase chain) once per granted frame. Idle when no

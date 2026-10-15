@@ -500,6 +500,50 @@ static void test_keeper_cpu_ladder_seam(void) {
   assert(out.install == 0);
 }
 
+/* FU296 Seam A (phase-27 T3): the record-0 machine is stepped from the `i == 0`
+ * branch of the FU-141 walk (`fifa96_match_entities_team_update`) using the
+ * frame's machine view, and the walk's single `action()` dispatch still runs
+ * once per record — the install feeds that one dispatch, it does not add a
+ * second. The step reaches each team's record 0 (the `0x782D8` head counter
+ * runs for the actor record of either team); a NULL view leaves the walk inert. */
+static void test_seam_a_step_once_per_team(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f = zero_frame();
+  fifa96_keeper_cpu cpu;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  cpu.ladder = kc_ladder_stub;
+  cpu.ladder_ctx = NULL;
+  cpu.side_xor = 0;
+  f.phase = 2;
+  f.delta = 2;
+  f.keeper_cpu = &cpu;
+
+  /* team 0 record 0 is the actor: its head counter (`0x782D8`) advances. */
+  pool.controlled = 0;                          /* ENTITY_ID(0,0) */
+  cpu.head_flag = 1;                            /* [0x157823] */
+  cp_dispatches = 0;
+  assert(fifa96_match_entities_update(&pool, &f, cp_cb, NULL) == FIFA96_OK);
+  assert(cpu.counter_ad0[0] == 1);              /* stepped for team 0 */
+  assert(cpu.counter_acc[1] == 1);
+  assert(cp_dispatches == 2u * RECS);           /* the single dispatch, no double */
+
+  /* team 1 record 0 is the actor: the step reaches team 1's walk too. */
+  pool.controlled = (int32_t)RECS;              /* ENTITY_ID(1,0) */
+  cpu.head_flag = 1;
+  cp_dispatches = 0;
+  assert(fifa96_match_entities_update(&pool, &f, cp_cb, NULL) == FIFA96_OK);
+  assert(cpu.counter_ad0[1] == 1);
+  assert(cpu.counter_acc[0] == 1);
+  assert(cp_dispatches == 2u * RECS);
+
+  /* a NULL view is inert (the fixture-frame default). */
+  cpu.head_flag = 1;
+  f.keeper_cpu = NULL;
+  assert(fifa96_match_entities_update(&pool, &f, cp_cb, NULL) == FIFA96_OK);
+  assert(cpu.counter_ad0[1] == 1);              /* unchanged */
+}
+
 int main(void) {
   test_prepass_no_double_dispatch();
   test_prepass_gates_are_phase2_only();
@@ -512,6 +556,7 @@ int main(void) {
   test_keeper_cpu_ladder_head_gates();
   test_keeper_cpu_prepass_gate_from_input_range();
   test_keeper_cpu_ladder_seam();
+  test_seam_a_step_once_per_team();
   puts("test_keeper_cpu OK");
   return 0;
 }

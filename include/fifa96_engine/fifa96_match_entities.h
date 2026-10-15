@@ -45,6 +45,7 @@
 #include <stdint.h>
 #include "fifa96_loader/fifa96_ball_pairing.h"
 #include "fifa96_loader/fifa96_err.h"
+#include "fifa96_loader/fifa96_keeper_cpu.h"
 #include "fifa96_loader/fifa96_scene.h"
 
 #define FIFA96_MATCH_ENTITY_TEAMS 2u
@@ -324,6 +325,13 @@ struct fifa96_match_entities_frame {
   int16_t cam_z;           /* word 0x157754 */
   int16_t intercept_x[FIFA96_MATCH_ENTITY_TEAMS]; /* word 0x10F37C+side*0xC */
   int16_t intercept_y[FIFA96_MATCH_ENTITY_TEAMS]; /* word +8 of the same record */
+  /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` view the
+   * `i == 0` branch of the FU-141 walk steps before the single `action()`
+   * dispatch. The caller (the match run) binds its `interlock_157c5d`/
+   * `latch_157c5c`/`force_install`/`side_xor` cells to the run's process cells
+   * each frame (read run -> step -> write run) and owns its storage; NULL
+   * leaves the walk inert. */
+  fifa96_keeper_cpu *keeper_cpu;
 };
 
 /* A ported action-row body over one pool record. Returns FIFA96_OK on success;

@@ -701,7 +701,35 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
      * install tree (0x784D3..) and its ladder gate (0x7857B..) are the bounded
      * skeleton in `fifa96_loader/fifa96_keeper_cpu.c`; they stay unported on the
      * engine path while their producers are staged zero (FU282-L2/L3/L4). */
-    if (i == 0) e->timer7b = e->timer79;
+    if (i == 0) {
+      e->timer7b = e->timer79;
+      /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` runs
+       * in the `i == 0` branch of the native `0xB2`-stride walk (`0x8DB35`),
+       * BEFORE the single `CALL dword[rec+0x18]` dispatch (`0x785A8`) below.
+       * Writing `e->code` here makes that one dispatch run the installed row —
+       * a standalone pre-pass call would double-dispatch (FU281 §3). The view
+       * is caller-owned; NULL (the fixture default) leaves the walk inert. The
+       * unported producers (P1 permit, P3 possession, P6/P8/P12) stay zero. */
+      if (frame->keeper_cpu) {
+        struct fifa96_keeper_cpu_record kc_rec;
+        struct fifa96_keeper_cpu_out kc_out;
+        memset(&kc_rec, 0, sizeof kc_rec);
+        kc_rec.side = pool->team[team].side;                 /* byte +0x826 */
+        kc_rec.code = e->code;                               /* byte +0x91 */
+        kc_rec.phase = frame->phase;                         /* [0x157A4A]>>0x18 */
+        kc_rec.is_actor =
+            (uint8_t)(pool->controlled == ENTITY_ID(pool, team, i));
+        kc_rec.timer81 = e->timer81;                         /* word +0x81 */
+        kc_rec.queued20 = e->has_slot ? 1u : 0u;             /* dword +0x20 */
+        kc_rec.gate_9a = e->skip_9a;                         /* byte +0x9A */
+        kc_rec.stage = e->stage;                             /* CX (FU296-L5) */
+        kc_rec.side_swap = frame->keeper_cpu->side_xor;      /* [0x157ABE] */
+        (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
+        if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
+        if (kc_out.ladder_out.install)                       /* 0x78599 arms */
+          e->code = kc_out.ladder_out.install_code;
+      }
+    }
     else if (e->skip_9a != 0) continue;                      /* 0x8DB42 */
     entity_timer_decay(e, frame->delta);
     if (action) {
