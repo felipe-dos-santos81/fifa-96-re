@@ -2096,10 +2096,15 @@ the goldens are unmoved.
 - **T5 — the `0x7A448` offside call ported into the live receive arm**
   (`fifa96_match_run_ball_receive`, `field_4c2f2`-gated, dormant by default).
 - **T6 — row `0x10` live** (the real armer + scanner, the camera an input);
-  **rows `0x12`/`0x13` honest-stop LIVE-LEG** (the act-2 terminal needs
-  `foul_kind == 3 || session_gate != 0`; the native completes via the unported
-  `[0x158882]` — leg **FU166-L6**).
-- **T7 — row `0x1D` live** (the `goal_scan` sit-4 emit through the ported armer);
+  **rows `0x12`/`0x13` honest-stop LIVE-LEG** (the live path emits a **non-foul
+  contact kind (1 ≠ 3)**; the native gate reduces to `contact_kind == 3 ||
+  session != 0`, i.e. `[0x158882] ≡ contact_kind == 3`, **already proxied** — so
+  the next phase needs a live **`contact_kind == 3`** producer, not a
+  `[0x158882]` port; the final review corrects the blocker, FU280 — leg
+  **FU166-L6**).
+- **T7 — row `0x1D` live** (the `goal_scan` sit-4 emit through the ported armer;
+  the goal-line excursion is a **staged camera pose** — the camera's own producer
+  rides R11-L4);
   row `0x1E` stays the **R11-L4** leg (the keeper CPU ladder).
 
 **The replay / overlay / sub leg (`FU278` §3.3):** `replay.state` / `sub.active` /
@@ -2123,7 +2128,13 @@ live); **FU274 W26b-L2 resolved to LIVE-LEG** (the contact *entry* is reachable;
 the row-`0x04` duel stays unraised pending the descriptor/`+0x9D` family);
 **FU276-L1 resolved**; **FU277-L1 resolved** (`goal_armed` is raised via the live
 armer `FUN_0007131C` — **not** R11-L4; `FU280` §1.4); the **`0x12`/`0x13`** rows
-route to **FU166-L6**; **R11-L4** → **phase-26b-ii**. The camera/pan/follow
+route to **FU166-L6** with the blocker corrected (the final review, FU280: the
+native act-2 stage-3 gate reduces to `contact_kind == 3 || session != 0` and
+`[0x158882] ≡ contact_kind == 3` is **already proxied** — no `[0x158882]` port
+flips the rows; the next phase needs a live `contact_kind == 3` producer);
+**leg (pre-existing divergence):** the engine's act-2 gate reads `foul_kind`/
+`[0x15888D]` (`run.c:6002`) where the native reads `contact_kind`/`[0x15888C]`
+(`0x894AB`); **R11-L4** → **phase-26b-ii**. The camera/pan/follow
 chain stays **FU264-L1/L2**.
 
 **Acceptance:** `make check` **110/110** (sanitized, strict); M1 `09b726b7…` and

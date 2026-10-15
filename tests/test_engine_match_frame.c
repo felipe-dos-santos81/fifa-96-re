@@ -4438,15 +4438,23 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
  * ported chain (pad `0x7CE38` -> row 0x0B -> row 0x0C ->
  * `fifa96_match_run_contact` -> act 3 -> phase 0x19 -> sit 0xA -> act 2) is live
  * and faithful, and Task 4 proved the contact **entry** reachable. But the act-2
- * terminal (`match_run_ref_step_restart` stage 2) completes only on
- * `foul_kind == 3 || session_gate_14c32a != 0`: the settled ordinary-match
- * session gate is 0 (FU-166/R14) and the row-0x0C re-call emits the literal
- * contact kind 1 (`run.c:6542`), so `foul_kind` is 0/1/2 and the decision never
- * completes — the machine holds armed at stage 2. The native completes through
- * the ball-row terminal flag `[0x158882]` (the `0x8941D` keep/reroll), an
- * unported leg (FU166-L6). Rows 0x12/0x13 therefore stay **LIVE-LEG**; this
- * pins that the LIVE default path reaches act-2 stage 2 and installs neither
- * taker row (a later `[0x158882]` port must flip this). */
+ * terminal (`match_run_ref_step_restart` stage 2) completes only on the native
+ * gate `contact_kind == 3 || session != 0`: the live path emits a **non-foul
+ * contact kind (1 ≠ 3)** (`run.c:6542`) and the settled ordinary-match session
+ * gate is 0 (FU-166/R14), so the decision never completes — the machine holds
+ * armed at stage 2. The final review (FU280) re-disassembled the act-2
+ * stage-2/3 body and corrected the old "the native completes via the unported
+ * `[0x158882]` leg" attribution: at `0x8941D` an unconditional `FUN_0006E724`
+ * install sets `[0x158882]=1`; the kind ≠ 3 branch runs a second install at
+ * `0x89464` (`EDX=0x49`) resetting it to 0, skipped only when `[0x15888C]==3`
+ * (`0x8944A`), so the stage-3 gate (`0x894A2`) reduces to `contact_kind == 3 ||
+ * session != 0` — i.e. `[0x158882] ≡ (contact_kind == 3)` is **already
+ * proxied**, and porting it would **not** flip the rows. The next phase needs a
+ * live **`contact_kind == 3`** producer. Leg note (pre-existing divergence): the
+ * engine's gate reads `foul_kind`/`[0x15888D]` (`run.c:6002`) where the native
+ * reads `contact_kind`/`[0x15888C]` (`0x894AB`). Rows 0x12/0x13 therefore stay
+ * **LIVE-LEG**; this pins that the LIVE default path reaches act-2 stage 2 and
+ * installs neither taker row. */
 static void test_foul_taker_held_on_live_default(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;

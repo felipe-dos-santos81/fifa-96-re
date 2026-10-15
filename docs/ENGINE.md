@@ -1624,8 +1624,14 @@ the build also produces the windowed `fifa96` target (`make game`).
   call ported **into the live receive arm**
   (`fifa96_match_run_ball_receive`, `field_4c2f2`-gated, dormant);
   T6 row `0x10` **live** (the real armer `run.c:4205` + scanner, the camera an
-  input) with rows `0x12`/`0x13` an **honest-stop LIVE-LEG**; T7 row `0x1D`
-  **live** (the `goal_scan` sit-4 emit). **This register appends the wave's
+  input) with rows `0x12`/`0x13` an **honest-stop LIVE-LEG** (the final review
+  corrects the blocker: the live path emits a **non-foul contact kind (1 ≠ 3)**;
+  the native gate reduces to `contact_kind == 3 || session != 0`, i.e.
+  `[0x158882] ≡ contact_kind == 3`, **already proxied** — so the next phase needs
+  a live **`contact_kind == 3`** producer, not a `[0x158882]` port; FU280); T7
+  row `0x1D` **live** (the `goal_scan` sit-4 emit; the goal-line excursion is a
+  **staged camera pose** — the camera's own producer rides R11-L4). **This
+  register appends the wave's
   leg resolution:** **FU274 W26b-L1** (the throw-in precondition) **resolved**
   (T6 — row `0x10` live through the ported armer/scanner; the camera is an
   input, not a missing producer); **FU274 W26b-L2** (the foul-adjudicator entry,
@@ -1638,8 +1644,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   (the armer + sit-4 scanner install and dispatch row `0x1D`; `goal_armed` is
   raised via the same live armer `FUN_0007131C`, i.e. **FU277-L1 ≡ FU269-L2,
   not R11-L4** — FU280 §1.4); **the `0x12`/`0x13` taker rows** route to the
-  **FU166-L6** leg (the act-2 terminal's unported `[0x158882]` ball-row terminal
-  flag under the settled session gate — the true remaining blocker, T6);
+  **FU166-L6** leg with the blocker corrected (the final review, FU280: the native
+  act-2 stage-3 gate `0x894A2` reduces to `contact_kind == 3 || session != 0`;
+  the `0x8941D` keep/reroll sets `[0x158882]=1` and the `0x89464` row-`0x49`
+  install resets it 0 unless `[0x15888C]==3` (`0x8944A`), so `[0x158882] ≡
+  contact_kind == 3` and is **already proxied** — the old "a `[0x158882]` port
+  must flip this" reading is **dropped**; the true remaining blocker is a live
+  **`contact_kind == 3`** producer, T6). **Leg (pre-existing divergence):** the
+  engine's act-2 gate reads `foul_kind`/`[0x15888D]` (`run.c:6002`) where the
+  native reads `contact_kind`/`[0x15888C]` (`0x894AB`);
   **R11-L4** (the keeper CPU chain `FUN_0008D8EC`→`FUN_000782D0`→`FUN_00077EAC`,
   rows `0x1A`/`0x1B`, the phase-6/`0x1F` chain, the claim bridge) stays **NO-GO /
   phase-scale** (`FU273`) and **routes onward to phase-26b-ii** as the enabling
