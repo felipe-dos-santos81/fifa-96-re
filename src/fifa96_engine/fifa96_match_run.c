@@ -4210,7 +4210,12 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     (void)fifa96_match_display_update(&mr->render.display, mr->state.frame_delta, 0);
     /* FU-141: the FU-67 entity chain (selection, record walk with the FU-137
      * action dispatch, ball pairing) after the slot/camera updates, matching
-     * FUN_0004B100's order. */
+     * FUN_0004B100's order. FU281 (phase-26c T6): this chain IS the native
+     * `FUN_0008D8EC` pre-pass reconciled by AUGMENT — its per-record `action`
+     * call is the single native dispatch (`FUN_000782D0`/`FUN_0007CA54` ->
+     * `CALL dword[rec+0x18]`), and `fifa96_match_entities_team_update` hosts
+     * the pre-pass state (`+0x82C` counter, phase-2 target/intercept/flag), so
+     * no standalone pre-pass is wired. */
     struct fifa96_match_entities_frame ef;
     match_run_entity_frame(mr, &ef);
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,

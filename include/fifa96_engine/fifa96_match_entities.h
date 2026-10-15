@@ -29,6 +29,12 @@
  * update counter, phase-2 nearest target selection (`0x8D929..0x8D9B7`),
  * phase-2 interception selection (`0x8D9BD..0x8DAE9`), team timer decay
  * (`0x8DAF3`), keeper record 0 + outfield records 1..10 (`0x8DB2E`/`0x8DB3A`).
+ * FU281 §2's "no engine equivalent of FUN_0008D8EC" is corrected: this walk IS
+ * the pre-pass (`fifa96_match_entities_team_update` hosts the `+0x82C` counter
+ * through the `0xB2`-stride dispatch), so phase-26c T6 reconciles it by
+ * AUGMENT — the pre-pass state rides the FU-141 dispatch and no standalone
+ * pre-pass is wired (a second call would double-dispatch every record,
+ * FUN_000782D0/FUN_0007CA54 -> `CALL dword[rec+0x18]`).
  * The action bodies run through the caller's callback (the engine binds the
  * FU-137 dispatcher); the record requests are drained by this module:
  * `install` -> the FU-137 §2 installer, `helper_request` -> the FU-138/FU-139

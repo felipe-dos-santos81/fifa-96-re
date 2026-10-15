@@ -593,6 +593,14 @@ target_link_options(test_engine_match_entities PRIVATE -fsanitize=address,undefi
 add_test(NAME test_engine_match_entities COMMAND test_engine_match_entities
          WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
 
+add_executable(test_keeper_cpu tests/test_keeper_cpu.c)
+target_link_libraries(test_keeper_cpu PRIVATE fifa96_engine)
+target_include_directories(test_keeper_cpu PRIVATE src)
+target_compile_options(test_keeper_cpu PRIVATE -fsanitize=address,undefined -fno-sanitize-recover=all)
+target_link_options(test_keeper_cpu PRIVATE -fsanitize=address,undefined)
+add_test(NAME test_keeper_cpu COMMAND test_keeper_cpu
+         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR})
+
 add_executable(test_engine_match_phase_machine tests/test_engine_match_phase_machine.c)
 target_link_libraries(test_engine_match_phase_machine PRIVATE fifa96_engine)
 target_include_directories(test_engine_match_phase_machine PRIVATE src)
