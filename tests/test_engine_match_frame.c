@@ -4418,6 +4418,84 @@ static void test_engine_offside_l10_reads_code_not_type(void) {
   assert(offside == 1u);
 }
 
+/* Stage the live-receive offside geometry (team 0 = side 0): the ball sits at
+ * the side-0 own-nearest (record 1); the receiver/actor (record 3) is level with
+ * the team-1 last defender (record 2), beyond the own-nearest depth gate and
+ * within the own-nearest distance gate; every other record is parked far so the
+ * two nearest queries are deterministic. */
+static void match_live_receive_offside_stage(struct fifa96_match_run *mr) {
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      mr->entities.team[t].records[i].pos_x = 0x6000;
+      mr->entities.team[t].records[i].pos_z = 0x6000;
+      mr->entities.team[t].records[i].skip_98 = 0;
+      mr->entities.team[t].records[i].skip_9a = 0;
+    }
+  mr->entities.team[0].side = 0;
+  mr->entities.team[1].side = 1;
+  mr->entities.ball.x = 0;
+  mr->entities.ball.z = 0x800;
+  mr->entities.team[0].records[1].pos_x = 0;      /* the own-nearest */
+  mr->entities.team[0].records[1].pos_z = 0x800;
+  mr->entities.team[0].records[3].pos_x = 0;      /* the receiver (actor) */
+  mr->entities.team[0].records[3].pos_z = 0x400;
+  mr->entities.team[1].records[2].pos_x = 0;      /* the last defender */
+  mr->entities.team[1].records[2].pos_z = 0x400;
+  mr->entities.team[0].records[3].code = 0u;      /* eligible +0x91 code */
+  mr->entities.team[0].records[3].active = 1u;
+  mr->render.camera.pos_z = 0;                    /* |camera_ref| <= 0x990 */
+}
+
+/* FU276-L2 (phase-26b Task 5): the live receive arm FUN_0007A084 calls the
+ * offside check at 0x7A448 behind its own `code` (+0x91) eligibility gate
+ * (0x7A419..0x7A43F). The engine's live port (`fifa96_match_run_ball_receive`,
+ * the exact callee of the live `match_kick_run`, match_handlers.c:1119) dropped
+ * that call as a declared leg, leaving `fifa96_match_run_offside_reception`
+ * callerless. This drives the live receive arm with the enable `field_4c2f2`
+ * (0x14C2F2) on and an eligible receiving record: the offside chain must
+ * dispatch (ref_machine -> REF_OFFSIDE, the kind-3 event + phase-0x0A stage 0).
+ * The enable-off control must stay dormant. */
+static void test_offside_reachable_from_live_receive(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_run mr2;
+  fifa96_ball_pair_vector vec;
+  /* The 0x158738 staged block IS the vector the arm receives; the offside check
+   * reads its +0 word as `tol2` and its +4 word as `side_gate`. tol2 0x200 makes
+   * the x2 distance term pass for any 6-bit tolerance (0x400 + 0x400 >= 0x800);
+   * side_gate 1 (positive) admits the side-0 receiver. */
+  vec.x = 0x200;
+  vec.height = 0;
+  vec.z = 1;
+
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.state.phase = 2;                              /* the phase-2 pre-gate */
+  match_live_receive_offside_stage(&mr);
+  mr.config.field_4c2f2 = 1u;                      /* offside enabled */
+  assert(fifa96_match_run_ball_receive(&mr, 3, &vec, 0x100) == FIFA96_OK);
+  assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);  /* 0x7A448 fired */
+  assert(mr.referee.contact_kind == 3u);           /* the kind-3 offside event */
+  assert(mr.ref_whistle == 0x1Eu);
+  assert(mr.ref_speech == 0x15u);
+  assert(mr.state.phase == 0x0Au);                 /* offside stage 0 */
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  /* Negative control: with the enable off the live receive arm leaves the
+   * offside machine idle (the port stays dormant). */
+  fifa96_match_run_init(&mr2);
+  begin_isolated(&mr2, f.engine);
+  mr2.state.phase = 2;
+  match_live_receive_offside_stage(&mr2);
+  mr2.config.field_4c2f2 = 0u;
+  assert(fifa96_match_run_ball_receive(&mr2, 3, &vec, 0x100) == FIFA96_OK);
+  assert(mr2.ref_machine == FIFA96_MATCH_RUN_REF_NONE);
+  assert(mr2.state.phase == 2u);
+  assert(fifa96_match_run_end(&mr2) == 0);
+
+  drop_fixture(f);
+}
+
 /* FU-149 §1.3 (first-hand scanner arms 0x88B53..0x88C0E): the clock-tail
  * scan's throw-in (|snap z| <= 0xB20 -> sit 2, BX=1) and corner/goal-kick
  * (|snap z| > 0xB20, zone 0 -> sit 3 + ((snap z < 0) == (ball team == 1)),
@@ -6141,6 +6219,7 @@ int main(void) {
   test_contact_gate_reachable_via_pad_duel();
   test_engine_referee_offside_chain();
   test_engine_offside_l10_reads_code_not_type();
+  test_offside_reachable_from_live_receive();
   test_scan_restart_arms();
   test_goal_chain_pan_fixture();
   test_goal_consumer_chain_fixture();

@@ -3765,8 +3765,10 @@ int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
  * The staging tail's receive gate (fifa96_ball_pair_stage_tail) already
  * proves every receive code has `[0x1104BB+code] == 0`, so the native entry
  * gate 0x7A0A4 is a pass-through on this path; the 0x18E2-class vector
- * rebuild, the sound-id selection/sink, the timer81 loop, the [team+0x7E7]
- * clear and the FUN_00079D5C foul body are the numbered legs. */
+ * rebuild, the sound-id selection/sink, the timer81 loop and the [team+0x7E7]
+ * clear are the numbered legs. The 0x7A448 FUN_00079D5C offside call is ported
+ * (FU276-L2, phase-26b Task 5) behind the [0x14C2F2] `field_4c2f2` enable and
+ * the receiving-record `code` (+0x91) eligibility gate. */
 int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
                                   const fifa96_ball_pair_vector *vector,
                                   int16_t traj) {
@@ -3852,6 +3854,31 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
    * arms the release countdown [0x15872D] = 0x14. */
   if (actor_id == mr->entities.ball.carrier)
     mr->entities.ball.pos_release = 0x14;
+  /* FU276-L2 (phase-26b Task 5): 0x7A419..0x7A448 — the receive arm's own
+   * `code` (+0x91) eligibility gate and the FUN_00079D5C offside check call
+   * (the former declared leg). The native gate reads the `code` byte
+   * (`dword[EBP+0x8E] >> 24` = `byte[+0x91]`, FU-150's `+0x8E>>24` is the alias
+   * trap) on the receiving record (EBP = [0x158730] = the actor) and calls the
+   * check with EDX = the staged 0x158738 block (its +0 word = tol2, +4 word =
+   * side_gate) and EAX = the same record. The check's own [0x14C2F2] settings
+   * gate (0x79D87) is the `field_4c2f2` pre-gate here, so the arm only enters
+   * when the enable is set: the dormant path (field_4c2f2 == 0, the default)
+   * stays a byte-exact no-op. */
+  if (mr->config.field_4c2f2 != 0) {
+    uint8_t rcode = actor_rec->code;             /* the +0x91 action byte */
+    if (rcode != 0x11u && rcode != 0x10u && rcode != 0x1Du && rcode != 0x1Eu) {
+      struct fifa96_ref_metric metric;
+      uint8_t offside = 0;
+      metric.tol2 = (int16_t)vector->x;          /* the 0x158738 block +0 word */
+      metric.side_gate = (int16_t)vector->z;     /* the 0x158738 block +4 word */
+      /* The camera inputs: native [0x157754] is the camera z (the engine
+       * camera.pos_z) and [0x157823] the one-shot pan/keeper mirror latch
+       * (no engine producer; staged 0). */
+      (void)fifa96_match_run_offside_reception(mr, actor_id, &metric,
+                                               mr->render.camera.pos_z, 0u,
+                                               &offside);
+    }
+  }
   return FIFA96_OK;
 }
 

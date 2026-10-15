@@ -1477,10 +1477,13 @@ int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
                              int32_t rec_a, int32_t rec_b, const int32_t point[3]);
 
 /* FU-150 §Port contract: the derived reception-time offside check. The native
- * caller is the reception handler FUN_0007A084 0x7A448 (unported), so this is
- * the staged entry: `receiver` is an encoded entity id, `metric` the staged
- * 0x158738 block (producer unported, leg 8) and `camera_ref`/`mirror` the
- * [0x157754]/[0x157823] staged camera inputs (FU-150 risk note). The engine
+ * caller is the reception handler FUN_0007A084 0x7A448, ported live into
+ * `fifa96_match_run_ball_receive` (FU276-L2, phase-26b Task 5) behind the
+ * [0x14C2F2] `field_4c2f2` enable; this entry stays callable for the direct
+ * geometry tests. `receiver` is an encoded entity id, `metric` the staged
+ * 0x158738 block (the arm passes the receive vector's +0/+4 words) and
+ * `camera_ref`/`mirror` the [0x157754]/[0x157823] staged camera inputs
+ * (FU-150 risk note). The engine
  * resolves the own-team nearest (FUN_0008DE8C derived as the pool nearest to
  * the ball triple, skip index 0) and the opponent last defender
  * (FUN_0008DE28 derived as the opponent nearest to (0, ±0xB10)) and stages the
