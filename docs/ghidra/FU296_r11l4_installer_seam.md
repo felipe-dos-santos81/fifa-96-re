@@ -258,3 +258,12 @@ this draft.
   `read_memory`); see FU290's `Fix round`.
 * P13 remains ADVANCED: the machine is live-wired, but the end-to-end install
   still needs P1 (`[0x110680]`, FU296-L2). Census `59/80`; M2 byte-identical.
+
+## Erratum (phase-27 T8 close-out)
+
+* **The T5 text "the seam sets `kc_rec.stage` **from the machine**" is imprecise
+  (quoted above, kept verbatim).** `fifa96_keeper_cpu_record` has **no** `stage`
+  field and the seam writes none; `fifa96_keeper_cpu_stage_select` computes `CX`
+  into a **local** `fifa96_keeper_cpu_stage_out.stage`, and the seam consumes
+  `kc_out.install` / `kc_out.ladder_out.install`. (The same correction lands in
+  `FU290_r11l4_stage_select.md`.)

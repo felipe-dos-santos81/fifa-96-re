@@ -1762,6 +1762,127 @@ the build also produces the windowed `fifa96` target (`make game`).
   installer + stage machine remain unported; there is no live installer).
   **Honest ceiling:** no row wired (census unmoved), no faked producer; every
   unreachable surface carries a numbered leg with a named native owner.
+- **M2 phase-27 leg register (FU290…FU297; 2026-10-15) — the keeper-CPU
+  installer (the camera unlock): the quoted errata + the leg register (appended;
+  prior sections never rewritten). Census holds `59/80 = 73%` (`36 action + 23
+  phase`); M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (no re-pin).** The
+  wave (`docs/ghidra/FU290…FU297`) froze the installer frontier past R11-L4; the
+  Stage-2 plan wired the ported machines into a **live frame** (the FU296 Seam A)
+  and **ported the `CX` stage-select machine live** (T5: a non-zero stage from
+  real engine state), but **no task proved a live end-to-end install**, so the
+  census is unmoved and the phase closes as a **Layer-1 reach + a Layer-2 waiver**
+  (spec §6; the phase-26a/26c shape). **Landed:** T2 the FU291 gate value; T3 the
+  FU296 **Seam A**; T4 the staged Layer-1 reach (GREEN, with three mutation-RED
+  riders); T5 (FU290/FU292) the ported `CX` machine + the readers of the FU292
+  cells; T6 (FU294/FU295) the actor lift; T7 the honest Layer-2 waiver. **Errata
+  (quoted):**
+  - **FU290 — the `CX` stage machine is `CX ∈ {0,1,4,5,A}`. FU283 §3 erratum.**
+    The only **immediates** are `{0,1,4,5}` (`b9 01000000`@`0x7805B`,
+    `b9 04000000`@`0x780D2`/`0x781BA`, `b9 05000000`@`0x781CD`, `31c9`@`0x781AF`);
+    the values `2`/`3` arise **only** via `MOV ECX,EDX`@`0x781DC` from the table
+    byte `A = byte[0x10E184+idx] ∈ {1..5}`. **FU283 §3's "`ECX ∈ {0,1,2,4,5}`"
+    conflates the immediate path with the `A` path.** The `CX` machine is **PORTED
+    and live** (`fifa96_keeper_cpu_stage_select`, `0x77F57..0x781E1` exactly); the
+    FU296 Seam A feeds it from real engine state and consumes its install via
+    `kc_out.install`/`kc_out.ladder_out.install` — **not** a `kc_rec.stage` field
+    (the T3 `rec.stage = e->stage` bridge is retired; the machine computes `CX`
+    internally — see the FU290/FU296 errata). Erratum: `[ESP+0xA]>>16` is the
+    `0x795B4` **bearing**, not camZ (the `>= 0xF0`/`>= 0x80` thresholds are bearing
+    thresholds). The `0x10E1xx` stage tables are PORTED as data (their geometry
+    **meaning** stays undecoded, FU290-L1); `0x114E04` is the 257-entry sine table.
+  - **FU291 — the gate value is PORTED.** `prepass_ah2 = (input_range[(side ^
+    side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:104-105`, the `0x77EE8 AND
+    AH,2` fold); the `[0x14C1D4]` table was already `fifa96_input_range_words` →
+    `mr->input_range`. **Zero-δ** (the gate's only consumer — the keeper-CPU ladder
+    — is not wired live). Legs FU291-L1 (`[0x157ABE]`'s producer `FUN_0007417c`),
+    L3 (the stats counters `FUN_00042c88`), L4/L5 stay open.
+  - **FU294 — the pan/camera setter is ALREADY PORTED. FU285 §2 erratum.**
+    `fifa96_camera_event_set` (`FUN_00071C94` + `FUN_00070544` subset, FU-148
+    §12.1) and `fifa96_camera_set_tracked` → `camera.tracked` are ported and wired
+    (`handlers.c:549/552`, `:1374/1379`, `:2717/2722`, `:3871`). FU285 §2's blanket
+    "None of these are in the engine" is **superseded** for the camera triple /
+    `camera.tracked` / `event_step` / `event_param`. The `0x71C94` **vector
+    construction** at the row-`0x1B` `0x77423` site is still the `match1b_wide_leg`
+    stub (`handlers.c:3870`). Legs FU294-L1 (`[0x1577CE+side*4]`), L2
+    (`[0x157815]` dir byte), L3 (the `0x15780C..0x157822` smoothing family), L4
+    (`[0x1577B8]` shared), L5 (the side-record clears).
+  - **FU295 — the `0x74442` consumer cell-split + `0x76AD8`.** The driver
+    `0x741C4` (§1.2) reads **only** `[+0x7B2]` at the `0x74442` consumer; the
+    `[+0x7BA]` pick #2 and the `[+0x7BE]` visibility flag belong to the AI/lunge
+    controller `FUN_0007F7E0` (and the unnamed `0x7E1B8`), **not** `0x74442` — the
+    brief's "reads 7B2/7BA/7BE" **conflates three cells**. The controlled-side
+    actor lift `FUN_0008C33C` (`0x8C3BE`) is ported (T6,
+    `fifa96_match_entities_actor_lift`) — an **unraised port** (no `src/` caller).
+    The actor `[0x157A83]` producer census = 22 WRITE (17 set→rec / 5 clear→0); the
+    keeper route's are `0x76DBF` (row-`0x1B` head, **LIVE**), `0x77568` (row-`0x1B`
+    wide self-set, **LIVE**), `0x7665C` (row-`0x1A` head, **NOT live** — NULL
+    slot), `0x76AD8` (row-`0x1A` **body** set, **NOT live** — the FU186-L1 body
+    remainder) and the `0x8C3BE` lift (**NOT live**). Legs FU295-L1..L6.
+  - **FU296 — Seam A; P13 the blocker.** The `fifa96_keeper_cpu_step` call lives in
+    the `i == 0` branch of `fifa96_match_entities_team_update`, before the single
+    `action()` (the FU-141 walk; **no second pre-pass**, no double-dispatch —
+    pinned `2*RECS`). **P13 / FU296-L5** (the stage index) was the phase's blocker;
+    FU290's machine now **ADVANCES** it (a non-zero `CX` from live cells). The
+    remaining end-to-end blocker is **P1 `[0x110680]`** (the install-permission
+    table, FU296-L2/FU282-L5) — a *different* unported producer, zero live — plus
+    the **`CX=1`→row-`0x1A` NULL lane** (FU296-L7). Legs FU296-L1 (link/reconcile —
+    done), L2 (P1), L3 (the P4 interlock bind), L4 (the test seam), L5 (P13), L6
+    (P6), L7 (the `0x1A` NULL slot), L8 (the invoke-now reconciliation).
+  - **FU297 — row `0x1A` stays NULL; the `60/80` dead-count warning; the +116
+    drift.** The ladder **does** install row `0x1A` (cases 1/2/3) and its body
+    **does** lift the actor (`0x76AD8`), but the body is **<½ ported** (head +
+    stage-0 only; no stage switch `0x76618`, no direction machine, no event, no
+    emit) and the sit-5 emit is the **FU-146 queue id-7** route, **never** the
+    engine's live direct-phase route. **Verdict: FU284's NO-GO STANDS** — the slot
+    stays `{0x1A, NULL}`. **A slot flip alone** would quote `60/80 = 75%`
+    (`action_wired 36→37`) but is a **dead count** (a wired half-ported body with
+    no faithful route — the FU289 live-vs-leg / rows-27/29/2C shape; the census
+    counts `fn != NULL`, not routes, FU297-L5). **Line drift:** FU284 cites the
+    row-`0x1A` body at `:5517`; FU297 fresh at `:5633` — a consistent **+116**
+    drift (the file grew); trust the row names, not the line numbers. Legs
+    FU297-L1..L5.
+  - **FU292 — the latch + geometry cells (the ladder's stage-select inputs).** Two
+    cell families: the target/band block `0x157C44..0x157C50` (`0x157C44` scalar,
+    the `0x157C48` 3-dword vector, `0x157C4C` its Y, the `0x157C2C` band code, the
+    `0x157C5C` ladder latch) and the camera-band block `0x1577F0..0x1577FA`
+    (`0x1577F4`/`F8` extents, `0x1577BC`, the packed `0x157821`, the `0x158740`
+    predicate gate). **Ported (T5) — the readers:** `0x157A49>>24` = `[0x157A4C]`
+    LIVE, `0x1577BC>>16` = `follow_speed` LIVE, `0x157821` byte0 = `pan_counter`
+    LIVE; the `0x157C44`/`0x157C48` writer **is recovered**
+    (`fifa96_keeper_hold_predict`, FU-179 §4 → `mr->predict_c44`/`predict_c48_*`,
+    bound to `rec->latch_157c44`/`target_157c48` — **FU292-L1 corrected**, read
+    zero live only because the projection sub-leg FU179-L2/L3 is unported); the
+    ladder now **WRITES** `[0x157C5C]` (**FU292-L6 advanced**, published in-frame
+    via `latch_written`). **Their WRITERS stay unported:** **FU292-L1** (the
+    projection sub-leg), **FU292-L2** (the `0x1577F0..FA` band struct words),
+    **FU292-L3** (`0x157821` byte3); plus FU292-L4 (`0x158740` mode byte), FU292-L5
+    (`0x157C2C` alphabet).
+  - **FU293 — the row-`0x1B` deep pan/descriptor interpolation stays a leg.** The
+    `0x7707D..0x77420` interpolation (`FU285-L1`, `mr->match1b_wide_leg`) is
+    unported: **FU293-L1** (the pan cells `[0x1577BE]`/`[0x1577C0]`/`[0x1577C2]` —
+    the load-bearing L1 state), L2 (the `[0x14C2F6]` difficulty + the ratio
+    descriptors), L3 (the `[0x1577F2]`/`[0x1577F8]` pan-vector pair), L4 (the
+    `0x8DCD4`/`0xCD474`/`0xCD514`/`0x8DC68`/`0x74584`/`0x702F8` folds), L5 (the
+    `EDI` sign-match + the install selection), L6 (the sit dispatch), L7
+    (`[0x1577CA]` stand-in), L8 (`FUN_00076B28` steering), L9 (row `0x1B` is not a
+    Ghidra function). The interpolation legs are the load-bearing remainder of the
+    wide path.
+  **The open legs the phase leaves, named:** **P1 `[0x110680]`** (the
+  install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker;
+  **the `CX=1`→NULL row-`0x1A` lane** (FU296-L7/FU297); **FU290-L1** (the
+  `0x10E1xx` stage-table semantics — ported as data, meaning undecoded),
+  **FU290-L2** (the `0x795B4` bearing chain — caller-supplied), **FU290-L5** (the
+  `[[rec+4]+0xB]`/`+0x10` sub-fields), **FU290-L7** (`[0x158740]` inside
+  `FUN_000765C4`); **FU292-L1/L2/L3** (the writers); **FU295-L1** (the `0x741C4`
+  driver's caller/registration); **FU196-L6** (the `FUN_0007417C` restart sink —
+  the lift's caller; wiring it un-gates `team_select_intercept` and moves M2);
+  **FU281-L5** (the un-gated `0x74442` consumer); and **FU290-L10 (new) — the
+  `0x77F20` `+0x81` `pos→target` copy** (`out->copy_pos`,
+  `src/fifa96_loader/fifa96_keeper_cpu.c:241`) is **reported-but-unapplied** (the
+  seam consumes `install`/`copy_valid`, not `copy_pos`) — the same class as the
+  fixed `copy_src`; native owner `FUN_00077EAC` (`0x77F16..0x77F20`, FU186-L5/L6);
+  zero live. **Honest ceiling:** no row wired (census unmoved), no faked producer;
+  every unreachable surface carries a numbered leg with a named native owner.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

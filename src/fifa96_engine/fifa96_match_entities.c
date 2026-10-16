@@ -161,10 +161,9 @@ int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t
  * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session) / the fresh
  * `disassemble_bytes 0x8C370` sequence derive the full gate:
  *
- *   (0x8C38D) EAX = [team+0x7B2]          ; the reset pick (target)
  *   (0x8C393) EBX = [0x157AAC]
  *   (0x8C3A1) SAR EBX, 0x18               ; EBX = controlled side byte
- *   (0x8C3A4) AL  = byte[team+0x826]      ; team side
+ *   (0x8C3A4) MOVZX EAX, byte[team+0x826] ; team side (zero-extended)
  *   (0x8C3B4) CMP EBX, EAX
  *   (0x8C3B6) JNZ 0x8C3C3                 ; skip the lift for the other team
  *   (0x8C3B8) EAX = [team+0x7B2]

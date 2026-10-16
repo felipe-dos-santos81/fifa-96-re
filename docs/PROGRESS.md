@@ -2252,3 +2252,110 @@ phase's acceptance. No fabricated live-ness.
 **The honest ceiling:** no faked producer; the row-`0x1A` NULL slot, the live
 phase-6 producer (`T2b-L2`), the live `contact_kind==3` raiser (`FU289-L1`) and
 the stage-select inputs (`FU283-L1/L6`) each carry a named native owner.
+
+## M2 phase-27 — the keeper-CPU installer (the camera unlock): the census hold + the leg register (FU290…FU297)
+
+**The installer machines go live on a real frame and the `CX` stage-select
+machine is now ported live from real engine state — but no end-to-end install
+fires, so the phase closes as a Layer-1 reach + a Layer-2 waiver. Census holds
+`59/80 = 73%` (`36 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…`
+byte-identical (no re-pin).** The phase-27 recon wave (`docs/ghidra/FU290…FU297`)
+froze the installer frontier past R11-L4, and the Stage-2 plan, in order: T1 the
+RED reach test; T2 the FU291 gate value; T3 the FU296 **Seam A**; T4 the staged
+Layer-1 reach (GREEN); T5 the ported `CX` **stage-select machine** + the FU292
+cell readers; T6 the FU295 controlled-side actor lift; T7 the honest Layer-2
+waiver. **No task proved a live end-to-end install**, so the census is unmoved
+and no `README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit
+was made.
+
+**Landed (each with a headless granted-frame test):**
+
+- **T2 — the FU291 gate value** (`feat(fu291)`, `85bb24e`): `prepass_ah2 =
+  (input_range[(side ^ side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:104-105`,
+  the `0x77EE8 AND AH,2` fold), from `fifa96_input_range_words` →
+  `mr->input_range`. **Zero-δ** — the gate's only consumer (the keeper-CPU
+  ladder) is not wired live; M2 byte-identical.
+- **T3 — the FU296 Seam A** (`221d2a7`, `9d7f780`): the `fifa96_keeper_cpu_step`
+  call lands in the `i == 0` branch of `fifa96_match_entities_team_update`,
+  **before** the single `action()` (the FU-141 walk; **no second pre-pass**, no
+  double-dispatch — pinned `2*RECS`); the module is compiled **once** (the engine
+  owns the TU); the frame cells `global_157c5d`/`global_157c5c`/`keeper_latch_157ab2`/
+  `side_swap` are bound read→step→write.
+- **T4 — the staged Layer-1 reach** (`42b5c1d`): `test_keeper_installer_reach`
+  GREEN by default (guard removed) — a multi-frame drive: Frame A (`phase==2`)
+  raises the row-`0x1B` install + the self-actor emit → phase 9 → row-`0x1E`;
+  frames B walk the claim to the stage-5 outlet; frame C releases
+  `camera.pos_y == 0x50`. Three mutation-RED riders (Seam A stub, ladder install
+  stub, claim-bridge stub) each abort it. The `permit` (P1) channel is added as a
+  caller-supplied input (inert unset).
+- **T5 — the FU290 stage-select machine + the FU292 cell readers** (`2db6f15`,
+  `97dce03`): `fifa96_keeper_cpu_stage_select` ports `0x77F57..0x781E1` exactly
+  (the `AX` prepass gate + the CX=1/CX=4 arms + the stage-table path); the Seam A
+  computes the stage **from real engine state** (a non-zero `CX`), retiring the T3
+  caller bridge. The `0x10E1xx` static stage tables are embedded; the `0x114E04`
+  257-entry sine table is confirmed; the readers of every FU292 cell are bound
+  (`[0x157A4C]`, `follow_speed`, `pan_counter`, `predict_c44`/`predict_c48_*`), and
+  the ladder's `+0x4D` copy is ported (`copy_valid`/`copy_x/y/z`). A T5 fix round
+  corrected the stage-table `C` entry (`kc_tbl_c[5]` 0x100→0) and published the
+  `[0x157C5C]` write in-frame.
+- **T6 — the FU295 controlled-side actor lift** (`feat(fu295)`, `509a9a7`):
+  `fifa96_match_entities_actor_lift` (`0x8C3BE`) — `controlled = team->target` iff
+  `controlled_side == team->side`. An **unraised port** (no `src/` caller); row
+  `0x1A` stays NULL; the FU294 residuals are verified, not re-ported.
+- **T7 — the honest Layer-2 waiver** (`test(fu296)`, `b236f43`): a real
+  `make game` (`DISPLAY=:1`) boots to a live match, but the installer chain cannot
+  fire because P1 `[0x110680]` (`permit`, FU282-L5) is unported and stays 0, and
+  the only fully-live `CX=1` arm installs the NULL row `0x1A` (FU296-L7). Live
+  frames over 24 s differ ≤918/776,568 px (sprite micro-motion; no pan).
+
+**The quoted errata (appended; prior sections never rewritten):** (1) **FU290** —
+the `CX` machine is `CX ∈ {0,1,4,5,A}` (immediates `{0,1,4,5}`; `2`/`3` only via
+`MOV ECX,EDX`@`0x781DC` from `A = byte[0x10E184+idx]`); **FU283 §3's
+"`ECX ∈ {0,1,2,4,5}`" conflates the immediate path with the `A` path**. (2)
+**FU291** — the gate value is **ported** (zero-δ). (3) **FU294** — the pan/camera
+setter is **already ported**; **FU285 §2's "None of these are in the engine" is
+superseded** for the camera triple / `camera.tracked` / `event_step` /
+`event_param`. (4) **FU295** — the `0x74442` consumer reads **only** `[+0x7B2]`;
+`[+0x7BA]`/`[+0x7BE]` belong to `FUN_0007F7E0` (the cell-split); `0x76AD8` (the
+row-`0x1A` body actor set) is **not live**. (5) **FU296** — Seam A; P13 was the
+blocker and now **advances**; the remaining blocker is P1 `[0x110680]`. (6)
+**FU297** — row `0x1A` stays **NULL** (FU284 NO-GO stands); a slot flip alone
+would quote `60/80 = 75%` but is a **dead count**; the FU284→FU297 citation drift
+is a consistent **+116**. (7) **FU292** — the latch/geometry cells: the readers
+are ported; the writers (`0x157C44`/`0x157C48` — **FU292-L1 corrected, the writer
+is recovered**; `0x1577F0..FA`; `0x157821` byte3) stay unported. (8) **FU293** —
+the row-`0x1B` deep pan/descriptor interpolation stays a **leg** (FU293-L1..L9).
+(9) **Errata (this task):** the FU290/FU296 T5 text "the seam computes/sets
+`kc_rec.stage`" is imprecise — `fifa96_keeper_cpu_record` has **no** `stage`
+field; the machine computes `CX` into a **local** `stage_out.stage` and the seam
+consumes `kc_out.install` / `kc_out.ladder_out.install`.
+
+**The leg register (appended, quoted):** **P1 `[0x110680]`** (the
+install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker; **the
+`CX=1`→NULL row-`0x1A` lane** (FU296-L7/FU297); **FU290-L1/L2/L5/L7**;
+**FU292-L1/L2/L3** (the writers); **FU295-L1** (the `0x741C4` driver's caller) /
+**FU196-L6** (the `FUN_0007417C` restart sink — the lift's caller; wiring it
+un-gates `team_select_intercept` and moves M2) / **FU281-L5** (the un-gated
+`0x74442` consumer); and **FU290-L10 (new)** — the `0x77F20` `+0x81`
+`pos→target` copy (`out->copy_pos`, `fifa96_keeper_cpu.c:241`) is
+**reported-but-unapplied** (the same class as the fixed `copy_src`; native owner
+`FUN_00077EAC`, zero live). The machine is live-wired; **no live installer**.
+
+**Acceptance:** `make check` **111/111** (sanitized, strict); M1 `09b726b7…` and
+M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census recomputed and
+**held** `59/80 = 73%` (`action_wired == 36u` / `phase_wired == 23u`) — no
+`README.md` / `AGENTS.md:90` / `tests/test_engine_m2.c` census-pin edit.
+
+**The honest Layer-2 waiver (spec §6):** the T4 reach test proves the release
+end-to-end behind a **granted-frame fixture the golden tape does not traverse**
+(Layer 1, GREEN), but the windowed smoke (`make game`, `DISPLAY=:1`) traverses
+**no live keeper restart** — the installer chain cannot fire while P1
+`[0x110680]` (`permit`) is unported, and the only fully-live `CX=1` arm installs
+the NULL row `0x1A`. The visible follow/pan camera is therefore **NOT made live
+by this phase**; the Layer-1 landing is the phase's acceptance. No fabricated
+live-ness.
+
+**The honest ceiling:** no faked producer; the install-permission slot
+(`P1`/`FU282-L5`), the row-`0x1A` NULL lane, the stage-select input families
+(`FU290-L1/L2/L5`, `FU292-L1/L2/L3`) and the `copy_pos` copy each carry a named
+native owner.

@@ -243,3 +243,13 @@ full machine is now derived) and localises the residual gap to the four families
   `mr->global_157c5c` from the machine (the native single cell, read by the
   row-`0x1B` body `0x76FF4` in the same frame). The frame-level Seam A bind alone
   would expose the write only next frame; the T4 fixture no longer stages it.
+
+## Erratum (phase-27 T8 close-out)
+
+* **The T5 text "the FU296 Seam A computes `kc_rec.stage`" is imprecise (quoted
+  above, kept verbatim).** `fifa96_keeper_cpu_record` has **no** `stage` field,
+  and the Seam A writes none: `fifa96_keeper_cpu_stage_select` computes `CX` into
+  a **local** `fifa96_keeper_cpu_stage_out.stage`, and the seam consumes the
+  ladder's products (`kc_out.install` / `kc_out.ladder_out.install`). The T3
+  `rec.stage = e->stage` caller bridge is retired; no `kc_rec.stage` exists. The
+  machine's `CX` is derived from the record's inputs, never stored on the record.
