@@ -298,7 +298,7 @@ static void test_reset_lane_pass(void) {
   pool.team[TEAM0].records[5].pos_z = 0;
   pool.team[TEAM0].second = 4;
   pool.team[TEAM0].timer7cb = 9;
-  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0) == FIFA96_OK);
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
   assert(pool.team[TEAM0].records[5].has_ball == 0);
   assert(pool.team[TEAM0].records[5].code == 3);       /* active -> install 3 */
   assert(pool.team[TEAM0].records[5].stage92 == 0);
@@ -309,6 +309,11 @@ static void test_reset_lane_pass(void) {
   assert(pool.team[TEAM0].second == NONE);
   assert(pool.team[TEAM0].target == 5);
   assert(pool.team[TEAM0].tracker7c7 == 5);
+  /* FU295 §2.2 (phase-27 T6): the controlled-side actor lift (0x8C3BE) — with
+   * controlled_side == team 0's side the fresh pick is lifted into the actor
+   * cell (pool.controlled). */
+  assert(pool.controlled == pool.team[TEAM0].target);
+  assert(pool.controlled == 5);
   /* record 0 inactive -> the forced install is 0x19 (via the installer). */
   assert(pool.team[TEAM0].records[0].code == 0x19);
   /* Off-axis discriminating case: the 0x795B4 band is the `FUN_000CD514`
@@ -320,14 +325,15 @@ static void test_reset_lane_pass(void) {
   }
   pool.team[TEAM0].records[6].pos_x = -0x240;
   pool.team[TEAM0].records[6].pos_z = -0x468;
-  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0) == FIFA96_OK);
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
   assert(pool.team[TEAM0].records[6].lane_x == 0x286);
   assert(pool.team[TEAM0].records[6].lane_z == 0x240);   /* cam.x - pos.x */
   assert(pool.team[TEAM0].records[6].cam_dz6f == 0x468); /* cam.z - pos.z */
   assert(pool.team[TEAM0].target == 6);
   assert(pool.team[TEAM0].tracker7c7 == 6);
-  assert(fifa96_match_entities_reset_lane(NULL, TEAM0, 0, 0) == -FIFA96_ERR_INVALID);
-  assert(fifa96_match_entities_reset_lane(&pool, 2, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(pool.controlled == 6);   /* FU295: the lift re-tracks the fresh pick */
+  assert(fifa96_match_entities_reset_lane(NULL, TEAM0, 0, 0, 0) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_reset_lane(&pool, 2, 0, 0, 0) == -FIFA96_ERR_INVALID);
 }
 
 /* The update chain order, observed by a counter callback: team 0 records

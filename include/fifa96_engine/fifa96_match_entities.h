@@ -409,9 +409,28 @@ int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t
  * 0x79B6C commit are unported; the derived subset keeps the live position,
  * FU-151 §3.4 leg). Then the team tail: `+0x7CB = 0`, the `FUN_0008DDE0`
  * pick with skip -1, `+0x7B6 = 0` (NONE), `+0x7B2 = pick`, `+0x7C7 = pick`
- * (`target`/`tracker7c7`). Returns FIFA96_OK or -FIFA96_ERR_INVALID. */
+ * (`target`/`tracker7c7`), and the FU295 §2.2 controlled-side actor lift
+ * (`0x8C3BE`, `fifa96_match_entities_actor_lift`). Returns FIFA96_OK or
+ * -FIFA96_ERR_INVALID.
+ *
+ * FU295 (phase-27 T6): `controlled_side` is the native `[0x157AAC]>>0x18` (the
+ * process controlled-side byte; the engine's `mr->phase_machine.side_controlled`).
+ * The native `0x741C4` driver / `FUN_0007417C` caller is unported (FU295-L1), so
+ * this pass has no live engine caller — the lift is a LIVE-LEG today. */
 int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
-                                     int32_t cam_x, int32_t cam_z);
+                                     int32_t cam_x, int32_t cam_z, uint8_t controlled_side);
+
+/* FU295 §2.2/§2.3 (phase-27 T6): the `FUN_0008C33C` controlled-side actor lift
+ * (`0x8C3BE`, fresh `decompile_function 0x8C33C`): `if (([0x157AAC]>>0x18) ==
+ * byte[team+0x826]) [0x157A83] = [team+0x7B2];` — the team's picked target
+ * (`team->target`) is lifted into the actor cell (`pool->controlled`) only when
+ * `team->side == controlled_side`. The remaining `FUN_0008C33C` tail writes
+ * (`+0x7C3 = target`, `+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears,
+ * `FUN_0008C418`) stay unported legs. The native callers (the `0x741C4` driver
+ * and `FUN_0007417C`) are unported (FU295-L1), so this is not wired live.
+ * NULL pool / team >= 2 -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_t team,
+                                     uint8_t controlled_side);
 
 /* FU-151 §2.8 / §Port contract item 8: the `0x10F37C` interception target
  * table (first-hand `read_memory`: two 12-byte triples `(0,0,0x990)` side 0 /

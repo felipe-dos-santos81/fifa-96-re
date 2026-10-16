@@ -3552,6 +3552,53 @@ static void test_keeper_installer_reach(void) {
   drop_fixture(f);
 }
 
+/* FU295 §2.2/§2.3 (phase-27 T6): the controlled-side actor lift `FUN_0008C33C`
+ * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session): after the reset
+ * picks the team target, `if (([0x157AAC]>>0x18) == byte[team+0x826])
+ * [0x157A83] = [team+0x7B2];` — the pick is lifted into the actor cell ONLY for
+ * the controlled team. The engine models `[0x157A83]` as `pool.controlled` and
+ * `[0x157AAC]>>0x18` as the caller's `controlled_side`.
+ *
+ * The lift is PORTED (`fifa96_match_entities_actor_lift`) but its native caller —
+ * the per-frame `0x741C4` driver (`0x742C9`/`0x742D2`; not a Ghidra function, 0
+ * xrefs) and the restart sink `FUN_0007417C` (`0x7419F`/`0x741A9`, FU196-L6) — is
+ * unported (FU295-L1), so it is NOT wired live: the M2 tape's `pool.controlled`
+ * stays NONE (FU295-L5). This test pins the ported lift against the native
+ * controlled-side gate; a mutation that drops the side compare, lifts the wrong
+ * team, or skips the write fails it. */
+static void test_actor_lift_controlled_side(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  /* Distinct sides and picked targets per team (the native reset pick output). */
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 3;                                       /* team 0 pick */
+  mr.entities.team[1].target = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 7); /* team 1 pick */
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+
+  /* Controlled side 0: the NON-controlled team 1 must not touch the actor cell. */
+  assert(fifa96_match_entities_actor_lift(&mr.entities, 1u, 0u) == FIFA96_OK);
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
+  /* ... while team 0 (side == controlled_side) lifts its pick = 3. */
+  assert(fifa96_match_entities_actor_lift(&mr.entities, 0u, 0u) == FIFA96_OK);
+  assert(mr.entities.controlled == mr.entities.team[0].target);
+  assert(mr.entities.controlled == 3);
+
+  /* Controlled side 1: team 1 now lifts its own pick (overwriting the actor). */
+  assert(fifa96_match_entities_actor_lift(&mr.entities, 1u, 1u) == FIFA96_OK);
+  assert(mr.entities.controlled == mr.entities.team[1].target);
+  /* ... and team 0 does nothing against controlled side 1. */
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  assert(fifa96_match_entities_actor_lift(&mr.entities, 0u, 1u) == FIFA96_OK);
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
+
+  /* Guards: NULL pool / out-of-range team -> -INVALID (cell untouched). */
+  assert(fifa96_match_entities_actor_lift(NULL, 0u, 0u) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_entities_actor_lift(&mr.entities, 2u, 0u) ==
+         -FIFA96_ERR_INVALID);
+  assert(mr.entities.controlled == FIFA96_MATCH_ENTITY_NONE);
+}
+
 /* FU-145 S2: the goal-mouth classifier `FUN_00070074` (first-hand
  * /FIFA96.EXE 0x70074, 47 insns). The return is the "no outside bit"
  * boolean: 1 iff z in [0xB10,0xB90), x in [-0xD0,0xD0) and y <= h(z), where
@@ -6831,6 +6878,7 @@ int main(void) {
   test_row1e_claim_place_pause_and_offsets();
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
+  test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
   test_row04_live_pan_arms_camera();

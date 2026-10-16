@@ -157,9 +157,34 @@ int fifa96_match_entities_team_pick(struct fifa96_match_entities *pool, uint32_t
   return index;
 }
 
+/* FU295 §2.2/§2.3 (phase-27 T6): the `FUN_0008C33C` controlled-side actor lift
+ * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session) / the fresh
+ * `disassemble_bytes 0x8C370` sequence derive the full gate:
+ *
+ *   (0x8C38D) EAX = [team+0x7B2]          ; the reset pick (target)
+ *   (0x8C393) EBX = [0x157AAC]
+ *   (0x8C3A1) SAR EBX, 0x18               ; EBX = controlled side byte
+ *   (0x8C3A4) AL  = byte[team+0x826]      ; team side
+ *   (0x8C3B4) CMP EBX, EAX
+ *   (0x8C3B6) JNZ 0x8C3C3                 ; skip the lift for the other team
+ *   (0x8C3B8) EAX = [team+0x7B2]
+ *   (0x8C3BE) MOV [0x157A83], EAX         ; lift the pick into the actor cell
+ *
+ * The engine models `[0x157A83]` as `pool->controlled` and `[0x157AAC]>>0x18`
+ * as `controlled_side`; `[team+0x7B2]` is `team->target`. NULL pool / team >= 2
+ * -> -FIFA96_ERR_INVALID. */
+int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_t team,
+                                     uint8_t controlled_side) {
+  if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
+  if (controlled_side == pool->team[team].side)
+    pool->controlled = pool->team[team].target;                 /* 0x8C3BE */
+  return FIFA96_OK;
+}
+
 /* FU-151 §2.8/§3.4: `FUN_0008C33C` + the derived `FUN_0007997C` reset. */
 int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_t team,
-                                     int32_t cam_x, int32_t cam_z) {
+                                     int32_t cam_x, int32_t cam_z,
+                                     uint8_t controlled_side) {
   struct fifa96_match_team *t;
   int pick;
   if (!pool || team >= FIFA96_MATCH_ENTITY_TEAMS) return -FIFA96_ERR_INVALID;
@@ -208,7 +233,11 @@ int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_
   t->second = FIFA96_MATCH_ENTITY_NONE;                         /* 0x8C371 (+0x7B6=0) */
   t->target = pick < 0 ? FIFA96_MATCH_ENTITY_NONE : ENTITY_ID(pool, team, (uint32_t)pick);
   t->tracker7c7 = t->target;                                    /* 0x8C37B/0x8C387 */
-  return FIFA96_OK;
+  /* FU295 §2.2/§2.3 (phase-27 T6): the FUN_0008C33C tail lift (0x8C3BE) — the
+   * freshly-picked target is lifted into `[0x157A83]` for the controlled team
+   * (the native `0x8C38D..0x8C3BE`). The sibling tail writes (`+0x7C3`,
+   * `+0x7BF = 0`, the `+0x82x`/`+0x7E7` clears, `FUN_0008C418`) stay unported. */
+  return fifa96_match_entities_actor_lift(pool, team, controlled_side);
 }
 
 /* M2 interactive Task 1 / FU-70 §1.3: the derived `FUN_0008DB6C` free-record
