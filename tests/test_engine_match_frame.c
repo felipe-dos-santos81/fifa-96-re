@@ -3552,6 +3552,77 @@ static void test_keeper_installer_reach(void) {
   drop_fixture(f);
 }
 
+/* FU296 §5/§6 (phase-27 T7): the Layer-2 acceptance — the honest live waiver.
+ *
+ * The T4 reach above fires the whole installer chain **because it stages P1
+ * `permit = 1`**. On a LIVE engine frame nothing raises `permit`: it is
+ * `[0x110680][code] & 1` (FU282-L5, UNPORTED), left 0 by
+ * `fifa96_keeper_cpu_init` (`src/fifa96_loader/fifa96_keeper_cpu.c:14`) and
+ * written by no `src/` producer (only tests set it). The gate
+ * `if (rec->permit != 0)` guards BOTH the record-0 install tree AND the ladder
+ * gate (`fifa96_keeper_cpu.c:50`, native `0x784DC`/`0x784E9`), so on every live
+ * frame the ladder never runs, no row-`0x1B`/`0x1E` installs, phase 9 is never
+ * reached, the stage-5 release never fires, and this chain never raises
+ * `camera.pos_y`.
+ *
+ * This drives the T4 reach's exact keeper scenario through the REAL per-frame
+ * body (`fifa96_match_run_frame`, the same `ef.keeper_cpu = &mr->keeper_cpu`
+ * seam the SDL3 `make game` run uses) with the engine's OWN `permit` (nothing
+ * staged) and pins the waiver: `permit == 0` throughout, the ladder never ran,
+ * no `0x1B`/`0x1E` install, no keeper release. A future `permit` producer (or a
+ * gate flip) makes this RED — at which point the census legitimately moves.
+ *
+ * Even if `permit` WERE live, the only fully-live `CX` is 1 (the AX gate + the
+ * CX=1 arm), which installs the NULL row `0x1A` (FU296-L7) — a `NULL->fn` flip
+ * with no live producer is a dead count (the rows-27/29/2C precedent).
+ *
+ * Verdict (spec §6): the visible follow/pan camera does NOT move live — the
+ * honest waiver, landed on the Layer-1 proof: the T4 GREEN reach + the T5
+ * ported/live `CX` stage machine + the T6 actor lift. */
+static void test_keeper_installer_live_waiver(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *keeper;
+  int installed = 0, ladder_ran = 0, released = 0;
+
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  assert(mr.keeper_cpu.permit == 0);              /* P1 unported: the LIVE value */
+
+  /* The exact T4 reach scenario — minus the staged `permit`. */
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.entities.controlled = (int32_t)FIFA96_MATCH_ENTITY_RECORDS; /* opposite-side actor */
+  mr.entities.team[0].slot_pool = 0;
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157a4c = 0;
+  mr.global_157c5d = 1;                           /* the row-0x19 interlock */
+  mr.render.camera.pos_z = -0x800;                /* the FU290 AX-gate input */
+  keeper = &mr.entities.team[0].records[0];
+  keeper->code = 0x19u;
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 0u;
+  keeper->has_slot = 0u;
+  keeper->lane = 0x28 << 16;                      /* the CX=4 lane input */
+  keeper->stage92 = 2u;
+
+  for (int i = 0; i < 120; i++) {
+    one_granted_frame(&mr);
+    assert(mr.keeper_cpu.permit == 0);            /* never raised live */
+    if (mr.keeper_cpu.latch_written) ladder_ran = 1;
+    if (keeper->code == 0x1Bu || keeper->code == 0x1Eu) installed = 1;
+    if (mr.keeper_cam_y == 0x50) released = 1;    /* 0x50 = the stage-5 release value */
+    assert(mr.render.camera.pos_y == 0);          /* the installer raised no camera */
+  }
+  assert(ladder_ran == 0);                        /* the permit gate blocks the ladder */
+  assert(installed == 0);                         /* no row-0x1B/0x1E install */
+  assert(released == 0);                          /* the stage-5 release never fires */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU295 §2.2/§2.3 (phase-27 T6): the controlled-side actor lift `FUN_0008C33C`
  * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session): after the reset
  * picks the team target, `if (([0x157AAC]>>0x18) == byte[team+0x826])
@@ -6878,6 +6949,7 @@ int main(void) {
   test_row1e_claim_place_pause_and_offsets();
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
+  test_keeper_installer_live_waiver();
   test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
