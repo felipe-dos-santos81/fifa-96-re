@@ -807,15 +807,36 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
           *frame->latch_157c5c = frame->keeper_cpu->latch_157c5c;
           *frame->latch_157ab2 = frame->keeper_cpu->force_install;
         }
-        if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
+        /* FU304 §3(A) / FU300-G1 (phase-28 T3): both installs apply through
+         * the pool installer, not a bare `e->code` write — the native
+         * `0x78576` and the ladder arms (fresh FU304 §1: `XOR EBX,EBX`
+         * before each `CALL 0x7D9A4`) call `FUN_0007D9A4`, which stages
+         * `+0x89=0/+0x9E=0/+0x92=BL(0)/+0x7B=+0x79` before the same-frame
+         * `0x785A8` dispatch, so a stale `stage92`/`timer89` would mis-route
+         * the installed row (FU300 §3.2-G1; FU304's review erratum adopts
+         * the merge). */
+        if (kc_out.install)                                  /* 0x78576 */
+          (void)fifa96_match_entities_install(e, pool->phase,
+                                              kc_out.install_code, 0);
         if (kc_out.ladder_out.install)                       /* 0x78599 arms */
-          e->code = kc_out.ladder_out.install_code;
+          (void)fifa96_match_entities_install(e, pool->phase,
+                                              kc_out.ladder_out.install_code, 0);
         /* FU290: the ladder's `+0x4D/+0x51/+0x55` copy target (0x7805b/0x780a5/
          * 0x781d4) — the native writes it before the same-frame row dispatch. */
         if (kc_out.ladder_out.copy_valid) {
           e->target_x = kc_out.ladder_out.copy_x;
           e->target_y = kc_out.ladder_out.copy_y;
           e->target_z = kc_out.ladder_out.copy_z;
+        }
+        /* FU304 §1/§3(A) (phase-28 T3, closes FU290-L10): the ladder's `+0x81`
+         * arm (0x77F16..0x77F29: 3-dword `pos +0x59 -> target +0x4D`, no
+         * install, no stage machine) — the port reports `copy_pos` but the
+         * phase-27 seam dropped it. Mutually exclusive with `copy_valid` by
+         * construction; both write before the same-frame row dispatch. */
+        if (kc_out.ladder_out.copy_pos) {                    /* 0x77F20 */
+          e->target_x = e->pos_x;
+          e->target_y = e->pos_y;
+          e->target_z = e->pos_z;
         }
       }
     }

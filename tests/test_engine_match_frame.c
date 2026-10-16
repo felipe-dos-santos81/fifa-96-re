@@ -3623,6 +3623,187 @@ static void test_keeper_installer_live_permit(void) {
   drop_fixture(f);
 }
 
+/* FU304 §3 / FU300 §3.2-G1 (phase-28 T3): the merged Seam A install contract
+ * + the `copy_pos` apply — the seam-level pins.
+ *
+ * G1: the native installer `FUN_0007D9A4` stages a whole record (`0x7DA63`..
+ * `0x7DA9B`: `+0x91 := code`, `+0x89 := 0`, `+0x9E := 0`, `+0x92 := BL` and
+ * `+0x7B := +0x79`) and both Seam A installs — the deferred tree `0x78576`
+ * and every ladder arm (fresh FU304 §1: `MOV ECX,1` + `XOR EBX,EBX` before
+ * each `CALL 0x7D9A4`, so `BL = 0`) — call it. The phase-27 seam wrote
+ * `e->code` only, so a same-frame row-`0x1A`/`0x1B` dispatch could run on a
+ * stale `stage92`/`timer89` (FU300 §3.2's mis-route class); FU304's review
+ * erratum adopts the merged contract — both installs route through
+ * `fifa96_match_entities_install(e, phase, code, 0)`.
+ *
+ * FU304 §1/§3(A): the ladder's `+0x81` arm (fresh `0x77F16..0x77F29`) is a
+ * 3-dword `pos (+0x59..) -> target (+0x4D..)` copy that returns at the shared
+ * epilogue `0x782C4` with no install and no stage machine; the port reports it
+ * (`out->copy_pos`, `fifa96_keeper_cpu.c:257`) but the seam never applied it
+ * (FU290-L10). The apply is `e->target_* = e->pos_*`.
+ *
+ * The pins below drive the walk's `i == 0` seam
+ * (`fifa96_match_entities_team_update`) and capture the record at dispatch
+ * entry — after the seam applies and before the row body, exactly the FU304 §3
+ * frozen shape ("both target writers sit before `action(ctx, e)`"). The
+ * machine's own inputs are producer inputs (FU290's camera/lane triple, FU299's
+ * `[0x157C5D]` gate cell); the install and the copy are what is under test. */
+struct seam_capture {
+  int calls;
+  uint8_t code;
+  uint8_t stage92;
+  uint8_t ran;
+  int32_t timer89;
+  uint16_t timer7b;
+  int32_t target_x, target_y, target_z;
+  int32_t pos_x, pos_y, pos_z;
+};
+
+static int seam_first_capture(void *ctx, struct fifa96_match_entity *e) {
+  struct seam_capture *c = ctx;
+  if (c->calls == 0) {
+    c->code = e->code;
+    c->stage92 = e->stage92;
+    c->ran = e->ran;
+    c->timer89 = e->timer89;
+    c->timer7b = e->timer7b;
+    c->target_x = e->target_x;
+    c->target_y = e->target_y;
+    c->target_z = e->target_z;
+    c->pos_x = e->pos_x;
+    c->pos_y = e->pos_y;
+    c->pos_z = e->pos_z;
+  }
+  c->calls++;
+  return FIFA96_OK;
+}
+
+/* The deferred install tree (`0x78576`) through the seam, live inputs only:
+ * keep code 4 (permit `0x110680[4] & 1 = 1`, FU298) with phase 2 and a zero
+ * timer, so the tree's target is the `0x19` escalation (`0x78513`) — a
+ * different code, installing. The record carries a stale pre-install posture
+ * the native installer overwrites (`0x7DA7E/0x7DA88/0x7DA95/0x7DA9B`); the
+ * single `0x785A8` dispatch must see the installer's values. */
+static void test_keeper_seam_install_full_state(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f;
+  fifa96_keeper_cpu cpu;
+  struct fifa96_match_entity *keeper;
+  struct seam_capture cap;
+  memset(&f, 0, sizeof f);
+  memset(&cap, 0, sizeof cap);
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  f.phase = 2u;
+  f.delta = 2u;
+  f.keeper_cpu = &cpu;
+  keeper = &pool.team[0].records[0];
+  keeper->code = 4u;              /* permit 1; the tree target 0x19 != 4 */
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 0u;           /* the tree keeps the 0x19 escalation */
+  keeper->has_slot = 0u;
+  keeper->stage92 = 2u;           /* stale pre-install postures */
+  keeper->timer89 = 0x55;
+  keeper->ran = 1u;
+  keeper->timer7b = 0xBB;
+  keeper->timer79 = 0x44;
+  assert(fifa96_match_entities_team_update(&pool, 0, &f, seam_first_capture,
+                                           &cap) == FIFA96_OK);
+  assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(cap.code == 0x19u);      /* 0x78576 install applied */
+  assert(cap.stage92 == 0u);      /* +0x92 := BL = 0 (the merged contract) */
+  assert(cap.timer89 == 0);       /* +0x89 := 0 */
+  assert(cap.ran == 0u);          /* +0x9E := 0 */
+  assert(cap.timer7b == 0x44u);   /* +0x7B := +0x79 */
+}
+
+/* The ladder's `+0x81` copy arm (`0x77F16..0x77F29`) through the seam, live
+ * inputs: keep code `0x19` (the ladder head gate), a non-zero `timer81` (the
+ * trigger), phase 2 + a zero queued action + the non-zero `[0x157C5D]` gate
+ * (the ladder-gate triple `0x7857B..0x78595`). The same non-zero timer forces
+ * the deferred install's target to 0 (`0x784FE..0x78503`), so the step both
+ * installs code 0 and takes the copy arm (FU304 §2); the dispatch must see the
+ * position triple on the target triple. */
+static void test_keeper_seam_copy_pos_applies(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f;
+  fifa96_keeper_cpu cpu;
+  struct fifa96_match_entity *keeper;
+  struct seam_capture cap;
+  memset(&f, 0, sizeof f);
+  memset(&cap, 0, sizeof cap);
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  f.phase = 2u;
+  f.delta = 2u;
+  f.keeper_cpu = &cpu;
+  cpu.interlock_157c5d = 1u;      /* the ladder-gate input cell */
+  keeper = &pool.team[0].records[0];
+  keeper->code = 0x19u;
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 1u;           /* 0x77F16: the copy trigger */
+  keeper->has_slot = 0u;
+  keeper->pos_x = 0x111;
+  keeper->pos_y = 0x222;
+  keeper->pos_z = 0x333;
+  keeper->target_x = 0xAAA;
+  keeper->target_y = 0xBBB;
+  keeper->target_z = 0xCCC;
+  assert(fifa96_match_entities_team_update(&pool, 0, &f, seam_first_capture,
+                                           &cap) == FIFA96_OK);
+  assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(cap.code == 0u);         /* the same-step deferred install (0x78576) */
+  assert(cap.target_x == cap.pos_x);   /* the 0x77F20 pos -> target copy */
+  assert(cap.target_y == cap.pos_y);
+  assert(cap.target_z == cap.pos_z);
+}
+
+/* The ladder's install arms through the seam (`0x7821D`-class; fresh FU304
+ * §3(A)). Live inputs drive the CX=4 arm exactly as the T4 reach does (the
+ * FU290 AX-gate camera, lane < 0x30, the opposite-side actor on team 1), and
+ * the stale pre-install posture must not survive: the arm's
+ * `FUN_0007D9A4(rec, 0x1B, 0, 1)` stages `+0x92 := 0` before the same-frame
+ * dispatch, so the row body starts at stage 0 — not the staged 2 (the G1
+ * mis-route class). */
+static void test_keeper_seam_ladder_install_full_state(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f;
+  fifa96_keeper_cpu cpu;
+  struct fifa96_match_entity *keeper;
+  struct seam_capture cap;
+  memset(&f, 0, sizeof f);
+  memset(&cap, 0, sizeof cap);
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  f.phase = 2u;
+  f.delta = 2u;
+  f.keeper_cpu = &cpu;
+  f.cam_pos_x = 0;
+  f.cam_pos_y = 0;
+  f.cam_pos_z = -0x800;           /* the FU290 AX-gate camera input */
+  cpu.interlock_157c5d = 1u;      /* the ladder-gate input cell */
+  pool.controlled = (int32_t)FIFA96_MATCH_ENTITY_RECORDS; /* the team-1 actor */
+  keeper = &pool.team[0].records[0];
+  keeper->code = 0x19u;
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 0u;           /* no deferred install (target == code) */
+  keeper->has_slot = 0u;
+  keeper->lane = 0x28 << 16;      /* lane_x 0x28 < 0x30 -> CX=4 */
+  keeper->stage92 = 2u;           /* stale: the installer must overwrite to 0 */
+  keeper->timer89 = 0x55;
+  keeper->ran = 1u;
+  keeper->timer7b = 0xBB;
+  keeper->timer79 = 0x66;
+  assert(fifa96_match_entities_team_update(&pool, 0, &f, seam_first_capture,
+                                           &cap) == FIFA96_OK);
+  assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(cap.code == 0x1Bu);      /* the CX=4 arm's install (0x78299) */
+  assert(cap.stage92 == 0u);      /* +0x92 := BL = 0 (the merged contract) */
+  assert(cap.timer89 == 0);       /* +0x89 := 0 */
+  assert(cap.ran == 0u);          /* +0x9E := 0 */
+  assert(cap.timer7b == 0x66u);   /* +0x7B := +0x79 */
+}
+
 /* FU299 §2/§4 (phase-28 T2) — the interlock ordering, rider (a): the cell
  * survival. The native `[0x157C5D]` is ONE process cell with a one-step pulse:
  * each record-0 step clears it (`0x785A2`, fresh FU299 §1) and the row-`0x19`
@@ -7063,6 +7244,9 @@ int main(void) {
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
   test_keeper_installer_live_permit();
+  test_keeper_seam_install_full_state();
+  test_keeper_seam_copy_pos_applies();
+  test_keeper_seam_ladder_install_full_state();
   test_keeper_interlock_survives_frame();
   test_keeper_interlock_cross_team_install();
   test_actor_lift_controlled_side();
