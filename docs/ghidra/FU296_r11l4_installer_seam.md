@@ -247,3 +247,14 @@ this draft.
 * **P4 / FU296-L3 — partially closed.** `keeper_cpu.latch_157c5c` is now
   written by the ladder and bound to `mr->global_157c5c` (the native row-`0x1B`
   `0x76FF4` reader). The interlock `[0x157C5D]` bind is unchanged.
+
+### Fix round (T5 review)
+
+* The ladder's `+0x4D` copy side effect is now **ported** (Seam A writes
+  `e->target_*`), and the machine's `[0x157C5C]` write is **published in-frame**
+  by the dispatch (the frame-level bind alone lagged a frame); the T4 reach no
+  longer stages `global_157c5c`.
+* The stage-table `C` entry for `A=5` was corrected to `0` (fresh
+  `read_memory`); see FU290's `Fix round`.
+* P13 remains ADVANCED: the machine is live-wired, but the end-to-end install
+  still needs P1 (`[0x110680]`, FU296-L2). Census `59/80`; M2 byte-identical.

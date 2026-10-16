@@ -743,10 +743,23 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
         kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
         kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */
+        /* FU292-L1 (FU-179 §4): the `[0x157C44]`/`[0x157C48]` writer
+         * `fifa96_keeper_hold_predict` -> `mr->predict_c44`/`predict_c48_*`. */
+        kc_rec.latch_157c44 = frame->latch_c44;
+        kc_rec.target_157c48[0] = frame->target_c48[0];
+        kc_rec.target_157c48[1] = frame->target_c48[1];
+        kc_rec.target_157c48[2] = frame->target_c48[2];
         (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
         if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
         if (kc_out.ladder_out.install)                       /* 0x78599 arms */
           e->code = kc_out.ladder_out.install_code;
+        /* FU290: the ladder's `+0x4D/+0x51/+0x55` copy target (0x7805b/0x780a5/
+         * 0x781d4) — the native writes it before the same-frame row dispatch. */
+        if (kc_out.ladder_out.copy_valid) {
+          e->target_x = kc_out.ladder_out.copy_x;
+          e->target_y = kc_out.ladder_out.copy_y;
+          e->target_z = kc_out.ladder_out.copy_z;
+        }
       }
     }
     else if (e->skip_9a != 0) continue;                      /* 0x8DB42 */

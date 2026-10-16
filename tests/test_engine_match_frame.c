@@ -3470,8 +3470,9 @@ static void test_keeper_l4_release_reach(void) {
  *    latch cells stay zero (legs); they gate the CX=4 arm only via the
  *    opposite-side actor, which is live.
  *  - P4 `mr.global_157c5d = 1` — the row-`0x19` interlock `[0x157C5D]`.
- *  - `mr.global_157c5c = 1` — the FU292 latch `[0x157C5C]` (also set by the
- *    machine's own CX=4 arm, FU290 `0x780D7`).
+ *  - The FU292 latch `[0x157C5C]`: **NOT staged** — the machine's own CX=4 arm
+ *    sets it (`0x780D7`) and the row dispatch publishes it in-frame (FU290 T5),
+ *    so the reach exercises the machine's latch write-back.
  *  - `keeper->stage92 = 2` — the row-`0x1B` stage latch (the phase-26c carry
  *    (iv) precedent; the isolated fixture has no live row-stage producer).
  *  - `team[0].slot_pool = 0` — the FU-70 slot machine's source pool
@@ -3504,7 +3505,6 @@ static void test_keeper_installer_reach(void) {
   mr.phase_machine.side_controlled = 0;
   mr.global_157a4c = 0;                            /* CPU: the stage-4 tail emits sit-5 */
   mr.global_157c5d = 1;                            /* P4: the row-0x19 interlock */
-  mr.global_157c5c = 1;                            /* FU292 latch -> the 0x774DD re-place */
   mr.render.camera.pos_z = -0x800;                 /* FU290 AX gate: |cam.z| > 0x7B0 */
   keeper = &mr.entities.team[0].records[0];
   keeper->code = 0x19u;                            /* P5: the keeper-hold row */

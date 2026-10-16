@@ -1406,6 +1406,16 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
       if (rc != FIFA96_OK && rc != -FIFA96_ERR_UNSUPPORTED) return rc;
     }
   }
+  /* FU290/FU292 (phase-27 T5): the native `[0x157C5C]` is ONE process cell — the
+   * keeper ladder writes it (`0x7802D`/`0x780D7`) and the row-`0x1B` body reads
+   * it at `0x76FF4` in the SAME frame. The frame-level Seam A bind would expose
+   * the machine's write only next frame, so publish it here (the keeper
+   * record-0 step set `latch_written`); the flag fires only when the ladder ran
+   * (`permit != 0`), so M2 is untouched. */
+  if (mr->keeper_cpu.latch_written) {
+    mr->global_157c5c = mr->keeper_cpu.latch_157c5c;
+    mr->keeper_cpu.latch_written = 0;
+  }
   rc = fifa96_match_dispatch_action(mr, e->code);
   /* FU-153 / T1: the native per-record tail runs FUN_0006E8E8 (the animation
    * event machine) right after the action handler and before the mover
@@ -1550,6 +1560,10 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->follow_speed = mr->render.camera.follow_speed;
   f->pan_counter = mr->render.camera.pan_counter;
   f->global_157a4c = mr->global_157a4c;
+  f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
+  f->target_c48[0] = mr->predict_c48_x;
+  f->target_c48[1] = mr->predict_c48_y;
+  f->target_c48[2] = mr->predict_c48_z;
   f->intercept_x[0] = 0;
   f->intercept_x[1] = 0;
   f->intercept_y[0] = FIFA96_MATCH_ENTITY_INTERCEPT_Z0;

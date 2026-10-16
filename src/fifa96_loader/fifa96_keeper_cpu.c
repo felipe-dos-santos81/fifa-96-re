@@ -19,6 +19,7 @@ void fifa96_keeper_cpu_init(fifa96_keeper_cpu *cpu) {
   cpu->force_install = 0;
   cpu->interlock_157c5d = 0;
   cpu->latch_157c5c = 0;
+  cpu->latch_written = 0;
   cpu->ladder = fifa96_keeper_cpu_ladder_run;
   cpu->ladder_ctx = 0;
 }
@@ -66,9 +67,13 @@ int fifa96_keeper_cpu_step(fifa96_keeper_cpu *cpu,
       if (cpu->ladder) {
         cpu->ladder(cpu->ladder_ctx, rec, &out->ladder_out);
         /* FU290/FU292: the ladder writes the `[0x157C5C]` latch (`0x7802D`
-         * clear / `0x780D7` CX=4 set) — bound to `mr->global_157c5c` by Seam A
-         * (the native row-0x1B read at `0x76FF4`). */
-        if (out->ladder_out.ran) cpu->latch_157c5c = out->ladder_out.latch_157c5c;
+         * clear / `0x780D7` CX=4 set) — one process cell. `latch_written` lets
+         * the caller (the row dispatch) publish it to `mr->global_157c5c`
+         * IN-FRAME, before the native `0x785A8` row body reads it. */
+        if (out->ladder_out.ran) {
+          cpu->latch_157c5c = out->ladder_out.latch_157c5c;
+          cpu->latch_written = 1;
+        }
       }
     }
   }
@@ -102,9 +107,10 @@ static const uint8_t kc_stage_tbl[64] = {
 
 /* The `0x10E1C4` word (B) and `0x10E1CE` dword (C) tables, indexed by the
  * stage-table byte A ∈ {1..5}: `B = signext16(word[0x10E1C4+2A])`,
- * `C = dword[0x10E1CE+2A] >> 16` (fresh `read_memory 0x10E1C4`). */
+ * `C = dword[0x10E1CE+2A] >> 16` (fresh `read_memory 0x10E1C4`/`0x10E1CE`:
+ * `B = {6,6,12,22,27}`, `C = {5,5,9,0,0}`). */
 static const int32_t kc_tbl_b[6] = {0, 6, 6, 12, 22, 27};
-static const int32_t kc_tbl_c[6] = {0, 5, 5, 9, 0, 0x100};
+static const int32_t kc_tbl_c[6] = {0, 5, 5, 9, 0, 0};
 
 int fifa96_keeper_cpu_stage_select(const fifa96_keeper_cpu_record *rec,
                                    fifa96_keeper_cpu_stage_out *out) {
@@ -113,7 +119,10 @@ int fifa96_keeper_cpu_stage_select(const fifa96_keeper_cpu_record *rec,
   out->ran = 0;
   out->stage = 0;
   out->latch_157c5c = 0;
-  out->copy_src = 0;
+  out->copy_valid = 0;
+  out->copy_x = 0;
+  out->copy_y = 0;
+  out->copy_z = 0;
 
   /* `0x77F57..0x77F90`: copy the camera triple to the stack locals and call
    * `0x795B4(rec+0x59, 0x157C48, scratch)`; SI=|cam.x|, DI=|cam.z|. The
@@ -146,16 +155,23 @@ int fifa96_keeper_cpu_stage_select(const fifa96_keeper_cpu_record *rec,
   /* CX=1 (`0x78038..0x78060`): the camera triple -> +0x4D, no latch. */
   if (lane_x < 0x20 && rec->cam_y < 4 && (int32_t)rec->follow_speed < 0xA) {
     out->stage = 1;
-    out->copy_src = 1;
+    out->copy_valid = 1;                                /* `0x7805b..0x78060` MOVSD×3 */
+    out->copy_x = rec->cam_x;
+    out->copy_y = rec->cam_y;
+    out->copy_z = rec->cam_z;
     return FIFA96_OK;
   }
 
-  /* CX=4 (`0x78065..0x780DD`): the opposite-side actor arm. */
+  /* CX=4 (`0x78065..0x780DD`): the opposite-side actor arm; the camera copy
+   * then adds `2*(int16)actor(+0x71/+0x73)` to the x/z words. */
   if (lane_x < (int32_t)rec->sub_0b * 2 + 0x30 && rec->cam_y == 0 &&
       rec->actor_present != 0 && rec->actor_same_side == 0) {
     out->stage = 4;
     out->latch_157c5c = 1;                              /* 0x780D7 */
-    out->copy_src = 3;
+    out->copy_valid = 1;                                /* `0x780a5..0x780cf` */
+    out->copy_x = rec->cam_x + 2 * (rec->actor_vel_x >> 16); /* 0x780b0.. */
+    out->copy_y = rec->cam_y;
+    out->copy_z = rec->cam_z + 2 * (rec->actor_vel_z >> 16); /* 0x780c0.. */
     return FIFA96_OK;
   }
 
@@ -183,7 +199,10 @@ int fifa96_keeper_cpu_stage_select(const fifa96_keeper_cpu_record *rec,
     if (bearing >= 0x80) { out->stage = 4; return FIFA96_OK; } /* 0x781BA */
     if (latch >= 0x100) { out->stage = 5; return FIFA96_OK; }  /* 0x781CD */
     out->stage = a;                                     /* 0x781DC MOV ECX,EDX */
-    out->copy_src = 2;
+    out->copy_valid = 1;                                /* `0x781d4..0x781e0` MOVSD×3 */
+    out->copy_x = rec->target_157c48[0];
+    out->copy_y = rec->target_157c48[1];
+    out->copy_z = rec->target_157c48[2];
   }
   return FIFA96_OK;
 }
@@ -201,7 +220,10 @@ int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
   out->stamp_157c2c = 0;
   out->stage = 0;
   out->latch_157c5c = 0;
-  out->copy_src = 0;
+  out->copy_valid = 0;
+  out->copy_x = 0;
+  out->copy_y = 0;
+  out->copy_z = 0;
 
   /* Head gates (`0x77EB7..0x77F29`): each closed gate jumps to the shared tail
    * `0x782C4` with no install. */
@@ -229,7 +251,10 @@ int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
   if (fifa96_keeper_cpu_stage_select(rec, &sel) != FIFA96_OK) return -FIFA96_ERR_INVALID;
   out->stage = sel.stage;
   out->latch_157c5c = sel.latch_157c5c;
-  out->copy_src = sel.copy_src;
+  out->copy_valid = sel.copy_valid;
+  out->copy_x = sel.copy_x;
+  out->copy_y = sel.copy_y;
+  out->copy_z = sel.copy_z;
   out->ran = sel.ran;
   if (!sel.ran) return FIFA96_OK;                /* 0x77FF5: the non-ladder arm */
   if (sel.stage == 0u) return FIFA96_OK;         /* TEST CX,CX; JZ 0x782C4 (0x781E1) */

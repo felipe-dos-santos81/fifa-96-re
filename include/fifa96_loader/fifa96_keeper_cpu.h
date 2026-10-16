@@ -63,8 +63,8 @@ typedef struct fifa96_keeper_cpu_record {
   int16_t band_1577fa;        /* word `[0x1577FA]` (`[0x1577F8] >> 16`) — LEG FU292-L2 */
   int8_t sub_0b;              /* `[[rec+4]+0xB] >> 24` (byte +0xE) — LEG FU290-L5 */
   int8_t sub_10;              /* `[[rec+4]+0x10] >> 24` (byte +0x13) — LEG FU290-L5 */
-  int16_t actor_vel_x;        /* actor `+0x71` word — the CX-4 copy term (LIVE) */
-  int16_t actor_vel_z;        /* actor `+0x73` word — the CX-4 copy term (LIVE) */
+  int32_t actor_vel_x;        /* actor dword `+0x71` — the CX-4 copy term `2*(>>16)` (LIVE) */
+  int32_t actor_vel_z;        /* actor dword `+0x73` — the CX-4 copy term `2*(>>16)` (LIVE) */
 } fifa96_keeper_cpu_record;
 
 /* FU290 — the stage-select machine's products. `ran` is the `AX` prepass gate
@@ -73,14 +73,16 @@ typedef struct fifa96_keeper_cpu_stage_out {
   uint8_t ran;          /* the AX gate opened (`0x77FF5 JNZ 0x7802B`) */
   uint8_t stage;        /* CX ∈ {0,1,4,5,A} */
   uint8_t latch_157c5c; /* the `[0x157C5C]` write (CX=4 -> 1, else 0) */
-  uint8_t copy_src;     /* the `+0x4D` copy source: 0 none, 1 camera, 2 [0x157C48], 3 camera+2*actor */
+  uint8_t copy_valid;   /* the `+0x4D` copy ran (CX=1/4/A; `0x7805b..0x781e0`) */
+  int32_t copy_x, copy_y, copy_z; /* the `[rec+0x4D/0x51/0x55]` target triple */
 } fifa96_keeper_cpu_stage_out;
 
 /* FU283 §4/§5 — the ladder's products. Every installer is
  * `FUN_0007D9A4(rec, code, 0, ECX=1)`: **invoke-now**, unlike the machine's
  * deferred `ECX=0` install. */
 typedef struct fifa96_keeper_cpu_ladder_out {
-  uint8_t ran;            /* the head gates + actor/side skip passed (reached the selector) */
+  uint8_t ran;            /* the head gates + actor/side skip passed AND the AX
+                           * prepass gate opened (reached the CX selector) */
   uint8_t copy_pos;       /* the `+0x81` path: `pos +0x59 -> +0x4D`, no install (0x77F20) */
   uint8_t install;        /* an install fired */
   uint8_t install_code;   /* 0x1A / 0x1B / 0x1C / 0x4 */
@@ -88,7 +90,8 @@ typedef struct fifa96_keeper_cpu_ladder_out {
   uint8_t stamp_157c2c;   /* the `0x1A` arms stamp `[0x157C2C]` 0x2C/0x2D/0x2E, else 0 */
   uint8_t stage;          /* FU290: the computed CX from the stage-select machine */
   uint8_t latch_157c5c;   /* FU290: the `[0x157C5C]` latch write (FU292) */
-  uint8_t copy_src;       /* FU290: the `+0x4D` copy source (see the stage_out) */
+  uint8_t copy_valid;     /* FU290: the `+0x4D` copy ran (see the stage_out) */
+  int32_t copy_x, copy_y, copy_z; /* FU290: the `[rec+0x4D/0x51/0x55]` triple */
 } fifa96_keeper_cpu_ladder_out;
 
 /* The machine's products for one record. */
@@ -122,6 +125,8 @@ typedef struct fifa96_keeper_cpu {
   uint8_t interlock_157c5d; /* [0x157C5D] — the ladder GATE (one-shot interlock) */
   uint8_t latch_157c5c;     /* [0x157C5C] — the ladder-internal LATCH (a DISTINCT
                              * cell; FU290 writes it in the ladder, FU292) */
+  uint8_t latch_written;    /* the ladder wrote `latch_157c5c` this step; the row
+                             * dispatch publishes it to `mr->global_157c5c` in-frame */
   fifa96_keeper_cpu_ladder_fn ladder; /* the `0x78599` seam (NULL = stub) */
   void *ladder_ctx;
 } fifa96_keeper_cpu;

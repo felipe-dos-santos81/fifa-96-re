@@ -214,3 +214,32 @@ full machine is now derived) and localises the residual gap to the four families
   *different* unported producer and is zero live; and even at `CX=1` the arm
   installs row `0x1A`, which the engine lanes to **NULL** (FU296-L7). M2 stays
   byte-identical (`b281a9b2…`).
+
+## Fix round (T5 review)
+
+* **Erratum to the T5 errata — `kc_tbl_c[5]` is `0`, not `0x100`.** Fresh
+  `read_memory 0x10E1CE` (16 B) = `1b 00 00 00 05 00 05 00 09 00 00 00 00 00 00
+  01`; `0x78190 MOVSX EAX,DX` / `0x78193 MOV EAX,dword[EAX*2+0x10e1ce]` /
+  `0x7819a SAR EAX,0x10` reads `dword[0x10E1CE+2A]>>16` → **C(1..5) =
+  `{5,5,9,0,0}`**. The T5 commit misread the offset and embedded `0x100`; the
+  fix carries `{5,5,9,0,0}` and adds a test with `delta ∈ [1,0x100]` (where the
+  native proceeds to `CX=5` and `0x100` would wrongly return `CX=0`) — the old
+  `band_1577fa = 0x200` staging masked the entry.
+* **FU290-L9 (new, CLOSED) — the `+0x4D/+0x51/+0x55` copy is now PORTED.**
+  `0x7805b..0x78060` (CX=1: the camera triple), `0x780a5..0x780cf` (CX=4: camera
+  then `+0x4D += 2*(int16)actor(+0x71)`, `+0x55 += 2*(int16)actor(+0x73)`), and
+  `0x781d4..0x781e0` (CX=A: the `0x157C48` triple). The machine emits
+  `copy_valid`/`copy_x/y/z`; Seam A writes `e->target_x/y/z` before the same-frame
+  row dispatch. (`copy_source` = `[rec+0x4D]`; the row-`0x1B`/`0x1A` consumers are
+  the readers of that cell.) No new leg: the only inputs are the live camera
+  triple, the bound `0x157C48` triple, and the live actor velocity dwords.
+* **FU292-L1 corrected (see FU292) — the `[0x157C44]`/`[0x157C48]` writer is
+  recovered**, not "unrecovered": `fifa96_keeper_hold_predict` (FU-179 §4), cells
+  `mr->predict_c44`/`predict_c48_x/y/z`, now bound to
+  `rec->latch_157c44`/`target_157c48`. They read zero live only because the
+  projection sub-leg (FU179-L2/L3) is unported.
+* **The `[0x157C5C]` latch is published in-frame.** `fifa96_keeper_cpu_step` sets
+  `latch_written` when the ladder ran; the record dispatch writes
+  `mr->global_157c5c` from the machine (the native single cell, read by the
+  row-`0x1B` body `0x76FF4` in the same frame). The frame-level Seam A bind alone
+  would expose the write only next frame; the T4 fixture no longer stages it.

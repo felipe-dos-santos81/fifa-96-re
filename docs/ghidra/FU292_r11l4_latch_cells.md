@@ -135,3 +135,24 @@ itself and consumed downstream (row `0x1A` body), not a stage-select input.
   needs to stage it. (FU292-L6's consumer behaviour stays inferred.)
 * **`[0x157A4C]` = `[0x157A49] >> 24`** is expressed by the ladder's `AX`
   prepass gate (FU290 T5); it maps to the LIVE `mr->global_157a4c`.
+
+## Fix round (T5 review)
+
+* **FU292-L1 corrected — the writer IS recovered.** The `0x157C44`/`0x157C48`
+  writer routine is `fifa96_keeper_hold_predict` (`src/fifa96_loader/
+  fifa96_keeper.c:340`, FU-179 §4), whose engine cells are `mr->predict_c44` and
+  `mr->predict_c48_x/y/z` (`include/fifa96_engine/fifa96_match_run.h:705`),
+  written by the row-`0x19` body (`fifa96_match_handlers.c:4172-4175`). They are
+  now **bound** by Seam A to `rec->latch_157c44`/`rec->target_157c48` (value-
+  equivalent, faithful). They read zero live only because the projection sub-leg
+  (`0x748b6..0x74AC1`, FU179-L2/L3) is unported, so `pred.predicted` stays 0 and
+  the cells are never written. The earlier "unrecovered routine" wording is
+  superseded.
+* **FU292-L2 partial modelling.** The `0x1577F0..FA` band struct's *words* are
+  now read by the machine (`rec->band_1577f6`/`band_1577fa`), so the ladder's
+  `delta` term is expressed; the `FUN_000700f4` (init) / `FUN_00070544`
+  (recompute) **writers** stay unported. The physical meaning (near/far band vs
+  ball-height band) remains unestablished.
+* **FU292-L6 advanced.** The ladder now WRITES `[0x157C5C]` (`0x7802D`/`0x780D7`)
+  and the row dispatch publishes the write to `mr->global_157c5c` in-frame (the
+  `0x76FF4` reader); the T4 fixture no longer stages it.

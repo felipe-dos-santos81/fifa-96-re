@@ -332,6 +332,12 @@ struct fifa96_match_entities_frame {
   int16_t follow_speed;
   uint8_t pan_counter;
   uint8_t global_157a4c;
+  /* FU290 (phase-27 T5): the FU292 latch/geometry cells `[0x157C44]`/
+   * `[0x157C48/4C/50]`. Their writer IS recovered as `fifa96_keeper_hold_predict`
+   * (FU-179 §4) with the engine cells `mr->predict_c44`/`predict_c48_x/y/z`
+   * (the projection sub-leg FU179-L2/L3 is unported, so both read zero live). */
+  int32_t latch_c44;
+  int32_t target_c48[3];
   int16_t intercept_x[FIFA96_MATCH_ENTITY_TEAMS]; /* word 0x10F37C+side*0xC */
   int16_t intercept_y[FIFA96_MATCH_ENTITY_TEAMS]; /* word +8 of the same record */
   /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` view the

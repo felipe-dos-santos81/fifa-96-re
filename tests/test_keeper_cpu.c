@@ -418,7 +418,8 @@ static void test_keeper_cpu_stage_select(void) {
   rec.cam_z = 0x800;                             /* |cam.z| > 0x7B0 */
   rec.global_157a4c = 1;                         /* 0x77FB3 branch */
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
-  assert(sel.ran == 1 && sel.stage == 1 && sel.copy_src == 1);
+  assert(sel.ran == 1 && sel.stage == 1 && sel.copy_valid == 1);
+  assert(sel.copy_x == rec.cam_x && sel.copy_y == rec.cam_y && sel.copy_z == rec.cam_z);
   assert(sel.latch_157c5c == 0);
 
   /* the AX prepass gate: |cam.x| >= 0x420 closes it -> the non-ladder arm. */
@@ -447,7 +448,11 @@ static void test_keeper_cpu_stage_select(void) {
   rec.actor_present = 1;
   rec.actor_same_side = 0;
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
-  assert(sel.stage == 4 && sel.latch_157c5c == 1 && sel.copy_src == 3);
+  assert(sel.stage == 4 && sel.latch_157c5c == 1 && sel.copy_valid == 1);
+  /* the CX-4 copy: camera + `2*(int16)actor(+0x71/+0x73)`. */
+  assert(sel.copy_y == rec.cam_y);
+  assert(sel.copy_x == rec.cam_x + 2 * (rec.actor_vel_x >> 16));
+  assert(sel.copy_z == rec.cam_z + 2 * (rec.actor_vel_z >> 16));
   /* the same-side actor closes the CX=4 arm (falls through to the table). */
   rec.actor_same_side = 1;
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
@@ -461,10 +466,21 @@ static void test_keeper_cpu_stage_select(void) {
       struct fifa96_keeper_cpu_record r = kc_ladder_open(want[i]);
       assert(fifa96_keeper_cpu_stage_select(&r, &sel) == FIFA96_OK);
       assert(sel.ran == 1 && sel.stage == want[i]);
-      assert(sel.copy_src == 2);
+      assert(sel.copy_valid == 1);                /* the 0x157C48 triple copy */
+      assert(sel.copy_x == r.target_157c48[0]);
+      assert(sel.copy_y == r.target_157c48[1]);
+      assert(sel.copy_z == r.target_157c48[2]);
       assert(r.target_157c48[1] == row[i]);
     }
   }
+  /* the A=5 `C` threshold is 0 (fresh `read_memory 0x10E1CE`), NOT 0x100: a
+   * delta of 1 (<= 0x100, > 0) must PROCEED to CX=5. (A 0x100 entry would
+   * wrongly return CX=0 here.) */
+  rec = kc_ladder_open(5);
+  rec.band_1577f6 = 0;
+  rec.band_1577fa = 1;                            /* delta = 1 in [1, 0x100] */
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 5);
   /* CX=0 through the table: the `[0x157C44]` -1 sentinel. */
   rec = kc_ladder_open(0);
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
