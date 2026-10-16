@@ -226,3 +226,24 @@ this draft.
   (`match_run_dispatch_entity:1393-1407` re-stages then re-dispatches) is the model to reconcile this.
 
 *(End of draft.)*
+
+## Closures / errata (phase-27 T5)
+
+* **P13 / FU296-L5 — ADVANCED (the stage index is now live).** FU290's machine
+  is ported as `fifa96_keeper_cpu_stage_select` and wired into Seam A: the seam
+  sets `kc_rec.stage` **from the machine**, retiring the T3 `rec.stage = e->stage`
+  caller bridge. The `AX` prepass gate and the `CX=1` arm read only live cells,
+  so a **non-zero** `CX` now exists from real engine state. The remaining
+  blocker to an end-to-end **install** is P1 (`[0x110680]` install-permission,
+  FU296-L2/FU282-L5) — a different unported producer, zero live — plus the
+  `CX=1`→row-`0x1A` NULL lane (FU296-L7). M2 stays byte-identical; census holds
+  `59/80`.
+* **§3.3 / §4 fixture note superseded.** The RED-first test's "caller-supplied
+  live stage index `stage = 4`" is replaced by the machine's **inputs**
+  (`mr.render.camera.pos_z` for the `AX` gate, `keeper->lane`, an opposite-side
+  `mr.entities.controlled`); T4's `test_keeper_installer_reach` now computes
+  CX=4 faithfully. The `[0x157C5C]` latch is set by the machine's own CX=4 arm
+  (`0x780D7`), not staged.
+* **P4 / FU296-L3 — partially closed.** `keeper_cpu.latch_157c5c` is now
+  written by the ladder and bound to `mr->global_157c5c` (the native row-`0x1B`
+  `0x76FF4` reader). The interlock `[0x157C5D]` bind is unchanged.

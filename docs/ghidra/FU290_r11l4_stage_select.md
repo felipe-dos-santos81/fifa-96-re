@@ -170,3 +170,47 @@ stage-select inputs — (1), (2), (4) and family (3)'s gate words — are unport
 **live** `CX` cannot be produced from current engine state — the
 stage-select inputs stay unported legs (FU290-L1..L5). This closes FU283-L6 (the
 full machine is now derived) and localises the residual gap to the four families.
+
+## Closures / errata (phase-27 T5, the live trigger)
+
+* **The `CX` machine is PORTED and live.** `fifa96_keeper_cpu_stage_select`
+  (`src/fifa96_loader/fifa96_keeper_cpu.c`) ports `0x77F57..0x781E1` exactly —
+  the `AX` prepass gate, the CX=1/CX=4 arms, and the stage-table path — and the
+  FU296 Seam A computes `kc_rec.stage` from it each frame (the T3
+  `rec.stage = e->stage` caller bridge is **retired**). A non-zero `CX` is now
+  produced from **real engine state**: the `AX` gate reads only live cells
+  (`camera.pos_x/pos_z`, `[0x157A4C]`, the record side) and the **CX=1** arm
+  reads only live cells (`lane +0x69`, `camera.pos_y`, `[0x1577BE]`). Evidence:
+  `tests/test_keeper_cpu.c` `test_keeper_cpu_stage_select` +
+  `test_keeper_cpu_ladder_live_stage_from_inputs` (RED→GREEN) and
+  `tests/test_engine_match_frame.c` `test_keeper_installer_reach` (now driven by
+  the computed CX=4, the `0x781E4`/`0x78294` arm).
+* **`0x10E1xx` stage tables — PORTED (FU290-L1 closed for family (1)).** The
+  64-byte `0x10E184` byte table and the `0x10E1C4` word (B) / `0x10E1CE` dword
+  (C) tables are embedded as static constants from fresh `read_memory`. The
+  machine's index `(([ESP+0xA]>>20)<<3)+([0x157C4C]>>5)` is clamped to `[0,63]`
+  (a memory-safety clamp; the native base is the 64-byte table). Their geometry
+  **meaning** stays undecoded (FU290-L1's original content).
+* **Erratum — `[ESP+0xA] >> 16` is the `0x795B4` bearing, not `camZ`.** Fresh
+  bytes `0x795B4` (`75..`) show it writes `word[arg2]` = the `0xCD514` angle at
+  `[ESP+0xC]`; `dword[ESP+0xA] >> 16` therefore reads that word (the record→
+  `0x157C48` bearing), not the camera z. The `>= 0xF0`/`>= 0x80` dispatch
+  thresholds are bearing thresholds. (Consumes FU290-L2 as a caller-supplied
+  `bearing_795b4` record field.)
+* **FU290-L4 — partially closed.** `[0x157A49] >> 24` = **byte `[0x157A4C]`** =
+  `mr->global_157a4c` (**LIVE**); `[0x1577BC] >> 16` = word `[0x1577BE]` =
+  `render.camera.follow_speed` (**LIVE**); `[0x157821]` byte0 =
+  `render.camera.pan_counter` (**LIVE**). `[0x1577F4] >> 16`/`[0x1577F8] >> 16`
+  (words `0x1577F6`/`0x1577FA`) and `[0x157821]` byte3 stay legs (FU292-L2/L3).
+* **FU290-L5 — the per-record sub-fields.** `[[rec+4]+0xB] >> 24` and
+  `[[rec+4]+0x10] >> 24` (bytes `+0xE`/`+0x13`) remain unported record inputs
+  (`rec->sub_0b`/`rec->sub_10`), zero live. Owner unchanged.
+* **FU290-L3 (the `0x157C44`/`0x157C48`/`0x157C4C` latch cells)** and
+  **FU290-L6** (the non-ladder `0x77FFA` arm) remain open; the latch cells are
+  caller-supplied `rec->latch_157c44`/`rec->target_157c48[3]`.
+* **FU290-L7 (`[0x158740]` inside `FUN_000765C4`)** remains open.
+* **The live install still does NOT fire end-to-end** (census holds `59/80`):
+  the ladder gate's install-permission cell `[0x110680]` (P1, FU282-L5) is a
+  *different* unported producer and is zero live; and even at `CX=1` the arm
+  installs row `0x1A`, which the engine lanes to **NULL** (FU296-L7). M2 stays
+  byte-identical (`b281a9b2…`).

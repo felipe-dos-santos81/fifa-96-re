@@ -1543,6 +1543,13 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
     f->select_vector[v][2] = mr->render.camera.pos_z;
   }
   f->cam_z = (int16_t)mr->render.camera.pos_z;
+  /* FU290 (phase-27 T5): the stage-select machine inputs. */
+  f->cam_pos_x = mr->render.camera.pos_x;
+  f->cam_pos_y = mr->render.camera.pos_y;
+  f->cam_pos_z = mr->render.camera.pos_z;
+  f->follow_speed = mr->render.camera.follow_speed;
+  f->pan_counter = mr->render.camera.pan_counter;
+  f->global_157a4c = mr->global_157a4c;
   f->intercept_x[0] = 0;
   f->intercept_x[1] = 0;
   f->intercept_y[0] = FIFA96_MATCH_ENTITY_INTERCEPT_Z0;

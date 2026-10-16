@@ -287,12 +287,47 @@ static void test_keeper_cpu_ladder_gate(void) {
   assert(cpu.interlock_157c5d == 0);
 }
 
-/* A ladder record with every head gate open (byte +0x91 == 0x19, all skip
- * cells clear); only `stage` (CX) varies. */
-static struct fifa96_keeper_cpu_record kc_ladder_open(uint8_t stage) {
+/* A ladder record whose stage-select inputs yield `cx` from
+ * `fifa96_keeper_cpu_stage_select` (FU290 phase-27 T5). The AX prepass gate
+ * (`0x77FF5`) is opened via a positive camera z with `[0x157A4C] == 1`
+ * (`0x77FB3`). The unported latch cells are staged (a producer-input stage —
+ * legitimate; the machine never invents a stage). */
+static struct fifa96_keeper_cpu_record kc_ladder_open(uint8_t cx) {
   struct fifa96_keeper_cpu_record r = kc_rec_zero();
   r.code = 0x19;
-  r.stage = stage;
+  r.cam_z = 0x800;             /* |cam.z| > 0x7B0 */
+  r.global_157a4c = 1;         /* 0x77FB3: AX = (cam_z > 0) */
+  r.pan_counter = 1;           /* skip the `+0x10` band gate (`0x7814B`) */
+  r.latch_157c44 = 0;          /* B > 0 and not the -1 sentinel */
+  r.side_157824 = 0;           /* == rec.side */
+  r.band_1577f6 = 0;
+  r.band_1577fa = 0x200;       /* delta > C(A) for every A */
+  switch (cx) {
+    case 1u:                    /* lane < 0x20, cam.y < 4, follow < 0xA */
+      break;
+    case 2u:                    /* table A=2: idx = 1 (0x20 >> 5) */
+      r.lane69 = 0x28 << 16;
+      r.target_157c48[1] = 0x20;
+      break;
+    case 3u:                    /* table A=3: idx = 3 (0x60 >> 5) */
+      r.lane69 = 0x28 << 16;
+      r.target_157c48[1] = 0x60;
+      break;
+    case 4u:                    /* the opposite-side actor arm */
+      r.lane69 = 0x28 << 16;
+      r.sub_0b = 0;             /* threshold 0x30 > lane 0x28 */
+      r.actor_present = 1;
+      r.actor_same_side = 0;
+      break;
+    case 5u:                    /* table A=5: idx = 5 (0xA0 >> 5) */
+      r.lane69 = 0x28 << 16;
+      r.target_157c48[1] = 0xA0;
+      break;
+    default:                    /* 0: the B <= [0x157C44] sentinel (latch < 0) */
+      r.lane69 = 0x28 << 16;
+      r.latch_157c44 = -1;
+      break;
+  }
   return r;
 }
 
@@ -308,21 +343,25 @@ static void test_keeper_cpu_ladder_five_arms(void) {
     memset(&out, 0, sizeof out);
     assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
     assert(out.ran == 1);
+    assert(out.stage == cx);                                 /* FU290: computed CX */
     assert(out.install == 1 && out.install_code == 0x1Au);   /* 0x78227/4f/77 */
     assert(out.invoke_now == 1);                             /* 0x78222/4a/72 */
     assert(out.stamp_157c2c == stamps[cx - 1u]);             /* 0x78230/58/7e */
     assert(out.copy_pos == 0);
   }
-  /* CX 4 -> the `0x78294` arm installs row 0x1B, no stamp. */
+  /* CX 4 -> the `0x78294` arm installs row 0x1B, no stamp; it sets the
+   * `[0x157C5C]` latch (0x780D7). */
   rec = kc_ladder_open(4);
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.stage == 4 && out.latch_157c5c == 1);
   assert(out.install == 1 && out.install_code == 0x1Bu && out.invoke_now == 1);
   assert(out.stamp_157c2c == 0);
   /* CX 5 -> the `0x782B1` arm installs row 0x1C (falls into the 0x782BB tail). */
   rec = kc_ladder_open(5);
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.stage == 5 && out.latch_157c5c == 0);
   assert(out.install == 1 && out.install_code == 0x1Cu && out.invoke_now == 1);
   assert(out.stamp_157c2c == 0);
 }
@@ -351,7 +390,10 @@ static void test_keeper_cpu_ladder_code4_fallthrough(void) {
   assert(out.install == 1 && out.install_code == 0x4u && out.invoke_now == 1);
   assert(out.stamp_157c2c == 0);                 /* the 0x1A arm is skipped */
   /* it wins over every stage: CX 4 (would be 0x1B) still installs 4. */
-  rec.stage = 4;
+  rec = kc_ladder_open(4);
+  rec.tracked_present = 1;
+  rec.tracked_same_side = 1;
+  rec.tracked_code = 5;
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
   assert(out.install_code == 0x4u);
@@ -361,6 +403,91 @@ static void test_keeper_cpu_ladder_code4_fallthrough(void) {
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
   assert(out.install == 1 && out.install_code == 0x1Bu);
+}
+
+/* FU290 (phase-27 T5) — the stage-select machine. Live inputs only (camera
+ * triple, lane, follow speed, the `[0x157A4C]` gate, side, the actor cell);
+ * the `0x10E1xx` tables are ported. The unported latch/geometry cells
+ * (FU292-L1/L2/L3, FU290-L1/L2) are staged only for the table paths. */
+static void test_keeper_cpu_stage_select(void) {
+  struct fifa96_keeper_cpu_record rec;
+  struct fifa96_keeper_cpu_stage_out sel;
+
+  /* CX=1 from the live inputs alone: the keeper in the prepass band. */
+  rec = kc_rec_zero();
+  rec.cam_z = 0x800;                             /* |cam.z| > 0x7B0 */
+  rec.global_157a4c = 1;                         /* 0x77FB3 branch */
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 1 && sel.copy_src == 1);
+  assert(sel.latch_157c5c == 0);
+
+  /* the AX prepass gate: |cam.x| >= 0x420 closes it -> the non-ladder arm. */
+  rec.cam_x = 0x420;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 0 && sel.stage == 0);
+  rec.cam_x = 0;
+  /* |cam.z| <= 0x7B0 -> closed. */
+  rec.cam_z = 0x7B0;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 0);
+  rec.cam_z = 0x800;
+  /* the `[0x157A4C] != 1` XOR branch: side 0 with cam.z > 0 -> closed. */
+  rec.global_157a4c = 0;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 0);
+  rec.side = 1;                                  /* (cam.z>0) != (side==0) */
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 1);
+
+  /* CX=4: the opposite-side actor arm (sets the `[0x157C5C]` latch). */
+  rec = kc_rec_zero();
+  rec.cam_z = 0x800;
+  rec.global_157a4c = 1;
+  rec.lane69 = 0x28 << 16;                       /* lane_x = 0x28 */
+  rec.actor_present = 1;
+  rec.actor_same_side = 0;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.stage == 4 && sel.latch_157c5c == 1 && sel.copy_src == 3);
+  /* the same-side actor closes the CX=4 arm (falls through to the table). */
+  rec.actor_same_side = 1;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 0);        /* all latch cells zero */
+
+  /* the table paths: staged latch/geometry cells yield A ∈ {2,3,5} and CX=0. */
+  {
+    static const uint8_t want[3] = {2u, 3u, 5u};
+    static const int32_t row[3] = {0x20, 0x60, 0xA0};
+    for (int i = 0; i < 3; i++) {
+      struct fifa96_keeper_cpu_record r = kc_ladder_open(want[i]);
+      assert(fifa96_keeper_cpu_stage_select(&r, &sel) == FIFA96_OK);
+      assert(sel.ran == 1 && sel.stage == want[i]);
+      assert(sel.copy_src == 2);
+      assert(r.target_157c48[1] == row[i]);
+    }
+  }
+  /* CX=0 through the table: the `[0x157C44]` -1 sentinel. */
+  rec = kc_ladder_open(0);
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 0);
+}
+
+/* FU290 (phase-27 T5) RED->GREEN — the ladder now COMPUTES the stage index from
+ * the live inputs alone (no caller bridge). A keeper record in the prepass band
+ * installs its CX=1 row `0x1A`; on the pre-T5 baseline the record reached the
+ * selector with `stage == 0` (the `rec->stage` bridge was never fed a live
+ * value) and installed nothing. */
+static void test_keeper_cpu_ladder_live_stage_from_inputs(void) {
+  struct fifa96_keeper_cpu_record rec = kc_rec_zero();
+  struct fifa96_keeper_cpu_ladder_out out;
+  rec.code = 0x19;                               /* the keeper-hold row */
+  rec.cam_z = 0x800;                             /* the live camera in the AX band */
+  rec.global_157a4c = 1;
+  memset(&out, 0, sizeof out);
+  assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
+  assert(out.ran == 1);
+  assert(out.stage == 1);                        /* NON-ZERO, computed live */
+  assert(out.install == 1 && out.install_code == 0x1Au);
+  assert(out.invoke_now == 1);
 }
 
 /* FU283 §1/§2 — the head gates and the actor/side skip: every closed gate exits
@@ -417,17 +544,19 @@ static void test_keeper_cpu_ladder_head_gates(void) {
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
   assert(out.copy_pos == 1 && out.ran == 0 && out.install == 0);
 
-  /* stage 0 returns at the selector (0x781E4): ran, no install. */
+  /* CX = 0 returns at the selector (0x781E1 JZ 0x782C4): ran, no install. */
   rec = kc_ladder_open(0);
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
-  assert(out.ran == 1 && out.install == 0);
+  assert(out.ran == 1 && out.stage == 0 && out.install == 0);
 
-  /* stage > 5 fails the DEC/CMP/JA bound (0x78206): no install. */
-  rec = kc_ladder_open(6);
+  /* The `AX` prepass gate closed (0x77FF5): the non-ladder arm (FU290-L6),
+   * not the selector — `ran` is 0 and no stage is computed. */
+  rec = kc_ladder_open(1);
+  rec.cam_z = 0;                                /* |cam.z| <= 0x7B0 */
   memset(&out, 0, sizeof out);
   assert(fifa96_keeper_cpu_ladder_run(NULL, &rec, &out) == FIFA96_OK);
-  assert(out.ran == 1 && out.install == 0);
+  assert(out.ran == 0 && out.install == 0);
 }
 
 /* FU291 §Port shape (phase-27 T2) — the ladder head gate is now COMPUTED from
@@ -471,9 +600,10 @@ static void test_keeper_cpu_prepass_gate_from_input_range(void) {
 }
 
 /* FU283 §Port shape / Task 8 — the ladder is wired INTO the FU282 seam (the
- * default is the ported body, replacing the no-op stub). The live stage index
- * cannot be raised (its selector inputs are unported, FU283-L6), so a 0x19
- * record reaches the selector with `stage == 0` and installs nothing. */
+ * default is the ported body, replacing the no-op stub). FU290 (phase-27 T5):
+ * the stage index `CX` is now COMPUTED by the stage-select machine from the
+ * record's inputs — a `kc_ladder_open(0)` record computes CX=0 and installs
+ * nothing; the `[0x157C5C]` latch write-back rides the machine view. */
 static void test_keeper_cpu_ladder_seam(void) {
   fifa96_keeper_cpu cpu;
   struct fifa96_keeper_cpu_record rec;
@@ -491,13 +621,16 @@ static void test_keeper_cpu_ladder_seam(void) {
   assert(out.ladder_out.ran == 0 && out.ladder_out.install == 0);
 
   cpu.interlock_157c5d = 1;
-  rec.code = 0x19;
+  rec = kc_ladder_open(0);                      /* the CX machine runs, CX=0 */
+  rec.permit = 1;
+  rec.phase = 2;
   rec.ball_owner = 0;                           /* machine target 0x19 == code: suppressed */
-  rec.stage = 0;
   assert(fifa96_keeper_cpu_step(&cpu, &rec, &out) == FIFA96_OK);
   assert(out.ladder == 1);
-  assert(out.ladder_out.ran == 1 && out.ladder_out.install == 0);
+  assert(out.ladder_out.ran == 1 && out.ladder_out.stage == 0);
+  assert(out.ladder_out.install == 0);
   assert(out.install == 0);
+  assert(cpu.latch_157c5c == 0);                /* the machine's latch write-back (0) */
 }
 
 /* FU296 Seam A (phase-27 T3): the record-0 machine is stepped from the `i == 0`
@@ -553,6 +686,8 @@ int main(void) {
   test_keeper_cpu_ladder_five_arms();
   test_keeper_cpu_ladder_tracked_predicate();
   test_keeper_cpu_ladder_code4_fallthrough();
+  test_keeper_cpu_stage_select();
+  test_keeper_cpu_ladder_live_stage_from_inputs();
   test_keeper_cpu_ladder_head_gates();
   test_keeper_cpu_prepass_gate_from_input_range();
   test_keeper_cpu_ladder_seam();

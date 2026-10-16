@@ -115,3 +115,23 @@ itself and consumed downstream (row `0x1A` body), not a stage-select input.
   decompiled row-`0x1A` body. Owner: FU183/FU186-L3.
 
 **Carried (read, not rewritten):** FU283 §1.4, FU273 §1.3.
+
+## Closures / errata (phase-27 T5)
+
+* **The ladder's READERS of every cell in §Per-cell are now PORTED** — the
+  stage-select machine (`fifa96_keeper_cpu_stage_select`, FU290 T5) consumes
+  `0x157C44`/`0x157C48`/`0x157C4C` (`rec->latch_157c44`/`target_157c48[3]`),
+  `0x1577F4`/`0x1577F8` (words `0x1577F6`/`0x1577FA` via `rec->band_1577f6`/
+  `band_1577fa`), `0x157821` (byte0 `rec->pan_counter` LIVE, byte3
+  `rec->side_157824` leg), `0x1577BC` (word `0x1577BE` = `camera.follow_speed`
+  LIVE), and `0x158740` stays leg (FU292-L4). **Their WRITERS stay unported**:
+  FU292-L1 (the unrecovered `0x157C44`/`0x157C48` routine), FU292-L2 (the
+  `0x1577F0..FA` band struct), FU292-L3 (`0x157821` byte3) — unchanged, the
+  cells' live value is zero.
+* **`0x157C5C` — the ladder now WRITES it, as §Per-cell predicted.**
+  `fifa96_keeper_cpu_ladder_run` sets the latch `0` (`0x7802D`) / `1` in the CX=4
+  arm (`0x780D7`) and `fifa96_keeper_cpu_step` writes it back to the machine cell
+  (Seam A binds it to `mr->global_157c5c`). The phase-27 T4 fixture no longer
+  needs to stage it. (FU292-L6's consumer behaviour stays inferred.)
+* **`[0x157A4C]` = `[0x157A49] >> 24`** is expressed by the ladder's `AX`
+  prepass gate (FU290 T5); it maps to the LIVE `mr->global_157a4c`.

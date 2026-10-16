@@ -40,14 +40,41 @@ typedef struct fifa96_keeper_cpu_record {
   uint8_t is_T;              /* `*(param_1[10]) == 'T'` (0x77F03) */
   uint8_t actor_present;     /* `[0x157A83] != 0` (0x77F3C) */
   uint8_t actor_same_side;   /* `[0x157A83]` `+0x826` == rec `+0x826` (0x77F45) */
-  uint8_t stage;             /* `CX` ∈ 1..5 — the stage-select index. UNPORTED
-                              * producer (FU283-L6; the caller supplies it; 0 =
-                              * no stage, the honest live value) */
   uint8_t tracked_present;   /* `[0x1577CA] != 0` — `camera.tracked` (0x765C7) */
   uint8_t tracked_same_side; /* the tracked record's `+0x826` == rec `+0x826` */
   uint8_t tracked_code;      /* the tracked record's byte +0x91 (0x765E3) */
   uint8_t global_158740;     /* `[0x158740] >> 0x18` — UNPORTED gate (0x765FA) */
+
+  /* FU290 (phase-27 T5) — the stage-select machine `0x77F57..0x781E1` inputs,
+   * consumed by `fifa96_keeper_cpu_stage_select`. The machine replaces the
+   * caller-supplied `stage` bridge (T3) with a computed `CX`. Fields marked
+   * LIVE are mapped from engine state by the FU296 Seam A; the rest are
+   * unported producers and stay zero (their honest live value) — numbered legs. */
+  int32_t cam_x, cam_y, cam_z; /* `[0x15774C/0x157750/0x157754]` the camera triple (LIVE) */
+  int32_t lane69;             /* dword +0x69; `lane_x = lane69 >> 16` (LIVE) */
+  int16_t follow_speed;       /* `[0x1577BC] >> 16` = word[0x1577BE] (LIVE) */
+  uint8_t global_157a4c;      /* byte `[0x157A4C]` (`[0x157A49] >> 24`) (LIVE) */
+  uint8_t pan_counter;        /* byte `[0x157821]` (LIVE) */
+  uint8_t side_157824;        /* byte `[0x157824]` = `[0x157821] >> 24` — LEG FU292-L3 */
+  int32_t latch_157c44;       /* dword `[0x157C44]` — LEG FU290-L1/FU292-L1 */
+  int32_t target_157c48[3];   /* `[0x157C48/0x157C4C/0x157C50]` — LEG FU292-L1 */
+  int16_t bearing_795b4;      /* the `0x795B4` word angle (`[ESP+0xC]`) — LEG FU290-L2 */
+  int16_t band_1577f6;        /* word `[0x1577F6]` (`[0x1577F4] >> 16`) — LEG FU292-L2 */
+  int16_t band_1577fa;        /* word `[0x1577FA]` (`[0x1577F8] >> 16`) — LEG FU292-L2 */
+  int8_t sub_0b;              /* `[[rec+4]+0xB] >> 24` (byte +0xE) — LEG FU290-L5 */
+  int8_t sub_10;              /* `[[rec+4]+0x10] >> 24` (byte +0x13) — LEG FU290-L5 */
+  int16_t actor_vel_x;        /* actor `+0x71` word — the CX-4 copy term (LIVE) */
+  int16_t actor_vel_z;        /* actor `+0x73` word — the CX-4 copy term (LIVE) */
 } fifa96_keeper_cpu_record;
+
+/* FU290 — the stage-select machine's products. `ran` is the `AX` prepass gate
+ * (`0x77F95..0x78000`; `0` falls to the non-ladder `0x77FFA` arm, FU290-L6). */
+typedef struct fifa96_keeper_cpu_stage_out {
+  uint8_t ran;          /* the AX gate opened (`0x77FF5 JNZ 0x7802B`) */
+  uint8_t stage;        /* CX ∈ {0,1,4,5,A} */
+  uint8_t latch_157c5c; /* the `[0x157C5C]` write (CX=4 -> 1, else 0) */
+  uint8_t copy_src;     /* the `+0x4D` copy source: 0 none, 1 camera, 2 [0x157C48], 3 camera+2*actor */
+} fifa96_keeper_cpu_stage_out;
 
 /* FU283 §4/§5 — the ladder's products. Every installer is
  * `FUN_0007D9A4(rec, code, 0, ECX=1)`: **invoke-now**, unlike the machine's
@@ -59,6 +86,9 @@ typedef struct fifa96_keeper_cpu_ladder_out {
   uint8_t install_code;   /* 0x1A / 0x1B / 0x1C / 0x4 */
   uint8_t invoke_now;     /* `ECX=1` (always set with `install`; the FU283 contrast) */
   uint8_t stamp_157c2c;   /* the `0x1A` arms stamp `[0x157C2C]` 0x2C/0x2D/0x2E, else 0 */
+  uint8_t stage;          /* FU290: the computed CX from the stage-select machine */
+  uint8_t latch_157c5c;   /* FU290: the `[0x157C5C]` latch write (FU292) */
+  uint8_t copy_src;       /* FU290: the `+0x4D` copy source (see the stage_out) */
 } fifa96_keeper_cpu_ladder_out;
 
 /* The machine's products for one record. */
@@ -91,7 +121,7 @@ typedef struct fifa96_keeper_cpu {
   uint8_t force_install;    /* [0x157AB2] — the force-install latch */
   uint8_t interlock_157c5d; /* [0x157C5D] — the ladder GATE (one-shot interlock) */
   uint8_t latch_157c5c;     /* [0x157C5C] — the ladder-internal LATCH (a DISTINCT
-                             * cell; this machine never reads or writes it) */
+                             * cell; FU290 writes it in the ladder, FU292) */
   fifa96_keeper_cpu_ladder_fn ladder; /* the `0x78599` seam (NULL = stub) */
   void *ladder_ctx;
 } fifa96_keeper_cpu;
@@ -104,13 +134,22 @@ int fifa96_keeper_cpu_step(fifa96_keeper_cpu *cpu,
                            const fifa96_keeper_cpu_record *rec,
                            fifa96_keeper_cpu_out *out);
 
+/* FU290 — the stage-select machine (`0x77F57..0x781E1`), the FU283-L6 / FU296-L5
+ * blocker. Computes `CX` from the record's stage-select inputs (the `0x10E1xx`
+ * static stage tables, the camera/lane/global gates, the FU292 latch/geometry
+ * cells and the per-record sub-fields). The `CX=4/5/A` paths read unported
+ * producers (FU292-L1/L2/L3, FU290-L1/L2/L5) so their live value is zero; the
+ * `CX=1` path and the `AX` prepass gate are fully live. `out->ran` is the AX
+ * gate; a closed gate means the non-ladder `0x77FFA` arm (FU290-L6). */
+int fifa96_keeper_cpu_stage_select(const fifa96_keeper_cpu_record *rec,
+                                   fifa96_keeper_cpu_stage_out *out);
+
 /* FU283 §4/§5 — the ported `FUN_00077EAC` body: the head gates, the actor/side
  * skip, the `FUN_000765C4` code-4 fall-through, and the five install arms
- * (CX-1 through `0x77E98`). The stage index `rec->stage` and the unported
- * `global_158740` selector input are caller-supplied — the selector machine
- * itself stays an open leg (FU283-L6). The `[0x14C1D4]` bit-9 gate is now
- * computed live from `rec->side ^ rec->side_swap` + `rec->input_range`
- * (FU291, phase-27 T2). */
+ * (CX-1 through `0x77E98`). FU290 (phase-27 T5): the stage index `CX` is now
+ * COMPUTED by `fifa96_keeper_cpu_stage_select` from the record's inputs (the
+ * caller-supplied bridge is gone). The `[0x14C1D4]` bit-9 gate is computed live
+ * from `rec->side ^ rec->side_swap` + `rec->input_range` (FU291, phase-27 T2). */
 int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
                                  fifa96_keeper_cpu_ladder_out *out);
 

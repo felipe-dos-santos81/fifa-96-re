@@ -3461,12 +3461,17 @@ static void test_keeper_l4_release_reach(void) {
  * legitimate, staging a gate is a fake):
  *  - P1 `permit` — the `[0x110680][code] & 1` install-permission gate
  *    (FU282-L5, unported); the caller-supplied channel on the machine view.
- *  - P13 `rec.stage = 4` — the ladder's stage index `CX` (FU290/FU296-L5, no
- *    live producer; the T3 `rec.stage = e->stage` bridge).
+ *  - P13 — the stage index `CX`. **FU290 (phase-27 T5): the index is now
+ *    COMPUTED** by `fifa96_keeper_cpu_stage_select` from the record inputs; the
+ *    T3 `rec.stage = e->stage` bridge is gone. This fixture stages the machine's
+ *    INPUTS so it yields CX=4: the camera z behind the `AX` prepass gate
+ *    (`mr.render.camera.pos_z = -0x800`), `keeper->lane` (`0x28 << 16`), and an
+ *    opposite-side actor (`mr.entities.controlled` on team 1). The unported
+ *    latch cells stay zero (legs); they gate the CX=4 arm only via the
+ *    opposite-side actor, which is live.
  *  - P4 `mr.global_157c5d = 1` — the row-`0x19` interlock `[0x157C5D]`.
- *  - `mr.global_157c5c = 1` — the FU292 latch `[0x157C5C]`, which the native
- *    ladder stage-4 sets (FU290, the exact CX computation) but the ported ladder
- *    omits; it selects the row-`0x1B` `0x774DD` re-place (the self-actor path).
+ *  - `mr.global_157c5c = 1` — the FU292 latch `[0x157C5C]` (also set by the
+ *    machine's own CX=4 arm, FU290 `0x780D7`).
  *  - `keeper->stage92 = 2` — the row-`0x1B` stage latch (the phase-26c carry
  *    (iv) precedent; the isolated fixture has no live row-stage producer).
  *  - `team[0].slot_pool = 0` — the FU-70 slot machine's source pool
@@ -3493,17 +3498,20 @@ static void test_keeper_installer_reach(void) {
   mr.state.phase = 2;                              /* P2: the ladder gate phase */
   mr.state.period_length = 90;
   mr.entities.team[0].side = 0;
+  mr.entities.controlled =
+      (int32_t)FIFA96_MATCH_ENTITY_RECORDS;        /* the opposite-side actor (team 1 rec 0) */
   mr.entities.team[0].slot_pool = 0;               /* no live slot source (FU-70) */
   mr.phase_machine.side_controlled = 0;
   mr.global_157a4c = 0;                            /* CPU: the stage-4 tail emits sit-5 */
   mr.global_157c5d = 1;                            /* P4: the row-0x19 interlock */
   mr.global_157c5c = 1;                            /* FU292 latch -> the 0x774DD re-place */
+  mr.render.camera.pos_z = -0x800;                 /* FU290 AX gate: |cam.z| > 0x7B0 */
   keeper = &mr.entities.team[0].records[0];
   keeper->code = 0x19u;                            /* P5: the keeper-hold row */
   keeper->skip_9a = 0u;                            /* P7 */
   keeper->timer81 = 0u;                            /* P9 */
   keeper->has_slot = 0u;                           /* P3 (no queued action) */
-  keeper->stage = 4u;                              /* P13: the staged stage-select index */
+  keeper->lane = 0x28 << 16;                       /* FU290: lane_x=0x28 -> CX=4 */
   keeper->stage92 = 2u;                            /* the row-0x1B stage-2 (wide/re-place) */
   mr.keeper_cpu.permit = 1;                        /* P1: the install-permission gate */
 

@@ -323,6 +323,15 @@ struct fifa96_match_entities_frame {
   int16_t timer_b;         /* word 0x157800 */
   int16_t timer_c;         /* word 0x157806 */
   int16_t cam_z;           /* word 0x157754 */
+  /* FU290 (phase-27 T5): the stage-select machine's live inputs the seam maps
+   * onto the keeper-CPU record. The camera triple is the native
+   * `0x15774C/0x157750/0x157754`; `follow_speed` the `0x1577BC >> 16` word
+   * (word 0x1577BE); `pan_counter`/`global_157a4c` the bytes `0x157821`/
+   * `0x157A4C`. The unported latch cells stay zero (legs). */
+  int32_t cam_pos_x, cam_pos_y, cam_pos_z;
+  int16_t follow_speed;
+  uint8_t pan_counter;
+  uint8_t global_157a4c;
   int16_t intercept_x[FIFA96_MATCH_ENTITY_TEAMS]; /* word 0x10F37C+side*0xC */
   int16_t intercept_y[FIFA96_MATCH_ENTITY_TEAMS]; /* word +8 of the same record */
   /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` view the

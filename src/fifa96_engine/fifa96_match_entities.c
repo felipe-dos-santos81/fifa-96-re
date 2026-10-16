@@ -713,18 +713,36 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
       if (frame->keeper_cpu) {
         struct fifa96_keeper_cpu_record kc_rec;
         struct fifa96_keeper_cpu_out kc_out;
+        int32_t act = pool->controlled;
         memset(&kc_rec, 0, sizeof kc_rec);
         kc_rec.side = pool->team[team].side;                 /* byte +0x826 */
         kc_rec.code = e->code;                               /* byte +0x91 */
         kc_rec.phase = frame->phase;                         /* [0x157A4A]>>0x18 */
-        kc_rec.is_actor =
-            (uint8_t)(pool->controlled == ENTITY_ID(pool, team, i));
+        kc_rec.is_actor = (uint8_t)(act == ENTITY_ID(pool, team, i));
+        /* FU290 (phase-27 T5): the actor cell `[0x157A83]` (P10/P11) and the
+         * stage-select machine's live inputs. The unported latch cells
+         * (FU292-L1/L2/L3, FU290-L1/L2/L5) stay zero. */
+        kc_rec.actor_present = (uint8_t)(act != FIFA96_MATCH_ENTITY_NONE);
+        if (act != FIFA96_MATCH_ENTITY_NONE) {
+          uint32_t at = (uint32_t)act / FIFA96_MATCH_ENTITY_RECORDS;
+          uint32_t ai = (uint32_t)act % FIFA96_MATCH_ENTITY_RECORDS;
+          kc_rec.actor_same_side =
+              (uint8_t)(pool->team[at].side == pool->team[team].side);
+          kc_rec.actor_vel_x = pool->team[at].records[ai].vel_x;
+          kc_rec.actor_vel_z = pool->team[at].records[ai].vel_z;
+        }
         kc_rec.timer81 = e->timer81;                         /* word +0x81 */
         kc_rec.queued20 = e->has_slot ? 1u : 0u;             /* dword +0x20 */
         kc_rec.gate_9a = e->skip_9a;                         /* byte +0x9A */
-        kc_rec.stage = e->stage;                             /* CX (FU296-L5) */
         kc_rec.side_swap = frame->keeper_cpu->side_xor;      /* [0x157ABE] */
         kc_rec.permit = frame->keeper_cpu->permit;           /* P1 (FU282-L5) */
+        kc_rec.cam_x = frame->cam_pos_x;                     /* [0x15774C] */
+        kc_rec.cam_y = frame->cam_pos_y;                     /* [0x157750] */
+        kc_rec.cam_z = frame->cam_pos_z;                     /* [0x157754] */
+        kc_rec.lane69 = e->lane;                             /* dword +0x69 */
+        kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
+        kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
+        kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */
         (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
         if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
         if (kc_out.ladder_out.install)                       /* 0x78599 arms */
