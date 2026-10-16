@@ -3623,6 +3623,119 @@ static void test_keeper_installer_live_permit(void) {
   drop_fixture(f);
 }
 
+/* FU299 §2/§4 (phase-28 T2) — the interlock ordering, rider (a): the cell
+ * survival. The native `[0x157C5D]` is ONE process cell with a one-step pulse:
+ * each record-0 step clears it (`0x785A2`, fresh FU299 §1) and the row-`0x19`
+ * body sets it mid-walk (`0x74707`), so a frame's LAST row-`0x19` set survives
+ * to the next step's gate read (`0x7858E`). The phase-27 engine inverted it:
+ * the step's cleared view was written back to the cell after the whole walk
+ * (`run.c:4257`), erasing the same-walk row set.
+ *
+ * This rider: both keepers hold code `0x19` (each dispatch runs the row body's
+ * unconditional prologue `r->ran = 1; mr->global_157c5d = 1`); team 1's keeper
+ * is the frame's LAST row-`0x19` setter. The default camera triple keeps the
+ * stage-select AX gate closed (`|cam.z| > 0x7B0` fails, `0x77F9A/0x77FA5`), so
+ * no ladder install can rewrite the codes. The assertion is the cell itself —
+ * no gate is staged, the setter is the row body's own live write. RED on the
+ * phase-27 tree: the frame-tail write-back zeroes the cell. */
+static void test_keeper_interlock_survives_frame(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].slot_pool = 0;               /* no live slot source (FU-70) */
+  mr.entities.team[0].records[0].code = 0x19u;
+  mr.entities.team[0].records[0].skip_9a = 0u;
+  mr.entities.team[0].records[0].timer81 = 0u;
+  mr.entities.team[0].records[0].has_slot = 0u;
+  mr.entities.team[1].records[0].code = 0x19u;
+  mr.entities.team[1].records[0].skip_9a = 0u;
+  mr.entities.team[1].records[0].timer81 = 0u;
+  mr.entities.team[1].records[0].has_slot = 0u;
+  assert(mr.global_157c5d == 0u);                  /* no staged interlock */
+
+  one_granted_frame(&mr);
+  /* The frame's last row-0x19 set (team 1's keeper) survives the walk. */
+  assert(mr.global_157c5d == 1u);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU299 §2/§4 (phase-28 T2) — the interlock ordering, rider (b): the same-frame
+ * cross-team arm. Native (derived, FU299-L1): the two per-team walks share the
+ * ONE cell, so team 0's row-`0x19` set mid-walk is what team 1's step gate
+ * reads in the SAME frame — the primary arming path for the team whose step
+ * runs second. The phase-27 engine bound the cell at frame head, so team 1's
+ * gate read the pre-frame value and the same-frame arm never fired.
+ *
+ * This rider: team 0's keeper holds `0x19` (the setter; the frame carries no
+ * staged P4). Team 1's keeper holds `0x19` with the T4 ladder-open inputs —
+ * lane `0x28`, stage `2`, the AX-gate camera — and the actor MOVED off team 1
+ * rec 0 onto team 0 rec 0 (`is_actor` skip `0x77F36` for one, setter for the
+ * other). The witness is the ladder's own consequence: the CX=4 arm installs
+ * row `0x1B` invoke-now, whose same-frame dispatch reaches the sit-5 emit
+ * (phase 9 -> row `0x1E`) — the T4 frame-A trajectory, but for team 1 and with
+ * NO staged interlock. RED on the phase-27 tree: team 1's gate reads the
+ * frame-head bind (0), the ladder never fires, and the code stays `0x19`. */
+static void test_keeper_interlock_cross_team_install(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *k0;
+  struct fifa96_match_entity *k1;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+
+  mr.state.phase = 2;                              /* P2: the ladder gate phase */
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.controlled = 0;                      /* the actor on team 0 rec 0 */
+  mr.entities.team[0].slot_pool = 0;               /* no live slot source (FU-70) */
+  /* The T4 fixture mirrored for the team that steps second: the controlled team
+   * is team 1, so the sit-5 emit's phase-9 arm installs `0x1E` on TEAM 1's
+   * keeper (the phase-9 branch's controlled team, `run.c` 0x8D098 arm) — the
+   * same assertion T4 makes on team 0. The common install-3 prefix re-installs
+   * `0x19` on every inactive record first, so the 0x1E write is the frame's
+   * last word on team 1 rec 0. */
+  mr.phase_machine.side_controlled = 1;
+  mr.global_157a4c = 0;
+  mr.global_157c5d = 0;                            /* NO staged P4: the set is in-frame */
+  /* The T4 ladder-open camera input, sign-flipped for side 1: the AX gate's
+   * pair test is `(cam.z > 0) != (side == 0)` (`0x77FE3`/`0x77FD0`), so a
+   * positive z opens it for team 1 where T4's negative z opened it for team 0. */
+  mr.render.camera.pos_z = 0x800;
+
+  k0 = &mr.entities.team[0].records[0];
+  k0->code = 0x19u;                                /* the setter (row-0x19 body) */
+  k0->skip_9a = 0u;
+  k0->timer81 = 0u;
+  k0->has_slot = 0u;
+
+  k1 = &mr.entities.team[1].records[0];
+  k1->code = 0x19u;                                /* the T4 ladder-open record */
+  k1->skip_9a = 0u;
+  k1->timer81 = 0u;
+  k1->has_slot = 0u;
+  k1->lane = 0x28 << 16;                           /* the CX=4 lane input */
+  k1->stage92 = 2u;                                /* the row-0x1B stage-2 (wide/re-place) */
+
+  /* One frame: team 0's row-0x19 set arms team 1's step gate in the SAME walk;
+   * the ladder's CX=4 arm installs `0x1B` and its dispatch reaches the sit-5
+   * emit -> phase 9 -> row `0x1E` on team 1's keeper. */
+  one_granted_frame(&mr);
+  assert(k1->code == 0x1Eu);                       /* cross-team armed + dispatched */
+  assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU295 §2.2/§2.3 (phase-27 T6): the controlled-side actor lift `FUN_0008C33C`
  * (`0x8C3BE`). Fresh `decompile_function 0x8C33C` (this session): after the reset
  * picks the team target, `if (([0x157AAC]>>0x18) == byte[team+0x826])
@@ -6950,6 +7063,8 @@ int main(void) {
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
   test_keeper_installer_live_permit();
+  test_keeper_interlock_survives_frame();
+  test_keeper_interlock_cross_team_install();
   test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();

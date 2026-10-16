@@ -1408,10 +1408,12 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   }
   /* FU290/FU292 (phase-27 T5): the native `[0x157C5C]` is ONE process cell — the
    * keeper ladder writes it (`0x7802D`/`0x780D7`) and the row-`0x1B` body reads
-   * it at `0x76FF4` in the SAME frame. The frame-level Seam A bind would expose
-   * the machine's write only next frame, so publish it here (the keeper
-   * record-0 step set `latch_written`); the flag fires only when the ladder ran
-   * (`permit != 0`), so M2 is untouched. */
+   * it at `0x76FF4` in the SAME frame. The T5 in-frame publish predates FU299
+   * (phase-28 T2, Option B): the per-step hug now publishes the ladder's write
+   * to `mr->global_157c5c` right after the record-0 step (before this
+   * dispatch), so this re-publish is value-identical (the view was bound from
+   * the cell at that step); it only consumes `latch_written`. The flag fires
+   * only when the ladder ran (`permit != 0`), so M2 is untouched. */
   if (mr->keeper_cpu.latch_written) {
     mr->global_157c5c = mr->keeper_cpu.latch_157c5c;
     mr->keeper_cpu.latch_written = 0;
@@ -4243,20 +4245,22 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * no standalone pre-pass is wired. */
     struct fifa96_match_entities_frame ef;
     match_run_entity_frame(mr, &ef);
-    /* FU296 Seam A: bind the record-0 machine view to the run's process cells
-     * (read run -> step -> write run) and hand it to the walk, which steps it
-     * in the `i == 0` branch before the single record dispatch. */
-    mr->keeper_cpu.interlock_157c5d = mr->global_157c5d;
-    mr->keeper_cpu.latch_157c5c = mr->global_157c5c;
-    mr->keeper_cpu.force_install = mr->keeper_latch_157ab2;
+    /* FU296 Seam A + FU299 (phase-28 T2, Option B): hand the record-0 machine
+     * view to the walk, which steps it in the `i == 0` branch before the single
+     * record dispatch. `side_xor` is a per-frame config cell; the three process
+     * cells (`[0x157C5D]`/`[0x157C5C]`/`[0x157AB2]`) travel as pointers and are
+     * bound/published PER STEP inside the walk — bind-before/publish-after the
+     * step, reproducing the native gate -> ladder -> clear -> dispatch order
+     * (FU299 §4), so a row-`0x19` set survives to the next step's gate read
+     * (the one-step pulse; team 1's step sees team 0's same-frame set). */
     mr->keeper_cpu.side_xor = mr->side_swap;
     ef.keeper_cpu = &mr->keeper_cpu;
+    ef.interlock_157c5d = &mr->global_157c5d;
+    ef.latch_157c5c = &mr->global_157c5c;
+    ef.latch_157ab2 = &mr->keeper_latch_157ab2;
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
                                       mr);
     if (rc != FIFA96_OK) return rc;
-    mr->global_157c5d = mr->keeper_cpu.interlock_157c5d;
-    mr->global_157c5c = mr->keeper_cpu.latch_157c5c;
-    mr->keeper_latch_157ab2 = mr->keeper_cpu.force_install;
     match_run_entity_drain(mr);
     /* FU-150 P2: the referee machine (the native phase-body/act invocation
      * runs inside the entity/phase chain) once per granted frame. Idle when no

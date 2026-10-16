@@ -781,7 +781,32 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.target_157c48[0] = frame->target_c48[0];
         kc_rec.target_157c48[1] = frame->target_c48[1];
         kc_rec.target_157c48[2] = frame->target_c48[2];
+        /* FU299 (phase-28 T2, Option B): the per-step hug. The run's process
+         * cells bind into the machine view immediately before the step and the
+         * view publishes back to them immediately after it — both before this
+         * record's single dispatch. Native order (fresh FU299 §1): gate read
+         * `0x7858E` -> `CALL 0x77EAC` -> clear `0x785A2` -> row dispatch
+         * `0x785A8`; the row-`0x19` set (`0x74707`) then survives to the next
+         * step's gate read (a one-step pulse), so team 1's step gate sees team
+         * 0's same-frame set. The frame-level bind/write-back is deleted
+         * (FU299 §4); the `[0x157AB2]` publish moves here too (FU304-L2: the
+         * native write is mid-machine, `0x7856C`, before the same-walk row
+         * bodies 0x1E/0x1D read it). The three pointers travel together; NULL
+         * leaves the view caller-owned. */
+        uint8_t hug = (uint8_t)(frame->interlock_157c5d != NULL &&
+                                frame->latch_157c5c != NULL &&
+                                frame->latch_157ab2 != NULL);
+        if (hug) {
+          frame->keeper_cpu->interlock_157c5d = *frame->interlock_157c5d;
+          frame->keeper_cpu->latch_157c5c = *frame->latch_157c5c;
+          frame->keeper_cpu->force_install = *frame->latch_157ab2;
+        }
         (void)fifa96_keeper_cpu_step(frame->keeper_cpu, &kc_rec, &kc_out);
+        if (hug) {
+          *frame->interlock_157c5d = frame->keeper_cpu->interlock_157c5d;
+          *frame->latch_157c5c = frame->keeper_cpu->latch_157c5c;
+          *frame->latch_157ab2 = frame->keeper_cpu->force_install;
+        }
         if (kc_out.install) e->code = kc_out.install_code;   /* 0x78576 */
         if (kc_out.ladder_out.install)                       /* 0x78599 arms */
           e->code = kc_out.ladder_out.install_code;

@@ -342,11 +342,18 @@ struct fifa96_match_entities_frame {
   int16_t intercept_y[FIFA96_MATCH_ENTITY_TEAMS]; /* word +8 of the same record */
   /* FU296 Seam A (phase-27 T3): the record-0 machine `FUN_000782D0` view the
    * `i == 0` branch of the FU-141 walk steps before the single `action()`
-   * dispatch. The caller (the match run) binds its `interlock_157c5d`/
-   * `latch_157c5c`/`force_install`/`side_xor` cells to the run's process cells
-   * each frame (read run -> step -> write run) and owns its storage; NULL
-   * leaves the walk inert. */
+   * dispatch. The caller (the match run) owns its storage and binds `side_xor`
+   * per frame; NULL leaves the walk inert. */
   fifa96_keeper_cpu *keeper_cpu;
+  /* FU299 (phase-28 T2, Option B): the run's process cells the per-step hug
+   * binds/publishes around the record-0 step — the `[0x157C5D]` ladder-gate
+   * cell, the `[0x157C5C]` latch and the `[0x157AB2]` force-install latch. The
+   * caller (the match run) points them at `mr->global_157c5d`/
+   * `mr->global_157c5c`/`mr->keeper_latch_157ab2`; the three travel together and
+   * NULL (the fixture default) leaves the machine view caller-owned. */
+  uint8_t *interlock_157c5d;
+  uint8_t *latch_157c5c;
+  uint8_t *latch_157ab2;
 };
 
 /* A ported action-row body over one pool record. Returns FIFA96_OK on success;
