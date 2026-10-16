@@ -219,6 +219,41 @@ static void test_keeper_cpu_deferred_install(void) {
   assert(out.install == 0 && out.force_install == 0);
 }
 
+/* FU298 (phase-28 T1) — the `0x110680` install-permission table (P1) + the
+ * `0x784DC` bind. The table is static image data — 45 bytes (`0x110680..
+ * 0x1106AC`), no writer exists in the LE image (19 read-only sites, FU298 §2) —
+ * so the port is a byte-exact `const` table plus the bind
+ * `permit = (code < 0x2D) ? tbl[code] & 1 : 0`; byte `0x2D` begins the mode
+ * table (`0x1106AD`), the bound is port-side hardening (the native has no guard;
+ * the out-of-range aliasing stays FU298-L1). Fresh `read_memory 0x110680`
+ * (phase-28 T1): `3` at {0,3,4,5,6,0x19}, `2` at {7,0x10..0x13}, else 0. */
+static void test_keeper_cpu_permit_bind(void) {
+  static const uint8_t expect[FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE] = {
+      3, 0, 0, 3, 3, 3, 3, 2, 0, 0,
+      0, 0, 0, 0, 0, 0, 2, 2, 2, 2,
+      0, 0, 0, 0, 0, 3, 0, 0, 0, 0,
+      0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+      0, 0, 0, 0, 0};
+  static const uint8_t permitted[6] = {0, 3, 4, 5, 6, 0x19};
+  static const uint8_t bit1_only[5] = {7, 0x10, 0x11, 0x12, 0x13};
+  uint32_t i;
+
+  assert(FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE == 0x2Du);
+  for (i = 0; i < FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE; i++)
+    assert(fifa96_keeper_cpu_permit_tbl[i] == expect[i]);
+  /* bit 0 (`&1`) over the whole table domain — the 16 `&1` sites' read. */
+  for (i = 0; i < FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE; i++)
+    assert(fifa96_keeper_cpu_permit((uint8_t)i) == (expect[i] & 1u));
+  for (i = 0; i < sizeof permitted; i++)
+    assert(fifa96_keeper_cpu_permit(permitted[i]) == 1u);
+  /* value 2 (bit 1 only) is NOT a permit: `!= 0` would wrongly pass here. */
+  for (i = 0; i < sizeof bit1_only; i++)
+    assert(fifa96_keeper_cpu_permit(bit1_only[i]) == 0u);
+  /* ≥0x2D: byte 0x2D is the mode table — the port reads 0 (FU298-L1). */
+  for (i = 0x2Du; i <= 0xFFu; i++)
+    assert(fifa96_keeper_cpu_permit((uint8_t)i) == 0u);
+}
+
 /* FU282 §1.4 (`0x7857B..0x785A2`): the ladder gate
  * `phase == 2 && [rec+0x20] == 0 && [0x157C5D] != 0` -> the `0x78599` seam.
  * Fresh disasm (`0x784E9 = 0f84af000000`, `JZ 0x7859E`) confirms the
@@ -698,6 +733,7 @@ int main(void) {
   test_prepass_gates_are_phase2_only();
   test_keeper_cpu_head_counter();
   test_keeper_cpu_deferred_install();
+  test_keeper_cpu_permit_bind();
   test_keeper_cpu_ladder_gate();
   test_keeper_cpu_ladder_five_arms();
   test_keeper_cpu_ladder_tracked_predicate();

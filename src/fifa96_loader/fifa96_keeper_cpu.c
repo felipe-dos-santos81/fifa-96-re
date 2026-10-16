@@ -7,11 +7,27 @@
 
 #include <string.h>
 
+/* FU298 (phase-28 T1) — P1, the `0x110680` install-permission table. Fresh
+ * `read_memory 0x110680` (this task, /FIFA96.EXE): the 45 bytes below; byte
+ * `0x2D` begins the mode table (`0x1106AD` reads `2`) — the table cannot be
+ * longer without aliasing it. Static image data: no writer exists in the LE
+ * image (FU298 §2/§3; the "producer" is the image's static initializer). */
+const uint8_t fifa96_keeper_cpu_permit_tbl[FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE] = {
+    3, 0, 0, 3, 3, 3, 3, 2, 0, 0,
+    0, 0, 0, 0, 0, 0, 2, 2, 2, 2,
+    0, 0, 0, 0, 0, 3, 0, 0, 0, 0,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    0, 0, 0, 0, 0};
+
+uint8_t fifa96_keeper_cpu_permit(uint8_t code) {
+  if (code >= FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE) return 0; /* FU298-L1 bound */
+  return (uint8_t)(fifa96_keeper_cpu_permit_tbl[code] & 1u);
+}
+
 void fifa96_keeper_cpu_init(fifa96_keeper_cpu *cpu) {
   if (!cpu) return;
   cpu->head_flag = 0;
   cpu->side_xor = 0;
-  cpu->permit = 0;
   cpu->counter_ad0[0] = 0;
   cpu->counter_ad0[1] = 0;
   cpu->counter_acc[0] = 0;

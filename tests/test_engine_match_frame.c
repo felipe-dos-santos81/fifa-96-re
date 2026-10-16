@@ -3459,8 +3459,10 @@ static void test_keeper_l4_release_reach(void) {
  *
  * Staged producer INPUTS (the plan's rule: staging a producer's input is
  * legitimate, staging a gate is a fake):
- *  - P1 `permit` — the `[0x110680][code] & 1` install-permission gate
- *    (FU282-L5, unported); the caller-supplied channel on the machine view.
+ *  - **P1 `permit` is NOT staged (FU298, phase-28 T1): it is live** — the seam
+ *    computes `fifa96_keeper_cpu_permit(e->code)` from the static `0x110680`
+ *    table; the keeper's staged code `0x19` reads byte `3` -> bit 0 set, so
+ *    this reach's gate opens from the record's own state.
  *  - P13 — the stage index `CX`. **FU290 (phase-27 T5): the index is now
  *    COMPUTED** by `fifa96_keeper_cpu_stage_select` from the record inputs; the
  *    T3 `rec.stage = e->stage` bridge is gone. This fixture stages the machine's
@@ -3513,7 +3515,6 @@ static void test_keeper_installer_reach(void) {
   keeper->has_slot = 0u;                           /* P3 (no queued action) */
   keeper->lane = 0x28 << 16;                       /* FU290: lane_x=0x28 -> CX=4 */
   keeper->stage92 = 2u;                            /* the row-0x1B stage-2 (wide/re-place) */
-  mr.keeper_cpu.permit = 1;                        /* P1: the install-permission gate */
 
   /* Frame A (phase 2): the ladder installs row 0x1B (invoke-now); the row's
    * self-actor re-place path reaches the sit-5 emit -> phase 9 -> row 0x1E. */
@@ -3522,9 +3523,10 @@ static void test_keeper_installer_reach(void) {
   assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
 
   /* Frames B: the row-0x1E claim walks stages 0..4 to the stage-5 outlet (the
-   * stage-4 anim selection resolves row 0x45). permit=0 so the phase-2/other
-   * install tree does not clobber the claim row. */
-  mr.keeper_cpu.permit = 0;
+   * stage-4 anim selection resolves row 0x45). The live permit is 0 here (the
+   * installed code 0x1E reads table byte 0), so the phase-2 install tree does
+   * not clobber the claim row — the same suppression the phase-27 fixture
+   * staged. */
   for (int i = 0; i < 400 && !reached_outlet; i++) {
     one_granted_frame(&mr);
     reached_outlet = (keeper->stage92 == 5u && keeper->anim_id == 0x45u);
@@ -3552,42 +3554,37 @@ static void test_keeper_installer_reach(void) {
   drop_fixture(f);
 }
 
-/* FU296 §5/§6 (phase-27 T7): the Layer-2 acceptance — the honest live waiver.
+/* FU298 §4/§6 (phase-28 T1): the P1 flip — the phase-27 T7 waiver, re-aimed.
  *
- * The T4 reach above fires the whole installer chain **because it stages P1
- * `permit = 1`**. On a LIVE engine frame nothing raises `permit`: it is
- * `[0x110680][code] & 1` (FU282-L5, UNPORTED), left 0 by
- * `fifa96_keeper_cpu_init` (`src/fifa96_loader/fifa96_keeper_cpu.c:14`) and
- * written by no `src/` producer (only tests set it). The gate
- * `if (rec->permit != 0)` guards BOTH the record-0 install tree AND the ladder
- * gate (`fifa96_keeper_cpu.c:50`, native `0x784DC`/`0x784E9`), so on every live
- * frame the ladder never runs, no row-`0x1B`/`0x1E` installs, phase 9 is never
- * reached, the stage-5 release never fires, and this chain never raises
- * `camera.pos_y`.
+ * The phase-27 waiver pinned the honest DEAD gate: `permit` was the unported
+ * `[0x110680][code] & 1` (FU282-L5) left 0 by `fifa96_keeper_cpu_init`, so no
+ * live frame raised it, the ladder never ran, no row-`0x1B`/`0x1E` installed,
+ * phase 9 was never reached, and this chain never raised `camera.pos_y`.
+ * FU298-L6 named that test RED-by-design for the Stage-2 flip.
  *
- * This drives the T4 reach's exact keeper scenario through the REAL per-frame
- * body (`fifa96_match_run_frame`, the same `ef.keeper_cpu = &mr->keeper_cpu`
- * seam the SDL3 `make game` run uses) with the engine's OWN `permit` (nothing
- * staged) and pins the waiver: `permit == 0` throughout, the ladder never ran,
- * no `0x1B`/`0x1E` install, no keeper release. A future `permit` producer (or a
- * gate flip) makes this RED — at which point the census legitimately moves.
+ * FU298 ports P1 as what it is in the image — a static 45-byte table with no
+ * writer (19 read-only sites) — bound live at the seam:
+ * `kc_rec.permit = fifa96_keeper_cpu_permit(e->code)`. The T4 reach's keeper
+ * (code `0x19` -> table byte `3` -> bit 0) now opens the gate from the record's
+ * own state with NO staged permit, so this test drives the exact T4 scenario
+ * minus the staged P1 through the REAL per-frame body (the same
+ * `ef.keeper_cpu = &mr->keeper_cpu` seam `make game` uses) and pins the flip:
+ * the ladder's `CX=4` arm installs row `0x1B`, its same-frame dispatch reaches
+ * the sit-5 emit (phase 9 -> row `0x1E`), and the row-`0x1E` claim walks to the
+ * stage-5 outlet — the T4 frame-A/B trajectory, un-staged. On the phase-27 tree
+ * the first assert fails (the dead permit leaves the code at `0x19`); the flip
+ * is the Stage-2 acceptance signal (FU298-L6), not a regression.
  *
- * Even if `permit` WERE live, the only fully-live `CX` is 1 (the AX gate + the
- * CX=1 arm), which installs the NULL row `0x1A` (FU296-L7) — a `NULL->fn` flip
- * with no live producer is a dead count (the rows-27/29/2C precedent).
- *
- * Verdict (spec §6): the visible follow/pan camera does NOT move live — the
- * honest waiver, landed on the Layer-1 proof: the T4 GREEN reach + the T5
- * ported/live `CX` stage machine + the T6 actor lift. */
-static void test_keeper_installer_live_waiver(void) {
+ * The release / visible-camera assertions stay with the T4 reach (they need the
+ * stage-5 `frame < 3` staging) and the Layer-2 acceptance (spec §5). */
+static void test_keeper_installer_live_permit(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   struct fifa96_match_entity *keeper;
-  int installed = 0, ladder_ran = 0, released = 0;
+  int reached_outlet = 0;
 
   fifa96_match_run_init(&mr);
   begin_isolated(&mr, f.engine);
-  assert(mr.keeper_cpu.permit == 0);              /* P1 unported: the LIVE value */
 
   /* The exact T4 reach scenario — minus the staged `permit`. */
   mr.state.phase = 2;
@@ -3607,17 +3604,20 @@ static void test_keeper_installer_live_waiver(void) {
   keeper->lane = 0x28 << 16;                      /* the CX=4 lane input */
   keeper->stage92 = 2u;
 
-  for (int i = 0; i < 120; i++) {
+  /* Frame 1: the live permit opens the gate; the ladder gate (P4 staged) runs
+   * the CX=4 arm; row `0x1B` installs invoke-now and dispatches on this same
+   * frame (the T4 frame-A trajectory, un-staged). */
+  one_granted_frame(&mr);
+  assert(keeper->code == 0x1Eu);                  /* installed + dispatched live */
+  assert(mr.state.phase == 9u);                   /* situation 5 -> phase 9 */
+
+  /* The claim walk: the installed row-`0x1E` walks stages 0..4 to the stage-5
+   * outlet (`anim_id == 0x45`) — the machinery the phase-27 waiver pinned dead. */
+  for (int i = 0; i < 400 && !reached_outlet; i++) {
     one_granted_frame(&mr);
-    assert(mr.keeper_cpu.permit == 0);            /* never raised live */
-    if (mr.keeper_cpu.latch_written) ladder_ran = 1;
-    if (keeper->code == 0x1Bu || keeper->code == 0x1Eu) installed = 1;
-    if (mr.keeper_cam_y == 0x50) released = 1;    /* 0x50 = the stage-5 release value */
-    assert(mr.render.camera.pos_y == 0);          /* the installer raised no camera */
+    reached_outlet = (keeper->stage92 == 5u && keeper->anim_id == 0x45u);
   }
-  assert(ladder_ran == 0);                        /* the permit gate blocks the ladder */
-  assert(installed == 0);                         /* no row-0x1B/0x1E install */
-  assert(released == 0);                          /* the stage-5 release never fires */
+  assert(reached_outlet == 1);
 
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
@@ -6949,7 +6949,7 @@ int main(void) {
   test_row1e_claim_place_pause_and_offsets();
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
-  test_keeper_installer_live_waiver();
+  test_keeper_installer_live_permit();
   test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();

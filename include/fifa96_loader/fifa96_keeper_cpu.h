@@ -12,17 +12,36 @@
  * Evidence: `docs/ghidra/FU282_r11l4_record0_machine.md`,
  * `docs/ghidra/FU283_r11l4_ladder.md`. */
 
+/* FU298 (phase-28 T1) — P1, the `0x110680` install-permission table. The
+ * table is static image data: 45 bytes (`0x110680..0x1106AC`), no writer
+ * exists in the LE image (19 read-only sites; FU298 §2), so the port is the
+ * byte-exact `const` table plus the bind read at the engine seam —
+ * `permit = (code < 0x2D) ? tbl[code] & 1 : 0` (the native `0x784DC` gate).
+ * `3` at {0,3,4,5,6,0x19}, `2` at {7,0x10..0x13}, else 0; bit 0 is the
+ * permission. Byte `0x2D` begins the mode table (`0x1106AD`): the bound is
+ * port-side hardening (no native guard; the out-of-range aliasing stays
+ * FU298-L1). The `0x1F` special case lives in `FUN_00076130` only and must
+ * NOT leak into `0x784DC`. Evidence:
+ * `docs/ghidra/FU298_r11l4_install_permission.md`. */
+#define FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE 0x2Du
+extern const uint8_t
+    fifa96_keeper_cpu_permit_tbl[FIFA96_KEEPER_CPU_PERMIT_TBL_SIZE];
+
+/* The `0x784DC` bind: `(&fifa96_keeper_cpu_permit_tbl)[code] & 1`, 0 for
+ * `code >= 0x2D` (the port-side bound above). */
+uint8_t fifa96_keeper_cpu_permit(uint8_t code);
+
 /* The machine's per-frame inputs for one record (`rec`). The install tree's
- * possession chain (`[[rec]+0x7B2]`, `[[[rec]]+0x7A6]`) and the `0x110680`
- * install-permission table are unported producers (FU282-L3/L5), so the
- * caller supplies their resolved booleans; the native comparison results they
- * stand in for are named per field. */
+ * possession chain (`[[rec]+0x7B2]`, `[[[rec]]+0x7A6]`) is an unported
+ * producer (FU282-L3), so the caller supplies its resolved booleans; the
+ * native comparison results they stand in for are named per field. */
 typedef struct fifa96_keeper_cpu_record {
   uint8_t side;         /* byte +0x826 — the XOR-side source */
   uint8_t code;         /* byte +0x91 — the current action code */
   uint8_t phase;        /* `[0x157A4A] >> 0x18` */
   uint8_t is_actor;     /* `rec == [0x157A83]` */
-  uint8_t permit;       /* `[0x110680][code] & 1` (table unported, FU282-L5) */
+  uint8_t permit;       /* `[0x110680][code] & 1` — the live bind is
+                         * `fifa96_keeper_cpu_permit(code)` (FU298) */
   uint8_t ball_owner;   /* `rec == [[rec]+0x7B2]` (possession, FU282-L3) */
   uint8_t owner_rel_5;  /* owner-related record `[+0x91] == 5` (FU282-L3) */
   uint16_t timer81;     /* word +0x81 (non-zero => target 0, `0x78507`) */
@@ -114,11 +133,6 @@ typedef int (*fifa96_keeper_cpu_ladder_fn)(void *ctx,
 typedef struct fifa96_keeper_cpu {
   uint8_t head_flag;        /* [0x157823] — the one-shot actor flag */
   uint8_t side_xor;         /* [0x157ABE] — the XOR-side cell */
-  uint8_t permit;           /* `[0x110680][code] & 1` (P1, FU282-L5) — the
-                             * install-permission gate. The per-action-code table
-                             * is UNPORTED, so this is a caller-supplied producer
-                             * INPUT (default 0 = the honest live value; the
-                             * staged reach test drives it). */
   uint16_t counter_ad0[2];  /* [0x157AD0 + idx*2] — the actor-side frame counter */
   uint16_t counter_acc[2];  /* [0x157ACC + idx*2] — the complement-side counter */
   uint8_t force_install;    /* [0x157AB2] — the force-install latch */

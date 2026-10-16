@@ -736,8 +736,9 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
        * BEFORE the single `CALL dword[rec+0x18]` dispatch (`0x785A8`) below.
        * Writing `e->code` here makes that one dispatch run the installed row —
        * a standalone pre-pass call would double-dispatch (FU281 §3). The view
-       * is caller-owned; NULL (the fixture default) leaves the walk inert. The
-       * unported producers (P1 permit, P3 possession, P6/P8/P12) stay zero. */
+       * is caller-owned; NULL (the fixture default) leaves the walk inert. P1
+       * is live (FU298); the unported producers (P3 possession, P6/P8/P12)
+       * stay zero. */
       if (frame->keeper_cpu) {
         struct fifa96_keeper_cpu_record kc_rec;
         struct fifa96_keeper_cpu_out kc_out;
@@ -763,7 +764,10 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.queued20 = e->has_slot ? 1u : 0u;             /* dword +0x20 */
         kc_rec.gate_9a = e->skip_9a;                         /* byte +0x9A */
         kc_rec.side_swap = frame->keeper_cpu->side_xor;      /* [0x157ABE] */
-        kc_rec.permit = frame->keeper_cpu->permit;           /* P1 (FU282-L5) */
+        /* FU298 (phase-28 T1): P1 is live — the `0x784DC` gate is the static
+         * `0x110680` table read at the record's own code (`perm[code] & 1`,
+         * bound ≤0x2C); the caller-supplied permit cell is retired. */
+        kc_rec.permit = fifa96_keeper_cpu_permit(e->code);
         kc_rec.cam_x = frame->cam_pos_x;                     /* [0x15774C] */
         kc_rec.cam_y = frame->cam_pos_y;                     /* [0x157750] */
         kc_rec.cam_z = frame->cam_pos_z;                     /* [0x157754] */
