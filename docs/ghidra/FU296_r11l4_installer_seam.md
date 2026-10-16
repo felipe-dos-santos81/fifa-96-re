@@ -267,3 +267,24 @@ this draft.
   into a **local** `fifa96_keeper_cpu_stage_out.stage`, and the seam consumes
   `kc_out.install` / `kc_out.ladder_out.install`. (The same correction lands in
   `FU290_r11l4_stage_select.md`.)
+* **The interlock co-blocker (final whole-branch review, T8): P1 alone does NOT
+  arm the ladder.** The T8 notes above name **P1 `[0x110680]` (this doc's
+  FU296-L2) as the sole remaining end-to-end blocker**; the final review shows
+  that is **incomplete**. The seam unconditionally writes the machine view back
+  over the run cells **after** the entity walk
+  (`src/fifa96_engine/fifa96_match_run.c:4257`
+  `mr->global_157c5d = keeper_cpu.interlock_157c5d`), and the step clears the view
+  (`src/fifa96_loader/fifa96_keeper_cpu.c:80`, the native `0x785A2` clear). The
+  only live `[0x157C5D]=1` writer is the row-`0x19` handler
+  (`src/fifa96_engine/fifa96_match_handlers.c:4097`), which runs **inside** that
+  same walk — so its write is clobbered before the next frame's bind
+  (`src/fifa96_engine/fifa96_match_run.c:4249`) reads it. Net: the ladder gate
+  `interlock != 0` (`fifa96_keeper_cpu.c:65`) is **always false**, so **porting
+  P1 alone will still not arm the ladder.** The remaining end-to-end blocker is
+  **P1 AND the dead interlock arming path** — P1 must be paired with fixing that
+  read→step→write ordering (or publishing the interlock in-frame, exactly as T5
+  did for `[0x157C5C]` via `latch_written`), or the camera unlock still won't
+  fire. **Inert today (`permit == 0`) and M2-invisible.** Cross-refs: **FU296-L3**
+  (below, "`[0x157C5D]` … is **never read** by any engine code …
+  set-and-forgotten") and **FU257-L6** (`docs/ENGINE.md`, the `[0x157C5D]`
+  consumer wiring).

@@ -1782,7 +1782,10 @@ the build also produces the windowed `fifa96` target (`make game`).
     the values `2`/`3` arise **only** via `MOV ECX,EDX`@`0x781DC` from the table
     byte `A = byte[0x10E184+idx] ∈ {1..5}`. **FU283 §3's "`ECX ∈ {0,1,2,4,5}`"
     conflates the immediate path with the `A` path.** The `CX` machine is **PORTED
-    and live** (`fifa96_keeper_cpu_stage_select`, `0x77F57..0x781E1` exactly); the
+    and live-wired (permit-gated)** (`fifa96_keeper_cpu_stage_select`,
+    `0x77F57..0x781E1` exactly; it is reachable **only** through `ladder_run`
+    under `if (rec->permit != 0)` (`fifa96_keeper_cpu.c:50,65-78`), so it does
+    **not** run on a live frame — no live installer); the
     FU296 Seam A feeds it from real engine state and consumes its install via
     `kc_out.install`/`kc_out.ladder_out.install` — **not** a `kc_rec.stage` field
     (the T3 `rec.stage = e->stage` bridge is retired; the machine computes `CX`
@@ -1791,7 +1794,7 @@ the build also produces the windowed `fifa96` target (`make game`).
     thresholds). The `0x10E1xx` stage tables are PORTED as data (their geometry
     **meaning** stays undecoded, FU290-L1); `0x114E04` is the 257-entry sine table.
   - **FU291 — the gate value is PORTED.** `prepass_ah2 = (input_range[(side ^
-    side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:104-105`, the `0x77EE8 AND
+    side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:234-236`, the `0x77EE8 AND
     AH,2` fold); the `[0x14C1D4]` table was already `fifa96_input_range_words` →
     `mr->input_range`. **Zero-δ** (the gate's only consumer — the keeper-CPU ladder
     — is not wired live). Legs FU291-L1 (`[0x157ABE]`'s producer `FUN_0007417c`),
@@ -1824,7 +1827,8 @@ the build also produces the windowed `fifa96` target (`make game`).
     pinned `2*RECS`). **P13 / FU296-L5** (the stage index) was the phase's blocker;
     FU290's machine now **ADVANCES** it (a non-zero `CX` from live cells). The
     remaining end-to-end blocker is **P1 `[0x110680]`** (the install-permission
-    table, FU296-L2/FU282-L5) — a *different* unported producer, zero live — plus
+    table, FU296-L2/FU282-L5) — a *different* unported producer, zero live — **AND
+    the dead interlock arming path** (the final-review co-blocker, below), plus
     the **`CX=1`→row-`0x1A` NULL lane** (FU296-L7). Legs FU296-L1 (link/reconcile —
     done), L2 (P1), L3 (the P4 interlock bind), L4 (the test seam), L5 (P13), L6
     (P6), L7 (the `0x1A` NULL slot), L8 (the invoke-now reconciliation).
@@ -1867,8 +1871,33 @@ the build also produces the windowed `fifa96` target (`make game`).
     (`[0x1577CA]` stand-in), L8 (`FUN_00076B28` steering), L9 (row `0x1B` is not a
     Ghidra function). The interpolation legs are the load-bearing remainder of the
     wide path.
+  - **The interlock co-blocker (final whole-branch review, T8) — P1 alone does NOT
+    arm the ladder.** The register above blames **P1 `[0x110680]` alone**; that is
+    **incomplete**. The seam unconditionally writes the machine view back over the
+    run cells **after** the entity walk
+    (`src/fifa96_engine/fifa96_match_run.c:4257`
+    `mr->global_157c5d = keeper_cpu.interlock_157c5d`), and the step clears that
+    view every frame (`src/fifa96_loader/fifa96_keeper_cpu.c:80`, the native
+    `0x785A2` clear). The only **live** writer of `[0x157C5D]=1` is the row-`0x19`
+    handler (`src/fifa96_engine/fifa96_match_handlers.c:4097`), which runs
+    **inside** that same walk — so its write is clobbered before the next frame's
+    bind (`src/fifa96_engine/fifa96_match_run.c:4249`) can read it. Net: the
+    ladder gate `interlock != 0` (`fifa96_keeper_cpu.c:65`) is **always false**,
+    so **porting P1 `[0x110680]` ALONE will still not arm the ladder.** The
+    remaining end-to-end blocker is **P1 `[0x110680]` AND the dead interlock
+    arming path** — P1 must be paired with fixing that read→step→write ordering
+    (or publishing the interlock in-frame, exactly as T5 did for `[0x157C5C]` via
+    `latch_written`), or the camera unlock still won't fire. **Inert today
+    (`permit == 0`) and M2-invisible.** Cross-refs: **FU296-L3** ("`[0x157C5D]`
+    … is **never read** by any engine code … set-and-forgotten",
+    `docs/ghidra/FU296_r11l4_installer_seam.md:208-210`) and **FU257-L6** (the
+    `[0x157C5D]` consumer wiring, `docs/ENGINE.md` FU257 leg register
+    `:1552` pre-edit).
   **The open legs the phase leaves, named:** **P1 `[0x110680]`** (the
-  install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker;
+  install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker — **AND
+  the dead interlock arming path** (the co-blocker above; **FU296-L3** / **FU257-L6**:
+  the seam clobbers the row-`0x19` `[0x157C5D]=1` before the next bind reads it,
+  so P1 alone does not arm the ladder);
   **the `CX=1`→NULL row-`0x1A` lane** (FU296-L7/FU297); **FU290-L1** (the
   `0x10E1xx` stage-table semantics — ported as data, meaning undecoded),
   **FU290-L2** (the `0x795B4` bearing chain — caller-supplied), **FU290-L5** (the

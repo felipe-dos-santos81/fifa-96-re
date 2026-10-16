@@ -2256,8 +2256,10 @@ the stage-select inputs (`FU283-L1/L6`) each carry a named native owner.
 ## M2 phase-27 — the keeper-CPU installer (the camera unlock): the census hold + the leg register (FU290…FU297)
 
 **The installer machines go live on a real frame and the `CX` stage-select
-machine is now ported live from real engine state — but no end-to-end install
-fires, so the phase closes as a Layer-1 reach + a Layer-2 waiver. Census holds
+machine is now ported and live-wired (permit-gated: it is reachable **only**
+through `ladder_run` under `if (rec->permit != 0)`, so it does **not** run on a
+live frame) from real engine state — but no end-to-end install fires, so the
+phase closes as a Layer-1 reach + a Layer-2 waiver. Census holds
 `59/80 = 73%` (`36 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…`
 byte-identical (no re-pin).** The phase-27 recon wave (`docs/ghidra/FU290…FU297`)
 froze the installer frontier past R11-L4, and the Stage-2 plan, in order: T1 the
@@ -2271,7 +2273,7 @@ was made.
 **Landed (each with a headless granted-frame test):**
 
 - **T2 — the FU291 gate value** (`feat(fu291)`, `85bb24e`): `prepass_ah2 =
-  (input_range[(side ^ side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:104-105`,
+  (input_range[(side ^ side_swap) & 1] >> 9) & 1` (`fifa96_keeper_cpu.c:234-236`,
   the `0x77EE8 AND AH,2` fold), from `fifa96_input_range_words` →
   `mr->input_range`. **Zero-δ** — the gate's only consumer (the keeper-CPU
   ladder) is not wired live; M2 byte-identical.
@@ -2331,7 +2333,16 @@ field; the machine computes `CX` into a **local** `stage_out.stage` and the seam
 consumes `kc_out.install` / `kc_out.ladder_out.install`.
 
 **The leg register (appended, quoted):** **P1 `[0x110680]`** (the
-install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker; **the
+install-permission, FU296-L2/FU282-L5) — the decisive end-to-end blocker — **AND
+the dead interlock arming path** (the co-blocker: the seam unconditionally writes
+the machine view back over the run cells after the walk,
+`fifa96_match_run.c:4257` `mr->global_157c5d = keeper_cpu.interlock_157c5d`, and
+the step clears it (`fifa96_keeper_cpu.c:80`, native `0x785A2`); the only live
+`[0x157C5D]=1` writer is the row-`0x19` handler `fifa96_match_handlers.c:4097`,
+**inside** that same walk, so its write is clobbered before the next frame's bind
+`:4249` reads it — the gate `interlock != 0` (`fifa96_keeper_cpu.c:65`) is always
+false, so **P1 alone will not arm the ladder**; FU296-L3 / FU257-L6; inert today,
+M2-invisible); **the
 `CX=1`→NULL row-`0x1A` lane** (FU296-L7/FU297); **FU290-L1/L2/L5/L7**;
 **FU292-L1/L2/L3** (the writers); **FU295-L1** (the `0x741C4` driver's caller) /
 **FU196-L6** (the `FUN_0007417C` restart sink — the lift's caller; wiring it
@@ -2350,12 +2361,16 @@ M2 `b281a9b2…` byte-identical (cmp-verified, no re-pin); census recomputed and
 end-to-end behind a **granted-frame fixture the golden tape does not traverse**
 (Layer 1, GREEN), but the windowed smoke (`make game`, `DISPLAY=:1`) traverses
 **no live keeper restart** — the installer chain cannot fire while P1
-`[0x110680]` (`permit`) is unported, and the only fully-live `CX=1` arm installs
+`[0x110680]` (`permit`) is unported **AND the interlock arming path is dead** (the
+seam clobbers the row-`0x19` `[0x157C5D]=1` before the next bind reads it, so P1
+alone does not arm the ladder; the co-blocker above / FU296-L3 / FU257-L6), and
+the only fully-live `CX=1` arm installs
 the NULL row `0x1A`. The visible follow/pan camera is therefore **NOT made live
 by this phase**; the Layer-1 landing is the phase's acceptance. No fabricated
 live-ness.
 
 **The honest ceiling:** no faked producer; the install-permission slot
-(`P1`/`FU282-L5`), the row-`0x1A` NULL lane, the stage-select input families
+(`P1`/`FU282-L5`), the **dead interlock arming path** (FU296-L3/FU257-L6), the
+row-`0x1A` NULL lane, the stage-select input families
 (`FU290-L1/L2/L5`, `FU292-L1/L2/L3`) and the `copy_pos` copy each carry a named
 native owner.
