@@ -423,3 +423,9 @@ keeper-CPU leg register); FU296 (the seam).
   names it "height"); the setter's `[0x1577F0]` low-clamp to `[0x157750]` then
   usually dominates. The engine seat passes `(int16_t)jitter` and its own clamp
   preserves this. Owner: `0x77423`; `fifa96_camera_event_set`.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review adjudicated FU301-L6's reading correct. Quoted correction: "the seat's BX height is camY-derived (`SI = dword[0x157750]`, nothing writes ESI through `0x77420`), so L10's 'BX = jitter' is superseded; the port must use the camY-derived height, not jitter, and the §6 seat-call discussion aligns accordingly."
+
+**Verdict:** GO with correction — FU301-L6 adjudicated correct; L10's "BX = jitter" superseded; the port uses the camY-derived height (`SI = dword[0x157750]`, nothing writes ESI through `0x77420`).

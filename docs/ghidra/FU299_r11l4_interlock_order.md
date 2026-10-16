@@ -166,3 +166,9 @@ exists as well (`0x7858E`, fresh), so the interlock was never truly read-less.
   publish and the write-back); if a future handler writes `mr->global_157c5c` like row-`0x19` writes
   `[0x157C5D]`, the same inversion class appears — the Stage-2 fix should cover `:4257-4259` as a
   block, not the interlock line alone.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review verdict: OK — Option B is mechanically sound. The review's fresh reads confirm the `[0x157C5D]` clear site is in `FUN_000782D0`, not inside a function named `0x77EAC` (the draft's E1 erratum stands).
+
+**Verdict:** GO — Option B mechanically sound; `[0x157C5D]` clear site confirmed in `FUN_000782D0` (draft E1 erratum stands).

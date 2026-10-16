@@ -203,3 +203,9 @@ unchanged NO-GO** — P1 `[0x110680]` (FU296-L2) **and** the interlock ordering
 (FU304-L5) remain the blockers; this task adds the `[0x157AB2]` publish ordering
 (FU304-L2) and the `input_range` wiring (FU304-L4) to the same promotion's checklist.
 Census unmoved; no producer faked.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review verdict: OK with the cross-draft contract merge (the review's Top-1): the copy arm is fresh-verified; §3(A)'s freezing of `e->code = install_code` as "applied" must merge with FU300-G1 — both Seam A installs route through `fifa96_match_entities_install` (incl. stage92/timer89/ran/+0x7B), else row-0x1A's first dispatch mis-routes on stale stage92 (violating the FU297 faithful-route bar). The Stage-2 plan adopts the merged contract.
+
+**Verdict:** GO with contract merge — copy arm fresh-verified; §3(A) `e->code = install_code` merges with FU300-G1 (both Seam A installs through `fifa96_match_entities_install`, incl. stage92/timer89/ran/+0x7B), else row-0x1A's first dispatch mis-routes on stale stage92 (violates the FU297 faithful-route bar).

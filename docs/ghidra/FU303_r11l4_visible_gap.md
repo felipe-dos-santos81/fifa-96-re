@@ -394,3 +394,9 @@ reader census); ENGINE.md phase-27 leg register.
 **Honest ceiling:** this analysis changes no code and moves no census (`59/80 = 73%`); it
 classifies existing gaps only. No producer is faked and every waivable cell carries its
 consuming chain and its visible consequence.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review verdict: OK — `0x157824` is 2 WRITEs in `FUN_000703E8` (fresh-verified); the per-cell verdicts are coherent.
+
+**Verdict:** GO — `0x157824` = 2 WRITEs in `FUN_000703E8` fresh-verified; the per-cell verdicts are coherent.

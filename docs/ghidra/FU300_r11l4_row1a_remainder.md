@@ -376,3 +376,9 @@ the natural tape stops the task for the M2 frame diff first (FU305/§5 re-pin ru
 
 **Carried docs (read, not rewritten):** FU284 §1/§2.1/§2.3/§4; FU186 §1.1/§2.1/§4;
 FU297 §1/§2/§3/§4; FU295; FU290; FU296; FU292/FU293/FU294.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review verdict: OK-with-caveat. The draft's "only unported deps are sinks" understates its own L2: `0x79C50`/`0x6E598` are movement/anim bridges, not sinks. The 59→60 GO is conditional on the Stage-2 P1 (FU298) + interlock (FU299) + G1/G2 contract + the Layer-1 reach test.
+
+**Verdict:** GO (conditional) — 59→60 wired count holds only with the Stage-2 P1 (FU298) + the interlock (FU299) + the G1/G2 contract + the Layer-1 reach test; `0x79C50`/`0x6E598` are movement/anim bridges, not sinks.

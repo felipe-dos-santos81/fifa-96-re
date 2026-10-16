@@ -397,3 +397,9 @@ re-pin protocol (§6).
    function; the period-end family — the FU196-L6-adjacent class). Owner:
    `0x742B4` (resolve the containing function; carried FU196-L6); if wired it
    moves the presentation team order and the ladder side fold like `0x7417C`.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review adjudication: the state-indexed permit table ends at index `0x2C` (45 bytes; FU298 wins). The extra "permit=1" codes {0x2F,0x44,0x47,0x49,0x4A,0x4B,0x5D,0x5E} are mode-table bytes (`0x1106AD` = idx 0x2D opens mode table 1; `0x1106C3` opens table 2), not permit entries. The Stage-2 P1 port bounds reads to ≤0x2C; FU298-L1 stays open.
+
+**Verdict:** GO — state-indexed permit table ends at index `0x2C` (45 bytes; FU298 wins); the extra "permit=1" codes {0x2F,0x44,0x47,0x49,0x4A,0x4B,0x5D,0x5E} are mode-table bytes (`0x1106AD` idx 0x2D opens mode table 1; `0x1106C3` opens table 2), not permit entries; Stage-2 P1 bounds reads to ≤0x2C; FU298-L1 stays open.

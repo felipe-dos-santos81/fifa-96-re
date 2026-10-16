@@ -305,3 +305,9 @@ port); FU157/FU167/FU171 (the pan-cell semantics); FU204/FU256 (the
   always); any port must consume the identical stream positions or the null
   backend diverges. Owner: `0x92AC8` call sites `0x7719F`/`0x77233`/`0x77247`/
   `0x772C5`.
+
+## Review erratum (wave review, 2026-10-16)
+
+Wave review adjudicated the seat-argument dispute in this draft's favor: `SI = dword[0x157750]` loaded at `0x77228`; FU302-L10's "BX = jitter" is wrong.
+
+**Verdict:** GO — seat-argument reading upheld (`SI = dword[0x157750]` loaded at `0x77228`); FU302-L10 "BX = jitter" superseded.
