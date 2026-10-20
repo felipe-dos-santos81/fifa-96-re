@@ -775,6 +775,7 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
         kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
         kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */
+        kc_rec.band_1577fa = frame->timer_a;                 /* word 0x1577FA (FU300 T4) */
         /* FU292-L1 (FU-179 §4): the `[0x157C44]`/`[0x157C48]` writer
          * `fifa96_keeper_hold_predict` -> `mr->predict_c44`/`predict_c48_*`. */
         kc_rec.latch_157c44 = frame->latch_c44;
@@ -807,6 +808,15 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
           *frame->latch_157c5c = frame->keeper_cpu->latch_157c5c;
           *frame->latch_157ab2 = frame->keeper_cpu->force_install;
         }
+        /* FU300 T4 (phase-28, G2): the ladder's `[0x157C2C]` stamp is ONE
+         * process cell — the native arm writes it (0x78230/0x78258/0x7827E)
+         * BEFORE its `CALL 0x7D9A4`, and the row-`0x1A` direction machine reads
+         * it back in the SAME frame (0x766FC). Publish it before the install
+         * apply, mirroring that order; a stamp of 0 is the arm-not-reached
+         * value (the native never clears the cell). */
+        if (frame->stamp_157c2c != NULL &&
+            kc_out.ladder_out.stamp_157c2c != 0)
+          *frame->stamp_157c2c = kc_out.ladder_out.stamp_157c2c;
         /* FU304 §3(A) / FU300-G1 (phase-28 T3): both installs apply through
          * the pool installer, not a bare `e->code` write — the native
          * `0x78576` and the ladder arms (fresh FU304 §1: `XOR EBX,EBX`

@@ -1562,6 +1562,16 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->follow_speed = mr->render.camera.follow_speed;
   f->pan_counter = mr->render.camera.pan_counter;
   f->global_157a4c = mr->global_157a4c;
+  /* FU300 (phase-28 T4): the row-0x1A cells the frame carries to the walk —
+   * the native raw dwords 0x1577BE (`follow_speed` low / `screen_lead_x` high)
+   * and 0x1577C0 (`screen_lead_x` low / `screen_lead_z` high), and
+   * word[0x1577FA] (`band_1577fa`). The lead cells' only live writer is the
+   * row's `'T'` arm; staged zero otherwise, so the tape is unchanged. */
+  f->lead_x = (int32_t)((uint32_t)(uint16_t)mr->render.camera.follow_speed |
+                        ((uint32_t)(uint16_t)mr->screen_lead_x << 16));
+  f->lead_z = (int32_t)((uint32_t)(uint16_t)mr->screen_lead_x |
+                        ((uint32_t)(uint16_t)mr->screen_lead_z << 16));
+  f->timer_a = mr->band_1577fa;
   f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
   f->target_c48[0] = mr->predict_c48_x;
   f->target_c48[1] = mr->predict_c48_y;
@@ -1870,6 +1880,7 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
   mr->screen_period_frames = 0;
   mr->screen_install_hint = 0;
   mr->screen_actor_age = 0;
+  mr->screen_lead_x = 0;   /* FU300 T4: word[0x1577C0] (the 'T' arm writes it) */
   mr->screen_lead_z = 0;
   mr->goal_no_score = 0;
   mr->goal_last_id = 0;
@@ -2068,6 +2079,17 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: the [0x157AB2] force latch */
+  /* FU300 T4: the row-0x1A process cells (the ladder stamp arrives live; the
+   * lead/band/bounce cells' producers are unported legs and stage zero; the
+   * `screen_lead_x` reset rides `match_run_reset_screen_state`). */
+  mr->global_157c2c = 0;
+  mr->band_1577f0 = 0;
+  mr->band_1577fa = 0;
+  mr->bounce_15759f = 0;
+  mr->bounce_1575cc = 0;
+  mr->bounce_1575d0 = 0;
+  mr->match1a_event_id = 0;
+  mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;           /* T3/FU-178: no unported row-09 arm */
   mr->match1b_wide_leg = 0;            /* T5/FU-285: no unported row-1B wide */
@@ -2193,6 +2215,16 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: fresh [0x157AB2] force latch */
+  /* FU300 T4: fresh row-0x1A process cells (see init; `screen_lead_x` rides
+   * `match_run_reset_screen_state`). */
+  mr->global_157c2c = 0;
+  mr->band_1577f0 = 0;
+  mr->band_1577fa = 0;
+  mr->bounce_15759f = 0;
+  mr->bounce_1575cc = 0;
+  mr->bounce_1575d0 = 0;
+  mr->match1a_event_id = 0;
+  mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;
   mr->match1b_wide_leg = 0;
@@ -4258,6 +4290,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
     ef.interlock_157c5d = &mr->global_157c5d;
     ef.latch_157c5c = &mr->global_157c5c;
     ef.latch_157ab2 = &mr->keeper_latch_157ab2;
+    ef.stamp_157c2c = &mr->global_157c2c;   /* FU300 T4 / G2 */
     rc = fifa96_match_entities_update(&mr->entities, &ef, match_run_dispatch_entity,
                                       mr);
     if (rc != FIFA96_OK) return rc;

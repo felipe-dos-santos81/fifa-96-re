@@ -3756,11 +3756,14 @@ static void test_action_1c_live_route(void) {
   drop_fixture(&f);
 }
 
-/* Row 0x1A (FU-186 §2.1): the bounded stage-0 body. The slot is NULL/uncounted
- * (its only installer is the unported FUN_00077EAC ladder), so the body is
- * driven directly. The tracked-teammate predicate is unported (FU186-L4), so
- * the gate takes the zero branch: ran=1, timer89=0, stage += 2, target := pos.
- * A stub leaves these untouched. */
+/* Row 0x1A (FU-186 §2.1 + FU300 §2, phase-28 T4): the full body. The slot is
+ * NULL/uncounted in T4 (the wire + the live reach + the census are T5's), so
+ * the body is driven directly. Without a tracked teammate the stage-0 arm falls
+ * through stage 1/2 into the movement/event block: ran=1, timer89=0, the
+ * `[0x157C2C]` cell 0 installs anim 0 (row flags bit 0 = 1, so the stage-3
+ * +0x44 arm advances) and the event ladder picks id 9 (follow_speed 0 < 7)
+ * with the anim select 0xF (follow_speed < 8). The final stage is 4. A stub
+ * leaves these untouched. */
 static void test_action_1a_runs_body(void) {
   struct fixture f;
   make_fixture(&f);
@@ -3776,10 +3779,12 @@ static void test_action_1a_runs_body(void) {
   f.mr.record.target_z = 0;
   assert(fifa96_match_action_1A(&f.mr) == FIFA96_OK);
   assert(f.mr.record.ran == 1u);          /* 0x766BE +0x9E */
-  assert(f.mr.record.timer89 == 0);       /* 0x766BE */
-  assert(f.mr.record.stage92 == 2u);      /* +0x92 += 2 */
+  assert(f.mr.record.timer89 == 0);       /* 0x766BE / 0x76A95 */
+  assert(f.mr.record.stage92 == 4u);      /* 0 -> 2 -> 3 -> the +0x44 arm */
   assert(f.mr.record.target_x == 0x111);  /* 0x766F7 0x79B1C snap */
   assert(f.mr.record.target_z == 0x333);
+  assert(f.mr.match1a_event_id == 9u);    /* follow_speed 0 < 7 */
+  assert(f.mr.match1a_anim == 0x0Fu);     /* follow_speed 0 < 8 */
   drop_fixture(&f);
 }
 

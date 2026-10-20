@@ -382,3 +382,55 @@ FU297 §1/§2/§3/§4; FU295; FU290; FU296; FU292/FU293/FU294.
 Wave review verdict: OK-with-caveat. The draft's "only unported deps are sinks" understates its own L2: `0x79C50`/`0x6E598` are movement/anim bridges, not sinks. The 59→60 GO is conditional on the Stage-2 P1 (FU298) + interlock (FU299) + G1/G2 contract + the Layer-1 reach test.
 
 **Verdict:** GO (conditional) — 59→60 wired count holds only with the Stage-2 P1 (FU298) + the interlock (FU299) + the G1/G2 contract + the Layer-1 reach test; `0x79C50`/`0x6E598` are movement/anim bridges, not sinks.
+
+---
+
+## Implementation errata (phase-28 T4, 2026-10-20; fresh bytes, /FIFA96.EXE read-only)
+
+Quoted errata for §2.2/§2.4/§2.5 — the frozen text is kept verbatim above; these
+corrections were derived while porting the body and are pinned by
+`tests/test_engine_match_frame.c::test_action_1a_*`.
+
+* **E4 — §2.4's `'T'` arm reads the raw-dword high words, not `follow_speed`.**
+  Fresh `disassemble_bytes 0x7687b` (40 B):
+
+  ```
+  0x7687b CALL 0x92AC8
+  0x76880 MOV EDX,[0x001577be]    ; dword at 0x1577BE
+  0x76886 AND EAX,0x3
+  0x76889 SAR EDX,0x10            ; = word[0x1577C0] (the alias rule: +2)
+  0x7688e SAR EDX,CL
+  0x76890 NEG EDX
+  0x76892 MOV word[0x001577c0],DX ; C0 := -(old C0 >> (rng&3))
+  0x76899 CALL 0x92AC8
+  0x7689e MOV EDX,[0x001577c0]    ; dword at C0 (low = new C0, high = old C2)
+  0x768a7 SAR EDX,0x10            ; = word[0x1577C2] (old C2)
+  0x768ae SAR EAX,CL
+  0x768b0 NEG EAX
+  0x768b2 MOV [0x001577c2],AX     ; C2 := -(old C2 >> (rng&3))
+  ```
+
+  So `word[0x1577C0]` and `word[0x1577C2]` **self-jitter**; the §2.4 wording
+  "`word[0x1577C2] := -(word[0x1577C0] >> CL)`; reads the new C0" and the §5
+  shape's `word[0x1577BE]`-derived pair are dword-alias misreads. The metric
+  and camera adds at `0x768b8..0x76900` likewise read the *new* C0/C2:
+  `word[+0x71] = 0x8DC68(new C0, new C2)`, `[0x15774C] += new C0`,
+  `[0x157754] += new C2`. The port uses those reads.
+* **E5 — §2.4's `word[EBP+0x7F] = AX` is the `timer7f` low word, not
+  `face7d`.** The `0xCD474(lane_z, cam_dz6f)` heading lands at `+0x7F` (the
+  low half of the `+0x7F` dword the engine models as `timer7f`); `+0x7D` is
+  the separate `0x79C50` face word.
+* **E6 — §2.5's "the stage-3 +0x44 arm runs IN THE SAME CALL" also means the
+  emit can rewrite `+0x92`.** `0x76A90` (`0x8A938(7,side,0)`) runs before the
+  `0x76A95 [EBP+0x89]=0; INC byte[EBP+0x92]`; on the closed-session direct
+  route the sit-7 table-2 arm writes phase `0xD` and `0x8D65D` installs action
+  0 over the non-controlled team's records 0..10 (including the row's own
+  record 0) via `FUN_0007D9A4`, so the increment reads the installer's `0`.
+  The port syncs the staged `+0x92` into the pool record before the emit and
+  reads it back after.
+* **E7 — §7/L2's `0x702F8` is not a leg.** `FUN_000702F8` is already ported as
+  `fifa96_camera_ramp` (FU-148 §2.1(c)/§5.2, `src/fifa96_loader/fifa96_camera.c`);
+  the camera-Y clamp uses it (the `EDX` passthrough is dropped by the port,
+  matching the native function's push/pop of `EDX`). Likewise `0x79C50` →
+  `fifa96_entity_face` and `0x6E598` → `fifa96_match_run_record_anim_install`
+  are the ported bridges, per the review erratum above.

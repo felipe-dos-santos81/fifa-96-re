@@ -354,6 +354,11 @@ struct fifa96_match_entities_frame {
   uint8_t *interlock_157c5d;
   uint8_t *latch_157c5c;
   uint8_t *latch_157ab2;
+  /* FU300 (phase-28 T4, G2): the in-frame publish of the keeper ladder's
+   * `[0x157C2C]` stamp (`ladder_out.stamp_157c2c`, the native 0x2C/0x2D/0x2E
+   * writes before `CALL 0x7D9A4`). The caller points it at
+   * `mr->global_157c2c`; NULL leaves the cell caller-owned. */
+  uint8_t *stamp_157c2c;
 };
 
 /* A ported action-row body over one pool record. Returns FIFA96_OK on success;

@@ -678,6 +678,27 @@ struct fifa96_match_run {
   uint8_t global_157c5c;
   uint8_t global_157c5d;
   uint8_t keeper_latch[8];
+  /* FU300 (phase-28 T4): the row-0x1A process cells the full body consumes.
+   * `global_157c2c` = the native dword `[0x157C2C]` direction stamp — the
+   * keeper ladder arms write 0x2C/0x2D/0x2E in-frame (the seam publishes
+   * `stamp_157c2c`, G2) and the row's direction machine rewrites it 0x5C/0x54;
+   * every native write is a dword immediate with a zero high word, so the
+   * modeled domain is one byte.
+   * `band_1577f0`/`band_1577fa` = `word[0x1577F0]`/`word[0x1577FA]`, the
+   * direction-machine band gates (their producers are unported, FU292-L2; the
+   * cells are the honest staged-zero live value; `band_1577fa` is also fed to
+   * the entity frame as `word[0x1577FA]`). `bounce_15759f`/`bounce_1575cc`/
+   * `bounce_1575d0` = the goal-bounce cells `[0x15759F]`/`word[0x1575CC]`/
+   * `word[0x1575D0]` the id-1 ladder arm reads (producer FUN_00072AC4
+   * unported, FU-145 / FU300-L3; staged zero). The `word[0x1577C0]/[0x1577C2]`
+   * lead words live with the screen state below (`screen_lead_x`/
+   * `screen_lead_z`). */
+  uint8_t global_157c2c;
+  int16_t band_1577f0;
+  int16_t band_1577fa;
+  int32_t bounce_15759f;
+  int16_t bounce_1575cc;
+  int16_t bounce_1575d0;
   /* FU296 Seam A (phase-27 T3) + FU299 (phase-28 T2, Option B): the record-0
    * machine `FUN_000782D0` view the FU-141 walk steps in its `i == 0` branch.
    * `fifa96_match_run_init`/`_begin` reset it; `fifa96_match_run_frame` hands
@@ -703,6 +724,16 @@ struct fifa96_match_run {
    * `fifa96_match_action_1B`; cleared by init/begin (observability, never a
    * silent no-op). */
   uint8_t match1b_wide_leg;
+  /* FU300 T4 (phase-28): the row-0x1A sinks' computed arguments. The sinks
+   * themselves (`0x8ED40` actor registrar, `0x8F188` event ring, `0x651F0` sit
+   * dispatch, `0x974DC`/`0x974F0` audio) are unported (FU300-L3), so the row
+   * records what it would hand them: `match1a_event_id` = the event-ladder id
+   * {5,4,9,1,7,0} and `match1a_anim` = the `0x651F0` argument (6 from the
+   * direction arms; 0xF/0xE/1 from the event block's select). Observability
+   * only — never a silent no-op (the row-reference precedent). Cleared by
+   * init/begin. */
+  uint8_t match1a_event_id;
+  uint8_t match1a_anim;
   int32_t predict_c44;
   int32_t predict_c48_x;
   int32_t predict_c48_y;
@@ -928,8 +959,11 @@ struct fifa96_match_run {
    *  - `screen_install_hint` = [0x15B6C4] (1 after FUN_000935A0);
    *  - `screen_actor_age` = [0x157A97] the camera-track actor age (producer
    *    FUN_00072AC4 unported, staged 0);
-   *  - `screen_lead_z` = `word[0x1577C2]` the FU-71 camera lead word
-   *    (producer unported, staged 0: OL-72);
+   *  - `screen_lead_x`/`screen_lead_z` = `word[0x1577C0]`/`word[0x1577C2]`,
+   *    the FU-71 camera lead words. Their live writer is the row-0x1A `'T'`
+   *    arm (FU300 T4, 0x76892/0x768B2); before it runs the staged value is 0
+   *    (the former producer leg OL-72 for `screen_lead_z`, and the sibling
+   *    `screen_lead_x` added with the same class);
    *  - `goal_no_score` = [0x15B6A0] the handler's no-score counter;
    *  - `goal_last_id`/`goal_minute` = [0x15B674]/[0x15B678] the last consumed
    *    id and its minute (the goal-log triple components);
@@ -947,6 +981,7 @@ struct fifa96_match_run {
   uint16_t screen_period_frames;
   uint8_t screen_install_hint;
   int32_t screen_actor_age;
+  int16_t screen_lead_x;
   int16_t screen_lead_z;
   uint32_t goal_no_score;
   uint8_t goal_last_id;
