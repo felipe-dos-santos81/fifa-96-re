@@ -81,7 +81,17 @@ int fifa96_keeper_cpu_step(fifa96_keeper_cpu *cpu,
     if (rec->phase == 2 && rec->queued20 == 0 && cpu->interlock_157c5d != 0) {
       out->ladder = 1;
       if (cpu->ladder) {
-        cpu->ladder(cpu->ladder_ctx, rec, &out->ladder_out);
+        /* FU304 fix (phase-28 T3 review): the native ladder call `0x78599`
+         * reads the LIVE record, and the install tree's `0x78576` call runs
+         * first — `FUN_0007D9A4` writes `+0x91` at `0x7DA67` (fresh), so the
+         * ladder's head gate (`0x77EB7..0x77EC5`) sees the POST-install code.
+         * Derive the ladder from that code too; the install's other writes
+         * (`+0x89/+0x9E/+0x92/+0x7B`) are not ladder inputs. The installer's
+         * own `+0x9A` rejection (`0x7D9BE`) leaves `+0x91` untouched, hence
+         * the `gate_9a` guard. */
+        struct fifa96_keeper_cpu_record live = *rec;
+        if (out->install && rec->gate_9a == 0) live.code = out->install_code;
+        cpu->ladder(cpu->ladder_ctx, &live, &out->ladder_out);
         /* FU290/FU292: the ladder writes the `[0x157C5C]` latch (`0x7802D`
          * clear / `0x780D7` CX=4 set) — one process cell. `latch_written` lets
          * the caller (the row dispatch) publish it to `mr->global_157c5c`
@@ -254,6 +264,15 @@ int fifa96_keeper_cpu_ladder_run(void *ctx, const fifa96_keeper_cpu_record *rec,
   if (rec->gate_9a != 0) return FIFA96_OK;       /* the +0x9A skip (0x77EFD) */
   if (rec->is_T != 0) return FIFA96_OK;          /* *(param_1[10]) == 'T' (0x77F10) */
   if (rec->timer81 != 0) {                       /* the +0x81 timer (0x77F16) */
+    /* REACH LEG (phase-28 T3 review; native owner 0x77F20): the arm is
+     * statically dead through the ladder's ONLY caller `0x78599`
+     * (`get_xrefs_to 0x77EAC` = 1, fresh): with `timer81 != 0` the install
+     * tree's `0x784FE/0x78503` forces target 0, and `FUN_0007D9A4` writes
+     * `+0x91` at `0x7DA67` BEFORE the ladder call — whose head gate
+     * (`0x77EB7..0x77EC5`) then returns unless `+0x91 == 0x19`. A live timer
+     * on a 0x19 keeper therefore always installs first. The arm stays ported
+     * (its direct-call contract is pinned in tests/test_keeper_cpu.c); the
+     * seam's `copy_pos` apply cannot fire live until a caller exists. */
     out->copy_pos = 1;                           /* pos +0x59 -> +0x4D (0x77F20) */
     return FIFA96_OK;
   }

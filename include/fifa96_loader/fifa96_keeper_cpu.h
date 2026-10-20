@@ -147,8 +147,11 @@ typedef struct fifa96_keeper_cpu {
 
 void fifa96_keeper_cpu_init(fifa96_keeper_cpu *cpu);
 
-/* One `FUN_000782D0` step for one record. Returns FIFA96_OK or
- * -FIFA96_ERR_INVALID on a NULL argument. */
+/* One `FUN_000782D0` step for one record. The ladder seam is handed the record
+ * view the native `0x78599` call would read — when the install tree fired, that
+ * is the POST-install code (`FUN_0007D9A4` writes `+0x91` at `0x7DA67` before
+ * the ladder call; the ladder's head gate reads it live at `0x77EB7..0x77EC5`).
+ * Returns FIFA96_OK or -FIFA96_ERR_INVALID on a NULL argument. */
 int fifa96_keeper_cpu_step(fifa96_keeper_cpu *cpu,
                            const fifa96_keeper_cpu_record *rec,
                            fifa96_keeper_cpu_out *out);

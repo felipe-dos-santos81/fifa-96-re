@@ -209,3 +209,34 @@ Census unmoved; no producer faked.
 Wave review verdict: OK with the cross-draft contract merge (the review's Top-1): the copy arm is fresh-verified; §3(A)'s freezing of `e->code = install_code` as "applied" must merge with FU300-G1 — both Seam A installs route through `fifa96_match_entities_install` (incl. stage92/timer89/ran/+0x7B), else row-0x1A's first dispatch mis-routes on stale stage92 (violating the FU297 faithful-route bar). The Stage-2 plan adopts the merged contract.
 
 **Verdict:** GO with contract merge — copy arm fresh-verified; §3(A) `e->code = install_code` merges with FU300-G1 (both Seam A installs through `fifa96_match_entities_install`, incl. stage92/timer89/ran/+0x7B), else row-0x1A's first dispatch mis-routes on stale stage92 (violates the FU297 faithful-route bar).
+
+## Erratum (phase-28 T3 implementation review, 2026-10-20)
+
+**§2's same-frame composite is refuted by fresh bytes.** §2 said "with `code = 0x19`
+a live timer both installs code 0 (deferred, `0x78576`) and takes the copy arm —
+the record then dispatches row 0 with the freshly copied target". The native order
+is install → ladder head gate, and the head gate reads the code the install has
+just written:
+
+| claim | fresh evidence (this session) |
+|---|---|
+| the install tree runs before the ladder call | `disassemble_bytes 0x78540` (90 B): `0x78574 XOR EBX,EBX`; `0x78576 CALL 0x7d9a4`; `0x7857b MOV EAX,[0x157a4a]` … `0x78599 CALL 0x77eac` |
+| `timer81 != 0` forces target 0 | `disassemble_bytes 0x784C0` (96 B): `0x784ef MOV DX,[EBP+0x81]`; `0x784fe TEST DX,DX`; `0x78501 JZ 0x78507`; `0x78503 XOR EAX,EAX`; `0x78505 JMP 0x78558` |
+| the installer writes `+0x91` | `disassemble_bytes 0x7DA57` (90 B): `0x7DA63 MOV AL,[ESP+0x4]`; `0x7DA67 MOV byte[ESI+0x91],AL` |
+| the ladder head gate reads the live `+0x91` | `disassemble_bytes 0x77EB7` (40 B): `0x77EB7 MOV EAX,[EAX+0x8E]`; `0x77EBD SAR EAX,0x18`; `0x77EC2 CMP EAX,0x19`; `0x77EC5 JNZ 0x782C4` |
+| the ladder has one caller | `get_xrefs_to 0x77EAC` = 1 (`0x78599`, `FUN_000782D0`) |
+
+So on a code-`0x19` keeper with a live `timer81`, the install tree writes
+`+0x91 = 0` before `0x77EAC` runs and the ladder returns at `0x782C4` — the
+`0x77F16` copy arm is never reached through its only caller. The engine now
+derives the ladder from the post-install code (`src/fifa96_loader/fifa96_keeper_cpu.c`,
+the `live.code` view at the ladder gate); the seam's `copy_pos` apply (§3 shape)
+stays but cannot fire in the install-fired state.
+
+* **FU304-L7 (new) — the `+0x81` copy arm's reach.** The arm `0x77F16..0x77F29`
+  is statically dead through the ladder's only caller `0x78599` (the install
+  tree preempts it, above). The port keeps the arm as the ladder function's
+  contract (`tests/test_keeper_cpu.c` pins `copy_pos == 1` on the direct call);
+  the seam apply cannot fire live until a caller exists. Native owner
+  `0x77F16..0x77F29`; the seam writer is `fifa96_match_entities.c`
+  (`kc_out.ladder_out.copy_pos`). Do not fake a producer to exercise it.
