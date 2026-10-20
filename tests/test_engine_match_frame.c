@@ -7207,9 +7207,10 @@ static void test_end_word_staging_gate(void) {
  * ruling: the wire + the proven live install+dispatch + the census land in T5
  * as ONE commit; FU297's dead-count discipline), so these pins drive the
  * exported `fifa96_match_action_1A` directly — the rows-27/29/2C precedent.
- * `action_1a_stage` mirrors the entry staging `match_run_dispatch_entity`
- * performs (the run record from the pool record + the process cells), so a
- * direct call sees exactly the state a live dispatch would hand the body. */
+ * `action_1a_stage` mirrors the live entry staging for the fields under test:
+ * `mr->record` from the pool record + the process cells, and
+ * `row44 = match_run_row_terminal_flag(anim 0) = 1` (the dispatch derives it
+ * from the live `anim_id`); pins that need the other arm override it. */
 
 static struct fifa96_match_entity *action_1a_stage(struct fifa96_match_run *mr,
                                                    uint8_t stage) {
@@ -7219,7 +7220,7 @@ static struct fifa96_match_entity *action_1a_stage(struct fifa96_match_run *mr,
   mr->record.delta = 0;
   mr->record.stage92 = stage;
   mr->record.timer89 = 0;
-  mr->record.row44 = 0;
+  mr->record.row44 = 1u;                    /* anim 0's row flags bit 0 (live staging) */
   mr->record.controlled = 0;
   mr->record.pos_x = 0x100;
   mr->record.pos_y = 0;
@@ -7304,6 +7305,15 @@ static void test_action_1a_stage0_pass_installs_4(void) {
   assert(e->code == 0u);
   assert(e->stage92 == 0u);                  /* FUN_0007D9A4 +0x92 := 0 */
   assert(e->timer89 == 0);
+
+  /* a tracked record on the opposite side keeps the predicate closed: the
+   * stage-0 fail arm runs (no install-4 dispatch). */
+  (void)action_1a_stage(&mr, 0u);
+  mr.entities.team[1].records[0].code = 5u;
+  mr.render.camera.tracked = FIFA96_MATCH_ENTITY_RECORDS;  /* team 1, record 0 */
+  assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
+  assert(mr.record.ran == 1u);
+  assert((mr.dispatched_ok & (1ull << 4)) == 0u);
 }
 
 /* Stage 1 direct (`0x766DD`): timer89 = 0, `+0x92` +1, then the stage-2
@@ -7401,6 +7411,19 @@ static void test_action_1a_direction_2d(void) {
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x2Du);
   assert(mr.match1a_event_id == 7u);        /* the id-7 arm */
+
+  /* the 0x5C stamp skips the later 0x54 compare: even with lane_x > 0x40 the
+   * row takes the 0x2D success -> movement/event path, not the 0x54 exit. */
+  (void)action_1a_stage(&mr, 2u);
+  mr.global_157c2c = 0x2Du;
+  mr.band_1577f0 = 0x50;
+  mr.render.camera.follow_speed = 0x13;
+  mr.band_1577fa = 0x10;
+  mr.record.lane = (int32_t)0x41 << 16;
+  assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
+  assert(mr.global_157c2c == 0x5Cu);
+  assert(mr.record.stage92 == 3u);          /* movement/event -> stage 3 */
+  assert(mr.record.controlled == 1u);
 }
 
 /* The `[0x157C2C] == 0x2E` arm (`0x76757..0x767E0`): the gate chain + the RNG
@@ -7453,6 +7476,23 @@ static void test_action_1a_direction_2e(void) {
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.record.jump_base == 0x321);
   assert(mr.record.jump_timer == 0x111);
+
+  /* the 0x2E gate is a DWORD compare of `[0x157750]` (fresh bytes at 0x7677e:
+   * `81 3d 50 77 15 00 90 00 00 00`), while the clamp reads its low word
+   * (`66 a1 50 77 15 00`). cam_y = 0x10080: the dword gate fails (0x10080 >
+   * 0x90) so the row clamps v = word(0x0080) - 0x70 = 0x10, whereas a
+   * word-only gate would pass and (with the armed passing draw) stamp 0x54. */
+  (void)action_1a_stage(&mr, 2u);
+  mr.global_157c2c = 0x2Eu;
+  mr.render.camera.follow_speed = 0x15;
+  mr.keeper_cam_y = 0x10080;
+  fifa96_rng_seed(&mr.rng, 0);
+  mr.rng.w[0] = 0x1F;
+  assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
+  assert(mr.global_157c2c == 0x2Eu);        /* no 0x54 stamp */
+  assert(mr.record.jump_base == fifa96_camera_ramp(0x10));
+  assert(mr.record.jump_timer == 0);
+  assert(mr.record.stage92 == 3u);
 }
 
 /* The `[0x157C2C] == 0x54` arm (`0x767E7..0x76815`): lane_x > 0x40 returns
@@ -7494,17 +7534,24 @@ static void test_action_1a_direction_54(void) {
  * `>> (rng & 3)` (the native reads the raw dwords' high words — C0 and C2
  * self-jitter; they are NOT derived from follow_speed), then the speed metric
  * is distance(C0, C2), the keeper camera focus accumulates the new C0/C2, and
- * the `0x7DAB4` reset closes the row. */
+ * the `0x7DAB4` reset closes the row.
+ *
+ * The metric pin is the T4 review fix: the FU-141 dispatch rebuilds
+ * `speed71 = (int16_t)vel_x` after the body, so the native `word[+0x71]` write
+ * must also land in `vel_x`'s low word (the high word = `vel73` stays). The
+ * test runs the dispatcher's exported decomposition pass after the handler —
+ * the precise post-handler step — and asserts the distance survives. */
 static void test_action_1a_movement_t_branch(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   int32_t face = 0, heading = 0;
   uint8_t sector = 0;
-  int16_t c0, c2;
+  int16_t c0, c2, sp;
   e = action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x54u;
   mr.record.lane = 0;                       /* <= 0x40 -> movement */
   mr.record.type = 0;
+  mr.record.vel_x = (int32_t)(0x1234u << 16 | 0x0077u);  /* vel73 = 0x1234, stale speed word */
   mr.screen_lead_x = 0x100;
   mr.screen_lead_z = 0x200;
   mr.keeper_cam_x = 0x10;
@@ -7522,6 +7569,7 @@ static void test_action_1a_movement_t_branch(void) {
     c0 = (int16_t)(-(int32_t)(0x100 >> (d1 & 3u)));
     c2 = (int16_t)(-(int32_t)(0x200 >> (d2 & 3u)));
   }
+  sp = (int16_t)fifa96_entity_distance(c0, c2);
   assert(fifa96_entity_face(-0x100, -0x200, &face, &sector) == FIFA96_OK);
   assert(fifa96_entity_angle(0x30, -0x40, &heading) == FIFA96_OK);
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
@@ -7531,10 +7579,45 @@ static void test_action_1a_movement_t_branch(void) {
   assert((uint16_t)e->timer7f == (uint16_t)(int16_t)heading);  /* 0x76857 word +0x7F */
   assert(mr.screen_lead_x == c0);           /* 0x76892 */
   assert(mr.screen_lead_z == c2);           /* 0x768B2 */
-  assert(mr.record.speed71 == (int16_t)fifa96_entity_distance(c0, c2)); /* 0x768CE */
+  assert(mr.record.speed71 == sp);          /* 0x768CE word[+0x71] */
+  assert((int16_t)mr.record.vel_x == sp);   /* mirrored into the dword's low word */
+  assert((uint32_t)mr.record.vel_x >> 16 == 0x1234u);  /* vel73 preserved */
   assert(mr.keeper_cam_x == 0x10 + (int32_t)c0);   /* 0x768F0 */
   assert(mr.keeper_cam_z == -0x10 + (int32_t)c2);  /* 0x768FA */
   assert(e->stage92 == 0u);                 /* 0x76900 0x7DAB4 -> installer 0 */
+  /* the dispatch's post-handler decomposition (run.c) must preserve the row's
+   * speed — the T4 review's RED without the vel_x mirror. */
+  fifa96_match_run_decompose_velocity_words(&mr.record);
+  assert(mr.record.speed71 == sp);
+  assert(mr.record.vel73 == (int16_t)0x1234);
+
+  /* a negative lead: the native SAR is arithmetic, then NEG (C0/C2 positive
+   * here); the same decomposition contract holds. */
+  e = action_1a_stage(&mr, 2u);
+  mr.global_157c2c = 0x54u;
+  mr.record.lane = 0;
+  mr.screen_lead_x = -0x100;
+  mr.screen_lead_z = -0x200;
+  mr.keeper_cam_x = 0;
+  mr.keeper_cam_z = 0;
+  fifa96_rng_seed(&mr.rng, 0);
+  mr.rng.w[0] = 0x1F;
+  {
+    struct fifa96_rng probe = mr.rng;
+    uint16_t d1 = 0, d2 = 0;
+    (void)fifa96_rng_step(&probe, &d1);
+    (void)fifa96_rng_step(&probe, &d2);
+    c0 = (int16_t)(-(int32_t)((int32_t)-0x100 >> (d1 & 3u)));
+    c2 = (int16_t)(-(int32_t)((int32_t)-0x200 >> (d2 & 3u)));
+  }
+  sp = (int16_t)fifa96_entity_distance(c0, c2);
+  assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
+  assert(mr.screen_lead_x == c0);           /* arithmetic SAR + NEG */
+  assert(mr.screen_lead_z == c2);
+  assert((int16_t)mr.record.vel_x == sp);
+  fifa96_match_run_decompose_velocity_words(&mr.record);
+  assert(mr.record.speed71 == sp);
+  (void)e;
 }
 
 /* The event ladder (`0x7690C..0x76A3E`): the emitted ids are {5,4,9,1,7,0}.

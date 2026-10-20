@@ -4087,9 +4087,11 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
           e->timer7f = (e->timer7f & 0xFFFF0000u) |
                        (uint16_t)(int16_t)heading;
       }
-      /* 0x7685B: the `0x6E598` anim bridge — id = word[0x157C2C], frame 0
-       * (the ported store core; the native head's active/cam-side gates are
-       * that helper's established subset). */
+      /* 0x7685B: the `0x6E598` anim bridge — EAX=rec, EDX=word[0x157C2C],
+       * EBX=0 (the ported store core). The helper's `[rec+0x8D]` head selects
+       * the ball-z-side `[0x157A6C]` write (FU84 §1: not a store gate), and
+       * that `[0x157A6C]` side effect is the pre-existing helper leg FU84 leg 5
+       * / FU-159 — not this row's; the store core is the shared mapping. */
       if (fifa96_match_run_record_anim_install(
               mr, e, (int32_t)mr->global_157c2c, 0) == FIFA96_OK) {
         r->anim_id = e->anim_id;                      /* byte[[rec+0x28]] */
@@ -4104,13 +4106,22 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
        * derived from follow_speed. */
       uint16_t d1 = 0, d2 = 0;
       int16_t c0, c2;
+      int16_t sp;
       (void)fifa96_rng_step(&mr->rng, &d1);
       c0 = (int16_t)(-(int32_t)((int32_t)mr->screen_lead_x >> (d1 & 3u)));
       mr->screen_lead_x = c0;                         /* 0x76892 word[0x1577C0] */
       (void)fifa96_rng_step(&mr->rng, &d2);
       c2 = (int16_t)(-(int32_t)((int32_t)mr->screen_lead_z >> (d2 & 3u)));
       mr->screen_lead_z = c2;                         /* 0x768B2 word[0x1577C2] */
-      r->speed71 = (int16_t)fifa96_entity_distance((int32_t)c0, (int32_t)c2);
+      sp = (int16_t)fifa96_entity_distance((int32_t)c0, (int32_t)c2);
+      r->speed71 = sp;
+      /* The FU-141 dispatch rebuilds the word views from the dword views after
+       * every body (`match_run_dispatch_entity`: `speed71 = (int16_t)vel_x`)
+       * before the mover reads them, so the native `word[+0x71]` write must be
+       * mirrored into `vel_x`'s low word (the high word is `vel73`, preserved)
+       * or the mover and the pool would see the previous frame's speed. */
+      r->vel_x = (int32_t)(((uint32_t)r->vel_x & 0xFFFF0000u) |
+                           (uint32_t)(uint16_t)sp);
       mr->keeper_cam_x += (int32_t)c0;                /* 0x768F0 [0x15774C] */
       mr->keeper_cam_z += (int32_t)c2;                /* 0x768FA [0x157754] */
       match_row_reset(mr, e);                          /* 0x76900 0x7DAB4 */

@@ -399,12 +399,16 @@ corrections were derived while porting the body and are pinned by
   0x76880 MOV EDX,[0x001577be]    ; dword at 0x1577BE
   0x76886 AND EAX,0x3
   0x76889 SAR EDX,0x10            ; = word[0x1577C0] (the alias rule: +2)
+  0x7688c MOV CL,AL
   0x7688e SAR EDX,CL
   0x76890 NEG EDX
   0x76892 MOV word[0x001577c0],DX ; C0 := -(old C0 >> (rng&3))
   0x76899 CALL 0x92AC8
   0x7689e MOV EDX,[0x001577c0]    ; dword at C0 (low = new C0, high = old C2)
+  0x768a4 AND EAX,0x3
   0x768a7 SAR EDX,0x10            ; = word[0x1577C2] (old C2)
+  0x768aa MOV CL,AL
+  0x768ac MOV EAX,EDX
   0x768ae SAR EAX,CL
   0x768b0 NEG EAX
   0x768b2 MOV [0x001577c2],AX     ; C2 := -(old C2 >> (rng&3))
@@ -434,3 +438,23 @@ corrections were derived while porting the body and are pinned by
   matching the native function's push/pop of `EDX`). Likewise `0x79C50` →
   `fifa96_entity_face` and `0x6E598` → `fifa96_match_run_record_anim_install`
   are the ported bridges, per the review erratum above.
+* **E8 — L2's `0x6E598` disclosure corrected (T4 review).** The `0x6E598` head
+  (`0x6E59C`) tests `[rec+0x8D]` only to select the ball-z-side computation
+  (`0x6E5A9 [0x157754] > 0` vs `[team+0x826]`) and its `[0x157A6C]` write
+  (`0x6E5F7/0x6E602`); it is **not** a store gate and does not return. That
+  `[0x157A6C]` side effect is the pre-existing helper leg **FU84 leg 5**
+  (`docs/ghidra/FU84_animation.md`: "written by the selector … meaning not
+  derived") / the FU-159 store-core port; it is not row-0x1A's and is not
+  modelled by `fifa96_match_run_record_anim_install`. The row uses the store
+  core (anim id = word[0x157C2C], frame 0) with that leg carried.
+* **E9 — the row body's `[0x15774C/50/54]` binding (T4 review).** §5's cell
+  table is the **Seam A frame view** (`frame->cam_pos_*` = the FU-71 render
+  camera stand-in). The row body operates on the native process cells, for
+  which the engine's FU-151 keeper mapping is `mr->keeper_cam_x/y/z` (the cells
+  sibling rows 0x1B/0x1D/0x1F read and write). Row 0x1A writes the x/z siblings
+  in its `'T'` arm (`0x768F0 [0x15774C]`, `0x768FA [0x157754]`), so reading Y
+  from the render camera would split one native triple; the body reads
+  `mr->keeper_cam_y`. Widths stay native: `0x7677E` (`81 3d 50 77 15 00 90 00
+  00 00`, `CMP dword [0x157750], 0x90`) and `0x7690C` (`CMP dword
+  [0x157750],0x20`) are dword compares, while the `0x767B6` clamp (`66 a1 50 77
+  15 00`, `MOV AX,[0x157750]`) is the low-word read the port already uses.

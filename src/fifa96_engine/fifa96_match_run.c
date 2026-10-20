@@ -1270,6 +1270,22 @@ static void match_run_record_jump_step(struct fifa96_match_run_record *r) {
   r->pos_y = fifa96_camera_arc_height((int16_t)base, (int16_t)t); /* 0x7C101 */
 }
 
+/* FU-142b (phase-12 T1) / T4 review (phase-28): the post-handler velocity
+ * decomposition. The arm rows write the dword views `vel_x`/`vel_z`
+ * (+0x71/+0x73 as a 16.16 pair), so the word views the mover reads
+ * (`speed71` +0x71, `vel73` +0x73, `vel75` +0x75) are rebuilt from them after
+ * every action body and before `match_run_record_mover`. A row that writes a
+ * native word directly (row 0x1A's `'T'` metric) must mirror it into the dword
+ * view or this pass would replace it with the previous frame's value — the
+ * row-0x1A T4 review finding. Exported so the row-level pins exercise the
+ * exact dispatch pass (NULL is a no-op). */
+void fifa96_match_run_decompose_velocity_words(struct fifa96_match_run_record *r) {
+  if (r == NULL) return;
+  r->speed71 = (int16_t)r->vel_x;
+  r->vel73 = (int16_t)((uint32_t)r->vel_x >> 16);
+  r->vel75 = (int16_t)((uint32_t)r->vel_z >> 16);
+}
+
 /* FU-141: one pool record -> the FU-138/FU-140 staging record -> the FU-137
  * action dispatch, then the handler's requests back into the pool record. The
  * bound FU-70 slot's animation/direction bytes (native slot +0x20/+0x21, the
@@ -1443,10 +1459,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
    * bytes; decompose them back onto the word views the mover reads so the
    * native `+0x71/+0x73/+0x75` bytes stay in lockstep (an arm's `vel_x=0`
    * therefore clears the words too, and a pass-through is identity because the
-   * staging invariant holds). */
-  r->speed71 = (int16_t)r->vel_x;
-  r->vel73 = (int16_t)((uint32_t)r->vel_x >> 16);
-  r->vel75 = (int16_t)((uint32_t)r->vel_z >> 16);
+   * staging invariant holds). Shared with the row-level pins. */
+  fifa96_match_run_decompose_velocity_words(r);
   /* FU-147 S1: every dispatched record runs the shared mover (native
    * FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5), then the BF20
    * lane block refreshes the +0x6B lane / +0x6D/+0x6F camera deltas / +0x77

@@ -728,10 +728,11 @@ struct fifa96_match_run {
    * themselves (`0x8ED40` actor registrar, `0x8F188` event ring, `0x651F0` sit
    * dispatch, `0x974DC`/`0x974F0` audio) are unported (FU300-L3), so the row
    * records what it would hand them: `match1a_event_id` = the event-ladder id
-   * {5,4,9,1,7,0} and `match1a_anim` = the `0x651F0` argument (6 from the
-   * direction arms; 0xF/0xE/1 from the event block's select). Observability
-   * only — never a silent no-op (the row-reference precedent). Cleared by
-   * init/begin. */
+   * {5,4,9,1,7,0} and `match1a_anim` = the **last** `0x651F0` argument — 6 from
+   * the direction arms, then 0xF/0xE/1 from the event block's select; the
+   * direction-arm 6 is observable only when the row exits in the 0x54 arm
+   * before that select. Observability only — never a silent no-op (the
+   * row-reference precedent). Cleared by init/begin. */
   uint8_t match1a_event_id;
   uint8_t match1a_anim;
   int32_t predict_c44;
@@ -1160,6 +1161,17 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
 int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
                                          struct fifa96_match_entity *e,
                                          int32_t id, uint8_t frame);
+
+/* FU-142b (phase-12 T1; exposed phase-28 T4): the post-handler velocity
+ * decomposition the FU-141 dispatch runs after every action body and before the
+ * mover — the arm rows write the dword views `vel_x`/`vel_z` (+0x71/+0x73 as a
+ * 16.16 pair), and this pass rebuilds the word views the mover reads
+ * (`speed71` +0x71, `vel73` +0x73, `vel75` +0x75) from them. A body that writes
+ * a native word directly (row 0x1A's `'T'` metric at 0x768CE) must mirror it
+ * into the dword view's low word or this pass discards it (the T4 review
+ * finding). Exported so the row-level pins exercise the exact dispatch pass;
+ * NULL is a no-op. */
+void fifa96_match_run_decompose_velocity_words(struct fifa96_match_run_record *r);
 
 /* FU-159 §3.1/§5.2 (T3): the `FUN_0008E008` frame-wrap row successor over a
  * pool record (the pool twin `FUN_0008DF84` install core). First-hand
