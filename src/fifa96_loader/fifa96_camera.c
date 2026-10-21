@@ -716,7 +716,7 @@ int16_t fifa96_camera_height(const fifa96_camera *cam) {
 }
 
 /* FUN_000795A4 (0x795A4..0x795B2): (a*b + 0x8000) >> 16, the low word. */
-static int16_t camera_mul16(int32_t a, int32_t b) {
+int16_t fifa96_camera_mul16(int32_t a, int32_t b) {
   int64_t v = ((int64_t)a * (int64_t)b + 0x8000) >> 16;
   return (int16_t)(uint16_t)(uint32_t)(int32_t)v;
 }
@@ -780,8 +780,8 @@ static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
     int32_t angle = 0;
     if (fifa96_entity_angle(cam->vel_x, cam->vel_z, &angle) != FIFA96_OK)
       return -FIFA96_ERR_INVALID;
-    cam->vel_x = camera_mul16(0x19, fifa96_entity_sine(angle));
-    cam->vel_z = camera_mul16(0x19, fifa96_entity_sine(angle + 0x100));
+    cam->vel_x = fifa96_camera_mul16(0x19, fifa96_entity_sine(angle));
+    cam->vel_z = fifa96_camera_mul16(0x19, fifa96_entity_sine(angle + 0x100));
     cam->speed = 0x19;
   }
   /* 0x707c4..0x707eb: the step products against the divisor. */
@@ -906,8 +906,8 @@ int fifa96_camera_pan_step(fifa96_camera *cam, struct fifa96_rng *rng,
       if (fifa96_rng_step(rng, &value) != FIFA96_OK) return -FIFA96_ERR_INVALID;
       angle += (int32_t)(value & 0xFF) - 0x80;   /* 0x70b05/0x70b07: low - 0x80 */
     }
-    cam->vel_x = camera_mul16(speed, fifa96_entity_sine(angle));
-    cam->vel_z = camera_mul16(speed, fifa96_entity_sine(angle + 0x100));
+    cam->vel_x = fifa96_camera_mul16(speed, fifa96_entity_sine(angle));
+    cam->vel_z = fifa96_camera_mul16(speed, fifa96_entity_sine(angle + 0x100));
   }
   /* 0x70b86: FUN_00070544(0) over the stored step pair. */
   return camera_event_ramp(cam, cam->event_step_x, cam->event_step_z, 0);

@@ -433,6 +433,12 @@ struct fifa96_match_run_record {
    * copies the position into the target. */
   int16_t jump_base;   /* native +0x85 */
   int16_t jump_timer;  /* native +0x87 */
+  /* FU302 (phase-28 T7): the FUN_00076B28 steering extent `word[+0x83]`
+   * (`0x76B3C..0x76B6A`). The same native cell the jump arms write; in this
+   * ported path it is written and read only inside the steering call (the
+   * unported FUN_0006E8E8 event gates are its other consumers, FU180-L1),
+   * so it is reset at every record staging. */
+  int16_t steer83;
   int32_t place_x;     /* FU-140 row 1E: native 0x15774C */
   int32_t place_y;     /* native 0x157750 */
   int32_t place_z;     /* native 0x157754 */
@@ -734,18 +740,45 @@ struct fifa96_match_run {
    * `fifa96_match_action_09`, cleared by init; observability for the explicit
    * unported path (never a silent no-op). */
   uint8_t match09_leg_stage;
-  /* M2 phase-26c T5 / FU-285 + phase-28 T6 / FU301: the row-0x1B stage-2 wide
-   * marker. 0 = the stage-2 wide interpolation was not reached (or diverted at
-   * the `0x76FD5`/`0x7700E`/`0x7701C` gates or by the seed/Block A-D exits);
-   * 1 = Block D selected the pan route (`0x7721B`), so the seed and Blocks A-E
-   * (`0x77035..0x7733E`, FU301) ran and wrote the pan cells. The pan vector
-   * (`0x7733F..0x7738A`), the `EDI` sign-match (`0x77313..0x7733A`), the
-   * `0x71C94` seat (`0x77423`) and the install tree (`0x77428..0x774D2`) stay
-   * the FU301-L5/FU302 legs; the existing `0x71D27` tracked-bind stand-in (the
-   * seat's bind) and the `0x774C0` terminal `[0x157C55]=1` are retained here
-   * unchanged until the seat lands. Written by `fifa96_match_action_1B`;
-   * cleared by init/begin (observability, never a silent no-op). */
-  uint8_t match1b_wide_leg;
+  /* FU302 (phase-28 T7): the row-0x1B wide-path completion — the seed + Blocks
+   * A-G through the `0x71C94` seat (`0x77423`) and the install tree
+   * (`0x77428..0x774D2`). The values the port computes but whose sinks are
+   * unported (the OL-27/OL-82 family) are recorded here, never faked:
+   *  - `match1b_hypot` = `word[0x1577BE]` after the `0xCD514` zero-guard fold
+   *    (`0x77275`; the seat's setter re-derives the cell, so this records the
+   *    fold itself);
+   *  - `match1b_pan_x/z` = `word[0x1577C0]/[0x1577C2]` after Block E's negate,
+   *    `int8[desc+0x1B]` jitter and `0x8DC50` reduce (`0x77312`);
+   *  - `match1b_vec_mag/x/z` = the native 6-byte vector `{mag, step_x,
+   *    step_z}` at `ESP+8` (`0x7733F..0x77385`);
+   *  - `match1b_sign_match` = the `EDI` flag (`0x77313..0x7733A`);
+   *  - `match1b_event_id` = the `0x8F188` request (6/3/0; 0xFF none),
+   *    `match1b_stat_id` = the `0x8ED40(rec, …)` request (0x64/0x19/5; 0xFF
+   *    none), `match1b_stat_tracked` = the `0x8ED40(tracked, 5)` companion
+   *    (after the seat `[0x1577CA]` is the record), and `match1b_sound_id` =
+   *    the terminal `0x974DC` request (4);
+   *  - `match1b_sit_code`/`match1b_sit_emit` = the `[0x157823]` block's
+   *    `0x92820(rec, 0x1A)` / `0x651F0(5|0xE)` requests (0 = block not run).
+   * Cleared by init/begin and at every wide dispatch. */
+  int16_t match1b_hypot;
+  int16_t match1b_pan_x, match1b_pan_z;
+  int16_t match1b_vec_mag, match1b_vec_x, match1b_vec_z;
+  uint8_t match1b_sign_match;
+  uint8_t match1b_event_id;
+  uint8_t match1b_stat_id;
+  uint8_t match1b_stat_tracked;
+  uint8_t match1b_sound_id;
+  uint8_t match1b_sit_code;
+  uint8_t match1b_sit_emit;
+  /* FU302 (phase-28 T7): the `[0x157823]` one-shot sit-dispatch latch and the
+   * `[0x157ACC]/[0x157AD0]` per-side sit counters the `0x7738C..0x773D8` block
+   * increments (`index = (side ^ [0x157ABE]) & 1` through `0x741B4`; the run's
+   * `side_swap` is the `[0x157ABE]` cell). The latch's native producer is
+   * unported (FU302-L5), so it is a staged input that defaults to zero; the
+   * counters are live native state. Init/begin clear them. */
+  uint8_t flag_157823;
+  uint16_t counter_157acc[2];
+  uint16_t counter_157ad0[2];
   /* FU300 T4 (phase-28): the row-0x1A sinks' computed arguments. The sinks
    * themselves (`0x8ED40` actor registrar, `0x8F188` event ring, `0x651F0` sit
    * dispatch, `0x974DC`/`0x974F0` audio) are unported (FU300-L3), so the row

@@ -1379,6 +1379,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->desc_c = 0;     /* FU301: rec[+4][+0xC] (unlocated producer, staged 0) */
   r->desc_f = 0;     /* FU301: rec[+4][+0xF] */
   r->desc_1b = 0;    /* FU301: rec[+4][+0x1B] */
+  r->steer83 = 0;    /* FU302: +0x83 (written by the 0x76B28 port) */
   r->place_offset_x = e->place_offset_x;
   r->place_offset_z = e->place_offset_z;
   r->ran = e->ran;
@@ -2110,7 +2111,26 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;           /* T3/FU-178: no unported row-09 arm */
-  mr->match1b_wide_leg = 0;            /* T5/FU-285: no unported row-1B wide */
+  /* FU302 (phase-28 T7): the row-0x1B wide-path observables and the
+   * `[0x157823]`/`[0x157ACC]`/`[0x157AD0]` sit cells. */
+  mr->match1b_hypot = 0;
+  mr->match1b_pan_x = 0;
+  mr->match1b_pan_z = 0;
+  mr->match1b_vec_mag = 0;
+  mr->match1b_vec_x = 0;
+  mr->match1b_vec_z = 0;
+  mr->match1b_sign_match = 0;
+  mr->match1b_event_id = 0xFFu;
+  mr->match1b_stat_id = 0xFFu;
+  mr->match1b_stat_tracked = 0;
+  mr->match1b_sound_id = 0;
+  mr->match1b_sit_code = 0;
+  mr->match1b_sit_emit = 0;
+  mr->flag_157823 = 0;
+  mr->counter_157acc[0] = 0;
+  mr->counter_157acc[1] = 0;
+  mr->counter_157ad0[0] = 0;
+  mr->counter_157ad0[1] = 0;
   mr->predict_c44 = 0;
   mr->predict_c48_x = 0;
   mr->predict_c48_y = 0;
@@ -2246,7 +2266,25 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->match1a_anim = 0;
   fifa96_keeper_cpu_init(&mr->keeper_cpu); /* FU296 Seam A: fresh machine view */
   mr->match09_leg_stage = 0;
-  mr->match1b_wide_leg = 0;
+  /* FU302 (phase-28 T7): fresh wide-path observables + sit cells. */
+  mr->match1b_hypot = 0;
+  mr->match1b_pan_x = 0;
+  mr->match1b_pan_z = 0;
+  mr->match1b_vec_mag = 0;
+  mr->match1b_vec_x = 0;
+  mr->match1b_vec_z = 0;
+  mr->match1b_sign_match = 0;
+  mr->match1b_event_id = 0xFFu;
+  mr->match1b_stat_id = 0xFFu;
+  mr->match1b_stat_tracked = 0;
+  mr->match1b_sound_id = 0;
+  mr->match1b_sit_code = 0;
+  mr->match1b_sit_emit = 0;
+  mr->flag_157823 = 0;
+  mr->counter_157acc[0] = 0;
+  mr->counter_157acc[1] = 0;
+  mr->counter_157ad0[0] = 0;
+  mr->counter_157ad0[1] = 0;
 
   mr->predict_c44 = 0;
   mr->predict_c48_x = 0;

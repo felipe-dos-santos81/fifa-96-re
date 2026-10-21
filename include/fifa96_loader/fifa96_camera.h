@@ -307,6 +307,12 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
  * it. `n` is the caller's shift count (no bounds clamp in the native). */
 int32_t fifa96_camera_shift_step(int32_t v, int n);
 
+/* FU302 §4 (phase-28 T7): FUN_000795A4 (`0x795A4..0x795B2`) — the 16.16
+ * product `(a * b + 0x8000) >> 16`, low word. The event setter's velocity
+ * rebuild and the row-0x1B/0x1C steering (`0x76C10`/`0x76C47`/`0x76CBA`/
+ * `0x76CEA`) consume it. */
+int16_t fifa96_camera_mul16(int32_t a, int32_t b);
+
 /* FU-152 §2.9 (T2): FUN_000709D0, the timer-driven pan step FUN_000736AC
  * calls when `timer > timer_limit`. Bands the event height into the
  * FUN_00065CF8 sink arguments (returned through `class_of`/`param`, left

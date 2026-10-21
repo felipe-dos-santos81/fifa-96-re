@@ -3473,17 +3473,20 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
  * The `0x774DD` re-place carries the **ungated self-actor** `0x77568
  * [0x157A83]=EBP` (no phase/side gate) and the sit-7 emit `0x77589`, then
  * falls to the `0x77636` stage-4 head, so the emit `0x77707` self-satisfies
- * (FU285-L1 narrows FU-273 T2b-L1). The deep pan-vector/descriptor arithmetic
- * (`0x7707D..0x77420`) is the FU285-L1 leg (`mr->match1b_wide_leg`). */
+ * (FU285-L1 narrows FU-273 T2b-L1). The deep pan seed + Blocks A-G through the
+ * `0x77423` seat and the `0x77428..0x774D2` install tree (`0x77035..0x774D2`)
+ * are ported by FU301/T6 + FU302/T7; the sink bodies stay OL-27/OL-82 legs and
+ * the computed requests are the `match1b_*` observables. */
 
 /* The wide ROUTE: head not bound (phase != 0x0D), rec != actor and != tracked,
  * the `[0x157C5C]` latch clear, the rush (`+0x6B <= +0x77`) and band gates pass
- * -> FU301's Blocks A–E run (`0x77035..0x7733E`; the camera-Y cell `0x30` is
+ * -> FU301's Blocks A-G run (`0x77035..0x774D2`; the camera-Y cell `0x30` is
  * past the Block D `0x20` pan gate, so the latches are not consulted), the
- * `0x71C94` pan setter stand-in binds the record (`0x71D27 [0x1577CA] = rec`)
- * and the `0x774C0` terminal sets `[0x157C55] = 1`. Block E sets
- * `[0x157C59] = 1` (`0x7721B`) and seeds the pan cells (BE was 0 -> the two
- * draws). The wide route does NOT self-write the actor, so the emit is NOT
+ * `0x71C94` seat binds the record (`0x71D27 [0x1577CA] = rec`) with the
+ * camY-derived height, and the `0x774C0` terminal sets `[0x157C55] = 1`. Block
+ * E sets `[0x157C59] = 1` (`0x7721B`) and seeds the pan cells (BE was 0 -> the
+ * two draws); Block D selected the p >= 0 install arm (`0x8F188(3, rec, 0x20)`
+ * recorded). The wide route does NOT self-write the actor, so the emit is NOT
  * reached: the not-controlled finish installs 0x19. */
 static void test_action_1b_wide_route_binds_pan(void) {
   struct fixture f;
@@ -3503,18 +3506,26 @@ static void test_action_1b_wide_route_binds_pan(void) {
   f.mr.keeper_latch[1] = 0;             /* 0x157C55 clear */
   f.mr.global_157c5c = 0;               /* the latch clear -> the wide route */
   f.mr.keeper_cam_y = 0x30;             /* Block D: > 0x20 -> the pan block */
+  f.mr.keeper_cam_z = 0x30;             /* Block F sign +; the tree's p >= 0 */
   e->lane_x = 0;                        /* the 0x7700E rush gate passes */
   e->bound = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
-  assert(f.mr.render.camera.tracked == 0);   /* 0x71D27 the pan setter bind */
+  assert(f.mr.render.camera.tracked == 0);   /* 0x71D27 the seat bind */
   assert(f.mr.keeper_latch[1] == 1);         /* 0x774CC [0x157C55] = 1 */
   assert(f.mr.keeper_latch[5] == 1);         /* 0x7721B [0x157C59] = 1 (Block E) */
   assert(f.mr.record.controlled == 0);       /* the wide route does not self-write */
-  assert(f.mr.match1b_wide_leg == 1);        /* the Blocks A–E reach (FU301) */
   /* Block E seeded the pan cells from the zero speed guard (draws 0x200/0x725
    * on this fixture's RNG: C0 = 8, C2 = -(13), then the code-2 reduce). */
-  assert(f.mr.render.camera.vel_x == 2);
-  assert(f.mr.render.camera.vel_z == -3);
+  assert(f.mr.match1b_pan_x == 2);
+  assert(f.mr.match1b_pan_z == -3);
+  assert(f.mr.match1b_hypot == 9);           /* 0xCD514(8, 13) */
+  /* The seat height is the camY cell (0x77228's dword[0x157750] low word). */
+  assert(f.mr.render.camera.event_param == 0x30);
+  /* Block F/G: C2 < 0 and camZ 0 > 0 -> EDI 0; the post-seat velocity x is 0
+   * (the zero timer delta), so the install tree's p >= 0 arm runs. */
+  assert(f.mr.match1b_sign_match == 0);
+  assert(f.mr.match1b_event_id == 3);        /* 0x8F188(3, rec, 0x20) */
+  assert(f.mr.match1b_stat_id == 0x19);      /* 0x8ED40(rec, 0x19) */
   assert(f.mr.state.phase == 0);             /* no emit: not-controlled -> 0x19 */
   assert(e->code == 0x19u);
   drop_fixture(&f);
@@ -3578,7 +3589,8 @@ static void test_action_1b_mutual_exclusion_skips_wide(void) {
   assert(f.mr.global_157c5c == 1);           /* latch NOT cleared: wide skipped */
   assert(f.mr.keeper_latch[5] == 0);         /* the 0x774DD re-place did not run */
   assert(f.mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);  /* no pan */
-  assert(f.mr.match1b_wide_leg == 0);        /* the wide interpolation not reached */
+  assert(f.mr.keeper_latch[1] == 0);         /* the wide terminal not reached */
+  assert(f.mr.match1b_event_id == 0xFF);     /* no install request */
   assert(f.mr.state.phase == 9u);            /* the head-bound emit */
   assert(e->code != 0x19u);
   drop_fixture(&f);

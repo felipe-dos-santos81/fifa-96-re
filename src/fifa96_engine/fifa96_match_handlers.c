@@ -3708,11 +3708,11 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
  *    block): the `0x76FD5` mutual exclusion, the `0x76FF4` `[0x157C5C]` latch
  *    re-place (`0x774DD`, incl. the **ungated self-actor** `0x77568`), the
  *    `0x77423 CALL 0x71C94` pan setter and the `0x774C0` terminal; the deep
- *    pan seed + Blocks A-E (`0x77035..0x7733E`) are ported by
- *    `match_1b_deep_pan` (phase-28 T6 / FU301); the pan vector
- *    (`0x7733F..0x7738A`), the `EDI` sign-match (`0x77313..0x7733A`) and the
- *    seat/install tree stay FU301-L5/FU302 (`mr->match1b_wide_leg` marks the
- *    Blocks A-E reach); every gate still reaches `0x77636`, which either
+ *    pan seed + Blocks A-G through the seat and the install tree
+ *    (`0x77035..0x774D2`) are ported by `match_1b_deep_pan` (phase-28 T6 /
+ *    FU301 + T7 / FU302); the sink bodies (`0x8F188`/`0x8ED40`/`0x974DC`,
+ *    OL-27/OL-82) stay legs and their arguments are recorded as the
+ *    `match1b_*` observables; every gate still reaches `0x77636`, which either
  *    tails on `+0x44==0` or advances to stage 3/4;
  *  - stage 3 (`0x7769F`): the `+0x44` gate then `+0x89=0`, `+0x92++`;
  *  - stage 4 (`0x776C1`): `+0x92=4`, `FUN_0007DAB4`, target=pos, then the
@@ -3769,13 +3769,19 @@ static int match_1b_replace(struct fifa96_match_run *mr,
   return 1;
 }
 
-/* ===== M2 phase-28 T6 / FU301: the deep-pan I — the seed + Blocks A–E ======
+/* ===== M2 phase-28 T6/T7 / FU301+FU302: the deep pan =======================
  *
- * `match_1b_deep_pan` is the field-level port of `0x77035..0x7733E` (fresh
- * `disassemble_bytes 0x77035`/`0x771C1` this slice; frozen FU301 §1.1–§1.6).
- * It runs after the FU-285 gate chain (`0x76FD5`..`0x7701C`) and stops at the
- * `EDI` sign-match (`0x77313`, T7/FU302): the pan vector (`0x7733F`), the
- * `0x71C94` seat (`0x77423`) and the install tree (`0x77428`) stay T7's.
+ * `match_1b_deep_pan` is the field-level port of the row-0x1B wide body
+ * `0x77035..0x774D2` (fresh `disassemble_bytes` in the FU301/FU302 slices):
+ * the seed + Blocks A-E (`0x77035..0x77312`, FU301/T6), Block F's `EDI`
+ * sign-match + pan vector (`0x77313..0x7738A`), the `[0x157823]` sit block
+ * (`0x7738C..0x7740B`), the `0x71C94` seat (`0x77423`) and the install tree
+ * through the terminal (`0x77428..0x774D2`, FU302/T7).
+ *
+ * The seat's height is the adjudicated camY-derived `SI = dword[0x157750]`
+ * loaded at `0x77228` (`fifa96_camera_event_set(cam, step_x, step_z,
+ * (int16_t)mr->keeper_cam_y, 0)`), never the Block-C jitter: the FU302 review
+ * erratum supersedes FU302-L10's "BX = jitter" reading.
  *
  * Corrections carried verbatim from the FU301 review (the FU293 omissions):
  *  - the difficulty-1 seed's final lane extent is `0x60-(8-d)`, not the
@@ -3795,27 +3801,113 @@ static int match_1b_replace(struct fifa96_match_run *mr,
  *  - Block B's first bound gate reads `dword[rec+0x69]>>16` = `word[+0x6B]`
  *    (`lane_x`), and the second the `dword[rec+0x5D]` position-height word.
  *
- * Unported cells stay numbered legs (never faked):
- *  - `0xCD514(C0,C2)` (`0x7726D` → `[0x1577BE]`) is FU302-L1 (T7): the
- *    zero-guard seeds C0/C2 and the two draws, but `camera.speed` is left at
- *    the guard value 0 (the native would store the hypot);
- *  - `0x74584(...)` (`0x771DA`, the Block C keeper-relation flag) is FU302-L2
- *    (T7): the flag stays 0 (its register-initial value at `0x7716A`);
- *  - `[0x1577CA]`'s deep reads are attached to the live pool record the
- *    tracked id resolves to (the row-0x1A stage-0 precedent) — FU302-L7's
- *    producer question remains open for any id with no pool record.
+ * The two fold legs close here (FU302-L1/L2):
+ *  - `0xCD514(C0,C2)` (`0x7726D` → `word[0x1577BE]`) is the trig-normalized
+ *    magnitude. `fifa96_entity_intercept_band(0, 0, C0, C2, &out)` computes
+ *    exactly `0xCD514`'s body (angle + `|a|/cos` or `|b|/sin` with the
+ *    `0..0x100` mirror); `0x795B4` calls the same primitive with the same
+ *    argument order (`0x795E2`), so the arg-order equivalence is proven for
+ *    this site. The result is kept in `match1b_hypot` (the setter re-derives
+ *    the live cell later).
+ *  - `0x74584(...)` (`0x771DA`, the Block C keeper-relation flag) is the
+ *    `RET 0x10` band predicate ported by `match_1b_keeper_band` below:
+ *    `t = 2*int8(0x10-desc_c)+0x3C0`, reject `|keeper.x| > t`, then
+ *    `side==1 ? keeper.z > 0xB10-t : keeper.z < -(0xB10-t)`.
  *
  * The `0x92AC8` stream positions are the FU301-L9 contract: two draws on the
  * zero-guard seed, one draw only inside the Block C jitter condition, one
  * reduce draw always. Returns MATCH_1B_DEEP_EXIT when a native gate diverts to
  * `0x77636`, MATCH_1B_DEEP_REPLACE when the `0x7720E` latch test ran the
  * `0x774DD` re-place (its ungated self-actor write), and MATCH_1B_DEEP_PAN when
- * Block D selected the pan block and Blocks E ran (`0x7721B..0x77312`). */
+ * the whole pan block through the `0x774D2` terminal ran. */
 enum {
   MATCH_1B_DEEP_EXIT = 0,
   MATCH_1B_DEEP_REPLACE = 1,
   MATCH_1B_DEEP_PAN = 2
 };
+
+/* FU302 §1.5 (phase-28 T7): FUN_00074584 (`0x74584..0x745E9`, 40 insns,
+ * `RET 0x10`). arg1 = keeper.x, arg2 = keeper.y (dead), arg3 = keeper.z,
+ * arg4 = the current record (its `[[rec]+4]+0xC` descriptor and
+ * `byte[[rec]+0x826]` side). Returns the AL flag. The `int8` cast on
+ * `0x10 - desc_c` reproduces the native `MOV DL,0x10; SUB DL,AH; MOVSX`.
+ * The row-0x19 caller (`0x74B12`) is FU302-L2's second xref and still a leg. */
+static int match_1b_keeper_band(int32_t keeper_x, int32_t keeper_z,
+                                int8_t desc_c, uint8_t side) {
+  int32_t t = 2 * (int32_t)(int8_t)(0x10 - (int32_t)desc_c) + 0x3C0;
+  int32_t t2;
+  int64_t ax = keeper_x < 0 ? -(int64_t)keeper_x : (int64_t)keeper_x;
+  if (ax > (int64_t)t) return 0;
+  t2 = 0xB10 - t;
+  if (side == 1u) return keeper_z > t2;
+  return keeper_z < -t2;
+}
+
+/* FU302 §4 (phase-28 T7): FUN_00076B28 (`0x76B28..0x76D11`, 155 insns; fresh
+ * `disassemble_function` this slice). Inputs are the record's staged fields:
+ * `+0x51 target_y`, `+0x65 distance`, `+0x67 dx`, `+0x69 dz`, `+0x59/5D/61
+ * pos`, with the two caller constants `EBX`/`EDX`. Writes `+0x83` (the extent,
+ * `match_run.h`'s `steer83`), `+0x85` (`jump_base`, the ramp), `+0x87`
+ * (`jump_timer` = 0), the `+0x4D/+0x51/+0x55` target copy + sine offsets,
+ * `+0x73/+0x75` (`vel73`/`vel75`) and `+0x71` (`speed71`).
+ *
+ * Deferred native surfaces (never faked): the `0x795B4` band call's `dx` word
+ * (`+0x67`, no engine home; `band`/`dz` land in `distance`/`lane`) and the
+ * row-0x1B stage-1 caller `0x76FA2`, which sits behind the unported
+ * `0x8DCD4`/`0x79C50`/`0x114E04` movement/rotation block (FU180-L1/L2). The
+ * row-0x1C caller `0x779B4` is wired below. */
+static void match_1b_steering(struct fifa96_match_run_record *r,
+                              int32_t extent_base, int32_t distance_base,
+                              int16_t distance, int16_t dx, int16_t dz) {
+  int16_t extent;
+  int16_t local;
+  int32_t angle = 0;
+  int32_t k;
+  uint32_t raw = (uint32_t)(uint16_t)(int16_t)r->target_y;
+  extent = (int16_t)(uint16_t)(raw - (uint32_t)extent_base + 0x20u);
+  if (extent > 0) {                              /* 0x76B43 JG */
+    if (extent > 0x60) extent = 0x60;            /* 0x76B65..0x76B6A */
+    r->steer83 = extent;
+    r->jump_base = fifa96_camera_ramp(extent);   /* 0x76B7C `0x702F8` */
+  } else {
+    r->steer83 = 0;                              /* 0x76B48 */
+    r->jump_base = 0;                            /* 0x76B51 */
+  }
+  raw = (uint32_t)(uint16_t)distance;
+  local = (int16_t)(uint16_t)(raw - (uint32_t)distance_base + 0x20u);
+  if (local < 0x10) local = 0x10;                /* 0x76BA7..0x76BB2 */
+  else if (local > 0x70) local = 0x70;           /* 0x76BB4..0x76BB9 */
+  r->jump_timer = 0;                             /* 0x76B9E */
+  (void)fifa96_entity_angle(dx, dz, &angle);     /* 0x76BCD */
+  r->target_x = r->pos_x;                        /* 0x76BE3 MOVSD x3 */
+  r->target_y = r->pos_y;
+  r->target_z = r->pos_z;
+  r->target_x += fifa96_camera_mul16(local, fifa96_entity_sine(angle));
+  r->target_z +=
+      fifa96_camera_mul16(local, fifa96_entity_sine(angle + 0x100));
+  {
+    /* 0x76C59 `0x795B4(pos, target, &+0x65)`: band -> +0x65, dx -> +0x67,
+     * dz -> +0x69. `+0x67` has no engine home (its consumers are the
+     * unported event gates); the two modeled words land in the record. */
+    fifa96_entity_intercept_band_out band;
+    if (fifa96_entity_intercept_band(r->pos_x, r->pos_z, r->target_x,
+                                     r->target_z, &band) == FIFA96_OK) {
+      r->distance = band.band;
+      r->lane = band.dz;
+    }
+  }
+  if (r->jump_base != 0) {                       /* 0x76C5E TEST DI,DI */
+    k = (int32_t)local / (int32_t)r->steer83;    /* 0x76C7E IDIV */
+    if (k > 0xF) k = 0xF;                        /* 0x76C83..0x76C88 */
+    r->vel73 = fifa96_camera_mul16(k, fifa96_entity_sine(angle));        /* 0x76CBA */
+    r->vel75 =
+        fifa96_camera_mul16(k, fifa96_entity_sine(angle + 0x100));       /* 0x76CEA */
+  } else {
+    r->vel73 = 0;                                /* 0x76CF1 XOR EAX,EAX */
+    r->vel75 = 0;
+  }
+  r->speed71 = (int16_t)fifa96_entity_distance(r->vel73, r->vel75);      /* 0x76D01 */
+}
 
 static int match_1b_deep_pan(struct fifa96_match_run *mr,
                              struct fifa96_match_run_record *r,
@@ -3825,6 +3917,25 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   const int32_t ratio = (int32_t)r->desc_c >> 1;   /* 0x7704F/0x77077: SAR 0x19 */
   const struct fifa96_match_entity *keeper = NULL;
   int32_t esi, ecx, jitter, flag, x;
+  int32_t delta;
+  int16_t step_x, step_z, mag;
+  uint8_t sign_match;
+  uint8_t side = mr->entities.team[e->team].side;   /* [[rec]+0x826] */
+
+  /* Per-dispatch observables: a diverted route reports "nothing ran". */
+  mr->match1b_hypot = 0;
+  mr->match1b_pan_x = 0;
+  mr->match1b_pan_z = 0;
+  mr->match1b_vec_mag = 0;
+  mr->match1b_vec_x = 0;
+  mr->match1b_vec_z = 0;
+  mr->match1b_sign_match = 0;
+  mr->match1b_event_id = 0xFFu;
+  mr->match1b_stat_id = 0xFFu;
+  mr->match1b_stat_tracked = 0;
+  mr->match1b_sound_id = 0;
+  mr->match1b_sit_code = 0;
+  mr->match1b_sit_emit = 0;
 
   if (cam->tracked != FIFA96_CAMERA_TRACKED_NONE)
     keeper = match_entity_by_id(mr, cam->tracked);
@@ -3890,8 +4001,13 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
     }
   }
   if (jitter > 0x10) jitter = 0x10;                 /* 0x771B7..0x771BC */
-  /* 0x771C1..0x771E7: the `0x74584` keeper-relation predicate (FU302-L2, T7);
-   * the flag keeps its 0 register-initial value until that fold lands. */
+  /* 0x771C1..0x771E7: the `0x74584` keeper-relation predicate. The native
+   * pushes `{rec, [keeper+0x61], [keeper+0x5D], [keeper+0x59]}` (arg2 dead);
+   * the fold reads the record's descriptor and side. The id-with-no-pool-record
+   * engine state has no native analogue, so it keeps the 0 register value
+   * (FU302-L7). */
+  if (keeper != NULL)
+    flag = match_1b_keeper_band(keeper->pos_x, keeper->pos_z, r->desc_c, side);
 
   /* Block D (`0x771E8..0x7721A`): latch + route. */
   if (mr->keeper_latch[3] != 0)                     /* 0x157C57 -> 0x774D7 */
@@ -3909,12 +4025,19 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   mr->keeper_latch[5] = 1;                          /* 0x7721B [0x157C59] = 1 */
   if ((int16_t)cam->speed == 0) {                   /* 0x77222/0x7722E word[0x1577BE] */
     uint16_t d1 = 0, d2 = 0;
+    fifa96_entity_intercept_band_out band;
     (void)fifa96_rng_step(&mr->rng, &d1);           /* 0x77233 */
     cam->vel_x = (int16_t)((d1 & 7u) + 8u);         /* 0x77241 word[0x1577C0] */
     (void)fifa96_rng_step(&mr->rng, &d2);           /* 0x77247 */
     cam->vel_z = (int16_t)((d2 & 7u) + 8u);         /* 0x77255 word[0x1577C2] */
-    /* 0x77275 word[0x1577BE] = 0xCD514(C0,C2): FU302-L1 (T7); the zero guard
-     * leaves the cell at 0 until that hypot fold lands. */
+    /* 0x7725B..0x77275: `word[0x1577BE] = 0xCD514(C0, C2)`. The 0x795B4
+     * primitive (`fifa96_entity_intercept_band`) is the exact 0xCD514 body:
+     * `dx = C0`, `dz = C2`, angle + the `|a|/cos`/`|b|/sin` divisor split. */
+    if (fifa96_entity_intercept_band(0, 0, cam->vel_x, cam->vel_z, &band) ==
+        FIFA96_OK) {
+      cam->speed = (uint16_t)band.band;
+      mr->match1b_hypot = band.band;
+    }
   }
   cam->vel_z = (int16_t)(-(int32_t)(int16_t)cam->vel_z);  /* 0x7727B NEG */
   {
@@ -3937,6 +4060,86 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
       cam->vel_z = (int16_t)fifa96_camera_shift_step(cam->vel_z, 3);  /* 0x772D7/0x77305 */
     }
   }
+  mr->match1b_pan_x = cam->vel_x;                   /* 0x77312 word[0x1577C0] */
+  mr->match1b_pan_z = cam->vel_z;                   /* word[0x1577C2] */
+
+  /* Block F (`0x77313..0x7738A`): the EDI sign-match + the pan vector.
+   * `0x77313 CMP word[0x1577C2],0; SETG` and `0x77320 MOV ECX,dword[0x157754];
+   * TEST; SETG` compare the two signs; the body head `0x76D3B XOR EDI,EDI`
+   * makes the flag exactly 0 on a mismatch (FU302 §8 erratum: not a carry).
+   * L9: the dword tests read the word values (the high halves are residue). */
+  sign_match = (uint8_t)(((int16_t)cam->vel_z > 0) ==
+                         ((int16_t)mr->keeper_cam_z > 0));
+  delta = (int32_t)(int16_t)cam->timer_limit -
+          (int32_t)(int16_t)cam->timer;             /* 0x7733F..0x77350 */
+  step_x = (int16_t)((int16_t)cam->vel_x * delta);  /* 0x77354..0x7735E */
+  step_z = (int16_t)((int16_t)cam->vel_z * delta);  /* 0x77363..0x7736D */
+  mag = (int16_t)fifa96_entity_distance(step_x, step_z);  /* 0x77380 `0x8DC68` */
+  mr->keeper_latch[3] = 1;                          /* 0x77392 [0x157C57] = 1 */
+  mr->match1b_sign_match = sign_match;
+  mr->match1b_vec_mag = mag;
+  mr->match1b_vec_x = step_x;
+  mr->match1b_vec_z = step_z;
+
+  /* Block G (`0x7738C..0x7740B`): the `[0x157823]` one-shot sit block. The
+   * native clears the latch, increments the two per-side counters through
+   * `0x741B4` (`(x ^ [0x157ABE]) & 1`; the run's `side_swap`), requests the
+   * `0x92820(rec, 0x1A)` sit and emits the `0x651F0` code. The sink bodies are
+   * unported (FU302-L5 / OL-27 / OL-82), so the computed requests are recorded
+   * in `match1b_sit_code`/`match1b_sit_emit` rather than faked. */
+  if (mr->flag_157823 != 0) {
+    uint8_t idx;
+    idx = (uint8_t)(((side ^ 1u) ^ mr->side_swap) & 1u);   /* 0x773AD..0x773B9 */
+    mr->counter_157acc[idx]++;
+    idx = (uint8_t)((side ^ mr->side_swap) & 1u);          /* 0x773C4..0x773D4 */
+    mr->counter_157ad0[idx]++;
+    mr->flag_157823 = 0;                                   /* 0x773A7 */
+    mr->match1b_sit_code = 0x1Au;                          /* 0x773DC..0x773E3 */
+    mr->match1b_sit_emit = (uint8_t)(idx == 0u ? 5u : 0x0Eu);  /* 0x773F6..0x7740B */
+  }
+
+  /* The `0x77423` seat: `[0x157A6C] = 0` before the call (`0x7741A`), then
+   * `0x71C94(EAX=rec, EDX=&{mag,step_x,step_z}, BX=camY, ECX=0)`. The
+   * adjudicated height is `SI = dword[0x157750]` loaded at `0x77228` — the
+   * camY cell, NOT the Block-C jitter (FU302 review erratum). The engine's
+   * setter splits the native reset/bind: `fifa96_camera_event_set` (the
+   * `0x700F4` subset + `FUN_00070544`) then `fifa96_camera_set_tracked`
+   * (`0x71D27`). */
+  cam->event_suspended = 0;                         /* 0x7741A */
+  (void)fifa96_camera_event_set(cam, step_x, step_z,
+                                (int16_t)mr->keeper_cam_y, 0);
+  (void)fifa96_camera_set_tracked(cam, r->entity_id);
+
+  /* The install selection (`0x77428..0x774D2`, the EDI consumer). The sinks
+   * (`0x8F188` event ring, `0x8ED40` stat accumulator, `0x974DC` sound) are
+   * unported (OL-27/OL-82); their computed arguments are recorded. After the
+   * seat `[0x1577CA]` is the record, so the `0x8ED40(tracked, 5)` companion is
+   * always present on the p >= 0 arm. */
+  {
+    uint8_t event_id = 0xFFu, stat_id = 0xFFu, stat_tracked = 0u;
+    if (mr->state.phase == 0x10u && sign_match == 0u) {   /* 0x77428..0x77456 */
+      event_id = 6u;                                      /* 0x8F188(6, rec, 8) */
+      stat_id = 0x64u;                                    /* 0x8ED40(rec, 0x64) */
+    } else if (sign_match == 0u) {                        /* 0x77458 */
+      int32_t p = (int32_t)(int16_t)cam->vel_x *           /* 0x7745C..0x7746A */
+                  (int32_t)(int16_t)mr->keeper_cam_z;
+      if (p >= 0) {                                       /* 0x7746F JGE */
+        event_id = 3u;                                    /* 0x8F188(3, rec, 0x20) */
+        stat_tracked = (uint8_t)(cam->tracked != FIFA96_CAMERA_TRACKED_NONE
+                                     ? 1u
+                                     : 0u);               /* 0x8ED40(tracked, 5) */
+        stat_id = 0x19u;                                  /* 0x8ED40(rec, 0x19) */
+      } else {
+        stat_id = 5u;                                     /* 0x8ED40(rec, 5) */
+        event_id = 0u;                                    /* 0x8F188(0, rec, 0x20) */
+      }
+    }
+    mr->match1b_event_id = event_id;
+    mr->match1b_stat_id = stat_id;
+    mr->match1b_stat_tracked = stat_tracked;
+  }
+  mr->match1b_sound_id = 4u;                        /* 0x774C0..0x774C7 0x974DC(4) */
+  mr->keeper_latch[1] = 1u;                         /* 0x774CC [0x157C55] = 1 */
   return MATCH_1B_DEEP_PAN;
 }
 
@@ -4005,6 +4208,12 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
     stage = 1u;                                                  /* 0x76E2F..0x76E35 */
   }
   if (stage == 1u) {                                             /* 0x76E3B */
+    /* The bounded slice: the `+0x51 += 0x20` write. The rest of the native
+     * stage-1 body (`0x8DCD4` metric, `0x79C50` face, `0xCD474` heading,
+     * the `0x114E04` rotation of `+0x67/+0x69`, the `0x157C54` compare and
+     * the `0x76FA2` `0x76B28` steering call) is FU180-L1/L2, so this caller
+     * stays a leg; the helper itself is ported and wired at row-0x1C's
+     * `0x779B4` (FU302/T7). */
     r->target_y += 0x20;                                         /* 0x76E7D */
     stage = 2u;                                                  /* 0x76FC1 */
   }
@@ -4024,15 +4233,14 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
      *  - `0x7701C [ESP+0xe]>>16` ∈ `[0x34,0x3A]` -> else `0x77636`: the
      *    `[ESP+0xe]` dword's high word is the `[ESP+0x10]` anim word staged at
      *    `0x76FFA` from `byte[[rec+0x28]]` (= `record.anim_id`);
-     *  - the pitch bounds / the deep-pan body: the seed + Blocks A-E
-     *    (`0x77035..0x7733E`, the `0x8DCD4`/`0x8DC50`/`0xCD474` folds + the
-     *    `[[rec+4]+9]` descriptor term) are PORTED (phase-28 T6 / FU301,
-     *    `match_1b_deep_pan`, incl. the `0x7720E [0x157C58]` re-place arm);
-     *    the pan vector (`0x7733F..0x7738A`), the `EDI` sign-match
-     *    (`0x77313..0x7733A`), the `0xCD514`/`0x74584` folds and the
-     *    `0x71C94` seat's install tree stay FU301-L5/FU302 (`match1b_wide_leg`
-     *    marks the Blocks A-E reach; the `0x71D27` bind is the retained
-     *    stand-in);
+     *  - the pitch bounds / the deep-pan body: the seed + Blocks A-G through
+     *    the `0x77423` seat and the `0x77428..0x774D2` install tree
+     *    (`0x77035..0x774D2`, the `0x8DCD4`/`0x8DC50`/`0xCD474`/`0xCD514`/
+     *    `0x74584` folds + the `[[rec+4]+9]` descriptor term) are PORTED
+     *    (phase-28 T6/T7 / FU301+FU302, `match_1b_deep_pan`, incl. the
+     *    `0x7720E [0x157C58]` re-place arm); the sink bodies
+     *    (`0x8F188`/`0x8ED40`/`0x974DC`, OL-27/OL-82 / FU302-L5) stay legs
+     *    with their computed arguments recorded;
      *  - `0x774C0` terminal: `0x974DC(4)` (sink, FU285-L1) + `[0x157C55]=1`. */
     if (mr->keeper_latch[1] == 0u) {                             /* 0x76FC7 */
       if (actor_is_rec == 0u) {                                  /* 0x76FD5 (mutual exclusion) */
@@ -4045,20 +4253,15 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
             if (self_actor != 0) actor_is_rec = 1;               /* 0x77568 */
           } else if ((int16_t)e->lane_x <= (int16_t)e->bound &&  /* 0x7700E */
                      (int16_t)anim >= 0x34 && (int16_t)anim <= 0x3A) {  /* 0x7701C */
-            /* FU301 (phase-28 T6): the seed + Blocks A-E (`0x77035..0x7733E`);
-             * every Block B/C/D exit diverts to the `0x77636` stage-4 head
-             * (the shared tail below), and the `0x7720E` latch arm runs the
-             * `0x774DD` re-place with its ungated self-actor write. The pan
-             * vector (`0x7733F`), the `EDI` sign-match (`0x77313`), the
-             * `0x71C94` seat (`0x77423`) and the install tree stay T7's
-             * (FU301-L5/FU302): the existing `0x71D27` tracked-bind stand-in
-             * and the `0x774C0` terminal are unchanged below. */
+            /* FU301/FU302 (phase-28 T6/T7): the seed + Blocks A-G through the
+             * `0x77423` seat and the `0x77428..0x774D2` install tree. Every
+             * Block B/C/D exit diverts to the `0x77636` stage-4 head (the
+             * shared tail below); the `0x7720E` latch arm runs the `0x774DD`
+             * re-place with its ungated self-actor write. The sink bodies
+             * (`0x8F188`/`0x8ED40`/`0x974DC`, OL-27/OL-82) record their
+             * computed arguments in the `match1b_*` observables. */
             int route = match_1b_deep_pan(mr, r, e);
-            if (route == MATCH_1B_DEEP_PAN) {
-              mr->match1b_wide_leg = 1;                          /* Blocks A-E ran (FU301) */
-              (void)fifa96_camera_set_tracked(&mr->render.camera, id);  /* 0x77423/0x71D27 stand-in */
-              mr->keeper_latch[1] = 1u;                          /* 0x774CC [0x157C55] = 1 (terminal) */
-            } else if (route == MATCH_1B_DEEP_REPLACE) {
+            if (route == MATCH_1B_DEEP_REPLACE) {
               actor_is_rec = 1;   /* 0x77568 [0x157A83] = EBP (the 0x77640 head reads it) */
             }
           }
@@ -4406,6 +4609,7 @@ static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
     fifa96_arm_vec from, to;
     int32_t distance = 0, lane = 0;
     int32_t angle = 0;
+    int16_t steer_dx, steer_dz;
     from.x = r->pos_x;
     from.y = r->pos_y;
     from.z = r->pos_z;
@@ -4413,6 +4617,8 @@ static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
     to.y = r->target_y;
     to.z = r->target_z;
     (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane);   /* 0x77797 */
+    steer_dx = (int16_t)((uint16_t)to.x - (uint16_t)from.x);     /* 0x8DCD4 out +0x67 */
+    steer_dz = (int16_t)((uint16_t)to.z - (uint16_t)from.z);     /* 0x8DCD4 out +0x69 */
     /* 0x777B4 `0x79C50(rec, -[0x1577C0], -[0x1577C2])` and the 0x777CC `+0x7F`
      * heading are FU186-L2 (unmodeled inputs / no cell). */
     if (fifa96_entity_angle(distance, r->target_y, &angle) == FIFA96_OK) { /* 0x777DE */
@@ -4421,8 +4627,8 @@ static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
       uint8_t on_target = 0, event_code = 0;
       int16_t steer_x = 0, steer_z = 0;
       delta_v.distance = (int16_t)distance;
-      delta_v.dx = (int16_t)((uint16_t)to.x - (uint16_t)from.x);   /* 0x8DCDD */
-      delta_v.dz = (int16_t)((uint16_t)to.z - (uint16_t)from.z);
+      delta_v.dx = steer_dx;
+      delta_v.dz = steer_dz;
       pos.x = r->pos_x;
       pos.y = r->pos_y;
       pos.z = r->pos_z;
@@ -4437,7 +4643,11 @@ static int fifa96_match_action_1C(struct fifa96_match_run *mr) {
       (void)steer_x;
       (void)steer_z;
     }
-    /* 0x77997 the `0x6E598` anim and the `0x76B28` steering -> FU186-L2. */
+    /* 0x77997 the `0x6E598` anim stays FU186-L2; 0x779B4 `0x76B28` is the
+     * FU302/T7 steering port (row-0x1B's `0x76FA2` caller stays FU180-L1/L2
+     * behind the unported stage-1 movement/rotation block). EBX=0x50,
+     * EDX=0x80 (fresh `0x779AC..0x779B4`). */
+    match_1b_steering(r, 0x50, 0x80, (int16_t)distance, steer_dx, steer_dz);
     r->timer89 = 0;                                 /* 0x779B9 */
     r->stage92 = 2u;                                /* 0x779CB */
     stage = 2u;
@@ -6025,9 +6235,9 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x1A, fifa96_match_action_1A,
      "FU-300 §2 + FU298/FU304 (phase-28 T5): row 1A FULL body ported (fifa96_match_action_1A, 0x7662C..0x76B21): the phase-0xD+[0x157AAC] head bind, +0x89 timer, +0x92>4 tail; the 5-arm table {0x76693,0x766DD,0x766F5,0x76AAD,0x76AE8} (stage-0 0x765C4 predicate -> reset + install 4 invoke-now / +0x9E/+0x89/+0x92+=2; stage-1 fold; stage-2 snap); the [0x157C2C] direction machine (0x2D/0x2E/0x54 arms + the 0x702F8 camera-Y clamp = fifa96_camera_ramp); the movement block (0x79C50 face = fifa96_entity_face, 0xCD474 heading -> word +0x7F, 0x6E598 anim = fifa96_match_run_record_anim_install, the 'T' lead jitter); the event ladder {5,4,9,1,7,0} + anim select {0xF,0xE,1} (sinks 0x8ED40/0x8F188/0x651F0/0x974DC/0x974F0 recorded as match1a_event_id/match1a_anim, FU300-L3); the sit-7 emit set_piece(7,side,0) and the stage-4 sit-5 emit set_piece(5,side,1). COUNTED after the T5 live proof: the ladder's 0x1A arms (0x7821D/0x78245/0x7826D) fire on the real frame path behind the live P1 permit (FU298 static 0x110680 table), the live row-0x19 interlock (FU299 Option B per-step pulse) and the computed CX, and the installed row dispatches through this slot (test_keeper_installer_live_reach: CX=4 -> row 0x1B + the camera chain; CX=1 -> row 0x1A, stamp 0x2C, event id 9/anim 0x0F/movement anim 0x2C). Legs: FU300-L1 (0x1577F0/FA + the descriptor byte), L2 (the movement bridges are ported; the remaining cells), L3 (the sinks), L4 (the seam stamp, now ported), L5 (the row-1B emit shape); OL-34; -UNSUPPORTED"},
     {0x1B, fifa96_match_action_1B,
-     "FU-180 §2 (phase-15 T2) + FU-285 §1/§5 (M2 phase-26c T5) + FU301 (phase-28 T6): row 1B reposition/rush body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the stage-2 wide is ported (FU-285): the 0x76FD5 mutual exclusion (EBP==[0x157A83] -> 0x77636), the 0x76FF4 [0x157C5C] latch clear -> the 0x774DD re-place (incl. the UNGATED self-actor 0x77568 and the 0x774C0 tail [0x157C55]=1), the 0x77423 CALL 0x71C94 pan setter (0x71D27 [0x1577CA]=rec) and the 0x7700E rush + 0x7701C anim-band gates, so the 0x77707 sit-5 emit is self-satisfying (FU285-L1 narrows FU-273 T2b-L1); the deep-pan seed + Blocks A-E (0x77035..0x7733E, the FU301 corrections: the seed ECX=0x60-(8-d), Block A's unconditional ECX x3/4, the code-3 reduce on C2 only; the 0x8DCD4 distance, the 0xCD474 heading and the 0x8DC50 reduces ported; the 0x7720E [0x157C58] re-place arm live) are ported by match_1b_deep_pan; the pan vector (0x7733F..0x7738A), the EDI sign-match (0x77313..0x7733A), the 0xCD514 hypot / 0x74584 keeper flag (FU302-L1/L2), the 0x14E04 sine rotation and the 0x76B28 steering stay FU301-L5/FU302 (FU180-L1/L2/L3); installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
+     "FU-180 §2 (phase-15 T2) + FU-285 §1/§5 (M2 phase-26c T5) + FU301/FU302 (phase-28 T6/T7): row 1B reposition/rush body ported (fifa96_match_action_1B, 0x76D28..0x77727 5-arm table {0x76DF6,0x76E3B,0x76FC7,0x7769F,0x776C1}): the phase-0xD+side head camera place/take/actor, the timer, stages 0/1/3/4 and the 0x77636 rush exit + the ported fifa96_keeper_reposition_b_finish; the stage-2 wide is ported (FU-285): the 0x76FD5 mutual exclusion (EBP==[0x157A83] -> 0x77636), the 0x76FF4 [0x157C5C] latch clear -> the 0x774DD re-place (incl. the UNGATED self-actor 0x77568 and the 0x774C0 tail [0x157C55]=1), the 0x77423 CALL 0x71C94 pan setter (0x71D27 [0x1577CA]=rec) and the 0x7700E rush + 0x7701C anim-band gates, so the 0x77707 sit-5 emit is self-satisfying (FU285-L1 narrows FU-273 T2b-L1); the deep-pan seed + Blocks A-G through the 0x77423 seat and the 0x77428..0x774D2 install tree (0x77035..0x774D2, the FU301 corrections: the seed ECX=0x60-(8-d), Block A's unconditional ECX x3/4, the code-3 reduce on C2 only; the 0x8DCD4 distance, the 0xCD474 heading, the 0x8DC50 reduces, the 0xCD514 hypot via fifa96_entity_intercept_band, the 0x74584 band predicate, the EDI sign-match and the pan vector; the 0x7720E [0x157C58] re-place arm live; the seat height = the camY-derived dword[0x157750] low word, NOT the jitter) are ported by match_1b_deep_pan; the install-tree sink bodies (0x8F188/0x8ED40/0x974DC) and the 0x92820/0x651F0 sit sinks stay OL-27/OL-82 legs with their computed arguments recorded in the match1b_* observables; the 0x76B28 steering is ported and wired at row-0x1C 0x779B4 (row-0x1B's 0x76FA2 caller sits behind the unported stage-1 block, FU180-L1/L2); installer is row-0x1F's ported no-slot dive (0x76557 invoke-now); the second installer 0x78299 (FUN_0008D8EC pre-pass) FU180-L4/L5"},
     {0x1C, fifa96_match_action_1C,
-     "FU-186 §2.2/§4.1 (phase-16 T3): row 1C keeper-lunge body ported (fifa96_match_action_1C, 0x77728..: head timer89 += delta, stage 0 (ran/timer89=0/keeper_latch[2]=0/stage->1), stage 1 = the 0x8DCD4 metric + the fifa96_keeper_lunge_track on-target pos shift (|angle(distance,target_y)|<0x55) and stage 2 (row44 -> match_row_reset); installer LIVE: the wired row-0x1F stage-3 tail drains fifa96_keeper_input_decide whose both-slot-dirs-zero arm installs 0x1C invoke-now (FUN_00076130 0x76291->0x762A4), so the route executes end-to-end; the 0x79C50 face, the +0x7F heading, the 0x77856 rotated arm (0x114E04 sine + 0x795A4), the 0x6E598 anim, the 0x76B28 steering and the 0x779DE tail stay FU186-L2; the second installer FUN_00077EAC 0x782B6 stays FU186-L5"},
+     "FU-186 §2.2/§4.1 (phase-16 T3): row 1C keeper-lunge body ported (fifa96_match_action_1C, 0x77728..: head timer89 += delta, stage 0 (ran/timer89=0/keeper_latch[2]=0/stage->1), stage 1 = the 0x8DCD4 metric + the fifa96_keeper_lunge_track on-target pos shift (|angle(distance,target_y)|<0x55) and stage 2 (row44 -> match_row_reset); installer LIVE: the wired row-0x1F stage-3 tail drains fifa96_keeper_input_decide whose both-slot-dirs-zero arm installs 0x1C invoke-now (FUN_00076130 0x76291->0x762A4), so the route executes end-to-end; the 0x79C50 face, the +0x7F heading, the 0x77856 rotated arm (0x114E04 sine + 0x795A4), the 0x6E598 anim and the 0x779DE tail stay FU186-L2; the 0x779B4 0x76B28 steering is ported (FU302/T7: match_1b_steering, writes +0x83/85/87/4D/51/55/73/75/71; the 0x795B4 dx word +0x67 has no engine home); the second installer FUN_00077EAC 0x782B6 stays FU186-L5"},
     {0x1D, fifa96_match_action_1D,
      "FU-151 §Port contract item 2/FU-79 §6/§2.5: row 1D ported (fifa96_keeper_closedown_step, 0x74EB0..0x754E1, stages 0..4) over the pool; place/commit/helper/reset/situation + the clearance staging (events 0x30/0x31) bound; 0x157C5E table, 0x744D4/0x74CDC/0x79B1C/0x7B878/0x8F188/0x7A490/0x8DE8C+0x786A0 and the UI/audio calls FU-151 legs"},
     {0x1E, fifa96_match_action_1E,

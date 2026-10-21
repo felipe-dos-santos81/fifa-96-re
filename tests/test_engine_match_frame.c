@@ -8017,7 +8017,6 @@ static void test_action_1b_deep_pan_seed_extents(void) {
   mr.keeper_cam_y = 0x20;
   mr.keeper_latch[4] = 1;                   /* 0x157C58: the latch test -> pan */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);         /* Block D selected 0x7721B */
   assert(mr.keeper_latch[5] == 1);          /* 0x7721B [0x157C59] = 1 (Block E) */
   assert(mr.keeper_latch[1] == 1);          /* 0x774CC terminal */
   assert(mr.render.camera.tracked == mr.record.entity_id);
@@ -8029,9 +8028,8 @@ static void test_action_1b_deep_pan_seed_extents(void) {
   e->lane_x = 0x98;
   mr.keeper_latch[4] = 1;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* 0x770E7 -> 0x77636 */
   assert(mr.keeper_latch[5] == 0);
-  assert(mr.keeper_latch[1] == 0);
+  assert(mr.keeper_latch[1] == 0);          /* 0x770E7 -> 0x77636 */
 
   /* (c) difficulty 0 -> ESI 0xA0; the same lane passes and Block E runs. */
   e = match1b_deep_stage(&mr);
@@ -8039,7 +8037,7 @@ static void test_action_1b_deep_pan_seed_extents(void) {
   e->lane_x = 0x98;
   mr.keeper_latch[4] = 1;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);
+  assert(mr.keeper_latch[1] == 1);
   assert(mr.keeper_latch[5] == 1);
 }
 
@@ -8065,9 +8063,8 @@ static void test_action_1b_deep_pan_block_a_three_quarter(void) {
   mr.keeper_cam_y = 0x48;
   mr.keeper_latch[4] = 1;                   /* pan if Block B passes */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* 0x770F5 -> 0x77636 */
   assert(mr.keeper_latch[5] == 0);
-  assert(mr.keeper_latch[1] == 0);
+  assert(mr.keeper_latch[1] == 0);          /* 0x770F5 -> 0x77636 */
 
   /* Far: d = 0x400 >= 0x1E0 -> no x3/4; ECX 0x59 + ratio 1 = 0x5A. */
   (void)match1b_deep_stage(&mr);
@@ -8078,7 +8075,7 @@ static void test_action_1b_deep_pan_block_a_three_quarter(void) {
   mr.keeper_cam_y = 0x5A;
   mr.keeper_latch[4] = 1;                   /* pan if Block B passes */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);         /* 0x770CE added the ratio */
+  assert(mr.keeper_latch[1] == 1);         /* 0x770CE added the ratio */
   assert(mr.keeper_latch[5] == 1);
   assert(mr.render.camera.tracked == mr.record.entity_id);
 }
@@ -8098,7 +8095,7 @@ static void test_action_1b_deep_pan_block_a_difficulty_adjust(void) {
 
   mr.difficulty_14c2f6 = 0;                 /* 0x63 -> x3/4 -> 0x4B */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);         /* 0x4B + 0 < 0x48 is false */
+  assert(mr.keeper_latch[1] == 1);         /* 0x4B + 0 < 0x48 is false */
   assert(mr.keeper_latch[5] == 1);
 
   (void)match1b_deep_stage(&mr);
@@ -8108,7 +8105,7 @@ static void test_action_1b_deep_pan_block_a_difficulty_adjust(void) {
   mr.keeper_latch[4] = 1;
   mr.difficulty_14c2f6 = 1;                 /* 0x59 -> x3/4 -> 0x43 */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* 0x43 < 0x48 -> 0x77636 */
+  assert(mr.keeper_latch[1] == 0);         /* 0x43 < 0x48 -> 0x77636 */
   assert(mr.keeper_latch[5] == 0);
 }
 
@@ -8131,7 +8128,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.keeper_latch[4] = 1;
   e->lane_x = 0xB0;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);         /* 0xB0 <= 0xC0 */
+  assert(mr.keeper_latch[1] == 1);         /* 0xB0 <= 0xC0 */
   assert(mr.keeper_latch[5] == 1);
 
   /* (b) heading 0x80 with lane_x > 0x20 -> exit. */
@@ -8143,7 +8140,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.keeper_latch[4] = 1;
   e->lane_x = 0x40;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* 0x77139..0x7715D -> 0x77636 */
+  assert(mr.keeper_latch[1] == 0);         /* 0x77139..0x7715D -> 0x77636 */
   assert(mr.keeper_latch[5] == 0);
 
   /* (c) the face word cancels the heading -> the pan block. */
@@ -8155,7 +8152,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.keeper_latch[4] = 1;
   e->lane_x = 0x40;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);
+  assert(mr.keeper_latch[1] == 1);
   assert(mr.keeper_latch[5] == 1);
 
   /* (d) the argument order: `angle(lane_z, cam_dz6f)` is 0 at
@@ -8172,7 +8169,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   e->lane_z = 0;
   e->cam_dz6f = 0x100;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);
+  assert(mr.keeper_latch[1] == 1);
   assert(mr.keeper_latch[5] == 1);
 }
 
@@ -8192,31 +8189,29 @@ static void test_action_1b_deep_pan_block_c_jitter(void) {
   mr.record.desc_c = 2;                     /* ratio = 1 */
   mr.keeper_cam_y = 0x30;
   mr.keeper_latch[4] = 0;                   /* the latch test falls to the pan */
-  keeper->pos_z = 0x800;                    /* > 0x780: the jitter arm */
+  keeper->pos_z = -0x800;                   /* > 0x780: the jitter arm; side-1 band false */
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);   /* draw1 = 0x200 */
 
   /* jitter 0 < 1 -> `[0x157C58]==0` -> the 0x774DD re-place. */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* Block E not reached */
+  assert(mr.keeper_latch[1] == 0);          /* Block E not reached; no terminal */
   assert(mr.record.place_valid == 1);       /* 0x774DD ran */
   assert(mr.record.controlled == 1);        /* 0x77568 self-actor */
   assert(mr.keeper_latch[5] == 1);          /* 0x77536 */
-  assert(mr.keeper_latch[1] == 0);          /* the pan terminal did not run */
 
   /* jitter 1 >= 1 and camY > 0x20 -> the pan block. */
   (void)match1b_deep_stage(&mr);
   keeper = match1b_deep_track(&mr);
-  keeper->pos_z = 0x800;
+  keeper->pos_z = -0x800;
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 2;
   mr.keeper_cam_y = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw1 = 0x4201 */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);
+  assert(mr.keeper_latch[1] == 1);
   assert(mr.record.place_valid == 0);
   assert(mr.keeper_latch[5] == 1);
-  assert(mr.keeper_latch[1] == 1);
   assert(mr.render.camera.tracked == mr.record.entity_id);
 }
 
@@ -8235,28 +8230,26 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
   /* (a) threshold: the same draw, the difficulty switch flips the route. */
   (void)match1b_deep_stage(&mr);
   keeper = match1b_deep_track(&mr);
-  keeper->pos_z = 0x600;
+  keeper->pos_z = -0x600;                   /* side-1 band false */
   mr.record.desc_c = 2;
   mr.keeper_cam_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.difficulty_14c2f6 = 0;                 /* 0x5A0: 0x600 > thr */
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw1 = 0x4201 */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);         /* jitter 2 >= ratio 1 -> pan */
-  assert(mr.keeper_latch[1] == 1);
+  assert(mr.keeper_latch[1] == 1);          /* jitter 2 >= ratio 1 -> pan */
 
   (void)match1b_deep_stage(&mr);
   keeper = match1b_deep_track(&mr);
-  keeper->pos_z = 0x600;
+  keeper->pos_z = -0x600;                   /* side-1 band false */
   mr.record.desc_c = 2;
   mr.keeper_cam_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.difficulty_14c2f6 = 1;                 /* 0x780: 0x600 not > thr */
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* jitter 0 < 1 -> 0x774DD */
+  assert(mr.keeper_latch[1] == 0);          /* jitter 0 < 1 -> 0x774DD */
   assert(mr.record.place_valid == 1);
-  assert(mr.keeper_latch[1] == 0);
 
   /* (b) clamp: the seed-0 draw 3 is 0x133F (low nibble 15), so difficulty 0
    * computes 2*15 = 30; the native clamps to 0x10 (`0x771B7..0x771BC`), and a
@@ -8264,7 +8257,7 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
    * 30 would pan). The two draws before the dispatch position the stream. */
   (void)match1b_deep_stage(&mr);
   keeper = match1b_deep_track(&mr);
-  keeper->pos_z = 0x800;
+  keeper->pos_z = -0x800;                   /* side-1 band false */
   mr.record.desc_c = 34;                    /* ratio = 17 */
   mr.keeper_cam_y = 0x30;
   mr.keeper_latch[4] = 0;
@@ -8276,9 +8269,8 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
     assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
   }
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);         /* 0x10 < 17 -> 0x774DD */
+  assert(mr.keeper_latch[1] == 0);         /* 0x10 < 17 -> 0x774DD */
   assert(mr.record.place_valid == 1);
-  assert(mr.keeper_latch[1] == 0);
 }
 
 /* Block D (`0x771E8..0x7721A`): the three latch routes.
@@ -8297,9 +8289,8 @@ static void test_action_1b_deep_pan_block_d_latches(void) {
   mr.keeper_latch[3] = 1;                   /* 0x157C57 */
   mr.keeper_latch[4] = 1;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 0);
-  assert(mr.keeper_latch[5] == 0);
   assert(mr.keeper_latch[1] == 0);
+  assert(mr.keeper_latch[5] == 0);
   assert(mr.record.place_valid == 0);
 
   /* (b) the latch test with [0x157C58]==0 -> 0x774DD. */
@@ -8321,20 +8312,21 @@ static void test_action_1b_deep_pan_block_d_latches(void) {
   mr.record.desc_c = 2;
   mr.keeper_latch[4] = 1;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_wide_leg == 1);
-  assert(mr.keeper_latch[5] == 1);
   assert(mr.keeper_latch[1] == 1);
+  assert(mr.keeper_latch[5] == 1);
   assert(mr.render.camera.tracked == mr.record.entity_id);
   assert(mr.record.place_valid == 0);
 }
 
 /* Block E (`0x7721B..0x77312`): the pan-cell state machine.
- * (a) the zero-speed guard seeds C0/C2 from two draws, the CD514 hypot is the
- *     FU302-L1 leg (`[0x1577BE]`/`speed` stays 0), C2 negates, the `int8
- *     [desc+0x1B]` jitter adds, and the reduce draw's code-2 arm shifts both
- *     cells by 2 (`0x8DC50`). Seed 0 draws 0x200/0x6C0/0x10E0 -> 8, -8 -> 2, -2.
- * (b) a nonzero `[0x1577BE]` skips the seed draws; `desc_1b = 3` adds to the
- *     positive C0; exactly one draw advances the stream.
+ * (a) the zero-speed guard seeds C0/C2 from two draws, the CD514 hypot lands in
+ *     `[0x1577BE]` (recorded as `match1b_hypot`; the seat's setter re-derives
+ *     the live camera cell), C2 negates, the `int8 [desc+0x1B]` jitter adds,
+ *     and the reduce draw's code-2 arm shifts both cells by 2 (`0x8DC50`).
+ *     Seed 0 draws 0x200/0x725/0x10E0 -> 8, -13 -> 2, -3; the hypot of the
+ *     pre-negate pair (8,13) is the 0x795B4 band 9.
+ * (b) a nonzero `[0x1577BE]` skips the seed draws/hypot; `desc_1b = 3` adds to
+ *     the positive C0; exactly one draw advances the stream.
  * (c) code 3 (`(rand&0xF)+4 < byte[desc+0xF]`) reduces **only C2** by 3
  *     (FU293's omission correction). */
 static void test_action_1b_deep_pan_block_e_cells(void) {
@@ -8348,9 +8340,9 @@ static void test_action_1b_deep_pan_block_e_cells(void) {
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   before = mr.rng;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.render.camera.vel_x == 2);      /* (0x200&7)+8 = 8 -> >>2 */
-  assert(mr.render.camera.vel_z == -3);     /* -((0x725&7)+8) = -13 -> >>2 */
-  assert(mr.render.camera.speed == 0);      /* 0xCD514: FU302-L1 leg, not faked */
+  assert(mr.match1b_pan_x == 2);            /* (0x200&7)+8 = 8 -> >>2 */
+  assert(mr.match1b_pan_z == -3);           /* -((0x725&7)+8) = -13 -> >>2 */
+  assert(mr.match1b_hypot == 9);            /* 0xCD514(8,13) via 0x795B4 */
   match1b_deep_expect_draws(&mr, before, 3);
   assert(mr.keeper_latch[5] == 1);
 
@@ -8365,9 +8357,9 @@ static void test_action_1b_deep_pan_block_e_cells(void) {
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   before = mr.rng;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.render.camera.speed == 0x123);  /* untouched: the guard was nonzero */
-  assert(mr.render.camera.vel_x == 0x10);   /* (0x40+3) >> 2 */
-  assert(mr.render.camera.vel_z == -8);     /* -0x20 >> 2 (signed truncation) */
+  assert(mr.match1b_hypot == 0);            /* the guard skipped the fold */
+  assert(mr.match1b_pan_x == 0x10);         /* (0x40+3) >> 2 */
+  assert(mr.match1b_pan_z == -8);           /* -0x20 >> 2 (signed truncation) */
   match1b_deep_expect_draws(&mr, before, 1);
 
   /* (c) code 3: only C2 is reduced (>>3); C0 keeps the jittered value. */
@@ -8381,9 +8373,262 @@ static void test_action_1b_deep_pan_block_e_cells(void) {
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   before = mr.rng;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.render.camera.vel_x == 0x40);   /* code-3 leaves C0 alone */
-  assert(mr.render.camera.vel_z == -4);     /* -0x20 >> 3 */
+  assert(mr.match1b_pan_x == 0x40);         /* code-3 leaves C0 alone */
+  assert(mr.match1b_pan_z == -4);           /* -0x20 >> 3 */
   match1b_deep_expect_draws(&mr, before, 1);
+}
+
+/* FU302 §1.5 (T7): the `0x74584` keeper-relation band predicate. The row
+ * record is team 1 (side 1), so the side-1 arm returns `keeper.z > 0xB10-t`;
+ * with `desc_c = 10` `t = 2*6+0x3C0 = 0x3CC`, `t2 = 0x744`. `keeper.z = 0x750`
+ * sets the Block C flag, halving the Block D ratio (`desc_c >> 1 = 5` -> the
+ * `>>flag` = 2) so the seed-32 jitter 2 pans; `keeper.z = 0x740` fails the
+ * predicate, leaves the ratio 5, and jitter 2 < 5 selects the `0x774DD`
+ * re-place. */
+static void test_action_1b_deep_pan_keeper_band(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *keeper;
+
+  (void)match1b_deep_stage(&mr);
+  keeper = match1b_deep_track(&mr);
+  keeper->pos_x = 0;
+  keeper->pos_z = 0x750;                    /* > t2: flag = 1 */
+  mr.difficulty_14c2f6 = 0;                 /* 0x5A0 threshold; 0x750 > it */
+  mr.record.desc_c = 10;                    /* ratio = 5 */
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = 0x30;                   /* Block F sign + */
+  mr.keeper_latch[4] = 0;
+  assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw 0x4201 -> jitter 2 */
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_sign_match == 0);       /* camZ 0 (sign -) vs C2 -3 */
+  assert(mr.keeper_latch[5] == 1);          /* jitter 2 >= ratio>>1 = 2 -> pan */
+  assert(mr.keeper_latch[1] == 1);
+  assert(mr.record.place_valid == 0);
+
+  /* z just below t2: the predicate fails -> the ratio stays 5 -> re-place. */
+  (void)match1b_deep_stage(&mr);
+  keeper = match1b_deep_track(&mr);
+  keeper->pos_x = 0;
+  keeper->pos_z = 0x740;                    /* < t2: flag = 0 */
+  mr.difficulty_14c2f6 = 0;
+  mr.record.desc_c = 10;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_latch[4] = 0;
+  assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.keeper_latch[1] == 0);          /* jitter 2 < 5 -> 0x774DD */
+  assert(mr.record.place_valid == 1);
+  assert(mr.record.controlled == 1);
+}
+
+/* FU302 §2 Block F (T7): the `EDI` sign-match + the pan vector. With the
+ * `0x20`/`0x10` event timer staged, `delta = 0x10`; Block E's seed-0 cells
+ * `C0/C2 = 2/-3` produce `step = {0x20, -0x30}`, `mag = 0x8DC68 = 0x3C`, and
+ * `sign_match = (C2 > 0) == (camZ > 0)`: 0 at camZ 0x30, 1 at camZ -0x30. */
+static void test_action_1b_deep_pan_sign_match_vector(void) {
+  struct fifa96_match_run mr;
+
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = 0x30;
+  mr.render.camera.timer_limit = 0x20;
+  mr.render.camera.timer = 0x10;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_pan_x == 2);
+  assert(mr.match1b_pan_z == -3);
+  assert(mr.match1b_vec_x == 0x20);         /* 2 * 0x10 */
+  assert(mr.match1b_vec_z == -0x30);        /* -3 * 0x10 */
+  assert(mr.match1b_vec_mag == 0x3C);       /* 0x8DC68(0x20, -0x30) */
+  assert(mr.match1b_sign_match == 0);       /* C2 < 0, camZ > 0 */
+  assert(mr.keeper_latch[3] == 1);          /* 0x77392 [0x157C57] */
+
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = -0x30;
+  mr.render.camera.timer_limit = 0x20;
+  mr.render.camera.timer = 0x10;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_sign_match == 1);       /* both negative */
+  assert(mr.match1b_event_id == 0xFF);      /* EDI != 0 -> straight to terminal */
+  assert(mr.match1b_stat_id == 0xFF);
+  assert(mr.match1b_sound_id == 4);
+  assert(mr.keeper_latch[1] == 1);
+}
+
+/* FU302 review erratum (T7): the `0x77423` seat's height is the camY-derived
+ * `SI = dword[0x157750]` loaded at `0x77228`, not the Block-C jitter. The
+ * scenario forces jitter 2 (difficulty 0, |keeper.z| > 0x5A0, seed-32 draw)
+ * and a camY of 0x30: `camera.event_param` is 0x30 (the jitter arm would give
+ * 2). The `[0x157A6C]` bail is cleared before the call and `0x71D27` binds the
+ * record. */
+static void test_action_1b_deep_pan_seat_height(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *keeper;
+
+  (void)match1b_deep_stage(&mr);
+  keeper = match1b_deep_track(&mr);
+  keeper->pos_z = 0x800;                    /* > the difficulty-0 0x5A0 */
+  mr.difficulty_14c2f6 = 0;
+  mr.record.desc_c = 2;                     /* ratio 1 */
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_latch[4] = 0;
+  mr.render.camera.event_suspended = 1;     /* 0x7741A clears it */
+  assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* jitter = 2 */
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.render.camera.event_suspended == 0);
+  assert(mr.render.camera.event_param == 0x30);  /* camY, not jitter 2 */
+  assert(mr.render.camera.tracked == mr.record.entity_id);  /* 0x71D27 */
+  assert(mr.keeper_latch[1] == 1);
+}
+
+/* FU302 §2 the install tree (T7): the `EDI`/`[0x157A4A]` selection records the
+ * `0x8F188`/`0x8ED40` requests the native sinks would receive.
+ * - EDI 1 -> no event/stat, terminal sound 4 only;
+ * - EDI 0, phase 0x10 -> 6 / 0x64;
+ * - EDI 0, pan_x * camZ >= 0 -> 3 / 0x19 (+ the tracked 0x8ED40(…,5));
+ * - EDI 0, pan_x * camZ < 0 -> 0 / 5.
+ * `desc_1b = -127` makes Block E's C0 negative, so the post-seat velocity and
+ * the product are negative. */
+static void test_action_1b_deep_pan_install_tree(void) {
+  struct fifa96_match_run mr;
+
+  /* EDI 0, p >= 0: event 3, stat 0x19, the tracked companion. */
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = 0x30;
+  mr.render.camera.timer_limit = 0x20;
+  mr.render.camera.timer = 0x10;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_sign_match == 0);
+  assert(mr.match1b_event_id == 3);
+  assert(mr.match1b_stat_id == 0x19);
+  assert(mr.match1b_stat_tracked == 1);
+  assert(mr.match1b_sound_id == 4);
+
+  /* EDI 0, p < 0: event 0, stat 5. */
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = 0x30;
+  mr.record.desc_1b = -127;                 /* C0 = 8 - 127 -> negative */
+  mr.render.camera.timer_limit = 0x20;
+  mr.render.camera.timer = 0x10;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_pan_x < 0);
+  assert(mr.match1b_event_id == 0);
+  assert(mr.match1b_stat_id == 5);
+  assert(mr.match1b_stat_tracked == 0);
+
+  /* EDI 0, phase 0x10: the high-priority arm 6 / 0x64. */
+  (void)match1b_deep_stage(&mr);
+  mr.state.phase = 0x10u;
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = 0x30;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_event_id == 6);
+  assert(mr.match1b_stat_id == 0x64);
+
+  /* EDI 1 (camZ negative): no install request, terminal only. */
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_cam_z = -0x30;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_sign_match == 1);
+  assert(mr.match1b_event_id == 0xFF);
+  assert(mr.match1b_stat_id == 0xFF);
+  assert(mr.match1b_sound_id == 4);
+}
+
+/* FU302 §2 Block G (T7): the `[0x157823]` sit block clears the latch, bumps
+ * the two counters through `0x741B4` and records the `0x92820(rec, 0x1A)` /
+ * `0x651F0` requests. The row record is team 1 (side 1) with `side_swap` 0:
+ * the first index is `((1^1)^0)&1 = 0`, the second `(1^0)&1 = 1` -> emit 0xE. */
+static void test_action_1b_deep_pan_sit_dispatch(void) {
+  struct fifa96_match_run mr;
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.flag_157823 = 1u;
+  mr.side_swap = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.flag_157823 == 0);
+  assert(mr.counter_157acc[0] == 1);
+  assert(mr.counter_157acc[1] == 0);
+  assert(mr.counter_157ad0[1] == 1);
+  assert(mr.counter_157ad0[0] == 0);
+  assert(mr.match1b_sit_code == 0x1A);
+  assert(mr.match1b_sit_emit == 0x0E);
+}
+
+/* FU302 §4 (T7): FUN_00076B28 wired at the row-0x1C stage-1 `0x779B4` call
+ * (EBX=0x50, EDX=0x80). The on-target lunge shifts pos by dx>>1 (0x18 -> 0xC);
+ * the steering then copies pos to target, adds `mul16(local 0x10, sine(0x100))
+ * = 0x10` to x, rewrites the `0x795B4` band/dz into distance/lane, and with
+ * `+0x83 = 0x10` / `k = 0x10/0x10 = 1` writes `vel73 = 1`, `vel75 = 0`,
+ * `speed71 = 1`. The second scenario has `target_y = 0`: `+0x83 <= 0` zeroes
+ * the extent/ramp and the velocity pair (`0x76B48`/`0x76CF1`). */
+static void test_action_1b_steering_writes(void) {
+  struct fifa96_match_run mr;
+
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = FIFA96_MATCH_ENTITY_RECORDS;
+  mr.record.stage92 = 1u;
+  mr.record.row44 = 0u;
+  mr.record.pos_x = 0x100;
+  mr.record.pos_y = 0x10;
+  mr.record.pos_z = 0x200;
+  mr.record.target_x = 0x118;
+  mr.record.target_y = 0x40;
+  mr.record.target_z = 0x200;
+  assert(fifa96_match_dispatch_action(&mr, 0x1C) == FIFA96_OK);
+  assert(mr.record.stage92 == 2u);
+  assert(mr.record.pos_x == 0x10C);         /* the on-target lunge dx>>1 */
+  assert(mr.record.pos_z == 0x200);
+  assert(mr.record.steer83 == 0x10);        /* 0x40 - 0x50 + 0x20 */
+  assert(mr.record.jump_base == fifa96_camera_ramp(0x10));  /* 0x85 */
+  assert(mr.record.jump_timer == 0);        /* 0x87 */
+  assert(mr.record.target_x == 0x11C);      /* pos 0x10C + local 0x10 */
+  assert(mr.record.target_z == 0x200);
+  assert(mr.record.distance == 0x10);       /* the 0x795B4 band */
+  assert(mr.record.lane == 0);
+  assert(mr.record.vel73 == 1);             /* mul16(1, sine(0x100)) */
+  assert(mr.record.vel75 == 0);             /* mul16(1, sine(0x200)) */
+  assert(mr.record.speed71 == 1);           /* 0x8DC68(1, 0) */
+
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = FIFA96_MATCH_ENTITY_RECORDS;
+  mr.record.stage92 = 1u;
+  mr.record.row44 = 0u;
+  mr.record.pos_x = 0x100;
+  mr.record.pos_y = 0x10;
+  mr.record.pos_z = 0x200;
+  mr.record.target_x = 0x118;
+  mr.record.target_y = 0;                   /* extent <= 0 -> the zero arm */
+  mr.record.target_z = 0x200;
+  assert(fifa96_match_dispatch_action(&mr, 0x1C) == FIFA96_OK);
+  assert(mr.record.steer83 == 0);
+  assert(mr.record.jump_base == 0);
+  assert(mr.record.jump_timer == 0);
+  assert(mr.record.vel73 == 0);
+  assert(mr.record.vel75 == 0);
+  assert(mr.record.speed71 == 0);
 }
 
 int main(void) {
@@ -8495,6 +8740,12 @@ int main(void) {
   test_action_1b_deep_pan_block_c_threshold();
   test_action_1b_deep_pan_block_d_latches();
   test_action_1b_deep_pan_block_e_cells();
+  test_action_1b_deep_pan_keeper_band();
+  test_action_1b_deep_pan_sign_match_vector();
+  test_action_1b_deep_pan_seat_height();
+  test_action_1b_deep_pan_install_tree();
+  test_action_1b_deep_pan_sit_dispatch();
+  test_action_1b_steering_writes();
   test_keeper_seam_install_full_state();
   test_keeper_seam_copy_pos_not_after_install();
   test_keeper_seam_copy_pos_applies();
