@@ -3518,7 +3518,7 @@ static void test_action_1b_wide_route_binds_pan(void) {
    * on this fixture's RNG: C0 = 8, C2 = -(13), then the code-2 reduce). */
   assert(f.mr.match1b_pan_x == 2);
   assert(f.mr.match1b_pan_z == -3);
-  assert(f.mr.match1b_hypot == 9);           /* 0xCD514(8, 13) */
+  assert(f.mr.match1b_hypot == 15);          /* 0xCD514(8, 13) */
   /* The seat height is the camY cell (0x77228's dword[0x157750] low word). */
   assert(f.mr.render.camera.event_param == 0x30);
   /* Block F/G: C2 < 0 and camZ 0 > 0 -> EDI 0; the post-seat velocity pair is

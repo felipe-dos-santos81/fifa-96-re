@@ -32,6 +32,27 @@ int fifa96_entity_find_nearest(const fifa96_entity_candidate *candidates,
 int fifa96_entity_angle(int32_t x, int32_t z, int32_t *angle);
 int32_t fifa96_entity_sine(int32_t angle);
 
+/* FU302-L1 (phase-28 T7): `FUN_000CD514` (`0xCD514..0xCD579`, 41 instructions,
+ * fresh `disassemble_function`) — the exact trig-normalized magnitude/hypot.
+ * `a = [EBP+8]`, `b = [EBP+0xc]`:
+ *
+ *   angle = `0xCD474(A=b, B=a)`; |angle|; if > 0x100 -> 0x200-|angle|
+ *   if angle <= 0x80: divisor = sine(angle + 0x100) (= cosine); mag = |a|
+ *   else:             divisor = sine(angle)             (= sine);   mag = |b|
+ *   return (mag << 16) / divisor
+ *
+ * Both branches are `hypot(a, b)`; the branch only picks the better-conditioned
+ * component. Returns the full 32-bit quotient (the callers store AX).
+ *
+ * **Residual leg FU302-L1** (native owner `0xCD514`): the pre-existing
+ * `fifa96_entity_intercept_band` below is **not** this fold — it computes
+ * `fifa96_entity_angle(dx, dz)` (the transposed pair) and always divides `|dx|`,
+ * so it is not an exact `0xCD514` port. Its callers
+ * (`handlers.c:3198/3263/3425/5167`, `fifa96_match_entities.c:217`) are outside
+ * this task's scope and keep that behavior; the row-0x1B Block E and the
+ * `0x795B4` band use this exact primitive instead. */
+int32_t fifa96_entity_hypot(int32_t a, int32_t b);
+
 /* `FUN_0008D824` (`0x8D824..0x8D8EB`, 81 instructions, OL-41): the
  * interception bind. EAX = the controlled actor record (`0x8DA75 MOV
  * EAX,[0x157A83]`), EDX = the nearest record, EBX = the nearest record's
@@ -69,7 +90,16 @@ int fifa96_entity_intercept_bind(int32_t actor_x, int32_t actor_z, uint8_t actor
  * for every `a` in range). The output triple is a caller scratch: the
  * interception caller passes `LEA EBX,[ESP+0xC]` (`0x8DA88`) and the record's
  * +0x4D triple is only the *input* (`EDX`) — nothing is stored back to the
- * record. NULL `out` -> -FIFA96_ERR_INVALID. */
+ * record. NULL `out` -> -FIFA96_ERR_INVALID.
+ *
+ * **FU302-L1 residual (phase-28 T7, native owner `0xCD514`):** the formula
+ * above is the engine's derived behavior, **not** the native `0x795B4` body.
+ * Fresh `0x795B4` computes dx/dz and calls `0xCD514(dx, dz)` (`0x795E2`),
+ * which normalizes `fifa96_entity_angle(dz, dx)` and divides `|dx|/cos` or
+ * `|dz|/sin` by the branch. This helper's transposed angle plus its fixed
+ * `|dx|` dividend diverge on z-dominant pairs (e.g. `(0, 13)` returns 0 here
+ * vs 13 natively). The row-0x1B/0x1C band uses the exact
+ * `fifa96_entity_hypot`; the other callers stay on this derived sibling. */
 typedef struct fifa96_entity_intercept_band_out {
   int16_t band;
   int16_t dx;

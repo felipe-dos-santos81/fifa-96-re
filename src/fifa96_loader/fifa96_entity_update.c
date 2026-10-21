@@ -118,6 +118,30 @@ int fifa96_entity_angle(int32_t x, int32_t z, int32_t *angle) {
   return FIFA96_OK;
 }
 
+/* FU302-L1 (phase-28 T7): FUN_000CD514 (`0xCD514..0xCD579`, 41 insns). The
+ * native calls `0xCD474(A = [EBP+0xc], B = [EBP+8])`, folds the angle to
+ * `0..0x100`, then divides the better-conditioned component:
+ *   angle <= 0x80 -> |arg1| / sine(angle + 0x100)   (0xCD54B arm)
+ *   else          -> |arg2| / sine(angle)           (0xCD568 arm)
+ * `DIV` is unsigned on `(|mag| << 16)`; the quotient is the full EAX, callers
+ * store AX. See the header for the FU302-L1 residual of the older sibling. */
+int32_t fifa96_entity_hypot(int32_t a, int32_t b) {
+  int32_t angle = 0;
+  int32_t divisor;
+  uint32_t mag;
+  if (fifa96_entity_angle(b, a, &angle) != FIFA96_OK) return 0;
+  if (angle < 0) angle = -angle;                 /* 0xCD525..0xCD529 */
+  if (angle > 0x100) angle = 0x200 - angle;      /* 0xCD52B..0xCD534 */
+  if (angle <= 0x80) {                           /* 0xCD539 JLE */
+    divisor = fifa96_entity_sine(angle + 0x100); /* 0xCD541 0xCE386 */
+    mag = a < 0 ? (uint32_t)(0u - (uint32_t)a) : (uint32_t)a;
+  } else {
+    divisor = fifa96_entity_sine(angle);         /* 0xCD55E 0xCE364 */
+    mag = b < 0 ? (uint32_t)(0u - (uint32_t)b) : (uint32_t)b;
+  }
+  return (int32_t)((mag << 16) / (uint32_t)divisor);
+}
+
 int fifa96_entity_intercept_bind(int32_t actor_x, int32_t actor_z, uint8_t actor_side,
                                  int32_t nearest_x, fifa96_entity_intercept_target *out) {
   int64_t az;

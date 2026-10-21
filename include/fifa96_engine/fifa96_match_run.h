@@ -744,9 +744,11 @@ struct fifa96_match_run {
    * A-G through the `0x71C94` seat (`0x77423`) and the install tree
    * (`0x77428..0x774D2`). The values the port computes but whose sinks are
    * unported (the OL-27/OL-82 family) are recorded here, never faked:
-   *  - `match1b_hypot` = `word[0x1577BE]` after the `0xCD514` zero-guard fold
-   *    (`0x77275`; the seat's setter re-derives the cell, so this records the
-   *    fold itself);
+   *  - `match1b_hypot` = the `0xCD514` fold result stored to `word[0x1577BE]`
+   *    at `0x77275`; the seat's setter re-derives the live cell, so this
+   *    records the fold itself. **0 means "the zero guard skipped the fold"**
+   *    (the live `[0x1577BE]`/`camera.speed` value is not mirrored here), not
+   *    a computed zero;
    *  - `match1b_pan_x/z` = `word[0x1577C0]/[0x1577C2]` after Block E's negate,
    *    `int8[desc+0x1B]` jitter and `0x8DC50` reduce (`0x77312`);
    *  - `match1b_vec_mag/x/z` = the native 6-byte vector `{mag, step_x,
@@ -757,9 +759,13 @@ struct fifa96_match_run {
    *    none), `match1b_stat_tracked` = the `0x8ED40(tracked, 5)` companion
    *    (after the seat `[0x1577CA]` is the record), and `match1b_sound_id` =
    *    the terminal `0x974DC` request (4);
-   *  - `match1b_sit_code`/`match1b_sit_emit` = the `[0x157823]` block's
-   *    `0x92820(rec, 0x1A)` / `0x651F0(5|0xE)` requests (0 = block not run).
-   * Cleared by init/begin and at every wide dispatch. */
+   *  - `match1b_sit_code`/`match1b_sit_emit` = the sit dispatch's
+   *    `0x92820(rec, 0x1A)` / `0x651F0(5|0xE)` requests. The native request is
+   *    **unconditional** (`0x773DC`, after the `[0x157823]` gate); only the
+   *    latch clear and the counters are gated. 0 = not set (an early wide
+   *    gate), 0x1A/5|0xE on every pan dispatch.
+   * Cleared by init/begin and at the top of every row-0x1B dispatch (so a
+   * head-diverted dispatch reports nothing, not a stale previous result). */
   int16_t match1b_hypot;
   int16_t match1b_pan_x, match1b_pan_z;
   int16_t match1b_vec_mag, match1b_vec_x, match1b_vec_z;
@@ -774,8 +780,10 @@ struct fifa96_match_run {
    * `[0x157ACC]/[0x157AD0]` per-side sit counters the `0x7738C..0x773D8` block
    * increments (`index = (side ^ [0x157ABE]) & 1` through `0x741B4`; the run's
    * `side_swap` is the `[0x157ABE]` cell). The latch's native producer is
-   * unported (FU302-L5), so it is a staged input that defaults to zero; the
-   * counters are live native state. Init/begin clear them. */
+   * unported (FU302-L5), so it is a staged input that defaults to zero; it
+   * gates only the counter increments and its own clear, **not** the sit
+   * request (`0x77398 JZ 0x773DC`). The counters are live native state.
+   * Init/begin clear them. */
   uint8_t flag_157823;
   uint16_t counter_157acc[2];
   uint16_t counter_157ad0[2];
