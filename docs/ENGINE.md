@@ -2231,6 +2231,192 @@ the build also produces the windowed `fifa96` target (`make game`).
     read as the phase-28 census. `make check` 111/111 (ASan/UBSan), census
     unchanged `60/80 = 75%`, M1 `09b726b7…` / M2 `b281a9b2…` byte-identical
     (no re-pin).
+- **M2 phase-29 leg register (FU306…FU309; 2026-10-21) — the visible follow
+  camera's producers (the live Y + the event chain): the quoted errata + the
+  leg register (appended; prior sections never rewritten). Census
+  `60/80 = 75%` (`37 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…`
+  byte-identical (no re-pin).** The Stage-2 plan (T1–T6) landed the live
+  `follow_speed` seam (T1/FU308), the four live `[0x157750]` stand-ins
+  (T2/FU308), the keeper-band camera-Y delivery + the single cell
+  (T3/FU307), the chaser corrections (T4/FU306) and the Layer-1 follow chain
+  (T5/FU309); T6 ran the Layer-2 acceptance (**WAIVED, spec §6**) and this
+  register. **Landed:** T1 the seam; T2 the stand-ins; T3 FU307-L3/L4 (the
+  raw stores + the single cell); T4 FU306-L2/L3/L4; T5 the event chain; T6
+  the acceptance.
+  - **The Layer-2 acceptance (T6) — an honest §6 waiver; no visible follow.**
+    `make game` (`DISPLAY=:1`, SDL3, the ISO): the phase-8 walkthrough (intro
+    RETURN → front-end BACKSPACE → RETURN → the kickoff KICK release; the
+    pairs taken in phase 2 at clock `00:05`). The **pan pair**
+    (`docs/screens/p29-l2-pan-a/b.png`, the same displayed second `00:05`,
+    a direction held) has scene-band AE **3421** on the `960x591+0+0` crop;
+    the **still pair** (`p29-l2-still-a/b.png`, the same second `00:05`, no
+    key held) has **2988**. The relative gate `AE_pan > AE_still` passes by
+    433 px (14 %), but the delta is sprite motion, not a scene shift: the
+    `compare -compose src` diff bbox is `476x56+230+296` (the sprite band;
+    the still pair is `434x53+251+299`), while a live follow's
+    `vel = dirs × 15` would move the whole scene, so the gate is
+    **corroboration only** and does not attest a pan (the p28 datum
+    re-verified this session: pan 1582 vs still 2052). The primary
+    attribution is the live cell trace: a read-only `gdb` sample of the same
+    run (no code change; **10 samples at a ~30-step stride** through
+    `fifa96_match_run_step`'s `mr` argument, while a direction was held)
+    shows every camera cell static —
+    `pos=(0,0,0)`, `vel=(0,0)`, `speed=0`, `event_param=0`,
+    `pan_counter=0`, `timer=0/0`, `tracked=-1` — at every sample;
+    `docs/screens/p29-l2-runaway.png` is the same run at `02:00` with the
+    controlled record at the top edge and the camera unmoved. A second
+    `make game` run with an open-play burst (direction changes +
+    KICK/PASS/LONG_BALL presses) and six further samples likewise kept every
+    camera cell at zero — no follow fired in that burst. **Verdict:
+    Layer 1 GREEN, Layer 2 WAIVED** (spec §6): the camera does **not**
+    visibly follow; the reason is the natural reach (FU307-L1 / FU309-L1) —
+    the live chain never produces a `>0xF0` event for the follow arm (and no
+    mid-band camera Y for the pan arm). The Layer-1 landing (T5's GREEN
+    54-frame window + the seven mutation riders) is the phase's acceptance.
+  - **FU306 — the record-event chaser (`FUN_00070C08`): the ramp fix + the
+    one-shot re-arm.** T4 landed the three fidelity corrections: `ramp_param
+    = 1` at the setter call (native `0x70DBA MOV ECX,1`, preserved by the
+    `0x92820` sink's PUSH/POP ECX and consumed by `0x71D60 MOVSX EAX,CX` —
+    FU306 erratum 1; the engine passed 0, the receive/row-04 arm's sign), the
+    live `+0x5D` (the BF20 tail reads `r->pos_y` after the
+    `0x7C057..0x7C113` jump arc, not the stale `e->pos_y` written after the
+    call), and the int16 seed wrap of the `0x8DC50` correction. Pins:
+    `test_record_event_chaser_ramp_param_one` (timer 36/limit 42/divisor 6 vs
+    the wrong arm's 6/36), `test_record_event_seed_word_wrap`,
+    `test_record_event_uses_live_height_5d`, `test_record_event_one_shot_rearm`
+    (`0x7C83E` tracked skip + `0x71D27` rebind: tracked 2/2/1). **FU306-L1 —
+    the same-record continuous re-arm: NO-GO (the numbered dead-end).** The
+    tracked record is excluded by `0x7C83E` and the setter rebinds
+    `tracked := rec` (`0x71D27`), so the native mechanism is a per-record
+    **hand-over**, not a per-frame loop; the probe/verdict stands (FU306 §6).
+    Legs: **L2/L3/L4 closed** (the ramp param, the live `+0x5D`, the int16
+    wrap); **L5** the second caller `0x7C90C..0x7C98C` (no xref, no Ghidra
+    function, not in the `0x1106E0` table; reachability unproven; owner the
+    `FUN_0007CA54`/`FUN_000782D0` computed-target census), **L6** the
+    record-class/activity prerequisites (the tracked record must be active
+    and code ∉ {8,9}; the engine mirrors it; the Layer-1 fixture obeys it),
+    **L7** the `0x92820(rec,0x1C,ECX=1)` sink has no consumer (OL-27), **L8**
+    the chaser cannot bootstrap a cold camera (the tall admission
+    `ev > ~0xC8` / the reflect `camY > 0xF0` presuppose a near-tall event —
+    the Y producer stays FU307's residue).
+  - **FU307 — the keeper-band camera-Y delivery + the single cell.** T3
+    landed the three row-`0x1E` **raw-store** cuts (`0x75A0F` = `0x38`,
+    `0x75EEA` = `0x10`, `0x75F86` = `0x80`) as the `cam_y_written` output →
+    `render.camera.pos_y` (no `0x700F4`), and the **single camera-Y cell**
+    (the `keeper_cam_y` shadow deleted; `dword[0x157750]` = the render camera
+    Y; the keeper readers, the claim/closedown staging and the arc all read
+    one cell). The T3 fix round added the stage-3 slot **place-order** fix
+    (the deferred place carries the post-store Y; native place `0x75976`
+    then store `0x75A0F`) and the frame-path
+    `test_row1e_slot_hold_follow_band_frame`. **FU307-L1 — the natural CX=4
+    reach: OPEN.** A fresh probe on the natural M2 tape (temporary, reverted
+    instrumentation in `fifa96_keeper_cpu_stage_select`) measured
+    `stage_select ran=0 cx1=0 cx4=0 table4=0` over the 165-frame transcript:
+    the ladder does not run at all — the AX prepass gate
+    (`0x77F9A`/`0x77FA5`, `|cam.x| < 0x420 && |cam.z| > 0x7B0`) never opens
+    because the live camera stays `(0,0,0)`; the tape's own m62 block keeps
+    the keeper cells fresh and never dispatches the staged row-`0x1E`
+    record. The live path is the same chicken-and-egg (the phase-28 gdb
+    sample and T6's fresh 10-sample trace both pin the camera at `(0,0,0)`).
+    The band is fixture/installer-proven, **not** natural-play-proven; the §6
+    Layer-2 waiver is the consequence (spec §8.1). **L2** the band → pan
+    co-occurrence (the `0x0E` retry + the `0x8D5D9` code rewrite + the
+    stage-7 `0x10`/`0x80` stamps + the `0x737B4` arc) stays open; **L3
+    closed** (the raw stores reach the render camera); **L4 closed** (the
+    single cell); **L5** the `0x74514` helper's zero-reference status (static
+    only; owner the 16-bit loader); **L6** the row-`0x1B` stage cadence (one
+    native stage per call vs the engine's 0→1→2; moves when, not the value;
+    owner `0x76DEE`); **L7 (new)** the row-`0x1E` stage-1 triple
+    (`0x7568A`/`0x7568B` `MOVSD`, no `0x700F4`) is a real `dword[0x157750]`
+    write outside the three-literal scope: the claim's first dispatch ends at
+    the deferred head place's `pos.y + 0x38` where the native ends at
+    `pos.y` (both out of band for a grounded keeper); owner
+    `fifa96_keeper_claim_step` / the `0x7568A` site; fold into FU307-L2 if a
+    live consumer needs it.
+  - **FU308 — the `[0x157750]` stand-ins + the keeper `follow_speed` seam;
+    the phase-28 parked seam CLOSED.** T1 fixed the phase-28 final review's
+    parked seam: the keeper bind is now
+    `f->follow_speed = (int16_t)mr->render.camera.speed` (the native word
+    `[0x1577BE]`) instead of the derived pre-tail `camera.follow_speed`
+    snapshot; `camera.follow_speed` stays for the `0x739CE` gate only. Pins:
+    the unit threshold (`9 → CX=1`, `0xA → closed`) and the frame-path seam
+    (walk-tail `speed 0xF` with `follow_speed == 0` → no `0x1A` install/G2
+    stamp; mutation-RED under the old bind). T2 re-staged the four `ball.y`
+    stand-ins to the live camera Y — rows 05/06/08
+    (`0x7F2C8`/`0x7F2E6`, `0x80247`/`0x8061B`, `0x81157`) and the record
+    machine's chase gate (`0x7CCD8`), with the chase height widened to
+    `int32_t` (signed native compares; `-1`/`-0x8000` stay inside). Pins: the
+    three per-row camera-vs-ball pairs, the frame-path chase arm, the chase
+    signed-widening arms. **L1** the row-05 second `[0x157750]` read
+    (`0x7F4D0`, `SETG`) has no engine consumer (FU171-L6 unported; when it
+    lands it must read `render.camera.pos_y`); **L2 closed** (the signed
+    widening); **L3** negative camera-Y reachability (owner the `[0x157750]`
+    writer set, FU168-L5/FU264-L1); **L4** the same-frame pre-keeper
+    `0x1577BE` writers (the bind is order-agnostic; no test stages the
+    window; owner the `FUN_0008D8EC` per-record order); **L5** the int16
+    truncation in the already-live rows 04/kick (faithful for the bounded
+    event heights; owner FU171-L3).
+  - **FU309 — the event source + the Layer-1 chain + the acceptance.** T5
+    extended `test_keeper_installer_live_reach` Part A on the real frame
+    path: the keeper release (`pos_y 0x50`, `tracked 11`) → the row-`0x5E`
+    jump → the real `fifa96_match_run_ball_receive` (`traj 0x100`, nonzero
+    vector, `has_slot`) → the follow arm (`vel = dirs × 15`) over the
+    **54-frame** window derived from the set's own F2/F4/F6 (never a
+    hard-coded 52) → the pan-counter lockout + a new setter re-open; the
+    row-`0x0E` pan arm is labelled **corroboration**. Seven mutation riders
+    each RED (the event call, the receive bind, the `>0xF0` height gate, the
+    pan-counter INC, the setter clear, the row-`0x0E` band, the jump arm).
+    **FU309-L1** the live `>0xF0` producer chain is not proven live (the
+    receive row needs the row-`0x5E` airborne selector or the grounded
+    band-2 height and FU307's mid-band Y; owner
+    `FUN_0007A084 0x7A207..0x7A219` + `0x15873E` + the code-4 draw +
+    `match_run.c:3946`); **L2** the pan-push anchor pair (the engine adds
+    `dx/dz` to `target_*` as well as `anchor_*`; the native
+    `0x73B30/0x73B36/0x73B42/0x73B48` touch the anchors only; fix site
+    `fifa96_camera.c:139-142`); **L3** the rate-nonzero call-site arm is not
+    modelled as a branch (structurally unreachable today; owner
+    `0x73A03`/`0x73B5B`); **L4** the event-cursor step word (`0x73AA2`;
+    owner `0x70240`/`0x709B3`); **L5** no env-gated live camera-cell trace
+    exists (this acceptance's read-only `gdb` sample is the corroboration;
+    the reusable trace stays a leg; owner the acceptance procedure /
+    `fifa96_match_run_frame`); **L6** the still-control AE is host/state
+    dependent (this session pan 3421 vs still 2988; the p28 datum re-verified
+    1582 vs 2052; the relative gate must be re-measured, no absolute floor);
+    **L7** the follow rate needs a moving tracked record (`vel = slot dirs ×
+    15`; a stationary tracked record gives `speed == 0` and gate 2 refuses;
+    owner the entity pool's dir producer + the acceptance step); **L8** the
+    table arm's keeper event ring (`FUN_00092998(1,2,-1)` staged 0, OL-27;
+    owner FUN_00092998, carried FU303/FU294-L2).
+  - **The measured plan erratum (T5; quoted, the plan text is not rewritten).**
+    Quote (plan T5 Step 1): "the follow/height assertion fails on the
+    phase-29 baseline". **Measured (T5):** the extended fixture is **GREEN on
+    the phase-29 baseline `423669f`** — every arm on the staged chain landed
+    in phases 9–14 (the follow + rate arm 9, the receive setter 10, the
+    window/pan counter 14) and T1–T4 touch cells off this chain (measured
+    inert on it). The only measured baseline-RED cell, the T3 `0x38` raw
+    store, cannot coexist with the stage-5 release
+    (`held_exit`/situation 0xB), so the baseline-RED clause is
+    **superseded**: the witness is the **GREEN chain + the seven
+    mutation-RED riders** (each producer proven necessary by its own task's
+    pin), not a baseline failure. The controller accepted this erratum; no
+    test was weakened and no RED faked. The `52`/`54` split is binding: `54`
+    at camY `0x50` (this fixture), `52` at `0x70` (FU171-L1).
+  - **Deferred minors (T1–T5 reviews; not fixed here).** T5: the
+    test-name/300-line split of the extended fixture; the `vx != 0` assert;
+    the `0x38` premise label; the `skip_9a` isolation timing; the report
+    cites. T1: the relocated RED note; the `camera.speed` vs `vel_z`
+    discriminator; the `0xA` stamp `== 0`; the 82-line duplicate. T2: the
+    equal-boundary (`0x38`/`0x70`) arms, the negative-camY row pin, the
+    `0x10000` width pin, the reset-helper DRY, the chase fixture helper. T3:
+    the two test-comment inaccuracies (the release-list wording; the stage-1
+    jump comment) and the out-of-scope FU307-L3/L4 closure notes (now
+    recorded here). T4: the z-seed wrap case; the word-diff cast helper.
+    None is a fidelity defect; each is a test/comment/clarity cleanup.
+  - **Tape:** M1 `09b726b7…` and M2 `b281a9b2…` byte-identical through T1–T6
+    (`cmp`-verified; no re-pin, no stop). `make check` 111/111 (strict,
+    ASan/UBSan). Census unchanged **`60/80 = 75%`** (`37 action + 23
+    phase`); no row joins, so `README.md`, `AGENTS.md` and the
+    `tests/test_engine_m2.c` pins are untouched.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5
