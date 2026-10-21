@@ -28,12 +28,14 @@ _Static_assert(offsetof(fifa96_outfield_chase_state, type_gate) == 1, "type_gate
 _Static_assert(offsetof(fifa96_outfield_chase_state, not_team_controlled) == 2, "not_ctrl");
 _Static_assert(offsetof(fifa96_outfield_chase_state, not_team_second) == 3, "not_second");
 _Static_assert(offsetof(fifa96_outfield_chase_state, distance) == 4, "distance");
-_Static_assert(offsetof(fifa96_outfield_chase_state, camera) == 6, "camera");
-_Static_assert(offsetof(fifa96_outfield_chase_state, user_present) == 8, "user_present");
-_Static_assert(offsetof(fifa96_outfield_chase_state, sides_differ) == 9, "sides_differ");
-_Static_assert(offsetof(fifa96_outfield_chase_state, unbound) == 10, "unbound");
-_Static_assert(offsetof(fifa96_outfield_chase_state, timer) == 12, "timer");
-_Static_assert(offsetof(fifa96_outfield_chase_state, third_zero) == 14, "third_zero");
+/* FU308 §4 site 4 / §8 L2 (phase-29 T2): `camera` widened to int32_t (the
+ * native signed dword compare), so the trailing bytes shift. */
+_Static_assert(offsetof(fifa96_outfield_chase_state, camera) == 8, "camera");
+_Static_assert(offsetof(fifa96_outfield_chase_state, user_present) == 12, "user_present");
+_Static_assert(offsetof(fifa96_outfield_chase_state, sides_differ) == 13, "sides_differ");
+_Static_assert(offsetof(fifa96_outfield_chase_state, unbound) == 14, "unbound");
+_Static_assert(offsetof(fifa96_outfield_chase_state, timer) == 16, "timer");
+_Static_assert(offsetof(fifa96_outfield_chase_state, third_zero) == 18, "third_zero");
 
 #define ROW04_INVALID ((fifa96_err_t)-FIFA96_ERR_INVALID)
 
@@ -232,7 +234,7 @@ static void test_forced_action(void) {
 }
 
 static fifa96_outfield_chase_state chase(uint8_t phase, uint8_t gate, uint16_t distance,
-                                         uint16_t camera) {
+                                         int32_t camera) {
   fifa96_outfield_chase_state s;
   s.phase = phase;
   s.type_gate = gate;
@@ -262,6 +264,14 @@ static void test_chase_action(void) {
   assert(fifa96_outfield_chase_action(&s, 0, &next) == 0);
   s = chase(2, 1, 0x4F, 0x30);
   assert(fifa96_outfield_chase_action(&s, 0, &next) == 0);
+  /* FU308 §8/L2 (phase-29 T2): the native gate is the signed dword compare
+   * `0x7CCD8 CMP dword[0x157750],0x30; JGE 0x7CD29` — a negative camera Y
+   * (the native dword's sign bit) stays inside the chase. A uint16 state
+   * reads -1 as 0xFFFF >= 0x30 and refuses. */
+  s = chase(2, 1, 0x4F, -1);
+  assert(fifa96_outfield_chase_action(&s, 0, &next) == 1);
+  s = chase(2, 1, 0x4F, -0x8000);
+  assert(fifa96_outfield_chase_action(&s, 0, &next) == 1);
   s = chase(2, 1, 0x4F, 0x2F);
   s.not_team_controlled = 0;
   assert(fifa96_outfield_chase_action(&s, 0, &next) == 0);

@@ -1981,6 +1981,51 @@ static void test_action_05_claim_dirs_and_stages(void) {
   drop_fixture(&f);
 }
 
+/* FU308 §4 site 1 (phase-29 T2): row 05's stage-0 dribble type-arm gate is
+ * the native camera-Y cell dword[0x157750] (`0x7F2C8 MOV EBX,[0x157750]`;
+ * `0x7F2E6 CMP EBX,0x38; JLE`), not the ball-record Y. The fixture stages the
+ * two apart: camera Y 0x39 takes the type-table dirs (`0x7F2E6`'s > 0x38 arm,
+ * speed 0x60), camera Y 0 the slot dirs; the pre-re-stage ball-Y stand-in
+ * inverts both arms. The `record.type` 0 row of the `0x10F334/0x10F33C`
+ * tables is (0, 1), distinct from the staged slot dirs (0x12, 0xF0). */
+static void test_action_05_ball_height_reads_camera_y(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.has_slot = 1;
+  f.mr.record.timer81 = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_y = 0;                    /* the airborne wait stays off */
+  f.mr.record.type = 0;                     /* type-table dirs (0, 1) */
+  f.mr.record.dir_x = 0x12;                 /* slot dirs (the other arm) */
+  f.mr.record.dir_z = (int8_t)0xF0;
+  f.mr.entities.team[0].records[1].lane_x = 0x20;
+  f.mr.entities.team[0].records[1].bound = 0x40;
+  f.mr.entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.ball.pos_release = 0;
+  f.mr.render.camera.pos_y = 0x39;          /* camera Y > 0x38 */
+  f.mr.entities.ball.y = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x05) == FIFA96_OK);
+  assert(f.mr.entities.ball.pos_dir_x == 0);        /* type-table X */
+  assert(f.mr.entities.ball.pos_dir_z == 1);        /* type-table Z */
+  assert(f.mr.record.stage92 == 0);
+
+  /* The twin: camera Y 0 (<= 0x38), ball Y 0x39. The live gate keeps the
+   * slot-dir arm (the stand-in took the type arm). */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.ball.y = 0x39;
+  f.mr.entities.ball.pos_dir_x = 0x55;
+  f.mr.entities.ball.pos_dir_z = 0x55;
+  f.mr.record.timer89 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x05) == FIFA96_OK);
+  assert(f.mr.entities.ball.pos_dir_x == 0x12);
+  assert((uint8_t)f.mr.entities.ball.pos_dir_z == 0xF0);
+  drop_fixture(&f);
+}
 
 /* FU-142 Appendix K.5/K.6 (M2 playability-legs Tasks 1/2 / OL-70/OL-70a):
  * rows 04 and 08 are wired — `fifa96_match_action_04`/`_08` bind
@@ -2091,6 +2136,41 @@ static void test_action_04_and_08_wired(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
   assert(f.mr.record.target_x == 0x11 && f.mr.record.target_y == 0x22 &&
          f.mr.record.target_z == 0x33);
+  drop_fixture(&f);
+}
+
+/* FU308 §4 site 3 (phase-29 T2): row 08's stage-0 no-slot arm reads the native
+ * camera-Y cell dword[0x157750] (`0x81157 CMP dword[0x157750],0x38; JLE
+ * 0x81185`; lane <= 0x50), not the ball-record Y: camera Y > 0x38 calls the
+ * `0x79B58` receiver timer (`e->timer93 = 0x10`), otherwise the row falls
+ * through to the face/anim/stage-advance tail. The pre-re-stage ball-Y
+ * stand-in inverts both arms. */
+static void test_action_08_ball_height_reads_camera_y(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.entities.team[0].records[0].lane_x = 0;   /* lane 0 <= 0x50 */
+  f.mr.entities.team[0].records[0].lane_z = 0;
+  f.mr.render.camera.pos_y = 0x39;               /* camera Y > 0x38 */
+  f.mr.entities.ball.y = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].timer93 == 0x10);   /* 0x79B58 */
+
+  /* The twin: camera Y 0, ball Y 0x39 -> no receiver timer; the tail's
+   * face/anim path advances the stage latch. */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.ball.y = 0x39;
+  f.mr.entities.team[0].records[0].timer93 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x08) == FIFA96_OK);
+  assert(f.mr.entities.team[0].records[0].timer93 == 0);
+  assert(f.mr.record.stage92 == 1);
+  assert(f.mr.record.ran == 1);
   drop_fixture(&f);
 }
 
@@ -2541,6 +2621,72 @@ static void test_action_06_runs_body(void) {
   assert(f.mr.record.target_x == 0);
   assert(f.mr.record.target_z == -0x91);
   assert(f.mr.record.install == 8);
+  drop_fixture(&f);
+}
+
+/* FU308 §4 site 2 (phase-29 T2): row 06's two camera-Y gates are the native
+ * dword[0x157750] reads — `0x80247 CMP dword[0x157750],0x70; JLE 0x8026D`
+ * (camY > 0x70 -> the carrier-gate install 4) and `0x8061B CMP
+ * dword[0x157750],0x38; JG 0x809E6` (camY > 0x38 -> skip the target block) —
+ * not the ball-record Y. Each arm stages camera Y and ball Y apart; the
+ * pre-re-stage ball-Y stand-in inverts all four assertions. */
+static void test_action_06_ball_height_reads_camera_y(void) {
+  struct fixture f;
+  make_fixture(&f);
+  /* The no-slot camera-metric fixture of test_action_06_runs_body: side 0,
+   * camera (0,0,0) -> V1 (0,0,-0xB1), actor == team target -> target V1 and
+   * the V4 metric 0 -> install 8. */
+  f.mr.state.phase = 2;
+  f.mr.state.frame_delta = 0;
+  f.mr.record.entity_id = 1;
+  f.mr.record.active = 1;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_y = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.delta = 0;
+  f.mr.entities.team[0].side = 0;
+  f.mr.entities.team[0].target = 1;
+  f.mr.entities.ball.carrier = 5;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_z = 0;
+
+  /* 0x80247: camera Y 0x71 installs 4, ball Y 0 must not. */
+  f.mr.render.camera.pos_y = 0x71;
+  f.mr.entities.ball.y = 0;
+  f.mr.record.install = 0;
+  f.mr.record.target_z = 0x77;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 4);
+  assert(f.mr.record.target_z == 0x77);       /* the early return, no target */
+
+  /* The twin: camera Y 0, ball Y 0x71 -> the live gate runs the metric path. */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.ball.y = 0x71;
+  f.mr.record.install = 0;
+  f.mr.record.target_z = 0x77;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 8);
+  assert(f.mr.record.target_z == -0xB1);
+
+  /* 0x8061B: camera Y 0x39 skips the target block (no target, no install),
+   * ball Y 0x39 must not. */
+  f.mr.render.camera.pos_y = 0x39;
+  f.mr.entities.ball.y = 0;
+  f.mr.record.install = 0;
+  f.mr.record.target_z = 0x77;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 0);
+  assert(f.mr.record.target_z == 0x77);
+
+  /* The twin: camera Y 0 (<= 0x38), ball Y 0x39 -> the target block runs. */
+  f.mr.render.camera.pos_y = 0;
+  f.mr.entities.ball.y = 0x39;
+  f.mr.record.install = 0;
+  f.mr.record.target_z = 0x77;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 8);
+  assert(f.mr.record.target_z == -0xB1);
   drop_fixture(&f);
 }
 
@@ -4267,7 +4413,10 @@ int main(void) {
   test_dead_2b_evidence();
   test_action_05_wired_carrier();
   test_action_05_claim_dirs_and_stages();
+  test_action_05_ball_height_reads_camera_y();
   test_action_04_and_08_wired();
+  test_action_08_ball_height_reads_camera_y();
+  test_action_06_ball_height_reads_camera_y();
   test_action_04_stages_lane_fields();
   test_action_04_ball_track_side_from_tracked();
   test_action_1E_stage3_possession_flip();

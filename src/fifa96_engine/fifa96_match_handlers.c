@@ -2810,8 +2810,11 @@ static int fifa96_match_action_05(struct fifa96_match_run *mr) {
   c.actor = id;
   c.timer89 = r->timer89;
   c.lane = e->lane_x;                    /* native dword[+0x69]>>16 = +0x6B */
-  c.ball_height = mr->entities.ball.y;   /* [0x157750] stand-in, FU-75 §1.6
-                                          * (leg 15.b; not the exact cell) */
+  /* FU308 §4 site 1 (phase-29 T2): the native stage-0 type-arm gate reads
+   * `0x7F2C8 MOV EBX,dword[0x157750]` + `0x7F2E6 CMP EBX,0x38; JLE` — the
+   * camera triple's Y (`camera.pos_y`), a signed 32-bit compare; the FU-75
+   * §1.6 ball-record stand-in is retired. */
+  c.ball_height = (int32_t)mr->render.camera.pos_y;
   c.timer81 = (int16_t)r->timer81;
   c.close_word = e->lane_x;              /* native word +0x6B */
   c.bound_word = e->bound;               /* native word +0x77 */
@@ -2974,8 +2977,11 @@ static int fifa96_match_action_08(struct fifa96_match_run *mr) {
   s.word6d = e->lane_z;             /* native word +0x6D */
   s.word7d = 0;                     /* native +0x7D (the face write is not
                                      * persisted; producer unported, OL-82) */
-  s.ball_height = mr->entities.ball.y;   /* [0x157750] stand-in, FU-75 §1.6
-                                          * (leg 15.b; not the exact cell) */
+  /* FU308 §4 site 3 (phase-29 T2): the stage-0 no-slot arm reads
+   * `0x81157 CMP dword[0x157750],0x38; JLE 0x81185` — the camera triple's Y
+   * (`camera.pos_y`), a signed 32-bit compare; the FU-75 §1.6 ball-record
+   * stand-in is retired. */
+  s.ball_height = (int32_t)mr->render.camera.pos_y;
   s.is_ball_track = id == controlled ? 1u : 0u;   /* [0x1577CA] stand-in */
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
@@ -3083,8 +3089,12 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
                        .pos_z;
   }
   s.self_index = id >= 0 ? id % (int32_t)FIFA96_MATCH_ENTITY_RECORDS : 0;
-  s.ball_height = mr->entities.ball.y;    /* [0x157750] stand-in, FU-75 §1.6
-                                           * (leg 15.b; not the exact cell) */
+  /* FU308 §4 site 2 (phase-29 T2): the two native camera-Y gates read
+   * `0x80247 CMP dword[0x157750],0x70; JLE 0x8026D` (the carrier-gate
+   * install 4) and `0x8061B CMP dword[0x157750],0x38; JG 0x809E6` (skip the
+   * target block) — the camera triple's Y (`camera.pos_y`), signed 32-bit
+   * compares; the FU-75 §1.6 ball-record stand-in is retired. */
+  s.ball_height = (int32_t)mr->render.camera.pos_y;
   s.camera_x = mr->render.camera.pos_x;
   s.camera_y = mr->render.camera.pos_y;
   s.camera_z = mr->render.camera.pos_z;

@@ -49,7 +49,11 @@ typedef struct fifa96_outfield_chase_state {
   uint8_t not_team_controlled;
   uint8_t not_team_second;
   uint16_t distance;
-  uint16_t camera;
+  /* FU308 §4 site 4 / §8 L2 (phase-29 T2): the native chase gate reads the
+   * full dword `CMP dword[0x157750],0x30; JGE` (signed 32-bit), so the camera
+   * height is `int32_t`; `distance` keeps the native word read
+   * (`[rec+0x69]>>16`) and its unsigned compare. */
+  int32_t camera;
   uint8_t user_present;
   uint8_t sides_differ;
   uint8_t unbound;

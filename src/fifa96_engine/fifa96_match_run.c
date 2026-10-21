@@ -909,9 +909,10 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
       (id != mr->entities.team[team].target) ? 1u : 0u;
   s.chase.not_team_second = (id != mr->entities.team[team].second) ? 1u : 0u;
   s.chase.distance = (uint16_t)(e->lane >> 16);   /* 0x7CCCD `[rec+0x69]>>16` */
-  s.chase.camera = (uint16_t)mr->entities.ball.y; /* 0x7CCD8 [0x157750]
-                                                   * ball-record stand-in,
-                                                   * FU-75 §1.6; leg 15.b */
+  /* FU308 §4 site 4 (phase-29 T2): `0x7CCD8 CMP dword[0x157750],0x30; JGE
+   * 0x7CD29` — the camera triple's Y (`camera.pos_y`), a signed 32-bit
+   * compare; the FU-75 §1.6 ball-record stand-in is retired. */
+  s.chase.camera = (int32_t)mr->render.camera.pos_y;
   s.chase.user_present = s.user_present;
   s.chase.sides_differ =
       (s.user_present != 0u && s.side != s.user_side) ? 1u : 0u;
@@ -2116,6 +2117,24 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: the [0x157AB2] force latch */
+  /* Phase-29 T2 self-review: the row-1E/1D keeper process cells the header
+   * block at fifa96_match_run.h ("Init/begin zero them") promises were never
+   * cleared — a fixture reading them before the first row-1B/1E write saw the
+   * caller's stack. Zero the native BSS defaults. */
+  mr->keeper_cam_x = 0;
+  mr->keeper_cam_y = 0;
+  mr->keeper_cam_z = 0;
+  mr->keeper_reset_x = 0;
+  mr->keeper_reset_y = 0;
+  mr->keeper_reset_z = 0;
+  mr->keeper_vec_band = 0;
+  mr->keeper_vec_dx = 0;
+  mr->keeper_vec_dz = 0;
+  mr->keeper_saved_x = 0;
+  mr->keeper_saved_z = 0;
+  mr->keeper_gauge = 0;
+  mr->flag_157820 = 0;
+  mr->flag_157822 = 0;
   mr->difficulty_14c2f6 = 0;           /* FU301: the image [0x14C2F6] default */
   /* FU300 T4: the row-0x1A process cells (the ladder stamp and the direction
    * grids arrive live from the camera; only the bounce cells stay staged). */
@@ -2269,6 +2288,23 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: fresh [0x157AB2] force latch */
+  /* Phase-29 T2 self-review: the row-1E/1D keeper process cells (the header's
+   * "Init/begin zero them"); without this a fresh match inherits the previous
+   * match's keeper band. */
+  mr->keeper_cam_x = 0;
+  mr->keeper_cam_y = 0;
+  mr->keeper_cam_z = 0;
+  mr->keeper_reset_x = 0;
+  mr->keeper_reset_y = 0;
+  mr->keeper_reset_z = 0;
+  mr->keeper_vec_band = 0;
+  mr->keeper_vec_dx = 0;
+  mr->keeper_vec_dz = 0;
+  mr->keeper_saved_x = 0;
+  mr->keeper_saved_z = 0;
+  mr->keeper_gauge = 0;
+  mr->flag_157820 = 0;
+  mr->flag_157822 = 0;
   mr->difficulty_14c2f6 = 0;           /* FU301: fresh [0x14C2F6] default */
   /* FU300 T4: fresh row-0x1A process cells (the camera carries the direction
    * grid/leads; only the bounce cells are staged). */

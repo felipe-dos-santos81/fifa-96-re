@@ -162,6 +162,9 @@ int fifa96_outfield_chase_action(const fifa96_outfield_chase_state *state, uint8
   if (!state || !next) return -FIFA96_ERR_INVALID;
   if (state->phase != 2 || state->type_gate == 0) return 0;
   if (!state->not_team_controlled || !state->not_team_second) return 0;
+  /* 0x7CCD3 `CMP EDX,0x50; JGE` (the lane word, unsigned state) and
+   * 0x7CCD8 `CMP dword[0x157750],0x30; JGE` (the signed 32-bit camera Y,
+   * FU308 §8 L2). */
   if (state->distance >= 0x50 || state->camera >= 0x30) return 0;
   if (!state->user_present || !state->sides_differ) return 0;
   if (!state->unbound || state->timer != 0 || !state->third_zero) return 0;

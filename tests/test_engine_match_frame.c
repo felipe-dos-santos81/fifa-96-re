@@ -1608,8 +1608,9 @@ static void test_unbound_team_target_forced_installs_row04(void) {
 
 /* The code-8 chase gate (`0x7CC93..0x7CD24`) requires `[rec+0x20] == 0` (the
  * unbound arm), phase 2, the type bit, not team target/second, lane < 0x50,
- * ball height < 0x30, a present user on the other side, `word[+0x81] == 0`
- * and `[rec+0x5D] == 0`. The same record with a bound slot must NOT chase. */
+ * camera Y < 0x30 (the `[0x157750]` cell), a present user on the other side,
+ * `word[+0x81] == 0` and `[rec+0x5D] == 0`. The same record with a bound slot
+ * must NOT chase. */
 static void test_unbound_chase_installs_and_runs_row08(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
@@ -1629,7 +1630,7 @@ static void test_unbound_chase_installs_and_runs_row08(void) {
   mr.entities.team[0].second = 3;    /* not rec */
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;       /* team 1: user present, side differs */
-  mr.entities.ball.y = 0x10;         /* camera < 0x30 */
+  mr.render.camera.pos_y = 0x10;     /* camera Y < 0x30 */
   one_granted_frame(&mr);
   assert(e->code == 8u);             /* the chase install */
   assert((mr.dispatched_ok & (1ull << 0x08u)) != 0u);
@@ -1651,7 +1652,7 @@ static void test_unbound_chase_installs_and_runs_row08(void) {
   mr.entities.team[0].second = 3;
   mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
   mr.entities.controlled = 11;
-  mr.entities.ball.y = 0x10;
+  mr.render.camera.pos_y = 0x10;
   /* isolate the fixture to record 1 (the other unbound records would chase). */
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
@@ -1659,6 +1660,70 @@ static void test_unbound_chase_installs_and_runs_row08(void) {
   one_granted_frame(&mr);
   assert(e->code != 8u);
   assert((mr.dispatched_ok & (1ull << 0x08u)) == 0u);
+}
+
+/* FU308 §4 site 4 (phase-29 T2): the code-8 chase gate's height cell is the
+ * native camera Y `dword[0x157750]` (`0x7CCD8 CMP dword[0x157750],0x30; JGE
+ * 0x7CD29`), not the ball-record Y. The two arms stage camera Y and ball Y
+ * apart; the pre-re-stage ball-Y stand-in inverts both. The native compare is
+ * signed 32-bit — the loader `camera` field is widened to `int32_t` (pinned by
+ * tests/test_outfield.c) so a negative camera Y stays inside the chase. */
+static void test_unbound_chase_gate_reads_camera_y(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+
+  /* camera Y 0x30 refuses (`JGE`), ball Y 0 — the stand-in chased. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane = 0;                       /* distance 0 < 0x50 */
+  e->timer81 = 0;
+  e->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;
+  mr.entities.team[0].second = 3;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  mr.render.camera.pos_y = 0x30;
+  mr.entities.ball.y = 0;
+  /* isolate the fixture to record 1 (the other unbound records would chase). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  assert(e->code != 8u);
+  assert((mr.dispatched_ok & (1ull << 0x08u)) == 0u);
+
+  /* camera Y 0x2F admits, ball Y 0x30 — the stand-in refused. */
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane = 0;
+  e->timer81 = 0;
+  e->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;
+  mr.entities.team[0].second = 3;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  mr.render.camera.pos_y = 0x2F;
+  mr.entities.ball.y = 0x30;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  assert(e->code == 8u);             /* the chase install */
+  assert((mr.dispatched_ok & (1ull << 0x08u)) != 0u);
 }
 
 /* M2 phase-10 T2 (FU-148 §12/§13): the config-cell producer path. The
@@ -9219,6 +9284,7 @@ int main(void) {
   test_machine_no_edge_arm_copies_camera_target();
   test_unbound_team_target_forced_installs_row04();
   test_unbound_chase_installs_and_runs_row08();
+  test_unbound_chase_gate_reads_camera_y();
   test_input_options_producer_sets_range_bits();
   test_record_event_tail_gate_fires_in_frame();
   test_record_event_gate_live_from_height_producer();
