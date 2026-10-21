@@ -514,8 +514,17 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
    * only where the native stores the dword without a `0x700F4` place. The
    * three literal cuts (`0x75A0F` 0x38, `0x75EEA` 0x10, `0x75F86` 0x80) are a
    * **raw** store: no camera init, no tracked/event clear (FU307 §6 item 2).
-   * A stage-3 -> stage-7 chain keeps the last stage's value in `s->cam_y`. */
-  if (out->cam_y_written != 0) mr->render.camera.pos_y = s->cam_y;
+   * `s->cam_y` holds the step's last native write: the stage-3 slot path's
+   * hold-follow place (`0x75976`) is followed by the same step's `0x75A0F`
+   * store, and the stage-7 literals override their arm's triple store. */
+  if (out->cam_y_written != 0) {
+    mr->render.camera.pos_y = s->cam_y;
+    /* The deferred place models an earlier native `0x700F4` (the `0x75976`
+     * hold-follow call precedes the `0x75A0F` store). The drain applies the
+     * place at frame end, so it must carry the POST-store Y — otherwise it
+     * would re-place the pre-store value and lose the band. */
+    if (mr->record.place_valid != 0) mr->record.place_y = s->cam_y;
+  }
   mr->keeper_reset_x = s->reset_x;
   mr->keeper_reset_y = s->reset_y;
   mr->keeper_reset_z = s->reset_z;

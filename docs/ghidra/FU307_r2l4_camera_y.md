@@ -646,3 +646,28 @@ Stage-2 must either prove it or pre-authorize the spec §6 Layer-2 waiver.
    (§2.1). Stage-2 must not add it to the FU307 writer set, nor cite it as a Y
    producer — its only camera consequence is the airborne height-table
    selector FU309 stages.
+
+---
+
+## Fix-round addendum (phase-29 Stage-2 Task 3, 2026-10-21)
+
+*Appended section: the frozen text above stands; this adds one numbered leg
+found while implementing §6 item 2. No new Ghidra read — the bytes cited are
+this document's own §2.2 item 6 and §3.1/§3.3.*
+
+**FU307-L7 — the row-`0x1E` stage-1 camera-triple store.** Quote (§2.2 item 6):
+"`0x7568B` | `dword[rec+0x5D]` (pos_y) | row `0x1E` stage 1 | keeper band, out
+of band (0)". **Addition, not a correction of the value:** `0x7568B` is a real
+`dword[0x157750]` write — the `MOVSD` middle of the `0x7568A` triple — with no
+`0x700F4` call. §6 item 2's raw-store delivery is deliberately scoped to the
+three **literal** cuts (`0x75A0F`/`0x75EEA`/`0x75F86`), so the engine does not
+deliver the stage-1 triple. Consequence: on a claim's first dispatch the head
+place (`0x755C7`, Y = `pos.y + 0x38`) is followed natively by the stage-1
+triple (Y = `pos.y`); the engine defers the head place to the frame drain, so
+the frame end reads `pos.y + 0x38` where the native reads `pos.y` (both out of
+band for a grounded keeper: `0x38` vs `0`). The stage-3 slot-path counterpart
+is already handled: its `0x75976` hold-follow place precedes the same step's
+`0x75A0F` store, and the binder carries the post-store Y on the deferred place
+(the native end-of-frame Y is `0x38`, not the pre-store value). Owner:
+`fifa96_keeper_claim_step` / the `0x7568A` site; fold into FU307-L2's
+band→pan co-occurrence if a live consumer needs the stage-1 zeroing.

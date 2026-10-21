@@ -3339,17 +3339,27 @@ static void test_row1e_stage3_possession_flip(void) {
  * selects row 0x45, so the same dispatch's stage 5 cuts the release
  * (`0x75D24 CMP byte[[rec+0x28]],0x45` -> `0x157750 := 0x50`). The bridge
  * consumes the produced `out->event` into `record.anim_id` (hence the pool
- * record) and the claim's live row becomes 0x45. Baseline (no bridge): the
- * live row never becomes 0x45, so stage 5 advances without the release and the
- * release pose `0x50` is never written.
+ * record); the loader's own `s->anim_row` update is then re-staged from the
+ * pool on the next dispatch.
  *
- * The release pose is asserted through a direct row-0x1E dispatch: after the
+ * The test discriminates the bridge READ, not just the stage-4 selection:
+ *  - dispatch A (stage 4) selects 0x45 and the bridge must write it through to
+ *    the pool record (`e->anim_id == 0x45`);
+ *  - dispatch B (stage 5, as the next frame's claim would run) stages
+ *    `record.anim_id` FROM the pool row and releases only if the bridge's write
+ *    landed (`camera.pos_y == 0x50`);
+ *  - the negative dispatch stages `record.anim_id = 0` (the no-bridge state)
+ *    and must NOT release (the cell keeps its sentinel).
+ * Mutation-RED: drop the bridge's `record.anim_id = e->anim_id`/pool install
+ * and dispatch B stages 0, so the release assert fails.
+ *
+ * The release pose is asserted through direct row-0x1E dispatches: after the
  * FU307-L4 single-cell unification the frame body's placement drain (the
  * fixture's row-01 `0x700F4` place at (0,0,0)) legitimately resets the live
  * camera Y in this scenario — a native `0x700F4` would too. The frame-path
- * release is pinned by `test_keeper_l4_release_reach` and
- * `test_keeper_installer_live_reach`, whose fixtures stage no competing
- * place. */
+ * release is pinned by `test_keeper_l4_release_reach`,
+ * `test_keeper_installer_live_reach` and
+ * `test_row1e_slot_hold_follow_band_frame`. */
 static void test_row1e_claim_anim_bridge(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
@@ -3372,6 +3382,27 @@ static void test_row1e_claim_anim_bridge(void) {
   assert(mr.render.camera.pos_y == 0x50);  /* the stage-5 release arm fired */
   assert(mr.record.anim_id == 0x45u);      /* the bridge selected row 0x45 */
   assert(e->anim_id == 0x45u);             /* ... through the pool record */
+
+  /* Dispatch B: a fresh stage-5 dispatch whose live row comes FROM the pool
+   * (the engine stages `record.anim_id` from the entity each dispatch). This is
+   * the discriminating read: without the bridge's pool write the row is 0 and
+   * the release gate stays shut. */
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0) == FIFA96_OK);
+  mr.record.stage92 = 5;
+  mr.record.anim_id = e->anim_id;
+  mr.record.frame = 3;
+  mr.record.has_ball = 1;
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x50);  /* the bridged 0x45 row releases */
+
+  /* Negative: the no-bridge state stages a zero live row -> no release. */
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0) == FIFA96_OK);
+  mr.record.stage92 = 5;
+  mr.record.anim_id = 0;
+  mr.record.frame = 3;
+  mr.record.has_ball = 1;
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0);     /* no release without the bridge row */
 }
 
 /* FU286 / R11-L2 + R11-L3 (phase-26c T4): the row-0x1E claim head place's
@@ -3854,9 +3885,11 @@ static void test_row1e_cam_y_raw_store(void) {
   assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
   assert(mr.render.camera.pos_y == 0x38);            /* 0x75A0F */
   assert(mr.render.camera.pos_y > 0x20 && mr.render.camera.pos_y < 0x70);
-  /* A raw store: no 0x700F4 reset, so every other camera cell is untouched. */
+  /* A raw store: no 0x700F4 reset, so every other camera cell is untouched
+   * and no deferred place is staged on the no-slot arm. */
   assert(mr.render.camera.pos_x == 0x11 && mr.render.camera.pos_z == 0x33);
   assert(mr.render.camera.tracked == 7);
+  assert(mr.record.place_valid == 0);
 
   /* Stage-7 `anim_row == 0x44` -> `0x75EEA` (`0x10`). */
   fifa96_match_run_init(&mr);
@@ -3867,6 +3900,7 @@ static void test_row1e_cam_y_raw_store(void) {
   mr.render.camera.tracked = 7;
   assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
   assert(mr.render.camera.pos_y == 0x10);            /* 0x75EEA */
+  assert(mr.render.camera.pos_x == 0x11 && mr.render.camera.pos_z == 0x33);
   assert(mr.render.camera.tracked == 7);
 
   /* Stage-7 `anim_row == 0x2F` -> `0x75F86` (`0x80`). */
@@ -3875,8 +3909,11 @@ static void test_row1e_cam_y_raw_store(void) {
   mr.record.stage92 = 7;
   mr.record.anim_id = 0x2F;
   assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  mr.render.camera.tracked = 7;
   assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
   assert(mr.render.camera.pos_y == 0x80);            /* 0x75F86 */
+  assert(mr.render.camera.pos_x == 0x11 && mr.render.camera.pos_z == 0x33);
+  assert(mr.render.camera.tracked == 7);
 
   /* The flag is exactly those three arms: the stage-1 triple
    * (`0x7568A`/`0x7568B`, out of band) must NOT move the live cell. */
@@ -3888,6 +3925,47 @@ static void test_row1e_cam_y_raw_store(void) {
   assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
   assert(mr.render.camera.pos_y == 0x22);            /* no cam_y_written arm */
+}
+
+/* FU307-L3 (phase-29 T3 fix round 1): the normal slot claim's place+store
+ * order through the frame path.
+ *
+ * A slot record's first claim dispatch runs the stage-1 jump into stage 3 in
+ * one step (`keeper.c` stage 1 -> 3). The head has set `+0x9B = 1`, so the
+ * latched slot arm takes the `0x75930` hold-follow: `0x75976 CALL 0x700F4`
+ * stages a place with the PRE-store camera Y. The same step then runs the
+ * `0x759FD`/`0x75A00` triple and the `0x75A0F` raw store (`0x38`). Native
+ * order is place-then-store, so the frame ends at `0x38`; the engine defers
+ * the place to the frame drain (`fifa96_camera_init`), which must therefore
+ * carry the post-store Y (the binder's `cam_y_written` place fix-up).
+ *
+ * Fixture: team 1 record 0 (id 11) holds row `0x1E` at stage 3, holding the
+ * ball and a slot, with the `[0x157AB2]` latch set and `slot_edge` 0. The
+ * frame body's other rows may stage their own places; the keeper's commit is
+ * the last pending one for this record walk.
+ *
+ * Mutation-RED on the fix: without the place fix-up, the drain re-places the
+ * pre-store Y (0) and the `0x38` band is lost. */
+static void test_row1e_slot_hold_follow_band_frame(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  e = &mr.entities.team[1].records[0];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
+  e->stage92 = 3;                    /* the slot hold-follow + raw-store step */
+  e->has_ball = 1;                   /* 0x75930 arms the hold-follow place */
+  e->has_slot = 1;                   /* the slot path (not the 0x757BE no-slot arm) */
+  e->pos_x = 0;
+  e->pos_z = 0;
+  mr.keeper_latch_157ab2 = 1;        /* the slot path's latched arm */
+  assert(mr.render.camera.pos_y == 0);
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_y == 0x38);   /* 0x75976 place, then 0x75A0F store */
+  assert(mr.render.camera.pos_y > 0x20 && mr.render.camera.pos_y < 0x70);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
 }
 
 /* FU307-L4 (phase-29 T3): the single camera-Y cell.
@@ -9418,6 +9496,7 @@ int main(void) {
   test_keeper_installer_live_permit();
   test_keeper_installer_live_reach();
   test_row1e_cam_y_raw_store();
+  test_row1e_slot_hold_follow_band_frame();
   test_keeper_cam_y_single_cell();
   test_keeper_live_follow_speed_seam();
   test_action_1b_deep_pan_seed_extents();

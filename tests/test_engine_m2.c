@@ -2454,9 +2454,10 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     assert(mr->render.sub.active == 0u);
     assert(mr->render.overlay.armed == 0u && mr->render.overlay.id == 0u);
     assert(mr->render.ball_row == NULL);
-    /* v7 (P3 keeper pre-state): the keeper process cells are fresh before the
-     * row-1E staging and the staged record (team 0, record 9) does not carry
-     * the ball yet. */
+    /* v7 (P3 keeper pre-state): the keeper process X/Z cells and the single
+     * FU-71 camera Y (FU307-L4; no keeper row has written it) are fresh before
+     * the row-1E staging, and the staged record (team 0, record 9) does not
+     * carry the ball yet. */
     assert(mr->keeper_cam_x == 0 && mr->render.camera.pos_y == 0 &&
            mr->keeper_cam_z == 0);
     assert(mr->keeper_reset_x == 0 && mr->keeper_reset_y == 0 &&
@@ -2696,9 +2697,10 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
                .code == 5u);
     assert((mr->dispatched_ok & (1ull << 0x05)) != 0u);
     /* The claim isolation (the m 42 staging): the m 41 row-1E record never
-     * dispatched — its code is still the staged 0x1E and every keeper cell
-     * stays fresh (the honest scenario state; the claim's own chain is
-     * fixture-proven, test_engine_match_frame::test_keeper_claim_*). */
+     * dispatched — its code is still the staged 0x1E, the keeper process X/Z
+     * cells stay fresh and the single FU-71 camera Y (FU307-L4) is still 0
+     * (the honest scenario state; the claim's own chain is fixture-proven,
+     * test_engine_match_frame::test_keeper_claim_*). */
     assert(mr->entities.team[0].records[9].code == 0x1Eu);
     assert(mr->entities.team[0].records[9].has_ball == 0u);
     assert(mr->keeper_cam_x == 0 && mr->render.camera.pos_y == 0 && mr->keeper_cam_z == 0);
