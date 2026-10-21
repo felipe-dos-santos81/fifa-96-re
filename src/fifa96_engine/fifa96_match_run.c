@@ -1376,6 +1376,9 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->player_d = 0;   /* native rec[+4][+0xD]; the roster descriptor is
                       * unmodeled by the pool (FU-142b Appendix C) */
   r->player_e = 0;   /* native rec[+4][+0xE] (same) */
+  r->desc_c = 0;     /* FU301: rec[+4][+0xC] (unlocated producer, staged 0) */
+  r->desc_f = 0;     /* FU301: rec[+4][+0xF] */
+  r->desc_1b = 0;    /* FU301: rec[+4][+0x1B] */
   r->place_offset_x = e->place_offset_x;
   r->place_offset_z = e->place_offset_z;
   r->ran = e->ran;
@@ -2093,6 +2096,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: the [0x157AB2] force latch */
+  mr->difficulty_14c2f6 = 0;           /* FU301: the image [0x14C2F6] default */
   /* FU300 T4: the row-0x1A process cells (the ladder stamp arrives live; the
    * lead/band/bounce cells' producers are unported legs and stage zero; the
    * `screen_lead_x` reset rides `match_run_reset_screen_state`). */
@@ -2229,6 +2233,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_157c5d = 0;
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: fresh [0x157AB2] force latch */
+  mr->difficulty_14c2f6 = 0;           /* FU301: fresh [0x14C2F6] default */
   /* FU300 T4: fresh row-0x1A process cells (see init; `screen_lead_x` rides
    * `match_run_reset_screen_state`). */
   mr->global_157c2c = 0;

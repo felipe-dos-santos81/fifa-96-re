@@ -451,6 +451,18 @@ struct fifa96_match_run_record {
   int32_t distance;         /* native +0x65 0x8DCD4 out[0] word (FU-142e row 2A) */
   int8_t player_d;          /* rec[+4][+0xD] table index (FU-142b row 26) */
   int8_t player_e;          /* rec[+4][+0xE] stage-0 gate (FU-142b row 26) */
+  /* FU301 (phase-28 T6): the roster descriptor `[rec+4]` bytes the row-0x1B
+   * wide path reads — `desc_c` = `byte[desc+0xC]` (its `SAR 0x19` ratio seeds
+   * the extents and Block A's `ECX += ratio`; the whole int8 via `SAR 0x18` is
+   * Block A's `0x10-x` difficulty-0 adjust), `desc_f` = `byte[desc+0xF]` (the
+   * Block E reduce threshold, loaded as `dword[desc+0xC]` and `SAR 0x18`),
+   * `desc_1b` = `int8 byte[desc+0x1B]` (the Block E `C0 ± b` rate jitter).
+   * The `[rec+4]` binding is the FU167/FU168/FU176/FU204 leg class and the
+   * producer is unlocated (FU301-L3), so staging resets them to zero (the
+   * engine's honest default). */
+  int8_t desc_c;            /* rec[+4][+0xC] */
+  int8_t desc_f;            /* rec[+4][+0xF] */
+  int8_t desc_1b;           /* rec[+4][+0x1B] */
   int8_t dir_x;
   int8_t dir_z;
   /* FU-77 `FUN_0007BF20` shared-mover state (M2 interactive Task 1): the
@@ -678,6 +690,14 @@ struct fifa96_match_run {
   uint8_t global_157c5c;
   uint8_t global_157c5d;
   uint8_t keeper_latch[8];
+  /* FU301 (phase-28 T6): the native difficulty/option-9 dword `[0x14C2F6]`
+   * the row-0x1B wide seed and Block A/C read (`==1` / `==0` / `2 - x`). The
+   * producers are `FUN_0003749C`/`FUN_00038630`, both `= FUN_0001D940(9)` =
+   * `dword[0x149278+0x24]`, and the static table is all-zero (fresh
+   * `read_memory 0x149278`), so the image/live default is **0**. The option-9
+   * front-end writer family is unported (FU301-L2), so this is a staged input
+   * (tests write it; init/begin reset it to 0). */
+  int32_t difficulty_14c2f6;
   /* FU300 (phase-28 T4): the row-0x1A process cells the full body consumes.
    * `global_157c2c` = the native dword `[0x157C2C]` direction stamp — the
    * keeper ladder arms write 0x2C/0x2D/0x2E in-frame (the seam publishes
@@ -714,15 +734,17 @@ struct fifa96_match_run {
    * `fifa96_match_action_09`, cleared by init; observability for the explicit
    * unported path (never a silent no-op). */
   uint8_t match09_leg_stage;
-  /* M2 phase-26c T5 / FU-285: the row-0x1B stage-2 wide interpolation marker.
-   * 0 = the stage-2 wide interpolation was not reached (or diverted at the
-   * `0x76FD5`/`0x7700E`/`0x7701C` gates); 1 = the body reached the wide route
-   * and the deep pan-vector/descriptor arithmetic (`0x7707D..0x77420`, the
-   * `0x8DC50`/`0x8DC68`/`0xCD474` fold + the `[[rec+4]+9]` descriptor term)
-   * stayed a numbered leg (FU285-L1) — the reach and the `0x71C94` tracked bind
-   * (`0x71D27`) are ported, the vector construction is not. Written by
-   * `fifa96_match_action_1B`; cleared by init/begin (observability, never a
-   * silent no-op). */
+  /* M2 phase-26c T5 / FU-285 + phase-28 T6 / FU301: the row-0x1B stage-2 wide
+   * marker. 0 = the stage-2 wide interpolation was not reached (or diverted at
+   * the `0x76FD5`/`0x7700E`/`0x7701C` gates or by the seed/Block A-D exits);
+   * 1 = Block D selected the pan route (`0x7721B`), so the seed and Blocks A-E
+   * (`0x77035..0x7733E`, FU301) ran and wrote the pan cells. The pan vector
+   * (`0x7733F..0x7738A`), the `EDI` sign-match (`0x77313..0x7733A`), the
+   * `0x71C94` seat (`0x77423`) and the install tree (`0x77428..0x774D2`) stay
+   * the FU301-L5/FU302 legs; the existing `0x71D27` tracked-bind stand-in (the
+   * seat's bind) and the `0x774C0` terminal `[0x157C55]=1` are retained here
+   * unchanged until the seat lands. Written by `fifa96_match_action_1B`;
+   * cleared by init/begin (observability, never a silent no-op). */
   uint8_t match1b_wide_leg;
   /* FU300 T4 (phase-28): the row-0x1A sinks' computed arguments. The sinks
    * themselves (`0x8ED40` actor registrar, `0x8F188` event ring, `0x651F0` sit

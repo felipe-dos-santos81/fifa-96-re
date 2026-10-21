@@ -300,6 +300,13 @@ int16_t fifa96_camera_ramp(int16_t height);
 int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
                             int16_t height, int ramp_param);
 
+/* FU-152 §2.9 (T2) / FU301 §1.6 (phase-28 T6): FUN_0008DC50
+ * (`0x8DC50..0x8DC62`) — the signed truncating shift `v >= 0 ? v >> n :
+ * -((-v) >> n)` (`SAR` is not what the native does: it takes the magnitude
+ * first). The row-`0x1B` wide Block E reduce and the reposition core consume
+ * it. `n` is the caller's shift count (no bounds clamp in the native). */
+int32_t fifa96_camera_shift_step(int32_t v, int n);
+
 /* FU-152 §2.9 (T2): FUN_000709D0, the timer-driven pan step FUN_000736AC
  * calls when `timer > timer_limit`. Bands the event height into the
  * FUN_00065CF8 sink arguments (returned through `class_of`/`param`, left

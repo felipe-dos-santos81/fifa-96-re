@@ -3478,10 +3478,13 @@ static void test_action_1b_stage0_latch_partial_clear(void) {
 
 /* The wide ROUTE: head not bound (phase != 0x0D), rec != actor and != tracked,
  * the `[0x157C5C]` latch clear, the rush (`+0x6B <= +0x77`) and band gates pass
- * -> the `0x71C94` pan setter is reached (`0x71D27 [0x1577CA] = rec`) and the
- * `0x774C0` terminal sets `[0x157C55] = 1`. The wide route does NOT self-write
- * the actor, so the emit is NOT reached: the not-controlled finish installs
- * 0x19. */
+ * -> FU301's Blocks A–E run (`0x77035..0x7733E`; the camera-Y cell `0x30` is
+ * past the Block D `0x20` pan gate, so the latches are not consulted), the
+ * `0x71C94` pan setter stand-in binds the record (`0x71D27 [0x1577CA] = rec`)
+ * and the `0x774C0` terminal sets `[0x157C55] = 1`. Block E sets
+ * `[0x157C59] = 1` (`0x7721B`) and seeds the pan cells (BE was 0 -> the two
+ * draws). The wide route does NOT self-write the actor, so the emit is NOT
+ * reached: the not-controlled finish installs 0x19. */
 static void test_action_1b_wide_route_binds_pan(void) {
   struct fixture f;
   make_fixture(&f);
@@ -3499,14 +3502,19 @@ static void test_action_1b_wide_route_binds_pan(void) {
   f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
   f.mr.keeper_latch[1] = 0;             /* 0x157C55 clear */
   f.mr.global_157c5c = 0;               /* the latch clear -> the wide route */
+  f.mr.keeper_cam_y = 0x30;             /* Block D: > 0x20 -> the pan block */
   e->lane_x = 0;                        /* the 0x7700E rush gate passes */
   e->bound = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   assert(f.mr.render.camera.tracked == 0);   /* 0x71D27 the pan setter bind */
   assert(f.mr.keeper_latch[1] == 1);         /* 0x774CC [0x157C55] = 1 */
+  assert(f.mr.keeper_latch[5] == 1);         /* 0x7721B [0x157C59] = 1 (Block E) */
   assert(f.mr.record.controlled == 0);       /* the wide route does not self-write */
-  assert(f.mr.keeper_latch[5] == 0);         /* the 0x774DD re-place did not run */
-  assert(f.mr.match1b_wide_leg == 1);        /* the interpolation is FU285-L1 */
+  assert(f.mr.match1b_wide_leg == 1);        /* the Blocks A–E reach (FU301) */
+  /* Block E seeded the pan cells from the zero speed guard (draws 0x200/0x725
+   * on this fixture's RNG: C0 = 8, C2 = -(13), then the code-2 reduce). */
+  assert(f.mr.render.camera.vel_x == 2);
+  assert(f.mr.render.camera.vel_z == -3);
   assert(f.mr.state.phase == 0);             /* no emit: not-controlled -> 0x19 */
   assert(e->code == 0x19u);
   drop_fixture(&f);

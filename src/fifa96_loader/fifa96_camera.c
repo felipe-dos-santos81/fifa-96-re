@@ -921,7 +921,7 @@ static int camera_pan_step_internal(fifa96_camera *cam, struct fifa96_rng *rng,
 }
 
 /* FU-152 §2.9 (T2): FUN_0008DC50 (0x8dc50..0x8dc62) — |v| >> n, signed. */
-static int32_t camera_shift_step(int32_t v, int n) {
+int32_t fifa96_camera_shift_step(int32_t v, int n) {
   if (v >= 0) return v >> n;
   return -((-v) >> n);
 }
@@ -955,9 +955,9 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
     int32_t delta[3] = {cur[0] - prev[0], cur[1] - prev[1], cur[2] - prev[2]};
     for (;;) {
       int32_t candidate[3];
-      delta[0] = camera_shift_step(delta[0], 1);
-      delta[1] = camera_shift_step(delta[1], 1);
-      delta[2] = camera_shift_step(delta[2], 1);
+      delta[0] = fifa96_camera_shift_step(delta[0], 1);
+      delta[1] = fifa96_camera_shift_step(delta[1], 1);
+      delta[2] = fifa96_camera_shift_step(delta[2], 1);
       if (delta[0] == 0 && delta[1] == 0 && delta[2] == 0) break;
       candidate[0] = adopted[0] + delta[0];
       candidate[1] = adopted[1] + delta[1];
@@ -983,7 +983,7 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
    * FUN_00070B94 elevation loop otherwise (leg, OL-T11-79). */
   {
     uint16_t changed = (uint16_t)(flags_prev ^ flags_cur);
-    if ((changed & 3u) != 0) cam->vel_x = (int16_t)camera_shift_step(-cam->vel_x, 2);
+    if ((changed & 3u) != 0) cam->vel_x = (int16_t)fifa96_camera_shift_step(-cam->vel_x, 2);
     if ((changed & 0x4u) != 0 && flags_prev == 0) cam->vel_z = 0;
     if ((changed & 0x10u) != 0 && flags_prev != 0) {
       cam->pos_y += (cam->pos_y < 0 ? -4 : 4);   /* +-2*delta (delta 2 staged) */
@@ -1015,8 +1015,8 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
         (int16_t)((uint16_t)cam->pos_x - (uint16_t)cam->target_x);
     int16_t dz =
         (int16_t)((uint16_t)cam->pos_z - (uint16_t)cam->target_z);
-    v1 = (int16_t)camera_shift_step((int32_t)cam->event_step_x - (int32_t)dx, 2);
-    v2 = (int16_t)camera_shift_step((int32_t)cam->event_step_z - (int32_t)dz, 2);
+    v1 = (int16_t)fifa96_camera_shift_step((int32_t)cam->event_step_x - (int32_t)dx, 2);
+    v2 = (int16_t)fifa96_camera_shift_step((int32_t)cam->event_step_z - (int32_t)dz, 2);
   }
   if (v1 == 0 && v2 == 0) {
     /* 0x70CB9..0x70CF7: three draws: t = (draw1 & 0x3F) + 0x30, then the
