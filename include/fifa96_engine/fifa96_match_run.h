@@ -710,18 +710,16 @@ struct fifa96_match_run {
    * `stamp_157c2c`, G2) and the row's direction machine rewrites it 0x5C/0x54;
    * every native write is a dword immediate with a zero high word, so the
    * modeled domain is one byte.
-   * `band_1577f0`/`band_1577fa` = `word[0x1577F0]`/`word[0x1577FA]`, the
-   * direction-machine band gates (their producers are unported, FU292-L2; the
-   * cells are the honest staged-zero live value; `band_1577fa` is also fed to
-   * the entity frame as `word[0x1577FA]`). `bounce_15759f`/`bounce_1575cc`/
-   * `bounce_1575d0` = the goal-bounce cells `[0x15759F]`/`word[0x1575CC]`/
-   * `word[0x1575D0]` the id-1 ladder arm reads (producer FUN_00072AC4
-   * unported, FU-145 / FU300-L3; staged zero). The `word[0x1577C0]/[0x1577C2]`
-   * lead words live with the screen state below (`screen_lead_x`/
-   * `screen_lead_z`). */
+   * The direction-machine gate words are the LIVE camera cells (fix wave):
+   * `[0x1577EE]>>16` = `camera.event_param`, `[0x1577F8]>>16` =
+   * `camera.timer`, `[0x1577BC]>>16` = `camera.speed`, and the lead words
+   * `word[0x1577C0]/[0x1577C2]` = `camera.vel_x`/`vel_z`. No run-level
+   * duplicate is kept — row 0x1A and the goal-screen selection read the camera
+   * fields directly. `bounce_15759f`/`bounce_1575cc`/`bounce_1575d0` = the
+   * goal-bounce cells `[0x15759F]`/`word[0x1575CC]`/`word[0x1575D0]` the id-1
+   * ladder arm reads (producer FUN_00072AC4 unported, FU-145 / FU300-L3;
+   * staged zero). */
   uint8_t global_157c2c;
-  int16_t band_1577f0;
-  int16_t band_1577fa;
   int32_t bounce_15759f;
   int16_t bounce_1575cc;
   int16_t bounce_1575d0;
@@ -1024,11 +1022,10 @@ struct fifa96_match_run {
    *  - `screen_install_hint` = [0x15B6C4] (1 after FUN_000935A0);
    *  - `screen_actor_age` = [0x157A97] the camera-track actor age (producer
    *    FUN_00072AC4 unported, staged 0);
-   *  - `screen_lead_x`/`screen_lead_z` = `word[0x1577C0]`/`word[0x1577C2]`,
-   *    the FU-71 camera lead words. Their live writer is the row-0x1A `'T'`
-   *    arm (FU300 T4, 0x76892/0x768B2); before it runs the staged value is 0
-   *    (the former producer leg OL-72 for `screen_lead_z`, and the sibling
-   *    `screen_lead_x` added with the same class);
+   *  - the native lead words `word[0x1577C0]`/`word[0x1577C2]` are NOT
+   *    duplicated here: they are `camera.vel_x`/`vel_z` (the one native pan
+   *    pair; the row-0x1A `'T'` arm and row-0x1B Block E write them, and the
+   *    goal-screen legs below read `camera.vel_z`);
    *  - `goal_no_score` = [0x15B6A0] the handler's no-score counter;
    *  - `goal_last_id`/`goal_minute` = [0x15B674]/[0x15B678] the last consumed
    *    id and its minute (the goal-log triple components);
@@ -1046,8 +1043,6 @@ struct fifa96_match_run {
   uint16_t screen_period_frames;
   uint8_t screen_install_hint;
   int32_t screen_actor_age;
-  int16_t screen_lead_x;
-  int16_t screen_lead_z;
   uint32_t goal_no_score;
   uint8_t goal_last_id;
   uint16_t goal_minute;
@@ -1942,8 +1937,8 @@ int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
  *    (+ latch);
  *  - leg 2 and the controlled record's team side != 0 and
  *    `screen_actor_age > 0xF0` -> id 3; the complement -> id 4;
- *  - leg not 2/4 and `camera.pos_z < 0` and `screen_lead_z < 0` -> id 9;
- *  - leg 5 and `screen_lead_z < 0` -> id 7;
+ *  - leg not 2/4 and `camera.pos_z < 0` and `camera.vel_z < 0` -> id 9;
+ *  - leg 5 and `camera.vel_z < 0` -> id 7;
  *  - tail: run the installed handler (`0x949E9 CALL [0x15B6D4]`).
  * The engine hardens the slotless run; the `[0x157A83]` reader resolves the
  * controlled id's team side (the native `byte[[[0x157A83]]+0x826]`). Returns 0,

@@ -3780,8 +3780,8 @@ static void test_action_1c_live_route(void) {
  * directly. Without a tracked teammate the stage-0 arm falls
  * through stage 1/2 into the movement/event block: ran=1, timer89=0, the
  * `[0x157C2C]` cell 0 installs anim 0 (row flags bit 0 = 1, so the stage-3
- * +0x44 arm advances) and the event ladder picks id 9 (follow_speed 0 < 7)
- * with the anim select 0xF (follow_speed < 8). The final stage is 4. A stub
+ * +0x44 arm advances) and the event ladder picks id 9 (camera.speed 0 < 7)
+ * with the anim select 0xF (camera.speed < 8). The final stage is 4. A stub
  * leaves these untouched. */
 static void test_action_1a_runs_body(void) {
   struct fixture f;
@@ -3802,8 +3802,8 @@ static void test_action_1a_runs_body(void) {
   assert(f.mr.record.stage92 == 4u);      /* 0 -> 2 -> 3 -> the +0x44 arm */
   assert(f.mr.record.target_x == 0x111);  /* 0x766F7 0x79B1C snap */
   assert(f.mr.record.target_z == 0x333);
-  assert(f.mr.match1a_event_id == 9u);    /* follow_speed 0 < 7 */
-  assert(f.mr.match1a_anim == 0x0Fu);     /* follow_speed 0 < 8 */
+  assert(f.mr.match1a_event_id == 9u);    /* camera.speed 0 < 7 */
+  assert(f.mr.match1a_anim == 0x0Fu);     /* camera.speed 0 < 8 */
   drop_fixture(&f);
 }
 

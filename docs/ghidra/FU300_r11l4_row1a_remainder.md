@@ -458,3 +458,9 @@ corrections were derived while porting the body and are pinned by
   00 00`, `CMP dword [0x157750], 0x90`) and `0x7690C` (`CMP dword
   [0x157750],0x20`) are dword compares, while the `0x767B6` clamp (`66 a1 50 77
   15 00`, `MOV AX,[0x157750]`) is the low-word read the port already uses.
+
+* **E10 — E4's quoted `disassemble_bytes 0x7687b` span is 61 B, not "(40 B)".**
+  Append-only correction (fix wave, 2026-10-21): E4's quote above is complete
+  and byte-exact, but the parenthetical byte count is stale. The completed
+  quote spans `0x7687B..0x768B7` = 61 B (the same erratum as the phase-28
+  register's FU300 item). No instruction, operand or port claim changes.

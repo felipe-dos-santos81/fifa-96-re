@@ -653,8 +653,10 @@ static void match_run_record_camera_event(struct fifa96_match_run *mr,
  * dispatch below, so row 07's stage 0 and stage 1 both run on the install
  * frame while the FU-70 released word is still live in `word[slot+6]`.
  *
- * Staged stand-ins (producers unported): the `0x1577F0` track word
- * (`high_577ee_ge_50`, OL-72), the `[0x157AB0]`/`[0x1587AC]` flags and the
+ * Staged stand-ins (this consumer's inputs): the `0x1577F0` track word
+ * (`high_577ee_ge_50`, staged 0; the cell itself is the live
+ * `camera.event_param` — the row-04 consumer staging remains OL-72), the
+ * `[0x157AB0]`/`[0x1587AC]` flags and the
  * record `+0x99` byte (OL-72; the native handler zero-gates
  * `0x7CE63`/`0x7CF7F`/`0x7D19F` pass with the staged 0). The live `slot_word10`
  * is the FU-70 slot's previous-mapped word (native `slot[+0x10] = mapped`,
@@ -867,7 +869,7 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
           : 0u;
   s.side = mr->entities.team[team].side;
   s.type = e->code;             /* native byte +0x91: the dispatch-code gate */
-  s.high_577ee_ge_50 = 0;       /* 0x1577F0 track word producer unported (OL-72) */
+  s.high_577ee_ge_50 = 0;       /* staged 0 (OL-72); the cell is live camera.event_param */
   s.tracked = (controlled >= 0 && id == controlled) ? 1u : 0u;
   s.user_absent_or_self = (controlled < 0 || id == controlled) ? 1u : 0u;
   s.chaser = (mr->entities.team[team].chosen >= 0 &&
@@ -1560,9 +1562,10 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
 
 /* FU-141 frame inputs: the phase/delta plus the FU-71 camera triple used as
  * the three selection vectors (the native 0x157770/0x157788/0x157794 shadow
- * the 0x15774C camera position at init, FU-67 §4.1). The 0x1577FA/0x157800/
- * 0x157806 bucket timers stay zero (the camera/track block producer is
- * unported, FU-67 S3/FU-130); the 0x10F37C/0x10F388 intercept targets are the
+ * the 0x15774C camera position at init, FU-67 §4.1). `word[0x1577FA]` is the
+ * live camera timer (bound to `timer_a`); only its sibling bucket timers
+ * 0x157800/0x157806 and the FU-67 S3 selection producer remain unported/zero.
+ * The 0x10F37C/0x10F388 intercept targets are the
  * static table `{(0,0,0x990),(0,0,-0xA90)}` (FU-151 §2.8, first-hand
  * `read_memory 0x10F37C`), staged live this slice. */
 static void match_run_entity_frame(const struct fifa96_match_run *mr,
@@ -1583,25 +1586,23 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->follow_speed = mr->render.camera.follow_speed;
   f->pan_counter = mr->render.camera.pan_counter;
   f->global_157a4c = mr->global_157a4c;
-  /* FU300 (phase-28 T4): the row-0x1A cells the frame carries to the walk —
-   * the native raw dwords 0x1577BE (`follow_speed` low / `screen_lead_x` high)
-   * and 0x1577C0 (`screen_lead_x` low / `screen_lead_z` high), and
-   * word[0x1577FA] (`band_1577fa`). The lead cells' only live writer is the
-   * row's `'T'` arm; staged zero otherwise, so the tape is unchanged. */
-  f->lead_x = (int32_t)((uint32_t)(uint16_t)mr->render.camera.follow_speed |
-                        ((uint32_t)(uint16_t)mr->screen_lead_x << 16));
-  f->lead_z = (int32_t)((uint32_t)(uint16_t)mr->screen_lead_x |
-                        ((uint32_t)(uint16_t)mr->screen_lead_z << 16));
-  f->timer_a = mr->band_1577fa;
+  /* FU300 (phase-28 T4; fix-wave unification): the native raw dwords
+   * 0x1577BE (low word `camera.speed`, high word `camera.vel_x`) and
+   * 0x1577C0 (low word `camera.vel_x`, high word `camera.vel_z`). The lead
+   * words are the one camera pan pair — row 0x1A and row 0x1B Block E write
+   * them, so there is no second run-level cell. `[0x1577FA]` (timer_a) is the
+   * live camera timer; the sibling bucket timers 0x157800/0x157806 and their
+   * selection producer remain FU-67 S3/z (zero). */
+  f->lead_x = (int32_t)((uint32_t)(uint16_t)mr->render.camera.speed |
+                        ((uint32_t)(uint16_t)mr->render.camera.vel_x << 16));
+  f->lead_z = (int32_t)((uint32_t)(uint16_t)mr->render.camera.vel_x |
+                        ((uint32_t)(uint16_t)mr->render.camera.vel_z << 16));
+  f->timer_a = (int16_t)mr->render.camera.timer;
   /* FU303-L10 (phase-28 T8): the keeper-CPU ladder's FU292-L2 band cells are
    * LIVE — `band_fa` is the camera timer (`word[0x1577FA]`) and `band_f6` is
    * its ramp start (`word[0x1577F6]`, folded by `camera_event_ramp` as
    * `timer_limit - ramp_divisor`; the 0x705e8 `F8 = F4 - F6` identity,
-   * FU303-L7). `timer_a` above stays the entity selection's FU-67 S3
-   * stand-in (a zero-bucket read of the separate run-level `band_1577fa`
-   * cell, which no live producer feeds); the native 0x1577FA is
-   * `camera.timer`, so `timer_a` and `band_fa` intentionally differ until the
-   * FU-67 S3 selection producer is ported — do not fold them. */
+   * FU303-L7). */
   f->band_f6 = mr->render.camera.band_1577f6;
   f->band_fa = (int16_t)mr->render.camera.timer;
   f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
@@ -1912,8 +1913,6 @@ static void match_run_reset_screen_state(struct fifa96_match_run *mr) {
   mr->screen_period_frames = 0;
   mr->screen_install_hint = 0;
   mr->screen_actor_age = 0;
-  mr->screen_lead_x = 0;   /* FU300 T4: word[0x1577C0] (the 'T' arm writes it) */
-  mr->screen_lead_z = 0;
   mr->goal_no_score = 0;
   mr->goal_last_id = 0;
   mr->goal_minute = 0;
@@ -2112,12 +2111,9 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: the [0x157AB2] force latch */
   mr->difficulty_14c2f6 = 0;           /* FU301: the image [0x14C2F6] default */
-  /* FU300 T4: the row-0x1A process cells (the ladder stamp arrives live; the
-   * lead/band/bounce cells' producers are unported legs and stage zero; the
-   * `screen_lead_x` reset rides `match_run_reset_screen_state`). */
+  /* FU300 T4: the row-0x1A process cells (the ladder stamp and the direction
+   * grids arrive live from the camera; only the bounce cells stay staged). */
   mr->global_157c2c = 0;
-  mr->band_1577f0 = 0;
-  mr->band_1577fa = 0;
   mr->bounce_15759f = 0;
   mr->bounce_1575cc = 0;
   mr->bounce_1575d0 = 0;
@@ -2268,11 +2264,9 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   memset(mr->keeper_latch, 0, sizeof mr->keeper_latch);
   mr->keeper_latch_157ab2 = 0;         /* FU296: fresh [0x157AB2] force latch */
   mr->difficulty_14c2f6 = 0;           /* FU301: fresh [0x14C2F6] default */
-  /* FU300 T4: fresh row-0x1A process cells (see init; `screen_lead_x` rides
-   * `match_run_reset_screen_state`). */
+  /* FU300 T4: fresh row-0x1A process cells (the camera carries the direction
+   * grid/leads; only the bounce cells are staged). */
   mr->global_157c2c = 0;
-  mr->band_1577f0 = 0;
-  mr->band_1577fa = 0;
   mr->bounce_15759f = 0;
   mr->bounce_1575cc = 0;
   mr->bounce_1575d0 = 0;
@@ -3799,12 +3793,12 @@ int fifa96_match_run_screen_schedule(struct fifa96_match_run *mr) {
     }
   }
   if (mr->screen_leg != 4 && mr->screen_leg != 2 &&   /* 0x9497D..0x949B5 */
-      mr->render.camera.pos_z < 0 && mr->screen_lead_z < 0) {
+      mr->render.camera.pos_z < 0 && mr->render.camera.vel_z < 0) {
     mr->situation_id = 9;
     mr->situation_pending = 1;
     return fifa96_match_run_screen_step(mr);
   }
-  if (mr->screen_leg == 5 && mr->screen_lead_z < 0) { /* 0x949B7..0x949DA */
+  if (mr->screen_leg == 5 && mr->render.camera.vel_z < 0) { /* 0x949B7..0x949DA */
     mr->situation_id = 7;
     mr->situation_pending = 1;
     return fifa96_match_run_screen_step(mr);

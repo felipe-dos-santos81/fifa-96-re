@@ -311,17 +311,18 @@ struct fifa96_match_entities {
 /* The camera/track inputs the phase-2 selection reads: the three vectors
  * 0x157788/0x157794/0x157770, the bucket timer words 0x1577FA against
  * 0x157800/0x157806, the lead dwords 0x1577BE/0x1577C0 and the camera z word
- * 0x157754. The producing camera/track block is FU-67 S3 (open leg), so callers
- * supply them; the engine passes its FU-71 camera triple for all three vectors
- * and zero timers/leads. */
+ * 0x157754. The engine passes the live FU-71 camera triple, `timer_a` =
+ * `camera.timer` (word 0x1577FA) and the two lead dwords built from
+ * `camera.speed`/`vel_x`/`vel_z`; only the sibling bucket timers
+ * 0x157800/0x157806 and their FU-67 S3 producer remain unported/zero. */
 struct fifa96_match_entities_frame {
   uint8_t phase;
   uint16_t delta;
   int32_t select_vector[FIFA96_MATCH_ENTITY_SELECT_VECTORS][3];
   int32_t lead_x, lead_z;  /* raw dwords 0x1577BE/0x1577C0 */
-  int16_t timer_a;         /* word 0x1577FA */
-  int16_t timer_b;         /* word 0x157800 */
-  int16_t timer_c;         /* word 0x157806 */
+  int16_t timer_a;         /* word 0x1577FA = camera.timer (LIVE) */
+  int16_t timer_b;         /* word 0x157800 (FU-67 S3, zero) */
+  int16_t timer_c;         /* word 0x157806 (FU-67 S3, zero) */
   int16_t cam_z;           /* word 0x157754 */
   /* FU290 (phase-27 T5): the stage-select machine's live inputs the seam maps
    * onto the keeper-CPU record. The camera triple is the native

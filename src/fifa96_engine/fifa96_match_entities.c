@@ -749,8 +749,11 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.phase = frame->phase;                         /* [0x157A4A]>>0x18 */
         kc_rec.is_actor = (uint8_t)(act == ENTITY_ID(pool, team, i));
         /* FU290 (phase-27 T5): the actor cell `[0x157A83]` (P10/P11) and the
-         * stage-select machine's live inputs. The unported latch cells
-         * (FU292-L1/L2/L3, FU290-L1/L2/L5) stay zero. */
+         * stage-select machine's live inputs. The latch cells FU292-L1
+         * (`0x157C44`/`C48`) and FU290-L1/L2/L5 stay staged zero; the FU292-L2
+         * band cells are live (frame->band_fa/F6, FU303-L10) and byte3
+         * `[0x157824]` is the honest producer-entry `0xFF` stage (FU303-L8/
+         * FU292-L3). */
         kc_rec.actor_present = (uint8_t)(act != FIFA96_MATCH_ENTITY_NONE);
         if (act != FIFA96_MATCH_ENTITY_NONE) {
           uint32_t at = (uint32_t)act / FIFA96_MATCH_ENTITY_RECORDS;

@@ -2185,6 +2185,52 @@ the build also produces the windowed `fifa96` target (`make game`).
     corroboration sentence added to the FU305 item (pan AE 1582 ≈ 20× below
     the precedent and below the still control → no camera pan). No code or
     test change; `make check` unaffected (docs-only), M1/M2 unmoved.
+  - **Final fix wave (whole-branch review, 2026-10-21) — row-`0x1A` live
+    cells + the one pan pair (quoted; prior text above not rewritten).**
+    **(i) Row `0x1A` now reads the LIVE camera cells.** Fresh bytes
+    `0x766fc`/`0x7671a`/`0x7672c`/`0x76757`/`0x76868` show `[0x1577EE]>>16` =
+    word `0x1577F0` = `camera.event_param`, `[0x1577BC]>>16` = word `0x1577BE`
+    = `camera.speed`, and `[0x1577F8]>>16` = word `0x1577FA` = `camera.timer`;
+    the body had bound the zero-only run cells `band_1577f0`/`band_1577fa`
+    and the derived pre-tail `camera.follow_speed` (not the `0x1577BE` cell),
+    so the `0x1` event arm, the `0x2D`/`0x2E` timer gates and the anim `>0x78`
+    arm were dead/misread. The two run-level band fields are retired; the
+    entity frame's `timer_a` binds the same live `camera.timer`, and only the
+    sibling bucket timers `0x157800`/`0x157806` (+ their FU-67 S3 producer)
+    stay zero. **FU300-L1 is therefore narrowed**: its `0x1577F0`/`0x1577FA`
+    part is closed (live camera cells), the `0x1577C0`/`0x1577C2` writer part
+    closes with (ii); the descriptor byte `[[rec+4]+0x10]+3` (FU290-L5) and
+    `[0x158740]>>24` (FU292-L4) remain the row's numbered legs with their
+    existing owners. Pins: `test_action_1a_live_camera_cells_frame_path` (real
+    frame path; a live `fifa96_camera_event_set` produces event_param `0x50`,
+    speed `0x19`, timer 0→2, and the `0x2D` arm stamps `0x5C` → id `4`/anim
+    `0xE`; the old mapping was RED: id `7`/anim `0xF`).
+    **(ii) The `0x1577C0`/`0x1577C2` pan pair is ONE pair.** Row-`0x1B` Block
+    E and row-`0x1A`'s `'T'` arm now both write `camera.vel_x`/`vel_z` (the
+    native words); the duplicate run-level `screen_lead_x/z` cells are
+    retired, and row-`0x1A`'s movement face plus the goal-screen selection
+    (`0x9497D`/`0x949B7`) read the camera fields. Pin:
+    `test_row1b_pan_feeds_row1a_and_screen` (a row-`0x1B` pan → the same run's
+    row-`0x1A` face and the screen id-`9`/id-`7` selection; RED under the
+    two-cell model). **FU302-L12 is not opened** — the unification is
+    structural and live, so no leg register entry is owed.
+    **(iii) Minor fix-wave items:** `match1a_event_id`/`match1a_anim` reset at
+    row-`0x1A` dispatch entry (head-divert/install-4 no longer leaks prior
+    values; `handlers.c:4180-4193` parity); the `match_1b_steering` inner
+    `dx`/`dz` renamed `band_dx`/`band_dz` (no parameter shadow); the stale
+    producer comments in `fifa96_match_entities.c` (`:750-753`),
+    `fifa96_match_run.c` (`:1560-1565`), `fifa96_match_run.h` (`:713-716`) and
+    the row-`0x1A` header binding block are corrected; FU300 E4's `(40 B)` is
+    errata'd as 61 B in the FU300 doc (E10) and here; the PROGRESS "two
+    fidelity riders" line is aligned to **FU292-L1/FU303-L6** +
+    **FU290-L5/FU303-L9**.
+    **(iv) Historical marker:** the **"Unwired rows (59/80)"** bullet
+    (`docs/ENGINE.md:4765`) is **historical** (phase-7 era). The current
+    dispatch over the 80 rows is **`19 UNSUP / 60 OK / 1 NOTF`**
+    (`60/80 = 75%`; the same correction as errata (1) above); it must not be
+    read as the phase-28 census. `make check` 111/111 (ASan/UBSan), census
+    unchanged `60/80 = 75%`, M1 `09b726b7…` / M2 `b281a9b2…` byte-identical
+    (no re-pin).
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

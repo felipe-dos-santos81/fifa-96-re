@@ -6170,7 +6170,7 @@ static void test_screen_schedule_ids(void) {
   mr.situation_id = 0;
   mr.situation_pending = 0;
   mr.render.camera.pos_z = -1;
-  mr.screen_lead_z = -1;
+  mr.render.camera.vel_z = -1;
   assert(fifa96_match_run_screen_schedule(&mr) == 0);
   assert(mr.situation_id == 9 && mr.situation_pending == 1);
   /* leg 5, lead z negative -> id 7 */
@@ -6178,7 +6178,7 @@ static void test_screen_schedule_ids(void) {
   mr.situation_id = 0;
   mr.situation_pending = 0;
   mr.render.camera.pos_z = 0;
-  mr.screen_lead_z = -1;
+  mr.render.camera.vel_z = -1;
   assert(fifa96_match_run_screen_schedule(&mr) == 0);
   assert(mr.situation_id == 7 && mr.situation_pending == 1);
   assert(fifa96_match_run_end(&mr) == 0);
@@ -7594,7 +7594,9 @@ static struct fifa96_match_entity *action_1a_stage(struct fifa96_match_run *mr,
   mr->entities.team[0].side = 0;
   mr->phase_machine.side_controlled = 0;
   mr->render.camera.tracked = FIFA96_MATCH_ENTITY_NONE;
-  mr->render.camera.follow_speed = 0;
+  mr->render.camera.speed = 0;
+  mr->render.camera.event_param = 0;
+  mr->render.camera.timer = 0;
   e = &mr->entities.team[0].records[0];
   e->stage92 = stage;
   e->timer89 = 0;
@@ -7632,7 +7634,7 @@ static void test_action_1a_head_and_tail(void) {
 
 /* Stage 0 fail (`0x766BE` -> stage 1 `0x766DD` -> stage 2): ran/timer/`+0x92
  * += 2, the `0x79B1C` snap, the movement block's anim install (cell 0 -> anim
- * row 0, flags 0x07 -> `+0x44` = 1), the event ladder (follow_speed 0 -> id 9)
+ * row 0, flags 0x07 -> `+0x44` = 1), the event ladder (camera.speed 0 -> id 9)
  * and the stage-3 `+0x44` arm (anim select 0xF, then `+0x92` -> 4). */
 static void test_action_1a_stage0_fail_full_fallthrough(void) {
   struct fifa96_match_run mr;
@@ -7645,8 +7647,8 @@ static void test_action_1a_stage0_fail_full_fallthrough(void) {
   assert(mr.record.stage92 == 4u);          /* 0 -> 2 -> 3 -> the +0x44 arm */
   assert(mr.record.target_x == 0x100);      /* 0x766F7 0x79B1C snap */
   assert(mr.record.target_z == 0x40);
-  assert(mr.match1a_event_id == 9u);        /* follow_speed 0 < 7 */
-  assert(mr.match1a_anim == 0x0Fu);         /* follow_speed 0 < 8 */
+  assert(mr.match1a_event_id == 9u);        /* camera.speed 0 < 7 */
+  assert(mr.match1a_anim == 0x0Fu);         /* camera.speed 0 < 8 */
   assert(e->code == 0x1Au);                 /* controlled team keeps rec 0 */
 }
 
@@ -7755,9 +7757,9 @@ static void test_action_1a_direction_2d(void) {
   struct fifa96_match_run mr;
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Du;
-  mr.band_1577f0 = 0x50;                    /* < 0x60 */
-  mr.render.camera.follow_speed = 0x13;     /* > 0x12 */
-  mr.band_1577fa = 0x10;                    /* < 0x1E */
+  mr.render.camera.event_param = 0x50;                    /* < 0x60 */
+  mr.render.camera.speed = 0x13;     /* > 0x12 */
+  mr.render.camera.timer = 0x10;                    /* < 0x1E */
   mr.record.pos_z = 0;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x5Cu);        /* 0x76742/0x7674C */
@@ -7767,8 +7769,8 @@ static void test_action_1a_direction_2d(void) {
 
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Du;
-  mr.band_1577f0 = 0x60;                    /* fails the < 0x60 gate */
-  mr.render.camera.follow_speed = 0x13;
+  mr.render.camera.event_param = 0x60;                    /* fails the < 0x60 gate */
+  mr.render.camera.speed = 0x13;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x2Du);
   assert(mr.match1a_event_id == 7u);        /* the id-7 arm */
@@ -7777,9 +7779,9 @@ static void test_action_1a_direction_2d(void) {
    * row takes the 0x2D success -> movement/event path, not the 0x54 exit. */
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Du;
-  mr.band_1577f0 = 0x50;
-  mr.render.camera.follow_speed = 0x13;
-  mr.band_1577fa = 0x10;
+  mr.render.camera.event_param = 0x50;
+  mr.render.camera.speed = 0x13;
+  mr.render.camera.timer = 0x10;
   mr.record.lane = (int32_t)0x41 << 16;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x5Cu);
@@ -7795,8 +7797,8 @@ static void test_action_1a_direction_2e(void) {
   struct fifa96_match_run mr;
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
-  mr.render.camera.follow_speed = 0x15;     /* > 0x14 */
-  mr.band_1577fa = 0;                       /* < 0x1C */
+  mr.render.camera.speed = 0x15;     /* > 0x14 */
+  mr.render.camera.timer = 0;                       /* < 0x1C */
   mr.keeper_cam_y = 0;                      /* < 0x90 */
   mr.record.lane = (int32_t)0x41 << 16;     /* the 0x54 arm exits (timer <= 0xF) */
   /* the 0x92AC8 draw must pass `(draw & 0x1F) > 0` (the descriptor byte is the
@@ -7818,7 +7820,7 @@ static void test_action_1a_direction_2e(void) {
   /* draw 0 (the zero RNG state) -> clamp: cam_y 0x90 -> v = 0x20. */
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
-  mr.render.camera.follow_speed = 0x15;
+  mr.render.camera.speed = 0x15;
   mr.keeper_cam_y = 0x90;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x2Eu);        /* the stamp stays */
@@ -7830,7 +7832,7 @@ static void test_action_1a_direction_2e(void) {
   /* v == 0 (cam_y 0x70) skips the ramp writes. */
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
-  mr.render.camera.follow_speed = 0x15;
+  mr.render.camera.speed = 0x15;
   mr.keeper_cam_y = 0x70;
   mr.record.jump_base = 0x321;
   mr.record.jump_timer = 0x111;
@@ -7845,7 +7847,7 @@ static void test_action_1a_direction_2e(void) {
    * word-only gate would pass and (with the armed passing draw) stamp 0x54. */
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
-  mr.render.camera.follow_speed = 0x15;
+  mr.render.camera.speed = 0x15;
   mr.keeper_cam_y = 0x10080;
   fifa96_rng_seed(&mr.rng, 0);
   mr.rng.w[0] = 0x1F;
@@ -7893,7 +7895,7 @@ static void test_action_1a_direction_54(void) {
 /* The movement block's `'T'` branch (`0x76868..0x7690B`): the anim install of
  * word[0x157C2C] = 0x54 selects it; the two 0x92AC8 draws jitter C0/C2 by
  * `>> (rng & 3)` (the native reads the raw dwords' high words — C0 and C2
- * self-jitter; they are NOT derived from follow_speed), then the speed metric
+ * self-jitter; they are NOT derived from camera.speed), then the speed metric
  * is distance(C0, C2), the keeper camera focus accumulates the new C0/C2, and
  * the `0x7DAB4` reset closes the row.
  *
@@ -7913,8 +7915,8 @@ static void test_action_1a_movement_t_branch(void) {
   mr.record.lane = 0;                       /* <= 0x40 -> movement */
   mr.record.type = 0;
   mr.record.vel_x = (int32_t)(0x1234u << 16 | 0x0077u);  /* vel73 = 0x1234, stale speed word */
-  mr.screen_lead_x = 0x100;
-  mr.screen_lead_z = 0x200;
+  mr.render.camera.vel_x = 0x100;
+  mr.render.camera.vel_z = 0x200;
   mr.keeper_cam_x = 0x10;
   mr.keeper_cam_z = -0x10;
   e->lane_z = 0x30;
@@ -7938,8 +7940,8 @@ static void test_action_1a_movement_t_branch(void) {
   assert(mr.record.face7d == (int16_t)face);/* 0x7682E 0x79C50 */
   assert(mr.record.type == sector);
   assert((uint16_t)e->timer7f == (uint16_t)(int16_t)heading);  /* 0x76857 word +0x7F */
-  assert(mr.screen_lead_x == c0);           /* 0x76892 */
-  assert(mr.screen_lead_z == c2);           /* 0x768B2 */
+  assert(mr.render.camera.vel_x == c0);           /* 0x76892 */
+  assert(mr.render.camera.vel_z == c2);           /* 0x768B2 */
   assert(mr.record.speed71 == sp);          /* 0x768CE word[+0x71] */
   assert((int16_t)mr.record.vel_x == sp);   /* mirrored into the dword's low word */
   assert((uint32_t)mr.record.vel_x >> 16 == 0x1234u);  /* vel73 preserved */
@@ -7957,8 +7959,8 @@ static void test_action_1a_movement_t_branch(void) {
   e = action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x54u;
   mr.record.lane = 0;
-  mr.screen_lead_x = -0x100;
-  mr.screen_lead_z = -0x200;
+  mr.render.camera.vel_x = -0x100;
+  mr.render.camera.vel_z = -0x200;
   mr.keeper_cam_x = 0;
   mr.keeper_cam_z = 0;
   fifa96_rng_seed(&mr.rng, 0);
@@ -7973,8 +7975,8 @@ static void test_action_1a_movement_t_branch(void) {
   }
   sp = (int16_t)fifa96_entity_distance(c0, c2);
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
-  assert(mr.screen_lead_x == c0);           /* arithmetic SAR + NEG */
-  assert(mr.screen_lead_z == c2);
+  assert(mr.render.camera.vel_x == c0);           /* arithmetic SAR + NEG */
+  assert(mr.render.camera.vel_z == c2);
   assert((int16_t)mr.record.vel_x == sp);
   fifa96_match_run_decompose_velocity_words(&mr.record);
   assert(mr.record.speed71 == sp);
@@ -7983,7 +7985,7 @@ static void test_action_1a_movement_t_branch(void) {
 
 /* The event ladder (`0x7690C..0x76A3E`): the emitted ids are {5,4,9,1,7,0}.
  * Each arm is reached by its own gates; the anim select (`0x76A43`) yields
- * 0xF/0xE/1 from follow_speed + word[0x1577FA]. The sinks are unported
+ * 0xF/0xE/1 from camera.speed + word[0x1577FA]. The sinks are unported
  * (FU300-L3), so the pins read the row's recorded arguments. */
 static void test_action_1a_event_ladder(void) {
   struct fifa96_match_run mr;
@@ -7997,13 +7999,13 @@ static void test_action_1a_event_ladder(void) {
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_event_id == 4u);
 
-  (void)action_1a_stage(&mr, 2u);           /* follow_speed 0 < 7 -> id 9 */
+  (void)action_1a_stage(&mr, 2u);           /* camera.speed 0 < 7 -> id 9 */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_event_id == 9u);
 
   (void)action_1a_stage(&mr, 2u);           /* 0x76998 -> id 1 */
-  mr.render.camera.follow_speed = 8;
-  mr.band_1577f0 = 0x100;                   /* > 0xF0 */
+  mr.render.camera.speed = 8;
+  mr.render.camera.event_param = 0x100;                   /* > 0xF0 */
   mr.bounce_15759f = -0x421;                /* |.| > 0x420 */
   mr.bounce_1575d0 = -0xEF;                 /* |.| < 0xF0 */
   mr.bounce_1575cc = 0x2D1;                 /* > 0x2D0 */
@@ -8012,32 +8014,89 @@ static void test_action_1a_event_ladder(void) {
 
   (void)action_1a_stage(&mr, 2u);           /* 0x76A12 -> id 7 */
   mr.global_157c2c = 0x2Du;
-  mr.band_1577f0 = 0x60;                    /* the 0x2D arm fails, cell stays */
-  mr.render.camera.follow_speed = 8;
+  mr.render.camera.event_param = 0x60;                    /* the 0x2D arm fails, cell stays */
+  mr.render.camera.speed = 8;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_event_id == 7u);
 
   (void)action_1a_stage(&mr, 2u);           /* the else arm -> id 0 */
-  mr.render.camera.follow_speed = 8;
+  mr.render.camera.speed = 8;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_event_id == 0u);
 
-  /* the anim select: follow_speed < 8 -> 0xF (above); the three 8+ arms. */
+  /* the anim select: camera.speed < 8 -> 0xF (above); the three 8+ arms. */
   (void)action_1a_stage(&mr, 2u);
-  mr.render.camera.follow_speed = 8;
-  mr.band_1577fa = 0x50;                    /* <= 0x78 and > 0x3C -> 1 */
+  mr.render.camera.speed = 8;
+  mr.render.camera.timer = 0x50;                    /* <= 0x78 and > 0x3C -> 1 */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_anim == 1u);
   (void)action_1a_stage(&mr, 2u);
-  mr.render.camera.follow_speed = 8;
-  mr.band_1577fa = 0x30;                    /* <= 0x3C -> 0xE */
+  mr.render.camera.speed = 8;
+  mr.render.camera.timer = 0x30;                    /* <= 0x3C -> 0xE */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_anim == 0x0Eu);
   (void)action_1a_stage(&mr, 2u);
-  mr.render.camera.follow_speed = 8;
-  mr.band_1577fa = 0x79;                    /* > 0x78 -> 0xF */
+  mr.render.camera.speed = 8;
+  mr.render.camera.timer = 0x79;                    /* > 0x78 -> 0xF */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.match1a_anim == 0x0Fu);
+}
+
+/* Fix wave (Important 1): the row-0x1A direction/event gates read the LIVE
+ * camera cells, not derived/staged duplicates. The camera is driven by the
+ * ported event producer (`fifa96_camera_event_set`, not a poked cell): height
+ * 0x50 at cam y 0 gives event_param 0x50, F4 0x42, seed stride 0x42 -> the
+ * atan-capped speed 25, timer 0; the granted frame advances the timer by its
+ * delta (2). Word 0x1577FA = 2 -> the native `timer < 0x1C` gate stays open;
+ * word 0x1577F0 = 0x50 < 0x60; word 0x1577BE = 0x19 > 0x12 -> the
+ * `0x2D` arm stamps 0x5C. The event ladder then reads the SAME live cells:
+ * 0x5C -> id 4, and the anim select speed >= 8 / timer <= 0x3C -> 0xE.
+ * RED on the old mapping: `band_*` = 0 and `follow_speed` = 0 (derived,
+ * never written by event_set), so the 0x2D arm would fail (id 7) and the
+ * anim would be 0xF. The record's code 0x1A has permit 0, so the keeper
+ * machine neither installs nor rewrites the staged `[0x157C2C]` stamp. */
+static void test_action_1a_live_camera_cells_frame_path(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].skip_9a = 1;
+  e = &mr.entities.team[1].records[0];
+  e->skip_9a = 0;
+  e->code = 0x1Au;                 /* permit 0 -> no install/ladder rewrite */
+  e->stage92 = 2u;
+  e->timer89 = 0;
+  e->row44 = 1u;
+  e->anim_id = 0;
+  e->lane = 0;
+  e->pos_x = 0x100;
+  e->pos_y = 0;
+  e->pos_z = 0x40;
+  e->target_x = e->pos_x;
+  e->target_y = e->pos_y;
+  e->target_z = e->pos_z;
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0) == FIFA96_OK);
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 2000, 0x50, 0) ==
+         FIFA96_OK);
+  assert(mr.render.camera.event_param == 0x50);   /* word[0x1577F0] */
+  assert(mr.render.camera.speed == 25);           /* word[0x1577BE] */
+  assert(mr.render.camera.timer == 0);            /* word[0x1577FA] */
+  mr.global_157c2c = 0x2Du;
+  one_granted_frame(&mr);
+  assert((mr.dispatched_ok & (1ull << 0x1A)) != 0u);
+  assert(mr.render.camera.timer == 2);            /* the frame delta advanced it */
+  assert(mr.render.camera.event_param == 0x50);   /* ball y 0 -> no record event */
+  assert(mr.global_157c2c == 0x5Cu);              /* the 0x76742 stamp */
+  assert(mr.match1a_event_id == 4u);              /* the 0x5C event arm */
+  assert(mr.match1a_anim == 0x0Eu);               /* speed >= 8, timer <= 0x3C */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
 }
 
 /* The sit-7 emit's mid-body install (0x76A90): the direct `0x8A938` route
@@ -8549,6 +8608,65 @@ static void test_action_1b_deep_pan_block_e_cells(void) {
  * `>>flag` = 2) so the seed-32 jitter 2 pans; `keeper.z = 0x740` fails the
  * predicate, leaves the ratio 5, and jitter 2 < 5 selects the `0x774DD`
  * re-place. */
+/* Fix wave (Important 2): the native `word[0x1577C0]`/`word[0x1577C2]` pan
+ * pair is ONE pair. A row-0x1B Block E pan writes `camera.vel_x`/`vel_z`; the
+ * same run's row-0x1A movement face and the goal-screen selection read those
+ * cells. Before the unification the pan wrote `camera.vel_*` while row 0x1A
+ * and `screen_schedule` read the stale `screen_lead_*` copies, so both pins
+ * below were RED. */
+static void test_row1b_pan_feeds_row1a_and_screen(void) {
+  struct fifa96_match_run mr;
+  int32_t face = 0;
+  uint8_t sector = 0;
+  (void)match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.keeper_latch[4] = 1;
+  mr.render.camera.speed = 0x123;
+  mr.render.camera.vel_x = 0x40;
+  mr.render.camera.vel_z = 0x20;
+  /* A live ramp delta makes the seat's 0x71C94 re-seed nonzero (the post-seat
+   * 0x1577BE..C2 cells row 0x1A then reads). */
+  mr.render.camera.timer_limit = 0x10;
+  mr.render.camera.timer = 0;
+  mr.record.desc_1b = 3;
+  assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_pan_x == 0x10);         /* (0x40 + 3) >> 2 */
+  assert(mr.match1b_pan_z == -8);           /* -(0x20 >> 2) */
+  assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
+
+  /* The goal-screen selection reads the post-pan C2 (word 0x1577C2). */
+  mr.running = 1;
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+  mr.situation_id = 0;
+  mr.situation_pending = 0;
+  mr.render.camera.pos_z = -1;
+  assert(fifa96_match_run_screen_schedule(&mr) == 0);
+  assert(mr.situation_id == 9u);
+  assert(mr.situation_pending == 1u);
+
+  /* The row-0x1A movement face reads the same post-pan pair. */
+  assert(fifa96_entity_face(-(int32_t)mr.render.camera.vel_x,
+                            -(int32_t)mr.render.camera.vel_z,
+                            &face, &sector) == FIFA96_OK);
+  assert(face != 0);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 2u;
+  mr.record.timer89 = 0;
+  mr.record.row44 = 1u;
+  mr.record.face7d = 0;
+  mr.record.type = 0;
+  mr.record.lane = 0;
+  mr.record.anim_id = 0;
+  mr.global_157c2c = 0;
+  mr.entities.team[0].records[0].lane = 0;
+  mr.entities.team[0].records[0].lane_z = 0;
+  mr.entities.team[0].records[0].cam_dz6f = 0;
+  assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
+  assert(mr.record.face7d == (int16_t)face);   /* 0x7682E */
+  assert(mr.record.type == sector);
+}
+
 static void test_action_1b_deep_pan_keeper_band(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *keeper;
@@ -9060,6 +9178,7 @@ int main(void) {
   test_action_1b_deep_pan_block_c_threshold();
   test_action_1b_deep_pan_block_d_latches();
   test_action_1b_deep_pan_block_e_cells();
+  test_row1b_pan_feeds_row1a_and_screen();
   test_action_1b_deep_pan_keeper_band();
   test_action_1b_deep_pan_sign_match_vector();
   test_action_1b_deep_pan_seat_height();
@@ -9083,6 +9202,7 @@ int main(void) {
   test_action_1a_direction_54();
   test_action_1a_movement_t_branch();
   test_action_1a_event_ladder();
+  test_action_1a_live_camera_cells_frame_path();
   test_action_1a_sit7_direct_installs_record();
   test_keeper_seam_stamp_publish();
   test_keeper_interlock_survives_frame();

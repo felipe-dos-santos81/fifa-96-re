@@ -2483,3 +2483,9 @@ FU303 waivable cells (FU294-L1, the FU294-L3(a) loop, the two fidelity riders,
 FU303-L5, the OL-27 keeper ring). No fabricated stage or producer: the Layer-1
 landing is the phase's acceptance, and the waiver is the honest phase-26a/26c/
 27 shape.
+  *(errata, phase-28 final fix wave, 2026-10-21: the "two fidelity riders"
+  named above are **FU292-L1 / FU303-L6** (the row-`0x19` predict leads staged
+  `0,0,0`; waivable for CX=1/CX=4, needed for the A/5 arms + the row-`0x19`
+  hold target) and **FU290-L5 / FU303-L9** (the `sub_0b`/`sub_10` descriptor
+  bytes staged 0; waivable, monotone conservative), matching the ENGINE
+  phase-28 register's FU303 item. The old wording is kept verbatim.)*
