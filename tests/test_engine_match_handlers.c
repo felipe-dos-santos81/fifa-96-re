@@ -78,9 +78,8 @@
  * install arm + body + pool binding are all bounded) and by FU-142d for row
  * 28 (ported: `fifa96_match_action_28`, the FU-142 Appendix G 4-arm machine)
  * and by FU-142e for row 2A (ported: `fifa96_match_action_2A`, the FU-142
- * Appendix H 12-arm machine). All other action rows
- * are UNSUPPORTED (the six remaining keeper rows 19/1A/1B/1C/1D/1F have
- * tested pure parts but unported arms; rows 27, 2C and 29 have ported bodies
+ * Appendix H 12-arm machine). The keeper rows 19/1A/1B/1C/1D/1F are wired
+ * (phase-26c/27/28); rows 27, 2C and 29 have ported bodies
  * but are unwired with their entries unresolved per the FU-142f census; row 0D
  * has a ported body (fifa96_action_sequence_0d_step) but its only installer,
  * row-09 0x80F61, is inside the unported row-09 arm 1 (FU178-L1); the
@@ -104,7 +103,7 @@
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 14 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x15 = M2 phase-23 T3: the phase-5 celebration sibling is wired (FU-243) */
+    /* 14 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x15 = M2 phase-23 T3: the phase-5 celebration sibling is wired (FU-243); 0x1A = phase-28 T5: wired after the live ladder install+dispatch (FU298/FU300/FU304) */
     /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED; 0x22 = M2 phase-25 (FU-259): the OL-65 staging fix fires the row-07 0x816DF invoke-now, so the ported body's slot is wired and row 0x22 dispatches (install+dispatch witnessed) */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
 };
@@ -3756,9 +3755,9 @@ static void test_action_1c_live_route(void) {
   drop_fixture(&f);
 }
 
-/* Row 0x1A (FU-186 §2.1 + FU300 §2, phase-28 T4): the full body. The slot is
- * NULL/uncounted in T4 (the wire + the live reach + the census are T5's), so
- * the body is driven directly. Without a tracked teammate the stage-0 arm falls
+/* Row 0x1A (FU-186 §2.1 + FU300 §2, phase-28 T4/T5): the full body. The slot
+ * is wired/counted in T5 after the live reach; this pin drives the body
+ * directly. Without a tracked teammate the stage-0 arm falls
  * through stage 1/2 into the movement/event block: ran=1, timer89=0, the
  * `[0x157C2C]` cell 0 installs anim 0 (row flags bit 0 = 1, so the stage-3
  * +0x44 arm advances) and the event ladder picks id 9 (follow_speed 0 < 7)

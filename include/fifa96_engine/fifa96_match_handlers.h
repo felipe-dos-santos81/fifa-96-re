@@ -214,20 +214,20 @@ int fifa96_match_action_17(struct fifa96_match_run *mr);
  * `mr->record.entity_id`. */
 int fifa96_match_action_22(struct fifa96_match_run *mr);
 
-/* The ported action row-0x1A body (FU300 §2, phase-28 T4): the FULL bounded
+/* The ported action row-0x1A body (FU300 §2, phase-28 T4/T5): the FULL bounded
  * body of `0x7662C..0x76B21` — the phase-0xD + `[0x157AAC]>>24` head bind, the
  * `+0x89` timer, the `+0x92 > 4` tail, the 5-arm table
  * `{0x76693,0x766DD,0x766F5,0x76AAD,0x76AE8}`, the `[0x157C2C]` direction
  * machine, the movement/`'T'` block, the event ladder `{5,4,9,1,7,0}` and the
  * sit-7/sit-5 emits. Its action-table slot (`fifa96_match_action_table[0x1A]`)
- * stays **NULL** in T4 by the controller ruling: the wire + the proven live
- * install+dispatch + the census land in T5 as ONE commit (the FU297 dead-count
- * discipline), so the exported body is driven row-level by direct calls. Its
- * installer is the now-ported keeper CPU ladder's three `0x1A` arms
- * (`0x7821D/0x78245/0x7826D`), armed live only behind the P1 permit and the
- * `[0x157C5D]` interlock; the `[0x157C2C]` stamp is published in-frame (G2).
- * The event/sink surfaces stay FU300-L3 legs. Returns FIFA96_OK, or
- * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id`. */
+ * is **wired and counted** in T5 after the live proof: the installer is the
+ * ported keeper CPU ladder's three `0x1A` arms (`0x7821D/0x78245/0x7826D`),
+ * armed live by the static P1 permit (`0x110680`, FU298) and the row-`0x19`
+ * `[0x157C5D]` interlock (FU299 Option B); the frame body's single dispatch
+ * runs the installed row (`test_keeper_installer_live_reach`). The `[0x157C2C]`
+ * stamp is published in-frame before the install (G2). The event/sink
+ * surfaces stay FU300-L3 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for
+ * an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_1A(struct fifa96_match_run *mr);
 
 /* The ported action row-0x24 lane/anim body (FU-188 §4/§6, phase-16 T4): the

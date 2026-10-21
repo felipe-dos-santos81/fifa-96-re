@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-59/80 dispatch rows wired (36 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
+60/80 dispatch rows wired (37 action + the wired phase rows 0x02, 0x10, 0x17, 0x18, 0x19, 0x1D, 0x1E, 0x1F, 0x21, 0x20, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -265,7 +265,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **59/80 rows wired** (36 action + the phase rows
+- Action dispatch (FU-137): **60/80 rows wired** (37 action + the phase rows
   `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1E`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
@@ -346,6 +346,15 @@ the build also produces the windowed `fifa96` target (`make game`).
   is corrected to the native `+0x91` code byte (FU185-L1; no engine-level
   discriminator yet — FU185-L6 blocks the gate). Both landed rows are install-
   live/tape-dormant, so M2 stays byte-exact (no re-pin).
+  **M2 phase-28 T5** wires **row `1A`** after the Layer-1 live proof
+  (`test_keeper_installer_live_reach`): the keeper-CPU ladder installs it on the
+  real frame path — the static P1 permit (`0x110680`, FU298), the live
+  row-`0x19` `[0x157C5D]` interlock (FU299 Option B one-step pulse) and the
+  FU290 computed `CX` (the `CX=4` arm installs/dispatches row `0x1B` and the
+  camera chain; `CX=1` installs/dispatches row `0x1A` with the G2 stamp `0x2C`)
+  — through the merged `fifa96_match_entities_install` contract (FU304). Census
+  `59/80 → 60/80 = 75%`; M1 `09b726b7…` / M2 `b281a9b2…` byte-identical (no
+  re-pin).
   dispatch results 45 UNSUP / 34 OK / 1 NOTF (sum 80; action 45 = 31 OK + 14
   UNSUP, phase 35 = 3 OK + 31 UNSUP + 1 NOTF). *(errata, phase-16 T2 review:
   the `49 UNSUP / 31 OK / 1 NOTF` this line replaced was likewise off by one —

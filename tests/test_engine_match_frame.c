@@ -3623,6 +3623,132 @@ static void test_keeper_installer_live_permit(void) {
   drop_fixture(f);
 }
 
+/* FU298/FU300/FU304 (phase-28 T5): the LIVE installer reach — the Layer-1
+ * hard gate.
+ *
+ * Part A drives the T2 rider-(b) shape through the real frame body: team 0's
+ * keeper holds row `0x19`, its dispatch's live `[0x157C5D] = 1` (`0x74707`)
+ * arms team 1's same-frame ladder step (no staged interlock); the static
+ * `0x110680` permit (FU298) opens the gate; the FU290 stage machine computes
+ * `CX = 4` from producer inputs (the AX-gate camera pose, the keeper lane, the
+ * opposite-side actor cell) and the ladder installs row `0x1B` through the
+ * merged `fifa96_match_entities_install` contract (FU304). The row dispatches
+ * in the same frame, reaches the sit-5 emit (situation 5 -> phase 9), the
+ * phase-9 arm installs row `0x1E` on the controlled team's keeper, and the
+ * row-`0x1E` claim walks to the stage-5 release (`keeper_cam_y = 0x50`). The
+ * camera cells move through the real seam: the re-place's `fifa96_camera_init`
+ * pose (`pos_y = 0x38`) on the install frame, then the release's `0x50`, and
+ * the pan/tracked cell binds.
+ *
+ * Part B drives the row-`0x1A` route: team 0's row-`0x19` set arms team 1's
+ * step in the same frame; the stage machine's live CX=1 path (lane < 0x20,
+ * camera height/lead inputs) installs `0x1A` with the in-frame `[0x157C2C]`
+ * stamp `0x2C` published before the install (FU300 G2); the wired slot
+ * dispatches the full row body (event ladder id 9, anim 0x0F, the movement
+ * anim install 0x2C, the sit-7 emit -> phase 0x0D).
+ *
+ * Staged producer INPUTS only: the keeper rows' held codes `0x19` (the
+ * per-frame row state the native holds between installs), the camera pose /
+ * lane / actor cell / slot pool, and the phase-2 match phase. The permit, the
+ * interlock, the stage index and the dispatch are NOT staged: the permit is
+ * the static table bind, the interlock is the row-`0x19` body's own write, the
+ * stage index is computed by `fifa96_keeper_cpu_stage_select`, and the
+ * dispatch is the frame body's single `action(ctx, e)`. */
+static void test_keeper_installer_live_reach(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *k0;
+  struct fifa96_match_entity *k1;
+  int reached_outlet = 0;
+
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+
+  /* Part A — the live cross-team `0x1B` install + the camera chain. */
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.controlled = 0;                     /* the team-0 actor: opposite for team 1 */
+  mr.entities.team[0].slot_pool = 0;              /* no live slot source (FU-70) */
+  mr.phase_machine.side_controlled = 1;           /* the 0x1E install lands on team 1 */
+  mr.global_157a4c = 0;
+  mr.render.camera.pos_z = 0x800;                 /* the side-1 AX gate */
+  assert(mr.global_157c5d == 0u);                 /* no staged interlock */
+  assert(mr.render.camera.pos_y == 0);
+
+  k0 = &mr.entities.team[0].records[0];
+  k0->code = 0x19u;
+  k0->skip_9a = 0u;
+  k0->timer81 = 0u;
+  k0->has_slot = 0u;
+
+  k1 = &mr.entities.team[1].records[0];
+  k1->code = 0x19u;
+  k1->skip_9a = 0u;
+  k1->timer81 = 0u;
+  k1->has_slot = 0u;
+  k1->lane = 0x28 << 16;                          /* lane_x 0x28 -> CX=4 */
+
+  one_granted_frame(&mr);
+  assert((mr.dispatched_ok & (1ull << 0x1B)) != 0u);
+  assert(mr.state.phase == 9u);
+  assert(k1->code == 0x1Eu);                      /* the phase-9 controlled-team install */
+  assert(mr.render.camera.pos_y == 0x38);         /* the re-place pose through the seam */
+  assert(mr.global_157c5d == 0u);                 /* the step consumed the pulse; 0x1B does not re-set */
+
+  /* The installed row 0x1E claim walks stages 0..4 to the stage-5 release. */
+  for (int i = 0; i < 400 && !reached_outlet; i++) {
+    one_granted_frame(&mr);
+    reached_outlet = (k1->stage92 == 5u && k1->anim_id == 0x45u);
+  }
+  assert(reached_outlet == 1);
+  k1->frame = 3u;                                  /* the stage-5 `frame < 3` input */
+  one_granted_frame(&mr);
+  assert(mr.keeper_cam_y == 0x50);
+  assert(mr.render.camera.pos_y == 0x50);
+  assert(mr.render.camera.tracked != 0);
+
+  assert(fifa96_match_run_end(&mr) == 0);
+
+  /* Part B — the live `0x1A` install + the wired dispatch. */
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[0].slot_pool = 0;
+  mr.phase_machine.side_controlled = 1;           /* the row-0x1A record is kept */
+  mr.global_157a4c = 0;
+  mr.render.camera.pos_z = 0x800;                 /* the side-1 AX gate */
+  k0 = &mr.entities.team[0].records[0];
+  k0->code = 0x19u;
+  k0->skip_9a = 0u;
+  k0->timer81 = 0u;
+  k0->has_slot = 0u;
+  k1 = &mr.entities.team[1].records[0];
+  k1->code = 0x19u;
+  k1->skip_9a = 0u;
+  k1->timer81 = 0u;
+  k1->has_slot = 0u;
+  k1->lane = 0;                                   /* lane_x 0 -> the CX=1 path */
+
+  one_granted_frame(&mr);
+  assert(k1->code == 0x1Au);
+  assert(k1->stage92 == 3u);                      /* the row body advanced past the sit-7 emit */
+  assert(mr.global_157c2c == 0x2Cu);              /* the ladder stamp, published before the install */
+  assert((mr.dispatched_ok & (1ull << 0x1A)) != 0u);
+  assert(mr.match1a_event_id == 9u);
+  assert(mr.match1a_anim == 0x0Fu);
+  assert(k1->anim_id == 0x2Cu);                   /* the movement block's 0x6E598 install */
+  assert(mr.state.phase == 0x0Du);                /* the sit-7 emit -> situation 7 */
+
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU304 §3 / FU300 §3.2-G1 (phase-28 T3): the merged Seam A install contract
  * + the `copy_pos` output — the seam-level pins.
  *
@@ -3778,6 +3904,61 @@ static void test_keeper_seam_copy_pos_not_after_install(void) {
   assert(cap.target_x == 0xAAA);  /* NO 0x77F20 pos -> target copy */
   assert(cap.target_y == 0xBBB);
   assert(cap.target_z == 0xCCC);
+}
+
+/* FU304 §3(A) / FU304-L7 (phase-28 T5): the seam's `copy_pos` apply branch.
+ *
+ * The native `+0x81` arm (`0x77F16..0x77F29`) is live-unreachable through the
+ * ladder's only caller `0x78599`: a live `timer81` on a code-`0x19` keeper
+ * always installs code 0 first, and the post-install head gate then returns
+ * (FU304-L7), so the machine's own arm contract is pinned by
+ * `test_keeper_cpu.c`'s direct ladder call. This pin covers the SEAM's apply of
+ * the reported output (the frozen `target_* := pos_*` shape) with a stub ladder
+ * — a branch contract, not a live reach claim. The sibling above pins the
+ * install-fired state where the copy must NOT run. */
+static int ladder_copy_pos_stub(void *ctx,
+                                const struct fifa96_keeper_cpu_record *rec,
+                                struct fifa96_keeper_cpu_ladder_out *out) {
+  (void)ctx;
+  (void)rec;
+  out->ran = 1;
+  out->copy_pos = 1;
+  return FIFA96_OK;
+}
+
+static void test_keeper_seam_copy_pos_applies(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f;
+  fifa96_keeper_cpu cpu;
+  struct fifa96_match_entity *keeper;
+  struct seam_capture cap;
+  memset(&f, 0, sizeof f);
+  memset(&cap, 0, sizeof cap);
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  cpu.ladder = ladder_copy_pos_stub;
+  f.phase = 2u;
+  f.delta = 2u;
+  f.keeper_cpu = &cpu;
+  cpu.interlock_157c5d = 1u;      /* the ladder-gate input cell */
+  keeper = &pool.team[0].records[0];
+  keeper->code = 0x19u;
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 0u;           /* no deferred install (target == code) */
+  keeper->has_slot = 0u;
+  keeper->pos_x = 0x111;
+  keeper->pos_y = 0x222;
+  keeper->pos_z = 0x333;
+  keeper->target_x = 0xAAA;
+  keeper->target_y = 0xBBB;
+  keeper->target_z = 0xCCC;
+  assert(fifa96_match_entities_team_update(&pool, 0, &f, seam_first_capture,
+                                           &cap) == FIFA96_OK);
+  assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(cap.code == 0x19u);      /* the ladder arm installs nothing here */
+  assert(cap.target_x == 0x111);  /* the 0x77F20 pos -> target copy applied */
+  assert(cap.target_y == 0x222);
+  assert(cap.target_z == 0x333);
 }
 
 /* The install-before-ladder order through the seam: the ladder must be handed
@@ -4679,6 +4860,16 @@ static void test_keeper_1d_goal_kick_reachable(void) {
   assert(mr.state.phase == 2u);
   assert(mr.goal_armed == 0u);
   assert((mr.dispatched_ok & (1ull << 0x1D)) == 0u);
+
+  /* FU300 (phase-28 T5): row 0x1A is wired now, and this camera excursion
+   * (`|z| > 0x7B0`) also opens the keeper ladder's FU290 AX gate on the natural
+   * code-`0x19` keepers, so the live row-0x1A body would run its sit-7 emit
+   * (phase 0x0D) before the goal scanner and pre-empt the sit-4/row-0x1D route
+   * under test. Stage the keepers' lane producer input past every stage-select
+   * install arm (lane_x >= 0x30: CX=1/4 closed; the table path's `delta <= lim`
+   * holds at 0) — the row-0x1D trigger stays the live armer + scanner. */
+  mr.entities.team[0].records[0].lane = 0x40 << 16;
+  mr.entities.team[1].records[0].lane = 0x40 << 16;
 
   /* stage the goal-line excursion the armer reads: beyond the goal line in the
    * OUT-of-mouth band (`|camera z| word >= 0xB90` -> the classifier's zone 0)
@@ -6406,6 +6597,12 @@ static void test_row04_arm_a_track_reload(void) {
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
     for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
       if (!(t == 1u && i == 4u)) mr.entities.team[t].records[i].skip_9a = 1;
+  /* FU300 (phase-28 T5): the 0xB00 camera also opens the now-live keeper
+   * ladder's FU290 AX gate; keep the stage-select install arms closed via the
+   * lane producer input so the row-0x1A sit-7 emit cannot rewrite the row-04
+   * record's code (the row under test). */
+  mr.entities.team[0].records[0].lane = 0x40 << 16;
+  mr.entities.team[1].records[0].lane = 0x40 << 16;
 
   one_granted_frame(&mr);
   assert(mr.render.camera.vel_z != 0);           /* the row's event fired */
@@ -7851,8 +8048,10 @@ int main(void) {
   test_keeper_l4_release_reach();
   test_keeper_installer_reach();
   test_keeper_installer_live_permit();
+  test_keeper_installer_live_reach();
   test_keeper_seam_install_full_state();
   test_keeper_seam_copy_pos_not_after_install();
+  test_keeper_seam_copy_pos_applies();
   test_keeper_seam_ladder_sees_post_install_code();
   test_keeper_seam_ladder_install_full_state();
   test_action_1a_head_and_tail();

@@ -2374,3 +2374,55 @@ live-ness.
 row-`0x1A` NULL lane, the stage-select input families
 (`FU290-L1/L2/L5`, `FU292-L1/L2/L3`) and the `copy_pos` copy each carry a named
 native owner.
+
+## M2 phase-28 T5 — the live installer reach (the Layer-1 hard gate) + the census (FU298/FU299/FU300/FU304)
+
+**The live install+dispatch is proven on the real frame path, so row `0x1A` is
+wired and the census moves `59/80 = 73%` → `60/80 = 75%` (`37 action + 23
+phase`).** `test_keeper_installer_live_reach` drives `fifa96_match_run_frame`
+with producer inputs only: the phase-2 match phase, the keepers' held `0x19`
+rows, the camera pose, the lane words, the actor cell and the slot pool. No
+gate is staged — the permit is the static `0x110680` table bind (T1/FU298), the
+interlock is the row-`0x19` body's own `[0x157C5D] = 1` (`0x74707`) read by the
+same-frame team-1 step (T2/FU299 Option B; the step's clear is published, so the
+cell reads 0 after an install frame whose last record-0 dispatch is not a
+row-`0x19`), the stage index is computed by `fifa96_keeper_cpu_stage_select`,
+and the dispatch is the walk's single `action(ctx, e)`.
+
+- **Part A (the `0x1B` arm + the camera chain):** team 0's row-`0x19` set arms
+  team 1's step; the side-1 AX camera gate + lane `0x28` + the opposite-side
+  actor select `CX=4`; the ladder's `0x1B` install goes through
+  `fifa96_match_entities_install` (T3/FU304 merged contract: `stage92=0`,
+  `timer89=0`, `ran=0`), the same-frame row-`0x1B` dispatch reaches the
+  re-place + the sit-5 emit (situation 5 → phase 9), the phase-9 arm installs
+  `0x1E` on the controlled team's keeper, the claim walks to the stage-5
+  outlet, and the release moves the camera cells: `camera.pos_y` `0x38` (the
+  re-place pose) then `0x50`, with the pan/tracked cell bound.
+- **Part B (the `0x1A` arm):** team 0's in-frame row-`0x19` set arms team 1's
+  step; the live `CX=1` path (lane/camera-height/follow inputs) installs `0x1A`
+  with the G2 in-frame `[0x157C2C] = 0x2C` publish, and the wired slot runs the
+  full body — the movement anim install `0x2C`, the event ladder id 9 + anim
+  `0x0F`, and the sit-7 emit → phase `0x0D`.
+- **Mutation-RED riders** (each stubbed in turn, reverted): (a) `permit = 0` →
+  no `0x1B` dispatch; (b) the per-step interlock publish removed → the
+  one-step-pulse clear assertion fails; (c) the `copy_pos` apply removed → the
+  new seam apply pin fails; (d) the `0x1A` slot back to NULL → the row body
+  never runs. The pre-wire RED is the same failure as (d).
+- **The `copy_pos` contract pin:** the `0x77F16` arm stays live-unreachable
+  through the ladder's only caller (FU304-L7), so `test_keeper_seam_copy_pos_applies`
+  pins the seam's apply branch with a stub ladder (a branch contract, not a
+  live claim); `test_keeper_seam_copy_pos_not_after_install` keeps the
+  install-fired native state.
+- **Wire-consequence fixture re-aims (no gate faked):**
+  `test_keeper_1d_goal_kick_reachable` and `test_row04_arm_a_track_reload` both
+  stage a `|cam.z| > 0x7B0` pose, which now also opens the live keeper ladder's
+  AX gate on the natural `0x19` keepers; both fixtures stage the keepers' lane
+  input past the stage-select install arms (`lane_x >= 0x30`) so the row-`0x1A`
+  sit-7 emit cannot pre-empt the row-`0x1D`/row-`0x04` routes under test.
+- **Tape:** M1 `09b726b7…` and M2 `b281a9b2…` byte-identical (`cmp`); the wire
+  is tape-neutral. `tests/test_engine_m2.c` pins `action_wired == 37u`,
+  `phase_wired == 23u`, and the row-`0x1A` non-NULL slot;
+  `tests/test_engine_match_handlers.c` flips the row's dispatch class to OK.
+- **Acceptance:** `make check` **111/111** (sanitized, strict `-Wall -Wextra
+  -Werror`); README title `75%`, `docs/ENGINE.md`, `AGENTS.md:90` and the m2
+  census pins updated in the same commit.
