@@ -2466,9 +2466,11 @@ landing — clock `00:05`). The pan pair
 (`docs/screens/p28-l2-pan-a/b.png`, same clock second) has scene-band AE
 **1582** on the `y < 591` crop of the 960×720 client area; the still control
 pair (`p28-l2-still-a/b.png`, no key held, same clock second `00:07`) has
-**2052**, not 0. The live scene animates continuously (the phase-10+ entity
-roll), so the AE witness cannot attribute motion to the camera — and a
-read-only `gdb` sample of the same run (517 phase-2 samples over ~52 s of
+**2052**, not 0. The pan AE (1582) also sits ~20× below the FU305 precedent
+(~2.9e4–4.6e4) and *below* the still control (2052), independently
+corroborating that no camera pan ran. The live scene animates continuously
+(the phase-10+ entity roll), so the AE witness cannot attribute motion to the
+camera — and a read-only `gdb` sample of the same run (517 phase-2 samples over ~52 s of
 repeated direction holds and kicks) shows the camera cells static for the
 whole phase-2 window: `pos=(0,0,0)`, `vel=(0,0)`, `rate=(0,0)`, `tracked=-1`,
 `follow_speed=0`, `event_param=0`, `pan_counter=0`, `timer=0`. The follow/pan
