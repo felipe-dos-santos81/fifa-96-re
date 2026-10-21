@@ -1921,6 +1921,225 @@ the build also produces the windowed `fifa96` target (`make game`).
   fixed `copy_src`; native owner `FUN_00077EAC` (`0x77F16..0x77F20`, FU186-L5/L6);
   zero live. **Honest ceiling:** no row wired (census unmoved), no faked producer;
   every unreachable surface carries a numbered leg with a named native owner.
+- **M2 phase-28 leg register (FU298…FU305; 2026-10-21) — the installer live
+  (the camera unlock) + the Layer-2 acceptance: the quoted errata + the leg
+  register (appended; prior sections never rewritten). Census `60/80 = 75%`
+  (`37 action + 23 phase`); M1 `09b726b7…` and M2 `b281a9b2…` byte-identical
+  (no re-pin).** The Stage-2 plan (T1–T9) drove the keeper-CPU ladder from
+  wired-but-unraised to a proven live install+dispatch (**Layer 1, GREEN**)
+  and attempted the visible-camera acceptance (**Layer 2**): the windowed smoke
+  runs, but the live camera cells stay `(0,0,0)` — the visible-camera goal is
+  an **honest §6 waiver** with the remainder legs named (the FU305 item below).
+  **Landed:** T1 the FU298 permit; T2 FU299 Option B; T3 FU304; T4 FU300; T5
+  the Layer-1 reach + the census; T6/T7 FU301/FU302; T8 FU303; T9 the
+  acceptance + this register.
+  - **FU298 — P1 `[0x110680]` is a static 45-byte table; the read is bounded
+    ≤`0x2C`; the phase-27 waiver is re-armed.** Fresh `read_memory 0x110680`
+    (96 B) + `search_instructions`/`get_xrefs_to` = 19 sites, **all reads, no
+    writer** — so "porting P1" is a byte-exact data table + a live bind
+    (`fifa96_keeper_cpu_permit_tbl[0x2D]`,
+    `fifa96_keeper_cpu_permit(code)` with `code < 0x2D`), not a producer. The
+    FU305 erratum stands: the extra "permit=1" codes
+    `{0x2F,0x44,0x47,0x49,0x4A,0x4B,0x5D,0x5E}` are the mode-table bytes at
+    `0x1106AD`/`0x1106C3`, not permit entries. The FU298 §5 "`static const`"
+    sketch vs the exported table is an **erratum** (the port exposes the table
+    for the byte-exactness pin). **The re-armed waiver:** the phase-27
+    `test_keeper_installer_live_waiver` (the dead `permit == 0`) is re-aimed as
+    `test_keeper_installer_live_permit` — RED on the phase-27 tree, GREEN after
+    the bind (FU298-L6), exactly the red-by-design flip the FU298 doc named.
+    Legs (native owners in FU298 §7): **FU298-L1** the exhaustive `+0x91`
+    state domain (owner: the `FUN_0007D9A4` call-site census; no native bound
+    check at the read sites, the port's bound is the faithful 45-byte physical
+    bound), **L2** the loader-stub pre-entry patch (owner: the 16-bit loader
+    spine; neither excluded nor evidenced), **L3** the `&3` bit-1 semantics
+    (owner: the `&3` sites' consumers, `0x7CFE8`/`0x7D06C`), **L4** the mode
+    tables `0x1106AD`/`0x1106C3` (owner `FUN_0008AF38`/`FUN_00079F3C`), **L5**
+    the record-0 code trajectory on M2 (owner: the M2 golden harness).
+  - **FU299 — the interlock ordering is Option B: per-team bind → step →
+    publish.** The native walk reads `[0x157C5D]` at the ladder gate
+    (`0x7858E`), the step clears it (`0x785A2`), and row-`0x19`'s body sets it
+    (`0x74707`); the engine now binds the cell into the machine view immediately
+    before `fifa96_keeper_cpu_step` and publishes the view back immediately
+    after it, inside `team_update` and **before** the single dispatch — the
+    frame-head bind and frame-tail write-back
+    (`fifa96_match_run.c:4249`/`:4257`) are deleted, and the `[0x157AB2]`
+    publish moved into the per-step publish as the same block (FU304-L2 /
+    FU299-L5). Net: a row-`0x19` dispatch arms the *next* step (a one-step
+    pulse), and the same-frame cross-team arm is **derived, not captured** —
+    **FU299-L1** (native owner `FUN_0004B100 0x4B2AB/0x4B2B2` +
+    `FUN_0008D8EC 0x8DB35` + the shared cell); the engine rider (b) tests the
+    engine side only. **FU299-L2** (an outfield record holding code `0x19` with
+    no in-walk clear; owner `FUN_0007CA54`, carried FU-179 row-04 producer
+    `0x7E866`/`0x7E8C1`) stays unproven; **L3** the cell's port shape is now
+    settled (the entities-frame cell + the machine view); **L4** the
+    invoke-now reconciliation is carried (FU296-L8); **L5** is closed by the
+    block migration.
+  - **FU300 — row `0x1A` is ported in full and wired (counted).** The 5-arm
+    stage machine `{0x76693,0x766DD,0x766F5,0x76AAD,0x76AE8}`, the
+    `[0x157C2C]` direction machine (`0x2D`/`0x2E`/`0x54` + the `0x702F8`
+    clamp), the movement block (`0x79C50` → `fifa96_entity_face`; `0xCD474` →
+    `word[+0x7F]`; `0x6E598` → the store core), the event ladder `{5,4,9,1,7,0}`
+    + anim select `{0xF,0xE,1}`, the sit-7 emit and the stage-4 sit-5 emit; the
+    slot `{0x1A, fifa96_match_action_1A}` is live and the census is a proven
+    count, not a slot flip (the FU297 "dead count" warning is satisfied).
+    **The `'T'` metric survives the dispatch decomposition** — the native
+    `word[+0x71] = 0x8DC68(new C0, new C2)` is mirrored into `vel_x`'s low
+    word via the dispatcher's exact decomposition (the FU-141 rebuild otherwise
+    overwrote `r->speed71`). **The FU84 leg 5 / FU-159 side state:** the
+    `0x6E598` helper's `[0x157A6C]` write is the pre-existing animation
+    selector's side effect, carried, not row-`0x1A`'s and not modelled by the
+    store core (FU300 E8). **The E9 `[0x157750]` binding:** the body reads Y
+    through `mr->keeper_cam_y` (the FU-151 process-cell mapping shared with
+    rows `0x1B`/`0x1D`/`0x1F`), not the render camera; widths stay native —
+    `0x7677E`/`0x7690C` are dword compares, the `0x767B6` clamp is the word
+    read. **The `match1a_anim` last-call semantics:** the cell records the
+    **last** `0x651F0` argument — 6 from the direction arms (observable on
+    both `0x54` exits) then `0xF`/`0xE`/1 from the event select. **Erratum:**
+    FU300 E4's quoted `disassemble_bytes 0x7687b` span is **61 B**, not the
+    "(40 B)" in the frozen quote. Legs: **FU300-L1** (`0x1577F0`/`0x1577FA`
+    and the descriptor byte `[[rec+4]+0x10]+3`; owners FU292-L2/FU294-L1/L2/
+    FU301), **L2** the remaining movement cells (`0x79C50`/`0xCD474`/`0x6E598`/
+    `0x702F8` are ported; the residual is FU186-L2/FU300-L2), **L3** the sink
+    bodies (`0x8ED40`/`0x8F188`/`0x651F0`/`0x974DC`/`0x974F0`), **L4** closed
+    (the seam stamp), **L5** the row-`0x1B` emit shape (owner `0x776F7`/
+    `0x76B1C`).
+  - **FU301 — the deep pan I: the seed + Blocks A–E (`0x77035..0x77312`).**
+    The three corrections vs FU293 are landed: the seed `ECX = 0x60-(8-d)`,
+    Block A's **unconditional** `ECX -= ECX>>2`, and the code-3 reduce touching
+    **only** `[0x1577C2]`. The split is recorded: the plan title says A–F, but
+    Block F's `EDI` sign-match + pan vector (`0x77313..0x77420`) landed in
+    **FU302** (T7), so the phase-28 T6 commit ends at `0x77312` — the "Blocks
+    A–E (`0x77035..0x7733E`)" end address is an **erratum**. The `0x92AC8`
+    stream positions are pinned (FU301-L9): two draws on the `BE==0` seed, one
+    jitter draw only inside the Block C condition, one reduce draw always.
+    Legs: **FU301-L2** (`[0x14C2F6]` unmodeled; owner `FUN_0003749C 0x374FB` /
+    `FUN_00038630 0x3878C` + the `0x149278` table), **L3** the ratio
+    descriptors (`[desc+0xC]` bits, `+0xF`, `+0x1B`; owner the in-window read
+    sites `0x77044/0x7704F/0x770B6/0x770BE/0x771F9/0x771FF`), **L4** the band
+    family's wide-block alias delta (owner `0x7733F..0x77350`), **L8** the
+    `[0x157C59]`/`[0x157C57]` latches (now written; owner `0x7721B`/`0x7738C`),
+    **L9** the RNG contract (owner the `0x92AC8` sites
+    `0x7719F/0x77233/0x77247/0x772C5`).
+  - **FU302 — the deep pan II: Blocks F/G + the exact `0xCD514`; the seat
+    adjudicated.** The folds `0x8DCD4`/`0xCD474`/`0x8DC68`/`0x74584` and the
+    exact trig-normalized `0xCD514` (`fifa96_entity_hypot`: `hypot(a,b)` via
+    the better-conditioned branch, full 32-bit quotient) are ported; Block E
+    and the `0x795B4` band use the exact primitive (the row-`0x1B`/`0x1C`
+    heading-order correction is pinned). **The seat camY adjudication:** the
+    `0x77420` `BX` is `SI = dword[0x157750]` loaded at `0x77228` — the
+    camY-derived height, **not** the jitter; **FU302-L10 is superseded**
+    (the wave review adjudicated FU301-L6 correct), and the install-tree
+    product is the post-seat pan-z cell (`09a24c3`). The `0x795B4` band's own
+    sibling `fifa96_entity_intercept_band` is **not** an exact `0xCD514`
+    port (transposed angle, fixed `|dx|` dividend) — **FU302-L1 stays a
+    residual leg** with its six callers named (row-`0x0B` ×2, row-`0x0C`,
+    row-`0x16`, the team lane refresh, `team_select_intercept`); the native
+    owner is `0xCD514`/`0x795B4`. **The rotated steering arm remains
+    FU186-L2:** the on-target `0x76B28` call is ported with the native
+    `0x80/0x40` constants; row-`0x1B`'s `0x76FA2` caller still sits behind
+    the unported stage-1 block. **FU302-L8 stays open** (the install gate
+    `byte[0x157A4D] == 0x10` vs the head's `== 0xD` and the FU285-L2
+    `0x157A4C` reconciliation), and the sink bodies (`0x8F188`/`0x8ED40`/
+    `0x974DC`, FU302-L5 owner `0x92820`, OL-27/OL-82) stay legs with their
+    computed arguments recorded in the `match1b_*` observables.
+  - **FU303 — the visible-motion cells: the needed/waivable split.** Needed
+    and landed: the dir byte `[0x157815]` producer
+    (`fifa96_camera_event_dir` at the setter sites), the `FUN_00071DF4` rate
+    table (`0x10E169` compass + the `0x11042B` 64-pair table) →
+    `camera.rate_x/rate_z` → the `update_walk` pan-push (`rate*(timer_limit −
+    timer)` into target/anchor, `rate` into velocity), and F6
+    (`band_1577f6 = timer_limit − ramp_divisor`, the `0x705e8` identity) +
+    the honest byte-3 `0xFF` staging (`FUN_000703E8`'s entry init; the
+    classifier's input mapping is the carried **FU303-L11**, so no producer
+    is faked). Waivable, staying legs: **FU294-L1** (the per-side tracked
+    array — goal-scan only; owner the ported `fifa96_camera_event_set`),
+    the **FU294-L3(a)** smoothing loop (proven closed, `[0x157814]` has 0
+    readers; owner `fifa96_camera_update_walk`), the `[0x157820]` freeze rider
+    and the `[0x157822]`→composer-bit rider (**FU303-L4**; owners
+    `fifa96_camera_update_walk` and the composer staging), `[0x158777]`
+    (**FU303-L5**; owner the FU-152 §2.9 setter clear), and **FU294-L2**'s
+    keeper ring (`FUN_00092998(1,2,-1)`, OL-27). The rate arm's sub-object dir
+    pair is the entity-pool copy (the pre-existing first arm's mapping; a
+    one-drain lag for a slot-bound record — the established semantics, not
+    changed). **FU303-L11**'s out-of-domain `0x10E169` read is bounded to the
+    live `{-1,0,1}` slot domain (the native's unchecked read is unreachable
+    from that writer; owner `fifa96_camera` / FU-148 §12.1).
+  - **FU304 — the seam contract merged; `copy_pos` applies; FU304-L7.** Both
+    Seam A installs route through `fifa96_match_entities_install` (the full
+    native `FUN_0007D9A4` contract: `stage92`/`timer89`/`ran`/`+0x7B`, not a
+    bare `e->code = install_code`), so row-`0x1A`'s first dispatch cannot
+    mis-route on stale stage state; `copy_pos` applies `target_* = pos_*`
+    (`0x77F20`) and the `[0x157C2C]` stamp publishes in-frame (G2). The
+    install-before-ladder order is the native order (`0x78576` install then
+    `0x7857B..0x78599` ladder), so the ladder derives from the post-install
+    code. **FU304-L7:** the `+0x81` copy arm is statically unreachable through
+    the ladder's only caller (`timer81 != 0` forces the install of code 0
+    before the `0x77EC2` head gate), so the seam apply is a branch contract
+    (`test_keeper_seam_copy_pos_applies`, a stub ladder), not a live claim —
+    no producer is faked to exercise it. **FU304-L4** (the seam's
+    `input_range` cells leave the bit-9 gate honestly open, zeros open it;
+    owner the seam promotion with FU291-L2) stays a leg; **L2/L3** are closed
+    by the per-step publish and the in-frame stamp; **L5** remains in FU299.
+  - **FU305 — the Layer-2 acceptance + the tape prediction; the honest
+    verdict.** The tape prediction (§5.3) is **measured**: enable the permit
+    live but the install tree is same-code-suppressed on the M2 route (record
+    0 already holds the code the tree would write), so **M2 never moved** —
+    `09b726b7…`/`b281a9b2…` byte-identical through T1–T9, no re-pin, no
+    stop; the post-m-42 ladder-arm question (the §5.3 prediction) produced no
+    presented change, and the exact tape-side refusal (the AX/CX arm census
+    over the parked-camera windows) stays **FU305-L1/L2** — not re-derived
+    here. The
+    acceptance ran on this host (`make game`, `DISPLAY=:1`, SDL3, the ISO
+    present; the phase-8 walkthrough: intro RETURN → front-end BACKSPACE →
+    RETURN, then the post-cutscene KICK release at ~20 s — the phase-18 act-1
+    route's phase-2 landing — clock `00:05`): the **pan pair**
+    (`docs/screens/p28-l2-pan-a/b.png`, same clock second) has scene-band AE
+    **1582** (`y < 591` crop of the 960×720 client area); the **still pair**
+    (`p28-l2-still-a/b.png`, no key held, same clock second `00:07`) has
+    **2052**, not 0. The scene animates continuously on the live path (the
+    phase-10+ entity roll), so the AE witness cannot attribute motion to the
+    camera — and a read-only `gdb` sample of the live run (no code change; 517
+    phase-2 samples over ~52 s of repeated direction holds and kicks) shows the
+    camera cells static for the whole phase-2 window:
+    `pos=(0,0,0)`, `vel=(0,0)`, `rate=(0,0)`, `tracked=-1`, `follow_speed=0`,
+    `event_param=0`, `pan_counter=0`, `timer=0` (the follow/pan chain's gates
+    never open). **Verdict: Layer 1 GREEN, Layer 2 WAIVED** (spec §6) — the
+    visible camera is **not** made live by this phase; the Layer-1 reach (the
+    same-commit attribution: `camera.pos_y` `0x38`→`0x50` and
+    `camera.tracked == 11` through the real seam, with the mutation-RED riders)
+    is the landing, and the visible-camera remainder keeps its numbered owners:
+    **FU305-L5** (the follow/pan needs a live event source: `FUN_00071DF4`'s
+    first arm + FU293-L1/L3 and the every-frame auto-camera's `[0x1577EE].hi >
+    0xF0` gate; the FU-148 §13 ball-staging producers), **FU305-L1** (the
+    record-0 census; owner `FUN_000782D0 0x784C0..0x785A8`), **L2** (the AX/CX
+    tape verdict; owner `FUN_00077EAC 0x77F9A/0x77FA5/0x78032..0x78051`),
+    **L3** (`[0x157A4C]`; owner `0x77FAD..0x77FEE` / the FU-217 sit-8 arm),
+    **L4** (the unported `AX==0 ∧ lane<0x40` arm; owner `FUN_0006DC88` +
+    `FUN_00092AC8`), **L6** (the AE attribution limit; owner the staging
+    `FUN_00036C70 0x36C9F` + the acceptance procedure), **L7** (the second
+    `[0x157ABE]` writer `0x742B4`, the FU196-L6-adjacent class).
+  - **Errata folding the phase's review minors (quoted; prior text not
+    rewritten):** (1) the **phase-16 dispatch-results ledger**
+    (`45 UNSUP / 34 OK / 1 NOTF`, `docs/ENGINE.md` phase-16 T2) is
+    **historical** — the current dispatch over the 80 rows is
+    **`19 UNSUP / 60 OK / 1 NOTF`** (T5's `60/80`; the ledger's errata chain
+    ends at phase-16 T4 and must not be read as this phase's result). (2) The
+    phase-27 register's **FU285-L1 "the `0x7707D..0x77420` interpolation is
+    unported"** statements (`docs/ENGINE.md:1752` / `:1874`) are **superseded**
+    by FU301+FU302: the interpolation is ported (`match_1b_deep_pan`), and
+    only the sink bodies / FU302-L8 / the rotated steering arm remain legs.
+    (3) The phase-27 register's **FU292-L2/L3 "writers stay unported"** is
+    **advanced**: F6 is bound live (`band_1577f6`), byte-3 is honestly staged
+    `0xFF` (producer FU303-L11), and the `[0x157815]` chain is live.
+    (4) The phase-27 register's **FU294-L1** cell and the FU294-L3(a) loop are
+    confirmed **waivable** (no render reader / proven closed). (5) The
+    **FU300 E4** quote span is 61 B (above). (6) The phase-27 T4 reach's weak
+    `camera.tracked != 0` is strengthened in the Layer-1 reach to the exact
+    id **11** (`FIFA96_MATCH_ENTITY_RECORDS`), and
+    `test_keeper_seam_copy_pos_applies` is labelled "staged (branch contract;
+    not live reach)" inline. (7) **FU299-L1** (the cross-team same-frame arm)
+    and **FU304-L7** stay open with their native owners — neither is claimed
+    live.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

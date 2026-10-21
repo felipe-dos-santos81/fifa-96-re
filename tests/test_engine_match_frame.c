@@ -3648,8 +3648,11 @@ static void test_keeper_installer_live_permit(void) {
  * anim install 0x2C, the sit-7 emit -> phase 0x0D).
  *
  * Staged producer INPUTS only: the keeper rows' held codes `0x19` (the
- * per-frame row state the native holds between installs), the camera pose /
- * lane / actor cell / slot pool, and the phase-2 match phase. The permit, the
+ * per-frame row state the native holds between installs), the keeper gates
+ * `skip_9a` / `timer81` / `has_slot` (the held record state the native carries
+ * between installs), the camera pose, the lane words, the actor cell, the
+ * controlled-side cell `phase_machine.side_controlled`, the CPU/human cell
+ * `global_157a4c`, the slot pool, and the phase-2 match phase. The permit, the
  * interlock, the stage index and the dispatch are NOT staged: the permit is
  * the static table bind, the interlock is the row-`0x19` body's own write, the
  * stage index is computed by `fifa96_keeper_cpu_stage_select`, and the
@@ -3707,7 +3710,10 @@ static void test_keeper_installer_live_reach(void) {
   one_granted_frame(&mr);
   assert(mr.keeper_cam_y == 0x50);
   assert(mr.render.camera.pos_y == 0x50);
-  assert(mr.render.camera.tracked != 0);
+  /* The release binds the keeper (team 1 record 0) as the tracked record:
+   * entity id 11 = FIFA96_MATCH_ENTITY_RECORDS + 0. */
+  assert(mr.render.camera.tracked ==
+         (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
 
   assert(fifa96_match_run_end(&mr) == 0);
 
@@ -3926,6 +3932,11 @@ static int ladder_copy_pos_stub(void *ctx,
   return FIFA96_OK;
 }
 
+/* FU304 §3-A / FU304-L7 (phase-28 T3): the seam `copy_pos` apply branch —
+ * staged (branch contract; not a live reach). The ladder stub returns
+ * `copy_pos = 1` and the seam applies `target_* = pos_*`; the live ladder never
+ * reaches the `0x77F16` arm through its only caller (the install tree rewrites
+ * `+0x91` first, FU304-L7), so this pins the apply contract, not live-ness. */
 static void test_keeper_seam_copy_pos_applies(void) {
   struct fifa96_match_entities pool;
   struct fifa96_match_entities_frame f;

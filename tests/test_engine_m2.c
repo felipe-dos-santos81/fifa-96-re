@@ -3649,9 +3649,10 @@ static void run_regulation_over_probe(struct m2_result *res) {
 static void run_census_riders(void) {
   /* 1. The census shape (T1–T6): the exact wired counts and the phase-15/16/17
    *    slots. A silent re-wire / un-census / slot flip fails here, not only in
-   *    the handler unit tests. 59/80 = 73% (36 action = the 31 baseline + the
+   *    the handler unit tests. 60/80 = 75% (37 action = the 31 baseline + the
    *    phase-18 T3 row 0x24 + the phase-20 T3 row 0x20 + the phase-23 T2 row
-   *    0x25 + the phase-23 T3 row 0x15 + the phase-25 OL-65 row 0x22; 23 phase = the 17 baseline + the phase-18 T3 phase
+   *    0x25 + the phase-23 T3 row 0x15 + the phase-25 OL-65 row 0x22 + the
+   *    phase-28 T5 row 0x1A; 23 phase = the 17 baseline + the phase-18 T3 phase
    *    0x20 + the phase-18 T4 phase 0x17 + the phase-19 T2 phase 0x1D + the
    *    phase-19 T4 phase 0x22 + the phase-20 T2 phase 0x10 + the phase-23 T4
    *    phase 0x1E; the phase

@@ -792,10 +792,11 @@ struct fifa96_match_run {
    * dispatch, `0x974DC`/`0x974F0` audio) are unported (FU300-L3), so the row
    * records what it would hand them: `match1a_event_id` = the event-ladder id
    * {5,4,9,1,7,0} and `match1a_anim` = the **last** `0x651F0` argument — 6 from
-   * the direction arms, then 0xF/0xE/1 from the event block's select; the
-   * direction-arm 6 is observable only when the row exits in the 0x54 arm
-   * before that select. Observability only — never a silent no-op (the
-   * row-reference precedent). Cleared by init/begin. */
+   * the direction arms, then 0xF/0xE/1 from the event block's select. The
+   * direction-arm 6 is observable on **both** `0x54` exits before that select
+   * (the `0x767E7` lane arm and the `0x76868` anim arm), not only the latter.
+   * Observability only — never a silent no-op (the row-reference precedent).
+   * Cleared by init/begin. */
   uint8_t match1a_event_id;
   uint8_t match1a_anim;
   int32_t predict_c44;

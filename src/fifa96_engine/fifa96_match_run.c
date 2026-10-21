@@ -1598,7 +1598,10 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
    * its ramp start (`word[0x1577F6]`, folded by `camera_event_ramp` as
    * `timer_limit - ramp_divisor`; the 0x705e8 `F8 = F4 - F6` identity,
    * FU303-L7). `timer_a` above stays the entity selection's FU-67 S3
-   * stand-in (a zero-bucket read), not this binding. */
+   * stand-in (a zero-bucket read of the separate run-level `band_1577fa`
+   * cell, which no live producer feeds); the native 0x1577FA is
+   * `camera.timer`, so `timer_a` and `band_fa` intentionally differ until the
+   * FU-67 S3 selection producer is ported — do not fold them. */
   f->band_f6 = mr->render.camera.band_1577f6;
   f->band_fa = (int16_t)mr->render.camera.timer;
   f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
@@ -3872,6 +3875,11 @@ int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
  * `camera.rate_x/rate_z`, which the next frame's integrator pan-push consumes.
  * The keeper gate's `FUN_00092998(1,2,-1)` ring result is unported (OL-27),
  * so it is staged 0: the rate write is live, the 0x1D/0x1E sink stays a leg.
+ * Caveat (FU303-L9): `e->dir_x`/`e->dir_z` is the entity-pool copy — the same
+ * mapping the pre-existing first arm uses — so for a slot-bound tracked record
+ * the pair can trail the native slot dirs by one pool drain. That is the
+ * established arm's semantics (not changed here; changing it would move the
+ * first arm's live behavior).
  * Returns 1 when either arm ran, 0 when a gate refused. */
 int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam;

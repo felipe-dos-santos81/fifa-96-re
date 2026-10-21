@@ -47,10 +47,14 @@ int32_t fifa96_entity_sine(int32_t angle);
  * **Residual leg FU302-L1** (native owner `0xCD514`): the pre-existing
  * `fifa96_entity_intercept_band` below is **not** this fold — it computes
  * `fifa96_entity_angle(dx, dz)` (the transposed pair) and always divides `|dx|`,
- * so it is not an exact `0xCD514` port. Its callers
- * (`handlers.c:3198/3263/3425/5167`, `fifa96_match_entities.c:217`) are outside
- * this task's scope and keep that behavior; the row-0x1B Block E and the
- * `0x795B4` band use this exact primitive instead. */
+ * so it is not an exact `0xCD514` port. Its callers are outside this task's
+ * scope and keep that behavior — the row-`0x0B` band pair
+ * (`handlers.c:3210`/`:3275`), the row-`0x0C` contact band
+ * (`handlers.c:3437`), the row-`0x16` stage-1 ball band (`handlers.c:5206`),
+ * the team-update lane refresh (`fifa96_match_entities.c:217`) and
+ * `team_select_intercept` (`fifa96_match_entities.c:674`); line numbers drift,
+ * the call names are the authority. The row-0x1B Block E and the `0x795B4`
+ * band use this exact primitive instead. */
 int32_t fifa96_entity_hypot(int32_t a, int32_t b);
 
 /* `FUN_0008D824` (`0x8D824..0x8D8EB`, 81 instructions, OL-41): the

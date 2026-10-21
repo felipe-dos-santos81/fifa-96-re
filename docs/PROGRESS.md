@@ -2426,3 +2426,57 @@ and the dispatch is the walk's single `action(ctx, e)`.
 - **Acceptance:** `make check` **111/111** (sanitized, strict `-Wall -Wextra
   -Werror`); README title `75%`, `docs/ENGINE.md`, `AGENTS.md:90` and the m2
   census pins updated in the same commit.
+
+## M2 phase-28 close-out — the installer live + the Layer-2 verdict (FU298…FU305)
+
+**The phase closes with the keeper-CPU ladder live end-to-end (Layer 1) and the
+visible follow/pan camera honestly waived (Layer 2).** Nine Stage-2 tasks
+landed the eight recon surfaces: the static P1 permit (FU298), the Option-B
+interlock ordering (FU299), the merged seam contract + `copy_pos` (FU304), row
+`0x1A` in full (FU300), the Layer-1 reach proof + the census (T5), the deep pan
+I/II (FU301/FU302), the visible-motion cells (FU303) and this acceptance +
+register (FU305). Census **`59/80 = 73%` → `60/80 = 75%`** (`37 action + 23
+phase`) on the proven live install+dispatch; README title, `docs/ENGINE.md`,
+`AGENTS.md:90` and the `tests/test_engine_m2.c` pins move together. M1
+`09b726b7…` and M2 `b281a9b2…` are byte-identical through every task (the
+install tree is same-code-suppressed on the tape and the ladder never installs
+there — no re-pin, no stop). The full leg register (FU298–FU305, the native
+owners, the split and the review errata) is appended to `docs/ENGINE.md`.
+
+**Layer 1 (the hard gate), GREEN.** `test_keeper_installer_live_reach` drives
+the real frame body with producer inputs only: team 0's row-`0x19` sets
+`[0x157C5D]` in-walk, team 1's same-frame step reads it, the static permit opens
+the gate, the `CX` stage machine computes `CX=4` from the camera pose/lane/actor
+inputs and installs row `0x1B` through the merged seam; the row dispatches in
+the same frame, the sit-5 emit walks phase 9, the row-`0x1E` claim reaches the
+stage-5 release, and the camera cells move through the seam — `camera.pos_y`
+`0x38` (the re-place pose) then `0x50`, with `camera.tracked == 11` (the exact
+id, replacing the weak `!= 0`). Part B proves the `CX=1` arm installs and
+dispatches row `0x1A` with the in-frame `[0x157C2C] = 0x2C` stamp. Mutation-RED
+riders on the permit, the interlock publish, the `copy_pos` branch and the
+row-`0x1A` slot discriminate the new producers; the F6/FA seam bind and the
+dir-byte → rate → pan-push chain are pinned on the frame path
+(`test_camera_rate_chain_sustained_pan`).
+
+**Layer 2 (the visible camera), WAIVED — spec §6.** The windowed smoke ran on
+this host (`make game`, `DISPLAY=:1`, SDL3, the ISO present; the phase-8
+walkthrough: intro RETURN → front-end BACKSPACE → RETURN, then the
+post-cutscene KICK release at ~20 s — the phase-18 act-1 route's phase-2
+landing — clock `00:05`). The pan pair
+(`docs/screens/p28-l2-pan-a/b.png`, same clock second) has scene-band AE
+**1582** on the `y < 591` crop of the 960×720 client area; the still control
+pair (`p28-l2-still-a/b.png`, no key held, same clock second `00:07`) has
+**2052**, not 0. The live scene animates continuously (the phase-10+ entity
+roll), so the AE witness cannot attribute motion to the camera — and a
+read-only `gdb` sample of the same run (517 phase-2 samples over ~52 s of
+repeated direction holds and kicks) shows the camera cells static for the
+whole phase-2 window: `pos=(0,0,0)`, `vel=(0,0)`, `rate=(0,0)`, `tracked=-1`,
+`follow_speed=0`, `event_param=0`, `pan_counter=0`, `timer=0`. The follow/pan
+chain's gates never open live; the visible camera is **not** made live by this
+phase. The visible-motion remainder keeps its numbered owners: **FU305-L5**
+(the live event source — the every-frame auto-camera's `[0x1577EE].hi > 0xF0`
+arm + the FU-148 §13 ball-staging producers), FU305-L1..L4/L6/L7, and the
+FU303 waivable cells (FU294-L1, the FU294-L3(a) loop, the two fidelity riders,
+FU303-L5, the OL-27 keeper ring). No fabricated stage or producer: the Layer-1
+landing is the phase's acceptance, and the waiver is the honest phase-26a/26c/
+27 shape.

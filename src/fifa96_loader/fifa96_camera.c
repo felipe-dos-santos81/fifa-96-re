@@ -880,7 +880,10 @@ int fifa96_camera_event_dir(fifa96_camera *cam, int has_slot, int32_t dir_x,
 /* 0x11042B/0x11042C — the 64-pair (8 dir-byte rows x 8 compass columns)
  * rate table, `read_memory 0x11042B` (128 B). The native index is
  * `(int8_t)(row + (dir_byte << 3))` (the 8-bit ADD AL,AH) and the pair is
- * `[0x11042B + 2*idx]`/`[0x11042C + 2*idx]`. */
+ * `[0x11042B + 2*idx]`/`[0x11042C + 2*idx]`. Rows 4..7 repeat rows 0..3 byte
+ * for byte (the image genuinely duplicates the second half; not a transcription
+ * artefact) — the live dir-byte domain is `{-1,0,1}`, so `idx` never leaves
+ * rows 0..1 in the reachable slots. */
 static const int8_t camera_rate_pairs[64][2] = {
     { 0,  0}, { 1,  0}, { 1,  0}, { 1,  0}, { 0,  0}, {-1,  0}, {-1,  0}, {-1,  0},
     { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0}, { 0,  1}, { 0,  1},
