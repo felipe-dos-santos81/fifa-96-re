@@ -2251,7 +2251,8 @@ the build also produces the windowed `fifa96` target (`make game`).
     a direction held) has scene-band AE **3421** on the `960x591+0+0` crop;
     the **still pair** (`p29-l2-still-a/b.png`, the same second `00:05`, no
     key held) has **2988**. The relative gate `AE_pan > AE_still` passes by
-    433 px (14 %), but the delta is sprite motion, not a scene shift: the
+    433 px (14 %), but the delta is confined to the sprite band, which
+    cannot distinguish sprite motion from a pan: the
     `compare -compose src` diff bbox is `476x56+230+296` (the sprite band;
     the still pair is `434x53+251+299`), while a live follow's
     `vel = dirs × 15` would move the whole scene, so the gate is
@@ -2262,9 +2263,31 @@ the build also produces the windowed `fifa96` target (`make game`).
     `fifa96_match_run_step`'s `mr` argument, while a direction was held)
     shows every camera cell static —
     `pos=(0,0,0)`, `vel=(0,0)`, `speed=0`, `event_param=0`,
-    `pan_counter=0`, `timer=0/0`, `tracked=-1` — at every sample;
+    `pan_counter=0`, `timer=0/0`, `tracked=-1` — at every sample:
+
+    | sample | clock / frame | `pos` | `tracked` | `event` |
+    |---|---|---|---|---|
+    | S0 | n.r. / ~0 step | (0,0,0) | -1 | 0 |
+    | S1 | n.r. / ~30 steps | (0,0,0) | -1 | 0 |
+    | S2 | n.r. / ~60 steps | (0,0,0) | -1 | 0 |
+    | S3 | n.r. / ~90 steps | (0,0,0) | -1 | 0 |
+    | S4 | n.r. / ~120 steps | (0,0,0) | -1 | 0 |
+    | S5 | n.r. / ~150 steps | (0,0,0) | -1 | 0 |
+    | S6 | n.r. / ~180 steps | (0,0,0) | -1 | 0 |
+    | S7 | n.r. / ~210 steps | (0,0,0) | -1 | 0 |
+    | S8 | n.r. / ~240 steps | (0,0,0) | -1 | 0 |
+    | S9 | n.r. / ~270 steps | (0,0,0) | -1 | 0 |
+
+    `n.r.` = not retained: the session log kept the sample index and the
+    cell vector, not the absolute frame counter or the displayed clock (the
+    stride above is the report's ~30 steps; the run is the phase-2
+    acceptance run whose capture window is `00:05`, direction held). Every
+    row also carried `vel=(0,0)`, `speed=0`, `event_param=0`,
+    `pan_counter=0`, `timer=0/0`. This table carries the full retained
+    per-sample record; the durable per-sample form is FU309-L5.
     `docs/screens/p29-l2-runaway.png` is the same run at `02:00` with the
-    controlled record at the top edge and the camera unmoved. A second
+    controlled record upper-middle (roughly y 270–350 of 720) and the camera
+    unmoved. A second
     `make game` run with an open-play burst (direction changes +
     KICK/PASS/LONG_BALL presses) and six further samples likewise kept every
     camera cell at zero — no follow fired in that burst. **Verdict:
@@ -2318,12 +2341,18 @@ the build also produces the windowed `fifa96` target (`make game`).
     the keeper cells fresh and never dispatches the staged row-`0x1E`
     record. The live path is the same chicken-and-egg (the phase-28 gdb
     sample and T6's fresh 10-sample trace both pin the camera at `(0,0,0)`).
-    The band is fixture/installer-proven, **not** natural-play-proven; the §6
-    Layer-2 waiver is the consequence (spec §8.1). **L2** the band → pan
-    co-occurrence (the `0x0E` retry + the `0x8D5D9` code rewrite + the
-    stage-7 `0x10`/`0x80` stamps + the `0x737B4` arc) stays open; **L3
-    closed** (the raw stores reach the render camera); **L4 closed** (the
-    single cell); **L5** the `0x74514` helper's zero-reference status (static
+    The band is fixture/installer-proven, **not** natural-play-proven; the
+    Layer-2 waiver is the consequence (spec §5 Layer-2 + §6). **L2** the
+    band → pan co-occurrence (the `0x0E` retry + the `0x8D5D9` code rewrite
+    + the stage-7 `0x10`/`0x80` stamps + the `0x737B4` arc) stays open; **L3
+    closed** (the raw stores reach the render camera); **L4 closed, Y-only**
+    (the single camera-Y cell; the asymmetry is named here: the same
+    stage's X/Z stores (`0x759FD` → `0x15774C`, `0x75A25` → `0x157754`)
+    still land only on the engine's `keeper_cam_x`/`keeper_cam_z`
+    stand-ins — the pre-existing FU-147 leg-13 relation (`0x15774C/50/54`
+    is the camera-focus point, asserted not proven). The closure delivers
+    the three literal Y cuts and leaves the focus-point X/Z at that leg);
+    **L5** the `0x74514` helper's zero-reference status (static
     only; owner the 16-bit loader); **L6** the row-`0x1B` stage cadence (one
     native stage per call vs the engine's 0→1→2; moves when, not the value;
     owner `0x76DEE`); **L7 (new)** the row-`0x1E` stage-1 triple
@@ -2386,7 +2415,13 @@ the build also produces the windowed `fifa96` target (`make game`).
     15`; a stationary tracked record gives `speed == 0` and gate 2 refuses;
     owner the entity pool's dir producer + the acceptance step); **L8** the
     table arm's keeper event ring (`FUN_00092998(1,2,-1)` staged 0, OL-27;
-    owner FUN_00092998, carried FU303/FU294-L2).
+    owner FUN_00092998, carried FU303/FU294-L2); **L9** the Layer-1 mutation
+    riders are manual (seven one-line reversions applied once; the spec's
+    baseline-RED bar is the erratum below; no automated negative harness
+    exists, so a later refactor could weaken the fixture silently). Owner
+    `tests/test_engine_match_frame.c` + the acceptance procedure; a durable
+    form is a small script that applies each one-line reversion into a
+    temporary worktree and asserts the fixture fails.
   - **The measured plan erratum (T5; quoted, the plan text is not rewritten).**
     Quote (plan T5 Step 1): "the follow/height assertion fails on the
     phase-29 baseline". **Measured (T5):** the extended fixture is **GREEN on
@@ -2402,10 +2437,10 @@ the build also produces the windowed `fifa96` target (`make game`).
     test was weakened and no RED faked. The `52`/`54` split is binding: `54`
     at camY `0x50` (this fixture), `52` at `0x70` (FU171-L1).
   - **Deferred minors (T1–T5 reviews; not fixed here).** T5: the
-    test-name/300-line split of the extended fixture; the `vx != 0` assert;
-    the `0x38` premise label; the `skip_9a` isolation timing; the report
-    cites. T1: the relocated RED note; the `camera.speed` vs `vel_z`
-    discriminator; the `0xA` stamp `== 0`; the 82-line duplicate. T2: the
+    test-name/300-line split of the extended fixture; the `0x38` premise
+    label; the `skip_9a` isolation timing; the report cites. T1: the
+    relocated RED note; the `camera.speed` vs `vel_z` discriminator; the
+    `0xA` stamp `== 0`; the 82-line duplicate. T2: the
     equal-boundary (`0x38`/`0x70`) arms, the negative-camY row pin, the
     `0x10000` width pin, the reset-helper DRY, the chase fixture helper. T3:
     the two test-comment inaccuracies (the release-list wording; the stage-1

@@ -2530,7 +2530,8 @@ RETURN → the kickoff KICK release; the pairs taken in phase 2 at clock
 direction held) has scene-band AE **3421** on the `960x591+0+0` crop; the
 **still pair** (`p29-l2-still-a/b.png`, the same second `00:05`, no key held)
 has **2988**. The relative gate `AE_pan > AE_still` passes by 433 px (14 %)
-but the delta is sprite motion, not a scene shift (the `compare -compose src`
+but the delta is confined to the sprite band, which cannot distinguish
+sprite motion from a pan (the `compare -compose src`
 diff bbox is `476x56+230+296`, the sprite band; the still pair is
 `434x53+251+299`) — the gate is corroboration only (the p28 datum re-verified
 this session: pan 1582 vs still 2052). The primary attribution is the live cell
@@ -2539,7 +2540,8 @@ at a ~30-step stride through `fifa96_match_run_step`'s `mr`, a direction
 held) shows every camera cell static — `pos=(0,0,0)`, `vel=(0,0)`,
 `speed=0`, `event_param=0`, `pan_counter=0`, `timer=0/0`, `tracked=-1` — at
 every sample; `docs/screens/p29-l2-runaway.png` is the same run at `02:00`
-with the controlled record at the top edge and the camera unmoved. A second
+with the controlled record upper-middle (roughly y 270–350 of 720) and the
+camera unmoved. A second
 `make game` run with an open-play burst (direction changes + KICK/PASS/
 LONG_BALL presses) and six further samples likewise kept every camera cell at
 zero — no follow fired in that burst.
@@ -2552,8 +2554,9 @@ instrumentation in `fifa96_keeper_cpu_stage_select`) measured
 `stage_select ran=0 cx1=0 cx4=0 table4=0` — the ladder never runs because the
 AX prepass gate (`0x77F9A`/`0x77FA5`) never opens while the live camera stays
 `(0,0,0)`. The live path is the same chicken-and-egg. The band is
-installer/fixture-proven, not natural-play-proven; the §6 waiver (spec §8.1)
-is the consequence, and the Layer-1 chain stands as the phase's landing.
+installer/fixture-proven, not natural-play-proven; the Layer-2 waiver (spec
+§5 Layer-2 + §6) is the consequence, and the Layer-1 chain stands as the
+phase's landing.
 
 **The closures and the remainder.** The phase-28 final review's parked keeper
 `follow_speed` seam is **CLOSED** (T1: the bind reads the native `[0x1577BE]`
@@ -2566,9 +2569,11 @@ natural CX=4 reach), **FU307-L2** (band → pan co-occurrence), **FU307-L5**
 (the `0x74514` helper), **FU307-L6** (the stage cadence), **FU307-L7** (the
 stage-1 head-place triple — new this phase), **FU309-L1** (the live `>0xF0`
 producer), **FU309-L2/L3** (the pan fidelity: the anchor pair and the
-rate-nonzero branch), **FU309-L4/L5/L6/L7/L8**, **FU306-L1** (the
+rate-nonzero branch), **FU309-L4/L5/L6/L7/L8/L9** (the event cursor, the trace,
+the AE baseline, the follow-rate input, the ring, and the manual mutation
+riders), **FU306-L1** (the
 same-record continuous NO-GO), **FU306-L5…L8**, and **FU308-L1/L3/L4/L5**.
-The T5 review minors (the test-name/300-line split, the `vx != 0`, the `0x38`
+The T5 review minors (the test-name/300-line split, the `0x38`
 premise label, the `skip_9a` timing, the report cites) and the T1–T4 minors
 are deferred (listed in the ENGINE register); none is a fidelity defect, and
 no faked producer or gate remains.

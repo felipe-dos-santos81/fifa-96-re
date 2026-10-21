@@ -4120,6 +4120,7 @@ static void test_keeper_installer_live_reach(void) {
       {
         int16_t vx = (int16_t)cam->vel_x;
         int32_t px = cam->pos_x;
+        assert(vx != 0);   /* a nonzero step (else the pin is vacuous) */
         one_granted_frame(&mr);
         assert(cam->pos_x == px + (int32_t)vx * mr.state.frame_delta);
       }
@@ -4331,19 +4332,35 @@ static void test_keeper_cam_y_single_cell(void) {
  * row `0x19` arms team 1's same-frame ladder step, and team 1's keeper (lane 0,
  * camera height 0) is CX=1-eligible apart from the speed word.
  *
- * - `vel_x = 9` -> the live word is 9 (< 0xA): CX=1 opens, row `0x1A` installs
- *   with the `0x2C` stamp and dispatches.
- * - `vel_x = 0xA` -> the live word is 0xA (not < 0xA): CX=1 closes; the record
- *   keeps row `0x19`, no stamp is published and row `0x1A` never dispatches
- *   (the selector's table path returns at the `0x157824` side gate).
+ * - `vel_x = 9`, `vel_z = 0` -> the live word is 9 (< 0xA): CX=1 opens, row
+ *   `0x1A` installs with the `0x2C` stamp and dispatches.
+ * - `vel_x = 0xA`, `vel_z = 0` -> the live word is 0xA (not < 0xA): CX=1
+ *   closes; the record keeps row `0x19`, no stamp is published and row `0x1A`
+ *   never dispatches (the selector's table path returns at the `0x157824`
+ *   side gate).
+ * - `vel_x = 9`, `vel_z = 0xA` -> the live word is `distance(9,0xA)` = 0xD
+ *   (closed). A bind that read `vel_x` alone would see 9 and open, so this arm
+ *   pins the second operand of the speed fold.
+ * - `vel_x = (int16_t)0xFFFF` (= -1), `vel_z = 0` -> the live word is
+ *   `|word|` = 1 (open). A bind that treated the word as unsigned (0xFFFF)
+ *   would close, so this arm pins the signed-word fold.
  *
  * RED on the phase-28 baseline (`f->follow_speed = camera.follow_speed` = 0):
  * the 0xA frame installs and dispatches row `0x1A`, so the `0xA` assertions
  * fail. */
 static void test_keeper_live_follow_speed_seam(void) {
   struct fixture f = make_fixture(10000000ull);
-  static const int16_t staged_vel[2] = {9, 0xA};
-  for (int c = 0; c < 2; c++) {
+  static const struct {
+    int16_t vel_x;
+    int16_t vel_z;
+    int open;
+  } staged[4] = {
+      {9, 0, 1},
+      {0xA, 0, 0},
+      {9, 0xA, 0},
+      {(int16_t)0xFFFF, 0, 1},
+  };
+  for (int c = 0; c < 4; c++) {
     struct fifa96_match_run mr;
     struct fifa96_match_entity *k0;
     struct fifa96_match_entity *k1;
@@ -4369,20 +4386,22 @@ static void test_keeper_live_follow_speed_seam(void) {
     k1->timer81 = 0u;
     k1->has_slot = 0u;
     k1->lane = 0;                                   /* lane_x 0 -> the CX=1 path */
-    mr.render.camera.vel_x = staged_vel[c];         /* the walk-tail speed input */
+    mr.render.camera.vel_x = staged[c].vel_x;       /* the walk-tail speed input */
+    mr.render.camera.vel_z = staged[c].vel_z;
 
     one_granted_frame(&mr);
-    /* The walk tail recomputed the live word from the staged velocity while
-     * the 0x739CE snapshot stayed at its pre-tail 0 — the split the seam
-     * must resolve toward the live cell. (The dispatched row body may clear
-     * the live cell later in the frame; the bind reads it before that.) */
+    /* The walk tail recomputed the live word from the staged velocity pair
+     * while the 0x739CE snapshot stayed at its pre-tail 0 — the split the
+     * seam must resolve toward the live cell. (The dispatched row body may
+     * clear the live cell later in the frame; the bind reads it before
+     * that.) */
     assert(mr.render.camera.follow_speed == 0);
-    if (staged_vel[c] == 9) {
+    if (staged[c].open) {
       assert(k1->code == 0x1Au);                    /* CX=1 open -> the row-0x1A install */
       assert(mr.global_157c2c == 0x2Cu);            /* the ladder stamp */
       assert((mr.dispatched_ok & (1ull << 0x1A)) != 0u);
     } else {
-      assert(k1->code == 0x19u);                    /* CX=1 closed by speed 0xA */
+      assert(k1->code == 0x19u);                    /* CX=1 closed by the live word */
       assert(mr.global_157c2c != 0x2Cu);            /* no G2 stamp */
       assert((mr.dispatched_ok & (1ull << 0x1A)) == 0u);
     }
