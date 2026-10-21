@@ -2470,10 +2470,11 @@ pair (`p28-l2-still-a/b.png`, no key held, same clock second `00:07`) has
 (~2.9e4–4.6e4) and *below* the still control (2052), independently
 corroborating that no camera pan ran. The live scene animates continuously
 (the phase-10+ entity roll), so the AE witness cannot attribute motion to the
-camera — and a read-only `gdb` sample of the same run (517 phase-2 samples over ~52 s of
-repeated direction holds and kicks) shows the camera cells static for the
-whole phase-2 window: `pos=(0,0,0)`, `vel=(0,0)`, `rate=(0,0)`, `tracked=-1`,
-`follow_speed=0`, `event_param=0`, `pan_counter=0`, `timer=0`. The follow/pan
+camera — and a read-only `gdb` sample of the same run (517 phase-2 samples
+over ~52 s of repeated direction holds and kicks) shows the camera cells static
+for the whole phase-2 window: `pos=(0,0,0)`, `vel=(0,0)`, `rate=(0,0)`,
+`tracked=-1`, `follow_speed=0`, `event_param=0`, `pan_counter=0`, `timer=0`.
+The follow/pan
 chain's gates never open live; the visible camera is **not** made live by this
 phase. The visible-motion remainder keeps its numbered owners: **FU305-L5**
 (the live event source — the every-frame auto-camera's `[0x1577EE].hi > 0xF0`
