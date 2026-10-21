@@ -501,3 +501,44 @@ FU-148 §14.5 (the `0x10F4EE`/`0x10F3C4` ports), FU-147 §3.3 leg 7,
 
 Status: recon complete; no repo file changed except this draft; no census move;
 no golden touched; no git.
+
+---
+
+## Review erratum (wave review, 2026-10-21)
+
+*Appended section: the frozen text above stands; every correction quotes it
+first. Read-only review round — no Ghidra call was made here; the review's
+fresh reads stand.*
+
+**Verdict:** GO — the chaser is a GO as the native **per-record/per-frame
+hand-over** re-arm (Layer-1, staged producer); the **same-record continuous
+re-arm is NO-GO** (FU306-L1), and the NO-GO governs the "one-shot" wording.
+
+1. **The setter call label is `0x70DD1`, not `0x70DCC`.** Quote (§2.4):
+   "`0x70DCC  EAX = ESI; CALL 0x71C94            ; THE EVENT SETTER`".
+   **Corrected:** `0x70DCC` is the label of the `MOV EAX,ESI` that loads the
+   record argument; it sits exactly **5 bytes** (`0x70DD1 − 0x70DCC = 5`)
+   before the call. The call site to cite is **`0x70DD1`**. Nothing else in
+   §2.4 moves (`0x70DBA MOV ECX,1`, `0x70DBF CALL 0x92820`, `0x70DB4
+   word[ESP] = AX`, and the `0x70DD6` bail label are unaffected), and the
+   §5.2 item-1 port delta (`ramp_param = 1`) does not depend on the label.
+
+2. **The "one-shot" wording, clarified — the NO-GO governs.** Quote (§1):
+   "GO as a one-shot live re-arm (staged-producer Layer-1); NO-GO as the
+   continuous per-frame re-arm". Read with §3.1 ("the tail **never fires for
+   the tracked record**") and §4 item 3 ("rebinds `[0x1577CA] = EBP`
+   (`0x71D27`)"), the two mechanisms must not be merged:
+
+   * **same-record continuous re-arm — NO-GO.** `0x7C83E CMP EBP,EAX; JZ
+     0x7C901` skips the record the setter has just rebound as tracked at
+     `0x71D27`; that record cannot fire again while it stays tracked.
+   * **per-record/per-frame hand-over — GO, the native shape.** The caller
+     walks the records per granted frame (`0x8D8EC` → the base record plus the
+     10 slots at `+0xB2*n`, `0x8DB35`/`0x8DB4D`), and every in-band record
+     **other than the tracked one** may call `0x70C08`; its setter rebinds
+     `tracked := rec` (`0x71D27`). The sustained mechanism is therefore a
+     frame-by-frame *hand-over between records*, not a loop on one record.
+
+   "One-shot" means **one shot per record per tracking epoch**, never "one
+   shot per event". Stage-2 must not stage a same-record second fire and must
+   not read §1's phrase as a single-fire mechanism.

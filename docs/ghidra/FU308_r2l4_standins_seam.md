@@ -373,3 +373,34 @@ class of "derived snapshot instead of the `0x1577BE` cell" error, fixed in
   `camera.vel_x`. If FU307's Y producer lands, the stand-ins become live in
   the intended direction; if not, they remain correct and dead (and the tape
   check still applies).
+
+---
+
+## Review erratum (wave review, 2026-10-21)
+
+*Appended section: the frozen text above stands; the correction quotes it
+first. Read-only review round; no file outside this draft was touched.*
+
+**Verdict:** GO — the four stand-in re-stages and the one-line keeper seam stand
+unchanged; the seam now carries the **M2-golden gate** as a hard Stage-2 stop.
+
+1. **The M2 gate binds the seam fix too, not only the stand-ins.** Quote (§5):
+   "Stage-2 must run `make check` plus
+   `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` and stop
+   for the frame diff first". **Extended:** the same gate is binding for the
+   §6.5 bind (`match_run.c:1586`, `follow_speed = camera.speed`). The seam
+   changes the **CX=1 input** the keeper ladder reads (`0x7804E CMP EAX,0xA`
+   over `word[0x1577BE]`), so it can move a keeper action on the tape even
+   when no stand-in site is touched. Stage-2 must:
+
+   * run the exact command
+     `./build/test_engine_m2 | cmp - tests/golden/engine/m2-frames.txt` on the
+     tree **before** the bind and again **after** it, so any diff is
+     attributable to the one-line change;
+   * **STOP on a diff** and report it — no re-pin without a written reason and
+     a frame diff (the AGENTS.md m2 rule; M1 is immovable and untouched here);
+   * keep `make check` green in the same commit.
+
+   The stand-in re-stages (§4) already carry this gate in §5; this erratum
+   closes the seam's silence on it — §9's "only caveat is the M2 comparison
+   (§5)" must be read as covering both bullets, stand-ins **and** seam.

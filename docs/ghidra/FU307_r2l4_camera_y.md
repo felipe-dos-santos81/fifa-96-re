@@ -578,3 +578,71 @@ FU-305 §5, `docs/ENGINE.md` (phase-28 register, the follow-cam row).
 
 Status: recon complete; **this draft is the only file written**; no census
 change (60/80 rows); no golden touched; no git.
+
+---
+
+## Review erratum (wave review, 2026-10-21)
+
+*Appended section: the frozen text above stands; every correction quotes it
+first. Read-only review round — no Ghidra call was made here; the byte checks
+below are doc-to-doc (FU-186 §1.1, FU-142 item 9), not new reads.*
+
+**Verdict:** GO **with the natural-reach caveat** — the keeper-band value and
+its store are proven (`0x38`/`0x50`, fixture-live), but the **natural-play**
+reach of the ladder arm is not shown; the natural CX=4 reach is FU307-L1, and
+Stage-2 must either prove it or pre-authorize the spec §6 Layer-2 waiver.
+
+1. **The missing tail branch between `0x780DD` and `0x78294`.** Quote (§3.1):
+   "`0x780dd  e9ff000000  JMP 0x781E1              ; the install tail`" and
+   (§7 step 1) "ladder CX=4 (`0x78065..0x780DD`) → `0x78294` install row
+   `0x1B`". **Corrected:** the tail is conditional, not a straight-through
+   install:
+
+   ```
+   0x781E1  TEST CX,CX; JZ 0x782C4          ; CX=0 leaves the table arm
+   0x781EC  CALL 0x765C4 (EAX=EBP)          ; the tracked-teammate predicate
+   0x781F1  TEST AX,AX; JZ 0x78205
+   0x781F6  ECX=1; EDX=4; JMP 0x782BB       ; predicate nonzero -> install row 0x04
+   0x78205  DEC ECX; CMP CX,4; JA 0x782C4
+   0x78215  JMP dword CS:[EAX*4+0x77E98]    ; 0x77E98[3] = 0x78294 -> row 0x1B
+   ```
+
+   So a **nonzero CX** whose `0x765C4` predicate returns nonzero installs row
+   `0x04`; the `0x38` route is the DEC/table **index-3** path (`0x78294`).
+   §3.1/§7 quote only that second branch; it is one branch among two.
+   *Sub-point recorded, not resolved:* the review's shorthand "only CX=0 takes
+   the DEC" does not match the carried bytes — `0x781E1 TEST CX,CX; JZ
+   0x782C4` sends CX=0 away, and the `DEC` at `0x78205` sits on the CX≠0,
+   predicate-zero path. FU307-L1 owns it; Stage-2 must re-read
+   `0x781E1..0x78220` in its own session before relying on either phrasing.
+
+2. **The stage-2 exclusions are load-bearing.** Quote (§3.2):
+   "`0x76fd5  3b2d837a1500        CMP EBP,[0x157A83]        ; self-actor exclusion`"
+   and "`0x76fe1  3b2dca771500        CMP EBP,[0x1577CA]        ; tracked exclusion`".
+   The route's own record becomes **both** cells (the
+   `0x77568` actor store, then the release's tracked bind), which is §3.4's
+   self-closing argument. Consequence for Stage-2: any second-write
+   expectation (`0x38`/`0x50` again) must be staged on a **different** record,
+   or the two cells must be explicitly cleared; a same-record re-entry is
+   natively excluded, not a missing port.
+
+3. **The fixture GO is not a natural-play GO.** Quote (§7): "**GO — the
+   keeper band.**" and the closing "Layer-2 is **not** waived on §8.1
+   grounds." **Corrected in scope:** the four-step proof runs on the phase-28
+   fixture — entry `tracked == 0`, an opposite-side actor staged, `tracked ==
+   11` only after the bind — so it proves the installer→writer chain and the
+   live frame path, **not** that natural play reaches the ladder's CX=4 arm.
+   No natural granted frame has been shown to take it (§9.2 already says so).
+   Stage-2 must either **(a)** prove the natural reach — a granted frame
+   entering CX=4 with camY `== 0` and an opposite-side actor, then row `0x1B`
+   installed and `0x38` stored — or **(b) pre-authorize** the spec §6 Layer-2
+   waiver before leaning on the visible acceptance. "Not waived on §8.1
+   grounds" stands only while (a) is open; it never authorizes a widened
+   fixture.
+
+4. **Row `0x5E` is not a `0x157750` writer.** Scope note: row `0x5E` (the
+   jump-aux anim row) is the FU309 event-source selector (§5.2/§8.2 there); it
+   writes no camera Y and is absent from the fresh 146-ref/22-write census
+   (§2.1). Stage-2 must not add it to the FU307 writer set, nor cite it as a Y
+   producer — its only camera consequence is the airborne height-table
+   selector FU309 stages.

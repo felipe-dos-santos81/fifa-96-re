@@ -257,3 +257,73 @@ compare -metric AE /tmp/opencode/p29-pan-a.png /tmp/opencode/p29-pan-b.png null:
 ## 9. Provenance (this session)
 
 Ghidra MCP, read-only, program `/FIFA96.EXE` (explicit; scripts disabled): `get_current_program_info`; `disassemble_bytes` `0x71DF4` (0x121 B), `0x739B0` (0x1D0 B), `0x73760` (0x90 B), `0x70A30` (0x70 B), `0x71C94` (0x160 B), `0x70130` (0x45 B), `0x70544` (0xD0 B), `0x70630` (0xE0 B), `0x707B0` (0x80 B), `0x708F0` (0xC0 B), `0x709A0` (0x40 B), `0x71EF0` (0x125 B), `0x7A1E0` (0x60 B), `0x82A3E` (0x38 B), `0x7C7C0` (0x50 B), `0x7721B` (0xF8 B), `0x77313` (0x88 B), `0x70228` (0x30 B), `0x7C810` (0x30 B); `get_xrefs_to` `0x1577F0` (31), `0x1577EE` (27), `0x1577BE` (70), `0x157821` (11); `read_memory` `0x1577EE` (16 B). Engine/test source read: `src/fifa96_engine/fifa96_match_run.c` (540-621, 1380-1418, 3878-3904, 3946-3969, 4260-4370), `src/fifa96_loader/fifa96_camera.c` (20-199, 515-535, 640-955, 957-1109), `src/fifa96_engine/fifa96_match_handlers.c` (1274-1400), `src/fifa96_loader/fifa96_action_handlers.c` (95-135), `src/fifa96_loader/fifa96_ball_pairing.c` (770-800), `tests/test_engine_match_frame.c` (127-201, 1144-1151, 2140-2352, 3626-3718, 7000-7241), `docs/screens/p28-l2-*.png` (`compare` fresh). Carried docs: FU171 (the gates/window/census), FU168 (the pan arm and its mid-band window), FU305 (the acceptance contract, FU305-L5/L6), FU293 (L1/L3), the phase-28 register (`docs/ENGINE.md:1924-2233`). No writes: no rename/comment/label/function/script/save; no git; no ISO write.
+
+---
+
+## Review erratum (wave review, 2026-10-21)
+
+*Appended section: the frozen text above stands; every correction quotes it
+first. Read-only review round — no Ghidra call was made here; the review's
+fresh reads stand.*
+
+**Verdict:** GO **conditional** — conditional on FU307's Y producer (or the
+spec §6 Layer-2 waiver) and on the RED-bar split below; the receive arm is the
+only **cold-start** `>0xF0` source, not the only `>0xF0` writer.
+
+1. **"Only the receive setter can pass `>0xF0`" is an overreach.** Quote (§1):
+   "The only wired setter that can pass `> 0xF0` is the receive arm's
+   trajectory". **Corrected:** true for *setters*, false for the cell. The
+   chaser writes the same word without a setter: the reflect arm (`0x70D91 AX
+   = word[0x157750]`, `0x70D97 word[0x1577F0] = AX`) passes `>0xF0` whenever
+   camY already is, and the ramp arm (`0x70D17`/`0x70D3A`) can **lift** an
+   event with `ev > ~0xC8` over the gate (FU306 §4/§6). What is unique to the
+   receive arm is that it is the only **cold-start trajectory source** — the
+   chaser cannot bootstrap (reflect is bounded by camY; ramp needs a near-tall
+   event and a high record). §4.1's three-route list is already correct; §1's
+   sentence is the one that overreaches.
+
+2. **"Pan writers port-exact" is qualified by FU309-L2/L3.** Quote (§1): "The
+   pan writers are also port-exact and live". **Qualified:** exact for the
+   wired default path (rate pair zero). The engine adds the push delta to
+   **`target_*` as well as `anchor_*`** (`camera.c:139-142`) while the native
+   `0x73B30/0x73B36/0x73B42/0x73B48` touch the anchors only — FU309-L2; and
+   the rate-nonzero call-site arm `0x73A03..0x73B59` is **not modelled as a
+   branch** (gate 4 returns 0; FU309-L3). L2 is a real cell delta whenever the
+   push runs; L3 is structurally unreachable today by the doc's own writer-set
+   argument. Either way, "port-exact" must not be read as "no delta" in
+   Stage-2.
+
+3. **`rec.pos_y + 0x5D` is a conflation.** Quote (§4.1 route 3): "whose ramp
+   crosses `0xF0` only for `rec.pos_y + 0x5D > 0x80`". **Corrected:** the
+   native operand is **`dword[rec+0x5D]`** (the record's Y cell); `pos_y` is
+   the engine field name and `+0x5D` its native offset — they are never added.
+   Read `dword[rec+0x5D] > 0x80`.
+
+4. **The §8.2 fixture must stage `has_slot` and a nonzero receive vector.**
+   The call site refuses a tracked record without a slot —
+   `0x73B65 CMP dword[EBP+0x20],0 / JZ 0x73B70`; the engine mirrors it
+   (`match_run.c:3895 if (!e->has_slot) return 0`). The fixture must therefore
+   stage the tracked record's slot (`has_slot != 0`), or every follow
+   assertion is vacuous. The staged receive must also carry a **nonzero**
+   vector (`&vec` at `match_run.c:3946-3955`): the setter seeds `speed` from
+   it, and a zero vector leaves gate 2 (`0x739CE`) at zero, so no follow frame
+   runs. Stage both as inputs; assert the outcome (§5.2 step 4's `camera.speed
+   != 0`).
+
+5. **The `0x50` fixture window is 54 frames, not 52.** Quote (§5.4 step 4):
+   "assert the window = `(F4 − F6)/2` for the fixture's camY (54 at `0x50`, 52
+   at `0x70`)". **Confirmed and made binding:** the §5.4 keeper-release chain
+   yields camY `0x50`, so the fixture asserts **54** frames; the literal
+   **52** is the camY `0x70` pin (FU171-L1, `tests/test_engine_match_frame.c:
+   2323-2328`), and §6 evidence row 18 cites that pin, not this fixture.
+
+6. **The pan assertion is baseline-green — label it corroboration.** Quote
+   (§5.4 step 7): "the *live-route* assertions (1–5 through the producer
+   chain) fail on the phase-28 baseline". **Corrected:** the pan arm is
+   **already wired** (`fifa96_match_action_0E` → `match_sp_pan_arm`) and the
+   keeper release already yields camY `0x50`, so step 5's pan assertions
+   **pass** on the phase-28 baseline. Only the follow/height assertions are
+   RED (step 3's `event_param == 0x100`, step 4's `vel == dirs*15` and the
+   54-frame window). Stage-2 must label step 5 as **corroboration**, or make
+   it genuinely baseline-RED; the latter risks widening the fixture, so the
+   label is the honest choice.
