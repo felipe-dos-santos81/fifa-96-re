@@ -1179,6 +1179,14 @@ static void test_rate_table_arm(void) {
   keeper = 0;
   assert(fifa96_camera_rate_table(&cam, 0xC1, 0, 2, 1, 0, 0, 2, 0x23F, -1, 1,
                                   &keeper) == 0);
+  /* An out-of-domain pair has no compass row -> no rate write (FU303-L11:
+   * the native reads neighbouring image data for such an index). */
+  cam.rate_x = 3;
+  cam.rate_z = 4;
+  keeper = 0;
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 0, 2, 1, 2, 0, 2, 0x23F, 0, 0,
+                                  &keeper) == 0);
+  assert(cam.rate_x == 3 && cam.rate_z == 4);
   /* The signed dir-byte gate and the timer gate precede the lookup. */
   assert(fifa96_camera_rate_table(&cam, 0xC1, -1, 2, 1, 1, 0, 2, 0x23F, -1, 1,
                                   &keeper) == 0);
@@ -1230,6 +1238,11 @@ static void test_event_dir_byte(void) {
   assert(cam.dir_157815 == 6);
   assert(fifa96_camera_event_dir(&cam, 1, -1, 1) == FIFA96_OK);
   assert(cam.dir_157815 == 7);
+  /* an out-of-domain pair resolves to the 0xFF marker: the live slot writer
+   * never yields one (T1 0x10E1DC has no path to T3's dead entries 9..15, so
+   * +0x20/+0x21 stay in {-1,0,1}); FU303-L11 residual. */
+  assert(fifa96_camera_event_dir(&cam, 1, 2, 0) == FIFA96_OK);
+  assert((uint8_t)cam.dir_157815 == 0xFF);
   /* the (0,0) pair with a live bearing word: the 0x8DD70 oct over the
    * post-ramp velocity pair. angle(25,0) = 0x100 -> ((0x100+0x40)&0x3FF)>>7
    * = 2. */

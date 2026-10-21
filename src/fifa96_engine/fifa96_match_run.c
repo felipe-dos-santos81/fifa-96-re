@@ -1595,11 +1595,11 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->timer_a = mr->band_1577fa;
   /* FU303-L10 (phase-28 T8): the keeper-CPU ladder's FU292-L2 band cells are
    * LIVE — `band_fa` is the camera timer (`word[0x1577FA]`) and `band_f6` is
-   * its ramp start `word[0x1577F6] = timer_limit - ramp_divisor` (the 0x705e8
-   * `F8 = F4 - F6` identity; FU303-L7). `timer_a` above stays the entity
-   * selection's FU-67 S3 stand-in (a zero-bucket read), not this binding. */
-  f->band_f6 = (int16_t)((int16_t)mr->render.camera.timer_limit -
-                         (int16_t)mr->render.camera.ramp_divisor);
+   * its ramp start (`word[0x1577F6]`, folded by `camera_event_ramp` as
+   * `timer_limit - ramp_divisor`; the 0x705e8 `F8 = F4 - F6` identity,
+   * FU303-L7). `timer_a` above stays the entity selection's FU-67 S3
+   * stand-in (a zero-bucket read), not this binding. */
+  f->band_f6 = mr->render.camera.band_1577f6;
   f->band_fa = (int16_t)mr->render.camera.timer;
   f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
   f->target_c48[0] = mr->predict_c48_x;
