@@ -3931,6 +3931,201 @@ static void test_keeper_installer_live_reach(void) {
   assert(mr.render.camera.tracked ==
          (int32_t)FIFA96_MATCH_ENTITY_RECORDS);
 
+  /* ===== FU309 §5.4 (phase-29 T5): the live event chain — the Layer-1 gate
+   *
+   * The every-frame arm (`fifa96_match_run_camera_follow` ->
+   * `fifa96_camera_rate_event`) and the pan writers are already live (FU309
+   * §5.1/§5.3; pinned by `test_auto_camera_follows_tracked_slot` and the
+   * FU171-L1 window test). The missing live input is the EVENT HEIGHT: the
+   * receive arm's trajectory (`match_run.c` 0x7A219) is the only cold-start
+   * `> 0xF0` source, and its open-play row is admitted by the airborne height
+   * table (`pos_y != 0 && camY - pos_y >= 0x38`,
+   * `fifa96_action_handlers.c:113-117`).
+   *
+   * Producer inputs only (the live-chain rule):
+   *  - the keeper release above is the live mid-band Y (`camera.pos_y` 0x50 —
+   *    the single `[0x157750]` cell, FU307);
+   *  - the row-`0x5E` anim install on the kicker (FU-153) is stepped until the
+   *    record's own `pos_y != 0` and the height-table `d >= 0x38` holds;
+   *  - the receive is the real setter producer
+   *    (`fifa96_match_run_ball_receive(kicker, vector, traj 0x100)`): a
+   *    NONZERO vector seeds the ramp speed (gate 2 `0x739CE`) and the traj is
+   *    the event height `> 0xF0`; `has_slot` is the call-site `0x73B65`
+   *    input.
+   *
+   * The window is derived from the fixture's live camY (FU309 §3.1): F2 =
+   * ramp(0x100), F4 = 2*F2, F6 = F2 - ramp(0x100 - camY); the pan step fires
+   * on the first frame with `timer > F4` and the timer advances by the frame
+   * delta, so the follow frame count is `(F4 - F6) / delta` — 54 at the
+   * keeper-release camY (52 at the FU171-L1 camY 0x70 pin).
+   *
+   * The pan arm below is CORROBORATION (FU309 erratum 6): it is already wired
+   * and the keeper release already yields the mid-band Y, so it passes on the
+   * phase-28 baseline too. It proves the row-`0x0E` setter's height
+   * `(rng & 0x3F) + camY <= 0xAE` can never wake the follow (FU309 §4.3).
+   *
+   * Mutation-RED riders (each verified against this fixture, T5 report):
+   *  - the receive producer removed -> `event_param == 0x100` fails;
+   *  - the receive tracked bind (match_run.c 0x71D27) removed ->
+   *    `tracked == kicker_id` fails;
+   *  - the height gate (`camera.c` `<= 0xF0`) closed -> `vel == 15` fails;
+   *  - the pan-counter INC (`camera.c` 0x70A65) removed -> the follow
+   *    velocity changes when the pan re-ramps and the loop assert fails;
+   *  - the setter's counter clear (0x70153) removed -> the re-open
+   *    `pan_counter == 0` fails;
+   *  - the row-0x0E band (0x82828) closed -> the focus `pos_x` fails;
+   *  - the jump arm's height/arc seed (aux-0x0E arm, 0x6EDE6..0x6EE14)
+   *    disabled -> `kicker->pos_y != 0` fails.
+   * The T1 seam, the T2 stand-ins, the T3 raw store and the T4 chaser are not
+   * on this fixture's chain (each is pinned by its own task's test); the
+   * fixture is baseline-green because every arm on the staged chain landed in
+   * phases 9-14 — the T5 report records the measured RED-bar erratum. */
+  {
+    struct fifa96_match_entity *kicker = &mr.entities.team[1].records[4];
+    int32_t kicker_id = (int32_t)(FIFA96_MATCH_ENTITY_RECORDS + 4u);
+    fifa96_camera *cam = &mr.render.camera;
+    fifa96_ball_pair_vector vec;
+    int32_t f2, f4, f6;
+    int16_t cam_y_at_set;
+    int window = 0;
+    int pan_frame = 0;
+
+    /* (2) the airborne selector. Row 0x5E's frame-0 aux 0x0E arm (0x6EE14)
+     * stores `pos_y = 0x10`; the BF20 arc holds it up for ~8 frames. */
+    assert(mr.slot.entity != kicker_id);   /* the follow reads the pool dirs */
+    kicker->dir_x = 1;                     /* the follow rate: dirs x 15 */
+    kicker->dir_z = 0;
+    assert(fifa96_match_run_record_anim_install(&mr, kicker, 0x5E, 0) ==
+           FIFA96_OK);
+    for (int i = 0; i < 8 && kicker->pos_y == 0; i++) one_granted_frame(&mr);
+    assert(kicker->pos_y != 0);            /* the height-table `pos_y != 0` */
+    assert((int16_t)cam->pos_y - (int16_t)kicker->pos_y >= 0x38);
+
+    /* (3) the receive: the real setter (`fifa96_match_run_ball_receive`). */
+    kicker->has_slot = 1;                  /* 0x73B65 `[[rec]+0x20] != 0` */
+    memset(&vec, 0, sizeof vec);
+    vec.height = 0x100;                    /* nonzero seed pair: gate 2 */
+    vec.z = 0x100;
+    cam_y_at_set = (int16_t)cam->pos_y;
+    assert(fifa96_match_run_ball_receive(&mr, kicker_id, &vec, 0x100) ==
+           FIFA96_OK);
+    assert(cam_y_at_set > 0x20 && cam_y_at_set < 0x70);   /* the mid-band Y */
+    assert((int16_t)cam->event_param == 0x100);           /* the traj height */
+    assert(cam->tracked == kicker_id);                    /* 0x71D27 */
+    assert(cam->pan_counter == 0);                        /* 0x700F4 clear */
+    assert((int16_t)cam->speed != 0);                     /* the seed (gate 2) */
+    /* The sustained window derived from the set's own F2/F4/F6 (FU309 §3.1:
+     * never hard-code 52 across fixtures): the quiet-frame count is
+     * floor((F4 - F6) / delta). The keeper release's own height-0x50 event
+     * arc has advanced camY 0x50 -> 0x4F by this frame; both values derive the
+     * same 54 frames. */
+    f2 = fifa96_camera_ramp(0x100);
+    f4 = 2 * f2;
+    f6 = f2 - fifa96_camera_ramp((int16_t)(0x100 - cam_y_at_set));
+    assert((int16_t)cam->timer_limit == f4);
+    assert((int16_t)cam->timer == f6);
+    assert((int16_t)cam->ramp_divisor == f4 - f6);
+    assert((f4 - f6) / (int32_t)mr.state.frame_delta == 54);
+
+    /* The other records' per-record BF20 camera events are isolated (the
+     * native per-record tail would re-arm/rebind the event legitimately; the
+     * WINDOW is this fixture's subject — the same isolation the FU171-L1
+     * window test uses). */
+    for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+      for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        if (!(t == 1u && i == 4u)) mr.entities.team[t].records[i].skip_9a = 1;
+
+    /* (4) the sustained follow through the frame path: the walk integrates the
+     * previous frame's velocity, the follow arm re-seeds `vel = dirs*15` after
+     * it, so the FIRST frame integrates the setter's ramp velocity and every
+     * later frame `15*delta`, while `pan_counter == 0`. */
+    {
+      int16_t seed_vel_x = (int16_t)cam->vel_x;
+      int32_t prev = cam->pos_x;
+      assert(seed_vel_x != 0);            /* the call-site speed gate (0x739CE) */
+      while (window < 200 && pan_frame == 0) {
+        one_granted_frame(&mr);
+        if (cam->pan_counter != 0) {
+          pan_frame = 1;
+          break;
+        }
+        window++;
+        if (window == 1) {
+          assert(cam->pos_x ==
+                 prev + (int32_t)seed_vel_x * (int32_t)mr.state.frame_delta);
+        } else {
+          assert((int16_t)cam->vel_x == 15 && (int16_t)cam->vel_z == 0);
+          assert(cam->pos_x == prev + 15 * (int32_t)mr.state.frame_delta);
+        }
+        prev = cam->pos_x;
+      }
+    }
+    assert(pan_frame == 1);      /* the first pan step closes the window */
+    assert(window == 54);        /* (F4 - F6)/delta at the release camY */
+    assert(cam->pan_counter == 1);
+    /* the lockout: the call site's gate 1 refuses until a new setter. */
+    assert(fifa96_match_run_camera_follow(&mr) == 0);
+    for (int i = 0; i < 3; i++) {
+      one_granted_frame(&mr);
+      assert(cam->pan_counter >= 1);
+      assert(fifa96_match_run_camera_follow(&mr) == 0);
+    }
+    /* a new setter re-opens the window (FUN_000700F4's 0x157821 clear). */
+    assert(fifa96_match_run_ball_receive(&mr, kicker_id, &vec, 0x100) ==
+           FIFA96_OK);
+    assert(cam->pan_counter == 0);
+    assert(cam->tracked == kicker_id);
+    one_granted_frame(&mr);
+    assert(cam->pan_counter == 0);
+    assert((int16_t)cam->vel_x == 15 && (int16_t)cam->vel_z == 0);
+
+    /* (5) CORROBORATION — the row-0x0E pan arm (baseline-green). */
+    {
+      struct fifa96_match_entity *pan = &mr.entities.team[0].records[4];
+      int32_t pan_id = 4;
+      struct fifa96_rng probe = mr.rng;
+      uint16_t draw = 0;
+      int16_t cam_y = 0x50;
+      int32_t focus_x = 0x100 + 0x40;   /* pos_x + dir_x[2] << 6 */
+      int32_t focus_z = 0x200;          /* pos_z + dir_z[2] << 6 */
+      assert(mr.state.phase == 2u);     /* the row-0x0E phase gate */
+      pan->lane_x = 0x10;               /* 0x8283A: < 0x60 */
+      pan->has_slot = 1;
+      mr.record.entity_id = pan_id;
+      mr.record.stage92 = 2;            /* the pan arm's stage */
+      mr.record.jump_base = 0;          /* the `word[+0x85] == 0` gate */
+      mr.record.type = 2;               /* octant: dir (1, 0) */
+      mr.record.pos_x = 0x100;
+      mr.record.pos_z = 0x200;
+      mr.record.has_slot = 1;
+      mr.record.dir_x = 1;              /* the lateral target dir << 7 */
+      mr.record.dir_z = 0;
+      mr.record.face7d = 0;
+      mr.record.speed71 = 0;
+      mr.record.side = 0;
+      mr.record.delta = (uint16_t)mr.state.frame_delta;
+      mr.record.timer89 = 0;
+      cam->pos_x = 0x40;
+      cam->pos_z = 0x60;
+      cam->pos_y = cam_y;
+      assert(cam->tracked != pan_id);
+      assert(fifa96_rng_step(&probe, &draw) == FIFA96_OK);
+      assert(fifa96_match_dispatch_action(&mr, 0x0E) == FIFA96_OK);
+      assert(cam->pos_x == focus_x);
+      assert(cam->pos_z == focus_z);
+      assert((int16_t)cam->event_param == (int16_t)((draw & 0x3F) + cam_y));
+      assert((int16_t)cam->event_param <= 0xAE);   /* < 0xF0: never a wake */
+      assert(cam->tracked == pan_id);
+      assert(mr.record.stage92 == 3);
+      {
+        int16_t vx = (int16_t)cam->vel_x;
+        int32_t px = cam->pos_x;
+        one_granted_frame(&mr);
+        assert(cam->pos_x == px + (int32_t)vx * mr.state.frame_delta);
+      }
+    }
+  }
+
   assert(fifa96_match_run_end(&mr) == 0);
 
   /* Part B — the live `0x1A` install + the wired dispatch. */
