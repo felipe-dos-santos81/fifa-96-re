@@ -224,6 +224,10 @@ typedef struct fifa96_keeper_claim {
 typedef struct fifa96_keeper_claim_out {
   uint8_t claimed;        /* the head claim ran (+0x9B set, place staged) */
   uint8_t released;       /* stage 5 cleared +0x9B */
+  uint8_t cam_y_written;  /* a raw `dword[0x157750]` store with no 0x700F4
+                           * place: `0x75A0F` (0x38), `0x75EEA` (0x10),
+                           * `0x75F86` (0x80). The binder applies
+                           * `camera.pos_y = cam_y` raw (FU307-L3). */
   uint8_t helper;         /* 0x7876C slot-merge request */
   uint8_t controlled;     /* [0x157A83] = rec */
   uint8_t place;          /* 0x700F4 camera place (place_*) */

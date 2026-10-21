@@ -435,7 +435,7 @@ static void match_keeper_claim_stage(struct fifa96_match_run *mr,
   s->target_x = mr->record.target_x;
   s->target_z = mr->record.target_z;
   s->cam_x = mr->keeper_cam_x;
-  s->cam_y = mr->keeper_cam_y;
+  s->cam_y = mr->render.camera.pos_y;   /* FU307-L4: the single camera-Y cell */
   s->cam_z = mr->keeper_cam_z;
   s->reset_x = mr->keeper_reset_x;
   s->reset_y = mr->keeper_reset_y;
@@ -508,8 +508,14 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
     }
   }
   mr->keeper_cam_x = s->cam_x;
-  mr->keeper_cam_y = s->cam_y;
   mr->keeper_cam_z = s->cam_z;
+  /* FU307-L4 (phase-29 T3): `dword[0x157750]` is ONE cell. The claim rows
+   * read `render.camera.pos_y` at staging time; a machine step writes it back
+   * only where the native stores the dword without a `0x700F4` place. The
+   * three literal cuts (`0x75A0F` 0x38, `0x75EEA` 0x10, `0x75F86` 0x80) are a
+   * **raw** store: no camera init, no tracked/event clear (FU307 §6 item 2).
+   * A stage-3 -> stage-7 chain keeps the last stage's value in `s->cam_y`. */
+  if (out->cam_y_written != 0) mr->render.camera.pos_y = s->cam_y;
   mr->keeper_reset_x = s->reset_x;
   mr->keeper_reset_y = s->reset_y;
   mr->keeper_reset_z = s->reset_z;
@@ -586,7 +592,7 @@ static void match_keeper_closedown_stage(struct fifa96_match_run *mr,
   s->target_x = mr->record.target_x;
   s->target_z = mr->record.target_z;
   s->cam_x = mr->keeper_cam_x;
-  s->cam_y = mr->keeper_cam_y;
+  s->cam_y = mr->render.camera.pos_y;   /* FU307-L4: the single camera-Y cell */
   s->cam_z = mr->keeper_cam_z;
   s->reset_x = mr->keeper_reset_x;
   s->reset_y = mr->keeper_reset_y;
@@ -646,7 +652,8 @@ static int match_keeper_closedown_apply(struct fifa96_match_run *mr,
   }
   if (out->commit != 0 && e != NULL) (void)fifa96_match_entities_place(e);
   mr->keeper_cam_x = s->cam_x;
-  mr->keeper_cam_y = s->cam_y;
+  /* FU307-L4: the closedown only reads the camera triple (its two places hand
+   * `s->cam_*` out; no stage writes Y), so there is no Y write-back here. */
   mr->keeper_cam_z = s->cam_z;
   mr->keeper_reset_x = s->reset_x;
   mr->keeper_reset_y = s->reset_y;
@@ -3684,7 +3691,7 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
     in.is_actor = (uint8_t)(mr->entities.controlled == id ? 1u : 0u);
     in.lane = (int16_t)(r->lane >> 16);
     in.cam_x = mr->keeper_cam_x;
-    in.cam_y = mr->keeper_cam_y;
+    in.cam_y = mr->render.camera.pos_y;
     in.cam_z = mr->keeper_cam_z;
     in.pos_x = r->pos_x;
     in.pos_z = r->pos_z;
@@ -3781,7 +3788,10 @@ static int match_1b_replace(struct fifa96_match_run *mr,
   int32_t cam_y = r->pos_y + 0x38;                              /* 0x77513..0x7751b */
   mr->keeper_cam_x = cam_x;                                     /* [0x15774C] */
   mr->keeper_cam_z = cam_z;                                     /* [0x157754] */
-  mr->keeper_cam_y = cam_y;                                     /* [0x157750] */
+  /* FU307-L4: the Y store `0x7751B` lands on the single cell immediately (the
+   * same-dispatch stage-2 reads must see it) and the flag-1 place below lets
+   * the frame placement drain run the `0x700F4` reset on the same triple. */
+  mr->render.camera.pos_y = cam_y;                              /* [0x157750] */
   r->place_x = cam_x;                                           /* 0x77542 CALL 0x700F4 (flag 1) */
   r->place_y = cam_y;
   r->place_z = cam_z;
@@ -3806,7 +3816,7 @@ static int match_1b_replace(struct fifa96_match_run *mr,
  *
  * The seat's height is the adjudicated camY-derived `SI = dword[0x157750]`
  * loaded at `0x77228` (`fifa96_camera_event_set(cam, step_x, step_z,
- * (int16_t)mr->keeper_cam_y, 0)`), never the Block-C jitter: the FU302 review
+ * (int16_t)mr->render.camera.pos_y, 0)`), never the Block-C jitter: the FU302 review
  * erratum supersedes FU302-L10's "BX = jitter" reading.
  *
  * Corrections carried verbatim from the FU301 review (the FU293 omissions):
@@ -3987,9 +3997,9 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   }
 
   /* Block B (`0x770D9..0x77162`): bounds + heading gate. */
-  if (mr->keeper_cam_y == 0) esi = 0xC0;            /* 0x770D9..0x770E5 */
+  if (mr->render.camera.pos_y == 0) esi = 0xC0;            /* 0x770D9..0x770E5 */
   if ((int32_t)e->lane_x > esi) return MATCH_1B_DEEP_EXIT;     /* 0x770E7 */
-  if (ecx + r->pos_y < mr->keeper_cam_y) return MATCH_1B_DEEP_EXIT;  /* 0x770F5 */
+  if (ecx + r->pos_y < mr->render.camera.pos_y) return MATCH_1B_DEEP_EXIT;  /* 0x770F5 */
   {
     int32_t angle = 0;
     int32_t h;
@@ -4028,7 +4038,7 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   if (mr->keeper_latch[3] != 0)                     /* 0x157C57 -> 0x774D7 */
     return MATCH_1B_DEEP_EXIT;
   x = ratio >> flag;                                /* 0x771F9..0x771FF (SAR CL) */
-  if (!(jitter >= x && mr->keeper_cam_y > 0x20)) {  /* 0x77201..0x7720C */
+  if (!(jitter >= x && mr->render.camera.pos_y > 0x20)) {  /* 0x77201..0x7720C */
     if (mr->keeper_latch[4] == 0) {                 /* 0x7720E [0x157C58] */
       uint8_t self_actor = 0;
       (void)match_1b_replace(mr, r, &self_actor);   /* 0x774DD */
@@ -4123,7 +4133,7 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
   cam->event_suspended = 0;                         /* 0x7741A */
   {
     int ev = fifa96_camera_event_set(cam, step_x, step_z,
-                                     (int16_t)mr->keeper_cam_y, 0);
+                                     (int16_t)mr->render.camera.pos_y, 0);
     if (ev < 0) return ev;
     /* FU303/FU294-L2 (phase-28 T8): the setter's actor dir arm. */
     if (ev == FIFA96_OK)
@@ -4215,7 +4225,9 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
     int32_t cam_y = r->pos_y + 0x38;                             /* 0x76D9F */
     mr->keeper_cam_x = cam_x;                                    /* 0x76D6A */
     mr->keeper_cam_z = cam_z;                                    /* 0x76D81 */
-    mr->keeper_cam_y = cam_y;                                    /* 0x76DB5 */
+    /* FU307-L4: `0x76DB5`'s Y store lands on the single cell now; the flag-1
+     * place below re-places it through the drain (`0x700F4`). */
+    mr->render.camera.pos_y = cam_y;                             /* 0x76DB5 */
     r->place_x = cam_x;                                          /* 0x76DBA FUN_000700F4 */
     r->place_y = cam_y;
     r->place_z = cam_z;
@@ -4393,7 +4405,9 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
  * `word[0x1577FA]` = `render.camera.timer`; `word[0x1577C0]/[0x1577C2]` =
  * `render.camera.vel_x`/`vel_z` (the native pan words; the `'T'` arm and the
  * row-`0x1B` Block E are their live writers); `[0x157750]` =
- * `keeper_cam_y`; `[0x15774C]/[0x157754]` = `keeper_cam_x`/`_z`; `[0x157C2C]`
+ * `render.camera.pos_y` (FU307-L4: the single camera-Y cell — the arc, the
+ * place drain, the release and the row-0x1E raw-store cuts all write it);
+ * `[0x15774C]/[0x157754]` = `keeper_cam_x`/`_z`; `[0x157C2C]`
  * = `global_157c2c` (G2 in-frame publish from the ladder); `[0x15759F]`/
  * `word[0x1575CC]/[0x1575D0]` = the `bounce_1575*` cells. The
  * `[[rec+4]+0x10]+3` descriptor byte (FU290-L5), `[0x158740]>>24` (FU292-L4)
@@ -4496,7 +4510,7 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
     }
     if (mr->global_157c2c == 0x2Eu) {                 /* 0x76757 */
       uint8_t pass = (uint8_t)(follow > 0x14 && timer < 0x1C &&
-                                mr->keeper_cam_y < 0x90);    /* dword 0x157750 */
+                                mr->render.camera.pos_y < 0x90);    /* dword 0x157750 */
       if (pass) {
         uint16_t draw = 0;
         (void)fifa96_rng_step(&mr->rng, &draw);       /* 0x76790 0x92AC8 */
@@ -4510,7 +4524,7 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
         /* 0x767B6: the camera-Y clamp — `AX = word[0x157750] - 0x70`, a
          * <=0 word skips, else clamp to 0x60 and `0x702F8` (the ported
          * `fifa96_camera_ramp`; the EDX passthrough is dropped). */
-        int16_t v = (int16_t)((uint16_t)(int16_t)mr->keeper_cam_y - 0x70u);
+        int16_t v = (int16_t)((uint16_t)(int16_t)mr->render.camera.pos_y - 0x70u);
         if (v > 0) {
           int32_t h = (int32_t)v;
           if (h > 0x60) h = 0x60;
@@ -4795,7 +4809,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
     return FIFA96_OK;
   }
   cam.x = mr->keeper_cam_x;
-  cam.y = mr->keeper_cam_y;
+  cam.y = mr->render.camera.pos_y;
   cam.z = mr->keeper_cam_z;
   lane = (int16_t)(r->lane >> 16);  /* [+0x69]>>16 */
   bound = (uint8_t)(mr->entities.controlled != FIFA96_MATCH_ENTITY_NONE ? 1u : 0u);
@@ -4807,7 +4821,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
    * record is `[[team+0x7A6]+0x7B2]` (the opponent team target). */
   {
     uint8_t guard_ok = (uint8_t)(bound == 0 && lane < 0x2D0 &&
-                                 mr->keeper_cam_y == 0 &&
+                                 mr->render.camera.pos_y == 0 &&
                                  team->tracker7c7 == (int32_t)idx);
     if (guard_ok != 0) {
       uint32_t opp = (uint32_t)(t ^ 1u);
@@ -4837,7 +4851,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
   /* Predictor (0x74832..0x74ACC). */
   {
     fifa96_keeper_predict pred;
-    if (fifa96_keeper_hold_predict(&cam, side, 0, 0, 0, mr->keeper_cam_y,
+    if (fifa96_keeper_hold_predict(&cam, side, 0, 0, 0, mr->render.camera.pos_y,
                                    mr->render.camera.pan_counter, bound, &pred) ==
             FIFA96_OK &&
         pred.predicted != 0) {

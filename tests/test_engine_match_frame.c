@@ -3341,31 +3341,37 @@ static void test_row1e_stage3_possession_flip(void) {
  * consumes the produced `out->event` into `record.anim_id` (hence the pool
  * record) and the claim's live row becomes 0x45. Baseline (no bridge): the
  * live row never becomes 0x45, so stage 5 advances without the release and the
- * release triple `0x157750` is never written. `mr.keeper_cam_y` is the engine's
- * `0x157750` stand-in, written only by the stage-5 release block. */
+ * release pose `0x50` is never written.
+ *
+ * The release pose is asserted through a direct row-0x1E dispatch: after the
+ * FU307-L4 single-cell unification the frame body's placement drain (the
+ * fixture's row-01 `0x700F4` place at (0,0,0)) legitimately resets the live
+ * camera Y in this scenario — a native `0x700F4` would too. The frame-path
+ * release is pinned by `test_keeper_l4_release_reach` and
+ * `test_keeper_installer_live_reach`, whose fixtures stage no competing
+ * place. */
 static void test_row1e_claim_anim_bridge(void) {
-  struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   fifa96_match_run_init(&mr);
-  begin_isolated(&mr, f.engine);
-  e = &mr.entities.team[1].records[0];
+  mr.record.entity_id = 0;
+  e = &mr.entities.team[0].records[0];
   assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
-  e->stage92 = 4;                   /* the stage-4 outlet dispatch */
-  e->frame = 3;                     /* past the stage-5 `frame < 3` gate */
-  e->has_slot = 1;                  /* slot path -> 0x8DCD4(pos, reset) vector */
-  e->pos_x = 0;
-  e->pos_z = 0;
+  mr.record.code = e->code;
+  mr.record.stage92 = 4;            /* the stage-4 outlet dispatch */
+  mr.record.frame = 3;              /* past the stage-5 `frame < 3` gate */
+  mr.record.has_slot = 1;           /* slot path -> 0x8DCD4(pos, reset) vector */
+  mr.record.pos_x = 0;
+  mr.record.pos_z = 0;
   mr.keeper_latch_157ab2 = 0;       /* latch clear -> the reset-vector arm */
   mr.keeper_reset_x = 0x800;        /* band 0x800 >= 0x780 -> event 0x45 */
   mr.keeper_reset_y = 0;
   mr.keeper_reset_z = 0;
-  assert(mr.keeper_cam_y == 0);     /* the release triple is unset at baseline */
-  for (int i = 0; i < 200 && mr.keeper_cam_y != 0x50; i++) one_granted_frame(&mr);
-  assert(mr.keeper_cam_y == 0x50);  /* the stage-5 release arm fired */
-  assert(e->anim_id == 0x45u);      /* the bridge selected row 0x45 */
-  assert(fifa96_match_run_end(&mr) == 0);
-  drop_fixture(f);
+  assert(mr.render.camera.pos_y == 0);     /* the release pose is unset at baseline */
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x50);  /* the stage-5 release arm fired */
+  assert(mr.record.anim_id == 0x45u);      /* the bridge selected row 0x45 */
+  assert(e->anim_id == 0x45u);             /* ... through the pool record */
 }
 
 /* FU286 / R11-L2 + R11-L3 (phase-26c T4): the row-0x1E claim head place's
@@ -3429,12 +3435,12 @@ static void test_row1e_claim_place_pause_and_offsets(void) {
  *       machine reads `render.frames`, absent in this isolated fixture, so the
  *       fixture stages `keeper->frame = 3` to pass the native `frame < 3` gate.
  *
- * The release writes the persistent cell `[0x157750]` (`keeper_cam_y`) and the
- * FU-71 camera triple. The release frame stages no `place`, so the frame body's
- * placement drain (`match_run.c` `match_run_entity_drain` -> `fifa96_camera_init`
- * at :1566) does not re-run this frame and `render.camera.pos_y` still holds
- * `0x50` at the frame end (asserted); the persistent `keeper_cam_y == 0x50` is
- * asserted alongside as the load-bearing cell. */
+ * The release writes the persistent cell `[0x157750]` — the single
+ * `render.camera.pos_y` (FU307-L4) — together with the FU-71 camera triple.
+ * The release frame stages no `place`, so the frame body's placement drain
+ * (`match_run.c` `match_run_entity_drain` -> `fifa96_camera_init`) does not
+ * re-run this frame and `render.camera.pos_y` still holds `0x50` at the frame
+ * end (asserted). */
 static void test_keeper_l4_release_reach(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -3474,11 +3480,10 @@ static void test_keeper_l4_release_reach(void) {
   /* Carry (iv): stage the frame past the native `frame < 3` gate. */
   keeper->frame = 3u;
   one_granted_frame(&mr);                          /* stage 5 -> 6 -> 7 -> 8 */
-  released = (mr.keeper_cam_y == 0x50);
+  released = (mr.render.camera.pos_y == 0x50);
   assert(released == 1);                          /* the stage-5 release fired */
 
-  /* The release triple: the persistent `[0x157750]` and the FU-71 camera. */
-  assert(mr.keeper_cam_y == 0x50);
+  /* The release triple: the single `[0x157750]` cell and the FU-71 camera. */
   assert(mr.render.camera.pos_y == 0x50);
   /* Carry (iii): the bridge writes the pool entity (the anim install) and
    * `record.anim_id`; the persistent pool entity carries `0x45`. */
@@ -3602,11 +3607,10 @@ static void test_keeper_installer_reach(void) {
    * phase-26c carry (iv)) -> the release fires. */
   keeper->frame = 3u;
   one_granted_frame(&mr);
-  released = (mr.keeper_cam_y == 0x50);
+  released = (mr.render.camera.pos_y == 0x50);
   assert(released == 1);                           /* the stage-5 release fired */
 
-  /* The release triple: the persistent `[0x157750]` and the FU-71 camera. */
-  assert(mr.keeper_cam_y == 0x50);
+  /* The release triple: the single `[0x157750]` cell and the FU-71 camera. */
   assert(mr.render.camera.pos_y == 0x50);
   assert(keeper->anim_id == 0x45u);                /* the claim's selected row */
   assert(mr.render.camera.tracked != 0);           /* the keeper bound as tracked */
@@ -3700,7 +3704,7 @@ static void test_keeper_installer_live_permit(void) {
  * merged `fifa96_match_entities_install` contract (FU304). The row dispatches
  * in the same frame, reaches the sit-5 emit (situation 5 -> phase 9), the
  * phase-9 arm installs row `0x1E` on the controlled team's keeper, and the
- * row-`0x1E` claim walks to the stage-5 release (`keeper_cam_y = 0x50`). The
+ * row-`0x1E` claim walks to the stage-5 release (`camera.pos_y = 0x50`). The
  * camera cells move through the real seam: the re-place's `fifa96_camera_init`
  * pose (`pos_y = 0x38`) on the install frame, then the release's `0x50`, and
  * the pan/tracked cell binds.
@@ -3773,8 +3777,7 @@ static void test_keeper_installer_live_reach(void) {
   assert(reached_outlet == 1);
   k1->frame = 3u;                                  /* the stage-5 `frame < 3` input */
   one_granted_frame(&mr);
-  assert(mr.keeper_cam_y == 0x50);
-  assert(mr.render.camera.pos_y == 0x50);
+  assert(mr.render.camera.pos_y == 0x50);          /* the single [0x157750] cell */
   /* The release binds the keeper (team 1 record 0) as the tracked record:
    * entity id 11 = FIFA96_MATCH_ENTITY_RECORDS + 0. */
   assert(mr.render.camera.tracked ==
@@ -3818,6 +3821,103 @@ static void test_keeper_installer_live_reach(void) {
 
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
+}
+
+/* FU307-L3 (phase-29 T3): the row-0x1E raw-store camera-Y cuts.
+ *
+ * The claim machine's three literal stores — `0x75A0F` (`0x38`), `0x75EEA`
+ * (`0x10`), `0x75F86` (`0x80`) — write the native camera-Y dword
+ * `[0x157750]` directly: no `0x700F4` place, so no reset and no tracked/event
+ * clear (FU307 §2.2 items 8/12/14, §6 item 2). The engine delivers them
+ * through `fifa96_keeper_claim_out.cam_y_written`, which the binder applies as
+ * a raw store to the single camera-Y cell `mr.render.camera.pos_y`.
+ *
+ * The stage-3 `0x38` is the band cut: `0x20 < 0x38 < 0x70` strictly. The
+ * stage-7 `0x10`/`0x80` are the out-of-band arms (FU307 §5.7) but still real
+ * stores, so they are pinned too — a dropped write on either arm is the
+ * mutation. Baseline (phase-28 tree): the claim only staged its shadow process
+ * cell, so the first `pos_y == 0x38` assert fails. */
+static void test_row1e_cam_y_raw_store(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 3;              /* the stage-3 raw-store arm (0x759EA) */
+  mr.record.has_ball = 0;
+  mr.record.has_slot = 0;
+  mr.record.timer89 = 0;              /* < 0x78: no flag8 divert */
+  mr.record.pos_x = 0x100;
+  mr.record.pos_y = 0;
+  mr.record.pos_z = 0x200;
+  assert(mr.keeper_gauge == 0);       /* < 0x90: the stage-3 body runs */
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  mr.render.camera.tracked = 7;
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x38);            /* 0x75A0F */
+  assert(mr.render.camera.pos_y > 0x20 && mr.render.camera.pos_y < 0x70);
+  /* A raw store: no 0x700F4 reset, so every other camera cell is untouched. */
+  assert(mr.render.camera.pos_x == 0x11 && mr.render.camera.pos_z == 0x33);
+  assert(mr.render.camera.tracked == 7);
+
+  /* Stage-7 `anim_row == 0x44` -> `0x75EEA` (`0x10`). */
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 7;
+  mr.record.anim_id = 0x44;
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  mr.render.camera.tracked = 7;
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x10);            /* 0x75EEA */
+  assert(mr.render.camera.tracked == 7);
+
+  /* Stage-7 `anim_row == 0x2F` -> `0x75F86` (`0x80`). */
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 7;
+  mr.record.anim_id = 0x2F;
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x80);            /* 0x75F86 */
+
+  /* The flag is exactly those three arms: the stage-1 triple
+   * (`0x7568A`/`0x7568B`, out of band) must NOT move the live cell. */
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 1;
+  mr.record.has_ball = 1;             /* skip the stage-<3 head claim */
+  mr.record.timer89 = 0;              /* < 0x3C: the stage-1 exit */
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_y == 0x22);            /* no cam_y_written arm */
+}
+
+/* FU307-L4 (phase-29 T3): the single camera-Y cell.
+ *
+ * `dword[0x157750]` is one native cell; the port split it into a keeper
+ * process cell (FU-151) and the FU-71 render camera, and only the arc wrote
+ * the render side — so the keeper rows read a stale Y after any event
+ * (FU307 §6 item 3). The unification deletes the keeper Y cell: every keeper
+ * row now reads `mr.render.camera.pos_y`.
+ *
+ * Witness: the row-0x1D closedown stage-0 place (`0x74F99 CALL 0x700F4`) hands
+ * the camera triple to the place output, so `record.place_y` is exactly the Y
+ * the machine read. Baseline: it read the shadow keeper cell (0), not the live
+ * `0x33`, so the assert is RED. */
+static void test_keeper_cam_y_single_cell(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x33, 0x22) == FIFA96_OK);
+  mr.keeper_cam_x = 0x44;             /* the X/Z process cells stay the shadow */
+  mr.keeper_cam_z = 0x55;
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 0;
+  mr.record.row44 = 1;                /* the stage-0 gate */
+  mr.record.timer89 = 0x1E;           /* >= 0x1E: the place runs */
+  mr.session_gate_14c32a = 0;
+  assert(fifa96_match_dispatch_action(&mr, 0x1D) == FIFA96_OK);
+  assert(mr.record.place_valid == 1);
+  assert(mr.record.place_x == 0x44);
+  assert(mr.record.place_y == 0x33);  /* the live camera Y, not a shadow cell */
+  assert(mr.record.place_z == 0x55);
 }
 
 /* FU308 §6.6 (phase-29 T1): the keeper `follow_speed` seam — the frame bind
@@ -7945,7 +8045,7 @@ static void test_action_1a_direction_2e(void) {
   mr.global_157c2c = 0x2Eu;
   mr.render.camera.speed = 0x15;     /* > 0x14 */
   mr.render.camera.timer = 0;                       /* < 0x1C */
-  mr.keeper_cam_y = 0;                      /* < 0x90 */
+  mr.render.camera.pos_y = 0;                      /* < 0x90 */
   mr.record.lane = (int32_t)0x41 << 16;     /* the 0x54 arm exits (timer <= 0xF) */
   /* the 0x92AC8 draw must pass `(draw & 0x1F) > 0` (the descriptor byte is the
    * unmodeled 0 leg); read it from a copy of the armed state */
@@ -7967,7 +8067,7 @@ static void test_action_1a_direction_2e(void) {
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
   mr.render.camera.speed = 0x15;
-  mr.keeper_cam_y = 0x90;
+  mr.render.camera.pos_y = 0x90;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x2Eu);        /* the stamp stays */
   assert(mr.record.jump_base == fifa96_camera_ramp(0x20));  /* 0x767D2 */
@@ -7979,7 +8079,7 @@ static void test_action_1a_direction_2e(void) {
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
   mr.render.camera.speed = 0x15;
-  mr.keeper_cam_y = 0x70;
+  mr.render.camera.pos_y = 0x70;
   mr.record.jump_base = 0x321;
   mr.record.jump_timer = 0x111;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
@@ -7994,7 +8094,7 @@ static void test_action_1a_direction_2e(void) {
   (void)action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x2Eu;
   mr.render.camera.speed = 0x15;
-  mr.keeper_cam_y = 0x10080;
+  mr.render.camera.pos_y = 0x10080;
   fifa96_rng_seed(&mr.rng, 0);
   mr.rng.w[0] = 0x1F;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
@@ -8325,8 +8425,8 @@ static void test_keeper_seam_stamp_publish(void) {
  * `[0x157C55]`/`[0x157C5C]` latches clear, the `0x7700E` rush gate open and the
  * `0x7701C` anim band passed. `face7d = 0x80` makes the Block B heading
  * `(0xCD474(0,0) - 0x80) & 0x3FF = 0`, so the `|h| >= 0x80 && lane_x > 0x20`
- * exit stays closed unless a test stages it. `keeper_cam_y` (the native
- * `[0x157750]` cell, producer unported) is a staged INPUT, never a gate. */
+ * exit stays closed unless a test stages it. `camera.pos_y` (the native
+ * `[0x157750]` cell since FU307-L4) is a staged INPUT, never a gate. */
 static struct fifa96_match_entity *match1b_deep_stage(struct fifa96_match_run *mr) {
   struct fifa96_match_entity *e;
   fifa96_match_run_init(mr);
@@ -8337,7 +8437,7 @@ static struct fifa96_match_entity *match1b_deep_stage(struct fifa96_match_run *m
   mr->record.face7d = 0x80;                 /* heading 0 at the zero lane vector */
   mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;
   mr->render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
-  mr->keeper_cam_y = 0x30;                  /* Block D pan gate: > 0x20 */
+  mr->render.camera.pos_y = 0x30;                  /* Block D pan gate: > 0x20 */
   mr->keeper_latch[1] = 0u;                 /* 0x157C55 clear */
   mr->global_157c5c = 0u;
   e = &mr->entities.team[1].records[0];
@@ -8383,7 +8483,7 @@ static void test_action_1b_deep_pan_seed_extents(void) {
   e = match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
-  mr.keeper_cam_y = 0x20;
+  mr.render.camera.pos_y = 0x20;
   mr.keeper_latch[4] = 1;                   /* 0x157C58: the latch test -> pan */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
   assert(mr.keeper_latch[5] == 1);          /* 0x7721B [0x157C59] = 1 (Block E) */
@@ -8429,7 +8529,7 @@ static void test_action_1b_deep_pan_block_a_three_quarter(void) {
   keeper->pos_x = 0;
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
-  mr.keeper_cam_y = 0x48;
+  mr.render.camera.pos_y = 0x48;
   mr.keeper_latch[4] = 1;                   /* pan if Block B passes */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
   assert(mr.keeper_latch[5] == 0);
@@ -8441,7 +8541,7 @@ static void test_action_1b_deep_pan_block_a_three_quarter(void) {
   keeper->pos_x = 0x400;
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 2;                     /* ratio = 1 */
-  mr.keeper_cam_y = 0x5A;
+  mr.render.camera.pos_y = 0x5A;
   mr.keeper_latch[4] = 1;                   /* pan if Block B passes */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
   assert(mr.keeper_latch[1] == 1);         /* 0x770CE added the ratio */
@@ -8459,7 +8559,7 @@ static void test_action_1b_deep_pan_block_a_difficulty_adjust(void) {
   (void)match1b_deep_stage(&mr);
   (void)match1b_deep_track(&mr);
   mr.record.desc_c = 2;
-  mr.keeper_cam_y = 0x48;
+  mr.render.camera.pos_y = 0x48;
   mr.keeper_latch[4] = 1;
 
   mr.difficulty_14c2f6 = 0;                 /* 0x63 -> x3/4 -> 0x4B */
@@ -8470,7 +8570,7 @@ static void test_action_1b_deep_pan_block_a_difficulty_adjust(void) {
   (void)match1b_deep_stage(&mr);
   (void)match1b_deep_track(&mr);
   mr.record.desc_c = 2;
-  mr.keeper_cam_y = 0x48;
+  mr.render.camera.pos_y = 0x48;
   mr.keeper_latch[4] = 1;
   mr.difficulty_14c2f6 = 1;                 /* 0x59 -> x3/4 -> 0x43 */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8493,7 +8593,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   /* (a) the camY-zero 0xC0 bound. */
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
-  mr.keeper_cam_y = 0;
+  mr.render.camera.pos_y = 0;
   mr.keeper_latch[4] = 1;
   e->lane_x = 0xB0;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8505,7 +8605,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
   mr.record.face7d = 0;                     /* heading = 0x80 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 1;
   e->lane_x = 0x40;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8517,7 +8617,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
   mr.record.face7d = 0x80;                  /* heading = 0 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 1;
   e->lane_x = 0x40;
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8532,7 +8632,7 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 0;
   mr.record.face7d = 0;                     /* angle 0 -> heading 0 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 1;
   e->lane_x = 0x40;
   e->lane_z = 0;
@@ -8556,7 +8656,7 @@ static void test_action_1b_deep_pan_block_c_jitter(void) {
   keeper = match1b_deep_track(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 2;                     /* ratio = 1 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;                   /* the latch test falls to the pan */
   keeper->pos_z = -0x800;                   /* > 0x780: the jitter arm; side-1 band false */
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);   /* draw1 = 0x200 */
@@ -8574,7 +8674,7 @@ static void test_action_1b_deep_pan_block_c_jitter(void) {
   keeper->pos_z = -0x800;
   mr.difficulty_14c2f6 = 1;
   mr.record.desc_c = 2;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw1 = 0x4201 */
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8601,7 +8701,7 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
   keeper = match1b_deep_track(&mr);
   keeper->pos_z = -0x600;                   /* side-1 band false */
   mr.record.desc_c = 2;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.difficulty_14c2f6 = 0;                 /* 0x5A0: 0x600 > thr */
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw1 = 0x4201 */
@@ -8612,7 +8712,7 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
   keeper = match1b_deep_track(&mr);
   keeper->pos_z = -0x600;                   /* side-1 band false */
   mr.record.desc_c = 2;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.difficulty_14c2f6 = 1;                 /* 0x780: 0x600 not > thr */
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
@@ -8628,7 +8728,7 @@ static void test_action_1b_deep_pan_block_c_threshold(void) {
   keeper = match1b_deep_track(&mr);
   keeper->pos_z = -0x800;                   /* side-1 band false */
   mr.record.desc_c = 34;                    /* ratio = 17 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.difficulty_14c2f6 = 0;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
@@ -8823,7 +8923,7 @@ static void test_action_1b_deep_pan_keeper_band(void) {
   keeper->pos_z = 0x750;                    /* > t2: flag = 1 */
   mr.difficulty_14c2f6 = 0;                 /* 0x5A0 threshold; 0x750 > it */
   mr.record.desc_c = 10;                    /* ratio = 5 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;                   /* Block F sign + */
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* draw 0x4201 -> jitter 2 */
@@ -8840,7 +8940,7 @@ static void test_action_1b_deep_pan_keeper_band(void) {
   keeper->pos_z = 0x740;                    /* < t2: flag = 0 */
   mr.difficulty_14c2f6 = 0;
   mr.record.desc_c = 10;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8856,7 +8956,7 @@ static void test_action_1b_deep_pan_keeper_band(void) {
   mr.entities.team[1].side = 0;
   mr.difficulty_14c2f6 = 0;
   mr.record.desc_c = 10;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
@@ -8871,7 +8971,7 @@ static void test_action_1b_deep_pan_keeper_band(void) {
   mr.entities.team[1].side = 0;
   mr.difficulty_14c2f6 = 0;
   mr.record.desc_c = 10;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8886,7 +8986,7 @@ static void test_action_1b_deep_pan_keeper_band(void) {
   keeper->pos_z = 0x750;
   mr.difficulty_14c2f6 = 0;
   mr.record.desc_c = 10;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8904,7 +9004,7 @@ static void test_action_1b_deep_pan_sign_match_vector(void) {
   (void)match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;
   mr.render.camera.timer_limit = 0x20;
   mr.render.camera.timer = 0x10;
@@ -8921,7 +9021,7 @@ static void test_action_1b_deep_pan_sign_match_vector(void) {
   (void)match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = -0x30;
   mr.render.camera.timer_limit = 0x20;
   mr.render.camera.timer = 0x10;
@@ -8949,7 +9049,7 @@ static void test_action_1b_deep_pan_seat_height(void) {
   keeper->pos_z = 0x800;                    /* > the difficulty-0 0x5A0 */
   mr.difficulty_14c2f6 = 0;
   mr.record.desc_c = 2;                     /* ratio 1 */
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_latch[4] = 0;
   mr.render.camera.event_suspended = 1;     /* 0x7741A clears it */
   assert(fifa96_rng_seed(&mr.rng, 32) == FIFA96_OK);  /* jitter = 2 */
@@ -8977,7 +9077,7 @@ static void test_action_1b_deep_pan_install_tree(void) {
   (void)match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -8992,7 +9092,7 @@ static void test_action_1b_deep_pan_install_tree(void) {
   (void)match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;
   mr.render.camera.timer_limit = 0x40;      /* delta 0x30 -> post-seat vel_z < 0 */
   mr.render.camera.timer = 0x10;
@@ -9009,7 +9109,7 @@ static void test_action_1b_deep_pan_install_tree(void) {
   mr.state.phase = 0x10u;
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = 0x30;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -9020,7 +9120,7 @@ static void test_action_1b_deep_pan_install_tree(void) {
   (void)match1b_deep_stage(&mr);
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = -0x30;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -9035,7 +9135,7 @@ static void test_action_1b_deep_pan_install_tree(void) {
   mr.state.phase = 0x10u;
   mr.difficulty_14c2f6 = 1;
   mr.keeper_latch[4] = 1;
-  mr.keeper_cam_y = 0x30;
+  mr.render.camera.pos_y = 0x30;
   mr.keeper_cam_z = -0x30;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
@@ -9317,6 +9417,8 @@ int main(void) {
   test_keeper_installer_reach();
   test_keeper_installer_live_permit();
   test_keeper_installer_live_reach();
+  test_row1e_cam_y_raw_store();
+  test_keeper_cam_y_single_cell();
   test_keeper_live_follow_speed_seam();
   test_action_1b_deep_pan_seed_extents();
   test_action_1b_deep_pan_block_b_bounds();

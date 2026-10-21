@@ -1814,7 +1814,7 @@ static void test_action_1D_runs_closedown(void) {
   f.mr.record.row44 = 1;
   f.mr.record.timer89 = 0x1E;
   f.mr.keeper_cam_x = 10;
-  f.mr.keeper_cam_y = 20;
+  f.mr.render.camera.pos_y = 20;
   f.mr.keeper_cam_z = 30;
   f.mr.state.phase = 1;
   f.mr.phase_machine.state = 1;
@@ -3438,7 +3438,7 @@ static void test_action_19_hold_guard_binds_camera(void) {
   team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
   f.mr.keeper_cam_x = 0x400;           /* > 0x390 -> clamped */
-  f.mr.keeper_cam_y = 0;
+  f.mr.render.camera.pos_y = 0;
   f.mr.keeper_cam_z = 0x1000;          /* > 0xAE0 -> hold_guard sets +0xAE0 */
   assert(fifa96_match_dispatch_action(&f.mr, 0x19) == FIFA96_OK);
   assert(team->tracker7c7 == 0);       /* the deepest-keeper tracker bound */
@@ -3468,7 +3468,11 @@ static void test_action_1b_head_bind_same_dispatch_finish(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   assert(f.mr.keeper_cam_x == 0x200);                    /* head camera place */
   assert(f.mr.keeper_cam_z == 0x30);
-  assert(f.mr.keeper_cam_y == 0x10 + 0x38);
+  /* FU307-L4: the head's `0x76DB5` Y store lands on the single camera cell and
+   * the flag-1 place stages the same value for the frame drain. */
+  assert(f.mr.render.camera.pos_y == 0x10 + 0x38);
+  assert(f.mr.record.place_valid == 1);
+  assert(f.mr.record.place_y == 0x10 + 0x38);
   assert(e->code != 0x19u);                              /* controlled -> no install */
   drop_fixture(&f);
 }
@@ -3504,7 +3508,7 @@ static void test_action_19_guard_tracked_opponent_rejects(void) {
   team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
   f.mr.keeper_cam_x = 0;
-  f.mr.keeper_cam_y = 0;
+  f.mr.render.camera.pos_y = 0;
   f.mr.keeper_cam_z = 0;
   /* the opponent team target points at a record whose lane word is -1, so
    * `rec_lane(0) >= opp_lane(-1)` -> the 0x747EA rejection fires. */
@@ -3651,7 +3655,7 @@ static void test_action_1b_wide_route_binds_pan(void) {
   f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
   f.mr.keeper_latch[1] = 0;             /* 0x157C55 clear */
   f.mr.global_157c5c = 0;               /* the latch clear -> the wide route */
-  f.mr.keeper_cam_y = 0x30;             /* Block D: > 0x20 -> the pan block */
+  f.mr.render.camera.pos_y = 0x30;             /* Block D: > 0x20 -> the pan block */
   f.mr.keeper_cam_z = 0x30;             /* Block F sign +; the tree's p >= 0 */
   e->lane_x = 0;                        /* the 0x7700E rush gate passes */
   e->bound = 0;
@@ -3908,7 +3912,7 @@ static void test_action_1c_live_route(void) {
   f.mr.entities.team[0].side = 0;
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
   f.mr.keeper_cam_x = 0;
-  f.mr.keeper_cam_y = 0;
+  f.mr.render.camera.pos_y = 0;
   f.mr.keeper_cam_z = -0x7B0;             /* the side-0 inside box */
   f.mr.entities.ball.pair.actor = 1;      /* the ball ack gates pass */
   f.mr.entities.ball.pair.ack = 1;

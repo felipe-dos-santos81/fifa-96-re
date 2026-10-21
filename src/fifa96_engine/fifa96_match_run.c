@@ -2122,7 +2122,6 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
    * cleared — a fixture reading them before the first row-1B/1E write saw the
    * caller's stack. Zero the native BSS defaults. */
   mr->keeper_cam_x = 0;
-  mr->keeper_cam_y = 0;
   mr->keeper_cam_z = 0;
   mr->keeper_reset_x = 0;
   mr->keeper_reset_y = 0;
@@ -2292,7 +2291,6 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
    * "Init/begin zero them"); without this a fresh match inherits the previous
    * match's keeper band. */
   mr->keeper_cam_x = 0;
-  mr->keeper_cam_y = 0;
   mr->keeper_cam_z = 0;
   mr->keeper_reset_x = 0;
   mr->keeper_reset_y = 0;

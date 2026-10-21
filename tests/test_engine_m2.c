@@ -2457,7 +2457,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
     /* v7 (P3 keeper pre-state): the keeper process cells are fresh before the
      * row-1E staging and the staged record (team 0, record 9) does not carry
      * the ball yet. */
-    assert(mr->keeper_cam_x == 0 && mr->keeper_cam_y == 0 &&
+    assert(mr->keeper_cam_x == 0 && mr->render.camera.pos_y == 0 &&
            mr->keeper_cam_z == 0);
     assert(mr->keeper_reset_x == 0 && mr->keeper_reset_y == 0 &&
            mr->keeper_reset_z == 0);
@@ -2701,7 +2701,7 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
      * fixture-proven, test_engine_match_frame::test_keeper_claim_*). */
     assert(mr->entities.team[0].records[9].code == 0x1Eu);
     assert(mr->entities.team[0].records[9].has_ball == 0u);
-    assert(mr->keeper_cam_x == 0 && mr->keeper_cam_y == 0 && mr->keeper_cam_z == 0);
+    assert(mr->keeper_cam_x == 0 && mr->render.camera.pos_y == 0 && mr->keeper_cam_z == 0);
     /* --- v11 (phase-11 acceptance, T3): the ball-machine stratum. ---
      * The FUN_0008BAF0 machine (phase-11 T2, FU-148 §16) runs every granted
      * frame; from the m 41 phase-2 flip the camera lead (period 1 <= 3)

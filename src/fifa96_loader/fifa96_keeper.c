@@ -624,6 +624,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
       s->cam_y = s->pos.y;
       s->cam_z = s->pos.z;
       s->cam_y = 0x38;                                             /* 0x75a0f */
+      out->cam_y_written = 1;                                      /* the raw store, no 0x700f4 */
       if (s->vel71_nonzero == 0) {                                 /* 0x75a18 */
         s->cam_z += (s->side == 0) ? 0x10 : -0x10;                 /* 0x75a25/0x75a2c */
       } else {
@@ -752,6 +753,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
       s->cam_y = s->pos.y;
       s->cam_z = s->pos.z;
       s->cam_y = 0x10;                                             /* 0x75eea */
+      out->cam_y_written = 1;                                      /* the raw store, no 0x700f4 */
       s->cam_x = s->pos.x + (int32_t)s->offset_x * 5 * 0x10;       /* 0x75ec4 (x*4+x)<<4 */
       s->cam_z = s->pos.z + (int32_t)s->offset_z * 5 * 0x10;       /* 0x75ef4 */
       staging_event = 0x0B;                                        /* 0x75f14 */
@@ -763,6 +765,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
       s->cam_y = s->pos.y;
       s->cam_z = s->pos.z;
       s->cam_y = 0x80;                                             /* 0x75f86 */
+      out->cam_y_written = 1;                                      /* the raw store, no 0x700f4 */
       s->cam_x = s->pos.x + ((int32_t)s->offset_x << 6);           /* 0x75f9e */
       s->cam_z = s->pos.z + ((int32_t)s->offset_z << 6);
       staging_event = 0x0C;                                        /* 0x75fca */

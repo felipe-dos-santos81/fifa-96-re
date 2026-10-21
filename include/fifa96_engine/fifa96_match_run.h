@@ -663,14 +663,19 @@ struct fifa96_match_run {
   int32_t actor_1587cc[2];
   /* FU-151 P3 (keeper machines): the process cells the row-1E/1D machines
    * carry across frames — the 0x15774C/50/54 camera focus (the FU-147 leg-13
-   * render-camera stand-in: the engine keeps its own derived cell so the
-   * machine's hold-follow writes do not move the real FU-71 camera), the
-   * 0x157A77 reset triple (the [0x10F328] constant = (0,0,0), FU-140), the
+   * render-camera stand-in for X/Z: the engine keeps its own derived cells so
+   * the machine's hold-follow writes do not move the real FU-71 camera X/Z),
+   * the 0x157A77 reset triple (the [0x10F328] constant = (0,0,0), FU-140), the
    * 0x157C30 `{band,dx,dz}` staging vector, the 0x157C36 saved point, the
    * 0x157C42 travelled gauge, the [0x157AB2] latch and the stage-6
    * [0x157820]/[0x157822] animation flags (their native consumers outside
-   * row 1E stay FU-151 leg 15). Init/begin zero them. */
-  int32_t keeper_cam_x, keeper_cam_y, keeper_cam_z;
+   * row 1E stay FU-151 leg 15). Init/begin zero them.
+   *
+   * FU307-L4 (phase-29 T3): `dword[0x157750]` has NO stand-in here — it is one
+   * native cell and the engine keeps exactly one: `render.camera.pos_y`
+   * (`fifa96_match_handlers.c` stages it into the keeper machines and applies
+   * the row-1E raw-store cuts back to it). */
+  int32_t keeper_cam_x, keeper_cam_z;
   int32_t keeper_reset_x, keeper_reset_y, keeper_reset_z;
   int16_t keeper_vec_band, keeper_vec_dx, keeper_vec_dz;
   int16_t keeper_saved_x, keeper_saved_z;
