@@ -388,9 +388,11 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
  * (`0x70C08..0x70DDD`) — the per-record camera event FUN_0007BF20's tail
  * (0x7C8FC) runs for every record. First-hand body: skip when `rec+0x9A != 0`
  * or (`rec+0x91 == 0x22` and ball height < 0x20); two shift-stepped seeds
- * `v1 = shift2(event_step_x - (pos_x - target_x))`, `v2 = shift2(event_step_z
- * - (pos_z - target_z))` (the native 0x1577BA/BC step pair minus the
- * `[0x15774C] - [0x157764]` origin correction); when both are zero, three RNG
+ * `v1 = shift2(word(event_step_x - (pos_x - target_x)))`, `v2 =
+ * shift2(word(event_step_z - (pos_z - target_z)))` (the native 0x1577BA/BC
+ * step pair minus the `[0x15774C] - [0x157764]` origin correction; both
+ * differences are word stores and `0x8DC50` sign-tests the word, FU306
+ * §5.2 item 3); when both are zero, three RNG
  * draws give `t = (draw1 & 0x3F) + 0x30` and the two signs (draw2/draw3);
  * then either the re-seed `event_param := ball_height` with one seed
  * reflected (when `sext(height_5d + 0x68) > ball_height`, 0x70CFA..0x70D03:
@@ -405,8 +407,10 @@ int fifa96_camera_reposition(fifa96_camera *cam, int32_t prev_x, int32_t prev_y,
  * 0x70D05..0x70D41; T2-review erratum, fix round 1 — the pre-fix comment
  * split `rec+0x5D > ball_height -> ramp` and negated `v2` on `e1 > e2`);
  * then the `0x8DC68` distance and
- * `fifa96_camera_event_set(cam, v1, v2, event_param, 0)` (the native
- * FUN_00071C94 with the vector `{distance, v1, v2}` and ECX 0). `cam` supplies
+ * `fifa96_camera_event_set(cam, v1, v2, event_param, 1)` (the native
+ * FUN_00071C94 with the vector `{distance, v1, v2}` and ECX 1; FU306 erratum
+ * 1 — the native `0x70DBA MOV ECX,1` survives the `0x92820` sink and takes
+ * the FUN_00070544 ADD sign). `cam` supplies
  * the `[0x1577BA]/[0x1577BC]` step pair (`event_step_x/z`), the target/origin
  * correction (`target_*`), the `[0x1577C0]/[0x1577C2]` velocities, the
  * `[0x1577BE]` bearing (`speed`) and the `[0x1577F0]` event height

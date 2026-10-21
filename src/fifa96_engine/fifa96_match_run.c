@@ -572,16 +572,20 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
  * [0x1577CA] pool id. **M2 phase-11 T1 (L14.7):** the height word is the
  * exact native cell `dword[0x157750]` = the camera Y (`camera.pos_y`, the
  * FUN_00070B94 arc producer) — the earlier `ball.y` stand-in is superseded
- * now that the producer is live. */
+ * now that the producer is live. **M2 phase-29 T4 (FU306 §5.2 item 2 /
+ * L3):** `live_pos_y` is the record's just-stepped `+0x5D` (`r->pos_y`,
+ * after the `0x7C057..0x7C113` jump arc), not the pool value the dispatch
+ * writes back later — the native reads the live dword. */
 static void match_run_record_camera_event(struct fifa96_match_run *mr,
-                                          struct fifa96_match_entity *e) {
+                                          struct fifa96_match_entity *e,
+                                          int16_t live_pos_y) {
   fifa96_camera *cam = &mr->render.camera;
   fifa96_camera_record_event_in in;
   fifa96_camera_record_event_out out;
   int32_t id = (int32_t)((uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS +
                          e->index);
   int16_t ball = (int16_t)cam->pos_y;         /* 0x157750 (T1/L14.7) */
-  int16_t height_5d = (int16_t)e->pos_y;
+  int16_t height_5d = live_pos_y;
   if ((int16_t)e->lane_x > 0x10) return;                    /* 0x7C7D3 */
   if ((int16_t)e->lane_x >= (int16_t)e->bound) return;      /* 0x7C7E2 */
   if (mr->flag_157820 != 0 || mr->flag_157822 != 0) return; /* 0x7C7F0/FD */
@@ -1505,8 +1509,10 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
     }
   }
   /* The BF20 tail's per-record camera event (native 0x7C8FC, after the lane
-   * block): FU-147 §3.3 leg 7, first-hand gate bytes at the helper above. */
-  match_run_record_camera_event(mr, e);
+   * block): FU-147 §3.3 leg 7, first-hand gate bytes at the helper above.
+   * FU306 §5.2 item 2: the native tail reads the live `+0x5D`; `r->pos_y`
+   * carries the just-stepped jump arc (the pool write-back below lags it). */
+  match_run_record_camera_event(mr, e, (int16_t)r->pos_y);
   e->pos_x = r->pos_x;
   e->pos_y = r->pos_y;
   e->pos_z = r->pos_z;

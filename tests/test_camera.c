@@ -1026,6 +1026,70 @@ static void test_record_event_height_ramp(void) {
   assert(cam.event_param == 0x100);
 }
 
+/* M2 phase-29 T4 (FU306 §5.2 item 1 / erratum 1, closes FU306-L2): the
+ * chaser's FUN_00071C94 call passes `ECX = 1` (native `0x70DBA MOV ECX,1`,
+ * preserved by the `0x92820` sink's PUSH/POP ECX). The ramp sign is
+ * observable in F6/F8: camY 0x10 and the reflected event height 0x20 give
+ * F2 = ramp(0x20) = 21, ramp(0x10) = 15, so ECX=1 gives
+ * F6 = 21 + 15 = 36, F8 = 42 - 36 = 6; the old ECX=0 gives F6 = 6, F8 = 36
+ * (and the two seeds floor to zero velocity at the F8 = 36 divide). */
+static void test_record_event_chaser_ramp_param_one(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  memset(&in, 0, sizeof in);
+  assert(fifa96_camera_init(&cam, 0x100, 0x10, 0x200) == FIFA96_OK);
+  cam.target_x = 0x100;
+  cam.target_z = 0x200;
+  cam.event_step_x = 30;                      /* v1 = 7 */
+  cam.event_step_z = 40;                      /* v2 = 10, reflected to -10 */
+  cam.event_param = 0x20;
+  in.action_91 = 3;
+  in.height_5d = 0;
+  in.ball_height = 0x20;                      /* 0x68 > 0x20 -> reflect arm */
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  assert(out.applied == 1);
+  assert(out.vec_1 == 7 && out.vec_2 == -10);
+  assert(cam.event_param == 0x20);            /* re-seeded to the ball height */
+  assert(cam.event_peak == 21);
+  assert(cam.timer == 36);                    /* F6 = F2 + ramp(0x10) */
+  assert(cam.timer_limit == 42);              /* F4 = 2 * F2 */
+  assert(cam.ramp_divisor == 6);              /* F8 = F4 - F6 */
+  assert(cam.band_1577f6 == 36);              /* [0x1577F6] = F6 */
+  assert(cam.vel_x == 1 && cam.vel_z == -1);  /* the seeds at F8 = 6 */
+}
+
+/* M2 phase-29 T4 (FU306 §5.2 item 3, closes FU306-L4): the native stores the
+ * seed difference as a word and 0x8DC50 sign-tests AX (CWDE), so the
+ * 16-bit wrap applies before the shift. 0x7FFF - (0 - 0x8000) is 0xFFFF
+ * (0x8DC50(-1) = 0); 0x0001 - (0 - 0x8000) is 0x8001 -> 0x8DC50(-0x7FFF) =
+ * -0x1FFF. The un-wrapped 32-bit port returns 0x3FFF / 0x2000. */
+static void test_record_event_seed_word_wrap(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_record_event_in in;
+  fifa96_camera_record_event_out out;
+  memset(&in, 0, sizeof in);
+  in.action_91 = 3;
+  in.height_5d = 0;
+  in.ball_height = 0x100;                     /* the ramp arm: no reflection */
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  cam.target_x = 0x8000;                      /* camX - targetX = -0x8000 */
+  cam.event_step_x = 0x7FFF;
+  cam.event_step_z = 40;                      /* v2 = 10 (non-zero: no jitter) */
+  cam.event_param = 0x20;
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  assert(out.vec_1 == 0);
+  assert(out.vec_2 == 10);
+  assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
+  cam.target_x = 0x8000;                      /* camX - targetX = -0x8000 */
+  cam.event_step_x = 0x0001;                  /* 1 - (-0x8000) wraps to 0x8001 */
+  cam.event_step_z = 40;
+  cam.event_param = 0x20;
+  assert(fifa96_camera_record_event(&cam, NULL, &in, &out) == 1);
+  assert(out.vec_1 == -0x1FFF);
+  assert(out.vec_2 == 10);
+}
+
 static void test_record_event_jitter_and_gates(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_record_event_in in;
@@ -1751,6 +1815,8 @@ int main(void) {
   test_update_walk_gate();
   test_record_event_reflect_and_event();
   test_record_event_height_ramp();
+  test_record_event_chaser_ramp_param_one();
+  test_record_event_seed_word_wrap();
   test_record_event_jitter_and_gates();
   test_tracked_record();
   test_reposition_flag_overlap_noop();

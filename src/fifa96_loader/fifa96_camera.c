@@ -726,7 +726,9 @@ int16_t fifa96_camera_mul16(int32_t a, int32_t b) {
 /* FU-152 §2.9 (T2): FUN_00070544 — the ramp/velocity/anchor setup, split out
  * of FUN_00071C94 so FUN_000709D0 can re-run it. `seed_x`/`seed_z` are the
  * native stored step pair 0x1577BA/BC (the fast-path dividend); `ramp_param`
- * is the caller's FUN_00070544 EAX argument (0 -> the NEG F6 path). */
+ * is the FUN_00071C94 ECX argument that reaches FUN_00070544 as its EAX sign
+ * param (0 -> the NEG F6 path, the receive/row-04 arm; 1 -> the ADD path, the
+ * chaser's `0x70DBA MOV ECX,1`, FU306 erratum 1). */
 static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
                              int ramp_param) {
   int16_t f2, f4, f6, f8;
@@ -1084,14 +1086,19 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
   if (in->action_91 == 0x22u && in->ball_height < 0x20) return 0;
   /* 0x70C3A..0x70CA1: the two shift-stepped seed corrections (the native
    * `[0x1577BA/BC] - ([0x15774C/54] - [0x157764/6C])`, 16-bit subtracts then
-   * the word store/re-read, >> 2 via 0x8DC50). */
+   * the word store/re-read, >> 2 via 0x8DC50). FU306 §5.2 item 3 / L4: both
+   * differences are word stores in the native (`0x70C58 word[ESP+2] = DX`,
+   * `0x70C8A word[ESP+4] = AX`), and 0x8DC50 sign-tests the word (`CWDE`),
+   * so the 16-bit wrap applies before the shift. */
   {
     int16_t dx =
         (int16_t)((uint16_t)cam->pos_x - (uint16_t)cam->target_x);
     int16_t dz =
         (int16_t)((uint16_t)cam->pos_z - (uint16_t)cam->target_z);
-    v1 = (int16_t)fifa96_camera_shift_step((int32_t)cam->event_step_x - (int32_t)dx, 2);
-    v2 = (int16_t)fifa96_camera_shift_step((int32_t)cam->event_step_z - (int32_t)dz, 2);
+    int16_t sx = (int16_t)(uint16_t)((uint16_t)cam->event_step_x - (uint16_t)dx);
+    int16_t sz = (int16_t)(uint16_t)((uint16_t)cam->event_step_z - (uint16_t)dz);
+    v1 = (int16_t)fifa96_camera_shift_step((int32_t)sx, 2);
+    v2 = (int16_t)fifa96_camera_shift_step((int32_t)sz, 2);
   }
   if (v1 == 0 && v2 == 0) {
     /* 0x70CB9..0x70CF7: three draws: t = (draw1 & 0x3F) + 0x30, then the
@@ -1149,16 +1156,19 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
       }
     }
   }
-  /* 0x70D9D..0x70DCE: the 0x8DC68 distance into the vector's first word, the
+  /* 0x70D9D..0x70DD1: the 0x8DC68 distance into the vector's first word, the
    * 0x92820(rec, 0x1C) sink request, then FUN_00071C94(rec, {dist, v1, v2},
-   * EBX = [0x1577F0], ECX = 0). */
+   * EBX = [0x1577F0], ECX = 1). FU306 §5.2 item 1 / erratum 1: the native
+   * `0x70DBA MOV ECX,1` survives the sink's PUSH/POP ECX and `0x71D60`
+   * consumes it as the FUN_00070544 ramp sign (the ADD arm); the pre-fix
+   * ECX=0 took the SUB arm. */
   out->distance = (int16_t)fifa96_entity_distance(v1, v2);
   out->sink = 1;
   out->sink_code = 0x1C;
   out->vec_1 = v1;
   out->vec_2 = v2;
   {
-    int ev = fifa96_camera_event_set(cam, v1, v2, (int16_t)cam->event_param, 0);
+    int ev = fifa96_camera_event_set(cam, v1, v2, (int16_t)cam->event_param, 1);
     if (ev < 0) return -FIFA96_ERR_INVALID;
     /* FU303/FU294-L2 (phase-28 T8): FUN_00071C94's actor dir arm over the
      * record this event belongs to. */

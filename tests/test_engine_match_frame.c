@@ -1833,6 +1833,123 @@ static void test_record_event_gate_live_from_height_producer(void) {
   assert(mr.render.camera.event_param == (uint16_t)mr.render.camera.pos_y);
 }
 
+/* M2 phase-29 T4 (FU306 §5.2 item 2, closes FU306-L3): the chaser and its
+ * caller read the live `+0x5D` — the record's just-stepped jump arc — not the
+ * previous frame's pool value. The pool stages 0x40 (the pre-jump height)
+ * while the frame's `0x7C057..0x7C113` arc lands at
+ * T[0x94-0x1E] - T[0x94-0x20] = 1535 - 1526 = 9. The stale read would skip
+ * (0x40 > camY 0x10); the live read passes the band, fires the reflect arm
+ * (`event_param := camY`) and the write-back stores the arc height. */
+static void test_record_event_uses_live_height_5d(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[1];
+  e->has_slot = 0;
+  e->active = 1;
+  e->code = 3;
+  e->lane_x = 0x20;                  /* old lane: the fresh 0x10 < 0x20 */
+  e->bound = 0x20;
+  e->pos_x = 0x10;                   /* lane 0x10 */
+  e->pos_y = 0x40;                   /* the stale +0x5D */
+  e->jump_base = 0x20;               /* the arc: t = 0 + delta 2 -> 9 */
+  e->jump_timer = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* not rec: no forced/target churn */
+  mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  mr.render.camera.pos_y = 0x10;     /* 0x157750 */
+  mr.render.camera.paused = 1;
+  mr.render.camera.speed = 5;        /* [0x1577BE] > 4 */
+  mr.render.camera.event_param = 0;
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 1u)) mr.entities.team[t].records[i].skip_9a = 1;
+  one_granted_frame(&mr);
+  assert(e->pos_y == 9);                     /* the arc ran and was written back */
+  assert(mr.render.camera.event_param == 0x10);   /* the reflect arm fired */
+  assert(mr.render.camera.tracked == 1);     /* 0x71D27 rebind */
+}
+
+/* M2 phase-29 T4 (FU306 §4 item 3 / §6, review erratum 2): the one-shot
+ * re-arm on the live frame path. The native tail skips the tracked record
+ * (`0x7C83E CMP EBP,EAX; JZ 0x7C901`) and the applied setter rebinds tracked
+ * to the firing record (`0x71D27`), so a record fires once per tracking epoch
+ * and a different in-band record hands the window over.
+ *
+ *   frame 1: nothing tracked -> record 2 (id 2) fires in the ramp arm
+ *            (target height_5d+0x70 = 0x70, event 0x10 -> event_param 0x40,
+ *            clamped up to camY 0x68 by FUN_00071C94); tracked := 2 and the
+ *            setter's pan-counter reset re-opens follow gate 1;
+ *   frame 2: record 2 is still in band and approaching (lane 8 < bound 0x10)
+ *            and is now the tracked record -> 0x7C83E skips it; event_param
+ *            stays 0x68 (a second fire would ramp it to 0x6C);
+ *   frame 3: record 1 (id 1) enters the band while record 2 leaves it ->
+ *            the non-tracked record fires and hands the tracking over
+ *            (tracked := 1, event_param := 0x6C). */
+static void test_record_event_one_shot_rearm(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *b;
+  struct fifa96_match_entity *c;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  b = &mr.entities.team[0].records[2];
+  c = &mr.entities.team[0].records[1];
+  b->has_slot = 0;
+  b->active = 1;
+  b->code = 3;
+  b->lane_x = 0x20;                  /* old lane -> the event gate's bound */
+  b->bound = 0x20;
+  b->pos_x = 0x10;                   /* lane 0x10 <= 0x10 and < 0x20 */
+  b->pos_y = 0;
+  mr.entities.team[0].side = 0;
+  mr.entities.team[1].side = 1;
+  mr.entities.team[0].target = 2;    /* record 2 is the team target: no chase */
+  mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.team[1].target = FIFA96_MATCH_ENTITY_NONE;
+  mr.entities.controlled = 11;
+  mr.render.camera.pos_y = 0x68;     /* 0x157750: the +0x70 band's upper edge */
+  mr.render.camera.paused = 1;
+  mr.render.camera.speed = 5;
+  mr.render.camera.event_param = 0x10;
+  mr.render.camera.event_step_x = 0x7FFF;   /* v1/v2 = 0x1FFF: the event keeps */
+  mr.render.camera.event_step_z = 0x7FFF;   /* the post-fire bearing > 4 */
+  mr.render.camera.pan_counter = 7;         /* the setter's reset observable */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 0u && i == 2u)) mr.entities.team[t].records[i].skip_9a = 1;
+
+  one_granted_frame(&mr);                   /* frame 1: record 2 fires */
+  assert(b->active == 1);
+  assert(b->code != 8u && b->code != 9u);
+  assert(mr.render.camera.tracked == 2);    /* 0x71D27 tracked := rec */
+  assert(mr.render.camera.event_param == 0x68);
+  assert(mr.render.camera.pan_counter == 0);   /* the follow-window re-open */
+
+  b->pos_x = 8;                             /* approaching: 8 < bound 0x10 */
+  one_granted_frame(&mr);                   /* frame 2: 0x7C83E skips rec 2 */
+  assert(mr.render.camera.tracked == 2);
+  assert(mr.render.camera.event_param == 0x68);   /* no second fire (0x6C) */
+
+  b->pos_x = 0x20;                          /* leaves the band */
+  c->has_slot = 0;
+  c->active = 1;
+  c->code = 3;
+  c->lane_x = 0x20;
+  c->bound = 0x20;
+  c->pos_x = 0x10;
+  c->pos_y = 0;
+  c->skip_9a = 0;                           /* enters the walk */
+  one_granted_frame(&mr);                   /* frame 3: rec 1 takes over */
+  assert(mr.render.camera.tracked == 1);
+  assert(mr.render.camera.event_param == 0x6C);
+}
+
 /* M2 phase-9 T1 / FU-75 L4.6 (FU-138 OL-18): the live held-key movement on the
  * real frame path. The formation-seeded kickoff leaves the FU-70 slot on team
  * 0 record 9 (`locomotion_restart_target`, first-hand probe: code 02, vel 0),
@@ -9466,6 +9583,8 @@ int main(void) {
   test_input_options_producer_sets_range_bits();
   test_record_event_tail_gate_fires_in_frame();
   test_record_event_gate_live_from_height_producer();
+  test_record_event_uses_live_height_5d();
+  test_record_event_one_shot_rearm();
   test_ball_head_error_shift_mask();
   test_ball_machine_phase2_open_play_lead();
   test_held_key_moves_live_controlled_record();
