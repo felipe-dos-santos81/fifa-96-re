@@ -520,6 +520,21 @@ static void test_keeper_cpu_stage_select(void) {
   rec = kc_ladder_open(0);
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
   assert(sel.ran == 1 && sel.stage == 0);
+
+  /* FU308 (phase-29 T1): the CX=1 third operand is the LIVE word 0x1577BE
+   * (`(int16)camera.speed`), not the derived 0x739CE pre-tail snapshot. The
+   * native `0x78046 MOV EAX,[0x1577BC]; 0x7804B SAR EAX,0x10;
+   * 0x7804E CMP EAX,0xA; JGE` keeps the arm only while the word is < 0xA:
+   * 9 opens it, 0xA closes it (same record, only the speed cell moves). */
+  rec = kc_rec_zero();
+  rec.cam_z = 0x800;
+  rec.global_157a4c = 1;
+  rec.follow_speed = 9;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 1);
+  rec.follow_speed = 0xA;                          /* 0x7804E CMP EAX,0xA */
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.ran == 1 && sel.stage == 0);
 }
 
 /* FU290 (phase-27 T5) RED->GREEN — the ladder now COMPUTES the stage index from

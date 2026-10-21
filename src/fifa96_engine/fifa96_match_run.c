@@ -1583,7 +1583,13 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->cam_pos_x = mr->render.camera.pos_x;
   f->cam_pos_y = mr->render.camera.pos_y;
   f->cam_pos_z = mr->render.camera.pos_z;
-  f->follow_speed = mr->render.camera.follow_speed;
+  /* FU308 (phase-29 T1): the keeper CX=1 gate `0x78046 MOV EAX,[0x1577BC];
+   * 0x7804B SAR EAX,0x10; 0x7804E CMP EAX,0xA` reads the LIVE word
+   * `0x1577BE` — `(int16)camera.speed`, written by the walk tail (0x73CB8)
+   * and the follow/pan arms. `camera.follow_speed` is the derived pre-tail
+   * snapshot captured at the 0x739CE follow gate (before those writes); it
+   * stays for that gate only (`fifa96_match_run_camera_follow`), not here. */
+  f->follow_speed = (int16_t)mr->render.camera.speed;
   f->pan_counter = mr->render.camera.pan_counter;
   f->global_157a4c = mr->global_157a4c;
   /* FU300 (phase-28 T4; fix-wave unification): the native raw dwords

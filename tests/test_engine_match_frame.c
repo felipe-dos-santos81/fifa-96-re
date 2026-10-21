@@ -3755,6 +3755,87 @@ static void test_keeper_installer_live_reach(void) {
   drop_fixture(f);
 }
 
+/* FU308 §6.6 (phase-29 T1): the keeper `follow_speed` seam — the frame bind
+ * feeds the LIVE word `0x1577BE` (`(int16)camera.speed`), not the derived
+ * 0x739CE pre-tail snapshot (`camera.follow_speed`).
+ *
+ * Native bytes (FU308 §6.1, fresh): `0x78046 MOV EAX,[0x1577BC]; 0x7804B
+ * SAR EAX,0x10; 0x7804E CMP EAX,0xA; JGE 0x78065` — the CX=1 arm reads the
+ * word at `0x1577BE`, i.e. the high half of the dword, which the walk tail
+ * (`0x73CB8`) and the follow/pan arms write. The engine's
+ * `camera.follow_speed` is the value captured at the `0x739CE` follow gate,
+ * BEFORE the follow arm and the tail recompute that write the live cell.
+ *
+ * The witness stages only a producer input: `camera.vel_x` before the granted
+ * frame. The walk tail computes `speed = distance(vel_x, vel_z)` with no
+ * integration and no follow arm (the entry `camera.speed` is 0, so the walk's
+ * `speed != 0` branch and the `0x739CE` `follow_speed == 0` gate both stay
+ * closed), leaving `camera.follow_speed == 0` while the live cell is the
+ * staged value at the frame bind. Same Part-B fixture as
+ * `test_keeper_installer_live_reach`: team 0's
+ * row `0x19` arms team 1's same-frame ladder step, and team 1's keeper (lane 0,
+ * camera height 0) is CX=1-eligible apart from the speed word.
+ *
+ * - `vel_x = 9` -> the live word is 9 (< 0xA): CX=1 opens, row `0x1A` installs
+ *   with the `0x2C` stamp and dispatches.
+ * - `vel_x = 0xA` -> the live word is 0xA (not < 0xA): CX=1 closes; the record
+ *   keeps row `0x19`, no stamp is published and row `0x1A` never dispatches
+ *   (the selector's table path returns at the `0x157824` side gate).
+ *
+ * RED on the phase-28 baseline (`f->follow_speed = camera.follow_speed` = 0):
+ * the 0xA frame installs and dispatches row `0x1A`, so the `0xA` assertions
+ * fail. */
+static void test_keeper_live_follow_speed_seam(void) {
+  struct fixture f = make_fixture(10000000ull);
+  static const int16_t staged_vel[2] = {9, 0xA};
+  for (int c = 0; c < 2; c++) {
+    struct fifa96_match_run mr;
+    struct fifa96_match_entity *k0;
+    struct fifa96_match_entity *k1;
+    fifa96_match_run_init(&mr);
+    begin_isolated(&mr, f.engine);
+    mr.state.phase = 2;
+    mr.state.period_length = 90;
+    mr.entities.team[0].side = 0;
+    mr.entities.team[1].side = 1;
+    mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+    mr.entities.team[0].slot_pool = 0;
+    mr.phase_machine.side_controlled = 1;           /* the row-0x1A record is kept */
+    mr.global_157a4c = 0;
+    mr.render.camera.pos_z = 0x800;                 /* the side-1 AX gate */
+    k0 = &mr.entities.team[0].records[0];
+    k0->code = 0x19u;
+    k0->skip_9a = 0u;
+    k0->timer81 = 0u;
+    k0->has_slot = 0u;
+    k1 = &mr.entities.team[1].records[0];
+    k1->code = 0x19u;
+    k1->skip_9a = 0u;
+    k1->timer81 = 0u;
+    k1->has_slot = 0u;
+    k1->lane = 0;                                   /* lane_x 0 -> the CX=1 path */
+    mr.render.camera.vel_x = staged_vel[c];         /* the walk-tail speed input */
+
+    one_granted_frame(&mr);
+    /* The walk tail recomputed the live word from the staged velocity while
+     * the 0x739CE snapshot stayed at its pre-tail 0 — the split the seam
+     * must resolve toward the live cell. (The dispatched row body may clear
+     * the live cell later in the frame; the bind reads it before that.) */
+    assert(mr.render.camera.follow_speed == 0);
+    if (staged_vel[c] == 9) {
+      assert(k1->code == 0x1Au);                    /* CX=1 open -> the row-0x1A install */
+      assert(mr.global_157c2c == 0x2Cu);            /* the ladder stamp */
+      assert((mr.dispatched_ok & (1ull << 0x1A)) != 0u);
+    } else {
+      assert(k1->code == 0x19u);                    /* CX=1 closed by speed 0xA */
+      assert(mr.global_157c2c != 0x2Cu);            /* no G2 stamp */
+      assert((mr.dispatched_ok & (1ull << 0x1A)) == 0u);
+    }
+    assert(fifa96_match_run_end(&mr) == 0);
+  }
+  drop_fixture(f);
+}
+
 /* FU304 §3 / FU300 §3.2-G1 (phase-28 T3): the merged Seam A install contract
  * + the `copy_pos` output — the seam-level pins.
  *
@@ -9170,6 +9251,7 @@ int main(void) {
   test_keeper_installer_reach();
   test_keeper_installer_live_permit();
   test_keeper_installer_live_reach();
+  test_keeper_live_follow_speed_seam();
   test_action_1b_deep_pan_seed_extents();
   test_action_1b_deep_pan_block_b_bounds();
   test_action_1b_deep_pan_block_a_three_quarter();
