@@ -8491,10 +8491,12 @@ static void test_action_1b_deep_pan_seat_height(void) {
  * `0x8F188`/`0x8ED40` requests the native sinks would receive.
  * - EDI 1 -> no event/stat, terminal sound 4 only;
  * - EDI 0, phase 0x10 -> 6 / 0x64;
- * - EDI 0, pan_x * camZ >= 0 -> 3 / 0x19 (+ the tracked 0x8ED40(…,5));
- * - EDI 0, pan_x * camZ < 0 -> 0 / 5.
- * `desc_1b = -127` makes Block E's C0 negative, so the post-seat velocity and
- * the product are negative. */
+ * - EDI 0, vel_z * camZ >= 0 -> 3 / 0x19 (+ the tracked 0x8ED40(…,5));
+ * - EDI 0, vel_z * camZ < 0 -> 0 / 5.
+ * The product's first factor is `word[0x1577C2]` after the seat (the setter's
+ * vel_z), not C0: with the `0x40`/`0x10` timer delta the post-seat vel_z is
+ * negative, so camZ 0x30 gives p < 0; the zero-delta scenarios leave vel_z 0
+ * and take the p >= 0 arm (p = 0). */
 static void test_action_1b_deep_pan_install_tree(void) {
   struct fifa96_match_run mr;
 
@@ -8504,10 +8506,9 @@ static void test_action_1b_deep_pan_install_tree(void) {
   mr.keeper_latch[4] = 1;
   mr.keeper_cam_y = 0x30;
   mr.keeper_cam_z = 0x30;
-  mr.render.camera.timer_limit = 0x20;
-  mr.render.camera.timer = 0x10;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_vec_z == 0);            /* the zero delta -> vel_z 0, p = 0 */
   assert(mr.match1b_sign_match == 0);
   assert(mr.match1b_event_id == 3);
   assert(mr.match1b_stat_id == 0x19);
@@ -8520,12 +8521,12 @@ static void test_action_1b_deep_pan_install_tree(void) {
   mr.keeper_latch[4] = 1;
   mr.keeper_cam_y = 0x30;
   mr.keeper_cam_z = 0x30;
-  mr.record.desc_1b = -127;                 /* C0 = 8 - 127 -> negative */
-  mr.render.camera.timer_limit = 0x20;
+  mr.render.camera.timer_limit = 0x40;      /* delta 0x30 -> post-seat vel_z < 0 */
   mr.render.camera.timer = 0x10;
   assert(fifa96_rng_seed(&mr.rng, 0) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
-  assert(mr.match1b_pan_x < 0);
+  assert(mr.match1b_vec_z == -0x90);        /* -3 * 0x30 */
+  assert(mr.render.camera.vel_z < 0);       /* the seat's seeded velocity */
   assert(mr.match1b_event_id == 0);
   assert(mr.match1b_stat_id == 5);
   assert(mr.match1b_stat_tracked == 0);

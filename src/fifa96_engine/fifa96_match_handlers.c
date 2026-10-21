@@ -4121,7 +4121,9 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
       event_id = 6u;                                      /* 0x8F188(6, rec, 8) */
       stat_id = 0x64u;                                    /* 0x8ED40(rec, 0x64) */
     } else if (sign_match == 0u) {                        /* 0x77458 */
-      int32_t p = (int32_t)(int16_t)cam->vel_x *           /* 0x7745C..0x7746A */
+      /* `0x7745C MOV EAX,[0x1577C0]; SAR 0x10` = word[0x1577C2] (the pan-z
+       * cell / the setter's post-seat vel_z) x dword[0x157754] (L9: word). */
+      int32_t p = (int32_t)(int16_t)cam->vel_z *
                   (int32_t)(int16_t)mr->keeper_cam_z;
       if (p >= 0) {                                       /* 0x7746F JGE */
         event_id = 3u;                                    /* 0x8F188(3, rec, 0x20) */

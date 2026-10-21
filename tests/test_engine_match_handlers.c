@@ -3521,8 +3521,8 @@ static void test_action_1b_wide_route_binds_pan(void) {
   assert(f.mr.match1b_hypot == 9);           /* 0xCD514(8, 13) */
   /* The seat height is the camY cell (0x77228's dword[0x157750] low word). */
   assert(f.mr.render.camera.event_param == 0x30);
-  /* Block F/G: C2 < 0 and camZ 0 > 0 -> EDI 0; the post-seat velocity x is 0
-   * (the zero timer delta), so the install tree's p >= 0 arm runs. */
+  /* Block F/G: C2 < 0 and camZ 0 > 0 -> EDI 0; the post-seat velocity pair is
+   * 0 (the zero timer delta), so the install tree's p >= 0 arm runs. */
   assert(f.mr.match1b_sign_match == 0);
   assert(f.mr.match1b_event_id == 3);        /* 0x8F188(3, rec, 0x20) */
   assert(f.mr.match1b_stat_id == 0x19);      /* 0x8ED40(rec, 0x19) */
