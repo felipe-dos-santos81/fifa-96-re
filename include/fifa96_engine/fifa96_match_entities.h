@@ -332,6 +332,13 @@ struct fifa96_match_entities_frame {
   int16_t follow_speed;
   uint8_t pan_counter;
   uint8_t global_157a4c;
+  /* FU303 (phase-28 T8) / FU292-L2: the ramp-band cells the ladder reads.
+   * `band_fa` = word[0x1577FA] (the camera timer) and
+   * `band_f6` = word[0x1577F6] = timer_limit - ramp_divisor (the 0x705e8
+   * `F8 = F4 - F6` identity). F6 is derivable, not a separately produced
+   * cell (FU303-L7). */
+  int16_t band_f6;
+  int16_t band_fa;
   /* FU290 (phase-27 T5): the FU292 latch/geometry cells `[0x157C44]`/
    * `[0x157C48/4C/50]`. Their writer IS recovered as `fifa96_keeper_hold_predict`
    * (FU-179 §4) with the engine cells `mr->predict_c44`/`predict_c48_x/y/z`

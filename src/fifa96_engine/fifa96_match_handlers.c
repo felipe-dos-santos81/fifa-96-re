@@ -548,6 +548,11 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
     {
       int rc = fifa96_camera_event_set(&mr->render.camera, 0, 0, 0x50, 0);
       if (rc < 0) return rc;
+      /* FU303/FU294-L2 (phase-28 T8): FUN_00071C94's actor dir arm
+       * (0x71d70..0x71ddc) over the record the native passes in EBP. */
+      if (rc == FIFA96_OK)
+        (void)fifa96_camera_event_dir(&mr->render.camera, mr->record.has_slot,
+                                      mr->record.dir_x, mr->record.dir_z);
     }
     (void)fifa96_camera_set_tracked(&mr->render.camera, mr->record.entity_id);
   }
@@ -1376,6 +1381,8 @@ static int match_sp_pan_arm(struct fifa96_match_run *mr) {
       (int16_t)((uint16_t)(draw & 0x3F) + (uint16_t)cam_y), 0);
   if (ev < 0) return 0;
   if (ev == FIFA96_OK) {
+    /* FU303/FU294-L2 (phase-28 T8): the setter's actor dir arm. */
+    (void)fifa96_camera_event_dir(cam, r->has_slot, r->dir_x, r->dir_z);
     (void)fifa96_camera_set_tracked(cam, r->entity_id);   /* 0x71D27 */
     e->has_ball = 0;                                      /* 0x71D2D */
     r->has_ball = 0;
@@ -2717,6 +2724,11 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
     int rc2 = fifa96_camera_event_set(&mr->render.camera, out.event_x, out.event_z,
                                       0, out.event_track_reload);
     if (rc2 < 0) return rc2;
+    /* FU303/FU294-L2 (phase-28 T8): the setter's actor dir arm (EBP = the
+     * row's record). */
+    if (rc2 == FIFA96_OK)
+      (void)fifa96_camera_event_dir(&mr->render.camera, r->has_slot, r->dir_x,
+                                    r->dir_z);
     /* M2 phase-9 T3 (0x71D27): FUN_00071C94 stores the event's actor record as
      * the camera-tracked entity `[0x1577CA] = rec`. */
     (void)fifa96_camera_set_tracked(&mr->render.camera, mr->record.entity_id);
@@ -4095,8 +4107,14 @@ static int match_1b_deep_pan(struct fifa96_match_run *mr,
    * `0x700F4` subset + `FUN_00070544`) then `fifa96_camera_set_tracked`
    * (`0x71D27`). */
   cam->event_suspended = 0;                         /* 0x7741A */
-  (void)fifa96_camera_event_set(cam, step_x, step_z,
-                                (int16_t)mr->keeper_cam_y, 0);
+  {
+    int ev = fifa96_camera_event_set(cam, step_x, step_z,
+                                     (int16_t)mr->keeper_cam_y, 0);
+    if (ev < 0) return ev;
+    /* FU303/FU294-L2 (phase-28 T8): the setter's actor dir arm. */
+    if (ev == FIFA96_OK)
+      (void)fifa96_camera_event_dir(cam, r->has_slot, r->dir_x, r->dir_z);
+  }
   (void)fifa96_camera_set_tracked(cam, r->entity_id);
 
   /* The install selection (`0x77428..0x774D2`, the EDI consumer). The sinks
@@ -4333,9 +4351,10 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
  *    `+0x7F` heading cell has no home — both FU186-L2 legs), then the
  *    `fifa96_keeper_lunge_track` on-target arm gated `|angle(distance,
  *    target_y)| < 0x55` (`0x777DE`): the `pos` shift
- *    `+= trunc_shift(dx|dz,1)` (`0x8DC50`) + event 0x3C. The `0x77856` rotated
- *    arm (`0x114E04` sine + `0x795A4`), the `0x6E598` anim install and the
- *    `0x76B28` steering are FU186-L2 legs; then `timer89=0`, `stage92` -> 2
+ *    `+= trunc_shift(dx|dz,1)` (`0x8DC50`) + event 0x3C. The `0x76B28`
+ *    steering runs on this on-target arm (phase-28 T7, `0x779AC`/`0x779B4`);
+ *    the `0x77856` rotated arm (`0x114E04` sine + `0x795A4`) and the `0x6E598`
+ *    anim install are FU186-L2 legs; then `timer89=0`, `stage92` -> 2
  *    (`0x779B9`);
  *  - stage 2 `0x779D1`: `row44 != 0` -> `match_row_reset` (`0x7DAB4`);
  *  - the tail `0x779DE..0x77E8B` (the `word[+0x81]`/memory-mailbox block) is
@@ -5150,9 +5169,11 @@ int fifa96_match_action_22(struct fifa96_match_run *mr) {
  *  - stage 2 (`0x846FD..0x8470E`): re-copy the triple; when `byte[rec+0x44]`
  *    (`mr->record.row44`) is non-zero run `FUN_0007DAB4` (`match_row_reset`),
  *    else return (the terminal wait).
- * The anim/face writes are FU187-L4 presentation sinks (the `0x795B4` ->
- * `fifa96_entity_intercept_band` mapping is the engine's only 0x795B4 port);
- * the native body never writes `+0x9E` (ran). */
+ * The anim/face writes are FU187-L4 presentation sinks; this row's `0x795B4`
+ * call keeps the `fifa96_entity_intercept_band` mapping (the documented
+ * FU302-L1 residual — the exact `0xCD514` port is `fifa96_entity_hypot`,
+ * used by the row-0x1B/0x1C band sites); the native body never writes `+0x9E`
+ * (ran). */
 static int fifa96_match_action_16(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   struct fifa96_match_entity *e;

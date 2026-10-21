@@ -68,18 +68,24 @@ typedef struct fifa96_keeper_cpu_record {
    * consumed by `fifa96_keeper_cpu_stage_select`. The machine replaces the
    * caller-supplied `stage` bridge (T3) with a computed `CX`. Fields marked
    * LIVE are mapped from engine state by the FU296 Seam A; the rest are
-   * unported producers and stay zero (their honest live value) — numbered legs. */
+   * unported producers and stay zero (their honest live value) — numbered
+   * legs. The `[0x157824]` byte3 is the exception: its honest staged value is
+   * the producer's entry init 0xFF (FU303-L8/T8). */
   int32_t cam_x, cam_y, cam_z; /* `[0x15774C/0x157750/0x157754]` the camera triple (LIVE) */
   int32_t lane69;             /* dword +0x69; `lane_x = lane69 >> 16` (LIVE) */
   int16_t follow_speed;       /* `[0x1577BC] >> 16` = word[0x1577BE] (LIVE) */
   uint8_t global_157a4c;      /* byte `[0x157A4C]` (`[0x157A49] >> 24`) (LIVE) */
   uint8_t pan_counter;        /* byte `[0x157821]` (LIVE) */
-  uint8_t side_157824;        /* byte `[0x157824]` = `[0x157821] >> 24` — LEG FU292-L3 */
+  uint8_t side_157824;        /* byte `[0x157824]` = `[0x157821] >> 24` — the
+                               * FUN_000703E8 entry-init 0xFF is staged (the
+                               * classifier's inputs are FU303-L11) */
   int32_t latch_157c44;       /* dword `[0x157C44]` — LEG FU290-L1/FU292-L1 */
   int32_t target_157c48[3];   /* `[0x157C48/0x157C4C/0x157C50]` — LEG FU292-L1 */
   int16_t bearing_795b4;      /* the `0x795B4` word angle (`[ESP+0xC]`) — LEG FU290-L2 */
-  int16_t band_1577f6;        /* word `[0x1577F6]` (`[0x1577F4] >> 16`) — LEG FU292-L2 */
-  int16_t band_1577fa;        /* word `[0x1577FA]` (`[0x1577F8] >> 16`) — LEG FU292-L2 */
+  int16_t band_1577f6;        /* word `[0x1577F6]` = `timer_limit - ramp_divisor`
+                               * (FU303-L7/T8; LIVE via the Seam A) */
+  int16_t band_1577fa;        /* word `[0x1577FA]` = the camera timer
+                               * (FU303-L10/T8; LIVE via the Seam A) */
   int8_t sub_0b;              /* `[[rec+4]+0xB] >> 24` (byte +0xE) — LEG FU290-L5 */
   int8_t sub_10;              /* `[[rec+4]+0x10] >> 24` (byte +0x13) — LEG FU290-L5 */
   int32_t actor_vel_x;        /* actor dword `+0x71` — the CX-4 copy term `2*(>>16)` (LIVE) */

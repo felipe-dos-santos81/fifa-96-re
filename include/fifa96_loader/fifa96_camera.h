@@ -19,6 +19,14 @@ typedef struct fifa96_camera {
   uint16_t event_cursor;
   uint16_t anchor_time, anchor2_time;
   int8_t rate_x, rate_z;
+  /* FU303/FU294-L2 (phase-28 T8): the event-set pan-direction byte
+   * `[0x157815]`. The native writers are FUN_00071C94's four stores
+   * (0x71d6a default 0, 0x71db1 0xFF, 0x71d9e/0x71ddc the 0x10E169 compass
+   * row or the 0x8DD70 bearing oct) and the init 0x702e6 (DL = 0); its only
+   * readers are FUN_00071DF4's signed gate and its `<<3` row selector
+   * (0x71ef0/0x71f35). `fifa96_camera_event_set` writes the default 0;
+   * `fifa96_camera_event_dir` applies the actor arm. */
+  int8_t dir_157815;
   uint8_t paused;
   /* FU-148 §2.1(c)/§5.2 + FU-152 §2.9 (T2): the FUN_000719C4/FUN_000700F4
    * event cells the pan bodies read (first-hand):
@@ -66,6 +74,13 @@ typedef struct fifa96_camera {
    * idle arm; the native idle arm stores 6). No earlier phase modeled the
    * cell, so `fifa96_camera_height` (the 0x157750 producer) needs it. */
   int16_t event_peak;
+  /* FU303/FU292-L2 (phase-28 T8): `word[0x1577F6]` = F6, the ramp start
+   * (`F2 +/- ramp(height - target_y)`, 0x705c4). The cell is not stored
+   * natively as an independent producer result: `F8 = F4 - F6` (0x705e8), so
+   * F6 = `timer_limit - ramp_divisor` exactly on both arms (the idle arm's
+   * F6 is the 0x70544 argument, 0 on the engine path). `camera_event_ramp`
+   * folds it here so the Seam A can bind the (FU303-L10) cell. */
+  int16_t band_1577f6;
 } fifa96_camera;
 
 #define FIFA96_CAMERA_TRACKED_NONE (-1)
@@ -295,10 +310,29 @@ int16_t fifa96_camera_ramp(int16_t height);
  * set (the native early return, 0x71C99), -FIFA96_ERR_INVALID on NULL.
  * Legs (OL-T11-79): the height > 0x70 [0x157A6D] anchor-B branch,
  * FUN_000703E8's corner cells, the FUN_00065CF8/FUN_00092820 sound sinks,
- * the tracked-player/event-rate tail ([player+0x20], table 0x10E169) and the
- * visual smoothing words 0x15780C/0E/10/12/14. */
+ * the tracked-player event-rate tail's keeper sink (the FUN_00092998 ring)
+ * and the visual smoothing words 0x15780C/0E/10/12/14. The `[0x157815]` dir
+ * byte and the 0x10E169/0x11042B table arm are ported next to this setter
+ * (FU303/FU294-L2, phase-28 T8): `fifa96_camera_event_dir` and
+ * `fifa96_camera_rate_table`. */
 int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
                             int16_t height, int ramp_param);
+
+/* FU303/FU294-L2 (phase-28 T8): FUN_00071C94's actor dir arm
+ * (`0x71d70..0x71ddc`), split from the setter because the native EBP record
+ * is the caller's. `fifa96_camera_event_set` has already stored the 0x71d6a
+ * default 0; this applies the actor arm over the post-ramp state:
+ *   - `has_slot == 0` (`[rec+0x20] == 0`): the default 0 stands;
+ *   - sub-object dir pair (dir_x, dir_z) non-zero: the 0x10E169 compass row
+ *     (the same 3x3 the rate arm reads; out-of-domain pairs resolve to 0xFF,
+ *     see the header note on the rate tables);
+ *   - (0, 0): when the bearing `word[0x1577BE]` (this struct's `speed`)
+ *     is zero the 0x71db1 store of 0xFF; else the 0x8DD70 bearing oct
+ *     `((0xCD474(vel_x, vel_z) + 0x40) & 0x3FF) >> 7` over the post-ramp
+ *     `word[0x1577C0]/[0x1577C2]` velocity pair.
+ * Returns FIFA96_OK, -FIFA96_ERR_INVALID on NULL cam. */
+int fifa96_camera_event_dir(fifa96_camera *cam, int has_slot, int32_t dir_x,
+                            int32_t dir_z);
 
 /* FU-152 §2.9 (T2) / FU301 §1.6 (phase-28 T6): FUN_0008DC50
  * (`0x8DC50..0x8DC62`) — the signed truncating shift `v >= 0 ? v >> n :
@@ -384,6 +418,10 @@ typedef struct fifa96_camera_record_event_in {
   uint8_t action_91;    /* rec +0x91 (the dword +0x8E >> 24 byte) */
   int16_t height_5d;    /* rec +0x5D word */
   int16_t ball_height;  /* [0x157750] word */
+  /* FU303/FU294-L2 (phase-28 T8): the record's sub-object dir arm inputs
+   * (rec +0x20 pointer -> the slot +0x20/+0x21 dir bytes). */
+  uint8_t has_slot;     /* rec +0x20 != 0 */
+  int8_t dir_x, dir_z;
 } fifa96_camera_record_event_in;
 
 typedef struct fifa96_camera_record_event_out {
@@ -399,17 +437,33 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
                                const fifa96_camera_record_event_in *in,
                                fifa96_camera_record_event_out *out);
 
-/* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). Gates:
- * signed rate_byte >= 0, timer <= 0x1E, then when `subobj_present` the
- * caller-resolved rate pair (the 0x10E169 + 0x11042B/0x11042C lookup is a
- * leg) is written to rate_x/rate_z. The keeper gate (event_byte == 2, event
- * height >= 0xC1, |anchor_x| <= 0x23F, rate_z != 0) emits 0x1D for the
- * approaching cases and 0x1E otherwise through `keeper_code` (0 = none).
+/* FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
+ * table/keeper arm. Gates: signed `rate_byte` >= 0, timer <= 0x1E, then when
+ * `subobj_present` the rate pair is resolved from the two static tables and
+ * written to `rate_x`/`rate_z`:
+ *
+ *   row  = 0x10E169[dir_x + 4*dir_z]          (both bytes sign-extended)
+ *   idx  = (int8_t)(row + (rate_byte << 3))   (the native 8-bit ADD AL,AH)
+ *   rate_x = byte[0x11042B + 2*idx]; rate_z = byte[0x11042C + 2*idx]
+ *
+ * The native first arm (0x71e1c..0x71eef) returns early; this arm is its
+ * fall-through. The keeper gate (event_byte == 2, event height >= 0xC1,
+ * |anchor_x| <= 0x23F, rate_z != 0) emits 0x1D for the approaching cases and
+ * 0x1E otherwise through `keeper_code` (0 = none). The `event_byte` is the
+ * FUN_00092998(1,2,-1) ring result (unported, OL-27); the frame path stages
+ * 0 so the keeper sink stays a leg while the rate write is live.
  * Returns 1 when the rates were applied or a keeper code emitted, 0 when
- * nothing applied, -FIFA96_ERR_INVALID (NULL cam/keeper_code). */
+ * nothing applied, -FIFA96_ERR_INVALID (NULL cam/keeper_code).
+ *
+ * Table domain: the live slot writer's dir bytes are T2/T3 of the mapped pad
+ * (`+0x20`/`+0x21`, FU70 §1.2) whose rows only produce {-1,0,1} (T1 never
+ * yields the dead T3 0x40/0 entries), so the 3x3 compass and the 8x8 rate
+ * rows are the exact live tables. The native's unchecked signed index reads
+ * neighbouring image data for any other pair; that read is the FU303-L11
+ * residual and resolves to "no row" (-1) here. */
 int fifa96_camera_rate_table(fifa96_camera *cam, int32_t event_height,
                              int32_t rate_byte, int32_t timer,
-                             int32_t subobj_present, int8_t rate_x, int8_t rate_z,
+                             int32_t subobj_present, int32_t dir_x, int32_t dir_z,
                              int32_t event_byte, int32_t anchor_x, int32_t pos_z,
                              int32_t vel_z, uint8_t *keeper_code);
 
@@ -428,8 +482,9 @@ void fifa96_camera_pan_band(int32_t height, int32_t *class_of, int32_t *param);
 /* FU-152 §2.9 (P4): FUN_00071DF4's first arm — a tracked sub-object at
  * height > 0xF0 writes the event rates `sub_object_rate * 15` clamped +-15
  * and recomputes the bearing magnitude. Returns 1 when applied, 0 when the
- * height gate fails, -FIFA96_ERR_INVALID on NULL. The keeper/player event
- * tail (FUN_00092998 -> FUN_0008F188 0x1D/0x1E) and the table arm stay legs. */
+ * height gate fails, -FIFA96_ERR_INVALID on NULL. The fall-through table arm
+ * (FU303/FU294-L2, phase-28 T8) is `fifa96_camera_rate_table`; the keeper
+ * event sink (FUN_00092998 -> FUN_0008F188 0x1D/0x1E) stays a leg (OL-27). */
 int fifa96_camera_rate_event(fifa96_camera *cam, int32_t rate_x, int32_t rate_z,
                              int32_t height);
 

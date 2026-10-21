@@ -775,7 +775,20 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
         kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
         kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */
-        kc_rec.band_1577fa = frame->timer_a;                 /* word 0x1577FA (FU300 T4) */
+        /* FU303-L10 (phase-28 T8): the FU292-L2 band cells are live now.
+         * `band_1577fa` = word[0x1577FA] (the camera timer) and
+         * `band_1577f6` = word[0x1577F6] = timer_limit - ramp_divisor (the
+         * 0x705e8 identity). */
+        kc_rec.band_1577f6 = frame->band_f6;
+        kc_rec.band_1577fa = frame->band_fa;
+        /* FU303-L8/FU292-L3 (phase-28 T8): the byte3 `[0x157824]` producer is
+         * FUN_000703E8; its input cells (`[0x157764]/[0x15776C]/[0x157778]`,
+         * `[0x1577CA]`'s `+0x826`, `[0x1577C2]`) are the carried FU303-L11
+         * mapping, so the classifier is NOT ported. The honest live value is
+         * the producer's entry init `0xFF` (0x703f3/0x703ff), not 0: with 0 a
+         * side-0 record passes the ladder side gate where native 0xFF blocks
+         * it. */
+        kc_rec.side_157824 = 0xFFu;
         /* FU292-L1 (FU-179 §4): the `[0x157C44]`/`[0x157C48]` writer
          * `fifa96_keeper_hold_predict` -> `mr->predict_c44`/`predict_c48_*`. */
         kc_rec.latch_157c44 = frame->latch_c44;

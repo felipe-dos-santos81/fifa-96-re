@@ -38,6 +38,7 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->anchor2_time = 0;
   cam->rate_x = 0;
   cam->rate_z = 0;
+  cam->dir_157815 = 0;
   cam->paused = 0;
   cam->event_suspended = 0;
   cam->ramp_divisor = 0;
@@ -50,6 +51,7 @@ int fifa96_camera_init(fifa96_camera *cam, int32_t x, int32_t y, int32_t z) {
   cam->tracked = FIFA96_CAMERA_TRACKED_NONE;   /* 0x700F4 0x70258 */
   cam->follow_speed = 0;
   cam->event_peak = 0;                         /* 0x1577F2 */
+  cam->band_1577f6 = 0;                        /* 0x1577F6 */
   return FIFA96_OK;
 }
 
@@ -757,6 +759,7 @@ static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
     cam->timer = (uint16_t)f6;
   }
   cam->event_peak = f2;   /* 0x1577F2 (M2 phase-11 T1 / FUN_00070B94 input) */
+  cam->band_1577f6 = f6;  /* 0x1577F6 = F4 - F8 (0x705e8; FU292-L2) */
   cam->ramp_divisor = f8;
   /* 0x70630..0x706d9: the fast path (F8 != 0 and [0x157821] == 0) divides the
    * stored step pair; the slow path scales each nonzero velocity by
@@ -824,6 +827,71 @@ static int camera_event_ramp(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   return FIFA96_OK;
 }
 
+/* FU303/FU294-L2 (phase-28 T8): the 0x10E169 sub-object dir compass and the
+ * 0x11042B/0x11042C rate pairs, first-hand `read_memory` of /FIFA96.EXE:
+ *
+ *   0x10E169 base, index = sign-extended dir_x + 4*sign-extended dir_z;
+ *   the live 3x3 rows (dir_z -1,0,1 x dir_x -1,0,1) read
+ *   {5,4,3} {6,-1,2} {7,0,1} (the center 0xFF is the "no dir" marker).
+ *
+ * The native's signed index is unchecked; the live slot writer (+0x20/+0x21
+ * = T2/T3 of the mapped pad, FU70 §1.2) only produces {-1,0,1} rows because
+ * T1 never yields the dead T3 0x40/0 entries, so the compass is the exact
+ * live table. Any other int8 pair reads neighbouring image tables and is the
+ * FU303-L11 residual: it resolves to -1 ("no row"), which the setter stores
+ * as the 0xFF marker and the rate arm refuses (0x71f2d's signed gate). */
+static int32_t camera_dir_row(int32_t dir_x, int32_t dir_z) {
+  static const int8_t compass[3][3] = {
+      {5, 4, 3},    /* dir_z = -1 */
+      {6, -1, 2},   /* dir_z = 0 */
+      {7, 0, 1},    /* dir_z = 1 */
+  };
+  if (dir_x < -1 || dir_x > 1 || dir_z < -1 || dir_z > 1) return -1;
+  return (int32_t)compass[dir_z + 1][dir_x + 1];
+}
+
+int fifa96_camera_event_dir(fifa96_camera *cam, int has_slot, int32_t dir_x,
+                            int32_t dir_z) {
+  if (!cam) return -FIFA96_ERR_INVALID;
+  /* 0x71d70: no actor sub-object (`[rec+0x20] == 0`) leaves the 0x71d6a 0. */
+  if (!has_slot) return FIFA96_OK;
+  /* 0x71d89/0x71d93: a non-zero dir pair takes the 0x10E169 compass row. */
+  if (dir_x != 0 || dir_z != 0) {
+    cam->dir_157815 = (int8_t)camera_dir_row(dir_x, dir_z);
+    return FIFA96_OK;
+  }
+  /* 0x71da7: both dir bytes zero and the bearing word zero -> 0xFF
+   * (0x71db1); otherwise the 0x8DD70 bearing oct (0x71dba..0x71ddc). */
+  if ((int16_t)cam->speed == 0) {
+    cam->dir_157815 = -1;
+    return FIFA96_OK;
+  }
+  {
+    int32_t angle = 0;
+    if (fifa96_entity_angle((int32_t)(int16_t)cam->vel_x,
+                            (int32_t)(int16_t)cam->vel_z, &angle) != FIFA96_OK)
+      return -FIFA96_ERR_INVALID;
+    cam->dir_157815 =
+        (int8_t)(((uint32_t)(angle + 0x40) & 0x3FFu) >> 7);
+  }
+  return FIFA96_OK;
+}
+
+/* 0x11042B/0x11042C — the 64-pair (8 dir-byte rows x 8 compass columns)
+ * rate table, `read_memory 0x11042B` (128 B). The native index is
+ * `(int8_t)(row + (dir_byte << 3))` (the 8-bit ADD AL,AH) and the pair is
+ * `[0x11042B + 2*idx]`/`[0x11042C + 2*idx]`. */
+static const int8_t camera_rate_pairs[64][2] = {
+    { 0,  0}, { 1,  0}, { 1,  0}, { 1,  0}, { 0,  0}, {-1,  0}, {-1,  0}, {-1,  0},
+    { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0}, { 0,  1}, { 0,  1},
+    { 0,  1}, { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0}, { 0,  1},
+    { 0,  1}, { 0,  1}, { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0},
+    { 0,  0}, { 1,  0}, { 1,  0}, { 1,  0}, { 0,  0}, {-1,  0}, {-1,  0}, {-1,  0},
+    { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0}, { 0,  1}, { 0,  1},
+    { 0,  1}, { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0}, { 0,  1},
+    { 0,  1}, { 0,  1}, { 0,  1}, { 0,  0}, { 0, -1}, { 0, -1}, { 0, -1}, { 0,  0},
+};
+
 int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
                             int16_t height, int ramp_param) {
   int16_t target_y;
@@ -876,6 +944,10 @@ int fifa96_camera_event_set(fifa96_camera *cam, int16_t seed_x, int16_t seed_z,
   if (height > 0x640) height = 0x640;
   if (height < 1) height = 0;
   cam->event_param = (uint16_t)height;
+  /* 0x71d6a: the setter's default dir-byte store (the `FUN_00070544`-saved
+   * DL is the caller's `0x71d63 XOR DL,DL` = 0). The actor arm
+   * (`fifa96_camera_event_dir`) runs at the caller that holds the record. */
+  cam->dir_157815 = 0;
   return camera_event_ramp(cam, seed_x, seed_z, ramp_param);
 }
 
@@ -1085,6 +1157,10 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
   {
     int ev = fifa96_camera_event_set(cam, v1, v2, (int16_t)cam->event_param, 0);
     if (ev < 0) return -FIFA96_ERR_INVALID;
+    /* FU303/FU294-L2 (phase-28 T8): FUN_00071C94's actor dir arm over the
+     * record this event belongs to. */
+    if (ev == FIFA96_OK)
+      (void)fifa96_camera_event_dir(cam, in->has_slot, in->dir_x, in->dir_z);
     /* FUN_00071C94 0x71D27 stores its player argument into [0x1577CA] after
      * the 0x71C99 bail gate; the camera port leaves the bind to the caller
      * (which owns the record identity), so report whether the setter applied
@@ -1094,26 +1170,36 @@ int fifa96_camera_record_event(fifa96_camera *cam, struct fifa96_rng *rng,
   return 1;
 }
 
-/* FU-152 §2.9 (T2): FUN_00071DF4's table/keeper arm (derived). */
+/* FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
+ * table/keeper arm (`0x71ef0..0x7200f`). Order: the signed dir-byte gate,
+ * the timer gate, the tracked sub-object (`[rec+0x20]`), the 0x10E169
+ * compass row, the 0x11042B rate pair write, then the keeper gate over the
+ * just-written `[0x157817]` (or the stored cell when the sub-object is
+ * absent, 0x71fac). */
 int fifa96_camera_rate_table(fifa96_camera *cam, int32_t event_height,
                              int32_t rate_byte, int32_t timer,
-                             int32_t subobj_present, int8_t rate_x, int8_t rate_z,
+                             int32_t subobj_present, int32_t dir_x, int32_t dir_z,
                              int32_t event_byte, int32_t anchor_x, int32_t pos_z,
                              int32_t vel_z, uint8_t *keeper_code) {
   int applied = 0;
+  int8_t rate_z;
   if (!cam || !keeper_code) return -FIFA96_ERR_INVALID;
   *keeper_code = 0;
-  if (rate_byte < 0) return 0;                   /* [0x157815] signed gate */
-  if (timer > 0x1E) return 0;                    /* [0x1577FA] gate */
+  if (rate_byte < 0) return 0;                   /* 0x71ef7 JL */
+  if (timer > 0x1E) return 0;                    /* 0x71f08 JG (word[0x1577FA]) */
   if (subobj_present) {
-    /* The caller resolves the 0x10E169 table + the 0x11042B/0x11042C rate
-     * pair (leg OL-T11-79); a NULL pair is the native negative-byte return. */
-    if (rate_x == 0 && rate_z == 0) return 0;
-    cam->rate_x = rate_x;
-    cam->rate_z = rate_z;
+    int32_t row = camera_dir_row(dir_x, dir_z);
+    int32_t idx;
+    if (row < 0) return 0;                       /* 0x71f2f JL (no table row) */
+    idx = (int32_t)(int8_t)(uint8_t)((uint32_t)row +
+                                    ((uint32_t)rate_byte << 3));
+    if (idx < 0 || idx > 63) return 0;   /* FU303-L11 out-of-domain residual */
+    cam->rate_x = camera_rate_pairs[idx][0];
+    cam->rate_z = camera_rate_pairs[idx][1];
     applied = 1;
   }
-  if (event_byte != 2) return applied;
+  rate_z = cam->rate_z;                          /* 0x71fac reads [0x157817] */
+  if (event_byte != 2) return applied;           /* 0x92998 ring result (OL-27) */
   if (event_height < 0xC1) return applied;
   if (anchor_x > 0x23F || anchor_x < -0x23F) return applied;
   if (rate_z < 0) {

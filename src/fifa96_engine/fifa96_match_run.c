@@ -606,6 +606,9 @@ static void match_run_record_camera_event(struct fifa96_match_run *mr,
   in.action_91 = e->code;
   in.height_5d = height_5d;
   in.ball_height = ball;
+  in.has_slot = e->has_slot;      /* FU303/FU294-L2 (phase-28 T8) */
+  in.dir_x = e->dir_x;
+  in.dir_z = e->dir_z;
   /* The FUN_0008F188 command-ring post (`0x7C8A2..0x7C8F8`) is the OL-27 leg;
    * the camera event runs unconditionally after it. The 0x92820 sink request
    * the port reports has no engine consumer yet (OL-27). FUN_00071C94 stores
@@ -1590,6 +1593,14 @@ static void match_run_entity_frame(const struct fifa96_match_run *mr,
   f->lead_z = (int32_t)((uint32_t)(uint16_t)mr->screen_lead_x |
                         ((uint32_t)(uint16_t)mr->screen_lead_z << 16));
   f->timer_a = mr->band_1577fa;
+  /* FU303-L10 (phase-28 T8): the keeper-CPU ladder's FU292-L2 band cells are
+   * LIVE — `band_fa` is the camera timer (`word[0x1577FA]`) and `band_f6` is
+   * its ramp start `word[0x1577F6] = timer_limit - ramp_divisor` (the 0x705e8
+   * `F8 = F4 - F6` identity; FU303-L7). `timer_a` above stays the entity
+   * selection's FU-67 S3 stand-in (a zero-bucket read), not this binding. */
+  f->band_f6 = (int16_t)((int16_t)mr->render.camera.timer_limit -
+                         (int16_t)mr->render.camera.ramp_divisor);
+  f->band_fa = (int16_t)mr->render.camera.timer;
   f->latch_c44 = mr->predict_c44;               /* FU-179 §4 (FU292-L1) */
   f->target_c48[0] = mr->predict_c48_x;
   f->target_c48[1] = mr->predict_c48_y;
@@ -3854,13 +3865,19 @@ int fifa96_match_run_screen_install(struct fifa96_match_run *mr, int16_t leg,
  * (`[[rec]+4][0] == 0x18D8`) and the event height `[0x1577EE].hi > 0xF0`,
  * then sets the velocity words from the slot dir bytes
  * `subobj[+0x20]/[+0x21] * 0xF` clamped to +-15 and recomputes the bearing.
- * `fifa96_camera_rate_event` is that arm (the height gate included); the
- * table/keeper second arm stays the OL-T11-79 leg. Returns 1 when the arm ran,
- * 0 when a gate refused. */
+ * `fifa96_camera_rate_event` is that arm (the height gate included). The
+ * fall-through second arm (`0x71ef0..0x7200f`, FU303/FU294-L2 phase-28 T8) is
+ * `fifa96_camera_rate_table`: the `[0x157815]` dir byte + the tracked
+ * record's dir pair resolve the 0x10E169/0x11042B rate pair into
+ * `camera.rate_x/rate_z`, which the next frame's integrator pan-push consumes.
+ * The keeper gate's `FUN_00092998(1,2,-1)` ring result is unported (OL-27),
+ * so it is staged 0: the rate write is live, the 0x1D/0x1E sink stays a leg.
+ * Returns 1 when either arm ran, 0 when a gate refused. */
 int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
   struct fifa96_camera *cam;
   int32_t tracked;
   struct fifa96_match_entity *e;
+  uint8_t keeper_code = 0;
   if (!mr) return -FIFA96_ERR_INVALID;
   cam = &mr->render.camera;
   if (cam->pan_counter != 0) return 0;              /* 0x739C6 */
@@ -3874,8 +3891,14 @@ int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {
   e = &mr->entities.team[(uint32_t)tracked / FIFA96_MATCH_ENTITY_RECORDS]
            .records[(uint32_t)tracked % FIFA96_MATCH_ENTITY_RECORDS];
   if (!e->has_slot) return 0;               /* [[rec]+0x20] != 0, 0x73B65 */
-  return fifa96_camera_rate_event(cam, e->dir_x, e->dir_z,
-                                  (int16_t)cam->event_param);
+  if (fifa96_camera_rate_event(cam, e->dir_x, e->dir_z,
+                               (int16_t)cam->event_param) == 1)
+    return 1;                               /* the 0x71e1c..0x71eef early return */
+  return fifa96_camera_rate_table(
+      cam, (int16_t)cam->event_param, (int16_t)cam->dir_157815,
+      (int16_t)cam->timer, 1, e->dir_x, e->dir_z,
+      0 /* the 0x92998 ring is unported (OL-27) */, cam->anchor_x, cam->pos_z,
+      (int16_t)cam->vel_z, &keeper_code);
 }
 
 /* M2 phase-10 T1 (FU-148 §13.5 / FU-142 OL-88): the FUN_0007A084 derived
@@ -3921,7 +3944,13 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
     int ev = fifa96_camera_event_set(cam, (int16_t)vector->height,
                                      (int16_t)vector->z, traj, 0);
     if (ev < 0) return ev;
-    if (ev == FIFA96_OK) (void)fifa96_camera_set_tracked(cam, actor_id);
+    if (ev == FIFA96_OK) {
+      /* FU303/FU294-L2 (phase-28 T8): FUN_00071C94's actor dir arm over the
+       * receiving record (the native EBP). */
+      (void)fifa96_camera_event_dir(cam, actor_rec->has_slot, actor_rec->dir_x,
+                                    actor_rec->dir_z);
+      (void)fifa96_camera_set_tracked(cam, actor_id);
+    }
   }
   /* 0x7A227: [0x157A83] = 0 — the controlled actor is released. */
   mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;

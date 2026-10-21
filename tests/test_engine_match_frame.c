@@ -6434,6 +6434,148 @@ static void test_camera_pan_event_chain(void) {
   drop_fixture(f);
 }
 
+/* FU303/FU294-L2 + FU292-L2/L3 (phase-28 T8): the visible-motion rate chain
+ * on the real frame path. The event setter produces the pan-direction byte
+ * `[0x157815]` (the compass row of the actor's slot dirs at set time), the
+ * every-frame FUN_00071DF4 call site resolves the 0x10E169 compass +
+ * 0x11042B/0x11042C pair into `rate_x/rate_z` from the actor's CURRENT dirs,
+ * and the following frames' FUN_000736AC pan-push integrates
+ * `rate*(timer_limit - timer)` into the target/anchor and `rate` into the
+ * velocity — sustained camera motion, not a one-shot. The event:
+ * height 0x60 at camera y 0 => F2 0x24, F4 0x48, F6 0, F8 0x48, seed 2000 ->
+ * the atan-capped vel_x 0x19 (step 0x32/frame). The set-time dirs (1,1) give
+ * the dir byte 1; the current dirs (1,0) give compass row 2, so
+ * idx = 2 + (1<<3) = 10 -> the (0,-1) rate pair. */
+static void test_camera_rate_chain_sustained_pan(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id = 6;
+  int32_t prev = 0;
+  int32_t moved = 0;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);                       /* settle the kickoff machine */
+  assert(mr.state.phase == 2u);
+  /* Isolate the camera: the walk skips skip_9a records (0x8DB42), and the
+   * keeper machine's AX gate needs |cam.z| > 0x7B0 (the camera stays at 0). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].skip_9a = 1;
+  e = &mr.entities.team[0].records[id];
+  e->has_slot = 1;                              /* [rec+0x20] != 0 */
+  e->active = 1;
+  e->dir_x = 1;
+  e->dir_z = 1;                                 /* the set-time direction */
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0) == FIFA96_OK);
+  assert(fifa96_camera_event_set(&mr.render.camera, 2000, 0, 0x60, 0) ==
+         FIFA96_OK);
+  assert(fifa96_camera_event_dir(&mr.render.camera, 1, e->dir_x, e->dir_z) ==
+         FIFA96_OK);
+  assert(mr.render.camera.dir_157815 == 1);     /* compass(1,1) */
+  assert(mr.render.camera.timer_limit == 0x48);
+  mr.render.camera.tracked = id;                /* [0x1577CA] */
+  e->dir_x = 1;
+  e->dir_z = 0;                                 /* the current direction */
+
+  one_granted_frame(&mr);
+  /* FUN_00071DF4's table arm ran (the first arm's > 0xF0 height gate fails):
+   * compass(1,0) = 2, idx = 2 + 1*8 = 10 -> (0,-1). */
+  assert(mr.render.camera.rate_x == 0);
+  assert(mr.render.camera.rate_z == -1);
+  assert(mr.render.camera.pos_z == 0);          /* the cursor is still short */
+
+  for (int i = 0; i < 10; i++) {
+    one_granted_frame(&mr);
+    if (mr.render.camera.pos_z < prev) moved++;
+    prev = mr.render.camera.pos_z;
+  }
+  /* the pan-push fired repeatedly: vel_z steps negative, the target/anchor
+   * accumulate rate*(limit-timer), and the position follows the velocity. */
+  assert(mr.render.camera.vel_z < 0);
+  assert(mr.render.camera.target_z < 0);
+  assert(mr.render.camera.anchor_z < 0);
+  assert(moved >= 3);                           /* sustained, not one-shot */
+  assert(mr.render.camera.pos_z <= -6);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU303-L10 (phase-28 T8): the Seam A binding of the FU292-L2 band cells.
+ * `band_fa` = word[0x1577FA] (the live camera timer) and `band_f6` =
+ * word[0x1577F6] = timer_limit - ramp_divisor (the 0x705e8 identity); the
+ * byte3 `side_157824` stages the native FUN_000703E8 entry init 0xFF (the
+ * classifier's input cells are FU303-L11, so no producer is faked). The
+ * camera event here is height 0x60 at camera y 0x20: F2 0x24, F4 0x48,
+ * F6 7, F8 0x41; the frame's update advances the timer 7 -> 9. */
+struct band_capture {
+  int calls;
+  int16_t f6;
+  int16_t fa;
+  uint8_t side_157824;
+};
+
+static int band_ladder_capture(void *ctx,
+                               const struct fifa96_keeper_cpu_record *rec,
+                               struct fifa96_keeper_cpu_ladder_out *out) {
+  struct band_capture *c = ctx;
+  if (c->calls == 0) {
+    c->f6 = rec->band_1577f6;
+    c->fa = rec->band_1577fa;
+    c->side_157824 = rec->side_157824;
+  }
+  c->calls++;
+  (void)out;   /* the step zeroed it */
+  return FIFA96_OK;
+}
+
+static void test_camera_band_cells_seam(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct band_capture cap;
+  memset(&cap, 0, sizeof cap);
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.global_5882a = 1;
+  one_granted_frame(&mr);
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0x20, 0) == FIFA96_OK);
+  /* Isolate the camera from the other records' events (the walk skips
+   * skip_9a records; the record-0 keeper step still runs). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr.entities.team[t].records[i].skip_9a = 1;
+  /* the ladder gate's inputs: the permit-bearing code 0x19, a zero slot bit
+   * and a zero timer (the native record-0 machine's gate form). */
+  mr.entities.team[0].records[0].code = 0x19u;
+  mr.entities.team[0].records[0].has_slot = 0;
+  mr.entities.team[0].records[0].timer81 = 0;
+  mr.entities.team[1].records[0].code = 0x19u;
+  mr.entities.team[1].records[0].has_slot = 0;
+  mr.entities.team[1].records[0].timer81 = 0;
+  assert(fifa96_camera_event_set(&mr.render.camera, 0, 0, 0x60, 0) ==
+         FIFA96_OK);
+  assert(mr.render.camera.timer_limit == 0x48);
+  assert(mr.render.camera.ramp_divisor == 0x41);
+  assert(mr.render.camera.timer == 7);
+  mr.keeper_cpu.ladder = band_ladder_capture;
+  mr.keeper_cpu.ladder_ctx = &cap;
+  mr.global_157c5d = 1;            /* the CPU ladder gate ([0x157C5D]) */
+  one_granted_frame(&mr);
+  assert(cap.calls >= 1);          /* both team walks may step record 0 */
+  assert(mr.render.camera.timer == 9);          /* 7 + delta 2 */
+  assert(mr.render.camera.band_1577f6 == 7);
+  assert(cap.f6 == 7);                          /* timer_limit - ramp_divisor */
+  assert(cap.fa == 9);                          /* the live word[0x1577FA] */
+  assert(cap.side_157824 == 0xFF);              /* FUN_000703E8's entry init */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-148 §2.1(c)/§6.2 + FU-152 §2.9 (T2): the natural gameplay-row pan
  * origin. A live action-04 record (the ported `fifa96_outfield_row04_step`
  * half-line arm) produces `out.events` and the engine wires it to the real
@@ -6902,13 +7044,20 @@ static void test_auto_camera_follows_tracked_slot(void) {
   assert(fifa96_match_run_camera_follow(&mr) == 1);
   assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == -15);
 
-  /* the height gate at the boundary: 0xF0 is refused (native JLE 0xF0) and
-   * leaves the velocity untouched, 0xF1 follows */
+  /* the height gate at the boundary: 0xF0 is refused by the FIRST arm
+   * (native JLE 0xF0) and leaves the velocity untouched; the FU303/T8 table
+   * fall-through (0x71ef0) still resolves the rates — dir byte 0, slot dir
+   * (1,0) -> compass row 2, idx 2 -> pair (1,0). */
   e->dir_x = 1;
   e->dir_z = 0;
   mr.render.camera.event_param = 0xF0;
-  assert(fifa96_match_run_camera_follow(&mr) == 0);
+  assert(fifa96_match_run_camera_follow(&mr) == 1);
   assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == -15);
+  assert(mr.render.camera.rate_x == 1 && mr.render.camera.rate_z == 0);
+  /* clear the rate pair (the 0x739ED call-site gate skips the next call's
+   * FUN_00071DF4 while a rate is live). */
+  mr.render.camera.rate_x = 0;
+  mr.render.camera.rate_z = 0;
   mr.render.camera.event_param = 0xF1;
   assert(fifa96_match_run_camera_follow(&mr) == 1);
   assert(mr.render.camera.vel_x == 15 && mr.render.camera.vel_z == 0);
@@ -7033,8 +7182,10 @@ static void test_ball_receive_low_ball_no_follow(void) {
   assert(mr.render.camera.tracked == 9);
   assert(fifa96_camera_update_walk(&mr.render.camera, &mr.rng, 2, 0, 0, 0) ==
          FIFA96_OK);
-  /* the call-site gate passes (height > 0x10) but the arm refuses (the
-   * ramp-derived velocity pair stays untouched) */
+  /* the call-site gate passes (height > 0x10); the FIRST arm refuses (the
+   * ramp-derived velocity pair stays untouched) but the FU303/T8 table
+   * fall-through still resolves the rate pair: dir byte 2 (compass(1,0)),
+   * slot dir (1,0) -> row 2, idx = 2 + 2*8 = 18 -> (0,0). */
   {
     int16_t vx;
     int16_t vz;
@@ -7042,9 +7193,11 @@ static void test_ball_receive_low_ball_no_follow(void) {
     assert(mr.render.camera.follow_speed != 0);
     vx = (int16_t)mr.render.camera.vel_x;
     vz = (int16_t)mr.render.camera.vel_z;
-    assert(fifa96_match_run_camera_follow(&mr) == 0);
+    assert(fifa96_match_run_camera_follow(&mr) == 1);
     assert((int16_t)mr.render.camera.vel_x == vx);
     assert((int16_t)mr.render.camera.vel_z == vz);
+    assert(mr.render.camera.rate_x == 0);
+    assert(mr.render.camera.rate_z == 0);
   }
 
   /* the phase-1 gate: the camera event/ack run, the receiver scan does not */
@@ -8926,6 +9079,8 @@ int main(void) {
   test_actor_lift_controlled_side();
   test_view_pose_feed_arms_camera();
   test_camera_pan_event_chain();
+  test_camera_rate_chain_sustained_pan();
+  test_camera_band_cells_seam();
   test_row04_live_pan_arms_camera();
   test_row04_tracked_gate_suppresses_half_line();
   test_row04_arm_a_track_reload();

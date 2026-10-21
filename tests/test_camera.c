@@ -924,6 +924,7 @@ static void test_record_event_reflect_and_event(void) {
   struct fifa96_rng rng;
   fifa96_camera_record_event_in in;
   fifa96_camera_record_event_out out;
+  memset(&in, 0, sizeof in);
   assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
   cam.target_x = 0x100;                       /* origin == target (delta 0) */
   cam.target_z = 0x200;
@@ -970,6 +971,7 @@ static void test_record_event_height_ramp(void) {
   fifa96_camera cam = fresh_camera();
   fifa96_camera_record_event_in in;
   fifa96_camera_record_event_out out;
+  memset(&in, 0, sizeof in);
   assert(fifa96_camera_init(&cam, 0x100, 0, 0x200) == FIFA96_OK);
   cam.target_x = 0x100;
   cam.target_z = 0x200;
@@ -1030,6 +1032,7 @@ static void test_record_event_jitter_and_gates(void) {
   fifa96_camera_record_event_out out;
   struct fifa96_rng rng;
   struct fifa96_rng expect;
+  memset(&in, 0, sizeof in);
   uint16_t d1 = 0, d2 = 0, d3 = 0;
   int16_t t;
   assert(fifa96_camera_init(&cam, 0, 0, 0) == FIFA96_OK);
@@ -1133,42 +1136,140 @@ static void test_reposition_invalid(void) {
          -FIFA96_ERR_INVALID);
 }
 
-/* ---- FU-152 §2.9 (T2): FUN_00071DF4 table/keeper arm (derived) ---- */
+/* ---- FU-152 §2.9 (T2) + FU303/FU294-L2 (phase-28 T8): FUN_00071DF4's
+ * table/keeper arm — the 0x10E169 compass + 0x11042B/0x11042C rate pair ---- */
 
 static void test_rate_table_arm(void) {
-  /* The table arm writes the caller-resolved rate pair (the 0x10E169/
-   * 0x11042B lookup is a leg) and the keeper gate emits 0x1D when
-   * rate_z < 0 && pos_z < 0 && vel_z >= 1, else 0x1E. Gates: rate_byte >= 0,
-   * timer <= 0x1E, event byte == 2, height >= 0xC1, |anchor_x| <= 0x23F. */
+  /* The arm resolves row = 0x10E169[dir_x + 4*dir_z], idx = (int8_t)(row +
+   * (rate_byte << 3)) and rate = 0x11042B[2*idx]; the keeper gate is
+   * event_byte == 2, height >= 0xC1, |anchor_x| <= 0x23F, rate_z != 0 ->
+   * 0x1D when approaching, else 0x1E. Gates: rate_byte >= 0, timer <= 0x1E.
+   * (The pre-T8 body wrote the caller pair; the DIRS below are the live
+   * sub-object +0x20/+0x21 bytes.) */
   fifa96_camera cam = fresh_camera();
   fifa96_camera_init(&cam, 0, 0, 0);
   uint8_t keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, -1, -1, 2, 0x23F, -1, 1,
+  /* dir byte 0, slot dir (1,1) -> row 1, idx 1 -> pair (1,0). */
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 0, 2, 1, 1, 1, 2, 0x23F, -1, 1,
                                   &keeper) == 1);
-  assert(cam.rate_x == -1 && cam.rate_z == -1);
+  assert(cam.rate_x == 1 && cam.rate_z == 0);
+  assert(keeper == 0);                 /* rate_z == 0 -> no keeper event */
+  /* dir byte 1, slot dir (1,0) -> row 2, idx 10 -> pair (0,-1); pos_z < 0
+   * and vel_z >= 1 is the approaching arm -> 0x1D. */
+  keeper = 0;
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 1, 2, 1, 1, 0, 2, 0x23F, -1, 1,
+                                  &keeper) == 1);
+  assert(cam.rate_x == 0 && cam.rate_z == -1);
   assert(keeper == 0x1D);
+  /* A diagonal row is the (0,0) pair: dir byte 2, slot dir (1,0) -> row 2,
+   * idx 18 -> (0,0); the write still applies but no keeper code. */
   keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, -1, -1, 2, 0x23F, -1, 0,
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, 1, 0, 2, 0x23F, -1, 1,
                                   &keeper) == 1);
-  assert(keeper == 0);                 /* vel_z < 1 -> the approaching gate */
+  assert(cam.rate_x == 0 && cam.rate_z == 0);
+  assert(keeper == 0);
+  /* dir byte 7, slot dir (0,1) -> row 0, idx 56 -> pair (0,1); the keeper
+   * gate's non-approaching arm (pos_z == 0) -> 0x1E. */
   keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, -1, -1, 2, 0x240, -1, 1,
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 7, 2, 1, 0, 1, 2, 0x23F, 0, 1,
                                   &keeper) == 1);
-  assert(keeper == 0);                 /* |anchor_x| > 0x23F */
-  keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, -1, -1, 2, 0x23F, 1, 1,
-                                  &keeper) == 1);
+  assert(cam.rate_x == 0 && cam.rate_z == 1);
   assert(keeper == 0x1E);
+  /* The (0,0) sub-object pair has no compass row -> no rate write. */
   keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC0, 2, 2, 1, -1, -1, 2, 0x23F, -1, 1,
-                                  &keeper) == 1);
-  assert(keeper == 0);                 /* height < 0xC1 -> no keeper event */
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 0, 2, 1, 0, 0, 2, 0x23F, -1, 1,
+                                  &keeper) == 0);
+  /* The signed dir-byte gate and the timer gate precede the lookup. */
+  assert(fifa96_camera_rate_table(&cam, 0xC1, -1, 2, 1, 1, 0, 2, 0x23F, -1, 1,
+                                  &keeper) == 0);
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 0, 0x1F, 1, 1, 0, 2, 0x23F, -1, 1,
+                                  &keeper) == 0);
+  /* Keeper gates: event byte, height, |anchor_x|. */
   keeper = 0;
-  assert(fifa96_camera_rate_table(&cam, 0xC1, 2, 2, 1, -1, -1, 1, 0x23F, -1, -1,
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 1, 2, 1, 1, 0, 1, 0x23F, -1, 1,
                                   &keeper) == 1);
-  assert(keeper == 0);   /* event byte != 2 */
+  assert(keeper == 0);
+  keeper = 0;
+  assert(fifa96_camera_rate_table(&cam, 0xC0, 1, 2, 1, 1, 0, 2, 0x23F, -1, 1,
+                                  &keeper) == 1);
+  assert(keeper == 0);
+  keeper = 0;
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 1, 2, 1, 1, 0, 2, 0x240, -1, 1,
+                                  &keeper) == 1);
+  assert(keeper == 0);
+  /* subobj_present == 0 skips the rate lookup/write but still runs the keeper
+   * gate over the STORED `[0x157817]` cell (0x71fac reads the cell, not a
+   * local): stage a stale positive rate_z and check it is untouched. */
+  cam.rate_x = 5;
+  cam.rate_z = 5;
+  keeper = 0;
+  assert(fifa96_camera_rate_table(&cam, 0xC1, 1, 2, 0, 1, 0, 2, 0x23F, 1, -1,
+                                  &keeper) == 1);
+  assert(cam.rate_x == 5 && cam.rate_z == 5);
+  assert(keeper == 0x1D);              /* rate_z > 0, pos_z > 0, vel_z < 0 */
   assert(fifa96_camera_rate_table(NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, NULL) ==
          -FIFA96_ERR_INVALID);
+}
+
+/* FU303/FU294-L2 (T8): FUN_00071C94's actor dir arm (0x71d70..0x71ddc). */
+static void test_event_dir_byte(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0, 0);
+  /* no actor (`[rec+0x20] == 0`): the 0x71d6a default 0 stands. */
+  assert(fifa96_camera_event_dir(&cam, 0, 1, 1) == FIFA96_OK);
+  assert(cam.dir_157815 == 0);
+  /* the 0x10E169 compass rows: (1,1)->1, (1,-1)->3, (0,-1)->4,
+   * (-1,0)->6, (-1,1)->7. */
+  assert(fifa96_camera_event_dir(&cam, 1, 1, 1) == FIFA96_OK);
+  assert(cam.dir_157815 == 1);
+  assert(fifa96_camera_event_dir(&cam, 1, 1, -1) == FIFA96_OK);
+  assert(cam.dir_157815 == 3);
+  assert(fifa96_camera_event_dir(&cam, 1, 0, -1) == FIFA96_OK);
+  assert(cam.dir_157815 == 4);
+  assert(fifa96_camera_event_dir(&cam, 1, -1, 0) == FIFA96_OK);
+  assert(cam.dir_157815 == 6);
+  assert(fifa96_camera_event_dir(&cam, 1, -1, 1) == FIFA96_OK);
+  assert(cam.dir_157815 == 7);
+  /* the (0,0) pair with a live bearing word: the 0x8DD70 oct over the
+   * post-ramp velocity pair. angle(25,0) = 0x100 -> ((0x100+0x40)&0x3FF)>>7
+   * = 2. */
+  cam.vel_x = 25;
+  cam.vel_z = 0;
+  cam.speed = 25;
+  assert(fifa96_camera_event_dir(&cam, 1, 0, 0) == FIFA96_OK);
+  assert(cam.dir_157815 == 2);
+  /* the (0,0) pair with a zero bearing word: the 0x71db1 0xFF store. */
+  cam.speed = 0;
+  assert(fifa96_camera_event_dir(&cam, 1, 0, 0) == FIFA96_OK);
+  assert((uint8_t)cam.dir_157815 == 0xFF);
+  /* (1,0) -> 2; the setter's default store clears the cell. */
+  assert(fifa96_camera_event_dir(&cam, 1, 1, 0) == FIFA96_OK);
+  assert(cam.dir_157815 == 2);
+  assert(fifa96_camera_event_set(&cam, 0, 0, 0x30, 0) == FIFA96_OK);
+  assert(cam.dir_157815 == 0);
+  assert(fifa96_camera_event_dir(NULL, 0, 0, 0) == -FIFA96_ERR_INVALID);
+}
+
+/* FU303/FU292-L2 (T8): F6 = timer_limit - ramp_divisor (the 0x705e8
+ * `F8 = F4 - F6` identity), both arms. */
+static void test_event_band_f6(void) {
+  fifa96_camera cam = fresh_camera();
+  fifa96_camera_init(&cam, 0, 0x20, 0);
+  assert(fifa96_camera_event_set(&cam, 0, 0, 0x60, 0) == FIFA96_OK);
+  /* F2 = 0x24, F4 = 0x48; F6 = 0x24 - ramp(0x60-0x20=0x40) = 0x24 - 0x1D = 7,
+   * F8 = 0x48 - 7 = 0x41. */
+  assert(cam.timer_limit == 0x48);
+  assert(cam.ramp_divisor == 0x41);
+  assert(cam.timer == 7);
+  assert(cam.band_1577f6 == 7);
+  assert(cam.band_1577f6 ==
+         (int16_t)((int16_t)cam.timer_limit - (int16_t)cam.ramp_divisor));
+  /* the idle arm (height clamps to 0 with the camera at y 0): F2=6,
+   * F4=F8=0xC, F6=0. */
+  fifa96_camera_init(&cam, 0, 0, 0);
+  assert(fifa96_camera_event_set(&cam, 0, 0, 0, 0) == FIFA96_OK);
+  assert(cam.timer_limit == 0xC && cam.ramp_divisor == 0xC);
+  assert(cam.band_1577f6 == 0);
 }
 
 /* ---- FU-152 §2.8 (P4): camera type mapping and the handler bodies ---- */
@@ -1643,6 +1744,8 @@ int main(void) {
   test_reposition_steps_back();
   test_reposition_invalid();
   test_rate_table_arm();
+  test_event_dir_byte();
+  test_event_band_f6();
   test_camera_type_mapping();
   test_behavior_table();
   test_behavior_steady();

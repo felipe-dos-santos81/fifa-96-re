@@ -1265,8 +1265,13 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e);
  * record-class gate `[[rec]+4][0] == 0x18D8` reduces to the pool-record
  * identity (all three [0x1577CA] writers store pool records or 0 — 0x71D27
  * the store, 0x70258/0x70054 the clears; the +4
- * descriptor is built at runtime). The table/keeper second arm stays the
- * OL-T11-79 leg. */
+ * descriptor is built at runtime). The FU303/FU294-L2 second arm
+ * (`0x71ef0..0x7200f`, phase-28 T8) is `fifa96_camera_rate_table`: the
+ * `[0x157815]` dir byte + the tracked record's dir pair resolve the
+ * 0x10E169/0x11042B rate pair into `camera.rate_x/rate_z` for the next
+ * frame's pan-push; the keeper event sink (the
+ * `FUN_00092998(1,2,-1)` ring) stays a leg (OL-27), so the arm is called
+ * with `event_byte` 0. Returns 1 when either arm ran. */
 int fifa96_match_run_camera_follow(struct fifa96_match_run *mr);
 
 /* M2 phase-10 T1 (FU-148 §13.5 / FU-142 OL-88): the FUN_0007A084 receive arm,
