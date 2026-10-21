@@ -35,7 +35,7 @@ Make the follow/pan camera **visibly move in sustained open play** — `make gam
 ## 5. Acceptance
 
 - **Layer-1 (required, the hard gate):** a granted-frame test on the real frame path in which a real open-play event (the receive/long-ball route) raises `[0x1577EE].hi > 0xF0`, the mid-band Y producer lands `camera.pos_y` in `(0x20, 0x70)`, the follow arm fires, and the camera pos/pan cells move over the sustained window (the FU171-L1 52-frame shape) — with mutation-RED riders on each new producer; the test must fail on the phase-28 baseline.
-- **Layer-2 (goaled):** `make game` (`DISPLAY=:1`) shows the camera visibly following sustained play; the pan pair vs the still pair captures + the AE witness (the FU305 discipline; the attribution via the same-commit cell assertions); whatever cannot be made live is a numbered waiver.
+- **Layer-2 (goaled):** `make game` (`DISPLAY=:1`) shows the camera visibly following sustained play; the pan pair vs the still pair captures + the acceptance shape in §8.3 (the same-commit cell assertions primary, the AE relative to the measured still control); whatever cannot be made live is a numbered waiver.
 - **Invariants:** M1 immutable; M2 byte-identical through the staged tasks — re-pinned **only** with a written reason + frame diff (a live path that legitimately moves the tape stops the task for that diff first); the census holds `60/80` unless a row is proven live (the four-doc same-commit rule); the live-chain rule (no staged gates).
 
 ## 6. Honest-stop rule
@@ -47,3 +47,12 @@ Any surface that cannot be raised live without a stand-in is a numbered leg with
 - The scope is the **visible follow/pan camera** — the standing Layer-2 goal from phases 27–28 (the user asked to start from what is already known).
 - The process is the repo's phase shape: spec → a four-slice recon wave (the user's up-to-4 cap) → the producer plan → SDD, on `main`.
 - The keeper `follow_speed` seam (the phase-28 parked finding) rides in the fidelity slice (FU308).
+
+## 8. Builder-check decisions (the calls made)
+
+The builder check surfaced four underdetermined points; the user's skip-the-questions instruction delegates them. The calls:
+
+1. **FU307 route rule.** The mid-band Y producer may use the **keeper band** (the row-`0x1B`/`0x1E` `rec.pos_y + 0x38` writes) when FU307 proves it faithful from the phase-28 live installer — it is the installer's own chain, not the R11-L4 remainder. The R11-L4 remainder, the set-piece/free-kick/corner routes and the throw-in cut stay **Out** (they re-anchor the chain). If no in-scope route is faithful, Stage-2 still runs: the fidelity work + the event chain + the Layer-1 proof on the keeper-release fixture, with Layer-2 waived (the §6 shape) — the phase does not stop at Stage-1.
+2. **The Layer-1 fixture counts.** The phase-28 keeper-release fixture is a legitimate Layer-1 witness (a real `fifa96_camera_event_set(..., 0x50, 0)` + `set_tracked`); extending it with the row-`0x0E`/`0x5E` record + the receive event + the follow/pan assertions is the test shape (staged producer inputs are allowed; the camera setter is a producer). The RED bar: the new follow/pan assertions fail on the phase-28 baseline.
+3. **The Layer-2 AE criterion.** The same-commit camera-cell assertions are the primary witness; the AE is corroboration with a **relative** gate — the pan-pair AE must exceed the same-crop still-pair control (the measured still control is ~2052; "still = 0" is unachievable), using a same-clock static window where possible. The FU305 precedent magnitudes are guidance, not a floor.
+4. **"Sustained" = one native window.** A single ~52-frame (≈1.7 s) follow burst per event is the goal (the native closes the window at the first pan step; a new setter call re-opens it). Continuous chaser re-arming is a stretch; if FU306 finds the ramp unreachable, it is a numbered leg, not a blocker.
