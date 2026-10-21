@@ -8157,6 +8157,23 @@ static void test_action_1b_deep_pan_block_b_bounds(void) {
   assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
   assert(mr.match1b_wide_leg == 1);
   assert(mr.keeper_latch[5] == 1);
+
+  /* (d) the argument order: `angle(lane_z, cam_dz6f)` is 0 at
+   * (lane_z 0, cam_dz6f 0x100) -> the pan; the swapped
+   * `angle(cam_dz6f, lane_z)` is 0x100, whose |h| >= 0x80 with lane_x 0x40
+   * would exit. This pins the fresh-byte reading (FU301 §1.3's slip). */
+  e = match1b_deep_stage(&mr);
+  mr.difficulty_14c2f6 = 1;
+  mr.record.desc_c = 0;
+  mr.record.face7d = 0;                     /* angle 0 -> heading 0 */
+  mr.keeper_cam_y = 0x30;
+  mr.keeper_latch[4] = 1;
+  e->lane_x = 0x40;
+  e->lane_z = 0;
+  e->cam_dz6f = 0x100;
+  assert(fifa96_match_dispatch_action(&mr, 0x1B) == FIFA96_OK);
+  assert(mr.match1b_wide_leg == 1);
+  assert(mr.keeper_latch[5] == 1);
 }
 
 /* Block C (`0x77163..0x771E7`): the jitter. A tracked keeper whose
