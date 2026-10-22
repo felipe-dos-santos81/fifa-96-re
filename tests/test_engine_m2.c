@@ -2258,7 +2258,17 @@ struct m2_stage_capture {
   uint32_t select_ran;   /* ... and its AX prepass gate opened */
   uint32_t select_cx1;   /* ... stage 1 */
   uint32_t select_cx4;   /* ... stage 4 */
-  struct fifa96_keeper_cpu_stage_out last;
+  /* The last sampled stage-select and its input view (FU313 P4: the counters
+   * prove every call; the view pins the measured cam=(0,0,0), lane_x=0,
+   * follow_speed=0). Scalar fields, so the P5 replay comparison has no struct
+   * padding to leak. */
+  uint8_t last_ran;
+  uint8_t last_stage;
+  uint8_t last_latch;
+  uint8_t last_copy_valid;
+  int32_t last_cam_x, last_cam_y, last_cam_z;
+  int32_t last_lane_x;
+  int16_t last_follow_speed;
 };
 
 /* The observation seam: count the gate, sample the stage-select on the same
@@ -2278,7 +2288,15 @@ static int m2_stage_capture_ladder(void *ctx,
         if (sel.stage == 1u) cap->select_cx1++;
         if (sel.stage == 4u) cap->select_cx4++;
       }
-      cap->last = sel;
+      cap->last_ran = sel.ran;
+      cap->last_stage = sel.stage;
+      cap->last_latch = sel.latch_157c5c;
+      cap->last_copy_valid = sel.copy_valid;
+      cap->last_cam_x = rec->cam_x;
+      cap->last_cam_y = rec->cam_y;
+      cap->last_cam_z = rec->cam_z;
+      cap->last_lane_x = rec->lane69 >> 16;
+      cap->last_follow_speed = rec->follow_speed;
     }
   }
   return fifa96_keeper_cpu_ladder_run(ctx, rec, out);
@@ -5154,12 +5172,16 @@ int main(void) {
           "test_engine_m2 natural probe: situation-0 kickoff at step %d (match "
           "start %d), row 0x24 dispatched, act-1 route at step %d, phase 2 at "
           "step %d, %u granted frames (%u s), camera zero %u/%u, ladder seam "
-          "%u calls / stage_select ran=%u (cx1=%u cx4=%u), score 0-0\n",
+          "%u calls / stage_select ran=%u (cx1=%u cx4=%u) cam=(%d,%d,%d) "
+          "lane_x=%d fspd=%d, score 0-0\n",
           nat.kick_step, nat.match_start_step, nat.act1_step, nat.phase2_step,
           (unsigned)nat.granted_frames, (unsigned)nat.clock_seconds,
           (unsigned)nat.camera_zero_frames, (unsigned)nat.sampled_frames,
           (unsigned)nat.stage.calls, (unsigned)nat.stage.select_ran,
-          (unsigned)nat.stage.select_cx1, (unsigned)nat.stage.select_cx4);
+          (unsigned)nat.stage.select_cx1, (unsigned)nat.stage.select_cx4,
+          (int)nat.stage.last_cam_x, (int)nat.stage.last_cam_y,
+          (int)nat.stage.last_cam_z, (int)nat.stage.last_lane_x,
+          (int)nat.stage.last_follow_speed);
   /* The honest baseline label: P6/P7/P8 are RED by design in the natural
    * window (the phase-30 NO-GO); only the scripted, Y-less pan witness moves
    * the place, and it is P6-partial, not natural play. */
