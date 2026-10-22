@@ -561,3 +561,56 @@ existing `build/test_engine_m2`.
    repeated scripted claims can walk the camera past `0x730` (and the scanner
    then produce a situation) is unproven: new leg **FU310-L9**. *Stage-2
    consequence:* a bounded armer spike, not a committed bootstrap.
+
+---
+
+## Erratum — the act-2 stage conflation (T3 fix round, 2026-10-22)
+
+The frozen text and the review erratum above stand; this append-only erratum
+corrects item 2's scope. Quoted (review erratum item 2):
+
+> "Fresh `0x8947A MOV AL,[0x14C32A]; 0x89485 TEST AL,AL; 0x89487 JZ 0x89615`
+> aborts **whenever the session byte is 0**, before every other term; `kind ==
+> 3` is only the `0x8944A CMP EAX,0x3` ball-row `0x49` choice, and
+> `[0x158882]` is tested at `0x894A2` **after** the session gate. The engine's
+> `kind == 3 || session != 0` (`match_run.c:6216`) is a port compression, not a
+> native OR."
+
+**Correction — the gate is per-stage, and `kind == 3` does pass at stage 3.**
+Fresh this round (`/FIFA96.EXE`, `watcom:LE:32:default`, base 0):
+`disassemble_bytes 0x894A2..0x894D1`, `read_memory 0x89214` (24 B). The stage
+table entry 3 is `a2 94 08 00` = `0x894A2`, i.e. the stage-2 body's abort
+re-enters at the stage-3 body, whose fresh bytes are:
+
+```
+0x894a2  803d8288150000   CMP byte ptr [0x158882], 0
+0x894a9  7519             JNZ 0x894C4             ; ball-row flag -> decision
+0x894ab  31c0             XOR EAX, EAX
+0x894ad  a08c881500       MOV AL, [0x15888C]      ; the contact-kind cell
+0x894b2  83f803           CMP EAX, 0x3
+0x894b5  740d             JZ  0x894C4             ; *** kind == 3 -> decision ***
+0x894b7  803d2ac3140000   CMP byte ptr [0x14C32A], 0
+0x894be  0f8451010000     JZ  0x89615             ; byte-0 session -> abort
+0x894c4  8a3529881500     MOV DH, byte ptr [0x158829]   ; the decision
+```
+
+The stage-2 body's abort (quoted unchanged, `0x8947A..0x89487`) happens **after**
+it increments the stage byte (`0x89472 MOV CH,[0x158829]; 0x89478 INC CH;
+0x8947F MOV [0x158829],CH`), so a byte-0 session splits the machine and the
+next driver call runs the stage-3 body above, which tests the flag, then
+`kind == 3`, then the session. The native two-call net under byte 0 + kind 3 is
+therefore a **decision** on the re-entry call; `kind == 3` alone never passes at
+**stage 2** (the only place the quoted sentence is true), but it does pass at
+**stage 3**. `[0x158882]` remains the only unmodelled term (assumed 0,
+FU166-L6).
+
+*Port consequence:* the engine models engine stage 1 = native stage 2 (the
+byte-0 split hold) and engine stage 2 = native stage 3 (`kind == 3 || session
+!= 0`); the flat compression is only wrong as a **single** gate (it would apply
+the stage-3 kind pass on the stage-2 call). FU310-L8 is re-scoped to that
+stage distinction. Item 2's "the kind-3 route is not an honest free-kick/
+penalty bootstrap" does not follow from the gate alone: under byte 0 a kind-3
+(offside) contact reaches the stage-3 body on the re-entry call and decides
+phase 7/6. Whether that route is a *bootstrap* depends on the offside
+producer's live inputs (the live receive arm was shown reachable in FU276-L2),
+which this erratum does not settle.
