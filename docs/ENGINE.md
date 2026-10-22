@@ -6557,3 +6557,91 @@ stays `75%`.
   change in phase 32's Stage 2. The trace sink stayed default-off outside
   the acceptance run; the capture/trace artefacts are
   `docs/screens/p32-l2-*`.
+
+---
+
+## M2 phase-32 close-out errata (T3 review, 2026-10-22)
+
+The phase-32 register above stands as written; this append-only section
+corrects the T3 review's three Important record-accuracy defects and the
+same-area minors. **Docs-only:** no production code/golden change; the
+phase's only code change is T1's test-side witness (`6fb8062`, +349 lines);
+`make check` **111/111** (strict, ASan/UBSan); M1 `09b726b7…` (22 004 B) and
+M2 `8434cfab…` (295 087 B) unmoved; the census holds **`60/80 = 75%`**. The
+verdict (the first **natural** non-zero-delta pan; drive-only; the offset is
+Layer-1; the live face is phase 33) is unchanged.
+
+**1. The live-timing drift sign (Important 1).** Quote (`:6516-6519`): "the
+phase-2 landing drifts: −3 ticks here vs +95 in the phase-31 T3 run".
+**Corrected:** the live phase 2 landed at **`f=539`/tick 1 800** against the
+null trace's **`f=538`/tick 1 797** — **+3 ticks vs the null trace**
+(`docs/screens/p32-l2-notes.md:23`, `:36-37`), or **−2 against the probe's
+step 1 802** (the probe's step counter and the trace's `tick` are different
+clocks; the reference must be named). The phase-31 `+95` is the live tick
+1 897 vs the null 1 802. The T2 report's prose (`task-2-report.md:169`)
+copied the phase-31 comparison's sign; its table (`:33`) has it right
+("+3 ticks"). No pin moves: the drive is phase-2-relative and the
+gate/event/motion/stop ticks are null-identical.
+
+**2. The plateau refusal count (Important 2).** Quote (`:6338-6339`): "the
+record is inside the band west of the camera for `f=1513…1528`, but
+`lane > bound` refuses 12 of those frames". **Corrected:** the 16 frames
+split **2 angle fails** (`f=1513` lane 16/16, `f=1515` lane 17/17), **13
+lane refusals** (`f=1514` alone, lane 17/16, plus the 12-frame
+`f=1516…1527` block), and **1 pass** (`f=1528`, lane/bound 36/36) —
+`docs/ghidra/FU320_r2l6_nonzero_drive.md:92-98`. The "12" is the block's
+length, not the refusal count. The plateau-riding conclusion stands.
+
+**3. "No code/test/golden change" (Important 3).** Quote (`:6555-6556`):
+"no code/test/golden change in phase 32's Stage 2". **Corrected:** the T3
+commit is docs-only, but the phase's Stage 2 is **not** code-free — T1 added
+the test-side witness (`tests/test_engine_m2.c`, **+349 lines**, `6fb8062`;
+the register's own T1 bullet, `:6344-6345`). The accurate formula is: **no
+production code/golden change; the only code change is T1's test-side
+witness (`6fb8062`, +349 lines)**.
+
+**4. The errata scope (Minor 1).** Quote (`:6301-6304`): "the wave-review
+errata are appended to each". **Corrected:** only **FU318** and **FU321**
+carry `## Review erratum (wave review, 2026-10-22)` sections; **FU319 and
+FU320 have none** (their final sections are Known limits / Provenance). The
+registered errata are FU318's staged-metric erratum and FU321's `|v0|`
+erratum + C1/C2 check. "Appended to FU318 and FU321" is the correct scope.
+
+**5. The half-time reset frame (Minor 2).** Quote (`:6383-6384`): "the
+half-time reset `f=4141` (`ph 12→1`, camera back to `0,0,0` …)".
+**Corrected:** the phase transition and the place reset are different
+frames: **`ph=12` at `f=4139`**, **`ph=1` at `f=4140`** (place still
+`−144`), and the **place/`trk`/`pan` reset at `f=4141`** (`pos=0,0,0`,
+`trk=-1`, `pan=0`) — `docs/screens/p32-l2-trace-pan.txt:77-79`. "One
+changed-place frame at `f=4141`" is right; the `ph 12→1` belongs to
+`f=4139→4140`.
+
+**6. The heading (Minor 3).** Quote (`:6294`): "the first offset pan".
+**Corrected:** **"the first natural offset pan"** — FU321 E21 records a
+**staged** non-zero-delta offset pan in the m-42 fixture (camera park
+`(0,0,0xB00)`, record `(0,0,0xAF0)`, lane `0x10`), so the unqualified
+"first offset pan" is too broad. The register's verdict already says
+"natural"; the heading now matches it.
+
+**7. The 3701→3722 shift cause (Minor 4).** Quote (`:6480-6483`): "No claim
+moves (T1 inserted the offset pass beside them)". **Corrected:** the shift
+comes from T1's **earlier** insertions — the `M2_OFFSET_*` macros
+(`tests/test_engine_m2.c:1884-1888`) and the struct/sampler additions — not
+from the offset pass at `:4279`. The fresh baseline is `:3722-3724`; "No
+claim moves" stands.
+
+**8. The §5 frame-path fixture (Minor 5).** The spec §5's Layer-1 half
+requires a frame-path fixture that reaches the same chain (producer inputs
+only). The record names it: the existing **`test_live_claim_pan_row04_half_line`**
+(`tests/test_engine_match_frame.c:2610`; FU317 §6 H5) — the real frame path
+with `begin_isolated`, kickoff → KICK → phase 2 → LONG_BALL → UP, asserting
+the claim, the tracked bind, the `0x90` stop and the `5→3→2→1→0` decay.
+**With no producer landed, no new fixture and no new mutation rider is
+added**; the T2 unit pair (`test_row04_live_face_passes_face_aligned_gate` /
+`…_zero_face_fails…`) remains the added face pin, not the same-chain
+fixture.
+
+**9. Tape and gate.** Docs-only errata; no production code/golden/test
+change. M1 `09b726b7…` (22 004 B) / M2 `8434cfab…` (295 087 B)
+byte-identical (`cmp`-verified); `make check` **111/111**; census
+**`60/80 = 75%`**; README/AGENTS untouched. The verdict is unchanged.
