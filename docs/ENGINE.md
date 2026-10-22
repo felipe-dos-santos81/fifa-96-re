@@ -6158,3 +6158,113 @@ fidelity did **not** re-pin); `make check` **111/111** (strict
   23 phase`); no README/AGENTS change. The trace sink remains default-off
   (the M2 stdout is `cmp`-identical with and without the env), and no
   `make game`/capture artefact outside `docs/screens/p31-l2-*` was added.
+
+---
+
+## M2 phase-31 close-out errata (T4 review, 2026-10-22)
+
+The phase-31 register above stands as written; this append-only section
+corrects the T4 review's three documentation-accuracy Importants and the
+same-area precision minors. **Docs-only:** no code/test/golden change;
+`make check` **111/111** (strict, ASan/UBSan); M1 `09b726b7…` and M2
+`8434cfab…` unmoved; the census holds **`60/80 = 75%`**. The verdict (the
+natural pan is real, one pan, trace-attributed; the follow waived; the armer
+NO-GO) is unchanged.
+
+**1. The `FU310-L5` contradiction (Important 1).** Quote
+(`docs/ENGINE.md:6091-6092`): "**FU314-L1 — MET for the one-pan witness** (it
+carried FU310-L5)". Quote (`:6126`, the carried list):
+"**FU310-L4..L7**". **Corrected:** a met L5 and an "open L5" cannot coexist.
+**FU310-L5 is MET for the one-pan witness** — the same scope as FU314-L1: the
+natural route's single pan (`f=1514…1540`, `−0x90`), carried by the T1
+witness. **The carried list is `FU310-L4/L6/L7`.** L5's broader/robust
+continuation is **FU314-L1a** (the face-aligned/non-zero-delta route), which
+stays open.
+
+**2. The `2 084` counter vs the `2 082`/`33` algebra trap (Important 2).**
+Quote (`:5908-5910`): "the off-zero count `2 084` is recorded and is *never*
+the count — the FU317 §3.4 false-pass trap". **Corrected:** these are two
+different counters. **`2 084` is the driven run's off-zero count**:
+`tests/test_engine_m2.c:3981` increments `off_zero_frames` on
+`pos != (0,0,0)`, and `:4141-4142` asserts
+`off_zero_frames == granted_frames − first_motion_f`; the delta-run rule
+(27 changed frames, `:4137-4140`) is the count, and the off-zero/27 check is
+T1's own RED-2 trap. **The FU317 §3.4 false pass is the test-side algebraic
+half-line predicate**, true on **2 082** granted frames of the undriven
+control (which never pans) vs **33** driven frames — the warning is "never
+re-derive the gate algebra in the test" (FU317-L2), not the delta-run rule.
+The register conflated the two.
+
+**3. The Layer-1 certification fixture (Important 3).** Quote
+(`:5877-5878`): "**Layer-1 GREEN** through the headless witness (T1) and the
+frame-path face pair (T2)". **Corrected:** the spec §5 same-chain fixture is
+**`test_live_claim_pan_row04_half_line`**
+(`tests/test_engine_match_frame.c:2610`; FU317 §6 H5): the real frame path
+with `begin_isolated` (the fixture allowance), kickoff → KICK → phase 2 →
+LONG_BALL → UP, asserting the claim (`ball.carrier == id`, `:2647`), the
+tracked bind (`:2652`), the `0x90` stop and the `5→3→2→1→0` decay
+(`:2656-2675`). **Layer-1's certification = the T1 headless witness + that
+fixture.** The T2 pair (`test_row04_live_face_passes_face_aligned_gate` /
+`test_row04_zero_face_fails_face_aligned_gate`, `:7646`/`:7664`) is the
+**added face pin**, not the same-chain fixture: it runs one granted frame and
+stops at the row-05 code install (`e->code == 5`), never the claim.
+
+**4. `FU317-L8` — settled by T1 (Minor 1).** Quote (`:6131`):
+"**FU317-L1..L7/L9/L10**". **Corrected:** **FU317-L8 (the probe cost) is
+settled by T1**, not dropped silently: the extra 12 000-step natural pass
+landed (one run, ~+9 s measured; `test_engine_m2` 65.90 s in the final suite).
+The carried set is L1..L7/L9/L10.
+
+**5. `FU311-L1` — closed by the phase-30 T2 bind pack (Minor 2).** Quote
+(`:6126`): "**FU311-L1..L4/L5a**". **Corrected:** **FU311-L1 is CLOSED** —
+the phase-30 T2 bind pack (`docs/ENGINE.md:2524-2543`; the code at
+`src/fifa96_engine/fifa96_match_entities.c:784-785`:
+`lane69 = (uint16)e->lane | ((uint16)e->lane_x << 16)`, native
+`0x78032/0x78035`) refreshes the high word from `e->lane_x`, which was
+FU311-L1's stale-cell defect. The carried list is **`FU311-L2/L3/L4/L5a`**.
+The phase-30 PROGRESS remainder list (`docs/PROGRESS.md:2652`) carries the
+same stale L1; this erratum supersedes it (prior text not rewritten).
+
+**6. The named deferred minors (Minor 3).** Quote (`:6149`): "the site
+comment's receiver-gate note". Quote (`:6153`): "the PNG-size phrasing".
+**Named/corrected:**
+- **The receiver-gate note:** the T2 row-04 face-site comment
+  (`src/fifa96_engine/fifa96_match_handlers.c:2646-2650`) names only the
+  `0x7EE5C` half-line angle consumer. It omits the **second `face_word7d`
+  consumer**, the `0x7E600` no-slot defender/receiver decision
+  (`src/fifa96_loader/fifa96_outfield.c:355-388`, the read at `:384`,
+  reached from `0x7EC89`/`outfield.c:581`). Comment-level; no behaviour
+  change.
+- **The PNG-size phrasing:** the T3 report's clock-corrections
+  Verification says "identical frames, **byte-identical PNG sizes
+  16,675 B** at 55 s"; equal PNG size is not a pixel-identity proof (the
+  report also states the frames are identical, so the claim is cosmetic).
+  No capture or AE number changed.
+
+**7. The acceptance labels (Minor 4).** Quote (`:6007-6008`): "the
+acceptance matrix (P11–P18)". **Corrected:** FU317 §6's acceptance matrix is
+**H1–H7** (H1 the natural witness, H2 the claim state, H3 the pan, H4 the
+tracked/gate/armer, H5 the frame-path fixture + riders, H6 the visible
+capture, H7 the invariants). **P11–P18 are the §4.4 probe assertions** (the
+T1 witness carries P11–P17); **P18 is manual** — the nine one-line mutation
+riders are not in CI (FU317 §4.5; FU309-L9 stays open). The register's
+"acceptance matrix (P11–P18)" conflated the two labels.
+
+**8. The hold-start boundary (Minor 5).** Quote (`:5891-5892`): "the hold
+must start after 1800, and 1810 is also measured safe". **Corrected:** the
+measured-safe starts are **1810 and 1820**; a held tail from **1800
+suppresses phase 2**, and **1801..1809 is unmeasured** (FU317-L1). The
+register's "after 1800" implied 1801 was safe.
+
+**9. The run-1 count provenance (Minor 7).** Quote (`:5971-5972`): "The
+bare-DOWN negative run (no M2 prefix; 1 header + 21 798 body lines, no pan)".
+**Qualified:** the 21 798 body lines are from the **uncommitted scratch
+trace** `/tmp/opencode/p31-cam-trace.log` (now recorded in
+`docs/screens/p31-l2-notes.md`'s appended errata); they are not a committed
+artefact. The committed evidence is the acceptance run's
+`docs/screens/p31-l2-trace-pan.txt`.
+
+**10. Tape and gate.** No code/test/golden change this round; the goldens
+and the suite are re-verified (see the fix report). M1 `09b726b7…` / M2
+`8434cfab…` byte-identical; `make check` 111/111; census `60/80 = 75%`;
+README/AGENTS untouched.

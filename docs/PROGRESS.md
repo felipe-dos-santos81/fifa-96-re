@@ -2885,3 +2885,39 @@ The follow/Y waiver stands (no `>0xF0` event; `follow=0` everywhere).
 byte-identical (`cmp`-verified; no re-pin this phase); `make check`
 **111/111** (strict `-Wall -Wextra -Werror`, ASan/UBSan); the census holds
 **`60/80 = 75%`**; README and `AGENTS.md` are untouched.
+
+## Phase-31 close-out erratum (T4 review, 2026-10-22)
+
+The phase-31 close-out above stands as written; this append-only section
+corrects the T4 review's documentation-accuracy findings that land in this
+file. No code/test/golden change; `make check` **111/111**; M1 `09b726b7…` /
+M2 `8434cfab…` unmoved; the census holds **`60/80 = 75%`**. The verdict (the
+natural pan is real, one pan, trace-attributed; the follow waived; the armer
+NO-GO) is unchanged. The full corrections are in the ENGINE section
+`## M2 phase-31 close-out errata (T4 review, 2026-10-22)`.
+
+**1. The trace count (Minor 6).** Quote (`docs/PROGRESS.md:2810`): "the
+trace 1 header + 3 598 lines with `trk=2` across the run and `follow=0`".
+**Corrected:** the trace is **1 header + 3 598 body lines** (one body line
+per granted frame — the P16 count asserted in `tests/test_engine_m2.c`).
+
+**2. The off-zero count (Important 2, same clarification as ENGINE).**
+Quote (close-out, "The witness"): "the off-zero count is 2 084 and is never
+the count". **Corrected/qualified:** 2 084 is the **driven** run's off-zero
+count (`pos != (0,0,0)` on each granted frame; asserted as
+`granted_frames − first_motion_f` at `tests/test_engine_m2.c:4141-4142`);
+the delta run is 27 changed frames. FU317 §3.4's **2 082/33** is a
+**different** counter — the test-side algebraic half-line predicate over
+undriven vs driven granted frames — not the off-zero count.
+
+**3. The carried remainder (Important 1 + Minor 2).** Quote (`:2881`):
+"**FU307-L8** and the phase-30 remainder are carried unchanged."
+**Corrected:** the remainder is carried **except** **FU310-L5**, which is
+**met for the one-pan witness** (the natural `f=1514…1540`/`−0x90` pan; its
+broader continuation is FU314-L1a), and **FU311-L1**, which the phase-30 T2
+bind pack closed (`fifa96_match_entities.c:784-785`); the carried list is
+FU310-L4/L6/L7 and FU311-L2/L3/L4/L5a. The ENGINE errata carries the detail.
+(The Layer-1 fixture correction — the same-chain fixture is
+`test_live_claim_pan_row04_half_line`, `tests/test_engine_match_frame.c:2610`;
+the T2 pair is the added face pin — lives only in the ENGINE errata; this
+narrative makes no fixture claim.)

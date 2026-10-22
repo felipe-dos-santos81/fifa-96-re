@@ -93,3 +93,19 @@ sprite-only caveat, never an attribution.
 
 No code/test/golden change. M1 `09b726b7…` and M2 `8434cfab…` (295 087 B) unchanged; `make check`
 green (see the task report). The trace sink stayed default-off outside this run.
+
+## Errata (T4 review, 2026-10-22)
+
+- **The bare-DOWN negative run's count is scratch provenance.** The
+  "1 header + 21 798 body lines" figure quoted in the phase-31 register is
+  from the **uncommitted** `/tmp/opencode/p31-cam-trace.log` (the first,
+  late-kickoff run; no pan). It is not a committed artefact and it is not in
+  this note's extract; the committed evidence is the acceptance run's
+  `p31-l2-trace-pan.txt` (1 header + 14 984 body lines). No capture, AE
+  number or verdict changes.
+- The phase-31 register's remaining documentation corrections (the
+  `FU310-L5` met/carried contradiction, the `2 084` vs `2 082/33` counter
+  split, the Layer-1 fixture name, `FU317-L8`, `FU311-L1`, the acceptance
+  labels, the hold-start boundary, the two named minors) are in
+  `docs/ENGINE.md`'s appended `## M2 phase-31 close-out errata (T4 review,
+  2026-10-22)`; `docs/PROGRESS.md` carries its own appended erratum.
