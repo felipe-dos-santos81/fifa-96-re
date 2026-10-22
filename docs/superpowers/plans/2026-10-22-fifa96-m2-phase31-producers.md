@@ -64,3 +64,18 @@
 - [ ] **Step 2:** `docs/PROGRESS.md`: the phase-31 narrative (the camera pans in natural play; the follow stays waived; the census holds).
 - [ ] **Step 3:** final `make check`; M1 `09b726b7…`; M2 (identical or the T2 re-pin recorded); census check.
 - [ ] **Step 4: Commit** `docs(phase31): the close-out — the natural-pan verdict`.
+
+## Plan erratum (final review, 2026-10-22)
+
+The Task-2 headline above ("the staged-face constants at the sites the wave
+names; the face-aligned pan route") overstates the landed scope. T2 delivered
+the **fidelity prerequisite** (the live `s.face_word7d = r->face7d` at
+`src/fifa96_engine/fifa96_match_handlers.c:2651` and the native row-0x24
+`(1,0)` constant at `:5391`) plus the **frame-path face-aligned pair**
+(`test_row04_live_face_passes_face_aligned_gate` /
+`test_row04_zero_face_fails_face_aligned_gate`). The **natural** witness
+itself still passes only at the **zero-delta degeneracy** (`lane_x = lane_z =
+0`; bearing `0x80`, face `0x100`, Δ`0x80`), so it does not exercise the
+face-aligned route. The robust face-aligned **natural** route remains
+**FU314-L1a (open)**. No behaviour or pin changes here; this erratum corrects
+the process record only.

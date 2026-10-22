@@ -1869,7 +1869,7 @@
 #define M2_CLAIM_DRIVE_FROM 1820
 /* The measured panning record (encoded entity id 2 = team 0 record 2), the
  * gate's controlled actor (pool `controlled` = 1) and the row-04 staging's
- * face operand. FU314-L2 (phase-31 T2) restaged `handlers.c:2646` from the
+ * face operand. FU314-L2 (phase-31 T2) restaged `handlers.c:2651` from the
  * constant 0 to the live record +0x7D, so the staged face is the pool cell:
  * 0x100 at the measured gate. At the measured zero-delta point both fold to
  * the same 0x80 angle delta (the FU317 erratum's P13 label). */
@@ -4013,13 +4013,23 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   const char *prev = getenv(name);
   static fifa96_platform_key tape[M2_CLAIM_TAPE_LEN];
   struct fifa96_platform_null_config pcfg;
+  /* The drive boundary is structural: `M2_KEYS` must end at or before the
+   * hold start, and the hold start must lie inside the tape, so the copied
+   * prefix can never overlap (or truncate) the DOWN hold. */
+  _Static_assert(M2_KEYS_LEN <= M2_CLAIM_DRIVE_FROM,
+                 "M2_KEYS must end at or before the DOWN-hold start");
+  _Static_assert(M2_CLAIM_DRIVE_FROM < M2_CLAIM_TAPE_LEN,
+                 "the DOWN-hold start must lie inside the claim tape");
+  _Static_assert(sizeof tape >= sizeof M2_KEYS,
+                 "the claim tape must hold the full M2_KEYS prefix");
   memset(&pcfg, 0, sizeof pcfg);
   memcpy(tape, M2_KEYS, sizeof M2_KEYS);
-  assert(memcmp(tape, M2_KEYS, sizeof M2_KEYS) == 0);   /* the verbatim prefix */
   for (int i = M2_CLAIM_DRIVE_FROM; i < M2_CLAIM_TAPE_LEN; i++) {
     tape[i].raw_code = FIFA96_ENGINE_KEY_DOWN;
     tape[i].state = 1;
   }
+  assert(tape[M2_CLAIM_DRIVE_FROM].raw_code == FIFA96_ENGINE_KEY_DOWN &&
+         tape[M2_CLAIM_DRIVE_FROM].state == 1);   /* the hold starts here */
   pcfg.tape = tape;
   pcfg.tape_len = M2_CLAIM_TAPE_LEN;
   pcfg.step_ns = 10000000ull;
@@ -4114,7 +4124,7 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
     assert(fifa96_entity_angle(cl->gate.lane_z, cl->gate.cam_dz6f, &bearing) ==
            FIFA96_OK);
     assert(bearing == 0x80);
-    /* The live staged face: `handlers.c:2646` now carries the pool +0x7D
+    /* The live staged face: `handlers.c:2651` now carries the pool +0x7D
      * (0x100), and at the zero-delta point both the staged and pool operands
      * fold to 0x80. */
     int32_t staged = (bearing - M2_CLAIM_STAGED_FACE) & 0x3FF;
@@ -5735,7 +5745,7 @@ int main(void) {
             "lane_z %d cam_dz6f %d bound %d timer81 %u has_slot %u dir (%d,%d) "
             "pos_y %d face7d 0x%X; event f=%d code %u vel (%d,%d) spd %u "
             "tim %u/%u ramp %d trk %d; controlled %d slot.entity %d staged "
-            "face 0x%X (handlers.c:2646, live +0x7D); pan f=%d..%d stop f=%d (%u changed / "
+            "face 0x%X (handlers.c:2651, live +0x7D); pan f=%d..%d stop f=%d (%u changed / "
             "%u off-zero frames, %u segment) place (%d,%d,%d) pan %u->%u "
             "speed %d->%d->%d->%d->%d trk_end %d, Y/Z nonzero %u/%u, armer "
             "%u/OOB %u, follow=1 %u, ladder %u/%u, trace 1+%u lines\n",

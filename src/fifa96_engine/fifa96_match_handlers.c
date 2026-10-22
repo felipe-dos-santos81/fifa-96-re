@@ -2647,7 +2647,10 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
    * live `word[+0x7D]`. The staging record carries the live face (loaded from
    * the pool at `match_run.c` record entry, written back at its tail; an
    * installer-invoked row may have re-faced it in the same record step), so
-   * stage it instead of the pre-fix constant 0. */
+   * stage it instead of the pre-fix constant 0. The same cell is also the
+   * second `face_word7d` consumer's input — the row-04 defender decision
+   * (`fifa96_outfield.c:384`, `row04_defender_decision`) — so a re-faced
+   * record is visible to both gates. */
   s.face_word7d = r->face7d;        /* native word +0x7D (FU314-L2) */
   s.slot_dir_x = r->dir_x;
   s.slot_dir_z = r->dir_z;

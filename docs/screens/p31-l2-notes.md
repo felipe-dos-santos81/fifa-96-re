@@ -100,8 +100,9 @@ green (see the task report). The trace sink stayed default-off outside this run.
   "1 header + 21 798 body lines" figure quoted in the phase-31 register is
   from the **uncommitted** `/tmp/opencode/p31-cam-trace.log` (the first,
   late-kickoff run; no pan). It is not a committed artefact and it is not in
-  this note's extract; the committed evidence is the acceptance run's
-  `p31-l2-trace-pan.txt` (1 header + 14 984 body lines). No capture, AE
+  this note's extract; the committed evidence is the 84-line extract
+  `p31-l2-trace-pan.txt` from the acceptance run's trace (1 header + 14 984
+  body lines). No capture, AE
   number or verdict changes.
 - The phase-31 register's remaining documentation corrections (the
   `FU310-L5` met/carried contradiction, the `2 084` vs `2 082/33` counter

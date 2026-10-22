@@ -6268,3 +6268,23 @@ artefact. The committed evidence is the acceptance run's
 and the suite are re-verified (see the fix report). M1 `09b726b7…` / M2
 `8434cfab…` byte-identical; `make check` 111/111; census `60/80 = 75%`;
 README/AGENTS untouched.
+
+**11. The live trace's second changed-place event (final review, Minor).**
+Quote (`:5870-5872`): "`f=1514…1540`, exactly one maximal changed-place
+run". **Scoped:** "exactly one" is the **T1 witness window** (the 27-frame
+delta run, `f=1514…1540`, inside the 3 598-frame null natural pass). The
+**full live acceptance trace** has a second changed-place event at
+**`f=4170`**: `f=4168` still reads phase `12` at `pos=-144,0,0`; `f=4169`
+reads phase `1` at the same place; `f=4170` reads `pos=0,0,0`, `trk=-1`,
+`pan=0`, `tim=0/0` — the **phase-12 → phase-1 camera reset to zero**, not a
+pan. The T1 `cl->segments == 1` pin is window-scoped; the full tape has one
+pan and one reset.
+
+**12. `FU311-L1`'s label (final review, Minor).** Quote (item 5 above,
+`:6223-6224`): "which was FU311-L1's stale-cell defect". **Corrected
+framing:** the `lane69` bind's high word is **0/−1 by construction** (the
+sign-extended `+0x69` word), per the phase-30 erratum (`:2677-2684`); the
+phase-30 T2 bind pack (`src/fifa96_engine/fifa96_match_entities.c:784-785`)
+refreshes the high word from `lane_x`. The leg is **CLOSED** as item 5 says;
+the "stale-cell" label is superseded by the "0/−1 by construction" framing,
+and the carried list stays `FU311-L2/L3/L4/L5a`.

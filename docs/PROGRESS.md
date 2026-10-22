@@ -2920,4 +2920,4 @@ FU310-L4/L6/L7 and FU311-L2/L3/L4/L5a. The ENGINE errata carries the detail.
 (The Layer-1 fixture correction — the same-chain fixture is
 `test_live_claim_pan_row04_half_line`, `tests/test_engine_match_frame.c:2610`;
 the T2 pair is the added face pin — lives only in the ENGINE errata; this
-narrative makes no fixture claim.)
+narrative makes no Layer-1 fixture claim.)

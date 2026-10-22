@@ -7613,6 +7613,11 @@ static void row04_face_band_setup(struct fixture *f, struct fifa96_match_run *mr
   assert(mr->situation_pending == 0);
   *id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
   assert(mr->slot.entity != *id);
+  /* The `is_ball_track` fallback (`handlers.c:2675-2677`) reads
+   * `id == controlled` when the pool tracked cell is not this record, so the
+   * fixture must never let the row-04 record coincide with the controlled
+   * actor — otherwise a positive pin could pass through the fallback. */
+  assert(mr->entities.controlled != *id);
 
   assert(fifa96_camera_init(&mr->render.camera, 0, 0, 0xB00) == FIFA96_OK);
   *e = &mr->entities.team[1].records[4];
