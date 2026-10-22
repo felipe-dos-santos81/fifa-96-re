@@ -62,3 +62,32 @@ If no natural drive can produce a non-zero-delta face-aligned admission (the wes
 2. **The L5 slice includes what the wave proves the locomotion turn reads.** If FU319 finds the native turn also needs the `0x57A73` focus point (or another cell), that belongs to the minimal producer slice when it is in the native locomotion-turn chain; otherwise it is a numbered leg and the L5 pin is deferred to it. No half-faithful turn lands.
 3. **A period-staged witness is allowed only if the wave proves R2 needs it.** The witness starts from the real kickoff by default; staging the period/clock is a match-setup input (declared), never a camera/face gate. If the second half is the only route, FU320 must show it and the witness documents the staged period.
 4. **L5/L3 are conditional phase-32 tasks with a land/revert gate.** The producer plan carries them only if FU318/FU319 return GO and the Stage-2 M2 diff is faithful; otherwise they are legs and the phase closes on the drive-only witness.
+
+## Plan erratum (close-out, 2026-10-22)
+
+The spec above stands as written; this append-only erratum records the plan's
+resolution of the producer-conditional against the frozen wave FU318–FU321 and
+the phase-32 execution.
+
+- **The producer-conditional resolved to drive-only.** §1/§8.1/§9.4 made
+  FU314-L5 (+ the row-local L3) conditional on the wave proving it the
+  natural/robust route and the M2 diff faithful. FU318/FU319 **did** prove the
+  producer — the locomotion turn, `+0x43 = row_flags & 2`, 38/111 rows, with
+  the staging shape FU319 §5 — but its M2 move is a **universal fidelity
+  change**: the undriven tape would pan and the natural-pass zero-camera
+  baseline (`tests/test_engine_m2.c:3722-3724`) flips by design, broader than
+  this phase's pan scope. The plan therefore landed the **drive-only** FU320
+  R2 witness (Layer 1 `run_natural_offset_pass`, Layer 2
+  `docs/screens/p32-l2-notes.md`) and deferred the producer. **The live face
+  is phase 33**, with FU319 §5/§6 and FU321 §5/§6 as its starting authority.
+  Cost if wrong: the witness remains plateau-riding geometry-luck (FU320-L1)
+  one more phase.
+- **The acceptance criterion is absolute.** FU321 §1/§9 C2/§4.6 G4 wrote "a
+  seed with `v0 ≥ 1`"; the wave review corrects it to **`|v0| ≥ 1`** — the
+  nominated seed is `−0x40`, `v0 = trunc(−0x40/0xC) = −5`, `speed 5` — so
+  C1/C2 are satisfied. The acceptance reads `(|v0|, frames) = (5, 27)` and the
+  observed `(|Δ|, frames) = (0x90, 27)`.
+- **The metric erratum is phase-33 input.** FU318 §8's "already staged"
+  `move_attr` is `fifa96_arm_dist_stage` (the `0x8DCD4` octagon), not the
+  native `+0x65` metric (`0x8DC68`); FU319-L3 (2 record-frames straddle
+  `0x60`, max |Δ| 115) is carried into phase 33, not folded into this phase.

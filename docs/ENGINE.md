@@ -6288,3 +6288,272 @@ phase-30 T2 bind pack (`src/fifa96_engine/fifa96_match_entities.c:784-785`)
 refreshes the high word from `lane_x`. The leg is **CLOSED** as item 5 says;
 the "stale-cell" label is superseded by the "0/−1 by construction" framing,
 and the carried list stays `FU311-L2/L3/L4/L5a`.
+
+---
+
+## M2 phase-32 register (FU318…FU321; 2026-10-22) — the non-zero-delta pan: the first offset pan (drive-only; the live face deferred)
+
+**Scope/provenance.** Phase-32 spec
+`docs/superpowers/specs/2026-10-22-fifa96-m2-phase32-face-aligned-pan-design.md`
+(§5–§9), producer plan
+`docs/superpowers/plans/2026-10-22-fifa96-m2-phase32-producers.md` (T1–T3) and
+the reviewed four-slice wave `docs/ghidra/FU318_r2l6_face_producers.md` …
+`FU321_r2l6_nonzero_acceptance.md` (promoted one-per-commit: `9b5c8c0`
+FU318, `e2dae90` FU319, `2736973` FU320, `19b0db2` FU321; the wave-review
+errata are appended to each — FU318's staged-metric erratum, FU321's `|v0|`
+erratum + C1/C2 check). Task commits: T1 `6fb8062`, T2 `c139c15`. Append-only:
+the phase-31 text and every prior section stand as written; the corrections
+below are quoted errata. Census **`60/80 = 75%`** (`37 action + 23 phase`; no
+row joined); M1 `09b726b7…` and M2 `8434cfab…` (295 087 B) byte-identical
+(`cmp`-verified; the phase lands no production change); `make check`
+**111/111** (strict `-Wall -Wextra -Werror`, ASan/UBSan). The README title
+stays `75%`.
+
+- **The verdict — the first natural non-zero-delta row-04 pan; drive-only; the
+  live face deferred.** The row-04 half-line arm fires from the natural route
+  (the real kickoff, the engine's own phase 2, the live record/camera cells,
+  **no staged camera/gate/face**) with the record **offset** from the parked
+  camera: at the passing dispatch (trace key `f=1528`; the dispatch at `f+1`
+  evaluates it, FU320-L6) record 2 is at `pos (−32,0,16)`, `lane 36`,
+  `bound 36`, `cam_dx +32`, `cam_dz −16`, `face7d 0x100`, bearing `0x14C`,
+  Δ`0x4C` ≤ `0xAB`, `has_slot 1`, `dir (−1,0)`, `tracked −1`, `controlled 1`,
+  `slot.entity 2`, camera `(0,0,0)`, `camY 0`. That is `pos ≠ cam` and a real
+  bearing — the FU321 §3.8/G3 signature (`lane_at_pass ≥ 1`; measured 36),
+  not the phase-31 zero-delta knife edge. The pan itself is the **same
+  slot-arm `T(s)` class** as phase 31: place `0 → −0x90` over **27 granted
+  frames**, `pan 0→4`, `trk=2`, Y=Z=0, `follow=0`; the seed is the slot dir
+  `(−1,0) << 6 = −0x40`, not the gate bearing, so the offset changes *where*
+  the admission happens, not the pan axis. **No production change** (the
+  FU321 Case A): the goldens and the suite are unmoved. The offset is a
+  **Layer-1** claim — the live trace carries camera cells only
+  (`src/fifa96_engine/fifa96_match_run.c:4591-4607`, FU321-L1); Layer 2
+  reproduces the drive and the arithmetic. The **live-face fidelity is
+  deferred to phase 33** (the ruling below).
+  - **The drive:** `M2_KEYS` verbatim entries `0..1799`; **LEFT
+    1820..1849**; **DOWN 1850..end**; 12 000 steps, 3 598 granted frames.
+  - **The honesty caveat — plateau-riding, not a robust crossing.** Every
+    measured pass (`L20…L80`, `R20…R80`) has `lane == bound` on an **integer
+    plateau** of the octagonal metric, and the nominated pass rides the branch
+    switch at `|x| = 2z` (`(2z−2) + 3z/8 = 2z + z/4 = 36` at `z = 16`). The
+    record is inside the band west of the camera for `f=1513…1528`, but
+    `lane > bound` refuses 12 of those frames and the cone opens only after
+    `|x| ≥ |z|/1.75`; the eastbound entry is unreachable with the static `+x`
+    face. **A robust approach-side crossing needs the live-face producer**
+    (FU320-L1/L3, FU319); this witness is geometry-luck until then.
+
+- **T1 — the natural witness (FU320; `6fb8062`).** `tests/test_engine_m2.c`:
+  `run_natural_offset_pass` (`:4279`) beside the untouched T1 claim pass
+  (`run_natural_claim_pass`, `:4031`; called `:4580`, the offset pass
+  `:4583`); the drive constants `M2_OFFSET_*` (`:1884-1888`), the structural
+  tape asserts (`:4291-4315`), the offset pin (`:4386-4392`), the gate tuple
+  (`:4394-4429`), the event/claim (`:4431-4447`), the delta run
+  (`:4449-4475`), the trace cross-check (`:4477-4547`). Pins (recorded, not
+  derived; no staging): gate `f=1528` — the tuple above, with `bearing 0x14C`
+  recomputed only by the port's own `fifa96_entity_angle` and the exact fold;
+  event `f=1529` — `code 5`, `dir (−1,0)`, `vel (−5,0)`, `spd 5`,
+  `trk 2`, `tim 0/12`, `ramp 12`, `ev 0`; claim `f=1530` — `carrier 2`
+  (`slot 2`, `pair 0/0`); **one delta run `f=1530…1556`** (27 changed
+  frames), stop `f=1557` at `(−0x90,0,0)`, `pan 0→4`, speed
+  `5→3→2→1→0`, monotone X (27 decrease / 0 increase), Y=Z=0,
+  `row04_after_event_frames 0`, armer/OOB 0; the off-zero count 2 068 =
+  `granted_frames − first_motion_f` and **not** the run count (the FU317
+  §3.4 trap); the trace **1 header + 3 598 body lines**, contiguous `f`,
+  `trk=−1` at the gate and `trk=2` across the run, `follow=0` and `ev=0` on
+  every line. The RED is the offset pin on the T1 DOWN drive:
+  `lane_at_pass == 0` at `f=1512` (`pos (0,0)`, bearing `0x80`) — the
+  zero-delta case FU321 §3.8 forbids. The undriven control
+  (`run_natural_pass`, `:3634`) stays 3 598/3 598 zero.
+
+- **T2 — the Layer-2 acceptance (FU321; `c139c15`).**
+  `docs/screens/p32-l2-notes.md`, the five PNGs
+  (`p32-l2-pan-a/b.png`, `p32-l2-still-a/b.png`, `p32-l2-pan-diff.png`) and
+  the trace extract `docs/screens/p32-l2-trace-pan.txt` (80 lines = 4
+  comments + 1 header + 75 body: the phase-2 line, the gate/event/pan window
+  `f=1520…1562`, the still window `f=1685…1710`, the half-time reset
+  `f=4138…4142`). The run: `make game` on `:1` with `FIFA96_CAMERA_TRACE`;
+  the M2 prefix replayed by trace tick and FU320's tail scheduled on the
+  **wall clock** at phase 2 + 20 ticks (a first run with a lossless 60 fps
+  clip encoding compressed the LEFT window to 31 ms / ~3 ticks and replayed
+  the T1 **zero-delta** timeline instead — the FU321-L4 limit; the accepted
+  run removed the encoder). Live phase 2 at tick **1 800** (`f=539`); the
+  gate/event/motion/stop at ticks **5 097/5 100/5 104…5 190/5 194** =
+  `f=1528/1529/1530…1556/1557`, **tick-for-tick with the null trace**. The
+  trace: place `0 → −0x90` over 27 changed frames, `pan 0→4`, `trk=2`,
+  `pos_y=0` and `follow=0` on all **15 043** body lines (1 921 636 B;
+  sha256 `aa887570…`); the only other changed-place frame is the half-time
+  reset `f=4141` (`ph 12→1`, camera back to `0,0,0`, `trk=−1`, `pan=0` — a
+  period reset, not a pan; included in the extract). **Gate 1 (relative,
+  binding): AE_pan 63 720 > AE_still 0**, same session; the HUD clock crop
+  AE 0 within each pair; the pan pair at displayed **00:33** (0.215 s apart,
+  inside the delta run) and the still pair at **00:38** (camera constant at
+  `−144`). **Gate 2 (whole-scene bbox) fails and cannot pass in this build**:
+  `335×397+281+0` vs `864×443`, because the renderer draws sprites on black
+  (no pitch) — the documented sprite-only caveat, never an attribution. The
+  **trace attributes**; the AE corroborates; the offset stays the Layer-1
+  tuple (FU321-L1).
+
+- **The wave's verdicts (FU318…FU321, promoted one-per-commit).**
+  - **FU318 (the `+0x7D` face census) — GO on the census and the production
+    contract; NO-GO on the L3 helper-site/frame-wrap route as the walker's
+    natural producer; GO-conditional on FU319.** All 40 `FUN_00079C50` call
+    sites are classified (**8 A** always-both, **1 B** constant `(0,0)` no-op,
+    **31 C** runtime vector) and the port's split is real: `fifa96_arm_face`
+    is sector-only (10 sites) while `fifa96_entity_face` is the true
+    both-cell helper (5 engine rows + 4 keeper sites with the face dropped +
+    1 unwired row + 1 kick inline). The frame-wrap arm `0x8E1CB` fires only
+    at the two row wraps `0x14→0x7F` / `0x52→0x7E` (2 of 111 rows), so it is
+    not the walker's producer; the per-frame producer is the **locomotion
+    turn**, gated by the installed row's `flags & 2` (`+0x43`) — **38 of 111
+    rows**, including the plausible initial rows `0x00`/`0x26` and the walk
+    row `0x13`.
+  - **FU319 (the `+0x43` producer) — GO on the producer and the focus
+    staging, with a broad intended M2 move; NO-GO on the two shortcuts.**
+    The producer is singular: `+0x43` is written at exactly three record sites
+    (`0x6E6C4` install, `0x8DFBA` pool twin, `0x8540C` row-0x22 clear), read
+    only by the turn twins (`0x7BF89`/`0x8E29C`), and its value is **2 for
+    every record after the kickoff placement** (rows 0/0x26 flags `0x07`).
+    The minimal staging shape (§5): a `row43` latch beside `row44`, written
+    by the two installs + the kickoff placement, cleared at `0x8540C`; the
+    mover stages `direct_face = row43` and `face_x/face_z` from the camera
+    triple `0x15774C` (the default `[0x157A73]` focus). The M2 move is
+    **broad**: 38/111 rows armed; the open-loop replay turns on 4 140/67 320
+    record-frames (6.1 %) with 20 distinct steady-state faces; the band record
+    settles at face `0x300` = the camera park, so the **undriven** tape would
+    pan and the natural-pass zero-camera baseline
+    (`tests/test_engine_m2.c:3722-3724`) would flip **by design** — the
+    P7/P8 window/lockout assertions must land with the inversion (FU321-L11).
+    The two NO-GOs: deriving `direct_face` in the mover from `anim_id` (it
+    loses the latch across the `+0x28 = 0` reset / row-0x22 clear, FU319-L2)
+    and folding the `move_attr` metric fix (`0x8DCD4` vs `0x8DC68`) into the
+    same pin (FU319-L3; 2 record-frames straddle `0x60`, max |Δ| 115).
+  - **FU320 (the drive) — GO on the no-code R2 witness; NO-GO on calling it
+    a robust crossing.** The 31-run sweep nominates `LEFT 1820..1849` +
+    `DOWN 1850..end`; the static-face pass set is the west cone
+    (`dx > 0`, `4|dz| < 7dx`, with `angle(0,0) = 0x80` the only tie); the
+    measured pass is plateau-riding (`lane == bound == 36`); the eastbound
+    entry is unreachable with the static `+x` face; the near-misses are
+    measured (`L10` Δ`0xB4` at its only angle-ready frame; `L120` never
+    inside the band; a released hold stops at `x = 1828`, 900+ units short).
+    The pan is X-only because the arm-B seed is the slot dir, not the bearing
+    (FU320-L5); with a live face the east approach would pass at `lane 0x40`
+    with Δ`0` (FU320-L3, a prediction, not a measurement).
+  - **FU321 (the acceptance and the M2 policy) — GO; C1/C2 satisfied; the
+    `|v0|` erratum.** The pan's place delta is **seed-determined, not
+    offset-determined**; the closed-form `T(s)` reproduces five published
+    instances exactly (`0x90/0x140/0x174/0x1FA/0x3B8`); the trace cells,
+    G1–G8, the Case A (drive-only: byte-identical) / Case B (producer: frame
+    diff + written reason + register pin) accounting and the fixture hazards
+    (the m-42/link fixtures, the additivity tautology, the multi-consumer
+    face) are the phase-33 M2 authority. The review erratum corrects C2/G4's
+    `v0 ≥ 1` to **`|v0| ≥ 1`**; the nominated seed `−0x40` gives
+    `v0 = trunc(−0x40/0xC) = −5`, `speed 5`, so C1/C2 hold.
+
+- **The plan ruling — drive-only phase 32; the live face is phase 33.** The
+  spec §8.1/§9.4 made FU314-L5 (+ the row-local L3) conditional on the wave
+  proving it the natural/robust route and the M2 diff faithful. The wave
+  proves the **producer** (FU319) but its move is a **universal fidelity
+  change** — 38/111 rows; the undriven tape would pan; the natural-pass
+  zero-camera baseline inverts — broader than this phase's pan scope. The
+  plan therefore lands the **drive-only** FU320 R2 witness (Case A) and
+  **defers FU314-L5 + the row-local L3 to phase 33**, with **FU319 §5/§6**
+  (the fields, the staging shape, the expected sim/M2 diff) and **FU321
+  §5/§6** (the faithful-move accounting and the hazards) as its starting
+  authority. Cost if wrong: the witness remains plateau-riding geometry-luck
+  (FU320-L1) one more phase; no fidelity claim is made for the live face.
+
+- **Quoted errata (append-only; the wave drafts and the phase-31 text stand as
+  written).**
+  1. **The `|v0|` criterion (FU321 §1/§9 C2/§4.6 G4).** Quote: "a seed with
+     `v0 ≥ 1`". **Corrected (FU321 review erratum 1):** the seed is signed —
+     the nominated FU320 drive is `dir = (−1,0)`, seed `−0x40`,
+     `v0 = −5` — so the binding criterion is **`|v0| ≥ 1`** (the event's
+     `speed > 0`). As written, C2/G4 would reject the intended witness; every
+     other criterion stands. The T1/T2 evidence uses `(|v0|, frames) =
+     (5, 27)` and `(|Δ|, frames) = (0x90, 27)`.
+  2. **The staged `move_attr` metric (FU318 §8).** Quote: "The `move_attr`
+     target distance is already staged (`match_run.c:521-522`)". **Corrected
+     (FU318 review erratum; cross-slice FU319 §4/§7.3):** it is staged from
+     `fifa96_arm_dist_stage` — the `0x8DCD4` octagon — not the native `+0x65`
+     metric (`0x8DC68`) the turn's `>0x60` branch reads. FU319 measures 2
+     record-frames where the two metrics straddle `0x60` (max |Δ| 115) and
+     carries the correction as FU319-L3; the verdict is unchanged.
+  3. **The wave's port-line cites predate T1.** FU319 §6/FU321 §5.4 cite the
+     natural-pass baseline at `tests/test_engine_m2.c:3701-3707`; fresh it is
+     `:3722-3724`. FU320 §1's T1 pass `:4007-4263` is fresh `:4031-4269`.
+     No claim moves (T1 inserted the offset pass beside them).
+
+- **The legs — met, open and out of phase.**
+  - **FU318-L1..L8 —** L1 the 40-site port mapping for the unported rows (the
+    row bodies + the animation event machine); L2 the frame-wrap face write
+    (`match_run.c:1055-1059` flips the octant only; native `0x8E1CB` writes
+    `+0x7D` too) — the animation driver; L3 the `[0x157A73]` live value and
+    the turn's arm at the band entry (FU319 owns it); L4 the native anim row
+    at the band entry and the turn's `speed` (`word[+0x71]`); L5 the
+    keeper/arm face cells (4 keeper sites discard the face; the arm record
+    has no `face7d`); L6 the row-0x0D both-cell output dead (FU178-L1); L7
+    the alternates (`0x6F90A/0x6F945`, `0x81BE3`, `0x8E691`/`0x8E9EE`);
+    L8 the FU314 stale line numbers (superseded by the fresh sites; FU314
+    is not edited).
+  - **FU319-L1..L7 —** L1 the non-default focus pointers (the foul spot
+    `0x1587C0`, the restore `0x8A3B9`, the phase setters); L2 the "row
+    pointer NULL, latch set" state (`FUN_0007997C` clears `+0x28` without
+    `+0x43`); L3 the `move_attr` metric (a separately pinned sub-change);
+    L4 the frame-wrap install's frame position (the successor runs from the
+    scene stage); L5 the sibling flag cells (`+0x45`, `+0x3F`); L6
+    **checked, not a leg** (the face-range parity; re-open only on a measured
+    wrap edge); L7 the M2 blast radius (Stage-2 must produce the actual
+    diff).
+  - **FU320-L1..L8 —** L1 the plateau-riding admission; L2 the `z` offset is
+    tape-timing coupled; L3 the producer-route prediction (the T1 east
+    approach passes at `lane 0x40`, Δ`0`, with the walk-bearing face;
+    unmeasured on the tree); L4 the second half/restart/defender over-run
+    unreachable in the 3 598-frame window; L5 the pan stays X-only; L6 the
+    sampling boundary (`f` is the trace key; the dispatch at `f+1` evaluates
+    it); L7 the controlled-record refusal (`is_ball_track` fallback; the
+    witness's record 2 ≠ controlled 1); L8 the pad→target model.
+  - **FU321-L1..L11 —** L1 the trace cannot prove the offset; L2 the
+    zero-seed silent event; L3 the no-slot `T(4w)` instances are formula-only;
+    **L4 the live timing** — exercised and recorded by T2 (live phase 2 tick
+    1 800; the gate/event/motion/stop tick-for-tick with the null; the
+    lossless-clip collapse of run 1), open as a general rule (the phase-2
+    landing drifts: −3 ticks here vs +95 in the phase-31 T3 run; schedule on
+    the wall clock, no encoder); L5 the m-42 fixture's re-staging
+    insensitivity; L6 the additivity gate is not a re-pin guard; L7 the
+    visible shift scales with the seed; L8 the period-staged witness
+    (conditional, unused); L9 the claim may be absent (the witness's claim is
+    that drive's, not the pan's requirement); L10 the face is a
+    multi-consumer cell (the strongest M2 collateral); L11 the natural-pass
+    baseline asserts flip with a universal producer.
+  - **FU314-L1a — the witness half is MET; the robust/live-face half stays
+    open.** The natural non-zero-delta pan is measured (T1 Layer 1, T2 Layer
+    2) with the live record face read, never staged; but the face is still
+    static, so the robust approach-side crossing (FU320-L3) and the producer
+    fidelity (FU319) are **phase 33**. The phase-31 one-pan witness
+    (`f=1514…1540`) remains the zero-delta witness beside the new offset pass;
+    the undriven `run_natural_pass` is the zero control.
+  - **Carried unchanged:** FU307-L8; the phase-30 remainder as registered;
+    the phase-31 fidelity legs FU315-L1/L2, FU316-L1..L9, FU317-L1..L7/L9/L10
+    (the follow/Y waiver stands; no `>0xF0` event is produced).
+
+- **Deferred minors (T1/T2 reviews; not fixed here; none is a fidelity
+  defect).** T1: the near-verbatim harness duplication between
+  `run_natural_offset_pass` and `run_natural_claim_pass`; the gate resting
+  cells (`vel/spd/tim/ramp`) not pinned; the ladder counters recorded but
+  unused; `trk` not checked after the stop frame; the plateau caveat absent
+  from the site comment. T2: the still pair is ~4.6 s after the stop (the
+  note says ~2 s); the still PNGs are byte-identical (two distinct grabs of a
+  static framebuffer) and the note should say so; the pan pair also shows a
+  pose change (the trace attributes the camera translation); the offset tuple
+  should cite Task 1 by name; `goal_armed = 0` should be stated; the extract
+  arithmetic is 80 lines = 4 comments + 1 header + 75 body; the scope line
+  omits the trace extract; the `+20` label vs the ≈`+22` wall-derived row; the
+  watcher-name parenthetical is backwards; the live/null `f=` is
+  run-relative; the `make check` citation points at the scratch log.
+
+- **Tape and gate.** M1 `09b726b7…` (22 004 B) and M2 `8434cfab…`
+  (295 087 B) byte-identical through T1–T3 (`cmp`-verified; no re-pin);
+  `make check` **111/111** (strict, ASan/UBSan); census **`60/80 = 75%`**
+  (`37 action + 23 phase`); no README/AGENTS change; no code/test/golden
+  change in phase 32's Stage 2. The trace sink stayed default-off outside
+  the acceptance run; the capture/trace artefacts are
+  `docs/screens/p32-l2-*`.
