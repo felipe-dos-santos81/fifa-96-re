@@ -5830,18 +5830,24 @@ static void test_taker_armed_referee_rows_resolve(void) {
   assert(mr.record.stage92 == 6u);
 }
 
-/* FU-166/R14 + FU-150 (T3 re-review round 2): the act-2 net rule under the
- * settled byte-0 default. The `0x89487` abort is a **one-call split**: the
- * stage byte is incremented before it (`0x89478/0x8947F` -> 3) and the shared
- * epilogue (`0x89615`) skips the `0x895E6` teardown, so the machine stays
- * armed and the next driver call dispatches `table[3] = 0x894A2`. The
- * stage-3 gate then decides on the ball row-terminal flag `[0x158882]`:
- * kind == 3 leaves it 1 (the `0x8941D` keep/reroll install lands rows
- * 0/0x62/0x63/0x64/0x65, flags 0x07), so the decision completes on the
- * re-entry call;
- * kind != 3 installs row 0x49 at `0x89464` (flags 0x00) and the gate-0 term
- * aborts (`0x894B7`), still armed at stage 3. The engine models the split as
- * `ref_restart_stage = 2`.
+/* FU-166/R14 + FU-150 (T3 re-review round 2) + FU-310 §3.2 / the review
+ * erratum item 2 (FU310-L8): the act-2 net rule under the settled byte-0
+ * default. The `0x89487` abort is a **one-call split**: the stage byte is
+ * incremented before it (`0x89472..0x8947F` -> 3) and the shared epilogue
+ * (`0x89615`) skips the `0x895E6` teardown, so the machine stays armed and
+ * the next driver call dispatches `table[3] = 0x894A2`. But the session byte
+ * is the **unconditional first gate** — `0x8947A MOV AL,[0x14C32A]; 0x89485
+ * TEST AL,AL; 0x89487 JZ 0x89615` aborts whenever it is 0, before the
+ * decision-word check (`0x8948D..0x8949C`, leg FU166-L6) and before the
+ * kind/`[0x158882]` terms (`0x894A2..0x894BE`). `kind == 3` is only the
+ * `0x8944A` ball-row `0x49` choice; it is not a pass. The retired engine
+ * compression read `kind == 3 || session != 0` and is FU310-L8.
+ *
+ * A non-zero session falls through the gate; the post-session three-term gate
+ * (`[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`, native `0x894A2`/
+ * `0x894AD`/`0x894B7`) is then satisfied by its own session term (the
+ * `[0x158882]` ball-row term stays the FU166-L6 leg). The engine models the
+ * split as `ref_restart_stage = 2`.
  *
  * FU289 (phase-26c Task 2): the stage-3 gate's `kind` is the **contact-kind
  * cell** `[0x15888C]` (byte `contact_kind`), read at `0x894AD MOV AL,[0x15888c];
@@ -5880,10 +5886,12 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.entities.team[1].target != 12);       /* no FK taker */
   assert(mr.entities.team[1].records[1].code != 0x12u);
 
-  /* case B: the FU-289 cell. The stage-3 gate reads the **contact-kind** cell
-   * `[0x15888C]` (`0x894AD`/`0x894DB`); staging `contact_kind = 3` completes on
-   * the re-entry call — the stage-2 split, then the stage-3 gate via the kind-3
-   * term -> phase 7 / row 0x12. */
+  /* case B: the FU-310 gate order. `contact_kind = 3` (the FU-289 cell
+   * `[0x15888C]`) with the byte-0 session must NOT pass — the `0x89487` abort
+   * precedes the kind/`[0x158882]` terms — so the machine holds at the
+   * stage-3 equivalent. Opening the session then lets the re-entered gate
+   * decide (the native third term), pinning that the kind/[0x158882] terms are
+   * evaluated *after* the session gate. */
   fifa96_match_run_init(&mr);
   mr.state.phase = 2;
   mr.config.field_4c306 = 1;
@@ -5901,7 +5909,18 @@ static void test_engine_referee_restart_default_gate_split(void) {
   assert(mr.act.id == 2);
   assert(mr.ref_restart_stage == 2u);
   assert(mr.state.phase == 0x0Au);
-  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);   /* the stage-3 decision */
+  assert(mr.ref_speech == 0u);
+  /* kind == 3 alone (byte-0 session): the unconditional session abort holds */
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
+  assert(mr.act.id == 2);
+  assert(mr.ref_restart_stage == 2u);
+  assert(mr.state.phase == 0x0Au);
+  assert(mr.ref_speech == 0u);
+  assert(mr.entities.team[1].target != 12);            /* no FK taker */
+  assert(mr.entities.team[1].records[1].code != 0x12u);
+  /* the non-zero session: the post-session gate evaluates -> the decision */
+  mr.session_gate_14c32a = 1;
+  assert(fifa96_match_act_tick(&mr) == FIFA96_OK);
   assert(mr.state.phase == 7u);
   assert(mr.act.id == 0);
   assert(mr.ref_speech == 0x2Au);
@@ -6129,28 +6148,26 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_NONE);   /* the retired route */
 }
 
-/* FU274 §3/§4 + FU166-L6 (phase-26b Task 6): the foul-taker honest-stop. The
- * ported chain (pad `0x7CE38` -> row 0x0B -> row 0x0C ->
- * `fifa96_match_run_contact` -> act 3 -> phase 0x19 -> sit 0xA -> act 2) is live
- * and faithful, and Task 4 proved the contact **entry** reachable. But the act-2
- * terminal (`match_run_ref_step_restart` stage 2) completes only on the native
- * gate `contact_kind == 3 || session != 0`: the live path emits a **non-foul
- * contact kind (1 ≠ 3)** (`run.c:6542`) and the settled ordinary-match session
- * gate is 0 (FU-166/R14), so the decision never completes — the machine holds
- * armed at stage 2. The final review (FU280) re-disassembled the act-2
- * stage-2/3 body and corrected the old "the native completes via the unported
- * `[0x158882]` leg" attribution: at `0x8941D` an unconditional `FUN_0006E724`
- * install sets `[0x158882]=1`; the kind ≠ 3 branch runs a second install at
- * `0x89464` (`EDX=0x49`) resetting it to 0, skipped only when `[0x15888C]==3`
- * (`0x8944A`), so the stage-3 gate (`0x894A2`) reduces to `contact_kind == 3 ||
- * session != 0` — i.e. `[0x158882] ≡ (contact_kind == 3)` is **already
- * proxied**, and porting it would **not** flip the rows. The next phase needs a
- * live **`contact_kind == 3`** producer. FU289 (phase-26c Task 2) closed the
- * cell divergence: the engine's gate now reads `contact_kind`/`[0x15888C]`
- * (`run.c:6002/6009`), matching the native `0x894AD`/`0x894DB`. Rows 0x12/0x13
- * therefore still stay **LIVE-LEG** (the live path emits `contact_kind == 1`);
- * this pins that the LIVE default path reaches act-2 stage 2 and installs
- * neither taker row. */
+/* FU274 §3/§4 + FU166-L6 + FU310 §3.2 / the review erratum item 2 (FU310-L8)
+ * (phase-26b Task 6 / phase-30 Task 3): the foul-taker honest-stop. The ported
+ * chain (pad `0x7CE38` -> row 0x0B -> row 0x0C -> `fifa96_match_run_contact` ->
+ * act 3 -> phase 0x19 -> sit 0xA -> act 2) is live and faithful, and Task 4
+ * proved the contact **entry** reachable. But the act-2 terminal
+ * (`match_run_ref_step_restart` stage 2) never decides under the ordinary
+ * session: the native `0x8947A..0x89487` abort fires whenever `[0x14C32A] == 0`
+ * **before** the decision-word check and the kind/`[0x158882]` terms, and the
+ * stage-3 re-entry re-tests the byte at `0x894B7`. The live path emits a
+ * **non-3 contact kind (1 ≠ 3)** (`run.c:6542`) and the settled ordinary-match
+ * session gate is 0 (FU-166/R14), so the machine holds armed at stage 2. The
+ * retired engine compression `contact_kind == 3 || session != 0` was FU310-L8:
+ * `kind == 3` is only the `0x8944A` ball-row `0x49` choice, so the offside
+ * (kind-3) event reaches the same byte-0 abort (the offside-chain test stages
+ * byte 1) and the free-kick/penalty bootstrap needs a non-zero session.
+ * FU289 (phase-26c Task 2) closed the cell divergence: the post-
+ * session terms read `contact_kind`/`[0x15888C]`, matching the native
+ * `0x894AD`. Rows 0x12/0x13 therefore stay **LIVE-LEG** (the live path
+ * emits `contact_kind == 1`); this pins that the LIVE default path reaches
+ * act-2 stage 2 and installs neither taker row. */
 static void test_foul_taker_held_on_live_default(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;

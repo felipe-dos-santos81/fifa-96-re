@@ -6223,38 +6223,31 @@ static int match_run_ref_apply(struct fifa96_match_run *mr,
  *  - stage 0 (0x89318/0x8935A): the soft-foul whistle then phase 0xA on the
  *    fouled side (the native then cascades through the stage 1/2 camera-lead
  *    gates; the port derives one stage per granted frame, FU-150 erratum);
- *  - stage 1 (0x894A2..0x895AC): the decision.
+ *  - stage 1 (0x893E2..0x89487): the ball-row keep/reroll then the session
+ *    gate;
+ *  - stage 2 (0x894A2..0x895AC): the decision.
  *
- * **The gate, re-derived first-hand (T3 review round 2, correcting round 1).**
- * The abort at `0x89487`/`0x894B7` (`JZ 0x89615`) jumps to the shared
- * epilogue and **skips the 0x895E6 teardown** (which clears `[0x15882A]=1`
- * — poked to 1 — `[0x158828]` machine kind = 0, `[0x158808]` step pointer =
- * 0 and `[0x158829]` stage = 0). The per-frame driver `FUN_0008AF38`
- * (`0x8B669 CMP dword[0x158808],0; 0x8B672 CALL dword[0x158808]`) calls the
- * armed step unconditionally, and the dispatcher reads the **stage byte from
- * memory** (`0x892FE MOV AL,[0x158829]`, table `0x89214`), so the abort is a
- * **one-call split, not a hand-off abort**: the aborting body already
- * incremented the stage (`0x89478/0x8947F` -> 3) and the next call re-enters
- * at `table[3] = 0x894A2`, bypassing `0x89487` entirely. The stage-3 gate is
- * `[0x158882] != 0 || kind == 3 || [0x14C32A] != 0`, where `[0x158882]` is
- * the ball block's `+0x96` byte (base `0x1587EC`) written by `FUN_0006E724`
- * as `row_flags & 1` (fresh decompile) — the ball record's current anim-row
- * terminal flag. The stage-2 body's `FUN_0006E724(0x1587EC, 0, ...)` at
- * `0x8941D` keeps/rerolls the ball row to 0/0x62/0x63/0x64/0x65 (flags 0x07 ->
- * `[0x158882] = 1`), and the kind != 3 branch then installs row 0x49
- * (`0x89464`, flags 0x00 -> 0). Net native:
- *  - **kind == 3** under byte 0: the stage-2 split, then the stage-3 entry
- *    sees `[0x158882] = 1` -> the decision completes (phase 7/6) on the
- *    re-entry call;
- *  - **kind != 3** under byte 0: the stage-3 entry sees `[0x158882] = 0` and
- *    gate 0 -> the `0x894B7` abort, still armed at stage 3 (it re-aborts each
- *    frame until a ball-row install or the session changes);
- *  - **byte 1**: the stage-2 decision-word check (`0x89494/0x89499`, leg
- *    FU166-L6) then the gate's `!= 0` term lets every kind through in the
- *    same call.
- * The engine models the split with `ref_restart_stage = 2` (the stage-3
- * equivalent); the `[0x158882]` ball-row term is not modeled (leg FU166-L6),
- * so stage 2 passes on `kind == 3 || gate != 0` and otherwise holds armed.
+ * **The gate order (FU-310 §3.2 + the review erratum item 2, FU310-L8).** The
+ * stage-2 body increments the stage byte (`0x89472 MOV CH,[0x158829]; 0x89478
+ * INC CH; 0x8947F MOV [0x158829],CH`) and then reads the ordinary-match
+ * session byte as the **unconditional first gate**: `0x8947A MOV
+ * AL,[0x14C32A]; 0x89485 TEST AL,AL; 0x89487 JZ 0x89615`. The abort precedes
+ * the decision-word check (`0x8948D..0x8949C`, leg FU166-L6) and the
+ * kind/`[0x158882]` terms; the shared epilogue skips the `0x895E6` teardown,
+ * so the machine stays armed and the next driver call re-enters at
+ * `table[3] = 0x894A2` (the engine's stage 2). That body re-tests the session
+ * at `0x894B7 CMP byte[0x14C32A],0; 0x894BE JZ 0x89615`, after the
+ * `[0x158882]`/kind terms, so a byte-0 session never decides. `kind == 3` is
+ * only the `0x8944A` ball-row `0x49` choice of the stage-2 reroll, NOT a
+ * pass: the retired compression `kind == 3 || session != 0` (the FU-166-L6
+ * "kind proxy") was a port invention, not a native OR.
+ *
+ * With a non-zero session the stage-2 body falls through and the post-session
+ * gate decides: `[0x158882] != 0 || kind == 3 || [0x14C32A] != 0` (0x894A2 /
+ * 0x894AD / 0x894B7). Its own session term is satisfied here; `[0x158882]`
+ * — the ball block's `+0x96` byte (base `0x1587EC`) written by FUN_0006E724
+ * as `row_flags & 1` — stays the FU166-L6 leg. The engine models the split
+ * with `ref_restart_stage = 2` (the stage-3 equivalent).
  * Phase 7 by default; phase 6 when the contact kind is not 3, |incident x| <
  * 0x420 and z lies in the fouler-side band [-0xB10,-0x7B0] side 0 /
  * [0x7B0,0xB10] side 1 (0x894DB..0x89550, verified). Speech 0x23 (6) /
@@ -6272,17 +6265,17 @@ static int match_run_ref_step_restart(struct fifa96_match_run *mr) {
     mr->ref_restart_stage = 1u;
     return 1;
   }
-  if (mr->ref_restart_stage == 1u && mr->session_gate_14c32a == 0u) {
-    /* 0x89487 JZ 0x89615 with the stage already incremented (0x89478/0x8947F
-     * -> 3): the armed split; machine stays RESTART. */
-    mr->ref_restart_stage = 2u;
+  /* 0x8947A..0x89487 / 0x894B7..0x894BE: the session byte is the
+   * unconditional first gate. The stage-2 body increments the stage byte
+   * before aborting (0x8947F), so the first byte-0 frame performs the split;
+   * the re-entered stage-2 (native stage 3) aborts again on its own session
+   * term. Either way the machine stays armed and never decides. */
+  if (mr->session_gate_14c32a == 0u) {
+    if (mr->ref_restart_stage == 1u) mr->ref_restart_stage = 2u;
     return 1;
   }
-  if (!(mr->referee.contact_kind == 3u || mr->session_gate_14c32a != 0u)) {
-    /* the stage-3 gate with `[0x158882] == 0` (kind != 3): 0x894B7 ->
-     * 0x89615, still armed (the native re-aborts each driver call). */
-    return 1;
-  }
+  /* The non-zero session satisfies the post-session gate's own third term
+   * (0x894A2/0x894AD/0x894B7), so every kind reaches the decision. */
   {
     uint8_t phase = 7u;
     if (mr->referee.contact_kind != 3u) {
