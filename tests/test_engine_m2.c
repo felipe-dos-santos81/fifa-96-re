@@ -4275,7 +4275,13 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
  * FU320's LEFT nudge (tape indices 1820..1849) then the DOWN west run
  * (1850..end). It stages no camera/gate/face cell: the gate tuple is the live
  * record at the passing dispatch, and the offset pin (FU321 §3.8 G3) is the
- * assertion the drive exists for. */
+ * assertion the drive exists for.
+ *
+ * This is deliberately a near-verbatim sibling of `run_natural_claim_pass`
+ * (the same env save/restore, engine setup, sampler and trace scan): the
+ * repo's witness style keeps each natural pass self-contained, and the
+ * shared-harness extraction is deferred (phase-32 review) rather than
+ * refactoring the frozen T1 pass. */
 static void run_natural_offset_pass(struct m2_claim *cl) {
   static const char name[] = "FIFA96_CAMERA_TRACE";
   char path[] = "/tmp/fifa96_m2_offset_trace_XXXXXX";
@@ -4316,10 +4322,10 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   pcfg.tape = tape;
   pcfg.tape_len = M2_OFFSET_TAPE_LEN;
   pcfg.step_ns = 10000000ull;
-  if (prev != NULL) {
+  had_env = prev != NULL;
+  if (had_env) {
     int n = snprintf(saved, sizeof saved, "%s", prev);
-    assert(n > 0 && (size_t)n < sizeof saved);
-    had_env = 1;
+    assert(n >= 0 && (size_t)n < sizeof saved);
   }
   int fd = mkstemp(path);
   assert(fd >= 0);
@@ -4401,6 +4407,8 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->gate.pos_x == -32 && cl->gate.pos_y == 0 &&
          cl->gate.pos_z == 16);
   assert(cl->gate.lane_x == 36);      /* lane/bound 36/36 */
+  /* `lane == bound == 36` is the octagonal metric's integer plateau, not a
+   * robust crossing: the admission here is plateau-riding (FU320-L1). */
   assert(cl->gate.bound == 36);
   assert(cl->gate.lane_z == 32);      /* cam_dx (+0x6D) */
   assert(cl->gate.cam_dz6f == -16);   /* cam_dz (+0x6F) */
@@ -4415,6 +4423,12 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->gate.slot_entity == M2_CLAIM_ENTITY);
   assert(cl->gate.cam_pos_x == 0 && cl->gate.cam_pos_y == 0 &&
          cl->gate.cam_pos_z == 0);    /* camera parked; camY 0 */
+  /* The gate frame's resting cells (the T2 extract's f=1528 row): no residual
+   * velocity/ramp and no timer — the drive has not fired yet. */
+  assert(cl->gate.cam_vel_x == 0 && cl->gate.cam_vel_z == 0);
+  assert(cl->gate.speed == 0u);
+  assert(cl->gate.timer == 0u && cl->gate.timer_limit == 0u);
+  assert(cl->gate.ramp_divisor == 0);
   {
     int32_t bearing = 0;
     assert(fifa96_entity_angle(cl->gate.lane_z, cl->gate.cam_dz6f, &bearing) ==
@@ -4470,9 +4484,12 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->last.code == 5u);
   assert(cl->last.tracked == M2_CLAIM_ENTITY);
 
-  /* The armer never runs; the X-only pan stays inside the OOB bounds. */
+  /* The armer never runs; the X-only pan stays inside the OOB bounds, and the
+   * keeper ladder seam is unchanged (the T1 pass's counters). */
   assert(cl->oob_frames == 0u);
   assert(cl->goal_armed_any == 0u);
+  assert(cl->stage.calls == 6118u);
+  assert(cl->stage.select_ran == 0u);
 
   /* P16-equivalent: the trace cross-check (the delta run, not the off-zero
    * frames). The trace carries camera cells only — the offset stays a
@@ -4519,9 +4536,11 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
     if (pan > pan_max) pan_max = (uint8_t)pan;
     if (frame == (unsigned)cl->gate.f) trk_gate = trk;
     if (frame == (unsigned)cl->event.f) trk_event = trk;
+    /* `trk=2` across the delta run and its stop tail: the live extract keeps
+     * it at f=1557…1562 (the tail is outside the changed-frame run). */
     if (frame >= (unsigned)cl->first_motion_f &&
-        frame < (unsigned)cl->stop_f)
-      assert(trk == M2_CLAIM_ENTITY);   /* trk=2 across the delta run */
+        frame <= (unsigned)cl->stop_f + 5)
+      assert(trk == M2_CLAIM_ENTITY);
     ppx = px;
     ppy = py;
     ppz = pz;
