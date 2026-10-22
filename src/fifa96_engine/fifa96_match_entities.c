@@ -344,8 +344,9 @@ int fifa96_match_entities_take_place(struct fifa96_match_entities *pool, int32_t
  * position.y is zeroed (0x79B7A), the target is then the committed position
  * (`MOVSD x3` 0x79B87..0x79B89), and the words +0x69/+0x67/+0x65/+0x71/
  * +0x73/+0x75 and the byte +0x9C are zeroed (0x79B8A..0x79BB1). The pool's
- * `lane`/`vel_x`/`vel_z` are dwords over those words: `lane` (+0x69/+0x6B)
- * keeps its high word (the native only clears +0x69), while the three
+ * `lane`/`vel_x`/`vel_z` are dwords over those words: `lane` is the `+0x69`
+ * word (the native clears it; the `+0x6B` high word is the separate `lane_x`
+ * field, untouched), while the three
  * velocity words +0x71/+0x73/+0x75 are cleared — the port zeroes the word
  * views (`speed71`/`vel73`/`vel75`) and the recomposed dword views so no stale
  * word survives a commit. */
@@ -358,7 +359,7 @@ int fifa96_match_entities_place(struct fifa96_match_entity *entity) {
   entity->target_x = entity->pos_x;
   entity->target_y = entity->pos_y;
   entity->target_z = entity->pos_z;
-  entity->lane = (int32_t)((uint32_t)entity->lane & 0xFFFF0000u);
+  entity->lane = 0;      /* native word +0x69 (the +0x6B high word is `lane_x`) */
   entity->speed71 = 0;   /* native word +0x71 */
   entity->vel73 = 0;     /* native word +0x73 */
   entity->vel75 = 0;     /* native word +0x75 */
@@ -774,7 +775,14 @@ int fifa96_match_entities_team_update(struct fifa96_match_entities *pool, uint32
         kc_rec.cam_x = frame->cam_pos_x;                     /* [0x15774C] */
         kc_rec.cam_y = frame->cam_pos_y;                     /* [0x157750] */
         kc_rec.cam_z = frame->cam_pos_z;                     /* [0x157754] */
-        kc_rec.lane69 = e->lane;                             /* dword +0x69 */
+        /* FU311-L5 (phase-30 T2): the native lane cell is the packed
+         * `dword[+0x69]` — the low word is the `+0x69` dz word (`e->lane`) and
+         * the high word the `+0x6B` lane (`e->lane_x`). The machine reads the
+         * high word (`0x78032 MOV EAX,[EBP+0x69] / SAR EAX,0x10`), so the bind
+         * re-packs the two port words exactly; binding `e->lane` alone leaves
+         * the high word 0/-1 by construction (FU311 §4.3, review erratum 2). */
+        kc_rec.lane69 = (int32_t)((uint32_t)(uint16_t)e->lane |
+                                  ((uint32_t)(uint16_t)e->lane_x << 16));
         kc_rec.follow_speed = frame->follow_speed;           /* [0x1577BE] */
         kc_rec.global_157a4c = frame->global_157a4c;         /* [0x157A4C] */
         kc_rec.pan_counter = frame->pan_counter;             /* [0x157821] */

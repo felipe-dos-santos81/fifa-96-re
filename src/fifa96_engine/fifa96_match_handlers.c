@@ -237,13 +237,22 @@ static int fifa96_match_action_01(struct fifa96_match_run *mr) {
     stage = 1u;                                  /* falls into 0x7DCAF */
   }
   if (stage == 1u) {
-    int16_t lane = (int16_t)(r->lane >> 16);     /* 0x7DCCC [+0x69]>>16 */
+    /* FU311-L5a (phase-30 T2, DEFERRED): the native `0x7DCCC`/`0x7DCD7` read
+     * `dword[rec+0x69] >> 16` = the `+0x6B` word (`e->lane_x`). The legacy
+     * `lane` read below is kept because the port's DERIVED kickoff row only
+     * passes its native lane gate (`lane <= 0x40`, `near_lane <= 0x40`) through
+     * this low-word/sign view: the camera focus is parked at (0,0,0) with no
+     * kickoff place (FU310 NO-GO), so the live lane is ~0x7AA and the faithful
+     * read stalls the row before its situation-0xB phase-2 write (measured:
+     * natural phase 2 at step 1802 -> -1, ladder 6 118 -> 0 calls). The
+     * faithful read lands with FU310; leg FU311-L5a. */
+    int16_t lane = (int16_t)(r->lane >> 16);     /* LEG FU311-L5a (legacy view) */
     int16_t near_lane = 0;
     int32_t near = match_row01_nearest(mr, t, (int16_t)mr->render.camera.pos_x,
                                        (int16_t)mr->render.camera.pos_z,
                                        r->active);      /* 0x7DCC7 */
     uint8_t ready = 0;
-    if (near >= 0) near_lane = (int16_t)(team->records[near].lane >> 16);
+    if (near >= 0) near_lane = (int16_t)(team->records[near].lane >> 16); /* LEG FU311-L5a */
     if (near >= 0 && lane <= 0x40 && near_lane <= 0x40) {   /* 0x7DCD5/0x7DCE0 */
       if (r->has_slot != 0) {
         /* 0x7DCE9..0x7DCF6: `word[slot+6] & 0x70` — the FU-70 §1.2 release
@@ -367,7 +376,7 @@ static int fifa96_match_action_02(struct fifa96_match_run *mr) {
   if ((uint8_t)r->stage92 == 0u) {             /* 0x7E08A..0x7E0AA */
     uint8_t ready = 0;
     uint8_t reset = 0;
-    (void)fifa96_action_locomotion_restart_wait((int16_t)(r->lane >> 16),
+    (void)fifa96_action_locomotion_restart_wait((int16_t)r->lane_x, /* 0x7E0B0 dword[+0x69]>>16 */
                                                 r->timer89, &ready, &reset);
     if (!ready) return FIFA96_OK;              /* 0x7E199 */
     if (reset != 0) match_row_reset(mr, e);    /* 0x7E0C8 FUN_0007DAB4 */
@@ -611,7 +620,7 @@ static void match_keeper_closedown_stage(struct fifa96_match_run *mr,
   s->vec.dz = mr->keeper_vec_dz;
   s->timer89 = mr->record.timer89;
   s->delta = mr->record.delta;
-  s->lane = mr->record.lane;
+  s->lane = mr->record.lane_x;   /* FU311-L5: the +0x6B lane word (0x7525C) */
   s->stage92 = mr->record.stage92;
   s->side = team->side;
   s->has_ball = mr->record.has_ball;
@@ -969,7 +978,7 @@ static void match_kick_from_record(struct fifa96_match_run *mr, uint8_t row,
   s->pos_y = r->pos_y;
   s->pos_y_word = (int16_t)r->pos_y;
   s->pos_z = r->pos_z;
-  s->lane_word = (int16_t)r->lane;
+  s->lane_word = (int16_t)r->lane_x;   /* 0x81519 dword[+0x69]>>16 = +0x6B */
   /* M2 phase-11 T1 (FU-148 §14.5 / L14.7): the native event's ball height is
    * `word[0x157750]` (FUN_0007AE70 0x7AEFD `MOV DX,[0x157750]; CX=[rec+0x5D];
    * SUB EDX,ECX`). The camera Y is that word's producer (the T1 port stores
@@ -1306,10 +1315,10 @@ static void match_target_from_camera(const struct fifa96_match_run *mr,
  *
  * Gates: `0x20 < (int32)[0x157750] < 0x70` (`0x82828..0x82834`, the camera Y)
  * and `(int16)word[+0x6B] < 0x60` (`0x8283a..0x82843`). The lane read is the
- * **live +0x6B word**, the pool `lane_x`: the FU-168 §9.4 erratum allows
- * either that or `r->lane >> 16`, and only `lane_x` is refreshed by the BF20
- * lane block (`match_run.c:1444` writes `e->lane_x`; the `e->lane` dword's
- * high word is a separate stale view — FU168-L7(d)).
+ * **live +0x6B word**, the pool `lane_x` (the FU-168 §9.4 erratum's choice;
+ * FU311-L5 retires the old `r->lane >> 16` form — `lane` is the `+0x69` dz
+ * word). Only `lane_x` is refreshed by the BF20 lane block (`match_run.c`
+ * writes `e->lane_x`).
  *
  * Payload (every cell per FU-167 §4): the focus re-placement
  * `rec.pos + 0x40*0x10F334/3C[type]` — the direct `[0x15774C]/[0x157754]`
@@ -1548,7 +1557,7 @@ static void match_sp_commit(struct fifa96_match_run_record *r) {
   r->target_x = r->pos_x;
   r->target_y = 0;
   r->target_z = r->pos_z;
-  r->lane = (int32_t)((uint32_t)r->lane & 0xFFFF0000u);
+  r->lane = 0;   /* native word +0x69 (the +0x6B high word is `lane_x`) */
   r->vel_x = 0;
   r->vel_z = 0;
   r->speed71 = 0;
@@ -1680,7 +1689,7 @@ static int fifa96_match_action_10(struct fifa96_match_run *mr) {
     r->target_y = mr->goal_snap_y;
     r->target_z = mr->goal_snap_z;
     if (mr->session_gate_14c32a == 0u && r->timer89 < 0x3C &&
-        (int16_t)(r->lane >> 16) > 0x20)
+        r->lane_x > 0x20)                                  /* 0x856A0 dword[+0x69]>>16 */
       return FIFA96_OK;                                   /* 0x85693..0x856A9 */
     /* 0x856AF..0x857D0: the FUN_000700F4 snapshot reset, the FUN_00073E08
      * commit and the record-position write at the snapshot ±0x10. The
@@ -1884,7 +1893,15 @@ static int fifa96_match_action_11(struct fifa96_match_run *mr) {
     r->target_x = mr->render.camera.pos_x;                /* 0x860CB..0x860DB */
     r->target_y = mr->render.camera.pos_y;
     r->target_z = mr->render.camera.pos_z;
-    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x860E4..0x860ED */
+    /* FU311-L5a (phase-30 T2, DEFERRED): the native `0x860DC` reads
+     * `dword[+0x69] >> 16` = the `+0x6B` word (`r->lane_x`). The legacy `lane`
+     * read below is kept because the port's DERIVED corner taker only passes
+     * this gate through the legacy view — a live lane > 0x40 blocks it because
+     * the camera focus is not placed at the corner spot (FU310 NO-GO); the
+     * faithful read stalls the row in phase 4 (measured: golden frame 773
+     * phase 2 -> 4 and the ET entry lost). The faithful read lands with FU310;
+     * leg FU311-L5a. */
+    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* LEG FU311-L5a */
     r->timer89 = 0;                                       /* 0x860FC */
     r->stage92 = 7u;                                      /* 0x86108 */
     stage = 7u;
@@ -2034,7 +2051,7 @@ static int fifa96_match_action_12(struct fifa96_match_run *mr) {
     r->target_x = mr->render.camera.pos_x;                /* 0x8416A..0x84182 */
     r->target_y = mr->render.camera.pos_y;
     r->target_z = mr->render.camera.pos_z;
-    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x84189..0x8418C */
+    if (r->lane_x > 0x40) return FIFA96_OK;               /* 0x84189 dword[+0x69]>>16 */
     r->timer89 = 0;                                       /* 0x8419B */
     r->stage92 = 4u;                                      /* 0x841A7 */
     stage = 4u;
@@ -2180,7 +2197,7 @@ static int fifa96_match_action_13(struct fifa96_match_run *mr) {
     r->target_x = mr->render.camera.pos_x;                /* 0x84DF4..0x84DFE */
     r->target_y = mr->render.camera.pos_y;
     r->target_z = mr->render.camera.pos_z;
-    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* 0x84E05..0x84E08 */
+    if (r->lane_x > 0x40) return FIFA96_OK;               /* 0x84E05 dword[+0x69]>>16 */
     r->timer89 = 0;                                       /* 0x84E14 */
     r->stage92 = 4u;                                      /* 0x84E20 */
     stage = 4u;
@@ -2388,7 +2405,7 @@ static int fifa96_match_action_21(struct fifa96_match_run *mr) {
   }
   memset(&r, 0, sizeof r);
   r.timer89 = mr->record.timer89;
-  r.offset_word = (int16_t)mr->record.lane;   /* native word[+0x6B] */
+  r.offset_word = (int16_t)mr->record.lane_x;   /* 0x8528B dword[+0x69]>>16 */
   r.stage = mr->record.stage92;
   r.active = mr->record.active;
   r.event_flag = 0;   /* native +0x44, staged zero (OL-68) */
@@ -2462,7 +2479,7 @@ static int fifa96_match_action_23(struct fifa96_match_run *mr) {
   t.target_x = mr->render.camera.pos_x;   /* 0x71B9C predictor stand-in (OL-68) */
   t.target_z = mr->render.camera.pos_z;
   t.target_height = (int16_t)mr->render.camera.pos_y;
-  t.close_word = (int16_t)mr->record.lane;   /* +0x6B */
+  t.close_word = (int16_t)mr->record.lane_x;   /* 0x82E0E dword[+0x69]>>16 */
   t.timer89 = mr->record.timer89;
   t.delta = mr->record.delta;
   t.phase = (uint8_t)mr->state.phase;
@@ -3263,7 +3280,7 @@ static int fifa96_match_action_0B(struct fifa96_match_run *mr) {
     r->target_x = r->pos_x;
     r->target_y = 0;
     r->target_z = r->pos_z;
-    r->lane = (int32_t)((uint32_t)r->lane & 0xFFFF0000u);
+    r->lane = 0;   /* native word +0x69 (the +0x6B high word is `lane_x`) */
     r->speed71 = 0;
     r->vel73 = 0;
     r->vel75 = 0;
@@ -3698,7 +3715,7 @@ static int fifa96_match_action_1F(struct fifa96_match_run *mr) {
     in.code = r->code;
     in.type_gate = fifa96_outfield_type_bits(r->code);
     in.is_actor = (uint8_t)(mr->entities.controlled == id ? 1u : 0u);
-    in.lane = (int16_t)(r->lane >> 16);
+    in.lane = r->lane_x;             /* 0x76224 dword[+0x69]>>16 = +0x6B */
     in.cam_x = mr->keeper_cam_x;
     in.cam_y = mr->render.camera.pos_y;
     in.cam_z = mr->keeper_cam_z;
@@ -4543,7 +4560,7 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr) {
       }
     }
     if (mr->global_157c2c == 0x54u &&                 /* 0x767E7 */
-        (int16_t)(r->lane >> 16) > 0x40) {            /* word[+0x6B] */
+        r->lane_x > 0x40) {                           /* 0x767EA word[+0x6B] */
       if (r->timer89 > 0xF) match_row_reset(mr, e);   /* 0x76808; <=0xF -> 0x76B21 */
       return FIFA96_OK;
     }
@@ -4820,7 +4837,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
   cam.x = mr->keeper_cam_x;
   cam.y = mr->render.camera.pos_y;
   cam.z = mr->keeper_cam_z;
-  lane = (int16_t)(r->lane >> 16);  /* [+0x69]>>16 */
+  lane = (int16_t)r->lane_x;        /* 0x747B9 dword[+0x69]>>16 */
   bound = (uint8_t)(mr->entities.controlled != FIFA96_MATCH_ENTITY_NONE ? 1u : 0u);
   /* Phase-2 guard (0x7479D..0x74831): the five native rejections all jump to
    * the predictor (0x74832) — `bound` = `[0x157A83]` (0x747B3), lane
@@ -4839,9 +4856,9 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
           opp_id <
               (int32_t)(FIFA96_MATCH_ENTITY_TEAMS * FIFA96_MATCH_ENTITY_RECORDS)) {
         int16_t opp_lane =
-            (int16_t)(mr->entities.team[opp]
-                          .records[(uint32_t)opp_id % FIFA96_MATCH_ENTITY_RECORDS]
-                          .lane >> 16);
+            (int16_t)mr->entities.team[opp]
+                .records[(uint32_t)opp_id % FIFA96_MATCH_ENTITY_RECORDS]
+                .lane_x;                                     /* 0x747E2 word[+0x6B] */
         if (lane >= opp_lane) guard_ok = 0;             /* 0x747EA JGE reject */
       }
     }
@@ -4876,7 +4893,11 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
   }
   /* Carrier dive (0x74ACC..0x74B71). */
   if (r->has_slot != 0 && mr->entities.controlled == id) {
-    if (fifa96_keeper_hold_intercept(&cam, r->lane, 0, 0, &out) == FIFA96_OK) {
+    /* 0x74B28: `dword[+0x69] >> 20` — the native passes the packed dword and
+     * the port's helper scales by `>> 20` itself (the high word is `lane_x`). */
+    int32_t lane69 = (int32_t)((uint32_t)(uint16_t)r->lane |
+                               ((uint32_t)(uint16_t)r->lane_x << 16));
+    if (fifa96_keeper_hold_intercept(&cam, lane69, 0, 0, &out) == FIFA96_OK) {
       r->target_x = out.x;
       r->target_y = out.y;
       r->target_z = out.z;
@@ -4885,7 +4906,7 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
     }
   }
   /* Weighted camera fallback (0x74B72..0x74C8D). */
-  if (fifa96_keeper_hold_fallback(&cam, side, 0, r->lane, 0, 0, 0, 0, &out) ==
+  if (fifa96_keeper_hold_fallback(&cam, side, 0, r->lane_x, 0, 0, 0, 0, &out) ==
       FIFA96_OK) {
     r->target_x = out.x;
     r->target_y = out.y;
@@ -4965,7 +4986,7 @@ static int fifa96_match_action_09(struct fifa96_match_run *mr) {
     /* arm 0 set, 0x80A87.. */
     int32_t dx = (int32_t)e->lane_z;    /* lead_x*0xA + word[+0x6D]; lead 0 (OL-82) */
     int32_t dz = (int32_t)e->cam_dz6f;  /* lead_z*0xA + word[+0x6F]; lead 0 (OL-82) */
-    int32_t speed = r->lane >> 17;      /* 0x80AB0 dword[+0x69]>>17 */
+    int32_t speed = r->lane_x >> 1;     /* 0x80AB0 dword[+0x69]>>17 */
     int32_t face = r->face7d;
     uint8_t sector = r->type;
     int32_t sin1, t1;
@@ -5173,7 +5194,7 @@ int fifa96_match_action_22(struct fifa96_match_run *mr) {
     return FIFA96_OK;
   }
   if (stage == 1u) {                                /* 0x85428 */
-    int16_t band = (int16_t)(r->lane >> 16);        /* 0x85428 word[+0x6B] */
+    int16_t band = (int16_t)r->lane_x;              /* 0x85428 word[+0x6B] */
     fifa96_action_sequence_press p;
     (void)fifa96_action_sequence_press_event(band, r->timer89, &p);  /* FU-136 */
     if (p.fire != 0u) {                             /* band <= 0x30 */
@@ -5818,8 +5839,8 @@ int fifa96_match_action_03(struct fifa96_match_run *mr) {
  *    is unported; the derived stand-in waits a slot-free record past
  *    `+0x89 > 0x78` and advances a slot-bound one (the FU-82 §3.7 arm-3
  *    reading); advance.
- *  - arm 4 (`0x85197`): target := the `0x15774C` focus; the `lane>>16 > 0x40`
- *    gate; the `0x78AA4` slot restore (leg) + the `0x7B9C4` mode-0x40 kick
+ *  - arm 4 (`0x85197`): target := the `0x15774C` focus; the `word[+0x6B] > 0x40`
+ *    gate (`lane_x`); the `0x78AA4` slot restore (leg) + the `0x7B9C4` mode-0x40 kick
  *    (pos_x/pos_z + anim via `0x7A490`); advance.
  *  - arm 5 (`0x851E1`): the `0x79B1C` snap; the `+0x44` ack gate; advance.
  *  - arm 6 (`0x85206`): the `0x7DAB4` reset.
@@ -5897,7 +5918,7 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
     r->target_x = mr->render.camera.pos_x;              /* 0x85197..0x851A0 */
     r->target_y = mr->render.camera.pos_y;
     r->target_z = mr->render.camera.pos_z;
-    if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK;  /* 0x851A2..0x851AB JG */
+    if (r->lane_x > 0x40) return FIFA96_OK;  /* 0x851A2 dword[+0x69]>>16 */
     /* 0x851B3 FUN_00078AA4 slot restore (leg); 0x851C4 FUN_0007B9C4(EBP,0x40,
      * EBX=0) — the mode-0x40 kick writes pos_x/pos_z + the anim (0x7A490). */
     rc = match_sp_kick(mr, NULL, 0x40u, 0u);

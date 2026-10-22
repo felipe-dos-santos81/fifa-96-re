@@ -488,6 +488,19 @@ static void test_keeper_cpu_stage_select(void) {
   assert(sel.copy_y == rec.cam_y);
   assert(sel.copy_x == rec.cam_x + 2 * (rec.actor_vel_x >> 16));
   assert(sel.copy_z == rec.cam_z + 2 * (rec.actor_vel_z >> 16));
+  /* FU311-L5 (phase-30 T2): the native cell is the packed dword +0x69. The
+   * machine's lane input is its HIGH word (`0x78032` `MOV EAX,[EBP+0x69]` /
+   * `SAR EAX,0x10`), so the low dz word must never leak into the CX decision:
+   * `0x00280200` (low 0x200, high 0x28) is the discriminating shape — a
+   * low-word read would be `0x200`, outside both CX windows. */
+  rec = kc_rec_zero();
+  rec.cam_z = 0x800;
+  rec.global_157a4c = 1;
+  rec.lane69 = (int32_t)0x00280200u;             /* high word 0x28 = lane_x */
+  rec.actor_present = 1;
+  rec.actor_same_side = 0;
+  assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);
+  assert(sel.stage == 4 && sel.latch_157c5c == 1);
   /* the same-side actor closes the CX=4 arm (falls through to the table). */
   rec.actor_same_side = 1;
   assert(fifa96_keeper_cpu_stage_select(&rec, &sel) == FIFA96_OK);

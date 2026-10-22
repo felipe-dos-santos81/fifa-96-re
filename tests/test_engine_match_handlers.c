@@ -1015,9 +1015,9 @@ static void test_action_20_body_arms(void) {
   assert(f.mr.entities.ball.y == 0);
   assert(f.mr.entities.ball.z == 0xB10);
 
-  /* arm 4 (0x85197): lane>>16 > 0x40 -> epilogue, no advance. */
+  /* arm 4 (0x85197): lane > 0x40 -> epilogue, no advance. */
   f.mr.record.stage92 = 4;
-  f.mr.record.lane = (int32_t)0x41 << 16;
+  f.mr.record.lane_x = 0x41;                     /* the +0x6B lane word */
   assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 4u);            /* held at the 0x851A2 gate */
 
@@ -1028,7 +1028,7 @@ static void test_action_20_body_arms(void) {
    * record `pos_x/pos_z`+anim write-back (`0x7A490`) is the FU210-L1/OL-9 leg
    * (not implemented by the port), so those fields are deliberately not
    * asserted here. */
-  f.mr.record.lane = 0;
+  f.mr.record.lane_x = 0;                        /* the +0x6B lane <= 0x40 */
   f.mr.entities.ball.pair.vector.x = 0;
   f.mr.entities.ball.pair.vector.height = 0;
   f.mr.entities.ball.pair.vector.z = 0;
@@ -2197,7 +2197,7 @@ static void test_action_07_runs_body(void) {
   f.mr.entities.ball.y = 0x40;
   f.mr.record.stage92 = 0;
   f.mr.record.pos_y = 0;
-  f.mr.record.lane = 0;
+  f.mr.record.lane_x = 0;   /* the 0x81526 word[+0x6B] gate (<= 0x40) */
   f.mr.record.entity_id = 0;
   f.mr.record.has_slot = 1;
   f.mr.render.camera.pos_x = 7;
@@ -2255,7 +2255,7 @@ static void test_action_07_decision_uses_code_byte(void) {
   f.mr.record.stage92 = 1;        /* stage 1 */
   f.mr.record.has_slot = 0;
   f.mr.entities.ball.pair.code = 3;   /* SI = 0x40 through the staged-code arm */
-  f.mr.record.lane = 0x100;
+  f.mr.record.lane_x = 0x100;         /* the +0x6B lane word (<= 0x180) */
   f.mr.record.pos_x = 0;
   f.mr.record.pos_z = 0x7B0;
   f.mr.render.camera.pos_x = 0x10;
@@ -2272,6 +2272,36 @@ static void test_action_07_decision_uses_code_byte(void) {
   f.mr.record.install = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
   assert(f.mr.record.install == 0);
+  drop_fixture(&f);
+}
+
+/* FU311-L5 (phase-30 T2): the kick gate's lane input is the native `+0x6B`
+ * word, not the `+0x69` dz word. The native row-07 stage-0 gate reads
+ * `dword[rec+0x69] >> 16` (`0x81519`/`0x81520`) and the defender decision
+ * reads the same word (`0x7E644`); the port staged `s->lane_word` from the
+ * low word `r->lane`, so the two inputs were swapped. The words are staged
+ * apart here: the low dz word is `0x200` (it would close the `> 0x180`
+ * decision gate) and the lane word is `0x20` (it passes), so only the `+0x6B`
+ * read installs the defender `0x0E`. */
+static void test_action_07_lane_word_is_the_0x6b_word(void) {
+  struct fixture f;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;        /* the stage-1 decision arm */
+  f.mr.record.has_slot = 0;
+  f.mr.entities.ball.pair.code = 3;   /* SI = 0x40 through the staged-code arm */
+  f.mr.record.lane = 0x200;       /* the +0x69 dz word (not the lane) */
+  f.mr.record.lane_x = 0x20;      /* the +0x6B lane word (0x81520) */
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0x7B0;
+  f.mr.render.camera.pos_x = 0x10;
+  f.mr.render.camera.pos_y = 0x30;
+  f.mr.render.camera.pos_z = 0x7B0;
+  f.mr.record.code = 4;           /* flat[4] & 1 == 1: the decision fires */
+  f.mr.record.type = 7;           /* the +0x8E octant is not the gate */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x07) == FIFA96_OK);
+  assert(f.mr.record.install == 0x0E);   /* the defender install */
   drop_fixture(&f);
 }
 
@@ -2370,7 +2400,7 @@ static void test_action_0F_runs_body(void) {
    * the lane > bound gate waits and the timer reload never runs; the loader
    * fixture `test_kick_machine_0F_reload_and_corner` covers the reload. */
   f.mr.record.stage92 = 1;
-  f.mr.record.lane = 0x20;
+  f.mr.record.lane_x = 0x20;   /* the +0x6B lane word (0x82C30) */
   f.mr.record.timer81 = 7;
   f.mr.record.pos_y = 0x40;
   f.mr.entities.ball.y = 0x40;
@@ -2468,7 +2498,7 @@ static void test_action_21_runs_body(void) {
   f.mr.record.pos_z = 0x200;
   f.mr.record.stage92 = 0;
   f.mr.record.active = 1;
-  f.mr.record.lane = 0;            /* word[+0x6B] <= 0x40 */
+  f.mr.record.lane_x = 0;          /* word[+0x6B] <= 0x40 */
   f.mr.record.timer89 = 0x100;
   f.mr.entities.team[0].records[3].pos_x = 0x210;
   f.mr.entities.team[0].records[3].pos_z = 0x200;
@@ -2955,7 +2985,7 @@ static void test_action_02_restart_and_phase2_arms(void) {
   f.mr.record.stage92 = 0;
   f.mr.record.timer89 = 0;
   f.mr.record.delta = 2;
-  f.mr.record.lane = 0x20 << 16;             /* lane 0x20 <= 0x40 -> 0xA */
+  f.mr.record.lane_x = 0x20;                 /* lane 0x20 <= 0x40 -> 0xA */
   f.mr.entities.team[0].slot_pool = 1;
   f.mr.record.helper_request = 0;
   assert(fifa96_camera_init(&f.mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
@@ -2981,7 +3011,7 @@ static void test_action_02_restart_and_phase2_arms(void) {
    * native fall-through into the stage-1 arm stays the OL-18 leg). */
   f.mr.record.stage92 = 0;
   f.mr.record.timer89 = 0x78;
-  f.mr.record.lane = 0x41 << 16;
+  f.mr.record.lane_x = 0x41;
   rec->active = 1;
   rec->code = 2;
   assert(fifa96_match_dispatch_action(&f.mr, 0x02) == FIFA96_OK);
@@ -3433,7 +3463,7 @@ static void test_action_19_hold_guard_binds_camera(void) {
   f.mr.record.entity_id = 0;
   f.mr.state.phase = 2;
   f.mr.record.has_slot = 0;
-  f.mr.record.lane = 0;                /* [+0x69]>>16 = 0 */
+  f.mr.record.lane_x = 0;              /* [+0x69]>>16 = 0 (the +0x6B word) */
   team->side = 1;
   team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
@@ -3503,7 +3533,7 @@ static void test_action_19_guard_tracked_opponent_rejects(void) {
   f.mr.record.entity_id = 0;
   f.mr.state.phase = 2;
   f.mr.record.has_slot = 0;
-  f.mr.record.lane = 0;                /* rec lane word 0 */
+  f.mr.record.lane_x = 0;              /* rec lane word 0 */
   team->side = 0;
   team->tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
   f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
@@ -3513,7 +3543,7 @@ static void test_action_19_guard_tracked_opponent_rejects(void) {
   /* the opponent team target points at a record whose lane word is -1, so
    * `rec_lane(0) >= opp_lane(-1)` -> the 0x747EA rejection fires. */
   f.mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 0;
-  f.mr.entities.team[1].records[0].lane = (int32_t)(0xFFFFu << 16);
+  f.mr.entities.team[1].records[0].lane_x = -1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x19) == FIFA96_OK);
   assert(f.mr.record.target_z == -0x9F0);   /* the fallback, not the guard clamp */
   drop_fixture(&f);
@@ -3532,7 +3562,7 @@ static void test_action_09_stage0_set_branch(void) {
   f.mr.state.phase = 2;
   f.mr.record.active = 1;
   f.mr.record.stage92 = 0;
-  f.mr.record.lane = 0;                /* dword[+0x69]>>17 = 0 speed */
+  f.mr.record.lane_x = 0;              /* dword[+0x69]>>17 = 0 speed */
   f.mr.record.pos_x = 0x100;
   f.mr.record.pos_y = 0x10;
   f.mr.record.pos_z = 0x200;
@@ -3902,7 +3932,7 @@ static void test_action_1c_live_route(void) {
   f.mr.record.stage92 = 0;                /* arm_step stage 0 -> tail */
   f.mr.record.has_slot = 1;
   f.mr.record.code = 0x19;                /* type_bits(0x19)=3 -> bit 0 set */
-  f.mr.record.lane = (int32_t)0x41 << 16; /* lane > 0x40 */
+  f.mr.record.lane_x = 0x41;              /* the +0x6B lane > 0x40 */
   f.mr.record.dir_x = 0;
   f.mr.record.dir_z = 0;
   f.mr.record.pos_x = 0x100;
@@ -4013,7 +4043,7 @@ static void test_action_22_runs_body(void) {
   f.mr.state.phase = 2u;
   f.mr.record.entity_id = 1;
   f.mr.record.stage92 = 1;
-  f.mr.record.lane = (int32_t)(0x20u << 16);   /* native word[+0x6B] = 0x20 */
+  f.mr.record.lane_x = 0x20;                   /* native word[+0x6B] = 0x20 */
   f.mr.record.timer89 = 0;
   f.mr.record.delta = 0;
   assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
@@ -4023,7 +4053,7 @@ static void test_action_22_runs_body(void) {
 
   /* stage 1, band > 0x30 with timer > 0x1E: reset. */
   f.mr.record.stage92 = 1;
-  f.mr.record.lane = (int32_t)(0x31u << 16);
+  f.mr.record.lane_x = 0x31;                  /* native word[+0x6B] > 0x30 */
   f.mr.record.timer89 = 0x1F;
   assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0u);   /* reset: phase-2 active forced install */
@@ -4034,7 +4064,7 @@ static void test_action_22_runs_body(void) {
   f.mr.state.phase = 2u;
   f.mr.record.entity_id = 1;
   f.mr.record.stage92 = 1;
-  f.mr.record.lane = (int32_t)(0x31u << 16);
+  f.mr.record.lane_x = 0x31;                  /* native word[+0x6B] > 0x30 */
   f.mr.record.timer89 = 0x1E;
   f.mr.record.delta = 0;
   assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
@@ -4358,7 +4388,7 @@ static void test_ol83_type8_readers_see_record_type(void) {
   f.mr.record.timer89 = 0;
   f.mr.record.delta = 0;
   f.mr.record.has_slot = 1;
-  f.mr.record.lane = 0;
+  f.mr.record.lane_x = 0;               /* the 0x81526 word[+0x6B] gate */
   f.mr.record.pos_y = 0;
   f.mr.record.type = 1;                 /* the live +0x8E octant */
   f.mr.record.code = 7;                 /* the +0x91 kick gate byte (K.5.3) */
@@ -4428,6 +4458,7 @@ int main(void) {
   test_action_1D_runs_closedown();
   test_action_07_runs_body();
   test_action_07_decision_uses_code_byte();
+  test_action_07_lane_word_is_the_0x6b_word();
   test_action_07_ol65_invoke_installs_row_22();
   test_ol83_type8_readers_see_record_type();
   test_action_0F_runs_body();

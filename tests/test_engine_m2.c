@@ -4073,12 +4073,12 @@ static void run_census_riders(void) {
     mr.record.entity_id = 0;
     mr.state.phase = 2;
     mr.record.has_slot = 0;
-    mr.record.lane = 0;                  /* rec lane word 0 */
+    mr.record.lane_x = 0;                /* rec lane word 0 */
     mr.entities.team[0].side = 0;
     mr.entities.team[0].tracker7c7 = FIFA96_MATCH_ENTITY_NONE;
     mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
     mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 0;
-    mr.entities.team[1].records[0].lane = (int32_t)(0xFFFFu << 16); /* opp lane -1 */
+    mr.entities.team[1].records[0].lane_x = -1;  /* opp lane -1 */
     assert(fifa96_match_dispatch_action(&mr, 0x19u) == FIFA96_OK);
     assert(mr.record.target_z == -0x9F0);   /* the fallback, not the clamp */
   }
@@ -4092,7 +4092,7 @@ static void run_census_riders(void) {
     mr.state.phase = 2;
     mr.record.active = 1;
     mr.record.stage92 = 0;
-    mr.record.lane = 0;
+    mr.record.lane_x = 0;      /* dword[+0x69]>>17 = 0 speed */
     mr.record.pos_x = 0x100;
     mr.record.pos_y = 0x10;
     mr.record.pos_z = 0x200;

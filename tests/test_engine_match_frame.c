@@ -1559,7 +1559,7 @@ static void test_machine_no_edge_arm_copies_camera_target(void) {
   e->active = 1;
   e->code = 3;
   e->timer81 = 1;
-  e->lane = 0x40 << 16;              /* 0x30 < lane < 0x90 */
+  e->lane_x = 0x40;                  /* 0x30 < lane < 0x90 (the +0x6B word) */
   mr.slot.entity = 1;
   mr.entities.team[0].side = 0;
   mr.entities.team[1].side = 1;
@@ -1569,6 +1569,11 @@ static void test_machine_no_edge_arm_copies_camera_target(void) {
   mr.input_state[0] = 0x10;          /* KICK held: mapped +0x10, no direction */
   one_granted_frame(&mr);            /* press edge: scan, no arm */
   assert(e->target_x == 0 && e->target_z == 0);
+  /* FU311-L5: the band input is the `+0x6B` word; the frame's BF20 lane block
+   * recomputes `lane_x` after the dispatch, so re-stage the producer input for
+   * the arm frame (the machine-input convention this fixture already uses for
+   * the edge words). */
+  e->lane_x = 0x40;                  /* 0x30 < lane < 0x90 */
   one_granted_frame(&mr);            /* no edges + prev_mapped 0x10: the arm */
   assert(e->target_x == 0x111);
   /* The Y follows the camera pos_y at the arm; with no live event height the
@@ -1621,7 +1626,7 @@ static void test_unbound_chase_installs_and_runs_row08(void) {
   e->has_slot = 0;
   e->active = 1;
   e->code = 3;
-  e->lane = 0;                       /* distance 0 < 0x50 */
+  e->lane_x = 0;                     /* chase distance 0 < 0x50 */
   e->timer81 = 0;
   e->pos_y = 0;
   mr.entities.team[0].side = 0;
@@ -1642,7 +1647,7 @@ static void test_unbound_chase_installs_and_runs_row08(void) {
   e->has_slot = 1;
   e->active = 1;
   e->code = 3;
-  e->lane = 0;
+  e->lane_x = 0;                     /* chase distance 0 < 0x50 */
   e->timer81 = 0;
   e->pos_y = 0;
   mr.slot.entity = 1;
@@ -1680,7 +1685,7 @@ static void test_unbound_chase_gate_reads_camera_y(void) {
   e->has_slot = 0;
   e->active = 1;
   e->code = 3;
-  e->lane = 0;                       /* distance 0 < 0x50 */
+  e->lane_x = 0;                     /* chase distance 0 < 0x50 */
   e->timer81 = 0;
   e->pos_y = 0;
   mr.entities.team[0].side = 0;
@@ -1707,7 +1712,7 @@ static void test_unbound_chase_gate_reads_camera_y(void) {
   e->has_slot = 0;
   e->active = 1;
   e->code = 3;
-  e->lane = 0;
+  e->lane_x = 0;                     /* chase distance 0 < 0x50 */
   e->timer81 = 0;
   e->pos_y = 0;
   mr.entities.team[0].side = 0;
@@ -3731,7 +3736,7 @@ static void test_keeper_installer_reach(void) {
   keeper->skip_9a = 0u;                            /* P7 */
   keeper->timer81 = 0u;                            /* P9 */
   keeper->has_slot = 0u;                           /* P3 (no queued action) */
-  keeper->lane = 0x28 << 16;                       /* FU290: lane_x=0x28 -> CX=4 */
+  keeper->lane_x = 0x28;                           /* FU290: lane_x=0x28 -> CX=4 */
   keeper->stage92 = 2u;                            /* the row-0x1B stage-2 (wide/re-place) */
 
   /* Frame A (phase 2): the ladder installs row 0x1B (invoke-now); the row's
@@ -3818,7 +3823,7 @@ static void test_keeper_installer_live_permit(void) {
   keeper->skip_9a = 0u;
   keeper->timer81 = 0u;
   keeper->has_slot = 0u;
-  keeper->lane = 0x28 << 16;                      /* the CX=4 lane input */
+  keeper->lane_x = 0x28;                          /* the CX=4 lane input */
   keeper->stage92 = 2u;
 
   /* Frame 1: the live permit opens the gate; the ladder gate (P4 staged) runs
@@ -3908,7 +3913,7 @@ static void test_keeper_installer_live_reach(void) {
   k1->skip_9a = 0u;
   k1->timer81 = 0u;
   k1->has_slot = 0u;
-  k1->lane = 0x28 << 16;                          /* lane_x 0x28 -> CX=4 */
+  k1->lane_x = 0x28;                              /* lane_x 0x28 -> CX=4 */
 
   one_granted_frame(&mr);
   assert((mr.dispatched_ok & (1ull << 0x1B)) != 0u);
@@ -4151,7 +4156,7 @@ static void test_keeper_installer_live_reach(void) {
   k1->skip_9a = 0u;
   k1->timer81 = 0u;
   k1->has_slot = 0u;
-  k1->lane = 0;                                   /* lane_x 0 -> the CX=1 path */
+  k1->lane_x = 0;                                 /* lane_x 0 -> the CX=1 path */
 
   one_granted_frame(&mr);
   assert(k1->code == 0x1Au);
@@ -4385,7 +4390,7 @@ static void test_keeper_live_follow_speed_seam(void) {
     k1->skip_9a = 0u;
     k1->timer81 = 0u;
     k1->has_slot = 0u;
-    k1->lane = 0;                                   /* lane_x 0 -> the CX=1 path */
+    k1->lane_x = 0;                                 /* lane_x 0 -> the CX=1 path */
     mr.render.camera.vel_x = staged[c].vel_x;       /* the walk-tail speed input */
     mr.render.camera.vel_z = staged[c].vel_z;
 
@@ -4695,7 +4700,7 @@ static void test_keeper_seam_ladder_install_full_state(void) {
   keeper->skip_9a = 0u;
   keeper->timer81 = 0u;           /* no deferred install (target == code) */
   keeper->has_slot = 0u;
-  keeper->lane = 0x28 << 16;      /* lane_x 0x28 < 0x30 -> CX=4 */
+  keeper->lane_x = 0x28;          /* lane_x 0x28 < 0x30 -> CX=4 */
   keeper->stage92 = 2u;           /* stale: the installer must overwrite to 0 */
   keeper->timer89 = 0x55;
   keeper->ran = 1u;
@@ -4706,6 +4711,50 @@ static void test_keeper_seam_ladder_install_full_state(void) {
   assert(cap.stage92 == 0u);      /* +0x92 := BL = 0 (the merged contract) */
   assert(cap.timer89 == 0);       /* +0x89 := 0 */
   assert(cap.ran == 0u);          /* +0x9E := 0 */
+}
+
+/* FU311-L5 (phase-30 T2): the keeper bind packs the native `dword[rec+0x69]`.
+ *
+ * The native lane input is `MOV EAX,[EBP+0x69] / SAR EAX,0x10` — the HIGH word
+ * of the packed dword (`0x78032`/`0x78035`, FU311 §2.3), i.e. the `+0x6B`
+ * word. The port keeps the two words apart: `e->lane` is the sign-extended
+ * `+0x69` dz word and `e->lane_x` the `+0x6B` lane. The bind must re-pack them
+ * (`(uint16)lane | (uint16)lane_x << 16`); binding `e->lane` directly makes the
+ * CX selector see 0/-1 by construction (FU311 §4.3 + the wave-review erratum
+ * item 2: `lane=-2678 lanehi=-1 lane_x=3144`).
+ *
+ * The measured bind shape drives the CX=4 arm here: with the packed cell the
+ * selector sees `lane_x = 0x28` (`0x20 <= 0x28 < 0x30`), the opposite-side
+ * actor is present and `cam_y == 0`, so the ladder installs row `0x1B`
+ * (`0x78299`). With the un-packed bind the high word is `-1` (`< 0x20`) and
+ * the CX=1 arm installs row `0x1A` instead. */
+static void test_keeper_seam_lane_bind_packs_0x6b(void) {
+  struct fifa96_match_entities pool;
+  struct fifa96_match_entities_frame f;
+  fifa96_keeper_cpu cpu;
+  struct fifa96_match_entity *keeper;
+  struct seam_capture cap;
+  memset(&f, 0, sizeof f);
+  memset(&cap, 0, sizeof cap);
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  fifa96_keeper_cpu_init(&cpu);
+  f.phase = 2u;
+  f.delta = 2u;
+  f.keeper_cpu = &cpu;
+  f.cam_pos_z = -0x800;                    /* the FU290 AX gate: |cam.z| > 0x7B0 */
+  cpu.interlock_157c5d = 1u;               /* the ladder-gate input cell */
+  pool.controlled = (int32_t)FIFA96_MATCH_ENTITY_RECORDS;  /* the opposite-side actor */
+  keeper = &pool.team[0].records[0];
+  keeper->code = 0x19u;                    /* permit 1; the ladder head code */
+  keeper->skip_9a = 0u;
+  keeper->timer81 = 0u;
+  keeper->has_slot = 0u;
+  keeper->lane = -2678;                    /* the +0x69 dz word (the measured log) */
+  keeper->lane_x = 0x28;                   /* the +0x6B lane: the CX=4 window */
+  assert(fifa96_match_entities_team_update(&pool, 0, &f, seam_first_capture,
+                                           &cap) == FIFA96_OK);
+  assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
+  assert(cap.code == 0x1Bu);               /* the CX=4 arm, not CX=1's 0x1A */
 }
 
 /* FU299 §2/§4 (phase-28 T2) — the interlock ordering, rider (a): the cell
@@ -4807,7 +4856,7 @@ static void test_keeper_interlock_cross_team_install(void) {
   k1->skip_9a = 0u;
   k1->timer81 = 0u;
   k1->has_slot = 0u;
-  k1->lane = 0x28 << 16;                           /* the CX=4 lane input */
+  k1->lane_x = 0x28;                               /* the CX=4 lane input */
   k1->stage92 = 2u;                                /* the row-0x1B stage-2 (wide/re-place) */
 
   /* One frame: team 0's row-0x19 set arms team 1's step gate in the SAME walk;
@@ -5534,8 +5583,8 @@ static void test_keeper_1d_goal_kick_reachable(void) {
    * under test. Stage the keepers' lane producer input past every stage-select
    * install arm (lane_x >= 0x30: CX=1/4 closed; the table path's `delta <= lim`
    * holds at 0) — the row-0x1D trigger stays the live armer + scanner. */
-  mr.entities.team[0].records[0].lane = 0x40 << 16;
-  mr.entities.team[1].records[0].lane = 0x40 << 16;
+  mr.entities.team[0].records[0].lane_x = 0x40;
+  mr.entities.team[1].records[0].lane_x = 0x40;
 
   /* stage the goal-line excursion the armer reads: beyond the goal line in the
    * OUT-of-mouth band (`|camera z| word >= 0xB90` -> the classifier's zone 0)
@@ -7409,8 +7458,8 @@ static void test_row04_arm_a_track_reload(void) {
    * ladder's FU290 AX gate; keep the stage-select install arms closed via the
    * lane producer input so the row-0x1A sit-7 emit cannot rewrite the row-04
    * record's code (the row under test). */
-  mr.entities.team[0].records[0].lane = 0x40 << 16;
-  mr.entities.team[1].records[0].lane = 0x40 << 16;
+  mr.entities.team[0].records[0].lane_x = 0x40;
+  mr.entities.team[1].records[0].lane_x = 0x40;
 
   one_granted_frame(&mr);
   assert(mr.render.camera.vel_z != 0);           /* the row's event fired */
@@ -8437,7 +8486,7 @@ static void test_action_1a_direction_2d(void) {
   mr.render.camera.event_param = 0x50;
   mr.render.camera.speed = 0x13;
   mr.render.camera.timer = 0x10;
-  mr.record.lane = (int32_t)0x41 << 16;
+  mr.record.lane_x = 0x41;                  /* the +0x6B lane gate (0x767EA) */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(mr.global_157c2c == 0x5Cu);
   assert(mr.record.stage92 == 3u);          /* movement/event -> stage 3 */
@@ -8455,7 +8504,7 @@ static void test_action_1a_direction_2e(void) {
   mr.render.camera.speed = 0x15;     /* > 0x14 */
   mr.render.camera.timer = 0;                       /* < 0x1C */
   mr.render.camera.pos_y = 0;                      /* < 0x90 */
-  mr.record.lane = (int32_t)0x41 << 16;     /* the 0x54 arm exits (timer <= 0xF) */
+  mr.record.lane_x = 0x41;                  /* the 0x54 arm exits (timer <= 0xF) */
   /* the 0x92AC8 draw must pass `(draw & 0x1F) > 0` (the descriptor byte is the
    * unmodeled 0 leg); read it from a copy of the armed state */
   fifa96_rng_seed(&mr.rng, 0);
@@ -8521,7 +8570,7 @@ static void test_action_1a_direction_54(void) {
   struct fifa96_match_entity *e;
   e = action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x54u;
-  mr.record.lane = (int32_t)0x41 << 16;
+  mr.record.lane_x = 0x41;                  /* the +0x6B lane gate (0x767EA) */
   mr.record.timer89 = 5;
   mr.record.delta = 0;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
@@ -8531,7 +8580,7 @@ static void test_action_1a_direction_54(void) {
 
   e = action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x54u;
-  mr.record.lane = (int32_t)0x41 << 16;
+  mr.record.lane_x = 0x41;                  /* the +0x6B lane gate (0x767EA) */
   mr.record.timer89 = 0x10;
   mr.record.delta = 0;
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
@@ -8817,7 +8866,7 @@ static void test_keeper_seam_stamp_publish(void) {
   keeper->skip_9a = 0u;
   keeper->timer81 = 0u;
   keeper->has_slot = 0u;
-  keeper->lane = 0;                         /* lane_x < 0x20 -> CX=1 */
+  keeper->lane_x = 0;                       /* lane_x < 0x20 -> CX=1 */
   assert(fifa96_match_entities_team_update(&pool, 0, &f, stamp_capture_action,
                                            &cap) == FIFA96_OK);
   assert(cap.calls == (int)FIFA96_MATCH_ENTITY_RECORDS);
@@ -9853,6 +9902,7 @@ int main(void) {
   test_keeper_seam_copy_pos_applies();
   test_keeper_seam_ladder_sees_post_install_code();
   test_keeper_seam_ladder_install_full_state();
+  test_keeper_seam_lane_bind_packs_0x6b();
   test_action_1a_head_and_tail();
   test_action_1a_stage0_fail_full_fallthrough();
   test_action_1a_stage0_pass_installs_4();

@@ -865,7 +865,16 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
     s.released = mr->slot.released;
     s.slot_word10 = mr->slot.prev_mapped;   /* native slot[+0x10] = mapped */
   }
-  s.lane = e->lane;             /* native dword +0x69 */
+  /* FU311-L5 (phase-30 T2): the native `dword[+0x69]` — the low `+0x69` dz
+   * word plus the `+0x6B` lane high word (`fifa96_outfield.c` reads it as
+   * `lane >> 16`, 0x7CC2F). The port keeps the two words apart, so pack them
+   * back here; the low word alone made the no-edge lane band read -1. */
+  /* FU311-L5 (phase-30 T2): the native `dword[+0x69]` — the low `+0x69` dz
+   * word plus the `+0x6B` lane high word (`fifa96_outfield.c` reads it as
+   * `lane >> 16`, 0x7CC2F). The port keeps the two words apart, so pack them
+   * back here; the low word alone made the no-edge lane band read -1. */
+  s.lane = (int32_t)((uint32_t)(uint16_t)e->lane |
+                     ((uint32_t)(uint16_t)e->lane_x << 16));
   s.user_present = controlled >= 0 ? 1u : 0u;
   s.user_side =
       controlled >= 0
@@ -912,7 +921,7 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
   s.chase.not_team_controlled =
       (id != mr->entities.team[team].target) ? 1u : 0u;
   s.chase.not_team_second = (id != mr->entities.team[team].second) ? 1u : 0u;
-  s.chase.distance = (uint16_t)(e->lane >> 16);   /* 0x7CCCD `[rec+0x69]>>16` */
+  s.chase.distance = (uint16_t)e->lane_x;   /* 0x7CCCD dword[+0x69]>>16 */
   /* FU308 §4 site 4 (phase-29 T2): `0x7CCD8 CMP dword[0x157750],0x30; JGE
    * 0x7CD29` — the camera triple's Y (`camera.pos_y`), a signed 32-bit
    * compare; the FU-75 §1.6 ball-record stand-in is retired. */
@@ -1325,6 +1334,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   r->stage92 = e->stage92;
   r->timer7b = e->timer7b;
   r->lane = e->lane;
+  r->lane_x = e->lane_x;   /* FU311-L5: the +0x6B high word of dword[+0x69] */
   /* FU-142e: reproduce the unported FUN_0008D098 pre-switch walk (`0x8D11E`),
    * which calls 0x8DCD4(pos, target) into `+0x65/+0x67/+0x69` for every free
    * record before the installer arms; the derived staging computes the word

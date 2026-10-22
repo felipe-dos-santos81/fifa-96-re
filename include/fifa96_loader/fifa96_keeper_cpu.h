@@ -72,7 +72,11 @@ typedef struct fifa96_keeper_cpu_record {
    * legs. The `[0x157824]` byte3 is the exception: its honest staged value is
    * the producer's entry init 0xFF (FU303-L8/T8). */
   int32_t cam_x, cam_y, cam_z; /* `[0x15774C/0x157750/0x157754]` the camera triple (LIVE) */
-  int32_t lane69;             /* dword +0x69; `lane_x = lane69 >> 16` (LIVE) */
+  int32_t lane69;             /* dword +0x69 = word[+0x69] (the dz word) |
+                               * word[+0x6B] << 16 (the native packed cell;
+                               * `lane_x = lane69 >> 16`). The seam packs both
+                               * pool words — the low word alone is never the
+                               * lane (FU311-L5). */
   int16_t follow_speed;       /* `[0x1577BC] >> 16` = word[0x1577BE] (LIVE) */
   uint8_t global_157a4c;      /* byte `[0x157A4C]` (`[0x157A49] >> 24`) (LIVE) */
   uint8_t pan_counter;        /* byte `[0x157821]` (LIVE) */

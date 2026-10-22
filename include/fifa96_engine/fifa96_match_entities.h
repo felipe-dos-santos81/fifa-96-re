@@ -138,14 +138,21 @@ struct fifa96_match_entity {
   int16_t jump_timer;   /* +0x87 */
   int32_t target_x, target_y, target_z; /* +0x4D / +0x51 / +0x55 */
   int32_t vel_x, vel_z;                 /* +0x71 / +0x73 (16.16 pair) */
-  int16_t lane_x, lane_z;               /* +0x6B lane / +0x6D cam-minus-pos x
-                                         * word (the FU-151 `cam_dx6d`) */
+  int16_t lane_x, lane_z;               /* +0x6B lane (the HIGH word of the
+                                         * native packed `dword[+0x69]`) / +0x6D
+                                         * cam-minus-pos x word (the FU-151
+                                         * `cam_dx6d`) */
   int16_t bound;                        /* +0x77 old-lane bound word (FU-147 S1:
                                          * `FUN_0007BF20` 0x7C77E stores the old
                                          * `+0x6B` before the lane refresh) */
   int16_t cam_dz6f;                     /* +0x6F camera-minus-position z word
                                          * (the FU-147 S1 track's `cam_dz`) */
-  int32_t lane;                         /* +0x69, lane = >>16 */
+  int32_t lane;                         /* +0x69 LOW word (the dz word),
+                                         * sign-extended. The native cell is the
+                                         * packed `dword[+0x69]`: its high word is
+                                         * the `+0x6B` lane (`lane_x` above).
+                                         * Readers of the native `>>16` form use
+                                         * `lane_x`, never `lane >> 16` (FU311-L5). */
   int8_t dir_x, dir_z;                  /* bound slot direction +0x20/+0x21 (the
                                          * T2/T3 chain `FUN_00078950` writes; row
                                          * 00 reads them through the unaligned

@@ -836,8 +836,9 @@ static void test_ball_state_roundtrip(void) {
  * position.y, copies the position back into the target triple, then zeroes the
  * word fields +0x69 (dz), +0x67 (dx), +0x65 (distance), +0x71/+0x73/+0x75
  * (both velocity halves) and the byte +0x9C. The pool maps `lane`
- * (dword +0x69) and `vel_x`/`vel_z` (dwords +0x71/+0x73) so `lane` keeps its
- * high word (native only clears +0x69) while both velocities are fully
+ * (word +0x69) and `vel_x`/`vel_z` (dwords +0x71/+0x73): the native clears
+ * only the +0x69 word, so `lane` zeroes and the separate +0x6B word (`lane_x`,
+ * FU311-L5) is untouched; both velocities are fully
  * cleared; the +0x65/+0x67 words have no pool field (the dispatch staging
  * recomputes `distance` from pos/target per FU-142e). */
 static void test_place_commits_target(void) {
@@ -849,7 +850,8 @@ static void test_place_commits_target(void) {
   e.target_x = -0x720;
   e.target_y = 0x55;
   e.target_z = 0x840;
-  e.lane = (int32_t)0xAAAA0040u;   /* low word +0x69 = dz, high word kept */
+  e.lane = 0x40;                   /* the +0x69 dz word */
+  e.lane_x = 0xAAAA;               /* the +0x6B lane word (untouched) */
   /* The three velocity word views and their dword aliases are all staged so
    * the commit's word zeroing is discriminating (a dword-only zero would leave
    * the words stale and the mover would resurrect them). */
@@ -863,7 +865,7 @@ static void test_place_commits_target(void) {
   assert(fifa96_match_entities_place(&e) == FIFA96_OK);
   assert(e.pos_x == -0x720 && e.pos_y == 0 && e.pos_z == 0x840);
   assert(e.target_x == -0x720 && e.target_y == 0 && e.target_z == 0x840);
-  assert((uint32_t)e.lane == 0xAAAA0000u);
+  assert(e.lane == 0 && (uint16_t)e.lane_x == 0xAAAAu);   /* only +0x69 cleared */
   assert(e.speed71 == 0 && e.vel73 == 0 && e.vel75 == 0);   /* words cleared */
   assert(e.vel_x == 0);
   assert(e.vel_z == 0);                                  /* alias lockstep */
