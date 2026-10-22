@@ -7594,6 +7594,86 @@ static void test_row04_live_pan_arms_camera(void) {
   drop_fixture(f);
 }
 
+/* FU314-L1a/L2 (phase-31 T2): the row-04 half-line band tuple. The record
+ * sits due WEST of the parked camera, so the camera bearing (`0x7EE4B` on
+ * word `+0x6D`/`+0x6F`) is +x = 0x100; `face7d` is the face producer input
+ * under test (the native row-0x24 constant is 0x100). One granted frame runs
+ * the live row-04 body on the pool record. */
+static void row04_face_band_setup(struct fixture *f, struct fifa96_match_run *mr,
+                                  struct fifa96_match_entity **e, int32_t *id,
+                                  int16_t face7d) {
+  *f = make_fixture(10000000ull);
+  fifa96_match_run_init(mr);
+  begin_isolated(mr, f->engine);
+  mr->session_gate_14c32a = 1;  /* FU-166: stage the byte-1 family under test */
+  mr->state.phase = 2;
+  mr->state.period_length = 90;
+  mr->global_5882a = 1;
+  one_granted_frame(mr);
+  assert(mr->situation_pending == 0);
+  *id = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 4;
+  assert(mr->slot.entity != *id);
+
+  assert(fifa96_camera_init(&mr->render.camera, 0, 0, 0xB00) == FIFA96_OK);
+  *e = &mr->entities.team[1].records[4];
+  assert(fifa96_match_entities_install(*e, (uint8_t)mr->state.phase, 4, 0) == 1);
+  (*e)->active = 1;
+  (*e)->pos_x = -0x40;                 /* due west of the camera: bearing +x */
+  (*e)->pos_y = 0;
+  (*e)->pos_z = 0xB00;
+  (*e)->target_x = (*e)->pos_x;
+  (*e)->target_y = 0;
+  (*e)->target_z = (*e)->pos_z;
+  (*e)->type = 16;                     /* 0x10F334/3C type-table seed */
+  (*e)->anim_id = 0;                   /* row byte != 0x13 -> the event arm */
+  (*e)->timer81 = 0;
+  (*e)->face7d = face7d;               /* the live +0x7D producer input */
+  (*e)->lane_x = 0x40;                 /* +0x6B: <= 0x40 - timer81, <= bound */
+  (*e)->bound = 0x40;                  /* +0x77: the previous lane */
+  (*e)->lane_z = 0x40;                 /* +0x6D: cam - pos x */
+  (*e)->cam_dz6f = 0;                  /* +0x6F: cam - pos z */
+  mr->render.camera.pos_y = 0x20;      /* <= 0x50, != 0 -> the type-table seed */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      if (!(t == 1u && i == 4u)) mr->entities.team[t].records[i].skip_9a = 1;
+
+  one_granted_frame(mr);
+}
+
+/* The live face is the native row-0x24 constant 0x100
+ * (`0x865B5`/`0x865BE`/`0x865C6`), aligned with the bearing: Δ 0 <= 0xAB, so
+ * the row emits the arm-B pan (code 0x1D) + the `0x71D27` tracked bind. */
+static void test_row04_live_face_passes_face_aligned_gate(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id;
+  row04_face_band_setup(&f, &mr, &e, &id, 0x100);
+  assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
+  assert(mr.render.camera.tracked == id);
+  assert(e->code == 5);                /* the row coda installed code 5 */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* The same tuple staged with face 0 (the pre-fix handler's constant) fails
+ * the gate: Δ 0x100 (256) > 0xAB (171) -> no event, no tracked bind, no
+ * coda. This is the mutation rider for the FU314-L2 producer: a handler that
+ * keeps staging 0 fails the positive pin, and a handler that ignores the
+ * live face fails this one. */
+static void test_row04_zero_face_fails_face_aligned_gate(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id;
+  row04_face_band_setup(&f, &mr, &e, &id, 0);
+  assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(e->code == 4);                /* the gate returns before the coda */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
 /* FU-171 §7 rec 2 (T2): the row-04 far arm gates on `[0x1577CA]` — the
  * camera-tracked record — not on the controlled actor (`id == controlled`).
  * Same staged scenario as `test_row04_live_pan_arms_camera`, but the record
@@ -10164,6 +10244,8 @@ int main(void) {
   test_camera_rate_chain_sustained_pan();
   test_camera_band_cells_seam();
   test_row04_live_pan_arms_camera();
+  test_row04_live_face_passes_face_aligned_gate();
+  test_row04_zero_face_fails_face_aligned_gate();
   test_row04_tracked_gate_suppresses_half_line();
   test_row04_arm_a_track_reload();
   test_natural_goal_end_to_end();

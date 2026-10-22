@@ -3912,6 +3912,28 @@ static void test_action_24_runs_body(void) {
   assert(mr.record.stage92 == 1u);              /* 0x866BD JGE: wait */
 }
 
+/* Row 0x24 (FU314-L5a, phase-31 T2): the native stage-0 face call at
+ * `0x865C6` passes the constant vector `(DX=1, BX=0)` (`0x865B5 MOV EDX,1`,
+ * `0x865BE XOR EBX,EBX`), not the record's seeded position. Stage a non-zero
+ * `player_e` so the two call shapes differ: `(pos_x,pos_z)` = (0x9F0, 6*0x7F)
+ * folds to 0xD0, while the native `(1,0)` is +x = 0x100 (octant 2). */
+static void test_action_24_face_constant_vector(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 0;
+  mr.record.active = 1;
+  mr.record.side = 0;
+  mr.record.player_e = 0x7F;
+  mr.record.face7d = 0x3FF;
+  mr.record.type = 7;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.pos_x == 0x9F0);             /* 0x8657A */
+  assert(mr.record.pos_z == 6 * 0x7F);          /* 0x86587/0x865AE */
+  assert(mr.record.face7d == 0x100);            /* the 0x79C50(1,0) constant */
+  assert(mr.record.type == 2);                  /* ((0x100 + 0x40) & 0x3FF) >> 7 */
+}
+
 /* ===== M2 phase-16 T3 (FU-186): rows 0x1A / 0x1C keeper chain ============= */
 
 /* Row 0x1C (FU-186 §2.2): the bounded lunge body. Stage 0 arms
@@ -4527,6 +4549,7 @@ int main(void) {
   test_action_16_stage0_gate();
   test_action_16_stage2_reset();
   test_action_24_runs_body();
+  test_action_24_face_constant_vector();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();
   test_null_arguments_are_invalid();

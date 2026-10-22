@@ -1869,12 +1869,13 @@
 #define M2_CLAIM_DRIVE_FROM 1820
 /* The measured panning record (encoded entity id 2 = team 0 record 2), the
  * gate's controlled actor (pool `controlled` = 1) and the row-04 staging's
- * face operand. The staged face is 0 at `handlers.c:2646` (OL-72 / FU314-L2);
- * the entity pool's `face7d` is 0x100. At the measured zero-delta point both
- * fold to the same 0x80 angle delta (the FU317 erratum's P13 label). */
+ * face operand. FU314-L2 (phase-31 T2) restaged `handlers.c:2646` from the
+ * constant 0 to the live record +0x7D, so the staged face is the pool cell:
+ * 0x100 at the measured gate. At the measured zero-delta point both fold to
+ * the same 0x80 angle delta (the FU317 erratum's P13 label). */
 #define M2_CLAIM_ENTITY 2
 #define M2_CLAIM_CONTROLLED 1
-#define M2_CLAIM_STAGED_FACE 0
+#define M2_CLAIM_STAGED_FACE 0x100
 
 /* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
@@ -2852,6 +2853,13 @@ static void m2_directives(struct fifa96_engine *e, int next, int match_start_ste
         er->lane_z = 0;
         er->cam_dz6f = 0x10;
         er->bound = 0x40;
+        /* FU314-L2 (phase-31 T2): the row-04 half-line gate now reads the
+         * live +0x7D. This arrival is staged from the south, so stage the
+         * face producer input too: facing +z (0) is the bearing the approach
+         * has (the pre-fix staged 0 was the same value the handler faked for
+         * every row-04 dispatch). The pool value from the step-12 row-0x24
+         * constant is +x (0x100), which this south approach does not face. */
+        er->face7d = 0;
         /* v10 (T4): the +0x73/+0x75 velocity words are zeroed because the
          * row-04 no-slot arm's 0x7F056 event seed reads exactly these words
          * (`(vel73 << 2, vel75 << 2)`), and every native install rewrites
@@ -4106,8 +4114,9 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
     assert(fifa96_entity_angle(cl->gate.lane_z, cl->gate.cam_dz6f, &bearing) ==
            FIFA96_OK);
     assert(bearing == 0x80);
-    /* The erratum's staged-vs-pool label: `handlers.c:2646` stages 0, the pool
-     * cell is 0x100, and both fold to 0x80 at the zero-delta point. */
+    /* The live staged face: `handlers.c:2646` now carries the pool +0x7D
+     * (0x100), and at the zero-delta point both the staged and pool operands
+     * fold to 0x80. */
     int32_t staged = (bearing - M2_CLAIM_STAGED_FACE) & 0x3FF;
     int32_t pool = (bearing - cl->gate.face7d) & 0x3FF;
     if (staged > 0x200) staged = 0x400 - staged;
@@ -5726,7 +5735,7 @@ int main(void) {
             "lane_z %d cam_dz6f %d bound %d timer81 %u has_slot %u dir (%d,%d) "
             "pos_y %d face7d 0x%X; event f=%d code %u vel (%d,%d) spd %u "
             "tim %u/%u ramp %d trk %d; controlled %d slot.entity %d staged "
-            "face 0x%X (handlers.c:2646); pan f=%d..%d stop f=%d (%u changed / "
+            "face 0x%X (handlers.c:2646, live +0x7D); pan f=%d..%d stop f=%d (%u changed / "
             "%u off-zero frames, %u segment) place (%d,%d,%d) pan %u->%u "
             "speed %d->%d->%d->%d->%d trk_end %d, Y/Z nonzero %u/%u, armer "
             "%u/OOB %u, follow=1 %u, ladder %u/%u, trace 1+%u lines\n",

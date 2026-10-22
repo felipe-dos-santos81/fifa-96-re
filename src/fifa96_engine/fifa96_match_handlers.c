@@ -2643,7 +2643,12 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.word6f = e->cam_dz6f;           /* FU-147 S1: native word +0x6F */
   s.vel_int_x = (int16_t)((uint32_t)r->vel_x >> 16);  /* word +0x73 */
   s.vel_int_z = (int16_t)((uint32_t)r->vel_z >> 16);  /* word +0x75 */
-  s.face_word7d = 0;                /* word +0x7D unmodeled (OL-72) */
+  /* FU314-L2 (phase-31 T2): the native half-line angle `0x7EE5C` reads the
+   * live `word[+0x7D]`. The staging record carries the live face (loaded from
+   * the pool at `match_run.c` record entry, written back at its tail; an
+   * installer-invoked row may have re-faced it in the same record step), so
+   * stage it instead of the pre-fix constant 0. */
+  s.face_word7d = r->face7d;        /* native word +0x7D (FU314-L2) */
   s.slot_dir_x = r->dir_x;
   s.slot_dir_z = r->dir_z;
   s.slot_word10 = 0;                /* slot +0x10 unmodeled (OL-69/OL-72) */
@@ -5343,9 +5348,11 @@ static int fifa96_match_action_16(struct fifa96_match_run *mr) {
  *  - stage 0 (`0x8656F..0x8664E`): seed `pos_x = 0x9F0` (`0x8657A`), the
  *    `±6*byte[[rec+4]+0xE]` facing into `pos_z` with the team-side sign
  *    (`0x86590..0x865AE`; `player_e` is staged 0 -> the term is 0), zero
- *    `+0x71/+0x73/+0x75`, run the `0x79C50` face, wait on the face-derived
- *    threshold, commit `target_z = pos_z` and `target_x = 0x7E0 + 6*byte`
- *    (`0x86611..0x8664B`), reset `+0x89` and stage to 1.
+ *    `+0x71/+0x73/+0x75`, run the `0x79C50` face with the native constant
+ *    vector `(1,0)` (`0x865B5`/`0x865BE`/`0x865C6`, FU314-L5a), wait on the
+ *    face-derived threshold, commit `target_z = pos_z` and
+ *    `target_x = 0x7E0 + 6*byte` (`0x86611..0x8664B`), reset `+0x89` and
+ *    stage to 1.
  *  - stage 1 (`0x8665C..0x866CF`): the `0x8EEC0`/`0x67800`/`0x8EEB4` ball
  *    gates (FU-188 §6 FU188-L3 — cited, gated on `[0x157AC2]`/`[0x14C32A]`),
  *    re-commit the target, wait while `word[+0x65]` (`distance`) >= `0x20`,
@@ -5378,7 +5385,10 @@ int fifa96_match_action_24(struct fifa96_match_run *mr) {
     r->pos_z = facing;                             /* 0x865AE dword[+0x61] */
     r->vel73 = 0;                                  /* 0x865BA word[+0x75]=0 */
     r->vel75 = 0;                                  /* 0x865C0 word[+0x73]=0 */
-    if (fifa96_entity_face(r->pos_x, r->pos_z, &face, &sector) == FIFA96_OK) {
+    /* FU314-L5a (phase-31 T2): `0x865B5 MOV EDX,1` / `0x865BE XOR EBX,EBX` /
+     * `0x865C6 CALL 0x79C50` — the native face vector is the constant (1,0),
+     * not the seeded position. */
+    if (fifa96_entity_face(1, 0, &face, &sector) == FIFA96_OK) {
       r->face7d = (int16_t)face;                   /* 0x865C6 CALL 0x79C50 */
       r->type = sector;
     }
