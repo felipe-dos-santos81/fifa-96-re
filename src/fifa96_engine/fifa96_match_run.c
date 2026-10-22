@@ -1817,9 +1817,41 @@ static int fifa96_match_run_cancel(void *ctx) {
 
 static void match_run_reset_screen_state(struct fifa96_match_run *mr);
 
+/* FU313/FU309-L5 (phase-30 T1): the default-off camera-cell trace. Closing is
+ * idempotent; `fifa96_match_run_begin` opens the sink only when the environment
+ * names a path, so every other run pays one NULL test per granted frame. */
+static void match_run_camera_trace_close(struct fifa96_match_run *mr) {
+  if (!mr || !mr->cam_trace) return;
+  fclose(mr->cam_trace);
+  mr->cam_trace = NULL;
+}
+
+/* FU313 §4.1: opened "w" at the end of `fifa96_match_run_begin`, after the
+ * lifecycle callback is registered and the run is live, so a failed begin
+ * creates no file. Unset/empty is off; an open failure is one stderr line and
+ * off (never stdout, never the goldens). The frame index is run-relative. */
+static void match_run_camera_trace_open(struct fifa96_match_run *mr) {
+  const char *path;
+  FILE *f;
+  mr->cam_trace = NULL;
+  mr->cam_trace_frame = 0;
+  path = getenv("FIFA96_CAMERA_TRACE");
+  if (!path || path[0] == '\0') return;
+  f = fopen(path, "w");
+  if (!f) {
+    fprintf(stderr, "fifa96: camera trace: cannot open %s\n", path);
+    return;
+  }
+  fprintf(f, "# fifa96-camera-trace v1 frame clock phase pos vel spd fspd ev cur "
+             "trk pan tim ramp rate follow tick\n");
+  fflush(f);
+  mr->cam_trace = f;
+}
+
 static int fifa96_match_run_teardown(void *ctx) {
   struct fifa96_match_run *mr = ctx;
   if (!mr) return -FIFA96_ERR_INVALID;
+  match_run_camera_trace_close(mr);
   /* The foundation owns no match assets yet; clear the per-match counters,
    * the match clock/period block and the per-side goal words. */
   mr->ticks = 0;
@@ -2096,6 +2128,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->backend.ctx = NULL;
   mr->ticks = 0;
   mr->steps = 0;
+  mr->cam_trace = NULL;      /* FU313: the trace is off until begin opens it */
+  mr->cam_trace_frame = 0;
   mr->running = 0;
   mr->stage_owner = NULL;
   mr->meta_owner = NULL;   /* FU-199 §7.2: no OL-13 metadata loaded yet */
@@ -2593,6 +2627,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
     mr->phase_machine.state = pm_state_before;
     mr->phase_machine.phase = pm_phase_before;
   }
+  match_run_camera_trace_open(mr);   /* FU313 §4.1: immediately before return 0 */
   return 0;
 }
 
@@ -4380,7 +4415,7 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * pool-record identity (all three writers of [0x1577CA] store pool records
      * or 0 — 0x71D27 the store, 0x70258/0x70054 the clears; the +4 descriptor
      * is built at runtime, statically unresolvable). */
-    (void)fifa96_match_run_camera_follow(mr);
+    int follow_ran = fifa96_match_run_camera_follow(mr);
     /* FU-148 §2.1(a)/§6.2 (S4): the FUN_000505D0 pose feed. The native driver
      * FUN_0004D2D4 runs from the draw loop (FUN_000495B0) with the replay/
      * `[0x107DD8]`/pad-idle gates (legs); the engine applies the staged pose
@@ -4540,6 +4575,29 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr) {
      * positions/animations reflect this frame. Rendering stays opt-in: the
      * Task 12-14 fixtures keep an unstaged scene. */
     if (mr->render.enabled) match_run_scene_stage(mr);
+    /* FU313 §4.3: the per-granted-frame camera line at the loop tail. The
+     * follow verdict is the saved return above, so `follow` pairs this frame's
+     * verdict with the event/pan cells as the frame left them; `tick` is the
+     * 100 Hz counter for sub-second capture alignment. Default-off: one NULL
+     * test when the sink is not open. */
+    if (mr->cam_trace) {
+      const struct fifa96_camera *cam = &mr->render.camera;
+      fprintf(mr->cam_trace,
+              "f=%u clock=%02u:%02u ph=%u pos=%d,%d,%d vel=%d,%d spd=%u "
+              "fspd=%d ev=0x%X cur=0x%X trk=%d pan=%u tim=%u/%u ramp=%d "
+              "rate=%d,%d follow=%d tick=%u\n",
+              mr->cam_trace_frame++, (unsigned)(mr->state.total_seconds / 60u),
+              (unsigned)(mr->state.total_seconds % 60u),
+              (unsigned)mr->state.phase, cam->pos_x, cam->pos_y, cam->pos_z,
+              (int)cam->vel_x, (int)cam->vel_z, (unsigned)cam->speed,
+              (int)cam->follow_speed, (unsigned)cam->event_param,
+              (unsigned)cam->event_cursor, (int)cam->tracked,
+              (unsigned)cam->pan_counter, (unsigned)cam->timer,
+              (unsigned)cam->timer_limit, (int)cam->ramp_divisor,
+              (int)cam->rate_x, (int)cam->rate_z, follow_ran,
+              (unsigned)mr->ticks);
+      fflush(mr->cam_trace);
+    }
   }
   /* FU-232 §4.1/§4.3 (M2 phase-22 T3): the native frame-loop `mark_over` tail.
    * The trigger is the end-word consumer's exact condition — word 1
@@ -4605,6 +4663,7 @@ int fifa96_match_run_step(struct fifa96_match_run *mr) {
 int fifa96_match_run_end(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   if (!mr->running) return -FIFA96_ERR_STATE;
+  match_run_camera_trace_close(mr);   /* FU313 §4.1: idempotent with teardown */
   int rc = fifa96_match_lifecycle_end(&mr->lc, &mr->pace);
   struct fifa96_engine *eng = mr->engine;
   match_run_release_stage(mr);

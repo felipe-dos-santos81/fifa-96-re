@@ -1716,6 +1716,7 @@
 #include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_engine/fifa96_platform_null.h"
 #include "fifa96_loader/fifa96_match_state.h"
+#include "fifa96_loader/fifa96_keeper_cpu.h"
 
 /* The engine's mode enum and engine-owned match run are engine-internal state;
  * this acceptance tape reads/forces the run's phase and reads the dispatch
@@ -1838,9 +1839,12 @@
  * of the situation-0 cutscene, which begins within a few granted frames. M2
  * phase-18 T4: the natural phase 2 now follows the phase-0x20 cutscene's
  * `0x3E8` stage-1 wait (~500 granted frames) plus the act-1 kickoff chain, so
- * the post-kick window (`M2_NATURAL_POST_STEPS`) covers that whole span. */
+ * the post-kick window covers that whole span. FU313 (phase-30 T1): the
+ * measured natural window runs to engine step 12 000 — 3 598 granted frames,
+ * 101 s of match clock — so the camera baseline is sampled over the whole
+ * open-play span the wave measured. */
 #define M2_NATURAL_PHASE2_CAP 600
-#define M2_NATURAL_POST_STEPS 1990
+#define M2_NATURAL_WINDOW_STEPS 12000
 
 /* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
@@ -2232,7 +2236,79 @@ struct m2_result {
  * live row-0x24 dispatch. M2 phase-18 T4: the phase-0x20 stage-2 terminal then
  * re-dispatches situation 1 -> act 1 -> phase 0x17 (the native kickoff), so the
  * probe also tracks the act-1 arming (`act1_step`) and the natural phase 2
- * (`phase2_step`) the kickoff chain reaches once the pad release is supplied. */
+ * (`phase2_step`) the kickoff chain reaches once the pad release is supplied.
+ *
+ * FU313 (phase-30 T1) extends the probe into the measurement harness:
+ *  - the natural window runs to `M2_NATURAL_WINDOW_STEPS` and samples every
+ *    granted frame (`pace.pending` delta), pinning 3 598 granted frames and the
+ *    all-zero camera baseline over 101 s of match clock;
+ *  - the `keeper_cpu.ladder` observation seam counts the FU282 gate firings and
+ *    applies the public `fifa96_keeper_cpu_stage_select` to the same record view
+ *    (the FU313 §5.3 P4 counters; measured 6 118 calls / `ran=0` with the ISO);
+ *  - a sample hash plus a second replay pins determinism (P5);
+ *  - the scripted pan witness (P6 partial) is a separate run on a COPY of
+ *    `M2_KEYS` with the FU-157/FU-163 claim/kick appended after phase 2.
+ * P6-P8 are RED by design in the natural window: the camera never leaves
+ * `(0,0,0)` there, which is exactly the phase-30 NO-GO baseline — the probe
+ * records it, it does not hide it. The pan witness is the only place motion
+ * (one-shot, X-only, Y stays 0). */
+struct m2_stage_capture {
+  uint32_t calls;        /* the FU282 ladder gate fired (the seam was entered) */
+  uint32_t select_calls; /* fifa96_keeper_cpu_stage_select returned OK */
+  uint32_t select_ran;   /* ... and its AX prepass gate opened */
+  uint32_t select_cx1;   /* ... stage 1 */
+  uint32_t select_cx4;   /* ... stage 4 */
+  struct fifa96_keeper_cpu_stage_out last;
+};
+
+/* The observation seam: count the gate, sample the stage-select on the same
+ * record view, then delegate to the real ladder body unchanged. It stages
+ * nothing (FU313 §3.5 / §5.2.4). */
+static int m2_stage_capture_ladder(void *ctx,
+                                   const struct fifa96_keeper_cpu_record *rec,
+                                   struct fifa96_keeper_cpu_ladder_out *out) {
+  struct m2_stage_capture *cap = ctx;
+  if (cap && rec && out) {
+    struct fifa96_keeper_cpu_stage_out sel;
+    cap->calls++;
+    if (fifa96_keeper_cpu_stage_select(rec, &sel) == FIFA96_OK) {
+      cap->select_calls++;
+      if (sel.ran) {
+        cap->select_ran++;
+        if (sel.stage == 1u) cap->select_cx1++;
+        if (sel.stage == 4u) cap->select_cx4++;
+      }
+      cap->last = sel;
+    }
+  }
+  return fifa96_keeper_cpu_ladder_run(ctx, rec, out);
+}
+
+/* FU313 §5.3 P6 partial: the scripted pan witness. This is the FU-157 §3.4 /
+ * FU-163 §1.2 claim/kick sequence (KICK -> phase 2 -> the long-ball request ->
+ * the UP walk to the claim) on a COPY of `M2_KEYS` with the request/walk
+ * appended after phase 2. It is NOT natural open play and NOT the natural
+ * window: the cutscene is isolated (`act.id = 0`, the documented
+ * `begin_isolated` idiom of tests/test_engine_match_frame.c) so the derived
+ * kickoff keeps the formation near the zero camera; the natural run stays the
+ * zero baseline. The claim walks the place 0 -> 0x90 -> 0x120 over two
+ * one-shot row-04 pans; Y and Z remain 0. */
+struct m2_pan {
+  int match_start_step;
+  int phase2_step;
+  int first_pan_step;    /* first granted frame with pos_x != 0 */
+  int first_stop_step;   /* first granted frame at the 0x90 stop */
+  int second_stop_step;  /* first granted frame at the 0x120 stop */
+  int32_t max_pos_x;
+  uint32_t granted_frames;
+  uint32_t y_nonzero_frames;   /* must stay 0: the pan is Y-less */
+  uint32_t z_nonzero_frames;   /* the measured witness is X-only */
+  uint32_t decrease_frames;    /* the pan is monotone */
+  int first_tracked;           /* the first pan's tracked record (9) */
+  int16_t vel_seq[8];          /* the pan-step decay 5 -> 3 -> 2 -> 1 */
+  uint32_t vel_seq_len;
+};
+
 struct m2_natural {
   int match_start_step;      /* engine step that entered MATCH (5 on both modes) */
   int kick_step;             /* first engine step where the situation-0 row-0x24 dispatched */
@@ -2240,6 +2316,16 @@ struct m2_natural {
   int phase2_step;           /* first engine step sampled at live phase 2 (-1: never reached) */
   uint64_t dispatched_at_kick;   /* dispatch mask when the kickoff row was observed */
   uint8_t phase_at_kick;         /* live phase at the kickoff observation */
+  uint32_t granted_frames;       /* pace.pending at the window end (measured 3 598) */
+  uint32_t sampled_frames;       /* granted frames observed by the sampler */
+  uint32_t camera_zero_frames;   /* granted frames whose 16 trace cells were all zero */
+  uint32_t camera_left_zero;     /* granted frames with pos != (0,0,0) (P6 baseline: 0) */
+  int first_left_zero_step;      /* diagnosis when the baseline moves */
+  int32_t first_left_zero_pos[3];
+  uint64_t sample_hash;          /* FNV-1a over the per-granted-frame camera cells (P5) */
+  uint16_t clock_seconds;        /* match clock at the window end (measured 101 s) */
+  struct m2_stage_capture stage; /* the keeper ladder seam counters (P4) */
+  struct m2_pan pan;             /* the scripted pan witness (P6 partial; ISO only) */
 };
 
 /* v21 (M2 phase-21 T1): the period-end probe observation — the measured FU-62
@@ -3342,21 +3428,71 @@ static char *run_scenario_capture(size_t *out_len) {
   return transcript;
 }
 
-/* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
- * by M2 phase-18 T4): the same scripted key tape and platform cadence as
- * run_tape, but with NO match directives. The engine's native chain must reach
- * the live phase 2 by itself: the match-init situation-0 cutscene runs (act 0xA
- * -> phase 0x20 -> code 0x24 -> row 0x24), then its stage-2 terminal
- * re-dispatches situation 1 -> act 1 -> the phase-0x17 kickoff (row 01 is
- * staged on the taker), and the situation-0xB call writes phase 2. Every live
- * sample must keep the score pair and the FUN_00093944 writer cells fresh (the
- * T3 negative: no goal invoker is reachable from the ported state). This is the
- * tape-level counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
- * and the permanent form of the FU-143 §11.5 mismatch-evidence replay. */
-static void run_natural_probe(int with_iso, struct m2_natural *nat) {
+/* FU313 §5.3 P5: FNV-1a over one granted frame's camera cells. The probe's
+ * second replay must reproduce the hash byte-for-byte (the M2 3-replay gate
+ * independently pins the transcript). */
+static void m2_sample_hash_u64(uint64_t *h, uint64_t v) {
+  for (int i = 0; i < 8; i++) {
+    *h ^= (uint8_t)(v >> (8 * i));
+    *h *= 1099511628211ull;
+  }
+}
+
+/* One granted-frame sample of the 16 trace cells (FU313 §4.3). The natural
+ * baseline asserts every cell stays at the native kickoff zero: pos/vel/speed/
+ * follow_speed/event_param/event_cursor/pan/timer/ramp/rate and tracked == -1.
+ * `camera_left_zero` is the P6 witness; today it is 0 over all 3 598 frames. */
+static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_run *mr,
+                              int step) {
+  const struct fifa96_camera *c = &mr->render.camera;
+  int zero = c->pos_x == 0 && c->pos_y == 0 && c->pos_z == 0 &&
+             c->vel_x == 0 && c->vel_z == 0 && c->speed == 0 &&
+             c->follow_speed == 0 && c->event_param == 0 &&
+             c->event_cursor == 0 && c->tracked == FIFA96_CAMERA_TRACKED_NONE &&
+             c->pan_counter == 0 && c->timer == 0 && c->timer_limit == 0 &&
+             c->ramp_divisor == 0 && c->rate_x == 0 && c->rate_z == 0;
+  nat->sampled_frames++;
+  if (zero) {
+    nat->camera_zero_frames++;
+  } else {
+    if (nat->camera_left_zero == 0) {
+      nat->first_left_zero_step = step;
+      nat->first_left_zero_pos[0] = c->pos_x;
+      nat->first_left_zero_pos[1] = c->pos_y;
+      nat->first_left_zero_pos[2] = c->pos_z;
+    }
+    nat->camera_left_zero++;
+  }
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint32_t)c->pos_x);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint32_t)c->pos_y);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint32_t)c->pos_z);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint16_t)c->vel_x);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint16_t)c->vel_z);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->speed);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint16_t)c->follow_speed);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->event_param);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->event_cursor);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint32_t)c->tracked);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->pan_counter);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->timer);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)c->timer_limit);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint16_t)c->ramp_divisor);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint8_t)c->rate_x);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)(uint8_t)c->rate_z);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)mr->state.phase);
+  m2_sample_hash_u64(&nat->sample_hash, (uint64_t)mr->state.total_seconds);
+}
+
+/* The natural pass. FU313 §5.2.3: the probe replays a COPY of M2_KEYS (never
+ * edits the golden producer's array) and appends nothing — the natural window
+ * is the exact measured tape. The seam is installed at match start and only
+ * observes (P4). */
+static void run_natural_pass(int with_iso, struct m2_natural *nat) {
+  static fifa96_platform_key tape[M2_KEYS_LEN];
   struct fifa96_platform_null_config pcfg;
   memset(&pcfg, 0, sizeof pcfg);
-  pcfg.tape = M2_KEYS;
+  memcpy(tape, M2_KEYS, sizeof M2_KEYS);   /* the probe-local copy */
+  pcfg.tape = tape;
   pcfg.tape_len = M2_KEYS_LEN;
   pcfg.step_ns = 10000000ull;
   fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
@@ -3377,9 +3513,10 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   nat->kick_step = -1;
   nat->act1_step = -1;
   nat->phase2_step = -1;
+  nat->sample_hash = 14695981039346656037ull;
+  uint32_t prev_pending = 0;
   int steps = 0;
-  int post = 0;
-  while (steps < M2_STEP_CAP) {
+  while (steps < M2_NATURAL_WINDOW_STEPS) {
     assert(fifa96_engine_step(e) == 0);
     steps++;
     struct fifa96_platform_null_stats st;
@@ -3389,50 +3526,200 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
       nat->match_start_step = steps;
       assert(e->match_run.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
       assert(e->match_run.phase_machine.state == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+      /* FU313 §5.2.4: match start is after begin's keeper_cpu re-init, so the
+       * observation seam survives the first frame body. It stages nothing. */
+      e->match_run.keeper_cpu.ladder = m2_stage_capture_ladder;
+      e->match_run.keeper_cpu.ladder_ctx = &nat->stage;
     }
-    int live = (e->mode == FIFA96_ENGINE_MODE_MATCH && e->match != NULL);
-    if (live) {
-      /* The T3 negative holds at every live sample: no natural goal. */
-      assert(e->match_run.score[0] == 0 && e->match_run.score[1] == 0);
-      assert(e->match_run.score_last_side == -1 &&
-             e->match_run.score_tracked_side == 1);
-      assert(e->match_run.score_max_diff == 0 &&
-             e->match_run.score_last_event == 0);
-      if (e->match_run.state.phase == 2u && nat->phase2_step < 0)
-        nat->phase2_step = steps;
-      /* M2 phase-18 T4 (FU-203): the phase-0x20 stage-2 terminal re-dispatches
-       * situation 1, arming act 1 (the native act-1 route). The arm is held
-       * across the clock-tail tick that runs the phase-0x17 kickoff. */
-      if (nat->act1_step < 0 && e->match_run.act.id == 1)
-        nat->act1_step = steps;
-      if (nat->kick_step < 0 &&
-          (e->match_run.dispatched_ok & (1ull << 0x24)) != 0u) {
-        nat->kick_step = steps;
-        nat->dispatched_at_kick = e->match_run.dispatched_ok;
-        nat->phase_at_kick = e->match_run.state.phase;
-      }
-      if (nat->kick_step >= 0 && ++post >= M2_NATURAL_POST_STEPS) break;
+    if (e->mode != FIFA96_ENGINE_MODE_MATCH || e->match == NULL) continue;
+    struct fifa96_match_run *mr = &e->match_run;
+    /* The T3 negative holds at every live sample: no natural goal. */
+    assert(mr->score[0] == 0 && mr->score[1] == 0);
+    assert(mr->score_last_side == -1 && mr->score_tracked_side == 1);
+    assert(mr->score_max_diff == 0 && mr->score_last_event == 0);
+    if (mr->state.phase == 2u && nat->phase2_step < 0)
+      nat->phase2_step = steps;
+    /* M2 phase-18 T4 (FU-203): the phase-0x20 stage-2 terminal re-dispatches
+     * situation 1, arming act 1 (the native act-1 route). */
+    if (nat->act1_step < 0 && mr->act.id == 1)
+      nat->act1_step = steps;
+    if (nat->kick_step < 0 &&
+        (mr->dispatched_ok & (1ull << 0x24)) != 0u) {
+      nat->kick_step = steps;
+      nat->dispatched_at_kick = mr->dispatched_ok;
+      nat->phase_at_kick = mr->state.phase;
     }
+    /* One 100 Hz tick per engine step; a pace grant runs the frame body. */
+    uint32_t pending = fifa96_match_pace_pending(&mr->pace);
+    if (pending != prev_pending) {
+      assert(pending == prev_pending + 1u);
+      prev_pending = pending;
+      m2_natural_sample(nat, mr, steps);
+    }
+    nat->granted_frames = pending;
+    nat->clock_seconds = mr->state.total_seconds;
   }
   assert(nat->match_start_step == 5);
-  /* M2 phase-18 T3: the situation-0 kickoff cutscene runs on the natural chain
-   * (the match-init producer dispatches situation 0 -> act 0xA -> phase 0x20,
-   * whose body installs code 0x24 on the pool, and row 0x24 dispatches). */
   assert(nat->kick_step > nat->match_start_step);
   assert(nat->kick_step - nat->match_start_step <= M2_NATURAL_PHASE2_CAP);
   assert((nat->dispatched_at_kick & (1ull << 0x24)) != 0u);
   assert(nat->phase_at_kick == FIFA96_MATCH_RUN_KICKOFF_PHASE);
-  /* M2 phase-18 T4 (FU-203): the native kickoff phase-1 entry is the act-1
-   * route (the phase-0x20 terminal's situation-1 re-dispatch -> act 1 -> phase
-   * 0x17; the sit-1 producer 0x8ABCF). The probe observes the act-1 arming and
-   * the live phase 2 the kickoff chain reaches, so the natural chain is
-   * complete (no leg). Mutation-RED: an un-registered phase 0x17 (or a NULL
-   * situation-1 row) leaves `act1_step` set but phase 2 unreached. */
   assert(nat->act1_step > nat->match_start_step);
   assert(nat->phase2_step > 0);
   assert(nat->phase2_step > nat->act1_step);
+  /* FU313 §8.2: the natural window is 11 996 live steps (5..12 000) and
+   * 3 598 granted frames; the sampler saw every grant. */
+  assert(nat->granted_frames == 3598u);
+  assert(nat->sampled_frames == nat->granted_frames);
+  /* P3/P6 baseline (RED by design): no camera cell leaves the native zero over
+   * the whole natural window. This is the phase-30 NO-GO witness; the bootstrap
+   * producer will flip it and the P7/P8 window/lockout assertions land with it
+   * (FU313-L1). Asserting the zero is the point, not an accident. */
+  assert(nat->camera_left_zero == 0u);
+  assert(nat->camera_zero_frames == nat->granted_frames);
+  assert(nat->first_left_zero_step == 0);
+  /* P4: the FU282 ladder gate is live on the natural window (measured 6 118
+   * calls in both ISO modes), while the AX prepass refuses every stage-select
+   * (`ran=0` — the camera stays at 0, so |cam_z| > 0x7B0 cannot hold). */
+  assert(nat->stage.calls == 6118u);
+  assert(nat->stage.select_calls == 6118u);
+  assert(nat->stage.select_ran == 0u);
+  assert(nat->stage.select_cx1 == 0u && nat->stage.select_cx4 == 0u);
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
+}
+
+/* FU313 §5.3 P6 partial: the scripted pan witness. The FU-157 §3.4 /
+ * FU-163 §1.2 chain on a COPY of M2_KEYS: the copied tape keeps the real
+ * kickoff prefix; the probe-local tail appends the long-ball request and the
+ * UP walk AFTER the derived phase-2 entry. The armed situation-0 cutscene is
+ * isolated (`act.id = 0`, the same idiom as
+ * tests/test_engine_match_frame.c's `begin_isolated`) so the derived kickoff
+ * keeps the formation in the zero camera's near field — the natural pass above
+ * is unaffected and stays the zero baseline. This is a scripted, one-shot,
+ * X-only, Y-less witness, never a natural open-play claim. */
+static void run_scripted_pan_witness(struct m2_pan *pan) {
+  static fifa96_platform_key tape[M2_KEYS_LEN];
+  struct fifa96_platform_null_config pcfg;
+  memset(&pcfg, 0, sizeof pcfg);
+  memcpy(tape, M2_KEYS, sizeof M2_KEYS);   /* the copied tape */
+  /* The probe-local claim/kick tail, after the derived phase 2 (step ~215):
+   * the 0x40 long-ball request then the UP walk. The copy is extended only
+   * here; M2_KEYS itself and the golden producer stay untouched. */
+  for (int i = 230; i <= 233; i++) {
+    tape[i].raw_code = FIFA96_ENGINE_KEY_LONG_BALL;
+    tape[i].state = 1;
+  }
+  for (int i = 240; i <= 520; i++) {
+    tape[i].raw_code = FIFA96_ENGINE_KEY_UP;
+    tape[i].state = 1;
+  }
+  pcfg.tape = tape;
+  pcfg.tape_len = M2_KEYS_LEN;
+  pcfg.step_ns = 10000000ull;
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = M2_ISO_PATH;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  memset(pan, 0, sizeof *pan);
+  pan->match_start_step = -1;
+  pan->phase2_step = -1;
+  pan->first_pan_step = -1;
+  pan->first_stop_step = -1;
+  pan->second_stop_step = -1;
+  pan->first_tracked = -1;
+  uint32_t prev_pending = 0;
+  int32_t prev_pos_x = 0;
+  int steps = 0;
+  while (steps < 1200) {
+    assert(fifa96_engine_step(e) == 0);
+    steps++;
+    if (pan->match_start_step < 0 && e->mode == FIFA96_ENGINE_MODE_MATCH) {
+      pan->match_start_step = steps;
+      /* The begin_isolated idiom: drop the armed situation-0 cutscene so the
+       * derived kickoff (the real kickoff entry) runs with the formation seed. */
+      e->match_run.act.id = 0;
+    }
+    if (e->mode != FIFA96_ENGINE_MODE_MATCH || e->match == NULL) continue;
+    struct fifa96_match_run *mr = &e->match_run;
+    assert(mr->score[0] == 0 && mr->score[1] == 0);
+    if (mr->state.phase == 2u && pan->phase2_step < 0) pan->phase2_step = steps;
+    uint32_t pending = fifa96_match_pace_pending(&mr->pace);
+    if (pending != prev_pending) {
+      const struct fifa96_camera *c = &mr->render.camera;
+      assert(pending == prev_pending + 1u);
+      prev_pending = pending;
+      pan->granted_frames++;
+      if (c->pos_x != 0 && pan->first_pan_step < 0) {
+        pan->first_pan_step = steps;
+        pan->first_tracked = c->tracked;
+      }
+      if (c->pos_x != 0 && c->vel_x != 0 &&
+          (pan->vel_seq_len == 0u ||
+           pan->vel_seq[pan->vel_seq_len - 1u] != c->vel_x) &&
+          pan->vel_seq_len < sizeof pan->vel_seq / sizeof pan->vel_seq[0])
+        pan->vel_seq[pan->vel_seq_len++] = c->vel_x;
+      if (c->pos_x == 0x90 && pan->first_stop_step < 0) pan->first_stop_step = steps;
+      if (c->pos_x == 0x120 && pan->second_stop_step < 0) pan->second_stop_step = steps;
+      if (c->pos_x > pan->max_pos_x) pan->max_pos_x = c->pos_x;
+      if (c->pos_x < prev_pos_x) pan->decrease_frames++;
+      prev_pos_x = c->pos_x;
+      if (c->pos_y != 0) pan->y_nonzero_frames++;
+      if (c->pos_z != 0) pan->z_nonzero_frames++;
+      /* The row-04 idle arm carries event_param 0 (the pan seed is vel_x). */
+      assert(c->event_param == 0);
+    }
+  }
+  assert(pan->match_start_step == 5);
+  assert(pan->phase2_step > 0 && pan->phase2_step < 500);
+  assert(pan->first_pan_step > pan->phase2_step);
+  assert(pan->first_stop_step > pan->first_pan_step);
+  assert(pan->second_stop_step > pan->first_stop_step);
+  assert(pan->max_pos_x == 0x120);
+  assert(pan->y_nonzero_frames == 0u);   /* P6 partial: Y stays 0 */
+  assert(pan->z_nonzero_frames == 0u);   /* the measured witness is X-only */
+  assert(pan->decrease_frames == 0u);    /* the pan is monotone */
+  assert(pan->first_tracked == 9);       /* the row-04 claim binds record 9 */
+  /* The FU-157 pan-step decay: vel_x 5 -> 3 -> 2 -> 1 (then 0). */
+  assert(pan->vel_seq_len >= 4u);
+  assert(pan->vel_seq[0] == 5 && pan->vel_seq[1] == 3 &&
+         pan->vel_seq[2] == 2 && pan->vel_seq[3] == 1);
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+}
+
+/* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
+ * by M2 phase-18 T4): the same scripted key tape and platform cadence as
+ * run_tape, but with NO match directives. The engine's native chain must reach
+ * the live phase 2 by itself: the match-init situation-0 cutscene runs (act 0xA
+ * -> phase 0x20 -> code 0x24 -> row 0x24), then its stage-2 terminal
+ * re-dispatches situation 1 -> act 1 -> the phase-0x17 kickoff (row 01 is
+ * staged on the taker), and the situation-0xB call writes phase 2. Every live
+ * sample must keep the score pair and the FUN_00093944 writer cells fresh (the
+ * T3 negative: no goal invoker is reachable from the ported state). This is the
+ * tape-level counterpart of `test_engine_match_frame::test_kickoff_enters_phase2_when_cutscene_isolated`
+ * and the permanent form of the FU-143 §11.5 mismatch-evidence replay.
+ *
+ * FU313 (phase-30 T1): P1-P5 run in both ISO modes; the P6-partial scripted pan
+ * witness is ISO-dependent (the formation seed places the claim record near the
+ * zero camera) and runs behind the `with_iso` gate, like the existing drawing
+ * asserts. The natural pass is replayed twice and the two sample structs must be
+ * byte-identical (P5 determinism). */
+static void run_natural_probe(int with_iso, struct m2_natural *nat) {
+  struct m2_natural second;
+  run_natural_pass(with_iso, nat);
+  run_natural_pass(with_iso, &second);
+  assert(memcmp(nat, &second, sizeof *nat) == 0);
+  if (with_iso) run_scripted_pan_witness(&nat->pan);
 }
 
 /* v21 (M2 phase-21 T1): the period-end feasibility probe — transcript-neutral.
@@ -4858,14 +5145,37 @@ int main(void) {
   /* M2 phase-18 T3/T4 acceptance (both modes): the natural chain runs the
    * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
    * no goal, then the act-1 route (situation 1 -> act 1 -> phase 0x17) and the
-   * live phase 2. Status to stderr keeps stdout the byte-exact transcript. */
+   * live phase 2. FU313 (phase-30 T1) adds the measured window: 3 598 granted
+   * frames over 11 996 live steps, the all-zero camera baseline and the ladder
+   * seam counters. Status to stderr keeps stdout the byte-exact transcript. */
   struct m2_natural nat;
   run_natural_probe(with_iso, &nat);
   fprintf(stderr,
           "test_engine_m2 natural probe: situation-0 kickoff at step %d (match "
           "start %d), row 0x24 dispatched, act-1 route at step %d, phase 2 at "
-          "step %d, score 0-0\n",
-          nat.kick_step, nat.match_start_step, nat.act1_step, nat.phase2_step);
+          "step %d, %u granted frames (%u s), camera zero %u/%u, ladder seam "
+          "%u calls / stage_select ran=%u (cx1=%u cx4=%u), score 0-0\n",
+          nat.kick_step, nat.match_start_step, nat.act1_step, nat.phase2_step,
+          (unsigned)nat.granted_frames, (unsigned)nat.clock_seconds,
+          (unsigned)nat.camera_zero_frames, (unsigned)nat.sampled_frames,
+          (unsigned)nat.stage.calls, (unsigned)nat.stage.select_ran,
+          (unsigned)nat.stage.select_cx1, (unsigned)nat.stage.select_cx4);
+  /* The honest baseline label: P6/P7/P8 are RED by design in the natural
+   * window (the phase-30 NO-GO); only the scripted, Y-less pan witness moves
+   * the place, and it is P6-partial, not natural play. */
+  fprintf(stderr,
+          "test_engine_m2 natural probe: P6/P7/P8 RED by design - no camera "
+          "cell leaves (0,0,0) and no follow window/lockout exists over the "
+          "natural window (the phase-30 NO-GO baseline); the copied-tape "
+          "claim/kick witness is P6 partial and Y-less\n");
+  if (with_iso)
+    fprintf(stderr,
+            "test_engine_m2 pan witness: scripted claim/kick (copied tape, the "
+            "cutscene isolated) place 0 -> 0x%X -> 0x%X at steps %d/%d (first "
+            "motion %d, tracked %d), Y=0, %u granted frames (P6 partial)\n",
+            (unsigned)0x90, (unsigned)0x120, nat.pan.first_stop_step,
+            nat.pan.second_stop_step, nat.pan.first_pan_step,
+            nat.pan.first_tracked, (unsigned)nat.pan.granted_frames);
 
   /* v21 (M2 phase-21 T1): the period-end feasibility probe (transcript-neutral)
    * — extends the scripted run to the first FU-62 completion and records what

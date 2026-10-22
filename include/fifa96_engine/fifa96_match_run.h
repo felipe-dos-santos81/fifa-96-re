@@ -1,6 +1,7 @@
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
+#include <stdio.h>
 #include "fifa96_engine/fifa96_keys.h"
 #include "fifa96_engine/fifa96_match_entities.h"
 #include "fifa96_engine/fifa96_match_phase_machine.h"
@@ -603,6 +604,13 @@ struct fifa96_match_run {
   struct fifa96_match_lifecycle_backend backend; /* engine callbacks or stub */
   uint32_t ticks;                                /* 100 Hz match callback hits */
   uint32_t steps;                                /* run steps since begin */
+  /* FU313/FU309-L5 (phase-30 T1): the default-off camera-cell trace. The sink
+   * is opened by `begin` only when FIFA96_CAMERA_TRACE names a path (empty or
+   * unset = NULL, the inert default); one line per granted frame is written at
+   * the frame-body loop tail. The frame index is run-relative and resets at
+   * begin. Closed idempotently by end/teardown. */
+  FILE *cam_trace;                               /* the FIFA96_CAMERA_TRACE sink (NULL = off) */
+  uint32_t cam_trace_frame;                      /* the run-relative granted-frame index */
   int running;                                   /* begin/end balance */
   struct fifa96_input input;                     /* FU-61 player-0 edge/held model */
   uint8_t input_state[FIFA96_INPUT_PLAYERS];     /* last sampled FU-61 state (slot input) */
