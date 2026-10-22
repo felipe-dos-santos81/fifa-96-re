@@ -339,24 +339,26 @@ static fifa96_keeper_closedown closedown_state(void) {
   return s;
 }
 
-/* Stage 0 -> 1: the place/commit with the per-side z offset, event 0x26, the
- * latch, and stage 1's place/commit + 0x79B6C tail when no slot is bound. */
+/* Stage 0 -> 1: the place/commit of the 0x1104F2 triple, event 0x26, the
+ * latch, and stage 1's place/commit + 0x79B6C tail when no slot is bound. The
+ * record copy adds the prologue's per-side -0xA0 (side 0), not a caller
+ * offset (FU310-L2). */
 static void test_closedown_stage0_1(void) {
   fifa96_keeper_closedown s = closedown_state();
   fifa96_keeper_closedown_out out;
   s.row44 = 1;
   s.timer89 = 0x1E;
-  s.cam_x = 10;
-  s.cam_y = 20;
+  s.cam_x = 10;                       /* pre-place cells: not a place source */
   s.cam_z = 30;
-  s.cam_off_z = 0x40;
+  s.snap_x_nonneg = 1;                /* -> the +0x1D0 x entry */
   assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
   assert(out.controlled == 1 && out.helper == 1);
-  assert(out.place == 1 && out.place_x == 10 && out.place_y == 20 && out.place_z == 30);
+  assert(out.place == 1 && out.place_x == 0x1D0 && out.place_y == 0 &&
+         out.place_z == -0xA00);
   assert(out.commit == 1);
   assert(out.event == 0x26);
   assert(s.latch_157ab2 == 1);
-  assert(s.pos.x == 10 && s.pos.y == 20 && s.pos.z == 30 + 0x40);
+  assert(s.pos.x == 0x1D0 && s.pos.y == 0 && s.pos.z == -0xA00 - 0xA0);
   assert(s.stage92 == 1);
   assert(out.slot_fill == 1);         /* stage 1, no slot */
   assert(out.tail_hold == 1);         /* latch set, stage 1 > 0 */
@@ -375,6 +377,44 @@ static void test_closedown_stage0_1(void) {
   s.session_gate = 1;
   assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
   assert(out.place == 1 && s.stage92 == 1);
+}
+
+/* FU310-L2 (phase-30 T4): the row-1D prologue place triple is the 0x1104F2
+ * table FUN_000744F4 seeds in `[0x157C5E]`, indexed
+ * `side*0x18 + 12*([0x15777C] >= 0)` (fresh `0x74EC3..0x74F10`; fresh
+ * `read_memory 0x1104F2` = the four triples). Both place calls (`0x74F99`,
+ * `0x750B5`) push it, and the record copy after each place (`0x74FBC..0x74FCE`
+ * / `0x750D3..0x750E5`) adds the prologue's per-side {-0xA0, +0xA0} word.
+ * The pre-place camera cells are not a source. Mutation-RED: the old engine
+ * placed the staged camera `(10,*,30)` and used a caller offset. */
+static void test_closedown_place_triples(void) {
+  static const int32_t table[4][3] = {
+      {-0x1D0, 0, -0xA00},   /* side 0, [0x15777C] <  0 */
+      {0x1D0, 0, -0xA00},    /* side 0, [0x15777C] >= 0 */
+      {-0x1D0, 0, 0xA00},    /* side 1, [0x15777C] <  0 */
+      {0x1D0, 0, 0xA00},     /* side 1, [0x15777C] >= 0 */
+  };
+  for (int side = 0; side < 2; side++) {
+    for (int flag = 0; flag < 2; flag++) {
+      fifa96_keeper_closedown s = closedown_state();
+      fifa96_keeper_closedown_out out;
+      int32_t zoff = side == 0 ? -0xA0 : 0xA0;
+      int idx = side * 2 + flag;
+      s.row44 = 1;
+      s.timer89 = 0x1E;
+      s.side = (uint8_t)side;
+      s.snap_x_nonneg = (uint8_t)flag;
+      s.cam_x = 0x77;
+      s.cam_z = -0x77;
+      assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
+      assert(out.place == 1);
+      assert(out.place_x == table[idx][0] && out.place_y == table[idx][1] &&
+             out.place_z == table[idx][2]);
+      /* The stage-1 record copy of the same triple + the side word. */
+      assert(s.pos.x == table[idx][0] && s.pos.y == table[idx][1]);
+      assert(s.pos.z == table[idx][2] + zoff);
+    }
+  }
 }
 
 /* Stage 1 branch topology: the slotless arm advances on timer89 > 0xB4
@@ -538,6 +578,7 @@ int main(void) {
   test_claim_stage4_outlet();
   test_claim_errors();
   test_closedown_stage0_1();
+  test_closedown_place_triples();
   test_closedown_stage1_slot_paths();
   test_closedown_stage2_reset_and_advance();
   test_closedown_stage3_clearance();

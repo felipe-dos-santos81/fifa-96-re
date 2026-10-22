@@ -624,13 +624,16 @@ static void test_action_12_runs_free_kick_body(void) {
   f.mr.state.phase = 7u;                   /* the free-kick phase gate */
   f.mr.session_gate_14c32a = 1;
   f.mr.incident_x = 0x500;
+  f.mr.incident_y = 0x123;                 /* FU310-L1: the native y source */
   f.mr.incident_z = 0;
 
   /* dispatch 1: incident placement + wall fold, then the stage-2 probe wait */
   assert(fifa96_match_dispatch_action(&f.mr, 0x12) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u);
   assert(f.mr.record.controlled == 1);
-  assert(f.mr.record.place_x == 0x500 && f.mr.record.place_z == 0);
+  assert(f.mr.record.place_x == 0x500 && f.mr.record.place_y == 0x123 &&
+         f.mr.record.place_z == 0);
+  assert(f.mr.render.camera.pos_y == 0x123);  /* 0x83E7D MOVSD middle word */
   assert(f.mr.record.pos_x != 0x500 || f.mr.record.pos_z != 0);  /* folded */
   assert(f.mr.record.target_x == f.mr.record.pos_x);
 
@@ -997,16 +1000,23 @@ static void test_action_20_body_arms(void) {
   f.mr.render.camera.pos_y = 0x50;
   f.mr.render.camera.pos_z = 0xB00;
 
-  /* arm 0 (0x84F5C): place pos at the camera focus (z-0xF0) + anim 0x26. */
+  /* arm 0 (0x84F5C): place the ball-camera triple (0,0,0x8D0) (FU310-L3),
+   * then target := the focus (z-0xF0) + anim 0x26. */
   assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
   assert(f.mr.record.controlled == 1);          /* 0x84F25/0x84F5C [0x157A83] */
   assert(f.mr.record.stage92 == 1u);            /* 0x85050 */
   assert(f.mr.record.timer89 == 0);             /* 0x8503E */
-  assert(f.mr.record.pos_x == 0x100);           /* 0x79B6C place = target */
+  assert(f.mr.render.camera.pos_x == 0);        /* 0x84F69 FUN_00073DC4(0) */
+  assert(f.mr.render.camera.pos_y == 0);
+  assert(f.mr.render.camera.pos_z == 0x8D0);
+  assert(f.mr.record.place_valid == 1);         /* 0x84F84 CALL 0x700F4 */
+  assert(f.mr.record.place_x == 0 && f.mr.record.place_y == 0 &&
+         f.mr.record.place_z == 0x8D0);
+  assert(f.mr.record.pos_x == 0);               /* 0x79B6C place = target */
   assert(f.mr.record.pos_y == 0);
-  assert(f.mr.record.pos_z == 0xB00 - 0xF0);    /* 0x84FA7 z -= 0xF0 */
-  assert(f.mr.record.target_x == 0x100);
-  assert(f.mr.record.target_z == 0xB00 - 0xF0);
+  assert(f.mr.record.pos_z == 0x8D0 - 0xF0);    /* 0x84FA7 z -= 0xF0 */
+  assert(f.mr.record.target_x == 0);
+  assert(f.mr.record.target_z == 0x8D0 - 0xF0);
   assert(f.mr.record.anim_id == 0x26u);         /* 0x8CFAC anim 0x26 */
 
   /* T4 (FU-220 §3.2 arm 0 / §4(a)): the arm-0 ball-record place maps onto the
@@ -1023,11 +1033,13 @@ static void test_action_20_body_arms(void) {
 
   /* arm 4 advance: lane>>16 <= 0x40 -> the 0x7B9C4 mode-0x40 kick -> stage 5/
    * timer 0. Arm 4's own record write is the target := camera-focus triple
-   * (`0x85197..0x851A0`), and the kick stages the ball block (`0x7B9C4` ->
-   * `fifa96_ball_kick_target`, the ported kick effect). The native kick's
-   * record `pos_x/pos_z`+anim write-back (`0x7A490`) is the FU210-L1/OL-9 leg
-   * (not implemented by the port), so those fields are deliberately not
-   * asserted here. */
+   * (`0x85197..0x851A0`, now the FU310-L3 place), and the kick stages the ball
+   * block (`0x7B9C4` -> `fifa96_ball_kick_target`, the ported kick effect).
+   * The kick's ball height is the placed camera Y (0), so the vector is
+   * 1440/-410/1381 (the pre-L3 staging had 0x50 -> -1426/203). The native
+   * kick's record `pos_x/pos_z`+anim write-back (`0x7A490`) is the
+   * FU210-L1/OL-9 leg (not implemented by the port), so those fields are
+   * deliberately not asserted here. */
   f.mr.record.lane_x = 0;                        /* the +0x6B lane <= 0x40 */
   f.mr.entities.ball.pair.vector.x = 0;
   f.mr.entities.ball.pair.vector.height = 0;
@@ -1035,12 +1047,12 @@ static void test_action_20_body_arms(void) {
   assert(fifa96_match_action_20(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 5u);            /* 0x851D7 */
   assert(f.mr.record.timer89 == 0);
-  assert(f.mr.record.target_x == 0x100);        /* 0x85197 target := camera focus */
-  assert(f.mr.record.target_y == 0x50);
-  assert(f.mr.record.target_z == 0xB00);
+  assert(f.mr.record.target_x == 0);            /* 0x85197 target := camera focus */
+  assert(f.mr.record.target_y == 0);
+  assert(f.mr.record.target_z == 0x8D0);
   assert(f.mr.entities.ball.pair.vector.x == 1440);      /* the staged 0x7B9C4 kick */
-  assert(f.mr.entities.ball.pair.vector.height == -1426);
-  assert(f.mr.entities.ball.pair.vector.z == 203);
+  assert(f.mr.entities.ball.pair.vector.height == -410);
+  assert(f.mr.entities.ball.pair.vector.z == 1381);
   assert(f.mr.entities.ball.pair.flags == 0x40u);        /* the latch mode byte */
 
   /* arm 5 (0x851E1): snap; +0x44 clear -> wait at stage 5. */
@@ -1803,8 +1815,10 @@ static void test_action_1E_machine_release_chain(void) {
   drop_fixture(&f);
 }
 
-/* FU-151 P3: row 1D's five-stage close-down through the engine binder. Stage 0
- * (row44 + timer gate) places/commits and advances; stage 3 with no slot
+/* FU-151 P3 + FU310-L2 (phase-30 T4): row 1D's five-stage close-down through
+ * the engine binder. Stage 0 (row44 + timer gate) places the 0x1104F2 table
+ * triple (side 0 / [0x15777C] >= 0 -> (0x1D0, 0, -0xA00)) and commits,
+ * advancing; the record copy adds the per-side -0xA0. Stage 3 with no slot
  * clears the outlet vector, runs situation 0xB and resets the record. */
 static void test_action_1D_runs_closedown(void) {
   struct fixture f;
@@ -1813,19 +1827,39 @@ static void test_action_1D_runs_closedown(void) {
   f.mr.record.stage92 = 0;
   f.mr.record.row44 = 1;
   f.mr.record.timer89 = 0x1E;
-  f.mr.keeper_cam_x = 10;
+  f.mr.keeper_cam_x = 10;              /* pre-place cells: not a place source */
   f.mr.render.camera.pos_y = 20;
   f.mr.keeper_cam_z = 30;
   f.mr.state.phase = 1;
   f.mr.phase_machine.state = 1;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1D) == FIFA96_OK);
   assert(f.mr.record.place_valid == 1);
-  assert(f.mr.record.place_x == 10 && f.mr.record.place_y == 20 &&
-         f.mr.record.place_z == 30);
+  assert(f.mr.record.place_x == 0x1D0 && f.mr.record.place_y == 0 &&
+         f.mr.record.place_z == -0xA00);
+  assert(f.mr.record.pos_x == 0x1D0 && f.mr.record.pos_y == 0 &&
+         f.mr.record.pos_z == -0xA00 - 0xA0);
+  assert(f.mr.keeper_cam_x == 0x1D0 && f.mr.keeper_cam_z == -0xA00);
   assert(f.mr.record.controlled == 1);         /* stage < 3 actor bind */
   assert(f.mr.record.helper_request == 1);     /* stage < 3 slot merge */
   assert(f.mr.record.stage92 == 1);            /* stage 0 -> stage 1 */
   assert(f.mr.keeper_latch_157ab2 == 1);
+
+  /* The selector's other arm: side 1 and [0x15777C] < 0 -> (-0x1D0,0,0xA00),
+   * +0xA0 on the copy. */
+  f.mr.entities.team[0].side = 1;
+  f.mr.goal_snap_x = -1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.row44 = 1;
+  f.mr.record.timer89 = 0x1E;
+  f.mr.state.phase = 1;
+  f.mr.phase_machine.state = 1;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1D) == FIFA96_OK);
+  assert(f.mr.record.place_x == -0x1D0 && f.mr.record.place_y == 0 &&
+         f.mr.record.place_z == 0xA00);
+  assert(f.mr.record.pos_z == 0xA00 + 0xA0);
+  assert(f.mr.keeper_cam_x == -0x1D0 && f.mr.keeper_cam_z == 0xA00);
+  f.mr.entities.team[0].side = 0;
+  f.mr.goal_snap_x = 0;
 
   /* stage 3 no slot: situation 0xB -> phase 2 and the 0x7DAB4 reset. */
   f.mr.state.phase = 1;

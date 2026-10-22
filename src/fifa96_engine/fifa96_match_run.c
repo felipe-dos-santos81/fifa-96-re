@@ -2246,6 +2246,7 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->store_15882b = 0;
   mr->store_15882c = 0;
   mr->incident_x = 0;
+  mr->incident_y = 0;
   mr->incident_z = 0;
   /* FU-149 L13 (T1): the throw/corner staging cells (the native BSS defaults). */
   mr->sp_flag_158784 = 0;
@@ -2425,6 +2426,7 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->store_15882b = 0;
   mr->store_15882c = 0;
   mr->incident_x = 0;
+  mr->incident_y = 0;
   mr->incident_z = 0;
   /* FU-149 L13 (T1): a fresh match drops the throw/corner staging cells. */
   mr->sp_flag_158784 = 0;
@@ -6827,6 +6829,7 @@ int fifa96_match_run_contact(struct fifa96_match_run *mr, uint8_t kind,
   if (rc < 0) return rc;
   mr->referee.recall_consumed = 1;            /* 0x81EC4 */
   mr->incident_x = mr->referee.point[0];      /* [0x158897] mirror */
+  mr->incident_y = mr->referee.point[1];      /* [0x15889B] mirror */
   mr->incident_z = mr->referee.point[2];      /* [0x15889F] mirror */
   if (out.sequence == FIFA96_REF_SEQ_ACT3) {
     /* FU-187 §5 (phase-16 T4): the act-3 producer routes through the act seam
@@ -6946,6 +6949,7 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
     if (rc < 0) return rc;
   }
   mr->incident_x = mr->referee.point[0];
+  mr->incident_y = mr->referee.point[1];
   mr->incident_z = mr->referee.point[2];
   mr->ref_machine = FIFA96_MATCH_RUN_REF_OFFSIDE;
   mr->referee.sequence = FIFA96_REF_SEQ_ACT6;

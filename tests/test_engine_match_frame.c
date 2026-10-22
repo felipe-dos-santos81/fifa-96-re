@@ -4286,23 +4286,21 @@ static void test_row1e_slot_hold_follow_band_frame(void) {
   drop_fixture(f);
 }
 
-/* FU307-L4 (phase-29 T3): the single camera-Y cell.
+/* FU310-L2 (phase-30 T4): row-0x1D's place source is the 0x1104F2 table
+ * (side*2 + ([0x15777C] >= 0), fresh 0x74EC3..0x74F10), never the camera
+ * cells. The pre-place camera/keeper cells carry values that must not leak
+ * into the place.
  *
- * `dword[0x157750]` is one native cell; the port split it into a keeper
- * process cell (FU-151) and the FU-71 render camera, and only the arc wrote
- * the render side — so the keeper rows read a stale Y after any event
- * (FU307 §6 item 3). The unification deletes the keeper Y cell: every keeper
- * row now reads `mr.render.camera.pos_y`.
- *
- * Witness: the row-0x1D closedown stage-0 place (`0x74F99 CALL 0x700F4`) hands
- * the camera triple to the place output, so `record.place_y` is exactly the Y
- * the machine read. Baseline: it read the shadow keeper cell (0), not the live
- * `0x33`, so the assert is RED. */
-static void test_keeper_cam_y_single_cell(void) {
+ * Supersedes the FU307-L4 witness that used this row's place as the live
+ * camera-Y read: the native place overwrites `[0x157750]` before the record
+ * copy, so row 0x1D never reads a pre-place Y. The single-Y-cell read side
+ * stays pinned on the claim row (`test_row1e_slot_hold_follow_band_frame`,
+ * the 0x75976 place Y) and the stage-7 raw stores. */
+static void test_row1d_place_triple_cells(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
   assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x33, 0x22) == FIFA96_OK);
-  mr.keeper_cam_x = 0x44;             /* the X/Z process cells stay the shadow */
+  mr.keeper_cam_x = 0x44;             /* the X/Z process cells */
   mr.keeper_cam_z = 0x55;
   mr.record.entity_id = 0;
   mr.record.stage92 = 0;
@@ -4311,9 +4309,91 @@ static void test_keeper_cam_y_single_cell(void) {
   mr.session_gate_14c32a = 0;
   assert(fifa96_match_dispatch_action(&mr, 0x1D) == FIFA96_OK);
   assert(mr.record.place_valid == 1);
-  assert(mr.record.place_x == 0x44);
-  assert(mr.record.place_y == 0x33);  /* the live camera Y, not a shadow cell */
-  assert(mr.record.place_z == 0x55);
+  assert(mr.record.place_x == 0x1D0);
+  assert(mr.record.place_y == 0);     /* the table's y, not the camera 0x33 */
+  assert(mr.record.place_z == -0xA00);
+  assert(mr.record.pos_x == 0x1D0 && mr.record.pos_y == 0 &&
+         mr.record.pos_z == -0xA00 - 0xA0);   /* the per-side copy */
+  assert(mr.keeper_cam_x == 0x1D0 && mr.keeper_cam_z == -0xA00);
+}
+
+/* FU310-L2 frame path: an installed row 0x1D runs from a granted frame's
+ * entity chain, and the place reaches the live camera through the frame drain
+ * (`match_run_entity_drain` -> `fifa96_camera_init`). All four selector
+ * entries: side x ([0x15777C] >= 0). */
+static void test_row1d_place_triple_frame(void) {
+  for (int side = 0; side < 2; side++) {
+    for (int flag = 0; flag < 2; flag++) {
+      struct fifa96_match_run mr;
+      struct fifa96_match_entity *e;
+      int32_t px = flag != 0 ? 0x1D0 : -0x1D0;
+      int32_t pz = side != 0 ? 0xA00 : -0xA00;
+      fifa96_match_run_init(&mr);
+      mr.state.phase = 0;
+      mr.state.period_length = 90;
+      e = &mr.entities.team[0].records[0];
+      e->code = 0x1D;
+      e->stage92 = 0;
+      e->timer89 = 0x1E;
+      e->anim_id = 0;                 /* row 0 flags 0x07 -> +0x44 = 1 */
+      mr.entities.team[0].side = (uint8_t)side;
+      mr.goal_snap_x = flag != 0 ? 0 : -1;
+      one_granted_frame(&mr);
+      assert(mr.render.camera.pos_x == px);
+      assert(mr.render.camera.pos_y == 0);
+      assert(mr.render.camera.pos_z == pz);
+      assert(e->pos_x == px && e->pos_y == 0 &&
+             e->pos_z == pz + (side != 0 ? 0xA0 : -0xA0));
+      assert(mr.keeper_cam_x == px && mr.keeper_cam_z == pz);
+    }
+  }
+}
+
+/* FU310-L3 frame path: row 0x20 arm 0 places the ball-camera triple
+ * (0, 0, 0x8D0) through the frame drain, and the target is the placed focus
+ * minus 0xF0. */
+static void test_row20_place_triple_frame(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 0;
+  mr.state.period_length = 90;
+  e = &mr.entities.team[0].records[0];
+  e->code = 0x20;
+  e->stage92 = 0;
+  e->anim_id = 0;
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_x == 0);
+  assert(mr.render.camera.pos_y == 0);
+  assert(mr.render.camera.pos_z == 0x8D0);
+  assert(e->place_valid == 0);                 /* consumed by the drain */
+  assert(e->pos_x == 0 && e->pos_y == 0);
+  assert(e->pos_z == 0x8D0 - 0xF0);            /* the 0x79B6C place */
+  assert(e->target_x == 0 && e->target_y == 0);
+  assert(e->target_z == 0x8D0 - 0xF0);
+}
+
+/* FU310-L1 frame path: row 0x12 stage 0's place copies the incident triple's
+ * own y (`0x83E7D`, the MOVSD middle word) into the focus and the camera. */
+static void test_row12_incident_y_frame(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.session_gate_14c32a = 0;
+  mr.incident_x = 0x500;
+  mr.incident_y = 0x123;
+  mr.incident_z = 0;
+  e = &mr.entities.team[0].records[0];
+  e->code = 0x12;
+  e->stage92 = 0;
+  e->timer89 = 0x3C;                  /* the byte-0 session timer gate */
+  e->anim_id = 0;
+  one_granted_frame(&mr);
+  assert(mr.render.camera.pos_x == 0x500);
+  assert(mr.render.camera.pos_y == 0x123);
+  assert(mr.render.camera.pos_z == 0);
 }
 
 /* FU308 §6.6 (phase-29 T1): the keeper `follow_speed` seam — the frame bind
@@ -9919,7 +9999,10 @@ int main(void) {
   test_keeper_installer_live_reach();
   test_row1e_cam_y_raw_store();
   test_row1e_slot_hold_follow_band_frame();
-  test_keeper_cam_y_single_cell();
+  test_row1d_place_triple_cells();
+  test_row1d_place_triple_frame();
+  test_row20_place_triple_frame();
+  test_row12_incident_y_frame();
   test_keeper_live_follow_speed_seam();
   test_action_1b_deep_pan_seed_extents();
   test_action_1b_deep_pan_block_b_bounds();

@@ -808,6 +808,27 @@ claim_exit:
 
 /* ===== FU-151 §Port contract item 2 — row-1D close-down machine =========== */
 
+/* FU310-L2 (phase-30 T4): the row-1D prologue place triple. Fresh
+ * `disassemble_bytes 0x74E90..0x74FB0` + `read_memory 0x1104F2` (48 B): the
+ * `[0x157C5E]` table FUN_000744F4 seeds with 0x1104F2 (fresh 0x74507) holds
+ * four triples `{(-0x1D0,0,-0xA00), (0x1D0,0,-0xA00), (-0x1D0,0,0xA00),
+ * (0x1D0,0,0xA00)}`, selected by `side*0x18 + 12*([0x15777C] >= 0)`
+ * (`0x74EC3..0x74F10`). Both place calls push this local triple and the
+ * following `MOVSD` copies it (+ the per-side word below) to `rec+0x59`. */
+static const int32_t keeper_place_triples[4][3] = {
+    {-0x1D0, 0, -0xA00},   /* side 0, snap.x <  0 */
+    {0x1D0, 0, -0xA00},    /* side 0, snap.x >= 0 */
+    {-0x1D0, 0, 0xA00},    /* side 1, snap.x <  0 */
+    {0x1D0, 0, 0xA00},     /* side 1, snap.x >= 0 */
+};
+
+/* The prologue's per-side Z word (`0x74FBC..0x74FCE` stage 0,
+ * `0x750D3..0x750E5` stage 1): the constant `dword[0x744D0] = 0x00A0FF60`
+ * read as `int16_t[side]`, i.e. {-0xA0, +0xA0}. */
+static int32_t keeper_closedown_zoff(uint8_t side) {
+  return side == 0u ? -0xA0 : 0xA0;
+}
+
 static void keeper_closedown_tail(fifa96_keeper_closedown *s,
                                   fifa96_keeper_closedown_out *out) {
   if (s->latch_157ab2 != 0 && (int8_t)s->stage92 > 0) out->tail_hold = 1; /* 0x754c3 */
@@ -817,8 +838,14 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
                                           fifa96_keeper_closedown_out *out) {
   int stage;
   int flag4 = 0;
+  const int32_t *place;
+  int32_t zoff;
   if (!s || !out) return -FIFA96_ERR_INVALID;
   memset(out, 0, sizeof *out);
+  /* 0x74EC3..0x74F10: the prologue triple from the 0x157C5E table. */
+  place = keeper_place_triples[(s->side != 0u ? 2 : 0) +
+                               (s->snap_x_nonneg != 0u ? 1 : 0)];
+  zoff = keeper_closedown_zoff(s->side);
   stage = (int)s->stage92;
   if (stage < 3) {                                                 /* 0x74f1a..0x74f27 */
     out->controlled = 1;
@@ -831,13 +858,13 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
     if (s->row44 == 0) return FIFA96_OK;                           /* 0x74f64 -> RET */
     if (s->timer89 < 0x1E && s->session_gate == 0) goto closedown_tail; /* 0x74f74/0x74f7d */
     out->place = 1;                                                /* 0x74f99 CALL 0x700F4 */
-    out->place_x = s->cam_x;
-    out->place_y = s->cam_y;
-    out->place_z = s->cam_z;
-    s->pos.x = s->cam_x;                                           /* 0x74fa9 pos := 0x15774C */
-    s->pos.y = s->cam_y;
-    s->pos.z = s->cam_z;
-    s->pos.z += (int32_t)s->cam_off_z;                             /* 0x74fc9 */
+    out->place_x = place[0];
+    out->place_y = place[1];
+    out->place_z = place[2];
+    s->pos.x = place[0];                                           /* 0x74fa9 focus -> +0x59 */
+    s->pos.y = place[1];
+    s->pos.z = place[2];
+    s->pos.z += zoff;                                              /* 0x74fc9 */
     out->commit = 1;                                               /* 0x74fe3 CALL 0x79B6C */
     out->event = 0x26;                                             /* 0x75000 */
     s->latch_157ab2 = 1;                                           /* 0x7501f */
@@ -854,12 +881,12 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
         out->ui |= 0x10u;                                          /* 0x974DC(0x1E) audio */
     }
     out->place = 1;                                                /* 0x750b5 CALL 0x700F4 */
-    out->place_x = s->cam_x;
-    out->place_y = s->cam_y;
-    out->place_z = s->cam_z;
-    s->pos.x = s->cam_x;                                           /* 0x750c0 pos := 0x15774C */
-    s->pos.y = s->cam_y;
-    s->pos.z = s->cam_z + (int32_t)s->cam_off_z;                   /* 0x750dd */
+    out->place_x = place[0];
+    out->place_y = place[1];
+    out->place_z = place[2];
+    s->pos.x = place[0];                                           /* 0x750c0 focus -> +0x59 */
+    s->pos.y = place[1];
+    s->pos.z = place[2] + zoff;                                    /* 0x750dd */
     out->commit = 1;                                               /* 0x750ed CALL 0x79B6C */
     if (s->has_slot == 0) {
       out->slot_fill = 1;                                          /* 0x750fb CALL 0x744D4 */

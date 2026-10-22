@@ -610,7 +610,6 @@ static void match_keeper_closedown_stage(struct fifa96_match_run *mr,
   s->target_x = mr->record.target_x;
   s->target_z = mr->record.target_z;
   s->cam_x = mr->keeper_cam_x;
-  s->cam_y = mr->render.camera.pos_y;   /* FU307-L4: the single camera-Y cell */
   s->cam_z = mr->keeper_cam_z;
   s->reset_x = mr->keeper_reset_x;
   s->reset_y = mr->keeper_reset_y;
@@ -639,7 +638,7 @@ static void match_keeper_closedown_stage(struct fifa96_match_run *mr,
   s->latch_157ab2 = mr->keeper_latch_157ab2;
   s->offset_x = mr->record.place_offset_x;
   s->offset_z = mr->record.place_offset_z;
-  s->cam_off_z = 0;   /* the 0x157C5E per-side table (producer unported, leg) */
+  s->snap_x_nonneg = (uint8_t)(mr->goal_snap_x >= 0);   /* the 0x74EED test */
   s->mates = mates;
   s->mate_count = FIFA96_MATCH_ENTITY_RECORDS;
   s->skip_index = mr->record.active;
@@ -669,10 +668,11 @@ static int match_keeper_closedown_apply(struct fifa96_match_run *mr,
     mr->record.place_z = out->place_z;
   }
   if (out->commit != 0 && e != NULL) (void)fifa96_match_entities_place(e);
-  mr->keeper_cam_x = s->cam_x;
-  /* FU307-L4: the closedown only reads the camera triple (its two places hand
-   * `s->cam_*` out; no stage writes Y), so there is no Y write-back here. */
-  mr->keeper_cam_z = s->cam_z;
+  /* FU310-L2 (phase-30 T4): the 0x700F4 place writes the focus triple
+   * `[0x15774C/54]` (the engine's keeper camera cells). The row writes X/Z
+   * only through its two places; without one the staged value stands. */
+  mr->keeper_cam_x = out->place != 0 ? out->place_x : s->cam_x;
+  mr->keeper_cam_z = out->place != 0 ? out->place_z : s->cam_z;
   mr->keeper_reset_x = s->reset_x;
   mr->keeper_reset_y = s->reset_y;
   mr->keeper_reset_z = s->reset_z;
@@ -1992,14 +1992,16 @@ static int fifa96_match_action_12(struct fifa96_match_run *mr) {
     r->stage92 = 1u;                                      /* 0x83E6C */
     stage = 1u;
     /* 0x83E72..0x83EAB: the 0x15774C focus := the 0x158897 incident triple
-     * with z clamped to ±0x9F0; the FUN_000700F4 reset. */
+     * (x@897/y@89B/z@89F, an unclamped MOVSD copy) with z clamped to ±0x9F0;
+     * the FUN_000700F4 reset. FU310-L1: y takes its native source. */
     {
       int32_t iz = mr->incident_z;
       if (iz > 0x9F0) iz = 0x9F0;
       else if (iz < -0x9F0) iz = -0x9F0;
-      (void)fifa96_camera_init(&mr->render.camera, mr->incident_x, 0, iz);
+      (void)fifa96_camera_init(&mr->render.camera, mr->incident_x,
+                               mr->incident_y, iz);
       r->place_x = mr->incident_x;
-      r->place_y = 0;
+      r->place_y = mr->incident_y;
       r->place_z = iz;
       r->place_valid = 1;
     }
@@ -5823,13 +5825,13 @@ int fifa96_match_action_03(struct fifa96_match_run *mr) {
  * re-asserts `[0x157A83] = rec` (the engine `controlled` request); `+0x89 +=
  * [0x157A64]`; the arm index is `byte[rec+0x92]` (<= 6, else the `0x8520D`
  * epilogue).
- *  - arm 0 (`0x84F5C`): the `0x73DC4`/`0x700F4` ball-camera stage and the
- *    `[0x15781D]` clear stay FU210-L1 legs; `0x73E08` commit; target := the
- *    `0x15774C` focus (the engine's derived camera stand-in, the row-0x13
- *    convention), `-0xF0` on z; the `0x79B6C` place (pos + anim); the team's
- *    ball record place at (0, 0xB10) is FU210-L2 (not faked); the `0x7876C`
- *    merge request; the `0x8CFAC` anim 0x26; `0x4C324`/`0x4C374(0x1B)` legs;
- *    advance.
+ *  - arm 0 (`0x84F5C`): `0x73DC4`/`0x700F4` place the ball-camera triple
+ *    (0, 0, 0x8D0) (FU310-L3, phase-30 T4); the `[0x15781D]` clear stays a
+ *    FU210-L1 leg; `0x73E08` commit; target := the `0x15774C` focus (the
+ *    engine camera), `-0xF0` on z; the `0x79B6C` place (pos + anim); the
+ *    team's ball record place at (0, 0xB10) is FU210-L2 (not faked); the
+ *    `0x7876C` merge request; the `0x8CFAC` anim 0x26;
+ *    `0x4C324`/`0x4C374(0x1B)` legs; advance.
  *  - arm 1 (`0x85056`): the `[0x15882A]` + `+0x89 >= 0x3C` gate; the ring pick
  *    and the `0x8F188` event — and the `0x4BEC8`/`0x7A028` bodies — are
  *    FU210-L1 legs (derived pass); advance.
@@ -5864,6 +5866,17 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
   if (stage > 6u) return FIFA96_OK;                     /* 0x84F47 JA 0x8520D */
   if (stage == 0u) {                                    /* arm 0 (0x84F5C) */
     r->controlled = 1;                                  /* 0x84F5C [0x157A83] = rec */
+    /* FU310-L3 (phase-30 T4): 0x84F69 CALL 0x73DC4 with EAX = 0 writes the
+     * focus triple `[0x15774C/50/54]` = (0, 0, 0x8D0) (fresh 0x73DC4:
+     * `[EDX]=0`, `[EDX+4]=0`, `[EDX+8]=0x8D0`; the EAX == 1 arm is -0x8D0),
+     * then 0x84F84 CALL 0x700F4 (flag 0) places it. This is the restart
+     * commit, never the penalty: the row-0x13 side sign is the separate
+     * 0x84B6B cut. */
+    (void)fifa96_camera_init(&mr->render.camera, 0, 0, 0x8D0);
+    r->place_x = 0;
+    r->place_y = 0;
+    r->place_z = 0x8D0;
+    r->place_valid = 1;
     match_sp_commit(r);                                 /* 0x84F89/0x84F90 FUN_00073E08 */
     r->target_x = mr->render.camera.pos_x;              /* 0x84F9B..0x84FA0 */
     r->target_y = mr->render.camera.pos_y;

@@ -267,7 +267,16 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *state,
  * the `0x8DD70`/`0x114E04`/`0x795A4` fold the entity primitives port. */
 typedef struct fifa96_keeper_closedown {
   fifa96_keeper_point pos;
-  int32_t cam_x, cam_y, cam_z;    /* 0x15774C/50/54 in/out */
+  /* FU310-L2 (phase-30 T4): the stage-0/1 place triple is NOT the camera
+   * cells. Row 0x1D's prologue (`0x74EC3..0x74F10`) reads the 0x1104F2 table
+   * (the base FUN_000744F4 stores in `[0x157C5E]`, 0x74507) at
+   * `side*0x18 + 12*([0x15777C] >= 0)`; both `0x700F4` calls (`0x74F99`,
+   * `0x750B5`) push that local triple. The record copy after each place takes
+   * the focus triple (the same triple) plus the prologue's per-side
+   * {-0xA0, +0xA0} word (`0x74FBC..0x74FCE`, `0x750D3..0x750E5`). The
+   * pre-place `[0x15774C..54]` camera is therefore not a source; only the
+   * stage-2 target copy (`0x75259` = `0x15774C/54`) stages `cam_x`/`cam_z`. */
+  int32_t cam_x, cam_z;           /* 0x15774C/54 in (the stage-2 target copy) */
   int32_t reset_x, reset_y, reset_z; /* 0x157A77 in/out */
   int32_t target_x, target_z;     /* +0x4D/+0x55 */
   fifa96_keeper_vec vec;          /* 0x158738 {band,dx,dz} in/out */
@@ -276,6 +285,8 @@ typedef struct fifa96_keeper_closedown {
   int32_t lane;                   /* (signed word) [+0x69]>>16 */
   uint8_t stage92;
   uint8_t side;
+  uint8_t snap_x_nonneg;          /* the `[0x15777C] >= 0` prologue flag
+                                   * (0x74EED..0x74F09, FU310-L2) */
   uint8_t has_ball;               /* +0x9B */
   uint8_t has_slot;               /* +0x20 */
   uint8_t slot_edge;              /* byte[slot+6] (the release edge bits) */
@@ -287,7 +298,6 @@ typedef struct fifa96_keeper_closedown {
   uint8_t session_gate;           /* [0x14C32A] */
   uint8_t latch_157ab2;           /* [0x157AB2] in/out */
   int8_t offset_x, offset_z;      /* 0x10F334/0x10F33C[sector] */
-  int16_t cam_off_z;              /* the per-side local camera z offset */
   const fifa96_entity_candidate *mates;
   uint32_t mate_count;
   uint8_t skip_index;

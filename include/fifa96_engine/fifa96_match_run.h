@@ -923,9 +923,10 @@ struct fifa96_match_run {
    *    (situation) / [0x15882C] (side) written by the BX!=0 fallback
    *    (0x8AA93/0x8AA9D) and re-read by act 8's tail (0x8A8BD..0x8ACD); the
    *    tail leaves `store_15882b = 0xFF` (0x8A8D3);
-   *  - `incident_x`/`incident_z` = the incident position dwords [0x158897]/
-   *    [0x15889F] the phase-7 arm probes (0x8D5A8); the producer is the
-   *    FU-150 foul adjudicator (P2), seeded 0. (FU-149 §3 lists 0x15889B as
+   *  - `incident_x`/`incident_y`/`incident_z` = the incident position dwords
+   *    [0x158897]/[0x15889B]/[0x15889F] the phase-7 arm probes (0x8D5A8) and
+   *    the row-0x12 place copies (0x83E7C..0x83E7E, FU310-L1); the producer is
+   *    the FU-150 foul adjudicator (P2), seeded 0. (FU-149 §3 lists 0x15889B as
    *    the z cell; first-hand the 12-byte triple is x@897/y@89B/z@89F and
    *    `FUN_00079CCC` reads +8 = 0x15889F — slice erratum.) */
   uint8_t sit_side_pending;
@@ -945,6 +946,7 @@ struct fifa96_match_run {
   uint8_t act8_record;
   struct fifa96_match_entity *act8_selected;
   int32_t incident_x;
+  int32_t incident_y;
   int32_t incident_z;
   /* FU-149 L13 (T1 taker rows): the throw/corner staging cells the 0x10/0x11/
    * 0x12/0x13 stage machines read and write across frames:
