@@ -2778,3 +2778,110 @@ longer targets the pre-step keeper shadow. Pinned at the machine
 **FU307-L8** leg (the claim stage-3 / closedown stage-7 raw X/Z delivery gap
 on a direct stage start) and the two deferred-list corrections are recorded in
 the ENGINE final fix-wave erratum.
+
+## M2 phase-31 close-out — the natural pan (FU314…FU317): the camera pans in natural play
+
+**The phase settles the natural-pan question honestly: the camera pans in
+natural play — the first visible camera motion, one pan of `0x90`,
+trace-attributed in `make game` — while the follow/Y stays waived and the
+armer is a measured NO-GO.** Four stage-2 tasks: the natural witness
+(T1/FU317), the row-`0x24` staged-face fidelity (T2/FU314), the visible-pan
+acceptance (T3) and this close-out (T4). Census holds **`60/80 = 75%`**
+(`37 action + 23 phase`): no row joined; the README title stays `75%`. M1
+`09b726b7…` byte-identical; M2 `8434cfab…` byte-identical (**no re-pin** —
+the T2 face fidelity's diff is empty and the reason is recorded below). The
+full register (the verdict, the witness, the face, the visible pan, the
+wave's verdicts, the quoted errata and the legs) is appended to
+`docs/ENGINE.md` as the phase-31 section.
+
+**The witness (T1, `dcf171b`).** The natural drive is the **verbatim
+`M2_KEYS` prefix plus a plain DOWN hold from tape index 1820**, run from the
+real kickoff with **no camera staging, no `act.id` staging and no
+`begin_isolated`**. It measures: phase 2 at step **1 802**; the gate at
+**`f=1512`** (record 2 `code=4`, `lane_x = lane_z = cam_dz6f = 0`,
+`bound=2`, `timer81=0`, `has_slot=1`, `dir=(−1,0)`; `controlled=1`,
+`slot.entity=2`, `tracked=−1`; the angle passes at the **zero-delta** point,
+bearing `0x80`, Δ`0x80`); the event at **`f=1513`** (`code=5`,
+`vel=(−5,0)`, `speed=5`, `tim=0/12`, `trk=2`); the claim at **`f=1514`**
+(`ball.carrier = slot.entity = 2`, `pair 0/0`); **one delta run
+`f=1514…1540`** (27 changed frames; the off-zero count is 2 084 and is never
+the count), stop `f=1541` at `(−0x90,0,0)`, `pan 0→4`, `speed
+5→3→2→1→0`, Y=Z=0; the armer/OOB 0, the ladder 6 118/`ran=0`; the trace
+1 header + 3 598 lines with `trk=2` across the run and `follow=0`; the
+undriven control still 3 598/3 598 zero. The measured one-shot is the pan's
+own **row-05 install** (`outfield.c:719`), not the tracked exclusion; the
+claim is the pan's downstream, one frame later.
+
+**The face fidelity (T2, `2598ae2`).** Two handler sites: the row-04
+half-line staging now reads the **live record face** (`handlers.c:2651`, was
+the constant 0), and the row-0x24 stage-0 face passes the **native constant
+vector `(1,0)`** (`handlers.c:5391`, was `(pos_x,pos_z)`; native
+`0x865B5`/`0x865BE`/`0x865C6`). The frame-path pair (the face-aligned pass
+vs the zero-face fail) and the row-0x24 constant pin are the RED→GREEN
+evidence. **M2 is unmoved**: the measured witness passes at the zero-delta
+point where both operands fold to Δ`0x80`; the row-0x24 call shapes coincide
+under the engine's staging (`player_e = 0`); and the one M2 spot where the
+old staged 0 was load-bearing (the m-42 band's staged south arrival) now
+stages its record **producer** input (`face7d = 0`). The live `+0x7D`
+producer coverage (the `0x8E1CB` frame-wrap arm / the mover `direct_face`)
+remains **FU314-L1a**'s prerequisite, so the face-aligned natural route is
+still open.
+
+**The visible pan (T3, `fbe36e2`, `13e4e37`, `026a204`).** A live `make game`
+run on `:1` with the trace sink and the tape-equivalent drive (the M2 prefix
++ the tick-synced KICK + DOWN at phase 2 + 20) reproduces the pan: clock
+**00:31…00:32**, place `0 → −0x90` over **27 frames** (`f=1514…1540`),
+`pan 0→4`, `trk=2`, Y=Z=0; the full trace is **1 header + 14 984 body
+lines**, `follow=0` on all. The same-run pan pair at 00:31 (0.25 s apart)
+lies inside the delta run; **`AE_pan 73 402 > AE_still 27 849`** (2.6×). The
+whole-scene bbox gate fails (`317×382` vs `864×443`) because this build
+renders sprites on black (no pitch), so the AE corroborates and the **trace
+attributes**. The captures are `docs/screens/p31-l2-*` (the pan/still pairs,
+the diff and the trace extract); the bare-DOWN negative run (no M2 prefix)
+shows no pan and records the timing limit. **Visible pan — YES,
+trace-attributed.**
+
+**The four-slice wave (FU314…FU317, `b85bb05`).** **FU314:** NO-GO on the
+undriven 12 000-step tape (the `0x7EE7D` angle gate rejects the only band
+entry — face `0x100` vs bearing `0x300`, Δ`0x200`, in 2 081/2 081 dispatches;
+arm A independently dead) but GO on the chain: the admission is live, the
+trigger is the gate tuple, and the **face data flow** was the defect (L2/L5a,
+fixed by T2). **FU315:** GO on the natural claim, already test-pinned; the P3
+cell is **not** the missing link (the `entities.c:741` "P3 possession
+unported" line is stale; P3 = `dword[rec+0x20]` is bound live at
+`entities.c:768`), and the claim is **not** the pan's producer. **FU316:** GO
+on the walk model (three tracked writers, eleven event sites;
+`T(0x40)=0x90`) and NO-GO on the natural armer reach (the measured ceiling
+2 pans/`0x120`; 13 same-direction pans needed; the arming is transient — a
+situation-2 throw-in re-places the camera). **FU317:** GO on the harness; the
+drive measured; the zero-delta honesty boundary and the AE/bbox limits are
+binding.
+
+**The quoted errata (detail in the register).** The phase corrects the
+plan/spec premise and the wave drafts where measurement disagrees: the FU314
+NO-GO is **tape-scoped** (the undriven window never brings a code-4 record
+to `(0,0)`; the hold does), and FU314's 2 081 vs FU317's 2 082 are one
+counter boundary apart. The one-shot is the **row-05 install**, not the
+tracked exclusion. The gate's `controlled`/`slot.entity`/`tracked` are
+1/2/−1 at `f=1512`, and the panning record 2 is **not** the controlled
+record — the `is_ball_track` fallback would refuse a controlled pan. The
+claim **follows** the pan (event `f=1513`; motion and carrier `f=1514`); the
+acceptance wording is "a natural row-04 pan that also produces the claim".
+The row-6-self install (`0x7F106..0x7F111`) skips the row-5 claim, so
+pan→row-5 is conditional (the measured witness took row 5). FU310-L9 was
+closed by phase-30 T6 (FU316 supplies the mechanism); the mirror blocks the
+armer, not the pan, and the unarmed mirror is the new FU316-L9.
+
+**The legs.** **FU314-L1 is met** for the one-pan witness; **FU314-L1a** (the
+face-aligned/robust natural witness) stays open — the face landed (T2), the
+non-zero-delta witness is Stage-3. **FU316-L1** (the no-slot seed/travel) and
+**FU316-L9** (the unarmed mirror) are new Stage-3/4 legs; **FU316-L8** (the
+row-05 carrier camera event) and **FU315-L1/L2** (the claim tail and the
+slot-pointer projection) are claim/follow fidelity, out of this phase's pan
+acceptance. **FU307-L8** and the phase-30 remainder are carried unchanged.
+The follow/Y waiver stands (no `>0xF0` event; `follow=0` everywhere).
+
+**The tape and the gate.** M1 `09b726b7…` and M2 `8434cfab…` (295 087 B) are
+byte-identical (`cmp`-verified; no re-pin this phase); `make check`
+**111/111** (strict `-Wall -Wextra -Werror`, ASan/UBSan); the census holds
+**`60/80 = 75%`**; README and `AGENTS.md` are untouched.
