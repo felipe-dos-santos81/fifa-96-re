@@ -2452,6 +2452,279 @@ the build also produces the windowed `fifa96` target (`make game`).
     ASan/UBSan). Census unchanged **`60/80 = 75%`** (`37 action + 23
     phase`); no row joins, so `README.md`, `AGENTS.md` and the
     `tests/test_engine_m2.c` pins are untouched.
+- **M2 phase-30 leg register (FU310…FU313; 2026-10-22) — the natural reach
+  (the first live camera bootstrap + the open-play event): the NO-GO verdict,
+  the harness (P1–P8), the fidelity fixes (T2–T5), the bounded spike (T6) and
+  the quoted errata (appended; prior sections never rewritten). Census
+  `60/80 = 75%` (`37 action + 23 phase`); M1 `09b726b7…` and the final M2
+  **`8434cfab…`** (the T2 re-pin, below) byte-identical.**
+  - **The verdict — NO-GO for a live natural camera Y/follow bootstrap.**
+    The Stage-2 plan (T1–T6) measured, fixed and stopped under spec §6; no
+    camera producer was invented. **Layer-1 partial = the scripted pan
+    witness only** (the copied-tape claim/kick: place `0 → 0x90 → 0x120`,
+    X-only, `Y=0`/`Z=0`, one-shot; P6 partial); **P7/P8 are RED by design**
+    (no sustained follow window, no pan-lockout/re-open), and the natural
+    window keeps every camera cell at zero (3 598/3 598 granted frames,
+    101 s). The reason chain, every link first-hand in the phase-30 wave:
+    (a) **the pan is place-only** — the row-04 half-line arm
+    (`0x7ED89..0x7EDE3` → `FUN_00071C94` → `FUN_000736AC`) writes
+    `pos_x/pos_z` and never Y, and its measured reach is two `0x90` slides
+    (`0x120`); (b) **every Y writer is circular** — the restart cuts need the
+    goal scanner (`situation 2/3/4`), whose armer (`0x713A6..0x713C0`) needs
+    the camera out of bounds (`|x| > 0x730 || |z| > 0xB20`) and whose call
+    site needs `|x| > 0x6C0 || |z| > 0xAB0`; no set-piece place crosses both
+    (the corner `(±0x710,0,±0xB00)` reaches the boundary handler and fails the
+    armer by `0x20`; the penalty, goal-kick and restart-commit places all sit
+    below the call site);
+    the free-kick/penalty hand-off sits behind the act-2 session gate
+    (below); the keeper band and the row-`0x1E` head are ladder-downstream;
+    the event arc needs a prior setter; (c) **the keeper ladder is
+    structurally out of phase** — the AX prepass needs
+    `|cam.x| < 0x420 && |cam.z| > 0x7B0` (plus the sign/side arm), the
+    ladder gate requires phase 2 (`0x78583`), while the row-`0x1B` camera
+    write is phase `0x0D`-only (`0x76D3D`), and the CX=4 lane window
+    (`0x20 <= lane_x < 0x30 + 2*sub_0b`, at most `0x12E`) is closed for every
+    produced place — NO-GO even with the lane defect fixed (FU311);
+    (d) **the act-2 session gate** — a byte-0 `[0x14C32A]` session aborts the
+    native stage-2 body (`0x89487`) before every other term; `kind == 3`
+    passes only at the stage-3 re-entry (`0x894B2/0x894B5`), so no ordinary
+    (non-offside) contact completes phase 6/7.
+  - **The harness (T1: `672f35a` + `55346ec`) — the trace + the natural
+    probe + the P1–P8 matrix.** `FIFA96_CAMERA_TRACE` (default-off): a
+    filesystem path opens one `"w"` sink at the end of
+    `fifa96_match_run_begin`, one line per granted frame at the
+    `fifa96_match_run_frame` loop tail, 16 fields (`frame clock phase pos
+    vel spd fspd ev cur trk pan tim ramp rate follow tick`; the frame field
+    prints as `f`), closed
+    idempotently at `_end`/`_teardown`; unset/empty ⇒ no file and one
+    pointer test per frame; stdout is never touched (the env-set M2 stdout is
+    `cmp`-identical). The probe replays a **copy** of `M2_KEYS` (12 000
+    steps): match start 5, the situation-0 row-`0x24` kick at 12, act 1 at
+    1 679, **phase 2 at 1 802** (recorded, not hard-coded), **3 598 granted
+    frames / 101 s**, every camera cell zero **3598/3598**, the FU282 ladder
+    seam **6 118 calls / stage_select `ran=0` / cx1=0 / cx4=0** (sampled view
+    `cam=(0,0,0)`, `follow_speed=0`, `lane_x=2541` after T2 — the pre-T2 bind
+    read 0). The scripted pan witness (a copied tape + the probe-local
+    LONG_BALL 230..233 / UP 240..520 tail, `act.id = 0`, the documented
+    `begin_isolated` isolation of a non-camera cell — not a staged gate)
+    gives `0 → 0x90 → 0x120` at steps 425/605 (first motion 339, tracked 9),
+    velocity `5→3→2→1`, 358 granted frames, `event_param=0`, Y=0/Z=0. The
+    matrix: **P1 GREEN** (start 5, phase 1), **P2 GREEN** (natural phase 2),
+    **P3 GREEN** (`pos=(0,0,0)` at start — no staging), **P4 GREEN** (the
+    ladder seam counts + the sampled input view), **P5 GREEN** (two replays
+    byte-identical, an FNV-1a hash over every granted-frame sample), **P6
+    PARTIAL** (the scripted pan only; the natural window 0/3 598), **P7 RED
+    by design** (no sustained follow window), **P8 RED by design** (no
+    lockout/re-open). **P9** (stage-select `cx4`) is recorded, not asserted —
+    the keeper route stays FU307-L1; **P10** (the trace self-check) stays
+    manual this phase (1 header + 3 598 body lines; the env-set M2 stdout
+    identical).
+  - **T2 — the `+0x6B` lane-read family (FU311-L5): `24da206` + `0414360`.**
+    The keeper bind now packs the native dword
+    (`lane69 = (uint16)e->lane | ((uint16)e->lane_x << 16)`; native
+    `0x78032/0x78035`), and every `dword[rec+0x69]>>16` reader routes to the
+    live `lane_x` word: the kick gate (`handlers.c:972`; native
+    `0x81519/0x81520`), the outfield pack, the chase (`match_run.c:915`;
+    `0x7CCCD`), the low-word masks (native `0x79B6C` clears `+0x69` only) and
+    the remaining family sites. **Option B (the controller ruling):** rows 01
+    (`handlers.c:240/246`; `0x7DCCC/0x7DCD7`) and 11 (`:1887`; `0x860DC`)
+    keep the legacy low-word read behind quoted comments + **FU311-L5a**:
+    the faithful read removes the port's derived kickoff/phase-2 entry
+    (`phase 2 at 1802 → -1`, ladder 6 118 → 0 calls) and the M2 corner/ET
+    trajectory (golden frame 773 phase 2→4, the ET entry lost) — both are
+    reachable only through the missing camera place (FU310's NO-GO). **The
+    M2 re-pin (the only one this phase):** the chase correction moves
+    **5 568 hash-only lines, frame 955..6522**; every frame id and `state=`
+    tag is identical, no assertion or ET directive moved; new sha
+    **`8434cfab105b926e78279ca3ea03c62bd3a0ae9654d2e11f0930c0cb8605cee1`**
+    (was `b281a9b2…`). Reason: the chase gate now reads the live `+0x6B` lane
+    instead of the constant `0xFFFF`; the first chase decision changes at
+    frame 955 and the deterministic replay follows. The natural probe is
+    unchanged (3 598/1 802/6 118/`ran=0`/zero); M1 identical.
+  - **T3 — the per-stage act-2 gate (FU310-L8): `b247126` + `136e795` +
+    `56a17cd`.** The flat `kind == 3 || session != 0` compression is gone.
+    Engine stage 1 = native stage 2: the byte-0 session performs the
+    split/hold (`0x89472..0x8947F` increments, `0x89487 JZ 0x89615`) and
+    never decides; engine stage 2 = native stage 3: the `[0x158882]` flag
+    (assumed 0, FU166-L6) → `kind == 3` (`0x894B2/0x894B5`) → the session
+    term (`0x894B7/0x894BE`), else hold; under byte 0 a kind-3 contact decides
+    on the second call. Case B pins the two-call net (split then decision); case C
+    isolates the session term. The FU310 act-2 erratum was appended (the T3
+    review's Important finding: the plan's "no kind-3 OR" is true for the
+    stage-2 body only).
+  - **T4 — the restart place triples (FU310-L1/L2/L3): `591cf1a`.** The
+    free-kick Y now reads the incident triple's `[0x15889B]`
+    (`fifa96_match_run.incident_y`, mirrored by both live producers; the
+    foul adjudicator still forces y=0, the offside route preserves it);
+    row `0x1D` places the native `0x1104F2` table triple
+    `{(±0x1D0,0,±0xA00)}` selected by `[0x157C5E] + side*0x18 +
+    12*([0x15777C] >= 0)` (fresh `0x74EC3..0x74F10`, `FUN_000744F4`); the
+    per-side ±0xA0 (`0x744D0` = `{-0xA0,+0xA0}`) is the record-copy word,
+    not the table. Row `0x20` arm 0 places the fixed `(0,0,+0x8D0)`
+    (`0x84F61 XOR EAX,EAX` → `0x73DC4` → `0x700F4`; no side is read — the
+    side sign belongs to the row-`0x13` penalty cut `0x84B6B`); the
+    `cam_off_z`/`cam_y` caller stand-ins are gone. The old FU307-L4
+    row-`0x1D` witness was replaced (the native overwrites Y before the
+    record copy); the single-Y-cell read side stays pinned. M1/M2 identical.
+  - **T5 — the row-`0x1E` stage-1 triple (FU307-L7 closed): `72d3a66`.**
+    The stage-1 cut `0x7568A/8B/8C` is a raw full-triple store
+    (`[0x15774C/50/54]`, Y = `pos_y`, the `0x7569F/0x756AA` ±0x20 Z adjust
+    stored at `0x756B5`) with no
+    `0x700F4`; `fifa96_keeper_claim_out` gains `cam_written` and the binder
+    writes `render.camera.pos_x/y/z` raw, carrying the post-store triple on
+    the same-step deferred place (the native place order; the head place no
+    longer wins at the frame drain); a stage-1 fall-through uses the
+    end-of-step triple. The two pre-L7 pins were superseded with the reason
+    (not weakened): the head place's offset/pause pins remain. M1/M2
+    identical.
+  - **T6 — the bounded armer spike (FU310-L9): `ffc4095` + `7f6476c`;
+    FAILS.** The scratch probe (`/tmp/opencode/fu310_l9`, not committed)
+    reproduced the T1 witness and ran seven scripted drives of 12 000 steps
+    / 3 598 granted frames. **The ceiling is identical in every run: max
+    x = 0x120 (288), z = 0, y = 0** — the two row-04 pans, still far below
+    the OOB call site (`0x6C0`/`0xAB0`) and the armer (`0x730`/`0xB20`); the
+    OOB predicate, the armer gate and `goal_armed` are 0 on every frame, the
+    scanner returns at its armed gate, and the phase stays 2. Mechanism
+    measured: after pan 2 the camera tracks record 10 (`0x71D27`) and the
+    half-line event arm's tracked-record exclusion (`0x7EFEE`) refuses it;
+    record 10 crosses the arm's own gates on gf 224..226 (angle
+    `0xA8/0x97/0xA0` ≤ `0xAB`) but stops at gf 227 (284,−2, angle `0xB4`);
+    the long-ball request `0x7CD60` fires once (step 239) and every later
+    scripted press is code-gated. **FU310-L9 — closed by measurement; the
+    NO-GO stands; no producer and no new leg.** The documented residual (a
+    non-pan tracked-cell changer and ≥13 same-direction turns to cross
+    `0x730`) is a Stage-3/4 question. The T6 scoped re-review's two text
+    minors are folded in the appended FU310 erratum.
+  - **Quoted errata (append-only; prior text not rewritten).**
+    **(1) "the ladder does not run at all" — refuted by measurement.**
+    Quote (`docs/ENGINE.md:2338`, repeated at `docs/PROGRESS.md:2554`): "the
+    ladder does not run at all — the AX prepass gate (`0x77F9A`/`0x77FA5`)
+    never opens because the live camera stays `(0,0,0)`." **Corrected (FU311
+    §4 + the review erratum item 1):** the ladder **is called** — 2 019
+    times over the whole-binary probe window (18 124 record-0 steps) and
+    **6 118 times** on the natural 12 000-step window (`stage_select` 6 118
+    too); `ran=0` is the **AX prepass refusal inside** stage_select, not an
+    absent call. The conclusion (the band is not natural-play-proven,
+    FU307-L1) stands; the mechanism sentence does not. FU313-L3 names the
+    two-counter attribution.
+    **(2) The row-`0x1E` "dispatch-dead" partial — the body is
+    dispatch-ready; the producer is ladder-downstream.** Quote (phase-29
+    register, FU307-L1): "The tape's own m62 block keeps the keeper cells
+    fresh and never dispatches the staged row-`0x1E` record"; quote
+    (FU311 §8.2): "the honest producer is **FU311-L4** (the phase-9 →
+    row-`0x1E` head place at `0x755C7`, Y = `pos_y + 0x38`, a real `0x700F4`
+    place inside the pan mid-band), which needs no ladder at all".
+    **Corrected (FU311 review erratum item 3):** the head place is real and
+    the port carries both halves (`match_run.c:3026-3034`,
+    `keeper.c:489-501`), but phase 9 ← situation 5, and situation 5's only
+    producers are row `0x1A` stage 4 (`0x76B1C`) and row `0x1B` (`0x77707`),
+    both ladder-installed; no qualifying place → no ladder → no
+    `0x1A`/`0x1B` → no sit 5 → no phase 9 → no `0x1E`. FU311-L4 is a
+    **dispatch-shape fact, not a bootstrap**; the row body is dispatch-ready
+    (T5 made the stage-1 triple faithful), the missing producer is the
+    ladder chain.
+    **(3) FU307-L1 — the structural NO-GO.** Quote (phase-29 register,
+    `docs/ENGINE.md:2334`): "**FU307-L1 — the natural CX=4 reach: OPEN.**"
+    **Corrected (FU311 §6.3/§7.2):** NO-GO by three independent reasons:
+    (a) the ladder gate requires phase 2 (`0x78583`) while the row-`0x1B`
+    camera place is phase-`0x0D`-only (`0x76D3D`) — structural, independent
+    of any unported cell; (b) the CX=4 lane window is at most `0x12E` wide
+    (`0x30 + 2*sub_0b`, `sub_0b` signed and unproduced — FU311-L2), and every
+    produced qualifying place lands 208..464 from the keeper (294..313 best
+    case) — closed; (c) there is no qualifying live place at all (FU310).
+    `ran=1` would buy **CX=1 → row `0x1A`**, not the keeper band. The band
+    stays fixture-proven; the `sub_0b` / lane-window arithmetic is
+    corroborative (FU311 review erratum item 5).
+    **(4) The FU310 act-2 item 2 — the stage distinction.** Quote (FU310
+    review erratum item 2): "`kind == 3` is only the `0x8944A CMP EAX,0x3`
+    ball-row `0x49` choice, and `[0x158882]` is tested at `0x894A2` **after**
+    the session gate." **Corrected (the appended FU310 erratum, the T3 fix
+    round):** the quoted sentence is true of the **stage-2 body only**
+    (`0x8947A..0x89487`); the stage-2 abort increments the stage byte
+    (`0x89472..0x8947F`), and the next call's **stage-3 body**
+    (`0x894A2..0x894C4`) tests the flag, then `kind == 3`
+    (`0x894B2/0x894B5` → decision `0x894C4`) **before** the session term
+    (`0x894B7/0x894BE`). Under byte 0 a kind-3 contact is a two-call
+    decision; the engine models engine stage 1 = native stage 2 and engine
+    stage 2 = native stage 3 (T3/`56a17cd`). `[0x158882]` is the only
+    unmodelled term (assumed 0, FU166-L6).
+    **(5) FU307-L7 — closed.** Quote (phase-29 register): "**L7 (new)** the
+    row-`0x1E` stage-1 triple (`0x7568A`/`0x7568B` `MOVSD`, no `0x700F4`) is
+    a real `dword[0x157750]` write outside the three-literal scope …; owner
+    `fifa96_keeper_claim_step` / the `0x7568A` site". **Closed by T5
+    (`72d3a66`):** the raw triple is delivered to `render.camera.pos_x/y/z`
+    (X/Y/Z, Y = `pos_y`), the place fix-up carries the post-store triple to
+    the drain, and no `0x700F4` is staged. FU311 §7.1 item 4 adds the X/Z
+    scope note: `0x7568A/8B/8C` moves the focus X/Z too (the triple, not
+    only Y) — exactly the delivered shape. The stage-3/7 raw stores stay
+    Y-only when a step starts there (the T3 scope; a start-at-3/7 X/Z
+    delivery is not claimed).
+    **(6) FU310-L1/L2/L3 — closed by T4.** Quote (FU310 §8): "**FU310-L1 —
+    the free-kick cut's Y source.** … the engine passes literal `0`
+    (`handlers.c:1983`)"; "**FU310-L2 — row `0x1D`'s place triple.** The
+    engine uses `keeper_cam_*` + `cam_off_z = 0`"; "**FU310-L3 — row `0x20`'s
+    camera cells.** `0x73DC4`/`0x700F4` are absent (`handlers.c:5844-5851`)".
+    **Closed (`591cf1a`):** L1 reads `[0x15889B]` (both producers mirrored);
+    L2 places the `0x1104F2` table triple selected by
+    `0x157C5E`/side/`[0x15777C]>=0`, with the per-side ±0xA0 as the
+    record-copy word; L3 places `(0,0,+0x8D0)`. The plan's "row-`0x20`
+    places `(0,0,±0x8D0)` by the team side" is **indicative**: the native
+    `0x84F61 XOR EAX,EAX` + `0x73DC4` is the fixed `+0x8D0`; the side sign
+    is the row-`0x13` penalty cut `0x84B6B`.
+    **(7) FU311-L5 / L5a — the lane family.** Quote (FU311 §3.2): "The bind
+    passes `e->lane`, whose high word is never re-synced from `lane_x` (only
+    the low word is masked, `:361`). … So the port's `lane_x` is a stale
+    `-1`, not the live band." **Corrected (review erratum item 2):** `e->lane`
+    is the sign-extended `+0x69` word, so `>>16` is 0/−1 **by construction**
+    and can never be `lane_x`; the same high-word read recurs at the family
+    sites (`handlers.c:240/246/1683/1887/2037/2183/3701/4546/4823/5176/5900`,
+    `match_run.c:915`), and `handlers.c:972` fed the **kick** gate the low
+    word where native `0x81519` reads the high word. The fix is the class
+    fix, not a one-line bind patch. **FU311-L5 closed by T2** (`24da206`:
+    the bind pack + every family site except rows 01/11). **FU311-L5a
+    OPEN:** those two derived-row sites (`handlers.c:240/246`, `:1887`) keep
+    the legacy low-word read until the missing camera place lands (FU310);
+    their faithful read removes the port's natural phase-2 entry and the M2
+    corner/ET trajectory (measured, T2) — retest together with any future
+    bootstrap.
+    **(8) FU310 §5's stale port-state prose.** Quote (FU310 §5): "**Row
+    `0x1D` places the wrong triple** …" and "**Row `0x20` does not place the
+    camera at all** (`handlers.c:5844-5851`)". **Superseded by T4** (the
+    register's (6) above); `docs/ENGINE.md:5236/5277` (the phase-7 P3 block and
+    the phase-7 close-out ledger) still name the retired `cam_off_z` caller
+    stand-in — prior text stands as written, this register is the current
+    state. No code or test was changed for the errata.
+  - **Deferred minors (T1–T6 reviews; not fixed here; none is a fidelity
+    defect).** T1: the witness wording says "appended" though it overwrites
+    copied entries; only the last ladder input view is retained; the "no
+    follow window" line is inferred from zero cells; P10 deferred. T2:
+    `test_action_1a_direction_54` still stages `lane = 0x40 << 16`; the
+    `match_run.h` "no writer" comment is false (two writers); the probe
+    comment says `lane_x=0` (measured 2541); the chase fixtures stage
+    `lane_x=0` (no direct chase pin); the row-26 test stages a dword into
+    `lane`; the T2 report §5 "no >>16 remains" overstates the two deferrals.
+    T3: the stage-3 decision-word check wording; the `0x81EB4` row-`0x0C`
+    attribution missing (the reviewer supplied `0x1106E0[0x0C] = 0x81C90`);
+    the comment blocks duplicate. T4: the row-`0x20` sign lacks a side-1
+    arm; the `incident_y` producer mirror has no pin; the FU307-L4 coverage
+    comment names write tests not the read test; two frame-test comments
+    overstate the drain; the RED evidence covers L1/L2 only. T5: the
+    stage-1→stage-3 fall-through is unpinned; the frame pin has no RED of its
+    own (the RED aborts earlier); the frame pin does not prove the place was
+    consumed; the stage-3-start X/Z scope comment should cite FU307-L3/L4.
+    T6: the scoped re-review's two minors are folded in the FU310 erratum
+    (the kick/pass pan attribution and the five→six count). **The residual
+    X/Z shadow split:** `keeper_cam_x/z` is the engine `[0x15774C/54]`
+    shadow while the other camera writers still write only
+    `render.camera.pos_x/z`; row-`0x1D`'s own place now syncs, but the cells
+    can diverge after other places (the FU307-L4 X/Z residual; a full
+    unification is a separate slice).
+  - **Tape:** M1 `09b726b7…` byte-identical; M2 **`8434cfab…`** byte-identical
+    after the T2 re-pin (recorded above; no further re-pin in T3–T7).
+    `make check` **111/111** (strict `-Wall -Wextra -Werror`, ASan/UBSan).
+    Census unchanged **`60/80 = 75%`** (`37 action + 23 phase`); no row
+    joins, so `README.md`, `AGENTS.md` and the `tests/test_engine_m2.c` pins
+    are untouched.
 - **Interactive smoke (phase-8 T5 re-run, this host 2026-10-10; the phase-9 T4
   acceptance re-run is below; the phase-7 P5
   run first verified the phase-7 reach, the phase-6 S5

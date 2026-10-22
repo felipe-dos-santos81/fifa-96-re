@@ -831,3 +831,24 @@ stands and is not a geometry effect at gf 224..226: `tracked = 10`
    3/2/1, 144 = 0x90. FU-157 §3.4's "24 frames" is that probe's own
    granted-frame count under its cadence; the travel (0x90) and the velocity
    sequence (5/3/2/1) are identical.
+
+---
+
+## Erratum — the T6 re-review minors (T7 close-out, 2026-10-22)
+
+The frozen text and the two errata above stand; this append-only note corrects
+the two scoped-re-review minors of the T6 fix round (the measured numbers and
+the FAILS verdict are unchanged).
+
+1. **The kick/pass pan attribution.** Quote (T6 fix-round erratum §1):
+   "`kick`/`pass` are independent runs whose pans at gf 210/265 come from the
+   kickoff kick, not from a repetition of the witness's pans." **Corrected:**
+   the attribution to "the kickoff kick" is unsupported. Those two runs are
+   plain `M2_KEYS` plus 80-step UP / 4-step KICK (or PASS) cycles from step
+   600; their pans at gf 210/265 follow the **step-600 UP-cycle walk**, not a
+   kickoff kick. The claim that they are standalone (not repetitions of the
+   witness's pans) stands.
+
+2. **The minor count.** Quote (T6 fix-round erratum preamble): "…and folds in
+   five same-area minors." **Corrected:** six minors are listed (§3 items
+   1–6); the count is **six**.
