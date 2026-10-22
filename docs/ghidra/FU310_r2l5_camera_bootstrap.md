@@ -614,3 +614,109 @@ penalty bootstrap" does not follow from the gate alone: under byte 0 a kind-3
 phase 7/6. Whether that route is a *bootstrap* depends on the offside
 producer's live inputs (the live receive arm was shown reachable in FU276-L2),
 which this erratum does not settle.
+
+---
+
+## Pan-cumulative armer spike (FU310-L9, 2026-10-22)
+
+**Provenance.** Phase-30 Stage-2 Task 6, docs-only. The measurement is a
+scratch probe at `/tmp/opencode/fu310_l9/probe.c` (not committed; links the
+unmodified `build/libfifa96_*.a` with the tree's ASan/UBSan flags, CWD = repo
+root). Per-run it boots the ISO with the null backend (`step_ns = 10 ms`) and
+drives a copy of the M2 tape; no repo source/test was changed and `make check`
+is unaffected. The recorded evidence is `/tmp/opencode/fu310_l9/<mode>.frames`
+(one line per granted frame), `<mode>.events` (slides/arms/phase edges), and
+`walk.camtrace` (the T1 `FIFA96_CAMERA_TRACE` sink, independent of the probe's
+own sampling).
+
+**Question.** The review erratum item 5 left the armer's live precondition
+(FU310-L7) unproven: the T1 pan witness moves the place `0 -> 0x120` in one
+claim/kick. Can **repeated** scripted claims/kicks accumulate the place past
+the `fifa96_camera_out_of_bounds` handler (`|x| > 0x6C0 || |z| > 0xAB0`,
+`camera.c:189-191`) and the armer (`|z|_w > 0xB20 || |x|_w > 0x730`,
+`0x713A6..0x713C0`, engine `match_run.c:3198-3226`) — and then let the scanner
+produce a situation?
+
+**The drive.** The T1 witness is reproduced exactly: `M2_KEYS` copy
+(`tests/test_engine_m2.c:1936-2105`; `act.id = 0` on the match-start frame,
+the `begin_isolated` idiom), LONG_BALL held 4 steps at 230..233, UP held
+240..520. Seven post-witness drives were measured, each 12 000 engine steps =
+**3 598 granted frames** (`walk` trace: clock 00:57, phase 2):
+
+| run | post-witness drive |
+|---|---|
+| `claim` | 80-step UP walk + 4-step LONG_BALL, repeated from step 600 (84-step cycles) |
+| `walk` | UP held continuously from step 240 |
+| `walkclaim` | UP held + a 4-step LONG_BALL every 200 steps |
+| `swap` / `swap30` | UP held + a 4-step LONG_BALL every 45 / 30 steps |
+| `kick` / `pass` | 80-step UP walk + 4-step KICK (or PASS), repeated from step 600 |
+
+Every granted frame the probe samples the camera triple/vel/tracked/pan cells,
+the OOB predicate, the armer's own gates, `goal_armed`/`goal_zone` and every
+phase change; every record with `+0x6B` lane <= 0x60 is logged with its
+`+0x6D`/`+0x6F` deltas, bound, `timer81`, dir byte and the folded half-line
+angle.
+
+**Measured table (identical ceiling in all seven drives).** The witness
+timings are quoted from `walk`/`claim`; `kick`/`pass` repeat the same two pans
+later (tracked binds at granted frames 210/265 instead of 99/153; slides end at
+steps 799/982 instead of 429/609).
+
+| pan | event (step / gf) | firing record | lane/bound | angle | dir | seed -> vel | slide (granted frames) | stop |
+|---|---|---|---|---|---|---|---|---|
+| 1 | 335 / 99 | team-0 rec 9 at (0,-2) | 2/2 | 0x0 | (1,0) | 0x40 -> 5,3,2,1 | 0 -> 144 (0x90), 28 | 429 / 127 |
+| 2 | 515 / 153 | team-0 rec 10 at (136,-6) | 10/12 | 0x97 | (1,0) | 0x40 -> 5,3,2,1 | 144 -> 288 (0x90), 28 | 609 / 181 |
+| 3+ | none | — | — | — | — | — | — | — |
+
+Max place over 3 598 granted frames: **x = 0x120 (288), z = 0** (the wait in
+`walk` holds `pos=288,0,0`, `ph=2` at trace f=1797). Each pan is the slot-dir
+seed (`0x40`, height 0) through the idle ramp (`event_param = 0`, F8 = 0xC):
+vel 5 -> 3 -> 2 -> 1 (k = `pan_rate_lo` 24/0x20) at 7 granted frames per
+phase (delta 2), i.e. exactly 0x90 per event. Y stays 0 (no height arm).
+
+**Why it stops — measured, not inferred.** The second pan rebinds the camera
+tracked record `[0x1577CA]` to record 10 (`0x71D27`; engine
+`fifa96_camera_set_tracked`, `handlers.c:2788`), and the row-04 half-line event
+arm is gated on `is_ball_track == 0` (`0x7EFEE`; the native gate reads
+`[0x1577CA]`, carried FU-171 §7 rec 2 — engine `s.is_ball_track`,
+`handlers.c:2670-2672`). In `walk`, record 10 then reaches (284,-2) and crosses
+the arm's **own** gates on granted frames 225/226 — lane 10/7, bound 12/10,
+**angle 0x97/0xA0** (<= 0xAB), `near=1` — and **no event fires**: it is the
+tracked record. It stops at x = 284 (its last row-00 target, 4 short of the
+camera) and no other record enters the `lane <= 0x40` / `angle <= 0xAB` cone
+for the remaining 3 372 granted frames (gf 227..3598). The claim key cannot
+re-seat the producer either: `0x7CD60` (pressed code-3 / released code-0 want
+0x40, the long-ball request) fires exactly once — the T1 prefix press, step
+239, team `+0x7CB = 9`, `+0x820 = 0x3C` (30 granted frames of the timer). Every
+post-witness press in `claim`/`walkclaim`/`swap`/`swap30` leaves
+`+0x820 = 0` / `+0x7CB = 0`: the request is selected by the slot record's
+`+0x91` code (3 at step 239; 4/5 afterwards), so the repeated "long-ball
+claims" never re-enter the handler. `kick`/`pass` do transfer the ball
+(carrier 9 for most frames) but add no pan.
+
+**Handler / armer / scanner outcomes (all seven runs).** The OOB predicate was
+true on **0** granted frames (max |x| 0x120 < 0x6C0), so the frame's
+`fifa96_match_goal_arm` call site (`match_run.c:4443-4445`) never ran; the
+armer's own gate (phase 2/0x10 and |x|_w > 0x730 or |z|_w > 0xB20) held on
+**0** frames; `goal_armed` never set (0 edges); `fifa96_match_run_goal_scan`
+returned at its armed gate (`match_run.c:3501`) and the phase stayed **2**
+from the derived phase-2 entry (gf 63) to the end — no phase edge after step
+215 — with no situation, no queue write, no set-piece and no score change.
+
+**Verdict: FAILS.** Repeated scripted claims/kicks do **not** accumulate the
+camera place past the armer thresholds. The measured ceiling is the T1
+witness's two row-04 half-line pans: **0x120 (288) in x, 0 in z** — 2 x 0x90,
+still short of the handler's 0x6C0 and the armer's 0x730/0xB20. The route is
+bounded by the native tracked-record exclusion (`0x7EFEE` reads `[0x1577CA]`,
+which the pan itself rebinds at `0x71D27`) plus the formation's two eligible
+records: a third pan needs a *different* record to take the next turn, and the
+scripted claim cannot re-seat the tracked cell (the `0x7CD60` code gate).
+
+**Leg disposition.** **FU310-L9 — closed by measurement.** The phase-30 NO-GO
+stands; nothing here is a producer, and no new numbered leg is opened this
+phase. Residual for a later phase, if one wants to re-open it: a *tracked-cell
+changer* between pans that is not itself a pan (the ball-receive arm
+`fifa96_match_run_ball_receive` rebinds `[0x1577CA]`, but it also seeds its own
+`FUN_00071C94` event) — and >= 13 same-direction half-line turns at the fixed
+<= 0x90 reach to cross 0x730. That is a Stage-3/4 question, not a phase-30
+bootstrap.
