@@ -720,3 +720,114 @@ changer* between pans that is not itself a pan (the ball-receive arm
 `FUN_00071C94` event) — and >= 13 same-direction half-line turns at the fixed
 <= 0x90 reach to cross 0x730. That is a Stage-3/4 question, not a phase-30
 bootstrap.
+
+---
+
+## Erratum — the armer-spike evidence corrections (T6 fix round 1, 2026-10-22)
+
+The T6 section above stands as written; this append-only erratum corrects two
+evidence-text errors found in review (the measured numbers and the FAILS
+verdict are unchanged) and folds in five same-area minors. The evidence logs'
+numbers are unchanged; the scratch source (`/tmp/opencode/fu310_l9/probe.c`,
+uncommitted) is the runnable record.
+
+### 1. The drive census — only `claim` has the full T1 prefix
+
+Quoted (T6 section):
+
+> **The drive.** The T1 witness is reproduced exactly: `M2_KEYS` copy … LONG_BALL
+> held 4 steps at 230..233, UP held 240..520. Seven post-witness drives were
+> measured, each 12 000 engine steps = **3 598 granted frames** …
+
+> … `kick`/`pass` repeat the same two pans later (tracked binds at granted
+> frames 210/265 instead of 99/153; slides end at steps 799/982 instead of
+> 429/609).
+
+**Corrected.** Only `claim` carries the full T1 prefix (`LONG_BALL` 230..233 +
+`UP` 240..520) and the post-witness 84-step cycles. The other six runs are not
+post-witness drives of the witness:
+
+| run | actual tape shape | pans (event gf) | slides end (step) |
+|---|---|---|---|
+| `claim` | full T1 prefix + 80 UP / 4 LONG_BALL cycles from 600 | 99, 153 | 429, 609 |
+| `walk` | UP tail only (240..end); no 230..233 claim | 99, 153 | 429, 609 |
+| `walkclaim` | UP tail + a 4-step LONG_BALL every 200 from 600 | 99, 153 | 429, 609 |
+| `swap` / `swap30` | UP tail + a **1-step** LONG_BALL every 45 / 30 from 300 | 101, 155 | 435, 615 |
+| `kick` / `pass` | **standalone**: plain `M2_KEYS` + 80 UP / 4 KICK (or PASS) cycles from 600; neither T1 prefix element | 210, 265 (**first** pans) | 799, 982 |
+
+The `walk`/`walkclaim` runs pan because the UP walk alone carries records 9
+and 10 across the camera; the 230..233 LONG_BALL claim is not required for
+those two pans (it is required for the T1 harness's claim path). `kick`/`pass`
+are independent runs whose pans at gf 210/265 come from the kickoff kick, not
+from a repetition of the witness's pans. The FAILS verdict rests on `claim`
+(the full-prefix run) and the UP-tail variants `walkclaim`/`swap`/`swap30`
+(with `walk` as the no-button control); `kick`/`pass` are extra standalone
+runs at the same 0x120 ceiling.
+
+### 2. Record 10 — the gate crossing and the stop are separate frames
+
+Quoted (T6 section):
+
+> In `walk`, record 10 then reaches (284,-2) and crosses the arm's **own**
+> gates on granted frames 225/226 — lane 10/7, bound 12/10, **angle
+> 0x97/0xA0** (<= 0xAB), `near=1` — and **no event fires**: it is the
+> tracked record. It stops at x = 284 …
+
+**Corrected.** The gate-passing frames and the stop are different frames:
+
+| gf | position | lane/bound | angle | gate (<= 0xAB) |
+|---|---|---|---|---|
+| 224 | (278,-6) | 12/13 | 0xA8 | pass |
+| 225 | (280,-6) | 10/12 | 0x97 | pass |
+| 226 | (282,-4) | 7/10 | 0xA0 | pass |
+| 227 | (284,-2) | 4/7 | 0xB4 | **fail** |
+| 228+ | (284,-2) | 4/4 | 0xB4 | fail |
+
+The record crosses the arm's own gates on gf 224..226; it **stops** at
+(284,-2) on gf 227, where the angle is already 0xB4 — outside the `<= 0xAB`
+cone — because its last row-00 target is x = 284. The no-event conclusion
+stands and is not a geometry effect at gf 224..226: `tracked = 10`
+(`is_ball_track = 1`), so the `0x7EFEE` half-line event arm is skipped.
+
+### 3. Minors folded
+
+1. **The logged angle.** The REC line's `angle` is computed from the record's
+   `+0x6D`/`+0x6F` camera-minus-record words (`lane_z`/`cam_dz6f`), folded to
+   `[0, 0x200]`; the log prints the folded angle, not the raw word pair.
+2. **Frame counts per run.** The **3 598 granted frames** belong to the
+   12 000-step runs (`claim` and the six variants, ~1:54 match clock); the
+   `walk.camtrace` cited above is the **6 000-step** walk (1 798 granted
+   frames, ~0:57), which also reaches x = 288 and holds it to f = 1 797.
+3. **Scanner consequences are inferred.** The probe samples `goal_armed`,
+   `goal_zone` and the phase, not the situation queue or the score. "No queue
+   write / no set-piece / no score change" is a consequence of the scanner's
+   armed-gate return plus the absence of any phase edge; it is not a sampled
+   cell.
+4. **The long-ball request is table-selected.** `s.type = e->code` feeds
+   `fifa96_outfield_dispatch_code` (`outfield.c:113-130`), not a direct code
+   test: `high_577ee_ge_50` (staged 0) -> `type == 5` selects scan-code **1**
+   (`pressed_1`/`released_1`, which have no `0x40 -> 0x7CD60` rule) ->
+   `tracked && user_absent_or_self` selects **3** (`pressed_3`, which has the
+   press rule) -> `chaser` 4 -> default **0** (`released_0`, which has the
+   release rule). At the one firing (gf 70) record 9's code is 4 and
+   `s.tracked` is 0 (the controlled actor is record 10), so scan-code 0 runs:
+   the `0x40` **release** word first hits `0x7D0C4` (returns `code == 0x0E`,
+   false at code 4) and then `0x7CD60` fires. The `0x40` **press** at gf 68
+   hits `pressed_0`'s `0x7CF20` and never reaches the long-ball rule. Fresh
+   `claimdbg` run logging `slot.pressed`/`slot.released` confirms it: gf 68
+   `pressed = 0x40` with `+0x820` still 0, gf 70 `released = 0x40` with
+   `+0x7CB = 9`, `+0x820 = 0x3C`. After the witness the slot record is record
+   10 with `+0x91` 5 -> scan-code 1 -> no `0x40` long-ball rule, which is why
+   the later presses are no-ops.
+5. **The `swap`/`swap30` arms.** A later scratch-probe edit dropped those two
+   modes from the source (the reviewer's Minor 5); they are restored to the
+   exact logged drive (UP tail + a 1-step LONG_BALL every 45/30 from step 300)
+   and the 12 000-step reruns reproduce gf 101/155 and slides 435/615
+   (`max_x = 288`, `pan_slides = 2`).
+6. **Slide length.** A slide spans 28 granted-frame intervals after the event
+   frame (event gf 99, first hold gf 127), i.e. 29 granted frames inclusive of
+   both endpoints; 27 of them integrate (gf 100..126, the event frame stages
+   the pan without integrating) at delta 2: 6 frames at vel 5, then 7 each at
+   3/2/1, 144 = 0x90. FU-157 §3.4's "24 frames" is that probe's own
+   granted-frame count under its cadence; the travel (0x90) and the velocity
+   sequence (5/3/2/1) are identical.
