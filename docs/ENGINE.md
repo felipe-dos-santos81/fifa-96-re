@@ -2457,7 +2457,7 @@ the build also produces the windowed `fifa96` target (`make game`).
   the harness (P1–P8), the fidelity fixes (T2–T5), the bounded spike (T6) and
   the quoted errata (appended; prior sections never rewritten). Census
   `60/80 = 75%` (`37 action + 23 phase`); M1 `09b726b7…` and the final M2
-  **`8434cfab…`** (the T2 re-pin, below) byte-identical.**
+  `8434cfab…` (the T2 re-pin, below) byte-identical.**
   - **The verdict — NO-GO for a live natural camera Y/follow bootstrap.**
     The Stage-2 plan (T1–T6) measured, fixed and stopped under spec §6; no
     camera producer was invented. **Layer-1 partial = the scripted pan
@@ -5507,3 +5507,192 @@ the build also produces the windowed `fifa96` target (`make game`).
 - Per-row cluster legs carried in FU-139/FU-141/FU-142 (`OL-56`…`OL-71`:
   unmodeled record bytes, process globals, camera/track inputs, roster
   descriptors, animation selectors).
+---
+
+## T7 close-out erratum (fix round 1, 2026-10-22)
+
+The phase-30 register above stands as written; this append-only section
+corrects the register's share of the T7 review's three documentation
+Importants and its precision minors. No code/test/golden/census change:
+`make check` **111/111** stands; M1 `09b726b7…` / M2 `8434cfab…` unmoved; the
+census holds `60/80 = 75%`. (The nested-bold heading at the register's first
+line was a markup typo and is fixed in place — the only in-place edit.)
+
+  - **1. The stale evidence line cites (Important 3).** Quoted (register, T2
+    bullet): "the kick gate (`handlers.c:972`; native `0x81519/0x81520`), the
+    outfield pack, the chase (`match_run.c:915`; `0x7CCCD`)"; "[rows 01]
+    (`handlers.c:240/246`; `0x7DCCC/0x7DCD7`) and 11 (`:1887`; `0x860DC`)".
+    Quoted (register, errata (7)): "the same high-word read recurs at the
+    family sites (`handlers.c:240/246/1683/1887/2037/2183/3701/4546/4823/
+    5176/5900`, `match_run.c:915`), and `handlers.c:972` fed the **kick**
+    gate the low word". Quoted (register, errata (8)):
+    "`docs/ENGINE.md:5236/5277` (the phase-7 P3 block and the phase-7
+    close-out ledger)".
+    **Corrected (fresh `grep -n` this round; the exact tokens):**
+    - the live kick read is **`fifa96_match_handlers.c:998`** —
+      `s->lane_word = (int16_t)r->lane_x; /* 0x81519 dword[+0x69]>>16 = +0x6B */`
+      (the 972 cite is retired);
+    - the live chase read is **`fifa96_match_run.c:920`** —
+      `s.chase.distance = (uint16_t)e->lane_x; /* 0x7CCCD dword[+0x69]>>16 */`
+      (915 is the section start, not the read);
+    - the current legacy row-01 reads are **`fifa96_match_handlers.c:249`**
+      (`int16_t lane = (int16_t)(r->lane >> 16); /* LEG FU311-L5a */`) and
+      **`:255`** (`near_lane = (int16_t)(team->records[near].lane >> 16);
+      /* LEG FU311-L5a */`); the row-11 read is **`:1921`**
+      (`if ((int16_t)(r->lane >> 16) > 0x40) return FIFA96_OK; /* LEG
+      FU311-L5a */`) — the 240/246 and 1887 cites are stale. The other family
+      sites in errata (7)'s list are the FU311 review-era classification
+      (they were fixed by T2; their line numbers are historical provenance,
+      not current reads);
+    - the `cam_off_z` tokens are at **`docs/ENGINE.md:5239`** and **`:5280`**
+      (fresh `grep -n`); 5236/5277 are the neighbouring lines.
+  - **2. The register completion — FU312 and FU313 (Important 2).** The
+    PROGRESS close-out says "The full leg register (FU310–FU313, the harness
+    matrix, the fixes, the spike and the quoted errata) is appended to
+    `docs/ENGINE.md`." At the original close-out that was false: the register
+    carried no FU312 leg list and no FU313-L1/L2/L4/L5 list. The missing legs
+    follow (names/owners carried from the wave docs), so the register is now
+    complete:
+    **FU312 — the natural event route** (`docs/ghidra/FU312_r2l5_natural_event.md`
+    §5).
+    - **FU312-L1 — the camera-height bootstrap (the event's prerequisite).**
+      No open-play port producer raises `[0x157750]`; the only native writers
+      in the usable range are the restart/keeper cuts (throw-in `0x85919` =
+      `0x80`, keeper `0x75D69` = `0x50`, `0x75F86` = `0x80`, `0x75A0F` =
+      `0x38`, the `rec.pos_y + 0x38` rows), all dispatch-dead in the port.
+      Owner: `FUN_00085911..0x8591C` (row `0x10`) + the restart queue
+      (FU163/FU310); `FUN_00075D17..0x75DD1` / `0x75F6C` (keeper rows
+      `0x1A`/`0x1B`) + R11-L4 (FU311). This is the minimal missing producer;
+      FU309-L1/FU307-L1 are the same leg from the camera side.
+    - **FU312-L2 — the kick reach at a high ball height.** At camY `0x80` a
+      grounded kicker is refused (`0x81531/0x81536`: `pos_y + 0x70 < camY`);
+      the throw-in route needs an airborne kicker (the height table) and the
+      crest window is 1..few frames (aux `0x0E` crest `0x10` = one frame; aux
+      `0x3A` crest `0x18` = a few). Owner: `0x81519..0x8153F` + the jump rows
+      (T1-L1). The keeper `0x50` cut avoids this (the window is the jump's
+      life).
+    - **FU312-L3 — T1-L1 (the live jump on the kicker), open.** The jump
+      arm/arc and both jump-row installers are ported (`0x5E` ← the row-`0x0C`
+      body `0x81DA4`; `0x12` ← the row-`0x0E` body `0x827D0`; engine
+      `fifa96_match_handlers.c:3476`, `:1478`), but no proven natural route
+      puts the ball carrier airborne at the kick: the row-`0x0E` install from
+      the row-07 defender arm is gated on `kick_decision`'s `predictor_y =
+      camY ∈ [0x20,0x60]` (`fifa96_action_handlers.c:1579`;
+      `fifa96_match_handlers.c:1048-1050`), and the row-23 tackle's attempt
+      gate `cam_f8 >= 0x14` (`fifa96_action_handlers.c:642`) is never staged
+      (the memset gives 0), so `install_0e` never fires; the
+      row-`0x0C`→`0x5E` path is a contact/duel record. Owner:
+      `0x7E600`/`0x82FF3..0x8305A`/`0x82E85` + the row-`0x0C` body.
+    - **FU312-L4 — FU309-L7 (the tracked record must move).** The receive
+      binds `tracked` to the kicker; the follow's velocity is the tracked slot
+      dirs × 15 (`0x71E63/0x71E69`; `fifa96_match_run.c:3942-3948`), so a
+      stationary tracked record gives `follow_speed == 0` and gate 2
+      (`0x739CE`) refuses. The natural witness must hold a direction across
+      the kick (the cold-camera zero-dir kick is a no-op). Owner: the
+      acceptance input script + the slot-dir producer
+      (`fifa96_match_run.c:1401-1404`).
+    - **FU312-L5 — the airborne discriminator width.** Native `TEST
+      dword[rec+0x5D]` (`0x7AF0D`) vs the port's 16-bit `event->height != 0`
+      (`fifa96_action_handlers.c:115`); equivalent while the record's `+0x5F`
+      high word is 0 (the mover writes the low word). Owner: `0x7AF08/0x7AF0D`
+      + the pool mover.
+    - **FU312-L6 — the `0x40` draw is RNG-state-dependent.** `>0xF0` needs
+      `(r&7)==7` (1/8) with `desc15 <= 2`; `desc15` is the OL-72 stand-in 0,
+      so the live draw is exactly `0x100` on 1/8 of the draws, and the
+      deterministic kickoff RNG fixes it for a given input script. The
+      harness must expose the draw (or pin the script that lands it). Owner:
+      `0x7BE6F` (`FUN_00092AC8`) + the RNG state; FU313's harness.
+    - **FU312-L7 — the per-record chaser hand-over can clobber the tall
+      event.** The probe observed the receive's `0x100` event re-seeded to
+      `0xDC` (and `tracked` flipped to another record) within ~6 granted
+      frames when the other records were not isolated; `FUN_00070C08`'s
+      reflect/ramp arms re-arm with camY/target (FU306 §4). The witness must
+      assert the follow at the first granted frame after the setter or isolate
+      the chaser. Owner: `0x70C08` / `fifa96_camera_record_event` + the
+      acceptance.
+    **FU313 — the acceptance harness**
+    (`docs/ghidra/FU313_r2l5_natural_acceptance.md` §9).
+    - **FU313-L1 — the probe's camera assertions need the producer.** P6–P8
+      stay RED until FU310 (bootstrap) and FU312 (event) land; they are
+      written RED-first. Owner: the phase-30 acceptance task / the next
+      bootstrap producer.
+    - **FU313-L2 — the input-timing coupling.** A held-direction tail appended
+      after `M2_KEYS` suppresses the natural phase-2 entry (measured twice);
+      the cause is unproven — the candidate is the row-01 kickoff release gate
+      consuming the slot edge. Owner: `fifa96_match_run_input` + the row-01
+      body (`fifa96_match_run.c:436-455`, the kickoff release path). Until
+      settled, replay the measured tape and append only after phase 2.
+    - **FU313-L3 — the ladder-vs-stage-select attribution split.** A `ran`-only
+      observable cannot distinguish "the ladder gate never fired" from "the AX
+      prepass refused"; the probe/trace must carry both counters. Owner: the
+      acceptance procedure (+ FU311's register text). **Addressed this
+      phase:** the T1 probe carries `calls`/`select_calls`/`select_ran`, and
+      errata (1) above quotes the measurement.
+    - **FU313-L4 — the bbox threshold is proposed, not measured.** `864x443`
+      (0.9×960 × 0.75×591) is derived from "a camera translation moves the
+      whole scene", not from a live follow capture (none exists). The
+      acceptance must measure the first real pair and record the observed
+      bbox; re-pin with that datum, never silently. Owner: the Layer-2
+      acceptance task.
+    - **FU313-L5 — no visible-camera capture in the repo for a pan.**
+      `docs/screens/*` has no whole-scene-shift pair; the phase-9 AE data are
+      entity-motion deltas. The first live follow capture has no pixel
+      precedent to compare against — only the AE magnitude guidance (§6.5).
+      Owner: the Layer-2 acceptance task.
+    `FU309-L6` stays **closed as a procedure** (the phase-29 close-out);
+    `FU309-L9` stays **open** (the mutation-rider automation, deferred by
+    spec §3).
+  - **3. The explicit closures (Minor 1).** **FU309-L5 — CLOSED (T1
+    `672f35a`):** the env-gated camera-cell trace landed (default-off
+    `FIFA96_CAMERA_TRACE`, 16 fields, the loop-tail line, the idempotent
+    close; P10 is manual). **FU310-L8 — CLOSED (T3 `56a17cd`):** the flat
+    act-2 compression is replaced by the native per-stage gate (stage 2
+    split/hold; stage 3 kind → session, else hold); `[0x158882]` remains
+    FU166-L6. (FU307-L7 was recorded closed in the T5 bullet / errata (5).)
+  - **4. FU307-L1 in the remainder (Minor 2).** Quoted (register, P9): "the
+    keeper route stays FU307-L1". **Corrected:** in every remainder list the
+    entry is **FU307-L1 (NO-GO)**; the structural NO-GO is errata (3) above
+    (the ladder phase 2 vs the row-`0x1B` place phase `0x0D`). `FU307-L2/L5/L6`
+    stay open as listed.
+  - **5. The deferred-list corrections (Minors 3–4).** Quoted (register):
+    "**Deferred minors (T1–T6 reviews; not fixed here; none is a fidelity
+    defect).**" **Corrected:** the **T6** scoped-re-review minors are
+    **fixed** (the appended FU310 erratum), so the heading's "T1–T6 / not
+    fixed here" applies to **T1–T5** only. The deferred list gains the four
+    residual concerns:
+    - **T2 residual — the chase `uint16_t` signed/unsigned compare.** The
+      chase gate's `uint16_t` comparison (documented as the native "unsigned"
+      compare in `fifa96_outfield.h:51-55`) is a pre-existing signed/unsigned
+      divergence; T2 corrects only the source word, not the compare.
+    - **T4 residual — row-`0x1D` stage 1's `0x700F4` 4th argument.** Native
+      `0x7509A MOV AL,[EDX+0x9B]; PUSH EAX` (the `place_pause` flag) is not
+      modelled; `[0x157820]/[0x157822]` are not written by this row (part of
+      the FU-151 consumers leg).
+    - **T5 residual — the release+hold-follow same-step ordering.** A stage-3
+      hold-follow place then a stage-5 release still drains a place after the
+      apply's `camera_event_set`/`set_tracked`; the ordering predates T5 and
+      is unchanged (the place value is the post-store triple).
+    - **T6 residual — the scratch-probe reproducibility.** The
+      `/tmp/opencode/fu310_l9` probe source is not committed; the FU310 doc
+      records the drive and the measured numbers, but the runnable source is
+      ephemeral (the same class as the wave's throwaway probes).
+  - **6. The exact ladder quote (Minor 5).** Quoted (register, errata (1)):
+    "the ladder does not run at all — the AX prepass gate
+    (`0x77F9A`/`0x77FA5`) never opens because the live camera stays
+    `(0,0,0)`." **Corrected:** the original (`docs/ENGINE.md:2338-2340`) reads
+    "the ladder does not run at all — the AX prepass gate
+    (`0x77F9A`/`0x77FA5`, `|cam.x| < 0x420 && |cam.z| > 0x7B0`) never opens
+    because the live camera stays `(0,0,0)`; the tape's own m62 block …". The
+    register's quote dropped the parenthetical without an ellipsis; the
+    correction (2 019/6 118, `ran=0` is the AX prepass) stands.
+  - **7. The reader scope (Minor 6).** Quoted (register, T2): "every
+    `dword[rec+0x69]>>16` reader routes to the live `lane_x` word".
+    **Corrected:** every **fixed** reader routes to `lane_x`; rows 01/11
+    remain the **FU311-L5a** deferral (the legacy low-word view), so they are
+    not routed. The fixed-site list is the T2 report's classification table.
+  - **8. The test-pin sentence (Minor 7).** Quoted (register, Tape): "no row
+    joins, so `README.md`, `AGENTS.md` and the `tests/test_engine_m2.c` pins
+    are untouched." **Corrected:** the golden-path **assertion** pins are
+    unchanged; the T2 re-pin is recorded above (the T2 fixture lanes changed,
+    and the test comment's provenance still says `b281a9b2…`). README and
+    AGENTS are untouched.

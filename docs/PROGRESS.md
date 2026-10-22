@@ -2679,3 +2679,65 @@ minor count) are folded in an appended FU310 erratum.
 census holds **`60/80 = 75%`** (`37 action + 23 phase`); no README/AGENTS/M2
 pin moved. The natural camera motion stays the phase's numbered NO-GO, not a
 faked producer.
+
+## T7 close-out erratum (fix round 1, 2026-10-22)
+
+The phase-30 close-out above stands as written; this append-only section
+corrects the T7 review's documentation Importants and the prose minors that
+live in this file. No code/test/golden change: `make check` 111/111 stands;
+M1 `09b726b7…` / M2 `8434cfab…` unmoved; the census holds `60/80 = 75%`.
+
+**1. The M2 sentence (Important 1).** Quoted (close-out, "The tape and the
+gate"): "no README/AGENTS/M2 pin moved." **Corrected:** **no M2 pin moved
+after T2** — the T2 re-pin (`b281a9b2…` → `8434cfab…`, the chase correction)
+is the one move; README and AGENTS are untouched.
+
+**2. The full-register sentence (Important 2).** Quoted (close-out,
+paragraph 1): "The full leg register (FU310–FU313, the harness matrix, the
+fixes, the spike and the quoted errata) is appended to `docs/ENGINE.md`."
+**Corrected:** this was **not true of the original close-out** — the ENGINE
+register lacked the FU312 legs and the FU313-L1/L2/L4/L5 list. The fix-round
+ENGINE erratum (`## T7 close-out erratum (fix round 1, 2026-10-22)`) now
+appends them (plus FU313-L3, the FU309-L6/L9 dispositions and the explicit
+FU309-L5/FU310-L8 closures), so the sentence is true of the corrected tree.
+The leg text lives in ENGINE, not in this narrative.
+
+**3. The test-pin sentence (Minor 7).** Quoted (close-out, paragraph 1):
+"the README title, `AGENTS.md:90` and the `tests/test_engine_m2.c` pins are
+untouched." **Corrected:** the golden-path **assertion** pins are unchanged;
+the T2 re-pin is recorded above (the T2 fixture lanes changed, and the test
+comment's provenance still says `b281a9b2…`); README and AGENTS are untouched.
+
+**4. The explicit closures (Minor 1).** Quoted (close-out, "The honest
+stop"): "**FU310-L4/L5/L6/L7** … **FU309-L1/L2/L3/L4/L6/L7/L8/L9**". The
+remainder list omits the two legs this phase closed. **Corrected:** **FU309-L5
+is CLOSED** (T1 `672f35a`, the default-off `FIFA96_CAMERA_TRACE`; P10 manual)
+and **FU310-L8 is CLOSED** (T3 `56a17cd`, the per-stage act-2 gate;
+`[0x158882]` stays FU166-L6). FU307-L7 was already recorded closed (T5). The
+remainder lists exclude the closed legs.
+
+**5. FU307-L1 in the remainder (Minor 2).** Quoted (close-out, "The honest
+stop"): "**FU307-L1/L2/L5/L6**". **Corrected:** the remainder entry is
+**FU307-L1 (NO-GO)**/L2/L5/L6 — the structural NO-GO is the ENGINE phase-30
+register's errata (3) (the ladder phase 2 vs the row-`0x1B` place phase
+`0x0D`).
+
+**6. The deferred residuals (Minor 4).** Quoted (close-out, "The honest
+stop"): "The deferred review minors are listed in the ENGINE register; none
+is a fidelity defect." **Corrected/expanded:** the ENGINE register's T7
+erratum now also carries the four residual concerns (the T2 chase `uint16_t`
+signed/unsigned compare; the T4 row-`0x1D` `0x700F4` 4th-argument/
+`place_pause` carry; the T5 release+hold-follow same-step ordering; the T6
+scratch probe's reproducibility). "None is a fidelity defect" holds for the
+review minors; the residuals are the named carries.
+
+**7. The ladder quote fragment (Minor 5).** Quoted (close-out, "The quoted
+errata"): "the phase-29 sentence \"the ladder does not run at all\"". The
+fragment itself is quoted as a fragment and is not wrong; the **full**
+original adds the parenthetical `(0x77F9A/0x77FA5, |cam.x| < 0x420 &&
+|cam.z| > 0x7B0)`. The ENGINE register's errata (1) quote dropped it; the
+ENGINE T7 erratum's item 6 restores the exact sentence.
+
+**8. The heading/markup note (Minor 8).** The nested-bold heading at the
+ENGINE register's first line (`ENGINE.md:2455-2460`) is fixed in place (the
+inner bold around `8434cfab…` removed); this is the only in-place edit.
