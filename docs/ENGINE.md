@@ -5696,3 +5696,50 @@ line was a markup typo and is fixed in place — the only in-place edit.)
     unchanged; the T2 re-pin is recorded above (the T2 fixture lanes changed,
     and the test comment's provenance still says `b281a9b2…`). README and
     AGENTS are untouched.
+
+---
+
+## T7 close-out erratum (fix round 2, 2026-10-22)
+
+The round-1 erratum above stands as written; this append-only section corrects
+the scoped re-review's FU312 leg-cite findings and the row-01 comment-quote
+truncation. Every cite below was **re-resolved against the post-T2 tree**
+(fresh `grep -n`/read this round, 2026-10-22), not carried from the wave docs.
+No code/test/golden change: `make check` 111/111 stands; M1 `09b726b7…` / M2
+`8434cfab…` unmoved; the census holds `60/80 = 75%`.
+
+**1. The FU312 leg cites (New Important).** Quoted (round-1 erratum, FU312-L3):
+"`0x5E` ← the row-`0x0C` body `0x81DA4`; `0x12` ← the row-`0x0E` body
+`0x827D0`; engine `fifa96_match_handlers.c:3476`, `:1478`". Quoted (round-1
+erratum, FU312-L3): "the row-`0x0E` install from the row-07 defender arm is
+gated on `kick_decision`'s `predictor_y = camY ∈ [0x20,0x60]`
+(`fifa96_action_handlers.c:1579`; `fifa96_match_handlers.c:1048-1050`)".
+Quoted (round-1 erratum, FU312-L4): "the follow's velocity is the tracked slot
+dirs × 15 (`0x71E63/0x71E69`; `fifa96_match_run.c:3942-3948`)". Quoted
+(round-1 erratum, FU312-L4): "Owner: the acceptance input script + the slot-dir
+producer (`fifa96_match_run.c:1401-1404`)".
+
+**Corrected (fresh reads; the 3476/1478/1048-1050/3942-3948/1401-1404 numbers
+are the pre-T2 wave-doc lines):**
+
+- the `0x5E` installer is **`fifa96_match_handlers.c:3512`** —
+  `if (fifa96_match_run_record_anim_install(mr, a, 0x5E, 0) != FIFA96_OK)`;
+  the `0x12` installer is **`:1504`** —
+  `if (fifa96_match_run_record_anim_install(mr, e, 0x12, 0) != FIFA96_OK)`;
+- the `predictor_y` assignment is **`fifa96_match_handlers.c:1075`** —
+  `s->predictor_y = mr->render.camera.pos_y;`;
+- the follow function starts at **`fifa96_match_run.c:3967`** —
+  `int fifa96_match_run_camera_follow(struct fifa96_match_run *mr) {` — and
+  the `fifa96_camera_rate_event` call is at **`:3985`** —
+  `if (fifa96_camera_rate_event(cam, e->dir_x, e->dir_z,`;
+- the slot-dir assignment is **`fifa96_match_run.c:1407-1411`** —
+  `r->dir_x = (int8_t)mr->slot.anim_b;` / `r->dir_z = (int8_t)mr->slot.anim_c;`
+  (the slot arm) and `r->dir_x = e->dir_x;` / `r->dir_z = e->dir_z;` (the
+  else arm).
+
+**2. The row-01 comment quote (Minor).** Quoted (round-1 erratum, item 1):
+"(`int16_t lane = (int16_t)(r->lane >> 16); /* LEG FU311-L5a */`)".
+**Corrected:** the code at `fifa96_match_handlers.c:249` reads
+`int16_t lane = (int16_t)(r->lane >> 16);     /* LEG FU311-L5a (legacy view) */`
+— the quoted comment truncated the `(legacy view)` tail. (The `:255` and
+`:1921` comments are exactly `/* LEG FU311-L5a */`.)
