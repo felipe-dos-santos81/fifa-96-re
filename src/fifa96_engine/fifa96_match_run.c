@@ -869,10 +869,6 @@ static int match_run_outfield_input(struct fifa96_match_run *mr,
    * word plus the `+0x6B` lane high word (`fifa96_outfield.c` reads it as
    * `lane >> 16`, 0x7CC2F). The port keeps the two words apart, so pack them
    * back here; the low word alone made the no-edge lane band read -1. */
-  /* FU311-L5 (phase-30 T2): the native `dword[+0x69]` — the low `+0x69` dz
-   * word plus the `+0x6B` lane high word (`fifa96_outfield.c` reads it as
-   * `lane >> 16`, 0x7CC2F). The port keeps the two words apart, so pack them
-   * back here; the low word alone made the no-edge lane band read -1. */
   s.lane = (int32_t)((uint32_t)(uint16_t)e->lane |
                      ((uint32_t)(uint16_t)e->lane_x << 16));
   s.user_present = controlled >= 0 ? 1u : 0u;
