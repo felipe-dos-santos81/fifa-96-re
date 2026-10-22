@@ -42,8 +42,8 @@ match **≈f 1520 / ≈f 1527.6**, i.e. both inside the 00:31 half of the delta 
 
 | pair | files | clock | clip time | AE (`960x591+0+0`) | bbox |
 |---|---|---|---|---|---|
-| pan | `p31-l2-pan-a.png`, `p31-l2-pan-b.png` | **00:31** (clock-area AE 0) | 43.883 s, 44.133 s (0.25 s) | **73 402** | **317×382+269+0** |
-| still | `p31-l2-still-a.png`, `p31-l2-still-b.png` | **00:33** (clock-area AE 0) | 46.050 s, 46.133 s (0.083 s) | **27 849** | 293×394+131+0 |
+| pan | `p31-l2-pan-a.png`, `p31-l2-pan-b.png` | **00:31** (clock AE 0, 140x50 and 140x66 crops) | 43.883 s, 44.133 s (0.25 s) | **73 402** | **317×382+269+0** |
+| still | `p31-l2-still-a.png`, `p31-l2-still-b.png` | **00:33** (clock AE 0, 140x50 and 140x66 crops) | 46.050 s, 46.133 s (0.083 s) | **27 849** | 293×394+131+0 |
 
 - **Gate 1 (relative, binding): AE_pan 73 402 > AE_still 27 849** (2.6×). Full-frame AE equals
   the crop on both pairs (the HUD band contributes 0, the displayed clocks are pixel-identical).
@@ -83,9 +83,11 @@ sprite-only caveat, never an attribution.
    at 30 match frames per 100 ticks and a 60 fps clip that is ~28 clip frames (≈26 for the 13).
    The pair must be picked inside it; the HUD second boundary is the hard edge.
 4. The scene (entities) stops changing at clock 00:34 while the trace continues; the HUD clock
-   keeps ticking (00:35 / 00:47 / 00:57 at clip 48 / 55 / 65 s), so later frames are not static
-   — their residual AE (688 at 48 s vs 55 s, 716 at 55 s vs 65 s) is the clock digits. The still
-   pair is the last animated 00:33 second before the scene settles.
+   keeps ticking (**00:35 / 00:42 / 00:52** at clip 48 / 55 / 65 s; frame-number and output-seek
+   extraction agree). Later frames are therefore not static — their **full-frame** AE (688 at
+   48 s vs 55 s, 716 at 55 s vs 65 s) is the clock digits; the `140x50+0+650` clock crop reads
+   544/572 because the glyphs extend below y=699. The still pair is the last animated 00:33
+   second before the scene settles.
 
 ## Invariants
 
