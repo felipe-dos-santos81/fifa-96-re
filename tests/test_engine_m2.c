@@ -1877,6 +1877,16 @@
 #define M2_CLAIM_CONTROLLED 1
 #define M2_CLAIM_STAGED_FACE 0x100
 
+/* FU320 §4.2 (phase-32 T1): the non-zero-delta natural drive. The verbatim
+ * `M2_KEYS` prefix, a LEFT hold on tape indices 1820..1849 (the 30-entry z
+ * nudge) and a DOWN hold from 1850 to the window end (the west run). Same
+ * 12 000-step window and observation seam as the T1 claim pass; no staging. */
+#define M2_OFFSET_STEPS M2_NATURAL_WINDOW_STEPS
+#define M2_OFFSET_TAPE_LEN (M2_OFFSET_STEPS + 1)
+#define M2_OFFSET_LEFT_FROM 1820
+#define M2_OFFSET_LEFT_TO 1849
+#define M2_OFFSET_DOWN_FROM 1850
+
 /* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
  * binding are all bounded. 00 and 1E wire first; cluster B/D rows
@@ -2366,10 +2376,13 @@ struct m2_claim_gate {
   int f;                       /* trace-relative granted frame index */
   uint8_t valid;
   uint8_t code, has_slot;
+  uint8_t active, anim_id;     /* FU320 §4.2: the gate's record cells */
+  int32_t id;                  /* encoded entity id (team*11 + index) */
   int8_t dir_x, dir_z;
   uint16_t timer81;
   int16_t lane_x, lane_z, cam_dz6f, bound, face7d;
   int16_t cam_vel_x, cam_vel_z;
+  int32_t cam_pos_x, cam_pos_y, cam_pos_z;
   uint16_t speed, timer, timer_limit;
   int16_t event_param, ramp_divisor;
   int32_t pos_x, pos_y, pos_z;
@@ -2407,6 +2420,9 @@ struct m2_claim {
   uint8_t pan_at_motion, pan_max;
   int16_t speed_seq[8];
   uint32_t speed_seq_len;
+  /* FU320 §4.2 (phase-32 T1): the gate's live-face bearing and folded delta,
+   * recorded by the offset pass (the T1 pass checks them locally). */
+  int32_t gate_bearing, gate_delta;
   uint32_t y_nonzero_frames, z_nonzero_frames;
   uint32_t decrease_frames, increase_frames;
   uint32_t row04_after_event_frames;
@@ -2446,6 +2462,7 @@ struct m2_natural {
   struct m2_stage_capture stage; /* the keeper ladder seam counters (P4) */
   struct m2_pan pan;             /* the scripted pan witness (P6 partial; ISO only) */
   struct m2_claim claim;         /* the natural claim-pan drive (FU317; ISO only) */
+  struct m2_claim offset;        /* the non-zero-delta drive (FU320) */
 };
 
 /* v21 (M2 phase-21 T1): the period-end probe observation — the measured FU-62
@@ -3897,6 +3914,10 @@ static void m2_claim_snapshot(struct m2_claim_gate *g,
   g->valid = 1;
   g->code = r->code;
   g->has_slot = r->has_slot;
+  g->active = r->active;
+  g->anim_id = r->anim_id;
+  g->id = (int32_t)((uint32_t)r->team * FIFA96_MATCH_ENTITY_RECORDS +
+                    (uint32_t)r->index);
   g->dir_x = r->dir_x;
   g->dir_z = r->dir_z;
   g->timer81 = r->timer81;
@@ -3907,6 +3928,9 @@ static void m2_claim_snapshot(struct m2_claim_gate *g,
   g->face7d = r->face7d;
   g->cam_vel_x = c->vel_x;
   g->cam_vel_z = c->vel_z;
+  g->cam_pos_x = c->pos_x;
+  g->cam_pos_y = c->pos_y;
+  g->cam_pos_z = c->pos_z;
   g->pos_x = r->pos_x;
   g->pos_y = r->pos_y;
   g->pos_z = r->pos_z;
@@ -4244,6 +4268,285 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(cl->trace_trk_event == M2_CLAIM_ENTITY);
 }
 
+/* FU320 §4.2 (phase-32 T1): the natural non-zero-delta drive. A sibling of the
+ * T1 claim pass: the same verbatim `M2_KEYS` prefix, the same 12 000-step
+ * window, the same observation seam and the same per-granted-frame sampler
+ * (`m2_claim_sample`, the delta-run rule included). The post-phase-2 drive is
+ * FU320's LEFT nudge (tape indices 1820..1849) then the DOWN west run
+ * (1850..end). It stages no camera/gate/face cell: the gate tuple is the live
+ * record at the passing dispatch, and the offset pin (FU321 §3.8 G3) is the
+ * assertion the drive exists for. */
+static void run_natural_offset_pass(struct m2_claim *cl) {
+  static const char name[] = "FIFA96_CAMERA_TRACE";
+  char path[] = "/tmp/fifa96_m2_offset_trace_XXXXXX";
+  char saved[1024];
+  char line[512];
+  int had_env = 0;
+  const char *prev = getenv(name);
+  static fifa96_platform_key tape[M2_OFFSET_TAPE_LEN];
+  struct fifa96_platform_null_config pcfg;
+  /* The drive boundaries are structural: `M2_KEYS` ends at or before the
+   * LEFT hold, the nudge ends before the DOWN hold, and the DOWN start lies
+   * inside the tape. */
+  _Static_assert(M2_KEYS_LEN <= M2_OFFSET_LEFT_FROM,
+                 "M2_KEYS must end at or before the LEFT-hold start");
+  _Static_assert(M2_OFFSET_LEFT_TO < M2_OFFSET_DOWN_FROM,
+                 "the LEFT nudge must end before the DOWN hold");
+  _Static_assert(M2_OFFSET_DOWN_FROM < M2_OFFSET_TAPE_LEN,
+                 "the DOWN-hold start must lie inside the offset tape");
+  _Static_assert(sizeof tape >= sizeof M2_KEYS,
+                 "the offset tape must hold the full M2_KEYS prefix");
+  memset(&pcfg, 0, sizeof pcfg);
+  memcpy(tape, M2_KEYS, sizeof M2_KEYS);
+  /* FU320 §4.2: LEFT on 1820..1849 (the z nudge), DOWN from 1850 to the end. */
+  for (int i = M2_OFFSET_LEFT_FROM; i <= M2_OFFSET_LEFT_TO; i++) {
+    tape[i].raw_code = FIFA96_ENGINE_KEY_LEFT;
+    tape[i].state = 1;
+  }
+  for (int i = M2_OFFSET_DOWN_FROM; i < M2_OFFSET_TAPE_LEN; i++) {
+    tape[i].raw_code = FIFA96_ENGINE_KEY_DOWN;
+    tape[i].state = 1;
+  }
+  assert(tape[M2_OFFSET_LEFT_FROM].raw_code == FIFA96_ENGINE_KEY_LEFT &&
+         tape[M2_OFFSET_LEFT_FROM].state == 1);
+  assert(tape[M2_OFFSET_LEFT_TO].raw_code == FIFA96_ENGINE_KEY_LEFT &&
+         tape[M2_OFFSET_LEFT_TO].state == 1);
+  assert(tape[M2_OFFSET_DOWN_FROM].raw_code == FIFA96_ENGINE_KEY_DOWN &&
+         tape[M2_OFFSET_DOWN_FROM].state == 1);
+  pcfg.tape = tape;
+  pcfg.tape_len = M2_OFFSET_TAPE_LEN;
+  pcfg.step_ns = 10000000ull;
+  if (prev != NULL) {
+    int n = snprintf(saved, sizeof saved, "%s", prev);
+    assert(n > 0 && (size_t)n < sizeof saved);
+    had_env = 1;
+  }
+  int fd = mkstemp(path);
+  assert(fd >= 0);
+  FILE *tmp = fdopen(fd, "wb");
+  assert(tmp != NULL);
+  assert(fclose(tmp) == 0);
+  assert(setenv(name, path, 1) == 0);
+
+  fifa96_platform *plat = fifa96_platform_null_create(&pcfg);
+  assert(plat != NULL);
+  struct fifa96_engine_config ecfg;
+  memset(&ecfg, 0, sizeof ecfg);
+  ecfg.iso_path = M2_ISO_PATH;
+  ecfg.width = 320;
+  ecfg.height = 240;
+  ecfg.headless = 1;
+  struct fifa96_engine *e = fifa96_engine_create(&ecfg, plat);
+  assert(e != NULL);
+  assert(fifa96_engine_boot(e) == 0);
+
+  memset(cl, 0, sizeof *cl);
+  cl->match_start_step = -1;
+  cl->phase2_step = -1;
+  cl->claim_f = -1;
+  cl->first_motion_f = -1;
+  cl->stop_f = -1;
+  cl->trace_first_motion = -1;
+  cl->trace_last_motion = -1;
+  uint32_t prev_pending = 0;
+  int steps = 0;
+  while (steps < M2_OFFSET_STEPS) {
+    assert(fifa96_engine_step(e) == 0);
+    steps++;
+    if (cl->match_start_step < 0 && e->mode == FIFA96_ENGINE_MODE_MATCH) {
+      cl->match_start_step = steps;
+      assert(e->match_run.state.phase == FIFA96_MATCH_RUN_KICKOFF_PHASE);
+      /* The same observation seam as the T1 pass (measured neutral). */
+      e->match_run.keeper_cpu.ladder = m2_stage_capture_ladder;
+      e->match_run.keeper_cpu.ladder_ctx = &cl->stage;
+    }
+    if (e->mode != FIFA96_ENGINE_MODE_MATCH || e->match == NULL) continue;
+    struct fifa96_match_run *mr = &e->match_run;
+    if (mr->state.phase == 2u && cl->phase2_step < 0) cl->phase2_step = steps;
+    uint32_t pending = fifa96_match_pace_pending(&mr->pace);
+    if (pending != prev_pending) {
+      assert(pending == prev_pending + 1u);
+      prev_pending = pending;
+      m2_claim_sample(cl, mr, (int)(pending - 1u));
+    }
+    cl->granted_frames = pending;
+  }
+  fifa96_engine_destroy(e);
+  fifa96_platform_destroy(plat);
+  if (had_env)
+    assert(setenv(name, saved, 1) == 0);
+  else
+    assert(unsetenv(name) == 0);
+
+  /* The drive/phase frame: the same measured window as the T1 pass. */
+  assert(cl->match_start_step == 5);
+  assert(cl->phase2_step > 0);
+  assert(cl->granted_frames == 3598u);
+
+  /* FU321 §3.8 (G3) — the offset pin. At the passing dispatch the record is
+   * not at the camera: `lane_at_pass >= 1` and `(cam_dx,cam_dz) != (0,0)`.
+   * The T1 DOWN-only drive fails exactly here with lane_at_pass 0: its only
+   * pass is the zero-delta point (pos == cam, bearing 0x80). */
+  assert(cl->gate.valid);
+  assert(cl->gate.lane_x >= 1);
+  assert(cl->gate.lane_z != 0 || cl->gate.cam_dz6f != 0);
+
+  /* FU320 §4.2: the passing-dispatch tuple at the trace key f=1528. The
+   * dispatch at f+1 evaluates it (FU320-L6). Recorded, not derived: the live
+   * record 2 in the camera's west cone, with no staged camera/gate/face. */
+  assert(cl->gate.f == 1528);
+  assert(cl->gate.id == M2_CLAIM_ENTITY);
+  assert(cl->gate.code == 4u);
+  assert(cl->gate.active == 2u);
+  assert(cl->gate.pos_x == -32 && cl->gate.pos_y == 0 &&
+         cl->gate.pos_z == 16);
+  assert(cl->gate.lane_x == 36);      /* lane/bound 36/36 */
+  assert(cl->gate.bound == 36);
+  assert(cl->gate.lane_z == 32);      /* cam_dx (+0x6D) */
+  assert(cl->gate.cam_dz6f == -16);   /* cam_dz (+0x6F) */
+  assert(cl->gate.face7d == 0x100);
+  assert(cl->gate.timer81 == 0u);
+  assert(cl->gate.has_slot == 1u);
+  assert(cl->gate.anim_id == 0u);
+  assert(cl->gate.dir_x == -1 && cl->gate.dir_z == 0);
+  assert(cl->gate.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cl->gate.controlled == M2_CLAIM_CONTROLLED);
+  assert(cl->gate.controlled != M2_CLAIM_ENTITY);   /* the fallback hazard */
+  assert(cl->gate.slot_entity == M2_CLAIM_ENTITY);
+  assert(cl->gate.cam_pos_x == 0 && cl->gate.cam_pos_y == 0 &&
+         cl->gate.cam_pos_z == 0);    /* camera parked; camY 0 */
+  {
+    int32_t bearing = 0;
+    assert(fifa96_entity_angle(cl->gate.lane_z, cl->gate.cam_dz6f, &bearing) ==
+           FIFA96_OK);
+    assert(bearing == 0x14C);
+    int32_t delta = (bearing - cl->gate.face7d) & 0x3FF;
+    if (delta > 0x200) delta = 0x400 - delta;
+    assert(delta == 0x4C);
+    assert(delta <= 0xAB);   /* the live-face acceptance (FU321 §3.8) */
+    cl->gate_bearing = bearing;
+    cl->gate_delta = delta;
+  }
+
+  /* The event (the row-05 install) and the seed: the slot dir (−1,0) scaled
+   * by 0x40 → seed −0x40 → v0 = trunc(−0x40/0xC) = −5 (FU320 §4.2). */
+  assert(cl->event.valid && cl->event.f == 1529);
+  assert(cl->event.code == 5u);
+  assert(cl->event.dir_x == -1 && cl->event.dir_z == 0);
+  assert(cl->event.cam_vel_x == -5 && cl->event.cam_vel_z == 0);
+  assert(cl->event.speed == 5u);
+  assert(cl->event.event_param == 0);
+  assert(cl->event.timer == 0u && cl->event.timer_limit == 12u);
+  assert(cl->event.ramp_divisor == 12);
+  assert(cl->event.tracked == M2_CLAIM_ENTITY);
+
+  /* The claim (the row-05 possession install): f=1530, carrier 2. */
+  assert(cl->claim_f == 1530);
+  assert(cl->claim_entity == M2_CLAIM_ENTITY);
+  assert(cl->claim_slot_entity == M2_CLAIM_ENTITY);
+  assert(cl->claim_pair_code == 0u && cl->claim_pair_ack == 0u);
+
+  /* The delta run (never the off-zero count): 27 changed frames, f=1530..1556,
+   * stop f=1557 at (−0x90,0,0); the off-zero count is the post-motion tail. */
+  assert(cl->segments == 1u);
+  assert(cl->first_motion_f == 1530);
+  assert(cl->stop_f == 1557);
+  assert(cl->changed_frames == 27u);
+  assert(cl->off_zero_frames ==
+         cl->granted_frames - (uint32_t)cl->first_motion_f);
+  assert(cl->off_zero_frames != cl->changed_frames);
+  assert(cl->stop_x == -0x90 && cl->stop_y == 0 && cl->stop_z == 0);
+  assert(cl->max_abs_x == 0x90);
+  assert(cl->decrease_frames == cl->changed_frames);
+  assert(cl->increase_frames == 0u);
+  assert(cl->y_nonzero_frames == 0u && cl->z_nonzero_frames == 0u);
+  assert(cl->pan_at_motion == 0u);
+  assert(cl->pan_max == 4u);
+  assert(cl->speed_seq_len == 5u);
+  assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 3 &&
+         cl->speed_seq[2] == 2 && cl->speed_seq[3] == 1 &&
+         cl->speed_seq[4] == 0);
+  assert(cl->row04_after_event_frames == 0u);
+  assert(cl->last.code == 5u);
+  assert(cl->last.tracked == M2_CLAIM_ENTITY);
+
+  /* The armer never runs; the X-only pan stays inside the OOB bounds. */
+  assert(cl->oob_frames == 0u);
+  assert(cl->goal_armed_any == 0u);
+
+  /* P16-equivalent: the trace cross-check (the delta run, not the off-zero
+   * frames). The trace carries camera cells only — the offset stays a
+   * Layer-1 claim (FU321-L1). */
+  FILE *f = fopen(path, "rb");
+  assert(f != NULL);
+  assert(fgets(line, sizeof line, f) != NULL);
+  assert(strncmp(line, "# fifa96-camera-trace v1", 24) == 0);
+  uint32_t body = 0;
+  int have_pos = 0, ppx = 0, ppy = 0, ppz = 0;
+  uint8_t pan_min = 0xFFu, pan_max = 0u;
+  int trk_gate = 99, trk_event = 99;
+  while (fgets(line, sizeof line, f) != NULL) {
+    unsigned frame = 0;
+    int px = 0, py = 0, pz = 0, trk = 0, follow = 0, ev = 0;
+    unsigned pan = 0;
+    assert(sscanf(line, "f=%u", &frame) == 1);
+    assert(frame == body);
+    assert(strstr(line, " ph=") != NULL);
+    const char *p = strstr(line, " pos=");
+    assert(p != NULL);
+    assert(sscanf(p, " pos=%d,%d,%d", &px, &py, &pz) == 3);
+    p = strstr(line, " trk=");
+    assert(p != NULL);
+    assert(sscanf(p, " trk=%d", &trk) == 1);
+    p = strstr(line, " pan=");
+    assert(p != NULL);
+    assert(sscanf(p, " pan=%u", &pan) == 1);
+    p = strstr(line, " follow=");
+    assert(p != NULL);
+    assert(sscanf(p, " follow=%d", &follow) == 1);
+    p = strstr(line, " ev=0x");
+    assert(p != NULL);
+    assert(sscanf(p, " ev=0x%X", &ev) == 1);
+    assert(ev == 0);
+    if (follow != 0) cl->trace_follow1++;
+    if (px != 0 || py != 0 || pz != 0) cl->trace_off_zero++;
+    if (have_pos && (px != ppx || py != ppy || pz != ppz)) {
+      if (cl->trace_first_motion < 0) cl->trace_first_motion = (int)frame;
+      cl->trace_last_motion = (int)frame;
+      cl->trace_changed++;
+    }
+    if (pan < pan_min) pan_min = (uint8_t)pan;
+    if (pan > pan_max) pan_max = (uint8_t)pan;
+    if (frame == (unsigned)cl->gate.f) trk_gate = trk;
+    if (frame == (unsigned)cl->event.f) trk_event = trk;
+    if (frame >= (unsigned)cl->first_motion_f &&
+        frame < (unsigned)cl->stop_f)
+      assert(trk == M2_CLAIM_ENTITY);   /* trk=2 across the delta run */
+    ppx = px;
+    ppy = py;
+    ppz = pz;
+    have_pos = 1;
+    body++;
+  }
+  assert(fclose(f) == 0);
+  assert(remove(path) == 0);
+  cl->trace_body = body;
+  cl->trace_trk_gate = trk_gate;
+  cl->trace_trk_event = trk_event;
+  cl->trace_pan_min = pan_min;
+  cl->trace_pan_max = pan_max;
+  assert(body == cl->granted_frames);
+  assert(body == 3598u);
+  assert(cl->trace_changed == cl->changed_frames);
+  assert(cl->trace_first_motion == cl->first_motion_f);
+  assert(cl->trace_last_motion == cl->stop_f - 1);
+  assert(cl->trace_off_zero == cl->off_zero_frames);
+  assert(cl->trace_follow1 == 0u);           /* the follow stays waived */
+  assert(cl->trace_pan_min == 0u && cl->trace_pan_max == 4u);
+  assert(cl->trace_trk_gate == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cl->trace_trk_event == M2_CLAIM_ENTITY);
+}
+
 /* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
  * by M2 phase-18 T4): the same scripted key tape and platform cadence as
  * run_tape, but with NO match directives. The engine's native chain must reach
@@ -4275,6 +4578,9 @@ static void run_natural_probe(int with_iso, struct m2_natural *nat) {
      * seed places the drive's record 2. The undriven pass above stays the
      * zero control. */
     run_natural_claim_pass(&nat->claim);
+    /* FU320 §4.2 (phase-32 T1): the non-zero-delta drive, beside the T1
+     * zero-delta witness (which stays unchanged as the zero control). */
+    run_natural_offset_pass(&nat->offset);
     run_scripted_pan_witness(&nat->pan);
   }
 }
@@ -5783,6 +6089,49 @@ int main(void) {
             (unsigned)nat.claim.stage.calls,
             (unsigned)nat.claim.stage.select_ran,
             (unsigned)nat.claim.trace_body);
+  if (with_iso)
+    fprintf(stderr,
+            "test_engine_m2 natural offset pass: gate f=%d record %d code %u "
+            "active %u pos (%d,%d,%d) lane %d bound %d cam_dx %d cam_dz %d "
+            "face7d 0x%X bearing 0x%X delta 0x%X (live face; no staging); "
+            "event f=%d code %u dir (%d,%d) vel (%d,%d) spd %u tim %u/%u "
+            "ramp %d trk %d; claim f=%d entity %d (slot %d, pair %u/%u); pan "
+            "f=%d..%d stop f=%d (%u changed / %u off-zero frames, %u segment) "
+            "place (%d,%d,%d) pan %u->%u speed %d->%d->%d->%d->%d, Y/Z "
+            "nonzero %u/%u, armer %u/OOB %u, follow=1 %u, trace 1+%u lines\n",
+            nat.offset.gate.f, (int)nat.offset.gate.id,
+            (unsigned)nat.offset.gate.code, (unsigned)nat.offset.gate.active,
+            (int)nat.offset.gate.pos_x, (int)nat.offset.gate.pos_y,
+            (int)nat.offset.gate.pos_z, (int)nat.offset.gate.lane_x,
+            (int)nat.offset.gate.bound, (int)nat.offset.gate.lane_z,
+            (int)nat.offset.gate.cam_dz6f, (unsigned)nat.offset.gate.face7d,
+            (unsigned)nat.offset.gate_bearing,
+            (unsigned)nat.offset.gate_delta, nat.offset.event.f,
+            (unsigned)nat.offset.event.code, (int)nat.offset.event.dir_x,
+            (int)nat.offset.event.dir_z, (int)nat.offset.event.cam_vel_x,
+            (int)nat.offset.event.cam_vel_z, (unsigned)nat.offset.event.speed,
+            (unsigned)nat.offset.event.timer,
+            (unsigned)nat.offset.event.timer_limit,
+            (int)nat.offset.event.ramp_divisor, nat.offset.event.tracked,
+            nat.offset.claim_f, (int)nat.offset.claim_entity,
+            (int)nat.offset.claim_slot_entity,
+            (unsigned)nat.offset.claim_pair_code,
+            (unsigned)nat.offset.claim_pair_ack, nat.offset.first_motion_f,
+            nat.offset.stop_f - 1, nat.offset.stop_f,
+            (unsigned)nat.offset.changed_frames,
+            (unsigned)nat.offset.off_zero_frames,
+            (unsigned)nat.offset.segments, (int)nat.offset.stop_x,
+            (int)nat.offset.stop_y, (int)nat.offset.stop_z,
+            (unsigned)nat.offset.pan_at_motion,
+            (unsigned)nat.offset.pan_max, (int)nat.offset.speed_seq[0],
+            (int)nat.offset.speed_seq[1], (int)nat.offset.speed_seq[2],
+            (int)nat.offset.speed_seq[3], (int)nat.offset.speed_seq[4],
+            (unsigned)nat.offset.y_nonzero_frames,
+            (unsigned)nat.offset.z_nonzero_frames,
+            (unsigned)nat.offset.goal_armed_any,
+            (unsigned)nat.offset.oob_frames,
+            (unsigned)nat.offset.trace_follow1,
+            (unsigned)nat.offset.trace_body);
 
   /* v21 (M2 phase-21 T1): the period-end feasibility probe (transcript-neutral)
    * — extends the scripted run to the first FU-62 completion and records what
