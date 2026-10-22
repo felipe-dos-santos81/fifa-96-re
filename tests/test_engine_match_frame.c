@@ -6157,8 +6157,9 @@ static void test_contact_gate_reachable_via_pad_duel(void) {
  * session: the native `0x8947A..0x89487` abort fires whenever `[0x14C32A] == 0`
  * **before** the decision-word check and the kind/`[0x158882]` terms, and the
  * stage-3 re-entry re-tests the byte at `0x894B7`. The live path emits a
- * **non-3 contact kind (1 ≠ 3)** (`run.c:6542`) and the settled ordinary-match
- * session gate is 0 (FU-166/R14), so the machine holds armed at stage 2. The
+ * **non-3 contact kind (1 ≠ 3)** (the row-0x0C literal `0x81EB4`) and the
+ * settled ordinary-match session gate is 0 (FU-166/R14), so the machine holds
+ * armed at stage 2. The
  * retired engine compression `contact_kind == 3 || session != 0` was FU310-L8:
  * `kind == 3` is only the `0x8944A` ball-row `0x49` choice, so the offside
  * (kind-3) event reaches the same byte-0 abort (the offside-chain test stages
