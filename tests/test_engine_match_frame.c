@@ -7653,7 +7653,20 @@ static void test_row04_live_face_passes_face_aligned_gate(void) {
   struct fifa96_match_run mr;
   struct fifa96_match_entity *e;
   int32_t id;
+  int32_t bearing = 0;
   row04_face_band_setup(&f, &mr, &e, &id, 0x100);
+  /* FU321 §3.8 (phase-32 code review): the offset tuple is recorded, not
+   * assumed. The record sits 0x40 west (cam_dx +0x40 -> bearing 0x100) and
+   * the live face is the row-0x24 constant 0x100, so Δ 0 <= 0xAB. A staged
+   * lane of 0 would be the zero-delta knife edge this pin must exclude. */
+  assert(e->lane_x == 0x40);       /* +0x6B: the record's camera lane */
+  assert(e->bound == 0x40);        /* +0x77: the previous lane */
+  assert(e->lane_z == 0x40);       /* +0x6D: cam_dx (non-zero offset) */
+  assert(e->cam_dz6f == 0);        /* +0x6F: cam_dz */
+  assert(e->face7d == 0x100);
+  assert(fifa96_entity_angle(e->lane_z, e->cam_dz6f, &bearing) == FIFA96_OK);
+  assert(bearing == 0x100);
+  assert((((uint16_t)bearing - (uint16_t)e->face7d) & 0x3FFu) == 0u);
   assert(mr.render.camera.vel_x != 0 || mr.render.camera.vel_z != 0);
   assert(mr.render.camera.tracked == id);
   assert(e->code == 5);                /* the row coda installed code 5 */
@@ -7675,6 +7688,28 @@ static void test_row04_zero_face_fails_face_aligned_gate(void) {
   assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
   assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
   assert(e->code == 4);                /* the gate returns before the coda */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
+}
+
+/* FU321 §3.8 (phase-32 code review): the same non-zero offset tuple with the
+ * record facing AWAY from the camera (face 0x300, the east/west walk face)
+ * is Δ 0x200 > 0xAB — no event, no tracked bind, no coda. The face-aligned
+ * gate needs the live face pointing at the camera; a non-zero offset alone
+ * is not the pass. This is the direction rider the offset pin was missing. */
+static void test_row04_opposite_face_fails_face_aligned_gate(void) {
+  struct fixture f;
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  int32_t id;
+  int32_t bearing = 0;
+  row04_face_band_setup(&f, &mr, &e, &id, 0x300);
+  assert(fifa96_entity_angle(e->lane_z, e->cam_dz6f, &bearing) == FIFA96_OK);
+  assert(bearing == 0x100);
+  assert((((uint16_t)bearing - (uint16_t)e->face7d) & 0x3FFu) == 0x200u);
+  assert(mr.render.camera.vel_x == 0 && mr.render.camera.vel_z == 0);
+  assert(mr.render.camera.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(e->code == 4);
   assert(fifa96_match_run_end(&mr) == 0);
   drop_fixture(f);
 }
@@ -10251,6 +10286,7 @@ int main(void) {
   test_row04_live_pan_arms_camera();
   test_row04_live_face_passes_face_aligned_gate();
   test_row04_zero_face_fails_face_aligned_gate();
+  test_row04_opposite_face_fails_face_aligned_gate();
   test_row04_tracked_gate_suppresses_half_line();
   test_row04_arm_a_track_reload();
   test_natural_goal_end_to_end();

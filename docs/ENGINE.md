@@ -6645,3 +6645,67 @@ fixture.
 change. M1 `09b726b7…` (22 004 B) / M2 `8434cfab…` (295 087 B)
 byte-identical (`cmp`-verified); `make check` **111/111**; census
 **`60/80 = 75%`**; README/AGENTS untouched. The verdict is unchanged.
+
+## M2 phase-32 close-out errata (code review, 2026-10-22)
+
+The phase-32 register and its T3 errata stand as written; this append-only
+section records the two-axis code review of `c8b1a6c..HEAD` and the fixes it
+produced. The verdict (a natural non-zero-delta pan; drive-only; the offset
+Layer-1; the live face deferred) is unchanged.
+
+**1. The stale test-line cites (Standards).** Quote (`:6345-6347`):
+"`run_natural_offset_pass` (`:4279`) … called `:4580`, the offset pass
+`:4583`". **Corrected (fresh at HEAD):** `run_natural_offset_pass` is at
+`tests/test_engine_m2.c:4285`; the two calls are `:4599`/`:4602`; the offset
+pin is `:4397`; the gate tuple's lane pin `:4409`; the claim `:4457`; the
+delta run `:4463-4481`; the trace cross-check `:4494-4567`;
+`run_natural_claim_pass` remains `:4031`. The shift is the `b72e2b8`
+witness-hardening insert — the same class the T3 erratum 3 records
+(`:6626-6631`).
+
+**2. The deferred-minors list is superseded (Standards/Spec).** Quote
+(`:6538-6553`): "**Deferred minors (T1/T2 reviews; not fixed here…)**",
+listing the gate resting cells, the plateau comment, the ladder counters,
+the `trk` tail, and the T2 note's ~2 s / byte-identity / scope / +20 /
+watcher / run-relative / `make check` items. **Corrected:** `b72e2b8` fixed
+those items (the witness hardening; the note's twelve corrections). The
+remaining deferred items are the near-verbatim harness duplication (declared
+at the site; the extraction is a follow-up), the pre-existing empty-env
+guards outside the offset pass (`tests/test_engine_m2.c:3863`, `:4061`), and
+the trace extract being the committed evidence (the full live trace is
+scratch).
+
+**3. The §5 fixture gap (Spec).** Quote (T3 erratum 8): "With no producer
+landed, no new fixture and no new mutation rider is added; the T2 unit pair
+… remains the added face pin, not the same-chain fixture." **Corrected:**
+the existing `test_live_claim_pan_row04_half_line` reaches the row-04
+arm/pan chain but pins no `lane`/`bound`/`face7d`/Δ, so it does not exercise
+the face-aligned gate this phase is about. The code-review fix closes the
+gap with the T2 unit-pin class (spec §9.1 exempt): the positive pair now
+records `lane_x 0x40`, `bound 0x40`, `lane_z 0x40` (cam_dx), `cam_dz6f 0`,
+`face7d 0x100`, the bearing `0x100` and Δ `0`; the new
+`test_row04_opposite_face_fails_face_aligned_gate` pins the direction rider
+(the same offset, `face 0x300`, Δ `0x200` → no event, no bind, code 4).
+This is a test-side pin, not a gate-staging acceptance fixture; the natural
+witness remains the full-engine frame path. The §5 fixture half is now met
+by the unit pin + the natural witness + the pan/claim fixture, with the
+coverage stated rather than implied.
+
+**4. The deferral reason (Spec).** Quote (the register's plan ruling): the
+producer is deferred because it is "larger than this phase's pan scope".
+**Corrected:** the spec §8.1's condition is two-part — the natural/robust
+route **and** a faithful M2 diff; FU319-L7 leaves the actual M2 diff
+unmeasured, so golden-safety was not proven. That unmeasured diff is the
+primary condition; the scope breadth is secondary. The deferral stands.
+
+**5. The `docs(phase32)` commit type (Standards, soft).** AGENTS.md's commit
+list is `feat`/`fix`/`docs(fuNNN)`/`test`/`chore`; `43e7410`/`4dc8925` use
+`docs(phase32)`. The phase-name form has the `docs(fuNNN)` precedent class;
+no rewrite (history is immutable).
+
+**6. Test-side fix and the invariant.** This code-review fix changes
+`tests/test_engine_match_frame.c` only (the tuple asserts, the opposite-face
+rider, the call); no production code, no golden. `make check` 111/111
+(strict, ASan/UBSan); M1 `09b726b7…` / M2 `8434cfab…` byte-identical; the
+census `60/80 = 75%`. The T3 erratum 9's "Docs-only errata; no … test
+change" described that commit; this one is test-side.

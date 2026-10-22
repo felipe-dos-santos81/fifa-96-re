@@ -3072,3 +3072,41 @@ pair stays the added face pin.
 **7. Tape and gate.** Docs-only errata; no production code/golden/test
 change. M1 `09b726b7…` / M2 `8434cfab…` byte-identical; `make check`
 111/111; census `60/80 = 75%`; README/AGENTS untouched.
+
+## Phase-32 close-out errata (code review, 2026-10-22)
+
+The phase-32 narrative and its T3 errata stand as written; this append-only
+section records the two-axis code review's corrections and the one test-side
+fix. The verdict (a natural non-zero-delta pan; drive-only; the offset
+Layer-1; the live face deferred) is unchanged.
+
+**1. The fresh test-line cites.** The T1 pass is
+`tests/test_engine_m2.c:4285` (not `:4279`); its calls are `:4599`/`:4602`
+(not `:4580`/`:4583`); the offset pin is `:4397`, the lane pin `:4409`, the
+claim `:4457`, the delta run `:4463-4481`, the trace `:4494-4567`. The
+`b72e2b8` hardening shifted the lines; the ENGINE section
+`## M2 phase-32 close-out errata (code review, 2026-10-22)` carries the
+detail.
+
+**2. The deferred-minors list is superseded.** The register's "not fixed
+here" list (`docs/ENGINE.md:6538-6553`) is fixed by `b72e2b8` for the gate
+resting cells, the plateau comment, the ladder counters, the `trk` tail and
+the T2 note's twelve items. What remains deferred: the near-verbatim harness
+duplication (declared; the extraction is a follow-up), the pre-existing
+empty-env guards (`tests/test_engine_m2.c:3863`, `:4061`), and the full
+trace being scratch (the extract is the committed evidence).
+
+**3. The §5 fixture gap.** The existing `test_live_claim_pan_row04_half_line`
+does not pin `lane`/`bound`/`face7d`/Δ; the code-review fix extends the T2
+unit-pin class (spec §9.1) with the offset tuple asserts and the
+opposite-face rider (`face 0x300`, Δ`0x200`, no event). It is a test-side
+pin, not a gate-staging acceptance fixture; the natural witness remains the
+full-engine frame path.
+
+**4. The deferral condition.** The producer is deferred primarily because
+FU319-L7 leaves the actual M2 diff unmeasured (the spec §8.1's faithful-diff
+condition), not only because of scope breadth.
+
+**5. Tape and gate.** Test-side fix only (`tests/test_engine_match_frame.c`);
+no production code/golden. M1 `09b726b7…` / M2 `8434cfab…` byte-identical;
+`make check` 111/111; census `60/80 = 75%`; README/AGENTS untouched.
