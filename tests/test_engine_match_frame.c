@@ -3555,10 +3555,18 @@ static void test_row1e_claim_place_pause_and_offsets(void) {
   /* R11-L3: the per-sector table writes the record offsets. */
   assert(mr.record.place_offset_x == 1);
   assert(mr.record.place_offset_z == -1);
-  /* the head place applies them (<<4) at the record position */
+  /* FU307-L7 (phase-30 T5): the head place (`0x755C7`, pos + offset << 4,
+   * Y = pos + 0x38) is followed by this same dispatch's stage-1 raw triple
+   * (`0x7568A/B/C`, z + 0x20 for side 0), so the deferred place carries the
+   * post-store triple: native order is place then store. The head place's
+   * own triple is not observable after the step — its offsets are pinned
+   * above and its pause flag below. */
   assert(mr.record.place_valid == 1);
-  assert(mr.record.place_x == 100 + 16);   /* dir_x 1 << 4 */
-  assert(mr.record.place_z == 200 - 16);   /* dir_z -1 << 4 */
+  assert(mr.record.place_x == 100);
+  assert(mr.record.place_y == 20);
+  assert(mr.record.place_z == 200 + 0x20);
+  assert(mr.render.camera.pos_x == 100 && mr.render.camera.pos_y == 20 &&
+         mr.render.camera.pos_z == 200 + 0x20);   /* the raw store */
 
   /* R11-L2: the `PUSH 1` place pause sets both [0x157820]/[0x157822]. */
   assert(mr.flag_157820 == 1);
@@ -4232,17 +4240,95 @@ static void test_row1e_cam_y_raw_store(void) {
   assert(mr.render.camera.pos_y == 0x80);            /* 0x75F86 */
   assert(mr.render.camera.pos_x == 0x11 && mr.render.camera.pos_z == 0x33);
   assert(mr.render.camera.tracked == 7);
+}
 
-  /* The flag is exactly those three arms: the stage-1 triple
-   * (`0x7568A`/`0x7568B`, out of band) must NOT move the live cell. */
+/* FU307-L7 (phase-30 T5): the row-0x1E stage-1 camera-triple cut.
+ *
+ * `0x7568A/8B/8C` is a raw `dword[0x15774C/50/54]` triple store (x/y/z =
+ * pos, then `0x756B5 ADD [0x157754], ±0x20`) with no `0x700F4` call — the
+ * same raw-store shape as the three literal-Y arms, extended to X/Z. The
+ * loader carries it as `cam_written`; the binder applies the full triple raw
+ * (no camera init, so every other camera cell keeps its value). */
+static void test_row1e_stage1_triple_raw_store(void) {
+  struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
-  mr.record.entity_id = 0;
+  mr.record.entity_id = 0;            /* team 0: side 0, z + 0x20 */
   mr.record.stage92 = 1;
   mr.record.has_ball = 1;             /* skip the stage-<3 head claim */
   mr.record.timer89 = 0;              /* < 0x3C: the stage-1 exit */
+  mr.record.pos_x = 0x100;
+  mr.record.pos_y = 0x12;
+  mr.record.pos_z = 0x200;
   assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  mr.render.camera.tracked = 7;
+  mr.render.camera.timer = 0x55;
+  mr.render.camera.event_param = 0x66;
+  mr.render.camera.pan_counter = 9;
   assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
-  assert(mr.render.camera.pos_y == 0x22);            /* no cam_y_written arm */
+  assert(mr.render.camera.pos_x == 0x100);           /* 0x7568A */
+  assert(mr.render.camera.pos_y == 0x12);            /* 0x7568B = pos_y */
+  assert(mr.render.camera.pos_z == 0x200 + 0x20);    /* 0x756B5 */
+  /* A raw store: no 0x700F4 reset and no deferred place on this arm. */
+  assert(mr.render.camera.tracked == 7);
+  assert(mr.render.camera.timer == 0x55);
+  assert(mr.render.camera.event_param == 0x66);
+  assert(mr.render.camera.pan_counter == 9);
+  assert(mr.record.place_valid == 0);
+  assert(mr.keeper_cam_x == 0x100 && mr.keeper_cam_z == 0x200 + 0x20);
+
+  /* Team 1 (side 1): the z arm is -0x20. */
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = FIFA96_MATCH_ENTITY_RECORDS;
+  mr.record.stage92 = 1;
+  mr.record.has_ball = 1;
+  mr.record.timer89 = 0;
+  mr.record.pos_x = 0x40;
+  mr.record.pos_y = 0x12;
+  mr.record.pos_z = 0x180;
+  assert(fifa96_camera_init(&mr.render.camera, 0x11, 0x22, 0x33) == FIFA96_OK);
+  mr.render.camera.tracked = 7;
+  assert(fifa96_match_dispatch_action(&mr, 0x1E) == FIFA96_OK);
+  assert(mr.render.camera.pos_x == 0x40);
+  assert(mr.render.camera.pos_y == 0x12);
+  assert(mr.render.camera.pos_z == 0x180 - 0x20);
+  assert(mr.render.camera.tracked == 7);
+}
+
+/* FU307-L7: the claim's first dispatch through the frame path.
+ *
+ * The head claim `0x755C7` (place Y = pos + 0x38, deferred to the frame
+ * drain by the engine) is followed in the same dispatch by the stage-1 raw
+ * triple (Y = pos, z ±0x20). Natively the store lands after the head place,
+ * so the frame ends on the triple; the deferred place must therefore carry
+ * the post-store triple — the `cam_y_written` fix-up over X/Z. A grounded
+ * keeper ends out of band (Y 0), not at the head's 0x38. */
+static void test_row1e_stage1_triple_frame(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  /* The last record of the walk: the engine's single pending place is
+   * take-once per frame, so an earlier record's row-00 kickoff place
+   * (`0x7DBEA`, the constant (0,0,0) triple) would otherwise overwrite the
+   * claim's. */
+  e = &mr.entities.team[1].records[10];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0x1E, 0) == 1);
+  e->stage92 = 1;
+  e->has_ball = 0;                    /* the head claim + place run */
+  e->timer89 = 0;                     /* < 0x3C: the stage-1 exit */
+  e->pos_x = 0x100;
+  e->pos_y = 0;                       /* grounded: the head's 0x38 is wrong */
+  e->pos_z = 0x200;
+  e->type = 3;                        /* head place x/z = (0x110, 0x1F0) */
+  assert(fifa96_camera_init(&mr.render.camera, 0, 0, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  assert(e->has_ball == 1);                            /* the head claim ran */
+  assert(mr.render.camera.pos_x == 0x100);             /* 0x7568A */
+  assert(mr.render.camera.pos_y == 0);                 /* 0x7568B, not 0x38 */
+  assert(mr.render.camera.pos_z == 0x200 - 0x20);      /* 0x756B5, side 1 */
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
 }
 
 /* FU307-L3 (phase-29 T3 fix round 1): the normal slot claim's place+store
@@ -9998,6 +10084,8 @@ int main(void) {
   test_keeper_installer_live_permit();
   test_keeper_installer_live_reach();
   test_row1e_cam_y_raw_store();
+  test_row1e_stage1_triple_raw_store();
+  test_row1e_stage1_triple_frame();
   test_row1e_slot_hold_follow_band_frame();
   test_row1d_place_triple_cells();
   test_row1d_place_triple_frame();

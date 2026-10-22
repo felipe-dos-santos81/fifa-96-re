@@ -521,6 +521,7 @@ fifa96_err_t fifa96_keeper_claim_step(fifa96_keeper_claim *s,
     s->cam_y = s->pos.y;
     s->cam_z = s->pos.z;
     s->cam_z += (s->side == 0) ? 0x20 : -0x20;                     /* 0x7569f/0x756aa */
+    out->cam_written = 1;   /* 0x7568a/b/c + 0x756b5 raw, no 0x700f4 */
     {
       int32_t face = 0;                                            /* 0x756d0 face(-pos.x,-pos.z) */
       (void)fifa96_entity_face(-(int32_t)(int16_t)s->pos.x,

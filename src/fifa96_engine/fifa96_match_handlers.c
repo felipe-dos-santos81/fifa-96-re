@@ -526,7 +526,24 @@ static int match_keeper_claim_apply(struct fifa96_match_run *mr,
    * `s->cam_y` holds the step's last native write: the stage-3 slot path's
    * hold-follow place (`0x75976`) is followed by the same step's `0x75A0F`
    * store, and the stage-7 literals override their arm's triple store. */
-  if (out->cam_y_written != 0) {
+  /* FU307-L7 (phase-30 T5): the stage-1 cut `0x7568A/B/C` is a raw
+   * `dword[0x15774C/50/54]` triple store (z += ±0x20 at `0x756B5`) with no
+   * `0x700F4`, so it lands the full triple — X/Z included — on the render
+   * camera. When the same step already staged a deferred place (the head
+   * `0x755C7`, or the stage-3 hold-follow), the native store follows that
+   * place, so the frame drain must carry the post-store triple: the
+   * `cam_y_written` fix-up over X/Z too (the alternative also applies to the
+   * stage-3 store path, which `cam_written` precedes in the fall-through). */
+  if (out->cam_written != 0) {
+    mr->render.camera.pos_x = s->cam_x;
+    mr->render.camera.pos_y = s->cam_y;
+    mr->render.camera.pos_z = s->cam_z;
+    if (mr->record.place_valid != 0) {
+      mr->record.place_x = s->cam_x;
+      mr->record.place_y = s->cam_y;
+      mr->record.place_z = s->cam_z;
+    }
+  } else if (out->cam_y_written != 0) {
     mr->render.camera.pos_y = s->cam_y;
     /* The deferred place models an earlier native `0x700F4` (the `0x75976`
      * hold-follow call precedes the `0x75A0F` store). The drain applies the

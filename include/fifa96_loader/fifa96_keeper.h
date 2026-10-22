@@ -224,6 +224,12 @@ typedef struct fifa96_keeper_claim {
 typedef struct fifa96_keeper_claim_out {
   uint8_t claimed;        /* the head claim ran (+0x9B set, place staged) */
   uint8_t released;       /* stage 5 cleared +0x9B */
+  uint8_t cam_written;    /* a raw `dword[0x15774C/50/54]` triple store with
+                           * no 0x700F4: the stage-1 cut `0x7568A/B/C`
+                           * (x/y/z = pos; z += ±0x20 at `0x756B5`, no place
+                           * call in between, FU307-L7). The binder applies
+                           * the full triple raw and carries the post-store
+                           * triple on a same-step deferred place. */
   uint8_t cam_y_written;  /* a raw `dword[0x157750]` store with no 0x700F4
                            * place: `0x75A0F` (0x38), `0x75EEA` (0x10),
                            * `0x75F86` (0x80). The binder applies

@@ -274,8 +274,12 @@ static void test_action_1E_runs_claim_place(void) {
 
   assert(fifa96_match_dispatch_action(&f.mr, 0x1E) == FIFA96_OK);
   assert(f.mr.record.helper_request == 1);
-  assert(f.mr.record.place_x == 116 && f.mr.record.place_y == 76);
-  assert(f.mr.record.place_z == 184);
+  /* FU307-L7: the head place (`0x755C7`, y = pos + 0x38) is followed by the
+   * same dispatch's stage-1 raw triple (`0x7568A/B/C`, y = pos, z + 0x20 for
+   * side 0), so the stashed place is the post-store triple (native order:
+   * place then store). */
+  assert(f.mr.record.place_x == 100 && f.mr.record.place_y == 20);
+  assert(f.mr.record.place_z == 200 + 0x20);
   assert(f.mr.record.place_valid == 1);
   assert(f.mr.record.has_ball == 1 && f.mr.record.controlled == 1);
 

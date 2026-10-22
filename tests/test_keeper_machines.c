@@ -87,6 +87,38 @@ static void test_claim_stage1_slot_to_stage3(void) {
   assert(out.install == 0 && out.reset == 0 && out.situation_0b == 0);
 }
 
+/* FU307-L7: the stage-1 cut `0x7568A/8B/8C` is a raw
+ * `dword[0x15774C/50/54]` triple store (x/y/z = pos, then
+ * `0x756B5 ADD [0x157754], ±0x20`) with no `0x700F4` call: the out carries
+ * the full triple as `cam_written`, the `cam_y_written` shape over X/Z. The
+ * literal-Y flag stays 0 — that one is the stage-3/7 arm only. */
+static void test_claim_stage1_triple_store(void) {
+  fifa96_keeper_claim s = claim_state();
+  fifa96_keeper_claim_out out;
+
+  /* side 0 (+0x20), no head claim: the head `0x755C7` place is skipped, so
+   * the step holds exactly the raw triple. */
+  s.stage92 = 1;
+  s.timer89 = 0;                      /* < 0x3C: the stage-1 exit */
+  s.has_ball = 1;
+  s.side = 0;
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(out.cam_written == 1);
+  assert(out.cam_y_written == 0);     /* the triple flag, not the literal-Y */
+  assert(out.place == 0);             /* raw: no 0x700F4 in the step */
+  assert(s.cam_x == 100 && s.cam_y == 20 && s.cam_z == 200 + 0x20);
+
+  /* side 1 (-0x20). */
+  s = claim_state();
+  s.stage92 = 1;
+  s.timer89 = 0;
+  s.has_ball = 1;
+  s.side = 1;
+  assert(fifa96_keeper_claim_step(&s, &out) == FIFA96_OK);
+  assert(out.cam_written == 1 && out.place == 0);
+  assert(s.cam_x == 100 && s.cam_y == 20 && s.cam_z == 200 - 0x20);
+}
+
 /* Stage 1 with no slot draws exactly one RNG word; the derived branch matches
  * the native bit (0 -> straight to stage 3 with event 0x27, 1 -> the 0x32
  * face + stage 2). Both arms are pinned: fifa96_rng_seed(0) yields first
@@ -571,6 +603,7 @@ static void test_closedown_errors(void) {
 int main(void) {
   test_claim_head_stage0_1();
   test_claim_stage1_slot_to_stage3();
+  test_claim_stage1_triple_store();
   test_claim_stage1_rng_branch();
   test_claim_stage3_restart();
   test_claim_stage3_slot_paths();
