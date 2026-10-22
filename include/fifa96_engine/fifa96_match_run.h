@@ -459,8 +459,9 @@ struct fifa96_match_run_record {
    * — the `+0x6B` lane word. The native reads it as `dword[+0x69] >> 16`
    * (`0x78032`, `0x81519`, `0x7DCCC`, ...); the port keeps it as its own staged
    * word (`lane` is the low dz word), so handlers reading the high word use
-   * this cell. Staged from the pool record and never written back (the native
-   * `+0x6B` has no writer in the ported engine path). */
+   * this cell. Staged from the pool record and never written back. The pool
+   * `+0x6B` is written by the BF20 lane block (`match_run.c:1507`); this
+   * run-record copy is staged read-only. */
   int32_t lane_x;           /* native word +0x6B (the +0x69 dword's high word) */
   int32_t distance;         /* native +0x65 0x8DCD4 out[0] word (FU-142e row 2A) */
   int8_t player_d;          /* rec[+4][+0xD] table index (FU-142b row 26) */

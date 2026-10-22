@@ -866,6 +866,11 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
     s->pos.y = place[1];
     s->pos.z = place[2];
     s->pos.z += zoff;                                              /* 0x74fc9 */
+    /* The 0x700F4 place writes the camera cells, so the stage-2 target copy
+     * (0x75259 = 0x15774C/54) reads the POST-place triple. Without this sync
+     * the stage-1 -> 2 fall-through targets the pre-step keeper shadow. */
+    s->cam_x = place[0];
+    s->cam_z = place[2];
     out->commit = 1;                                               /* 0x74fe3 CALL 0x79B6C */
     out->event = 0x26;                                             /* 0x75000 */
     s->latch_157ab2 = 1;                                           /* 0x7501f */
@@ -888,6 +893,8 @@ fifa96_err_t fifa96_keeper_closedown_step(fifa96_keeper_closedown *s,
     s->pos.x = place[0];                                           /* 0x750c0 focus -> +0x59 */
     s->pos.y = place[1];
     s->pos.z = place[2] + zoff;                                    /* 0x750dd */
+    s->cam_x = place[0];                                           /* 0x750b5 place -> 0x15774C */
+    s->cam_z = place[2];                                           /* ... and 0x157754 */
     out->commit = 1;                                               /* 0x750ed CALL 0x79B6C */
     if (s->has_slot == 0) {
       out->slot_fill = 1;                                          /* 0x750fb CALL 0x744D4 */

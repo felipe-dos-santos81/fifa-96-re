@@ -280,9 +280,10 @@ typedef struct fifa96_keeper_closedown {
    * `0x750B5`) push that local triple. The record copy after each place takes
    * the focus triple (the same triple) plus the prologue's per-side
    * {-0xA0, +0xA0} word (`0x74FBC..0x74FCE`, `0x750D3..0x750E5`). The
-   * pre-place `[0x15774C..54]` camera is therefore not a source; only the
-   * stage-2 target copy (`0x75259` = `0x15774C/54`) stages `cam_x`/`cam_z`. */
-  int32_t cam_x, cam_z;           /* 0x15774C/54 in (the stage-2 target copy) */
+   * pre-place `[0x15774C..54]` camera is therefore not a source; the
+   * stage-2 target copy (`0x75259` = `0x15774C/54`) reads the post-place
+   * cells, which the machine syncs after each stage-0/1 place. */
+  int32_t cam_x, cam_z;           /* 0x15774C/54 in/out (post-place in stage 2) */
   int32_t reset_x, reset_y, reset_z; /* 0x157A77 in/out */
   int32_t target_x, target_z;     /* +0x4D/+0x55 */
   fifa96_keeper_vec vec;          /* 0x158738 {band,dx,dz} in/out */

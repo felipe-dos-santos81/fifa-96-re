@@ -4403,6 +4403,27 @@ static void test_row1d_place_triple_cells(void) {
   assert(mr.keeper_cam_x == 0x1D0 && mr.keeper_cam_z == -0xA00);
 }
 
+/* FU310-L2/final fix wave: the stage-1 -> 2 fall-through target copy reads the
+ * POST-place camera cells (`0x75259` after the `0x750B5` place). The reviewer's
+ * repro: a staged keeper shadow `(10,30)`, stage 1, timer 0xB5 and no slot
+ * places `(0x1D0,0,-0xA00)` and must target the triple, not the shadow. */
+static void test_row1d_stage2_target_fallthrough(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.keeper_cam_x = 10;               /* the pre-step shadow (must not leak) */
+  mr.keeper_cam_z = 30;
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 1;              /* stage 1 -> stage 2 in the same step */
+  mr.record.row44 = 0;
+  mr.record.timer89 = 0xB5;           /* > 0xB4: the slotless flag4 arm */
+  mr.record.lane_x = 0;               /* stage-2 lane <= 0x40: advance */
+  mr.goal_snap_x = 0;                 /* snap_x_nonneg -> the +0x1D0 entry */
+  assert(fifa96_match_dispatch_action(&mr, 0x1D) == FIFA96_OK);
+  assert(mr.record.place_x == 0x1D0 && mr.record.place_z == -0xA00);
+  assert(mr.record.target_x == 0x1D0 && mr.record.target_z == -0xA00);
+  assert(mr.keeper_cam_x == 0x1D0 && mr.keeper_cam_z == -0xA00);
+}
+
 /* FU310-L2 frame path: an installed row 0x1D runs from a granted frame's
  * entity chain, and the place reaches the live camera through the frame drain
  * (`match_run_entity_drain` -> `fifa96_camera_init`). All four selector
@@ -6464,6 +6485,10 @@ static void test_engine_referee_offside_chain(void) {
   mr.session_gate_14c32a = 1;
   mr.situation_pending = 1;                      /* force the direct path */
   match_frame_stage_offside(&mr);
+  /* FU310-L1 mirror: the offside producer copies the whole referee point into
+   * the incident cells (`mr->incident_y = mr->referee.point[1]`). The staging
+   * zeroes Y, so give the own-nearest record a distinctive height first. */
+  mr.entities.team[0].records[1].pos_y = 0x234;
   (void)fifa96_rng_seed(&mr.rng, 0);             /* draw 1 = 0x200, tol 0 */
   metric.tol2 = 0;
   metric.side_gate = 1;
@@ -6472,7 +6497,9 @@ static void test_engine_referee_offside_chain(void) {
   assert(mr.referee.contact_kind == 3u);
   assert(mr.referee.rec_first == 1);             /* the own-nearest record */
   assert(mr.referee.point[0] == 0 && mr.referee.point[2] == 0x3C0);
-  assert(mr.incident_x == 0 && mr.incident_z == 0x3C0);
+  assert(mr.referee.point[1] == 0x234);
+  assert(mr.incident_x == 0 && mr.incident_y == 0x234 &&
+         mr.incident_z == 0x3C0);
   assert(mr.ref_machine == FIFA96_MATCH_RUN_REF_OFFSIDE);
   assert(mr.state.phase == 0x0Au);               /* offside stage 0 */
   assert(mr.ref_whistle == 0x1Eu);
@@ -8796,7 +8823,7 @@ static void test_action_1a_direction_54(void) {
 
   e = action_1a_stage(&mr, 2u);
   mr.global_157c2c = 0x54u;
-  mr.record.lane = (int32_t)0x40 << 16;     /* <= 0x40 -> movement */
+  mr.record.lane_x = 0x40;                  /* the 0x767EA gate reads lane_x */
   assert(fifa96_match_action_1A(&mr) == FIFA96_OK);
   assert(e->anim_id == 0x54u);              /* the movement anim install */
   assert(e->stage92 == 0u);                 /* the 'T' arm's reset -> installer 0 */
@@ -10088,6 +10115,7 @@ int main(void) {
   test_row1e_stage1_triple_frame();
   test_row1e_slot_hold_follow_band_frame();
   test_row1d_place_triple_cells();
+  test_row1d_stage2_target_fallthrough();
   test_row1d_place_triple_frame();
   test_row20_place_triple_frame();
   test_row12_incident_y_frame();

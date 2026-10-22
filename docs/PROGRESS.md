@@ -2741,3 +2741,40 @@ ENGINE T7 erratum's item 6 restores the exact sentence.
 **8. The heading/markup note (Minor 8).** The nested-bold heading at the
 ENGINE register's first line (`ENGINE.md:2455-2460`) is fixed in place (the
 inner bold around `8434cfab…` removed); this is the only in-place edit.
+
+---
+
+## Phase-30 final fix-wave erratum (2026-10-22)
+
+The close-out above stands as written; this append-only section records the
+final whole-branch review's P10 correction and the one behaviour fix. No
+camera producer was invented; **the phase-30 NO-GO stands**. M1 `09b726b7…`
+and M2 `8434cfab…` are byte-identical; the census holds `60/80 = 75%`;
+`make check` 111/111.
+
+**1. P10 (Important 2).** Quoted (close-out, "The four-slice verdicts"):
+"**FU313 (the harness):** GO — the default-off camera trace, the natural
+probe and the P1–P10 matrix, landed in T1." Quoted (close-out, "The Layer-1
+result"): "P10 (the trace self-check) stays manual this phase." **Corrected:**
+P10 now lands and is **asserted** in `run_natural_probe`
+(`tests/test_engine_m2.c`): one natural pass with `FIFA96_CAMERA_TRACE` set to
+a unique temp path (the caller's environment is restored), one header +
+**3 598** body lines, contiguous run-relative frame ids, and every sampled
+`pos` triple at `(0,0,0)`. The trace was always correct and default-off; the
+"P1–P10 landed" sentence was wrong only because P10 was manual. The manual
+command still shows 182 lines because each `fifa96_match_run_begin` opens the
+sink `"w"` — the file is the **last** scenario's, not the natural pass's
+3 599. The M2 stdout stays `cmp`-identical with the env set. The T7 erratum's
+"(P10 manual)" parenthetical in the FU309-L5 closure is corrected the same
+way.
+
+**2. The row-`0x1D` stage-2 shadow (Important 1, behaviour fix).** The native
+stage 2 targets the camera **after** the stage-1 `0x750B5` place
+(`0x75259` = `[0x15774C/54]`). The machine now syncs `cam_x/cam_z` from the
+place triple after the stage-0/1 places, so the stage-1 → 2 fall-through no
+longer targets the pre-step keeper shadow. Pinned at the machine
+(`test_closedown_stage1_slot_paths`) and engine
+(`test_row1d_stage2_target_fallthrough`) levels; M2 is unmoved. The new
+**FU307-L8** leg (the claim stage-3 / closedown stage-7 raw X/Z delivery gap
+on a direct stage start) and the two deferred-list corrections are recorded in
+the ENGINE final fix-wave erratum.

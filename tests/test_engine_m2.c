@@ -1694,6 +1694,18 @@
  * `set_period(1,1)` staging (m 41) is kept, so the ET-half completion schedule
  * is fixed; the live-length producer is proved by fixture (FU-238 §2.5).
  *
+ * Phase-30 provenance (T2, `24da206` + `0414360`): the `+0x6B` lane-read
+ * family changed the chase's source word, moving **5,568 hash-only lines,
+ * frames 955..6522**. Every `frame=` id and `state=` tag in that range is
+ * unchanged (the first 954 lines are byte-identical; the line count stays
+ * 6,522 and no state stratum is added or removed); only the `hash=` column
+ * moves. This is the intended chase correction, not a regression. Re-pinned
+ * with the ISO present (`./build/test_engine_m2 > tests/golden/engine/
+ * m2-frames.txt`); old M2 sha `b281a9b2…` -> new M2 sha
+ * `8434cfab105b926e78279ca3ea03c62bd3a0ae9654d2e11f0930c0cb8605cee1`
+ * (phase-30 final pin). M1 is unmoved (`09b726b7…`). No later phase-30 task
+ * moved the pin.
+ *
  * The phase-22 riders: `run_regulation_over_probe` (below) exercises the
  * word-1 regulation-over chain (staged word 1 -> the OVER screen -> the
  * front-end return) on a seeded flag-clear regulation terminal — the off-tape
@@ -2247,7 +2259,8 @@ struct m2_result {
  *    (the FU313 §5.3 P4 counters; measured 6 118 calls / `ran=0` with the ISO);
  *  - a sample hash plus a second replay pins determinism (P5);
  *  - the scripted pan witness (P6 partial) is a separate run on a COPY of
- *    `M2_KEYS` with the FU-157/FU-163 claim/kick appended after phase 2.
+ *    `M2_KEYS` with the FU-157/FU-163 claim/kick overwriting the copied
+ *    tape's tail after phase 2.
  * P6-P8 are RED by design in the natural window: the camera never leaves
  * `(0,0,0)` there, which is exactly the phase-30 NO-GO baseline — the probe
  * records it, it does not hide it. The pan witness is the only place motion
@@ -2259,7 +2272,7 @@ struct m2_stage_capture {
   uint32_t select_cx1;   /* ... stage 1 */
   uint32_t select_cx4;   /* ... stage 4 */
   /* The last sampled stage-select and its input view (FU313 P4: the counters
-   * prove every call; the view pins the measured cam=(0,0,0), lane_x=0,
+   * prove every call; the view pins the measured cam=(0,0,0), lane_x=2541,
    * follow_speed=0). Scalar fields, so the P5 replay comparison has no struct
    * padding to leak. */
   uint8_t last_ran;
@@ -2305,12 +2318,12 @@ static int m2_stage_capture_ladder(void *ctx,
 /* FU313 §5.3 P6 partial: the scripted pan witness. This is the FU-157 §3.4 /
  * FU-163 §1.2 claim/kick sequence (KICK -> phase 2 -> the long-ball request ->
  * the UP walk to the claim) on a COPY of `M2_KEYS` with the request/walk
- * appended after phase 2. It is NOT natural open play and NOT the natural
- * window: the cutscene is isolated (`act.id = 0`, the documented
- * `begin_isolated` idiom of tests/test_engine_match_frame.c) so the derived
- * kickoff keeps the formation near the zero camera; the natural run stays the
- * zero baseline. The claim walks the place 0 -> 0x90 -> 0x120 over two
- * one-shot row-04 pans; Y and Z remain 0. */
+ * overwriting the copied tape's tail after phase 2. It is NOT natural open
+ * play and NOT the natural window: the cutscene is isolated (`act.id = 0`, the
+ * documented `begin_isolated` idiom of tests/test_engine_match_frame.c) so the
+ * derived kickoff keeps the formation near the zero camera; the natural run
+ * stays the zero baseline. The claim walks the place 0 -> 0x90 -> 0x120 over
+ * two one-shot row-04 pans; Y and Z remain 0. */
 struct m2_pan {
   int match_start_step;
   int phase2_step;
@@ -3609,9 +3622,9 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
 
 /* FU313 §5.3 P6 partial: the scripted pan witness. The FU-157 §3.4 /
  * FU-163 §1.2 chain on a COPY of M2_KEYS: the copied tape keeps the real
- * kickoff prefix; the probe-local tail appends the long-ball request and the
- * UP walk AFTER the derived phase-2 entry. The armed situation-0 cutscene is
- * isolated (`act.id = 0`, the same idiom as
+ * kickoff prefix; the probe-local tail overwrites the copied tape's tail with
+ * the long-ball request and the UP walk AFTER the derived phase-2 entry. The
+ * armed situation-0 cutscene is isolated (`act.id = 0`, the same idiom as
  * tests/test_engine_match_frame.c's `begin_isolated`) so the derived kickoff
  * keeps the formation in the zero camera's near field — the natural pass above
  * is unaffected and stays the zero baseline. This is a scripted, one-shot,
@@ -3707,12 +3720,72 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
   assert(pan->z_nonzero_frames == 0u);   /* the measured witness is X-only */
   assert(pan->decrease_frames == 0u);    /* the pan is monotone */
   assert(pan->first_tracked == 9);       /* the row-04 claim binds record 9 */
+  assert(pan->granted_frames == 358u);   /* the measured 1 200-step witness */
   /* The FU-157 pan-step decay: vel_x 5 -> 3 -> 2 -> 1 (then 0). */
   assert(pan->vel_seq_len >= 4u);
   assert(pan->vel_seq[0] == 5 && pan->vel_seq[1] == 3 &&
          pan->vel_seq[2] == 2 && pan->vel_seq[3] == 1);
   fifa96_engine_destroy(e);
   fifa96_platform_destroy(plat);
+}
+
+/* FU313 P10 (phase-30 final fix wave): the trace self-check. The default-off
+ * sink is opened `"w"` by EVERY `fifa96_match_run_begin`, so a multi-scenario
+ * run leaves only the last begin's file (e.g. the reviewer's env-set
+ * `FIFA96_CAMERA_TRACE=/tmp/x ./build/test_engine_m2` keeps 182 lines, not
+ * the natural pass's 3 599). P10 therefore traces exactly ONE natural pass
+ * into a unique temp path: the file must hold one header + one body line per
+ * granted frame, the body indices must be contiguous from 0, and every sampled
+ * `pos` triple must match the sampler's zero baseline. The caller's
+ * environment is restored. */
+static void run_natural_trace_self_check(int with_iso) {
+  static const char name[] = "FIFA96_CAMERA_TRACE";
+  char path[] = "/tmp/fifa96_m2_trace_XXXXXX";
+  char saved[1024];
+  char line[512];
+  struct m2_natural traced;
+  int had_env = 0;
+  const char *prev = getenv(name);
+  if (prev != NULL) {
+    int n = snprintf(saved, sizeof saved, "%s", prev);
+    assert(n > 0 && (size_t)n < sizeof saved);
+    had_env = 1;
+  }
+  int fd = mkstemp(path);
+  assert(fd >= 0);
+  FILE *tmp = fdopen(fd, "wb");
+  assert(tmp != NULL);
+  assert(fclose(tmp) == 0);
+  assert(setenv(name, path, 1) == 0);
+  run_natural_pass(with_iso, &traced);
+  if (had_env)
+    assert(setenv(name, saved, 1) == 0);
+  else
+    assert(unsetenv(name) == 0);
+
+  FILE *f = fopen(path, "rb");
+  assert(f != NULL);
+  assert(fgets(line, sizeof line, f) != NULL);
+  assert(strncmp(line, "# fifa96-camera-trace v1", 24) == 0);
+  uint32_t body = 0;
+  uint32_t zero_pos = 0;
+  while (fgets(line, sizeof line, f) != NULL) {
+    unsigned frame = 0;
+    int px = 0, py = 0, pz = 0;
+    assert(sscanf(line, "f=%u", &frame) == 1);
+    assert(frame == body);          /* contiguous, run-relative */
+    assert(strstr(line, " ph=") != NULL);   /* the phase cell is sampled */
+    const char *pos = strstr(line, " pos=");
+    assert(pos != NULL);
+    assert(sscanf(pos, " pos=%d,%d,%d", &px, &py, &pz) == 3);
+    if (px == 0 && py == 0 && pz == 0) zero_pos++;
+    body++;
+  }
+  assert(fclose(f) == 0);
+  assert(remove(path) == 0);
+  assert(body == traced.granted_frames);
+  assert(zero_pos == traced.granted_frames);
+  assert(body == 3598u);             /* the measured natural window */
 }
 
 /* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
@@ -3731,12 +3804,15 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
  * witness is ISO-dependent (the formation seed places the claim record near the
  * zero camera) and runs behind the `with_iso` gate, like the existing drawing
  * asserts. The natural pass is replayed twice and the two sample structs must be
- * byte-identical (P5 determinism). */
+ * byte-identical (P5 determinism). P10 (final fix wave) traces one additional
+ * natural pass and checks the file against that pass's granted frames. */
 static void run_natural_probe(int with_iso, struct m2_natural *nat) {
   struct m2_natural second;
   run_natural_pass(with_iso, nat);
   run_natural_pass(with_iso, &second);
   assert(memcmp(nat, &second, sizeof *nat) == 0);
+  /* P10: one isolated natural pass under the trace sink (env restored). */
+  run_natural_trace_self_check(with_iso);
   if (with_iso) run_scripted_pan_witness(&nat->pan);
 }
 
@@ -5182,14 +5258,15 @@ int main(void) {
           (int)nat.stage.last_cam_x, (int)nat.stage.last_cam_y,
           (int)nat.stage.last_cam_z, (int)nat.stage.last_lane_x,
           (int)nat.stage.last_follow_speed);
-  /* The honest baseline label: P6/P7/P8 are RED by design in the natural
-   * window (the phase-30 NO-GO); only the scripted, Y-less pan witness moves
-   * the place, and it is P6-partial, not natural play. */
+  /* The honest baseline label: P6 is PARTIAL (the scripted pan witness); P7/P8
+   * are RED by design in the natural window (the phase-30 NO-GO); only the
+   * scripted, Y-less pan witness moves the place. */
   fprintf(stderr,
-          "test_engine_m2 natural probe: P6/P7/P8 RED by design - no camera "
-          "cell leaves (0,0,0) and no follow window/lockout exists over the "
-          "natural window (the phase-30 NO-GO baseline); the copied-tape "
-          "claim/kick witness is P6 partial and Y-less\n");
+          "test_engine_m2 natural probe: P6 partial (the scripted pan "
+          "witness); P7/P8 RED by design - no camera cell leaves (0,0,0) and "
+          "no follow window/lockout exists over the natural window (the "
+          "phase-30 NO-GO baseline); the copied-tape claim/kick witness is P6 "
+          "partial and Y-less\n");
   if (with_iso)
     fprintf(stderr,
             "test_engine_m2 pan witness: scripted claim/kick (copied tape, the "

@@ -2458,6 +2458,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   the quoted errata (appended; prior sections never rewritten). Census
   `60/80 = 75%` (`37 action + 23 phase`); M1 `09b726b7…` and the final M2
   `8434cfab…` (the T2 re-pin, below) byte-identical.**
+  *(See the T7 close-out errata and the final fix-wave erratum appended below;
+  this register text stands as written.)*
   - **The verdict — NO-GO for a live natural camera Y/follow bootstrap.**
     The Stage-2 plan (T1–T6) measured, fixed and stopped under spec §6; no
     camera producer was invented. **Layer-1 partial = the scripted pan
@@ -5743,3 +5745,100 @@ are the pre-T2 wave-doc lines):**
 `int16_t lane = (int16_t)(r->lane >> 16);     /* LEG FU311-L5a (legacy view) */`
 — the quoted comment truncated the `(legacy view)` tail. (The `:255` and
 `:1921` comments are exactly `/* LEG FU311-L5a */`.)
+
+---
+
+## Phase-30 final fix-wave erratum (2026-10-22)
+
+The register above stands as written; this append-only section records the
+final whole-branch review's three Importants and the two deferred-list
+corrections. One behaviour fix (the row-`0x1D` stage-2 camera shadow), one
+harness assertion (P10), one comment truth fix, one new leg, and two doc
+corrections. No camera producer was invented: **the phase-30 NO-GO stands**.
+M1 `09b726b7…` and M2 `8434cfab…` are byte-identical (`cmp`-verified); the
+census holds `60/80 = 75%`; `make check` 111/111.
+
+**1. The row-`0x1D` stage-2 target shadow sync (Important 1).** The native
+stage-2 body copies `[0x15774C]/[0x157754]` into the record target at
+`0x75259` — the camera **after** the stage-1 `0x750B5` `0x700F4` place of the
+`0x1104F2` triple. The port staged the place (deferred to the frame drain) but
+never synced the machine's own `cam_x/cam_z`; the binder sources them from the
+pre-step `keeper_cam_x/z`, so the stage-1 → 2 fall-through (`has_slot == 0 &&
+timer89 > 0xB4`, or the slot `0x50` edge) targeted the old camera. The
+reviewer's repro (`stage92=1, timer89=0xB5, has_slot=0, snap_x_nonneg=1,
+cam=(10,30)`) gave `place=(0x1D0,0,-0xA00)` but `target=(10,30)`; the native
+targets `(0x1D0,-0xA00)`. **Fixed:** `fifa96_keeper_closedown_step` now sets
+`s->cam_x = place[0]; s->cam_z = place[2];` after both the stage-0 (`0x74F99`)
+and stage-1 (`0x750B5`) places — the native post-place cells. Pins:
+`test_closedown_stage1_slot_paths` (machine `s.target_x/z`) and
+`test_row1d_stage2_target_fallthrough` (engine `record.target_x/z`). The M2
+golden is unmoved (the tape does not reach this fall-through).
+
+**2. P10 — the trace self-check (Important 2).** Quoted (register, harness):
+"**P10** (the trace self-check) stays manual this phase (1 header + 3 598 body
+lines; the env-set M2 stdout identical)." **Corrected:** P10 is now asserted
+in `run_natural_probe` (`tests/test_engine_m2.c`): it sets
+`FIFA96_CAMERA_TRACE` to a unique temp path for ONE natural pass, restores the
+caller's environment, then requires exactly one header + **3 598** body lines,
+contiguous run-relative `f=` ids, the phase cell on every line, and every
+sampled `pos` triple at `(0,0,0)`. The earlier "P1–P10 matrix landed" wording
+was wrong only because P10 was manual, not because the trace was wrong: the
+sink is opened `"w"` by **every** `fifa96_match_run_begin`, so
+`FIFA96_CAMERA_TRACE=/tmp/x ./build/test_engine_m2` keeps only the LAST
+scenario's file (measured 182 lines), not the natural pass's 3 599. The
+"P10 is manual" parenthetical in the explicit FU309-L5 closure above is
+corrected the same way: P10 is asserted now, not manual. The trace remains
+default-off and the M2 stdout is `cmp`-identical.
+
+**3. The false "no writer" comment (Important 3).** Quoted
+(`include/fifa96_engine/fifa96_match_run.h`, pre-fix): "Staged from the pool
+record and never written back (the native `+0x6B` has no writer in the ported
+engine path)." **Corrected:** the pool `+0x6B` has two writers — the BF20 lane
+block (`fifa96_match_run.c:1507`, `e->lane_x = lane; /* 0x7C7AF: +0x6B */`)
+and the reset (`fifa96_match_entities.c:221`,
+`e->lane_x = band.band; /* +0x6B */`). The comment now reads: the pool
+`+0x6B` is written by the BF20 lane block (`match_run.c:1507`); this
+run-record copy is staged read-only.
+
+**4. FU307-L8 — the claim stage-3 / closedown stage-7 raw X/Z store is not
+delivered on a direct stage start (new leg).** Quote (FU307 §2.2 table): "the
+0x1E stage-3 `0x38` | `disassemble_bytes 0x759B0..0x75A18`:
+`0x759EA..0x75A0F`". Fresh (the T5 read cited there):
+`0x759FD 8D7659 LEA ESI,[ESI+0x59]; 0x75A00 A5 A5 A5 MOVSD x3` copies
+`rec+0x59/5D/61` into `0x15774C/50/54` — the full X/Y/Z triple, no `0x700F4`
+— and `0x75A0F MOV [0x157750],0x38` overwrites Y. The closedown stage-7
+literals have the same shape (`0x75EA6` triple + `0x75EEA` Y=`0x10`;
+`0x75F66` triple + `0x75F86` Y=`0x80`; the `0x75F9E`/`0x75FEE` offset
+recompute). The port delivers Y through `cam_y_written`; the binder branch
+(`fifa96_match_handlers.c:546`) writes `render.camera.pos_y` only, so on a
+**direct** stage-3/7 start — no same-step `0x700F4` place whose deferred drain
+would carry the triple — the native X/Z store is undelivered and the next
+frame reads the previous X/Z. Consequence: a restored/direct stage-3/7 entry
+diverges in X/Z; every reachable path advances through the head place in one
+process, which is why no fixture moves today. Owner:
+`fifa96_keeper_claim_step` / `fifa96_keeper_closedown_step` + the
+`cam_y_written` binder branch; fix with the FU307-L7 stage-1-triple and the T5
+release+hold-follow residuals. **No behaviour change this wave.**
+
+**5. The `0x81EB4` row-`0x0C` attribution (deferred-list correction).**
+Quoted (register, deferred minors): "the `0x81EB4` row-`0x0C` attribution
+missing (the reviewer supplied `0x1106E0[0x0C] = 0x81C90`)". **Corrected:** the
+deferred item is stale — `136e795` (`chore(fu310): cite the stable 0x81EB4
+for the live contact kind`) added the attribution in
+`tests/test_engine_match_frame.c` (the stale `run.c:6542` cite became "the
+row-0x0C literal `0x81EB4`"); the body head is cited
+`fifa96_match_handlers.c:3466` (`Row 0x0C 0x81C90..0x8250B`) and the engine
+producer carries the same cite (`fifa96_match_run.c:6822`). No code or test
+change in this wave.
+
+**6. The test/comment corrections folded here.** `tests/test_engine_m2.c`:
+the sampler comment now says `lane_x=2541` (the measured view, not 0); the
+golden-provenance block records the T2 pin (`8434cfab…`, 5 568 hash-only
+lines, frames 955..6522, no state-tag change); the pan witness asserts
+`granted_frames == 358`; its comments say the probe tail **overwrites the
+copied tape's tail** (not "appends"); the stderr label is "P6 partial; P7/P8
+RED by design". `tests/test_engine_match_frame.c`:
+`test_action_1a_direction_54` stages `lane_x = 0x40` (the gate reads the high
+word); the offside chain asserts the `incident_y` producer mirror
+(`point[1]`). See `.superpowers/sdd/2026-10-21-fifa96-m2-phase30-producers/
+final-fix-report.md` for the wiring and the command output.

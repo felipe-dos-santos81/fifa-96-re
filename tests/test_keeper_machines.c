@@ -456,13 +456,22 @@ static void test_closedown_stage1_slot_paths(void) {
   fifa96_keeper_closedown s;
   fifa96_keeper_closedown_out out;
 
-  /* slotless, timer89 > 0xB4 -> flag4 -> stage 2 (native 0x75216). */
+  /* slotless, timer89 > 0xB4 -> flag4 -> stage 2 (native 0x75216). The
+   * stage-1 place precedes the same step's stage-2 target copy, so the target
+   * is the POST-place triple, not the pre-step keeper shadow (the fall-through
+   * `target=(10,30)` bug, reproduced with these values). */
   s = closedown_state();
   s.stage92 = 1;
   s.timer89 = 0xC0;
   s.row44 = 0;
+  s.cam_x = 10;
+  s.cam_z = 30;
+  s.snap_x_nonneg = 1;                /* -> the +0x1D0 x entry */
   assert(fifa96_keeper_closedown_step(&s, &out) == FIFA96_OK);
   assert(out.slot_fill == 1);
+  assert(out.place == 1 && out.place_x == 0x1D0 && out.place_z == -0xA00);
+  assert(s.target_x == 0x1D0 && s.target_z == -0xA00);  /* 0x75259 post-place */
+  assert(s.cam_x == 0x1D0 && s.cam_z == -0xA00);
   assert(s.stage92 == 4);             /* 1 -> 2 -> 3 -> 4 then the tail */
   assert(out.sink_4b0 == 0);          /* slot-only block */
   assert((out.ui & 0x100u) == 0u);    /* slot-only 0x4C31C(0) */
