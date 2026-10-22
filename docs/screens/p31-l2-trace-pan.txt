@@ -1,6 +1,6 @@
 # p31-l2 trace extract: the live visible-pan acceptance (2026-10-22).
-# source: /tmp/opencode/p31-cam-trace2.log (1 header + 12 711 body lines; FIFA96_CAMERA_TRACE, make game on :1).
-# the pan window f=1495..1560 (the event f=1513, motion f=1514..1540, stop f=1541); the phase-2 line f=568 is included.
+# source: /tmp/opencode/p31-cam-trace2.log (1 header + 14 984 body lines, f=0…14983; FIFA96_CAMERA_TRACE, make game on :1).
+# ranges: the phase-2 line f=568; the pan window f=1495..1560 (event f=1513, motion f=1514..1540, stop f=1541); the still window f=1578..1590 (keyup f=1580; the still pair ≈f 1585/≈f 1588).
 # fifa96-camera-trace v1 frame clock phase pos vel spd fspd ev cur trk pan tim ramp rate follow tick
 f=568 clock=00:00 ph=2 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=1897
 f=1495 clock=00:30 ph=2 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=4987
@@ -69,3 +69,16 @@ f=1557 clock=00:32 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 p
 f=1558 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5197
 f=1559 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5200
 f=1560 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5204
+f=1578 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5264
+f=1579 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5267
+f=1580 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5270
+f=1581 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5274
+f=1582 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5277
+f=1583 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5280
+f=1584 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5284
+f=1585 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5287
+f=1586 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5290
+f=1587 clock=00:33 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5294
+f=1588 clock=00:34 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5297
+f=1589 clock=00:34 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5300
+f=1590 clock=00:34 ph=2 pos=-144,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=2 pan=4 tim=0/12 ramp=12 rate=0,0 follow=0 tick=5304

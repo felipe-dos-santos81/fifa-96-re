@@ -1,4 +1,4 @@
-# P31-L2 — the visible-pan acceptance (the natural claim pan, live)
+# P31-L2 — the visible-pan acceptance (a natural row-04 pan that also produces the claim, live)
 
 **Task:** M2 phase-31 Stage-2 task 3 (`docs/superpowers/plans/2026-10-22-fifa96-m2-phase31-producers.md:50-57`).
 **Procedure:** `docs/ghidra/FU317_r2l6_claim_acceptance.md` §5–§6 (the trace primary, the same-clock pairs,
@@ -27,10 +27,10 @@ and is held until the pan is complete.
 | f=1541 | 00:32 | −144,0,0 | 0,0 | 2 | **4** | stop |
 
 **27 changed frames (f=1514…1540), place `0 → −0x90`, `pan 0→4`, Y=Z=0.** `follow=0` on all
-**12 711** body lines (`grep -c 'follow=1'` = 0); `|x| = 0x90` is below the OOB call site
-(`0x6C0`) and the armer (`0x730`), so the scanner/armer stays at 0. The trace is the same-run
-attribution; the extract is `p31-l2-trace-pan.txt` (f=1495…1560 + the phase-2 line, from
-`/tmp/opencode/p31-cam-trace2.log`).
+**14 984** body lines (f=0…14983; `grep -c 'follow=1'` = 0); `|x| = 0x90` is below the OOB call
+site (`0x6C0`) and the armer (`0x730`), so the scanner/armer stays at 0. The trace is the
+same-run attribution; the extract is `p31-l2-trace-pan.txt` (the phase-2 line, the pan window
+f=1495…1560, and the still window f=1578…1590, from `/tmp/opencode/p31-cam-trace2.log`).
 
 ## The captures and the AE
 
@@ -38,7 +38,7 @@ The clip: `ffmpeg -f x11grab -framerate 60 -video_size 960x720 -i :1+66,69 -t 70
 `/tmp/opencode/p31-live2.mkv`. The pan runs at match clock 00:31…00:32; the display-second
 boundary 00:31→00:32 is at clip t≈44.15 s, so 00:31 covers the motion's first 14 frames
 (f=1514…1527) and 00:32 the last 13 (f=1528…1540). The pan pair (t=43.883/44.133 s) maps to
-match **f≈1519/f≈1527**, i.e. both inside the 00:31 half of the delta run.
+match **≈f 1520 / ≈f 1527.6**, i.e. both inside the 00:31 half of the delta run.
 
 | pair | files | clock | clip time | AE (`960x591+0+0`) | bbox |
 |---|---|---|---|---|---|
@@ -51,7 +51,8 @@ match **f≈1519/f≈1527**, i.e. both inside the 00:31 half of the delta run.
   `compare -crop 960x591+0+0` form returns the same counts).
 - The still pair is the same run, 2 s after the pan: camera static at `−144`, **no key held**
   (DOWN released at tick 5270 = f=1580 ≈ clip 45.93 s; the keyup is processed on the next poll,
-  and both frames map to f≈1581/f≈1584, after it), the controlled players still animating. The
+  and the pair maps approximately to **≈f 1585 / ≈f 1588** — the second sits at the f=1588
+  00:34 boundary, while the pixel clock is 00:33 on both), the scene still animating. The
   phase-28 precedent also used different seconds for the pan and still pairs.
 - **Gate 2 (whole-scene bbox) FAILS and cannot pass in this build:** the port renders sprites on
   black (no pitch/background), so the diff is confined to the sprite band (`317×382` vs the
@@ -78,11 +79,13 @@ sprite-only caveat, never an attribution.
    and the act-1 KICK at 1790.
 2. The phase-2 landing shifted to tick 1897 (null: 1802), but the pan still landed at tick 5050
    (null: 5044) — the walk/claim timing is absolute, not phase-2-relative.
-3. The same-second pan window is **14 match frames ≈ 0.39 s** at 00:31 (13 at 00:32); the 60 fps
-   clip gives ~23 frames. The pair must be picked inside it; the HUD second boundary is the
-   hard edge.
-4. The clip's presentation freezes at clock 00:34 (later frames are static while the trace
-   continues); the still pair is the last animated second before it (00:33).
+3. The same-second pan window is **14 match frames ≈ 0.47 s** at 00:31 (13 ≈ 0.43 s at 00:32);
+   at 30 match frames per 100 ticks and a 60 fps clip that is ~28 clip frames (≈26 for the 13).
+   The pair must be picked inside it; the HUD second boundary is the hard edge.
+4. The scene (entities) stops changing at clock 00:34 while the trace continues; the HUD clock
+   keeps ticking (00:35 / 00:47 / 00:57 at clip 48 / 55 / 65 s), so later frames are not static
+   — their residual AE (688 at 48 s vs 55 s, 716 at 55 s vs 65 s) is the clock digits. The still
+   pair is the last animated 00:33 second before the scene settles.
 
 ## Invariants
 
