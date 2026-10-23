@@ -154,3 +154,43 @@ distribution, not an acceptance.
    frequency evidence; GO/NO-GO on the natural witness).
 4. **FU329** — the acceptance and golden governance (the Layer-1/2 design, the
    M2 policy, the hazards, the leg ledger), arguing from the measured numbers.
+
+## Plan erratum (wave close, 2026-10-23)
+
+The wave measured, and this spec's §2/§4 premise is **corrected by it**
+(append-only; the sections above stand as written):
+
+Quote (§2/§4): "a larger no-slot seed `s = 0x80` gives `T = 0x174` … **no
+measurement covers the larger no-slot seeds**"; "the armer reach … (fewer for
+larger no-slot seeds)". **Corrected (FU326, fresh):** the seed words are the
+stride ramp table at `0x10F680` (1280 words, fresh min **−15** / max **+15**),
+so the no-slot seed is **≤ 0x3C**, `v0 = trunc(w/3) ∈ [−5,5]`, and
+**`T ≤ 0x90`** always — the `0x174` is arithmetic-only (a hypothetical `v0=10`
+beyond the table). FU316 §4.3's "fewer pans for larger no-slot seeds"
+**inverts**: 13 x / 20 z pans is a **floor**, not a best case (FU326; FU321
+§3.5 already carried the `|w| ≤ 15` bound, so the wave reconciles the two
+frozen docs). The non-locomotion writers (FU326-L1) keep a formal escape open,
+but the measured tape's `|w| ≤ 1` on every record-frame.
+
+**The natural witness is NO-GO (FU328, measured).** The root cause is upstream
+of the seed: the native placement timer `+0x79` (`timer79`) has **no port
+producer**, so the placement counter nibble is 0 on every record-frame,
+`stride_len` clamps to 1, `attr ≤ 1`, `|velocity| ≤ 1`, `|seed| ≤ 4`,
+`v0 = 0` — the silent bind is the *consequence of the missing producer*, not
+of the no-slot arm alone (FU328-L1; a future, separately pinned golden-moving
+fidelity change, the native value measured first — FU328-L3/L8). The 32-run
+sweep found no natural witness; the labelled diagnostic (staging only the
+locomotion limit) proves the chain.
+
+**The port is at parity on the seed staging** (FU326: 22 audit cells match the
+fresh bytes) — the spec §8.5's conditional fix is **not** triggered, so
+Stage 2 carries no production change. The distribution: 5 row-04 gate passes
+measured (1 no-slot at the natural f=1517 with seed `(−4,0)`/`v0 0`/`T 0`;
+4 slot controls at seed `(−0x40,0)`/`v0 −5`/`T −0x90`, two per driven pass)
+(FU327). The frequency: 1 no-slot band entry / 3,598 granted frames
+(0.028 %), 0 pans; the long window stalls at the half-time kickoff
+(FU328-L4). The acceptance design (FU329 Branch B) is recorded; **no test
+change lands** (no assert of today's zero seed; A1–A3 stay; the future A3
+re-pin rides the `+0x79` producer). M1 `09b726b7…` / M2 `d5446144…` unchanged;
+census `60/80 = 75%`.
+

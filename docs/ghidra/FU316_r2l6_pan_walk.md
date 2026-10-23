@@ -691,3 +691,21 @@ change (60/80); no golden touched; no git.
 **Quote (§7.1):** "the pan decay — settled ... `5 -> 3 -> 2 -> 1 -> 0`." **Fresh:** verified on the FU317 trace: vel `5` f=1514..1519 (6 frames), `3` 1520..1526 (7), `2` 1527..1533 (7), `1` 1534..1540 (7); `T=0x90`; pan counter `0→4`. The `T(s)` table and the 13-pan x / 20-pan z arithmetic are internally consistent (144·12=`0x6C0`; 144·19=`0xAB0`; strict `>0x6C0`/`>0xAB0` at `0x73B7B`/`0x73B94`). The armer NO-GO stands.
 
 **Stage-2 consequence:** the walk model is GO; the armer is NO-GO; the row-5 install is conditional (row-6 diversion); L1 is a new Stage-3/4 leg; L7 re-scopes to re-arm/second pan (FU317 measured 1 pan driven, 0 undriven).
+
+## Review erratum (phase-34 wave, 2026-10-23)
+
+**Quote (§4.3 table; §7-L1; §8):** "`s = 0x80` -> `T = 0x174`" / "admits larger
+seeds and therefore longer pans" / "(fewer for larger no-slot seeds, §4.3 /
+L1)". **Corrected (FU326, fresh read of `/FIFA96.EXE`):** the seed words are
+the stride-velocity table at `0x10F680` — 1 280 words, fresh **min −15 / max
++15** — so the no-slot seed is **≤ 0x3C**, `v0 = trunc(w/3) ∈ [−5,5]`, and
+**`T ≤ 0x90`** for the locomotion writers. The `0x174` row is arithmetic-only
+(a hypothetical `v0 = 10` beyond the table); the "fewer pans for larger
+no-slot seeds" reading **inverts** to a floor (13 x / 20 z — FU321 §3.5
+already carried the `|w| ≤ 15` bound, so this reconciles the two frozen docs).
+The 87/51 **non-locomotion** `+0x73/+0x75` writers are the only formal escape
+(FU326-L1, open); the measured tape's `|w| ≤ 1` on every record-frame (FU327),
+and the natural no-slot witness is **NO-GO** because the native placement
+timer `+0x79` has no port producer (FU328-L1 — the silent bind's root cause).
+The §4.3 `T(s)` arithmetic, the decay `5→3→2→1→0` and the 13/20-pan reach
+stand unchanged.

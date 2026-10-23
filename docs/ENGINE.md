@@ -7231,3 +7231,25 @@ artifact item below); every other prior section stands as written.
   segment block is `:4557-4659`); `run_natural_offset_pass` is now `:4758`
   (was `:4720`), its re-pin assert set `:4861-5041` (was `:4884-4992`; the
   segment block is `:4946-5041`).
+
+## M2 phase-34 wave erratum (the phase-33 register's seg[1] cells)
+
+Quote (this register's driven-witness bullets, the phase-33 tail): "**the new
+code-3 walk camera event** the frozen world did not have — gate **f=1552**
+(code 3, lane 128/−128, bound 128, `face7d −0x100`, `has_slot 0`, pos
+(−16,0,0), trk 2), event **f=1553** (code 3, trk 1)"; and the second segment's
+"(code 3, …)". **Corrected (FU327, measured on the phase-34 wave):** the driven
+**seg[1] is a row-04 event of entity 1** — the firing record's action code is
+**4**, `has_slot 1`, seed `(−0x40,0)`, the same `−0x90` pan class. The `code 3`
+is **entity 2's pool cell** read through the harness's pool snapshot
+(`event.code`), not the firing record's action code; the snapshot attribution
+is the FU327 §4.3 caveat (the pool's `event.code` belongs to the record the
+pool last wrote, not to the event's record). The `active 2` / `dir (−1,0)`
+cells are likewise `active 1` / `dir (0,0)` (the `2` is `row43`, the dir is
+entity 2's). **What stands:** the phase-33 Layer-2 verdict (the driven
+two-segment pan reproduced live), the two-segment shape, the per-segment
+`−0x90` pans, the `(−0x120,0,0)` total, the 54 changed frames, and the
+`5,3,2,1,0` per-segment decays. The cell corrections propagate from FU323's
+phase-34 erratum (`docs/ghidra/FU323_r2l7_m2_probe.md`); the phase-34 wave
+measured 5 row-04 gate passes total (1 no-slot, 4 slot controls — FU327 §3).
+The phase-33 register's verdict and golden accounting are unaffected.

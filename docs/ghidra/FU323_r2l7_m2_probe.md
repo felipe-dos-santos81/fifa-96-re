@@ -200,3 +200,9 @@ both segments** (`tests/test_engine_m2.c:4587-4590`, `:4644-4647` claim;
 `:4970-4973`, `:4994-4997`, `:5027-5030` offset). The frozen tables' other
 cells stand unchanged; only the sequence cells and their reading are
 corrected.
+
+## Review erratum (wave review, 2026-10-23)
+
+**1. The band-frame tuple's `active`/`dir` cells (§4).** Quote: "| the gate tuple at the band frame | — | `code 4`, `active 2`, `anim 0`, `timer81 0`, `has_slot 0`, `dir (−1,0)`, `pos (64,0)`, ...". **Corrected:** FU323's own artifact `/tmp/opencode/fu323/anim_patched.txt`, step 5062, team 1 record 1 (entity 12) is `5062 1 1 4 1 0 2 -256 6 1 64 0 0 0 64 -64 0 66 0 0 0 1 -1` — `active 1`, `anim 0`, `row43 2`, `has_slot 0`, `dir` not dumped; the a12 pool `dir` is `(0,0)` on all 3 598 frames (FU327 §5.1). The `2` in the table is the `row43`/`+0x43` cell; `dir (−1,0)` is entity 2's slot dir. The bind identity (`f=1517`, `trk=12`, zero seed, no motion) is exact and stands.
+
+**2. The second segment's attribution (§5.1).** Quote: "its passing dispatch is no longer the row-04 code-4 gate but the **code-3 chase walk's own camera event**". **Corrected:** the second segment's event is a **row-04 dispatch of entity 1** (`ecode 0x1D`, `code 4`, `has_slot 1`, seed `−0x40`, `trk 1`); the harness's `event.code 3` is **entity 2's** pool cell (`m2_claim_snapshot` always reads `M2_CLAIM_ENTITY = 2`, `tests/test_engine_m2.c:1912`, `:4219-4257`). The frozen pins stand as pool-cell pins; the attribution changes (FU327 §5.1/L2/L3). The first claim's own passing dispatch remains uncaptured (the earlier review erratum 1 stands).
