@@ -175,6 +175,147 @@ static void test_step_direct_face(void) {
   assert(m.facing == 0x40);
 }
 
+/* FU324 §5/§6 + FU319 §4 (phase-33 task 2): the move_attr metric contract
+ * pin. The mover stages `s.move_attr` as the native `dword[rec+0x63]` —
+ * high word = the block-A distance (`FUN_0008DC68`, whose verbatim C port
+ * is `fifa96_entity_distance`) over the record's low-word target-minus-pos,
+ * low word unwritten (0; FU324-L2) — and the locomotion consumers extract
+ * `>>16` (the turn's >0x60 branch, fifa96_action_handlers.c:221) and `>>19`
+ * (the stride attr = dist>>3 under the stride_len clamp,
+ * fifa96_action_handlers.c:260-262).
+ *
+ * GREEN at commit (the discipline ruling): the port already satisfies the
+ * contract numerically — the native 0x8DC68/0x8DCD4 metric cores are the
+ * SAME computation (4 000 800 sampled pairs, 0 diffs, FU324 §3.3) and the
+ * metric-only patch moved 0 frames alone and 0 frames composed on the latch
+ * build (FU324 §5). The pin's RED story is FU324's RECORDED MUTANT RUN
+ * (`max + min/3`, a genuine metric change): it fires the stride arm 37 219
+ * times in the M2 window yet moves 0 frames, because
+ * `attr = min(dist>>3, stride_len <= 3)` masks every metric difference at
+ * the current `+0x7B` nibble staging; the sensitivity returns only with the
+ * nibble staging (FU324-L5) and the mutant protocol must re-run then. No
+ * natural RED tuple exists (no real tuple separates the two metric values),
+ * so none is manufactured here. */
+/* The mover's staging expression (fifa96_match_run.c, the mover block):
+ * the high word is the metric's 16-bit result, the low word 0. */
+static int32_t staged_shape(int16_t dx, int16_t dz) {
+  return (int32_t)((uint32_t)(uint16_t)fifa96_entity_distance(dx, dz) << 16);
+}
+
+static void assert_move_attr_turn(int16_t dx, int16_t dz, int facing_focus) {
+  int32_t d = fifa96_entity_distance(dx, dz);
+  int32_t word = (int16_t)(uint16_t)d; /* the native AX store at word +0x65 */
+  int32_t staged = staged_shape(dx, dz);
+  fifa96_action_locomotion ref, real;
+  int k;
+  /* The staged dword shape: high word = the metric's 16-bit result (the
+   * native block-A AX store), low word 0 (the native +0x63..+0x64 has no
+   * writer and no word-width reader, FU324-L2). For every tuple with both
+   * |dx|,|dz| < 0x8000 the word IS the metric value; the -0x8000 edges
+   * truncate the rare negative overflow exactly as the native's AX store
+   * does (e.g. (-0x8000,-0x8000) -> word +0x5000). */
+  assert((staged >> 16) == word);
+  assert((staged >> 19) == (word >> 3)); /* the native SAR 0x13 stride attr */
+  ref = loco();
+  ref.target_x = dx;
+  ref.target_z = dz;
+  ref.direct_face = 2;
+  ref.face_x = -1;
+  ref.delta = 0;
+  ref.move_attr = 0x7FFF0000; /* forced: word 0x7FFF > 0x60 -> the target arm */
+  real = ref;
+  real.move_attr = staged; /* staged exactly as the mover stages it */
+  for (k = 0; k < 12; k++) {
+    assert(fifa96_action_locomotion_step(&ref, heading, stride_table) == FIFA96_OK);
+    assert(fifa96_action_locomotion_step(&real, heading, stride_table) == FIFA96_OK);
+  }
+  /* The turn's branch decision must track the metric word at the tuple:
+   * the staged-attr facing converges to the target arm's facing iff
+   * word > 0x60, else to the forced-focus arm's (the two forced refs
+   * bracket the decision; body_timer 0/delta 0 keeps the stride arm
+   * unfired in all three runs). */
+  assert(real.facing == (word > 0x60 ? ref.facing : facing_focus));
+}
+
+static void test_step_move_attr_metric_contract(void) {
+  /* The octagon breakpoint set of FU324 §6 item 1, sign-crossed pairs
+   * (both coordinates range over the word set; -0x8000 is +0x8000's word).
+   * delta = 0 / body_timer = 0: the stride arm never fires in the turn
+   * runs. Negative metric words (the -0x8000 edges) are shape-asserted and
+   * turn-branched but never drive a stride index here. */
+  static const int16_t v[] = {
+      0,       1,       -1,      7,       -7,      8,       -8,      9,
+      -9,      0x1FFE,  -0x1FFE, 0x1FFF,  -0x1FFF, 0x2000,  -0x2000, 0x2001,
+      -0x2001, 0x2002,  -0x2002, 0x3FFE,  -0x3FFE, 0x3FFF,  -0x3FFF, 0x4000,
+      -0x4000, 0x7FFE,  -0x7FFE, 0x7FFF,  -0x7FFF, -0x8000};
+  /* The stride-consumer tuples: the 8-boundary ladder (attr = dist>>3
+   * unclamped at stride_len 15) and the clamp family (>= 0x80 pins attr at
+   * 15 — the boundary 15->16 masked, FU324 §5's clamp argument), the
+   * metric's fold diagonal, and FU319's recorded row (-78,+51): 96 under
+   * BOTH metric cores, the FU324-L1 erratum's own measurement. */
+  static const int16_t st[][2] = {
+      {0, 0},    {7, 0},    {8, 0},    {9, 0},    {0x3F, 0}, {0x40, 0},
+      {0x41, 0}, {0x47, 0}, {0x48, 0}, {0x5F, 0}, {0x60, 0}, {0x61, 0},
+      {0x6F, 0}, {0x70, 0}, {0x77, 0}, {0x78, 0}, {0x79, 0}, {0x7F, 0},
+      {0x80, 0}, {0x81, 0}, {0xFF, 0}, {0x100, 0}, {0x7FFF, 0},
+      {0x40, 0x40}, {-78, 51}};
+  const int n = (int)(sizeof(v) / sizeof(v[0]));
+  int i, j, k;
+  int facing_focus;
+  {
+    fifa96_action_locomotion m = loco();
+    m.direct_face = 2;
+    m.face_x = -1;
+    m.delta = 0;
+    m.move_attr = 0; /* forced: word 0 <= 0x60 -> the focus arm */
+    for (k = 0; k < 12; k++)
+      assert(fifa96_action_locomotion_step(&m, heading, stride_table) == FIFA96_OK);
+    facing_focus = m.facing;
+  }
+  for (i = 0; i < n; i++)
+    for (j = 0; j < n; j++)
+      assert_move_attr_turn(v[i], v[j], facing_focus);
+  /* FU319 §7-L3's two recorded rows, re-measured 96/96 by FU324 §5: the
+   * boundary pair the (voided) straddle prediction named. */
+  assert_move_attr_turn(-78, 51, facing_focus);
+  assert_move_attr_turn(-78, 52, facing_focus);
+  /* The >>19 contract through the real stride consumer: one fired stride
+   * row (body_timer 3 > threshold 2, delta 0 -> no position advance), the
+   * table filled so index (desired & 0x3F0) | attr reads 2*attr -> the
+   * velocity ramp lands vel_x = vel_z = attr from rest (dv = 2a > 1). The
+   * stride tuples keep attr >= 0: negative metric words would drive the
+   * index negative — the native reads its table at the same wild index;
+   * unclassified here (FU324 §6's clamp scope). */
+  (void)loco();
+  for (i = 0; i < 0x500; i++) stride_table[i] = (int16_t)(2 * (i & 0xF));
+  for (i = 0; i < (int)(sizeof(st) / sizeof(st[0])); i++) {
+    int16_t dx = st[i][0], dz = st[i][1];
+    int32_t d = fifa96_entity_distance(dx, dz);
+    int32_t word = (int16_t)(uint16_t)d;
+    int32_t attr = word >> 3;
+    int32_t expected = attr > 15 ? 15 : attr;
+    int32_t angle = 0;
+    fifa96_action_locomotion m;
+    assert((staged_shape(dx, dz) >> 19) == (word >> 3));
+    assert(expected >= 0);
+    memset(&m, 0, sizeof m);
+    m.target_x = dx;
+    m.target_z = dz;
+    if (dx != 0 || dz != 0)
+      assert(fifa96_action_kick_angle(dx, dz, &angle) == FIFA96_OK);
+    m.facing = (int16_t)angle; /* preset to desired -> stride_len = 15 */
+    m.direct_face = 2;
+    m.stride = 0x0F;
+    m.body_timer = 3;
+    m.delta = 0;
+    m.move_attr = staged_shape(dx, dz);
+    assert(fifa96_action_locomotion_step(&m, heading, stride_table) == FIFA96_OK);
+    /* attr = min(move_attr >> 19, stride_len): the unclamped >>19 equals
+     * dist>>3 exactly where the clamp allows it to be seen. */
+    assert(m.vel_x == expected && m.vel_z == expected);
+  }
+}
+
 static void test_step_stride_ramp(void) {
   fifa96_action_locomotion m = loco();
   m.target_x = 0x100;
@@ -408,6 +549,7 @@ int main(void) {
   test_step_turn_clamp();
   test_step_angle_wrap();
   test_step_direct_face();
+  test_step_move_attr_metric_contract();
   test_step_stride_ramp();
   test_step_speed_gate();
   test_step_body_timer_boundary();

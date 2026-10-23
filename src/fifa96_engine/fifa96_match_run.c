@@ -10,6 +10,7 @@
 #include "fifa96_loader/fifa96_animation.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_bigf.h"
+#include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_outfield.h"
 #include "fifa96_loader/fifa96_projection.h"
 #include "fifa96_loader/fifa96_record.h"
@@ -506,10 +507,6 @@ int fifa96_match_run_set_input_options(
 static void match_run_record_mover(struct fifa96_match_run *mr) {
   struct fifa96_match_run_record *r = &mr->record;
   fifa96_action_locomotion s;
-  fifa96_arm_vec from = { r->pos_x, r->pos_y, r->pos_z };
-  fifa96_arm_vec to = { r->target_x, r->target_y, r->target_z };
-  int32_t distance = 0;
-  int32_t lane_unused = 0;
   memset(&s, 0, sizeof s);
   s.pos_x = r->pos_x;
   s.pos_z = r->pos_z;
@@ -527,8 +524,21 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
   s.direct_face = r->row43;
   s.face_x = (int16_t)mr->render.camera.pos_x;
   s.face_z = (int16_t)mr->render.camera.pos_z;
-  (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane_unused);
-  s.move_attr = (int32_t)((uint32_t)(uint16_t)distance << 16);
+  /* FU324 §3.2/§6 (phase-33 task 2): the staged high word is the native
+   * block-A distance — FUN_0008DC68 over the record's low-word
+   * target-minus-pos, stored at word +0x65 by the mover's own block A
+   * (fresh bytes `0x8E273 CALL 0x0008dc68`, `0x8E278 MOV word[EBX+0x65],AX`);
+   * `fifa96_entity_distance` is that metric's verbatim C port. The
+   * 0x8DCD4-shaped `fifa96_arm_dist_stage` call previously staged here
+   * computes the SAME value (FU324 §3.3: 4 000 800 sampled pairs, 0 diffs;
+   * the mover's lane output was already unused), so the VALUE does not
+   * change — this is the staging-SOURCE alignment, a measured no-op
+   * (FU324 §5: 0 frames moved alone and 0 composed on the latch build).
+   * The low half of the staged dword stays 0 — the native +0x63..+0x64 has
+   * no writer and no word-width reader (FU324 §3.1, leg L2). */
+  s.move_attr = (int32_t)((uint32_t)(uint16_t)fifa96_entity_distance(
+      (int16_t)((uint16_t)r->target_x - (uint16_t)r->pos_x),
+      (int16_t)((uint16_t)r->target_z - (uint16_t)r->pos_z)) << 16);
   s.heading = r->type;
   s.has_slot = r->has_slot;
   s.body_timer = r->body_timer9c;
