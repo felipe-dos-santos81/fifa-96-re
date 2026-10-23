@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **Read-only wave:** no repo source/test/golden change; the only repo writes are the four draft docs. Patched builds and probes live under `/tmp/opencode/`; the ISO is read-only. **No git commands; no commits** — the controller promotes the drafts.
+- **Read-only wave (tasks 1–4):** no repo source/test/golden change; the only repo writes are the four draft docs. Patched builds and probes live under `/tmp/opencode/`; the ISO is read-only. **Tasks 1–4 run no git commands and make no commits** — task 5 is the controller's promotion task: it commits and pushes one doc per commit.
 - **Ghidra (FU324, and any slice that consults it):** the program argument is exactly `/FIFA96.EXE` (case-sensitive); LE-image globals sit at `+0x100000`; scripts are disabled; standard MCP tools only; caller counts need a fresh `get_xrefs_to` in the same session; verify CALL bytes before trusting a target; the alias traps (`dword[addr]>>16` = the word at `addr+2`, `>>24` = the byte at `addr+3`; sign/width errors; gate-index misreads).
 - **Carried vs fresh:** the producer facts are **carried** from FU318/FU319 (modeled on FU321 §0: name the frozen doc/section; do not re-derive what is frozen). A slice re-opens a native cell only to answer a question the frozen docs do not settle.
 - **Evidence rule:** every address/byte claim cites a fresh disassembly/raw-byte read or a reconciled `file:line`; anything not statically provable becomes a **numbered leg** with its native owner; never asserted, never faked. Prior doc sections are never rewritten.

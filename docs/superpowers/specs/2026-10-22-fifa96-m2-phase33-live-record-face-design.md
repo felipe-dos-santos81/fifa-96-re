@@ -22,10 +22,13 @@ phase-30 NO-GO baseline inverts by design (FU321-L11).
   writers, two readers, no other site), §5 (the minimal faithful staging),
   §8 (GO on staging the live `+0x43` and the focus point).
 - The phase-30 natural-pass baseline asserts stand at
-  `tests/test_engine_m2.c:3701-3707` with the site's own note
-  (`:3720`: "the bootstrap producer will flip it and the P7/P8
-  window/lockout assertions land with it"); P6–P8 are RED by design today
-  (`:2293`, the honest-baseline label `:6049-6054`).
+  `tests/test_engine_m2.c:3722-3724` (`camera_left_zero == 0`,
+  `camera_zero_frames == granted_frames`, `first_left_zero_step == 0`) with the
+  site's own note block `:3717-3721` ("the bootstrap producer will flip it and
+  the P7/P8 window/lockout assertions land with it"); P6–P8 are RED by design
+  today (`:2293`, the honest-baseline label `:6049-6054`). (The frozen FU321 §5
+  cites this assert set as `:3701-3707` — a pre-drift range; the wave
+  re-measured the file, and the fresh range above is authoritative.)
 - Pins: M1 `09b726b7…` immutable; M2 `8434cfab…` is the re-pin baseline under
   the faithful-move policy; census `60/80 = 75%`.
 
@@ -38,7 +41,8 @@ phase-30 NO-GO baseline inverts by design (FU321-L11).
   (`fifa96_match_action_22` stage 0, the `0x8540C` site).
 - The mover staging: `s.direct_face = r->row43` and
   `s.face_x/face_z = (int16_t)camera.pos_x/pos_z` (the default focus pointer
-  `[0x157A73] → 0x15774C/0x157754`), in `match_run_record_mover`.
+  `[0x157A73] → 0x15774C/0x157754` — FU319 §3.1, verified fresh there), in
+  `match_run_record_mover`.
 - The **move_attr metric sub-change** (`0x8DCD4 → 0x8DC68` for the turn's
   `+0x63 >> 16` threshold and the `>> 19` stride attr) — in scope but **only as
   a separately pinned sub-change** with its own RED/GREEN and measured blast
@@ -109,9 +113,10 @@ Two stages, the phase-32 shape:
   (`09b726b7…`), and the first differing frame **at or after** the first
   face-driven event. Any diff starting earlier or unexplainable by a
   lane/arm(gate/sub-change) is a stop-and-report.
-- **Baseline inversion (FU321-L11):** the `:3701-3707` asserts are inverted and
+- **Baseline inversion (FU321-L11):** the `:3722-3724` asserts are inverted and
   the replacement P7/P8 window/lockout assertions are pinned in the **same**
-  commit; deleting or weakening without a replacement is NO-GO.
+  commit; deleting or weakening without a replacement is NO-GO. (The frozen
+  FU321 §5 cites the assert range as `:3701-3707` — pre-drift.)
 - **Census/README:** `60/80 = 75%` must survive (no new federated action-row
   wiring); the README title is recomputed only if a re-count proves otherwise.
   The register/errata discipline follows `AGENTS.md` (append-only, quoted
@@ -142,7 +147,7 @@ rule whether it re-pins, and write the reason — do not silently upgrade it.
    pointers are FU319-L1, untouched.
 5. The `direct_face`-from-`anim_id` derivation is **NO-GO** (FU319 §5 rejected
    shortcut; the `+0x28 = 0` reset and the row-0x22 clear would re-invent `2`).
-6. The inversion commit is atomic: the `:3701-3707` inversion, P7/P8, the
+6. The inversion commit is atomic: the `:3722-3724` inversion, P7/P8, the
    golden re-pin, and the node's provenance note in the same commit.
 7. The phase-32 driven witnesses re-pin only with measured evidence (§7).
 
@@ -167,24 +172,55 @@ The wave measured, and this spec's §1/§6/§8.1 premise is **corrected by it**
 
 Quote (§1, and §6 Layer-1): "after this phase the undriven natural tape pans
 (the band record arrives facing its focus point, the row-04 angle gate passes
-natively, arm B arms)". **Corrected (FU323, measured):** the mechanism is met —
-the band record arrives facing the focus point and the gate passes — but arm B
-is a **silent bind**: the undriven band record holds no control slot, the seed
-switch takes the **no-slot arm** (FU316-L1's open leg), `v0 = 0`, and **no
-granted frame ever has `pos ≠ (0,0,0)`**; the camera cells never differ from
-the unpatched build. The undriven tape's honest post-producer baseline is
-"faces live from step 9, a code-5 bind at granted f=1517, camera still zero"
-(FU322's erratum re-shapes the inverted asserts accordingly; A4/A5's pan-window
-asserts relocate to the **driven** claim/offset passes, which FU323 measured
-re-pinning — the offset pass `G3` improves to `lane_at_pass 129` with the
-plateau caveat gone, the claim pass moves to the no-slot arm's `(−0x120,0,0)`
-shape). The pan vehicle is therefore the **driven witnesses**, and the
-natural-pan future belongs to **FU316-L1** (the no-slot seed/travel leg).
+natively, arm B arms)" — and §6 Layer-1's "the camera leaving `(0,0,0)` from
+the first face-driven event onward". **Corrected (FU323, measured):** the
+mechanism is met — the band record arrives facing the focus point and the gate
+passes — but arm B is a **silent bind**: the undriven band record holds no
+control slot, the seed switch takes the **no-slot arm** (FU316-L1's open leg),
+`v0 = 0`, and **camera `pos` never moves** (`(0,0,0)` through f=3597). What
+DOES differ from the unpatched build is the camera **event state**: the bind
+engages it from f=1517 (`tracked`/`timer`/`ramp` leave zero among the
+sampler's 16 cells), so `camera_zero_frames` 1517 / `camera_left_zero` 2081 —
+the old `:3722` assert's measured RED, which is the inversion's own evidence
+(FU323 §2/§4). The undriven tape's honest post-producer baseline is: faces
+live from step 9, the silent code-5 bind at granted f=1517, camera pos still
+zero. FU322's erratum 1 re-shapes the inverted asserts (A1–A3
+bind-anchored); **A4/A5's pan-window/lockout asserts are void undriven**
+(`segments == 0` measured) and relocate to the **driven** claim/offset passes
+(FU322's erratum 2), which FU323 measured re-pinning with REAL pans — both
+passes now run **two chained segments**: the row-04 `−0x90` one-shot (the
+claim pass: bind f=1483, `trk=2` window f=1483..1552, stop f=1511) plus a
+**new code-3 walk camera event** the frozen world did not have (gate f=1552,
+event f=1553, `trk=1`, stop f=1581); totals 54 changed / 2 116 off-zero
+frames, stop place `(−0x120,0,0)`; the offset pass's `G3` improves to
+`lane_at_pass 129` (`cam_dx −128`, `cam_dz −4`, Δ=0), 2 segments, stop
+`(−0x120,0,0)`. The pan vehicle is therefore the **driven witnesses**, and the
+natural-pan future belongs to **FU316-L1** (the no-slot seed/travel leg). The
+segment-aware authority for these numbers is **FU322's erratum 2** — FU323 §5's
+loose tables mix the claim's first dispatch with its LAST segment's cells
+(FU323's own erratum) and must not be cited directly.
 
 Also measured: the first **golden** diff is frame **852** (the sit-1 half-time
 kickoff draw divergence, 5 671 hash-only lines, `state=` suffixes unchanged,
 M1 byte-identical on the patched engine) — §6's golden governance anchor is the
 measured 9/52/852 chain, not a pre-pan camera frame (FU325's erratum re-words
-the tripwires). And FU319-L3's predicted metric magnitude is **falsified**
-(FU324: 0 moved frames; the metric sub-change is a measured no-op with a
-contract pin).
+the tripwires). Because 852 sits **inside** the v21 2 522-line prefix,
+**Outcome B** applies: the additivity gate is replaced by the **stratum-set
+gate**, which lands in the same commit; FU323 measured the stratum set
+unchanged (`state=1` ×951, `state=19` ×2 620, `state=2` ×2 100 —
+951+2620+2100 = 5 671) (FU322's erratum 5). And FU319-L3's predicted metric
+magnitude is **falsified** (FU324: the two metric cores are the same
+computation — 4 000 800 pairs, 0 diffs; 0 moved frames alone and composed; the
+metric sub-change is a contract pin **GREEN at commit** with the recorded
+mutant run as its sensitivity guard; the `>>19` pacing-slack rationale
+re-bases on measured variance — FU322's erratum 3).
+
+**The §5 sketch is re-shaped by the same measurement:** the P1/P2 split
+(implementation commit, then acceptance commit) cannot keep the suite green —
+with the engine live, the standing `:3722-3724` asserts fire (the measured RED
+above) and the golden moves in the same build. FU322-L11's rule therefore
+binds **one atomic producer commit**: the implementation + the unit pins + the
+re-shaped inversion (A1–A3, plus the relocated A4/A5) + the segment-aware
+witness re-pins + the golden re-pin (with the stratum-set gate) + the
+provenance note. The metric sub-change stays its own commit; the close-out
+follows.
