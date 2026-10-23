@@ -3108,6 +3108,42 @@ static void test_record_anim_install_row44(void) {
   drop_fixture(f);
 }
 
+/* FU319 §5 (phase-33) + the final-review correction: the dispatch-path
+ * propagation of the live +0x43 latch. An action body installs its row on the
+ * POOL entity through `fifa96_match_run_record_anim_install` (writer 1 writes
+ * `e->row43 = row.flags & 2`), but the staging record's latch was copied at
+ * the frame head. The post-dispatch re-stage (`r->row43 = e->row43`, beside
+ * the velocity decomposition) must refresh the staging record before the
+ * mover and the end-of-dispatch write-back (`e->row43 = r->row43`); otherwise
+ * the write-back reverts the install to the stale staged byte.
+ *
+ * Row 0x0E is the clean probe: stage 1 installs anim row 0x12 (flags 0x00 ->
+ * `row43 = 0`) through a real granted frame, with the latch armed to 2
+ * beforehand (row 0x26 flags 0x07 & 2). The measured tape has no flag-0
+ * install surviving a frame, so this is a unit-only path (the golden is
+ * byte-identical under the propagation — see the M2 provenance note). */
+static void test_dispatch_install_row43_propagates(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;
+  mr.session_gate_14c32a = 0;
+  e = &mr.entities.team[0].records[0];
+  /* Arm the latch: row 0x26 flags 0x07 & 2 = 2. */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
+  assert(e->row43 == 2u);
+  /* Row 0x0E stage 1 (staged directly) waits on `timer89 >= 0x0C` and then
+   * installs anim row 0x12, whose flags are 0x00: the in-dispatch clear. */
+  e->code = 0x0E;
+  e->stage92 = 1;
+  e->timer89 = 0x3C;
+  one_granted_frame(&mr);
+  assert(e->anim_id == 0x12u);   /* the in-dispatch install landed */
+  assert(e->row43 == 0u);        /* not the stale pre-dispatch 2 */
+  assert(mr.record.row43 == 0u); /* the staging view agrees post-frame */
+}
+
 /* FU-159 §3.1/§5.2 (T3): the FUN_0008E008 frame-wrap successor over the pool.
  * First-hand rows: 0x5E {last 5, flags 0x00, next 0x0F}, 0x0F {last 4, flags
  * 0x00, next 0x00}, 0x00 {last 0, flags 0x07 (terminal), next 0x00}, 0x0E
@@ -10384,6 +10420,7 @@ int main(void) {
   test_record_jump_arm_aux_3a_base_literal();
   test_jump_arm_f3_freeze_and_f0_landing();
   test_record_anim_install_row44();
+  test_dispatch_install_row43_propagates();
   test_record_row_successor_chain();
   test_mover_row43_live_turns_toward_focus();
   test_record_jump_case_0f_snap_frame3();

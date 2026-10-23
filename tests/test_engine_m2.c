@@ -1730,8 +1730,9 @@
  * regression: the port's staged `direct_face = 0` suppressed a live,
  * universal native behaviour (every record's latch is 2 after the kickoff
  * placement). M2 sha old `8434cfab105b926e78279ca3ea03c62bd3a0ae9654d2e11f
- * 0930c0cb8605cee1` (295,087 B, 6,522 lines) -> new sha below (same byte
- * and line counts — hash-only). M1 is byte-identical (`09b726b7…`). The
+ * 0930c0cb8605cee1` (295,087 B, 6,522 lines) -> new sha
+ * `d5446144f08c22c5a4d986e1d07529068f715ff8b8e2cd86411ee493ea804ad8` (same
+ * byte and line counts — hash-only). M1 is byte-identical (`09b726b7…`). The
  * moved strata are the pre-existing `state=1` ×951, `state=19` ×2,620,
  * `state=2` ×2,100 (5,671 total; FU322's erratum 5) — no stratum touched,
  * added or removed; the anchors crossed: m 41 / the m-42 band / m 58 / the
@@ -1909,6 +1910,9 @@
  * 0x100 at the measured gate. At the measured zero-delta point both fold to
  * the same 0x80 angle delta (the FU317 erratum's P13 label). */
 #define M2_CLAIM_ENTITY 2
+/* Dead since the phase-33 re-pin (final review): no reference remains in the
+ * passes; the controlled actor is asserted from the gate snapshot's measured
+ * `controlled` cell. Kept for the historical record only. */
 #define M2_CLAIM_CONTROLLED 1
 /* FU-142b (phase-12 T1) — retired phase-33: the frozen staged-face constant
  * (0x100) the claim gate used to split; the handler now stages the pool face
@@ -2338,8 +2342,9 @@ struct m2_result {
  *
  * FU313 (phase-30 T1) extends the probe into the measurement harness:
  *  - the natural window runs to `M2_NATURAL_WINDOW_STEPS` and samples every
- *    granted frame (`pace.pending` delta), pinning 3 598 granted frames and the
- *    all-zero camera baseline over 101 s of match clock;
+ *    granted frame (`pace.pending` delta), pinning 3 598 granted frames and
+ *    the camera-zero/left-zero split (measured 1 517 / 2 081) over 101 s of
+ *    match clock;
  *  - the `keeper_cpu.ladder` observation seam counts the FU282 gate firings and
  *    applies the public `fifa96_keeper_cpu_stage_select` to the same record view
  *    (the FU313 §5.3 P4 counters; measured 6 118 calls / `ran=0` with the ISO);
@@ -2485,6 +2490,12 @@ struct m2_claim_segment {
   uint32_t changed_frames;
   int32_t stop_x, stop_y, stop_z;
   struct m2_claim_gate gate, event;
+  /* The per-segment decay signature (final review): the pass-level
+   * `speed_seq` collapses to {first-motion speed, stop speed} because its
+   * `stop_f` is still the previous segment's at the next segment's start.
+   * Recording here keeps each segment's real distinct-speed run. */
+  int16_t speed_seq[8];
+  uint32_t speed_seq_len;
 };
 
 /* FU317 §4.3/§4.4 (phase-31 T1): the natural claim-pan witness. The pan is
@@ -2589,7 +2600,9 @@ struct m2_natural {
   uint32_t granted_frames;       /* pace.pending at the window end (measured 3 598) */
   uint32_t sampled_frames;       /* granted frames observed by the sampler */
   uint32_t camera_zero_frames;   /* granted frames whose 16 trace cells were all zero */
-  uint32_t camera_left_zero;     /* granted frames with pos != (0,0,0) (P6 baseline: 0) */
+  uint32_t camera_left_zero;     /* granted frames with pos != (0,0,0)
+                                  * (measured 2 081 post-producer; P6's 0 is
+                                  * the pre-producer baseline) */
   int first_left_zero_step;      /* diagnosis when the baseline moves */
   int32_t first_left_zero_pos[3];
   /* FU322 §4.1 A2/erratum 1: the 0-based granted-frame index of the first
@@ -4291,6 +4304,8 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
         sg->changed_frames = 0;
         sg->gate = cl->gate;
         sg->event = cl->event;
+        sg->speed_seq[0] = (int16_t)c->speed;
+        sg->speed_seq_len = 1;
       }
     }
     cl->changed_frames++;
@@ -4305,20 +4320,34 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
     cl->stop_y = c->pos_y;
     cl->stop_z = c->pos_z;
     if (cl->segments >= 1u && cl->segments <= 2u) {
-      cl->seg[cl->segments - 1u].stop_f = f;
-      cl->seg[cl->segments - 1u].stop_x = c->pos_x;
-      cl->seg[cl->segments - 1u].stop_y = c->pos_y;
-      cl->seg[cl->segments - 1u].stop_z = c->pos_z;
+      struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
+      int16_t sp = (int16_t)c->speed;
+      sg->stop_f = f;
+      sg->stop_x = c->pos_x;
+      sg->stop_y = c->pos_y;
+      sg->stop_z = c->pos_z;
+      if (sg->speed_seq_len <
+              sizeof sg->speed_seq / sizeof sg->speed_seq[0] &&
+          sp != sg->speed_seq[sg->speed_seq_len - 1u])
+        sg->speed_seq[sg->speed_seq_len++] = sp;
+      /* The pass-level copy is the LAST segment's full sequence (the
+       * pass-level first_motion_f/stop_f convention), never the collapsed
+       * {first-motion, stop} pair the old `stop_f` gate produced. */
+      memcpy(cl->speed_seq, sg->speed_seq, sizeof cl->speed_seq);
+      cl->speed_seq_len = sg->speed_seq_len;
     }
   }
-  /* The decay signature (FU317 §3.3): distinct speeds from the first motion
-   * through the stop frame, inclusive. */
-  if (cl->first_motion_f >= 0 &&
-      (cl->stop_f < 0 || f <= cl->stop_f) &&
-      cl->speed_seq_len < sizeof cl->speed_seq / sizeof cl->speed_seq[0]) {
+  /* The per-segment decay signature (FU317 §3.3): distinct speeds from the
+   * first motion through the last changed frame; the stop speed is appended
+   * by the stop branch above. The pass-level `speed_seq` is the last
+   * segment's — the per-segment cells hold each run (final review). */
+  if (cl->in_segment && cl->segments >= 1u && cl->segments <= 2u) {
+    struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
     int16_t sp = (int16_t)c->speed;
-    if (sp != cl->speed_seq[cl->speed_seq_len - 1u])
-      cl->speed_seq[cl->speed_seq_len++] = sp;
+    if (sg->speed_seq_len <
+            sizeof sg->speed_seq / sizeof sg->speed_seq[0] &&
+        sp != sg->speed_seq[sg->speed_seq_len - 1u])
+      sg->speed_seq[sg->speed_seq_len++] = sp;
   }
   if (c->pos_x != 0 || c->pos_y != 0 || c->pos_z != 0) {
     if (cl->first_off_zero_f < 0) cl->first_off_zero_f = f;
@@ -4555,6 +4584,10 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(cl->seg[0].changed_frames == 27u);
   assert(cl->seg[0].stop_x == -0x90 && cl->seg[0].stop_y == 0 &&
          cl->seg[0].stop_z == 0);
+  assert(cl->seg[0].speed_seq_len == 5u);   /* 5 -> 3 -> 2 -> 1 -> 0 */
+  assert(cl->seg[0].speed_seq[0] == 5 && cl->seg[0].speed_seq[1] == 3 &&
+         cl->seg[0].speed_seq[2] == 2 && cl->seg[0].speed_seq[3] == 1 &&
+         cl->seg[0].speed_seq[4] == 0);
   /* Segment 1: the code-3 walk's own camera event. */
   assert(cl->seg[1].gate.valid && cl->seg[1].gate.f == 1552);
   assert(cl->seg[1].gate.code == 3u);
@@ -4604,9 +4637,14 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(cl->y_nonzero_frames == 0u && cl->z_nonzero_frames == 0u);
   assert(cl->pan_at_motion == 0u);
   assert(cl->pan_max == 4u);
-  /* The decay sequence truncated at the site (FU323 §5.1: seq_len 2). */
-  assert(cl->speed_seq_len == 2u);
-  assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 0);
+  /* The per-segment decay signature (final review): the real distinct-speed
+   * run 5->3->2->1->0 on both segments. The old pass-level {5,0} pair was a
+   * sampler artifact — segment 1's start still read segment 0's `stop_f`, so
+   * only the first-motion and stop cells were recorded. */
+  assert(cl->speed_seq_len == 5u);
+  assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 3 &&
+         cl->speed_seq[2] == 2 && cl->speed_seq[3] == 1 &&
+         cl->speed_seq[4] == 0);
   assert(cl->row04_after_event_frames == 0u);
   assert(cl->last.code == 3u);
   assert(cl->last.tracked == 1);
@@ -4929,6 +4967,10 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->seg[0].changed_frames == 27u);
   assert(cl->seg[0].stop_x == -0x90 && cl->seg[0].stop_y == 0 &&
          cl->seg[0].stop_z == 0);
+  assert(cl->seg[0].speed_seq_len == 5u);   /* 5 -> 3 -> 2 -> 1 -> 0 */
+  assert(cl->seg[0].speed_seq[0] == 5 && cl->seg[0].speed_seq[1] == 3 &&
+         cl->seg[0].speed_seq[2] == 2 && cl->seg[0].speed_seq[3] == 1 &&
+         cl->seg[0].speed_seq[4] == 0);
   assert(cl->seg[1].gate.valid && cl->seg[1].gate.f == 1552);
   assert(cl->seg[1].gate.code == 3u);
   assert(cl->seg[1].gate.lane_x == 129 && cl->seg[1].gate.lane_z == -128);
@@ -4949,6 +4991,10 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->seg[1].changed_frames == 27u);
   assert(cl->seg[1].stop_x == -0x120 && cl->seg[1].stop_y == 0 &&
          cl->seg[1].stop_z == 0);
+  assert(cl->seg[1].speed_seq_len == 5u);   /* 5 -> 3 -> 2 -> 1 -> 0 */
+  assert(cl->seg[1].speed_seq[0] == 5 && cl->seg[1].speed_seq[1] == 3 &&
+         cl->seg[1].speed_seq[2] == 2 && cl->seg[1].speed_seq[3] == 1 &&
+         cl->seg[1].speed_seq[4] == 0);
   /* The per-segment T(s) arithmetic from the recorded seeds. */
   {
     int32_t fr = 0, pl = 0;
@@ -4978,8 +5024,11 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->y_nonzero_frames == 0u && cl->z_nonzero_frames == 0u);
   assert(cl->pan_at_motion == 0u);
   assert(cl->pan_max == 4u);
-  assert(cl->speed_seq_len == 2u);   /* truncated at the site (FU323 §5.1) */
-  assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 0);
+  assert(cl->speed_seq_len == 5u);   /* the last segment's real signature:
+                                      * 5 -> 3 -> 2 -> 1 -> 0 */
+  assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 3 &&
+         cl->speed_seq[2] == 2 && cl->speed_seq[3] == 1 &&
+         cl->speed_seq[4] == 0);
   assert(cl->row04_after_event_frames == 0u);
   assert(cl->last.code == 3u);
   assert(cl->last.tracked == 1);
@@ -6538,8 +6587,9 @@ int main(void) {
    * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
    * no goal, then the act-1 route (situation 1 -> act 1 -> phase 0x17) and the
    * live phase 2. FU313 (phase-30 T1) adds the measured window: 3 598 granted
-   * frames over 11 996 live steps, the all-zero camera baseline and the ladder
-   * seam counters. Status to stderr keeps stdout the byte-exact transcript. */
+   * frames over 11 996 live steps, the camera-zero/left-zero split
+   * (1 517 / 2 081) and the ladder seam counters. Status to stderr keeps
+   * stdout the byte-exact transcript. */
   struct m2_natural nat;
   run_natural_probe(with_iso, &nat);
   fprintf(stderr,

@@ -6916,7 +6916,7 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
     records it; the leg's *direction* — the native metric is `0x8DC68` —
     stands, and T2 aligned the staging source to it).
   - **The Layer-2 live acceptance (T3, `eb9e521`; `docs/screens/p33-l2-notes.md`
-    + the eight PNGs + the two diffs + the 120-line trace extract).**
+    + the eight PNGs (incl. the two diffs) + the 120-line trace extract).**
     **"The driven pan reproduced live under the live face — YES,
     trace-attributed, both segments, tick-for-tick against the re-pinned
     timeline."** Live phase 2 at `f=539`/tick 1800 (p32's own cells); the
@@ -7180,3 +7180,33 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   (`302b746`) and T2's value-identical metric-source alignment (`7b3cc10`); T3
   and this close-out are docs-only. The trace sink stayed default-off outside
   T3's acceptance run; the capture/trace artefacts are `docs/screens/p33-l2-*`.
+
+## Final-review erratum — the phase-33 register (2026-10-23)
+
+Append-only; every section above stands as written. Two corrections from the
+final whole-branch review:
+
+- **The artifact set (Layer-2 sentence).** Quote: "the eight PNGs + the two
+  diffs + the 120-line trace extract". **Corrected:** the two diff PNGs are
+  two of the eight committed PNGs, not additional files; the artefact set is
+  **the eight PNGs (incl. the two diffs) + the 120-line trace extract** (the
+  Layer-2 sentence above carries the corrected wording). Nine files beyond
+  the note: `p33-l2-pan-a..d.png`, `p33-l2-pan-diff.png`,
+  `p33-l2-seg1-diff.png`, `p33-l2-still-a..b.png`, plus
+  `p33-l2-trace-pan.txt`.
+- **FU319-L8 (new; the raw-point focus guard vs the native delta test).** The
+  port's turn-close branch guards the focus point with the raw staged-point
+  test `face_x != 0 || face_z != 0`
+  (`src/fifa96_loader/fifa96_action_handlers.c:223`), while the native
+  `0x8E2B7..0x8E2D0` tests the **deltas** (the focus point minus the
+  record's position). The two forms diverge at the **undriven camera origin**
+  `(0,0)`: the raw test disables the focus branch (the face keeps its
+  current value), while the native delta test would steer toward the staged
+  point even when that point is `(0,0,0)`. The divergence is why the P-MOV
+  fixture stages an off-origin camera
+  (`test_mover_row43_live_turns_toward_focus`; the plan erratum records the
+  sketch correction). **Blast radius unmeasured** — no moved M2 frame is
+  attributed to it (the golden is byte-identical under the phase-33 dispatch
+  fix); re-open with a camera-origin witness or a direct unit pin of the
+  native delta form. Owner: the action-handlers seam
+  (`fifa96_action_locomotion_step`).

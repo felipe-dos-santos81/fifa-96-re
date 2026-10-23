@@ -196,8 +196,11 @@ static void test_step_direct_face(void) {
  * nibble staging (FU324-L5) and the mutant protocol must re-run then. No
  * natural RED tuple exists (no real tuple separates the two metric values),
  * so none is manufactured here. */
-/* The mover's staging expression (fifa96_match_run.c, the mover block):
- * the high word is the metric's 16-bit result, the low word 0. */
+/* The mover's staging expression (fifa96_match_run.c, the mover block; the
+ * mover site carries the reciprocal flag): the high word is the metric's
+ * 16-bit result, the low word 0. Keep this shadow in lockstep with that
+ * staging — it re-states the expression because the value is never
+ * persisted. */
 static int32_t staged_shape(int16_t dx, int16_t dz) {
   return (int32_t)((uint32_t)(uint16_t)fifa96_entity_distance(dx, dz) << 16);
 }

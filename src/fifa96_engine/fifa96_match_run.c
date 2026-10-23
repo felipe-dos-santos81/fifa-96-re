@@ -535,7 +535,11 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
    * change — this is the staging-SOURCE alignment, a measured no-op
    * (FU324 §5: 0 frames moved alone and 0 composed on the latch build).
    * The low half of the staged dword stays 0 — the native +0x63..+0x64 has
-   * no writer and no word-width reader (FU324 §3.1, leg L2). */
+   * no writer and no word-width reader (FU324 §3.1, leg L2). The contract
+   * pin's `staged_shape` (tests/test_action_locomotion.c:200-203) is a SHADOW
+   * of this expression: any shape change here must land there in the same
+   * commit (the pin re-states the staging because the value is never
+   * persisted). */
   s.move_attr = (int32_t)((uint32_t)(uint16_t)fifa96_entity_distance(
       (int16_t)((uint16_t)r->target_x - (uint16_t)r->pos_x),
       (int16_t)((uint16_t)r->target_z - (uint16_t)r->pos_z)) << 16);
@@ -1527,6 +1531,17 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
    * native `+0x71/+0x73/+0x75` bytes stay in lockstep (an arm's `vel_x=0`
    * therefore clears the words too, and a pass-through is identity because the
    * staging invariant holds). Shared with the row-level pins. */
+  /* FU319 §5 (phase-33) + the final-review correction: the action bodies
+   * install rows on the pool entity (`fifa96_match_run_record_anim_install`
+   * writes `e->row43`), while the staging record's latch was copied at the
+   * frame head (`r->row43 = e->row43` above). Re-stage the pool byte after
+   * the dispatch, before the mover: without this the end-of-dispatch
+   * write-back (`e->row43 = r->row43` below) restores the STALE pre-dispatch
+   * byte and reverts every in-dispatch install (rows 0x4F/0x0F/0x5E/0x12/…),
+   * leaving writer 1 inert in-engine; the mover's same-frame `direct_face`
+   * read would stay stale too. The row-0x22 clear already writes both views,
+   * so the re-stage is value-identical for it. */
+  r->row43 = e->row43;
   fifa96_match_run_decompose_velocity_words(r);
   /* FU-147 S1: every dispatched record runs the shared mover (native
    * FUN_0007CA54 tail 0x7CD48 / FUN_000782D0 tail 0x785C5), then the BF20

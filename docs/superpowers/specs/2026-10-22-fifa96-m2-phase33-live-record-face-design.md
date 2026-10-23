@@ -224,3 +224,23 @@ re-shaped inversion (A1–A3, plus the relocated A4/A5) + the segment-aware
 witness re-pins + the golden re-pin (with the stratum-set gate) + the
 provenance note. The metric sub-change stays its own commit; the close-out
 follows.
+
+## Post-execution erratum (final review, 2026-10-23)
+
+Append-only; the text above stands as written.
+
+**The claim/offset seg[0] attribution.** Quote (the measurement paragraph
+above): "the row-04 `−0x90` one-shot (the claim pass: bind f=1483, `trk=2`
+window f=1483..1552, stop f=1511)". **Corrected:** that tuple is the
+**OFFSET** pass's seg[0] (gate f=1482, bind f=1483, motion f=1484…1510, stop
+f=1511). The landed **CLAIM** pass's seg[0] is gate f=1480, bind/event f=1481
+(code 5, vel (−5,0), spd 5, trk 2), motion f=1482…1508, stop f=1509 at
+(−0x90,0,0); its seg[1] is gate f=1552 / event f=1553 / motion f=1554…1580 /
+stop f=1581 at (−0x120,0,0). The claim pass's totals are 54 changed / 2 116
+off-zero with first off-zero f=1482; the offset pass is 54 / 2 114 / 1484.
+Only the attribution was wrong — the numbers are the measured cells. The
+authoritative correct record is `docs/ENGINE.md`'s phase-33 "driven
+witnesses" block (the claim-pass and offset-pass sub-bullets) and the tree's
+segment-aware asserts in `tests/test_engine_m2.c`. (The plan's P-MOV sketch
+correction and the new FU319-L8 leg are appended to the plan erratum and the
+ENGINE register respectively.)

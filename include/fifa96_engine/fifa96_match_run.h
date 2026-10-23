@@ -1241,8 +1241,8 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
  *  - the frame resolve `FUN_0006E490` (`0x6E6FE..0x6E706`: `frame < 0 ->
  *    last`, `frame > last -> 0`) and the frame-timer zero `word[+0x32] = 0`
  *    (`0x6E70B`).
- * The derived surface stores `anim_id`/`frame`/`row44`, forces the aux
- * re-arm (`aux_seen = 0xFFFF`) and zeroes the render slot's `anim_timer`
+ * The derived surface stores `anim_id`/`frame`/`row43`/`row44`, forces the
+ * aux re-arm (`aux_seen = 0xFFFF`) and zeroes the render slot's `anim_timer`
  * (the +0x32 twin; the slot is `team*11 + index`). NULL `mr`/`e` or an
  * out-of-range slot -> -FIFA96_ERR_INVALID. Returns FIFA96_OK. */
 int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,

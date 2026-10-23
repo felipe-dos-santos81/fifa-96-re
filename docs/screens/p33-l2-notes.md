@@ -135,8 +135,9 @@ pan grabs are two pairs, one per segment. The committed files are
 pair), `pan-16a` → `p33-l2-pan-c.png`, `pan-19b` → `p33-l2-pan-d.png` (the
 **seg[1]** pair), `still-s2-a` → `p33-l2-still-a.png`, `still-s2-b` →
 `p33-l2-still-b.png` (the raw names are the watcher's; the `p33-l2-*` names are
-the committed ones; each committed PNG is the `-depth 8` conversion of its
-16-bit grab — pixel-identical to it, AE 0).
+the committed ones; an independent `-depth 8` re-conversion is AE 0 vs the
+committed file, and the pair AEs are identical on the raw and the committed
+files).
 
 | pair | files | clock | trace bounds (PRE → POST) | AE (`960x591+0+0`) | full-frame AE | HUD clock crop AE (`140x66+0+650`) | bbox |
 |---|---|---|---|---|---|---|---|
@@ -153,19 +154,21 @@ the committed ones; each committed PNG is the `-depth 8` conversion of its
   each pair (the sprite animation advances), so the AE alone is not an
   animation discriminator — the trace is the attribution.
 - The still pair: same run, camera constant at `−288`, **no key held** (the
-  DOWN keyup followed the `f=1581` stop, tick 5277), the `s2` pair ~2.4 s after
-  the stop (stop tick 5274 / 00:34; the grabs f=1679…1685 at tick
-  5600…5620 / 00:38), 0.15 s apart, both 00:38.
+  DOWN keyup followed the `f=1581` stop, tick 5277), the `s2` pair ≈ **+3.26 s**
+  after the stop (the watcher's waits are sequential — `p33-capture.py:77-84`:
+  `s1` at +1.0 s, then `s2` after the `s1` pair at +2.0 s; stop tick 5274 /
+  00:34; the grabs f=1679…1685 at tick 5600…5620 / 00:38), 0.15 s apart,
+  both 00:38.
 - **Unlike p32's still, this pair is NOT pixel-identical: AE 29 120.** The
   still scene carries a **ball sprite in frame**, and the ball animates between
   the two grabs; the diff bbox is confined to the ball (`200×200+416+347` — the
   outfield sprite is pixel-identical between the grabs). The camera-constant
   property is carried by the trace cells (all four PRE/POST lines read
   `pos=−288,0,0 vel=0,0 spd=0 trk=1 pan=4`), and the two sibling still controls
-  agree: `s1` (1 s after the stop) AE 61 195 (the player sprite still settling,
-  bbox 449×490+62+0), `s3` (3 s after) AE 29 591 — the ball never settles; the
-  player does. The committed still pair is `s2` because it isolates the
-  residual to the ball sprite alone.
+  agree: `s1` (the first wait, ≈ +1.06 s after the stop) AE 61 195 (the player
+  sprite still settling, bbox 449×490+62+0), `s3` (≈ +6.46 s after the stop)
+  AE 29 591 — the ball never settles; the player does. The committed still
+  pair is `s2` because it isolates the residual to the ball sprite alone.
 - **Gate 1 (relative): AE_pan 52 466 / 69 828 > AE_still 29 120**, all measured
   in the same session/build on the same files. The gap is carried by the
   sprite's screen position shift (the camera translation), not by the pose or
@@ -277,7 +280,8 @@ python3 /tmp/opencode/p33/p33-run.py "$WID" /tmp/opencode/p33/p33-trace.log \
 #   stop + the s1/s2/s3 stills; p33-capture.py)
 python3 /tmp/opencode/p33/p33-capture.py "$WID" /tmp/opencode/p33/p33-trace.log \
   /tmp/opencode/p33
-# the depth-8 conversion of each committed grab (16-bit -> 8-bit, AE 0)
+# the depth-8 conversion of each committed grab (16-bit -> 8-bit; an
+# independent re-run is AE 0 vs the committed file — not vs the raw grab)
 convert <raw>.png -depth 8 docs/screens/p33-l2-<name>.png
 # the crops, the AE, the diffs, the bboxes
 for p in pan-a pan-b pan-c pan-d still-a still-b; do
@@ -299,7 +303,8 @@ convert docs/screens/p33-l2-seg1-diff.png -format '%@' info:   # 592x406+0+0
 The committed PNGs are the 8-bit conversions (`-depth 8`) of the 16-bit
 `import` grabs; the window's source pixels are 8-bit, and the AE is unchanged
 by the conversion (52 466 / 69 828 / 29 120 measured on the committed files
-themselves; each conversion is pixel-identical to its grab, AE 0).
+themselves; an independent `-depth 8` re-conversion is AE 0 vs the committed
+file, and the pair AEs are identical on the raw and the committed files).
 
 ## The extract
 

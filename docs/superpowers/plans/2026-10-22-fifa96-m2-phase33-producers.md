@@ -112,3 +112,39 @@
 - [ ] **Step 3: The invariants:** fresh census count (`60/80` expected — recompute and fix the README title in this commit if it moved); `make check` 111/111; M1/M2 `cmp`.
 - [ ] **Step 4: Commit and push** `docs(fu314): the phase-33 close-out — the live record face`.
 - [ ] **Step 5: Final ledger + report.**
+
+## Post-execution erratum (final review, 2026-10-23)
+
+Append-only; the text above stands as written. Two corrections measured on the
+landed tree:
+
+1. **The claim/offset seg[0] attribution.** Quote (the "driven witnesses
+   re-pin" decision bullet): "Claim pass: the row-04 `−0x90` one-shot (bind
+   f=1483, `trk=2` window f=1483..1552, stop f=1511)"; and Task 1 Step 6:
+   "claim bind f=1483/window/stop 1511 + the code-3 event gate f=1552/event
+   f=1553/stop 1581". **Corrected:** the `f=1483 / stop f=1511` tuple is the
+   **OFFSET** pass's seg[0] (gate f=1482, bind f=1483, motion f=1484…1510,
+   stop f=1511). The landed **CLAIM** pass's seg[0] is gate f=1480,
+   bind/event f=1481 (code 5, vel (−5,0), spd 5, trk 2), motion f=1482…1508,
+   stop f=1509 at (−0x90,0,0); its seg[1] is gate f=1552 / event f=1553 /
+   motion f=1554…1580 / stop f=1581 at (−0x120,0,0). The claim pass's totals
+   are 54 changed / 2 116 off-zero with first off-zero f=1482; the offset
+   pass's are 54 / 2 114 with first off-zero f=1484. The authoritative,
+   correct record is `docs/ENGINE.md`'s phase-33 "driven witnesses" block
+   (the claim-pass and offset-pass sub-bullets) and the tree's segment-aware
+   asserts in `tests/test_engine_m2.c`. Only the attribution was wrong: the
+   numbers themselves are the measured cells.
+
+2. **The P-MOV fixture sketch (Task 1 Step 2).** Quote: "P-MOV a NEW
+   settled-record fixture in `tests/test_engine_match_frame.c` (`row43=2`,
+   camera `(0,0,0)` → RED = the face frozen at 0x100, GREEN = the first
+   `0x40` step; …)". **Corrected:** a camera at `(0,0,0)` cannot turn the face
+   under the port's raw-point focus guard — `fifa96_action_handlers.c:223`
+   tests `face_x != 0 || face_z != 0`, so the all-zero staged point takes the
+   keep branch. The native `0x8E2B7..0x8E2D0` tests the **deltas** (focus
+   minus position), so the native would steer even from the origin; that
+   divergence is registered as **FU319-L8** in the phase-33 register (owner:
+   the action-handlers seam; unmeasured blast radius). The executor correctly
+   staged an **off-origin** camera `(0,0,0x100)` (deltas `(0,−0xA00)`) in
+   `test_mover_row43_live_turns_toward_focus`; that landed fixture is the
+   authority, and the plan's sketch is void as written.
