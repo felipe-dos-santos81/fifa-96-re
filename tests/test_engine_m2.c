@@ -2566,11 +2566,14 @@ struct m2_claim_segment {
   uint32_t speed_seq_len;
 };
 
-/* FU317 §4.3/§4.4 (phase-31 T1): the natural claim-pan witness. The pan is
- * counted as a delta run (a maximal changed-place run), never as "frames off
- * zero": after the pan the place stays at -0x90 for the rest of the window,
- * so the off-zero count is ~2,084 while the measured delta run is 27 frames
- * (FU317 §3.4 — the undriven tape's off-zero algebra false-passes). */
+/* FU317 §4.3/§4.4 (phase-31 T1; figures re-based by phase-35 P1): the natural
+ * claim-pan witness. The pan is counted as a delta run (a maximal
+ * changed-place run), never as "frames off zero": after the pan the place
+ * stays at -0x90 for the rest of the window, so the off-zero count is
+ * **2 923 on the claim pass** (3 598 - 675) and **2 921 on the offset pass**
+ * (3 598 - 677), while each measured delta run is 27 frames (FU317 §3.4 —
+ * the undriven tape's off-zero algebra false-passes; the phase-33 ~2 084
+ * was the pre-producer figure). */
 struct m2_claim {
   int match_start_step;
   int phase2_step;
@@ -2674,10 +2677,13 @@ struct m2_natural {
   uint32_t granted_frames;       /* pace.pending at the window end (measured 3 598) */
   uint32_t sampled_frames;       /* granted frames observed by the sampler */
   uint32_t camera_zero_frames;   /* granted frames whose 16 trace cells were all zero */
-  uint32_t camera_left_zero;     /* granted frames with pos != (0,0,0)
-                                  * (measured 2 894 in the phase-35 produced
-                                  * world; the phases-33/34 pre-producer
-                                  * baseline was 2 081) */
+  uint32_t camera_left_zero;     /* granted frames where the 16-cell
+                                  * all-zero predicate is false (the first
+                                  * departure itself has pos (0,0,0) — its
+                                  * bind cells leave zero): measured
+                                  * 2 894 = 3 598 - 704 in the phase-35
+                                  * produced world; the phases-33/34
+                                  * pre-producer baseline was 2 081) */
   int first_left_zero_step;      /* diagnosis when the baseline moves */
   int32_t first_left_zero_pos[3];
   /* FU322 §4.1 A2/erratum 1: the 0-based granted-frame index of the first
@@ -4761,10 +4767,11 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
     if (pan > pan_max) pan_max = (uint8_t)pan;
     if (frame == (unsigned)cl->gate.f) trk_gate = trk;
     if (frame == (unsigned)cl->event.f) trk_event = trk;
-    /* The segment-aware bind check (FU322's erratum 2): the tracked record
-     * is bound (not NONE) across both segments' delta runs; the first
-     * segment carries the row-04 coda's bind (trk=2), the last the code-3
-     * walk's (trk=1). */
+    /* The bind check: the tracked record is bound (not NONE) across the
+     * pass's single segment's delta run. Phase-35 P1: each driven pass runs
+     * ONE segment (the claim's trk=2 segment); the phase-33 two-segment
+     * world's second "code-3 walk" bind (trk=1) is history. The guarded
+     * seg[1] branch below remains for the two-segment shape. */
     if (frame >= (unsigned)cl->first_motion_f &&
         frame < (unsigned)cl->stop_f)
       assert(trk != FIFA96_CAMERA_TRACKED_NONE);
@@ -5126,10 +5133,11 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
     if (pan > pan_max) pan_max = (uint8_t)pan;
     if (frame == (unsigned)cl->gate.f) trk_gate = trk;
     if (frame == (unsigned)cl->event.f) trk_event = trk;
-    /* The segment-aware bind check (FU322's erratum 2): the tracked record
-     * is bound across both segments' runs and their stop tails; the first
-     * segment carries the row-04 coda's bind (trk=2), the last the code-3
-     * walk's (trk=1). */
+    /* The bind check: the tracked record is bound across the pass's single
+     * segment's run and its stop tail. Phase-35 P1: each driven pass runs
+     * ONE segment (the offset pass's trk=2 segment); the phase-33
+     * two-segment world's second "code-3 walk" bind (trk=1) is history. The
+     * guarded seg[1] branch below remains for the two-segment shape. */
     if (frame >= (unsigned)cl->first_motion_f &&
         frame <= (unsigned)cl->stop_f + 5)
       assert(trk != FIFA96_CAMERA_TRACKED_NONE);
@@ -5156,8 +5164,9 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(body == cl->granted_frames);
   assert(body == 3598u);
   assert(cl->trace_changed == cl->changed_frames);
-  /* Segment-aware (FU322's erratum 2): the trace's FIRST motion is the first
-   * segment's (1484); the LAST motion is the last segment's stop - 1. */
+  /* Segment-aware (FU322's erratum 2; phase-35 P1: ONE segment on this
+   * pass — its first motion is measured 677, the adjacent assert's value);
+   * the LAST motion is that segment's stop - 1. */
   assert(cl->trace_first_motion == cl->seg[0].first_motion_f);
   assert(cl->trace_last_motion == cl->stop_f - 1);
   assert(cl->trace_off_zero == cl->off_zero_frames);
