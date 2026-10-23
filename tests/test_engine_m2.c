@@ -1748,6 +1748,50 @@
  * from step 9, trk=12 bound at granted f=1517 / engine step 5065, camera
  * pos still (0,0,0) — the FU316-L1 no-slot leg), pinned by the inverted
  * A1-A3 assert set in this commit.
+ *
+ * Phase-35 provenance (the atomic producer commit, `fix(fu328)`): the native
+ * placement-limit producer `FUN_0007997C` — `word[+0x79] = byte[0x10F394 +
+ * byte[[rec+4]+0xD]] | byte[+0x9D]` (0x79A4D) then `word[+0x7B] =
+ * word[+0x79]` (0x79A86) — landed at the two port writers (the exact native
+ * `entities_reset_lane` site, dead live, and the `entities_init` match-begin
+ * seam, live), reusing the shared `fifa96_arm_26_timer_table[32]` (the
+ * `0x20` boundary; the out-of-range continuation is refused, never zeroed).
+ * The two inputs are declared staging bytes (`desc_d` = `[[rec+4]+0xD]`,
+ * `byte9d` = `+0x9D`), both 0, so every record carries `+0x79 = 6` — the
+ * table's first row, a port staging value, NOT a native per-record
+ * measurement (the roster index is unmeasured: FU330-L1/FU328-L3). The
+ * row-09 OL-82 literal at `handlers.c:5034` is retired in the same commit:
+ * `+0x7B = +0x79*2` (0x80B3D..0x80B43), inert on this tape (0 code-9
+ * record-frames, FU332 §7). M2 re-pin (faithful move, FU332 §5): first
+ * differing line **frame 852** (`state=1/1-0`, hash 964282c7… -> e04df34d…),
+ * **5,671 of 6,522 lines moved** as ONE contiguous tail 852..6522, the
+ * 10-tag `state=` stratum set intact (the untagged pre-match 5 unchanged);
+ * moved strata exactly `state=1/1-0` ×951, `state=19/1-0` ×2,620,
+ * `state=2/1-0` ×2,100 — no stratum added, lost or re-valued. Length
+ * unchanged (295,087 B). M2 sha old `d5446144f08c22c5a4d986e1d07529068f715f
+ * 8b8e2cd86411ee493ea804ad8` -> new `6aa2703b03444b99380a0590dfd8b5fa25281
+ * 5b74cb358ee911c2c9d47c9b98b` (byte-identical to FU332's measured value-6
+ * transcript, `6aa2703b…`). M1 is byte-identical (`09b726b7…`, `cmp`). The
+ * pool's position fingerprint diverges at step 12 (the first mover id 10;
+ * all 20 active records by f=3), so no line moves before the producer's own
+ * frame; 852 is the phase-33 render-attribution class (the sit-1 half-time
+ * kickoff revealing the moving walk-in). Collateral: the whole formation's
+ * faster walk (the AI-chase class) — no unexplainable frame. The survival
+ * re-pins: A3 (first camera departure engine step 5065 -> **2355** = granted
+ * f 704, the FU332 tuple; window 2351..2359, the one-frame alignment slack),
+ * the natural trace's zero-run identity (the place stays at -38 after the
+ * 13-frame pan), the driven claim pass (one segment: the record-2 claim's
+ * own pan, gate f 673 / event f 674), the driven offset pass (the LEFT nudge
+ * shortened to 10 entries so record 2's event at f 676 still precedes the
+ * natural band pan at f 704; lane 62, Δ 0x42 <= 0xAB), the observed dispatch
+ * set (+ row 0x06 on the restart chain; the row was already wired, so the
+ * census does not move), and the row-09 unit pin (`target = pos + vel<<3`).
+ * **FU324-L5 clause (recorded, not silently re-measured):** the `+0x7B`
+ * nibble now moves on every record (6 from the install, 12 on row 09), so the
+ * `stride_len <= 3` clamp that masked the mover's metric sensitivity is gone
+ * and the phase-30 mutant protocol re-arms; the re-measure is the close-out
+ * register's clause, not this commit's. Census `60/80 = 75%` unchanged: the
+ * producer is a state-fidelity change, not a new action row.
  */
 #include <assert.h>
 #include <inttypes.h>
@@ -1919,15 +1963,21 @@
  * (FU314-L2) and the split is void. Kept for the historical record only. */
 #define M2_CLAIM_STAGED_FACE 0x100
 
-/* FU320 §4.2 (phase-32 T1): the non-zero-delta natural drive. The verbatim
- * `M2_KEYS` prefix, a LEFT hold on tape indices 1820..1849 (the 30-entry z
- * nudge) and a DOWN hold from 1850 to the window end (the west run). Same
+/* FU320 §4.2 (phase-32 T1), re-based by phase-35 P1: the non-zero-delta
+ * natural drive. The verbatim `M2_KEYS` prefix, a LEFT nudge on tape indices
+ * 1820..1829 (a 10-entry z nudge) and a DOWN hold from 1830 (the west run).
+ * The original 30-entry nudge (1820..1849) delays record 2's own camera event
+ * past the producer's natural band pan (f 704), which then owns the one-shot
+ * camera event and leaves this pass without its driven subject; measured on
+ * the produced tree, a nudge of 10 (and any <= 10) keeps the record-2 event
+ * first (f 676) while >= 20 hands the pan to the band record. The nudge stays
+ * long enough to lift the record's z to 24 (the pass's own offset). Same
  * 12 000-step window and observation seam as the T1 claim pass; no staging. */
 #define M2_OFFSET_STEPS M2_NATURAL_WINDOW_STEPS
 #define M2_OFFSET_TAPE_LEN (M2_OFFSET_STEPS + 1)
 #define M2_OFFSET_LEFT_FROM 1820
-#define M2_OFFSET_LEFT_TO 1849
-#define M2_OFFSET_DOWN_FROM 1850
+#define M2_OFFSET_LEFT_TO 1829
+#define M2_OFFSET_DOWN_FROM 1830
 
 /* FU322 §4.3 (erratum 1 re-shape): the undriven tape's band record — the
  * record the row-04 gate binds at granted f=1517 (FU323-L1's silent bind;
@@ -1936,17 +1986,22 @@
  * but its identity re-pins with a reasoned re-pin if the face-coupled walk
  * order moves it. */
 #define M2_NAT_BAND_ENTITY 12
-/* FU322 §4.1 A3 / errata 1+3: the bind window. FU323 measured the bind at
- * engine step 5065 (granted f=1517; the event's own trace tick 5060). The
- * slack covers the MEASURED face-coupled pacing scale of this window — the
- * same class of event re-timed across FU323's witness tables by up to
- * ±40 granted frames (~±135 steps: the drives' gate/event cells 1512→1552 /
- * 1513→1553, the claim 1514→1482; the driven first-segment binds f=1483 and
- * second-segment gates f=1552 sit at engine steps ≈4932/5162) — and the
- * move_attr metric sub-change adds nothing to cover (FU324: a measured
- * no-op, 0 frames). The exact step is recorded (stderr), never pinned. */
-#define M2_NAT_FACE_FIRST_LO 4930
-#define M2_NAT_FACE_FIRST_HI 5200
+/* FU322 §4.1 A3 / errata 1+3, re-pinned by phase-35 P1 (the +0x79 producer;
+ * FU330/FU331/FU332): the first camera-cell departure. FU323 measured the
+ * bind at engine step 5065 (granted f=1517) on the producer-less tree; with
+ * the produced placement limit (`+0x79 = 6`) the formation runs, the row-04
+ * band gate passes on the undriven tape and the first camera departure is
+ * **engine step 2355 (granted f=704)** — FU332 §6's measured event frame
+ * (the band record 12, `v0 = -2`, `T_x = -0x26`, 13 frames, pan 2).
+ * The slack is the declared ALIGNMENT class only: the one-frame
+ * gate-vs-capture offset between the event capture and the row-04 body
+ * (FU328-L6), converted into steps at the measured pace (11 996 live steps /
+ * 3 598 grants = 3.33 steps per grant -> 4 steps). The null tape is
+ * byte-deterministic (the two-run identity), so no transient is covered; the
+ * phase-33 ±135 face-coupled slack does not carry over. The exact step stays
+ * recorded (stderr), never pinned. */
+#define M2_NAT_FACE_FIRST_LO 2351
+#define M2_NAT_FACE_FIRST_HI 2359
 
 /* The wired action rows the accepted tape exercises (14 of the 21 wired at
  * the phase-9 T2 close, FU-137 §7): the rows whose installer arm + body + pool
@@ -3970,10 +4025,10 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
      * departure is an honest RED. */
     assert(nat->camera_zero_frames == (uint32_t)nat->first_left_zero_f);
     /* A3 (locked structure + the measured window): strictly after the
-     * phase-2 entry, and inside the bind window M2_NAT_FACE_FIRST_LO/HI —
-     * the measured bind step 5065 ± the re-based pacing slack (FU322's
-     * erratum 3: no metric transient exists to cover). The exact step is
-     * recorded to stderr, never pinned. */
+     * phase-2 entry, and inside the producer's departure window
+     * M2_NAT_FACE_FIRST_LO/HI — the measured step 2355 ± the declared
+     * one-frame alignment slack (the phase-35 re-pin; FU332 §6). The exact
+     * step is recorded to stderr, never pinned. */
     assert(nat->first_left_zero_step > nat->phase2_step);
     assert(nat->first_left_zero_step >= M2_NAT_FACE_FIRST_LO);
     assert(nat->first_left_zero_step <= M2_NAT_FACE_FIRST_HI);
@@ -4073,10 +4128,23 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
       e->match_run.act.id = 0;
       /* FU319 §5 live-face repair (phase-33): the staged-zero-face control —
        * the same declared input as begin_isolated (the witness's scripted
-       * claim/kick chain pins the blind-AI world). */
+       * claim/kick chain pins the blind-AI world).
+       * Phase-35 P1: the producer-off control. The scripted LONG_BALL/UP
+       * chain relies on the pre-producer walk-in; with the produced placement
+       * limit the formation runs from the first frame and the scripted chain
+       * reaches NO camera cell departure at all (measured: 0 events in 6 000
+       * steps, no `pos_x != 0` frame). The witness is explicitly a scripted,
+       * staged control (never the natural acceptance), so it stages the
+       * pre-producer limit next to the declared +0x43 zero: `timer79` and
+       * `timer7b` are the two cells the producer writes at the match-begin
+       * seam. The producer's own pan is measured by the undriven natural pass
+       * above (f 704, FU332). */
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
-        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+        for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
           e->match_run.entities.team[t].records[i].row43 = 0;
+          e->match_run.entities.team[t].records[i].timer79 = 0;
+          e->match_run.entities.team[t].records[i].timer7b = 0;
+        }
     }
     if (e->mode != FIFA96_ENGINE_MODE_MATCH || e->match == NULL) continue;
     struct fifa96_match_run *mr = &e->match_run;
@@ -4198,10 +4266,15 @@ static void run_natural_trace_self_check(int with_iso) {
   assert(remove(path) == 0);
   assert(body == traced.granted_frames);
   if (with_iso) {
-    /* The A2 identity's trace-side form (FU322 §4.1): the all-zero pos run is
-     * exactly the body minus the changed-place frames (undriven: the
-     * FU323-L1 silent bind — changed_frames 0, every pos zero). */
-    assert(zero_pos == body - traced.nat_pan.changed_frames);
+    /* The A2 identity's trace-side form, re-based by phase-35 P1: the
+     * all-zero pos run is exactly the pre-departure prefix. The old
+     * `body - changed_frames` form held only on the zero-motion baseline
+     * (changed 0); under the producer the natural pan moves the place to
+     * -38 over 13 frames and the place STAYS off zero, so the off-zero
+     * frames are the post-departure tail (measured 2 893 = 3 598 - 705)
+     * and the zero run is `body - off_zero_frames` (705). */
+    assert(zero_pos == body - traced.nat_pan.off_zero_frames);
+    assert(zero_pos == 705u);
   } else {
     /* The no-ISO trace's zero shape under the live face is unmeasured
      * (FU322-L10): recorded-only. */
@@ -4470,60 +4543,51 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   else
     assert(unsetenv(name) == 0);
 
-  /* === The re-pinned assert set (FU322's erratum 2 tables / FU323 §5.1,
-   * measured this session — the claim pass under the live face). The
-   * pass-level gate/event/run cells are the LAST segment's (the sampler
-   * re-fills at every segment start; FU323's erratum 1); the per-segment
-   * records carry both chains. The last segment is the NEW code-3 walk
-   * camera event the frozen world did not have. The timeline cells moved
-   * with the live face's walk approach (the RE-PIN reason); the pan
-   * structure, the one-shot and the invariants hold. === */
+  /* === The re-pinned assert set (phase-35 P1, the +0x79 placement producer;
+   * FU330/FU331/FU332; measured this session). The produced limit (`+0x79 =
+   * 6`) is copied into `+0x7B` by the row install, so the mover's stride
+   * nibble is 6 instead of 0 and the whole formation runs: the drive's
+   * record-2 camera event arrives at granted f=674 (was 1553) and the pass
+   * records ONE segment — the record-2 claim's own pan. The phase-32 second
+   * segment (the code-3 walk event) no longer occurs: the one-shot camera
+   * event is consumed by the earlier record-2 claim. The pan structure, the
+   * one-shot and the invariants hold; the pass stages no cell. === */
 
-  /* P11: the claim (the row-05 possession install), moved 1514 -> 1482. */
+  /* P11: the claim (the row-05 possession install), moved 1514 -> 675. */
   assert(cl->match_start_step == 5);
   assert(cl->phase2_step == 1802);
   assert(cl->granted_frames == 3598u);
-  assert(cl->claim_f == 1482);
+  assert(cl->claim_f == 675);
   assert(cl->claim_entity == M2_CLAIM_ENTITY);
   assert(cl->claim_slot_entity == M2_CLAIM_ENTITY);
   assert(cl->claim_pair_code == 0u && cl->claim_pair_ack == 0u);
-  /* P13 (the segment-aware re-pin, FU322's erratum 2 / FU323 §5.1): the
-   * gate/event cells are the LAST segment's — the NEW code-3 walk camera
-   * event the frozen world did not have (the camera is no longer parked:
-   * cam (−144,0,0)). */
-  assert(cl->gate.valid && cl->gate.f == 1552);
-  assert(cl->gate.code == 3u);
+  /* P13: the gate/event cells are the single segment's. The camera is still
+   * parked at the gate (the event has not fired yet); the face is settled
+   * (0x300: bearing == face), the record is 56 units from the camera. */
+  assert(cl->gate.valid && cl->gate.f == 673);
+  assert(cl->gate.code == 4u);
   assert(cl->gate.active == 2u);
   assert(cl->gate.anim_id == 0u);
   assert(cl->gate.id == M2_CLAIM_ENTITY);
-  assert(cl->gate.lane_x == 128 && cl->gate.lane_z == -128);
+  assert(cl->gate.lane_x == 56 && cl->gate.lane_z == -56);
   assert(cl->gate.cam_dz6f == 0);
-  assert(cl->gate.bound == 128);
+  assert(cl->gate.bound == 68);
   assert(cl->gate.timer81 == 0u);
-  assert(cl->gate.has_slot == 0u);
+  assert(cl->gate.has_slot == 1u);
   assert(cl->gate.dir_x == -1 && cl->gate.dir_z == 0);
-  assert(cl->gate.pos_x == -16 && cl->gate.pos_y == 0 && cl->gate.pos_z == 0);
+  assert(cl->gate.pos_x == 56 && cl->gate.pos_y == 0 && cl->gate.pos_z == 0);
   /* The settled live face: 0x300 in the 10-bit fold, stored as -0x100. */
   assert(cl->gate.face7d == -0x100);
-  assert(cl->gate.cam_pos_x == -144 && cl->gate.cam_pos_y == 0 &&
-         cl->gate.cam_pos_z == 0);   /* the camera no longer parked */
+  assert(cl->gate.cam_pos_x == 0 && cl->gate.cam_pos_y == 0 &&
+         cl->gate.cam_pos_z == 0);   /* the camera is still parked */
   assert(cl->gate.cam_vel_x == 0 && cl->gate.cam_vel_z == 0);
   assert(cl->gate.speed == 0u);
-  assert(cl->gate.timer == 0u && cl->gate.timer_limit == 12u);
+  assert(cl->gate.timer == 0u && cl->gate.timer_limit == 0u);
   assert(cl->gate.event_param == 0);
-  assert(cl->gate.ramp_divisor == 12);   /* measured: the first segment's
-                                          * event's ramp persists at the
-                                          * last segment's gate frame */
-  assert(cl->gate.controlled == FIFA96_MATCH_ENTITY_NONE);   /* measured: the
-                                        * controlled actor is released under
-                                        * the live face (was 1) */
-  assert(cl->gate.slot_entity == 1);   /* measured: the slot's entity cell
-                                        * moved 2 -> 1 (the face-coupled
-                                        * chase merge chain) */
-  assert(cl->gate.tracked == M2_CLAIM_ENTITY);   /* measured: the first
-                                                  * segment's bind (trk=2)
-                                                  * is still bound at the
-                                                  * last segment's gate */
+  assert(cl->gate.ramp_divisor == 0);
+  assert(cl->gate.controlled == 1);
+  assert(cl->gate.slot_entity == 2);
+  assert(cl->gate.tracked == FIFA96_CAMERA_TRACKED_NONE);
   assert(cl->gate.controlled != M2_CLAIM_ENTITY);   /* the fallback hazard */
   {
     int32_t bearing = 0;
@@ -4531,56 +4595,51 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
            FIFA96_OK);
     /* The live-face gate (FU323 §5.1/erratum 1): the bearing to the camera
      * equals the settled face, so the row-04 gate's folded delta is 0. The
-     * staged operand IS the pool face now (handlers.c:2651 stages
-     * `r->face7d`, FU314-L2) — the frozen staged/pool constant split is
-     * void and the identity is the pin. */
+     * staged operand IS the pool face (handlers.c:2651 stages `r->face7d`,
+     * FU314-L2) — the identity is the pin. */
     int32_t delta = (bearing - cl->gate.face7d) & 0x3FF;
     if (delta > 0x200) delta = 0x400 - delta;
     assert(delta == 0);
     assert(delta <= 0xAB);
   }
-  assert(cl->event.valid && cl->event.f == 1553);
-  assert(cl->event.code == 3u);
+  assert(cl->event.valid && cl->event.f == 674);
+  assert(cl->event.code == 5u);
   assert(cl->event.active == 2u);
   assert(cl->event.anim_id == 0u);
-  assert(cl->event.has_slot == 0u);
+  assert(cl->event.has_slot == 1u);
   assert(cl->event.dir_x == -1 && cl->event.dir_z == 0);
   assert(cl->event.cam_vel_x == -5 && cl->event.cam_vel_z == 0);
-  assert(cl->event.pos_x == -16 && cl->event.pos_y == 0 &&
+  assert(cl->event.pos_x == 44 && cl->event.pos_y == 0 &&
          cl->event.pos_z == 0);
   assert(cl->event.speed == 5u);
   assert(cl->event.event_param == 0);
   assert(cl->event.timer == 0u && cl->event.timer_limit == 12u);
   assert(cl->event.ramp_divisor == 12);
-  assert(cl->event.tracked == 1);
+  assert(cl->event.tracked == M2_CLAIM_ENTITY);
 
   /* P12 — the RELOCATED A4 (the P7-analog pan window; FU322's erratum 2):
-   * two chained segments (the row-04 one-shot coda + the code-3 walk event),
-   * each segment's delta run asserted as the T(s) closed form from the
-   * pass's own recorded seeds (arm-agnostic, zero-seed-proof); the second
-   * segment's stop place accumulates the first's; the totals and the
-   * lockout identities. */
-  assert(cl->segments == 2u);
-  assert(cl->seg[0].valid && cl->seg[1].valid);
-  /* Segment 0: the row-04 coda's own pan (the kept-trace row-04-coda shape:
-   * bind f=1481, window f=1481..1509, -0x90 pan, stop f=1509). */
-  assert(cl->seg[0].gate.valid && cl->seg[0].gate.f == 1480);
+   * one segment, its delta run asserted as the T(s) closed form from the
+   * pass's own recorded seed (arm-agnostic, zero-seed-proof); the stop place
+   * and the totals/lockout identities. */
+  assert(cl->segments == 1u);
+  assert(cl->seg[0].valid);
+  assert(cl->seg[0].gate.valid && cl->seg[0].gate.f == 673);
   assert(cl->seg[0].gate.code == 4u);
-  assert(cl->seg[0].gate.lane_x == 64 && cl->seg[0].gate.lane_z == -64);
+  assert(cl->seg[0].gate.lane_x == 56 && cl->seg[0].gate.lane_z == -56);
   assert(cl->seg[0].gate.cam_dz6f == 0);
-  assert(cl->seg[0].gate.bound == 66);
+  assert(cl->seg[0].gate.bound == 68);
   assert(cl->seg[0].gate.face7d == -0x100);
   assert(cl->seg[0].gate.has_slot == 1u);
-  assert(cl->seg[0].gate.pos_x == 64 && cl->seg[0].gate.pos_y == 0 &&
+  assert(cl->seg[0].gate.pos_x == 56 && cl->seg[0].gate.pos_y == 0 &&
          cl->seg[0].gate.pos_z == 0);
   assert(cl->seg[0].gate.tracked == FIFA96_CAMERA_TRACKED_NONE);
-  assert(cl->seg[0].event.valid && cl->seg[0].event.f == 1481);
+  assert(cl->seg[0].event.valid && cl->seg[0].event.f == 674);
   assert(cl->seg[0].event.code == 5u);
   assert(cl->seg[0].event.cam_vel_x == -5 && cl->seg[0].event.cam_vel_z == 0);
   assert(cl->seg[0].event.speed == 5u);
   assert(cl->seg[0].event.tracked == M2_CLAIM_ENTITY);
-  assert(cl->seg[0].first_motion_f == 1482);
-  assert(cl->seg[0].stop_f == 1509);
+  assert(cl->seg[0].first_motion_f == 675);
+  assert(cl->seg[0].stop_f == 702);
   assert(cl->seg[0].changed_frames == 27u);
   assert(cl->seg[0].stop_x == -0x90 && cl->seg[0].stop_y == 0 &&
          cl->seg[0].stop_z == 0);
@@ -4588,28 +4647,6 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(cl->seg[0].speed_seq[0] == 5 && cl->seg[0].speed_seq[1] == 3 &&
          cl->seg[0].speed_seq[2] == 2 && cl->seg[0].speed_seq[3] == 1 &&
          cl->seg[0].speed_seq[4] == 0);
-  /* Segment 1: the code-3 walk's own camera event. */
-  assert(cl->seg[1].gate.valid && cl->seg[1].gate.f == 1552);
-  assert(cl->seg[1].gate.code == 3u);
-  assert(cl->seg[1].gate.lane_x == 128 && cl->seg[1].gate.lane_z == -128);
-  assert(cl->seg[1].gate.cam_dz6f == 0);
-  assert(cl->seg[1].gate.bound == 128);
-  assert(cl->seg[1].gate.face7d == -0x100);
-  assert(cl->seg[1].gate.has_slot == 0u);
-  assert(cl->seg[1].gate.pos_x == -16 && cl->seg[1].gate.pos_y == 0 &&
-         cl->seg[1].gate.pos_z == 0);
-  assert(cl->seg[1].gate.tracked == M2_CLAIM_ENTITY);
-  assert(cl->seg[1].event.valid && cl->seg[1].event.f == 1553);
-  assert(cl->seg[1].event.code == 3u);
-  assert(cl->seg[1].event.cam_vel_x == -5 && cl->seg[1].event.cam_vel_z == 0);
-  assert(cl->seg[1].event.speed == 5u);
-  assert(cl->seg[1].event.tracked == 1);
-  assert(cl->seg[1].first_motion_f == 1554);
-  assert(cl->seg[1].stop_f == 1581);
-  assert(cl->seg[1].changed_frames == 27u);
-  assert(cl->seg[1].stop_x == -0x120 && cl->seg[1].stop_y == 0 &&
-         cl->seg[1].stop_z == 0);
-  /* The per-segment T(s) arithmetic from the recorded seeds. */
   {
     int32_t fr = 0, pl = 0;
     m2_pan_curve(cl->seg[0].event.cam_vel_x, &fr, &pl);
@@ -4617,40 +4654,31 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
     assert(pl == cl->seg[0].stop_x);
     m2_pan_curve(cl->seg[0].event.cam_vel_z, &fr, &pl);
     assert(fr == 0 && pl == 0);   /* the z pan: the seed's z word is 0 */
-    m2_pan_curve(cl->seg[1].event.cam_vel_x, &fr, &pl);
-    assert((uint32_t)fr == cl->seg[1].changed_frames);
-    assert(pl == cl->seg[1].stop_x - cl->seg[0].stop_x);
-    m2_pan_curve(cl->seg[1].event.cam_vel_z, &fr, &pl);
-    assert(fr == 0 && pl == 0);
   }
   /* The A5 lockout identities (the totals + the bounds). */
-  assert(cl->first_motion_f == 1554);   /* the last segment's */
-  assert(cl->stop_f == 1581);
-  assert(cl->changed_frames == 54u);    /* 27 + 27 */
+  assert(cl->first_motion_f == 675);    /* the last (only) segment's */
+  assert(cl->stop_f == 702);
+  assert(cl->changed_frames == 27u);
   assert(cl->off_zero_frames ==
-         cl->granted_frames - (uint32_t)cl->first_off_zero_f);  /* 2116 */
-  assert(cl->first_off_zero_f == 1482);
-  assert(cl->stop_x == -0x120 && cl->stop_y == 0 && cl->stop_z == 0);
-  assert(cl->max_abs_x == 0x120);
+         cl->granted_frames - (uint32_t)cl->first_off_zero_f);  /* 2923 */
+  assert(cl->first_off_zero_f == 675);
+  assert(cl->stop_x == -0x90 && cl->stop_y == 0 && cl->stop_z == 0);
+  assert(cl->max_abs_x == 0x90);
   assert(cl->decrease_frames == cl->changed_frames);
   assert(cl->increase_frames == 0u);
   assert(cl->y_nonzero_frames == 0u && cl->z_nonzero_frames == 0u);
   assert(cl->pan_at_motion == 0u);
   assert(cl->pan_max == 4u);
-  /* The per-segment decay signature (final review): the real distinct-speed
-   * run 5->3->2->1->0 on both segments. The old pass-level {5,0} pair was a
-   * sampler artifact — segment 1's start still read segment 0's `stop_f`, so
-   * only the first-motion and stop cells were recorded. */
   assert(cl->speed_seq_len == 5u);
   assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 3 &&
          cl->speed_seq[2] == 2 && cl->speed_seq[3] == 1 &&
          cl->speed_seq[4] == 0);
   assert(cl->row04_after_event_frames == 0u);
-  assert(cl->last.code == 3u);
-  assert(cl->last.tracked == 1);
+  assert(cl->last.code == 5u);
+  assert(cl->last.tracked == M2_CLAIM_ENTITY);
 
-  /* P14: the armer never runs; the ladder seam is unchanged (FU323 §4: the
-   * keeper ladder seam re-measured 6118/ran 0 under the live face). */
+  /* P14: the armer never runs; the ladder seam is unchanged (the produced
+   * movement leaves the keeper ladder at 6118 / ran 0). */
   assert(cl->oob_frames == 0u);
   assert(cl->goal_armed_any == 0u);
   assert(cl->stage.calls == 6118u);
@@ -4709,7 +4737,8 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
     if (frame >= (unsigned)cl->seg[0].first_motion_f &&
         frame < (unsigned)cl->seg[0].stop_f)
       assert(trk == M2_CLAIM_ENTITY);
-    if (frame >= (unsigned)cl->seg[1].first_motion_f &&
+    if (cl->segments >= 2u &&
+        frame >= (unsigned)cl->seg[1].first_motion_f &&
         frame < (unsigned)cl->seg[1].stop_f)
       assert(trk == 1);
     ppx = px;
@@ -4737,8 +4766,11 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(cl->trace_pan_min == 0u && cl->trace_pan_max == 4u);
   /* The segment-aware trailing pins (FU322's erratum 2): the gate/event
    * frames sampled are the LAST segment's; the bind cells follow them. */
-  assert(cl->trace_trk_gate == M2_CLAIM_ENTITY);
-  assert(cl->trace_trk_event == 1);
+  /* Phase-35 P1: the gate frame precedes the bind (the camera is still
+   * parked and its tracked cell unset); the event frame carries the record-2
+   * bind. */
+  assert(cl->trace_trk_gate == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cl->trace_trk_event == M2_CLAIM_ENTITY);
 }
 
 /* FU320 §4.2 (phase-32 T1): the natural non-zero-delta drive. A sibling of the
@@ -4858,112 +4890,116 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   else
     assert(unsetenv(name) == 0);
 
-  /* === The re-pinned assert set (FU322's erratum 2 tables / FU323 §5.2,
-   * measured this session — the offset pass under the live face). The
-   * criterion itself survives better than predicted: the pass rides
-   * lane 129 == bound 129 (the same integer-plateau class, off the pinned
-   * 36/36 numbers) and the folded delta is 0 — the face has settled onto
-   * the bearing. Two chained segments; the first is the row-04 one-shot
-   * coda (bind f=1483, trk=2 window f=1483..1552, -0x90 pan, stop f=1511),
-   * the second the code-3 walk camera event. === */
+  /* === The re-pinned assert set (phase-35 P1, the +0x79 placement producer;
+   * FU330/FU331/FU332; measured this session). The left nudge is shortened
+   * to 10 entries (M2_OFFSET_LEFT_TO/DOWN_FROM) so record 2's own camera
+   * event still precedes the producer's natural band pan (f 704): measured,
+   * a 30- or 20-entry nudge hands the one-shot pan to the band record and
+   * this pass loses its driven subject, while 10 keeps the driven event at
+   * f 676. The pass therefore still rides its own record-2 claim: lane 62,
+   * camera-minus-position (-56,-24), the live-face delta 0x42 (inside the
+   * row-04 gate's 0xAB). The drive exists for exactly this: the record's z
+   * offset 24 is the nudge's footprint. No cell is staged. === */
 
   /* The drive/phase frame: the same measured window as the T1 pass. */
   assert(cl->match_start_step == 5);
   assert(cl->phase2_step == 1802);
   assert(cl->granted_frames == 3598u);
 
-  /* FU321 §3.8 (G3) — the offset pin, LOCKED: `lane_at_pass >= 1` and
-   * `(cam_dx,cam_dz) != (0,0)` (measured 129 and (−128,−4)). The T1
-   * DOWN-only drive fails exactly here with lane_at_pass 0: its only pass
-   * is the zero-delta point (pos == cam, bearing 0x80). */
+  /* FU321 §3.8 (G3) — the offset pin: `lane_at_pass >= 1` and
+   * `(cam_dx,cam_dz) != (0,0)` (measured 62 and (-56,-24)). */
   assert(cl->gate.valid);
   assert(cl->gate.lane_x >= 1);
   assert(cl->gate.lane_z != 0 || cl->gate.cam_dz6f != 0);
 
   /* FU320 §4.2: the passing-dispatch tuple (the segment-aware re-pin). */
-  assert(cl->gate.f == 1552);
+  assert(cl->gate.f == 675);
   assert(cl->gate.id == M2_CLAIM_ENTITY);
-  assert(cl->gate.code == 3u);
+  assert(cl->gate.code == 4u);
   assert(cl->gate.active == 2u);
-  assert(cl->gate.pos_x == -16 && cl->gate.pos_y == 0 &&
-         cl->gate.pos_z == 4);
-  assert(cl->gate.lane_x == 129);     /* lane/bound 129/129 — the plateau
-                                       * class off the pinned 36/36 */
-  assert(cl->gate.bound == 129);
-  assert(cl->gate.lane_z == -128);    /* cam_dx (+0x6D) */
-  assert(cl->gate.cam_dz6f == -4);    /* cam_dz (+0x6F) */
-  /* The live face at the gate: 0x2FB in the 10-bit fold (0xFEFB as int16). */
-  assert(cl->gate.face7d == -261);
+  assert(cl->gate.pos_x == 56 && cl->gate.pos_y == 0 &&
+         cl->gate.pos_z == 24);
+  assert(cl->gate.lane_x == 62);
+  assert(cl->gate.bound == 74);
+  assert(cl->gate.lane_z == -56);     /* cam_dx (+0x6D) */
+  assert(cl->gate.cam_dz6f == -24);   /* cam_dz (+0x6F): the nudge's offset */
+  /* The live face at the gate: 0x300 in the 10-bit fold (0xFF00 as int16). */
+  assert(cl->gate.face7d == -0x100);
   assert(cl->gate.timer81 == 0u);
-  assert(cl->gate.has_slot == 0u);
+  assert(cl->gate.has_slot == 1u);
   assert(cl->gate.anim_id == 0u);
   assert(cl->gate.dir_x == -1 && cl->gate.dir_z == 0);
-  assert(cl->gate.tracked == M2_CLAIM_ENTITY);   /* the first segment's bind */
-  assert(cl->gate.controlled == FIFA96_MATCH_ENTITY_NONE);   /* measured: the
-                                        * controlled actor released */
+  assert(cl->gate.tracked == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cl->gate.controlled == 1);
   assert(cl->gate.controlled != M2_CLAIM_ENTITY);   /* the fallback hazard */
-  assert(cl->gate.slot_entity == 1);   /* measured: the slot's entity cell */
-  assert(cl->gate.cam_pos_x == -144 && cl->gate.cam_pos_y == 0 &&
-         cl->gate.cam_pos_z == 0);    /* the camera no longer parked */
+  assert(cl->gate.slot_entity == 2);
+  assert(cl->gate.cam_pos_x == 0 && cl->gate.cam_pos_y == 0 &&
+         cl->gate.cam_pos_z == 0);    /* the camera is still parked */
   /* The gate frame's resting cells: no residual velocity/ramp and no
    * timer — the drive has not fired yet. */
   assert(cl->gate.cam_vel_x == 0 && cl->gate.cam_vel_z == 0);
   assert(cl->gate.speed == 0u);
-  assert(cl->gate.timer == 0u && cl->gate.timer_limit == 12u);
-  assert(cl->gate.ramp_divisor == 12);   /* measured: the ramp persists */
+  assert(cl->gate.timer == 0u && cl->gate.timer_limit == 0u);
+  assert(cl->gate.ramp_divisor == 0);
   {
     int32_t bearing = 0;
     assert(fifa96_entity_angle(cl->gate.lane_z, cl->gate.cam_dz6f, &bearing) ==
            FIFA96_OK);
-    /* The live-face acceptance (FU321 §3.8): the face has settled onto the
-     * bearing — the folded delta is 0 (was 0x4C on the plateau-riding pass). */
+    /* The live-face acceptance (FU321 §3.8): the face folds to within the
+     * gate's 0xAB of the bearing. The produced pacing leaves a residual
+     * 0x42 (the phase-32 producer-less run measured 0 — the walk had
+     * settled further by step 5065); the structural bound is the pin. */
     int32_t delta = (bearing - cl->gate.face7d) & 0x3FF;
     if (delta > 0x200) delta = 0x400 - delta;
-    assert(delta == 0);
+    assert(delta == 0x42);
     assert(delta <= 0xAB);
     cl->gate_bearing = bearing;
     cl->gate_delta = delta;
   }
 
-  /* The event (the code-3 walk's own camera event) and the seed:
+  /* The event (the record-2 claim's own camera event) and the seed:
    * camvel (−5,0), spd 5, tim 0/12, ramp 12. */
-  assert(cl->event.valid && cl->event.f == 1553);
-  assert(cl->event.code == 3u);
+  assert(cl->event.valid && cl->event.f == 676);
+  assert(cl->event.code == 5u);
+  assert(cl->event.active == 2u);
+  assert(cl->event.anim_id == 0u);
+  assert(cl->event.has_slot == 1u);
   assert(cl->event.dir_x == -1 && cl->event.dir_z == 0);
   assert(cl->event.cam_vel_x == -5 && cl->event.cam_vel_z == 0);
+  assert(cl->event.pos_x == 44 && cl->event.pos_y == 0 &&
+         cl->event.pos_z == 24);
   assert(cl->event.speed == 5u);
   assert(cl->event.event_param == 0);
   assert(cl->event.timer == 0u && cl->event.timer_limit == 12u);
   assert(cl->event.ramp_divisor == 12);
-  assert(cl->event.tracked == 1);
-
-  /* The claim (the row-05 possession install), moved 1530 -> 1484. */
-  assert(cl->claim_f == 1484);
+  assert(cl->event.tracked == M2_CLAIM_ENTITY);
+  /* The claim install (the row-05 possession) arrives one frame after the
+   * event. */
+  assert(cl->claim_f == 677);
   assert(cl->claim_entity == M2_CLAIM_ENTITY);
   assert(cl->claim_slot_entity == M2_CLAIM_ENTITY);
   assert(cl->claim_pair_code == 0u && cl->claim_pair_ack == 0u);
 
-  /* The RELOCATED A4: two chained segments, the per-segment T(s) arithmetic
-   * from the recorded seeds; the second's stop accumulates the first's. */
-  assert(cl->segments == 2u);
-  assert(cl->seg[0].valid && cl->seg[1].valid);
-  assert(cl->seg[0].gate.valid && cl->seg[0].gate.f == 1482);
+  /* The A4 pan window (one segment: the claim's own pan). */
+  assert(cl->segments == 1u);
+  assert(cl->seg[0].valid);
+  assert(cl->seg[0].gate.valid && cl->seg[0].gate.f == 675);
   assert(cl->seg[0].gate.code == 4u);
-  assert(cl->seg[0].gate.lane_x == 64 && cl->seg[0].gate.lane_z == -60);
-  assert(cl->seg[0].gate.cam_dz6f == -16);
-  assert(cl->seg[0].gate.bound == 66);
+  assert(cl->seg[0].gate.lane_x == 62 && cl->seg[0].gate.lane_z == -56);
+  assert(cl->seg[0].gate.cam_dz6f == -24);
+  assert(cl->seg[0].gate.bound == 74);
   assert(cl->seg[0].gate.face7d == -0x100);
   assert(cl->seg[0].gate.has_slot == 1u);
-  assert(cl->seg[0].gate.pos_x == 60 && cl->seg[0].gate.pos_y == 0 &&
-         cl->seg[0].gate.pos_z == 16);
+  assert(cl->seg[0].gate.pos_x == 56 && cl->seg[0].gate.pos_y == 0 &&
+         cl->seg[0].gate.pos_z == 24);
   assert(cl->seg[0].gate.tracked == FIFA96_CAMERA_TRACKED_NONE);
-  assert(cl->seg[0].event.valid && cl->seg[0].event.f == 1483);
+  assert(cl->seg[0].event.valid && cl->seg[0].event.f == 676);
   assert(cl->seg[0].event.code == 5u);
   assert(cl->seg[0].event.cam_vel_x == -5 && cl->seg[0].event.cam_vel_z == 0);
   assert(cl->seg[0].event.speed == 5u);
   assert(cl->seg[0].event.tracked == M2_CLAIM_ENTITY);
-  assert(cl->seg[0].first_motion_f == 1484);
-  assert(cl->seg[0].stop_f == 1511);
+  assert(cl->seg[0].first_motion_f == 677);
+  assert(cl->seg[0].stop_f == 704);
   assert(cl->seg[0].changed_frames == 27u);
   assert(cl->seg[0].stop_x == -0x90 && cl->seg[0].stop_y == 0 &&
          cl->seg[0].stop_z == 0);
@@ -4971,70 +5007,37 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->seg[0].speed_seq[0] == 5 && cl->seg[0].speed_seq[1] == 3 &&
          cl->seg[0].speed_seq[2] == 2 && cl->seg[0].speed_seq[3] == 1 &&
          cl->seg[0].speed_seq[4] == 0);
-  assert(cl->seg[1].gate.valid && cl->seg[1].gate.f == 1552);
-  assert(cl->seg[1].gate.code == 3u);
-  assert(cl->seg[1].gate.lane_x == 129 && cl->seg[1].gate.lane_z == -128);
-  assert(cl->seg[1].gate.cam_dz6f == -4);
-  assert(cl->seg[1].gate.bound == 129);
-  assert(cl->seg[1].gate.face7d == -261);
-  assert(cl->seg[1].gate.has_slot == 0u);
-  assert(cl->seg[1].gate.pos_x == -16 && cl->seg[1].gate.pos_y == 0 &&
-         cl->seg[1].gate.pos_z == 4);
-  assert(cl->seg[1].gate.tracked == M2_CLAIM_ENTITY);
-  assert(cl->seg[1].event.valid && cl->seg[1].event.f == 1553);
-  assert(cl->seg[1].event.code == 3u);
-  assert(cl->seg[1].event.cam_vel_x == -5 && cl->seg[1].event.cam_vel_z == 0);
-  assert(cl->seg[1].event.speed == 5u);
-  assert(cl->seg[1].event.tracked == 1);
-  assert(cl->seg[1].first_motion_f == 1554);
-  assert(cl->seg[1].stop_f == 1581);
-  assert(cl->seg[1].changed_frames == 27u);
-  assert(cl->seg[1].stop_x == -0x120 && cl->seg[1].stop_y == 0 &&
-         cl->seg[1].stop_z == 0);
-  assert(cl->seg[1].speed_seq_len == 5u);   /* 5 -> 3 -> 2 -> 1 -> 0 */
-  assert(cl->seg[1].speed_seq[0] == 5 && cl->seg[1].speed_seq[1] == 3 &&
-         cl->seg[1].speed_seq[2] == 2 && cl->seg[1].speed_seq[3] == 1 &&
-         cl->seg[1].speed_seq[4] == 0);
-  /* The per-segment T(s) arithmetic from the recorded seeds. */
   {
     int32_t fr = 0, pl = 0;
     m2_pan_curve(cl->seg[0].event.cam_vel_x, &fr, &pl);
     assert((uint32_t)fr == cl->seg[0].changed_frames);
     assert(pl == cl->seg[0].stop_x);
     m2_pan_curve(cl->seg[0].event.cam_vel_z, &fr, &pl);
-    assert(fr == 0 && pl == 0);
-    m2_pan_curve(cl->seg[1].event.cam_vel_x, &fr, &pl);
-    assert((uint32_t)fr == cl->seg[1].changed_frames);
-    assert(pl == cl->seg[1].stop_x - cl->seg[0].stop_x);
-    m2_pan_curve(cl->seg[1].event.cam_vel_z, &fr, &pl);
-    assert(fr == 0 && pl == 0);
+    assert(fr == 0 && pl == 0);   /* the z pan: the seed's z word is 0 */
   }
   /* The A5 lockout identities (the totals + the bounds). */
-  assert(cl->first_motion_f == 1554);
-  assert(cl->stop_f == 1581);
-  assert(cl->changed_frames == 54u);
+  assert(cl->first_motion_f == 677);
+  assert(cl->stop_f == 704);
+  assert(cl->changed_frames == 27u);
   assert(cl->off_zero_frames ==
-         cl->granted_frames - (uint32_t)cl->first_off_zero_f);  /* 2114 */
-  assert(cl->first_off_zero_f == 1484);
-  assert(cl->off_zero_frames != cl->changed_frames);
-  assert(cl->stop_x == -0x120 && cl->stop_y == 0 && cl->stop_z == 0);
-  assert(cl->max_abs_x == 0x120);
+         cl->granted_frames - (uint32_t)cl->first_off_zero_f);  /* 2921 */
+  assert(cl->first_off_zero_f == 677);
+  assert(cl->stop_x == -0x90 && cl->stop_y == 0 && cl->stop_z == 0);
+  assert(cl->max_abs_x == 0x90);
   assert(cl->decrease_frames == cl->changed_frames);
   assert(cl->increase_frames == 0u);
   assert(cl->y_nonzero_frames == 0u && cl->z_nonzero_frames == 0u);
   assert(cl->pan_at_motion == 0u);
   assert(cl->pan_max == 4u);
-  assert(cl->speed_seq_len == 5u);   /* the last segment's real signature:
-                                      * 5 -> 3 -> 2 -> 1 -> 0 */
+  assert(cl->speed_seq_len == 5u);
   assert(cl->speed_seq[0] == 5 && cl->speed_seq[1] == 3 &&
          cl->speed_seq[2] == 2 && cl->speed_seq[3] == 1 &&
          cl->speed_seq[4] == 0);
   assert(cl->row04_after_event_frames == 0u);
-  assert(cl->last.code == 3u);
-  assert(cl->last.tracked == 1);
+  assert(cl->last.code == 5u);
+  assert(cl->last.tracked == M2_CLAIM_ENTITY);
 
-  /* The armer never runs; the X-lead pan stays inside the OOB bounds, and
-   * the keeper ladder seam is unchanged. */
+  /* The armer never runs; the ladder seam is unchanged. */
   assert(cl->oob_frames == 0u);
   assert(cl->goal_armed_any == 0u);
   assert(cl->stage.calls == 6118u);
@@ -5095,7 +5098,8 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
     if (frame >= (unsigned)cl->seg[0].first_motion_f &&
         frame <= (unsigned)cl->seg[0].stop_f + 5)
       assert(trk == M2_CLAIM_ENTITY);
-    if (frame >= (unsigned)cl->seg[1].first_motion_f &&
+    if (cl->segments >= 2u &&
+        frame >= (unsigned)cl->seg[1].first_motion_f &&
         frame <= (unsigned)cl->seg[1].stop_f + 5)
       assert(trk == 1);
     ppx = px;
@@ -5121,8 +5125,11 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->trace_off_zero == cl->off_zero_frames);
   assert(cl->trace_follow1 == 0u);           /* the follow stays waived */
   assert(cl->trace_pan_min == 0u && cl->trace_pan_max == 4u);
-  assert(cl->trace_trk_gate == M2_CLAIM_ENTITY);
-  assert(cl->trace_trk_event == 1);
+  /* Phase-35 P1: the gate frame precedes the bind (the camera is still
+   * parked and its tracked cell unset); the event frame carries the record-2
+   * bind. */
+  assert(cl->trace_trk_gate == FIFA96_CAMERA_TRACKED_NONE);
+  assert(cl->trace_trk_event == M2_CLAIM_ENTITY);
 }
 
 /* v4 natural-phase-2 probe (M2 playable-match Task 4 / G4 acceptance; re-based
@@ -6969,8 +6976,13 @@ int main(void) {
   /* v14 (phase-14 T3): the post-run re-read now spans the restart chain, so
    * the accepted set is the wired mask plus the restart rows the corner-arm
    * chain exercises (the taker 0x11; M2_RESTART_ROWS_MASK) — the m 72
-   * directive keeps the pre-restart exact set above. */
-  assert(res.mask_final == (M2_WIRED_MASK | M2_RESTART_ROWS_MASK));
+   * directive keeps the pre-restart exact set above.
+   * Phase-35 P1: row 0x06 joins the observed set — the produced movement
+   * reaches a code-6 dispatch on the restart chain (measured; the row was
+   * already wired, so the dispatch census does not move). The m 58/m 72
+   * exact sets above are unchanged. */
+  assert(res.mask_final ==
+         (M2_WIRED_MASK | M2_RESTART_ROWS_MASK | (1ull << 0x06)));
   /* v13 acceptance completion (phase-13 T4): the row-0x0E live jump selector
    * is wired (22/80) but dormant on this tape — no record enters the row-23
    * tackle drain (AI/contact-gated), so its bit never lands in the dispatch

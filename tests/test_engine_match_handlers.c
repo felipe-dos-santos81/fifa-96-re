@@ -3589,6 +3589,81 @@ static void test_action_19_guard_tracked_opponent_rejects(void) {
 
 /* ===== M2 phase-15 T3 (FU-177/FU-178/FU-180) ============================= */
 
+/* FU-330/FU-331 §6.2 (phase-35 P1): the counter. The native row install
+ * re-copies the produced limit (`0x7DA9B` `+0x7B := +0x79`) and the mover's
+ * stride nibble is `timer7b & 0x0F` (`match_run.c:549`), so the FU328 §3.3
+ * clause (`nibble >= 3` enables the seed arm) is a producer consequence.
+ * RED on the pre-producer tree: the cells stay 0. */
+static void test_placement_counter_from_producer(void) {
+  struct fifa96_match_entity e;
+  memset(&e, 0, sizeof e);
+  e.active = 1;
+  e.desc_d = 22;                                  /* 0x10F394[22] = 0x0C */
+  (void)fifa96_match_entities_placement_seed(&e);
+  assert(e.timer79 == 0x0C && e.timer7b == 0x0C); /* RED: 0 / 0 */
+  assert(fifa96_match_entities_install(&e, 2, 0x0B, 0) == 1);
+  assert(e.timer7b == 0x0C);                      /* 0x7DA9B re-copies */
+  assert((e.timer7b & 0x0F) >= 3);                /* FU328 §3.3 clause 1 */
+  /* the boundary keeps the live value (no zeroing fallback) */
+  e.desc_d = 0x20;
+  assert(fifa96_match_entities_placement_seed(&e) == 0);
+  assert(e.timer79 == 0x0C && e.timer7b == 0x0C);
+}
+
+/* FU-330 R6 / FU-331 §4.3/§6.3 (phase-35 P1): the row-09 consumer. The native
+ * staging is `word[+0x7B] = word[+0x79] * 2` (`0x80B3D MOV AX,[EBP+0x79];
+ * 0x80B41 ADD EAX,EAX; 0x80B43 MOV [EBP+0x7B],AX`) and it feeds the two
+ * velocity multiplies, the speed and the `vel << 3` target adds. The OL-82
+ * literal 0 is retired for this cell; the zero-value companion keeps the old
+ * behaviour reachable by staging `timer79 = 0` (a producer pin, not a rewrite).
+ * RED on the pre-producer tree: 0 / 0 / 0 / 0x100. */
+static void test_action_09_placement_limit_velocity(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.state.phase = 2;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.lane_x = 0;              /* speed 0: the position path stays put */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x10;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.face7d = 0x100;          /* sine(0x100) = 0x10000 exactly */
+  e->lane_z = 0;                       /* dx == dz == 0 -> the face is kept */
+  e->cam_dz6f = 0;
+  e->timer79 = 6;                      /* the produced limit (0x10F394[0]) */
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 12);   /* 0x80B43: 2 * 6 */
+  assert(f.mr.record.vel73 == 12);     /* mul(12, 0x10000) */
+  assert(f.mr.record.vel75 == 0);      /* mul(12, 0) — invariant */
+  assert(f.mr.record.speed71 == 12);   /* distance(12, 0) */
+  assert(f.mr.record.target_x == 0x160);  /* 0x100 + 12*8 */
+  assert(f.mr.record.target_z == 0x200);  /* invariant */
+  assert(f.mr.record.stage92 == 1);    /* 0x80BEB invariant */
+  /* zero-value companion: the retirement is conditional on the producer */
+  e = &f.mr.entities.team[0].records[1];
+  f.mr.record.entity_id = 1;
+  f.mr.state.phase = 2;
+  f.mr.record.active = 1;
+  f.mr.record.stage92 = 0;
+  f.mr.record.lane_x = 0;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x10;
+  f.mr.record.pos_z = 0x200;
+  f.mr.record.face7d = 0x100;
+  e->lane_z = 0;
+  e->cam_dz6f = 0;
+  e->timer79 = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
+  assert(f.mr.record.timer7b == 0);
+  assert(f.mr.record.vel73 == 0);
+  assert(f.mr.record.speed71 == 0);
+  assert(f.mr.record.target_x == 0x100);
+  assert(f.mr.record.target_z == 0x200);
+  drop_fixture(&f);
+}
+
 /* Row 09 arm-0 set branch (FU-178 §3): active phase-2 stage-0 record — the
  * face target (e->lane_z/cam_dz6f), the target copy, the 0x79B58 receiver
  * timer, the 0x6E598 anim 0x11 install and the +0x92 stage advance. */
@@ -3610,8 +3685,20 @@ static void test_action_09_stage0_set_branch(void) {
   assert((f.mr.dispatched_ok & (1ull << 0x09)) != 0u);
   assert(f.mr.record.ran == 1);        /* 0x80BCC */
   assert(f.mr.record.stage92 == 1);    /* arm 0 advanced (0x80BEB) */
-  assert(f.mr.record.target_x == 0x100);  /* target = pos (0x80B8E) */
-  assert(f.mr.record.target_z == 0x200);
+  /* The target is NOT the position: the native copies pos -> target and then
+   * adds `vel << 3` (0x80B8E MOVSD x3; 0x80B91..0x80B9D / 0x80B9F..0x80BB0).
+   * The phase-35 placement producer (`+0x79 = 6`) makes the row-09 staging
+   * live: `+0x7B = 2*6 = 12` (0x80B43), the face folds (0x79C50) to 0xB4 from
+   * (dx 0x40, dz 0x20), `sine(0xB4)` through the 0x795A4 multiply gives
+   * `vel73 = 11`, so `target_x = 0x100 + 11*8 = 0x158`; speed 0 keeps
+   * `vel75 = 0` and `target_z = 0x200`. Re-derived under FU330 R6/FU331
+   * §4.3, not re-pinned to the old "target = pos" half. */
+  assert(f.mr.record.timer7b == 12);
+  assert(f.mr.record.face7d == 0xB4);
+  assert(f.mr.record.vel73 == 11);
+  assert(f.mr.record.vel75 == 0);
+  assert(f.mr.record.target_x == 0x158);  /* target = pos + vel73*8 */
+  assert(f.mr.record.target_z == 0x200);  /* vel75 = 0 */
   assert(e->timer93 == 0x10);          /* 0x79B58 receiver timer */
   assert(e->anim_id == 0x11);          /* the 0x6E598 anim install */
   drop_fixture(&f);
@@ -4548,6 +4635,8 @@ int main(void) {
   test_action_1b_finish_not_controlled();
   test_action_19_guard_tracked_opponent_rejects();
   test_action_09_stage0_set_branch();
+  test_placement_counter_from_producer();
+  test_action_09_placement_limit_velocity();
   test_action_09_clear_branch_detaches();
   test_action_09_unported_stage_marks();
   test_action_1b_stage0_latch_partial_clear();

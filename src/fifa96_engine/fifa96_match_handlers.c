@@ -4965,8 +4965,11 @@ static int fifa96_match_action_19(struct fifa96_match_run *mr) {
  *    `+0x9E=1`, `[0x15877C]=0`, `+0x89=0`, `+0x92++`.
  * Unmodelled cells are staged zero with their producers unported (the row-08
  * convention, OL-82): the `0x1577C0/C2` lead words (so the face target uses
- * only `+0x6D/+0x6F`), `word[+0x79]` (the `+0x7B` source) and the `[0x15877C]`
- * shared flag (FU178-L6, write-only here). The `0x79B58` receiver-timer call
+ * only `+0x6D/+0x6F`) and the `[0x15877C]` shared flag (FU178-L6, write-only
+ * here). `word[+0x79]` (the `+0x7B` source) is NO LONGER staged: the phase-35
+ * placement producer writes it (FU330/FU331) and `0x80B43` is the native
+ * `+0x79 * 2`, so the OL-82 zero is retired for this cell only (FU331 §4.4).
+ * The `0x79B58` receiver-timer call
  * (`0x80B4C`) applies the tested `0x79B58` effect (`+0x93 = 0x10`; the `+0x99`
  * callee gate is staged 0, as row 04). */
 static int16_t match_row09_mul(int32_t a, int32_t b) {
@@ -5031,7 +5034,13 @@ static int fifa96_match_action_09(struct fifa96_match_run *mr) {
     /* the second fold (0x80AE8..0x80B15, sine(face+0x100)) is dead on the
      * position path: 0x80B22 overwrites ECX with the first result before the
      * second 0x795A4 call, so 0x80B32 multiplies by (int16)t1, not sin2. */
-    r->timer7b = 0;                                  /* 0x80B43 word[+0x79]*2, +0x79 zero (OL-82) */
+    r->timer7b = (uint16_t)((uint32_t)e->timer79 * 2u); /* 0x80B3D..0x80B43:
+                                * word[+0x7B] = word[+0x79] * 2 (the OL-82
+                                * staged zero retired for this cell; FU330 R6,
+                                * FU331 §4.4). The native reads the record's
+                                * own +0x79; the staging record has no such
+                                * cell, so the pool entity's stands in
+                                * (FU332-L3). */
     e->timer93 = 0x10;                               /* 0x80B4C 0x79B58 (+0x99 staged 0) */
     r->vel73 = match_row09_mul((int16_t)r->timer7b, sin1);        /* 0x80B51..0x80B5E */
     r->vel75 = match_row09_mul((int16_t)r->timer7b, (int16_t)t1); /* 0x80B62..0x80B6F */

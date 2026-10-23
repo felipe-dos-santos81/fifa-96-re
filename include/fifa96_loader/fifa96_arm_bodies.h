@@ -4,6 +4,14 @@
 #pragma once
 #include "fifa96_loader/fifa96_arm_helpers.h"
 
+/* The flat `0x10F394` table the runtime `[0x157A38]` points at (`FUN_00073CD0`
+ * stores `0xF394`; FU-84 §6, FU330 §4): 32 per-player tier bytes read with the
+ * signed descriptor byte `rec[+0x4][+0xD]`. Row 0x26 reads it here
+ * (`timer7b = entry >> 1`); the phase-35 `+0x79` placement producer reads the
+ * same table (`fifa96_match_entities_placement_limit`). One copy, two
+ * consumers — never a second table (FU331 review erratum 1). */
+extern const uint8_t fifa96_arm_26_timer_table[32];
+
 /* `0x36200`: `MOV [0x105FC4],EAX; RET` (5 bytes, first-hand). The stored dword
  * is the gate of the unported `FUN_00036208` camera/coordinate step
  * (`0x3621E CMP dword [(0x105FC4)],1; SETZ/JZ return`; the `0x36211` gate above

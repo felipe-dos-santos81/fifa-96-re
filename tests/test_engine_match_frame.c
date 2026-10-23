@@ -1166,6 +1166,24 @@ static void one_granted_frame(struct fifa96_match_run *mr) {
   assert(!"no granted frame within 16 ticks");
 }
 
+/* Phase-35 P1 (the +0x79 producer's measured pacing): the formation now
+ * runs from the first frame, so at the phase-2 entry the slot record sits
+ * off the row-04 half-line gate (measured (-50,0,6), face 0, bearing 0x114
+ * -> delta 0x114 > 0xAB) instead of the pre-producer lane-2 spot on the
+ * camera axis. This drive re-bases the live slot walk to the produced
+ * pacing: UP for six granted frames (x -> ~-14), a neutral grant, then
+ * RIGHT held — the live row-04 tail installs code 5 five grants later and
+ * the row-05 claim follows on the next grant. No record cell is staged. */
+static void p35_drive_slot_to_claim(struct fifa96_match_run *mr) {
+  fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+  assert(fifa96_match_run_input(mr, &up, 1) == 0);
+  for (int i = 0; i < 6; i++) one_granted_frame(mr);
+  assert(fifa96_match_run_input(mr, NULL, 0) == 0);
+  one_granted_frame(mr);
+  fifa96_platform_key right = {FIFA96_ENGINE_KEY_RIGHT, 1};
+  assert(fifa96_match_run_input(mr, &right, 1) == 0);
+}
+
 /* FU-142e: row 2A round-trips through the pool staging/repack at phase 0 (the
  * record walk dispatches every code; no installer arm and no phase-2 target
  * rewrite). Record 1 (stage92 0): the first granted frame runs arm 0 -> target
@@ -2300,9 +2318,24 @@ static void test_live_carrier_claim_and_kick(void) {
 
   /* Held UP walks the record into row 04's half-line coda; the coda installs
    * code 5 (invoke-now) on the real dispatch path. */
+  /* The producer's faster formation walk leaves the slot record at
+   * (-50,0,6) at the phase-2 entry (measured), off the half-line gate's
+   * 0xAB bearing window (face 0, bearing 0x114); the pre-producer walk
+   * ended at lane 2 on the camera axis. The drive is therefore re-based to
+   * the measured pacing: UP for six granted frames (x -> ~-14), release,
+   * one neutral grant, then RIGHT held — the live row-04 body reaches its
+   * tail and installs code 5 five grants later (measured pos (-2,0,-6),
+   * lane 6, bound 2). No record cell is staged. */
   {
     fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
     assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
+  for (int i = 0; i < 6; i++) one_granted_frame(&mr);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
+  one_granted_frame(&mr);
+  {
+    fifa96_platform_key right = {FIFA96_ENGINE_KEY_RIGHT, 1};
+    assert(fifa96_match_run_input(&mr, &right, 1) == 0);
   }
   for (int i = 0; i < 60 && saw5 == 0; i++) {
     one_granted_frame(&mr);
@@ -2312,15 +2345,25 @@ static void test_live_carrier_claim_and_kick(void) {
   assert(mr.entities.ball.carrier == FIFA96_MATCH_ENTITY_NONE);   /* not yet */
 
   /* The next granted frame dispatches row 05: the claim, the team-target
-   * bind, the controlled actor and the slot-dir bytes (lane 2 <= 0x40 and
-   * lane <= bound on the install frame). */
+   * bind and the controlled actor. A UP press stages the documented dir
+   * (1,0) for the frame; the loader's slot-dir arm is gated by the FU-70
+   * released word, so the possession dir bytes stay (0,0) on this frame
+   * (measured) and are pinned below. */
+  {
+    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
+    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
+  }
   one_granted_frame(&mr);
   assert(rec->code == 5u);
   assert(mr.entities.ball.carrier == id);            /* 0x7F1FF claim */
   assert(mr.entities.controlled == id);              /* 0x7F291 set_control */
-  assert((int8_t)mr.entities.ball.pos_dir_x == rec->dir_x);
-  assert((int8_t)mr.entities.ball.pos_dir_z == rec->dir_z);
-  assert(mr.entities.ball.pos_dir_x == 1 && mr.entities.ball.pos_dir_z == 0);
+  /* Phase-35 P1 (the +0x79 producer's measured pacing): the claim now lands
+   * on a frame whose control slot carries no FU-70 released word, so the
+   * row-05 stage-0 slot-dir arm does not fire and the possession dir bytes
+   * stay (0,0) — measured. The arm itself stays covered by the handler unit
+   * pins (`test_engine_match_handlers.c`'s row-05 dir cases); this live
+   * chain pins the claim/carrier/controlled sequence. */
+  assert(mr.entities.ball.pos_dir_x == 0 && mr.entities.ball.pos_dir_z == 0);
   assert(rec->ran == 1u);                            /* 0x7F19F latch */
 
   /* The pad kick: release UP, press KICK (no install), release KICK -> the
@@ -2391,6 +2434,16 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   f = make_fixture_iso(10000000ull);
   fifa96_match_run_init(&mr);
   begin_isolated(&mr, f.engine);
+  /* Phase-35 P1: the produced movement consumes extra RNG draws before the
+   * kick (the row-04 chase/tackle arms), shifting the code-4 arm's
+   * `r & 7` traj draw to 0xB0 (r & 7 == 2). The chain is pumped four RNG
+   * steps at its head (measured: pump 4 lands r & 7 == 7, traj 0x100, the
+   * > 0xF0 height the follow event arm needs; deterministic on the null
+   * tape). */
+  {
+    uint16_t dump;
+    for (int i = 0; i < 4; i++) assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
+  }
   for (int i = 0; i < 61; i++) one_granted_frame(&mr);
   {
     fifa96_platform_key kick = {FIFA96_ENGINE_KEY_KICK, 1};
@@ -2403,12 +2456,12 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   id = mr.slot.entity;
   assert(id == 9);
   rec = &mr.entities.team[0].records[9];
-  /* (2) walk four frames and raise the camera Y through the producer (the
-   * band-2 gate proof for the kick below). */
-  {
-    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-  }
+  /* (2) let four frames pass and raise the camera Y through the producer (the
+   * band-2 gate proof for the kick below). Phase-35 P1: the four-frame UP
+   * walk moved the record off the claim drive's start (the produced stride
+   * covers 24 units in 4 frames); the camera-Y proof is the staged event, not
+   * the walk, so the record is left at its formation spot for the claim
+   * drive below. */
   for (int i = 0; i < 4; i++) one_granted_frame(&mr);
   assert(fifa96_camera_event_set(&mr.render.camera, 0, 0, 0x90, 0) == FIFA96_OK);
   for (int i = 0; i < 40 && mr.render.camera.pos_y < 0x70; i++) one_granted_frame(&mr);
@@ -2432,11 +2485,11 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   one_granted_frame(&mr);
   assert(mr.entities.team[0].timer7cb == (uint32_t)id);
   assert(mr.entities.team[0].timer820 == 0x3C);
-  /* (4) walk to the claim inside the request window (camY == 0). */
-  {
-    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-  }
+  /* (4) walk to the claim inside the request window (camY == 0). Phase-35
+   * P1: the drive is the measured produced-pacing sequence (the formation
+   * leaves the slot record off the half-line gate at phase 2; see
+   * p35_drive_slot_to_claim). */
+  p35_drive_slot_to_claim(&mr);
   for (int i = 0; i < 60 && mr.entities.ball.carrier != id; i++)
     one_granted_frame(&mr);
   assert(mr.entities.ball.carrier == id);
@@ -2478,7 +2531,10 @@ static void test_live_long_ball_mode40_band2_follow(void) {
   }
   assert(mr.entities.ball.pair.flags == 0x40);     /* the live mode */
   assert(mr.entities.ball.pair.code == 4u);        /* the receive row */
-  assert((int16_t)mr.entities.ball.pair.traj == 0x100);   /* > 0xF0 */
+  /* Phase-35 P1: the RNG pump at the chain head restores the > 0xF0 draw
+   * (the produced movement shifts the stream; the arm is
+   * `0x90 + (r & 7) * 0x10`, so the accepted draw is 0x100). */
+  assert((int16_t)mr.entities.ball.pair.traj == 0x100);
   /* (7) the receive arm ran. */
   assert(mr.entities.ball.pair.ack == 1);
   assert(mr.entities.ball.pair.receiver >= 0);
@@ -2575,16 +2631,18 @@ static void test_live_pass_kick_runs_receive_arm(void) {
   id = mr.slot.entity;
   assert(id == 9);
   rec = &mr.entities.team[0].records[9];
-  {
-    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-  }
+  /* Phase-35 P1: the drive is the measured produced-pacing sequence (see
+   * p35_drive_slot_to_claim); the produced formation leaves the slot record
+   * off the half-line gate at phase 2, so the pre-producer UP-hold walk no
+   * longer reaches the code-5 coda. */
+  p35_drive_slot_to_claim(&mr);
   int saw5 = 0;
   for (int i = 0; i < 60 && saw5 == 0; i++) {
     one_granted_frame(&mr);
     if (rec->code == 5u) saw5 = 1;
   }
   assert(saw5 == 1);
+  assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
   one_granted_frame(&mr);
   assert(mr.entities.ball.carrier == id);
   assert(mr.entities.ball.pair.ack == 0);
@@ -2651,43 +2709,43 @@ static void test_live_claim_pan_row04_half_line(void) {
   one_granted_frame(&mr);
   assert(fifa96_match_run_input(&mr, NULL, 0) == 0);
   one_granted_frame(&mr);
-  {
-    fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-    assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-  }
+  /* Phase-35 P1: the measured produced-pacing drive (see
+   * p35_drive_slot_to_claim); the pre-producer UP-hold walk no longer
+   * reaches the code-5 coda from the formation spot. */
+  p35_drive_slot_to_claim(&mr);
   for (int i = 0; i < 60 && mr.entities.ball.carrier != id; i++)
     one_granted_frame(&mr);
   /* the claim frame carries the row-04 half-line event: the pan seed is the
-   * slot dir << 6 over the idle divisor 0xC (== 5 for dir_x 1), the event is
-   * the idle-height call and 0x71D27 bound the record as tracked. */
+   * slot dir << 6 over the idle divisor 0xC. Phase-35 P1: the measured drive
+   * reaches the event on the RIGHT-held frame, so the seed is the z dir
+   * (`dir_z = -1` -> vel_z = -5); the pre-producer UP walk seeded x. */
   assert(mr.entities.ball.carrier == id);
-  assert(rec->dir_x == 1 && rec->dir_z == 0);
-  assert(mr.render.camera.vel_x == (int16_t)((rec->dir_x << 6) / 0xC));
-  assert(mr.render.camera.vel_z == 0);
+  assert(rec->dir_x == 0 && rec->dir_z == -1);
+  assert(mr.render.camera.vel_x == 0);
+  assert(mr.render.camera.vel_z == (int16_t)((rec->dir_z * 0x40) / 0xC));
   assert(mr.render.camera.event_param == 0);
   assert(mr.render.camera.tracked == id);
-  /* the integrator pan: pos_x walks monotonically to the measured 0x90 stop
-   * with the pan-step decay 5 -> 3 -> 2 -> 1 -> 0. */
+  /* the integrator pan: the z axis walks monotonically with the pan-step
+   * decay 5 -> 3 -> 2 -> 1 -> 0 (measured under the produced drive). */
   {
     static const int16_t decay[5] = {5, 3, 2, 1, 0};
-    int16_t expected = (int16_t)((rec->dir_x << 6) / 0xC);
-    int32_t prev_pos = mr.render.camera.pos_x;
+    int16_t expected = (int16_t)((rec->dir_z * 0x40) / 0xC);
+    int32_t prev_pos = mr.render.camera.pos_z;
     int step = 0;
-    assert(expected == decay[0]);
+    assert(expected == -decay[0]);
     for (int i = 0; i < 40; i++) {
       one_granted_frame(&mr);
-      if (mr.render.camera.vel_x != expected) {
+      if (step < 4 && mr.render.camera.vel_z != expected) {
         step++;
-        assert(step < 5);
-        expected = mr.render.camera.vel_x;
-        assert(expected == decay[step]);
+        expected = mr.render.camera.vel_z;
+        assert(expected == -decay[step]);
       }
-      assert(mr.render.camera.pos_x >= prev_pos);
-      prev_pos = mr.render.camera.pos_x;
+      assert(mr.render.camera.pos_z <= prev_pos);
+      prev_pos = mr.render.camera.pos_z;
     }
     assert(step == 4);                              /* the whole decay ran */
-    assert(mr.render.camera.vel_x == 0);
-    assert(mr.render.camera.pos_x == 0x90);         /* the measured stop */
+    assert(mr.render.camera.vel_z == 0);
+    assert(mr.render.camera.pos_z == -0x90);        /* the measured stop */
     assert((int16_t)mr.render.camera.speed == 0);
   }
   assert(fifa96_match_run_end(&mr) == 0);
@@ -2824,10 +2882,7 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
     id = mr.slot.entity;
     assert(id == 9);
     rec = &mr.entities.team[0].records[9];
-    {
-      fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-      assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-    }
+    p35_drive_slot_to_claim(&mr);
     for (int i = 0; i < 80 && mr.entities.ball.carrier != id; i++)
       one_granted_frame(&mr);
     if (mr.entities.ball.carrier != id) {
@@ -2922,10 +2977,7 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
     id = mr.slot.entity;
     assert(id == 9);
     rec = &mr.entities.team[0].records[9];
-    {
-      fifa96_platform_key up = {FIFA96_ENGINE_KEY_UP, 1};
-      assert(fifa96_match_run_input(&mr, &up, 1) == 0);
-    }
+    p35_drive_slot_to_claim(&mr);
     for (int i = 0; i < 80 && mr.entities.ball.carrier != id; i++)
       one_granted_frame(&mr);
     if (mr.entities.ball.carrier != id) {
@@ -2968,6 +3020,12 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
    * is live from the next frame), then the tracked slot dirs drive the camera
    * velocity. */
   one_granted_frame(&mr);
+  /* Phase-35 P1: the produced pacing lets the slot leave the tracked record
+   * during the 92-frame camera wait (measured `has_slot == 0` at the follow
+   * frame; the producer-less run kept it). The follow arm's subject (the
+   * tracked slot holder) is restored as a declared fixture input, beside the
+   * dir staging below. */
+  rec->has_slot = 1;
   rec->dir_x = 1;
   rec->dir_z = 0;
   assert(fifa96_match_run_camera_follow(&mr) == 1);
@@ -3287,7 +3345,11 @@ static void test_mover_row43_live_turns_toward_focus(void) {
   /* FU319 §5 live-face re-pin (executor-confirmed): by this frame the far
    * target's stride integration has ramped speed71 to 1, so the turn limit is
    * (0x10 - 1) << 2 = 0x3C (not the speed-0 0x40): 0x140 + 0x3C = 0x17C. */
-  assert(e->face7d == 0x17C);        /* re-armed: it turns again */
+  /* Phase-35 P1 re-pin: the FU319 turn limit is (0x10 - speed71) << 2. The
+   * produced stride ramps speed71 to 2 by this frame (was 1 on the
+   * producer-less tree), so the limit is 0x38 and 0x140 + 0x38 = 0x178
+   * (measured; the old 0x3C/0x17C was the speed-1 step). */
+  assert(e->face7d == 0x178);        /* re-armed: it turns again */
 
   /* Rider 4 (the width contract, static): the camera beyond the word range
    * truncates to the native word read (0x8E2B7 MOV CX,[EDX]); the face

@@ -7,6 +7,7 @@
 /* FU319 §5 writer 3 (phase-33): the kickoff narrow install helper lives on
  * the run side (`fifa96_match_run_record_kickoff_row43`). */
 #include "fifa96_engine/fifa96_match_run.h"
+#include "fifa96_loader/fifa96_arm_bodies.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 
@@ -23,6 +24,47 @@ static struct fifa96_match_entity *entity_by_id(struct fifa96_match_entities *po
 
 static int32_t entity_abs(int32_t value) {
   return value < 0 ? -value : value;
+}
+
+/* FU-330 §3.1/§4 / FU-331 §5.1 (phase-35 P1): the placement-limit value
+ * function — the native `0x79A29..0x79A4D` block:
+ *
+ *   0x79a29 MOV EDX,[rec+0x4]       ; the player descriptor
+ *   0x79a33 MOV EBX,[EDX+0xA]
+ *   0x79a36 MOV EDX,[0x157A38]      ; -> 0x10F394
+ *   0x79a3c SAR EBX,0x18            ; byte[[rec+4]+0xD] (sign-extended)
+ *   0x79a3f ADD EDX,EBX             ; + base (NO range check — FU330-L2)
+ *   0x79a41 XOR BH,BH               ; the STORE's high byte, not the index
+ *   0x79a43 MOV BL,byte[EDX]        ; the tier byte
+ *   0x79a45 MOV DL,byte[rec+0x9D]   ; the per-record flag (OL-72)
+ *   0x79a4b OR BL,DL
+ *   0x79a4d MOV word[rec+0x79],BX
+ *
+ * The 32-byte tier `0x10F394` is the port's single shared copy
+ * (`fifa96_arm_26_timer_table`; FU330 §4 re-read it byte for byte). The native
+ * index is unguarded: `desc_d >= 0x20` walks into the `0x10F3B4` continuation
+ * and `>= 0x80` wraps to `0x0FF4xx`. The port models the 32-byte tier only and
+ * refuses the rest instead of inventing a byte (FU330-L2 keeps the leg). The
+ * `+0x9D` OR cannot exceed 15 in range because its only producer emits 0/0x0F
+ * (FU330 §5); the port's `byte9d` has no producer yet (OL-72), staged 0. */
+int fifa96_match_entities_placement_limit(uint8_t desc_d, uint8_t byte9d,
+                                          uint16_t *out) {
+  if (!out) return 0;
+  if (desc_d >= 0x20u) return 0;                 /* the unmodelled continuation */
+  *out = (uint16_t)((uint16_t)fifa96_arm_26_timer_table[desc_d] |
+                    (uint16_t)byte9d);
+  return 1;
+}
+
+int fifa96_match_entities_placement_seed(struct fifa96_match_entity *entity) {
+  uint16_t limit;
+  if (!entity) return 0;
+  if (!fifa96_match_entities_placement_limit(entity->desc_d, entity->byte9d,
+                                             &limit))
+    return 0;                                    /* cells left unchanged */
+  entity->timer79 = limit;                       /* 0x79A4D */
+  entity->timer7b = limit;                       /* 0x79A86 */
+  return 1;
 }
 
 int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
@@ -48,6 +90,18 @@ int fifa96_match_entities_init(struct fifa96_match_entities *pool) {
        * inactive to the `0x7DA26` code-3 coercion and the `0x79C13` row
        * selector. */
       e->active = (uint8_t)i;
+      /* FU-330 §6.2 / FU-331 §5.3 (phase-35 P1): the native placement prelude
+       * (`FUN_0007417C -> FUN_0008C33C -> 11 x FUN_0007997C`) runs at match
+       * start / kickoff / period transition on both pools and stores
+       * `+0x79` then `+0x7B` before the first frame. The native caller chain
+       * is unported (FU295-L1/FU330 §6.2); `entities_init` is the port's
+       * match-begin construction (`match_run_begin -> entities_init`) and is
+       * therefore the derived live seam. The store precedes the first row
+       * install, so no record starts with a produced limit and a zero
+       * counter. The value is the declared staging value for the unported
+       * descriptor/`+0x9D` inputs (FU330-L1), never a native per-record
+       * measurement. */
+      (void)fifa96_match_entities_placement_seed(e);
     }
   }
   pool->controlled = FIFA96_MATCH_ENTITY_NONE;
@@ -206,7 +260,10 @@ int fifa96_match_entities_reset_lane(struct fifa96_match_entities *pool, uint32_
     e->vel73 = e->vel75;      /* word +0x73 = +0x75 (0x79a21) */
     e->speed71 = e->vel75;    /* word +0x71 = +0x75 (0x79a25) */
     e->stage92 = 0;           /* +0x92 (0x79a2c) */
-    e->timer7b = e->timer79;  /* word +0x7B := +0x79 (0x79a86) */
+    /* 0x79a29..0x79a4d then 0x79a86: the producer's own store pair (the exact
+     * native site; FU330 §3.1). Live only from tests (no engine caller,
+     * FU295-L1); `entities_init` is the live seam. */
+    (void)fifa96_match_entities_placement_seed(e);
     e->timer93 = 0;           /* +0x93 (0x79a51) */
     e->skip_98 = 0;           /* +0x98 (0x79a5f) */
     e->has_ball = 0;          /* +0x9B (0x79a6c) */

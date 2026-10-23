@@ -127,6 +127,16 @@ struct fifa96_match_entity {
   uint16_t timer81;         /* +0x81 countdown word */
   uint16_t timer7b;         /* +0x7B */
   uint16_t timer79;         /* +0x79 */
+  /* FU-330/FU-331 (phase-35 P1): the placement-limit producer's two native
+   * inputs. `desc_d` is `byte[[rec+4]+0xD]` — the per-player roster descriptor
+   * (the `0x10F394` tier index; the native read is unguarded, FU330-L2); its
+   * producer is unported (FU301-L3/FU330-L1) and the pool stages 0.
+   * `byte9d` is the native `byte[+0x9D]` OR term (OL-72); its only writer is
+   * the unported lineup rebind and the pool stages 0. With both at 0 the
+   * producer yields `0x10F394[0] = 6` on every record — a declared staging
+   * value, not a native per-record measurement. */
+  uint8_t desc_d;           /* native byte[[rec+4]+0xD] */
+  uint8_t byte9d;           /* native byte[+0x9D] */
   uint32_t timer7f;         /* +0x7F, countdown limit = >>16 */
   int32_t timer89;          /* +0x89 action timer */
   int32_t pos_x, pos_y, pos_z;          /* +0x59 / +0x5D / +0x61 */
@@ -474,6 +484,28 @@ int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_
  * `frame->intercept_x[]` and z/word8 into `frame->intercept_y[]`. */
 #define FIFA96_MATCH_ENTITY_INTERCEPT_Z0 0x990
 #define FIFA96_MATCH_ENTITY_INTERCEPT_Z1 (-0xA90)
+
+/* FU-330 §3.1 / FU-331 §5 (phase-35 P1): the native placement-limit value
+ * function (`FUN_0007997C` `0x79A29..0x79A4D`): `word[+0x79] =
+ * byte[0x10F394 + desc_d] | byte[+0x9D]`. The table is the port's existing
+ * `fifa96_arm_26_timer_table[32]` (`fifa96_arm_bodies.c`, flat `0x10F394`;
+ * FU330 §4 re-read it byte for byte). Returns 1 and stores `*out` for an index
+ * inside the modelled 32-byte tier (`desc_d <= 0x1F`, values 6..15); returns 0
+ * for the unmodelled `desc_d >= 0x20` continuation class (the native index is
+ * unguarded and would read `0x10F3B4`/the `0x0FF4xx` wrap, FU330-L2) with
+ * `*out` untouched. NULL `out` -> 0. */
+int fifa96_match_entities_placement_limit(uint8_t desc_d, uint8_t byte9d,
+                                          uint16_t *out);
+
+/* FU-331 §5.3 (phase-35 P1): the native placement-reset store pair —
+ * `0x79A4D` `word[+0x79] = limit` then `0x79A86` `word[+0x7B] = word[+0x79]`
+ * — over one pool record. Both cells are written in that order, so no window
+ * exists in which the counter holds a stale limit. Returns 1 when written and
+ * 0 when the descriptor is outside the modelled tier table: the cells are
+ * then left UNCHANGED (never zeroed: 0 is below the native floor `2..15` and
+ * would re-create the FU323-L1 silent bind; FU331 review erratum 2). NULL ->
+ * 0. */
+int fifa96_match_entities_placement_seed(struct fifa96_match_entity *entity);
 
 /* The FU-137 §2 installer FUN_0007D9A4 over a derived record: `code` is the
  * requested action, `staged` the BL stage byte. Rejects an occupied record

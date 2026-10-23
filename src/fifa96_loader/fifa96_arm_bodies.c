@@ -28,8 +28,10 @@
 
 /* Flat 0x10F394, the 32-byte table pointed to by the runtime [0x157A38]
  * (FUN_00073CD0 stores 0xF394; FU-84 §6 re-reads the same bytes). Row 26 reads
- * it with the signed byte rec[+0x4][+0xD]. */
-static const uint8_t fifa96_arm_26_timer_table[32] = {
+ * it with the signed byte rec[+0x4][+0xD]. Public since phase-35 P1: the
+ * `+0x79` placement producer (FU330 §4 re-read the bytes) indexes the same
+ * 32-byte tier. */
+const uint8_t fifa96_arm_26_timer_table[32] = {
   0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06, 0x06,
   0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07, 0x07,
   0x0F, 0x0F, 0x0F, 0x0E, 0x0D, 0x0D, 0x0C, 0x0B,

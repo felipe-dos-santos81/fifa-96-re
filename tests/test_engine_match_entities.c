@@ -1205,6 +1205,60 @@ static void test_null_take_guards(void) {
   assert(fifa96_match_entities_take_place(NULL, NULL, NULL, NULL) == -FIFA96_ERR_INVALID);
 }
 
+/* FU-330 §3.1 / FU-331 §5/§6.1 (phase-35 P1): the native placement-limit
+ * producer `FUN_0007997C` — `word[+0x79] = byte[0x10F394 + desc_d] |
+ * byte[+0x9D]` at `0x79A4D`, then `word[+0x7B] = word[+0x79]` at `0x79A86`.
+ * Both writers are pinned: the init seed (the live derived seam) and the
+ * reset-lane pass (the exact native site). The staged inputs are desc_d = 0
+ * and byte9d = 0, so the produced value is the table's first row (6) — the
+ * declared staging value, never a native per-record measurement (FU330-L1). */
+static void test_placement_limit_producer(void) {
+  struct fifa96_match_entities pool;
+  uint16_t out = 0;
+  assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
+  /* RED on the pre-producer tree: 0. GREEN: 0x10F394[0] = 6. */
+  assert(pool.team[TEAM0].records[3].timer79 == 6);
+  assert(pool.team[TEAM0].records[3].timer7b == 6);      /* 0x79A86 */
+  /* the value function: the table index and the +0x9D OR are both exercised */
+  assert(fifa96_match_entities_placement_limit(0, 0, &out) == 1 && out == 6);
+  assert(fifa96_match_entities_placement_limit(22, 0, &out) == 1 && out == 0x0C);
+  assert(fifa96_match_entities_placement_limit(16, 0x10, &out) == 1 && out == 0x1F);
+  assert(fifa96_match_entities_placement_limit(0, 0x80, &out) == 1 && out == 0x86);
+  assert(fifa96_match_entities_placement_limit(31, 0, &out) == 1 && out == 6);
+  /* the modelled index boundary (FU331 review erratum 2 / FU330-L2): the
+   * native index is unguarded and >= 0x20 reads the 0x10F3B4 continuation,
+   * which the port does not model; the function refuses (0) instead of
+   * inventing a byte. */
+  out = 0xAA;
+  assert(fifa96_match_entities_placement_limit(0x20, 0, &out) == 0);
+  assert(out == 0xAA);                                   /* untouched */
+  assert(fifa96_match_entities_placement_limit(0, 0, NULL) == 0);
+  assert(fifa96_match_entities_placement_seed(NULL) == 0);
+  /* the exact native site: reset_lane runs the producer per record */
+  pool.team[TEAM0].records[4].desc_d = 22;               /* 0x10F394[22] = 0x0C */
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[4].timer79 == 0x0C);
+  assert(pool.team[TEAM0].records[4].timer7b == 0x0C);
+  pool.team[TEAM0].records[5].desc_d = 16;               /* 0x0F */
+  pool.team[TEAM0].records[5].byte9d = 0x10;             /* OR -> 0x1F */
+  pool.team[TEAM0].records[6].desc_d = 0;
+  pool.team[TEAM0].records[6].byte9d = 0x80;             /* 6 | 0x80 = 0x86 */
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[5].timer79 == 0x1F);
+  assert(pool.team[TEAM0].records[6].timer79 == 0x86);
+  /* the out-of-range class leaves the live cells UNCHANGED (never 0: below
+   * the native floor 2..15 and the FU323-L1 silent bind; FU331 erratum 2) */
+  pool.team[TEAM0].records[7].timer79 = 0x0B;
+  pool.team[TEAM0].records[7].timer7b = 0x0B;
+  pool.team[TEAM0].records[7].desc_d = 0x20;
+  assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
+  assert(pool.team[TEAM0].records[7].timer79 == 0x0B);
+  assert(pool.team[TEAM0].records[7].timer7b == 0x0B);
+  /* the other team is produced too (both pools in the native prelude) */
+  assert(pool.team[TEAM1].records[10].timer79 == 6);
+  assert(pool.team[TEAM1].records[10].timer7b == 6);
+}
+
 int main(void) {
   test_init_resets_pool();
   test_release_clears();
@@ -1214,6 +1268,7 @@ int main(void) {
   test_install_coerces_inactive_code3();
   test_install_carrier_bit();
   test_install_skip98_clear();
+  test_placement_limit_producer();
   test_team_select_nearest();
   test_team_select_none();
   test_team_pick_ranked_lane();
