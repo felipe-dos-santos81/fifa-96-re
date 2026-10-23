@@ -5215,7 +5215,10 @@ int fifa96_match_action_22(struct fifa96_match_run *mr) {
     r->target_x = r->pos_x;                         /* 0x85407 snap */
     r->target_y = r->pos_y;
     r->target_z = r->pos_z;
-    /* 0x8540C byte[+0x43] = 0 (the FUN_0006E598 row-flags byte, FU185-L3). */
+    /* 0x8540C byte[+0x43] = 0 (the FUN_0006E598 row-flags byte, FU185-L3;
+     * FU319 §5 clear, phase-33: the pool and the staging record agree). */
+    r->row43 = 0;
+    e->row43 = 0;
     r->timer89 = 0;                                 /* 0x85416 */
     r->stage92 = 1u;                                /* 0x85420 */
     return FIFA96_OK;

@@ -497,6 +497,11 @@ struct fifa96_match_run_record {
   /* FU-139 §9 (Task 11): the current pool record identity, staged so rows
    * 07/0F can resolve the team candidates and the kick direction table. */
   int32_t entity_id;   /* team*11 + index, or NONE */
+  uint8_t row43;       /* native +0x43: the anim-row "steer the facing" latch
+                        * (row_flags & 0x02, values {0,2}; FU319 §2/§5,
+                        * phase-33 probe). Staged from the pool latch (not
+                        * derivable from anim_id), read by the mover's
+                        * direct_face arm. */
   uint8_t row44;       /* native +0x44 animation/event ack byte (FU-151: the
                         * row-1E stage 0/2/8 and row-1D stage 0/4 gates read
                         * it; FU-159/T3: produced from the current anim row's
@@ -1243,6 +1248,16 @@ int fifa96_match_run_frame(struct fifa96_match_run *mr);
 int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
                                          struct fifa96_match_entity *e,
                                          int32_t id, uint8_t frame);
+
+/* FU319 §5 writer 3 (phase-33 probe): the kickoff placement's narrow +0x43
+ * install — the row's "steer the facing" latch (`row_flags & 0x02`,
+ * 0x6E6BF..0x6E6C4) for the placement's selected row (native
+ * `FUN_0006E598(rec, active ? 0 : 0x26, 0)` at 0x79C13). The pool-side
+ * placement installs the row without the full FUN_0006E598 route (the
+ * `anim_timer`/`aux_seen` side effects are collateral there), so it calls
+ * this narrow write. No-op on NULL or a row-lookup miss. */
+void fifa96_match_run_record_kickoff_row43(struct fifa96_match_entity *e,
+                                           int32_t anim_id);
 
 /* FU-142b (phase-12 T1; exposed phase-28 T4): the post-handler velocity
  * decomposition the FU-141 dispatch runs after every action body and before the

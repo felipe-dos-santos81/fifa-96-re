@@ -1071,6 +1071,12 @@ static void test_kickoff_place_face_and_selector(void) {
   assert(e->frame == 0);
   assert(plain->anim_id == 0);     /* active non-special: derived fallback */
   assert(pool.team[TEAM1].records[0].type == 0);   /* zero delta: untouched */
+  /* FU319 §5 writer 3 (phase-33): the native `0x79C13` tail is a real row
+   * install — the +0x43 latch := the SELECTED row's flags bit 1; rows
+   * 0/0x26/0x62 all carry flags 0x07, so every placed record re-arms at 2. */
+  for (uint32_t t = 0; t < 2; t++)
+    for (uint32_t i = 0; i < 11; i++)
+      assert(pool.team[t].records[i].row43 == 2u);
 }
 
 /* FU-96 leg 5 (M2 interactive T2): the per-record camera place

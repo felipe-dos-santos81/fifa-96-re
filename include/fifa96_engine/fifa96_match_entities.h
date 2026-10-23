@@ -95,6 +95,15 @@ struct fifa96_match_entity {
    * unwired `fifa96_match_action_phase_1E` body. */
   uint8_t skip_99;          /* +0x99 */
   uint8_t skip_9a;          /* +0x9A exclusion (occupied record) */
+  uint8_t row43;            /* native +0x43: the anim-row "steer the facing"
+                             * latch (row_flags & 0x02, values {0,2}; FU319
+                             * §2/§5, phase-33 probe). Written by the row
+                             * installs (0x6E6BF..0x6E6C4 / 0x8DFB6..0x8DFBA),
+                             * the kickoff narrow install (0x79C13) and the
+                             * row-0x22 stage-0 clear (0x8540C); read only by
+                             * the locomotion turn (0x8E29C/0x7BF89). Not
+                             * derivable from anim_id: it survives the
+                             * 0x799BF row-pointer clear. */
   uint8_t row44;            /* native +0x44 (animation/event ack byte; the
                              * keeper stage gates read it; FU-159 §4.1/T3: the
                              * producer is the row install's `row_flags & 1`

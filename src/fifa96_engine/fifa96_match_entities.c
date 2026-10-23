@@ -4,6 +4,9 @@
 #include <string.h>
 
 #include "fifa96_engine/fifa96_match_entities.h"
+/* FU319 §5 writer 3 (phase-33): the kickoff narrow install helper lives on
+ * the run side (`fifa96_match_run_record_kickoff_row43`). */
+#include "fifa96_engine/fifa96_match_run.h"
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 
@@ -563,8 +566,15 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
         if (fifa96_arm_face(&from, &to, &face) == FIFA96_OK) e->type = face;
       }
       if (fifa96_arm_anim_select(e->active != 0 ? 0u : 0x26u, e->anim_id, &slot) ==
-          FIFA96_OK)
+          FIFA96_OK) {
         e->anim_id = slot;
+        /* FU319 §5 writer 3 (phase-33): the native `0x79C13` tail is a real
+         * row install — write the +0x43 latch from the selected row's flags
+         * (rows 0/0x26 carry flags 0x07, so the latch is 2 for every record
+         * after the placement). The narrow write: no anim_timer/aux_seen
+         * side effects here; +0x44 reproduces through the dispatch staging. */
+        fifa96_match_run_record_kickoff_row43(e, (int32_t)slot);
+      }
       e->frame = 0;   /* FUN_0006E490 with BX = 0 (0x79C13 selector request) */
     }
   }

@@ -146,6 +146,33 @@ static void test_step_direct_face(void) {
   m.delta = 10;
   assert(fifa96_action_locomotion_step(&m, heading, stride_table) == FIFA96_OK);
   assert(m.facing == 0 && m.heading == 0xEE);
+  /* FU319 §3 (P-TURN, phase-33): the focus arm's z-only case — face_x = 0,
+   * face_z = -1 -> the guard (action_handlers.c:223) fires on face_z, the
+   * arm's internal face_target is kick_angle(0,-1) = 0x200, and the facing
+   * steps to the limit (+0x40, speed 0, no slot); the octant cell follows
+   * heading_table[((0x40 & 0x3FF) >> 5)]. (desired_facing stays the
+   * target-derived angle: the arm's face_target is internal.) The
+   * pre-existing pin only exercised face_x. */
+  m = loco();
+  m.target_x = 1;
+  m.direct_face = 1;
+  m.move_attr = 0x00500000;
+  m.face_z = -1;
+  m.delta = 10;
+  assert(fifa96_action_locomotion_step(&m, heading, stride_table) == FIFA96_OK);
+  assert(m.facing == 0x40 && m.heading == heading[(0x40u & 0x3FFu) >> 5]);
+  /* FU319 §2.2 (P-TURN): the native-value-2 equivalence — the native byte is
+   * 2 (row_flags & 0x02) and the consumer 0x8E29C is a zero/nonzero test, so
+   * direct_face = 2 must produce the identical outputs to the = 1 case
+   * above (target branch, move_attr 0x00700000). */
+  m = loco();
+  m.target_x = 1;
+  m.direct_face = 2;
+  m.move_attr = 0x00700000;
+  m.face_x = -1;
+  m.delta = 10;
+  assert(fifa96_action_locomotion_step(&m, heading, stride_table) == FIFA96_OK);
+  assert(m.facing == 0x40);
 }
 
 static void test_step_stride_ramp(void) {

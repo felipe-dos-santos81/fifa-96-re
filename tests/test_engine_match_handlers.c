@@ -4062,8 +4062,14 @@ static void test_action_22_runs_body(void) {
   f.mr.record.entity_id = 1;
   f.mr.record.stage92 = 3;
   f.mr.record.timer89 = 9;
+  /* FU319 §5 (phase-33) rider: the shared reset must NOT clear the latch —
+   * the native's only +0x43 clear is the row-0x22 stage-0 arm (0x8540C). */
+  f.mr.record.row43 = 2;
+  f.mr.entities.team[0].records[1].row43 = 2;
   assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.stage92 == 0xFF && f.mr.record.timer89 == 0);
+  assert(f.mr.record.row43 == 2u);            /* the reset keeps the latch */
+  assert(f.mr.entities.team[0].records[1].row43 == 2u);
 
   /* stage 0, active: ran + snap + timer 0 + stage 1. */
   drop_fixture(&f);
@@ -4080,11 +4086,18 @@ static void test_action_22_runs_body(void) {
   f.mr.record.target_x = 0;
   f.mr.record.target_y = 0;
   f.mr.record.target_z = 0;
+  /* FU319 §5 clear (phase-33, P-CLR): the stage-0 arm is the native's only
+   * +0x43 clear (0x8540C) — it must clear the latch on BOTH views (the pool
+   * and the staging record agree at the record loop's drain). */
+  f.mr.record.row43 = 2;
+  f.mr.entities.team[0].records[1].row43 = 2;
   assert(fifa96_match_action_22(&f.mr) == FIFA96_OK);
   assert(f.mr.record.ran == 1);
   assert(f.mr.record.target_x == 0x111 && f.mr.record.target_y == 0x222 &&
          f.mr.record.target_z == 0x333);
   assert(f.mr.record.stage92 == 1u && f.mr.record.timer89 == 0);
+  assert(f.mr.record.row43 == 0u);            /* the staging-record clear */
+  assert(f.mr.entities.team[0].records[1].row43 == 0u);  /* the pool clear */
 
   /* stage 0, inactive -> the shared reset. */
   drop_fixture(&f);

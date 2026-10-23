@@ -494,9 +494,11 @@ int fifa96_match_run_set_input_options(
  * every dispatched record (the pool walk keeps the `+0x9A` skip). The fields
  * the native reads/writes persist on the pool record (`face7d` +0x7D,
  * `speed71` +0x71, `vel73`/`vel75` +0x73/+0x75, `body_timer9c` +0x9C,
- * `timer7b` +0x7B as the stride nibble); the unported inputs are staged as
- * their derived defaults: `+0x6F` stride rate 0, `+0x43` direct-face 0 and
- * the `0x57A73` point (0,0). `move_attr` is the native `dword[rec+0x63]`,
+ * `timer7b` +0x7B as the stride nibble); the remaining unported input is
+ * staged as its derived default: `+0x6F` stride rate 0. The `+0x43`
+ * direct-face latch and the `0x157A73` focus point are staged LIVE (FU319 §5,
+ * phase-33): the latch is the record's own pool byte and the point is the
+ * engine's camera triple. `move_attr` is the native `dword[rec+0x63]`,
  * whose high word is the block-A distance `+0x65` (the low word falls out of
  * the `>>19` attr extract); it is recomputed here from the post-action target
  * so the stride index sees the fresh distance, exactly as the native
@@ -518,6 +520,13 @@ static void match_run_record_mover(struct fifa96_match_run *mr) {
   s.speed = r->speed71;
   s.vel_x = r->vel73;
   s.vel_z = r->vel75;
+  /* FU319 §5 (phase-33): the live +0x43 latch and the default focus point —
+   * the turn's close branch (`move_attr >> 16 <= 0x60`) steers the facing at
+   * the camera triple `[0x157A73] -> 0x15774C/0x157754`; the words are the
+   * native read width (MOV CX,[EDX] / MOV AX,[EDX+8]). */
+  s.direct_face = r->row43;
+  s.face_x = (int16_t)mr->render.camera.pos_x;
+  s.face_z = (int16_t)mr->render.camera.pos_z;
   (void)fifa96_arm_dist_stage(&from, &to, &distance, &lane_unused);
   s.move_attr = (int32_t)((uint32_t)(uint16_t)distance << 16);
   s.heading = r->type;
@@ -1011,6 +1020,25 @@ static uint8_t match_run_row_terminal_flag(uint8_t anim_id) {
   return (uint8_t)(row.flags & 0x01u);
 }
 
+/* FU319 §5 writer 3 (phase-33): the kickoff placement's narrow +0x43 install —
+ * the native tail `FUN_0006E598(rec, active ? 0 : 0x26, 0)` (`0x79BF1..0x79C13`)
+ * writes `byte[rec+0x43] = row_flags & 2` (0x6E6BF..0x6E6C4). The pool-side
+ * placement (`fifa96_match_entities.c`) installs the row without routing the
+ * full `FUN_0006E598` (whose `anim_timer`/`aux_seen` side effects are
+ * collateral there), so it asks for the narrow write: `row43` only; the
+ * native `+0x44 = 1` already reproduces through the same `row.flags & 1`
+ * derivation at the dispatch staging. No-op on a lookup miss (row43 keeps
+ * its pool-init 0). */
+void fifa96_match_run_record_kickoff_row43(struct fifa96_match_entity *e,
+                                           int32_t anim_id) {
+  fifa96_anim_row row;
+  if (e == NULL) return;
+  if (fifa96_animation_row_lookup(match_run_anim_rows, FIFA96_ANIM_ROW_COUNT,
+                                  anim_id, &row) != FIFA96_OK)
+    return;
+  e->row43 = (uint8_t)(row.flags & 0x02u);
+}
+
 /* FU-159 §5.4 / FU-160 §1.4 (T3): the FUN_0006E598 store core (see the header
  * doc for the fresh evidence). */
 int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
@@ -1027,6 +1055,8 @@ int fifa96_match_run_record_anim_install(struct fifa96_match_run *mr,
   e->anim_id = (uint8_t)id;
   e->frame = frame;
   e->row44 = (uint8_t)(row.flags & 0x01u);            /* 0x6E6CC */
+  e->row43 = (uint8_t)(row.flags & 0x02u);            /* 0x6E6BF..0x6E6C4
+                                                       * (FU319 §5 writer 1) */
   e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;    /* force the +0x36 re-arm */
   slot = (uint32_t)e->team * FIFA96_MATCH_ENTITY_RECORDS + e->index;
   if (slot < FIFA96_MATCH_RUN_RENDER_SLOTS)
@@ -1065,6 +1095,8 @@ int fifa96_match_run_record_anim_successor(struct fifa96_match_entity *e) {
   e->anim_id = next;
   e->frame = (uint8_t)frame;
   e->row44 = (uint8_t)(next_row.flags & 0x01u);
+  e->row43 = (uint8_t)(next_row.flags & 0x02u);       /* 0x8DFB6..0x8DFBA
+                                                       * (FU319 §5 writer 2) */
   e->aux_seen = FIFA96_MATCH_ENTITY_AUX_SEEN_NONE;
   return FIFA96_OK;
 }
@@ -1350,6 +1382,11 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
    * equivalent (anim_id only changes at install/successor) and replaces the
    * always-zero pool pass-through that blocked the kick-07 stage-2 reset. */
   r->row44 = match_run_row_terminal_flag(e->anim_id);
+  /* FU319 §5 (phase-33): the +0x43 latch is staged from the pool cell, never
+   * derived from anim_id — it survives the 0x799BF row-pointer clear and the
+   * row-0x22 clear, so a derivation would re-invent it (FU319 §5 rejected
+   * shortcut). */
+  r->row43 = e->row43;
   r->code = e->code;   /* native +0x91: the kick/row-04 gates index this byte */
   r->anim_id = e->anim_id;   /* OL-80: byte[[rec+0x28]] live row id */
   r->frame = e->frame;       /* OL-80: native +0x3D live frame index */
@@ -1533,6 +1570,8 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->lane = r->lane;
   e->type = r->type;
   e->row44 = r->row44;       /* FU-159 §4.1: the derived row-flags bit 0 */
+  e->row43 = r->row43;       /* FU319 §5: the pool and the staging record agree
+                              * (the row-0x22 clear writes both directly) */
   e->aux_word = r->aux_word; /* FU-161 §5.4: the one-shot word write-back */
   e->frame_freeze = r->frame_freeze;   /* FU-161 §5.2: the freeze request */
   e->anim_id = r->anim_id;   /* OL-80: the arm bodies' `anim_sel` write-back */

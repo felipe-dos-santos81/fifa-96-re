@@ -157,6 +157,22 @@ static void drop_fixture(struct fixture f) {
 static void begin_isolated(struct fifa96_match_run *mr, struct fifa96_engine *eng) {
   assert(fifa96_match_run_begin(mr, eng, 0) == 0);
   mr->act.id = 0;
+  /* FU319 §5 (phase-33): the staged-zero-face control. Begin's kickoff
+   * placement now installs the live +0x43 "steer the facing" latch on every
+   * record (writer 3), which wakes the face-gated AI/keeper chase machinery
+   * and re-times the row-04 walk-in/coda — the measured collateral of the
+   * producer (the FU323-L4 class: the face-reading chase chain). These
+   * fixtures pin their own subject chains against the blind-AI world they
+   * were built against, so the control clears the latch on the whole pool
+   * right after begin (the row-0x22 stage-0 clear's cell write, applied as a
+   * declared fixture input — the real clear's own pin is P-CLR in
+   * test_engine_match_handlers.c). The live-face machinery keeps its own
+   * pins: `test_mover_row43_live_turns_toward_focus` below (re-arming through
+   * the installs) and the M2 tape (test_engine_m2.c, the live engine chain:
+   * the golden, the witnesses and the inverted baseline). */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+      mr->entities.team[t].records[i].row43 = 0;
 }
 
 /* M2 phase-9 T1: the live held-key movement is only reachable with the
@@ -2779,6 +2795,21 @@ static void test_live_airborne_long_ball_seed_then_band2_follow(void) {
   for (int pump = 0; pump < 64 && seed_ok == 0; pump++) {
     uint16_t dump;
     begin_isolated(&mr, f.engine);
+    /* FU319 §5 live-face repair (phase-33): isolate the non-subject records
+     * (the row-04 fixture's +0x9A idiom). With the latch live the AI's
+     * face-gated chase chain runs and re-stages codes/merges the slot
+     * mid-choreography (the FU323-L4 collateral); the scripted carrier/kick
+     * chains pin their own subject, so the non-subjects stay out of its way.
+     * The exemptions are the records the derived kickoff chain itself drives:
+     * the keeper (record 0), the state-1 arm's taker (`team[0].target`) and
+     * the formation-seeded second pick (record 9). */
+    {
+      int32_t taker = mr.entities.team[0].target;
+      for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
+        for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+          if (!(t == 0u && ((int32_t)i == taker || i == 9u)))
+            mr.entities.team[t].records[i].skip_9a = 1;
+    }
     for (int i = 0; i < pump; i++)
       assert(fifa96_rng_step(&mr.rng, &dump) == FIFA96_OK);
     for (int i = 0; i < 61; i++) one_granted_frame(&mr);
@@ -3049,16 +3080,22 @@ static void test_record_anim_install_row44(void) {
 
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x00, 0) == FIFA96_OK);
   assert(e->anim_id == 0x00 && e->row44 == 1u);
+  /* FU319 §5 writer 1 (phase-33): the +0x43 "steer the facing" latch is the
+   * row flags' bit 1 — row 0x00 flags 0x07 & 2 = 2 (0x6E6BF..0x6E6C4). */
+  assert(e->row43 == 2u);
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 0) == FIFA96_OK);
   assert(e->anim_id == 0x5E && e->row44 == 0u);
+  assert(e->row43 == 0u);   /* row 0x5E flags 0x00: the negative half */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
   assert(e->anim_id == 0x26 && e->row44 == 1u);
+  assert(e->row43 == 2u);   /* row 0x26 flags 0x07 & 2 */
   /* frame clamp: row 0x5E last = 5 -> frame 9 installs at 0 */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 9) == FIFA96_OK);
   assert(e->frame == 0u);
   /* id clamp: 0x80 -> row 0 */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x80, 0) == FIFA96_OK);
   assert(e->anim_id == 0x00 && e->row44 == 1u);
+  assert(e->row43 == 2u);   /* the clamp lands row 0: the latch re-arms */
   /* the dispatch derivation overrides a stale pool byte */
   e->anim_id = 0x5E;
   e->row44 = 1u;                    /* stale */
@@ -3088,29 +3125,167 @@ static void test_record_row_successor_chain(void) {
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 5) == FIFA96_OK);
   assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
   assert(e->anim_id == 0x0F && e->frame == 0u && e->row44 == 0u);
+  assert(e->row43 == 0u);   /* row 0x0F flags 0x00: the latch clears */
   /* 0x0F (last 4) -> 0x00 frame 0, row44 1 (terminal) */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x0F, 4) == FIFA96_OK);
   assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
   assert(e->anim_id == 0x00 && e->frame == 0u && e->row44 == 1u);
+  /* FU319 §5 writer 2 (phase-33): the successor is the FUN_0008DF84 pool
+   * twin — row 0x00 flags 0x07 & 2 = 2 (0x8DFB6..0x8DFBA). */
+  assert(e->row43 == 2u);
   /* terminal rows are this helper's no-op (the movement tables are
-   * FU159-L5/FU161-L3) */
+   * FU159-L5/FU161-L3); the latch keeps its installed value */
   assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
   assert(e->anim_id == 0x00 && e->row44 == 1u);
+  assert(e->row43 == 2u);
   /* self-loop 0x0E restarts at frame 0 */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x0E, 8) == FIFA96_OK);
   assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
   assert(e->anim_id == 0x0E && e->frame == 0u);
+  assert(e->row43 == 0u);   /* row 0x0E flags 0x00: clear both ways */
   /* mirror: row 0x14 next 0x7F -> face flips by 4 and 0x0F installs */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x14, 6) == FIFA96_OK);
   e->type = 3u;
   assert(fifa96_match_run_record_anim_successor(e) == FIFA96_OK);
   assert(e->anim_id == 0x0F && e->frame == 0u && e->type == 7u);
+  assert(e->row43 == 0u);   /* the mirror lands row 0x0F: the latch clears */
   assert(fifa96_match_run_record_anim_install(&mr, e, 0x5E, 5) == FIFA96_OK);
   assert(fifa96_match_run_record_anim_install(NULL, e, 0x5E, 0) ==
          -FIFA96_ERR_INVALID);
   assert(fifa96_match_run_record_anim_install(&mr, NULL, 0x5E, 0) ==
          -FIFA96_ERR_INVALID);
   assert(fifa96_match_run_record_anim_successor(NULL) == -FIFA96_ERR_INVALID);
+}
+
+/* FU319 §5 (phase-33, P-MOV): the mover's live +0x43 staging —
+ * `s.direct_face = r->row43`, `s.face_x/face_z = (int16_t)camera.pos_x/pos_z`
+ * (the default focus pointer [0x157A73] -> 0x15774C/0x157754; FU319 §3.1).
+ * The record is settled (target == pos -> the close branch,
+ * `move_attr >> 16 <= 0x60` at action_handlers.c:221) so the face steers at
+ * the staged focus point at the limit `(0x10 - speed) << (slot ? 4 : 2)` =
+ * 0x40 per frame (:235-244), and the octant cell `e->type` follows
+ * fifa96_match_heading_table[((face & 0x3FF) >> 5)].
+ * Fixture note (executor-confirmed at RED/GREEN time): the sketch's camera
+ * (0,0,0) keeps the face — the port's focus guard is the raw point test
+ * (action_handlers.c:223; the native 0x8E2B7..0x8E2D0 tests the deltas) — so
+ * the focus case stages the camera off-origin (0,0,0x100); the zero-delta
+ * keep and the far-target (branch-B) riders pin the rest. */
+static void test_mover_row43_live_turns_toward_focus(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  begin_isolated(&mr, f.engine);
+  e = &mr.entities.team[1].records[4];
+  assert(fifa96_match_entities_install(e, (uint8_t)mr.state.phase, 0, 0) == 1);
+
+  /* The settled record: pos == target (the focus branch), the face at the
+   * placement constant 0x100, speed 0, no slot. */
+  e->pos_x = 0;
+  e->pos_y = 0;
+  e->pos_z = 0xB00;
+  e->target_x = 0;
+  e->target_y = 0;
+  e->target_z = 0xB00;
+  e->face7d = 0x100;
+  e->speed71 = 0;
+  e->has_slot = 0;
+  mr.render.camera.pos_x = 0;
+  mr.render.camera.pos_y = 0;
+  mr.render.camera.pos_z = 0x100;   /* off-origin: the deltas are (0,-0xA00) */
+  /* writer 1 arms the latch: row 0x26 flags 0x07 & 2 = 2 */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
+  assert(e->row43 == 2u);
+  one_granted_frame(&mr);
+  /* GREEN: the first 0x40 turn step toward the focus (0x100 -> 0x140;
+   * desired kick_angle(0,-0xA00) = 0x200), and the octant follows the
+   * heading table at [(0x140 & 0x3FF) >> 5]. */
+  assert(e->face7d == 0x140);
+  assert(e->type == fifa96_match_heading_table[(0x140u & 0x3FFu) >> 5]);
+
+  /* Rider 1 (mutation-RED for a latch-ignoring mover): row43 = 0 poked AFTER
+   * the install of an armed row — anim_id stays 0x26, the face must stay
+   * frozen (the anti-anim_id-derivation rider: a mover that derives
+   * direct_face from anim_id's row flags turns it and fails here). */
+  e->row43 = 0;
+  one_granted_frame(&mr);
+  assert(e->face7d == 0x140);        /* the 0xC0 error is real; the clear latch
+                                      * suppresses the turn (not a zero-delta
+                                      * keep — the desired face is 0x200) */
+  e->face7d = 0x100;                 /* re-stage the frozen face */
+  one_granted_frame(&mr);
+  assert(e->face7d == 0x100);        /* frozen: no derivation from anim_id */
+
+  /* Rider 2 (the far rider): a fresh far target (> 0x60) with the latch
+   * re-armed steps the face toward desired_facing (the movement direction). */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
+  e->target_z = -0xB00;
+  one_granted_frame(&mr);
+  assert(e->face7d == 0x140);        /* the first step toward 0x200 */
+
+  /* Rider 3 (the clear-freeze rider, through the real row-0x22 clear): the
+   * action-22 stage-0 arm clears the latch on BOTH views; a further frame
+   * with a fresh far target stays frozen until a new install re-arms it.
+   * The stage-0 arm sits behind the body's phase gate (handlers.c:5198), so
+   * the rider stages live phase 2 (the camera_band_cells_seam idiom). */
+  mr.state.phase = 2u;
+  mr.state.period_length = 90;
+  mr.record.entity_id = 15;          /* team*11 + index = 1*11 + 4 */
+  mr.record.active = 1;
+  mr.record.stage92 = 0;
+  mr.record.delta = 2;
+  assert(fifa96_match_action_22(&mr) == FIFA96_OK);
+  assert(e->row43 == 0u);            /* the pool clear (0x8540C site) */
+  assert(mr.record.row43 == 0u);     /* the staging-record clear */
+  /* Restore the riders' kickoff-phase world for the observation frames: the
+   * phase-2 chain's AI re-stages decision codes/positions on the record (the
+   * FU323-L4 chase class), which would pollute the face oracle. */
+  mr.state.phase = FIFA96_MATCH_RUN_KICKOFF_PHASE;
+  mr.render.camera.pos_x = 0;
+  mr.render.camera.pos_y = 0;
+  mr.render.camera.pos_z = 0x100;
+  e->target_z = -0xB00;              /* a fresh far target */
+  one_granted_frame(&mr);
+  assert(e->face7d == 0x140);        /* frozen: the latch is clear */
+  assert(fifa96_match_run_record_anim_install(&mr, e, 0x26, 0) == FIFA96_OK);
+  one_granted_frame(&mr);
+  /* FU319 §5 live-face re-pin (executor-confirmed): by this frame the far
+   * target's stride integration has ramped speed71 to 1, so the turn limit is
+   * (0x10 - 1) << 2 = 0x3C (not the speed-0 0x40): 0x140 + 0x3C = 0x17C. */
+  assert(e->face7d == 0x17C);        /* re-armed: it turns again */
+
+  /* Rider 4 (the width contract, static): the camera beyond the word range
+   * truncates to the native word read (0x8E2B7 MOV CX,[EDX]); the face
+   * target from the wrapped point equals the target from the truncated
+   * point. Stage the wrapped camera on a twin record and compare. One run
+   * per engine (the begin/end eng->match rule), so the first run ends first
+   * (the pad_drives_controlled_locomotion twin-run idiom). */
+  assert(fifa96_match_run_end(&mr) == 0);
+  {
+    struct fifa96_match_run mr2;
+    struct fifa96_match_entity *t;
+    fifa96_match_run_init(&mr2);
+    begin_isolated(&mr2, f.engine);
+    t = &mr2.entities.team[1].records[4];
+    assert(fifa96_match_entities_install(t, (uint8_t)mr2.state.phase, 0, 0) == 1);
+    t->pos_x = 0;
+    t->pos_y = 0;
+    t->pos_z = 0xB00;
+    t->target_x = 0;
+    t->target_y = 0;
+    t->target_z = 0xB00;
+    t->face7d = 0x100;
+    t->speed71 = 0;
+    t->has_slot = 0;
+    mr2.render.camera.pos_x = 0x10040u;  /* wraps to 0x40 in a word */
+    mr2.render.camera.pos_y = 0;
+    mr2.render.camera.pos_z = 0x100;
+    assert(fifa96_match_run_record_anim_install(&mr2, t, 0x26, 0) == FIFA96_OK);
+    one_granted_frame(&mr2);
+    assert(t->face7d == 0x140);    /* the wrapped point = the word read */
+    assert(fifa96_match_run_end(&mr2) == 0);
+  }
+  drop_fixture(f);
 }
 
 /* FU-159 §2.3 (T3): the case-0x0F arm — the `pos_y != 0` branch resolves the
@@ -10210,6 +10385,7 @@ int main(void) {
   test_jump_arm_f3_freeze_and_f0_landing();
   test_record_anim_install_row44();
   test_record_row_successor_chain();
+  test_mover_row43_live_turns_toward_focus();
   test_record_jump_case_0f_snap_frame3();
   test_record_jump_impulsion();
   test_record_jump_sustained_and_freeze();
