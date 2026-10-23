@@ -159,3 +159,32 @@ rule whether it re-pins, and write the reason — do not silently upgrade it.
 4. **FU325** — the Stage-2 acceptance and governance (the Layer-2 live design,
    the golden recipe, the hazard list, the unit-pin plan), arguing from the
    measured numbers.
+
+## Plan erratum (wave close, 2026-10-22)
+
+The wave measured, and this spec's §1/§6/§8.1 premise is **corrected by it**
+(append-only; the sections above stand as written):
+
+Quote (§1, and §6 Layer-1): "after this phase the undriven natural tape pans
+(the band record arrives facing its focus point, the row-04 angle gate passes
+natively, arm B arms)". **Corrected (FU323, measured):** the mechanism is met —
+the band record arrives facing the focus point and the gate passes — but arm B
+is a **silent bind**: the undriven band record holds no control slot, the seed
+switch takes the **no-slot arm** (FU316-L1's open leg), `v0 = 0`, and **no
+granted frame ever has `pos ≠ (0,0,0)`**; the camera cells never differ from
+the unpatched build. The undriven tape's honest post-producer baseline is
+"faces live from step 9, a code-5 bind at granted f=1517, camera still zero"
+(FU322's erratum re-shapes the inverted asserts accordingly; A4/A5's pan-window
+asserts relocate to the **driven** claim/offset passes, which FU323 measured
+re-pinning — the offset pass `G3` improves to `lane_at_pass 129` with the
+plateau caveat gone, the claim pass moves to the no-slot arm's `(−0x120,0,0)`
+shape). The pan vehicle is therefore the **driven witnesses**, and the
+natural-pan future belongs to **FU316-L1** (the no-slot seed/travel leg).
+
+Also measured: the first **golden** diff is frame **852** (the sit-1 half-time
+kickoff draw divergence, 5 671 hash-only lines, `state=` suffixes unchanged,
+M1 byte-identical on the patched engine) — §6's golden governance anchor is the
+measured 9/52/852 chain, not a pre-pan camera frame (FU325's erratum re-words
+the tripwires). And FU319-L3's predicted metric magnitude is **falsified**
+(FU324: 0 moved frames; the metric sub-change is a measured no-op with a
+contract pin).
