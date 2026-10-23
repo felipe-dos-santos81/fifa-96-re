@@ -7183,14 +7183,16 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
 
 ## Final-review erratum — the phase-33 register (2026-10-23)
 
-Append-only; every section above stands as written. Two corrections from the
-final whole-branch review:
+Three corrections from the final whole-branch review. One is an in-place edit
+to the Layer-2 artifact sentence (its original wording is quoted in the
+artifact item below); every other prior section stands as written.
 
 - **The artifact set (Layer-2 sentence).** Quote: "the eight PNGs + the two
   diffs + the 120-line trace extract". **Corrected:** the two diff PNGs are
   two of the eight committed PNGs, not additional files; the artefact set is
   **the eight PNGs (incl. the two diffs) + the 120-line trace extract** (the
-  Layer-2 sentence above carries the corrected wording). Nine files beyond
+  Layer-2 sentence above was corrected in place; its original wording is the
+  quote in this item). Nine files beyond
   the note: `p33-l2-pan-a..d.png`, `p33-l2-pan-diff.png`,
   `p33-l2-seg1-diff.png`, `p33-l2-still-a..b.png`, plus
   `p33-l2-trace-pan.txt`.
@@ -7210,3 +7212,22 @@ final whole-branch review:
   fix); re-open with a camera-origin witness or a direct unit pin of the
   native delta form. Owner: the action-handlers seam
   (`fifa96_action_locomotion_step`).
+- **The decay-sequence cell (claim-pass sub-bullet) and the pass-source line
+  refs.** Quote: "the decay seq truncated at the site (5, 0)". **Corrected:**
+  the `(5, 0)` pair was a sampler artifact, not a measured truncation — the
+  pass-level `speed_seq` restarted at each segment start while its `stop_f`
+  gate still held the previous segment's stop, so only the first-motion and
+  stop speeds were recorded. The per-segment recording now pins the real
+  signature **5, 3, 2, 1, 0 on both segments** (claim asserts
+  `tests/test_engine_m2.c:4587-4590` and `:4644-4647`; offset asserts
+  `:4970-4973`, `:4994-4997`, `:5027-5030`) and the stderr line prints it;
+  the round-1 fix report (`final-fix-report.md`, the `speed_seq` item)
+  records the sampler defect and the choice of per-segment recording. The
+  frozen tables' other cells stand unchanged. **Fresh line refs for the
+  pass citations in the register's driven-witness bullets above** (the
+  functions moved in round 1):
+  `run_natural_claim_pass` is now `tests/test_engine_m2.c:4381` (was
+  `:4352`), its re-pin assert set `:4473-4659` (was `:4444-4619`; the
+  segment block is `:4557-4659`); `run_natural_offset_pass` is now `:4758`
+  (was `:4720`), its re-pin assert set `:4861-5041` (was `:4884-4992`; the
+  segment block is `:4946-5041`).

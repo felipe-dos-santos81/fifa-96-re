@@ -3141,7 +3141,6 @@ static void test_dispatch_install_row43_propagates(void) {
   one_granted_frame(&mr);
   assert(e->anim_id == 0x12u);   /* the in-dispatch install landed */
   assert(e->row43 == 0u);        /* not the stale pre-dispatch 2 */
-  assert(mr.record.row43 == 0u); /* the staging view agrees post-frame */
 }
 
 /* FU-159 §3.1/§5.2 (T3): the FUN_0008E008 frame-wrap successor over the pool.

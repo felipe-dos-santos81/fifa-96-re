@@ -180,3 +180,23 @@ diff <(cut -d' ' -f3- tests/golden/engine/m2-frames.txt) \
 **1. The witness tables mix the first claim with the last segment.** Quote (§5.1, the table's caption): "Loose-mode full record vs the pinned values", presenting `gate.f 1512 → 1552`, `gate.code 4 → 3`, `event.f/code 1513/5 → 1553/3`, `event.tracked 2 → 1`, `first_motion_f/stop_f 1514/1541 → 1554/1581`, `changed/off_zero 27/2084 → 54/2116`; quote (§2): "the claim pass's claim lands at 1482 (pinned 1514) and its passing dispatch is no longer the row-04 code-4 gate but the **code-3 chase walk's own camera event**". **Corrected (probe.c's `m2_claim_sample`, read in this review):** the sampler re-fills the chain cells at **every** segment start — each `!in_segment` re-assigns `cl->gate = cl->ring[1]; cl->event = cl->ring[0];` and restarts `first_motion_f`/`changed_frames` — while `claim_f` is captured at the **first** claim only (the `cl->claim_f < 0` guard). With the measured `segments == 2` the tabulated gate/event/first_motion/stop/changed/off_zero cells are therefore the **last** segment's, and the claim at 1482 belongs to the earlier chain; the claim's own passing dispatch is **uncaptured** by the loose record, so the §2 attribution (the claim's dispatch = the code-3 walk event) is not established — 1482 ≠ 1552. The RE-PINS rulings stand (the pan structure, the invariants and the criterion are the record's own measured cells); what changes is the presentation: the Stage-2 re-pin design must pin **both segments per pass** (the first segment's gate tuple is not in the record — the kept trace carries the offset pass's datum, not the claim pass's) and must not read gate.f=1552 as the successor of the pinned f=1512/f=1528 gates.
 
 **2. The kept traces named `claim_trace_*.txt` hold the offset pass's trace, not the claim pass's.** Evidence (this review, the kept files): the unpatched kept trace's first non-NONE bind is `f=1529 tick=5100 vel=-5,0 spd=5 tim=0/12 ramp=12 trk=2` — matching the **offset pass's** pinned event (`event.f == 1529`, the LEFT-nudge tuple at `:4403-4443`); the claim pass's pinned event is f=1513/tick 5047 (`docs/ENGINE.md:5948-5957`; stats4.log lines 7–8: claim event f=1513, offset event f=1529). The pass-local granted index and the trace's `f=` agree (calibrated on both builds), so the patched kept trace's first event at f=1483 (`trk=2` window f=1483..1552, motion 1484..1510, stop f=1511 at `pos=-144`, `pan=4`) is the patched **offset** pass's first segment — the segment §5's tables omit. Consequence: the artefacts are the Stage-2 **offset** re-pin's evidence; any Stage-2 design that reads them as claim-pass traces (the file names suggest it) pins the wrong drive. The doc's §10 note "the kept traces (3599 lines each) are the artefacts for the Stage-2 re-pin design" stands corrected accordingly.
+
+---
+
+## Post-execution erratum (final review, 2026-10-23)
+
+Append-only; the text above stands as written.
+
+**The `speed_seq` cells (§5.1 and §5.2).** Quote (§5.1's table):
+"`speed_seq_len` / the seq | 5 / 5,3,2,1,0 | **2** / (truncated at the site) |
+**moved**"; and (§5.2): "`speed_len 2`". **Corrected:** the `2` /
+"truncated at the site" readings were a **sampler artifact**, not a native
+truncation — the pass-level `speed_seq` restarted at each segment start while
+its extension gate still held the previous segment's `stop_f`, so only the
+first-motion and stop speeds survived (the stderr printed a stale
+`5->0->2->1->0`). With per-segment recording (`struct m2_claim_segment`'s
+`speed_seq`) the driven passes show **5 frames per segment, `5,3,2,1,0` on
+both segments** (`tests/test_engine_m2.c:4587-4590`, `:4644-4647` claim;
+`:4970-4973`, `:4994-4997`, `:5027-5030` offset). The frozen tables' other
+cells stand unchanged; only the sequence cells and their reading are
+corrected.
