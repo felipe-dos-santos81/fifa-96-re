@@ -3110,3 +3110,103 @@ condition), not only because of scope breadth.
 **5. Tape and gate.** Test-side fix only (`tests/test_engine_match_frame.c`);
 no production code/golden. M1 `09b726b7…` / M2 `8434cfab…` byte-identical;
 `make check` 111/111; census `60/80 = 75%`; README/AGENTS untouched.
+
+## M2 phase-33 close-out — the live record face (FU322…FU325): the pan story's honest shape
+
+**The phase lands the live record face — the native `+0x43` locomotion latch
+and the camera-focus point staged live in the mover — and closes FU314-L5 and
+FU319-L7.** The landing is **one atomic producer commit** (`302b746`,
+`fix(fu314)`): the implementation (`row43` beside `row44` in both structs; the
+three writers — the anim-row install `0x6E6C4`, the successor twin `0x8DFBA`,
+the kickoff narrow install `0x79C13`; the row-0x22 clear `0x8540C`; the mover
+staging `s.direct_face = r->row43` + the int16 camera-triple focus — FU319 §5
+verbatim, no `anim_id` derivation, no metric fold), the unit pins
+(P-W1/W2/W3/CLR/MOV/TURN), the re-shaped baseline inversion, the segment-aware
+witness re-pins, the golden re-pin and the provenance note. Nothing was RED at
+any commit point — with the engine live, the standing
+`tests/test_engine_m2.c:3722` zero-baseline asserts fired on the patched probe
+(FU323's measured RED), so the phase-32 plan's P1/P2 split could not keep the
+suite green; FU322-L11's rule binds the atomic shape (FU322's erratum 5). Then
+`7b3cc10` (`fix(fu319)`) lands the move_attr metric as its own contract-pinned
+commit, and `eb9e521` (`docs(fu325)`) lands the Layer-2 live acceptance. The
+close-out register is appended to `docs/ENGINE.md` as the phase-33 section.
+
+**The pan story's honest shape.** The face is live — every record's face
+settles from the camera bearings from the first phase-2 grant (engine step 9)
+— but **the undriven tape does not pan, and that is native-faithful**: the
+band record holds no control slot, the row-04 seed switch takes the no-slot
+arm (`word[+0x73/+0x75] << 2` = ±4 → `v0 = 0`), and the code-5 event at
+granted **f=1517** (tick 5060) is a **silent bind** — `trk=12` binds, the
+camera's event state engages (`camera_zero_frames` 1517 / `camera_left_zero`
+2081 — the old zero-baseline assert's measured RED), and camera `pos` stays
+`(0,0,0)` through f=3597. What DOES pan is the **driven** witnesses, re-pinned
+under the live face with **two chained segments each**: the row-04 `−0x90`
+one-shot coda plus a **new code-3 walk camera event the frozen world did not
+have**, ending at `(−0x120,0,0)`, 54 changed frames per pass — and the offset
+pass's G3 improves to **`lane_at_pass 129`** (Δ=0), retiring the phase-32
+"plateau-riding geometry-luck" caveat. **Live**, the driven pan reproduced
+**tick-for-tick** against the re-pinned timeline (seg[0] stop f=1511/tick
+5040; seg[1] event f=1553/tick 5180; seg[1] stop f=1581/tick 5274),
+trace-attributed with the AE as the relative corroboration (pan 52 466 / 69
+828 vs still 29 120; the still pair is **not** pixel-identical this phase —
+the ball sprite animates — and Gate 1 holds relatively). The natural clause is
+recorded **NOT-GO-as-measured**, never silently upgraded: the natural-pan
+future belongs to **FU316-L1** (the no-slot seed/travel), now promoted to its
+owner leg.
+
+**The golden re-pin's reason (the house form).** The port's staged
+`direct_face = 0` suppressed a live, universal native behaviour (every
+record's latch is 2 after the kickoff placement). The re-pin is the intended
+consequence of the faithful producer, not a regression: **first differing
+line frame 852**, 5 671 hash-only lines (frames 852..6522, contiguous),
+`state=` suffixes byte-unchanged, M1 `09b726b7…` byte-identical, and the new
+golden byte-identical to FU323's predicted patched-build sha
+(`8434cfab…` → **`d5446144…`**, same byte and line counts). The chain is
+measured: faces settle at step 9 → the first face-driven movement at frame 52
+(the mover's stride-error face term) → the first hash-visible frame 852 (the
+half-time kickoff's camera reset revealing the face-driven t1 walk-in
+sprites). Because 852 sits inside the v21 2 522-line prefix, the additivity
+gate is replaced by the **stratum-set gate** (Outcome B; the strata
+`state=1` ×951 / `state=19` ×2 620 / `state=2` ×2 100 measured unchanged).
+
+**The metric sub-change is a measured no-op.** FU324's census settles it: the
+two native metric cores (`0x8DC68`/`0x8DCD4`) are the same computation (4 000
+800 sampled pairs, 0 diffs), so `7b3cc10` changes the staging SOURCE (the
+block-A `fifa96_entity_distance`) without changing the VALUE — 0 frames moved
+alone and composed; the contract pin is GREEN at commit with FU324's recorded
+mutant run (37 219 stride firings, 0 frames moved — the `stride_len ≤ 3`
+clamp) as its guard. FU319-L3's predicted magnitude is falsified (erratum
+FU324-L1); the attr sensitivity returns only with the `+0x7B` nibble staging
+(FU324-L5 — re-run the mutant protocol then).
+
+**The next-phase candidates.** **FU316-L1** — the no-slot seed distribution
+and the per-pan travel (the natural-pan owner leg: `0x7F056`,
+`word[+0x73]<<2`; the silent bind is its zero-seed instance); **FU316-L9** —
+the unarmed mirror (`0x713C0 JLE 0x718A9`; the port reflects only once
+`goal_armed` is set); **FU316-L8** — the row-05 carrier camera event
+(`0x7F4E7`; a claim-frame bind / the pan→row-5→rebind fusion); **FU315-L1/L2**
+— the claim tail (the row-05 stage-0 claim event + the slot-pointer
+projection). Carried into the next phase's watch list: FU324-L5 (the nibble
+staging re-measure), the new register legs FU324-L8 (the mover's
+`r->distance` persistence gap — unmeasured) and FU324-L9 (the
+negative-metric-word stride index — unclassified), FU322-L10 (the no-ISO
+window), FU325-L3 (the pool-row44 question).
+
+**The legs.** Registered in full in the ENGINE phase-33 section:
+**FU322-L1..L12** (L12 the re-shape dependency, new), **FU323-L1..L7**,
+**FU324-L1..L9** (L8/L9 new this close-out) and **FU325-L1..L8** (L8 the
+still-pair AE honesty, new). FU314-L5 closes; FU319-L7 closes; FU314-L1a's
+live-face half is met and its natural-route remainder moves to FU316-L1. The
+follow/Y waiver stands (now asserted per trace line); the phase-30/31/32
+remainder is carried unchanged.
+
+**The tape and the gate.** M1 `09b726b7…` (22 004 B, 691 lines) is
+byte-identical through the phase (`cmp`-verified at every task). M2 re-pins
+exactly once, in the atomic producer commit, with the reason + the frame diff
++ the register pin in the same commit; `make check` **111/111** (strict
+`-Wall -Wextra -Werror`, ASan/UBSan) at every task; the census holds
+**`60/80 = 75%`** (fresh re-count: 37 action + 23 phase; no row joined) and
+the README title stays `75%`. T3 and the close-out are docs-only; the
+production changes are the live-face staging and the value-identical metric
+source. The trace sink stayed default-off outside the acceptance run; the
+artefacts are `docs/screens/p33-l2-*`.
