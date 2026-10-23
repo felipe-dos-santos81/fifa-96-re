@@ -7314,7 +7314,7 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   | `v0` | `trunc(s/0xC) = trunc(w/3)` → **`[−5, +5]`** | FU326 §4.2 (`0x70646`/`0xA2AEE`) |
   | the travel | `T ≤ 0x90` per axis; the delta is the **vector** `Δ = sign(w)·T` | FU326 §4.3 |
   | the silent band | `\|w\| ≤ 2` → `v0 = 0`, `T = 0` (three consecutive words share one step) | FU326 §4.4 |
-  | the armer reach | `floor(0x730/T)+1` = **13 x / 20 z** at `T = 0x90` — a **floor** | FU326 §4.5 |
+  | the armer reach | `floor(0x730/T)+1` x / `floor(0xB20/T)+1` z = **13 x / 20 z** at `T = 0x90` — a **floor** | FU326 §4.5 |
 
   **Quoted correction (the spec §2/§4 and FU316 §4.3/§7.1).** "a larger no-slot
   seed `s = 0x80` gives `T = 0x174`" / "the armer reach … (fewer for larger
@@ -7399,7 +7399,7 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   pinned.** **No test change lands.** A *new* assert of today's zero seed would
   pre-commit the acceptance to the no-witness world and invert the day a
   witness appears (the phase-33 inversion lesson), so it is deliberately not
-  taken; **A1–A3 stay** as landed (`tests/test_engine_m2.c:3935-3966`) and
+  taken; **A1–A3 stay** as landed (`tests/test_engine_m2.c:3962-3979`) and
   nothing is re-pinned. The witness tuple — `code 4`, `anim_id != 0x13`,
   `cam_pos_y == 0`, `has_slot 0`, the arm's camera sub-gate, `lane_x ≥ 1`,
   `|v0| ≥ 1`, the per-axis `T(s)` from the measured `cam_vel` pair, the
@@ -7428,6 +7428,20 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   FU316's seed erratum (`996ddda`); the phase-33 register's seg[1] erratum (the
   section above). Every number in this register is a quote of those sections —
   no native fact is re-derived here.
+
+- **Quoted errata (this close-out's own record).**
+  1. **The A1–A3 line cite.** Quote (the Branch B bullet above):
+     "`tests/test_engine_m2.c:3935-3966`". **Corrected (fresh read,
+     fix round 1):** the landed A1–A3 block is **`:3962-3979`** — the
+     `if (with_iso)` at 3962, the A1 comment 3963-3966 with its assert at
+     3967, A2 at 3968-3971, A3 at 3972-3979 (the authoritative range is
+     `docs/ghidra/FU329_r2l8_acceptance.md:373`). `:3935-3966` ends on the A1
+     comment and contains **none** of the asserts. The stale range was
+     **inherited**, not measured here: its sources are
+     `docs/ghidra/FU328_r2l8_reachability.md:597` and the phase-33 register
+     (`docs/ENGINE.md:6809`), and both still carry it — append-only, they are
+     corrected **here** and not rewritten; FU328's draft receives the same
+     post-review note.
 
 - **The legs — met, open and promoted.**
   - **FU326-L1..L4** — L1 the non-locomotion `+0x73/+0x75` writers (87/51
@@ -7469,7 +7483,9 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
     native placement limit `+0x79` (`FUN_0007997C`, `0x799F0..0x79A4D`, FU84
     §6) has **no port producer**: `timer79` is read-only in the engine
     (`include/fifa96_engine/fifa96_match_entities.h:129`), the install reset
-    copies 0 into `+0x7B` (`fifa96_match_entities.c:94`, native `0x7DA9B`), so
+    copies `timer79` (currently 0) into `+0x7B`
+    (`entity->timer7b = entity->timer79`,
+    `src/fifa96_engine/fifa96_match_entities.c:94`, native `0x7DA9B`), so
     the placement nibble is 0 on every record-frame. Owner: the entity
     reset/placement entry + the `+0x9D` byte (OL-72). It is a **future,
     separately pinned, golden-moving fidelity change**: the native value for

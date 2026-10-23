@@ -3255,8 +3255,9 @@ half-time kickoff (FU328-L4).
 
 **The root gap is upstream of the seed.** The native placement limit
 `+0x79` (`timer79`, set by `FUN_0007997C`) has no port producer: `timer79` is
-read-only in the engine and the install reset copies 0 into the placement
-counter `+0x7B`, so `stride_len` clamps to 1, `attr ≤ 1`, the stride word `≤ 1`,
+read-only in the engine and the install reset copies `timer79` (currently 0)
+into the placement counter `+0x7B`, so `stride_len` clamps to 1, `attr ≤ 1`,
+the stride word `≤ 1`,
 `|seed| ≤ 4` and `v0 = 0`. **The silent bind is the consequence of the missing
 producer, not of the no-slot arm alone** — the labelled diagnostic (the
 placement limit staged on the locomotion cell only, never a witness) makes the

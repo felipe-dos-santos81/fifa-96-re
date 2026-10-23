@@ -625,3 +625,16 @@ census and goldens are untouched.
 **3. The `ramp` cell (§5.1).** Quote: "height 0, ramp 0". **Corrected:** `ramp 0` is the setter's `ramp_param` (the wrap's `rp=0`); the post-event `ramp_divisor` is **12** (`tim 0/12`), as FU327 §4.2, FU323 §2 and the `FU327POST` line report. Name the cell, so the two figures do not read as a contradiction.
 
 **4. The direction family (§8 L5).** Quote: "Only DOWN/LEFT+DOWN put a record in the cone". **Corrected:** the **RIGHT** nudge + DOWN (`/tmp/opencode/fu328/logs/rnudge12.txt`) also puts the slot record in the cone: two arm-1 events at f 1483/1553, `place (−0x120,0,0)`, exactly as §5.3's own RIGHT row records. The family is DOWN, LEFT+DOWN, RIGHT+DOWN; the rest of L5 stands.
+
+## Post-review erratum (2026-10-23)
+
+**The A1–A3 line cite (§11, the fresh-source list).** Quote:
+"`tests/test_engine_m2.c:3935-3966` (the landed A1–A3 asserts)". **Corrected
+(fresh read, phase-34 close-out review):** the landed A1–A3 block is
+**`:3962-3979`** — the `if (with_iso)` at 3962, the A1 comment 3963-3966 with
+its assert at 3967, A2 at 3968-3971, A3 at 3972-3979 (the authoritative range
+is `docs/ghidra/FU329_r2l8_acceptance.md:373`). `:3935-3966` ends on the A1
+comment and contains **none** of the asserts. The stale range was also
+inherited by the phase-33 register (`docs/ENGINE.md:6809`); the **phase-34
+register** (`docs/ENGINE.md`, its quoted-errata item 1) carries the correction,
+and the phase-33 section is left as written per the append-only rule.
