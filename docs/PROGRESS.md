@@ -3210,3 +3210,95 @@ the README title stays `75%`. T3 and the close-out are docs-only; the
 production changes are the live-face staging and the value-identical metric
 source. The trace sink stayed default-off outside the acceptance run; the
 artefacts are `docs/screens/p33-l2-*`.
+
+## M2 phase-34 close-out — the no-slot pan travel (FU326…FU329): the measured NO-GO and the `+0x79` root gap
+
+**The phase measures the no-slot arm and finds it native-faithful, at parity,
+and unable to pan on this tree — because the native placement timer `+0x79` has
+no port producer.** It is a **NO-GO / measurement phase** (the spec's §5 branch):
+no production, test or golden change. The record is the phase-34 register
+appended to `docs/ENGINE.md`; the wave is FU326 (the seed algebra + the 22-cell
+port audit), FU327 (the measured distribution), FU328 (the 32-run reachability
+sweep) and FU329 (the Branch B acceptance design), each with its wave-review
+erratum, plus the wave erratum that carried the FU323 cell correction, the
+FU316 seed correction, the spec's Plan erratum and the phase-33 register's
+seg[1] correction.
+
+**The arm is exact, and the port matches it.** The `0x7F056` no-slot arm
+(`camY == 0 && !has_slot`, the `|cam_x| ≤ 0x630` / `|cam_z| ≤ 0xA20` guards,
+seed `word[+0x73] << 2` / `word[+0x75] << 2`, the `(0,0)` bail that still fires
+the event), the `v0 = trunc(seed/0xC)` fast path (the native `IDIV`), the
+`trunc(0x18·v/0x20)` decay and the `T(v0) = 2·(6·v0 + 7·v1 + …)` travel all
+match the fresh bytes; the 22 seed-staging/arithmetic audit cells are **all
+parity**, so the spec's conditional staging fix is not triggered. The carried
+larger-seed premise is **inverted by measurement**: the seed words are the
+stride velocity, bounded by the `0x10F680` flat (1 280 words, min −15 / max
++15), so `|seed| ≤ 0x3C`, `v0 ∈ [−5,5]` and `T ≤ 0x90` — the `0x174` row is
+arithmetic-only, and the 13 x / 20 z pans to the armer are a **floor**. That
+reconciles FU316 §4.3 with FU321 §3.5, which already carried the bound; the
+non-locomotion writers (FU326-L1) keep the only formal escape open.
+
+**The measured result: the tape's records are all parked.** Five row-04 gate
+passes on the current tree — **one no-slot** (the natural f=1517, entity 12,
+seed `(−4,0)`, `v0 (0,0)`, `T = 0`, 0 changed frames: the phase-33 silent bind
+reproduced cell for cell) and **four slot controls** (two per driven pass, seed
+`(−0x40,0)` → `v0 (−5,0)` → the `5,3,2,1,0` decay → `T = −0x90` → 27 changed
+frames, `(−0x120,0,0)` after two). Every record in the formation stays at
+`|word[+0x73]| ≤ 1` on every granted frame; the smallest moving no-slot seed
+needs `|w| ≥ 3`. The 32-run sweep (verbatim `M2_KEYS` from 12 000 to 160 000
+steps, the direction and offset families, the kick/pass claim contexts, seven
+KICK-release offsets and a DOWN tail — no staged slot/seed/face cell) found
+**no nominee**: the second no-slot gate pass (f=1590, at the moved camera) is
+zero seed too, and every real pan is the slot arm. Frequency: **1 no-slot band
+entry / 3 598 granted frames (0.028 %), 0 pans**; the long window stalls at the
+half-time kickoff (FU328-L4).
+
+**The root gap is upstream of the seed.** The native placement limit
+`+0x79` (`timer79`, set by `FUN_0007997C`) has no port producer: `timer79` is
+read-only in the engine and the install reset copies 0 into the placement
+counter `+0x7B`, so `stride_len` clamps to 1, `attr ≤ 1`, the stride word `≤ 1`,
+`|seed| ≤ 4` and `v0 = 0`. **The silent bind is the consequence of the missing
+producer, not of the no-slot arm alone** — the labelled diagnostic (the
+placement limit staged on the locomotion cell only, never a witness) makes the
+same natural record, with no drive, pan: `+0x79` 3/6/15 → `v0` −1/−2/−4 →
+`T` −0xC/−0x26/−0x84, with the exact 6/13/27-frame decays. The acceptance
+design (FU329 Branch B) is therefore **recorded, not pinned**: no assert of
+today's zero seed (it would invert the day a witness appears), A1–A3 stay, and
+the future A3 re-pin rides the producer. The golden is **Case A** —
+byte-identical, provable by construction, and this phase writes no test at all.
+
+**The next-phase candidates, in order.** **FU328-L1 — the `+0x79` producer, the
+natural-pan owner leg** (a future, separately pinned, golden-moving fidelity
+change: the native value for the band record measured first — FU328-L3 — then
+the faithful-move recipe with the first-diff rule and the stratum-set gate; its
+M2 exposure is FU328-L8, the whole formation's stride rising to the native
+value and the golden moving wholesale). Then the **claim/carrier fusion**
+(FU315-L1 + FU316-L8: the row-05
+carrier camera event `0x7F4E7` and the claim tail — the pan→row-5→rebind half
+of the cycle does not exist in the engine); then the **armer/follow body**
+(FU316-L6 + FU316-L9: the `0x7131C` announce/threshold/far-band body and the
+unarmed mirror — the port reflects only once `goal_armed` is set); then the
+**undriven second-half stall** (FU328-L4: phase 12 → phase 1 at step 13805,
+clock 120 s, no transition through step 160 000 — the row-01 kickoff release /
+the FU-84 per-frame driver). FU316-L1's disposition is recorded: the travel
+model is settled **within the locomotion bound**, and the non-locomotion writer
+escape (FU326-L1) stays open.
+
+**The legs.** Registered in full in the ENGINE phase-34 section: **FU326-L1..L4**
+(the writers, the `camY` width, the slot-dir source, the rate pair),
+**FU327-L1..L7** (the parked seed, the cell corrections, the harness's pool
+cells, the arithmetic-only ladder, the unexercised arms, the replica predicate),
+**FU328-L1..L8** (L1 the producer gap — promoted; L2 the row-03 counter; L3 the
+native value; L4 the stall; L5 the finite families; L6 the filter≠gate; L7 the
+arm classifier; L8 the M2 exposure) and **FU329-L1..L11** (the acceptance
+design's open items). The phase-30/31/32/33 remainder is carried unchanged; the
+FU324-L5 re-measure clause now has its named trigger (the `+0x7B` nibble
+staging arrives with FU328-L1).
+
+**The tape and the gate.** M1 `09b726b7…` (22 004 B, 691 lines) and M2
+`d5446144…` (295 087 B, 6 522 lines) are byte-identical (`cmp`-verified); no
+re-pin, no frame diff, no fixture change. `make check` **111/111** (strict
+`-Wall -Wextra -Werror`, ASan/UBSan). The census holds **`60/80 = 75%`** (fresh
+re-count: 37 action + 23 phase; no row joined) and the README title stays
+`75%`. The phase is docs-only; the wave's probes and builds live out of tree,
+and the ISO was read only.

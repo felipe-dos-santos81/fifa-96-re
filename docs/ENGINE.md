@@ -7253,3 +7253,263 @@ two-segment pan reproduced live), the two-segment shape, the per-segment
 phase-34 erratum (`docs/ghidra/FU323_r2l7_m2_probe.md`); the phase-34 wave
 measured 5 row-04 gate passes total (1 no-slot, 4 slot controls — FU327 §3).
 The phase-33 register's verdict and golden accounting are unaffected.
+
+## M2 phase-34 register (FU326…FU329; 2026-10-23) — the no-slot pan travel: the measured NO-GO (the arm is native-faithful at parity; the `+0x79` placement-timer producer is the root gap)
+
+**Scope/provenance.** Phase-34 spec
+`docs/superpowers/specs/2026-10-23-fifa96-m2-phase34-noslot-pan-design.md`
+(§5/§6/§7/§8 + the **Plan erratum (wave close)** — which corrects §2/§4's
+larger-seed premise and records the NO-GO), producer plan
+`docs/superpowers/plans/2026-10-23-fifa96-m2-phase34-producers.md` (T1, this
+close-out) and the recon-ahead plan
+(`2026-10-23-fifa96-m2-phase34-recon-ahead.md`); the reviewed four-slice wave
+`docs/ghidra/FU326_r2l8_noslot_seed.md` … `FU329_r2l8_acceptance.md`,
+promoted one-per-commit (`55357f8` FU326, `4945e4b` FU327, `3ce3dbb` FU328,
+`04a78f2` FU329), with the wave-review errata appended to each — FU326's five
+items (the zero-seed speed mechanism, the bound's scope, the FU321 §3.5 prior
+authority, the `0x19` clamp, the `T = 12` wording), FU327's one (the walk rate
+is the velocity word; the place steps 2/frame), FU328's four (the band
+`active`, the `+0x79` range, the `ramp` cell, the direction family), FU329's
+five (the `0x174` row, H5's inverted premise, H3's example, the M2
+exposure/leg hand-off, the m-42 cite); and the phase-34 wave erratum
+`996ddda`, which appended the FU323 cell erratum, the FU316 seed erratum, the
+spec's Plan erratum and the phase-33 register's seg[1] erratum. This close-out
+is **docs-only**: no production, test or golden change (the spec §5 NO-GO
+branch — P1 is the measured-distribution register, not a producer).
+Append-only: the phase-33 text and every prior section stand as written; the
+corrections below are quoted errata. Census **`60/80 = 75%`** (`37 action + 23
+phase`; fresh re-count this close-out over the 45+35 dispatch tables — no row
+joined); M1 `09b726b7…` (22 004 B, 691 lines) and M2 `d5446144…` (295 087 B,
+6 522 lines) **byte-identical** (`cmp`-verified); `make check` **111/111**
+(strict `-Wall -Wextra -Werror`, ASan/UBSan). The README title stays `75%` —
+the census did not move, so no recompute (AGENTS.md's derived rule).
+
+- **The verdict — no natural pan was achieved, and the reason is measured: the
+  no-slot arm is native-faithful and the port is at parity, but the band
+  record never leaves its parked stride because the native placement timer
+  `+0x79` has no port producer.** The row-04 seed switch's **no-slot arm**
+  (`0x7F056`: `camY == 0 && !has_slot`, `|cam_x| ≤ 0x630`, `|cam_z| ≤ 0xA20` →
+  `word[+0x73] << 2` / `word[+0x75] << 2`; the `(0,0)` bail still fires the
+  event) is exact against the fresh bytes, the `v0 = trunc(seed/0xC)` fast path
+  is the native `IDIV` (`0xA2AEE`), the decay is `trunc(0x18·v/0x20)` and the
+  travel `T(v0) = 2·(6·v0 + 7·v1 + …)` reproduces the measured
+  `5→3→2→1→0` / `T(0x40) = 0x90` instance (FU326 §3–§4). The port's **22
+  seed-staging/arithmetic audit cells** match the fresh bytes — **no staging
+  fix is warranted** (FU326 §6) — so the spec §5/§8.5 conditional Case B is
+  **not triggered** and the phase carries **no production change**. The natural
+  witness is **NO-GO** (FU328 §6/§9): every no-slot gate pass on every measured
+  shape is the zero-seed **silent bind**, and **the silent bind is the
+  consequence of the missing `+0x79` producer, not of the no-slot arm alone** —
+  supply the limit (the §5.6 diagnostic) and the same natural record, with no
+  drive, pans with `T = −0xC / −0x26 / −0x84`.
+
+- **The algebra (FU326) — the stride bound and the inversion of the carried
+  larger-seed premise.**
+
+  | quantity | value | source |
+  |---|---|---|
+  | the seed words | `word[+0x73]` / `word[+0x75]` (the record's stride velocity) | `0x7F08F` / `0x7F09B` |
+  | the stride flat | `0x10F680`, 1 280 words, fresh **min −15 / max +15** (445 negative / 660 positive / 175 zero) | FU326 §4.2 |
+  | the seed | `s = 4·w`, so **`\|s\| ≤ 0x3C`** | FU326 §4.2 |
+  | `v0` | `trunc(s/0xC) = trunc(w/3)` → **`[−5, +5]`** | FU326 §4.2 (`0x70646`/`0xA2AEE`) |
+  | the travel | `T ≤ 0x90` per axis; the delta is the **vector** `Δ = sign(w)·T` | FU326 §4.3 |
+  | the silent band | `\|w\| ≤ 2` → `v0 = 0`, `T = 0` (three consecutive words share one step) | FU326 §4.4 |
+  | the armer reach | `floor(0x730/T)+1` = **13 x / 20 z** at `T = 0x90` — a **floor** | FU326 §4.5 |
+
+  **Quoted correction (the spec §2/§4 and FU316 §4.3/§7.1).** "a larger no-slot
+  seed `s = 0x80` gives `T = 0x174`" / "the armer reach … (fewer for larger
+  no-slot seeds)". **Corrected (FU326, fresh `read_memory 0x10F680`):** the
+  `0x174` row needs `v0 = 10`, i.e. `w = 0x20`, outside the table, so it is
+  **arithmetic-only**; the live no-slot maximum is `T = 0x90`, hence 13 x / 20
+  z pans is the **floor**, not a best case. This is a **reconciliation, not a
+  discovery**: FU321 §3.5 (frozen, phase 32) already carried the `|w| ≤ 15`
+  bound and concluded "the no-slot arm's maximum is the same `0x90`". The
+  bound's **scope** is the locomotion writer's domain and the measured tape
+  (`|w| ≤ 1` on every record-frame); a static impossibility is **not**
+  established — the 87/51 non-locomotion `+0x73/+0x75` writers stay open as
+  FU326-L1 (FU326's erratum 2).
+
+- **The measured distribution (FU327) — five row-04 gate passes, one no-slot.**
+  The three measured passes sample the whole window (`cone_passes` =
+  `events_1d` = the fired events: natural 1, claim 2, offset 2), twice per
+  process byte-identically, on a probe whose unpatched build reproduces M2
+  `d5446144…` **before** any instrumentation (and whose instrumented build
+  reproduces the same sha — the hook is observation-only).
+
+  | # | pass | gate f | id | `has_slot` | arm | seed `(x,z)` | `v0` | `T` | changed frames |
+  |---|---|---|---|---|---|---|---|---|---|
+  | 1 | natural | 1517 | 12 | **0** | **`0x7F056`** | **(−4,0)** | **(0,0)** | **0** | **0** |
+  | 2 | claim | 1481 | 2 | 1 | `0x7F035` | (−0x40,0) | (−5,0) | −0x90 | 27 |
+  | 3 | claim | 1553 | 1 | 1 | `0x7F035` | (−0x40,0) | (−5,0) | −0x90 | 27 |
+  | 4 | offset | 1483 | 2 | 1 | `0x7F035` | (−0x40,0) | (−5,0) | −0x90 | 27 |
+  | 5 | offset | 1553 | 1 | 1 | `0x7F035` | (−0x40,0) | (−5,0) | −0x90 | 27 |
+
+  The arm census is `0x7F056` ×1, `0x7F035` ×4, `0x7F003` ×0, the `(0,0)` bail
+  ×0. The no-slot instance reproduces the phase-33 silent bind **cell for
+  cell**: `trk=12`, `tim 0/12`, `ramp 12`, `vel (0,0)`, `speed 0`,
+  `pos (0,0,0)` on all 3 598 granted frames, `camera_zero_frames` 1517 /
+  `camera_left_zero` 2081, `segments 0 / changed 0 / off-zero 0`. The four
+  slot controls are the carried model end to end: seed `−0x40` → `v0 = −5` →
+  the `5,3,2,1,0` decay over 6/7/7/7 frame groups → 27 changed frames →
+  `T = −0x90` → pan `0→4`, **two per driven pass** accumulating to
+  `(−0x120,0,0)` (the second event's clear resets `pan 4→0` before rebinding).
+  The measured population is the condition a witness fails: the band record's
+  `+0x73 ∈ {0,−1}` on all 3 598 frames, the formation-wide `max |w| = 1`
+  (0 on 1 074 frames, 1 on 2 524), **zero records at `|w| ≥ 3`** on any row —
+  the smallest moving no-slot seed (`|w| = 3` → `T = ±0xC`) is two whole
+  velocity units away (FU327 §4/§6).
+
+  **Quoted cell corrections (FU323 §4/§5.1; FU327 §5.1/L2/L3).** Quote: "the
+  gate tuple at the band frame … `active 2` … `dir (−1,0)`" and "its passing
+  dispatch is no longer the row-04 code-4 gate but the **code-3 chase walk's
+  own camera event**". **Corrected:** the band frame's cells are **`active 1`**
+  / **`dir (0,0)`** (the `2` is the `row43`/`+0x43` cell; the dir is entity
+  2's; FU323's own `anim_patched.txt` step-5062 line carries `active 1`), and
+  the driven **seg[1] is a row-04 event of entity 1** (`code 4`, `has_slot 1`,
+  seed `(−0x40,0)`) — the harness's `event.code 3` is **entity 2's pool cell**
+  (`m2_claim_snapshot` reads `M2_CLAIM_ENTITY = 2`). The frozen pins stand as
+  pool-cell pins; only the attribution changes. The phase-33 register's own
+  seg[1] erratum (the section above, `996ddda`) carries the same correction.
+
+- **The reachability (FU328) — the 32-run sweep: NO-GO; the labelled
+  diagnostic proves the chain.** Thirty-two measured runs — the verbatim
+  `M2_KEYS` natural tape at 12 000 / 24 000 / 48 000 / 96 000 / 160 000 steps
+  (3 598 … 47 998 granted frames), the direction families
+  (DOWN/UP/LEFT/RIGHT), the offset nudge family, the kick/pass/long-ball
+  claim/carrier contexts, seven half-time-restart KICK offsets and a DOWN
+  tail — every granted frame sampled, every `fifa96_camera_event_set` captured
+  with the arriving record's cells; **no shape staged a slot, seed or face
+  cell**. **No nominee:** the two no-slot gate passes that exist (natural
+  f=1517; f=1590 at the moved camera under the kick/pass family) both carry
+  `seed −4 → v0 = 0`, and every real pan in the sweep is the slot arm. The
+  port-side cap is one chain (§3.4): `+0x79` unwritten → `+0x7B & 0xF = 0` on
+  every record-frame → `stride_len = 1` → `attr ≤ 1` → the stride word `≤ 1` →
+  `|seed| ≤ 4` → `v0 = 0`. The **labelled diagnostic** — the placement limit
+  staged on the record-locomotion cell only, never a witness, excluded from the
+  sweep table, the spec §7 staging ban respected for every sweep shape — pins
+  the chain from the other side: **`+0x79` = 3/6/15 → seed `−0xC/−0x18/−0x34` →
+  `v0` −1/−2/−4 → `T` −0xC/−0x26/−0x84** at gate f 867/704/607, with the exact
+  6/13/27-frame decays. **Frequency (FU316-L7): 1 no-slot band entry / 3 598
+  granted frames (0.028 %), 0 pans**; 1/4 138 first-half granted frames
+  (0.024 %) over the longer windows; driven **2 slot pans / 3 598 (0.056 %)**,
+  still 0 no-slot pans. The 96 000-step window's extra 24 660 granted frames
+  (85.6 %) are the **stalled half-time kickoff**, not play (FU328-L4).
+
+- **The acceptance and the golden governance (FU329) — Branch B: recorded, not
+  pinned.** **No test change lands.** A *new* assert of today's zero seed would
+  pre-commit the acceptance to the no-witness world and invert the day a
+  witness appears (the phase-33 inversion lesson), so it is deliberately not
+  taken; **A1–A3 stay** as landed (`tests/test_engine_m2.c:3935-3966`) and
+  nothing is re-pinned. The witness tuple — `code 4`, `anim_id != 0x13`,
+  `cam_pos_y == 0`, `has_slot 0`, the arm's camera sub-gate, `lane_x ≥ 1`,
+  `|v0| ≥ 1`, the per-axis `T(s)` from the measured `cam_vel` pair, the
+  segment cells — is the design the **`+0x79` producer will be measured
+  against**; the **future A3 re-pin rides that producer**, not this phase. The
+  golden is **Case A, byte-identical**: the natural pass writes no transcript,
+  so a test-side acceptance could not move M2 by construction — and this phase
+  writes no test at all. Branch A (a measured witness) did not arise, and no
+  fixture was staged to manufacture one (spec §6/§8.6). The future producer is
+  a **separately pinned, golden-moving** fidelity change (FU328-L8) under the
+  faithful-move recipe (the first-diff rule, the `state=` check, the
+  stratum-set gate, the written reason), never folded into an acceptance
+  (FU329's erratum 4).
+
+- **The wave's verdicts and the errata chain.** **FU326** GO on the algebra and
+  the port parity / NO-GO on the carried larger-seed premise — its most
+  consequential erratum is item 2 (the bound is the locomotion/measured
+  domain, not an impossibility). **FU327** GO on the measured-distribution
+  register / NO-GO on a natural witness in the measured passes. **FU328**
+  NO-GO on a natural witness (no nominee) + GO on the diagnosis and the fix
+  target — its erratum 2 corrects "6..15" to the `0x10F394` **table-entry**
+  range and records that the native store also ORs `[rec+0x9D]` (unported,
+  OL-72), so entity 12's native value is **unmeasured** (FU328-L3). **FU329**
+  GO on the design, closing in Branch B. Errata pointers: the spec's Plan
+  erratum; the FU326/FU327/FU328/FU329 review errata; FU323's cell erratum and
+  FU316's seed erratum (`996ddda`); the phase-33 register's seg[1] erratum (the
+  section above). Every number in this register is a quote of those sections —
+  no native fact is re-derived here.
+
+- **The legs — met, open and promoted.**
+  - **FU326-L1..L4** — L1 the non-locomotion `+0x73/+0x75` writers (87/51
+    operands; reachability at the row-04 gate unproven — the only formal escape
+    from the bound; owner: `fifa96_outfield_row04_step`'s `vel_int` staging +
+    a native writer census); L2 the `camY` int16 narrowing (latent, `Y ∈
+    [0, 0x640]`; owner: the `fifa96_match_action_04` staging); L3 the slot-arm
+    dir source (dead on the no-slot arm; owner: the `fifa96_match_run` slot
+    model); L4 the hardcoded `0x1104AB` rate pair (owner:
+    `fifa96_camera_event_set` + the `0x14C2FE`/`0x14C2FA` cells).
+  - **FU327-L1..L7** — L1 the parked no-slot seed and the formation-wide
+    `|w| ≤ 1` (owner: FU328 — now FU328-L1); L2 the band tuple's
+    `active`/`dir` cells (owner: the Stage-2 baseline wording — this register's
+    quoted correction lands it); L3 the harness's pass-level `gate`/`event`
+    cells are entity-2 pool cells (owner: the acceptance wording); L4 the
+    moving-travel ladder is arithmetic-only (owner: FU328's drive — not found;
+    the `+0x79` producer's measurement); L5 the no-slot camera-bounds bail is
+    unexercised (owner: FU326 §5 item 5 / FU328); L6 the height arm and the
+    row-`0x13` code-`0x15` arm are unexercised (owner: none in phase 34);
+    L7 the probe's cone predicate is a replica (owner: the next probe; guarded
+    by the 5/5 agreement and the golden-equivalence build).
+  - **FU328-L1..L8** — L1 **the `+0x79` producer gap — PROMOTED, the
+    natural-pan owner leg** (below); L2 the row-0x03 placement counter is
+    unwired and its staged `move_attr` is hard 0 (owner: FU177-L1 — the
+    *maintenance* half; L1 alone lifts the install-reset cap); L3 the native
+    `+0x79` for entity 12 is unmeasured (the 3/6/15 ladder is not the native
+    value; owner: FU84 §6 + the roster descriptor, measured with L1 landed);
+    L4 the undriven second half is a **stall** (phase 12 at step 13802, phase 1
+    at 13805, clock 120 s, no transition through step 160 000; owner: the
+    row-01 kickoff release / the FU-84 per-frame driver); L5 the drive-family
+    coverage is finite (no live `make game` rate; owner: a future live
+    measurement); L6 the cone filter is not the gate (one-frame operand
+    offset; the wrap events are the authority); L7 the wrap's arm classifier is
+    partial (arms 0/1 exercised; 4/5/6 never observed); **L8 the M2 exposure of
+    the L1 fix** (every record's stride rises to the native value and the
+    natural tape pans undriven — the golden moves wholesale under the
+    faithful-move recipe; the census does not move).
+  - **FU328-L1 — PROMOTED: the natural-pan owner leg** (from FU316-L1). The
+    native placement limit `+0x79` (`FUN_0007997C`, `0x799F0..0x79A4D`, FU84
+    §6) has **no port producer**: `timer79` is read-only in the engine
+    (`include/fifa96_engine/fifa96_match_entities.h:129`), the install reset
+    copies 0 into `+0x7B` (`fifa96_match_entities.c:94`, native `0x7DA9B`), so
+    the placement nibble is 0 on every record-frame. Owner: the entity
+    reset/placement entry + the `+0x9D` byte (OL-72). It is a **future,
+    separately pinned, golden-moving fidelity change**: the native value for
+    the natural band record measured first (FU328-L3), the first-diff rule and
+    the stratum-set gate armed (FU329 §6.2), never folded into an
+    acceptance-only commit. The predicted witness (entity 12, gate ≈ f
+    607–704 for the native range, `|v0| = 2..5`, `T = 0x26..0x90`) is a
+    **prediction**, never an assertion.
+  - **FU329-L1..L11** — L1 the witness pin is unwritten until the tuple is
+    measured (owner: FU328 → the `+0x79` producer's phase); L2 the `lane = 0`
+    conflict is a spec decision (owner: the wave review/spec — unexercised);
+    L3 the seed words are not yet a harness cell (owner: the future P1 +
+    FU326); L4 the Layer-2 pair window for a small `v0` (owner: the Layer-2
+    task — not attempted in Branch B); L5 the no-slot Layer-2 has no slot-arm
+    fallback (owner: the Layer-2 task + the register wording); L6 the armer
+    class of **chained** no-slot pans is unmeasured (owner: FU326 + FU328 —
+    re-worded by the erratum); L7 the natural run's later windows (owner: the
+    Layer-2 note); L8 the trace cannot show the arm or the seed (owner: the
+    acceptance wording); L9 the m-42/link class is a slot-arm fixture (owner:
+    the future P1); L10 the census/README recompute is out of scope (this
+    close-out re-counted: `60/80` holds; owner: the close-out — met); L11 Case
+    B is conditional on a fix this wave did not make (owner: the future fix +
+    FU326).
+  - **FU316-L1 — its disposition.** The travel model is **settled within the
+    locomotion bound**: the no-slot seed is `4w` with `|w| ≤ 15`, so
+    `|s| ≤ 0x3C`, `v0 ∈ [−5,5]` and `T ≤ 0x90` per axis, and the measured tape
+    sits far inside it (`|w| ≤ 1`). Its larger-seed premise
+    (`s = 0x80 → T = 0x174`) is corrected by FU326/FU329's errata; its
+    **non-locomotion writer escape stays open** (FU326-L1). The natural-pan
+    **ownership passes to FU328-L1**: the gap is upstream of the seed.
+  - **Carried unchanged:** the phase-30/31/32/33 remainder as registered
+    (FU315-L1/L2, FU316-L2..L9, FU317-L1..L7/L9/L10, FU318…FU325's legs,
+    FU319-L8 included); the FU324-L5 re-measure clause now has a named trigger
+    — the `+0x7B` nibble staging arrives with FU328-L1.
+
+- **Tape and gate.** Docs-only, proven: M1 `09b726b7…` and M2 `d5446144…`
+  byte-identical (`cmp`-verified), no re-pin, no frame diff, no fixture
+  re-staging and no `state=` change; `make check` **111/111**; census
+  **`60/80 = 75%`** (`37 action + 23 phase`; fresh re-count); the README title
+  stays `75%`; the ISO untouched; the wave's probes, builds and logs all
+  out-of-tree (`/tmp/opencode/fu326…fu329`), the repo receiving only the four
+  drafts, the spec, the plans and the errata. The phase's **next-phase
+  hand-off** is FU328-L1 (the `+0x79` producer, the natural-pan owner).
