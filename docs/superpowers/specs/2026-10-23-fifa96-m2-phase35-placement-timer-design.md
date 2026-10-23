@@ -174,3 +174,51 @@ stop-and-report, never a re-pin.
 4. **FU333** — the acceptance and governance (the Branch B concretized, the
    A3 re-pin, the Layer-2, the faithful-move recipe, the hazards), arguing
    from the measured numbers.
+
+## Plan erratum (wave close, 2026-10-23)
+
+The wave measured; these premises are **corrected by it** (append-only; the
+sections above stand as written):
+
+1. **The cap premise (§2/§4).** Quote: "the range seen is 6..15, but … '6..15
+   is not a proven cap'". **Corrected (FU330, fresh):** `+0x79` is a tier-table
+   lookup — `word[+0x79] = byte[0x10F394 + byte[[rec+4]+0xD]] | byte[+0x9D]`
+   — with **15 the proven in-range maximum** (the table's `0x0F` at indices
+   16..18; the `+0x9D` OR-writer only emits 0/0x0F). **6 is not a floor** (P2
+   reaches 3, and 2 by composition), and no universal cap holds only because
+   the index is **unguarded** (an out-of-range descriptor byte reads the
+   `0x0FF394` continuation). The kickoff value depends on the roster byte
+   (unmeasured — FU330-L1); the port's `player_d = 0` stages **6** on all
+   records (declared staging, not native per-record).
+2. **The port's assumption (§2).** Quote: "the port assumes `+0x79 = 0` in
+   places: … the copies … and the various `timer7b` writers". **Corrected
+   (FU331):** the copies (`entities.c:94/209/744`) **inherit** the value; the
+   only false assumption is the literal at `handlers.c:5034` (OL-82). The
+   row-09 native is `word[+0x7B] = word[+0x79]*2` (fresh `0x80B3D..0x80B43`),
+   so a live 6 gives `+0x7B = 12`, `vel73 = 12`, `speed71 = 12`,
+   `target = pos + 96`; the row-09 path is **inert** on the measured tape
+   (0 code-9 record-frames — FU332).
+3. **The A3 re-pin's commit (§6).** Quote: "The A3 window re-pins in P2 with
+   the measured pacing." **Corrected (FU333-L2):** it lands in **P1** — a
+   golden re-pin commit may not be red; P2 (test-side) cannot move M2 and only
+   verifies.
+4. **The branch name (§2).** Quote: "**FU329 Branch B**". **Corrected
+   (FU333):** the landed case is **Branch A** (the witness exists, measured —
+   FU332); Branch B (the measured NO-GO record) does not apply.
+5. **The carried cite (§4).** Quote: "(FU328 §4.3)". **Corrected:** the
+   `+0x7B` counter's fresh derivation is **FU328 §3.3** (the §4.3 label is
+   wrong).
+6. **The witness's character (§1/§6).** Quote: "the natural no-slot pan
+   acceptance (the undriven tape's first real pan)". **Corrected (FU332):**
+   the pan is **producer-conditioned** — measured at the port-reachable
+   `+0x79 = 6` (entry f=703, event f=704, entity 12, `has_slot 0`, lane 56,
+   `vel73 −6`, seed `−0x18`, `v0 −2`, `T_x −0x26` = −38, 13 frames, pan 2;
+   at 15: event f=607, `v0 −4`, `T −0x84`, 27 frames, pan 4); the **native
+   per-record value is unmeasured** (the roster index), so the witness is
+   native-faithful in mechanism but route-conditioned in value — the register
+   must say so. The silent bind (f=1517) is gone. M2's first differing line
+   is **852**, 5 671/6 522 lines, one contiguous tail 852..6522, the 10-tag
+   stratum set intact (`d5446144…` → `6aa2703b…` at 6 / `bd971062…` at 15);
+   the pool diverges at step 12 (the first mover, id 10) — the render's
+   852-chain is the phase-33 attribution class.
+
