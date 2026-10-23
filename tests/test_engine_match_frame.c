@@ -2357,6 +2357,9 @@ static void test_live_carrier_claim_and_kick(void) {
   assert(rec->code == 5u);
   assert(mr.entities.ball.carrier == id);            /* 0x7F1FF claim */
   assert(mr.entities.controlled == id);              /* 0x7F291 set_control */
+  /* The UP press's purpose: the record's staged dir at the claim frame is
+   * the documented (1,0) (the loader's slot-dir arm is separately gated). */
+  assert(rec->dir_x == 1 && rec->dir_z == 0);
   /* Phase-35 P1 (the +0x79 producer's measured pacing): the claim now lands
    * on a frame whose control slot carries no FU-70 released word, so the
    * row-05 stage-0 slot-dir arm does not fire and the possession dir bytes

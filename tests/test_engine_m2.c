@@ -1742,12 +1742,14 @@
  * (the FU323-L4 measured code-4 population); no unexplainable frame. The
  * phase-32 witnesses re-pin under the live face (FU323 §5, FU322's
  * erratum 2: the claim pass's timeline cells and the offset pass's tuple —
- * both passes now run two chained segments; the offset pass's criterion
- * itself survives: lane_at_pass 129 ≥ 1, Δ=0); the undriven natural
- * window's post-producer baseline is the FU323-L1 silent bind (faces live
+ * both passes then ran two chained segments; the offset pass's criterion
+ * itself survived: lane_at_pass 129 ≥ 1, Δ=0); the undriven natural
+ * window's post-producer baseline was the FU323-L1 silent bind (faces live
  * from step 9, trk=12 bound at granted f=1517 / engine step 5065, camera
  * pos still (0,0,0) — the FU316-L1 no-slot leg), pinned by the inverted
- * A1-A3 assert set in this commit.
+ * A1-A3 assert set in that commit. **(This is the pre-producer baseline of
+ * phases 33–34; the phase-35 placement producer below supersedes it — the
+ * natural pan is live and the driven passes run one segment each.)**
  *
  * Phase-35 provenance (the atomic producer commit, `fix(fu328)`): the native
  * placement-limit producer `FUN_0007997C` — `word[+0x79] = byte[0x10F394 +
@@ -1760,7 +1762,8 @@
  * `byte9d` = `+0x9D`), both 0, so every record carries `+0x79 = 6` — the
  * table's first row, a port staging value, NOT a native per-record
  * measurement (the roster index is unmeasured: FU330-L1/FU328-L3). The
- * row-09 OL-82 literal at `handlers.c:5034` is retired in the same commit:
+ * row-09 OL-82 literal (then `handlers.c:5034`; the corrected line now sits
+ * at `:5037`) is retired in the same commit:
  * `+0x7B = +0x79*2` (0x80B3D..0x80B43), inert on this tape (0 code-9
  * record-frames, FU332 §7). M2 re-pin (faithful move, FU332 §5): first
  * differing line **frame 852** (`state=1/1-0`, hash 964282c7… -> e04df34d…),
@@ -1979,12 +1982,13 @@
 #define M2_OFFSET_LEFT_TO 1829
 #define M2_OFFSET_DOWN_FROM 1830
 
-/* FU322 §4.3 (erratum 1 re-shape): the undriven tape's band record — the
- * record the row-04 gate binds at granted f=1517 (FU323-L1's silent bind;
- * entity 12 = team 1 record 1). The bind identity is locked (its P3
- * sensitivity is declared): the first-bind frame is walk-driven and stable,
- * but its identity re-pins with a reasoned re-pin if the face-coupled walk
- * order moves it. */
+/* FU322 §4.3 (erratum 1 re-shape), re-based by phase-35 P1: the undriven
+ * tape's band record — the record the row-04 gate binds at granted f=704 /
+ * engine step 2355 in the produced world (the phases-33/34 pre-producer
+ * baseline bound it at f=1517 — FU323-L1's silent bind; entity 12 = team 1
+ * record 1). The bind identity is locked (its P3 sensitivity is declared):
+ * the first-bind frame is walk-driven and stable, but its identity re-pins
+ * with a reasoned re-pin if the face-coupled walk order moves it. */
 #define M2_NAT_BAND_ENTITY 12
 /* FU322 §4.1 A3 / errata 1+3, re-pinned by phase-35 P1 (the +0x79 producer;
  * FU330/FU331/FU332): the first camera-cell departure. FU323 measured the
@@ -2398,24 +2402,27 @@ struct m2_result {
  * FU313 (phase-30 T1) extends the probe into the measurement harness:
  *  - the natural window runs to `M2_NATURAL_WINDOW_STEPS` and samples every
  *    granted frame (`pace.pending` delta), pinning 3 598 granted frames and
- *    the camera-zero/left-zero split (measured 1 517 / 2 081) over 101 s of
- *    match clock;
+ *    the camera-zero/left-zero split over 101 s of match clock; the
+ *    phase-35 produced world measures **704 / 2 894** (the phases-33/34
+ *    pre-producer baseline was 1 517 / 2 081);
  *  - the `keeper_cpu.ladder` observation seam counts the FU282 gate firings and
  *    applies the public `fifa96_keeper_cpu_stage_select` to the same record view
  *    (the FU313 §5.3 P4 counters; measured 6 118 calls / `ran=0` with the ISO);
  *  - a sample hash plus a second replay pins determinism (P5);
- *  - the scripted pan witness (P6 partial) is a separate run on a COPY of
- *    `M2_KEYS` with the FU-157/FU-163 claim/kick overwriting the copied
- *    tape's tail after phase 2.
- * P6-P8 status after the inversion (FU322 §4.1/§4.6, the atomic producer
- * commit): P6 is GREEN in the natural window — the live +0x43 latch's
- * silent-bind baseline (the row-04 gate passes once; the camera event state
- * engages; the place itself never moves undriven, FU323-L1/FU316-L1). The
- * A4/A5 pan-window/lockout pair lives on the driven claim/offset passes
+ *  - the scripted pan witness is the declared PRE-PRODUCER CONTROL (it stages
+ *    `timer79`/`timer7b` = 0 at the match-begin seam): a separate run on a
+ *    COPY of `M2_KEYS` with the FU-157/FU-163 claim/kick overwriting the
+ *    copied tape's tail after phase 2.
+ * P6-P8 status after the phase-35 producer: P6 is GREEN in the natural
+ * window — the producer-conditioned natural no-slot pan (row-04 gate passes,
+ * live seed, first departure step 2355 = granted f 704, motion 705..717,
+ * stop 718, place -38, pan 2; FU332 §6). The phases-33/34 pre-producer
+ * baseline was the FU323-L1 silent bind (the place never moved undriven).
+ * The A4/A5 pan-window/lockout pair lives on the driven claim/offset passes
  * (FU322's erratum 2). The FU313 follow window/lockout form stays waived on
  * this tape (the row-04 event's height is 0, so the follow cannot open —
- * E16/FU317; FU322-L11): the pan witness is still the only place motion
- * (one-shot, X-only, Y stays 0). */
+ * E16/FU317; FU322-L11). The scripted pre-producer control remains the
+ * two-pan X-only witness; Y stays 0. */
 struct m2_stage_capture {
   uint32_t calls;        /* the FU282 ladder gate fired (the seam was entered) */
   uint32_t select_calls; /* fifa96_keeper_cpu_stage_select returned OK */
@@ -2466,15 +2473,21 @@ static int m2_stage_capture_ladder(void *ctx,
   return fifa96_keeper_cpu_ladder_run(ctx, rec, out);
 }
 
-/* FU313 §5.3 P6 partial: the scripted pan witness. This is the FU-157 §3.4 /
+/* FU313 §5.3 P6: the scripted pan witness — the declared PRE-PRODUCER
+ * CONTROL. This is the FU-157 §3.4 /
  * FU-163 §1.2 claim/kick sequence (KICK -> phase 2 -> the long-ball request ->
  * the UP walk to the claim) on a COPY of `M2_KEYS` with the request/walk
  * overwriting the copied tape's tail after phase 2. It is NOT natural open
  * play and NOT the natural window: the cutscene is isolated (`act.id = 0`, the
  * documented `begin_isolated` idiom of tests/test_engine_match_frame.c) so the
- * derived kickoff keeps the formation near the zero camera; the natural run
- * stays the zero baseline. The claim walks the place 0 -> 0x90 -> 0x120 over
- * two one-shot row-04 pans; Y and Z remain 0. */
+ * derived kickoff keeps the formation near the zero camera. **It is the
+ * declared PRE-PRODUCER CONTROL**: the produced placement limit makes the
+ * formation run from the first frame and its scripted chain then reaches no
+ * camera event at all (measured: 0 departures in 6 000 steps), so the run
+ * stages `timer79`/`timer7b` = 0 at the match-begin seam beside the existing
+ * `+0x43 = 0`; the natural pass above carries the producer-conditioned pan,
+ * this control keeps the pre-producer pan shape pinned. The claim walks the
+ * place 0 -> 0x90 -> 0x120 over two one-shot row-04 pans; Y and Z remain 0. */
 struct m2_pan {
   int match_start_step;
   int phase2_step;
@@ -2572,12 +2585,16 @@ struct m2_claim {
   struct m2_claim_gate gate;
   struct m2_claim_gate event;
   struct m2_claim_gate last;
-  /* FU322's erratum 2 (the segment-aware re-pin): two chained segments
-   * measured on both driven passes. */
+  /* FU322's erratum 2 (the segment-aware re-pin), re-based by phase-35 P1:
+   * ONE segment per driven pass in the measured produced world (the claim
+   * pass's record-2 claim at gate f 673 / event f 674; the offset pass's at
+   * gate f 675 / event f 676). The phases-32/33 baseline had two chained
+   * segments; the producer's earlier one-shot pan consumes the second. */
   struct m2_claim_segment seg[2];
   /* The first frame with pos != (0,0,0) — the A5 off-zero identity's left
-   * side under two segments (the pass-level first_motion_f is the last
-   * segment's; measured off-zero 2 116 = 3598 - 1482). */
+   * side (the pass-level first_motion_f is the segment's; measured off-zero
+   * 2 923 = 3 598 - 675 on the claim pass and 2 921 = 3 598 - 677 on the
+   * offset pass). */
   int first_off_zero_f;
   /* P12: the delta run and the place. */
   int first_motion_f;
@@ -2615,15 +2632,17 @@ struct m2_claim {
   uint8_t trace_pan_min, trace_pan_max;
 };
 
-/* FU322 §4.3/erratum 2: the UNDRIVEN natural run's delta-run machine — the
- * m2_claim counter subset (segments/changed/off-zero/stop/Y-Z/bounds)
- * replayed over run_natural_pass's own camera cells, plus the bind snapshot
- * (the first frame with tracked != NONE). Measured undriven (FU323 §4): the
- * silent code-5 bind at granted f=1517 binds trk=12 with a zero seed, the
- * delta-run machine records segments == 0 / changed_frames == 0, and no
- * granted frame has pos != (0,0,0) — so the A4/A5 pan-window asserts are
- * VOID here and live on the driven claim/offset passes; every cell below is
- * recorded-only (stderr) until that mode is measured further. */
+/* FU322 §4.3/erratum 2, re-based by phase-35 P1: the UNDRIVEN natural run's
+ * delta-run machine — the m2_claim counter subset (segments/changed/off-zero/
+ * stop/Y-Z/bounds) replayed over run_natural_pass's own camera cells, plus
+ * the bind snapshot (the first frame with tracked != NONE). Measured in the
+ * produced world: the band record 12 binds at granted f=704 / engine step
+ * 2355 with a live no-slot seed (vel -2), the delta-run machine records
+ * ONE segment / 13 changed frames / off-zero 2 893 / stop f 718 / place
+ * -38 / pan 2, and the bind frame itself is the first departure. The
+ * phases-33/34 pre-producer baseline was the silent code-5 bind at f=1517
+ * with a zero seed and no motion (FU323-L1); every cell below is
+ * recorded-only (stderr). */
 struct m2_nat_pan {
   uint32_t segments, changed_frames, off_zero_frames;
   uint32_t y_nonzero_frames, z_nonzero_frames;
@@ -2656,18 +2675,22 @@ struct m2_natural {
   uint32_t sampled_frames;       /* granted frames observed by the sampler */
   uint32_t camera_zero_frames;   /* granted frames whose 16 trace cells were all zero */
   uint32_t camera_left_zero;     /* granted frames with pos != (0,0,0)
-                                  * (measured 2 081 post-producer; P6's 0 is
-                                  * the pre-producer baseline) */
+                                  * (measured 2 894 in the phase-35 produced
+                                  * world; the phases-33/34 pre-producer
+                                  * baseline was 2 081) */
   int first_left_zero_step;      /* diagnosis when the baseline moves */
   int32_t first_left_zero_pos[3];
   /* FU322 §4.1 A2/erratum 1: the 0-based granted-frame index of the first
    * not-all-zero sample — the identity side of the inverted baseline
-   * (measured 1517 == camera_zero_frames, the pre-bind prefix). */
+   * (measured 704 == camera_zero_frames in the phase-35 world; the
+   * phases-33/34 baseline was 1 517, the pre-bind prefix). */
   int first_left_zero_f;
   /* FU322 §4.3/erratum 1: the first bind (the first frame with a tracked
-   * record). Measured: trk=12 at granted f=1517 (tick 5060) — the FU323-L1
-   * silent code-5 bind (a zero seed, the place never moves). The bind
-   * identity is what makes A1 mean a live-face consequence. */
+   * record). Measured phase-35: trk=12 at granted f=704 (step 2355) — the
+   * producer-conditioned no-slot pan (seed -0x18, v0 -2, place -38). The
+   * phases-33/34 baseline was the FU323-L1 silent code-5 bind at f=1517 (a
+   * zero seed, the place never moved). The bind identity is what makes A1
+   * mean a live-face consequence. */
   int first_bind_f, first_bind_id;
   struct m2_nat_pan nat_pan;     /* the delta-run machine + the bind snapshot
                                   * replayed on the UNDRIVEN run (FU322
@@ -2676,7 +2699,7 @@ struct m2_natural {
   uint64_t sample_hash;          /* FNV-1a over the per-granted-frame camera cells (P5) */
   uint16_t clock_seconds;        /* match clock at the window end (measured 101 s) */
   struct m2_stage_capture stage; /* the keeper ladder seam counters (P4) */
-  struct m2_pan pan;             /* the scripted pan witness (P6 partial; ISO only) */
+  struct m2_pan pan;             /* the scripted pre-producer control (ISO only) */
   struct m2_claim claim;         /* the natural claim-pan drive (FU317; ISO only) */
   struct m2_claim offset;        /* the non-zero-delta drive (FU320) */
 };
@@ -3798,14 +3821,16 @@ static void m2_sample_hash_u64(uint64_t *h, uint64_t v) {
   }
 }
 
-/* One granted-frame sample of the 16 trace cells (FU313 §4.3). The natural
- * baseline is INVERTED (FU322 §4.1 A1/erratum 1): with the live +0x43 latch
- * the row-04 gate passes once on the undriven tape and the camera event
- * state engages — the FU323-L1 silent-bind baseline: the departure the
- * sampler sees is the BIND (trk/tim/ramp leave zero), not a place move
- * (the pos stays (0,0,0) through f=3597; the undriven pan is FU316-L1's
- * open leg). `camera_left_zero` is the P6 witness (measured 2 081); the
- * all-zero frames are exactly the pre-bind prefix (A2's identity). */
+/* One granted-frame sample of the 16 trace cells (FU313 §4.3), re-based by
+ * phase-35 P1: the produced placement limit makes the row-04 band gate pass
+ * on the undriven tape with a live no-slot seed, so the first departure is
+ * the natural pan (event granted f 704 / step 2355; motion 705..717, stop
+ * 718, place -38; FU332 §6). The phases-33/34 pre-producer baseline was the
+ * FU323-L1 silent bind: the departure the sampler saw was the BIND
+ * (trk/tim/ramp leaving zero), not a place move (the pos stayed (0,0,0) —
+ * the undriven pan was FU316-L1's open leg). `camera_left_zero` is the P6
+ * witness (measured 2 894 in the produced world, 2 081 pre-producer); the
+ * all-zero frames are exactly the pre-departure prefix (A2's identity). */
 static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_run *mr,
                               int step) {
   const struct fifa96_camera *c = &mr->render.camera;
@@ -4000,29 +4025,33 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
    * 3 598 granted frames; the sampler saw every grant. */
   assert(nat->granted_frames == 3598u);
   assert(nat->sampled_frames == nat->granted_frames);
-  /* The INVERTED baseline (FU322 §4.1 A1-A3, errata 1+2; FU321-L11; the
-   * atomic producer commit): the phase-30 zero witness is replaced — never
-   * deleted — by the measured bind baseline. With the live +0x43 latch the
-   * row-04 gate passes once on the undriven tape and the camera event state
-   * engages: the FU323-L1 silent-bind baseline (the band record holds no
-   * control slot, the seed switch takes the no-slot arm, trk=12 binds at
-   * granted f=1517 / engine step 5065 with a zero seed and the place never
-   * moves — the undriven pan is FU316-L1's open leg). The A4/A5
-   * pan-window/lockout asserts are VOID here (the delta-run machine records
-   * segments == 0 / changed_frames == 0 undriven) and live on the driven
-   * claim/offset passes (FU322's erratum 2), whose cells this commit
-   * re-pins. The set is ISO-gated (FU322 §4.4 / FU313 §5.3: the formation
+  /* A1-A3, re-based to the measured phase-35 world (the +0x79 producer;
+   * FU330-FU332). The phases-33/34 pre-producer baseline (kept as history:
+   * FU322 §4.1 A1-A3, errata 1+2; FU323-L1) was the silent bind — with the
+   * live +0x43 latch the row-04 gate passed once and the band record bound
+   * at granted f=1517 / engine step 5065 with a zero seed, the place staying
+   * (0,0,0) (the undriven pan was FU316-L1's open leg). The produced
+   * placement limit now lets the whole formation run: the row-04 band gate
+   * passes on the undriven tape, the no-slot seed is live and the natural
+   * pan runs — first departure engine step 2355 (granted f 704), motion
+   * 705..717, stop 718, place (0,0,0) -> (-38,0,0), pan 2 (measured; FU332
+   * §6). The A4/A5 pan-window/lockout asserts remain VOID at the pass level
+   * (the undriven machine records one segment, recorded below) and live on
+   * the driven claim/offset passes; the natural cells are recorded-only
+   * (stderr). The set is ISO-gated (FU322 §4.4 / FU313 §5.3: the formation
    * seed places the records); the degraded no-ISO window's face-coupled
    * behavior is unmeasured (FU322-L10) and stays recorded-only. */
   if (with_iso) {
-    /* A1 (locked): a camera cell left the all-zero state. The measured
-     * consequence is the BIND (trk/tim/ramp leave zero among the 16 cells),
-     * not a place move — the row-04 gate passes once and binds a record
-     * with a zero seed; the FU323-L1 silent-bind baseline. */
+    /* A1 (locked): a camera cell left the all-zero state — the
+     * producer-conditioned pan/bind (the event frame binds trk=12 and the
+     * next frame starts the pan; the pre-producer baseline saw only the
+     * bind). */
     assert(nat->camera_left_zero >= 1u);
-    /* A2 (locked identity): the all-zero frames are exactly the pre-bind
-     * prefix — measured 1517 == 1517. Any all-zero frame after the first
-     * departure is an honest RED. */
+    /* A2 (locked identity): the all-zero frames are exactly the
+     * pre-departure prefix — measured 704 == 704 in the phase-35 world
+     * (camera_left_zero 2 894 = 3 598 - 704); the phases-33/34 baseline was
+     * 1 517. Any all-zero frame after the first departure is an honest
+     * RED. */
     assert(nat->camera_zero_frames == (uint32_t)nat->first_left_zero_f);
     /* A3 (locked structure + the measured window): strictly after the
      * phase-2 entry, and inside the producer's departure window
@@ -4067,15 +4096,18 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
   fifa96_platform_destroy(plat);
 }
 
-/* FU313 §5.3 P6 partial: the scripted pan witness. The FU-157 §3.4 /
- * FU-163 §1.2 chain on a COPY of M2_KEYS: the copied tape keeps the real
- * kickoff prefix; the probe-local tail overwrites the copied tape's tail with
- * the long-ball request and the UP walk AFTER the derived phase-2 entry. The
- * armed situation-0 cutscene is isolated (`act.id = 0`, the same idiom as
- * tests/test_engine_match_frame.c's `begin_isolated`) so the derived kickoff
- * keeps the formation in the zero camera's near field — the natural pass above
- * is unaffected and stays the zero baseline. This is a scripted, one-shot,
- * X-only, Y-less witness, never a natural open-play claim. */
+/* FU313 §5.3 P6: the scripted pan witness — the declared PRE-PRODUCER
+ * CONTROL. The FU-157 §3.4 / FU-163 §1.2 chain on a COPY of M2_KEYS: the
+ * copied tape keeps the real kickoff prefix; the probe-local tail overwrites
+ * the copied tape's tail with the long-ball request and the UP walk AFTER the
+ * derived phase-2 entry. The armed situation-0 cutscene is isolated
+ * (`act.id = 0`, the same idiom as tests/test_engine_match_frame.c's
+ * `begin_isolated`) so the derived kickoff keeps the formation in the zero
+ * camera's near field. The natural pass above carries the phase-35
+ * producer-conditioned pan; this control stages `timer79`/`timer7b` = 0 at
+ * the match-begin seam (with the existing `+0x43 = 0`) and keeps the
+ * pre-producer two-pan shape pinned. It is a scripted, one-shot, X-only,
+ * Y-less witness, never a natural open-play claim. */
 static void run_scripted_pan_witness(struct m2_pan *pan) {
   static fifa96_platform_key tape[M2_KEYS_LEN];
   struct fifa96_platform_null_config pcfg;
@@ -4129,16 +4161,16 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
       /* FU319 §5 live-face repair (phase-33): the staged-zero-face control —
        * the same declared input as begin_isolated (the witness's scripted
        * claim/kick chain pins the blind-AI world).
-       * Phase-35 P1: the producer-off control. The scripted LONG_BALL/UP
-       * chain relies on the pre-producer walk-in; with the produced placement
-       * limit the formation runs from the first frame and the scripted chain
-       * reaches NO camera cell departure at all (measured: 0 events in 6 000
-       * steps, no `pos_x != 0` frame). The witness is explicitly a scripted,
-       * staged control (never the natural acceptance), so it stages the
-       * pre-producer limit next to the declared +0x43 zero: `timer79` and
-       * `timer7b` are the two cells the producer writes at the match-begin
-       * seam. The producer's own pan is measured by the undriven natural pass
-       * above (f 704, FU332). */
+       * Phase-35 P1: the PRE-PRODUCER CONTROL (see the function contract). The
+       * scripted LONG_BALL/UP chain relies on the pre-producer walk-in; with
+       * the produced placement limit the formation runs from the first frame
+       * and the scripted chain reaches NO camera cell departure at all
+       * (measured: 0 events in 6 000 steps, no `pos_x != 0` frame). The
+       * witness is explicitly a scripted, staged control (never the natural
+       * acceptance), so it stages the pre-producer limit next to the declared
+       * +0x43 zero: `timer79` and `timer7b` are the two cells the producer
+       * writes at the match-begin seam. The producer's own pan is measured by
+       * the undriven natural pass above (f 704, FU332). */
       for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++)
         for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
           e->match_run.entities.team[t].records[i].row43 = 0;
@@ -4182,7 +4214,7 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
   assert(pan->first_stop_step > pan->first_pan_step);
   assert(pan->second_stop_step > pan->first_stop_step);
   assert(pan->max_pos_x == 0x120);
-  assert(pan->y_nonzero_frames == 0u);   /* P6 partial: Y stays 0 */
+  assert(pan->y_nonzero_frames == 0u);   /* the pre-producer control: Y stays 0 */
   assert(pan->z_nonzero_frames == 0u);   /* the measured witness is X-only */
   assert(pan->decrease_frames == 0u);    /* the pan is monotone */
   assert(pan->first_tracked == 9);       /* the row-04 claim binds record 9 */
@@ -4202,10 +4234,12 @@ static void run_scripted_pan_witness(struct m2_pan *pan) {
  * the natural pass's 3 599). P10 therefore traces exactly ONE natural pass
  * into a unique temp path: the file must hold one header + one body line per
  * granted frame, the body indices must be contiguous from 0, and the
- * all-zero `pos` run must be exactly the pre-pan prefix of the same run
- * (`zero_pos == body - traced.nat_pan.changed_frames` — the A2 identity's
- * trace-side form; the undriven changed_frames is 0, the FU323-L1 silent
- * bind). The caller's environment is restored. */
+ * all-zero `pos` run must be exactly the pre-departure prefix of the same run
+ * (`zero_pos == body - traced.nat_pan.off_zero_frames` — the A2 identity's
+ * trace-side form; the produced world's pan leaves the place at -38 after
+ * the 13-frame run, so the off-zero frames are the post-departure tail; the
+ * phases-33/34 pre-producer baseline had changed_frames 0 and every pos
+ * zero, the FU323-L1 silent bind). The caller's environment is restored. */
 static void run_natural_trace_self_check(int with_iso) {
   static const char name[] = "FIFA96_CAMERA_TRACE";
   char path[] = "/tmp/fifa96_m2_trace_XXXXXX";
@@ -4757,8 +4791,9 @@ static void run_natural_claim_pass(struct m2_claim *cl) {
   assert(body == cl->granted_frames);
   assert(body == 3598u);
   assert(cl->trace_changed == cl->changed_frames);
-  /* Segment-aware (FU322's erratum 2): the trace's FIRST motion is the first
-   * segment's (1482/1484); the LAST motion is the last segment's stop - 1. */
+  /* Segment-aware (FU322's erratum 2; phase-35 P1: one segment per driven
+   * pass — the claim's first motion at f 675, offset's at f 677); the LAST
+   * motion is the segment's stop - 1. */
   assert(cl->trace_first_motion == cl->seg[0].first_motion_f);
   assert(cl->trace_last_motion == cl->stop_f - 1);
   assert(cl->trace_off_zero == cl->off_zero_frames);
@@ -5021,6 +5056,9 @@ static void run_natural_offset_pass(struct m2_claim *cl) {
   assert(cl->changed_frames == 27u);
   assert(cl->off_zero_frames ==
          cl->granted_frames - (uint32_t)cl->first_off_zero_f);  /* 2921 */
+  /* The off-zero count is the post-departure tail, not the changed-run count
+   * (measured 2 921 vs 27): the place stays at -0x90 after the 27-frame pan. */
+  assert(cl->off_zero_frames != cl->changed_frames);
   assert(cl->first_off_zero_f == 677);
   assert(cl->stop_x == -0x90 && cl->stop_y == 0 && cl->stop_z == 0);
   assert(cl->max_abs_x == 0x90);
@@ -6594,9 +6632,11 @@ int main(void) {
    * situation-0 kickoff cutscene (row 0x24 dispatched) with no directives and
    * no goal, then the act-1 route (situation 1 -> act 1 -> phase 0x17) and the
    * live phase 2. FU313 (phase-30 T1) adds the measured window: 3 598 granted
-   * frames over 11 996 live steps, the camera-zero/left-zero split
-   * (1 517 / 2 081) and the ladder seam counters. Status to stderr keeps
-   * stdout the byte-exact transcript. */
+   * frames over 11 996 live steps, and the ladder seam counters; the
+   * phase-35 produced world measures the camera-zero/left-zero split
+   * **704 / 2 894** (the phases-33/34 pre-producer baseline was
+   * 1 517 / 2 081). Status to stderr keeps stdout the byte-exact
+   * transcript. */
   struct m2_natural nat;
   run_natural_probe(with_iso, &nat);
   fprintf(stderr,
@@ -6613,10 +6653,11 @@ int main(void) {
           (int)nat.stage.last_cam_x, (int)nat.stage.last_cam_y,
           (int)nat.stage.last_cam_z, (int)nat.stage.last_lane_x,
           (int)nat.stage.last_follow_speed);
-  /* FU322 §4.1 A3 / erratum 1: the exact bind step is RECORDED (stderr),
-   * never pinned; the window pin M2_NAT_FACE_FIRST_LO/HI is the locked
-   * bounded form. The bind identity cells (FU323-L1's silent bind) are the
-   * recorded evidence the A1 assert's comment cites. */
+  /* FU322 §4.1 A3 / erratum 1: the exact departure step is RECORDED
+   * (stderr), never pinned; the window pin M2_NAT_FACE_FIRST_LO/HI is the
+   * locked bounded form. The bind/pan cells are the phase-35 producer-
+   * conditioned no-slot pan (granted f 704, step 2355; FU332 §6) the A1
+   * assert's comment cites. */
   fprintf(stderr,
           "test_engine_m2 natural probe: first camera-cell departure at step "
           "%d (granted f %d, pos (%d,%d,%d)); first bind f %d id %d trk %d "
@@ -6644,24 +6685,31 @@ int main(void) {
           (unsigned)nat.nat_pan.goal_armed_any,
           (unsigned)nat.nat_pan.oob_frames,
           (unsigned)nat.nat_pan.pan_max);
-  /* The honest baseline label (FU322 §4.6 item 4): the INVERTED baseline —
-   * P6 is GREEN via the live-face silent-bind baseline; the A4/A5
-   * pan-window/lockout pair is pinned on the driven claim/offset passes; the
-   * FU313 follow window/lockout stays waived (the height-0 event cannot open
-   * the follow); the scripted, Y-less pan witness remains the only undriven
-   * place motion. */
+  /* The honest baseline label: the phase-35 measured state is the
+   * producer-conditioned natural no-slot pan (first departure step 2355 =
+   * granted f 704; motion 705..717, stop 718, place -38, pan 2). The
+   * phases-33/34 pre-producer baseline was the silent bind (FU323-L1: the
+   * gate passed once, the seed was 0 and the place never moved); it is
+   * history, not the current verdict. The A4/A5 pan-window/lockout pair
+   * still lives on the driven claim/offset passes; the FU313 follow
+   * window/lockout stays waived (the height-0 event cannot open the follow);
+   * the scripted, Y-less witness is the declared pre-producer control. */
   fprintf(stderr,
-          "test_engine_m2 natural probe: P6 GREEN (the live +0x43 silent-bind "
-          "baseline: the row-04 gate passes once and binds a record with a "
-          "zero seed; the place stays (0,0,0) undriven - FU323-L1); the A4/A5 "
-          "pan window/lockout live on the driven claim/offset passes (FU322 "
-          "erratum 2); P7/P8 follow window/lockout still waived (height-0); "
-          "the copied-tape claim/kick witness is P6 partial and Y-less\n");
+          "test_engine_m2 natural probe: P6 GREEN (the producer-conditioned "
+          "natural no-slot pan: the row-04 gate passes, the no-slot seed is "
+          "live, first departure step 2355 = granted f 704, motion 705..717, "
+          "stop 718, place -38, pan 2 - FU332 §6; the phases-33/34 baseline "
+          "was the FU323-L1 silent bind); the A4/A5 pan window/lockout live "
+          "on the driven claim/offset passes (FU322 erratum 2); P7/P8 follow "
+          "window/lockout still waived (height-0); the copied-tape claim/kick "
+          "witness is the declared pre-producer control (timer79/timer7b = 0) "
+          "and Y-less\n");
   if (with_iso)
     fprintf(stderr,
-            "test_engine_m2 pan witness: scripted claim/kick (copied tape, the "
-            "cutscene isolated) place 0 -> 0x%X -> 0x%X at steps %d/%d (first "
-            "motion %d, tracked %d), Y=0, %u granted frames (P6 partial)\n",
+            "test_engine_m2 pan witness: scripted claim/kick (PRE-PRODUCER "
+            "CONTROL: copied tape, cutscene isolated, timer79/timer7b = 0) "
+            "place 0 -> 0x%X -> 0x%X at steps %d/%d (first motion %d, "
+            "tracked %d), Y=0, %u granted frames\n",
             (unsigned)0x90, (unsigned)0x120, nat.pan.first_stop_step,
             nat.pan.second_stop_step, nat.pan.first_pan_step,
             nat.pan.first_tracked, (unsigned)nat.pan.granted_frames);

@@ -490,7 +490,11 @@ int fifa96_match_entities_actor_lift(struct fifa96_match_entities *pool, uint32_
  * byte[0x10F394 + desc_d] | byte[+0x9D]`. The table is the port's existing
  * `fifa96_arm_26_timer_table[32]` (`fifa96_arm_bodies.c`, flat `0x10F394`;
  * FU330 §4 re-read it byte for byte). Returns 1 and stores `*out` for an index
- * inside the modelled 32-byte tier (`desc_d <= 0x1F`, values 6..15); returns 0
+ * inside the modelled 32-byte tier (`desc_d <= 0x1F`; the table's rows are
+ * 6..15). The native `+0x9D` OR term's real domain is 0/0x0F, so a native
+ * in-range result is 6..15; the unit pin's `0x10`/`0x80` OR inputs are
+ * synthetic discriminators deliberately outside that domain (the port models
+ * the expression, not the flag's producer — OL-72). Returns 0
  * for the unmodelled `desc_d >= 0x20` continuation class (the native index is
  * unguarded and would read `0x10F3B4`/the `0x0FF4xx` wrap, FU330-L2) with
  * `*out` untouched. NULL `out` -> 0. */
