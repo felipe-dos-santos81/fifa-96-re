@@ -634,7 +634,15 @@ census and goldens are untouched.
 **`:3962-3979`** — the `if (with_iso)` at 3962, the A1 comment 3963-3966 with
 its assert at 3967, A2 at 3968-3971, A3 at 3972-3979 (the authoritative range
 is `docs/ghidra/FU329_r2l8_acceptance.md:373`). `:3935-3966` ends on the A1
-comment and contains **none** of the asserts. The stale range was also
+comment and contains **none of the A1–A3 asserts** (its natural-baseline
+asserts live at 3936-3947). The stale range was also
 inherited by the phase-33 register (`docs/ENGINE.md:6809`); the **phase-34
 register** (`docs/ENGINE.md`, its quoted-errata item 1) carries the correction,
 and the phase-33 section is left as written per the append-only rule.
+
+**The §5.6 `gate f (step)` label (the port row).** The diagnostic ladder's port
+row lists **1517 (5065)** under `gate f (step)`, but by this doc's own L6 (§8)
+the capture row is one frame ahead of the row-04 body's gate: the **1517 is
+the event frame; the gate is 1516**. The phase-34 register's distribution
+table carries the same convention with an unambiguous header
+(`event f (gate = f − 1)`). The §5.6 numbers are unaffected — only the label.

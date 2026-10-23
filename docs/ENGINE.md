@@ -7336,7 +7336,7 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   `d5446144…` **before** any instrumentation (and whose instrumented build
   reproduces the same sha — the hook is observation-only).
 
-  | # | pass | gate f | id | `has_slot` | arm | seed `(x,z)` | `v0` | `T` | changed frames |
+  | # | pass | event f (gate = f − 1) | id | `has_slot` | arm | seed `(x,z)` | `v0` | `T` | changed frames |
   |---|---|---|---|---|---|---|---|---|---|
   | 1 | natural | 1517 | 12 | **0** | **`0x7F056`** | **(−4,0)** | **(0,0)** | **0** | **0** |
   | 2 | claim | 1481 | 2 | 1 | `0x7F035` | (−0x40,0) | (−5,0) | −0x90 | 27 |
@@ -7353,11 +7353,11 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   the `5,3,2,1,0` decay over 6/7/7/7 frame groups → 27 changed frames →
   `T = −0x90` → pan `0→4`, **two per driven pass** accumulating to
   `(−0x120,0,0)` (the second event's clear resets `pan 4→0` before rebinding).
-  The measured population is the condition a witness fails: the band record's
-  `+0x73 ∈ {0,−1}` on all 3 598 frames, the formation-wide `max |w| = 1`
-  (0 on 1 074 frames, 1 on 2 524), **zero records at `|w| ≥ 3`** on any row —
-  the smallest moving no-slot seed (`|w| = 3` → `T = ±0xC`) is two whole
-  velocity units away (FU327 §4/§6).
+  The measured population is the condition on which a witness fails: the band
+  record's `+0x73 ∈ {0,−1}` on all 3 598 frames, the formation-wide
+  `max |w| = 1` (0 on 1 074 frames, 1 on 2 524), **zero records at
+  `|w| ≥ 3`** on any row — the smallest moving no-slot seed
+  (`|w| = 3` → `T = ±0xC`) is two whole velocity units away (FU327 §4/§6).
 
   **Quoted cell corrections (FU323 §4/§5.1; FU327 §5.1/L2/L3).** Quote: "the
   gate tuple at the band frame … `active 2` … `dir (−1,0)`" and "its passing
@@ -7430,18 +7430,25 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   no native fact is re-derived here.
 
 - **Quoted errata (this close-out's own record).**
-  1. **The A1–A3 line cite.** Quote (the Branch B bullet above):
+  1. **The A1–A3 line cite.** Quote (the Branch B bullet as first committed in
+     `75dcccd`):
      "`tests/test_engine_m2.c:3935-3966`". **Corrected (fresh read,
      fix round 1):** the landed A1–A3 block is **`:3962-3979`** — the
      `if (with_iso)` at 3962, the A1 comment 3963-3966 with its assert at
      3967, A2 at 3968-3971, A3 at 3972-3979 (the authoritative range is
      `docs/ghidra/FU329_r2l8_acceptance.md:373`). `:3935-3966` ends on the A1
-     comment and contains **none** of the asserts. The stale range was
+     comment and contains **none of the A1–A3 asserts** (its natural-baseline
+     asserts live at 3936-3947). The stale range was
      **inherited**, not measured here: its sources are
      `docs/ghidra/FU328_r2l8_reachability.md:597` and the phase-33 register
      (`docs/ENGINE.md:6809`), and both still carry it — append-only, they are
      corrected **here** and not rewritten; FU328's draft receives the same
      post-review note.
+  2. **The degraded no-ISO window's line cite.** Quote (the phase-33 register,
+     `docs/ENGINE.md:6816`): "The degraded no-ISO window stays recorded-only
+     (`:3967-3989`; FU322-L10)". **Corrected (fresh read):** the recorded-only
+     `else` branch (the no-ISO stderr line) is **`:3980-4002`**. Append-only:
+     the phase-33 text stands as written; the correction lands here.
 
 - **The legs — met, open and promoted.**
   - **FU326-L1..L4** — L1 the non-locomotion `+0x73/+0x75` writers (87/51
@@ -7482,7 +7489,8 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   - **FU328-L1 — PROMOTED: the natural-pan owner leg** (from FU316-L1). The
     native placement limit `+0x79` (`FUN_0007997C`, `0x799F0..0x79A4D`, FU84
     §6) has **no port producer**: `timer79` is read-only in the engine
-    (`include/fifa96_engine/fifa96_match_entities.h:129`), the install reset
+    (`include/fifa96_engine/fifa96_match_entities.h:129`; no writer in
+    `src/`, the only assignments are in tests), the install reset
     copies `timer79` (currently 0) into `+0x7B`
     (`entity->timer7b = entity->timer79`,
     `src/fifa96_engine/fifa96_match_entities.c:94`, native `0x7DA9B`), so
@@ -7518,7 +7526,8 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
     **ownership passes to FU328-L1**: the gap is upstream of the seed.
   - **Carried unchanged:** the phase-30/31/32/33 remainder as registered
     (FU315-L1/L2, FU316-L2..L9, FU317-L1..L7/L9/L10, FU318…FU325's legs,
-    FU319-L8 included); the FU324-L5 re-measure clause now has a named trigger
+    FU319-L8 included; FU316-L7's M2-window frequency met here, residual =
+    FU328-L5); the FU324-L5 re-measure clause now has a named trigger
     — the `+0x7B` nibble staging arrives with FU328-L1.
 
 - **Tape and gate.** Docs-only, proven: M1 `09b726b7…` and M2 `d5446144…`
