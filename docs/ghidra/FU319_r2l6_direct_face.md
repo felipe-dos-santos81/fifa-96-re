@@ -191,3 +191,18 @@ No prior-doc statement is contradicted here: FU314 §5/§7.5 (`+0x7D` live, the 
 - The band count is post-frame sampled (`2 082`), one boundary away from FU314's dispatch-side `2 081`; neither is a contradiction of the other.
 - The `+0x43` value is asserted `2` at kickoff from three install sites whose *execution order* in the port's staging is not re-derived (the port only reproduces the *value* through the install call it would add); FU319-L4 carries the ordering.
 - No claim is made about `+0x45`/`+0x3F` (FU319-L5) or about the non-default focus pointers (FU319-L1).
+
+## Review erratum (phase-33 wave, 2026-10-22)
+
+Quote (§7 leg 3, and §4's row): the `move_attr` metric divergence is measured
+"**2** record-frames in the window straddle the `>0x60` branch …; max |Δ| = 115
+units over the window". **Corrected:** the phase-33 wave's fresh measurement
+(FU324 §measure, its patched metric-only build and the 4 000 800-pair port
+comparison) reproduces **no straddle and no moved frame** — the named rows give
+`0x8DC68` = `0x8DCD4` = 96 on the named steps, the stride arm's clamp
+(`attr = min(dist>>3, stride_len ≤ 3)`) absorbs the index shift, and the
+`max+min/3` mutant also moves 0 frames. FU319-L3's *direction* (the native
+metric is `0x8DC68`, the port stages `0x8DCD4`) stands; its measured magnitude
+does not. The leg's owner text is now FU324-L1 (the erratum leg); the
+nibble-conditional re-measure is FU324-L5. Also measured here: the low word of
+`+0x63` has no writer (dead space, FU324-L2).
