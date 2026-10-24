@@ -2760,21 +2760,27 @@ static void test_action_06_runs_body(void) {
 }
 
 /* Phase-35 final review (the twin wiring, row-06 side): the pool's `byte9d`
- * reaches the row-06 pursuit consumers too — `0x806F8`'s `desc_c | byte9d`
- * gate and the `0x80716` install-9 block's `(desc_e | byte9d) << shift`
- * threshold in `fifa96_action_pursuit_step`. That is a different body from
- * the row-04 pin (`fifa96_outfield.c:598`), so it needs its own evidence.
- * The fixture opens the no-slot V4 arm (metric 0x70 in (0x60, 0x90], carrier
- * speed > 4, parity set, thread counter < 2) and stages an explicit six-word
- * RNG state whose second draw has `r & 0x1FF < 0xF`. `fifa96_rng_seed`
- * cannot reach that branch: the seed only sets bits 25..31, so a freshly
- * seeded state always yields the same low 9 bits on the second draw (measured
- * 293) and the capped 0xF threshold can never admit it — the fixture stages
- * the long-advanced state directly, as the native producer has by then. With the pool
- * `byte9d = 0x0F` the threshold is 0xF and the draw installs 9; the same
- * state with `byte9d = 0` gives threshold 0 and falls through (no install).
- * `desc_c` / `desc_e` are still hardcoded 0 (OL-69), so this pins the pool
- * half of the OR exactly like the row-04 test. */
+ * reaches the row-06 pursuit install-9 threshold — the `0x80716` block's
+ * `(desc_e | byte9d) << shift` — in `fifa96_action_pursuit_step`. That is a
+ * different body from the row-04 pin (`fifa96_outfield.c:598`), so it needs
+ * its own evidence. The `0x806F8` term (`desc_c | byte9d` gating
+ * `target_x += adjust_x << 6`) is UNOBSERVABLE in this fixture: `adjust_x =
+ * ball.pos_dir_x` is unstaged (0), so the two dispatches would agree at that
+ * site even with its wiring broken; it needs its own pin if a
+ * `pos_dir_x`-bearing fixture is added (out of this slice). The fixture opens
+ * the no-slot V4 arm (metric 0x70 in (0x60, 0x90], carrier speed > 4, parity
+ * set, thread counter < 2) and stages an explicit six-word RNG state whose
+ * second draw has `r & 0x1FF < 0xF`. With `parity = 1` the `0x806F8` draw is
+ * consumed first, so the install draw is the second step. `fifa96_rng_seed`
+ * cannot reach that branch: the seed only sets bits 25..31 (an effective
+ * 7-bit domain), so the second draw's low 9 bits stay in a narrow band
+ * (measured 293..298) and the capped 0xF threshold can never admit it — the
+ * fixture stages the long-advanced state directly, as the native producer
+ * has by then. With the pool `byte9d = 0x0F` the threshold is 0xF and the
+ * draw installs 9; the same state with `byte9d = 0` gives threshold 0 and
+ * falls through (no install). `desc_c` / `desc_e` are still hardcoded 0
+ * (OL-69), so this pins the pool half of the OR exactly like the row-04
+ * test. */
 static void test_action_06_pool_byte9d_threshold(void) {
   struct fixture f;
   struct fifa96_match_entity *e;

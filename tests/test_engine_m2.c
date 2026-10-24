@@ -3953,10 +3953,12 @@ static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_
     if (changed) {
       if (!p->in_segment) {
         /* The gate/event frames are the two frames before the first motion
-         * (the claim pass's f-2/f-1 convention). STRUCTURAL INVARIANT
-         * (phase-35 final review; not a no-ISO measurement — FU322-L10):
-         * the sampler records every granted frame, so the two-frame ring is
-         * populated by construction; the measured no-ISO run satisfies it. */
+         * (the claim pass's f-2/f-1 convention). Two separate structural
+         * invariants (phase-35 final review; not no-ISO measurements —
+         * FU322-L10): (1) the sampler records every granted frame, so the
+         * two-frame ring is populated by construction; (2) a segment cannot
+         * start in the first two granted frames (the `f >= 2` assert). The
+         * measured no-ISO run satisfies both. */
         assert(f >= 2);
         assert(p->ring[1].valid && p->ring[1].f == f - 2);
         assert(p->ring[0].valid && p->ring[0].f == f - 1);
@@ -4022,9 +4024,11 @@ static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_
    * frame of the open run (the pan step rebuilds it); a mismatch is a stop.
    * The run's own pan-counter max rides the same per-segment record.
    * STRUCTURAL INVARIANT (phase-35 final review; not a no-ISO measurement —
-   * FU322-L10): the camera defines `speed` as the distance of its velocity
-   * pair, so this identity holds in both ISO modes; the measured no-ISO run
-   * satisfies it. */
+   * FU322-L10): the camera walk's tail recomputes `speed` from the velocity
+   * pair, so the identity holds on sampled walk/pan frames. The event ramp's
+   * `0x19` cap (`fifa96_camera.c:784-790`) can transiently differ (the
+   * rebuilt distance is 24/25/26 by angle); the measured windows never hit
+   * it. */
   if (p->in_segment) {
     assert(c->speed == fifa96_entity_distance(c->vel_x, c->vel_z));
     if (p->segments >= 1u && p->segments <= M2_NAT_PAN_SEGMENTS) {
@@ -4226,9 +4230,10 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       g = &w->gate;
       ev = &w->event;
       assert(g->valid != 0 && ev->valid != 0);
-      /* The closure identity (phase-35 final review): both ring records are
-       * the band entity (measured 12), never two different records whose
-       * chain happens to line up. */
+      /* The closure identity (phase-35 final review): `g->id == ev->id` is
+       * construction-identity (both ring records flow from the same band
+       * argument); the load-bearing half is `g->id == M2_NAT_BAND_ENTITY`
+       * (measured 12), which pins the record the chain is attributed to. */
       assert(g->id == ev->id);
       assert(g->id == M2_NAT_BAND_ENTITY);
       /* §4.5 item 2: the record id is read from the bind, and the band
@@ -4263,7 +4268,9 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       seed_z = (int16_t)((uint16_t)g->vel75 << 2);
       assert(seed_x != 0 || seed_z != 0);
       /* The vector form (phase-35 final review): the no-slot seed pair is
-       * not the `dir << 6` slot pair, matching the structural claim. */
+       * not the `dir << 6` slot pair. Under the measured `dir == 0` it is
+       * equivalent to the adjacent nonzero-pair assert above; it is the
+       * vector claim that stays meaningful if the dir arm is ever staged. */
       assert(seed_x != (int16_t)((uint16_t)g->dir_x << 6) ||
              seed_z != (int16_t)((uint16_t)g->dir_z << 6));
       /* C2 (W3) — the produced chain is visible and consistent: the limit
