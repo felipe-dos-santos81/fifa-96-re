@@ -1,0 +1,60 @@
+# fifa96-camera-trace v1 frame clock phase pos vel spd fspd ev cur trk pan tim ramp rate follow tick
+# p35-l2 trace extract: the placement-tier live acceptance (the natural no-slot pan) (2026-10-23).
+# source: /tmp/opencode/p35/p35-trace.log (FIFA96_CAMERA_TRACE, make game on :1; the live run of the phase-35 producers task 3; full trace 1 header + 4167 body lines, sha256 953a0cc5b89ae7ba29b15956467022d2fe2e134f64155d88ad249713f4211f37).
+# drive: the natural tape -- intro FMV RETURN -> front-end BACKSPACE -> RETURN (match); the M2_KEYS prefix by trace tick (RIGHT 7, KICK 14/17, LEFT 47..140, act-1 KICK 1790/1797); NOTHING added after phase 2 (the undriven clause: no LEFT/DOWN hold anywhere after the tape's act-1 KICK; no key held at any grab).
+# ranges: the phase-2 line f=539 (tick 1800); the no-slot gate/event/pan window f=701..721 (gate f=703 tick 2347, event f=704 tick 2350, motion f=705..717, stop f=718 tick 2397, pan 0->2, place 0 -> (-38,0,0), trk=12, pos_y=0, follow=0); the still windows f=749..758 (s1), f=818..827 (s2, the committed still pair), f=917..921 (s3); the mid-run sentinel f=2000 (the camera parked at -38, trk=12, pan=2); the half-time reset f=4137..4143 (ph 12 -> 1, the camera reset to 0,0,0 with trk=-1, pan=0 -- a period reset, not a pan); the last line f=4166.
+f=701 clock=00:05 ph=2 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=2340
+f=702 clock=00:05 ph=2 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=2344
+f=703 clock=00:05 ph=2 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=2347
+f=704 clock=00:05 ph=2 pos=0,0,0 vel=-2,0 spd=2 fspd=0 ev=0x0 cur=0x0 trk=12 pan=0 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2350
+f=705 clock=00:05 ph=2 pos=-4,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=2/12 ramp=12 rate=0,0 follow=0 tick=2354
+f=706 clock=00:05 ph=2 pos=-8,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=4/12 ramp=12 rate=0,0 follow=0 tick=2357
+f=707 clock=00:05 ph=2 pos=-12,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=6/12 ramp=12 rate=0,0 follow=0 tick=2360
+f=708 clock=00:05 ph=2 pos=-16,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=8/12 ramp=12 rate=0,0 follow=0 tick=2364
+f=709 clock=00:05 ph=2 pos=-20,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=10/12 ramp=12 rate=0,0 follow=0 tick=2367
+f=710 clock=00:05 ph=2 pos=-24,0,0 vel=-2,0 spd=2 fspd=2 ev=0x0 cur=0x0 trk=12 pan=0 tim=12/12 ramp=12 rate=0,0 follow=0 tick=2370
+f=711 clock=00:05 ph=2 pos=-26,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2374
+f=712 clock=00:05 ph=2 pos=-28,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=2/12 ramp=12 rate=0,0 follow=0 tick=2377
+f=713 clock=00:05 ph=2 pos=-30,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=4/12 ramp=12 rate=0,0 follow=0 tick=2380
+f=714 clock=00:05 ph=2 pos=-32,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=6/12 ramp=12 rate=0,0 follow=0 tick=2384
+f=715 clock=00:05 ph=2 pos=-34,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=8/12 ramp=12 rate=0,0 follow=0 tick=2387
+f=716 clock=00:05 ph=2 pos=-36,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=10/12 ramp=12 rate=0,0 follow=0 tick=2390
+f=717 clock=00:05 ph=2 pos=-38,0,0 vel=-1,0 spd=1 fspd=1 ev=0x0 cur=0x0 trk=12 pan=1 tim=12/12 ramp=12 rate=0,0 follow=0 tick=2394
+f=718 clock=00:05 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2397
+f=719 clock=00:06 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2400
+f=720 clock=00:06 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2404
+f=721 clock=00:06 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2407
+f=749 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2500
+f=750 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2504
+f=751 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2507
+f=752 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2510
+f=753 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2514
+f=754 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2517
+f=755 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2520
+f=756 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2524
+f=757 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2527
+f=758 clock=00:07 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2530
+f=818 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2730
+f=819 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2734
+f=820 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2737
+f=821 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2740
+f=822 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2744
+f=823 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2747
+f=824 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2750
+f=825 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2754
+f=826 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2757
+f=827 clock=00:09 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=2760
+f=917 clock=00:12 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=3060
+f=918 clock=00:12 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=3064
+f=919 clock=00:12 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=3067
+f=920 clock=00:12 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=3070
+f=921 clock=00:12 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=3074
+f=2000 clock=00:48 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=6670
+f=4137 clock=01:59 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=13794
+f=4138 clock=01:59 ph=2 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=13797
+f=4139 clock=02:00 ph=12 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=13800
+f=4140 clock=02:00 ph=1 pos=-38,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=12 pan=2 tim=0/12 ramp=12 rate=0,0 follow=0 tick=13804
+f=4141 clock=02:00 ph=1 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=13807
+f=4142 clock=02:00 ph=1 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=13810
+f=4143 clock=02:00 ph=1 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=13814
+f=4166 clock=02:00 ph=1 pos=0,0,0 vel=0,0 spd=0 fspd=0 ev=0x0 cur=0x0 trk=-1 pan=0 tim=0/0 ramp=0 rate=0,0 follow=0 tick=13890
