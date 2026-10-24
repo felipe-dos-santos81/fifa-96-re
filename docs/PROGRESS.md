@@ -3303,3 +3303,128 @@ re-pin, no frame diff, no fixture change. `make check` **111/111** (strict
 re-count: 37 action + 23 phase; no row joined) and the README title stays
 `75%`. The phase is docs-only; the wave's probes and builds live out of tree,
 and the ISO was read only.
+
+## M2 phase-35 close-out — the placement timer (FU330…FU333): the producer lands and the natural pan becomes real
+
+**The phase lands the native `+0x79` placement-tier producer and, with it, the
+undriven tape's first real camera pan — measured at the desk and reproduced
+live.** It is the direct answer to the phase-34 NO-GO: the silent bind was the
+consequence of a missing producer, not of the no-slot arm. One atomic
+golden-moving commit (`749cc2f`, `fix(fu328)`) lands the two staging cells
+(`desc_d`, `byte9d`), the native expression
+`byte[0x10F394 + byte[[rec+4]+0xD]] | byte[+0x9D]` over the **existing**
+32-byte `fifa96_arm_26_timer_table` (the `0x20` boundary, no zeroing fallback),
+the two writers (`entities_init` — the live derived seam — and `reset_lane` —
+the exact native site, dead live), the row-09 `+0x7B = +0x79 * 2` correction
+(OL-82 retired for that cell only), the P1/P2/P3 unit pins, the A3 re-pin, the
+survival/driven re-pins, the fixture re-derivations, the M2 re-pin and the
+provenance. Then `673a10d` (`test(fu333)`) pins the natural witness, and
+`79819a4` + `21f5f44` (`docs(fu333)`) land the live acceptance and its
+evidence-attribution round. The close-out register is the phase-35 section
+appended to `docs/ENGINE.md`.
+
+**The natural pan's honest shape.** With the producer and **no staged
+slot/seed/face/timer cell**, the undriven `M2_KEYS` tape's band record (entity
+12) passes the row-04 no-slot gate moving: gate **f=703 / step 2352**
+(`has_slot 0`, lane 56, `timer79 6`, `timer7b 6`, `vel73 −6`), event **f=704**
+(step 2355, `v0 = −2`), motion **705..717**, stop **f=718** at
+**(−38,0,0)**, pan **0→2**, decay 2,1,0 — `T_x = −0x26`, 13 frames. The seed
+chain is the produced one (`vel73 −6 → seed −0x18 → v0 −2`), the one-shot is
+clean (0 row-04 frames after the event), and the frequency is **1 pan / 3 598
+granted frames (0.028 %)**. **Live**, the same undriven match reproduces it
+**frame-exact** (event f=704, motion 705..717, stop 718, place 0 → −38,
+pan 0→2, trk 12, `pos_y 0` and follow 0 on all 4 167 body lines), trace-
+attributed with a constant −5-tick alignment against the null tape. The AE
+could not corroborate it — the strict in-run pair is AE 0, exactly the still's
+AE 0, because the renderer draws no pitch/background — so the FU333 §7 W-b
+**AE-coverage waiver is applied to the AE only, never to the trace**; the
+committed still pair is a disclosed **cross-run** camera-constant control
+(attempt 4), and the note says so. And the witness is
+**producer-conditioned**: the port's value is `table[0] = 6` (staged
+`player_d = 0`), while the native per-record value needs the roster descriptor
+the image does not contain (**FU330-L1**). The register says that in every
+clause; the pan is real, the value is not yet native.
+
+**The producer is faithful in mechanism, staged in value.** The tier table is
+the native 32 bytes (max **15** at indices 16..18; **6 is not a floor** — the
+P2/P3 writers lower it to 3 and, composed, 2); the index is unguarded in the
+native code, so the port models `desc_d < 0x20` and **refuses** the `0x10F3B4`
+continuation instead of inventing a byte; the out-of-range class **keeps the
+live cell** rather than zeroing it (zero would re-create the silent bind). The
+row-09 correction is the native `word[+0x7B] = word[+0x79] * 2` at
+`handlers.c:5037` — a real fidelity fix that is **inert on the measured tape**
+(0 code-9 record-frames), pinned anyway. The `dword[+0x7B]>>16` reads stay
+`face7d` (the `+0x7D` alias trap; a future reader must not "fix" them onto
+`timer7b`). **P2 (the lineup rebind) and P3 (the code-`0x0C` no-replacement
+arm) are not landed**: the live native domain is 2..15, where **2 fails and 3
+pans** (`|v0| = 1`, `T = −0xC`, 6 frames) — so the witness survives the table
+rows 6..15 and the P2/P3 values 3..7, not the whole domain. That residual is
+FU333-L15, not a silent claim.
+
+**The golden re-pin's reason (the house form).** The staged `+0x79 = 0` was a
+port assumption, not a native fact: the producer raises every record's
+placement counter and the whole formation's movement. The re-pin is the
+faithful consequence: **first differing line frame 852** (`state=1/1-0`,
+`964282c7…` → `e04df34d…`), **5 671 / 6 522** lines (86.95 %), one contiguous
+tail **852..6522**, length **295 087 B** unchanged, `state=` suffixes and the
+**10-tag stratum set** intact (`1/1-0` 951/953, `19/1-0` 2 620/2 620,
+`2/1-0` 2 100/2 173), M1 `09b726b7…` byte-identical; `d5446144…` →
+**`6aa2703b…`**. The chain is measured: the pool diverges at step 12 (the first
+mover), and frame 852 is the phase-33 sit-1 reveal class (the half-time
+kickoff's camera reset exposing the since-372–379 walk-in positions). The A3
+window re-pins with the pacing (measured step **2355**, window **2351..2359**);
+the A2 identity is now **704 == 704** with `camera_left_zero` **2 894**; the
+driven claim/offset passes are **one segment each** (claim gate f 673/event
+674, off-zero 2 923; offset gate f 675/event 676, off-zero 2 921, Δ=0x42) with
+the offset drive re-based (LEFT 30→10, DOWN from 1830) because the producer's
+earlier band pan now owns the one-shot; the scripted pan witness is a declared
+**pre-producer control** (it stages `timer79 = timer7b = 0`).
+
+**Governance.** The T1 review's M8 is discharged here: the register + this
+narrative are the docs pin; the A2 figures are recorded; and **FU324-L5's
+trigger has fired** — the `+0x7B` nibble now moves (6 at the install, 12 after
+row 09), so the `stride_len ≤ 3` clamp no longer masks the metric, and the
+mover's metric sensitivity **re-arms**. The mutant protocol was **not re-run**:
+the phase-35 plan records the re-measure as a clause, the provenance note
+carries it, and this close-out records the deviation from FU333 H10 ("P1
+re-runs the mutant protocol") rather than silently claiming a result. FU324-L5
+is re-armed, not closed. The phase's other governance rows: FU328-L1 is closed
+**for the placement-reset writer** (and the M2 exposure, FU328-L8, is met by
+the re-pin); FU330-L1 owns the native faithfulness of the witness's value;
+FU331-L4 keeps row 03 unwired (wiring it would lower the counter to 1).
+
+**The next-phase candidates, in order.** The **roster index (FU330-L1) and the
+P2/P3 native live domain** — the native-faithfulness work that would let the
+witness stop being producer-conditioned (`+0x79` 2..15; the roster descriptor
+is per-player data outside the image, and the rebind/no-replacement arms need
+their own re-measure). Then the **claim/carrier fusion** (FU315-L1 + FU316-L8:
+the row-05 carrier camera event `0x7F4E7` and the claim tail — the
+pan→row-5→rebind half of the cycle does not exist in the engine); then the
+**armer/follow body** (FU316-L6 + FU316-L9: the `0x7131C` announce/threshold/
+far-band body and the unarmed mirror); then the **undriven half-time stall**
+(FU328-L4: phase 12 → phase 1 at step 13805, clock 120 s, no transition through
+step 160 000 — the row-01 kickoff release / the FU-84 per-frame driver).
+
+**The legs.** Registered in full in the ENGINE phase-35 section:
+**FU330-L1..L8** (L1 the native per-record value — the witness's
+native-faithfulness owner; L8 the `+0x9D` cell — closed), **FU331-L1..L8**
+(L1 the cadence/seam, L4 row 03 must stay unwired, L5 the `+0x7B`/`+0x7D`
+alias), **FU332-L1..L7** (L1 the dead native site, L4 the 840-frame render lag
+— narrowed/explained, L7 the half-time re-entry) and **FU333-L1..L15** (L11 the
+FU324-L5 clause — deviation recorded; L15 the P2/P3 writers). The phase-34
+carry stays open: FU328-L4..L7, FU326-L1 (the non-locomotion `+0x73/+0x75`
+writers), FU319-L8, FU324-L8/L9, FU325-L8; the phase-30/31/32 remainder is
+carried unchanged. The deferred polish from the T2/T3 reviews (the witness's
+assert-shape minors and the p35 note's still-control wording) is listed in the
+register and deliberately not fixed in this docs-only close-out.
+
+**The tape and the gate.** M1 `09b726b7…` (22 004 B, 691 lines) is
+byte-identical through the phase (`cmp`-verified at every task). M2 re-pins
+exactly once, in the atomic producer commit, with the reason + the frame diff
++ the register pin in the same commit; `make check` **111/111** (strict
+`-Wall -Wextra -Werror`, ASan/UBSan) at every task; the census holds
+**`60/80 = 75%`** (fresh re-count: 37 action + 23 phase; no row joined) and the
+README title stays `75%`. T2 is test-side; T3 and this close-out are docs-only;
+the production change is the producer + the row-09 correction. The trace sink
+stayed default-off outside the acceptance run; the artefacts are
+`docs/screens/p35-l2-*`.

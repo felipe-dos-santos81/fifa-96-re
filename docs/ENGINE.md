@@ -7538,3 +7538,416 @@ the census did not move, so no recompute (AGENTS.md's derived rule).
   out-of-tree (`/tmp/opencode/fu326…fu329`), the repo receiving only the four
   drafts, the spec, the plans and the errata. The phase's **next-phase
   hand-off** is FU328-L1 (the `+0x79` producer, the natural-pan owner).
+
+## M2 phase-35 register (FU330…FU333; 2026-10-23) — the placement timer and the natural pan: the producer landed, the measured 852-chain re-pin, the first natural pan (producer-conditioned)
+
+**Scope/provenance.** Phase-35 spec
+`docs/superpowers/specs/2026-10-23-fifa96-m2-phase35-placement-timer-design.md`
+(§1–§9 + the **Plan erratum (wave close)** — six corrections: the cap, the
+port assumption, A3-in-P1, Branch A, the `+0x7B` counter cite, the witness's
+producer-conditioned character), the producer plan
+`docs/superpowers/plans/2026-10-23-fifa96-m2-phase35-producers.md` (T1–T4) and
+the recon-ahead plan (`2026-10-23-fifa96-m2-phase35-recon-ahead.md`); the
+reviewed four-slice wave `docs/ghidra/FU330_r2l9_placement_timer.md` …
+`FU333_r2l9_acceptance.md`, promoted one-per-commit (`3bf1f35` FU330,
+`245172c` FU331, `53d1ffe` FU332, `8883995` FU333), with the wave-review errata
+appended to each — FU330's five items (the `XOR AH,AH` store, the index-order
+causal sentence, "row-12" → action code `0x0C`, the consumers claim, the
+`+0x9D = 0` basis), FU331's six (the existing table, the `0x20` boundary, P1 is
+one of three writers, the cadence, the index form/site count, the 15-bound
+qualification), FU332's six (the value probe vs the expression, `+0x9D` not
+measured, the P2/P3 residual, the 840-frame gap explained, the dump identity,
+the x-only `Δ` column), FU333's eight (Branch A/B, the 852 anchor, the
+producer-conditioned witness, "row-12", the phase-0C cite, the spec §5/§6, the
+memcmp rationale, "probably wholesale" measured); the wave erratum + plan
+`09b7352`; the spec `614dff7`. Task commits: T1 **`749cc2f`** (**the atomic
+producer commit** — the two cells, the producer, the row-09 correction, the
+P1/P2/P3 pins, the A3 re-pin, the survival/driven re-pins, the M2 re-pin and
+the provenance, one commit, `fix(fu328)`), with fixes `8aaddb1` / `14ef311`
+(the natural-pass narrative re-base, the offset discriminator, the fixture
+re-derivations); T2 `673a10d` (`test(fu333)`, the natural no-slot pan witness,
+test-side only); T3 `79819a4` + `21f5f44` (`docs(fu333)`, the Layer-2 live
+acceptance and its round-1 evidence attributions). This close-out is
+**docs-only**. Append-only: the phase-34 text and every prior section stand as
+written; the corrections below are quoted errata. Census **`60/80 = 75%`**
+(`37 action + 23 phase`; fresh re-count this close-out over the 45+35 dispatch
+tables — no row joined); M1 `09b726b7…` (22 004 B, 691 lines) byte-identical
+(`cmp`-verified at every task); M2 re-pinned once, in T1, `d5446144…` →
+**`6aa2703b…`** (295 087 B, 6 522 lines — same byte and line counts,
+hash-only); `make check` **111/111** (strict `-Wall -Wextra -Werror`,
+ASan/UBSan; ~220 s). The README title stays `75%` — the census did not move, so
+no recompute (AGENTS.md's derived rule).
+
+- **The verdict — the `+0x79` placement-tier producer landed, the M2 golden
+  moved by the measured 852 chain, and the undriven tape's natural pan is
+  measured and live — producer-conditioned at the port-reachable value 6.**
+  FU328-L1's producer gap is **closed for the placement-reset writer**
+  (`FUN_0007997C`); its native-per-record **value** leg is FU330-L1 (open) and
+  the other two native writers — P2 the lineup rebind and P3 the code-`0x0C`
+  no-replacement arm — are the P2/P3 residual (FU333-L15). The witness is
+  **FU329 Branch A**: a row-04 gate pass with `has_slot 0`, `|v0| = 2`, the
+  event binding at granted **f=704** and a 13-frame `T_x = −0x26` pan
+  (705..717, stop 718, counter 0→2) — **with no staged slot/seed/face/timer
+  cell**. The silent bind (phases-33/34's f=1517) is **gone, replaced, not
+  accompanied**; the frequency is **1 pan / 3 598 granted frames (0.028 %)**.
+  **Live**, the same undriven match reproduces the pan frame-exact (T3). The
+  row-09 staging is corrected (`+0x7B = +0x79*2`) and **inert** on the measured
+  tape.
+
+  - **The landing (FU331's design as reviewed).** The producer is the native
+    expression `word[+0x79] = byte[0x10F394 + byte[[rec+4]+0xD]] |
+    byte[+0x9D]` — **one shared table, no second copy**: the port's existing
+    `fifa96_arm_26_timer_table[32]` (`src/fifa96_loader/fifa96_arm_bodies.c:32-37`;
+    `static` removed, `extern` in `fifa96_arm_bodies.h`) — the 32-byte tier
+    (`06×8 07×8 0F 0F 0F 0E 0D 0D 0C 0B 0B 0A 09 09 08 07 07 06`), **15 the
+    in-range maximum**, **6 not a floor**. The `0x20` boundary refuses the
+    `0x10F3B4` continuation (the unguarded-index class, FU330-L2), and the
+    out-of-range class **leaves the live cells UNCHANGED — never 0** (a zeroing
+    fallback would re-create the silent bind; FU331 review erratum 2).
+    `fifa96_match_entities_placement_limit`
+    (`src/fifa96_engine/fifa96_match_entities.c:50-56`) returns 0 for
+    `desc_d >= 0x20`; `fifa96_match_entities_placement_seed` (`:59-68`) writes
+    `timer79` then `timer7b` (`0x79A4D` / `0x79A86`). The two declared staging
+    cells are `desc_d` (`byte[[rec+4]+0xD]`) and `byte9d` (`byte[+0x9D]`,
+    OL-72) — `include/fifa96_engine/fifa96_match_entities.h:138-139`; both are
+    zero today (`player_d = 0`, `src/fifa96_engine/fifa96_match_run.c:1443`; no
+    `+0x9D` producer). The writers are `fifa96_match_entities_init` (`:104` —
+    the **live** derived seam for the unported `0x741C4` driver, FU331-L1) and
+    `fifa96_match_entities_reset_lane` (`:266` — the exact native site, dead
+    live, FU295-L1); both write `+0x79` then `+0x7B`. **The value is
+    `table[0] = 6` on every record — declared staging, not native per record**
+    (the roster index is per-player data not present in the image, FU330-L1).
+  - **The row-09 correction (OL-82 retired for this cell only).** Native
+    `word[+0x7B] = word[+0x79] * 2` (fresh `0x80B3D MOV AX,[EBP+0x79]` /
+    `0x80B41 ADD EAX,EAX` / `0x80B43 MOV [EBP+0x7B],AX`); the port's staged
+    literal 0 at `src/fifa96_engine/fifa96_match_handlers.c:5037` (the plan and
+    spec cite `:5034`, the pre-fix line; the corrected row landed three lines
+    lower) becomes `r->timer7b = (uint16_t)((uint32_t)e->timer79 * 2u)`. At 6:
+    `timer7b = 12`, `vel73 = 12`, `speed71 = 12`, `target = pos + 96`.
+    **Inert on the measured tape** — 0 code-9 record-frames (FU332 §7), so the
+    retirement is a fidelity correction with a zero blast radius, pinned by P3.
+    The `dword[+0x7B] >> 16` reads stay `face7d` (the `word[+0x7D]` alias — the
+    FU178 trap, FU331-L5; a future reader must not "fix" the fold onto
+    `timer7b`).
+  - **The measured re-pin (the faithful move, T1).** First differing line
+    **852** (`state=1/1-0`, `964282c7…` → `e04df34d…`), **5 671 / 6 522** lines
+    (86.95 %) moved in **one contiguous tail 852..6522** (last diff 6522),
+    length **295 087 B** unchanged, 6 517 tagged lines (5 untagged pre-match),
+    **the 10-tag stratum set identical** (none added, lost or re-valued); moved
+    by tag `1/1-0` 951/953, `19/1-0` 2 620/2 620, `2/1-0` 2 100/2 173
+    (FU332's table). `d5446144…` → **`6aa2703b…`**, byte-identical to FU332's
+    measured value-6 transcript; M1 `09b726b7…` **byte-identical** (`cmp`).
+    The producer's pool diverges at **step 12** (the first mover, id 10; all
+    20 active records by f=3); frame **852** is the phase-33 attribution class
+    — the sit-1 half-time kickoff's camera reset revealing the since-372–379
+    face-driven walk-in positions (FU323 §6; FU332's review erratum 4 narrows
+    the "840-frame gap" to this same reveal).
+  - **The unit pins (P1/P2/P3, RED→GREEN).** P1
+    `test_placement_limit_producer` (`tests/test_engine_match_entities.c:1215`):
+    every placed record `timer79 == 6` / `timer7b == 6`, the value function's
+    index and OR arms (`[22] = 0x0C`, `16 | 0x10 = 0x1F`, `6 | 0x80 = 0x86`),
+    the `0x20` refusal with the caller's out **untouched**, the out-of-range
+    class keeping `0x0B`, and both teams. P2
+    `test_placement_counter_from_producer`
+    (`tests/test_engine_match_handlers.c:3597`): `desc_d 22 → 0x0C`, the
+    install re-copy (`0x7DA9B`), the nibble floor, the no-zeroing boundary. P3
+    `test_action_09_placement_limit_velocity` (`:3620`): `timer7b == 12`,
+    `vel73 == 12`, `vel75 == 0`, `speed71 == 12`, `target 0x160/0x200`, with
+    the zero-value companion keeping the old path reachable by staging
+    `timer79 = 0` — a producer pin, not a rewrite. The RED evidence is the
+    staged-zero tree (P1 value 0; P2 0/0; P3 0/0/0/0x100).
+  - **The A3 re-pin and the survivors (T1).** The measured first camera
+    departure is **engine step 2355 (granted f 704)** — FU332's event frame;
+    the phase-33 window 4930/5200 → **2351/2359** (the measured step ∓ 4, the
+    one-frame gate-vs-capture alignment; constants
+    `tests/test_engine_m2.c:2007-2008`, asserts `:4175-4189`). A1/A2 survive;
+    the A2 identity is now **704 == 704** with `camera_left_zero`
+    **2 894 = 3 598 − 704** (the phases-33/34 figures 1 517 / 2 081 are
+    history). The natural-pass survivors are unchanged (`granted_frames 3 598`,
+    `stage.calls 6 118`, `select_ran 0`, score 0-0, the kick cap, bind id 12).
+    The two **driven passes re-pinned to ONE segment each**: the claim pass gate
+    **f 673** / event **f 674** (27 changed, stop place `−0x90`, off-zero
+    **2 923**; the phase-33 second segment no longer occurs — the one-shot pan
+    is consumed earlier), the offset pass gate **f 675** / event **f 676**
+    (27 changed, off-zero **2 921**, **Δ = 0x42** at the gate), with its drive
+    **re-based LEFT 30 → 10 entries, DOWN from 1830** (a 20+-entry nudge hands
+    the one-shot to the producer's natural band pan at f 704 and the pass loses
+    its subject — measured, FU333-L3's re-measure duty). The scripted pan
+    witness is now a **declared pre-producer control** (it stages
+    `timer79 = timer7b = 0`; with the producer on its LONG_BALL/UP chain
+    reaches **no camera event in 6 000 steps** — measured). The six
+    `test_engine_match_frame` live fixtures were re-derived under the produced
+    pacing (drive re-bases, an RNG pump, the turn limit `0x38`/face `0x178`,
+    the staged `has_slot` before the 92-frame follow, and the z-seeded
+    half-line pan `pos_z 0 → −0x90`; the claim's slot-dir bytes are `(0,0)` on
+    that frame, the dir arm covered by the handler unit pins).
+
+- **The natural witness (T2, `673a10d`; FU333 C1–C6, Branch A,
+  producer-conditioned).** The undriven `M2_KEYS` tape, no added hold, no
+  staged cell. **The measured tuple:** gate **f 703 / step 2352** (id 12,
+  code 4, anim 0, active 1, `has_slot 0`, cam (0,0,0), tracked −1, controlled
+  1; lane 56/−56, `cam_dz6f` 0, bound 68, timer81 0, face `0xFF00`, dir (0,0);
+  chain `timer79 6`, `timer7b 6`, nibble 6, vel (−6,0), `speed71 6`, pos
+  (56,0,0), target (0,0); bearing `0xFFFFFF00`, Δ 0) → event **f 704 / step
+  2355** (code 5, `has_slot 0`, trk 12 = id 12, cam vel (−2,0), speed 2,
+  tim 0/12, ramp 12, record pos (44,0,0)) → first motion **f 705 / step 2359**
+  → stop **f 718 / step 2402**, 13 changed frames, stop (−38,0,0), pan 0→2,
+  `speed_seq 2,1,0`, seed (−0x18,0), `v0 (−2,0)`, `T (−38,0)`. **The asserted
+  side** is the FU333 §4.3 classes: the arm cells exact (C1/W1), the seed chain
+  `vel73 −6 → seed −0x18 → v0 −2` through the measured fast path, the chain
+  cells exact with the nibble bound structural (C2/W3), the gate cells exact
+  with the predicates structural (C3/W2), the event cells exact (C4/W4), the
+  run from the pass's own seed through `m2_pan_curve` plus the one-shot
+  (C5/W5, W6), and the bind identity `first_bind_id == bind_tracked == 12`.
+  **Recorded only:** the exact f/step of every anchor, the bearing/Δ, the
+  off-zero counts, the later segments, the achieved seed/v0/T and the
+  frequency; the exact f/step values are recorded, never asserted (the
+  structural frame order gate `f−2` / event `f−1` / motion `f` is asserted,
+  and the witness is **seg[0]**, never inferred from pass-level cells).
+  **The no-staged-cell proof (FU333 §4.4):** the diff touches
+  `tests/test_engine_m2.c` only; no engine write is added in the natural path;
+  the pass's copied-tape `memcmp` is silent (`:4140`); no staging `#define`
+  exists (the only added define is the recorded-segment bound); the FU328 §5.6
+  diagnostic ladder is not in the tree. The witness is
+  **producer-conditioned**: the native per-record value is unmeasured
+  (FU330-L1), so the exact numbers follow the port-reachable value 6 — the
+  register says so, and the note and the assert comments do too.
+
+- **The Layer-2 live acceptance (T3, `79819a4` + `21f5f44`).** The **undriven
+  live match reproduced the pan, frame-exact**: event **f=704** (tick 2350),
+  motion **705..717**, stop **f=718** (tick 2397), place 0 → (−38,0,0),
+  pan 0→2, trk 12, follow 0 and `pos_y 0` on all 4 167 body lines;
+  **trace-attributed**. The four anchors sit on a **constant −5-tick
+  alignment** vs the null tape (2347/2350/2354/2397 vs 2352/2355/2359/2402 —
+  the live scheduler vs the deterministic step clock, both frozen; live phase
+  2 at f=539 / tick 1800). **The AE route could NOT corroborate:** the strict
+  in-run pair is **AE 0 = the still's AE 0** — the renderer draws no
+  pitch/background (the tracked sprite pinned at a fixed screen point), so a
+  camera translation has no scene-translation pixel signature. The FU333 §7
+  W-b **AE-coverage waiver is applied to the AE only — never to the trace**.
+  The run-end pair is AE 502 (`23x41+458+296` — the tracked sprite's animation
+  step), the event view switch AE 53 850 (`293x394+317+0` — the event, not the
+  pan). The still pair is a **disclosed cross-run camera-constant control**
+  (attempt 4: f=942→945 / f=948→950, clock 00:13; the accepted run's raw stills
+  were overwritten by the re-run's fixed filenames — the round-1 correction;
+  the committed PNGs are unchanged): same second, no key, camera cells
+  constant (pos −38, trk 12, pan 2) and the siblings AE 0. The methods are the
+  phase-33 ones (`docs/screens/p33-l2-notes.md`'s form): trace primary, the AE
+  relative, the sprite-only bbox caveat, the extract a verbatim ordered
+  subsequence (**61 lines** = 1 header + 4 comments + 56 body; the phase-2 line
+  is full-trace line 541), and the still's own caveat stated. Artifacts:
+  `docs/screens/p35-l2-notes.md`, the **seven PNGs** (the strict pair
+  `pan-a/b`, the run-end pair `pan-c/d`, `pan-diff`, `still-a/b`) and
+  `p35-l2-trace-pan.txt`.
+
+- **The wave's verdicts (FU330…FU333, promoted one-per-commit).**
+  - **FU330 (the producer census) — GO on the producer and the tier semantics;
+    NO-GO on any native per-record claim.** The store is the word-wide table
+    lookup `byte[0x10F394 + byte[[rec+4]+0xD]] | byte[+0x9D]` (the index is
+    physically `[[rec+4]+0xD]`; the stored high byte forced 0 — its review
+    errata 1–2 correct the omitted `XOR AH,AH` and the index-order sentence).
+    The table is 32 bytes at `0x10F394` (the `0x10F3B4` continuation follows);
+    **15 is the proven in-range maximum** (the table's `0x0F` at indices
+    16..18; the `+0x9D` OR-writer emits only 0/`0x0F`), **6 is not a floor**
+    (P2 halves to 3, composed 2), and no universal cap holds only because the
+    index is **unguarded** (32..47 reads the continuation, `0x80+` wraps to
+    `0x0FF4xx`). The native per-record kickoff values need the roster
+    descriptor, which the image does not contain (FU330-L1).
+  - **FU331 (the design) — GO on P1 as the placement-reset writer; NO-GO
+    beyond the design.** The existing table reuse (erratum 1: no second
+    `[0x30]` array), the `0x20` boundary and the no-zeroing fallback (erratum
+    2), P1 as **one of three** `+0x79` writers (erratum 3: P2/P3 stay
+    FU333-L15), the init-only cadence being exact while the value is constant
+    and neither writer runs (erratum 4: the reset pass is prelude-only, four
+    callers), the 23 audited sites being timer-cell **lines** (the W class is
+    9 lines in 7 rows — erratum 5), and 15 as the in-range max / 6 not a floor
+    (erratum 6). **Row 03 must not
+    be wired** (FU331-L4: `min(1, limit) = 1 < 6` — a counter-lowering route,
+    not a witness enabler).
+  - **FU332 (the blast radius) — GO on the measured radius and on the natural
+    pan; NO-GO (narrow) on calling the tuple *native* while FU330-L1 is
+    open.** The probe was a value probe (the constant `table[0]` at the init
+    seam — its erratum 1), so it proves the cell/seam/value, not the table
+    lookup/OR (P1's pins own the expression). The whole formation moves at the
+    floor value (20/20 records; the first at f 1, all by f 3; `max |v| 1 → 6`);
+    the golden's 5 671/6 522-line 852 tail; M1 identical. The `+0x9D` port
+    term is 0 **by construction**, the native byte unmeasured (erratum 2);
+    the live native limit domain is 2..15 (erratum 3, the P2/P3 residual).
+  - **FU333 (the acceptance + governance) — GO; Branch A is the landed
+    branch.** C1–C6 + the no-staging clause; the golden recipe (the first-diff
+    anchor 852, the `state=` check, the stratum-set gate, the 6 522-line
+    invariant, M1 `cmp`, TW1–TW9); the Layer-2 design (the AE-coverage waiver,
+    trace primary). Its errata: Branch A is the witness branch, Branch B the
+    no-witness one (1); 852 is the measured render bound while 2355 is the
+    A3/event anchor (2); the witness is **producer-conditioned**, not "the
+    native golden" (3); "row-12" is action code `0x0C` (4); the phase-0C
+    hazard cite (5); the spec's §5 **and** §6 carried the A3-in-P2 sentence
+    (6); the memcmp is a source-level check, not a platform-consumption proof
+    (7); "probably wholesale" is the measured 86.95 % (8).
+
+- **Governance (the Task-1 review's M8 and the phase's own record).**
+  - **The docs register pin** is this section + the PROGRESS narrative — the
+    M8 item the T1 review deferred to the close-out.
+  - **The new A2 figures:** `camera_zero_frames == first_left_zero_f` =
+    **704 == 704**, `camera_left_zero` **2 894** (replacing 1 517 / 2 081); the
+    A3 window 2351..2359.
+  - **FU324-L5's outcome — the trigger fired, the sensitivity re-arms.** The
+    `+0x7B` nibble now moves (6 at the install, 12 after row 09), so the
+    `stride_len ≤ 3` clamp that masked every metric difference is gone and the
+    mover's metric sensitivity **returns**. **The mutant protocol was not
+    re-run**: the plan records it as a clause, not a measurement (plan Step 7,
+    "FU324-L5's re-measure clause recorded"), and the provenance note carries
+    the clause. FU324-L5 is therefore **re-armed, not closed**.
+  - **The FU333 H10 deviation, quoted.** Quote
+    (`docs/ghidra/FU333_r2l9_acceptance.md:483`): "P1 re-runs the mutant
+    protocol and records the result in the register; it is a **clause**, not a
+    silent re-measure." **Recorded deviation:** the phase-35 plan deferred the
+    run (Step 7 records the clause; the provenance note carries it), so the
+    register records the re-arming and the deferral. The pre-producer mutant
+    result (37 219 stride firings, 0 frames moved — FU324 §5) is **not**
+    evidence for the produced build. Owner: the mover staging + the row-26
+    timer staging (FU324-L5, carried).
+
+- **The legs — met, closed and open.**
+  - **FU328-L1 — CLOSED for its own subject (the producer gap), narrowed in
+    scope.** The placement-reset writer is live
+    (`fifa96_match_entities_placement_seed` at `entities_init` and
+    `reset_lane`), so the natural pan's root gap is closed (FU331's erratum 3's
+    "narrowed, not closed" speaks of the full native three-writer set, not of
+    this gap). The **native per-record value is FU330-L1** (open; the
+    native-faithfulness owner of the producer-conditioned witness: trap
+    `0x79A4D` / `FUN_0007997C` on the M2 tape and log
+    `[[rec+4]+0xD]`, `+0x9D`, `+0x79` for all 22 records) and the other two
+    writers are the P2/P3 residual (below). **FU328-L8** (the M2 exposure) is
+    **met/measured** — the re-pin. **FU328-L2** (the row-03 counter) stays
+    NULL/unwired (FU331-L4). **FU328-L3** is FU330-L1.
+  - **FU330-L1..L8 (owners).** L1 the native per-record `+0x79` at kickoff —
+    **open, the native-faithfulness owner**; owner FU84 §6 + the roster
+    descriptor (FU-142b Appendix C / FU188-L5). L2 the unguarded index — owner
+    the roster byte's loader (unported). L3 the `+0x9D` override's meaning —
+    owner the roster/tactics flags. L4 the operand-based `+0x9D`-writer census
+    — owner the roster-flags census. L5 P3's trigger semantics — owner the
+    code-`0x0C` arm's phase. L6 the `0x8B832` caller of `FUN_0007417C` (no
+    Ghidra function) — owner the match-state reset routine. L7 `+0x79`'s
+    downstream algebra — owner FU326/FU328/FU331 (the row-09 site is now
+    landed; the reader census stands). L8 the port's missing `+0x9D` cell —
+    **closed** (`byte9d` landed; still staged 0, OL-72).
+  - **FU331-L1..L8 (owners).** L1 the native call-site cadence — owner FU295-L1
+    + the `0x741C4` driver (the derived `entities_init` seam stands; the
+    kickoff/period re-store and the P2/P3 re-seeds are residuals). L2 the
+    descriptor index is unported — owner FU301-L3 / the roster loader. L3 the
+    `+0x9D` OR and the index domain — owner FU330 (the port models `0..0x1F`,
+    refuses `>= 0x20`, keeps the live cell; unobservable while `desc_d = 0`).
+    L4 **row 03 must stay unwired** — open by instruction; owner
+    FU177-L1/FU328-L2. L5 FU178's "heading word `+0x7B`" is `word[+0x7D]` —
+    recorded; the port reads `face7d`; owner any future reader (no code move).
+    L6 the `+0x7B` distribution is multimodal — owner FU324-L5 (the metric
+    clause). L7 the P3 pin's `sine(0x100)`/`distance(12,0)` identities — owner
+    the entity trig/metric core. L8 the golden attribution unmeasured here —
+    **met** by T1's 852 measurement.
+  - **FU332-L1..L7 (owners).** L1 the native producer site is not live — the
+    `reset_lane` site landed but is dead live; the live route is the derived
+    seam; owner FU295-L1/FU331. L2 the measured value is port-reachable — owner
+    FU330-L1. L3 the staging record has no `+0x79` — the pool entity's stands
+    in (recorded in the row-09 comment); owner P1 (met). L4 the 840-frame
+    render lag — **narrowed/explained** (852 = the phase-33 reveal); the
+    per-sprite pixel proof stays FU323-L2's; owner a presentation-side measure
+    if ever needed. L5 the out-of-range index, not the OR, is the `> 15` path —
+    owner FU330-L2. L6 the A3 window re-pins — **met** (2351..2359). L7 the
+    pan's place does not survive the half-time re-entry — carried (the
+    half-time reset; FU328-L4).
+  - **FU333-L1..L15 (owners).** L1 the tuple is FU332's — met/recorded. L2 the
+    A3 commit placement (spec §6 vs the green gate) — the contradiction is
+    recorded and the spec's Plan erratum item 3 settles it (P1; owner the
+    Stage-2 plan/controller). L3 the driven passes are a second acceptance
+    surface — **met** (re-measured, re-pinned, one segment each). L4 the
+    natural-pass value pins outside A3 — met (unchanged). L5 the score-bearing
+    strata — met (the 10-tag set intact, no value change). L6 the two producer
+    channels — met (the first-diff anchor is the render 852; the row-09 channel
+    is inert, 0 code-9). L7 the `+0x9D` OR's port value is 0 — carried (OL-72;
+    a value divergence, not a mechanism one). L8 one `+0x7B` channel per commit
+    — met (only the placement copies + row 09 changed; the H6 stagings
+    untouched). L9 the row-03 idle core clamps to 1 — met by leaving row 03
+    unwired (the placement copies are the enabler; recorded). L10 the row-26
+    read is the same table and index byte — carried (FU331's audit; the port
+    carries the bytes; the guard and the `>>1` are the trap). L11 the FU324-L5
+    re-measure rides P1 — **deviation recorded** (the clause landed, the run
+    deferred; see Governance). L12 Layer 2 conditional on the tuple and the
+    measured duration — **met** (Branch A; the tuple and the measured pan
+    duration; the AE waiver recorded). L13 the armer/OOB accumulation of a
+    natural pan is recorded, not asserted — met (recorded). L14 the suite count
+    is per-tree — met (**111/111** on this tree). L15 `+0x79`'s other writers —
+    **open** (P2 the lineup rebind, P3 the code-`0x0C` arm; a window crossing
+    one of these must be re-measured, never explained by the placement value).
+  - **The P2/P3 residual (the live native domain 2..15).** Native P2 halves the
+    limit (`+0x79 >> 1`, floor 2 at `0x8C939/0x8C942`, iff `+0x99`) and P3
+    writes `max(+0x79>>1, 3)` (`0x822E7/0x822F0`, action code `0x0C` — not row
+    `0x12`); a composed P2-after-P3 gives **2 or 3**. **At 3 the pan survives**
+    (`|v0| = 1`, `T = −0xC`, 6 frames); **at 2 it fails** (the measured seed
+    gives `v0 = 0`). The witness therefore survives the **table rows 6..15 and
+    the P2/P3 values 3..7**, **not the whole native domain 2..15**; both
+    writers are unported, so the measured tuple stands, but a future window
+    crossing one must be re-measured (FU333-L15).
+  - **Carried unchanged (still open):** FU328-L4..L7 (L4 the undriven
+    second-half stall — the row-01 kickoff release / the FU-84 per-frame
+    driver; L5 the finite drive-family coverage; L6 the cone filter is not the
+    gate; L7 the partial wrap classifier); FU326-L1 (the non-locomotion
+    `+0x73/+0x75` writers — the only formal escape from the seed bound);
+    FU319-L8 (the raw-point focus guard vs the native delta test); FU324-L8/L9
+    (the `r->distance` persistence gap; the negative-metric-word stride index);
+    FU325-L8 (the still-pair AE-honesty class — this phase's still is AE 0; the
+    class stands); the phase-30/31/32 remainder (FU315-L1/L2, FU316-L2..L9,
+    FU317-L1..L7/L9/L10, FU318…FU321) as registered. FU316-L1's travel model
+    stays settled within the locomotion bound; its non-locomotion escape is
+    FU326-L1.
+
+- **Deferred polish (the T2/T3 reviews; none a fidelity defect).** (1) the
+  arm-distinction assert is x-only (`tests/test_engine_m2.c:4243`; the vector
+  form would compare both axes); (2) the `≤ 0x19` seed-metric assert
+  (`:4289`) labels a bound that is the engine's event-pair cap, not the
+  metric's; (3) the literal stop `−38` (`:4308`) duplicates the curve assert
+  (`:4305-4307`); (4) the `timer7b == 6` equality (`:4248`) over-constrains a
+  multi-writer cell — FU333 §4.4 allows a bound, not equality; (5) the
+  `ev->code == 5` pin (`:4324`) is an extra pin beyond W6 (label it or drop
+  it); (6) the global `y/z_nonzero` counts (`:4310-4311`, and the pass-level
+  counters `:4019-4020`) go beyond W5; (7) the `m2_nat_pan` struct comment
+  (`:2702-2705`) names frequency fields that do not exist (the frequency is
+  derived at print time); (8) `M2_NAT_PAN_SEGMENTS 4` (`:2673`) is a silent
+  cap — later segments past the bound are skipped without an assert
+  (`:3953`/`:3969`/`:4013`); (9) the `rel` offsets and the sample hash
+  (`:4030-4047`) are not printed although the report calls them recorded
+  (the witness stderr prints f/step, not `rel`; `:6992-7033`); (10) the claim
+  pass's per-segment cells are not zeroed at a segment start
+  (`:4686-4703` — the natural sampler `memset`s its segment, the claim sampler
+  does not, so `decrease/increase/pan_max/stop_*` can carry over); (11) the
+  ring identity asserts in `m2_natural_sample` (`:3953`/`:3969`) run
+  unconditionally in the no-ISO mode though FU322-L10 keeps that window
+  recorded-only; (12) the witness never closes `g->id == ev->id` (`:4227-4235`
+  vs `:4283`); (13) the Task-2 report's no-ISO anchor line (`stop 718`) is off
+  by one against the recorded 717 — a report-accuracy item, not a tree claim.
+  The Task-3 wording note: `docs/screens/p35-l2-notes.md:41` says "Every trace
+  row in this note is this run's own cell" without the still-control
+  exception its own row (`:154`) and section (`:178-183`) carry; the note's
+  "row-12" label (`:39`) is the wave's corrected code-`0x0C` name. None of
+  these is fixed in this docs-only close-out (the reviewers' instruction); they
+  are carry-items for the next touch of those files.
+
+- **Tape and gate.** Docs-only, proven: M1 `09b726b7…` (22 004 B, 691 lines)
+  and M2 `6aa2703b…` (295 087 B, 6 522 lines) byte-identical (`cmp`-verified);
+  no re-pin in this close-out, no frame diff, no fixture change and no
+  `state=` change; `make check` **111/111**; census **`60/80 = 75%`**
+  (`37 action + 23 phase`; fresh re-count); the README title stays `75%`; the
+  ISO untouched. The phase's production change is T1's producer + row-09
+  correction (`749cc2f`) plus the T1 fix rounds; T2 is test-side and T3/the
+  close-out are docs-only. The trace sink stayed default-off outside T3's
+  acceptance run; the capture/trace artefacts are `docs/screens/p35-l2-*`.
+  **The next-phase candidates, in order:** the **roster index (FU330-L1) and
+  the P2/P3 native live domain** (2..15; 2 fails, 3 pans) — the
+  native-faithfulness work that would let the witness stop being
+  producer-conditioned; the **claim/carrier fusion** (FU315-L1 + FU316-L8: the
+  row-05 carrier camera event `0x7F4E7` and the claim tail — the
+  pan→row-5→rebind half does not exist in the engine); the **armer/follow**
+  (FU316-L6 + FU316-L9: the `0x7131C` announce/threshold/far-band body and the
+  unarmed mirror); the **undriven half-time stall** (FU328-L4: phase 12 →
+  phase 1 at step 13805, clock 120 s, no transition through step 160 000 — the
+  row-01 kickoff release / the FU-84 per-frame driver).
