@@ -1723,7 +1723,9 @@ static void test_action_04_ball_track_side_from_tracked(void) {
 
 /* Phase-35 final review (the twin wiring): the pool's `byte9d` — the native
  * `byte[+0x9D]` OR term — reaches the row-04 contact threshold (`0x7ED58`:
- * `thresh = (int8_t)desc_e | byte9d`, both staged from the pool record).
+ * `thresh = (int8_t)desc_e | byte9d`). Only `byte9d` is pool-backed here;
+ * row 04's `desc_e` is still hardcoded 0 in the match staging (OL-72), so
+ * this pin exercises the OR term's pool half, never a pool descriptor.
  * The threshold is only observable through the rare contact arm, so the
  * fixture stages a deterministic setup (the subject and the opponent team
  * target on the same point, a losing score to open the arm) and searches the
@@ -2754,6 +2756,76 @@ static void test_action_06_runs_body(void) {
   assert(f.mr.record.target_x == 0);
   assert(f.mr.record.target_z == -0x91);
   assert(f.mr.record.install == 8);
+  drop_fixture(&f);
+}
+
+/* Phase-35 final review (the twin wiring, row-06 side): the pool's `byte9d`
+ * reaches the row-06 pursuit consumers too — `0x806F8`'s `desc_c | byte9d`
+ * gate and the `0x80716` install-9 block's `(desc_e | byte9d) << shift`
+ * threshold in `fifa96_action_pursuit_step`. That is a different body from
+ * the row-04 pin (`fifa96_outfield.c:598`), so it needs its own evidence.
+ * The fixture opens the no-slot V4 arm (metric 0x70 in (0x60, 0x90], carrier
+ * speed > 4, parity set, thread counter < 2) and stages an explicit six-word
+ * RNG state whose second draw has `r & 0x1FF < 0xF`. `fifa96_rng_seed`
+ * cannot reach that branch: the seed only sets bits 25..31, so a freshly
+ * seeded state always yields the same low 9 bits on the second draw (measured
+ * 293) and the capped 0xF threshold can never admit it — the fixture stages
+ * the long-advanced state directly, as the native producer has by then. With the pool
+ * `byte9d = 0x0F` the threshold is 0xF and the draw installs 9; the same
+ * state with `byte9d = 0` gives threshold 0 and falls through (no install).
+ * `desc_c` / `desc_e` are still hardcoded 0 (OL-69), so this pins the pool
+ * half of the OR exactly like the row-04 test. */
+static void test_action_06_pool_byte9d_threshold(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  struct fifa96_rng start, probe;
+  uint16_t r1 = 0, r2 = 0;
+  int have = 0;
+  make_fixture(&f);
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 1;          /* team 0, record 1 (the actor) */
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.entities.ball.carrier = 5;     /* team 0 record 5: carrier_speed > 4 */
+  f.mr.entities.ball.pos_counter_f = 0;
+  f.mr.pass_parity = 1;               /* the 0x806C7 sub-gate */
+  f.mr.entities.team[0].records[5].vel_x = 8;
+  f.mr.entities.team[0].target = 0;   /* actor 1 != target: no timer arm */
+  f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;       /* <= 0x38 and <= 0x70 */
+  f.mr.render.camera.pos_z = 0;
+  e = &f.mr.entities.team[0].records[1];
+  e->lane_z = 0x70;                   /* V4 metric 0x70: the (0x60,0x90] band */
+  /* Find a state whose second step has r & 0x1FF < 0xF (the install-9
+   * admission at the capped threshold). */
+  for (uint32_t n = 0; n < 65536u && !have; n++) {
+    start.w[0] = n;
+    start.w[1] = 1;
+    start.w[2] = 2;
+    start.w[3] = 3;
+    start.w[4] = 4;
+    start.w[5] = 5;
+    probe = start;
+    assert(fifa96_rng_step(&probe, &r1) == FIFA96_OK);
+    assert(fifa96_rng_step(&probe, &r2) == FIFA96_OK);
+    if ((r2 & 0x1FFu) < 0x0Fu) have = 1;
+  }
+  assert(have == 1);
+  f.mr.rng = start;
+  f.mr.record.install = 0;
+  e->byte9d = 0x0F;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 9);   /* the pool byte9d OR reaches install 9 */
+  /* the same state with the pool byte9d 0 cannot cross threshold 0 */
+  f.mr.rng = start;
+  f.mr.record.install = 0;
+  e->byte9d = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x06) == FIFA96_OK);
+  assert(f.mr.record.install == 0);   /* the install-9 arm refused */
   drop_fixture(&f);
 }
 
@@ -4692,6 +4764,7 @@ int main(void) {
   test_action_21_runs_body();
   test_action_23_runs_body();
   test_action_06_runs_body();
+  test_action_06_pool_byte9d_threshold();
   test_action_14_runs_body();
   test_action_14_live_phase5_route();
   test_action_22_runs_body();

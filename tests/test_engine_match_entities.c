@@ -1216,9 +1216,15 @@ static void test_placement_limit_producer(void) {
   struct fifa96_match_entities pool;
   uint16_t out = 0;
   assert(fifa96_match_entities_init(&pool) == FIFA96_OK);
-  /* RED on the pre-producer tree: 0. GREEN: 0x10F394[0] = 6. */
-  assert(pool.team[TEAM0].records[3].timer79 == 6);
-  assert(pool.team[TEAM0].records[3].timer7b == 6);      /* 0x79A86 */
+  /* RED on the pre-producer tree: 0. GREEN: 0x10F394[0] = 6. The init loop
+   * writes ALL 22 records (phase-35 final review), so pin every one, not a
+   * sample: both pools, all records, the value and the 0x79A86 copy. */
+  for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
+    for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
+      assert(pool.team[t].records[i].timer79 == 6);
+      assert(pool.team[t].records[i].timer7b == 6);      /* 0x79A86 */
+    }
+  }
   /* the value function: the table index and the +0x9D OR are both exercised */
   assert(fifa96_match_entities_placement_limit(0, 0, &out) == 1 && out == 6);
   assert(fifa96_match_entities_placement_limit(22, 0, &out) == 1 && out == 0x0C);
@@ -1254,9 +1260,7 @@ static void test_placement_limit_producer(void) {
   assert(fifa96_match_entities_reset_lane(&pool, TEAM0, 0, 0, 0) == FIFA96_OK);
   assert(pool.team[TEAM0].records[7].timer79 == 0x0B);
   assert(pool.team[TEAM0].records[7].timer7b == 0x0B);
-  /* the other team is produced too (both pools in the native prelude) */
-  assert(pool.team[TEAM1].records[10].timer79 == 6);
-  assert(pool.team[TEAM1].records[10].timer7b == 6);
+  /* the other team's init records are covered by the all-22 loop above */
 }
 
 int main(void) {

@@ -2587,6 +2587,14 @@ struct m2_claim_segment {
   uint32_t speed_seq_len;
 };
 
+/* The per-segment capacity (phase-35 final review, the claim/offset twin of
+ * the natural sampler's `M2_NAT_PAN_SEGMENTS`): the guards compare the
+ * 1-based `segments` count against this size while the index is
+ * `segments - 1`, so `segments <= M2_CLAIM_SEGMENTS` fills the array exactly.
+ * Three slots keep the measured one segment, the phase-32/33 two-segment
+ * baseline and one recorded-only extra without a silent drop. */
+#define M2_CLAIM_SEGMENTS 3u
+
 /* FU317 §4.3/§4.4 (phase-31 T1; figures re-based by phase-35 P1): the natural
  * claim-pan witness. The pan is counted as a delta run (a maximal
  * changed-place run), never as "frames off zero": after the pan the place
@@ -2614,7 +2622,7 @@ struct m2_claim {
    * pass's record-2 claim at gate f 673 / event f 674; the offset pass's at
    * gate f 675 / event f 676). The phases-32/33 baseline had two chained
    * segments; the producer's earlier one-shot pan consumes the second. */
-  struct m2_claim_segment seg[2];
+  struct m2_claim_segment seg[M2_CLAIM_SEGMENTS];
   /* The first frame with pos != (0,0,0) — the A5 off-zero identity's left
    * side (the pass-level first_motion_f is the segment's; measured off-zero
    * 2 923 = 3 598 - 675 on the claim pass and 2 921 = 3 598 - 677 on the
@@ -2700,8 +2708,10 @@ struct m2_nat_pan {
    * and the event the cells at f-1. */
   struct m2_claim_gate ring[2];
   /* FU333 §4.3/§4.5 recorded-only cells: the gate's live-face bearing and
-   * folded delta (computed on the witness gate frame), and the granted-frame
-   * frequency numerator/denominator (the pan count over the window's grants). */
+   * folded delta (computed on the witness gate frame and recorded to stderr;
+   * phase-35 final review: there are no frequency fields here — the
+   * granted-frame frequency is computed in `main` from `segments` /
+   * `nat.granted_frames`). */
   int32_t gate_bearing, gate_delta;
 };
 
@@ -3943,7 +3953,10 @@ static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_
     if (changed) {
       if (!p->in_segment) {
         /* The gate/event frames are the two frames before the first motion
-         * (the claim pass's f-2/f-1 convention). */
+         * (the claim pass's f-2/f-1 convention). STRUCTURAL INVARIANT
+         * (phase-35 final review; not a no-ISO measurement — FU322-L10):
+         * the sampler records every granted frame, so the two-frame ring is
+         * populated by construction; the measured no-ISO run satisfies it. */
         assert(f >= 2);
         assert(p->ring[1].valid && p->ring[1].f == f - 2);
         assert(p->ring[0].valid && p->ring[0].f == f - 1);
@@ -4007,7 +4020,11 @@ static void m2_natural_sample(struct m2_natural *nat, const struct fifa96_match_
   }
   /* FU333 W5: the camera's bearing is its velocity pair's distance on every
    * frame of the open run (the pan step rebuilds it); a mismatch is a stop.
-   * The run's own pan-counter max rides the same per-segment record. */
+   * The run's own pan-counter max rides the same per-segment record.
+   * STRUCTURAL INVARIANT (phase-35 final review; not a no-ISO measurement —
+   * FU322-L10): the camera defines `speed` as the distance of its velocity
+   * pair, so this identity holds in both ISO modes; the measured no-ISO run
+   * satisfies it. */
   if (p->in_segment) {
     assert(c->speed == fifa96_entity_distance(c->vel_x, c->vel_z));
     if (p->segments >= 1u && p->segments <= M2_NAT_PAN_SEGMENTS) {
@@ -4209,6 +4226,11 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       g = &w->gate;
       ev = &w->event;
       assert(g->valid != 0 && ev->valid != 0);
+      /* The closure identity (phase-35 final review): both ring records are
+       * the band entity (measured 12), never two different records whose
+       * chain happens to line up. */
+      assert(g->id == ev->id);
+      assert(g->id == M2_NAT_BAND_ENTITY);
       /* §4.5 item 2: the record id is read from the bind, and the band
        * constant is asserted equal to it (never assumed). */
       assert(nat->first_bind_id == M2_NAT_BAND_ENTITY);
@@ -4240,7 +4262,10 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       seed_x = (int16_t)((uint16_t)g->vel73 << 2);
       seed_z = (int16_t)((uint16_t)g->vel75 << 2);
       assert(seed_x != 0 || seed_z != 0);
-      assert(seed_x != (int16_t)((uint16_t)g->dir_x << 6));
+      /* The vector form (phase-35 final review): the no-slot seed pair is
+       * not the `dir << 6` slot pair, matching the structural claim. */
+      assert(seed_x != (int16_t)((uint16_t)g->dir_x << 6) ||
+             seed_z != (int16_t)((uint16_t)g->dir_z << 6));
       /* C2 (W3) — the produced chain is visible and consistent: the limit
        * (6), the counter's nibble (6, >= 3), the velocity words it bounds,
        * the speed metric, the place and the target. The counter is
@@ -4323,7 +4348,9 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       assert(w->decrease_frames == w->changed_frames);
       assert(w->increase_frames == 0u);
       /* C5's one-shot (W6): the row-04 install leaves on the event frame, so
-       * the band record has no code-4 frame after the bind. */
+       * the band record has no code-4 frame after the bind. The `code == 5`
+       * cell is ONE-SHOT EVIDENCE (the measured event-frame code), kept as
+       * measured — it is not a structural invariant. */
       assert(ev->code == 5u);
       assert(p->post_event_row04_frames == 0u);
     }
@@ -4354,6 +4381,10 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
    * calls in both ISO modes; FU323 §4 re-measured it unchanged under the
    * live face), while the AX prepass refuses every stage-select
    * (`ran=0` — the camera stays at 0, so |cam_z| > 0x7B0 cannot hold). */
+  /* The per-segment cap is a hard bound, not a truncation (phase-35 final
+   * review): the sampler drops nothing silently — a longer run fails here
+   * instead of producing an under-recorded witness. */
+  assert(nat->nat_pan.segments <= M2_NAT_PAN_SEGMENTS);
   assert(nat->stage.calls == 6118u);
   assert(nat->stage.select_calls == 6118u);
   assert(nat->stage.select_ran == 0u);
@@ -4682,8 +4713,12 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
       cl->in_segment = 1;
       /* FU322's erratum 2: snapshot this segment (the pass-level cells are
        * re-filled per segment and hold the LAST one's). */
-      if (cl->segments <= 2u) {
+      if (cl->segments <= M2_CLAIM_SEGMENTS) {
         struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
+        /* Reset the segment's cells at every start (phase-35 final review;
+         * the natural path's `memset(sg, ...)` is the precedent), so no
+         * stale stop/speed/pan cells from an earlier segment survive. */
+        memset(sg, 0, sizeof *sg);
         sg->valid = 1;
         sg->first_motion_f = f;
         sg->first_motion_step = step;
@@ -4698,7 +4733,7 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
       }
     }
     cl->changed_frames++;
-    if (cl->segments >= 1u && cl->segments <= 2u) {
+    if (cl->segments >= 1u && cl->segments <= M2_CLAIM_SEGMENTS) {
       struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
       sg->changed_frames++;
       if (c->pos_x < cl->prev_x) sg->decrease_frames++;
@@ -4712,7 +4747,7 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
     cl->stop_x = c->pos_x;
     cl->stop_y = c->pos_y;
     cl->stop_z = c->pos_z;
-    if (cl->segments >= 1u && cl->segments <= 2u) {
+    if (cl->segments >= 1u && cl->segments <= M2_CLAIM_SEGMENTS) {
       struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
       int16_t sp = (int16_t)c->speed;
       sg->stop_f = f;
@@ -4736,7 +4771,8 @@ static void m2_claim_sample(struct m2_claim *cl, const struct fifa96_match_run *
    * first motion through the last changed frame; the stop speed is appended
    * by the stop branch above. The pass-level `speed_seq` is the last
    * segment's — the per-segment cells hold each run (final review). */
-  if (cl->in_segment && cl->segments >= 1u && cl->segments <= 2u) {
+  if (cl->in_segment && cl->segments >= 1u &&
+      cl->segments <= M2_CLAIM_SEGMENTS) {
     struct m2_claim_segment *sg = &cl->seg[cl->segments - 1u];
     int16_t sp = (int16_t)c->speed;
     if (sg->speed_seq_len <
