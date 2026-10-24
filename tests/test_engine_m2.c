@@ -4242,10 +4242,13 @@ static void run_natural_pass(int with_iso, struct m2_natural *nat) {
       assert(seed_x != 0 || seed_z != 0);
       assert(seed_x != (int16_t)((uint16_t)g->dir_x << 6));
       /* C2 (W3) — the produced chain is visible and consistent: the limit
-       * (6), the counter and its nibble (6), the velocity words it bounds,
-       * the speed metric, the place and the target. */
+       * (6), the counter's nibble (6, >= 3), the velocity words it bounds,
+       * the speed metric, the place and the target. The counter is
+       * CONSISTENCY-checked against the mover's read (the nibble and the
+       * |vel| bounds), not for equality with the limit: `+0x7B` has several
+       * writers (FU333 §4.4), so the full word is recorded to stderr
+       * (`chain timer79/timer7b`), never asserted. */
       assert(g->timer79 == 6u);
-      assert(g->timer7b == 6u);
       assert((g->timer7b & 0x0Fu) == 6u);
       assert((g->timer7b & 0x0Fu) >= 3u);   /* the algebra's pan threshold */
       assert(g->vel73 == -6 && g->vel75 == 0);

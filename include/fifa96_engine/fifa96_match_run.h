@@ -415,8 +415,10 @@ struct fifa96_match_run_render {
  * `FUN_0007876C` slot-merge request, consumed by the FU-141 pool merge. FU-142b
  * adds the row-26 fields `stage92` (native +0x92, the 0/1/2 latch), `timer7b`
  * (+0x7B), `lane` (+0x69 dz word) and the `player_d`/`player_e` stand-ins for
- * the native `rec[+4]` descriptor bytes +0xD/+0xE (the roster descriptor is
- * unmodeled; the pool path stages 0). FU-142e adds `distance` (+0x65): the
+ * the native `rec[+4]` descriptor bytes +0xD/+0xE (`player_d` is staged from
+ * the pool's `desc_d` — the producer's index byte, phase-35 — while `player_e`
+ * stays 0; the roster index itself is still unmeasured, FU330-L1). FU-142e
+ * adds `distance` (+0x65): the
  * unported FUN_0008D098 pre-switch walk (`0x8D11E`) writes the 0x8DCD4 out
  * triple for every free record before the installer arms, so the frame staging
  * recomputes the word from this dispatch's pos/target and row 2A gates on it. */

@@ -426,6 +426,35 @@ static void test_action_26_repack_round_trips_fields(void) {
   assert(latch->target_x == 0xCC0 && latch->target_z == 0);
 }
 
+/* Phase-35 final review (the twin wiring): the pool's `desc_d` — the native
+ * `byte[[rec+4]+0xD]`, the `0x10F394` tier index — reaches row 26's read.
+ * `match_run_dispatch_entity` stages `player_d` from `e->desc_d`, and the
+ * row-26 prologue computes `timer7b = table[player_d] >> 1`. With the pool
+ * `desc_d = 22` the table row is 0x0C, so `timer7b` repacks to **6**; the
+ * sibling fixture above pins the staged-0 value (3). A broken twin leaves
+ * `player_d` 0 and this becomes 3. */
+static void test_action_26_reads_pool_desc_d(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *pass;
+  fifa96_match_run_init(&mr);
+  mr.state.phase = 2;
+  mr.state.period_length = 90;       /* no period end inside the 10 ticks */
+
+  pass = &mr.entities.team[0].records[1];
+  pass->code = 0x26;
+  pass->stage92 = 2;                 /* past the latch: prologue only */
+  pass->timer89 = 100;
+  pass->active = 3;
+  pass->desc_d = 22;                 /* 0x10F394[22] = 0x0C */
+
+  for (int i = 0; i < 10; i++)
+    assert(fifa96_match_run_frame(&mr) >= 0);   /* 3 granted frames, delta 2 */
+
+  assert(pass->code == 0x26);
+  assert(pass->timer89 == 106);
+  assert(pass->timer7b == 6);        /* 0x0C >> 1; 3 without the twin */
+}
+
 /* FU-142d: the row-28 body round-trips through the FU-141 pool record staging
  * and repack, and the pool resolves `team+0x831` into the chosen-record
  * position. Two pool team-0 records carry code 0x28 at phase 2 (no installer
@@ -10411,6 +10440,7 @@ int main(void) {
   test_frame_drives_entity_chain();
   test_phase_machine_hook();
   test_action_26_repack_round_trips_fields();
+  test_action_26_reads_pool_desc_d();
   test_action_28_repack_round_trips_fields();
   test_action_2A_repack_round_trips_fields();
   test_phase_drive_reaches_period_end();

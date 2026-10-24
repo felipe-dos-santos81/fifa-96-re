@@ -7597,7 +7597,7 @@ no recompute (AGENTS.md's derived rule).
   - **The landing (FU331's design as reviewed).** The producer is the native
     expression `word[+0x79] = byte[0x10F394 + byte[[rec+4]+0xD]] |
     byte[+0x9D]` — **one shared table, no second copy**: the port's existing
-    `fifa96_arm_26_timer_table[32]` (`src/fifa96_loader/fifa96_arm_bodies.c:32-37`;
+    `fifa96_arm_26_timer_table[32]` (`src/fifa96_loader/fifa96_arm_bodies.c:34-39`;
     `static` removed, `extern` in `fifa96_arm_bodies.h`) — the 32-byte tier
     (`06×8 07×8 0F 0F 0F 0E 0D 0D 0C 0B 0B 0A 09 09 08 07 07 06`), **15 the
     in-range maximum**, **6 not a floor**. The `0x20` boundary refuses the
@@ -7819,7 +7819,8 @@ no recompute (AGENTS.md's derived rule).
     `0x79A4D` / `FUN_0007997C` on the M2 tape and log
     `[[rec+4]+0xD]`, `+0x9D`, `+0x79` for all 22 records) and the other two
     writers are the P2/P3 residual (below). **FU328-L8** (the M2 exposure) is
-    **met/measured** — the re-pin. **FU328-L2** (the row-03 counter) stays
+    **met/measured** — the re-pin **at the staged 6** (the native `2..15`
+    domain is FU330-L1). **FU328-L2** (the row-03 counter) stays
     NULL/unwired (FU331-L4). **FU328-L3** is FU330-L1.
   - **FU330-L1..L8 (owners).** L1 the native per-record `+0x79` at kickoff —
     **open, the native-faithfulness owner**; owner FU84 §6 + the roster
@@ -7865,10 +7866,11 @@ no recompute (AGENTS.md's derived rule).
     strata — met (the 10-tag set intact, no value change). L6 the two producer
     channels — met (the first-diff anchor is the render 852; the row-09 channel
     is inert, 0 code-9). L7 the `+0x9D` OR's port value is 0 — carried (OL-72;
-    a value divergence, not a mechanism one). L8 one `+0x7B` channel per commit
-    — met (only the placement copies + row 09 changed; the H6 stagings
-    untouched). L9 the row-03 idle core clamps to 1 — met by leaving row 03
-    unwired (the placement copies are the enabler; recorded). L10 the row-26
+    a value divergence, not a mechanism one; owner: FU330 + P1). L8 one
+    `+0x7B` channel per commit — met (only the placement copies + row 09
+    changed; the H6 stagings untouched). L9 the row-03 idle core clamps to 1
+    — met by leaving row 03 unwired (the placement copies are the enabler;
+    recorded). L10 the row-26
     read is the same table and index byte — carried (FU331's audit; the port
     carries the bytes; the guard and the `>>1` are the trap). L11 the FU324-L5
     re-measure rides P1 — **deviation recorded** (the clause landed, the run
@@ -7883,8 +7885,9 @@ no recompute (AGENTS.md's derived rule).
     limit (`+0x79 >> 1`, floor 2 at `0x8C939/0x8C942`, iff `+0x99`) and P3
     writes `max(+0x79>>1, 3)` (`0x822E7/0x822F0`, action code `0x0C` — not row
     `0x12`); a composed P2-after-P3 gives **2 or 3**. **At 3 the pan survives**
-    (`|v0| = 1`, `T = −0xC`, 6 frames); **at 2 it fails** (the measured seed
-    gives `v0 = 0`). The witness therefore survives the **table rows 6..15 and
+    (`|v0| = 1`, `T = −0xC`, 6 frames — measured); **at 2 the chain predicts
+    failure** (`v0 = 0` on the predicted seed 8 — **not measured**; FU332's
+    erratum 3). The witness therefore survives the **table rows 6..15 and
     the P2/P3 values 3..7**, **not the whole native domain 2..15**; both
     writers are unported, so the measured tuple stands, but a future window
     crossing one must be re-measured (FU333-L15).
@@ -7925,12 +7928,14 @@ no recompute (AGENTS.md's derived rule).
   recorded-only; (12) the witness never closes `g->id == ev->id` (`:4227-4235`
   vs `:4283`); (13) the Task-2 report's no-ISO anchor line (`stop 718`) is off
   by one against the recorded 717 — a report-accuracy item, not a tree claim.
-  The Task-3 wording note: `docs/screens/p35-l2-notes.md:41` says "Every trace
+  The Task-3 wording note: `docs/screens/p35-l2-notes.md:41` said "Every trace
   row in this note is this run's own cell" without the still-control
   exception its own row (`:154`) and section (`:178-183`) carry; the note's
-  "row-12" label (`:39`) is the wave's corrected code-`0x0C` name. None of
-  these is fixed in this docs-only close-out (the reviewers' instruction); they
-  are carry-items for the next touch of those files.
+  `row-12` label (`:38`) is the wave's corrected action-code-`0x0C` name
+  (FU330's review erratum 3). Both are fixed by the final-review wave
+  (`fix(fu330)` — the sentence is scoped to the **pan** rows, the still pair's
+  bounds are the re-run's control, and the `:38` label carries the
+  action-code-`0x0C` name).
 
 - **Tape and gate.** Docs-only, proven: M1 `09b726b7…` (22 004 B, 691 lines)
   and M2 `6aa2703b…` (295 087 B, 6 522 lines) byte-identical (`cmp`-verified);

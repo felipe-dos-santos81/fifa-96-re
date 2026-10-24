@@ -1440,8 +1440,10 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
       r->chosen_ok = 1;
     }
   }
-  r->player_d = 0;   /* native rec[+4][+0xD]; the roster descriptor is
-                      * unmodeled by the pool (FU-142b Appendix C) */
+  r->player_d = (int8_t)e->desc_d; /* native rec[+4][+0xD]: the pool's
+                      * producer byte (phase-35 `desc_d`; the roster index
+                      * itself is still unmeasured/staged 0 — FU330-L1), read
+                      * by row 26 as the 0x10F394 table index */
   r->player_e = 0;   /* native rec[+4][+0xE] (same) */
   r->desc_c = 0;     /* FU301: rec[+4][+0xC] (unlocated producer, staged 0) */
   r->desc_f = 0;     /* FU301: rec[+4][+0xF] */

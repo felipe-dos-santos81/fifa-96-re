@@ -1721,6 +1721,71 @@ static void test_action_04_ball_track_side_from_tracked(void) {
   drop_fixture(&f);
 }
 
+/* Phase-35 final review (the twin wiring): the pool's `byte9d` — the native
+ * `byte[+0x9D]` OR term — reaches the row-04 contact threshold (`0x7ED58`:
+ * `thresh = (int8_t)desc_e | byte9d`, both staged from the pool record).
+ * The threshold is only observable through the rare contact arm, so the
+ * fixture stages a deterministic setup (the subject and the opponent team
+ * target on the same point, a losing score to open the arm) and searches the
+ * run RNG for a seed whose first draw passes the `r & 0x3F == 0` gate. With
+ * the pool `byte9d = 0x0F` the arm's second draw admits the 0x0B install;
+ * the same seed with the pool `byte9d = 0` cannot (`(r2 & 0x1F) < 0`) and the
+ * body falls through to the row-04 tail install 5. */
+static void test_action_04_pool_byte9d_threshold(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_entity *o;
+  uint32_t seed_found = 0;
+  int found = 0;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[0];
+  o = &f.mr.entities.team[1].records[0];
+  f.mr.state.phase = 2;
+  f.mr.record.entity_id = 0;
+  f.mr.record.active = 1;
+  f.mr.record.has_slot = 0;
+  f.mr.record.timer81 = 0;
+  f.mr.record.anim_id = 0;
+  f.mr.entities.controlled = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.ball.carrier = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].target = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[0].second = FIFA96_MATCH_ENTITY_NONE;
+  f.mr.entities.team[1].target = (int32_t)FIFA96_MATCH_ENTITY_RECORDS;
+  f.mr.score[0] = 0;
+  f.mr.score[1] = 3;                 /* own + 2 < oth opens the arm */
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0;      /* keeps the defender decision off */
+  f.mr.render.camera.pos_z = 0;
+  f.mr.render.camera.tracked = FIFA96_CAMERA_TRACKED_NONE;
+  e->pos_x = 0; e->pos_z = 0; e->lane_x = 0; e->bound = 0;
+  e->lane_z = 0; e->cam_dz6f = 0; e->face7d = 0; e->has_slot = 0;
+  o->pos_x = 0; o->pos_z = 0; o->lane_x = 0; o->code = 4;
+  for (uint32_t seed = 0; seed < 16384u && !found; seed++) {
+    e->code = 4;
+    e->timer89 = 0;
+    e->target_x = e->pos_x;
+    e->target_z = e->pos_z;
+    e->byte9d = 0x0F;
+    assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
+    assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+    if (e->code == 0x0Bu) {
+      found = 1;
+      seed_found = seed;
+    }
+  }
+  assert(found == 1);
+  /* the same seed with the pool byte9d 0 cannot cross the threshold */
+  e->code = 4;
+  e->timer89 = 0;
+  e->target_x = e->pos_x;
+  e->target_z = e->pos_z;
+  e->byte9d = 0;
+  assert(fifa96_rng_seed(&f.mr.rng, seed_found) == FIFA96_OK);
+  assert(fifa96_match_dispatch_action(&f.mr, 0x04) == FIFA96_OK);
+  assert(e->code == 5u);             /* the tail install, not the contact arm */
+  drop_fixture(&f);
+}
+
 /* FU-147 S1: the row-1E stage-3 span tail (0x75A40..0x75B6F, first-hand
  * this slice): at the stage-3 span with `+0x9B == 0` the native resets the
  * record (`0x7DAB4`), calls situation 0xB (`0x8A938`, phase -> 2) and installs
@@ -4613,6 +4678,7 @@ int main(void) {
   test_action_06_ball_height_reads_camera_y();
   test_action_04_stages_lane_fields();
   test_action_04_ball_track_side_from_tracked();
+  test_action_04_pool_byte9d_threshold();
   test_action_1E_stage3_possession_flip();
   test_action_1E_machine_release_chain();
   test_action_1D_runs_closedown();

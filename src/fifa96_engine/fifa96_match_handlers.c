@@ -2626,7 +2626,9 @@ static int fifa96_match_action_04(struct fifa96_match_run *mr) {
   s.active = r->active;
   s.has_slot = r->has_slot;
   s.byte99 = 0;                     /* +0x99 producer unported (OL-72) */
-  s.byte9d = 0;                     /* +0x9D producer unported (OL-72) */
+  s.byte9d = e->byte9d;             /* +0x9D: the pool's producer byte
+                                     * (phase-35 twin; 0 while the rebind
+                                     * producer is unported — OL-72) */
   s.type8 = r->type;                /* native byte +0x8E (OL-83) */
   s.code = r->code;                 /* native byte +0x91 (the dispatched code) */
   s.row_byte = r->anim_id;          /* byte[[rec+0x28]] live row id (OL-80) */
@@ -3119,7 +3121,7 @@ static int fifa96_match_action_06(struct fifa96_match_run *mr) {
   s.type8 = mr->record.type;              /* native +0x8E (OL-83) */
   s.row_byte = mr->record.anim_id;        /* [[rec+0x28]] live id (OL-80) */
   s.byte99 = 0;                           /* +0x99 (OL-69) */
-  s.byte9d = 0;                           /* +0x9D (OL-69) */
+  s.byte9d = e != NULL ? e->byte9d : 0;   /* +0x9D (pool producer, phase-35) */
   s.desc_c = 0;                           /* rec[+4][+0xC] (OL-69) */
   s.desc_e = 0;                           /* rec[+4][+0xE] (OL-69) */
   s.byte90 = 0;                           /* +0x90 (OL-69) */

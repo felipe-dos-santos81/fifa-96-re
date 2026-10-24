@@ -35,11 +35,13 @@ The **value** is the producer-conditioned part: the port's produced limit is
 the port's `byte9d` (the `+0x9D` OR term) is **staged 0, with no producer yet
 (OL-72)**; the native `+0x9D` is **unmeasured** (FU330-L1/FU328-L3), not a
 measured native per-record value. The native roster index is unmeasured, and
-the P2/P3 `+0x79` re-writes (the lineup rebind, the row-12 no-replacement arm)
-are unported (FU332 erratum 3); the measured tuple therefore describes the
-**producer-conditioned** witness, not a native-roster measurement. Every trace
-row in this note is this run's own cell; the Layer-1 rows (§"The chain") are
-the tree's Task-2 witness, never a native claim.
+the P2/P3 `+0x79` re-writes (the lineup rebind, the action-code-`0x0C`
+no-replacement arm) are unported (FU332 erratum 3); the measured tuple
+therefore describes the **producer-conditioned** witness, not a
+native-roster measurement. Every **pan** trace row in this note is this
+run's own cell; the **still** pair's bounds are the re-run's control (see
+"The captures and the AE"); the Layer-1 rows (§"The chain") are the tree's
+Task-2 witness, never a native claim.
 
 ## The run
 

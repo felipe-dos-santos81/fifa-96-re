@@ -3356,8 +3356,10 @@ row-09 correction is the native `word[+0x7B] = word[+0x79] * 2` at
 (0 code-9 record-frames), pinned anyway. The `dword[+0x7B]>>16` reads stay
 `face7d` (the `+0x7D` alias trap; a future reader must not "fix" them onto
 `timer7b`). **P2 (the lineup rebind) and P3 (the code-`0x0C` no-replacement
-arm) are not landed**: the live native domain is 2..15, where **2 fails and 3
-pans** (`|v0| = 1`, `T = −0xC`, 6 frames) — so the witness survives the table
+arm) are not landed**: the live native domain is 2..15, where the chain
+**predicts that 2 fails** (`v0 = 0` on the predicted seed 8 — not measured)
+and **3 pans** (measured: `|v0| = 1`, `T = −0xC`, 6 frames) — so the witness
+survives the table
 rows 6..15 and the P2/P3 values 3..7, not the whole domain. That residual is
 FU333-L15, not a silent claim.
 
