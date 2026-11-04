@@ -3575,3 +3575,14 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   **5** blocked); M1/M2 remain exact and `make check` is **112/112**. Earlier
   notes that `0x80F61` sits in an *unported* row-09 arm 1 are superseded: arm 1
   is ported; the row-0x0D gate itself remains unproduced.
+
+- **phase-38 row-0x0D wiring (2026-11-04).** Wired `fifa96_match_action_0D`
+  over the ported loader body and applied its state/out surface (the
+  `0x702F8(0x20)=21` arm-1 hold, anims, metric, face, target and reset). It
+  deliberately does not touch position: `0x8657A`/`0x865AE` are row-`0x24`
+  stage-0 writes, not row `0x0D`. The installer gate is still dead
+  (`desc_16`/`[rec+0x24]`), so the row joins `fifa96_match_port_blocked`:
+  install-live **62→63/80**, blocked **5→6**, natural **57/80** unchanged.
+  Action install-live is now **38/45**. The arm-1 anim is applied after the
+  loader step, so arm 2's `+0x44` gate sees the pre-install byte (FU180-L9;
+  producer-blocked, not live). M1/M2 byte-identical; `make check` 112/112.

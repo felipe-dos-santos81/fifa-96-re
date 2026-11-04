@@ -5785,7 +5785,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 25u);  /* 62/80 install-live, 55/80 natural (phase-36: +phase 0x0D/0x1C) */
+    assert(action_wired == 38u && phase_wired == 25u);  /* 63/80 install-live, 57/80 natural (phase-38: +action 0x0D) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -5835,7 +5835,7 @@ static void run_census_riders(void) {
     assert(fifa96_match_action_table[0x1C].fn != NULL); /* T3: keeper lunge (counted) */
     assert(fifa96_match_action_table[0x1A].fn != NULL); /* phase-28 T5: the live ladder install + dispatch (test_keeper_installer_live_reach) */
     assert(fifa96_match_action_table[0x17].fn == NULL); /* T1: ported, no installer */
-    assert(fifa96_match_action_table[0x0D].fn == NULL); /* T3: ported, no installer */
+    assert(fifa96_match_action_table[0x0D].fn == fifa96_match_action_0D); /* phase-38: wired, producer-blocked */
     assert(fifa96_match_action_table[0x03].fn == NULL); /* phase-17 T1: row 03 leg (FU177-L1) */
   }
   /* 2. The act seam + phase 0x1F (T1/FU-175): the seam's dispatch reaches the
@@ -6169,7 +6169,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 25u);    /* 62/80 install-live, 55/80 natural (phase-36: +phase 0x0D/0x1C) */
+    assert(action_wired == 38u && phase_wired == 25u);    /* 63/80 install-live, 57/80 natural (phase-38: +action 0x0D) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);

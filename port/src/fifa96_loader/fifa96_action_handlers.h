@@ -765,9 +765,11 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
  * call, now `fifa96_camera_ramp`; `anim` = the `0x6E598` call; `metric` = the
  * `0x8DCD4` call, now `fifa96_arm_dist_stage`; `face` = the `0x79C50` call) —
  * FU180-L8 for the unported ones. Row 0D's only installer, row-09 `0x80F61`,
- * now runs inside the ported arm 1, but its live gate is dead (`desc_16` and
- * `[rec+0x24]` have no producer), so the action-table slot stays NULL
- * (uncounted, the rows-27/29/2C precedent).
+ * runs inside the ported arm 1, but its live gate is dead (`desc_16` and
+ * `[rec+0x24]` have no producer), so the action-table slot is wired through
+ * `fifa96_match_action_0D` and the row is classified producer-blocked
+ * (install-live, excluded from the natural count by
+ * `fifa96_match_port_blocked`).
  * NULL `state`/`out` -> -FIFA96_ERR_INVALID. */
 typedef struct fifa96_action_0d_state {
   uint8_t stage92;      /* +0x92 in */

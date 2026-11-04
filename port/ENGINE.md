@@ -6,8 +6,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
 78/78 native dispatch bodies ported (100%) — 57/80 dispatch slots wired
-(62/80 install-live)
-(37 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
+(63/80 install-live)
+(38 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
 loop (live period end 2 → 0x0C), the derived C3-OL2 score source, live OL-80
@@ -8311,3 +8311,30 @@ headless loop does not drive the render/anim advance, FU159-L5). M1
 > inside an *unported* row-09 arm 1 are superseded: arm 1 is ported and the
 > `0x0C` invoke-now is closed; the row-0x0D dispatch slot still stays NULL
 > because the live install gate (`desc_16`/`[rec+0x24]`) is unproduced.
+
+## Phase 38 — row `0x0D` wired as producer-blocked; native arm surface (2026-11-04)
+
+This supersedes the phase-37 erratum's "still stays NULL" sentence: the row is
+now wired, but explicitly producer-blocked.
+
+Row `0x0D` now has the engine adapter `fifa96_match_action_0D` over the
+ported loader body `fifa96_action_sequence_0d_step`; the dispatch table slot is
+non-NULL. The sole installer `0x80F61` runs inside ported row-09 arm 1, but its
+live gate is dead because `desc_16` and `[rec+0x24]` have no producer. The row
+is therefore **install-live and in `fifa96_match_port_blocked`**: natural
+stays 57/80, install-live moves 62/80 → **63/80**, blocked 5 → **6**.
+
+The adapter maps the loader state/out surface: `+0x83=0x20`,
+`0x702F8(0x20)=21` into `+0x85`, `+0x87=0`, the arm-0/1 anim installs,
+velocity scale, target commit, metric, face and the `0x7DAB4` reset. It does
+**not** apply row-0x24's `pos_x=0x9F0` stage-0 seed: `0x8657A/0x865AE` belong
+to row `0x24`, not `0x0D`. `test_engine_match_handlers` pins the wired/blocked
+dispatch and the hold/release path. Residual: the adapter applies the arm-0/1
+anim through the engine install after the loader step, so arm 2's `+0x44`
+gate reads the pre-install byte; row `0x0D` is producer-blocked and this is
+recorded as FU180-L9, not live.
+
+Census: **78/78 bodies = 100%; 57/80 natural = 71%; 63/80 install-live = 78%;
+6 producer-blocked rows** (`0x0D`, `0x13`, `0x1F`, `0x28`, `0x2A` action,
+phase `0x06`). Action install-live is 38/45. M1 `09b726b7…` and M2
+`274e7431…` are byte-identical (`cmp`); `make check` **112/112**.

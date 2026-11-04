@@ -98,7 +98,7 @@ int main(void) {
   assert(fifa96_match_port_bodies() == bodies);
   assert(fifa96_match_port_no_body() == no_body);
   assert(fifa96_match_port_install_live() == action_install + phase_install);
-  assert(fifa96_match_port_blocked_count() == 5u);
+  assert(fifa96_match_port_blocked_count() == 6u);
   assert(fifa96_match_port_wired() == 57u);
 
   /* The two body-less slots, at their native positions. */
@@ -107,11 +107,11 @@ int main(void) {
          FIFA96_MATCH_PORT_NO_BODY);
 
   /* The install-live census (the natural count subtracts the blocked set). */
-  assert(action_install == 37u);
+  assert(action_install == 38u);
   assert(phase_install == 25u);
-  assert(fifa96_match_port_install_live() == 62u);
+  assert(fifa96_match_port_install_live() == 63u);
 
-  /* The five producer-blocked rows are install-live but not naturally
+  /* The six producer-blocked rows are install-live but not naturally
    * reachable (FU-338 §4); the natural count subtracts them. */
   for (i = 0; i < FIFA96_MATCH_PORT_BLOCKED_ROWS; i++) {
     const struct fifa96_match_blocked_row *b = &fifa96_match_port_blocked[i];
@@ -128,7 +128,7 @@ int main(void) {
   assert(file_contains("port/ENGINE.md",
                        "78/78 native dispatch bodies ported (100%)"));
   assert(file_contains("port/ENGINE.md", "57/80 dispatch slots wired"));
-  assert(file_contains("port/ENGINE.md", "62/80 install-live"));
+  assert(file_contains("port/ENGINE.md", "63/80 install-live"));
   printf("port-census: bodies %u/%u (%u%%) no-body %u wired %u/%u "
          "install-live %u/%u action %u/45 phase %u/35\n",
          bodies, (unsigned)FIFA96_MATCH_PORT_NATIVE_ROWS,

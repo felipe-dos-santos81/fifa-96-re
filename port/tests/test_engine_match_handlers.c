@@ -81,9 +81,11 @@
  * Appendix H 12-arm machine). The keeper rows 19/1A/1B/1C/1D/1F are wired
  * (phase-26c/27/28); rows 27, 2C and 29 have ported bodies
  * but are unwired with their entries unresolved per the FU-142f census; row 0D
- * has a ported body (fifa96_action_sequence_0d_step) but its only installer,
- * row-09 0x80F61, is inside the unported row-09 arm 1 (FU178-L1); the
- * rest are `not ported`, with 2B now a dead entry per FU-142f). FU-139
+ * has a ported body (fifa96_action_sequence_0d_step) and is wired through
+ * fifa96_match_action_0D (phase-38), but its only installer, row-09 0x80F61,
+ * is gated by the unproduced desc_16/[rec+0x24] pair, so it is
+ * producer-blocked; the rest are `not ported`, with 2B now a dead entry per
+ * FU-142f). FU-139
  * (cluster B) keeps 05/06 UNSUP (their carrier/pursuit arms are unported);
  * FU-139 §10 (Task 12) wires the possession/tackle rows 18/21/23
  * (`fifa96_match_action_18`/`_21`/`_23` bind the duel/receive/tackle machines
@@ -102,7 +104,7 @@
  * dispatched. */
 static const int action_expect[FIFA96_MATCH_ACTION_ROWS] = {
     /* 00 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
-    /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
+    /* 0A */ UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,
     /* 14 */ FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK,   /* 0x15 = M2 phase-23 T3: the phase-5 celebration sibling is wired (FU-243); 0x1A = phase-28 T5: wired after the live ladder install+dispatch (FU298/FU300/FU304) */
     /* 1E */ FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, FIFA96_OK, UNSUP,   /* 0x20 = M2 phase-20 T3: the actor-cell bind is live (FU-217), so row 0x20 is COUNTED; 0x22 = M2 phase-25 (FU-259): the OL-65 staging fix fires the row-07 0x816DF invoke-now, so the ported body's slot is wired and row 0x22 dispatches (install+dispatch witnessed) */
     /* 28 */ FIFA96_OK, UNSUP, FIFA96_OK, UNSUP, UNSUP,
@@ -1736,20 +1738,49 @@ static void test_phase_05_goal_ring(void) {
   drop_fixture(&f);
 }
 
-/* FU-178/FU-190 §6.1 + rows09-0c: row 0x0D's slot stays NULL/uncounted even
- * though its sole installer `0x80F61` (`MOV EDX,0xD; MOV EAX,ESI; XOR EBX,EBX;
- * CALL 0x7D9A4`) now runs — row-09 arm 1 is ported. The evidence records the
- * ported installer and the open wiring decision (wiring flips the census
- * numbers, AGENTS.md); the dispatch contract stays UNSUP. */
+/* Phase-38: row 0x0D is wired through the engine adapter but remains
+ * producer-blocked. The sole installer `0x80F61` runs inside row-09 arm 1,
+ * yet its live gate is dead (`desc_16`/`[rec+0x24]` unproduced), so the row is
+ * install-live and in `fifa96_match_port_blocked`; the natural count does not
+ * move. The adapter's arm-0 `0x702F8` value (21) holds arm 1 on the first
+ * dispatch; clearing the wait releases the target commit. */
 static void test_action_0d_arm1_installer_leg(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x0D];
   make_fixture(&f);
-  assert(row->fn == NULL);
+  assert(row->fn == fifa96_match_action_0D);
   assert(strstr(row->evidence, "0x80F61") != NULL);
-  assert(strstr(row->evidence, "OL-22") != NULL);
-  assert(action_expect[0x0D] == UNSUP);
-  assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == UNSUP);
+  assert(strstr(row->evidence, "fifa96_match_port_blocked") != NULL);
+  assert(action_expect[0x0D] == FIFA96_OK);
+  f.mr.state.phase = 0;
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 0;
+  f.mr.record.active = 1;
+  f.mr.record.side = 0;
+  f.mr.record.player_e = 0;
+  f.mr.record.timer89 = 0;
+  f.mr.record.delta = 0;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.target_x = 0x1111;
+  f.mr.record.target_z = 0x2222;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == FIFA96_OK);
+  assert((f.mr.dispatched_ok & (1ull << 0x0D)) != 0u);
+  assert(f.mr.record.stage92 == 1u);       /* arm 0 commits, arm 1 holds */
+  assert(f.mr.record.anim_id == 0x10u);    /* 0x825AD */
+  assert(f.mr.record.jump_base == 21);     /* 0x702F8(0x20) */
+  assert(f.mr.record.pos_x == 0x100);      /* row 0x0D does not seed pos */
+  assert(f.mr.record.pos_z == 0x100);
+  assert(f.mr.record.target_x == 0x1111);  /* arm 1 waits on word[+0x85] */
+  assert(f.mr.record.target_z == 0x2222);
+  /* Clear the wait and run arm 1's pos->target + metric + anim 0x0B. */
+  f.mr.record.jump_base = 0;
+  f.mr.record.distance = 0x20;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x0D) == FIFA96_OK);
+  assert(f.mr.record.target_x == 0x100);   /* pos + type_off_x[0]<<6 */
+  assert(f.mr.record.target_z == 0x140);   /* pos + type_off_z[0]<<6 */
+  assert(f.mr.record.anim_id == 0x0Bu);    /* arm 1 install */
+  assert(f.mr.record.stage92 >= 2u);
   drop_fixture(&f);
 }
 

@@ -3811,6 +3811,91 @@ static int fifa96_match_action_0C(struct fifa96_match_run *mr) {
   return FIFA96_OK;
 }
 
+/* Row 0x0D engine adapter (phase-38): the loader-shaped body
+ * `fifa96_action_sequence_0d_step` is the exact port of `0x8251C..0x826FE`.
+ * Bind the run record to its state/out surface, apply the returned requests,
+ * and keep the row's own arm-0 `+0x83` write / arm-1 wait / arm-3 reset. The
+ * arm-0/1 anim install is applied after the loader step, so arm 2's `+0x44`
+ * gate sees the pre-install byte (FU180-L9). The row remains producer-blocked
+ * (`desc_16` and `[rec+0x24]` have no live writer), so the dispatch slot is
+ * wired but excluded from the natural count. */
+int fifa96_match_action_0D(struct fifa96_match_run *mr) {
+  struct fifa96_match_run_record *r = &mr->record;
+  struct fifa96_match_entity *e = match_sp_entity(mr, NULL, NULL);
+  fifa96_action_0d_state s;
+  fifa96_action_0d_out o;
+  int rc;
+  if (e == NULL) return -FIFA96_ERR_INVALID;
+  memset(&s, 0, sizeof s);
+  s.stage92 = r->stage92;
+  s.active = r->active;
+  s.byte44 = r->row44;
+  s.is_actor = (uint8_t)(r->controlled != 0 ||
+                         mr->entities.controlled == r->entity_id);
+  s.sector = (uint8_t)r->type;
+  s.word81 = r->timer81;
+  s.timer89 = r->timer89;
+  s.delta = (uint16_t)r->delta;
+  s.vel73 = r->vel73;
+  s.vel75 = r->vel75;
+  s.speed71 = r->speed71;
+  s.word85 = r->jump_base;
+  s.pos_x = r->pos_x;
+  s.pos_y = r->pos_y;
+  s.pos_z = r->pos_z;
+  s.target_x = r->target_x;
+  s.target_y = r->target_y;
+  s.target_z = r->target_z;
+  s.type_off_x = match_kick_dir_x;
+  s.type_off_z = match_kick_dir_z;
+  rc = fifa96_action_sequence_0d_step(&s, &o);
+  if (rc != FIFA96_OK) return rc;
+  if (o.clear_actor != 0) {
+    mr->entities.controlled = FIFA96_MATCH_ENTITY_NONE;   /* 0x82540..0x82546 */
+    r->controlled = 0;
+  }
+  if (o.word83_20 != 0) r->steer83 = 0x20;                /* 0x82574 */
+  if (o.ball_param != 0) r->jump_base = o.word85;         /* 0x82598 */
+  if (o.word87_zero != 0) r->jump_timer = 0;              /* 0x825A4 */
+  if (o.vel_scale != 0) {
+    r->vel73 = s.vel73;                                    /* 0x825E1..0x82603 */
+    r->vel75 = s.vel75;
+    r->speed71 = s.speed71;
+    /* The frame's decompose pass rebuilds the word views from these dword
+     * views; mirror the row-0C convention so the arm's words survive. */
+    r->vel_x = (int32_t)((uint16_t)r->speed71 |
+                         ((uint32_t)(uint16_t)r->vel73 << 16));
+    r->vel_z = (int32_t)((uint16_t)r->vel73 |
+                         ((uint32_t)(uint16_t)r->vel75 << 16));
+  }
+  if (o.anim != 0) {
+    if (fifa96_match_run_record_anim_install(mr, e, o.anim_id, 0) ==
+        FIFA96_OK) {
+      r->anim_id = e->anim_id;                             /* 0x825AD / 0x82693 */
+      r->frame = e->frame;
+      r->row44 = e->row44;
+    }
+  }
+  if (o.target_set != 0) {
+    r->target_x = s.target_x;                              /* 0x82633..0x82671 */
+    r->target_y = s.target_y;
+    r->target_z = s.target_z;
+  }
+  if (o.metric != 0) {
+    r->distance = o.metric_dist;                           /* 0x82679 */
+    r->lane = o.metric_lane;
+  }
+  if (o.face != 0) {
+    r->face7d = o.face7d;                                  /* 0x826E3 */
+    r->type = o.face_sector;
+  }
+  if (o.ran != 0) r->ran = 1;                              /* 0x82603 */
+  r->timer89 = o.timer89;
+  r->stage92 = o.stage92;
+  if (o.reset != 0) match_row_reset(mr, e);                /* 0x826F1 */
+  return FIFA96_OK;
+}
+
 /* Row 17 `0x84730..0x849AF` (FU-181 §2, first-hand this slice; FU-81 §2 4-arm
  * table `0x84720`): the line-up walk. The phase gate `[0x157A4A]>>24 == 0xB`
  * (`0x84743`) else the `0x849A1` FUN_0007DAB4 reset tail; the `+0x89` timer
@@ -7614,8 +7699,8 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
      "FU-169 §3 (phase-14 T1): row 0B duel body ported (0x81908..0x81C71, fresh first-hand): arm 0 (index gate, the point pos+dir<<5, the nearest opponent, the strict (0x20,0x70) band, the speed/facing {0x0C,0x59} choice, the 0x79B6C snap+face, the anim install on self, ran, stage->1), arm 1 (the +0x3D frame gate, nearest, found active, band <= 0x60, the [0x14C32A] session gate, the +0x7D7 duel counter, the kind-2 registrar, the +0x8E type copy, the action-0x0C install on the found record, stage->2) + the same-dispatch arm-2 snap/+0x44 reset; the ring-post [[rec+4]]==0x18DE (FU169-L3), the events/sinks/0x8ED40 (FU169-L2), the installer tails and the arm-0 fall-through inertness are documented in the body"},
     {0x0C, fifa96_match_action_0C,
      "FU-169 §2 + rows09-0c (fresh 0x81C74/0x81F4E..0x82502 this slice): row 0C FULL contact-decision body ported (fifa96_match_action_0C, 0x81C90..0x8250B, stage table 0x81C74 = {0x81CDC,0x81F4E,0x81FA7,0x8244B,0x8247D,0x824CD,0x824F2}): head timer89 += delta + the pos_y==0 target copy; stage 0 = the live row-0x5E install arm (A=[0x15888F] row 0x59 frame>=2, the 0x795B4 lead band, +0x7CF, anim 0x5E) + the foul tail (+0x98, the 0x0D/0x52 draw, ran, stage 0->1, falling into arm 1); arms 1..6 with the native fall-through: stage 1 (anim 0x0D/0x52 retry; 0x92040/0x651F0 sins), stage 2 ([0x14C30A] gate, 0x92AC8 & 0x1F, +0x99, the 0x822DB swap terminal +0x79>>=1 min 3 / +0x93=0 / event 0x61, the 0x82317 event ladder with the [0x15888C] kind and the point z band), stage 3 (act id [0x158828] in {3,8} retry), stage 4 (+0x89 >= (+0x99 ? 0x4B0 : 0x12C) -> anim 0x0F install), stage 5 (+0x44 gate -> +0x98=0), stage 6 (+0x89 > 0x3C -> 0x7DAB4 reset); legs: the 0x14C360/0x14C3A0/0x14C3B0 swap-selection tables (every exit reaches 0x822DB, whose record effects are ported), the [0x15888E] foul latch (staged 0), the 0x8F188 ring (match0c_event_id) and the 0x92040/0x651F0 sins (FU169-L2/L4)"},
-    {0x0D, NULL,
-     "FU-180 §3 + FU-245 §1/§4 (rows09-0c update): row 0D body 0x8251C..0x826FE (4-arm table 0x8250C) is ported as fifa96_action_sequence_0d_step (fifa96_action_handlers.c) but NOT counted: its slot stays NULL. Its sole installer 0x80F61 NOW RUNS (row-09 arm 1 is ported: MOV EDX,0xD at 0x80F61, CALL 0x7D9A4 at 0x80F6A, gated by 3*byte[[rec+4]+0x16] vs (0x92AC8 & 0x3F) or the reciprocal [rec+0x24] owner test), so the census wiring decision is the remaining follow-up: wiring the slot flips action_install 37->38 and must move the README/ENGINE numbers in the same commit (AGENTS.md). The second-order inputs [[rec+4]+0x16] and [rec+0x24] stay producer legs (FU245-L3/FU256-L2); OL-22"},
+    {0x0D, fifa96_match_action_0D,
+     "FU-180 §3 + FU-245 §1/§4 + phase-38: row 0D body 0x8251C..0x826FE (4-arm table 0x8250C) is ported as fifa96_action_sequence_0d_step (fifa96_action_handlers.c) and wired through the engine adapter fifa96_match_action_0D. Its sole installer 0x80F61 runs (row-09 arm 1: MOV EDX,0xD at 0x80F61, CALL 0x7D9A4 at 0x80F6A, gated by 3*byte[[rec+4]+0x16] vs (0x92AC8 & 0x3F) or the reciprocal [rec+0x24] owner test), but the live gate is dead because desc_16 and [rec+0x24] have no producer; the row is therefore install-live and in fifa96_match_port_blocked (natural count unchanged). The adapter maps the loader state/out surface, keeps the native arm-0 +0x83/word85/word87/anim/velocity writes, the arm-1 wait (0x702F8=21 in the body), the arm-3 face and the 0x7DAB4 reset; FU180-L9 records the post-step arm-2 +0x44 order; OL-22 remains the producer leg (FU245-L3/FU256-L2)"},
 
     {0x0E, fifa96_match_action_0E,
      "FU-160 §2/FU-159 §3.3 + FU-167/FU-168 (phase-13 T3, completed phase-14 T1): row 0E ported (0x82710..0x82ACF, fresh first-hand): the phase gate + timer89 accumulate, stage 0 (index gate, 0x71B9C camera-target stand-in, 0x8DCD4 metric + 0x79C50 face), stage 1 (0x157794 target, 0x79B58 self receiver timer, timer89 >= 0x0C -> install row 0x12 on self via FUN_0006E598 frame 0, ran), stage 2 (tracked [0x1577CA]/jump_base -> 3; the else arm 0x82820..0x82A9E is wired: the (0x20,0x70) camY and lane_x < 0x60 gates -> retry, the focus pos+0x40*dir[type], the seed/angle/amplitude vector and the FUN_00071C94 event + [0x1577CA] tracked bind; FU-167/FU-168; the sinks/descriptor/direction-byte legs FU167-L1..L5, the live Y producer FU168-L5) and stage 3 (+0x44 reset) — the live jump selector: row-23 tackle -> install 0x0E -> row 0x12 -> the ported jump arm/arc"},
@@ -7783,18 +7868,20 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
  * the C implementation of the native entry; `NO_BODY` is the phase-0x16 INT3
  * sentinel and the action-0x2B shared row-29 epilogue `RET` (0x87738). The
  * loader-shaped bodies keep `fn == NULL` because their native call shape is not
- * `int (*)(mr)`, but their `body` symbol is the ported implementation. The
- * table is the authority for the README completion percentage; the dispatch
- * tables remain the authority for runtime wiring. */
+ * `int (*)(mr)`, but their `body` symbol is the ported implementation. Row 0x0D
+ * is the exception: it now has the `fifa96_match_action_0D` adapter and carries
+ * both the match-signature `fn` and the loader `body_0d_fn`. The table is the
+ * authority for the README completion percentage; the dispatch tables remain
+ * the authority for runtime wiring. */
 #define FIFA96_PORT_A_BODY(code, fn) \
   { FIFA96_MATCH_PORT_ACTION, (code), FIFA96_MATCH_PORT_BODY, (fn), NULL, NULL, \
     #fn }
 #define FIFA96_PORT_A_ARM(code, fn) \
   { FIFA96_MATCH_PORT_ACTION, (code), FIFA96_MATCH_PORT_BODY, NULL, (fn), NULL, \
     #fn }
-#define FIFA96_PORT_A_0D(code, fn) \
-  { FIFA96_MATCH_PORT_ACTION, (code), FIFA96_MATCH_PORT_BODY, NULL, NULL, (fn), \
-    #fn }
+#define FIFA96_PORT_A_0D(code, fn, body_fn) \
+  { FIFA96_MATCH_PORT_ACTION, (code), FIFA96_MATCH_PORT_BODY, (fn), NULL, \
+    (body_fn), #body_fn }
 #define FIFA96_PORT_A_NO_BODY(code) \
   { FIFA96_MATCH_PORT_ACTION, (code), FIFA96_MATCH_PORT_NO_BODY, NULL, NULL, \
     NULL, NULL }
@@ -7820,7 +7907,8 @@ const struct fifa96_match_port_row
   FIFA96_PORT_A_BODY(0x0A, fifa96_match_action_0A),
   FIFA96_PORT_A_BODY(0x0B, fifa96_match_action_0B),
   FIFA96_PORT_A_BODY(0x0C, fifa96_match_action_0C),
-  FIFA96_PORT_A_0D(0x0D, fifa96_action_sequence_0d_step),
+  FIFA96_PORT_A_0D(0x0D, fifa96_match_action_0D,
+                   fifa96_action_sequence_0d_step),
   FIFA96_PORT_A_BODY(0x0E, fifa96_match_action_0E),
   FIFA96_PORT_A_BODY(0x0F, fifa96_match_action_0F),
   FIFA96_PORT_A_BODY(0x10, fifa96_match_action_10),
@@ -7928,6 +8016,7 @@ unsigned fifa96_match_port_install_live(void) {
  * `fifa96_match_port_wired` (the natural-reach count). */
 const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS] = {
+  {FIFA96_MATCH_PORT_ACTION, 0x0D},  /* phase-38: installer gate unproduced */
   {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; phase 6 blocked */
   {FIFA96_MATCH_PORT_ACTION, 0x1F},  /* same */
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */

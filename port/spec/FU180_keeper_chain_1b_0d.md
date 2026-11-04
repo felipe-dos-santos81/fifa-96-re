@@ -434,3 +434,13 @@ precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
 > select (`read_memory 0x10E180 = 34 36 38 3A`), the `0x6E598` install and the
 > `0x76FA7`/`0x76FBB` tail are ported; the stage-3 `0x79C50/0x6E598` actor
 > event remains a separate leg.
+
+> **FU-180 §13 phase-38 erratum (2026-11-04).** The engine adapter
+> `fifa96_match_action_0D` now wires the ported loader body and applies its
+> `0x702F8(0x20)=21`/anim/metric/face/target/reset surface. It does **not**
+> add a stage-0 position seed: `0x8657A/0x865AE` (`pos_x=0x9F0`,
+> `pos_z=±6*subtype`) are row-`0x24` writes, not row `0x0D`. The row remains
+> producer-blocked (`desc_16`/`[rec+0x24]`), so natural is unchanged and
+> install-live is 63/80 (blocked six). Residual FU180-L9: the arm-1 anim
+> install is applied after the loader step, so arm 2's `+0x44` gate reads the
+> pre-install byte; the row is not live.

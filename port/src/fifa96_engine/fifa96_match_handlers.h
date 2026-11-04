@@ -89,14 +89,15 @@ struct fifa96_match_port_row {
   const char *body;           /* C symbol implementing the native entry */
 };
 
-/* The five rows whose dispatch handler exists but whose natural producer is
- * structurally blocked in the current engine (FU-338 §4). They stay in the
- * install-live count and are subtracted from the natural-reach count. */
+/* The six rows whose dispatch handler exists but whose natural producer is
+ * structurally blocked in the current engine (FU-338 §4 + phase-38 row 0x0D).
+ * They stay in the install-live count and are subtracted from the
+ * natural-reach count. */
 struct fifa96_match_blocked_row {
   uint8_t domain;
   uint8_t code;
 };
-#define FIFA96_MATCH_PORT_BLOCKED_ROWS 5u
+#define FIFA96_MATCH_PORT_BLOCKED_ROWS 6u
 extern const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS];
 
@@ -286,6 +287,12 @@ int fifa96_match_action_03(struct fifa96_match_run *mr);
  * native originator exists. The body is exported for direct unit testing.
  * Returns FIFA96_OK, or -FIFA96_ERR_INVALID for a NULL `mr`/missing record. */
 int fifa96_match_action_0A(struct fifa96_match_run *mr);
+
+/* Phase-38: the row-0x0D engine adapter over the loader-shaped
+ * `fifa96_action_sequence_0d_step`. The row is wired in the dispatch table but
+ * remains in `fifa96_match_port_blocked` because the sole installer's live
+ * gate (`desc_16` / `[rec+0x24]`) is unproduced. */
+int fifa96_match_action_0D(struct fifa96_match_run *mr);
 
 /* The ported action row-0x17 body (FU-181 §2): the line-up walk
  * `0x84730..0x849AF`. Its action-table slot (`fifa96_match_action_table[0x17]`)
