@@ -89,14 +89,14 @@ struct fifa96_match_port_row {
   const char *body;           /* C symbol implementing the native entry */
 };
 
-/* The seven rows whose dispatch handler exists but whose natural producer is
+/* The six rows whose dispatch handler exists but whose natural producer is
  * structurally blocked in the current engine (FU-338 §4). They stay in the
  * install-live count and are subtracted from the natural-reach count. */
 struct fifa96_match_blocked_row {
   uint8_t domain;
   uint8_t code;
 };
-#define FIFA96_MATCH_PORT_BLOCKED_ROWS 7u
+#define FIFA96_MATCH_PORT_BLOCKED_ROWS 6u
 extern const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS];
 
@@ -376,10 +376,11 @@ int fifa96_match_action_20(struct fifa96_match_run *mr);
  * **live**: the ECX-carried bulk installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25
  * -> FUN_0008CEB8 -> FUN_0007D9A4`) sits on the `FUN_0008D098` situation-0x13
  * path and is already modelled by `fifa96_match_phase_machine_step`
- * (`code = ac5!=ac7 ? 0x25 : 3`). The prior FU189-L2 "row 25 has NO static
- * installer" verdict (a `MOV EDX/DX,0x25`-only scan) is REFUTED by FU-242 §2 /
- * FU-243 §4.2: the installer's code travels in `ECX`, which that scan cannot
- * see. The active head block (`0x88106..0x881D2`: `target := [team+0x59]` + the
+ * (`code = mr->score[0] != mr->score[1] ? 0x25 : 3`, the native full 16-bit
+ * `0x8D76C`/`0x8D772` goal-word compare over the live score pair). The prior
+ * FU189-L2 "row 25 has NO static installer" verdict (a `MOV EDX/DX,0x25`-only
+ * scan) is REFUTED by FU-242 §2 / FU-243 §4.2: the installer's code travels
+ * in `ECX`, which that scan cannot see. The active head block (`0x88106..0x881D2`: `target := [team+0x59]` + the
  * radius-`0xC0` `0x114E04` fold, the `0x8DCD4` metric + `0x79C50` face) is the
  * leg FU243-L4 (no engine team base position / `[rec+0x8B]` angle cell); the
  * `0x8776C` id-init and the `[0x587B8+idx]`/`[0x587BB]`/`[0x587BC]` anim

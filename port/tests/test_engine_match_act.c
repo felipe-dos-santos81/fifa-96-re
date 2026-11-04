@@ -1058,9 +1058,10 @@ static void test_phase_1B_body_reset(void) {
  * "row 25 has NO static installer" verdict is REFUTED — the ECX-carried bulk
  * installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 -> FUN_0008CEB8`) installs code
  * 0x25 on the live `FUN_0008D098` path and is already modelled by
- * `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 : 3`). Only the
- * body `0x880CC` (the FU-82 7-arm table `0x880B0`) was unported. Mutation-RED:
- * a NULL slot returns UNSUPPORTED and the dispatch assertion fails. */
+ * `fifa96_match_phase_machine_step` (`code = mr->score[0] != mr->score[1]
+ * ? 0x25 : 3`). Only the body `0x880CC` (the FU-82 7-arm table `0x880B0`)
+ * was unported. Mutation-RED: a NULL slot returns UNSUPPORTED and the
+ * dispatch assertion fails. */
 static void test_row_25_counted(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);

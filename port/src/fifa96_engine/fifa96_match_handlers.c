@@ -6255,8 +6255,9 @@ int fifa96_match_action_20(struct fifa96_match_run *mr) {
  * = record; a stage > 6 takes the `0x886A9` POP/RET tail). The body is entered
  * by the ECX-carried bulk installer `0x8D79D`/`0x8D7AD` (`MOV ECX,0x25 ->
  * FUN_0008CEB8 -> FUN_0007D9A4`), already modelled by
- * `fifa96_match_phase_machine_step` (`code = ac5!=ac7 ? 0x25 : 3`); the prior
- * FU189-L2 "no static installer" verdict is REFUTED (FU-243 §4.2/§6).
+ * `fifa96_match_phase_machine_step` (`code = mr->score[0] != mr->score[1] ?
+ * 0x25 : 3`, the native 16-bit `0x8D76C`/`0x8D772` goal-word compare); the
+ * prior FU189-L2 "no static installer" verdict is REFUTED (FU-243 §4.2/§6).
  *
  * Head (`0x880D0..0x881D2`): `timer89 += (uint16)delta`; the `0x974F0(0x9C4)`
  * sound sink, the `[0x157AA3] = [rec]` (team) write and the `0x36200(2)`
@@ -6693,7 +6694,9 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x25, fifa96_match_action_25,
      "FU-243 §4.2/§6 (phase-23 T2): row 25 body 0x880CC ported (FU-82 7-arm table 0x880B0). "
      "COUNTED: the installer 0x8D79D/0x8D7AD (PUSH -1 / MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "
-     "live FUN_0008D098 path, already modelled by fifa96_match_phase_machine_step (code = ac5!=ac7 ? 0x25 : 3). "
+     "live FUN_0008D098 path, modelled by fifa96_match_phase_machine_step (code = mr->score[0] != mr->score[1] "
+     "? 0x25 : 3, the native 16-bit 0x8D76C/0x8D772 goal-word compare over the live score pair). The row's "
+     "natural producer is now live (the score pair reaches the step); the prior byte-mirror staging gap is closed. "
      "The prior 'row 25 has NO static installer' (FU189-L2) is REFUTED (the EDX/immediate-only scan missed the "
      "ECX-carried code, FU-242 §2). Sinks/legs per FU-243 §5; OL-9, FU243-L4"},
     {0x26, fifa96_match_action_26,
@@ -6937,7 +6940,6 @@ const struct fifa96_match_blocked_row
     fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS] = {
   {FIFA96_MATCH_PORT_ACTION, 0x13},  /* phase_arm(6) only; phase 6 blocked */
   {FIFA96_MATCH_PORT_ACTION, 0x1F},  /* same */
-  {FIFA96_MATCH_PORT_ACTION, 0x25},  /* ac5/ac7 discriminator unstaged */
   {FIFA96_MATCH_PORT_ACTION, 0x28},  /* phase-0x14 chooser arm unfed */
   {FIFA96_MATCH_PORT_ACTION, 0x2A},  /* same */
   {FIFA96_MATCH_PORT_PHASE, 0x06},   /* contact_kind != 3 arm unreachable */

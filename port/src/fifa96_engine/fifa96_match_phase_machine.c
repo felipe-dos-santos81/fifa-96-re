@@ -65,7 +65,11 @@ int fifa96_match_phase_machine_step(struct fifa96_match_run *mr) {
       continue;                                                /* 0x8D74D/RET */
     }
     if (mr->state.phase == 0x13u) {                            /* 0x8D767 */
-      uint8_t code = pm->ac5 != pm->ac7 ? 0x25u : 3u;          /* 0x8D772 */
+      /* 0x8D76C `MOV AX,[0x157AC5]` / 0x8D772 `CMP AX,[0x157AC7]`: the
+       * full 16-bit goal-word compare. The words are the engine's live
+       * `mr->score[0]/[1]` (the score path writes them), so the byte-width
+       * mirror that lost the high byte is retired (OL-81). */
+      uint8_t code = mr->score[0] != mr->score[1] ? 0x25u : 3u; /* 0x8D772 */
       (void)fifa96_match_arm_install_multi(&mr->entities, t, 0, 10, code, -1);
       continue;                                  /* 0x8D78B/0x8D7AD, both RET */
     }

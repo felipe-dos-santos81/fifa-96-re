@@ -52,7 +52,7 @@ static void test_init_defaults(void) {
   memset(&pm, 0xAA, sizeof pm);
   assert(fifa96_match_phase_machine_init(&pm) == FIFA96_OK);
   assert(pm.state == 0 && pm.phase == 0 && pm.side_controlled == 0);
-  assert(pm.ac5 == 0 && pm.ac7 == 0 && pm.arm2a_overflow == 0);
+  assert(pm.arm2a_overflow == 0);
   assert(pm.chosen831[0] == NONE && pm.chosen831[1] == NONE);
   assert(fifa96_match_phase_machine_init(NULL) == -FIFA96_ERR_INVALID);
 }
@@ -207,14 +207,15 @@ static void test_step_arm26_side_mismatch(void) {
   assert(mr.phase_machine.arm2a_overflow == 0);
 }
 
-/* `0x8D78B`/`0x8D7AD`: phase 0x13, controlled side. Equal low bytes of
- * `[0x157AC5]`/`[0x157AC7]` install 3; differing bytes install 0x25. The
- * non-controlled team still gets 0x26. */
+/* `0x8D78B`/`0x8D7AD`: phase 0x13, controlled side. The native compares the
+ * full 16-bit goal words `[0x157AC5]`/`[0x157AC7]` (0x8D76C/0x8D772), which
+ * the engine carries as the live `mr->score[0]/[1]`: a differing pair installs
+ * 0x25, an equal pair installs 3. The non-controlled team still gets 0x26. */
 static void test_step_arm25_3_phase13(void) {
   struct fifa96_match_run mr;
   step_setup(&mr, 0x13, 0x13, TEAM1); /* team 1 is controlled */
-  mr.phase_machine.ac5 = 9;
-  mr.phase_machine.ac7 = 4; /* differ -> 0x25 */
+  mr.score[0] = 9;
+  mr.score[1] = 4; /* differ -> 0x25 */
   assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
     assert(mr.entities.team[1].records[i].code == 0x25);
@@ -222,8 +223,8 @@ static void test_step_arm25_3_phase13(void) {
     assert(mr.entities.team[0].records[i].code == 0x26);
   /* equal words -> code 3 (0x19 on record 0) */
   step_setup(&mr, 0x13, 0x13, TEAM1);
-  mr.phase_machine.ac5 = 4;
-  mr.phase_machine.ac7 = 4;
+  mr.score[0] = 4;
+  mr.score[1] = 4;
   for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
     mr.entities.team[1].records[i].active = 1; /* installer keeps code 3 */
   assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
@@ -232,6 +233,31 @@ static void test_step_arm25_3_phase13(void) {
     assert(mr.entities.team[1].records[i].code == 3);
   for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
     assert(mr.entities.team[0].records[i].code == 0x26);
+}
+
+/* OL-81 mutation case: the native compare is a 16-bit word compare, so a pair
+ * that differs only in the high byte must take the 0x25 arm; a byte-width
+ * model (`(uint8_t)score[0] != (uint8_t)score[1]`) would wrongly install 3.
+ * The equal high-byte pair stays on the 3 arm. */
+static void test_step_arm25_score_word_width(void) {
+  struct fifa96_match_run mr;
+  step_setup(&mr, 0x13, 0x13, TEAM0);
+  mr.score[0] = 0x0100;
+  mr.score[1] = 0x0000; /* low bytes equal, words differ -> 0x25 */
+  assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
+  for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(mr.entities.team[0].records[i].code == 0x25);
+  assert(mr.entities.team[1].records[0].code == 0x26);
+  step_setup(&mr, 0x13, 0x13, TEAM0);
+  mr.score[0] = 0x0100;
+  mr.score[1] = 0x0100; /* equal 16-bit words -> 3 (0x19 on record 0) */
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    mr.entities.team[0].records[i].active = 1;
+  assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
+  assert(mr.entities.team[0].records[0].code == 0x19);
+  for (uint32_t i = 1; i < FIFA96_MATCH_ENTITY_RECORDS; i++)
+    assert(mr.entities.team[0].records[i].code == 3);
+  assert(mr.entities.team[1].records[0].code == 0x26);
 }
 
 /* `0x8D7CF` arm 0x28 + `0x8D807` arm 0x2A (phase 0x14 half): the controlled
@@ -301,8 +327,8 @@ static void test_step_2a_overflow(void) {
 static void test_step_side_hi_bit(void) {
   struct fifa96_match_run mr;
   step_setup(&mr, 0x13, 0x13, 0x80);
-  mr.phase_machine.ac5 = 7;
-  mr.phase_machine.ac7 = 7; /* an equal pair: the controlled path would install 3 */
+  mr.score[0] = 7;
+  mr.score[1] = 7; /* an equal pair: the controlled path would install 3 */
   assert(fifa96_match_phase_machine_step(&mr) == FIFA96_OK);
   for (uint32_t t = 0; t < FIFA96_MATCH_ENTITY_TEAMS; t++) {
     for (uint32_t i = 0; i < FIFA96_MATCH_ENTITY_RECORDS; i++) {
@@ -383,6 +409,7 @@ int main(void) {
   test_step_gate();
   test_step_arm26_side_mismatch();
   test_step_arm25_3_phase13();
+  test_step_arm25_score_word_width();
   test_step_arm28_2a_phase14();
   test_step_2a_overflow();
   test_step_side_hi_bit();

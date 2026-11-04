@@ -20,12 +20,15 @@
  * The machine state mirrors the globals `FUN_0008D098` gates its arms on:
  * `[0x157A4D]` (switch value, 0x8D178), `[0x157A4A]>>24` (phase, read by
  * `FUN_0006D920` and the per-record loop), `[0x157AAC]>>24` (controlled side,
- * 0x8D728), the low bytes of the `[0x157AC5]`/`[0x157AC7]` words
- * (0x8D76C/0x8D772) and the per-team `+0x831` chosen-record cache the 0x2A
- * arm writes (0x8D801). The native state switch byte at `0x157A4D` IS the high
- * byte of the `0x157A4A` dword (0x157A4A + 3), so `state` and `phase` are two
- * views of the same native byte; the derived step keeps the plan's two-field
- * gate and reads the arm-block phase from `mr->state.phase`.
+ * 0x8D728) and the per-team `+0x831` chosen-record cache the 0x2A arm writes
+ * (0x8D801). The `[0x157AC5]`/`[0x157AC7]` goal words (0x8D76C/0x8D772) are
+ * not mirrored here: the step compares the live score pair `mr->score[0]`/
+ * `mr->score[1]`, which the FU-72 score path writes, at the native full 16-bit
+ * width (the retired byte mirror was OL-81). The native state switch byte at
+ * `0x157A4D` IS the high byte of the `0x157A4A` dword (0x157A4A + 3), so
+ * `state` and `phase` are two views of the same native byte; the derived step
+ * keeps the plan's two-field gate and reads the arm-block phase from
+ * `mr->state.phase`.
  *
  * `fifa96_match_phase_machine_step` is the state 0x13/0x14 subset of
  * `FUN_0008D098` (Task 2, FU-142 Appendix B): the state switch jump table
@@ -56,9 +59,6 @@ struct fifa96_match_phase_machine {
                               two are the same native byte); kept as a carried
                               mirror for the frame/reset surface */
   uint8_t side_controlled; /* [0x157AAC]>>24 (0x8D728) */
-  uint8_t ac5, ac7;        /* low bytes of [0x157AC5]/[0x157AC7] (0x8D76C);
-                              the native compare is a full 16-bit word compare,
-                              the high-byte loss is FU-142 OL-81 */
   uint8_t arm2a_overflow;  /* 0x2A scan past record 10 (FU-142 §2 hazard) */
   int32_t chosen831[FIFA96_MATCH_ENTITY_TEAMS]; /* per-team +0x831 chosen
                               record; carried Task-1 mirror: the step writes
@@ -89,8 +89,10 @@ int fifa96_match_arm_install_multi(struct fifa96_match_entities *pool, uint32_t 
  * the phase are the same byte; the derived gate keeps both fields). Per team:
  *  - `+0x826 != (uint8_t)side_controlled` (0x8D728..0x8D73B) -> stage 0x26
  *    across records 0..10 and return (0x8D74D, the per-team call RETs);
- *  - phase 0x13 (0x8D767): `ac5 != ac7` -> 0x25, else 3 (record 0 pre-coerced
- *    to 0x19 by the helper's index-0 rule); both return;
+ *  - phase 0x13 (0x8D767): `mr->score[0] != mr->score[1]` (the full 16-bit
+ *    native `[0x157AC5]`/`[0x157AC7]` compare at 0x8D76C/0x8D772) -> 0x25,
+ *    else 3 (record 0 pre-coerced to 0x19 by the helper's index-0 rule); both
+ *    return;
  *  - phase 0x14: stage 0x28 across records 0..10 (0x8D7CF), then scan records
  *    1..10 for the first `skip_9a == 0` (0x8D7D4..0x8D7F6): found ->
  *    `chosen831 = 11*team + i` and a direct `fifa96_match_entities_install`

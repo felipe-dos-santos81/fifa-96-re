@@ -326,9 +326,9 @@ static void test_frame_drives_entity_chain(void) {
 /* FU-142a: the frame body runs the FUN_0008D098 state 0x13/0x14 arm block
  * once per granted frame, after the FU-141 entity chain. State/phase 0x13 with
  * side_controlled 0: team 1 (side 1) is the non-controlled side and all its
- * records stage 0x26; team 0 (controlled, ac5 == ac7) stages 3 (record 0 ->
- * 0x19). At phase 2 the hook is off: the entity chain still runs row 00 but no
- * arm code appears on any record. */
+ * records stage 0x26; team 0 (controlled, score[0] == score[1]) stages 3
+ * (record 0 -> 0x19). At phase 2 the hook is off: the entity chain still runs
+ * row 00 but no arm code appears on any record. */
 static void test_phase_machine_hook(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);

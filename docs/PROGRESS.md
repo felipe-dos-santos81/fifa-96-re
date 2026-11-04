@@ -3472,3 +3472,30 @@ phase `0x06/0x1F`); they stay counted under the installer-live definition and
 are named as producer legs in FU-338 §4. M1 `09b726b7…` and M2 `6aa2703b…`
 are byte-identical; `make check` is 112/112. The README title moves to 100%
 under the port-coverage derivation, with the wired count reported separately.
+
+## M2 row-`0x25` natural producer (2026-11-04)
+
+Action `0x25`'s natural producer is now live, so the census split moves:
+**56/80 dispatch slots naturally wired (62/80 install-live)**; the port-coverage
+title stays **78/78 = 100%**.
+
+The native gate is a **16-bit** goal-word compare — fresh Ghidra read of
+`/FIFA96.EXE`: `0x8D76C MOV AX,[0x00157AC5]` (`66a1c57a1500`), `0x8D772 CMP
+AX,word ptr [0x00157AC7]` (`663b05c77a1500`), `0x8D779 JNZ 0x8D79D` (`7522`)
+→ `0x8D79F MOV ECX,0x25`, else `0x8D77D MOV ECX,0x3`. The engine already
+carries those words as the live `mr->score[0]`/`mr->score[1]` pair, so
+`fifa96_match_phase_machine_step`'s phase-`0x13` arm now compares that pair and
+the `pm->ac5`/`pm->ac7` byte mirrors are removed (**OL-81 closed**: the mirrors
+lost the high byte and were only ever written by tests, so live the installer
+always chose 3).
+
+Action `0x25` therefore leaves `fifa96_match_port_blocked`
+(`FIFA96_MATCH_PORT_BLOCKED_ROWS 7 → 6`); the remaining six are action
+`0x13`/`0x1F`/`0x28`/`0x2A` and phase `0x06`/`0x1F` (FU-338 §4). The new
+census line is `port-census: bodies 78/78 (100%) no-body 2 wired 56/80
+install-live 62/80 action 37/45 phase 25/35`. The phase-machine test now
+stages `mr.score[0]/[1]` and pins the OL-81 width case (`0x0100`/`0` → `0x25`,
+`0x0100`/`0x0100` → 3); a byte-width model fails it. The M2 golden is
+unchanged in this slice — the controller runs the final re-pin (expected: row
+`0x25` joins the transcript, first diff frame 3299, 3224 lines, `state=` tags
+unchanged).

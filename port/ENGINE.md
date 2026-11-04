@@ -5,7 +5,7 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-78/78 native dispatch bodies ported (100%) — 55/80 dispatch slots wired
+78/78 native dispatch bodies ported (100%) — 56/80 dispatch slots wired
 (62/80 install-live)
 (37 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
@@ -8034,3 +8034,41 @@ phase-35 text above stands as written.
   both numbers. The seven natural-reach gaps, the R1a producer/re-pin legs,
   R8-L1/L2 and the FU193-L4 residual / FU285-L6 second sit-7 producer are the
   carried legs.
+
+## M2 row-`0x25` natural producer (2026-11-04) — natural wired `55/80 → 56/80`
+
+**Scope/provenance.** Fresh Ghidra read of `/FIFA96.EXE`
+(`disassemble_bytes 0x8D760`, 80 bytes): `0x8D76C MOV AX,[0x00157AC5]`
+(`66a1c57a1500`), `0x8D772 CMP AX,word ptr [0x00157AC7]`
+(`663b05c77a1500`), `0x8D779 JNZ 0x8D79D` (`7522`) → install code
+`0x25` (`0x8D79F MOV ECX,0x25`, `0x8D7AD CALL 0x8CEB8`); the equal arm
+falls to `0x8D77D MOV ECX,0x3` / `0x8D78B CALL 0x8CEB8`. The compare is
+**16-bit**; the engine already carries the two goal words as the live
+`mr->score[0]`/`mr->score[1]` pair (`fifa96_match_run.h`, written by the
+FU-72/C3-OL2 score path).
+
+**Change.** `fifa96_match_phase_machine_step`'s phase-`0x13` arm now reads
+`mr->score[0] != mr->score[1]` instead of the test-only `pm->ac5`/`pm->ac7`
+byte mirrors, and the `ac5`/`ac7` fields are removed from
+`struct fifa96_match_phase_machine`. *(errata, this slice: the OL-81 bullet
+above — "the FU-142a decision compares `ac5`/`ac7` byte-wide" — no longer
+describes the code; OL-81 is closed by construction. The mirror was only
+ever written by tests, so live it read 0 == 0 and always chose 3.)*
+
+**Census.** Action `0x25` leaves `fifa96_match_port_blocked`
+(`FIFA96_MATCH_PORT_BLOCKED_ROWS 7 → 6`): the producer is now the live score
+pair on the `FUN_0008D098` phase-`0x13` path, the same arm the native installs
+from. Install-live stays `62/80`; the natural-reach count moves
+**`55/80 = 68%` → `56/80 = 70%`**; the port-coverage title stays `78/78`
+(100%). The remaining six producer-blocked rows are action `0x13`/`0x1F`/
+`0x28`/`0x2A` and phase `0x06`/`0x1F` (FU-338 §4). The census print line is
+now
+`port-census: bodies 78/78 (100%) no-body 2 wired 56/80 install-live 62/80 action 37/45 phase 25/35`.
+
+**Tests.** `port/tests/test_engine_match_phase_machine.c` stages
+`mr.score[0]/[1]` (9/4 → `0x25`; 4/4 → 3 with record 0 `0x19`) and adds the
+OL-81 width case (`0x0100`/`0x0000` → `0x25`, `0x0100`/`0x0100` → 3); a
+byte-width model fails the first of those. `port/tests/test_engine_match_port_census.c`
+pins `6` blocked rows and `56` natural. The M2 golden is untouched in this
+slice; the controller does the final re-pin (expected: row `0x25` joins the
+transcript, first diff frame 3299, 3224 lines, `state=` tags unchanged).

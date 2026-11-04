@@ -111,3 +111,30 @@ census cannot reach 100%: two slots have no body, and several native-body rows
 have no producer. The phase-36 wave splits the two questions and makes the
 title measure port completeness, which is what "reverse engineered and ported"
 means. The wired census remains the stricter, separately reported metric.
+
+## 7. Errata — row `0x25`'s natural producer (2026-11-04)
+
+**Supersedes the §3/§4 counts and the §5 derivation for the natural-reach
+metric; the port-coverage numbers are unchanged.** Action `0x25` is no longer
+producer-blocked: `fifa96_match_phase_machine_step`'s phase-`0x13` arm now
+compares the live `mr->score[0] != mr->score[1]` pair (the engine cells for the
+native goal words `[0x157AC5]`/`[0x157AC7]`, `0x8D76C`/`0x8D772`, full 16-bit),
+and the test-only `ac5`/`ac7` byte mirrors are gone (OL-81 closed).
+
+Current numbers:
+
+- `fifa96_match_port_blocked[6]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 6`).
+- `37 action + 25 phase = 62` install-live (unchanged);
+  `62 - 6 = 56` natural.
+- canonical line:
+  `port-census: bodies 78/78 (100%) no-body 2 wired 56/80 install-live 62/80 action 37/45 phase 25/35`.
+
+```
+ported_percentage = floor(100 * 78 / 78) = 100
+wired_percentage  = floor(100 * 56 / 80) = 70   (natural, 6 producer-blocked)
+install_live_pct  = floor(100 * 62 / 80) = 77
+```
+
+The README title stays `100%` (port coverage); the ENGINE headline carries
+`56/80` wired and `62/80` install-live. The six remaining counted-but-blocked
+rows are FU-338 §4 (minus `0x25`).

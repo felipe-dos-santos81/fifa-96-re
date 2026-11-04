@@ -94,7 +94,31 @@ unchanged) and no producer was fabricated. The M2 acceptance tape forces phase
 `0x14` in its staged window, so its observed mask carries `0x28`/`0x2A`; that
 is test staging, not a natural producer, and it does not close the gap.
 
-## 5. Erratum (2026-11-04) — the phase-6 and phase-0x14 producer rows
+## 5. Errata — action `0x25`'s producer closed (2026-11-04)
+
+**Supersedes, for action `0x25` only, the §3 "Seven of those are
+producer-blocked … natural-reach count is `55/80`" line and the first row of
+the §4 table.** The minimal staging fix the audit named is now implemented:
+`fifa96_match_phase_machine_step`'s phase-`0x13` arm compares the live
+`mr->score[0] != mr->score[1]` pair — the engine cells the score path writes
+for the native goal words `[0x157AC5]`/`[0x157AC7]` — at the native full
+16-bit width (fresh Ghidra read: `0x8D76C 66a1c57a1500 MOV AX,[0x00157AC5]`,
+`0x8D772 663b05c77a1500 CMP AX,word ptr [0x00157AC7]`, `0x8D779 7522 JNZ
+0x8D79D` → `0x8D79F MOV ECX,0x25`; equal → `0x8D77D MOV ECX,0x3`). The
+test-only `pm->ac5`/`pm->ac7` byte mirrors are removed (**OL-81 closed**; the
+mirrors lost the high byte and, reading 0 == 0 live, always chose 3).
+
+Consequences for this audit's numbers:
+
+- `fifa96_match_port_blocked` is `[6]` (`FIFA96_MATCH_PORT_BLOCKED_ROWS 6`):
+  action `0x13`/`0x1F`/`0x28`/`0x2A` and phase `0x06`/`0x1F` remain.
+- Install-live stays `37 action + 25 phase = 62/80`; the **natural-reach**
+  count moves `62 - 6 = 56/80` (was `62 - 7 = 55`).
+- The M2 acceptance tape is untouched here; the controller does the final
+  re-pin (expected: row `0x25` joins the transcript, first diff frame 3299,
+  3224 lines, `state=` tags unchanged). The audit closes no other leg.
+
+## 6. Erratum (2026-11-04) — the phase-6 and phase-0x14 producer rows
 
 Two §4 producer notes are superseded by fresh reads; the row list itself is
 unchanged.
@@ -115,8 +139,3 @@ The engine's `probe[4]` literal is now a real seam (`mr->probe_a/probe_b`);
 without a competition-setup producer the rows remain producer-blocked. The
 prior attribution to an "unmodelled `0x8BCCF` variable writer" is corrected:
 `0x8BCCF` is the phase-`0x13` writer only.
-
-**Action `0x25` — closeable from `mr->score`.** The native `0x8D76C/0x8D772`
-compare is the live 16-bit score pair `[0x157AC5]`/`[0x157AC7]`, which the
-engine already carries as `mr->score[0]/[1]`. The `ac5/ac7` low-byte mirror is
-test-only and must be retired; the honest fix is the full-word score compare.
