@@ -4690,8 +4690,9 @@ static void test_action_1c_runs_body(void) {
 }
 
 /* Row 0x1C stage 1 (FU-186 §2.2): with |angle(distance,target_y)| < 0x55 the
- * on-target arm shifts pos_x by trunc_shift(dx,1); pos_z is unchanged (dz 0).
- * A stub would leave pos_x at 0x100. */
+ * on-target arm shifts pos_x by trunc_shift(dx,1); pos_z is unchanged (dz 0),
+ * then the ported 0x76B28 steering runs with the arm's EBX=0x80/EDX=0x40.
+ * A stub would leave pos_x at 0x100 and the steering cells at 0. */
 static void test_action_1c_lunge_arm(void) {
   struct fixture f;
   make_fixture(&f);
@@ -4706,6 +4707,121 @@ static void test_action_1c_lunge_arm(void) {
   assert(f.mr.record.stage92 == 2u);
   assert(f.mr.record.pos_x == 0x110);     /* += trunc_shift(0x20,1) */
   assert(f.mr.record.pos_z == 0x100);     /* dz 0 */
+  /* 0x779AC/0x779B4: the on-target arm steers with EBX=0x80, EDX=0x40 on the
+   * unrotated 0x8DCD4 triple (distance 0x20): extent 0xA0-0x80+0x20 = 0x40,
+   * local 0x20-0x40+0x20 -> clamp 0x10, k 0x10/0x40 = 0 -> vel 0; the band
+   * target is pos(0x110,0x100) + 0x10 along the dx-only heading -> 0x120. */
+  assert(f.mr.record.steer83 == 0x40);
+  assert(f.mr.record.jump_base == 29);    /* 0x702F8(0x40) */
+  assert(f.mr.record.jump_timer == 0);
+  assert(f.mr.record.vel73 == 0);
+  assert(f.mr.record.vel75 == 0);
+  assert(f.mr.record.speed71 == 0);
+  assert(f.mr.record.distance == 0x10);   /* 0x795B4 band */
+  assert(f.mr.record.lane == 0);
+  assert(f.mr.record.target_x == 0x120);
+  assert(f.mr.record.target_y == 0);      /* the MOVSD pos copy */
+  assert(f.mr.record.target_z == 0x100);
+  drop_fixture(&f);
+}
+
+/* Row 0x1C off-target arm (FU-186-L2 closes here): 0x777DE
+ * angle(distance 0x100, target_y 0x180) = 0x60 >= 0x55, so the 0x7783C
+ * rotated arm runs: the recomputed heading angle(0x100,0)=0x100 ->
+ * word[+0x7F], word[+0x65] += 0x40 = 0x140 radius, the 0x114E04/0x795A4
+ * rotate -> +0x67/+0x69 = 0x140/0, target = (0x240,0x20,0x100), the
+ * 0x157C54 camera-velocity cross-product, then 0x76B28 with EBX=0x50,
+ * EDX=0x80: extent 0x150 -> 0x60 (ramp 36), local 0xE0 -> 0x70, k =
+ * 0x70/0x60 = 1 -> vel 1/0; the band target is (0x170,0x20,0x100). */
+static void test_action_1c_offtarget_rotated_arm(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;                /* dispatch stage 1 directly */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x20;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.target_x = 0x200;           /* dx = 0x100, dz = 0 */
+  f.mr.record.target_y = 0x180;           /* the off-target angle 0x60 */
+  f.mr.record.target_z = 0x100;
+  f.mr.render.camera.vel_x = 0x10;
+  f.mr.render.camera.vel_z = -0x10;
+  e->lane_z = 0x30;                       /* 0x778F5 word[+0x6D] */
+  e->cam_dz6f = 0x40;                     /* 0x778EF word[+0x6F] */
+  e->timer7f = 0x12340000u;
+  f.mr.keeper_latch[0] = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  assert(e->timer7f == 0x12340100u);      /* 0x7784A heading word[+0x7F] */
+  assert(f.mr.keeper_latch[0] == 1);      /* 0x778EF..0x7791A */
+  assert(f.mr.record.steer83 == 0x60);    /* extent 0x150 -> clamp 0x60 */
+  assert(f.mr.record.jump_base == 36);    /* 0x702F8(0x60) */
+  assert(f.mr.record.jump_timer == 0);
+  assert(f.mr.record.vel73 == 1);
+  assert(f.mr.record.vel75 == 0);
+  assert(f.mr.record.speed71 == 1);
+  assert(f.mr.record.distance == 0x70);   /* the 0x795B4 band */
+  assert(f.mr.record.lane == 0);
+  assert(f.mr.record.target_x == 0x170);
+  assert(f.mr.record.target_y == 0x20);
+  assert(f.mr.record.target_z == 0x100);
+  assert(f.mr.record.stage92 == 2u);
+  drop_fixture(&f);
+}
+
+/* Row 0x1B stage 1 (FU-180 §2; completed this slice): the native movement
+ * block 0x76E3B..0x76FC7 — the 0x8DCD4 metric, the 0x79C50 face, the
+ * 0xCD474 heading into word[+0x7F], +0x51 += 0x20, the 0x114E04/0x795A4
+ * rotation of +0x67/+0x69 (radius = +0x65 + 0x40), the +0x4D/+0x55 target,
+ * the 0x157C58/0x157C54 latches and 0x76B28(EBX=0x60,EDX=0xA0). Exact folds:
+ * distance 0x100 (dx 0x100/dz 0), heading angle(0x100,0x100)=0x80,
+ * sine(0x80)=sine(0x180)=46340, radius 0x140 -> rot 0xE2/0xE2 and
+ * target (0x1E2,0xAB0+0xE2); the steering extent 0x41-0x60+0x20 = 1 ->
+ * steer83 1/ramp 8, local 0xC0 -> 0x70, k 0x70/1 -> 0xF -> vel 0xB/0xB,
+ * speed 14; the band target is (0x14F,0x20,0xAFF). */
+static void test_action_1b_stage1_rotation_steering(void) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;                /* dispatch stage 1 directly */
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x20;
+  f.mr.record.pos_z = 0xAB0;
+  f.mr.record.target_x = 0x200;           /* dx = 0x100, dz = 0 */
+  f.mr.record.target_y = 0x21;
+  f.mr.record.target_z = 0xAB0;
+  f.mr.record.face7d = 0x3FF;
+  f.mr.record.type = 3;
+  f.mr.render.camera.vel_x = 0x10;
+  f.mr.render.camera.vel_z = -0x10;
+  e->timer7f = 0x12340000u;
+  f.mr.keeper_latch[0] = 0;
+  f.mr.keeper_latch[4] = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  /* 0x76E49..0x76E61: 0x79C50(rec, -word[0x1577C2], -word[0x1577C0]) =
+   * angle(-0x10, 0x10) = -0x80 and the octant ((-0x80+0x40)&0x3FF)>>7. */
+  assert(f.mr.record.face7d == -0x80);
+  assert(f.mr.record.type == 7);
+  /* 0x76E66..0x76E79: 0xCD474(word[+0x67], word[+0x69]) -> word[+0x7F]
+   * (the countdown-limit high word is preserved). */
+  assert(e->timer7f == 0x12340080u);
+  /* 0x76F1D..0x76F2A and 0x76F31..0x76F5D. */
+  assert(f.mr.keeper_latch[4] == 1);      /* |pos.z + 0xE2| >= 0xAB0 */
+  assert(f.mr.keeper_latch[0] == 1);      /* 0xE2*0x10 > 0xE2*(-0x10) */
+  /* 0x76FA2: the 0x76B28 steering (EBX=0x60, EDX=0xA0). */
+  assert(f.mr.record.steer83 == 1);
+  assert(f.mr.record.jump_base == 8);     /* 0x702F8(1) */
+  assert(f.mr.record.jump_timer == 0);
+  assert(f.mr.record.vel73 == 0xB);
+  assert(f.mr.record.vel75 == 0xB);
+  assert(f.mr.record.speed71 == 14);      /* 0x8DC68(0xB,0xB) */
+  assert(f.mr.record.distance == 0x6F);   /* the 0x795B4 band */
+  assert(f.mr.record.lane == 0x4F);       /* band dz */
+  assert(f.mr.record.target_x == 0x14F);  /* pos + local*sin(0x80) */
+  assert(f.mr.record.target_y == 0x20);   /* the MOVSD pos copy */
+  assert(f.mr.record.target_z == 0xAFF);
+  assert(f.mr.record.stage92 == 2u);
   drop_fixture(&f);
 }
 
@@ -5298,7 +5414,9 @@ int main(void) {
   test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();
   test_action_1c_lunge_arm();
+  test_action_1c_offtarget_rotated_arm();
   test_action_1c_live_route();
+  test_action_1b_stage1_rotation_steering();
   test_action_1a_runs_body();
   test_action_16_runs_body();
   test_action_16_stage0_gate();

@@ -10490,8 +10490,9 @@ static void match1b_1c_stage(struct fifa96_match_run *mr, int32_t tx, int32_t ty
  *     (the exact hypot's z arm; the old intercept_band sibling returns 0).
  * (c) clamps: extent 0x1A0 -> 0x60, local 0x80 -> 0x70, k 1; target 0x1C0.
  * (d) the k clamp: extent 1 -> k 16 -> 0xF, vel73 15.
- * (e) rotated arm (`target_y 0`, |angle| >= 0x55): FU186-L2 staging, the
- *     steering call is skipped (target_x stays 0x118, vel 0). */
+ * (e) rotated arm (`target_y 0`, |angle| >= 0x55): the ported 0x7783C arm
+ *     (radius 0x58 -> target 0x158) then the EBX=0x50/EDX=0x80 steering
+ *     (extent < 0 -> no jump, local clamp 0x10 -> target 0x110, band 0x10). */
 static void test_action_1b_steering_writes(void) {
   struct fifa96_match_run mr;
 
@@ -10546,14 +10547,21 @@ static void test_action_1b_steering_writes(void) {
   assert(mr.record.vel75 == 0);
   assert(mr.record.speed71 == 15);
 
-  /* (e) rotated arm: the steering call is a FU186-L2 leg, not the
-   * pre-rotation 0x50/0x80 call. */
+  /* (e) rotated arm (`target_y 0`, |angle| >= 0x55): the 0x7783C rotated
+   * arm runs instead of the on-target lunge (FU186-L2 ported): radius
+   * 0x18+0x40 = 0x58 -> the +0x4D/+0x55 target 0x158, then the EBX=0x50/
+   * EDX=0x80 steering; extent 0-0x50+0x20 < 0 -> the no-jump arm, local
+   * 0x58-0x80+0x20 < 0x10 -> clamp 0x10 -> the band target is pos + 0x10. */
   match1b_1c_stage(&mr, 0x118, 0, 0x200);
   assert(fifa96_match_dispatch_action(&mr, 0x1C) == FIFA96_OK);
   assert(mr.record.pos_x == 0x100);         /* off-target: no lunge */
-  assert(mr.record.target_x == 0x118);      /* the steering did not copy pos */
-  assert(mr.record.steer83 == 0);           /* staging reset; no call */
+  assert(mr.record.target_x == 0x110);      /* the 0x76B28 pos copy + 0x10 */
+  assert(mr.record.target_y == 0x10);       /* the MOVSD pos copy */
+  assert(mr.record.target_z == 0x200);
+  assert(mr.record.steer83 == 0);           /* extent < 0 -> the 0x76B48 arm */
   assert(mr.record.jump_base == 0);
+  assert(mr.record.distance == 0x10);       /* 0x795B4(0x10, 0) */
+  assert(mr.record.lane == 0);
   assert(mr.record.vel73 == 0);
   assert(mr.record.vel75 == 0);
   assert(mr.record.speed71 == 0);
