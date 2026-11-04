@@ -219,14 +219,23 @@ int fifa96_match_phase_machine_scatter(struct fifa96_match_run *mr,
  * (3× MOVSD, FU-192 §2.1). */
 int fifa96_match_phase_00(struct fifa96_match_run *mr);
 /* `0x6DE44` — rows `03 04 07` (FU-192 §2.4): the `word[0x1577D6/D8+side*4]`
- * side-selected placement. The DX≥0 arm scales the `[rec+0x14]` dword pair
- * (`W + (W>>2)` / `D + (D>>4)`, side-flipped) — gated on the unported
- * `[rec+0x14]` (FU192-L1); the DX<0 cell-map arm (`0x6D870`/`0x15774C`) is
- * FU192-L3. */
+ * side-selected placement. Both arms are ported. DX>=0 scales the
+ * `[rec+0x14]` dword pair (`W + (W>>2)` / `D + (D>>4)`, side-flipped) at the
+ * per-side cell index — gated on the unported `[rec+0x14]` (FU192-L1);
+ * DX<0 maps the `[0x15774C/54]` focus through the native `0x6D870` pitch-cell
+ * mapper and feeds the resulting side-selected cell to the shared `0x6DCC8`
+ * port (`[rec+0xC]`). The per-side cell `mr->phase_cell_side[]` is staged 0
+ * (the live mapper clamps cells >= 0, so the DX<0 arm is a dead arm in the
+ * shipped image, unit-fixture driven). */
 int fifa96_match_phase_04(struct fifa96_match_run *mr);
-/* `0x6E05C` — row `05` (FU-192 §2.7): the ball-relative line. The derivable
- * arm is the `target := rec position` copy; the ball/`0x8DC68`/`0x114E04` arm
- * is FU192-L1 (the ball team is unmodelled). */
+/* `0x6E05C` — row `05` (FU-192 §2.7): the goal-relative celebration line.
+ * Both arms are ported: the `target := rec position` copy (different
+ * team-block, the goal record itself, or metric >= the 0x5A0/0x12C0 limit) and
+ * the goal-team ring — target := the goal record position
+ * (`mr->goal_record` = native `[0x157A9F]`) plus the radius-0xC0 `0x114E04`
+ * fold at `(int8)byte[rec+0x8D]*0x40`, gated by the `0x8DC68` metric
+ * (`fifa96_entity_distance`) and the `[0x157AC5]` score pair /
+ * `[0x15881A]`-`[0x157AB6]` period clock / `[0x157AC2]` limit selector. */
 int fifa96_match_phase_05(struct fifa96_match_run *mr);
 /* `0x6DD9C` — row `06` (FU-192 §2.3): scales the `[rec+0x10]` dword pair by
  * ×1.25 / ×1.0625 with the `[0x157754]`-sign index and the ±0x60 z bias;

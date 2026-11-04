@@ -436,3 +436,123 @@ superseded by the fresh v22 golden. Quoted from
 The §4 conclusion that phase rows `0x01`/`0x11`/`0x12` stay excluded is
 **unchanged**; only the frame counts move. Fresh v22 golden = 6522 lines, sha
 `b281a9b25b263e665a7f775f7d34046ffea5992c507e8b0ce9c662a162378f4a`.
+
+---
+
+## 9. Erratum (rows 03/04/07 + row 05 bodies, 2026-11-04) — FU192-L3 landed; §2.7's "ball" reading corrected
+
+Fresh read-only Ghidra window, program exactly `/FIFA96.EXE` (scripts disabled;
+`LE:32:default`, image base 0): `disassemble_bytes 0x6DE44` (263 B),
+`0x6D870` (0x6D870..0x6D901), `0x6DCC8` (0x6DCC8..0x6DD3B), `0x6E05C` (361 B),
+`0x8DC68` (0x8DC68..0x8DD26), `0x6DAB4` (16 insns), `0x70270` (24 insns),
+`0x73C00` (39 insns); `get_xrefs_to 0x1577D8` (3), `0x1577D6` (7),
+`0x15774C` (100 of 260), `0x157AAF` (11), `0x157A9F` (18); `read_memory
+0x114E04` (256 B), `0x1577D0` (32 B). The alias traps apply (`dword[x]>>16` =
+word `x+2`, `>>24` = byte `x+3`).
+
+### 9.1 `0x6DE44` (rows 03/04/07) — §2.4's DX<0 sketch, completed
+
+Fresh instruction text for the DX<0 arm (`0x6DEE5..0x6DF37`):
+
+```
+6DEE5 EDI=ESP ; 6DEE7 ESI=0x15774C ; 6DEEC AH=byte[0x157AAF]
+6DEF2..6DEF4 MOVSD x3          ; local vec3 := [0x15774C],[0x157750],[0x157754]
+6DEF5 TEST AH,AH ; 6DEF7 JNZ 6DF00
+6DEF9 EAX=0x1E0 ; 6DEFE JMP 6DF05
+6DF00 EAX=0xFFFFFE20           ; -0x1E0
+6DF05 EDX=[ESP+8] ; 6DF0D EDX+=EAX ; 6DF11 [ESP+8]=EDX   ; z +- 0x1E0
+6DF09 EBX=ESP+0x10 ; 6DF0F EAX=ESP ; 6DF15 EDX=ESP+0xC ; 6DF19 CALL 0x6D870
+6DF1E CMP word[ESP+0x14],0 ; 6DF26 EBX=[ESP+0xC] / 6DF2C EBX=[ESP+0x10]
+6DF34 SAR EBX,0x10 ; 6DF37 CALL 0x6DCC8
+6DF3C [ECX+4]=0
+```
+
+`0x6D870..0x6D901` (fresh) is the pitch-cell mapper: `x_bin = (vec_x+0x86B) /
+0x14B` and `z_bin = (vec_z+0xC1E) / 0x10E` (IDIV, truncating), each clamp-tested
+through its **low word** (`0x6D8A4..0x6D8BA` x: [0, 0xC];
+`0x6D8BA..0x6D8CB` z: [0, 0x16]), `cell = z_bin*0xD + x_bin` (`0x6D8D0`/
+`0x6D8D3`); out1 = `{z_bin, x_bin, (int16)cell}` (`0x6D8D9..0x6D8DE`) and out2 =
+`{0x16-z_bin, 0xC-x_bin, (int16)(0x12A-cell)}` (`0x6D8E6..0x6D8FA`). The arm
+picks out1 for side 0 / out2 for side 1 and passes the struct's **cell** word
+(`SAR EBX,0x10`) to `0x6DCC8`, i.e. an explicit `[rec+0xC]` direction-pair index.
+
+**The two selectors are one cell.** `word[0x1577D8+side*4]` is the high word
+of the dword at `0x1577D6+side*4` (the alias rule), and the DX>=0 index is
+`dword[0x1577D6+side*4] >> 16` — the same value. Fresh `FUN_000700F4`
+(0x70290..0x702A2) maps the focus with `EAX=0x15774C, EDX=0x1577D6,
+EBX=0x1577DA`, so side 0 reads the primary cell and side 1 the mirrored cell;
+`0x702A4..0x702D7` then copies the pairs to `0x1577DE` (whose `>>16` is the
+`0x6DCC8` default index) and `0x1577E2`/`0x1577E6`/`0x1577EA`. `0x1577D8` has
+**no direct writer**: its three xrefs are all reads (`0x6DAF3`, `0x83DC4`,
+`0x6DE65`); the writer is `0x6D870`'s EDX out-pointer at `0x7029F`. Because the
+mapper clamps both bins to >= 0, `cell` in [0, 0x12A] and the word is never
+negative — **the DX<0 arm is a dead arm in the shipped image** (it needs a
+staged/negative cell).
+
+Engine: `fifa96_match_phase_04` implements both arms; `match_phase_04_cell`
+ports `0x6D870` (including the low-word-only clamp quirk); `mr->phase_cell_side
+[2]` models `word[0x1577D8+side*4]` and replaces the former
+`sel_1577d6`/`sel_1577d8` static zeros. It is staged 0 by init/begin (same
+DX>=0 index 0 as before), and the DX<0 arm is unit-tested by staging a negative
+cell. **Residual leg FU192-L8**: the `FUN_000700F4` cell-map producer
+(`0x70290..0x702D7`) is not modelled (`fifa96_camera_event_set` ports the
+reset subset only), so the live DX>=0 index stays the staged 0 rather than the
+camera-focus cell. Phase `0x04` is **on-tape** (303 v22 frames), so wiring the
+producer needs its own `cmp` pin.
+
+### 9.2 `0x6E05C` (row 05) — §2.7's "ball" reading is a misnomer; the goal-team ring
+
+Fresh `0x6E066..0x6E072`: `EDX=[0x157A9F]; EAX=[rec]; CMP EAX,[EDX]; JNZ
+0x6E1B3` — `[0x157A9F]` is the **scanner-selected record pointer**, not the
+ball. `get_xrefs_to 0x157A9F` = 18; the writer is `FUN_00088940 0x88AAC
+EAX=[EAX*4+0x1577CE]; MOV [0x157A9F],EAX` (FU-303 §3.1: the per-side tracked
+array `[0x1577CE+side*4]`; FU-184 §3 calls `[0x157A9F]` "the goal record").
+The body therefore compares rec's team block with the selected record's and
+then `rec == selected` (`0x6E10B/0x6E10D`, EBX is callee-preserved by
+`0x8DC68`). §2.7's "ball/ball-team" wording is corrected here.
+
+Fresh `0x6E078..0x6E0D8` — the distance limit, gated on the score pair:
+`word[0x157AC5+side*2] == word[0x157AC5+(1-side)*2] + 1` (the record team's
+side; `[0x157AC5]`/`[0x157AC7]` = `mr->score[0/1]`), then
+`word[0x15881A] - word[0x157AB6] < 0x3C` (`0x6E0C2 JL`) **or**
+`byte[0x157AC2] >= 3` (`0x6E0CE`) -> `ecx = 0x12C0`; else `ecx = 0x5A0`. The
+period cells are live in the engine: `[0x15881A]` is the period length
+(`state.period_length`, FU-170 §4) and `[0x157AB6]` the elapsed period seconds
+(`state.period_seconds`, FU-213 §2). The **ac2 test is nested inside** the
+score-equality branch, not an independent gate.
+
+Fresh `0x6E0E8..0x6E0FF`: `dx = (int16)(word[sel+0x59] - word[rec+0x59])`,
+`dz` likewise on `+0x61`, then `0x8DC68(dx, dz)`; its exact port is
+`fifa96_entity_distance` (the `(a>>2 + a>>1)>>1` octagonal blend). `metric >=
+limit` or `rec == selected` -> the copy. Fresh `0x6E11B..0x6E1A8`: `target :=
+[sel+0x59/+0x5D/+0x61]` (y included) then `target[0] += round16(0xC0 *
+fold(angle + 0x100))`, `target[2] += round16(0xC0 * fold(angle))` with
+`angle = ((int32)(dword[rec+0x8A]) >> 24) << 6` = `(int8)byte[rec+0x8D] * 0x40`
+(the FU255 alias finding; engine `active`, seeded to the record index).
+`0x6E1B3` is the `target := rec position` copy.
+
+The two folds are the 0x114E04 byte-shift idiom with the **bit-15** sign
+(`SHL CH,7; SBB EDX,EDX; ADD CH,CH; SBB ECX,ECX; XOR/AND/SUB` and the `SHL AH,7`
+sibling), i.e. `fold16(u)`: index `= ((u & 0xFF) ^ -bit8) + bit8`, negate on
+bit 15. This differs from `fifa96_entity_sine`'s bit-9 sign for positive
+operands above 0x1FF: record 9 (`0x240` = 202.5 deg) yields `(177, 73)` where
+the bit-9 fold would negate z. The engine normalizes exactly
+(`u &= 0xFFFF; n = u & 0x1FF; if (u & 0x8000) n = -n;`) then uses the canonical
+257-entry `0x114E04` table fold (`match_phase05_fold16`; cell-equal for every
+16-bit operand). Read `0x114E04` (256 B) matches the port table prefix
+`0,402,804,1206,...`; entry 256 = 65536.
+
+Engine: `fifa96_match_phase_05` implements both arms; `[0x157A9F]` is
+`mr->goal_record` (`NONE` -> the copy arm), `[0x157AC5]`/`[0x157AC7]` are
+`mr->score[]`, `[0x15881A]`/`[0x157AB6]` are the clock words, `[0x157AC2]` is
+`mr->global_157ac2`, all live — no staged cell on this body. **Residual leg
+FU192-L9**: the non-goal scanner arm of the `[0x157A9F]` producer
+(throw-in/corner writes) stays FU173-L1, so a non-goal stale/`NONE` cell takes
+the copy arm. Row `05` is off-tape in the v22 golden.
+
+### 9.3 Tape verdicts (unchanged)
+
+The v22 golden visits `{0x00,0x01,0x02,0x04,0x0C,0x13,0x14,0x15}` (fresh
+`grep -o 'state=…'`, 6522 lines); row `0x05` is absent and row `0x04` is
+present. The new DX<0 cell-map arm is staged 0, so `test_engine_m2` remains
+byte-identical (6522-line `cmp`, this slice); `test_engine_m1` is unchanged.

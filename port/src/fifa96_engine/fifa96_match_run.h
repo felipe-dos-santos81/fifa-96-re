@@ -895,6 +895,19 @@ struct fifa96_match_run {
   int32_t phase_walk_edge;
   uint8_t phase_walk_active;
   int32_t phase_dir_default[2];
+  /* FU-192 §2.4 (rows 03/04/07, this slice): the native per-side pitch cell
+   * `word[0x1577D8 + side*4]` the `0x6DE44` body tests (`0x6DE65 TEST DX,DX;
+   * JL 0x6DEE5`) and, through the dword alias, the DX>=0 direction index
+   * `dword[0x1577D6 + side*4] >> 16` (`0x6DE75..0x6DE81`; `>>16` of that dword
+   * is exactly the `0x1577D8` word). The cell is the output of the
+   * `0x6D870` pitch-cell mapper (`FUN_000700F4` 0x70290..0x702A2 maps the
+   * `[0x15774C/50/54]` focus through `EAX=&0x15774C, EDX=&0x1577D6,
+   * EBX=&0x1577DA`; side 0 = the primary struct's cell, side 1 = the mirrored
+   * struct's), so it is a *signed* word. The mapper clamps both bins to >= 0,
+   * so a negative cell (the DX<0 arm) is unreachable in the shipped image, and
+   * the engine stages the pair 0 in init/begin like `phase_dir_default` — the
+   * DX<0 body is exercised by unit fixtures only. */
+  int32_t phase_cell_side[2];
   /* The derived act-9 → GATE handshake marker: within the restart window the
    * native `[0x15882A]` gate has exactly one reachable producer. Fresh xrefs
    * (24 touches): the leg-0 SETUP0 clears it unconditionally (`0x93C30`;

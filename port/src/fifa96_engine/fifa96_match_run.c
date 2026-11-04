@@ -2296,6 +2296,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->phase_walk_active = 0;
   mr->phase_dir_default[0] = 0;        /* [0x1577DE] producer unported */
   mr->phase_dir_default[1] = 0;
+  mr->phase_cell_side[0] = 0;          /* [0x1577D6/D8] cell map (dead arm) */
+  mr->phase_cell_side[1] = 0;
   mr->pass_parity = 0;
   mr->clock_period_ended = 0;          /* FU-143: no staged clock completion */
   mr->dispatched_ok = 0;
@@ -2473,6 +2475,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->phase_walk_active = 0;
   mr->phase_dir_default[0] = 0;        /* [0x1577DE] producer unported */
   mr->phase_dir_default[1] = 0;
+  mr->phase_cell_side[0] = 0;          /* [0x1577D6/D8] cell map (dead arm) */
+  mr->phase_cell_side[1] = 0;
   mr->pass_parity = 0;                 /* FU-139 §11: fresh [0x157A4F] */
   mr->clock_period_ended = 0;          /* FU-143: fresh clock staging */
   mr->dispatched_ok = 0;               /* Task 15: fresh dispatch observation */

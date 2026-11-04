@@ -1340,6 +1340,78 @@ static void test_phase_04_meta14_scale(void) {
   drop_fixture(&f);
 }
 
+/* FU-192 §2.4 (rows 03/04/07; DX<0 arm, this slice): the `0x6DEE5..0x6DF37`
+ * arm. The per-side selector `word[0x1577D8+gside*4]` is
+ * `mr.phase_cell_side[]` — the same value as the DX>=0 index
+ * `dword[0x1577D6+gside*4]>>16` (the dword alias). Negative -> the `0x6D870`
+ * pitch-cell mapper over the `[0x15774C/54]` focus (engine `render.camera`)
+ * plus the `[0x157AAF]`-side `±0x1E0` z bias, then the shared `0x6DCC8` port
+ * over `[rec+0xC]`. The live mapper clamps both bins, so no shipped-image cell
+ * is negative; the arm is driven here by staging one. */
+static void test_phase_04_cell_map_arm(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  static int8_t pair[0x256];                       /* 299 cells x 2 bytes */
+  static const int32_t meta14[4] = {
+      (int32_t)(uint32_t)((uint16_t)0x1111 | (0x2222u << 16)),
+      (int32_t)(uint32_t)((uint16_t)0x3333 | (0x4444u << 16)),
+      (int32_t)(uint32_t)((uint16_t)(-8) | (24u << 16)),   /* idx 1: W=-8 D=24 */
+      (int32_t)0x77777777u };
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[2];
+  e->team = 0;
+  e->phase_meta = pair;
+  e->phase_meta14 = NULL;          /* the DX<0 arm must not need [rec+0x14] */
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 1;
+  f.mr.phase_cell_side[0] = 0;     /* gside 1's cell is the one read */
+  f.mr.phase_cell_side[1] = -1;    /* DX<0 */
+  /* camera focus (0, ·, 0x1E0): side_controlled 1 subtracts 0x1E0 -> z 0;
+   * x_bin = (0+0x86B)/0x14B = 6, z_bin = (0+0xC1E)/0x10E = 11,
+   * cell = 11*0xD + 6 = 149; record side 0 selects the primary cell. */
+  f.mr.render.camera.pos_x = 0;
+  f.mr.render.camera.pos_y = 0x40;
+  f.mr.render.camera.pos_z = 0x1E0;
+  pair[149 * 2] = 7;
+  pair[149 * 2 + 1] = -4;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == 7 * 0x26);
+  assert(e->target_z == -4 * 0x21);
+  assert(e->target_y == 0);                       /* 0x6DCC8/0x6DF3C */
+  /* side 1 selects the mirrored cell (0x12A - cell) and the side flip: camera
+   * (-0x86B, ·, -0xC1E + 0x1E0) -> z_bin 0, x_bin 0 at gside 1, cell 0 ->
+   * mirror 0x12A; [rec+0xC] pair at cell 0x12A, both values negated. */
+  f.mr.entities.team[0].side = 1;
+  f.mr.render.camera.pos_x = -0x86B;
+  f.mr.render.camera.pos_z = -0xC1E + 0x1E0;
+  pair[0x12A * 2] = 5;
+  pair[0x12A * 2 + 1] = 6;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == -(5 * 0x26));
+  assert(e->target_z == -(6 * 0x21));
+  assert(e->target_y == 0);
+  /* the bin clamps (0x6D8A4..0x6D8CB): gside 0 adds 0x1E0; a far -x focus
+   * clamps x_bin to 0 and a far +z focus clamps z_bin to 0x16 -> cell 0x11E. */
+  f.mr.entities.team[0].side = 0;
+  f.mr.phase_machine.side_controlled = 0;
+  f.mr.phase_cell_side[0] = -2;
+  f.mr.render.camera.pos_x = -0x2000;
+  f.mr.render.camera.pos_z = 0x4000;              /* +0x1E0, then clamped */
+  pair[0x11E * 2] = 1;
+  pair[0x11E * 2 + 1] = 1;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x26);
+  assert(e->target_z == 0x21);
+  /* the shared cell is the DX>=0 index too: a non-negative cell selects the
+   * [rec+0x14] pair at that index (side 0 == controlled -> +0 offset). */
+  f.mr.phase_cell_side[0] = 1;
+  e->phase_meta14 = meta14;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x04, e, -1) == FIFA96_OK);
+  assert(e->target_x == -10);                     /* W=-8 + (W>>2) */
+  assert(e->target_z == 25);                      /* D=24 + (D>>4) */
+  drop_fixture(&f);
+}
+
 /* FU-192 §2.3 (phase-17 T3): the 0x6DD9C body (row 06). W*1.25 / D*1.0625 with
  * the [0x157754]-sign index (staged 0) and the +0x60 z bias; the unported
  * [rec+0x10] is the OL-13 gate. */
@@ -1556,7 +1628,7 @@ static void test_phase_10_variant_table(void) {
 }
 
 /* FU-192 §2.7 (phase-17 T3): the derivable 0x6E05C arm (row 05):
- * `target := rec position`. */
+ * `target := rec position` (the no-goal cell / different-team-block arm). */
 static void test_phase_05_position_copy(void) {
   struct fixture f;
   struct fifa96_match_entity *e;
@@ -1565,8 +1637,102 @@ static void test_phase_05_position_copy(void) {
   e->team = 0;
   e->pos_x = 0x10; e->pos_y = 0x20; e->pos_z = 0x30;
   e->target_x = 1; e->target_y = 2; e->target_z = 3;
+  /* [0x157A9F] unset (no goal scan) -> the copy arm */
+  assert(f.mr.goal_record == FIFA96_MATCH_ENTITY_NONE);
   assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
   assert(e->target_x == 0x10 && e->target_y == 0x20 && e->target_z == 0x30);
+  /* the goal record on the other team block -> the copy arm too */
+  f.mr.goal_record = (int32_t)FIFA96_MATCH_ENTITY_RECORDS + 3;   /* team 1 */
+  e->target_x = 1; e->target_y = 2; e->target_z = 3;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x10 && e->target_y == 0x20 && e->target_z == 0x30);
+  drop_fixture(&f);
+}
+
+/* FU-192 §2.7 (rows 05; goal-team ring, this slice): the same-block goal-team
+ * arm. `[0x157A9F]` = `mr.goal_record` (the live goal scan, FU-173 §4.2);
+ * `rec != goal` and the 0x8DC68 metric (`fifa96_entity_distance`) below the
+ * limit place `target := the goal record position` plus the radius-0xC0
+ * 0x114E04 fold at `(int8)[rec+0x8D]*0x40` (`active` = the native +0x8D).
+ * active 1 -> (177, 73); active 9 (0x240 = 202.5 deg) pins the native 16-bit
+ * fold sign: it mirrors back to (177, 73) where `fifa96_entity_sine(0x240)`
+ * would negate z. The limit is 0x5A0, or 0x12C0 when the goal team leads by one
+ * and the period clock has < 0x3C s left (`[0x15881A]-[0x157AB6]`) or
+ * `[0x157AC2] >= 3`. `target[1]` is the goal record's y (the copy arm writes
+ * the record's own triple). */
+static void test_phase_05_goal_ring(void) {
+  struct fixture f;
+  struct fifa96_match_entity *e;
+  struct fifa96_match_entity *g;
+  make_fixture(&f);
+  e = &f.mr.entities.team[0].records[7];
+  g = &f.mr.entities.team[0].records[3];
+  e->team = 0;
+  e->active = 1;
+  e->pos_x = 0x140; e->pos_y = 0x30; e->pos_z = 0x200;
+  e->target_x = 0; e->target_y = 0; e->target_z = 0;
+  g->team = 0;
+  g->pos_x = 0x100; g->pos_y = 0x20; g->pos_z = 0x200;
+  f.mr.entities.team[0].side = 0;
+  f.mr.goal_record = 3;                            /* team 0, record 3 */
+  f.mr.score[0] = 0; f.mr.score[1] = 0;
+  f.mr.state.period_length = 120;
+  f.mr.state.period_seconds = 0;
+  f.mr.global_157ac2 = 0;
+  /* metric = |0x100 - 0x140| = 0x40 < 0x5A0 -> the ring arm. */
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 177);              /* round16(0xC0*sin(0x140)) */
+  assert(e->target_y == 0x20);                     /* the goal position, not rec's */
+  assert(e->target_z == 0x200 + 73);               /* round16(0xC0*sin(0x40)) */
+  /* `rec == goal` (the 0x6E10B JZ) -> the copy arm. */
+  f.mr.goal_record = 7;
+  e->target_x = 0; e->target_y = 0; e->target_z = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x140 && e->target_y == 0x30 && e->target_z == 0x200);
+  /* metric >= the 0x5A0 limit (0x6E113/0x6E115 JGE) -> the copy arm. */
+  f.mr.goal_record = 3;
+  e->pos_x = 0x100 + 0x600;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 0x600 && e->target_z == 0x200);
+  /* the go-ahead-goal limit: score[side] == score[other]+1 and the period clock
+   * inside 0x3C s (or ac2 >= 3) raises the limit to 0x12C0, so the same
+   * 0x600-away record now takes the ring arm. */
+  f.mr.score[0] = 1;
+  f.mr.score[1] = 0;
+  f.mr.state.period_seconds = 120 - 20;            /* 20 < 0x3C */
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 177 && e->target_z == 0x200 + 73);
+  /* the same score without the clock term stays 0x5A0 -> copy ... */
+  f.mr.state.period_seconds = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 0x600);
+  /* ... and, still inside the lead gate, the [0x157AC2] >= 3 disjunct raises
+   * it without the clock term (the ac2 test is the inner 0x6E0C7..0x6E0D1
+   * branch, not a separate gate). */
+  f.mr.score[0] = 1;
+  f.mr.global_157ac2 = 3;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 177 && e->target_z == 0x200 + 73);
+  f.mr.global_157ac2 = 0;
+  /* without the lead the ac2 byte alone leaves the 0x5A0 limit. */
+  f.mr.score[0] = 0;
+  f.mr.global_157ac2 = 3;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 0x600);
+  f.mr.global_157ac2 = 0;
+  /* the fold's large-angle arm: active 9 -> t = 0x240; the native 16-bit fold
+   * (bit-15 sign) mirrors 202.5 deg back to the first quadrant, unlike the
+   * bit-9 `fifa96_entity_sine` sign (which would give z - 73). */
+  e->active = 9;
+  e->pos_x = 0x100 + 0x40;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 177);
+  assert(e->target_z == 0x200 + 73);
+  /* active 0 -> t = 0: cos 0 = 0x10000 -> +0xC0, sin 0 = 0 -> +0. */
+  e->active = 0;
+  assert(fifa96_match_dispatch_phase_record(&f.mr, 0x05, e, -1) == FIFA96_OK);
+  assert(e->target_x == 0x100 + 0xC0);
+  assert(e->target_z == 0x200);
   drop_fixture(&f);
 }
 
@@ -1575,7 +1741,7 @@ static void test_phase_05_position_copy(void) {
  * CALL 0x7D9A4`) now runs — row-09 arm 1 is ported. The evidence records the
  * ported installer and the open wiring decision (wiring flips the census
  * numbers, AGENTS.md); the dispatch contract stays UNSUP. */
-static void test_action_0d_installer_now_ported_slot_null(void) {
+static void test_action_0d_arm1_installer_leg(void) {
   struct fixture f;
   const struct fifa96_match_handler *row = &fifa96_match_action_table[0x0D];
   make_fixture(&f);
@@ -5360,13 +5526,15 @@ int main(void) {
   test_record_phase_walk_scans_and_skips();
   test_phase_00_reset_copies_position();
   test_phase_04_meta14_scale();
+  test_phase_04_cell_map_arm();
   test_phase_06_meta10_scale();
   test_phase_08_wrapper_selects_edge();
   test_gated_rows_gate_truth_table();
   test_phase_0C_timer_accumulate_and_gate();
   test_phase_10_variant_table();
   test_phase_05_position_copy();
-  test_action_0d_installer_now_ported_slot_null();
+  test_phase_05_goal_ring();
+  test_action_0d_arm1_installer_leg();
   test_dead_2b_evidence();
   test_action_05_wired_carrier();
   test_action_05_claim_dirs_and_stages();
