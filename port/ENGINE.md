@@ -8200,6 +8200,12 @@ free-record bind) and `0x4BDF8`/`0x4BD38` (the `0x1587D4` strip readers);
   hold test per arm plus the full 0 -> 9 drive) and the full CTest run are
   green; M1 `09b726b7…` and M2 `6aa2703b…` are byte-identical (`cmp`), no
   re-pin.
+
+> **Census erratum (2026-11-04).** The rows09/row1d sections above quote
+> `55/80`; they were already superseded when merged (row `0x25` -> 56/80,
+> phase `0x1F` -> 57/80). Current is **57/80 natural, 62/80 install-live,
+> five blocked** (final wave section below).
+
 ## M2 phase-`0x1F` one-shot producer (2026-11-04) — natural wired `56/80 → 57/80`
 
 The native sit-0xC install is invoke-now: `0x8AF0E MOV EBX,1` /

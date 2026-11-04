@@ -43,7 +43,7 @@ the port's golden fixtures — captured byte excerpts committed under
 | `port/src/fifa96_loader/` | The C port (~40 libraries): INT-21 wrappers, envelope, QFS, POG, TGV, VIV, ISO9660 reader, load-order tables, script, trace; codec chain refpack/huff/tree/record/kVGT/TGV-stream/fVGT/EACS; audio BIGF/BNK/SFX/voice/mixer/settings/pacing/music/CRD; presentation player/blit/VGA; match layer tick/input/match-pace/state/lifecycle/event-queue/display/control/camera/ball/keeper/outfield/entity/ring/stats/frontend/competition/settings-handoff |
 | `port/src/fifa96_engine/` | The native engine layer (platform ABI, SDL3/null backends, boot/intro/front-end/match drivers, M1/M2 acceptance tapes) — see [`port/ENGINE.md`](port/ENGINE.md) |
 | `port/tests/`, `port/tests/golden/` | CTest suite (112 tests) over captured container/codec/audio/video bytes (`golden/vgt/`, `golden/eacs/`, `golden/audio/`) plus the engine goldens (`golden/engine/`) |
-| `port/tools/fifa96_play.c` | Host runner — the single `make run` tool ([port/HOST_RUNNER.md](port/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
+| `port/tools/fifa96_play.c` | Host runner used by `make run FILE=…` / `make run ARGS=…` ([port/HOST_RUNNER.md](port/HOST_RUNNER.md)): explicit `video`/`audio`/`sprite` modes plus `auto` (bare `FILE`) — TGV chunk stream → PPM/Mode-X, EACS/BNK/VIV → WAV, BIGF `.pvi` sprite → PPM, and an ISO9660 walk + bounded smoke pass |
 | `port/tools/fifa96_dump.c` | Standalone container dumper (debug aid) — `0xFB10` envelope, QFS, POG, `kVGT` TGV, VIV offset tables via the shared `port/tools/fifa96_detect.c` sniff |
 | `tools/*.py`, `tools/keys/` | Runtime capture rig: LE-image rebuild (`fifa96_le.py`), ISO patch/probe (`fifa96_patch.py`, `fifa96_probe.py`), trace map/bind (`fifa96_runtime.py`, `fifa96_bind.py`), VGT/fVGT extraction, key-step driver, frame export |
 | `_tools/tsr/fifa96_capture.asm` | 16-bit `.COM` capture TSR emitting framed FILE/CODEC/PROBE records over COM1 (`make tsr`) |
@@ -69,15 +69,16 @@ all **78 native dispatch bodies** (80 slots minus the phase-`0x16` INT3
 sentinel and the action-`0x2B` shared epilogue) now have a C implementation,
 so `floor(100 × 78 / 78) = 100`. The stricter runtime metric is reported
 separately: **57/80 dispatch slots naturally wired (62/80 install-live)**,
-with the six producer-blocked rows named in the phase-36 register
+with the five producer-blocked rows named in the phase-36 register
 (`port/ENGINE.md`, FU-338 §4, and the row-`0x25` errata below).
 
 ## Build and run
 
 ```bash
 make check                     # configure + strict build + full CTest suite (112 tests)
-make game                      # windowed native engine (needs SDL3 + data/game/FIFAPCCD96.iso)
-make run FILE=data/game/FIFAPCCD96.iso    # flagship: sniff the ISO, bounded decode pass under build/run/
+make run                       # windowed native engine on data/game/FIFAPCCD96.iso (no extra args)
+make game                      # explicit alias for the same windowed native engine
+make run FILE=data/game/FIFAPCCD96.iso    # host runner: sniff the ISO, bounded decode pass under build/run/
 make run FILE=port/tests/golden/fw1.qfs   # any container: envelope/QFS/POG/TGV/VIV auto-detect + decode
 make run ARGS="--help"         # host runner modes; ARGS="video FILE --out build/play" etc.
 make tsr                       # assemble build/FIFAPCCD.COM (capture TSR, needs nasm)

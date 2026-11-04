@@ -3541,7 +3541,9 @@ The row was already registered and counted, so the census does not move
 (M1 `09b726b7…`, M2 `6aa2703b…`, `cmp`-verified) and the gate is green. The
 sinks (`0x651F0`/`0x974F0`/`0x8F188`), `0x4C374`'s reader-less
 `word[0x157A68]`, the `0x45001` gate, the ball-record `+0x44` and arm 9's
-`[0x157AC0]` write-back (FU209-L5) remain the carried legs.
+`[0x157AC0]` write-back (FU209-L5) remain the carried legs. The `55/80`
+figure in this close-out predates the row-`0x25` and phase-`0x1F` producers;
+current is **57/80 natural, 62/80 install-live, five blocked**.
 - **phase-0x1F one-shot invoke (2026-11-04).** The native sit-0xC install uses
   `0x8AF0E EBX=1` and invokes act 9 in the install frame; the engine now passes
   `invoke=1` for act 9. This closes phase `0x1F` in the natural-reach census

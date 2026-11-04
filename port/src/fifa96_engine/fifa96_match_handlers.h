@@ -89,7 +89,7 @@ struct fifa96_match_port_row {
   const char *body;           /* C symbol implementing the native entry */
 };
 
-/* The six rows whose dispatch handler exists but whose natural producer is
+/* The five rows whose dispatch handler exists but whose natural producer is
  * structurally blocked in the current engine (FU-338 §4). They stay in the
  * install-live count and are subtracted from the natural-reach count. */
 struct fifa96_match_blocked_row {

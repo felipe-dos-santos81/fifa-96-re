@@ -4734,7 +4734,7 @@ static int fifa96_match_action_1B(struct fifa96_match_run *mr) {
       r->face7d = (int16_t)face;
       r->type = sector;
     }
-    if (fifa96_entity_angle(distance, steer_dx, &heading) ==
+    if (fifa96_entity_angle(steer_dx, steer_dz, &heading) ==
         FIFA96_OK) {                                             /* 0x76E66..0x76E79 */
       e->timer7f = (e->timer7f & 0xFFFF0000u) |
                    (uint16_t)(int16_t)heading;
@@ -5569,16 +5569,17 @@ static int match_row09_arm1(struct fifa96_match_run *mr,
   /* 0x80CAD..0x80CC4: +0x6B >= 3*scalar + 0x40 -> target block. */
   if ((int32_t)(int16_t)r->lane_x >= 3 * (int32_t)scalar + 0x40) goto target_block;
   {
-    /* 0x80CD6..0x80D12: the 0x8DD70 angle of the record's own offset from the
-     * camera (x = word[+0x6F], z = word[+0x6D]) against the facing +0x7D. The
-     * chain is record-local (no target deref), so it runs with a NULL target
-     * too and falls through to the 0x80D18 event path. */
+    /* 0x80CCA..0x80CDF: `0x8DD70` loads EAX = word[+0x6D] and DX = word[+0x6F],
+     * then pushes DX first and EAX second, so `0xCD474` receives
+     * (x = +0x6D lane_z, z = +0x6F cam_dz6f). The chain is record-local (no
+     * target deref), so it runs with a NULL target too and falls through to
+     * the 0x80D18 event path. */
     int32_t angle = 0;
     int32_t fold;
     int32_t counter = (int32_t)(int8_t)mr->entities.ball.pos_counter_f; /* 0x15872F */
     int32_t threshold;
-    if (fifa96_entity_angle((int32_t)(int16_t)e->cam_dz6f,
-                            (int32_t)(int16_t)e->lane_z, &angle) != FIFA96_OK)
+    if (fifa96_entity_angle((int32_t)(int16_t)e->lane_z,
+                            (int32_t)(int16_t)e->cam_dz6f, &angle) != FIFA96_OK)
       return FIFA96_OK;
     fold = match_row09_fold_3ff(angle - (int32_t)r->face7d);
     threshold = 4 * (int32_t)scalar + (int32_t)(int16_t)(4 * counter + 0x39);
@@ -5629,10 +5630,10 @@ target_block:
     to.z = target->pos_z;
     (void)fifa96_arm_dist_stage(&from, &to, &band, &lane_unused); /* 0x80E32 */
     if ((int16_t)band > 0x40) return FIFA96_OK;         /* 0x80E37..0x80E41 */
-    /* 0x80E47..0x80E57: the native pushes word[+4] (dz) then word[+2] (dx),
-     * so the 0xCD474 arguments are (x = dz, z = dx) — reproduce literally. */
+    /* 0x80E47..0x80E57: cdecl pushes the dz word first and the dx word
+     * second, so `0xCD474` receives (x = dx, z = dz). */
     dx = (int16_t)((uint16_t)target->pos_x - (uint16_t)r->pos_x);
-    if (fifa96_entity_angle(lane_unused, (int32_t)dx, &angle) != FIFA96_OK)
+    if (fifa96_entity_angle((int32_t)dx, lane_unused, &angle) != FIFA96_OK)
       return FIFA96_OK;
     fold = match_row09_fold_3ff(angle - (int32_t)r->face7d);
     if (fold >= 0x55) return FIFA96_OK;                 /* 0x80E78 JGE tail */
@@ -7445,7 +7446,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x08, fifa96_match_action_08,
      "FU-142 App. K.6/FU-137 §6.1 (Task 2/OL-70a): row 08 ported (fifa96_outfield_row08_step, 0x81068..0x814AF) over the pool; the stage-0 camera/face, the +0x3D-gated projection scan, the 0x79B1C snap and the process-byte writes are bound; row 08 installs no code; unmodeled record/process bytes, the 0x7A490 staging and the event/sound sinks OL-52/OL-62/OL-82; the +0x8E readers now unify on record.type (OL-83 closed)"},
     {0x09, fifa96_match_action_09,
-     "rows09-0c (FU-178 §3/§4/§6 + FU-245 §2, fresh 0x80BFB..0x81065 this slice): row 09 FULL body ported (fifa96_match_action_09, 0x80A00..0x81066, arm table 0x809F0 = {0x80A3F,0x80BFB,0x80FCC,0x8103A}): the phase==2 gate (0x80A0B, else 0x7DAB4 reset), the stage>3 tail (0x80A2A), arm 0 (clear = reset + detach [team+0x7B2]/[team+0x7B6]; set = the 0x79C50 ball-relative face, the 0x114E04 sine folds, the 0x795A4 velocity/0x8DC68 speed, the +0x4D copy, the 0x6E598 anim 0x11 install, +0x9E/[0x15877C]/+0x89/+0x92), arm 1 (0x80BFB: the [0x15877C] head gate, the [[rec+0x28]]==0x11 and [rec+0x3D]==2 gates, the [0x157750]/lane/0x8DD70-angle chain, the 0x8ED40/0x8F188 event path (+0x15877C=1), the 0x8DCD4/0xCD474 target block, the 0x8A3FC contact register, the 0x0C install at 0x80EFA (invoke-now) and the 0x0D install at 0x80F61 (deferred)), arm 2 (0x80FCC: [0x15877C]=0, the anim gate, the 0x8DE8C [team+0x7B2] re-select from the 0x157788 camera triple), arm 3 (0x8103A: the 0x79B1C snap, the +0x44 reset and the [0x15872F] counter when rec != [0x1577CA]); cells [0x15877C]/[0x15872F] modelled as match09_seq_flag_15877c / entities.ball.pos_counter_f; legs: the cross-record invoke-now re-entry (the target row runs on its next frame-walk dispatch, row-07 precedent), [rec+0x24] owner (staged 0), the 0x8ED40/0x8F188/0x92820/0x7A490/0x974F0/0x651F0 sinks (match09_event_id), and the [rec+4][+0x16] descriptor (desc_16, producer unlocated, staged 0); installer live (pad release 0x7CFB2 + wired row-06 RNG arm 0x807C1)"},
+     "rows09-0c (FU-178 §3/§4/§6 + FU-245 §2, fresh 0x80BFB..0x81065 this slice): row 09 arms 0-3 ported (cross-record invoke-now remains a leg) (fifa96_match_action_09, 0x80A00..0x81066, arm table 0x809F0 = {0x80A3F,0x80BFB,0x80FCC,0x8103A}): the phase==2 gate (0x80A0B, else 0x7DAB4 reset), the stage>3 tail (0x80A2A), arm 0 (clear = reset + detach [team+0x7B2]/[team+0x7B6]; set = the 0x79C50 ball-relative face, the 0x114E04 sine folds, the 0x795A4 velocity/0x8DC68 speed, the +0x4D copy, the 0x6E598 anim 0x11 install, +0x9E/[0x15877C]/+0x89/+0x92), arm 1 (0x80BFB: the [0x15877C] head gate, the [[rec+0x28]]==0x11 and [rec+0x3D]==2 gates, the [0x157750]/lane/0x8DD70-angle chain, the 0x8ED40/0x8F188 event path (+0x15877C=1), the 0x8DCD4/0xCD474 target block, the 0x8A3FC contact register, the 0x0C install at 0x80EFA (invoke-now) and the 0x0D install at 0x80F61 (deferred)), arm 2 (0x80FCC: [0x15877C]=0, the anim gate, the 0x8DE8C [team+0x7B2] re-select from the 0x157788 camera triple), arm 3 (0x8103A: the 0x79B1C snap, the +0x44 reset and the [0x15872F] counter when rec != [0x1577CA]); cells [0x15877C]/[0x15872F] modelled as match09_seq_flag_15877c / entities.ball.pos_counter_f; legs: the cross-record invoke-now re-entry (the target row runs on its next frame-walk dispatch, row-07 precedent), [rec+0x24] owner (staged 0), the 0x8ED40/0x8F188/0x92820/0x7A490/0x974F0/0x651F0 sinks (match09_event_id), and the [rec+4][+0x16] descriptor (desc_16, producer unlocated, staged 0); installer live (pad release 0x7CFB2 + wired row-06 RNG arm 0x807C1)"},
     {0x0A, NULL,
      "FU-76 §2 + FU-334 (phase-36): row 0A body 0x81738..0x81905 PORTED as fifa96_match_action_0A (phase-2 gate, stage 0 nearest/0x8DCD4/0xCD474/0x10F394 tier OR +0x9D/0x114E04 sine/0x6E598 anim, stage 1 +0x44 ack). The action slot stays NULL: the only install site 0x7CE1A lives in the 0x7CDD8 cluster, which is absent from all eight collision tables and whose address occurs nowhere in the image (FU-334 §2), so no native originator exists. The body is exported for direct unit testing. OL-14 (dead installer, table census)"},
     {0x0B, fifa96_match_action_0B,

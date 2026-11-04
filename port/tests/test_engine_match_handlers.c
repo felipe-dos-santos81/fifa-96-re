@@ -4414,8 +4414,8 @@ static void test_action_09_arm1_installs(void) {
   f.mr.record.pos_z = 0x200;
   f.mr.record.face7d = 0;
   f.mr.record.desc_16 = 10;                  /* 12*10 + 0 < 0xFF -> gate 1 */
-  tgt->pos_x = 0x320;                        /* +x: 0xCD474 angle 0 */
-  tgt->pos_z = 0x200;
+  tgt->pos_x = 0x300;                        /* +z: 0xCD474 angle 0 */
+  tgt->pos_z = 0x220;
   tgt->face7d = 0;                           /* the target-facing fold 0 */
 
   /* seed the 0x92AC8 draw odd so the gate yields kind 1 */
@@ -4432,8 +4432,8 @@ static void test_action_09_arm1_installs(void) {
   assert(f.mr.referee.contact_kind == 1u);   /* 0x8A3FC kind = the gate */
   assert(f.mr.referee.rec_first == 1);       /* A = EBP */
   assert(f.mr.referee.rec_second == 12);     /* B = ESI */
-  assert(f.mr.referee.point[0] == 0x320);
-  assert(f.mr.referee.point[2] == 0x200);
+  assert(f.mr.referee.point[0] == 0x300);
+  assert(f.mr.referee.point[2] == 0x220);
   assert(f.mr.record.stage92 == 2u);         /* 0x80EFF advance */
 
   /* the 0x0D branch: target-facing fold >= 0x80 and 3*desc_16 > (draw & 0x3F) */
@@ -5100,9 +5100,9 @@ static void test_action_1c_offtarget_rotated_arm(void) {
  * 0xCD474 heading into word[+0x7F], +0x51 += 0x20, the 0x114E04/0x795A4
  * rotation of +0x67/+0x69 (radius = +0x65 + 0x40), the +0x4D/+0x55 target,
  * the 0x157C58/0x157C54 latches and 0x76B28(EBX=0x60,EDX=0xA0). Exact folds:
- * distance 0x100 (dx 0x100/dz 0), heading angle(0x100,0x100)=0x80,
- * sine(0x80)=sine(0x180)=46340, radius 0x140 -> rot 0xE2/0xE2 and
- * target (0x1E2,0xAB0+0xE2); the steering extent 0x41-0x60+0x20 = 1 ->
+ * distance 0x100 (dx 0x100/dz 0), heading angle(0x100,0)=0x100,
+ * sine(0x100)=65536, sine(0x200)=0, radius 0x140 -> rot 0x140/0 and
+ * target (0x240,0xAB0); the steering extent 0x41-0x60+0x20 = 1 ->
  * steer83 1/ramp 8, local 0xC0 -> 0x70, k 0x70/1 -> 0xF -> vel 0xB/0xB,
  * speed 14; the band target is (0x14F,0x20,0xAFF). */
 static void test_action_1b_stage1_rotation_steering(void) {
@@ -5131,7 +5131,7 @@ static void test_action_1b_stage1_rotation_steering(void) {
   assert(f.mr.record.type == 7);
   /* 0x76E66..0x76E79: 0xCD474(word[+0x67], word[+0x69]) -> word[+0x7F]
    * (the countdown-limit high word is preserved). */
-  assert(e->timer7f == 0x12340080u);
+  assert(e->timer7f == 0x12340100u);
   /* 0x76F1D..0x76F2A and 0x76F31..0x76F5D. */
   assert(f.mr.keeper_latch[4] == 1);      /* |pos.z + 0xE2| >= 0xAB0 */
   assert(f.mr.keeper_latch[0] == 1);      /* 0xE2*0x10 > 0xE2*(-0x10) */
@@ -5139,14 +5139,14 @@ static void test_action_1b_stage1_rotation_steering(void) {
   assert(f.mr.record.steer83 == 1);
   assert(f.mr.record.jump_base == 8);     /* 0x702F8(1) */
   assert(f.mr.record.jump_timer == 0);
-  assert(f.mr.record.vel73 == 0xB);
-  assert(f.mr.record.vel75 == 0xB);
-  assert(f.mr.record.speed71 == 14);      /* 0x8DC68(0xB,0xB) */
-  assert(f.mr.record.distance == 0x6F);   /* the 0x795B4 band */
-  assert(f.mr.record.lane == 0x4F);       /* band dz */
-  assert(f.mr.record.target_x == 0x14F);  /* pos + local*sin(0x80) */
+  assert(f.mr.record.vel73 == 0xF);
+  assert(f.mr.record.vel75 == 0);
+  assert(f.mr.record.speed71 == 15);      /* 0x8DC68(0xF,0) */
+  assert(f.mr.record.distance == 0x70);   /* the 0x795B4 band */
+  assert(f.mr.record.lane == 0);          /* band dz */
+  assert(f.mr.record.target_x == 0x170);  /* pos + local*sin(0x100) */
   assert(f.mr.record.target_y == 0x20);   /* the MOVSD pos copy */
-  assert(f.mr.record.target_z == 0xAFF);
+  assert(f.mr.record.target_z == 0xAB0);
   assert(f.mr.record.stage92 == 2u);
   drop_fixture(&f);
 }

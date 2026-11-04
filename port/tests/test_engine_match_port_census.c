@@ -111,7 +111,7 @@ int main(void) {
   assert(phase_install == 25u);
   assert(fifa96_match_port_install_live() == 62u);
 
-  /* The six producer-blocked rows are install-live but not naturally
+  /* The five producer-blocked rows are install-live but not naturally
    * reachable (FU-338 §4); the natural count subtracts them. */
   for (i = 0; i < FIFA96_MATCH_PORT_BLOCKED_ROWS; i++) {
     const struct fifa96_match_blocked_row *b = &fifa96_match_port_blocked[i];
