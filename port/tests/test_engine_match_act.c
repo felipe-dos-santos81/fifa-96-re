@@ -14,7 +14,8 @@
  *   - the phase-0x1F/act-9 body (`0x88F4C`): head `0x88F51 word[0x158818] +=
  *     word[0x157A64]`; stage 0 `0x88F81` clears `[0x15882A]` (`0x88F9A`) and
  *     writes phase 0x15 on the controlled side; stage 3 `0x890B1` gates on
- *     `word[0x15881A] >= 0x3C` (alias trap: `[0x158816]>>16`), then sets
+ *     `word[0x158818] >= 0x3C` (the `[0x158816] SAR 0x10` load = the act
+ *     timer; the old `[0x15881A]` reading was the alias misread), then sets
  *     `[0x15882A]=1` (`0x890C4`) and clears the act slot
  *     (`0x890D3..0x890DE`).
  *
@@ -26,8 +27,8 @@
  * on the install call. The begin-time install is one-shot: the native
  * match-init (`0x4B095`/`0x4B0A5`, situation 0) supersedes the slot with act
  * 0xA. Stages 1/2 (`0x88FED`/`0x89064`, the leg/`0x74110`/`0x93850`/`0x361B0`
- * gates) are compressed to pass; the stage-3 gate reads the derived act timer
- * (the native `word[0x15881A]` producer is FU165-L2/FU175-L5). */
+ * gates) are compressed to pass; the stage-3 gate reads the same act timer
+ * (`word[0x158818]`), which is native-exact. */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>

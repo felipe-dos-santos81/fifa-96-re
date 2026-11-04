@@ -380,3 +380,15 @@ The §4 dual-identity hazard (FU165-L9) is not exercised in the engine: phase
 0x1F is reached only through the global act tick, never the per-record
 `[rec+0x1C]` walk (unported, FU175-L1), so the handler cannot run twice for one
 byte.
+
+## Phase-43 erratum — act-9 stages 1/2 derived, not wired (2026-11-04)
+
+FU339 records fresh bytes for `0x88FED..0x890B0`: stage 1 holds while
+`0x74110` finds a free record in either `0x1588A4` / `0x1590D9` bank, then
+retries `0x93850(0)`/`(1)` over the four `0x157C64` slots (stride `0x25`,
+side byte `+0x22`, player byte `+0x1C`) and calls `0x361B0`; stage 2 waits for
+`(slot.pressed & 0x70) != 0` and otherwise calls `0x93930` and stays. The M2
+tape has free records and no `0x70` press, so wiring these arms would stall
+the restart; stages 1/2 remain compressed. Stage 3's gate is
+`word[0x158818]` (the act timer), not `word[0x15881A]`; the engine already
+uses the timer and the stale comments were corrected.

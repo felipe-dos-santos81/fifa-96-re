@@ -507,3 +507,14 @@ phase before dispatch. The write still runs on the install call because act 9
 is invoke-now, and the M2 v25 transcript is byte-identical. The phase-0x15
 state arm `0x8D040[0x15]=0x8D77B` remains a numbered leg; stage 1/2 sinks
 remain FU181-L5.
+
+## Phase-43 erratum — native stage-0 order measured, deferred (2026-11-04)
+
+FU339 records the fresh stage-0 order: `0x700F4` camera reset (the
+`0x10F328/2C/30` triple is a constant zero), `0x73E28`, the phase-0x15 write,
+`0x73E08` placement commit, `0x4C324`, then `word[0x158818] = 0` and stage++.
+Adding the native timer zero moved the M2 restart gate assertion
+(`gate_step - phase15_step == 93`) and the restart fixture's `mr.act.timer == 4`;
+adding zero camera init plus placement moved the M2 scenario record placement
+and the live held-key position. Those pieces need a dedicated M2 re-pin with
+the full stage context; this phase leaves them as FU181-L5/FU170-L2 legs.

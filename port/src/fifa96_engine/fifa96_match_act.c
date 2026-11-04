@@ -83,9 +83,10 @@ int fifa96_match_action_phase_1F(struct fifa96_match_run *mr) {
     a->stage = 3u;
     return FIFA96_OK;
   }
-  /* Stage 3 (0x890B1): the native gate is word[0x15881A] >= 0x3C; the derived
-   * model gates on the act timer (FU175-L5). On pass, [0x15882A] = 1 (0x890C4)
-   * and the act slot is cleared (0x890D3..0x890DE). */
+  /* Stage 3 (0x890B1): the gate is `word[0x158818] >= 0x3C` (the `[0x158816]
+   * SAR 0x10` load, i.e. the act timer), not `word[0x15881A]`; the derived
+   * model gates on the same timer. On pass, [0x15882A] = 1 (0x890C4) and the
+   * act slot is cleared (0x890D3..0x890DE). */
   if (a->timer >= 0x3C) {
     mr->global_5882a = 1u;
     mr->act9_gate = 1u;                              /* the derived gate marker */

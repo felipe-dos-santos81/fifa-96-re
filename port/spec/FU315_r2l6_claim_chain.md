@@ -310,3 +310,21 @@ Program stayed `/FIFA96.EXE`; no repo file was created or changed except this dr
 **Quote (§5.1):** "at `out.tail != 0`, `fifa96_camera_event_set` ... + `fifa96_camera_event_dir` ... + `fifa96_camera_set_tracked`." **Fresh:** `out.tail` is emitted in `fifa96_action_carrier_arm` (`action_handlers.c:500`) before the native `0x7F3A1..0x7F4E7` gates; the native event also requires the `0x7F3A1` mode word, the `lane>0x20` camera/record triple copy, `camera.speed > word[+0x71]` (`0x7F3D7..0x7F3DA`) and the slot word (`0x7F472`). `out.tail` alone is an over-approximation. Stage-2: if the claim-time bind is wanted, port the gate tail with `0x7F3A1..0x7F4E7` (FU315-L1) or leave it out; do not fire on `out.tail` alone.
 
 **Stage-2 consequence:** FU315's GO stands (natural claim at f=1514), but the claim is not the pan's producer. FU315-L1/L2 are claim/follow fidelity, out of phase-31's pan acceptance; the P3 line is a docs erratum, not code.
+
+## Phase-43 erratum — claim tail derived; wiring deferred (2026-11-04)
+
+FU339 gives the fresh `0x7F3A1..0x7F57B` control flow: the both-zero
+camera/record target copy, the `camera.speed > word[+0x71]` substitution to
+`word[+0x71]<<2` and the type dirs, the `speed += camY` gate, the type-pair
+target write from `+0x6D/+0x6F`, the `0x28`/bound returns, the
+`0x8DC68` seed metric, the `0x71C94` event/tracked bind, and the
+`has_slot ? 4 : metric>>2` release plus F8 with the `0x3C` clamp. The
+`0x92820(rec,0x26)` sound sink and the `0x7F522` `0x79CCC`/`0x6DA64` parity
+search remain unported.
+
+A bounded implementation was measured and reverted: the natural-claim probe
+moved from stop 702 / 27 frames / x `-0x90` to stop 850 / 175 / `-0x736`, and
+`test_live_airborne_long_ball_seed_then_band2_follow` no longer reaches its
+`cross_ok` event. Those are plausible native consequences, but they require a
+dedicated probe re-characterization; the engine keeps the explicit `out.tail`
+leg rather than a silent partial port.

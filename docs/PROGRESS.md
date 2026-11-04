@@ -3627,3 +3627,13 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   byte. Fixtures stage stale `byte44 = 1` and assert the stage-3 advance in
   both the loader and engine paths. Row 0x0D remains producer-blocked; M1/M2
   byte-identical; census unchanged; `make check` 112/112.
+
+- **phase-43 live-leg audit (2026-11-04).** FU339 derives the act-9 stage 1/2
+  path (`0x74110` record-busy, four-slot `0x93850`, `0x70` press wait) and the
+  row-05 claim tail (`0x7F3A1..0x7F57B`), then records why neither is wired:
+  the M2 tape has free records and no `0x70` press, and the row-05 tail moved
+  the natural-claim probe (stop 702→850, 27→175 frames, x `-0x90`→`-0x736`)
+  and broke the long-ball `cross_ok` probe. A bounded implementation and the
+  act-9 timer/camera order were measured and reverted. The stale stage-3
+  `word[0x15881A]` comments are corrected to the act timer
+  `word[0x158818]`. No census or golden change; `make check` 112/112.

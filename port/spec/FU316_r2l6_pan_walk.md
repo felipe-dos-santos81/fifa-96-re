@@ -709,3 +709,13 @@ and the natural no-slot witness is **NO-GO** because the native placement
 timer `+0x79` has no port producer (FU328-L1 — the silent bind's root cause).
 The §4.3 `T(s)` arithmetic, the decay `5→3→2→1→0` and the 13/20-pan reach
 stand unchanged.
+
+## Phase-43 erratum — FU316-L8/FU316-L9 status (2026-11-04)
+
+FU339 re-derives the row-05 claim tail (`0x7F3A1..0x7F57B`) and confirms the
+stage-2 gate is the slot `pressed & 0x70` chord (`0x89079..0x89088`). The
+row-05 tail remains unported: wiring its vector/event/release part moves the
+natural-claim probe (stop 702→850, 27→175 frames, x `-0x90`→`-0x736`) and
+breaks the long-ball `cross_ok` probe, so it needs a dedicated
+re-characterization rather than a fixture edit. FU316-L9 (the unarmed
+`0x7131C` mirror) is untouched.

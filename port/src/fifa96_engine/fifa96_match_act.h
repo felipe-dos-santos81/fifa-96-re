@@ -72,11 +72,12 @@ int fifa96_match_act_installed(const struct fifa96_match_act *act);
  *  - head (`0x88F51`): `timer += frame_delta` (`word[0x158818] += [0x157A64]`);
  *  - stage 0 (`0x88F81`): clear the gate `[0x15882A] = 0` and advance to the
  *    stage-3 wait (stages 1/2 `0x88FED`/`0x89064` compressed to pass, FU170-L1;
- *    the stage-0 phase-0x15 write is performed by the sit-0xC arm, FU-170 §7);
+ *    the stage-0 phase-0x15 write is handler-owned, FU-181; the native timer
+ *    clear at `0x88FE0` remains a FU-181 leg because it moves the M2 restart);
  *  - stage >= 1: when `timer >= 0x3C` set `[0x15882A] = 1` (the derived
  *    `global_5882a` + `act9_gate` markers) and clear the act slot. The native
- *    stage-3 gate reads `word[0x15881A]` (alias trap `[0x158816]>>16`), a
- *    timeline cell whose producer is unported (FU165-L2/FU175-L5), so the
- *    derived model gates on the act timer.
+ *    stage-3 gate reads `word[0x158818]` (`0x890B1 MOV EAX,[0x158816] SAR
+ *    0x10`), the act timer this model uses; the old `word[0x15881A]` reading
+ *    was the alias misread (FU-170 §4).
  * Returns FIFA96_OK or -FIFA96_ERR_INVALID (NULL `mr`). */
 int fifa96_match_action_phase_1F(struct fifa96_match_run *mr);

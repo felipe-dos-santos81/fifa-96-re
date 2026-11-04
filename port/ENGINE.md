@@ -8420,3 +8420,34 @@ FU180-L9 is closed. M1/M2 are byte-identical: M1 `09b726b7…`, M2 v25
 `ea18ee1d…`; `make check` **112/112**. Census unchanged: **78/78 bodies,
 57/80 natural, 63/80 install-live, 6 blocked, action 38/45, phase 25/35**.
 Row `0x0D` remains producer-blocked by `desc_16`/`[rec+0x24]` (OL-22).
+
+## Phase 43 — live-leg audit: act-9 stages 1/2, row-05 claim tail, stage-0 order (2026-11-04)
+
+FU339 records the fresh derivations and the measured reason none of the three
+candidate legs is wired in this phase.
+
+- **Act-9 stages 1/2 (FU181-L5).** `0x88FED` holds while `0x74110` finds a free
+  record in either bank; the success path retries the four-slot `0x93850`
+  lookup (stride `0x25`, side `+0x22`, player `+0x1C`) and calls `0x361B0`.
+  `0x89064` waits for `(slot.pressed & 0x70) != 0`; otherwise `0x93930` runs
+  and the stage stays. The M2 tape has free records and no `0x70` press, so a
+  faithful wire would stall the restart. Stage 3's gate is
+  `word[0x158818]` (the act timer), not `word[0x15881A]`; the engine already
+  uses the timer, and the stale comments/evidence were corrected.
+- **Row-05 claim tail (FU315-L1/FU316-L8).** The full `0x7F3A1..0x7F57B`
+  algebra, `0x8DC68` metric, `0x71C94` event/tracked bind and
+  `has_slot ? 4 : metric>>2` release are derived. A bounded implementation was
+  reverted: the natural-claim probe moved from stop 702 / 27 frames /
+  x `-0x90` to 850 / 175 / `-0x736`, and the long-ball `cross_ok` probe
+  failed. The parity `0x79CCC`/`0x6DA64` arm and `0x92820` sound sink remain
+  legs; the probes need a dedicated re-characterization before wiring.
+- **Act-9 stage-0 order (FU170-L2/FU181-L5).** Native `0x700F4` (zero camera
+  triple), `0x73E28`, phase write, `0x73E08`, `0x4C324`, then timer 0. Timer
+  zero moved the M2 restart gate assertion; camera/placement moved the M2
+  scenario record and live held-key position. They stay legs until a full
+  stage-context re-pin.
+
+No engine behavior, dispatch table, census, or golden changed. M1
+`09b726b7…` / M2 v25 `ea18ee1d…` stay exact; `make check` **112/112**.
+Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
+blocked, action 38/45, phase 25/35**.
