@@ -355,3 +355,13 @@ Docs cross-cited: FU-178 (§2/§4.1/L1/L6/L7), FU-180 (§1.2/§3/§9/L8/§11), F
 (§4), FU-245 (§1/§2), FU-243 (§2.4), FU-190 (§6.1), FU-174, OL-80/OL-82. No
 writes beyond this draft and the workspace report; no git; ISO/`data/game/hdd/`
 untouched.
+
+> **FU-256 phase-37 erratum (2026-11-04).** The `0x80EFA` install is now
+> invoke-now. Fresh `disassemble_bytes 0x7D9A4..0x7DAB1` shows
+> `0x7DAA3 TEST DI,DI; 0x7DAA8 MOV EAX,ESI; 0x7DAAA CALL dword[ESI+0x18]`;
+> the engine helper stages the target's row-0x0C inputs, calls
+> `fifa96_match_dispatch_action(mr, 0x0C)` once, writes the handler's record
+> effects back and restores the outer row-09 staging. The target's own walk
+> still dispatches row 0x0C a second time, matching the native installer +
+> machine-tail pair. The live `0x80F61` gate remains producer-blocked
+> (`desc_16`/`[rec+0x24]`), so row 0x0D stays dispatch-NULL.

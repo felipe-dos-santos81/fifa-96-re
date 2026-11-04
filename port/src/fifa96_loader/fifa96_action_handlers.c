@@ -4,6 +4,7 @@
 
 #include "fifa96_loader/fifa96_arm_helpers.h"
 #include "fifa96_loader/fifa96_ball_pairing.h"
+#include "fifa96_loader/fifa96_camera.h"
 #include "fifa96_loader/fifa96_entity_update.h"
 #include "fifa96_loader/fifa96_rng.h"
 
@@ -1404,9 +1405,12 @@ fifa96_err_t fifa96_action_sequence_velocity_scale(int16_t type_x, int16_t type_
  * (`0x8251C..0x826FE`, first-hand `disassemble_bytes` this slice; the 4-arm
  * table `0x8250C` = `{0x82567, 0x8261F, 0x826B0, 0x826D5}`). The native arms
  * fall through, so a stage-N dispatch runs arms N..3 (subject to the arm gates)
- * in one call. The `0x702F8`/`0x6E598`/`0x8DCD4`/`0x79C50` sinks are exposed
- * as requests (FU180-L8); the `0x10F334`/`0x10F33C` per-sector bytes index the
- * caller-supplied tables. */
+ * in one call. The `0x702F8` call is the ported `fifa96_camera_ramp` (the
+ * native argument is the word staged at `+0x83` = `0x20`, reached by the
+ * `dword[+0x81] SAR 0x10` alias at `0x8257D..0x82588`); `0x8DCD4` is the
+ * ported `fifa96_arm_dist_stage` (the `metric` report); the remaining
+ * `0x6E598`/`0x79C50` sinks are exposed as requests (FU180-L8); the
+ * `0x10F334`/`0x10F33C` per-sector bytes index the caller-supplied tables. */
 fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
                                             fifa96_action_0d_out *out) {
   uint8_t stage;
@@ -1422,9 +1426,13 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
   if (stage == 0u) {                                /* arm 0, 0x82567 */
     int16_t tx, tz;
     if (state->active == 0u) { out->reset = 1; goto done; }  /* 0x826f1 */
-    out->word83_20 = 1;                             /* 0x82574 */
-    out->ball_param = 1;                            /* 0x8258d */
-    state->word85 = 0;                              /* 0x702F8 return, FU180-L8 */
+    out->word83_20 = 1;                             /* 0x82574 word[+0x83]=0x20 */
+    out->ball_param = 1;                            /* 0x8258d 0x702F8 call */
+    /* 0x8257D MOV EAX,dword[EBP+0x81]; 0x82588 SAR EAX,0x10 = the word at
+     * +0x83 (0x20), not the +0x81 low word. 0x82598 stores the ramp result to
+     * `word[+0x85]`; arm 1 (0x8261F) waits while it is nonzero, so this call
+     * stops at stage 1 with the value 21. */
+    state->word85 = fifa96_camera_ramp(0x20);
     out->word87_zero = 1;                           /* 0x825a4 word[+0x87]=0 */
     out->anim = 1;                                  /* 0x825ad 0x6E598 */
     out->anim_id = 0x10;                            /* the 0x82583 EDX immediate */
@@ -1488,6 +1496,7 @@ fifa96_err_t fifa96_action_sequence_0d_step(fifa96_action_0d_state *state,
 
 done:
   out->stage92 = stage;
+  out->word85 = state->word85;
   out->timer89 = state->timer89;
   out->vel73 = state->vel73;
   out->vel75 = state->vel75;

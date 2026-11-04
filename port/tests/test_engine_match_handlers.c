@@ -4402,6 +4402,8 @@ static void test_action_09_arm1_installs(void) {
   f.mr.state.phase = 2;
   b = &f.mr.entities.team[0].records[1];
   b->active = 1;
+  b->anim_id = 0x11u;                        /* the row-0C alternate gate */
+  b->frame = 2u;                             /* >= the 0x11 threshold -> foul */
   tgt = &f.mr.entities.team[1].records[1];
   tgt->active = 1;
   f.mr.entities.team[1].target = 12;         /* [[team+0x7A6]+0x7B2] */
@@ -4428,7 +4430,10 @@ static void test_action_09_arm1_installs(void) {
   assert(fifa96_rng_seed(&f.mr.rng, seed) == FIFA96_OK);
   assert(fifa96_match_dispatch_action(&f.mr, 0x09) == FIFA96_OK);
   assert(tgt->code == 0x0Cu);                /* the 0x80EFA install */
-  assert(tgt->stage92 == 0u);                /* EBX = 0 */
+  assert((f.mr.dispatched_ok & (1ull << 0x0Cu)) != 0u); /* ECX=1 invoke-now */
+  assert(tgt->stage92 == 1u);                /* the nested row-0C foul tail */
+  assert(tgt->skip_98 == 1u);                /* 0x81ED5 */
+  assert(tgt->anim_id == 0x0Du || tgt->anim_id == 0x52u); /* 0x81EEC draw */
   assert(f.mr.referee.contact_kind == 1u);   /* 0x8A3FC kind = the gate */
   assert(f.mr.referee.rec_first == 1);       /* A = EBP */
   assert(f.mr.referee.rec_second == 12);     /* B = ESI */
@@ -4436,7 +4441,11 @@ static void test_action_09_arm1_installs(void) {
   assert(f.mr.referee.point[2] == 0x220);
   assert(f.mr.record.stage92 == 2u);         /* 0x80EFF advance */
 
-  /* the 0x0D branch: target-facing fold >= 0x80 and 3*desc_16 > (draw & 0x3F) */
+  /* the 0x0D branch: target-facing fold >= 0x80 and 3*desc_16 > (draw & 0x3F).
+   * The nested row-0C foul above may advance the global phase through its
+   * contact/act-3 tail, so restore the row-09 phase-2 gate before this second
+   * dispatch (the outer row's gate already passed on the first call). */
+  f.mr.state.phase = 2;
   f.mr.record.stage92 = 1;
   f.mr.record.anim_id = 0x11u;
   f.mr.record.frame = 2;
@@ -4549,25 +4558,83 @@ static void test_action_09_stage_above_range_tail(void) {
 
 /* Latch-revert discriminator (T3 carry / FU180 errata): the row-0x1B stage-0
  * clear touches only 0x157C54/57/58/59/5A/5B — the 0x157C55/56 bytes (kernel
- * latch [1]/[2]) must survive, because FU180-L7's stage-2 rush gate reads
- * byte[0x157C55]. The prior `memset(sizeof)` (all eight) was the regression. */
+ * latch [1]/[2]) must survive the *stage-0* store. The prior
+ * `memset(sizeof)` (all eight) was the regression. Phase-37 adds the native
+ * stage-1 tail: the same dispatch falls into stage 1, whose `0x76FBB` store
+ * clears [1] before the stage-2 gate, while [2] (never written by this row's
+ * stage 0/1) still survives. The `lane_x=1/bound=0` pair forces the 0x7700E
+ * rush exit so the deep pan is not reached. */
 static void test_action_1b_stage0_latch_partial_clear(void) {
   struct fixture f;
   make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
   f.mr.record.entity_id = 0;
   f.mr.state.phase = 0;                /* head does not bind */
   f.mr.record.stage92 = 0;
+  e->lane_x = 1;                       /* the 0x7700E rush gate closes */
+  e->bound = 0;
   memset(f.mr.keeper_latch, 1, sizeof f.mr.keeper_latch);
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   assert(f.mr.keeper_latch[0] == 0);   /* 0x157C54 cleared */
-  assert(f.mr.keeper_latch[1] == 1);   /* 0x157C55 NOT cleared (FU180-L7) */
+  assert(f.mr.keeper_latch[1] == 0);   /* 0x76FBB stage-1 tail (phase-37) */
   assert(f.mr.keeper_latch[2] == 1);   /* 0x157C56 NOT cleared */
   assert(f.mr.keeper_latch[3] == 0);   /* 0x157C57 cleared */
   assert(f.mr.keeper_latch[4] == 0);   /* 0x157C58 cleared */
   assert(f.mr.keeper_latch[5] == 0);   /* 0x157C59 cleared */
   assert(f.mr.keeper_latch[6] == 0);   /* 0x157C5A cleared */
   assert(f.mr.keeper_latch[7] == 0);   /* 0x157C5B cleared */
+  /* The stage-0 falls into stage 1: the 0x10E180 row-0 table entry installs
+   * (latch[0] 0, target_y 0x20 <= 0x50), so anim 0x34 lands on the pool and
+   * the staging record, then the 0x7763A head tails on row44 0. */
+  assert(e->anim_id == 0x34u);
+  assert(f.mr.record.anim_id == 0x34u);
+  assert(f.mr.record.frame == 0u);
+  assert(f.mr.record.row44 == 0u);
+  assert(f.mr.record.timer89 == 0);    /* 0x76FA7 */
+  assert(f.mr.record.stage92 == 2u);   /* 0x76FC1 / the 0x7763A tail */
   drop_fixture(&f);
+}
+
+/* Row-0x1B stage-1 anim select (`0x76F5A..0x76F91`, phase-37): the four
+ * 0x10E180 rows keyed by `(new [0x157C54], dword[+0x51] > 0x50)`. The target
+ * sits on +x, so the rotated pair is `(rot_x 0x140, rot_z 0)` and the
+ * 0x157C54 cross-product reduces to `0 > 0x140*vel_z` — latch 1 only for
+ * `vel_z < 0`. `target_y_in` is the pre-`+0x51 += 0x20` value, so 0 -> 0x20
+ * (`<= 0x50`) and 0x40 -> 0x60 (`> 0x50`). */
+static void run_1b_stage1_anim_case(int32_t target_y_in, int16_t vel_z,
+                                    uint8_t expect_id) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;             /* dispatch stage 1 directly */
+  f.mr.record.pos_x = 0;
+  f.mr.record.pos_z = 0;
+  f.mr.record.target_x = 0x100;        /* dx 0x100, dz 0 -> heading 0x100 */
+  f.mr.record.target_y = target_y_in;
+  f.mr.record.target_z = 0;
+  f.mr.render.camera.vel_x = 0;
+  f.mr.render.camera.vel_z = vel_z;
+  f.mr.record.timer89 = 0x55;          /* the 0x76FA7 store must clear it */
+  f.mr.keeper_latch[1] = 1;            /* the 0x76FBB store must clear it */
+  e->lane_x = 1;                       /* the 0x7700E rush exit at stage 2 */
+  e->bound = 0;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
+  assert(e->anim_id == expect_id);
+  assert(f.mr.record.anim_id == expect_id);   /* the row-1C-style sync */
+  assert(f.mr.record.frame == 0u);
+  assert(f.mr.record.row44 == 0u);            /* all four rows' flags & 1 = 0 */
+  assert(f.mr.keeper_latch[1] == 0u);         /* 0x76FBB */
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.record.stage92 == 2u);          /* row44 0 -> the 0x7763A tail */
+  drop_fixture(&f);
+}
+
+static void test_action_1b_stage1_anim_table(void) {
+  run_1b_stage1_anim_case(0, 1, 0x34);       /* latch 0, target_y 0x20 */
+  run_1b_stage1_anim_case(0, -1, 0x36);      /* latch 1, target_y 0x20 */
+  run_1b_stage1_anim_case(0x40, 1, 0x38);    /* latch 0, target_y 0x60 */
+  run_1b_stage1_anim_case(0x40, -1, 0x3A);   /* latch 1, target_y 0x60 */
 }
 
 /* ===== M2 phase-26c T5 / FU-285: the row-0x1B stage-2 wide + self-actor =====
@@ -5017,11 +5084,13 @@ static void test_action_1c_runs_body(void) {
 
 /* Row 0x1C stage 1 (FU-186 §2.2): with |angle(distance,target_y)| < 0x55 the
  * on-target arm shifts pos_x by trunc_shift(dx,1); pos_z is unchanged (dz 0),
- * then the ported 0x76B28 steering runs with the arm's EBX=0x80/EDX=0x40.
- * A stub would leave pos_x at 0x100 and the steering cells at 0. */
+ * then the ported 0x76B28 steering runs with the arm's EBX=0x80/EDX=0x40 and
+ * the shared 0x77997 install lands anim 0x3C. A stub would leave pos_x at
+ * 0x100, the steering cells at 0 and anim_id at 0. */
 static void test_action_1c_lunge_arm(void) {
   struct fixture f;
   make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
   f.mr.record.entity_id = 0;
   f.mr.record.stage92 = 1;                /* dispatch stage 1 directly */
   f.mr.record.pos_x = 0x100;
@@ -5029,10 +5098,19 @@ static void test_action_1c_lunge_arm(void) {
   f.mr.record.target_x = 0x120;           /* dx = 0x20 */
   f.mr.record.target_y = 0xA0;            /* distance << target_y -> on-target */
   f.mr.record.target_z = 0x100;
+  e->timer7f = 0x12340000u;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
   assert(f.mr.record.stage92 == 2u);
   assert(f.mr.record.pos_x == 0x110);     /* += trunc_shift(0x20,1) */
   assert(f.mr.record.pos_z == 0x100);     /* dz 0 */
+  /* 0x777B9..0x777CC: 0xCD474(dx 0x20, dz 0) -> word[+0x7F] (the prologue). */
+  assert(e->timer7f == 0x12340100u);
+  /* 0x77997: the on-target 0x3C install (0x77823) and the r-> sync. */
+  assert(e->anim_id == 0x3Cu);
+  assert(f.mr.record.anim_id == 0x3Cu);
+  assert(f.mr.record.frame == 0u);
+  assert(e->row44 == 0u);
+  assert(f.mr.record.row44 == 0u);        /* 0x779D1 tails without a reset */
   /* 0x779AC/0x779B4: the on-target arm steers with EBX=0x80, EDX=0x40 on the
    * unrotated 0x8DCD4 triple (distance 0x20): extent 0xA0-0x80+0x20 = 0x40,
    * local 0x20-0x40+0x20 -> clamp 0x10, k 0x10/0x40 = 0 -> vel 0; the band
@@ -5051,14 +5129,15 @@ static void test_action_1c_lunge_arm(void) {
   drop_fixture(&f);
 }
 
-/* Row 0x1C off-target arm (FU-186-L2 closes here): 0x777DE
+/* Row 0x1C off-target arm (the FU-186-L2 stage-1 residue closes here): 0x777DE
  * angle(distance 0x100, target_y 0x180) = 0x60 >= 0x55, so the 0x7783C
  * rotated arm runs: the recomputed heading angle(0x100,0)=0x100 ->
  * word[+0x7F], word[+0x65] += 0x40 = 0x140 radius, the 0x114E04/0x795A4
  * rotate -> +0x67/+0x69 = 0x140/0, target = (0x240,0x20,0x100), the
- * 0x157C54 camera-velocity cross-product, then 0x76B28 with EBX=0x50,
- * EDX=0x80: extent 0x150 -> 0x60 (ramp 36), local 0xE0 -> 0x70, k =
- * 0x70/0x60 = 1 -> vel 1/0; the band target is (0x170,0x20,0x100). */
+ * 0x157C54 camera-velocity cross-product, the 0x7791F anim pick
+ * (target_y 0x180 >= 0x40, rotated cross 1) -> 0x3E, then 0x76B28 with
+ * EBX=0x50, EDX=0x80: extent 0x150 -> 0x60 (ramp 36), local 0xE0 -> 0x70,
+ * k = 0x70/0x60 = 1 -> vel 1/0; the band target is (0x170,0x20,0x100). */
 static void test_action_1c_offtarget_rotated_arm(void) {
   struct fixture f;
   make_fixture(&f);
@@ -5080,6 +5159,13 @@ static void test_action_1c_offtarget_rotated_arm(void) {
   assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
   assert(e->timer7f == 0x12340100u);      /* 0x7784A heading word[+0x7F] */
   assert(f.mr.keeper_latch[0] == 1);      /* 0x778EF..0x7791A */
+  /* 0x7791F..0x7798B + 0x77997: target_y 0x180 >= 0x40 and the rotated cross
+   * (0x10*0 > -0x10*0x140) -> 0x3E, installed + synced. */
+  assert(e->anim_id == 0x3Eu);
+  assert(f.mr.record.anim_id == 0x3Eu);
+  assert(f.mr.record.frame == 0u);
+  assert(e->row44 == 0u);
+  assert(f.mr.record.row44 == 0u);        /* 0x779D1 tails without a reset */
   assert(f.mr.record.steer83 == 0x60);    /* extent 0x150 -> clamp 0x60 */
   assert(f.mr.record.jump_base == 36);    /* 0x702F8(0x60) */
   assert(f.mr.record.jump_timer == 0);
@@ -5095,16 +5181,66 @@ static void test_action_1c_offtarget_rotated_arm(void) {
   drop_fixture(&f);
 }
 
+/* Row-0x1C off-target anim pick (`0x7791F..0x7798B`, phase-37): the four ids
+ * are selected by `dword[+0x51] < 0x40` and the *rotated* cross-product
+ * `vel_x*word[+0x69] > vel_z*word[+0x67]` — a different pair from the
+ * `+0x6D/+0x6F` pair behind [0x157C54] (held at 1 by e->lane_z/cam_dz6f).
+ * `target_x 0x200` (dx +) gives rot_x +0x140 (cross 1); `target_x 0` (dx -)
+ * gives rot_x -0x140 (cross 0). distance 0x100 keeps both target_y values
+ * off-target (0x20 -> angle 0xEC, 0x180 -> 0x60). */
+static void run_1c_offtarget_anim_case(int32_t target_x, int32_t target_y,
+                                       uint8_t expect_id,
+                                       uint16_t expect_heading) {
+  struct fixture f;
+  make_fixture(&f);
+  struct fifa96_match_entity *e = &f.mr.entities.team[0].records[0];
+  f.mr.record.entity_id = 0;
+  f.mr.record.stage92 = 1;
+  f.mr.record.pos_x = 0x100;
+  f.mr.record.pos_y = 0x20;
+  f.mr.record.pos_z = 0x100;
+  f.mr.record.target_x = target_x;
+  f.mr.record.target_y = target_y;
+  f.mr.record.target_z = 0x100;
+  f.mr.render.camera.vel_x = 0x10;
+  f.mr.render.camera.vel_z = -0x10;
+  e->lane_z = 0x30;
+  e->cam_dz6f = 0x40;                     /* [0x157C54] = 1 on every case */
+  e->timer7f = 0x12340000u;
+  assert(fifa96_match_dispatch_action(&f.mr, 0x1C) == FIFA96_OK);
+  /* 0x7779C..0x777B4: the shared face prologue on -vel_x/-vel_z
+   * (angle(-0x10, 0x10) = -0x80, octant 7). */
+  assert(f.mr.record.face7d == -0x80);
+  assert(f.mr.record.type == 7u);
+  assert(e->timer7f == (0x12340000u | expect_heading));
+  assert(f.mr.keeper_latch[0] == 1u);     /* the independent +0x6D/+0x6F pair */
+  assert(e->anim_id == expect_id);
+  assert(f.mr.record.anim_id == expect_id);
+  assert(f.mr.record.frame == 0u);
+  assert(f.mr.record.row44 == 0u);
+  assert(f.mr.record.stage92 == 2u);
+  drop_fixture(&f);
+}
+
+static void test_action_1c_offtarget_anim_ids(void) {
+  run_1c_offtarget_anim_case(0x200, 0x20, 0x36, 0x0100u);  /* <0x40, cross 1 */
+  run_1c_offtarget_anim_case(0x000, 0x20, 0x34, 0xFF00u);  /* <0x40, cross 0 */
+  run_1c_offtarget_anim_case(0x000, 0x180, 0x3D, 0xFF00u); /* >=0x40, cross 0 */
+}
+
 /* Row 0x1B stage 1 (FU-180 §2; completed this slice): the native movement
  * block 0x76E3B..0x76FC7 — the 0x8DCD4 metric, the 0x79C50 face, the
  * 0xCD474 heading into word[+0x7F], +0x51 += 0x20, the 0x114E04/0x795A4
  * rotation of +0x67/+0x69 (radius = +0x65 + 0x40), the +0x4D/+0x55 target,
- * the 0x157C58/0x157C54 latches and 0x76B28(EBX=0x60,EDX=0xA0). Exact folds:
- * distance 0x100 (dx 0x100/dz 0), heading angle(0x100,0)=0x100,
+ * the 0x157C58/0x157C54 latches, the 0x10E180 anim install, the
+ * 0x76B28(EBX=0x60,EDX=0xA0) steering and the +0x89/[0x157C55] tail.
+ * Exact folds: distance 0x100 (dx 0x100/dz 0), heading angle(0x100,0)=0x100,
  * sine(0x100)=65536, sine(0x200)=0, radius 0x140 -> rot 0x140/0 and
  * target (0x240,0xAB0); the steering extent 0x41-0x60+0x20 = 1 ->
  * steer83 1/ramp 8, local 0xC0 -> 0x70, k 0x70/1 -> 0xF -> vel 0xB/0xB,
- * speed 14; the band target is (0x14F,0x20,0xAFF). */
+ * speed 14; the band target is (0x14F,0x20,0xAFF). The anim table picks
+ * index latch[0] 1 + 2*(0x41 > 0x50 = false) = 1 -> 0x36; `lane_x=1/bound=0`
+ * forces the stage-2 0x7700E rush exit so the deep pan does not run. */
 static void test_action_1b_stage1_rotation_steering(void) {
   struct fixture f;
   make_fixture(&f);
@@ -5122,7 +5258,11 @@ static void test_action_1b_stage1_rotation_steering(void) {
   f.mr.render.camera.vel_x = 0x10;
   f.mr.render.camera.vel_z = -0x10;
   e->timer7f = 0x12340000u;
+  e->lane_x = 1;                          /* the 0x7700E rush exit */
+  e->bound = 0;
+  f.mr.record.timer89 = 0x55;             /* the 0x76FA7 store must clear it */
   f.mr.keeper_latch[0] = 0;
+  f.mr.keeper_latch[1] = 1;               /* the 0x76FBB store must clear it */
   f.mr.keeper_latch[4] = 0;
   assert(fifa96_match_dispatch_action(&f.mr, 0x1B) == FIFA96_OK);
   /* 0x76E49..0x76E61: 0x79C50(rec, -word[0x1577C2], -word[0x1577C0]) =
@@ -5135,6 +5275,13 @@ static void test_action_1b_stage1_rotation_steering(void) {
   /* 0x76F1D..0x76F2A and 0x76F31..0x76F5D. */
   assert(f.mr.keeper_latch[4] == 1);      /* |pos.z + 0xE2| >= 0xAB0 */
   assert(f.mr.keeper_latch[0] == 1);      /* 0xE2*0x10 > 0xE2*(-0x10) */
+  /* 0x76F5A..0x76F91: the 0x10E180 row 1 -> 0x36, installed on the pool and
+   * synced into the staging record (the +0x44 feeds the stage-2 head). */
+  assert(e->anim_id == 0x36u);
+  assert(f.mr.record.anim_id == 0x36u);
+  assert(f.mr.record.frame == 0u);
+  assert(e->row44 == 0u);
+  assert(f.mr.record.row44 == 0u);
   /* 0x76FA2: the 0x76B28 steering (EBX=0x60, EDX=0xA0). */
   assert(f.mr.record.steer83 == 1);
   assert(f.mr.record.jump_base == 8);     /* 0x702F8(1) */
@@ -5147,6 +5294,9 @@ static void test_action_1b_stage1_rotation_steering(void) {
   assert(f.mr.record.target_x == 0x170);  /* pos + local*sin(0x100) */
   assert(f.mr.record.target_y == 0x20);   /* the MOVSD pos copy */
   assert(f.mr.record.target_z == 0xAB0);
+  /* 0x76FA7 / 0x76FBB. */
+  assert(f.mr.record.timer89 == 0);
+  assert(f.mr.keeper_latch[1] == 0u);
   assert(f.mr.record.stage92 == 2u);
   drop_fixture(&f);
 }
@@ -5737,12 +5887,14 @@ int main(void) {
   test_action_09_arm3_snap_and_reset();
   test_action_09_stage_above_range_tail();
   test_action_1b_stage0_latch_partial_clear();
+  test_action_1b_stage1_anim_table();
   test_action_1b_wide_route_binds_pan();
   test_action_1b_replace_self_actor_reaches_emit();
   test_action_1b_mutual_exclusion_skips_wide();
   test_action_1c_runs_body();
   test_action_1c_lunge_arm();
   test_action_1c_offtarget_rotated_arm();
+  test_action_1c_offtarget_anim_ids();
   test_action_1c_live_route();
   test_action_1b_stage1_rotation_steering();
   test_action_1a_runs_body();

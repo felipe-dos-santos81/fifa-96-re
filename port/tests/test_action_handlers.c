@@ -316,9 +316,11 @@ static void test_sequence_velocity_scale(void) {
   assert(fifa96_action_sequence_velocity_scale(1, 1, &vx, &vz, NULL) == ACTION_INVALID);
 }
 
-/* FU-180 §3 (T3): the row-0D 4-arm body (native 0x8251C..0x826FE). The arms
- * fall through (stage 0 -> 1 -> 2 -> 3 in one call); the unported
- * 0x702F8/0x6E598/0x8DCD4/0x79C50 sinks are reported as requests (FU180-L8). */
+/* FU-180 §3 (T3): the row-0D 4-arm body (native 0x8251C..0x826FE). Arm 0
+ * stages `word[+0x85] = 0x702F8(0x20)` = 21 and arm 1 waits on it, so the
+ * stage-0 call ends at stage 1; a second call with the native wait cleared
+ * (+0x85 = 0) exercises the 1 -> 2 -> 3 fall-through. The remaining
+ * 0x6E598/0x79C50 sinks are reported as requests (FU180-L8). */
 static void test_sequence_0d_row(void) {
   fifa96_action_0d_state s;
   fifa96_action_0d_out o;
@@ -344,7 +346,7 @@ static void test_sequence_0d_row(void) {
   assert(o.timer89 == 0x15);          /* 0x10 + delta 5 */
   assert(o.stage92 == 0);             /* reset does not advance */
 
-  /* stage 0 active -> the full 0->1->2->3 fall-through. */
+  /* stage 0 active -> arm 0 runs; arm 1 waits on word[+0x85] = 21. */
   memset(&s, 0, sizeof s);
   s.stage92 = 0;
   s.active = 1;
@@ -357,10 +359,25 @@ static void test_sequence_0d_row(void) {
   s.type_off_z = toz;
   assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
   assert(o.word83_20 == 1);
-  assert(o.ball_param == 1);          /* 0x702F8 */
+  assert(o.ball_param == 1);          /* 0x702F8 call */
+  assert(o.word85 == 21);             /* fifa96_camera_ramp(0x20) */
   assert(o.word87_zero == 1);         /* +0x87 = 0 */
-  assert(o.vel_scale == 1);          /* arm 0 velocity scale */
+  assert(o.vel_scale == 1);           /* arm 0 velocity scale */
   assert(o.ran == 1);                 /* +0x9E */
+  assert(o.anim == 1);
+  assert(o.anim_id == 0x10);          /* arm 0 anim; arm 1 never runs */
+  assert(o.target_set == 0);          /* arm 1 blocked by +0x85 */
+  assert(s.target_x == 0x0BAD);       /* target untouched */
+  assert(o.metric == 0);
+  assert(o.face == 0);
+  assert(o.stage92 == 1);
+
+  /* Second call with the +0x92 write applied and the native wait cleared
+   * (+0x85 = 0): arms 1..3 run. */
+  s.stage92 = o.stage92;
+  s.word85 = 0;
+  assert(fifa96_action_sequence_0d_step(&s, &o) == FIFA96_OK);
+  assert(o.word85 == 0);
   assert(o.target_set == 1);          /* arm 1 pos -> target */
   assert(s.target_x == 0x180);        /* 0x100 + (2 << 6) */
   assert(s.target_z == 0x1C0);        /* 0x200 + (-1 << 6) */
@@ -368,6 +385,7 @@ static void test_sequence_0d_row(void) {
   assert(o.metric_dist == 0x90);      /* fifa96_arm_dist_stage: dx 0x80, dz -0x40 */
   assert(o.metric_lane == -0x40);     /* the +0x69 word = dz */
   assert(o.face == 1);                /* 0x79C50 request (arm 3) */
+  assert(o.reset == 0);               /* timer89 0 is not > 0x14 */
   assert(o.anim == 1);
   assert(o.anim_id == 0x0B);          /* arm 1 overrides arm 0's 0x10 */
   assert(o.stage92 == 3);

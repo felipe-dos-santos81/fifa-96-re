@@ -4133,7 +4133,33 @@ static void test_keeper_l4_release_reach(void) {
  * (P10), no queued action (P3) and the single record dispatch.
  *
  * Baseline (phase-26c): the module is unlinked/unwired, so the ladder never
- * runs — `records[0].code` stays `0x19` and `camera.pos_y` stays `0`. */
+ * runs — `records[0].code` stays `0x19` and `camera.pos_y` stays `0`.
+ *
+ * Phase-37 correction (row-0x1B stage-1 closure): the ladder installs `0x1B`
+ * at stage 0, so the same dispatch runs the ported stage-1 body and its
+ * `0x76F91` anim install writes `+0x44` from the `0x10E180` row — all four
+ * rows have flags bit 0 clear, which closes the native `0x77636` gate. The
+ * sit-5 emit therefore needs the animation successor's `+0x44 = 1` row
+ * (the row-0x1B stage-2 wait design); the headless frame loop does not drive
+ * the render/anim advance (FU159-L5), so the fixtures below step the ported
+ * successor explicitly (`keeper_1b_release_ack`). */
+static void keeper_1b_release_ack(struct fifa96_match_run *mr,
+                                  struct fifa96_match_entity *keeper) {
+  assert(keeper->code == 0x1Bu);          /* the ladder install landed */
+  assert(keeper->stage92 == 2u);          /* the 0x76FC1 stage-1 tail */
+  assert(keeper->anim_id >= 0x34u && keeper->anim_id <= 0x3Au);
+  assert(keeper->row44 == 0u);            /* every 0x10E180 row: flags & 1 = 0 */
+  /* The animation successor is the native `+0x44` producer; two steps walk
+   * every 0x10E180 row to 0x26/0x27 (flags 0x07 -> `+0x44 = 1`):
+   * 0x34 -> 0x3F -> 0x26, 0x36 -> 0x41 -> 0x26, 0x38 -> 0x3F, 0x3A -> 0x41. */
+  for (int i = 0; i < 4 && keeper->row44 == 0u; i++)
+    assert(fifa96_match_run_record_anim_successor(keeper) == FIFA96_OK);
+  assert(keeper->row44 == 1u);
+  /* The next granted frame: stage 2 -> the 0x77636 gate now passes -> the
+   * stage-4 tail (reset + reposition_b_finish notify 5) -> phase 9. */
+  one_granted_frame(mr);
+}
+
 static void test_keeper_installer_reach(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -4166,8 +4192,12 @@ static void test_keeper_installer_reach(void) {
   keeper->stage92 = 2u;                            /* the row-0x1B stage-2 (wide/re-place) */
 
   /* Frame A (phase 2): the ladder installs row 0x1B (invoke-now); the row's
-   * self-actor re-place path reaches the sit-5 emit -> phase 9 -> row 0x1E. */
+   * same-frame stage 1 runs the re-place self-actor path and parks at the
+   * 0x77636 `+0x44` gate (the stage-1 anim row's flags bit 0 is clear).
+   * Frame B (the staged successor ack) then reaches the sit-5 emit ->
+   * phase 9 -> row 0x1E. */
   one_granted_frame(&mr);
+  keeper_1b_release_ack(&mr, keeper);
   assert(keeper->code == 0x1Eu);                   /* row 0x1E installed on the keeper */
   assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
 
@@ -4192,7 +4222,11 @@ static void test_keeper_installer_reach(void) {
   /* The release triple: the single `[0x157750]` cell and the FU-71 camera. */
   assert(mr.render.camera.pos_y == 0x50);
   assert(keeper->anim_id == 0x45u);                /* the claim's selected row */
-  assert(mr.render.camera.tracked != 0);           /* the keeper bound as tracked */
+  /* Phase-37 correction: the fixture keeper is team 0 record 0 -> entity id 0,
+   * so "bound as tracked" is `tracked == id`, not `tracked != 0` (the old
+   * `!= 0` passed on another record's release in the pre-phase-37 route). */
+  assert(mr.render.camera.tracked ==
+         (int32_t)(keeper->team * FIFA96_MATCH_ENTITY_RECORDS + keeper->index));
 
   /* The row-0E stage-2 gate (the live camY band `0x20 < [0x157750] < 0x70`). */
   one_granted_frame(&mr);
@@ -4217,11 +4251,13 @@ static void test_keeper_installer_reach(void) {
  * own state with NO staged permit, so this test drives the exact T4 scenario
  * minus the staged P1 through the REAL per-frame body (the same
  * `ef.keeper_cpu = &mr->keeper_cpu` seam `make game` uses) and pins the flip:
- * the ladder's `CX=4` arm installs row `0x1B`, its same-frame dispatch reaches
- * the sit-5 emit (phase 9 -> row `0x1E`), and the row-`0x1E` claim walks to the
- * stage-5 outlet — the T4 frame-A/B trajectory, un-staged. On the phase-27 tree
- * the first assert fails (the dead permit leaves the code at `0x19`); the flip
- * is the Stage-2 acceptance signal (FU298-L6), not a regression.
+ * the ladder's `CX=4` arm installs row `0x1B`; its stage-1 anim install parks
+ * the row at the native `0x77636` `+0x44` gate (phase-37), the successor-ack
+ * frame runs the sit-5 emit (phase 9 -> row `0x1E`), and the row-`0x1E` claim
+ * walks to the stage-5 outlet — the T4 frame-A/B trajectory, un-staged, plus
+ * the stage-1 wait frame. On the phase-27 tree the first assert fails (the
+ * dead permit leaves the code at `0x19`); the flip is the Stage-2 acceptance
+ * signal (FU298-L6), not a regression.
  *
  * The release / visible-camera assertions stay with the T4 reach (they need the
  * stage-5 `frame < 3` staging) and the Layer-2 acceptance (spec §5). */
@@ -4254,8 +4290,11 @@ static void test_keeper_installer_live_permit(void) {
 
   /* Frame 1: the live permit opens the gate; the ladder gate (P4 staged) runs
    * the CX=4 arm; row `0x1B` installs invoke-now and dispatches on this same
-   * frame (the T4 frame-A trajectory, un-staged). */
+   * frame (the T4 frame-A trajectory, un-staged): the stage-1 anim install
+   * parks at the 0x77636 `+0x44` gate. Frame 2 steps the successor ack and
+   * runs the stage-4 tail. */
   one_granted_frame(&mr);
+  keeper_1b_release_ack(&mr, keeper);
   assert(keeper->code == 0x1Eu);                  /* installed + dispatched live */
   assert(mr.state.phase == 9u);                   /* situation 5 -> phase 9 */
 
@@ -4281,7 +4320,8 @@ static void test_keeper_installer_live_permit(void) {
  * `CX = 4` from producer inputs (the AX-gate camera pose, the keeper lane, the
  * opposite-side actor cell) and the ladder installs row `0x1B` through the
  * merged `fifa96_match_entities_install` contract (FU304). The row dispatches
- * in the same frame, reaches the sit-5 emit (situation 5 -> phase 9), the
+ * in the same frame (stage-1 anim install + self-actor re-place); the
+ * successor-ack frame then runs the sit-5 emit (situation 5 -> phase 9), the
  * phase-9 arm installs row `0x1E` on the controlled team's keeper, and the
  * row-`0x1E` claim walks to the stage-5 release (`camera.pos_y = 0x50`). The
  * camera cells move through the real seam: the re-place's `fifa96_camera_init`
@@ -4343,10 +4383,13 @@ static void test_keeper_installer_live_reach(void) {
 
   one_granted_frame(&mr);
   assert((mr.dispatched_ok & (1ull << 0x1B)) != 0u);
-  assert(mr.state.phase == 9u);
-  assert(k1->code == 0x1Eu);                      /* the phase-9 controlled-team install */
   assert(mr.render.camera.pos_y == 0x38);         /* the re-place pose through the seam */
   assert(mr.global_157c5d == 0u);                 /* the step consumed the pulse; 0x1B does not re-set */
+  /* Phase-37: the stage-1 anim install's +0x44 is clear, so the emit waits
+   * for the successor ack frame (`keeper_1b_release_ack`). */
+  keeper_1b_release_ack(&mr, k1);
+  assert(mr.state.phase == 9u);
+  assert(k1->code == 0x1Eu);                      /* the phase-9 controlled-team install */
 
   /* The installed row 0x1E claim walks stages 0..4 to the stage-5 release. */
   for (int i = 0; i < 400 && !reached_outlet; i++) {
@@ -5418,10 +5461,12 @@ static void test_keeper_interlock_survives_frame(void) {
  * lane `0x28`, stage `2`, the AX-gate camera — and the actor MOVED off team 1
  * rec 0 onto team 0 rec 0 (`is_actor` skip `0x77F36` for one, setter for the
  * other). The witness is the ladder's own consequence: the CX=4 arm installs
- * row `0x1B` invoke-now, whose same-frame dispatch reaches the sit-5 emit
- * (phase 9 -> row `0x1E`) — the T4 frame-A trajectory, but for team 1 and with
- * NO staged interlock. RED on the phase-27 tree: team 1's gate reads the
- * frame-head bind (0), the ladder never fires, and the code stays `0x19`. */
+ * row `0x1B` invoke-now, whose dispatch runs the stage-1 install + the
+ * self-actor re-place; the successor-ack frame then reaches the sit-5 emit
+ * (phase 9 -> row `0x1E`) — the T4 trajectory plus the phase-37 stage-1 wait
+ * frame, but for team 1 and with NO staged interlock. RED on the phase-27
+ * tree: team 1's gate reads the frame-head bind (0), the ladder never fires,
+ * and the code stays `0x19`. */
 static void test_keeper_interlock_cross_team_install(void) {
   struct fixture f = make_fixture(10000000ull);
   struct fifa96_match_run mr;
@@ -5465,9 +5510,12 @@ static void test_keeper_interlock_cross_team_install(void) {
   k1->stage92 = 2u;                                /* the row-0x1B stage-2 (wide/re-place) */
 
   /* One frame: team 0's row-0x19 set arms team 1's step gate in the SAME walk;
-   * the ladder's CX=4 arm installs `0x1B` and its dispatch reaches the sit-5
-   * emit -> phase 9 -> row `0x1E` on team 1's keeper. */
+   * the ladder's CX=4 arm installs `0x1B` and its dispatch runs the stage-1
+   * install + the self-actor re-place, parking at the 0x77636 `+0x44` gate.
+   * The successor-ack frame then runs the sit-5 emit -> phase 9 -> row `0x1E`
+   * on team 1's keeper (phase-37 correction; see `keeper_1b_release_ack`). */
   one_granted_frame(&mr);
+  keeper_1b_release_ack(&mr, k1);
   assert(k1->code == 0x1Eu);                       /* cross-team armed + dispatched */
   assert(mr.state.phase == 9u);                    /* situation 5 -> phase 9 */
 

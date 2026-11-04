@@ -3562,3 +3562,16 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   **FU188-L3** because it invalidates the FU333 natural-pan witness. M2 v24
   re-pinned to `274e7431…` (first diff frame 466, 5985/6522 lines, state set
   unchanged); M1 exact; `make check` **112/112**.
+
+- **phase-37 live-record fidelity (2026-11-04).** Closed the row-`0x1B`
+  stage-1 anim select/tail (`0x10E180 = {0x34,0x36,0x38,0x3A}`, index
+  `[0x157C54] + 2*(target_y > 0x50)`; `0x76FA7`/`0x76FBB`) and the row-`0x1C`
+  shared face/heading prologue plus its on-target `0x3C` / off-target
+  `{0x34,0x36,0x3D,0x3E}` installs. Also implemented the row-`0x09` native
+  same-frame `0x0C` invoke-now (`0x7D9A4 ECX=1`) with an outer-record restore,
+  and corrected the row-`0x0D` loader body's `0x702F8` argument to the
+  `+0x83` word (`ramp(0x20)=21`), without wiring its dead dispatch slot. The
+  census is unchanged (**78/78**, **57/80** natural, **62/80** install-live,
+  **5** blocked); M1/M2 remain exact and `make check` is **112/112**. Earlier
+  notes that `0x80F61` sits in an *unported* row-09 arm 1 are superseded: arm 1
+  is ported; the row-0x0D gate itself remains unproduced.

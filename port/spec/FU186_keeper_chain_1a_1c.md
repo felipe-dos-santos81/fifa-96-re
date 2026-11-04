@@ -465,3 +465,14 @@ Tests: `test_action_1c_runs_body` / `test_action_1c_lunge_arm` /
 (`port/tests/test_engine_match_handlers.c`), each mutation-RED (stubbing the body
 aborts at its first effect assertion). `make check` 110/110; M1 `09b726b7…`
 and M2 `7b4b241a…` byte-identical → no re-pin.
+
+> **FU-186 §9 phase-37 erratum (2026-11-04).** The row-0x1C stage-1 residue of
+> FU186-L2 is now closed. Fresh `disassemble_bytes 0x77790..0x779B9` gives the
+> shared `0x79C50(rec, -word[0x1577C0], -word[0x1577C2])` face and the
+> `0xCD474` heading -> `word[+0x7F]` at `0x7779C..0x777CC`; the shared
+> `0x77997` install is `0x3C` on-target and `0x7791F..0x7798B` selects
+> `{0x36,0x34}` below `dword[+0x51] 0x40` and `{0x3E,0x3D}` at/above it from
+> the rotated `vel_x*word[+0x69] > vel_z*word[+0x67]` cross-product. The
+> install syncs `anim_id/frame/row44` before the native `0x779D1` test. The
+> `0x779DE..0x77E8B` tail remains FU186-L2; the second installer
+> `FUN_00077EAC` remains FU186-L5.

@@ -423,3 +423,14 @@ precedent). It co-wires when row-09 arm 1 lands. The `0x702F8`/`0x6E598`/
 > sinks are exposed as requests (FU180-L8)." **Corrected:** `0x8DCD4` is the
 > ported `fifa96_arm_dist_stage`, called directly by the row-0x0D arm-1 body;
 > the sinks still exposed as requests are `0x702F8`/`0x6E598`/`0x79C50`.
+
+> **FU-180 §12 phase-37 erratum (2026-11-04).** This supersedes the sink note
+> above for `0x702F8` only. Fresh `disassemble_bytes 0x82567..0x825B5` shows
+> `0x82574 MOV word[EBP+0x83],0x20`, `0x8257D MOV EAX,dword[EBP+0x81]`,
+> `0x82588 SAR EAX,0x10`, `0x8258D CALL 0x702F8`, `0x82598 MOV
+> word[EBP+0x85],AX`. The argument is therefore the `+0x83` word (`0x20`), not
+> the `+0x81` low word; `fifa96_camera_ramp(0x20)=21` and arm 1 waits. The
+> loader body now stages 21 and reports it. Row-0x1B stage 1's `0x10E180`
+> select (`read_memory 0x10E180 = 34 36 38 3A`), the `0x6E598` install and the
+> `0x76FA7`/`0x76FBB` tail are ported; the stage-3 `0x79C50/0x6E598` actor
+> event remains a separate leg.

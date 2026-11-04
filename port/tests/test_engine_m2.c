@@ -5917,14 +5917,21 @@ static void run_census_riders(void) {
   }
   /* 7. The row-0x1B stage-0 latch partial clear (T2 fidelity fix / FU180-L7):
    *    the native six-store form clears only 0x157C54/57/58/59/5A/5B and leaves
-   *    0x157C55/56 (keeper_latch[1]/[2]) — FU180-L7's stage-2 rush gate reads
-   *    byte[0x157C55]. The reverted `memset(sizeof)` would clear all eight. */
+   *    0x157C55/56 (keeper_latch[1]/[2]) through the stage-0 store — the
+   *    reverted `memset(sizeof)` would clear all eight. Phase-37 adds the
+   *    native stage-1 tail: the same dispatch falls into stage 1, whose
+   *    0x76FBB store clears [1] before the stage-2 gate, so the surviving [2]
+   *    is the observable half. `lane_x=1/bound=0` forces the 0x7700E rush
+   *    exit so the deep pan does not run. */
   {
     struct fifa96_match_run mr;
     fifa96_match_run_init(&mr);
+    struct fifa96_match_entity *e = &mr.entities.team[0].records[0];
     mr.record.entity_id = 0;
     mr.state.phase = 0;                  /* the head does not bind */
     mr.record.stage92 = 0;
+    e->lane_x = 1;                       /* the 0x7700E rush gate closes */
+    e->bound = 0;
     memset(mr.keeper_latch, 1, sizeof mr.keeper_latch);
     assert(fifa96_match_dispatch_action(&mr, 0x1Bu) == FIFA96_OK);
     assert(mr.keeper_latch[0] == 0);     /* 0x157C54 cleared */
@@ -5933,8 +5940,10 @@ static void run_census_riders(void) {
     assert(mr.keeper_latch[5] == 0);     /* 0x157C59 cleared */
     assert(mr.keeper_latch[6] == 0);     /* 0x157C5A cleared */
     assert(mr.keeper_latch[7] == 0);     /* 0x157C5B cleared */
-    assert(mr.keeper_latch[1] == 1);     /* 0x157C55 survives (FU180-L7) */
-    assert(mr.keeper_latch[2] == 1);     /* 0x157C56 survives */
+    assert(mr.keeper_latch[1] == 0);     /* 0x76FBB stage-1 tail (phase-37) */
+    assert(mr.keeper_latch[2] == 1);     /* 0x157C56 survives the whole row */
+    assert(e->anim_id == 0x34u);         /* the 0x10E180 row-0 install */
+    assert(mr.record.anim_id == 0x34u);  /* the staging sync */
   }
 }
 

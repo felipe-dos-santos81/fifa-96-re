@@ -8265,3 +8265,49 @@ Census: **78/78 bodies = 100%; 57/80 natural = 71%; 62/80 install-live = 77%;
 `274e74314d9cb95960e2a8db214ec37528d194f3941e41cb8c7a65d81bfa2f83`:
 first differing line 466, 5985/6522 lines, state-tag set unchanged (counts
 `21/1-0` 100→96, `4/1-0` 303→304, `12/1-0` 4→7). Final gate: **112/112**.
+
+## Phase 37 — live-record fidelity: row-1B/1C stage-1 tails + row-09 invoke-now (2026-11-04)
+
+Fresh Ghidra reads closed three faithful runtime legs without wiring a dead
+producer or moving the census.
+
+- **Row `0x1B` stage 1.** `0x76F5A..0x76F91` selects the `0x10E180` anim row by
+  `index = byte[0x157C54] + 2*(dword[+0x51] > 0x50)` (the unaligned dword at
+  `0x10E17D + index`, `SAR 0x18`); `read_memory 0x10E180` = `34 36 38 3A`,
+  i.e. `{0x34,0x36,0x38,0x3A}`. The install syncs `anim_id/frame/row44`, then
+  the native tail stores `timer89=0` (`0x76FA7`), `byte[0x157C55]=0`
+  (`0x76FBB`) and advances to stage 2. Row-1B stage 3's separate
+  `0x79C50/0x6E598` actor event remains a leg; the stage-1 residue is closed.
+- **Row `0x1C` stage 1.** `0x7779C..0x777CC` is the shared `0x79C50` face on
+  `-camera.vel_x/-camera.vel_z` plus the `0xCD474(dx,dz)` heading into the
+  `timer7f` low word. `0x7791F..0x7798B` picks the off-target id
+  `{0x36,0x34}` below `target_y 0x40` and `{0x3E,0x3D}` at/above it, using the
+  rotated `vel_x*word[+0x69] > vel_z*word[+0x67]` cross-product; the shared
+  `0x77997` install is `0x3C` on-target. Both installs sync
+  `anim_id/frame/row44` before the native `0x779D1` `+0x44` test. The
+  `0x779DE..0x77E8B` tail stays FU186-L2.
+- **Row `0x09` invoke-now.** Native `0x7D9A4` with `ECX=1` calls
+  `[rec+0x18]` immediately (`0x7DAA3..0x7DAAA`). The engine now stages the
+  target's row-0x0C inputs, dispatches it once, writes the handler's record
+  effects back and restores the outer row-09 staging; the target's own walk
+  still dispatches row 0x0C again, matching the native installer + machine-tail
+  pair. Fixture: the nested foul tail sets `stage92=1`, `skip_98=1`, the
+  `0x0D/0x52` anim and the `dispatched_ok` 0x0C bit.
+- **Row `0x0D` body fidelity.** The native `0x702F8` argument is the word at
+  `+0x83` (`0x82574` stages 0x20; `0x8257D` + `0x82588` is the dword-alias read
+  of `dword[+0x81]>>16`), not `+0x81`. `fifa96_camera_ramp(0x20)=21`, so arm 1
+  waits; the loader body now stages 21 and reports it. The row's dispatch slot
+  stays NULL because the live install gate (`desc_16`/`[rec+0x24]`) is
+  unproduced; wiring it would be a fake natural count.
+
+Census unchanged: **78/78 bodies, 57/80 natural, 62/80 install-live, 5 blocked**.
+The row-1B stage-1 `+0x44` install now delays the sit-5 emit to the native
+successor frame; the frame fixtures step the ported successor explicitly (the
+headless loop does not drive the render/anim advance, FU159-L5). M1
+`09b726b7…` and M2 `274e7431…` are byte-identical (`cmp`); `make check`
+**112/112**.
+
+> **Erratum.** Earlier statements that the row-0x0D installer `0x80F61` sits
+> inside an *unported* row-09 arm 1 are superseded: arm 1 is ported and the
+> `0x0C` invoke-now is closed; the row-0x0D dispatch slot still stays NULL
+> because the live install gate (`desc_16`/`[rec+0x24]`) is unproduced.
