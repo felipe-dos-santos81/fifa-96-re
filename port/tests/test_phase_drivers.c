@@ -310,6 +310,55 @@ static void test_phase_period_end(void) {
   assert(fifa96_action_phase_period_end(0, 0, 0, 0, 0, 0, 0, 0, 0, p0000, NULL) == PHASE_INVALID);
 }
 
+/* The native phase-0x13/0x14 upgrade probes: A = the dword pair at 0x142FE0
+ * (read by FUN_00012230(0/1)) and B = the pair at 0x142FE8 (read by
+ * FUN_00012250(0/1)). The chooser takes them as {A0, A1, B0, B1}; a hit
+ * upgrades phase 0x13 -> 0x14 and keeps the native side path:
+ *  - Edx 0 (own > other, or period >= 4 with d8 > d9) reads A0 -> side_abe;
+ *  - Edx 1 (own < other, or period >= 4 with d8 <= d9) reads A1 -> side_abf;
+ *  - Edx 3 (equal scores, period < 4) reads B0 then B1 -> side_abe/side_abf.
+ * The period >= 4 d8/d9 compare (0x8BA17) is signed. */
+static void test_phase_period_end_probe(void) {
+  static const uint8_t none[4] = {0, 0, 0, 0};
+  static const uint8_t a0[4] = {1, 0, 0, 0};
+  static const uint8_t a1[4] = {0, 1, 0, 0};
+  static const uint8_t b0[4] = {0, 0, 1, 0};
+  static const uint8_t b1[4] = {0, 0, 0, 1};
+  fifa96_action_phase_period_end_out out;
+
+  /* own > other -> Edx 0 -> A0. */
+  assert(fifa96_action_phase_period_end(1, 1, 2, 1, 0x33, 0x21, 0x22, 0, 0, none, &out) == FIFA96_OK);
+  assert(out.phase == 0x13u && out.act == 0x0Cu && out.side == 0x21u);
+  assert(fifa96_action_phase_period_end(1, 1, 2, 1, 0x33, 0x21, 0x22, 0, 0, a0, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.act == 0x0Cu && out.side == 0x21u);
+
+  /* own < other -> Edx 1 -> A1; A0 does not upgrade this arm. */
+  assert(fifa96_action_phase_period_end(1, 1, 1, 2, 0x33, 0x21, 0x22, 0, 0, a0, &out) == FIFA96_OK);
+  assert(out.phase == 0x13u && out.side == 0x22u);
+  assert(fifa96_action_phase_period_end(1, 1, 1, 2, 0x33, 0x21, 0x22, 0, 0, a1, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.act == 0x0Cu && out.side == 0x22u);
+
+  /* equal scores -> Edx 3 -> B0 then B1; the no-hit control keeps
+   * side_controlled. */
+  assert(fifa96_action_phase_period_end(1, 1, 1, 1, 0x33, 0x21, 0x22, 0, 0, none, &out) == FIFA96_OK);
+  assert(out.phase == 0x13u && out.side == 0x33u);
+  assert(fifa96_action_phase_period_end(1, 1, 1, 1, 0x33, 0x21, 0x22, 0, 0, b0, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.act == 0x0Cu && out.side == 0x21u);
+  assert(fifa96_action_phase_period_end(1, 1, 1, 1, 0x33, 0x21, 0x22, 0, 0, b1, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.side == 0x22u);
+
+  /* period >= 4 -> the signed d8/d9 compare: 5 <= 5 -> Edx 1 -> A1;
+   * 6 > 5 -> Edx 0 -> A0; -1 <= 0 -> Edx 1 -> A1. */
+  assert(fifa96_action_phase_period_end(4, 1, 0, 0, 0x33, 0x21, 0x22, 5, 5, a1, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.act == 0x0Cu && out.side == 0x22u);
+  assert(fifa96_action_phase_period_end(4, 1, 0, 0, 0x33, 0x21, 0x22, 6, 5, a0, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.side == 0x21u);
+  assert(fifa96_action_phase_period_end(4, 1, 0, 0, 0x33, 0x21, 0x22, 255, 0, a1, &out) == FIFA96_OK);
+  assert(out.phase == 0x14u && out.side == 0x22u);
+  assert(fifa96_action_phase_period_end(4, 1, 0, 0, 0x33, 0x21, 0x22, 5, 5, none, &out) == FIFA96_OK);
+  assert(out.phase == 0x13u && out.side == 0x22u);
+}
+
 int main(void) {
   init_phase_table();
   test_phase_install();
@@ -324,6 +373,7 @@ int main(void) {
   test_phase_act();
   test_phase_situations();
   test_phase_period_end();
+  test_phase_period_end_probe();
   puts("test_phase_drivers: all assertions passed");
   return 0;
 }

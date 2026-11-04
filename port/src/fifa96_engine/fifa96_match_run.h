@@ -657,6 +657,18 @@ struct fifa96_match_run {
    * stay unported legs (FU213-L1/L7). This is T1's exposed flag for T2's
    * situation-8 gate / the act-0xC-0xB route. */
   uint8_t global_157ac0;
+  /* The `FUN_0008B9CC` period-end upgrade probes (the chooser's `probe[4]`):
+   * the native dword cells `0x142FE0` (A0/A1) and `0x142FE8` (B0/B1), written
+   * by `FUN_00012228`/`FUN_00012248` and read by the chooser through
+   * `FUN_00012230(0/1)`/`FUN_00012250(0/1)` (`0x8BA37`/`0x8BA49`/`0x8BA5E`);
+   * a non-zero pick upgrades the extra-time phase 0x13 -> 0x14. Only the
+   * competition screens (season mode 1 / cup mode 3) write non-zero; ordinary
+   * match setup zeroes both pairs (`FUN_00018680` `0x1871F`/`0x1874E`), so
+   * init/begin stage all four zero and a Friendly keeps the native 0x13 arm.
+   * `fifa96_match_run_set_probe` is the future front-end hand-off seam; the
+   * competition-screen producer is not ported, so no value is fabricated. */
+  uint8_t probe_a[2];
+  uint8_t probe_b[2];
   /* FU-231 §5 / FU-236 §1.1 (M2 phase-22 T2): the native end word
    * `[0x158822]` (a 16-bit word; FU234-L2: the harness return `0x8B678 MOV
    * AX,word[0x158822]`). Set by the ported `FUN_0008BAF0` end machine to `1`
@@ -1405,6 +1417,19 @@ int fifa96_match_run_ball_receive(struct fifa96_match_run *mr, int32_t actor,
  * `FIFA96_ACTION_PHASE_NONE`), 0 otherwise, -FIFA96_ERR_INVALID (NULL), or a
  * -fifa96_err_t from the drivers. */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr);
+
+/* The native period-end probe-cell setters `FUN_00012228` (A, dword cell
+ * `0x142FE0`) / `FUN_00012248` (B, dword cell `0x142FE8`): stage one index's
+ * A/B pair for the `FUN_0008B9CC` chooser (`probe[4]` =
+ * `{A0, A1, B0, B1}`). This is the front-end hand-off seam for the unported
+ * competition-screen producer (season mode 1 / cup mode 3); ordinary match
+ * setup zeroes both pairs, which init/begin mirror, and the engine adds no
+ * fake producer. The native setters are plain memory stores with no run gate,
+ * so this seam writes before or after `begin` (a later `begin` re-zeroes).
+ * The native indexes blindly; the port hardens. Returns 0 or
+ * -FIFA96_ERR_INVALID (NULL `mr` or side > 1). */
+int fifa96_match_run_set_probe(struct fifa96_match_run *mr, uint8_t side,
+                               uint8_t a, uint8_t b);
 
 /* The derived `FUN_0008A938` situation dispatcher's table-2 row (M2
  * playable-match Task 2 / OL-84 residual; FU-143 §3.2/§5; FU-149 P1 shared

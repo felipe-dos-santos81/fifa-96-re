@@ -44,6 +44,10 @@ static void test_init_resets_state(void) {
   assert(mr.state.phase == 0);
   assert(mr.state.prev_phase == 0);
   assert(mr.state.aux_flag == 0);
+  /* The native period-end probe cells 0x142FE0/0x142FE8 (ordinary match
+   * setup zeroes both pairs): a fresh run keeps the Friendly 0x13 arm. */
+  assert(mr.probe_a[0] == 0u && mr.probe_a[1] == 0u);
+  assert(mr.probe_b[0] == 0u && mr.probe_b[1] == 0u);
   /* FU-142a: the installer-arms machine is reset with the run state */
   assert(mr.phase_machine.state == 0);
   assert(mr.phase_machine.phase == 0);
@@ -739,6 +743,116 @@ static void test_phase_drive_period4_skip_and_w5(void) {
   assert(fifa96_match_run_phase_drive(&mr) == 0);
   assert(mr.global_157ac0 == 0u);
   assert(mr.global_157ac2 == 0u);
+}
+
+/* The native phase-0x13/0x14 probe cells: A = the dword pair at 0x142FE0
+ * (FUN_00012230(0/1) reads), B = 0x142FE8 (FUN_00012250(0/1)); setters
+ * FUN_00012228/FUN_00012248. The run carries the four bytes and phase_drive
+ * threads them into the chooser in native call order {A0,A1,B0,B1}. The
+ * default all-zero pair (ordinary match setup, a Friendly) keeps phase 0x13;
+ * a staged A0 upgrades the same period completion to 0x14/act 0x0C; the
+ * equal-score Edx-3 arm reads B0/B1; and the period>=4 Edx-1 arm reads A1.
+ * Mutation-RED: reverting the probe initializer to literal zeros leaves every
+ * upgraded assertion at 0x13. */
+static void test_phase_drive_probe_cells(void) {
+  struct fifa96_match_run mr;
+
+  /* negative control: the fresh run's zero probes keep the 0x13 choice. */
+  fifa96_match_run_init(&mr);
+  assert(mr.probe_a[0] == 0u && mr.probe_a[1] == 0u);
+  assert(mr.probe_b[0] == 0u && mr.probe_b[1] == 0u);
+  mr.state.period = 2;                  /* completed regulation index 1 */
+  mr.state.phase = 2;                   /* class 1: the clock runs */
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;                     /* W2 raises the OL-85 flag */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 1u);
+  assert(mr.state.phase == 0x13u);
+  assert(mr.act.id == 0x0Cu);
+
+  /* A0 (0x142FE0 index 0) -> the same completion lands phase 0x14. */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_probe(&mr, 0u, 1u, 0u) == 0);
+  assert(mr.probe_a[0] == 1u && mr.probe_a[1] == 0u);
+  assert(mr.probe_b[0] == 0u && mr.probe_b[1] == 0u);
+  mr.state.period = 2;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 0u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.global_157ac0 == 1u);
+  assert(mr.state.phase == 0x14u);
+  assert(mr.act.id == 0x0Cu);
+
+  /* Equal scores: the front-end flag is pre-set (the W6 writer is unported),
+   * the chooser's Edx-3 arm reads B0 (0x142FE8 index 0) -> 0x14. */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_probe(&mr, 0u, 0u, 1u) == 0);
+  mr.state.period = 2;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;
+  mr.global_157ac0 = 1u;                /* W6 front-end stand-in (no producer) */
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x14u);
+  assert(mr.act.id == 0x0Cu);
+
+  /* B1 (index 1) also upgrades the equal-score arm. */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_probe(&mr, 1u, 0u, 1u) == 0);
+  assert(mr.probe_a[0] == 0u && mr.probe_a[1] == 0u);
+  assert(mr.probe_b[0] == 0u && mr.probe_b[1] == 1u);
+  mr.state.period = 2;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.score[0] = 1u;
+  mr.score[1] = 1u;
+  mr.global_157ac0 = 1u;
+  mr.clock_period_ended = 1;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x14u);
+  assert(mr.act.id == 0x0Cu);
+
+  /* period >= 4: the chooser's Edx-1 arm reads A1 (d8 == d9 == 0 derives
+   * Edx 1); the staged A1 upgrades the skip's phase to 0x14. */
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_probe(&mr, 1u, 1u, 0u) == 0);
+  mr.state.period = 4;
+  mr.state.phase = 2;
+  mr.phase_machine.side_controlled = 0;
+  mr.global_157ac0 = 1u;
+  assert(fifa96_match_run_phase_drive(&mr) == 1);
+  assert(mr.state.phase == 0x14u);
+  assert(mr.state.period == 5u);
+  assert(mr.global_157ac2 == 5u);
+
+  /* The native setters index blindly; the port hardens. */
+  assert(fifa96_match_run_set_probe(NULL, 0u, 1u, 1u) == -FIFA96_ERR_INVALID);
+  assert(fifa96_match_run_set_probe(&mr, 2u, 1u, 1u) == -FIFA96_ERR_INVALID);
+  assert(mr.probe_a[0] == 0u && mr.probe_a[1] == 1u);  /* unchanged */
+}
+
+/* The ordinary native match setup zeroes 0x142FE0/0x142FE8 through
+ * FUN_00012228/FUN_00012248 (FUN_00018680 0x1871F/0x1874E); init and begin
+ * stage the same zero, so a stale competition hand-off cannot leak into the
+ * next Friendly. */
+static void test_probe_cells_begin_reset(void) {
+  struct fixture f = make_fixture(10000000ull);
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_run_set_probe(&mr, 0u, 1u, 1u) == 0);
+  assert(fifa96_match_run_set_probe(&mr, 1u, 1u, 1u) == 0);
+  assert(fifa96_match_run_begin(&mr, f.engine, 0) == 0);
+  assert(mr.probe_a[0] == 0u && mr.probe_a[1] == 0u);
+  assert(mr.probe_b[0] == 0u && mr.probe_b[1] == 0u);
+  assert(fifa96_match_run_end(&mr) == 0);
+  drop_fixture(f);
 }
 
 /* FU-208 §4.2 / FU-209 §6 (M2 phase-19 T2): the situation-8 selection. When the
@@ -10457,6 +10571,8 @@ int main(void) {
   test_phase_drive_extra_time_tiebreak();
   test_phase_drive_half_time_selects_act1();
   test_phase_drive_period4_skip_and_w5();
+  test_phase_drive_probe_cells();
+  test_probe_cells_begin_reset();
   test_phase_drive_situation8_selects_act7();
   test_roll_flag_staged_zero();
   test_phase_drive_roll4_flag_differing();

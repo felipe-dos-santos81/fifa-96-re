@@ -2216,6 +2216,10 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
+  mr->probe_a[0] = 0;                  /* 0x142FE0: ordinary setup zeroes the pair */
+  mr->probe_a[1] = 0;
+  mr->probe_b[0] = 0;                  /* 0x142FE8: same for the B pair */
+  mr->probe_b[1] = 0;
   mr->end_word_158822 = 0;             /* FU-231 T2: no end word yet */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
@@ -2389,6 +2393,10 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
+  mr->probe_a[0] = 0;                  /* 0x142FE0: fresh-match setup zeroes A */
+  mr->probe_a[1] = 0;
+  mr->probe_b[0] = 0;                  /* 0x142FE8: fresh-match setup zeroes B */
+  mr->probe_b[1] = 0;
   mr->end_word_158822 = 0;             /* FU-231 T2: fresh end word */
   mr->actor_1587d4 = FIFA96_MATCH_ENTITY_NONE; /* FU-210 L3: no sit-8 actor bind */
   mr->actor_1587cc[0] = FIFA96_MATCH_ENTITY_NONE; /* FU-217 T3: no sit-8 per-side bind */
@@ -2828,6 +2836,21 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr) {
   return 0;
 }
 
+/* The native period-end probe-cell setters `FUN_00012228` (A, dword cell
+ * `0x142FE0`) / `FUN_00012248` (B, dword cell `0x142FE8`). The engine keeps
+ * the four values the chooser reads (`probe_a[0..1]`/`probe_b[0..1]`) and this
+ * is the front-end hand-off seam for the unported competition-screen producer
+ * (season mode 1 / cup mode 3). The native setters are plain dword stores with
+ * no run gate; the port keeps that (init/begin still stage the ordinary-setup
+ * zero). The native indexes blindly; the port hardens. No producer is faked. */
+int fifa96_match_run_set_probe(struct fifa96_match_run *mr, uint8_t side,
+                               uint8_t a, uint8_t b) {
+  if (!mr || side > 1u) return -FIFA96_ERR_INVALID;
+  mr->probe_a[side] = a;
+  mr->probe_b[side] = b;
+  return 0;
+}
+
 /* FU-143 wiring (M2 playability Task 3): the engine-side phase driver. The
  * native funnel is FUN_0008AF38's second rollover: when the phase-class gate is
  * open (class 1 always; class 2 while [0x14C302]==0; class 0 stops the clock;
@@ -2880,14 +2903,27 @@ static int match_run_terminal_dwelling(const struct fifa96_match_run *mr) {
  * chooser's side/d8/d9/probe inputs remain the derived defaults (OL-74/OL-75);
  * the equal-score override `[0x14C2EE]`, the front-end writer `0x389A4` and
  * the no-extra-time latch `[0x10F378]` stay unported legs (FU213-L1/L7). */
+/* ERRATUM (probe-ab, native-faithful probe inputs): the two sentences above
+ * that leave the chooser's `0x12230`/`0x12250` probe inputs as the hardwired
+ * derived defaults are superseded. The run now carries the native cells
+ * (`probe_a[0..1]` = `0x142FE0`, `probe_b[0..1]` = `0x142FE8`, setters
+ * `FUN_00012228`/`FUN_00012248`) and threads them into the chooser in native
+ * call order `{A0, A1, B0, B1}`. init/begin still stage all four zero (the
+ * ordinary match-setup write), so the Friendly path remains phase 0x13; the
+ * competition-screen producer is unported and `fifa96_match_run_set_probe`
+ * exposes only the seam (no fake caller, FU213-L1/L7 unchanged). */
 int fifa96_match_run_phase_drive(struct fifa96_match_run *mr) {
   const fifa96_action_phase_row_desc *row;
   fifa96_action_phase_period_end_out out;
-  uint8_t probe[4] = { 0u, 0u, 0u, 0u };
+  uint8_t probe[4];
   uint8_t side;
   uint8_t ended;
   int rc;
   if (!mr) return -FIFA96_ERR_INVALID;
+  probe[0] = mr->probe_a[0];   /* 0x12230(0) */
+  probe[1] = mr->probe_a[1];   /* 0x12230(1) */
+  probe[2] = mr->probe_b[0];   /* 0x12250(0) */
+  probe[3] = mr->probe_b[1];   /* 0x12250(1) */
   /* FU-225 §4 / D10 (T4): the native `FUN_0004B02C(mode 0)` runs EVERY frame
    * (FUN_000493A0 loop 0x4950A), before the clock; its own gates
    * (state.phase == 0x0C, global_157ac2 == 4) select the sit-1/sit-8 arm.
