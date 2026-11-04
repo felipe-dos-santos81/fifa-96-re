@@ -1906,8 +1906,8 @@ int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
  * no-winner [0x1587CC] rebind back to stage 0). Remaining legs: the unported
  * 0x651F0/0x974F0/0x8F188 sinks (FU194-L3/L7), the 0x45001 input gate
  * (FU184-L3/FU188-L2 sibling) and the record-11 ball record's +0x44 cell
- * (FU-142 OL-49). Arm 9's native [0x157AC0]=1 write stays FU209-L5.] Returns
- * FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+ * (FU-142 OL-49). Arm 9's native [0x157AC0]=1 write is mirrored (0x89E8C;
+ * FU209-L5 closed).] Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1D(struct fifa96_match_run *mr);
 
 /* FU-241 §6.3 (M2 phase-23 T4; formerly FU-194 §4/§6.2): the phase-0x1E / act-8

@@ -4895,12 +4895,11 @@ static void test_action_24_face_constant_vector(void) {
   assert(mr.record.type == 2);                  /* ((0x100 + 0x40) & 0x3FF) >> 7 */
 }
 
-/* Row 0x24 stage 0 wait (FU-188 §4, `0x865CB..0x8660B`): the derived
- * `fifa96_action_sequence_lane` threshold holds the stage until
- * `timer89 >= threshold`; the target commit below the wait is not reached.
- * `boost` is `[+0x8A]>>25`, i.e. the dword's `+0x8D` active byte >> 1: with
- * subtype 4 and active 8 (`boost` 4) the side-0 threshold is
- * `(4*(4*60))>>4 = 60`. */
+/* Row 0x24 stage 0 (FU-188 §4, `0x865CB..0x8660B`): the native derived
+ * threshold wait is **withheld** as the FU188-L3 leg because landing it
+ * changes the FU333 natural-pan witness (gate code 4 -> 3 and the seed
+ * pair). The derived no-wait arm therefore commits the target on the first
+ * stage-0 dispatch; this test pins that deliberate derived behavior. */
 static void test_action_24_stage0_wait(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -4912,15 +4911,9 @@ static void test_action_24_stage0_wait(void) {
   mr.record.timer89 = 0;
   mr.record.delta = 0;
   assert(fifa96_match_action_24(&mr) == FIFA96_OK);
-  assert(mr.record.stage92 == 0u);              /* threshold 60 > timer 0 */
   assert(mr.record.pos_x == 0x9F0);             /* seeds precede the wait */
   assert(mr.record.pos_z == -(4 * 6));          /* side 0 -> -6*subtype */
-  mr.record.timer89 = 59;
-  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
-  assert(mr.record.stage92 == 0u);              /* threshold 60 > 59 */
-  mr.record.timer89 = 60;
-  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
-  assert(mr.record.stage92 >= 1u);              /* 0x8660B falls through */
+  assert(mr.record.stage92 >= 1u);              /* derived no-wait arm */
   assert(mr.record.target_x == 0x7E0 + 6 * 4);  /* 0x86617/0x8664B */
 }
 

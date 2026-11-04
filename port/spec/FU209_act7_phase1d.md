@@ -640,3 +640,13 @@ T3 ports the arm-0 coupled install and the coupled row-`0x20` body.
 * **FU209-L4/L5/L6 remain legs** (the arm-8 selection block; the arm-9
   `[0x157AC0]` write-back; the arm-2 contact gate). Census unchanged `52/80`.
   No prior section rewritten.
+
+## Erratum (2026-11-04) — FU209-L5 closed
+
+The act-7 / phase-0x1D arm-9 terminal now mirrors the native
+`0x89E8C byte[0x157AC0] = 1` write into `mr->global_157ac0`. The unit
+fixtures `test_phase_1D_terminal` and `test_phase_1D_full_timeline_terminates`
+pin the store. The rest of the arm remains as landed: the row-`0x20` install,
+the score-pair write and the act-slot clear. The unported sinks
+(`0x651F0`/`0x974F0`/`0x8F188`) and the record-11 ball `+0x44` cell remain
+FU194-L3/L7 and FU-142 OL-49 legs.

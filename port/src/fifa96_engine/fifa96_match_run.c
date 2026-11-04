@@ -6774,8 +6774,9 @@ static struct fifa96_match_entity *match_1d_actor(struct fifa96_match_run *mr) {
  * FU184-L3/FU188-L2 sibling leg; `0x4C374` only clears `word[0x157A68]`
  * (ignores its EAX, FU194-L3/L4, no reader); the ball record `[[actor]+0x7A6]`
  * is the record-11 spill slot the pool does not model (FU-142 OL-49), so its
- * `+0x44` gate is derived ready. Arm 9's native `[0x157AC0]=1` write stays the
- * FU209-L5 leg. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL `mr`. */
+ * `+0x44` gate is derived ready. Arm 9's native `[0x157AC0]=1` write is
+ * mirrored (`0x89E8C`); FU209-L5 is closed. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for NULL `mr`. */
 int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
   if (!mr) return -FIFA96_ERR_INVALID;
   mr->act.timer = (int16_t)(mr->act.timer + (int16_t)mr->state.frame_delta); /* 0x89882/0x89899 */
@@ -7000,9 +7001,7 @@ int fifa96_match_action_phase_1D(struct fifa96_match_run *mr) {
       }
       case 9u:  /* arm 9 (0x89E6E): the terminal (no situation re-dispatch) */
         mr->global_157a4c = 0u;                      /* [0x157A4C]=0 */
-        /* The native [0x157AC0]=1 write (0x89E8C) is not mirrored here; the flag
-         * cell now exists (`mr->global_157ac0`, T1/FU-213) — this terminal's
-         * write-back stays the FU209-L5 leg. */
+        mr->global_157ac0 = 1u;                      /* 0x89E8C [0x157AC0]=1 */
         mr->act.id = 0;                              /* [0x158828] */
         mr->act.stage = 0;                           /* [0x158829] */
         mr->act.timer = 0;                           /* [0x158818] */

@@ -762,6 +762,7 @@ static void test_phase_1D_terminal(void) {
   assert(fifa96_match_action_phase_1D(&mr) == FIFA96_OK);
   assert(mr.act.id == 0u && mr.act.stage == 0u && mr.act.timer == 0);
   assert(mr.global_157a4c == 0u);     /* [0x157A4C]=0 */
+  assert(mr.global_157ac0 == 1u);     /* 0x89E8C [0x157AC0]=1 */
 }
 
 /* FU-210 §6.1/§8 L3 (M2 phase-19 T3; bind landed M2 phase-20 T3, FU-217): the
@@ -1024,6 +1025,7 @@ static void test_phase_1D_full_timeline_terminates(void) {
   assert(mr.act.id == 0);                        /* the act slot cleared */
   assert(mr.act.stage == 0u && mr.act.timer == 0);
   assert(mr.global_157a4c == 0u);                /* arm 9 */
+  assert(mr.global_157ac0 == 1u);                /* 0x89E8C */
   assert(mr.score[0] == 1u && mr.score[1] == 0u);
   assert(mr.match1d_event_id == 0xBAu);
 }

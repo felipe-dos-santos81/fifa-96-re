@@ -3548,3 +3548,15 @@ sinks (`0x651F0`/`0x974F0`/`0x8F188`), `0x4C374`'s reader-less
   (blocked rows 6 → 5; natural wired 56/80 → **57/80**, install-live 62/80).
   The sustained restart chain remains Practise-only (`[0x14C32A]`). M2 moves at
   the restart window and is re-pinned with the final body wave; M1 is exact.
+
+- **final faithful-body wave (2026-11-04).** Closed the audited partial arms:
+  row `0x0A` `+0x75`, row `0x09` arms 1–3, row `0x0C` stages 1–6, phase
+  `0x1D` arms 2–8 plus the arm-9 `[0x157AC0]` write, row `0x1B` stage 1, row
+  `0x1C` off-target arm, phase `0x03/04/07` DX<0 cell map, phase `0x05`
+  goal ring, row `0x17` stage 2/3 and row `0x24` stages 1/2. The producer
+  wave added the probe seam, action `0x25`'s live score compare and phase
+  `0x1F`'s native invoke-now; natural wired is **57/80**, install-live
+  **62/80**, blocked **5**. The action-`0x24` stage-0 threshold wait stays
+  **FU188-L3** because it invalidates the FU333 natural-pan witness. M2 v24
+  re-pinned to `274e7431…` (first diff frame 466, 5985/6522 lines, state set
+  unchanged); M1 exact; `make check` **112/112**.

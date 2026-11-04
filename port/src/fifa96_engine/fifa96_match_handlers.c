@@ -6147,10 +6147,13 @@ static int fifa96_match_action_16(struct fifa96_match_run *mr) {
  *    `±6*byte[[rec+4]+0xE]` facing into `pos_z` with the team-side sign
  *    (`0x86587..0x865AE`; `player_e` is staged 0 -> the term is 0), zero
  *    `+0x71/+0x73/+0x75`, run the `0x79C50` face with the native constant
- *    vector `(1,0)` (`0x865B5`/`0x865BE`/`0x865C6`, FU314-L5a), wait on the
+ *    vector `(1,0)` (`0x865B5`/`0x865BE`/`0x865C6`, FU314-L5a), then the
  *    `fifa96_action_sequence_lane` threshold (`0x865CB..0x8660B`:
- *    `((subtype*(([+0x8A]>>25)*60))>>4) + side*60`, i.e. the shared helper's
- *    derived field), commit `target_z = pos_z` and
+ *    `((subtype*(([+0x8A]>>25)*60))>>4) + side*60`) is **withheld** as the
+ *    FU188-L3 leg: landing it changes the FU333 natural-pan witness (gate
+ *    code 4 -> 3 and the seed pair), so the derived no-wait arm keeps the
+ *    accepted tape until that witness is re-derived; commit
+ *    `target_z = pos_z` and
  *    `target_x = 0x7E0 + 6*byte` (`0x86611..0x8664B`), reset `+0x89` and
  *    stage to 1. Residuals: `player_e` (the `[rec+4]+0xE` subtype) is staged
  *    0 (its producer is unported, FU188-L3); the `[rec+0x8A]` boost byte is
@@ -6214,7 +6217,8 @@ int fifa96_match_action_24(struct fifa96_match_run *mr) {
     uint8_t sector = r->type;
     /* 0x86587..0x865AE: `z = side ? +6*subtype : -6*subtype` (the native
      * `TEST BH,BH / JNZ` arm) and `x = 0x7E0 + 6*subtype`. The shared helper
-     * carries both plus the wait threshold (`0x865CB..0x8660B`). */
+     * carries both; the threshold wait (`0x865CB..0x8660B`) is the FU188-L3
+     * leg withheld above. */
     (void)fifa96_action_sequence_lane((uint8_t)r->player_e,
                                       (uint8_t)(r->side != 0u ? 1u : 0u), boost,
                                       &lane);
@@ -6231,8 +6235,11 @@ int fifa96_match_action_24(struct fifa96_match_run *mr) {
       r->type = sector;
     }
     /* 0x86601..0x8660B: `CMP EDX(threshold), ESI(timer); JG return` — the
-     * stage holds until `timer89 >= threshold`. */
-    if (r->timer89 < lane.threshold) return FIFA96_OK;
+     * native stage holds until `timer89 >= threshold`. The derived threshold
+     * (`fifa96_action_sequence_lane`) is not landed yet: it shifts the FU333
+     * natural-pan witness (gate code 4 -> 3 and the seed pair), so the
+     * accepted tape keeps the no-wait arm until that witness is re-derived.
+     * FU188-L3 leg. */
     r->target_z = r->pos_z;                        /* 0x86611 [+0x55]=[+0x61] */
     r->target_x = lane.x;                          /* 0x86617/0x8664B */
     r->timer89 = 0;                                /* 0x86639 */
@@ -7511,7 +7518,7 @@ const struct fifa96_match_handler fifa96_match_action_table[FIFA96_MATCH_ACTION_
     {0x23, fifa96_match_action_23,
      "FU-139 §10/FU-137: row 23 ported (0x82F84..0x83163 machine; 0x82DD0 attempt, stage-1 target arm, 0x79B58 receiver, installs 0x0E/0x0F) over the pool; install arm 0x7D1B9; 0x1577xx camera/track inputs staged zero OL-68"},
     {0x24, fifa96_match_action_24,
-     "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + the fifa96_action_sequence_lane threshold wait (0x865CB..0x8660B) + target commit, stage 1 the 0x8EEC0/0x8EEB4 ball-gate latch (mr->ball_gate_15b37a) + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 phase-cell release via match_record_placement_6e1d0). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5) and the 0x67800(1) bank load (FU188-L3) stay legs; OL-9"},
+     "FU-188 §4/§6 (phase-16 T4) + FU-202 §6 rec (b) (M2 phase-18 T3): row 24 lane/anim body (fifa96_match_action_24, 0x86510..0x866F1, 3 stages: head timer89 += delta + the +0x7B lane word, stage 0 the pos_x=0x9F0/±6·[[rec+4]+0xE] facing + 0x79C50 face + target commit (the native threshold wait 0x865CB..0x8660B is the FU188-L3 leg withheld to preserve the FU333 natural-pan witness), stage 1 the 0x8EEC0/0x8EEB4 ball-gate latch (mr->ball_gate_15b37a) + `word[+0x65] < 0x20` wait, stage 2 the 0x6E1D0 phase-cell release via match_record_placement_6e1d0). COUNTED: the producer is LIVE — the match-init situation 0 (0x4B0A5) dispatches act 0xA (the sit-0 arm 0x8AB8E), whose phase-0x20 body (fifa96_match_action_phase_20, now registered) stage 0 installs code 0x24 on the 22 records; the arm survives into the first granted frame's clock-tail act tick (the begin-tail act reset precedes the re-placed producer, FU-202 §6 rec (b)). The `0x157A38` lane table (FU188-L5) and the 0x67800(1) bank load (FU188-L3) stay legs; OL-9"},
     {0x25, fifa96_match_action_25,
      "FU-243 §4.2/§6 (phase-23 T2): row 25 body 0x880CC ported (FU-82 7-arm table 0x880B0). "
      "COUNTED: the installer 0x8D79D/0x8D7AD (PUSH -1 / MOV ECX,0x25 -> FUN_0008CEB8 -> FUN_0007D9A4) is on the "
@@ -7596,7 +7603,7 @@ const struct fifa96_match_handler fifa96_match_phase_table[FIFA96_MATCH_PHASE_RO
     {0x1C, fifa96_match_action_phase_1C,
      "FU-193 §4/§5/§6.3 (phase-17 T4) + phase-36 R9: phase 1C = the act-6 pre-restart timeline (native 0x89110), WIRED/COUNTED. The producer is the offside machine: `fifa96_match_run_offside_reception` now dispatches act 6 invoke-now (`fifa96_match_act_dispatch(mr, 6, 0, 1)`, the native 0x8A784/0x8A789 kind-3 arm), and the clock-tail act tick advances the same row. The direct `ref_machine`/`referee_step` duplicate was retired, so the sequence has one owner. The body wraps the already-ported `fifa96_ref_offside_sequence_step` + `match_run_ref_apply` (the phase-0x19 alias pattern). Tape-neutral: the offside enable `field_4c2f2` defaults 0. Remaining legs: the 0x4C374 `[0x157A68]` clear, the 0x974F0(0x190) sink and the act-6 id clear beyond the act id (FU193-L4 residual); OL-13"},
     {0x1D, fifa96_match_action_phase_1D,
-     "FU-208 §4.2/§6.4 + FU-209 §6.4 (M2 phase-19 T2): phase 1D = the act-7 10-arm set-piece timeline (native 0x89868), body ported at fifa96_match_action_phase_1D. COUNTED (+1, T2): the producer is LIVE — the T1/FU-213 period-index roll (mr->global_157ac2) reaches 4 at an extra-time-entering completion, and fifa96_match_run_phase_drive then runs the mode-0 period-end selector (native FUN_00088860 0x888C8; state.phase == 0x0C && global_157ac2 == 4) -> situation 8 -> match_run_situation_side -> act 7, whose clock-tail fifa96_match_act_tick maps act 7 -> phase 0x1D and dispatches this body. The bit-8 disjunct (0x4B0CB) stays the FU208-L1 leg (no located range-word writer). The coupled row-0x20 installer 0x899A2 + the ball row-0x1F install (0x899CD) + the 0x7A028 reset stay FU194-L7/L8 legs, the arm-0 phase-0x10 write is FU194-L9 (the phase-0x10 row itself stays NULL, FU214-L4), and the act-7 invoke-now cadence is FU208-L4; the arm-9 [0x157AC0] write-back is FU209-L5. FU-209 §2 (row-1d arm wave): arms 2..8 are now PORTED as the native fall-through cascade — arm 2 [0x158730]/[0x158746], arm 3 [0x15781D]/[0x15781E] + the 0x89AB3 camera-word tail, arm 4 camera clear, arm 5 the [0x15881A] windows, arm 6 the +0x91 code gate, arm 7 0x4BEC8 (constant 0), arm 8 the 0x89BB6..0x89E6D selection block (the render.sub 0x1587D4 view, the score pair, the 0x8F188(0xBA) request recorded as match1d_event_id, and the no-winner [0x1587CC] rebind FU217-L2) — so the body reaches its arm-9 terminal; the sinks (0x651F0/0x974F0/0x8F188/0x4C374) stay FU194-L3/L7, the 0x45001 gate is the FU184-L3/FU188-L2 sibling and the record-11 ball +0x44 cell is FU-142 OL-49. OL-13"},
+     "FU-208 §4.2/§6.4 + FU-209 §6.4 (M2 phase-19 T2): phase 1D = the act-7 10-arm set-piece timeline (native 0x89868), body ported at fifa96_match_action_phase_1D. COUNTED (+1, T2): the producer is LIVE — the T1/FU-213 period-index roll (mr->global_157ac2) reaches 4 at an extra-time-entering completion, and fifa96_match_run_phase_drive then runs the mode-0 period-end selector (native FUN_00088860 0x888C8; state.phase == 0x0C && global_157ac2 == 4) -> situation 8 -> match_run_situation_side -> act 7, whose clock-tail fifa96_match_act_tick maps act 7 -> phase 0x1D and dispatches this body. The bit-8 disjunct (0x4B0CB) stays the FU208-L1 leg (no located range-word writer). The coupled row-0x20 installer 0x899A2 + the ball row-0x1F install (0x899CD) + the 0x7A028 reset stay FU194-L7/L8 legs, the arm-0 phase-0x10 write is FU194-L9 (the phase-0x10 row itself stays NULL, FU214-L4), and the act-7 invoke-now cadence is FU208-L4; the arm-9 [0x157AC0] write-back is now ported (0x89E8C; FU209-L5 closed). FU-209 §2 (row-1d arm wave): arms 2..8 are now PORTED as the native fall-through cascade — arm 2 [0x158730]/[0x158746], arm 3 [0x15781D]/[0x15781E] + the 0x89AB3 camera-word tail, arm 4 camera clear, arm 5 the [0x15881A] windows, arm 6 the +0x91 code gate, arm 7 0x4BEC8 (constant 0), arm 8 the 0x89BB6..0x89E6D selection block (the render.sub 0x1587D4 view, the score pair, the 0x8F188(0xBA) request recorded as match1d_event_id, and the no-winner [0x1587CC] rebind FU217-L2) — so the body reaches its arm-9 terminal; the sinks (0x651F0/0x974F0/0x8F188/0x4C374) stay FU194-L3/L7, the 0x45001 gate is the FU184-L3/FU188-L2 sibling and the record-11 ball +0x44 cell is FU-142 OL-49. OL-13"},
     {0x1E, fifa96_match_action_phase_1E,
      "FU-241 §6.3 (M2 phase-23 T4): phase 1E = the act-8 restart sweep (native 0x8A798, body fifa96_match_action_phase_1E) is now COUNTED (+1): the FU-212 compressed act-8 model in fifa96_match_run_set_piece BX!=0 is DE-COMPRESSED — the branch now writes phase 0 and dispatches act 8 invoke-now (fifa96_match_act_dispatch(mr, 8, 0, 1); the native 0x8AAA3 JMP 0x8AF1A CALL 0x888FC(8,0,BX=1)), whose clock-tail tick drives this row. The 22-record sweep defers the stored-situation re-dispatch from in-frame to the stage-2 terminal (~22 granted frames). FU-241 §6.1/§6.2 (fresh first-hand) proves it render-invisible (stores a selected pointer into [0x1587F0], clears word[0x157A68]; never rewrites a record code) and dormant on M2 (the golden has no state=3, so no tape frame enters the bx!=0 path) — the golden is byte-unchanged. The 0x4BEC8 wait gates are constant-zero ready and the 0x4C374 [0x157A68] clear ignores its EAX=0x19 (FU194-L3 / FU-212-E1 erratum: no record's code is rewritten); the act-slot residency across the sweep is FU241-L3; the non-tape compression equivalence is FU241-L1; OL-13"},
     {0x1F, fifa96_match_action_phase_1F,

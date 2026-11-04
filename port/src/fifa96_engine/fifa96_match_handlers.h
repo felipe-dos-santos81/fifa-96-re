@@ -360,11 +360,12 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr);
  * (0x4B0A5) -> act 0xA phase-0x20 stage 0 code-0x24 install
  * (`0x8B750`/`0x8B78B` on all 22 records), re-placed after the begin-tail act
  * reset so it survives into the first granted frame (FU-202 §6 rec (b)). The
- * stage-0 wait uses the `fifa96_action_sequence_lane` threshold
- * (`0x865CB..0x8660B`), stage 1 latches the `0x8EEC0`/`0x8EEB4` ball gate
- * (`mr->ball_gate_15b37a`), and stage 2 runs the `0x6E1D0` phase-cell release;
- * the `0x157A38` lane table (FU188-L5) and the `0x67800(1)` bank load
- * (FU188-L3) stay legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
+ * stage-0 threshold wait (`0x865CB..0x8660B`) is withheld as the FU188-L3
+ * leg (it invalidates the FU333 natural-pan witness; the derived no-wait arm
+ * preserves the accepted tape), stage 1 latches the `0x8EEC0`/`0x8EEB4` ball
+ * gate (`mr->ball_gate_15b37a`), and stage 2 runs the `0x6E1D0` phase-cell
+ * release; the `0x157A38` lane table (FU188-L5) and the `0x67800(1)` bank
+ * load (FU188-L3) stay legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
  * out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_24(struct fifa96_match_run *mr);
 

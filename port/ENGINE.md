@@ -8224,3 +8224,38 @@ M2 moves at the restart window: first differing transcript line frame 466
 `gate_step - phase15_step` 96 → 93, `phase4_step - phase15_step` 100 → 96, and
 `restart_step - phase4_step` 303 → 304. The final re-pin is done with the
 other body branches in the same commit; M1 `09b726b7…` is exact.
+
+## Final faithful-body wave (2026-11-04) — body closures, natural 57/80, M2 v24
+
+This wave closed the body gaps the independent audit found, without changing
+the 78/78 slot-coverage definition:
+
+- action `0x0A`: the second quarter-sine fold writes `vel75` (`0x818B9`).
+- action `0x09`: arms 1–3, including the `0x0C`/`0x0D` installs at
+  `0x80EFA`/`0x80F61`.
+- action `0x0C`: stages 1–6, including the native fall-through and the
+  `0x822DB` swap terminal.
+- phase `0x1D`: arms 2–8 as the native fall-through cascade; arm 9 now mirrors
+  `[0x157AC0]=1` (`0x89E8C`, FU209-L5 closed).
+- action `0x1B`: stage-1 metric/face/heading/rotation/steering; action `0x1C`:
+  the off-target `0x77856` rotated arm.
+- phase `0x03/04/07`: the DX<0 cell-map arm (`0x6D870` + `0x6DCC8`); phase
+  `0x05`: the goal-ring arm.
+- action `0x17`: stage 2/3 formation sync, placement limit, anim and stash
+  copies; action `0x24`: stage-1 ball gate and stage-2 `0x6E1D0` release.
+- producers: the phase-`0x13/0x14` probe seam (`mr->probe_a/probe_b`), action
+  `0x25` on the live 16-bit score pair, and phase `0x1F` via the native
+  invoke-now sit-0xC arm.
+
+Withheld honestly: the action-`0x24` stage-0 threshold wait (`0x865CB..0x8660B`)
+is the FU188-L3 leg; landing it changes the FU333 natural-pan witness
+(`code 4 -> 3`, seed pair), so the derived no-wait arm preserves the accepted
+tape until that witness is re-derived. The remaining sinks/inputs stay numbered
+legs in their FU records.
+
+Census: **78/78 bodies = 100%; 57/80 natural = 71%; 62/80 install-live = 77%;
+5 producer-blocked rows** (`0x13`, `0x1F` action, `0x28`, `0x2A`, phase
+`0x06`). M1 `09b726b7…` is exact. M2 re-pinned to **v24**
+`274e74314d9cb95960e2a8db214ec37528d194f3941e41cb8c7a65d81bfa2f83`:
+first differing line 466, 5985/6522 lines, state-tag set unchanged (counts
+`21/1-0` 100→96, `4/1-0` 303→304, `12/1-0` 4→7). Final gate: **112/112**.
