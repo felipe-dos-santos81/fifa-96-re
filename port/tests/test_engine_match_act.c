@@ -19,11 +19,14 @@
  *     (`0x890D3..0x890DE`).
  *
  * The derived engine keeps the FU-170 §7 model: the sit-0xC arm performs the
- * stage-0 phase-0x15 write and installs act 9 with invoke=0 (the native BX=1
- * invoke-now is deferred to the clock-tail tick, preserving the granted-frame
- * cadence, FU170-L1); stages 1/2 (`0x88FED`/`0x89064`, the leg/`0x74110`/
- * `0x93850`/`0x361B0` gates) are compressed to pass; the stage-3 gate reads the
- * derived act timer (the native `word[0x15881A]` producer is FU165-L2/FU175-L5). */
+ * stage-0 phase-0x15 write and installs act 9 with invoke=1 — the native arm is
+ * `0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9 / 0x8AF18 XOR EDX,EDX / 0x8AF1A CALL
+ * 0x888FC`, so `0x88937 CALL dword[0x158808]` runs the phase-0x1F stage-0 body
+ * on the install call. The begin-time install is one-shot: the native
+ * match-init (`0x4B095`/`0x4B0A5`, situation 0) supersedes the slot with act
+ * 0xA. Stages 1/2 (`0x88FED`/`0x89064`, the leg/`0x74110`/`0x93850`/`0x361B0`
+ * gates) are compressed to pass; the stage-3 gate reads the derived act timer
+ * (the native `word[0x15881A]` producer is FU165-L2/FU175-L5). */
 #include <assert.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -93,6 +96,35 @@ static void test_dispatch_invoke_runs_handler(void) {
   assert(mr.act.id == 1);
   assert(mr.act.stage == 1u);                /* stage 0 -> 1 (0x88EB1) */
   assert(mr.state.phase == 1u);              /* the kickoff phase-1 entry */
+}
+
+/* The native sit-0xC arm is invoke-now (`0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9
+ * / 0x8AF18 XOR EDX,EDX / 0x8AF1A CALL 0x888FC`; the seam's `0x88937 CALL
+ * dword[0x158808]`), so the leg-0 screen install queues situation 0xC and runs
+ * the phase-0x1F stage-0 body on the same call. The begin-time install is
+ * one-shot: the native match-init (`0x4B095`/`0x4B0A5`, situation 0) supersedes
+ * the slot with act 0xA, so this install invoke is the ordinary-match reach.
+ * Mutation-RED: dropping the invoke flag leaves `act.stage` at 0 — only the
+ * stage-0 body writes 3 (the SETUP0 step already zeroes `global_5882a`, so the
+ * stage is the distinguishing cell). */
+static void test_sit0c_install_invokes_stage0(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  assert(fifa96_match_run_screen_install(&mr, 0, 0, 0) == 0);
+  assert(mr.screen_leg == 0 && mr.screen_step == 1u);  /* SETUP0 ran */
+  assert(mr.state.phase == 0x15u);      /* the sit-0xC controlled-side write */
+  assert(mr.act.id == 9);               /* act 9 installed (0x8890A) */
+  assert(mr.act.stage == 3u);           /* stage 0 ran on the install call */
+  assert(mr.global_5882a == 0u);        /* 0x88F9A */
+  /* The mechanism pin: the same slot through the BX=0 seam stays at stage 0, so
+   * a regression to invoke=0 fails the stage-3 assertion above. */
+  fifa96_match_run_init(&mr);
+  mr.running = 1;
+  mr.global_5882a = 1u;
+  assert(fifa96_match_act_dispatch(&mr, 9, 0, 0) == FIFA96_OK);
+  assert(mr.act.id == 9 && mr.act.stage == 0u);
+  assert(mr.global_5882a == 1u);        /* no body ran */
 }
 
 /* tick is a no-op while no act is installed or the installed act's phase row is
@@ -1390,6 +1422,7 @@ int main(void) {
   test_init_defaults();
   test_dispatch_installs_and_latches();
   test_dispatch_invoke_runs_handler();
+  test_sit0c_install_invokes_stage0();
   test_tick_timer_and_completion();
   test_phase_18_registered();
   test_phase_18_act_owns_handoff();

@@ -3247,10 +3247,17 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
    * frame. The ad-hoc `ref_machine = REF_RESTART` route (the FU175-L7
    * double-run) is retired — the act slot is the single owner. Act 9 (sit 0xC,
    * FU-170 §7) writes phase 0x15 on the controlled side (`0x88F9A`..`0x88FB0`)
-   * and installs act 9; its invoke defers to the tick to preserve the
-   * granted-frame cadence (FU170-L1). Other acts install the slot (0x8890A) but
-   * their phase rows stay unported (OL-13). Do NOT clear `situation_pending`:
-   * the native sit-0xC dispatch does not touch `[0x15B6C0]`. */
+   * and installs act 9 **invoke-now**: the native sit-0xC arm is
+   * `0x8AF0E MOV EBX,1 / 0x8AF13 MOV EAX,9 / 0x8AF18 XOR EDX,EDX /
+   * 0x8AF1A CALL 0x888FC`, so `0x8892E TEST BX,BX` passes and `0x88937 CALL
+   * dword[0x158808]` runs the phase-0x1F stage-0 body on the install call.
+   * The begin-time install is one-shot: the native match-init
+   * (`0x4B095`/`0x4B0A5`, situation 0) supersedes the slot with act 0xA, so
+   * this invoke is the ordinary-match reach. The clock tail then ticks the
+   * installed handler each granted frame (the native same-frame second run is
+   * preserved). Other acts install the slot (0x8890A) but their phase rows
+   * stay unported (OL-13). Do NOT clear `situation_pending`: the native
+   * sit-0xC dispatch does not touch `[0x15B6C0]`. */
   if (out.act == 2u) {
     mr->ref_restart_stage = out.stage;
   } else if (out.act == 9u) {
@@ -3258,13 +3265,18 @@ static int match_run_situation_side(struct fifa96_match_run *mr, uint8_t situati
     if (rc != 0) return (int)rc;
   }
   if (out.act != FIFA96_ACTION_PHASE_NONE) {
-    /* Act 2 is invoke-now (the stage-0 hand-off runs on this call); act 9 (and
-     * every act other than 2 and 7) installs only, its invoke deferred to the
-     * clock tail. Act 7 is likewise invoke-now (FU-219: native `0x8AEAE MOV
-     * EBX,1` → the seam `0x88937 CALL dword[0x158808]` runs the phase-`0x1D`
-     * arm 0 on the dispatch frame); the clock-tail tick then advances it. */
-    rc = (fifa96_err_t)fifa96_match_act_dispatch(mr, out.act, out.stage,
-                                                 (out.act == 2u || out.act == 7u) ? 1 : 0);
+    /* Act 2 is invoke-now (the stage-0 hand-off runs on this call). Act 7 is
+     * likewise invoke-now (FU-219: native `0x8AEAE MOV EBX,1` → the seam
+     * `0x88937 CALL dword[0x158808]` runs the phase-`0x1D` arm 0 on the
+     * dispatch frame). Act 9 is invoke-now too: the sit-0xC arm is
+     * `0x8AF0E MOV EBX,1` → the same `0x88937` call runs the phase-0x1F
+     * stage-0 body (the begin-time install is superseded by the match-init
+     * act-0xA install at `0x4B095`/`0x4B0A5`, so this is the one-shot install
+     * invoke). Every action installs the slot (0x8890A); the clock-tail tick
+     * then advances the installed handler each granted frame. */
+    rc = (fifa96_err_t)fifa96_match_act_dispatch(
+        mr, out.act, out.stage,
+        (out.act == 2u || out.act == 7u || out.act == 9u) ? 1 : 0);
     if (rc != 0) return (int)rc;
   }
   return 0;
