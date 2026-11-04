@@ -45,11 +45,14 @@ The two body-less slots are:
 | phase `0x1B` | `0x890EC..0x8910D` | `fifa96_match_action_phase_1B` (FU-336) |
 
 The remaining 75 bodies were already ported, including the loader-shaped bodies
-`fifa96_action_sequence_0d_step`, `fifa96_arm_27_step`, `fifa96_arm_29_step`,
-`fifa96_arm_2c_step` and the formation placement
-`fifa96_scene_formation_place`. The port table names those symbols in its
-`body` column; their native call shape is not `int (*)(mr)`, so their `fn` is
-NULL.
+`fifa96_action_sequence_0d_step`, `fifa96_arm_27_step`, `fifa96_arm_29_step`
+and `fifa96_arm_2c_step`. Their native call shape is not `int (*)(mr)`, so the
+port table carries typed pointers (`body_0d_fn`, `arm_fn`) instead of `fn`; the
+test asserts the corresponding pointer is non-NULL, so a renamed symbol is a
+link error, not a stale string. The formation rows `0x01/0x11/0x12` were given
+a real per-record body in the fix round (`fifa96_match_phase_01`, which reads
+the native `[rec+8]` cell via `phase_meta8`), so they use `fn` like the other
+row bodies.
 
 ## 4. The artifact
 
@@ -62,17 +65,26 @@ NULL.
 (action `0x00..0x2C`, then phase `0x00..0x22`), one row per slot. The table is
 the authority for the completion percentage. The dispatch tables remain the
 authority for wiring; the test refuses a mismatch between a non-NULL dispatch
-`fn` and the port row's `fn`.
+`fn` and the port row's `fn`. The loader-shaped bodies carry typed function
+pointers (`arm_fn`, `body_0d_fn`, `formation_fn`) so a renamed or missing
+symbol is a link error, not a stale `body` string.
+
+The seven rows whose dispatch handler exists but whose natural producer is
+structurally blocked (FU-338 §4) are listed in
+`fifa96_match_port_blocked[7]`. `fifa96_match_port_install_live()` is the
+superset count; `fifa96_match_port_wired()` subtracts the blocked set (the
+spec's natural-reach wired metric).
 
 `tests/test_engine_match_port_census.c` asserts:
 
 - 80 slots, 78 `BODY`, 2 `NO_BODY`, 0 `NONE`;
 - the two no-body slots are exactly action `0x2B` and phase `0x16`;
-- every dispatch `fn` is the same function the port table names;
-- the wired counts are `37 action + 25 phase = 62` (after the phase-36
-  `0x0D`/`0x1C` wiring);
+- every `BODY` row has at least one typed body pointer, and every dispatch
+  `fn` is the same function the port table names;
+- the wired counts are `37 action + 25 phase = 62` install-live and
+  `62 - 7 = 55` natural (after the phase-36 `0x0D`/`0x1C` wiring);
 - the canonical line:
-  `port-census: bodies 78/78 no-body 2 wired 62/80 (100%) action 37/45 phase 25/35`.
+  `port-census: bodies 78/78 (100%) no-body 2 wired 55/80 install-live 62/80 action 37/45 phase 25/35`.
 
 ## 5. The derivation
 
@@ -80,6 +92,8 @@ authority for wiring; the test refuses a mismatch between a non-NULL dispatch
 ported_percentage = floor(100 * fifa96_match_port_bodies() / 78)
                   = floor(100 * 78 / 78) = 100
 wired_percentage  = floor(100 * fifa96_match_port_wired() / 80)
+                  = floor(100 * 55 / 80) = 68   (natural, 7 producer-blocked)
+install_live_pct  = floor(100 * fifa96_match_port_install_live() / 80)
                   = floor(100 * 62 / 80) = 77
 ```
 

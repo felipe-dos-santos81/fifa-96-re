@@ -46,7 +46,8 @@
   invoke-now and the direct `ref_machine` route is retired (FU-338).
 - Fixtures: `test_phase_0D_wired`, the updated offside chain + live-receive
   tests.
-- **Accept:** census `62/80`; M1/M2 byte-identical.
+- **Accept:** census `62/80` install-live (`55/80` natural); M1/M2
+  byte-identical.
 
 ## T6 — the close-out
 
@@ -55,4 +56,31 @@
 - Record the natural-reach audit (FU-338 §4): seven counted rows with
   producer gaps, no fabricated producers, no lowered count.
 - **Accept:** `make check` 112/112; M1 `09b726b7…`, M2 `6aa2703b…` (`cmp`);
-  README `100%`, ENGINE `78/78 ... 62/80`.
+  README `100%`, ENGINE `78/78 ... 55/80 wired / 62/80 install-live`.
+
+## Wave-close erratum (spec §5 narrowing)
+
+T5 landed the two tape-neutral live producers (phase `0x0D`, phase `0x1C`).
+The other spec §5 candidates were **not** wired in this wave, with first-hand
+evidence:
+
+- **action `0x03`** — the body is ported and native-dispatched, but registering
+  it moves 792 presented M2 frames (first differ frame 29; R1b). It is a
+  fidelity re-pin, not a tape-neutral wiring.
+- **phase `0x13`** — live, but the body consumes the shared RNG stream; wiring
+  it injects ~96 draws and moves the tape (R1a). Ported-but-dormant until the
+  measured re-pin.
+- **action `0x0D`** — the `0x80F61` install sits behind `[[rec+4]+0x16]` and
+  `[rec+0x24]`, both staged 0 in the pool (R3). The row-09 arm is ported in
+  the sweep, but the install is not reachable.
+- **phase `0x0B`** — its sole writer `0x8972F` is in the phase-`0x1A` body,
+  whose slot is NULL (act 4 has no producer); the action-row-`0x1A` wiring is
+  a different native body (R7).
+- **phase `0x14`** — no live writer (the `phase_drive` probe words are zero).
+- **action `0x17` / phase `0x1A`** — no live act-4 producer (R4).
+- **actions `0x27/0x29/0x2C`** — no installer in the 77-site census (R5).
+- **phase `0x1B`** — no EAX=5 invoker and no phase-`0x1B` writer (R8).
+
+These are the ported-but-dormant / NO-GO rows. No producer was fabricated, and
+the seven producer-blocked install-live rows are excluded from the
+natural-reach count (FU-338 §4).

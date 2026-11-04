@@ -68,13 +68,37 @@ enum fifa96_match_port_kind {
   (FIFA96_MATCH_ACTION_ROWS + FIFA96_MATCH_PHASE_ROWS) /* 80 */
 #define FIFA96_MATCH_PORT_NATIVE_ROWS (FIFA96_MATCH_PORT_SLOTS - 2u) /* 78 */
 
+struct fifa96_arm_record;
+struct fifa96_action_0d_state;
+struct fifa96_action_0d_out;
+
+/* The loader-shaped bodies have native call shapes that are not
+ * `int (*)(mr)`. The typed pointers keep the port table compile-checked: a
+ * missing/renamed symbol is a link error, not a stale string. */
+typedef fifa96_err_t (*fifa96_match_arm_body_fn)(struct fifa96_arm_record *rec);
+typedef fifa96_err_t (*fifa96_match_0d_body_fn)(
+    struct fifa96_action_0d_state *state, struct fifa96_action_0d_out *out);
+
 struct fifa96_match_port_row {
   uint8_t domain;             /* FIFA96_MATCH_PORT_ACTION / _PHASE */
   uint8_t code;               /* native slot code */
   uint8_t kind;               /* enum fifa96_match_port_kind */
   fifa96_match_handler_fn fn; /* match-signature body, NULL for loader-shaped */
+  fifa96_match_arm_body_fn arm_fn;    /* rows 27/29/2C */
+  fifa96_match_0d_body_fn body_0d_fn; /* row 0D */
   const char *body;           /* C symbol implementing the native entry */
 };
+
+/* The seven rows whose dispatch handler exists but whose natural producer is
+ * structurally blocked in the current engine (FU-338 §4). They stay in the
+ * install-live count and are subtracted from the natural-reach count. */
+struct fifa96_match_blocked_row {
+  uint8_t domain;
+  uint8_t code;
+};
+#define FIFA96_MATCH_PORT_BLOCKED_ROWS 7u
+extern const struct fifa96_match_blocked_row
+    fifa96_match_port_blocked[FIFA96_MATCH_PORT_BLOCKED_ROWS];
 
 extern const struct fifa96_match_port_row
     fifa96_match_port_table[FIFA96_MATCH_PORT_SLOTS];
@@ -84,7 +108,13 @@ extern const struct fifa96_match_port_row
  * non-NULL (the runtime-wiring metric). */
 unsigned fifa96_match_port_bodies(void);
 unsigned fifa96_match_port_no_body(void);
+/* The spec's wired metric: naturally reachable rows (dispatch `fn` non-NULL
+ * minus the producer-blocked set). */
 unsigned fifa96_match_port_wired(void);
+/* The superset: every row whose dispatch `fn` is non-NULL, including the
+ * producer-blocked set (FU-338 §4). */
+unsigned fifa96_match_port_install_live(void);
+unsigned fifa96_match_port_blocked_count(void);
 
 /* The two native tables enumerated in FU-136 §2/§3 and re-verified in FU-137
  * §1. `fn` is NULL for every row at the Task 4 commit (0 ported); later
@@ -150,6 +180,15 @@ int fifa96_match_dispatch_phase_record(struct fifa96_match_run *mr, uint8_t phas
  * no-op (FU-177 §7 dispatched-but-gated). Returns FIFA96_OK, or
  * -FIFA96_ERR_INVALID (NULL `mr`). */
 int fifa96_match_phase_02(struct fifa96_match_run *mr);
+
+/* The ported phase-`0x01`/`0x11`/`0x12` formation placement body `0x6E1D0`
+ * (FU-192 §2.9 / phase-36 R6): reads the native `[rec+8]` cell
+ * (`fifa96_match_entity.phase_meta8`), selects the pair by side, and writes the
+ * scaled target through `fifa96_action_phase_cell`. Per-record and
+ * unit-tested; the phase-table slots stay NULL because the live placement is
+ * the begin seed (the single-owner refactor is the wiring leg). `NULL` metadata
+ * is the gated no-op. */
+int fifa96_match_phase_01(struct fifa96_match_run *mr);
 
 /* The ported phase-`0x13`/`0x14` camera-scatter body `0x6E244..0x6E32A`
  * (FU-83 §3.1 / FU-192 §2.10; fresh phase-36 disassembly): the side gate, the
@@ -299,17 +338,17 @@ int fifa96_match_action_22(struct fifa96_match_run *mr);
  * an out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_1A(struct fifa96_match_run *mr);
 
-/* The ported action row-0x24 lane/anim body (FU-188 §4/§6, phase-16 T4): the
- * 3-stage machine `0x86510..0x866F1`. Its action-table slot
- * (`fifa96_match_action_table[0x24]`) is **NULL** — the row is not counted —
- * because its sole producer is the phase-0x20 / act-0xA timeline's code-0x24
- * install (`0x8B750`/`0x8B78B`, invoke-now on all 22 records), whose only
- * producer is situation 0 — not dispatched by any engine source/test (FU-188
- * §6). This is the rows-27/29/2C precedent (a ported body with no live engine
- * installer stays unwired and uncounted); the situation-0 producer
- * (FU188-L1) is the owner. The body is exported so it is tested directly and
- * ready for the phase-0x20 builder. Returns FIFA96_OK, or -FIFA96_ERR_INVALID
- * for an out-of-range `mr->record.entity_id`. */
+/* The ported action row-0x24 lane/anim body (FU-188 §4/§6, phase-16 T4;
+ * wired and COUNTED by M2 phase-18 T3/FU-202): the 3-stage machine
+ * `0x86510..0x866F1`. Its action-table slot
+ * (`fifa96_match_action_table[0x24]`) is **wired** to
+ * `fifa96_match_action_24`: the producer is the live match-init situation 0
+ * (0x4B0A5) -> act 0xA phase-0x20 stage 0 code-0x24 install
+ * (`0x8B750`/`0x8B78B` on all 22 records), re-placed after the begin-tail act
+ * reset so it survives into the first granted frame (FU-202 §6 rec (b)). The
+ * `0x157A38` lane table, the threshold arithmetic and the release sinks stay
+ * FU188-L3/L5 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
+ * out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_24(struct fifa96_match_run *mr);
 
 /* The ported action row-0x20 body (FU-210 §2/§3/§4, M2 phase-19 T3; wired +

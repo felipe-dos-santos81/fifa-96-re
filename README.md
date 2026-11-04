@@ -68,8 +68,9 @@ percentage above is derived from the `docs/ENGINE.md` **port-coverage** census:
 all **78 native dispatch bodies** (80 slots minus the phase-`0x16` INT3
 sentinel and the action-`0x2B` shared epilogue) now have a C implementation,
 so `floor(100 × 78 / 78) = 100`. The stricter runtime metric is reported
-separately: **62/80 dispatch slots wired**, with the seven producer-blocked
-rows named in the phase-36 register (`docs/ENGINE.md`, FU-338 §4).
+separately: **55/80 dispatch slots naturally wired (62/80 install-live)**,
+with the seven producer-blocked rows named in the phase-36 register
+(`docs/ENGINE.md`, FU-338 §4).
 
 ## Build and run
 

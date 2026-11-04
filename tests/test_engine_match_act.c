@@ -454,6 +454,57 @@ static void test_phase_1A_end_block(void) {
   assert(mr.state.phase == 0x0Au);     /* the act-2 phase-0x18 stage 0 wrote it */
 }
 
+/* Phase 0x01/0x11/0x12 (phase-36 R6): the per-record formation placement
+ * `0x6E1D0`. Mutation-RED: the side-selected pair, the ±scales and the
+ * unbound gate each fail if dropped. */
+static void test_phase_01_formation_body(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *rec;
+  static const uint8_t cells[4] = {1, 2, 3, 4};
+  fifa96_match_run_init(&mr);
+  assert(fifa96_match_port_table[FIFA96_MATCH_ACTION_ROWS + 0x01].fn ==
+         fifa96_match_phase_01);
+  rec = &mr.entities.team[0].records[1];
+  rec->team = 0;
+  rec->phase_meta8 = cells;
+  mr.phase_walk_active = 1;
+  mr.phase_walk_rec = rec;
+  mr.entities.team[0].side = 0;
+  mr.phase_machine.side_controlled = 0;
+
+  /* same side -> pair +2 = {3,4}; x = 3*0x26, z = 4*0x21 */
+  rec->target_x = 0x111;
+  rec->target_y = 0x222;
+  rec->target_z = 0x333;
+  assert(fifa96_match_phase_01(&mr) == FIFA96_OK);
+  assert(rec->target_x == 3 * 0x26);
+  assert(rec->target_y == 0);
+  assert(rec->target_z == 4 * 0x21);
+
+  /* other side -> pair +0 = {1,2} */
+  mr.phase_machine.side_controlled = 1;
+  assert(fifa96_match_phase_01(&mr) == FIFA96_OK);
+  assert(rec->target_x == 1 * 0x26);
+  assert(rec->target_z == 2 * 0x21);
+
+  /* the team-side negation (other side -> pair +0) */
+  mr.entities.team[0].side = 1;
+  mr.phase_machine.side_controlled = 0;
+  assert(fifa96_match_phase_01(&mr) == FIFA96_OK);
+  assert(rec->target_x == -(1 * 0x26));
+  assert(rec->target_z == -(2 * 0x21));
+
+  /* unbound metadata is the native gate */
+  rec->phase_meta8 = NULL;
+  rec->target_x = 0x111;
+  rec->target_y = 0x222;
+  rec->target_z = 0x333;
+  assert(fifa96_match_phase_01(&mr) == FIFA96_OK);
+  assert(rec->target_x == 0x111 && rec->target_y == 0x222 &&
+         rec->target_z == 0x333);
+  assert(fifa96_match_phase_01(NULL) == -FIFA96_ERR_INVALID);
+}
+
 /* Phase 0x13/0x14 (phase-36, fresh `0x6E244..0x6E32A`): the camera-scatter
  * body. Mutation-RED: the side gate, the inactive z negation, the active
  * four-draw scatter and the no-negation x write each fail if dropped. */
@@ -1118,6 +1169,7 @@ int main(void) {
   test_phase_1A_dormant();
   test_phase_1A_install();
   test_phase_1A_end_block();
+  test_phase_01_formation_body();
   test_phase_13_inactive();
   test_phase_13_active();
   test_phase_scatter_producer();

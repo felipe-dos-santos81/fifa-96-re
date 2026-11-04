@@ -96,9 +96,11 @@ derived from one binary (`FIFA96.EXE`):
   precedent). The port table is the authority; the test refuses a
   dispatch/port `fn` mismatch.
 - The **wired** count is a separate, stricter ENGINE.md headline
-  (`N/80` dispatch slots; currently 62/80). Whenever a task adds a body or
-  wires a row, recompute both numbers and update the README title + the
-  ENGINE.md headline **in the same commit**.
+  (`N/80` dispatch slots; currently 55/80 naturally wired, 62/80
+  install-live). The seven producer-blocked rows are listed in
+  `fifa96_match_port_blocked` and subtracted from the natural count. Whenever a
+  task adds a body or wires a row, recompute all three numbers and update the
+  README title + the ENGINE.md headline **in the same commit**.
 - The status narrative lives in `docs/PROGRESS.md` (moved out of the README);
   update it when a slice closes, and keep `docs/ENGINE.md` as the
   engine-level gates/legs record.

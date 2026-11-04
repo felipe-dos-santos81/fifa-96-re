@@ -214,6 +214,12 @@ struct fifa96_match_entity {
    * stage a byte pair to exercise the arithmetic directly. `NULL` means
    * "unbound". */
   const int8_t *phase_meta;  /* native [rec+0xC] */
+  /* Native [rec+8] (phase-36): the per-record 4-byte placement cell
+   * (`FUN_0004C384(form*6+0) + byte[rec+0x8D]*4`). The phase-01/11/12 body
+   * picks the pair at +0 or +2 by side and feeds `fifa96_action_phase_cell`.
+   * `NULL` = unbound (gated no-op). The live ko-blob bind is the R6 recipe
+   * leg; this field is staged by unit fixtures today. */
+  const uint8_t *phase_meta8;
   /* FU-192 §2.3/§2.4 + FU-199 §7.2 / FU-200 §1 (M2 phase-18 T1): the
    * per-record metadata pointers the phase bodies `0x6DD9C` (row 06) and
    * `0x6DE44` (rows 03/04/07) index. The native sources are the OL-13 `.fmt`

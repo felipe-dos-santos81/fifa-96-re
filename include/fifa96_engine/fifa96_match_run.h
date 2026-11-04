@@ -1620,6 +1620,9 @@ int fifa96_match_run_kickoff_entry(struct fifa96_match_run *mr);
  * phase-16 T4): the phase-0x19 row `fifa96_match_action_phase_19` is owned by
  * the act machine, dispatched invoke-now from `fifa96_match_run_contact`. */
 #define FIFA96_MATCH_RUN_REF_NONE 0u
+/* RETIRED (phase-36 R9): the act-6 phase row owns the offside sequence; the
+ * id is kept because this enum mirrors the native ref-machine slots and the
+ * field remains part of the run state. Only REF_NONE is assigned today. */
 #define FIFA96_MATCH_RUN_REF_OFFSIDE FIFA96_REF_SEQ_ACT6
 
 /* FU-150 §Port contract: the derived contact entry. The native contact
@@ -1674,21 +1677,17 @@ int fifa96_match_run_offside_reception(struct fifa96_match_run *mr, int32_t rece
                                        int32_t camera_ref, uint8_t mirror,
                                        uint8_t *offside);
 
-/* Run the active referee machine once (one granted 30 Hz frame; the frame body
- * calls this after the FU-141 entity chain). NONE -> 0. OFFSIDE runs the module
- * step and applies its requests: the whistle/speech observation slots
- * (`ref_whistle`/`ref_speech`), the phase write through
- * `match_run_write_phase` + the FU-149 arm, the record install on rec_first,
- * and the situation dispatch through the shared
- * `fifa96_match_run_set_piece(..., BX=1)` (whose direct path may start the
- * act-2 phase-0x18 machine, run invoke-now). Also drives the [0x157A6A]
- * suppression countdown (0x7438D..0x743A5, saturated at 0) and stages the live
- * phase into the referee state. Returns 1 when a step ran, 0 when idle, or a
- * -fifa96_err_t (including -FIFA96_ERR_INVALID for NULL). (The former RESTART
- * arm is retired — FU-183 §5 / phase-16 T1: the act machine owns the
- * phase-0x18 hand-off `fifa96_match_action_phase_18`; the former FOUL arm is
- * retired — FU-187 §5 / phase-16 T4: the act machine owns the phase-0x19 foul
- * sequence `fifa96_match_action_phase_19`.) */
+/* Run the per-granted-frame referee observation pass (one granted 30 Hz frame;
+ * the frame body calls this after the FU-141 entity chain). It clears the
+ * whistle/speech observation slots (`ref_whistle`/`ref_speech`), stages the
+ * live phase into the referee state, and drives the [0x157A6A] suppression
+ * countdown (0x7438D..0x743A5, saturated at 0). Returns 0, or
+ * -FIFA96_ERR_INVALID for NULL. The foul/offside sequences are owned by the
+ * act machine's phase rows, not by a `ref_machine` driver: the RESTART arm is
+ * retired (FU-183 §5), the FOUL arm is retired (FU-187 §5), and the OFFSIDE
+ * arm is retired (phase-36 R9 — the act-6 phase row
+ * `fifa96_match_action_phase_1C` is the single owner; the offside reception
+ * dispatches it invoke-now). */
 int fifa96_match_run_referee_step(struct fifa96_match_run *mr);
 
 /* FU-183 §5/§6 rank 2 (phase-16 T1): the phase-0x18 / act-2 row body. Runs the
@@ -1782,22 +1781,27 @@ int fifa96_match_action_phase_1A(struct fifa96_match_run *mr);
  * `mr`. */
 int fifa96_match_action_phase_1B(struct fifa96_match_run *mr);
 
-/* FU-193 §4/§6.3 (M2 phase-17 T4): the phase-0x1C / act-6 row body — the
- * pre-restart timeline (native `0x89110`, ends `0x89213`). Its phase-table slot
- * (`fifa96_match_phase_table[0x1C]`) is **NULL** — the row is not counted —
- * because no engine source dispatches act 6 (FU193-L4); the existing driver is
- * the offside machine (`fifa96_match_run_offside_reception` ->
- * `fifa96_ref_offside_sequence_step`), so wiring the row would double-run it.
- * The native handler is already ported as `fifa96_ref_offside_sequence_step`
- * (FU-150/FU-165); this body aliases the act slot's stage/timer to the referee
- * state (the phase-0x19 FU187-L3 pattern), runs the 3-stage step (stage 0 writes
- * phase 0xA + whistle, stages 1/2 wait on `0x4BEC8`, stage 2 re-dispatches
- * situation 9 on the opponent), clears the act slot on the terminal and applies
- * the requests through `match_run_ref_apply`. Returns FIFA96_OK, or
- * -FIFA96_ERR_INVALID for NULL `mr`. */
+/* FU-193 §4/§6.3 (M2 phase-17 T4) + phase-36 R9: the phase-0x1C / act-6 row
+ * body — the pre-restart timeline (native `0x89110`, ends `0x89213`). The
+ * phase-table slot (`fifa96_match_phase_table[0x1C]`) is **WIRED and
+ * COUNTED**: the offside machine is the live act-6 producer
+ * (`fifa96_match_run_offside_reception` dispatches act 6 invoke-now,
+ * `0x8A784/0x8A789`), and the clock-tail act tick advances the same row. The
+ * former direct `ref_machine`/`referee_step` driver was retired, so there is
+ * one owner. The native handler is already ported as
+ * `fifa96_ref_offside_sequence_step` (FU-150/FU-165); this body aliases the
+ * act slot's stage/timer to the referee state (the phase-0x19 FU187-L3
+ * pattern), runs the 3-stage step (stage 0 writes phase 0xA + whistle, stages
+ * 1/2 wait on `0x4BEC8`, stage 2 re-dispatches situation 9 on the opponent),
+ * clears the act slot on the terminal and applies the requests through
+ * `match_run_ref_apply`. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for NULL
+ * `mr`. */
 int fifa96_match_action_phase_1C(struct fifa96_match_run *mr);
 
-/* FU-194 §3/§6.1 (M2 phase-17 T5): the phase-0x1D / act-7 row body — the native
+/* [phase-19 T2 / phase-20 T3 erratum: the phase-0x1D slot is now REGISTERED
+ * and COUNTED, and action row 0x20 is wired too (FU-208/FU-217); the "NULL"
+ * sentences below are the phase-17 record.]
+ * FU-194 §3/§6.1 (M2 phase-17 T5): the phase-0x1D / act-7 row body — the native
  * 10-arm set-piece timeline `0x89868`. Its phase-table slot
  * (`fifa96_match_phase_table[0x1D]`) is **NULL** — the row is not counted — and
  * it forms one coupled unit with action row 0x20 (FU-194 §6.1): arm 0 carries

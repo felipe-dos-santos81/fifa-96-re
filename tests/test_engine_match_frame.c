@@ -6931,7 +6931,8 @@ static void match_live_receive_offside_stage(struct fifa96_match_run *mr) {
  * that call as a declared leg, leaving `fifa96_match_run_offside_reception`
  * callerless. This drives the live receive arm with the enable `field_4c2f2`
  * (0x14C2F2) on and an eligible receiving record: the offside chain must
- * dispatch (ref_machine -> REF_OFFSIDE, the kind-3 event + phase-0x0A stage 0).
+ * dispatch (act 6, the kind-3 event + phase-0x0A stage 0; the direct
+ * ref_machine route is retired by phase-36 R9).
  * The enable-off control must stay dormant. */
 static void test_offside_reachable_from_live_receive(void) {
   struct fixture f = make_fixture(10000000ull);

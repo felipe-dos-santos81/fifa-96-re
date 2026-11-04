@@ -5,7 +5,8 @@ turns them into a running game: platform ABI → SDL3/null backends → engine c
 (boot, asset table, clock, intro, front-end, match).
 
 Status: **M1 complete headless; M2 match playable, visible and RGB-visible —
-78/78 native dispatch bodies ported (100%) — 62/80 dispatch slots wired
+78/78 native dispatch bodies ported (100%) — 55/80 dispatch slots wired
+(62/80 install-live)
 (37 action + the wired phase rows 0x02, 0x0D, 0x10, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x21, 0x22
 and the per-record phase-17 T3 cohort 0x00/0x03/0x04/0x05/0x06/0x07/0x08/0x09/0x0A/0x0C/0x0F/0x15), the
 derived FU-143 phase driver wired into the run
@@ -266,8 +267,8 @@ the build also produces the windowed `fifa96` target (`make game`).
   now takes the native
   `word[slot+6] & 0x70` release gate, so the natural kickoff waits for a
   button press/release exactly as the native (observed live in the T4 smoke).
-- Action dispatch (FU-137): **62/80 dispatch slots wired** (37 action + the phase rows
-  `0x02`/`0x0D`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1C`/`0x1D`/`0x1E`/`0x1F`/`0x20`/`0x21`/`0x22` and the phase-17 T3 per-record cohort
+- Action dispatch (FU-137): **60/80 rows wired** (37 action + the phase rows
+  `0x02`/`0x10`/`0x17`/`0x18`/`0x19`/`0x1D`/`0x1E`/`0x1F`/`0x21`/`0x20`/`0x22` and the phase-17 T3 per-record cohort
   `0x00`/`0x03`/`0x04`/`0x05`/`0x06`/`0x07`/`0x08`/`0x09`/`0x0A`/`0x0C`/`0x0F`/`0x15`)
   — `00`, `01`, `02` (M2
   phase-9 T1/FU-75 L4.6: the restart/placement row whose phase-2 install-4
@@ -7958,7 +7959,7 @@ no recompute (AGENTS.md's derived rule).
   phase 1 at step 13805, clock 120 s, no transition through step 160 000 — the
   row-01 kickoff release / the FU-84 per-frame driver).
 
-## M2 phase-36 register (FU334…FU338; 2026-11-04) — the completion census: 78/78 native dispatch bodies ported (100%), 62/80 wired
+## M2 phase-36 register (FU334…FU338; 2026-11-04) — the completion census: 78/78 native dispatch bodies ported (100%), 55/80 wired (62/80 install-live)
 
 **Scope/provenance.** The phase-36 spec
 `docs/superpowers/specs/2026-11-04-fifa96-m2-phase36-completion-design.md` and
@@ -7978,10 +7979,12 @@ phase-35 text above stands as written.
   `0x16` (`0x110794[0x16] = 0`, the loader INT3 sentinel). **78 native-body
   slots**; all 78 now have a body. The README title is
   `floor(100 * 78 / 78) = 100`; the wired metric is separate:
-  `62/80 = 77%` (or `62/78 = 79%` of native-body slots). The census test
-  `tests/test_engine_match_port_census.c` prints
-  `port-census: bodies 78/78 no-body 2 wired 62/80 (100%) action 37/45 phase 25/35`
-  and refuses a dispatch/port `fn` mismatch.
+  **`55/80 naturally wired = 68%`** and `62/80 install-live = 77%` (the seven
+  producer-blocked rows below are subtracted from the natural count). The
+  census test `tests/test_engine_match_port_census.c` prints
+  `port-census: bodies 78/78 (100%) no-body 2 wired 55/80 install-live 62/80 action 37/45 phase 25/35`
+  and refuses a dispatch/port `fn` mismatch; it also pins the typed body
+  pointers (the loader-shaped rows are compile-checked, not string-only).
 - **The three missing bodies.** **Action `0x0A`** (`0x81738..0x81905`, not
   `..0x818F5`; FU-334): the phase-2 gate, stage 0 nearest / `> 0x50` reject /
   `0x8DCD4` distance / `0xCD474` bearing / `0x10F394` tier OR the self `+0x9D`
@@ -8009,9 +8012,9 @@ phase-35 text above stands as written.
   `fifa96_match_action_phase_1C`: the offside reception now dispatches act 6
   invoke-now (`0x8A784/0x8A789` kind-3 arm) and the clock-tail act tick
   advances it; the duplicate `ref_machine`/`referee_step` route is retired.
-  Census `60/80 → 62/80` (+1 phase `0x0D`, +1 phase `0x1C`). Both are
-  tape-neutral: the golden carries no phase-`0x0D` frame and the offside enable
-  `field_4c2f2` defaults 0.
+  Census `60/80 → 62/80` install-live (+1 phase `0x0D`, +1 phase `0x1C`);
+  the natural-reach count is `55/80`. Both are tape-neutral: the golden carries
+  no phase-`0x0D` frame and the offside enable `field_4c2f2` defaults 0.
 - **The natural-reach audit.** A fresh source audit of the 60 pre-wave wired
   rows found seven counted rows whose producer is currently structurally
   blocked in the engine: action `0x25` (the `ac5 != ac7` discriminator is

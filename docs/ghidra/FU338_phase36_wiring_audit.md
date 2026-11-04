@@ -60,8 +60,10 @@ act-6 id clear beyond the act id (FU193-L4 residual).
 
 ## 3. Census after the wiring
 
-`37 action + 25 phase = 62/80 wired` (was `37 + 23 = 60`). The port-coverage
-census stays `78/78` (FU-337). The M1/M2 goldens are byte-identical; no re-pin.
+`37 action + 25 phase = 62/80` **install-live** (was `37 + 23 = 60`). Seven of
+those are producer-blocked (§4), so the **natural-reach** count is `55/80`.
+The port-coverage census stays `78/78` (FU-337). The M1/M2 goldens are
+byte-identical; no re-pin.
 
 ## 4. The natural-reach audit (fresh source + first-hand spot checks)
 

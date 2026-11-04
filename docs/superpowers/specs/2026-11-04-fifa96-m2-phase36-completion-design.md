@@ -112,3 +112,29 @@ and a frame diff; the default is tape-neutral.
 - Each new producer claim cites a fresh `get_xrefs_to` in the same session.
 - No row is wired without a producer; no body-less slot is counted.
 - Prior registers are append-only; corrections land as quoted errata.
+
+## 7. Wave-close erratum (2026-11-04)
+
+§5's "wire every row whose producer is live" is narrowed at the wave close to
+"wire every live producer that is tape-neutral or has an accepted measured
+re-pin". The implementation wired the two tape-neutral rows (phase `0x0D`,
+phase `0x1C`). The remaining §5 candidates are ported-but-dormant with the
+evidence recorded in the producers plan's wave-close erratum:
+
+- action `0x03` — live, but wiring moves 792 presented M2 frames (R1b);
+- phase `0x13` — live, but consumes the shared RNG stream and needs a measured
+  re-pin (R1a);
+- action `0x0D` — the `0x80F61` install is behind two zero-staged pool cells
+  (R3);
+- phase `0x0B` — its writer is in the phase-`0x1A` body, which is dormant (R7);
+- phase `0x14` — no live writer;
+- action `0x17` / phase `0x1A` — no live act-4 producer (R4);
+- actions `0x27/0x29/0x2C` — no installer in the 77-site census (R5);
+- phase `0x1B` — no EAX=5 invoker / no phase-`0x1B` writer (R8).
+
+The wired headline therefore reports two numbers: **`55/80` naturally wired**
+and `62/80` install-live (the seven producer-blocked rows in
+`fifa96_match_port_blocked`, FU-338 §4). The completion title remains the
+port-coverage `78/78 = 100%`. This is a deliberate metric redefinition (wired
+reachability → native-body port coverage), not a claim that the prior 75%
+target was met under the old metric.

@@ -3434,8 +3434,8 @@ stayed default-off outside the acceptance run; the artefacts are
 ## M2 phase-36 — the completion census (2026-11-04)
 
 The port surface is complete: **78/78 native dispatch bodies ported (100%)**,
-with **62/80 dispatch slots wired**. The two numbers are now separate by
-design. The dispatch tables answer runtime wiring; the new
+with **55/80 dispatch slots naturally wired (62/80 install-live)**. The
+numbers are separate by design. The dispatch tables answer runtime wiring; the new
 `fifa96_match_port_table[80]` answers reverse-engineering completeness. Two
 slots have no native body at all — action `0x2B` is the shared row-29 epilogue
 `RET` at `0x87738`, and phase `0x16` is the loader's zero/INT3 sentinel — so

@@ -5776,7 +5776,7 @@ static void run_census_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 25u);  /* 62/80 (phase-36: +phase 0x0D/0x1C) */
+    assert(action_wired == 37u && phase_wired == 25u);  /* 62/80 install-live, 55/80 natural (phase-36: +phase 0x0D/0x1C) */
     assert(fifa96_match_phase_table[0x1F].fn != NULL);  /* T1: the act-9 phase row */
     assert(fifa96_match_phase_table[0x18].fn != NULL);  /* T1: the act-2 phase row */
     assert(fifa96_match_phase_table[0x19].fn != NULL);  /* T4: the act-3 foul phase row */
@@ -6151,7 +6151,7 @@ static void run_phase17_riders(void) {
       if (fifa96_match_action_table[i].fn != NULL) action_wired++;
     for (uint32_t i = 0; i < FIFA96_MATCH_PHASE_ROWS; i++)
       if (fifa96_match_phase_table[i].fn != NULL) phase_wired++;
-    assert(action_wired == 37u && phase_wired == 25u);    /* 62/80 (phase-36: +phase 0x0D/0x1C) */
+    assert(action_wired == 37u && phase_wired == 25u);    /* 62/80 install-live, 55/80 natural (phase-36: +phase 0x0D/0x1C) */
     for (size_t k = 0; k < sizeof gated; k++)
       assert(fifa96_match_phase_table[gated[k]].fn != NULL);
     fifa96_match_run_init(&mr);

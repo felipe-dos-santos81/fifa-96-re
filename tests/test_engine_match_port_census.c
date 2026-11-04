@@ -46,8 +46,8 @@ static int file_contains(const char *path, const char *needle) {
 }
 
 int main(void) {
-  unsigned action_wired = 0;
-  unsigned phase_wired = 0;
+  unsigned action_install = 0;
+  unsigned phase_install = 0;
   unsigned bodies = 0;
   unsigned no_body = 0;
   unsigned none = 0;
@@ -70,6 +70,9 @@ int main(void) {
     }
     if (p->kind == FIFA96_MATCH_PORT_BODY) {
       assert(p->body != NULL && p->body[0] != '\0');
+      /* At least one typed body pointer must name the implementation: a stale
+       * string alone is not a port. */
+      assert(p->fn != NULL || p->arm_fn != NULL || p->body_0d_fn != NULL);
       bodies++;
     } else if (p->kind == FIFA96_MATCH_PORT_NO_BODY) {
       assert(p->fn == NULL && p->body == NULL);
@@ -83,8 +86,8 @@ int main(void) {
     if (d->fn != NULL) {
       assert(p->kind == FIFA96_MATCH_PORT_BODY);
       assert(p->fn == d->fn);
-      if (p->domain == FIFA96_MATCH_PORT_ACTION) action_wired++;
-      else phase_wired++;
+      if (p->domain == FIFA96_MATCH_PORT_ACTION) action_install++;
+      else phase_install++;
     }
   }
 
@@ -94,29 +97,45 @@ int main(void) {
   assert(bodies + no_body == FIFA96_MATCH_PORT_SLOTS);
   assert(fifa96_match_port_bodies() == bodies);
   assert(fifa96_match_port_no_body() == no_body);
-  assert(fifa96_match_port_wired() == action_wired + phase_wired);
+  assert(fifa96_match_port_install_live() == action_install + phase_install);
+  assert(fifa96_match_port_blocked_count() == 7u);
+  assert(fifa96_match_port_wired() == 55u);
 
   /* The two body-less slots, at their native positions. */
   assert(fifa96_match_port_table[0x2B].kind == FIFA96_MATCH_PORT_NO_BODY);
   assert(fifa96_match_port_table[FIFA96_MATCH_ACTION_ROWS + 0x16].kind ==
          FIFA96_MATCH_PORT_NO_BODY);
 
-  /* The runtime-wired census (stricter than port coverage). */
-  assert(action_wired == 37u);
-  assert(phase_wired == 25u);
-  assert(fifa96_match_port_wired() == 62u);
+  /* The install-live census (the natural count subtracts the blocked set). */
+  assert(action_install == 37u);
+  assert(phase_install == 25u);
+  assert(fifa96_match_port_install_live() == 62u);
+
+  /* The seven producer-blocked rows are install-live but not naturally
+   * reachable (FU-338 §4); the natural count subtracts them. */
+  for (i = 0; i < FIFA96_MATCH_PORT_BLOCKED_ROWS; i++) {
+    const struct fifa96_match_blocked_row *b = &fifa96_match_port_blocked[i];
+    const struct fifa96_match_handler *d =
+        b->domain == FIFA96_MATCH_PORT_ACTION
+            ? &fifa96_match_action_table[b->code]
+            : &fifa96_match_phase_table[b->code];
+    assert(d->fn != NULL);
+  }
 
   assert(fifa96_match_port_bodies() == FIFA96_MATCH_PORT_NATIVE_ROWS);
   assert(file_contains("README.md", "Reverse Engineering (100%)"));
+  assert(file_contains("README.md", "55/80 dispatch slots naturally wired"));
   assert(file_contains("docs/ENGINE.md",
                        "78/78 native dispatch bodies ported (100%)"));
-  assert(file_contains("docs/ENGINE.md", "62/80 dispatch slots wired"));
-  printf("port-census: bodies %u/%u no-body %u wired %u/%u (%u%%) "
-         "action %u/45 phase %u/35\n",
-         bodies, (unsigned)FIFA96_MATCH_PORT_NATIVE_ROWS, no_body,
-         action_wired + phase_wired, (unsigned)FIFA96_MATCH_PORT_SLOTS,
-         (100u * bodies) / (unsigned)FIFA96_MATCH_PORT_NATIVE_ROWS, action_wired,
-         phase_wired);
+  assert(file_contains("docs/ENGINE.md", "55/80 dispatch slots wired"));
+  assert(file_contains("docs/ENGINE.md", "62/80 install-live"));
+  printf("port-census: bodies %u/%u (%u%%) no-body %u wired %u/%u "
+         "install-live %u/%u action %u/45 phase %u/35\n",
+         bodies, (unsigned)FIFA96_MATCH_PORT_NATIVE_ROWS,
+         (100u * bodies) / (unsigned)FIFA96_MATCH_PORT_NATIVE_ROWS, no_body,
+         fifa96_match_port_wired(), (unsigned)FIFA96_MATCH_PORT_SLOTS,
+         fifa96_match_port_install_live(),
+         (unsigned)FIFA96_MATCH_PORT_SLOTS, action_install, phase_install);
   puts("test_engine_match_port_census OK");
   return 0;
 }
