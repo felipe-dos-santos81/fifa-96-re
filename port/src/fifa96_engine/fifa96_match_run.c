@@ -2216,6 +2216,8 @@ void fifa96_match_run_init(struct fifa96_match_run *mr) {
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] BSS word */
+  memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: no extra-time flag yet */
   mr->probe_a[0] = 0;                  /* 0x142FE0: ordinary setup zeroes the pair */
   mr->probe_a[1] = 0;
@@ -2398,6 +2400,8 @@ int fifa96_match_run_begin(struct fifa96_match_run *mr, struct fifa96_engine *en
   mr->global_10f364 = 0;
   mr->global_10f368 = 0;
   mr->global_157ac2 = 0;
+  mr->ball_gate_15b37a = 0;            /* FU-188: fresh [0x15B37A] word */
+  memset(mr->row17_stash_1587fc, 0, sizeof mr->row17_stash_1587fc); /* FU-181 */
   mr->global_157ac0 = 0;               /* FU-213 T1: fresh extra-time flag */
   mr->probe_a[0] = 0;                  /* 0x142FE0: fresh-match setup zeroes A */
   mr->probe_a[1] = 0;

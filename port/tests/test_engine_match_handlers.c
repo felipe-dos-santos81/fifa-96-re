@@ -4780,6 +4780,69 @@ static void test_action_16_stage2_reset(void) {
   drop_fixture(&f);
 }
 
+/* Row 0x17 stage 2 (FU-181 §2, `0x84842..0x8494B`): the display-side
+ * formation-matrix sync (`formation_current[ds][slot] = formation_order[ds][slot]`,
+ * native `0x157BD2/0x14C360` dwords), the `0x8C758` placement-limit store
+ * (`0x8C850` word[+0x79]), the `0x6E598` anim install, and the 0x1587FC ->
+ * target copy + `0x8DCD4` commit. Stage 3 then copies the stash back into the
+ * position triple and takes the `0x849A1` reset; the `> 0x12C` timer bypass
+ * skips the distance gate. */
+static void test_row_17_stage2_sync_and_calls(void) {
+  struct fifa96_match_run mr;
+  struct fifa96_match_entity *e;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 1;                      /* team 0 record 1 */
+  mr.state.phase = 0x0Bu;
+  mr.record.stage92 = 0;
+  mr.record.pos_x = 0x12;
+  mr.record.pos_y = 0x34;
+  mr.record.pos_z = 0x56;
+  mr.record.active = 3;                         /* the +0x8D matrix slot */
+  mr.record.type = 0x12;                        /* the 0x6E598 id */
+  mr.record.delta = 0;
+  mr.side_swap = 0;
+  mr.formation_order[0][3] = 0x2A;
+  mr.formation_order[0][0] = 0x99;
+  e = &mr.entities.team[0].records[1];
+  e->timer79 = 0;
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
+  assert(mr.row17_stash_1587fc[0] == 0x12);     /* 0x84792 */
+  assert(mr.row17_stash_1587fc[1] == 0x34);
+  assert(mr.row17_stash_1587fc[2] == 0x56);
+  assert(mr.record.stage92 == 1u);
+  /* stage 1 -> 2 in the same call (the derived stage walk). */
+  mr.record.stage92 = 1;
+  mr.record.timer89 = 0x3C;
+  mr.record.distance = 0;                       /* 0x8480A < 0x20 */
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 == 3u);
+  assert(mr.formation_current[0][3] == 0x2A);   /* 0x84892 sync */
+  assert(mr.formation_current[0][0] == 0);      /* only the record's slot */
+  assert(e->timer79 == 6u);                     /* 0x8C850 limit (tier[0]) */
+  assert(e->anim_id == 0x12u);                  /* 0x848F1 anim install */
+  assert(mr.record.anim_id == 0x12u);           /* the write-back mirror */
+  assert(mr.record.target_x == 0x12);           /* 0x84922 stash -> target */
+  assert(mr.record.target_y == 0x34);
+  assert(mr.record.target_z == 0x56);
+  assert(mr.record.pos_x == -0x860);            /* 0x84918 */
+  assert(mr.record.pos_y == 0 && mr.record.pos_z == 0);
+  assert(mr.record.timer89 == 0);
+  /* stage 3: the `[+0x63]>>16 < 0x60` distance gate holds below the reset */
+  mr.record.stage92 = 3;
+  mr.record.timer89 = 0x3C;
+  mr.record.distance = 0x60;                    /* 0x8496E JGE -> hold */
+  e->code = 0x17u;
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
+  assert(e->code == 0x17u);
+  /* `> 0x12C` bypasses the distance gate: presentation + stash copy + reset */
+  mr.record.timer89 = 0x12D;
+  assert(fifa96_match_action_17(&mr) == FIFA96_OK);
+  assert(e->code == 0u);                        /* 0x849A1 match_row_reset */
+  assert(mr.record.pos_x == 0x12);              /* 0x84994 stash -> pos */
+  assert(mr.record.pos_y == 0x34);
+  assert(mr.record.pos_z == 0x56);
+}
+
 /* Row 0x24 (FU-188 §4) + FU-202 §6 rec (b) (M2 phase-18 T3): the WIRED/COUNTED
  * lane/anim body (its installer is the live phase-0x20 stage 0). Stage 0 seeds
  * pos_x = 0x9F0, zeroes the movement words and commits target_x = 0x7E0, then
@@ -4811,8 +4874,10 @@ static void test_action_24_runs_body(void) {
 /* Row 0x24 (FU314-L5a, phase-31 T2): the native stage-0 face call at
  * `0x865C6` passes the constant vector `(DX=1, BX=0)` (`0x865B5 MOV EDX,1`,
  * `0x865BE XOR EBX,EBX`), not the record's seeded position. Stage a non-zero
- * `player_e` so the two call shapes differ: `(pos_x,pos_z)` = (0x9F0, 6*0x7F)
- * folds to 0xD0, while the native `(1,0)` is +x = 0x100 (octant 2). */
+ * `player_e` so the two call shapes differ: `(pos_x,pos_z)` = (0x9F0, -6*0x7F)
+ * folds to 0xD0, while the native `(1,0)` is +x = 0x100 (octant 2). FU-188 §4
+ * (`0x865A0`): side 0 negates the `6*subtype` z term, so `pos_z` is negative
+ * (the shared `fifa96_action_sequence_lane` field). */
 static void test_action_24_face_constant_vector(void) {
   struct fifa96_match_run mr;
   fifa96_match_run_init(&mr);
@@ -4825,9 +4890,111 @@ static void test_action_24_face_constant_vector(void) {
   mr.record.type = 7;
   assert(fifa96_match_action_24(&mr) == FIFA96_OK);
   assert(mr.record.pos_x == 0x9F0);             /* 0x8657A */
-  assert(mr.record.pos_z == 6 * 0x7F);          /* 0x86587/0x865AE */
+  assert(mr.record.pos_z == -6 * 0x7F);         /* 0x86587/0x865A0/0x865AE */
   assert(mr.record.face7d == 0x100);            /* the 0x79C50(1,0) constant */
   assert(mr.record.type == 2);                  /* ((0x100 + 0x40) & 0x3FF) >> 7 */
+}
+
+/* Row 0x24 stage 0 wait (FU-188 §4, `0x865CB..0x8660B`): the derived
+ * `fifa96_action_sequence_lane` threshold holds the stage until
+ * `timer89 >= threshold`; the target commit below the wait is not reached.
+ * `boost` is `[+0x8A]>>25`, i.e. the dword's `+0x8D` active byte >> 1: with
+ * subtype 4 and active 8 (`boost` 4) the side-0 threshold is
+ * `(4*(4*60))>>4 = 60`. */
+static void test_action_24_stage0_wait(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 0;
+  mr.record.active = 8;
+  mr.record.side = 0;
+  mr.record.player_e = 4;
+  mr.record.timer89 = 0;
+  mr.record.delta = 0;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 == 0u);              /* threshold 60 > timer 0 */
+  assert(mr.record.pos_x == 0x9F0);             /* seeds precede the wait */
+  assert(mr.record.pos_z == -(4 * 6));          /* side 0 -> -6*subtype */
+  mr.record.timer89 = 59;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 == 0u);              /* threshold 60 > 59 */
+  mr.record.timer89 = 60;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.stage92 >= 1u);              /* 0x8660B falls through */
+  assert(mr.record.target_x == 0x7E0 + 6 * 4);  /* 0x86617/0x8664B */
+}
+
+/* Row 0x24 stage 1 ball gates (FU-188 §4, `0x8665C..0x86684`): the
+ * `0x8EEC0` getter (word[0x15B37A]), the `[0x157AC2]` and `[0x14C32A]` cell
+ * gates, then `0x67800(1)` (unported bank load) and `0x8EEB4` (latch = 1).
+ * The stage holds on `distance >= 0x20` after the gate, so each fixture keeps
+ * stage 1 while observing the latch. */
+static void test_action_24_stage1_ball_gate(void) {
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;
+  mr.record.stage92 = 1;
+  mr.record.side = 0;
+  mr.record.distance = 0x20;                    /* 0x866BD JGE holds stage 1 */
+  assert(mr.ball_gate_15b37a == 0u);
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.ball_gate_15b37a == 1u);            /* 0x86682 CALL 0x8EEB4 */
+  assert(mr.record.stage92 == 1u);
+  /* the latch (0x8EEC0 != 0) suppresses the one-shot load */
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.ball_gate_15b37a == 1u);
+  /* [0x157AC2] != 0 skips it */
+  mr.ball_gate_15b37a = 0u;
+  mr.global_157ac2 = 1u;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.ball_gate_15b37a == 0u);
+  /* [0x14C32A] != 0 skips it */
+  mr.global_157ac2 = 0u;
+  mr.session_gate_14c32a = 1u;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.ball_gate_15b37a == 0u);
+  /* both clear -> the latch fires again */
+  mr.session_gate_14c32a = 0u;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.ball_gate_15b37a == 1u);
+}
+
+/* Row 0x24 stage 2 (FU-188 §4, `0x866DD..0x866E7`): `0x6E1D0(rec, &rec+0x4D,
+ * -1)` writes the side-selected `[rec+8]` pair through
+ * `fifa96_action_phase_cell` (`x*0x26`, `0`, `z*0x21`, side-negated). The pair
+ * at +2 is selected when the record side equals the controlled side; the
+ * unbound cell is the gated no-op. */
+static void test_action_24_stage2_phase_cell_release(void) {
+  static const uint8_t cells[4] = {2, 3, 4, 5};
+  struct fifa96_match_run mr;
+  fifa96_match_run_init(&mr);
+  mr.record.entity_id = 0;                      /* team 0 record 0 */
+  mr.record.stage92 = 2;
+  mr.record.target_x = 0x111;
+  mr.record.target_y = 0x222;
+  mr.record.target_z = 0x333;
+  mr.entities.team[0].records[0].phase_meta8 = cells;
+  mr.phase_machine.side_controlled = 0;         /* == team 0 side -> pair +2 */
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.target_x == 4 * 0x26);       /* cells[2] */
+  assert(mr.record.target_y == 0);
+  assert(mr.record.target_z == 5 * 0x21);       /* cells[3] */
+  /* side != controlled side -> pair +0 and the side-1 negation */
+  mr.record.entity_id = 11;                     /* team 1 record 0 */
+  mr.record.target_x = 0x111;
+  mr.record.target_z = 0x333;
+  mr.entities.team[1].records[0].phase_meta8 = cells;
+  mr.phase_machine.side_controlled = 0;         /* team side 1 != 0 */
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.target_x == -(2 * 0x26));
+  assert(mr.record.target_z == -(3 * 0x21));
+  /* unbound [rec+8] -> the native no-op gate: target untouched */
+  mr.entities.team[1].records[0].phase_meta8 = NULL;
+  mr.record.target_x = 0x444;
+  mr.record.target_z = 0x555;
+  assert(fifa96_match_action_24(&mr) == FIFA96_OK);
+  assert(mr.record.target_x == 0x444);
+  assert(mr.record.target_z == 0x555);
 }
 
 /* ===== M2 phase-16 T3 (FU-186): rows 0x1A / 0x1C keeper chain ============= */
@@ -5589,8 +5756,12 @@ int main(void) {
   test_action_16_runs_body();
   test_action_16_stage0_gate();
   test_action_16_stage2_reset();
+  test_row_17_stage2_sync_and_calls();
   test_action_24_runs_body();
   test_action_24_face_constant_vector();
+  test_action_24_stage0_wait();
+  test_action_24_stage1_ball_gate();
+  test_action_24_stage2_phase_cell_release();
   test_action_0a_runs_body();
   test_phase_rows_dispatch_per_classification();
   test_out_of_range_is_not_found();

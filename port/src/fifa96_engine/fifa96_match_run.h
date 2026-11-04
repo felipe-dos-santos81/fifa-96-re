@@ -654,6 +654,21 @@ struct fifa96_match_run {
   int32_t global_10f364;
   int32_t global_10f368;
   uint8_t global_157ac2;
+  /* FU-188 §4 / FU-202 (row-0x24 stage 1): the native `word[0x15B37A]` ball
+   * gate latch. `FUN_0008EEC0` (`0x8EEC0..0x8EEC6`) returns the word;
+   * `FUN_0008EEB4` (`0x8EEB4..0x8EEBD`) stores 1. Row 0x24 stage 1
+   * (`0x8665C..0x86684`) runs the bank-1 load `FUN_00067800(1)` plus the
+   * latch set only when this word is 0 and `[0x157AC2]`/`[0x14C32A]` are 0.
+   * The `0x67800` bank loader is an unported sink (FU188-L3); the latch is
+   * the derived observable the gate leaves. Init/begin stage 0 (BSS). */
+  uint16_t ball_gate_15b37a;
+  /* FU-181 §2 (row 0x17): the native `0x1587FC` position-triple stash. Stage 0
+   * copies `+0x59/+0x5D/+0x61` into it (`0x84792..0x84794`); stage 2 copies it
+   * into the target triple (`0x84922..0x84924`) and stage 3 copies it back
+   * into the position triple (`0x84994..0x84996`). The native cell is private
+   * to row 0x17 (fresh `get_xrefs_to 0x1587FC` = the three row sites only).
+   * Init/begin stage the triple 0. */
+  int32_t row17_stash_1587fc[3];
   /* FU-213 §2.4/§2.5 (M2 phase-19 T1): the OL-85 extra-time flag, the native
    * `[0x157AC0]` boolean byte (FU-207 §1). The live clock's period completion
    * raises it when the completed regulation (W2 0x8B2AC) or extra-time-2 (W4

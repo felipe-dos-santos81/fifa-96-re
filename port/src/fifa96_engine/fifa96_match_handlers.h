@@ -292,12 +292,17 @@ int fifa96_match_action_0A(struct fifa96_match_run *mr);
  * is **NULL** — the row is not counted — because no engine path installs it:
  * the only static installer is act-4 stage 0 (`0x89740`, invoke-now), whose
  * invoker (the `FUN_0008A938` sit-2..4 formation-order gate `0x8AB08..0x8AB62`,
- * FU-149 L12) and the formation matrices are unported (FU181-L1). This is the
- * rows-27/29/2C precedent (a ported body with no engine installer stays
- * unwired and uncounted); the body is exported so it is tested directly and
- * ready for the act-4 seam. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
- * out-of-range `mr->record.entity_id` (like every row body it assumes a
- * non-NULL `mr`; the dispatch entry points guard that). */
+ * FU-149 L12) is not live. The body now carries the full derivable stage walk:
+ * the stage-2 dword formation sync over `formation_current`/`formation_order`
+ * (`0x84892`), the `0x8C758` placement limit (`0x8C850`), the `0x6E598` anim
+ * install (`0x848F1`), the `0x1587FC` stash copies and the `0x8DCD4` commits;
+ * the `0x157B90`/`0x157BA6` companion matrices (FU197-L2), the 0x8C758
+ * descriptor/flag half (FU330-L1) and the `0x45001`/`0x4C324`/`0x4728C` sinks
+ * (FU181-L4) stay legs. This is the rows-27/29/2C precedent (a ported body with
+ * no engine installer stays unwired and uncounted); the body is exported so it
+ * is tested directly and ready for the act-4 seam. Returns FIFA96_OK, or
+ * -FIFA96_ERR_INVALID for an out-of-range `mr->record.entity_id` (like every
+ * row body it assumes a non-NULL `mr`; the dispatch entry points guard that). */
 int fifa96_match_action_17(struct fifa96_match_run *mr);
 
 /* The ported action row-0x22 body (FU-185 §2/§6): the sequence/press machine
@@ -355,8 +360,11 @@ int fifa96_match_action_1A(struct fifa96_match_run *mr);
  * (0x4B0A5) -> act 0xA phase-0x20 stage 0 code-0x24 install
  * (`0x8B750`/`0x8B78B` on all 22 records), re-placed after the begin-tail act
  * reset so it survives into the first granted frame (FU-202 §6 rec (b)). The
- * `0x157A38` lane table, the threshold arithmetic and the release sinks stay
- * FU188-L3/L5 legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
+ * stage-0 wait uses the `fifa96_action_sequence_lane` threshold
+ * (`0x865CB..0x8660B`), stage 1 latches the `0x8EEC0`/`0x8EEB4` ball gate
+ * (`mr->ball_gate_15b37a`), and stage 2 runs the `0x6E1D0` phase-cell release;
+ * the `0x157A38` lane table (FU188-L5) and the `0x67800(1)` bank load
+ * (FU188-L3) stay legs. Returns FIFA96_OK, or -FIFA96_ERR_INVALID for an
  * out-of-range `mr->record.entity_id`. */
 int fifa96_match_action_24(struct fifa96_match_run *mr);
 

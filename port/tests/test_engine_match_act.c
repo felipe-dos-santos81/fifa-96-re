@@ -317,16 +317,18 @@ static void test_row_17_stage_walk(void) {
   assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.stage92 == 1u && mr.record.timer89 == 2);
   mr.record.timer89 = 0x3C - 2;
+  mr.record.distance = 0;                     /* 0x8480A: < 0x20 advances */
   assert(fifa96_match_action_17(&mr) == FIFA96_OK);  /* stage1->2->3 */
   assert(mr.record.stage92 == 3u);
   assert(mr.record.timer89 == 0);
   assert(mr.record.pos_x == -0x860);          /* the stage-2 +0x59 write */
   assert(mr.record.pos_y == 0 && mr.record.pos_z == 0);
-  /* stage 3: wait then reset */
+  /* stage 3: wait then reset (the 0x8496E distance gate) */
   mr.record.timer89 = 0;
   assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.record.stage92 == 3u && mr.record.timer89 == 2);
   mr.record.timer89 = 0x3C - 2;
+  mr.record.distance = 0;                     /* 0x8496E: < 0x60 resets */
   assert(fifa96_match_action_17(&mr) == FIFA96_OK);
   assert(mr.entities.team[0].records[1].code == 0u);   /* 0x849A1 reset */
   /* stage > 3: the 0x8476D JA epilogue, no reset */
