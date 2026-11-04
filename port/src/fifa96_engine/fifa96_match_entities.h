@@ -137,7 +137,9 @@ struct fifa96_match_entity {
    * value, not a native per-record measurement. */
   uint8_t desc_d;           /* native byte[[rec+4]+0xD] */
   uint8_t byte9d;           /* native byte[+0x9D] */
-  uint32_t timer7f;         /* +0x7F, countdown limit = >>16 */
+  uint32_t timer7f;         /* +0x7F dword: low word = movement heading;
+                             * high word = the +0x81 timer81 alias, not a
+                             * separate limit (phase-40) */
   int32_t timer89;          /* +0x89 action timer */
   int32_t pos_x, pos_y, pos_z;          /* +0x59 / +0x5D / +0x61 */
   /* FU-153 / M2 phase-12 T1 (15.a): the FUN_0007BF20 jump arc state — word

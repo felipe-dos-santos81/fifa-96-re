@@ -579,3 +579,12 @@ verified (both cases disabled -> the freeze assert fails). Tier 2/3 stay
 legs; **FU172-L7 closed**, the rest stand (L1..L6, L8..L10 carried — the
 call-site split is deliberately deferred: it touches successor staging the
 M2 tape exercises).
+
+## Phase-40 erratum — the `timer7f` field is not a countdown (2026-11-04)
+
+The two “unrelated `+0x7F` countdown” sentences are corrected. The native
+`dword[+0x7F]` overlays the low-word movement heading at `+0x7F` and the
+timer word at `+0x81`; the engine keeps `timer7f` for the low-word heading and
+`timer81` for the timer. `FUN_0007CA54`'s `SAR 0x10` is that alias, not a
+separate limit; see FU141's phase-40 erratum. The mover still has no writer
+for the `+0x7F` heading beyond the ported keeper/row sites.

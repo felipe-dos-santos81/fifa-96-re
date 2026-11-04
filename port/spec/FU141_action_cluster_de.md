@@ -535,3 +535,16 @@ touched). Port write set: `port/src/fifa96_engine/fifa96_match_entities.h`,
 `port/tests/test_engine_match_frame.c`, `port/tests/test_engine_match_handlers.c`,
 `CMakeLists.txt`. `data/game/FIFAPCCD96.iso` untouched; `data/fifa96.rep/**` churn not
 staged.
+
+## Phase-40 erratum — the `+0x7F>>16` limit is `+0x81` (2026-11-04)
+
+The `FUN_0007CA54` table at `:202-205` already states the bytes; this erratum
+names the alias explicitly. `0x7CA66 MOV EDX,dword[rec+0x7F]` followed by
+`0x7CA6B SAR EDX,0x10` reads the word at `+0x81`, i.e. `timer81` itself, not
+the high half of a separate `timer7f` limit. The engine's old
+`timer7f >> 16` limit was never produced, so any nonzero `timer81` was zeroed
+on its first decay. `entity_timer_decay` now uses `(int16_t)timer81`; the
+per-record drain also writes `e->timer81 = r->timer81`, persisting handler
+reloads such as row 0x0F's `0x82DA7`. The alias-trap test is
+`test_engine_match_entities::test_update_counter_and_timers`; M1/M2 are
+unchanged and the census is unchanged.

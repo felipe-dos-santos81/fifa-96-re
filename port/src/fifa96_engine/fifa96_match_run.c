@@ -1593,6 +1593,7 @@ static int match_run_dispatch_entity(void *ctx, struct fifa96_match_entity *e) {
   e->target_y = r->target_y;
   e->target_z = r->target_z;
   e->timer89 = r->timer89;
+  e->timer81 = r->timer81;   /* native +0x81: handler reloads must persist */
   e->stage92 = r->stage92;
   e->timer7b = r->timer7b;
   e->lane = r->lane;

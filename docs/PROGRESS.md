@@ -3601,3 +3601,13 @@ current is **57/80 natural, 62/80 install-live, five blocked**.
   blocked, action 38/45, phase 25/35**); `make check` 112/112. The
   `player_e` descriptor, the `0x157A38` lane table and the `0x67800(1)` bank
   load remain numbered legs.
+
+- **phase-40 timer81 alias + write-back (2026-11-04).** Corrected
+  `FUN_0007CA54`'s decay limit to the native `dword[+0x7F]>>16` alias, i.e.
+  the word at `+0x81` (`timer81`), and added the missing per-record drain
+  `e->timer81 = r->timer81` so row-0x0F reloads persist. The old
+  `timer7f >> 16` limit was never produced and zeroed every nonzero timer.
+  `test_engine_match_entities` pins the alias trap; M1/M2 are byte-identical
+  (M2 v25 `ea18ee1d…`); census unchanged (`78/78`, `57/80`, `63/80`,
+  `6` blocked); `make check` 112/112. The row-0x1C tail remains FU186-L2,
+  now without its timer81 prerequisite.

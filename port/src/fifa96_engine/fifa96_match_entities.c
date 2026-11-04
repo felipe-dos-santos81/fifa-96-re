@@ -639,11 +639,12 @@ int fifa96_match_entities_kickoff_place(struct fifa96_match_entities *pool, int3
 }
 
 static void entity_timer_decay(struct fifa96_match_entity *e, uint16_t delta) {
-  /* The native compares the signed high word of the limit against the
-   * zero-extended delta word (0x7CA74, 0x7CAA0). */
+  /* 0x7CA66..0x7CA74: `MOV EDX,dword[+0x7F]; SAR EDX,0x10` is the word at
+   * `+0x81`, i.e. the timer word itself (the dword-alias rule). The signed
+   * limit is compared with the zero-extended delta word (0x7CA74/0x7CAA0). */
   int32_t d = (int32_t)delta;
   if (e->timer81 != 0) {
-    int32_t limit = (int16_t)(e->timer7f >> 16);
+    int32_t limit = (int16_t)e->timer81;
     if (limit > d) e->timer81 = (uint16_t)(e->timer81 - (uint16_t)delta);
     else e->timer81 = 0;
   }

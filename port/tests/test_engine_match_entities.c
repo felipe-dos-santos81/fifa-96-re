@@ -561,9 +561,9 @@ static void test_update_intercept_band_flag(void) {
 }
 
 /* Update counter wraps at 0xB (0x8D8F7..0x8D912) and the record timer pair
- * decays by the frame delta with the +0x7F>>16 limit (FUN_0007CA54
- * 0x7CA5C..0x7CAB8); the keeper record 0 copies +0x79 -> +0x7B
- * (FUN_000782D0, FU-67 §4.3). */
+ * decays by the frame delta with the `dword[+0x7F] >> 16` alias — the word
+ * at `+0x81`, i.e. timer81 itself (FUN_0007CA54 0x7CA5C..0x7CAB8); the
+ * keeper record 0 copies +0x79 -> +0x7B (FUN_000782D0, FU-67 §4.3). */
 static void test_update_counter_and_timers(void) {
   struct fifa96_match_entities pool;
   struct fifa96_match_entities_frame f = zero_frame();
@@ -571,15 +571,17 @@ static void test_update_counter_and_timers(void) {
   f.phase = 0; /* no selection */
   f.delta = 3;
   struct fifa96_match_entity *e = &pool.team[TEAM0].records[2];
-  e->timer7f = 0x00020000u; /* limit 2 <= delta 3: the native zeroes the word */
+  /* The old `timer7f >> 16` reading would use limit 2 and zero the word;
+   * the native alias uses timer81 = 5 > delta 3, so only 3 is subtracted. */
+  e->timer7f = 0x00020000u;
   e->timer81 = 5;
   e->timer93 = 2;
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(pool.team[TEAM0].update_count == 1);
-  assert(e->timer81 == 0);
+  assert(e->timer81 == 2);
   assert(e->timer93 == 0);
-  e->timer7f = 0x00040000u; /* limit 4 > delta 3: decay by 3 */
-  e->timer81 = 9;
+  e->timer7f = 0;           /* ignored by the native alias */
+  e->timer81 = 9;           /* 9 > delta 3: decay by 3 */
   e->timer93 = 9;
   assert(fifa96_match_entities_update(&pool, &f, NULL, NULL) == FIFA96_OK);
   assert(e->timer81 == 6);
@@ -593,7 +595,7 @@ static void test_update_counter_and_timers(void) {
   assert(pool.team[TEAM0].update_count == 13 % 0xB);
   /* The limit/delta compares are signed-word against the zero-extended delta
    * word (0x7CA74/0x7CAA0): a 0x8000 delta is 32768, not -32768. */
-  e->timer7f = 0x00070000u; /* limit 7 */
+  e->timer7f = 0x00070000u;
   e->timer81 = 5;
   e->timer93 = 5;
   f.delta = 0x8000;

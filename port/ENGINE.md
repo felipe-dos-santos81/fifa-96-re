@@ -8371,3 +8371,20 @@ is exact. Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live,
 Residuals: FU188-L3's descriptor `player_e`, FU188-L5's `0x157A38` lane write
 and the `0x67800(1)` bank load stay legs; FU333/FU332 record the S6 re-pin
 and the record-21 tuple.
+
+## Phase 40 — native timer81 decay alias + drain write-back (2026-11-04)
+
+`FUN_0007CA54` (`0x7CA66..0x7CA74`) loads `dword[rec+0x7F]` and shifts right
+16, which is the word at `+0x81` (the timer itself), not the separately
+modelled `timer7f` high word. The engine now uses `(int16_t)e->timer81` as
+the signed limit; the old `timer7f >> 16` limit was never produced and made
+every nonzero `timer81` zero on its first decay. The per-record drain also
+copies `r->timer81` back to the pool after dispatch, so a handler's reload
+(row 0x0F's `0x82DA7` path) is not lost.
+
+`test_engine_match_entities` now pins the alias trap (`timer7f` high word 2,
+`timer81` 5, delta 3 -> 2, where the old limit would zero). M1/M2 are
+byte-identical: M1 `09b726b7…`, M2 v25 `ea18ee1d…`; `make check` **112/112**.
+Census unchanged: **78/78 bodies, 57/80 natural, 63/80 install-live, 6
+blocked, action 38/45, phase 25/35**. The row-0x1C tail remains FU186-L2; this
+only removes its `timer81` prerequisite.
